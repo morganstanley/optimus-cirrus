@@ -1,0 +1,14 @@
+# Declare files that will always have LF line endings on checkout
+*.sh text eol=lf
+*.md text eol=lf
+*.java text eol=lf
+*.scala text eol=lf
+*.groovy text eol=lf
+*.conf text eol=lf
+
+# Similarly for CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Perl scripts should always have LF (Unix default) line ending
+*.pl text eol=lf
+*.pm text eol=lf
