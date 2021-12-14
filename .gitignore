@@ -1,0 +1,37 @@
+# General
+*.log
+*.orig
+*.hprof
+
+# IntelliJ IDEA
+.idea
+*.iml
+*.ipr
+*.iws
+/.shelf/
+
+# Python
+.mypy_cache/
+*.pyc
+
+# Stratosphere
+.depcopycontent
+.jnipath
+.jnipathivy
+.moduleload
+.runtime
+.testruntime
+*.local.runconf
+
+# Used when project is imported from bsp
+.bsp
+generated-obt
+stale_outputs_checked
+/test-output/
+
+# briefly present when formatting scala files using the git pre-commit hook
+diff-file.txt
+diff-chunked.txt
+
+# TODO (OPTIMUS-41799): fix zinc + jcstress and remove this
+*_jcstress.java
