@@ -3,3 +3,6 @@ Optimus Cirrus
 Copyright 2021 Morgan Stanley.
 
 This product includes software developed at Morgan Stanley.
+
+This product includes software developed at the Apache Software Foundation (http://www.apache.org/), including:
+  - Apache ZooKeeper (https://zookeeper.apache.org/)
