@@ -174,3 +174,8 @@
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+
+BUNDLED SOFTWARE LICENSES:
+
+This product bundles software from http://github.com/scalamacros/macrology201, which is available under a "3-clause BSD" license.
+For details, see optimus/platform/projects/core_macro/src/main/scala/optimus/utils/internal/Splicer.scala
