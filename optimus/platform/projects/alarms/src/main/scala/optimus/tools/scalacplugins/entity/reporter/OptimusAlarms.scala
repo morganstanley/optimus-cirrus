@@ -555,9 +555,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NO_UNIQUE_INDEXED_COLLECTION =
     error1(22910, OptimusPhases.REF_CHECKS, "Unique Indexes not allowed for Collection types")
 
-  // purity check phase errors
-  val TRANSFORM_ERROR2 = error3(23000, OptimusPhases.PURITY_CHECK, "Error transforming in %s: %s\n%s") // remove such kind of error? throw exception instead?
-
   // entity relationship phase errors
   val TRAVERSE_ERROR1 = error3(23100, OptimusPhases.ENTITY_RELATIONSHIP, "Error traversing in %s: %s\n%s")
 
@@ -773,13 +770,6 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     warningOptional0(12002, OptimusPhases.REF_CHECKS, "Scenario independent node cannot call scenario dependent node")
   val HANDLE_IN_NODE = warningOptional0(12203, OptimusPhases.REF_CHECKS, "cannot call @handle methods inside @node")
   val IMPURE_IN_NODE = info0(12205, OptimusPhases.REF_CHECKS, "Invalid call to @impure from @node")
-
-  // purity check phase warnings
-  val IMPURE_DEPENDENCY = warning2(13000, OptimusPhases.PURITY_CHECK, "impure dependency: %s details: %s")
-  val IMPURE_TYPE_OF = warning2(13001, OptimusPhases.PURITY_CHECK, "impure type of %s : %s")
-  val MUTABLE = warning1(13002, OptimusPhases.PURITY_CHECK, "mutable %s")
-  val IMPURE_CALL_TO = warning2(13003, OptimusPhases.PURITY_CHECK, "impure call to %s with fullName = %s")
-  val IMPURE = warning2(13004, OptimusPhases.PURITY_CHECK, "impure %s with fullName = %s")
 
   // optimus_valaccessors phase warnings
   val RELY_ON_BROKEN_BEHAVIOUR = warningOptional2(

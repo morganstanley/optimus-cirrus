@@ -8,8 +8,8 @@ Here are some links to talks we have done about the principles behind Optimus Ci
  
 The initial release will include the basics that will allow you to see some parts of the runtime in action. We are in the process of preparing more project components to be shared here. 
 
-Please note our LICENSE.txt file.
+Please note the LICENSE file.
 
 We hope that you find the project interesting and useful. If you want to ask questions or make comments then please feel free to contact us at `optimus_cirrus (at) morganstanley (dot) com`.
 
-[Contributors](.github/contriboutors.md) 
+[Contributors](contributors.md) 

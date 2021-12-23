@@ -12,8 +12,7 @@
 package optimus.tools.scalacplugins.entity
 
 import scala.reflect.internal.util.SourceFile
-import scala.tools.nsc.Properties
-import scala.tools.nsc.SubComponent
+import scala.tools.nsc._, plugins._
 
 object OptimusPhases {
 
@@ -37,7 +36,6 @@ object OptimusPhases {
     val optimus_apicheck = "optimus_apicheck"
     val optimus_entity_relationship = "optimus_entity_relationship"
     val optimus_refchecks = "optimus_refchecks"
-    val optimus_puritycheck = "optimus_puritycheck"
     val optimus_valaccessors = "optimus_valaccessors"
     val optimus_embeddable = "optimus_embeddable"
     val optimus_entityinfo = "optimus_entityinfo"
@@ -61,7 +59,6 @@ object OptimusPhases {
     val fields = "fields" // scalac phase: synthesize accessors, fields (and bitmaps) for (lazy) vals and modules
 
     val optimus_constructors = "optimus_constructors"
-    val optimus_addSIcheck = "optimus_addSIcheck"
     val optimus_safeInteropExportCheck = "optimus_safe_interop_export_check"
     val optimus_position = "optimus_position"
     val optimus_propertyinfo = "optimus_propertyinfo"
@@ -77,22 +74,21 @@ object OptimusPhases {
   }
 
   import names._
-  import StagingPhase.names.optimus_staging
 
-  def phaseBlock(names: String*): List[OptimusPhaseInfo] = {
+  def phaseBlock(names: (String, String)*): List[OptimusPhaseInfo] = {
     names
       .sliding(3)
       .map {
-        case Seq(prev, curr, next) => OptimusPhaseInfo(curr, prev, next)
+        case Seq((prev, _), (name, desc), (next, _)) => OptimusPhaseInfo(name, desc, prev, next)
       }
       .toList
   }
 
   private val List(_, _ADJUST_AST) = phaseBlock(
-    parser,
-    optimus_staging,
-    optimus_adjustast,
-    namer
+    parser -> "",
+    StagingPhase.STAGING.nameAndDescription,
+    optimus_adjustast -> "add program elements prior to typechecking",
+    namer -> ""
   )
   private val List(
     _FORWARDING,
@@ -101,31 +97,48 @@ object OptimusPhases {
     _PROPERTY_INFO,
     _SAFE_EXPORT_CHECK,
     _APICHECK,
-    _PURITY_CHECK,
     _VAL_ACCESSORS,
     _REF_CHECKS,
   ) = phaseBlock(
-    typer,
-    optimus_forwarding,
-    optimus_classifier,
-    optimus_entity_relationship,
-    optimus_propertyinfo,
-    optimus_safeInteropExportCheck,
-    optimus_apicheck,
-    optimus_puritycheck,
-    optimus_valaccessors,
-    optimus_refchecks,
-    superaccessors
+    typer -> "",
+    StagingPhase.FORWARDING.nameAndDescription,
+    optimus_classifier -> "mark nodes and other symbols of interest",
+    optimus_entity_relationship -> "generate metadata for the ComputeEntityRelationships app (likely redundant with optimus_export)",
+    optimus_propertyinfo -> "create property info vals on entity companions",
+    optimus_safeInteropExportCheck -> "validate uses of @exported annotation",
+    optimus_apicheck -> "warn on deprecated API usage",
+    optimus_valaccessors -> "transform stored vals and add entity args methods",
+    optimus_refchecks -> "check sundry optimus-specific requirements",
+    superaccessors -> ""
   )
   private val List(_EMBEDDABLE, _ENTITY_INFO, _AUTOASYNC) =
-    phaseBlock(pickler, optimus_embeddable, optimus_entityinfo, optimus_autoasync, patmat)
+    phaseBlock(
+      pickler -> "",
+      optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes",
+      optimus_entityinfo -> "generate info/$info members for entities",
+      optimus_autoasync -> "prepare collection and Option methods for asynchronous transform",
+      patmat -> ""
+    )
   private val List(_GENERATE_NODE_METHODS, _NODE_LIFT) =
-    phaseBlock(patmat, optimus_generatenodemethods, optimus_nodelift, refchecks)
-  private val _ASYNC_GRAPH = OptimusPhaseInfo(optimus_asyncgraph, refchecks, explicitouter)
-  private val List(_OPTIMUS_CONSTRUCTORS, _ADD_SICHECK, _POSITION) =
-    phaseBlock(mixin, optimus_constructors, optimus_addSIcheck, optimus_position, cleanup)
-  private val _EXPORTINFO = OptimusPhaseInfo(optimus_export, delambdafy, jvm)
-  private val _CAPTURE_BY_VALUE = OptimusPhaseInfo(optimus_capturebyvalue, uncurry, fields)
+    phaseBlock(
+      patmat -> "",
+      optimus_generatenodemethods -> "generate $queued/$newNode methods for nodes",
+      optimus_nodelift -> "transform arguments to @nodeLift parameters",
+      refchecks -> ""
+    )
+  private val _ASYNC_GRAPH =
+    OptimusPhaseInfo(optimus_asyncgraph, "create node classes and state machines", refchecks, explicitouter)
+  private val List(_OPTIMUS_CONSTRUCTORS, _POSITION) =
+    phaseBlock(
+      mixin -> "",
+      optimus_constructors -> "generate pickling/unpickling methods for storable entities",
+      optimus_position -> "validate positions of trees before codegen",
+      cleanup -> ""
+    )
+  private val _EXPORTINFO =
+    OptimusPhaseInfo(optimus_export, "write json files for entity/event/embeddable hierarchies", delambdafy, jvm)
+  private val _CAPTURE_BY_VALUE =
+    OptimusPhaseInfo(optimus_capturebyvalue, "move captured values into @captureByValue closures", uncurry, fields)
 
   val ADJUST_AST = _ADJUST_AST
   val FORWARDING = _FORWARDING
@@ -134,7 +147,6 @@ object OptimusPhases {
   val PROPERTY_INFO = _PROPERTY_INFO
   val SAFE_EXPORT_CHECK = _SAFE_EXPORT_CHECK
   val APICHECK = _APICHECK
-  val PURITY_CHECK = _PURITY_CHECK
   val REF_CHECKS = _REF_CHECKS
   val VAL_ACCESSORS = _VAL_ACCESSORS
   val EMBEDDABLE = _EMBEDDABLE
@@ -144,7 +156,6 @@ object OptimusPhases {
   val NODE_LIFT = _NODE_LIFT
   val ASYNC_GRAPH = _ASYNC_GRAPH
   val OPTIMUS_CONSTRUCTORS = _OPTIMUS_CONSTRUCTORS
-  val ADD_SICHECK = _ADD_SICHECK
   val POSITION = _POSITION
   val EXPORTINFO = _EXPORTINFO
   val CAPTURE_BY_VALUE = _CAPTURE_BY_VALUE
@@ -194,9 +205,10 @@ object ScalaVersionData {
   val scalaVersion = Properties.versionNumberString
 }
 
-trait WithOptimusPhase extends SubComponent with PluginDataAccess {
+trait WithOptimusPhase extends PluginComponent with PluginDataAccess {
   val phaseInfo: OptimusPhaseInfo
   val phaseName: String = phaseInfo.phaseName
-  val runsAfter = phaseInfo.runsAfter
-  override val runsBefore = phaseInfo.runsBefore
+  val runsAfter = phaseInfo.runsAfter :: Nil
+  override val runsBefore = phaseInfo.runsBefore :: Nil
+  override val description: String = phaseInfo.description
 }
