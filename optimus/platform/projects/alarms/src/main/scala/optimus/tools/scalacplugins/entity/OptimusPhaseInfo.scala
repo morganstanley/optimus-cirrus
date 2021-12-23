@@ -11,15 +11,10 @@
  */
 package optimus.tools.scalacplugins.entity
 
-case class OptimusPhaseInfo(phaseName: String, runsAfter: List[String], runsBefore: List[String])
+case class OptimusPhaseInfo(phaseName: String, description: String, runsAfter: String, runsBefore: String) {
+  def nameAndDescription = (phaseName, description)
+}
 
 object OptimusPhaseInfo {
-  val NoPhase = OptimusPhaseInfo("NoPhase", Nil, Nil)
-
-  def apply(phaseName: String, runsAfter: List[String], runsBefore: String): OptimusPhaseInfo =
-    apply(phaseName, runsAfter, runsBefore :: Nil)
-  def apply(phaseName: String, runsAfter: String, runsBefore: List[String]): OptimusPhaseInfo =
-    apply(phaseName, runsAfter :: Nil, runsBefore)
-  def apply(phaseName: String, runsAfter: String, runsBefore: String): OptimusPhaseInfo =
-    apply(phaseName, runsAfter :: Nil, runsBefore :: Nil)
+  val NoPhase = OptimusPhaseInfo("NoPhase", "<no phase>", "parser", "terminal")
 }

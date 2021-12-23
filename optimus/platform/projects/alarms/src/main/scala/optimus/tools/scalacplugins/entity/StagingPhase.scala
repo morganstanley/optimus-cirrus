@@ -35,9 +35,14 @@ object StagingPhase {
 
   // OptimusPhaseInfo(phaseName, runsAfter, runsBefore)
   // these three run one after each other, after parsing but before namer or adjustast
-  val STAGING = OptimusPhaseInfo(optimus_staging, parser, namer)
-  val STANDARDS = OptimusPhaseInfo(optimus_standards, optimus_staging, optimus_annotator)
-  val ANNOTATING = OptimusPhaseInfo(optimus_annotator, optimus_standards, namer)
-  val FORWARDING = OptimusPhaseInfo(optimus_forwarding, typer, superaccessors)
-  val REWRITE = OptimusPhaseInfo(optimus_rewrite, pickler, refchecks)
+  val STAGING = OptimusPhaseInfo(optimus_staging, "remove program elements based on @staged conditions", parser, namer)
+  val STANDARDS = OptimusPhaseInfo(
+    optimus_standards,
+    "fail when certain coding standards are violated",
+    optimus_staging,
+    optimus_annotator)
+  val ANNOTATING = OptimusPhaseInfo(optimus_annotator, "add annotations to library symbols", optimus_standards, namer)
+  val FORWARDING =
+    OptimusPhaseInfo(optimus_forwarding, "rewrite references to @forwarder values", typer, superaccessors)
+  val REWRITE = OptimusPhaseInfo(optimus_rewrite, "rewrite source files in-place during migration", pickler, refchecks)
 }
