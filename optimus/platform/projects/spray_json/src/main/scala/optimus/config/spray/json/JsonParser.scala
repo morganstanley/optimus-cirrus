@@ -218,11 +218,12 @@ class JsonParser(input: ParserInput) {
   private def appendSB(c: Char): Boolean = { sb.append(c); true }
   private def require(c: Char): Unit = if (!ch(c)) fail(s"'$c'")
 
-  protected final def fail(target: String, cursor: Int = input.cursor, errorChar: Char = cursorChar): Nothing = {
+  protected final def fail(target: String, cursor: Int = input.cursor, errorChar: Char = cursorChar, hint: String = null): Nothing = {
     val ParserInput.Line(lineNr, col, text) = input.getLine(cursor)
     val summary = {
       val preamble =
-        "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusdoc/GraphConfig"
+        if (hint ne null) hint
+        else "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusdoc/GraphConfig"
       val unexpected =
         if (errorChar != EOI) {
           val c = if (Character.isISOControl(errorChar)) "\\u%04x" format errorChar.toInt else errorChar.toString

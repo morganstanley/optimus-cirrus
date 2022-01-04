@@ -183,6 +183,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val EVENT_WITH_TRANSIENT = error0(21503, OptimusPhases.ADJUST_AST, " @event can't be @transient")
   // removed: val EVENT_INHERITED_MUST_BE_DECLARED = error0(21504, OptimusPhases.ADJUST_AST, "only @event can extends @event")
   val METHOD_LOCAL_EVENT = error0(21505, OptimusPhases.ADJUST_AST, "Illegal method-local @event definition.")
+  val CONTAINED_EVENT_WITH_KEY_INDEX =
+    error0(21506, OptimusPhases.REF_CHECKS, "@event(contained=true) must not contain @key/@indexed fields")
+  val UNKNOWN_PARAM_OF_EVENT =
+    error1(21507, OptimusPhases.ADJUST_AST, "Unknown named parameter of @event annotation: %s")
+  val UNNAMED_PARAM_OF_EVENT = error0(21508, OptimusPhases.ADJUST_AST, "@event definition must use named arguments in annotation (contained or projected)")
 
   val ASYNC_WITH_VAL = error0(21601, OptimusPhases.ADJUST_AST, "Illegal @async val, @async is only permitted with def")
   val NONENTITY_NODE_WITH_VAL = error0(

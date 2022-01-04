@@ -131,9 +131,16 @@ class stable extends StaticAnnotation
 class notPartOfIdentity extends StaticAnnotation
 
 /**
+ * Contained modifier is intended for the use of low-latency publishing
  * @see http://optimusdoc/BasicAnnotations
  */
-class event(projected: Boolean = false) extends StaticAnnotation
+class event(val projected: Boolean /* = false */ , val contained: Boolean /* = false */) extends StaticAnnotation{
+  @staged def this(
+    projected: Boolean = false,
+    contained: Boolean = false,
+    fakeParamForIntellij: Boolean = true) =
+    this(projected, contained)
+}
 
 /**
  * This annotation explicitly excludes one constructor parameter from the copy method we generate,
