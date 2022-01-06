@@ -57,4 +57,10 @@ package object collection {
       override def newBuilder(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder[A, B]
     }
   }
+
+  // TODO: make polymorphic like 2.12 version
+  implicit class MapValuesFilterKeysNow[K, +V](private val self: sc.Map[K, V]) extends AnyVal {
+    def mapValuesNow[W](f: V => W): Map[K, W] = self.view.mapValues(f).toMap
+    def filterKeysNow(p: K => Boolean): Map[K, V] = self.view.filterKeys(p).toMap
+  }
 }

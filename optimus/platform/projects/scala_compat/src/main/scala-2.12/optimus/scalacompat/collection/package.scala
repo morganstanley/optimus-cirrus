@@ -11,13 +11,13 @@
  */
 package optimus.scalacompat
 
-import scala.collection.mutable
+import scala.collection.generic.CanBuildFrom
 import scala.{ collection => sc }
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
-    case  _: sc.IterableView[_, _] => true
-    case _ => false
+    case _: sc.IterableView[_, _] => true
+    case _                        => false
   }
   def empty[From, Elem, Repr](cbf: BuildFrom[From, Elem, Repr], from: From): Repr = {
     if ((cbf.asInstanceOf[AnyRef] eq sc.Seq.canBuildFrom) || (cbf.asInstanceOf[AnyRef] eq List.canBuildFrom)) {
@@ -53,22 +53,55 @@ package object collection {
   def knownSize(t: sc.GenTraversableOnce[_]): Int = {
     CanEqual.knownSize(t)
   }
-  implicit class BreakOutTo[CC[A] <: sc.GenTraversable[A]](private val companion: sc.generic.GenericCompanion[CC]) extends AnyVal {
+  implicit class BreakOutTo[CC[A] <: sc.GenTraversable[A]](private val companion: sc.generic.GenericCompanion[CC])
+      extends AnyVal {
     def breakOut[A]: sc.generic.CanBuildFrom[Any, A, CC[A]] = new sc.generic.CanBuildFrom[Any, A, CC[A]] {
       override def apply(from: Any): sc.mutable.Builder[A, CC[A]] = companion.newBuilder
       override def apply(): sc.mutable.Builder[A, CC[A]] = companion.newBuilder
     }
   }
   implicit class BreakOutToArray(private val companion: Array.type) extends AnyVal {
-    def breakOut[A: scala.reflect.ClassTag]: sc.generic.CanBuildFrom[Any, A, Array[A]] = new sc.generic.CanBuildFrom[Any, A, Array[A]] {
-      override def apply(from: Any): sc.mutable.Builder[A, Array[A]] = companion.newBuilder
-      override def apply(): sc.mutable.Builder[A, Array[A]] = companion.newBuilder
-    }
+    def breakOut[A: scala.reflect.ClassTag]: sc.generic.CanBuildFrom[Any, A, Array[A]] =
+      new sc.generic.CanBuildFrom[Any, A, Array[A]] {
+        override def apply(from: Any): sc.mutable.Builder[A, Array[A]] = companion.newBuilder
+        override def apply(): sc.mutable.Builder[A, Array[A]] = companion.newBuilder
+      }
   }
-  implicit class BreakOutToMap[CC[A, B] <: sc.GenMap[A, B] with sc.GenMapLike[A, B, CC[A, B]]](private val companion: sc.generic.GenMapFactory[CC]) extends AnyVal {
-    def breakOut[A, B]: sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] = new sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] {
-      override def apply(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
-      override def apply(): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
+  implicit class BreakOutToMap[CC[A, B] <: sc.GenMap[A, B] with sc.GenMapLike[A, B, CC[A, B]]](
+      private val companion: sc.generic.GenMapFactory[CC])
+      extends AnyVal {
+    def breakOut[A, B]: sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] =
+      new sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] {
+        override def apply(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
+        override def apply(): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
+      }
+  }
+
+  implicit class MapValuesFilterKeysNow[K, V, Repr <: sc.MapLike[K, V, Repr] with sc.Map[K, V]](
+      private val self: sc.MapLike[K, V, Repr])
+      extends AnyVal {
+    /**
+     * A strict version of `mapValues` that is polymorphic in the resulting map type.
+     *
+     * The built-in `mapValues` method returns a "view" on the original map where the transformation
+     * function is recomputed on each traversal. `mapValuesNow` eagerly builds a new map.
+     *
+     * The built-in `mapValues` method has a static return type `collection.Map`, an override
+     * in `SortedMap` refines the result type. `mapValuesNow` is polymorphic in the resulting map
+     * type, like the built-in `map` method.
+     */
+    def mapValuesNow[W, That](f: V => W)(implicit bf: CanBuildFrom[Repr, (K, W), That]): That = self match {
+      case im: sc.immutable.MapLike[K, V, Repr] => im.transform { case (_, v) => f(v) }
+      case _ => self.map { case (k, v) => (k, f(v)) }
     }
+
+    /**
+     * A strict version of `filterKeys` that retains the map's static type.
+     *
+     * The built-in `filterKeys` method has a static return type `collection.Map`, an override
+     * * in `SortedMap` refines the result type. `filterKeysNow` returns a map of the same type
+     * as the source, like the built-in `filter` method.
+     */
+    def filterKeysNow(p: K => Boolean): Repr = self.filter(kv => p(kv._1))
   }
 }
