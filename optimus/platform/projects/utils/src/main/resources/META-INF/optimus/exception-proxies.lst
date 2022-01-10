@@ -1,0 +1,5 @@
+optimus.exceptions.AdditionalExceptionProxy
+optimus.exceptions.TestDeprecatedExceptionProxy
+optimus.exceptions.TestRuntimeExceptionGreedyMatching
+optimus.exceptions.TestRuntimeExceptionMatching
+optimus.exceptions.TestSolverExceptionProxy
