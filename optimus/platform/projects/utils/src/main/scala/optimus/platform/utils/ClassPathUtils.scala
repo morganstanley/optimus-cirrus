@@ -13,9 +13,7 @@ package optimus.platform.utils
 
 import java.io.File
 import java.net.URL
-import java.net.URLClassLoader
 import java.nio.file.Files
-import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.{util => ju}
@@ -63,44 +61,18 @@ object ClassPathUtils {
     val excludePatterns = excludeRegexes map Pattern.compile
     def shouldExclude(path: String): Boolean =
       excludePatterns exists { _.matcher(path).matches }
-    extractPathsFromLoader(classLoader, shouldExclude)
-  }
-
-  private def extractPathsFromLoader(classLoader: ClassLoader, shouldExclude: String => Boolean): Seq[Path] = {
-    val ours = classLoader match {
-      // Java 8 case
-      case urlCl: URLClassLoader =>
-        urlCl.getURLs.toSeq.flatMap { url =>
-          if (url.getProtocol.equals("file") && !shouldExclude(url.getFile)) {
-            try Some(demanglePathFromUrl(url))
-            catch {
-              case ex: InvalidPathException =>
-                log.warn(s"Skipped invalid classpath entry: $ex")
-                None
-            }
-          } else None
-        }
-      // Java 9+ case
-      case appLoader if smellsLikeJava9AppLoader(appLoader) =>
-        // See comment in interop ClasspathUtils; this thing is a singleton and its classpath is java.class.path,
-        // so we're just going to look at that system property.
-        bootProperties
-          .get("java.class.path")
-          .split(File.pathSeparator)
-          .filterNot(_.isEmpty) // someone does: PREPEND_APPSCRIPT_CLASSPATH=${PREPEND_APPSCRIPT_CLASSPATH}:/... and it was originally unset
-          .filterNot(shouldExclude)
-          .map(Paths.get(_))
-          .toList
-      case cl =>
-        log.info(s"No idea what to do with a classloader of ${cl.getClass}; skipping (this isn't your problem)")
-        Nil // ...
-    }
-    ours ++ (if (classLoader.getParent != null) extractPathsFromLoader(classLoader.getParent, shouldExclude) else Nil)
-  }
-
-  private def smellsLikeJava9AppLoader(loader: ClassLoader): Boolean = {
-    val klasz = loader.getClass
-    klasz.getClassLoader == null && klasz.getName == "jdk.internal.loader.ClassLoaders$AppClassLoader"
+    // We're just reading off of the classpath sysprop now.
+    // Previously we poked through our loader chain to look for potential URLClassLoaders, as that's what we got in Java 8,
+    // but we don't support Java 8 anymore so there's really no point.
+    // If we supported running Optimus in some sort of OSGi situation we would need to nuance this,
+    // but we don't so I won't.
+    bootProperties
+      .get("java.class.path")
+      .split(File.pathSeparator)
+      .filterNot(_.isEmpty) // someone does: PREPEND_APPSCRIPT_CLASSPATH=${PREPEND_APPSCRIPT_CLASSPATH}:/... and it was originally unset
+      .filterNot(shouldExclude)
+      .map(Paths.get(_))
+      .toList
   }
 
   final def demanglePathFromUrl(url: URL): Path =
@@ -138,7 +110,7 @@ object ClassPathUtils {
               try {
                 val path = {
                   if (pathStr startsWith "file:/")
-                    demanglePathFromUrl(new URL(pathStr)) // handle as a URL (probably a file URL) else {
+                    demanglePathFromUrl(new URL(pathStr)) // handle as a URL (probably a file URL)
                   else file.getParent.resolve(pathStr) // probably relative (but resolving an absolute path works)
                 }
                 if (effectiveClassPath.add(path)) pending += path
@@ -150,7 +122,7 @@ object ClassPathUtils {
           }
           pending.foreach(loadClassPath)
         }
-      } else log.info(s"ignoring path as it doesn't exist ($file)")
+      } else log.debug(s"ignoring path as it doesn't exist ($file)")
     }
 
     effectiveClassPath.addAll(classPath.asJava)

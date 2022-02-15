@@ -13,6 +13,11 @@ package optimus.tools.scalacplugins.entity.reporter
 
 import optimus.tools.scalacplugins.entity.StagingPhase
 
+object CodeStyleErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
+  val RETURN_STATEMENT =
+    error0(20011, StagingPhase.STANDARDS, s"${OptimusAlarms.NewTag} Return statement is not needed here")
+}
+
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
   // staging phase errors
@@ -33,11 +38,13 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 }
 
 object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
-
   // staging phase warnings
   val UNKNOWN_STAGING_MARKER = warning1(10004, StagingPhase.STAGING, "Unknown staging marker type: %s")
 
   // code-standards phase warnings
-  val UNTYPED_IMPLICIT = preIgnore(warningOptional1(10005, StagingPhase.STANDARDS,
-  "Public implicit methods and classes should have explicit type: %s"))
+  val UNTYPED_IMPLICIT = preIgnore(
+    warningOptional1(
+      10005,
+      StagingPhase.STANDARDS,
+      "Public implicit methods and classes should have explicit type: %s"))
 }

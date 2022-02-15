@@ -41,6 +41,7 @@ object OptimusAlarms {
     RelationalAlarms.ensureLoaded()
     StagingErrors.ensureLoaded()
     StagingNonErrorMessages.ensureLoaded()
+    CodeStyleErrors.ensureLoaded()
     UIAlarms.ensureLoaded()
     VersioningAlarms.ensureLoaded()
     PluginMacrosAlarms.ensureLoaded()
@@ -122,7 +123,6 @@ trait OptimusAlarms {
     OptimusAlarms.preIgnoredAlarms += b.id.sn
     b
   }
-
 
   // This is used as a hack to make sure alarm classes get loaded
   def ensureLoaded(): Unit = {}

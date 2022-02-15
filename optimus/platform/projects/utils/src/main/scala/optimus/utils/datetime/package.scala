@@ -115,7 +115,7 @@ package object datetime {
       if (divRem(0).bitLength > 63) {
         throw new ArithmeticException(s"Exceeds capacity of Instant: $epochNano")
       }
-      return Instant.ofEpochSecond(divRem(0).longValue(), divRem(1).intValue())
+      Instant.ofEpochSecond(divRem(0).longValue(), divRem(1).intValue())
     }
   }
 
@@ -125,7 +125,7 @@ package object datetime {
     }
 
     def toEpochNanoBigInteger: BigInteger = {
-      return BigInteger
+      BigInteger
         .valueOf(instant.getEpochSecond)
         .multiply(BigInteger.valueOf(1000000000))
         .add(BigInteger.valueOf(instant.getNano))

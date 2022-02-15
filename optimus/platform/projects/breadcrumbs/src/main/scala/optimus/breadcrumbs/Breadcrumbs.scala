@@ -195,6 +195,8 @@ object Breadcrumbs {
     }
   }
 
+  def currentRegisteredInterests: Map[String, Map[String, (Int, ChainedID)]] = interests.toMap
+
   private[breadcrumbs] def replicate(c: Crumb): Seq[Crumb] = {
     if (c.source.flags.contains(CrumbFlag.DoNotReplicate)) {
       Seq(c)
