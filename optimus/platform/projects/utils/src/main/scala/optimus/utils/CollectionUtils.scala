@@ -17,6 +17,7 @@ import optimus.utils.CollectionUtils.TraversableOps
 
 import scala.collection.SeqLike
 import scala.collection.immutable.Seq
+import scala.util._
 
 object CollectionUtils extends CollectionUtils {
   final class TraversableOps[A](val as: Traversable[A]) extends AnyVal {
@@ -80,6 +81,21 @@ trait CollectionUtils {
   implicit class juPropertiesOps(props: ju.Properties) {
     def addAll[K <: AnyRef, V <: AnyRef](all: ju.Map[K, V]): Unit = { // hack against scala/bug#10418 (fixed in 2.13 only)
       (props: ju.Hashtable[AnyRef, AnyRef]).putAll(all)
+    }
+  }
+  implicit class OptimusOptionOps[A](underlying: Option[A]) {
+    def getOrThrow(msg: => String): A = underlying.getOrElse(throw new IllegalArgumentException(msg))
+    def onEmpty(action: => Unit): Option[A] = { if (underlying.isEmpty) action else (); underlying }
+  }
+
+  implicit class OptimusTryOps[A](underlying: Try[A]) {
+    def getOrThrow(msg: => String): A = underlying match {
+      case Success(value)     => value
+      case Failure(exception) => throw new IllegalArgumentException(s"$msg. See details: $exception.")
+    }
+    def onEmpty(action: Throwable => Unit): Try[A] = onFailure(action)
+    def onFailure(action: Throwable => Unit): Try[A] = {
+      if (underlying.isFailure) action(underlying.failed.get) else (); underlying
     }
   }
 }

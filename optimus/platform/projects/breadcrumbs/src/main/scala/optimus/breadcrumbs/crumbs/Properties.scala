@@ -583,7 +583,7 @@ object Properties extends KnownProperties {
 
   val scope = prop[String]
 
-  val obtScope = prop[(String, String, String, String)]
+  val obtScope = prop[String]
   val obtCommit = prop[String]
   val obtWorkspace = prop[String]
   val obtProgresses = prop[collection.Seq[(Instant, String, Double)]]
@@ -611,6 +611,7 @@ object Properties extends KnownProperties {
   val pgoDiff = prop[collection.Seq[Map[String, String]]]
   val optconfPath = prop[String]
   val optconfAction = prop[String]
+  val optconfApplyTimeElapsed = propL
   val artifacts = prop[String]
 
   val hotspotEngine = prop[String]
