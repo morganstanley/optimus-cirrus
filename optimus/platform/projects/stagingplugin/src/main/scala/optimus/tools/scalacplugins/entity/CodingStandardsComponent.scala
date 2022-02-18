@@ -33,20 +33,19 @@ class CodingStandardsComponent(
   }
 
   private object standardsTraverser extends Traverser {
+    private case class TraversalState(inDefDef: Boolean, inLastExpr: Boolean, inDef: Boolean)
+    private object TraversalState {
+      def initial: TraversalState = TraversalState(inDefDef = false, inLastExpr = false, inDef = false)
+    }
 
-    var inDef = false
-
-    // used to check if return is in last expression (and therefore should cause error)
-    var inLastExpr = false
-    var inDefDef = false
-
+    private var state = TraversalState.initial
     override def traverse(tree: Tree) {
       tree match {
-        case Return(retVal) if inLastExpr => alarm(CodeStyleErrors.RETURN_STATEMENT, retVal.pos);
+        case Return(retVal) if state.inLastExpr => alarm(CodeStyleErrors.RETURN_STATEMENT, retVal.pos)
 
         case vdd: ValOrDefDef =>
           import vdd._
-          if (!inDef && mods.isImplicit && mods.isPublic && tpt.isEmpty)
+          if (!state.inDef && mods.isImplicit && mods.isPublic && tpt.isEmpty)
             alarm(StagingNonErrorMessages.UNTYPED_IMPLICIT(name), tree.pos)
 
           var alreadyTraversed = false
@@ -54,27 +53,21 @@ class CodingStandardsComponent(
             case dd: DefDef =>
               // Setting everything to the correct value before traversing the function (preserving old values for after the
               // function traversal is done
-              val wasInDefDef = inDefDef
-              inDefDef = true
-              val wasInLastExpr = inLastExpr
-              inLastExpr = true
-              val wasInDef = inDef
-              inDef = true
+              val oldState = state
+              state = state.copy(inDefDef = true, inLastExpr = true, inDef = true)
               super.traverse(dd)
+              state = oldState
               alreadyTraversed = true
-              inDef = wasInDef
-              inLastExpr = wasInLastExpr
-              inDefDef = wasInDefDef
             case ValDef(_, _, _, Return(retVal)) => alarm(CodeStyleErrors.RETURN_STATEMENT, retVal.pos)
             case _                               => super.traverse(tree)
           }
 
-          // might have already traversed this tree above if it was a defdef, don't wnat to again
+          // might have already traversed this tree above if it was a defdef, don't want to again
           if (!alreadyTraversed) {
-            val wasInDef = inDef
-            inDef = true
+            val oldState = state
+            state = state.copy(inDef = true)
             super.traverse(tree)
-            inDef = wasInDef
+            state = oldState
           }
 
         case Import(pre, _) =>
@@ -97,35 +90,24 @@ class CodingStandardsComponent(
 
         // inLastExpr will be true if if it was in the last expression already and it still is
 
-        case cd: CaseDef if inDefDef =>
+        case cd: CaseDef if state.inDefDef =>
           // does not necessarily exit the last expression so keep the value of the parent when traversing
           super.traverse(cd.pat)
           super.traverse(cd.guard)
           traverse(cd.body)
 
-        case i: If if inDefDef =>
-          val wasInLastExpr = inLastExpr
-          val isElseDefined = i.elsep match {
-            case Literal(Constant(())) => false
-            case _                     => true
-          }
-
-          // if can only be last expression if it has a corresponding else
-          inLastExpr = isElseDefined && wasInLastExpr
+        case i: If if state.inDefDef =>
           super.traverse(i.cond)
           traverse(i.thenp)
-          if (isElseDefined) traverse(i.elsep)
-          inLastExpr = wasInLastExpr
+          traverse(i.elsep)
 
-        case Block(stats, expr) if inDefDef =>
+        case Block(stats, expr) if state.inDefDef =>
           // first parts of a block are by definition not the last expression
-          val wasInLastExpr = inLastExpr
-          inLastExpr = false
+          val oldState = state
+          state = state.copy(inLastExpr = false)
           super.traverseTrees(stats)
-          inLastExpr = wasInLastExpr
-          val wasInLastExpression2 = inLastExpr
+          state = oldState
           traverse(expr)
-          inLastExpr = wasInLastExpression2
 
         case _ => super.traverse(tree)
       }

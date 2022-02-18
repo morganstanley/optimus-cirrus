@@ -13,7 +13,9 @@ package optimus.platform.utils
 
 import java.io.File
 import java.net.URL
+import java.net.URLClassLoader
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.{util => ju}
@@ -61,18 +63,33 @@ object ClassPathUtils {
     val excludePatterns = excludeRegexes map Pattern.compile
     def shouldExclude(path: String): Boolean =
       excludePatterns exists { _.matcher(path).matches }
-    // We're just reading off of the classpath sysprop now.
-    // Previously we poked through our loader chain to look for potential URLClassLoaders, as that's what we got in Java 8,
-    // but we don't support Java 8 anymore so there's really no point.
-    // If we supported running Optimus in some sort of OSGi situation we would need to nuance this,
-    // but we don't so I won't.
-    bootProperties
-      .get("java.class.path")
-      .split(File.pathSeparator)
-      .filterNot(_.isEmpty) // someone does: PREPEND_APPSCRIPT_CLASSPATH=${PREPEND_APPSCRIPT_CLASSPATH}:/... and it was originally unset
-      .filterNot(shouldExclude)
-      .map(Paths.get(_))
-      .toList
+
+    def loop(classLoader: ClassLoader): Seq[Path] = classLoader match {
+      case urlCl: URLClassLoader =>
+        // Zeppelin launches us in a custom classloader so check if we're in one and use its URLs too
+        urlCl.getURLs.toSeq.flatMap { url =>
+          if (url.getProtocol.equals("file") && !shouldExclude(url.getFile)) {
+            try Some(demanglePathFromUrl(url))
+            catch {
+              case ex: InvalidPathException =>
+                log.warn(s"Skipped invalid classpath entry: $ex")
+                None
+            }
+          } else None
+        } ++ loop(classLoader.getParent)
+      case _ =>
+        // The Java 9 app loader is very locked down and generally a pain to look through
+        // but really it just goes off the JVM classpath! so we'll just use that.
+        bootProperties
+          .get("java.class.path")
+          .split(File.pathSeparator)
+          .filterNot(_.isEmpty) // someone does: PREPEND_APPSCRIPT_CLASSPATH=${PREPEND_APPSCRIPT_CLASSPATH}:/... and it was originally unset
+          .filterNot(shouldExclude)
+          .map(Paths.get(_))
+          .toList
+    }
+
+    loop(classLoader)
   }
 
   final def demanglePathFromUrl(url: URL): Path =
