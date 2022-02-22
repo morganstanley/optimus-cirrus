@@ -63,4 +63,12 @@ package object collection {
     def mapValuesNow[W](f: V => W): Map[K, W] = self.view.mapValues(f).toMap
     def filterKeysNow(p: K => Boolean): Map[K, V] = self.view.filterKeys(p).toMap
   }
+
+  implicit class IterableOnceConvertTo[A](private val coll: IterableOnce[A]) {
+    /**
+     * Convert a collection into a different collection type.
+     * This is an alias for `collection.to(Target)` used while cross-building with 2.12.
+     */
+    def convertTo[C](factory: Factory[A, C]): C = coll.to(factory)
+  }
 }
