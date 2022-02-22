@@ -13,9 +13,12 @@ package optimus.utils
 
 import java.{util => ju}
 
+import optimus.utils.CollectionUtils.ExtraTraversableOps2
 import optimus.utils.CollectionUtils.TraversableOps
 
 import scala.collection.SeqLike
+import scala.collection.TraversableLike
+import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable.Seq
 import scala.util._
 
@@ -100,8 +103,7 @@ object CollectionUtils extends CollectionUtils {
         as.toSet.size match {
           case 1 => as.head
           case n =>
-            throw new IllegalArgumentException(
-              s"Expected single distinct element, but found $n: [${as.mkString(",")}]")
+            throw new IllegalArgumentException(s"Expected single distinct element, but found $n: [${as.mkString(",")}]")
         }
     }
 
@@ -121,13 +123,11 @@ object CollectionUtils extends CollectionUtils {
               s"Expected zero or one distinct element, but found $n: [${as.mkString(",")}]")
         }
 
-
     /** Not async friendly, for that see singleOrElseAsync. */
     def singleOptionOrElse(nonSingleHandler: (Int, Traversable[A]) => Option[A]): Option[A] = as.size match {
       case 1 => as.headOption
       case n => nonSingleHandler(n, as)
     }
-
 
     /** Not async friendly, for that see singleOrElseAsync. */
     def singleOr(nonSingleHandler: => A): A = as.size match {
@@ -141,11 +141,52 @@ object CollectionUtils extends CollectionUtils {
       case n => nonSingleHandler(n, as)
     }
   }
+
+  class ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](underlying: Repr[T]) {
+    def onEmpty(action: => Unit): Repr[T] = { if (underlying.isEmpty) action else (); underlying }
+
+    /**
+     * returns only those elements of the collection which are instances of the specified type
+     *
+     * (this is named 'collect' rather than 'filter' because the type of the returned collection is
+     * changed to be a collection of T, and this follows the convention of collect in the scala api)
+     */
+    def collectInstancesOf[X](implicit xManifest: Manifest[X], cbf: CanBuildFrom[Repr[T], X, Repr[X]]): Repr[X] = {
+      val cls = xManifest.runtimeClass
+      underlying.collect {
+        case c if cls.isInstance(c) => c.asInstanceOf[X]
+      }(cbf)
+    }
+
+    def collectInstancesNotOf[X](implicit xManifest: Manifest[X]): Repr[T] = {
+      val cls = xManifest.runtimeClass
+      underlying.filterNot(c => cls.isInstance(c))
+    }
+
+    def collectFirstInstanceOf[X](implicit xManifest: Manifest[X]): Option[X] = {
+      val cls = xManifest.runtimeClass
+      underlying.collectFirst {
+        case c if cls.isInstance(c) => c.asInstanceOf[X]
+      }
+    }
+
+    def collectAllInstancesOf[X](
+        implicit xManifest: Manifest[X],
+        cbf: CanBuildFrom[Repr[T], X, Repr[X]]): Option[Repr[X]] = {
+      val collected = collectInstancesOf[X]
+      if (collected.size == underlying.size) Some(collected) else None
+    }
+
+  }
+
 }
 
 // note that this is inherited by optimus.platform package object, so you only need to import it if you can't see platform
 trait CollectionUtils {
   implicit def traversable2Ops[A](as: Traversable[A]): TraversableOps[A] = new TraversableOps(as)
+
+  implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](t: Repr[T]) =
+    new ExtraTraversableOps2[T, Repr](t)
 
   implicit class TraversableTuple2Ops[A, B](iterable: Traversable[(A, B)]) {
     def toSingleMap: Map[A, B] = iterable.groupBy(_._1).map {

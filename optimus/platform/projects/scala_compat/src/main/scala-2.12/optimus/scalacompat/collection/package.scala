@@ -104,4 +104,39 @@ package object collection {
      */
     def filterKeysNow(p: K => Boolean): Repr = self.filter(kv => p(kv._1))
   }
+
+  implicit class TraversableOnceConvertTo[A](private val coll: TraversableOnce[A]) {
+    /**
+     * Convert a collection into a different collection type.
+     *
+     * When used with scala-collection-compat, this method is equivalent to using `.to(Target)` in Scala 2.13.
+     * With scala-collection-compat, the collection is only copied if necessary: if the source collection
+     * is immutable and matches the target type, it is returned unchanged.
+     *
+     * Compared to `.to[Target]` in Scala 2.12 (or `to(Target)` with scala-collection-compat), this
+     * method has a more precise static type; the `to[Target]` method returns a `CC[T]`, so the static
+     * type cannot be a `Map[K, V]` or a `BitSet`.
+     */
+    def convertTo[C](cbf: CanBuildFrom[Nothing, A, C]): C = {
+      val b = cbf()
+      b ++= coll.seq
+      b.result()
+    }
+  }
+
+  /**
+   * Implicit conversion from `mutable.Map` companion to `CanBuildFrom` building a mutable map.
+   *
+   * This is a workaround for a bug in scala-collection-compat, where `mapFactoryToCBF` by mistake only
+   * converts the `immutable.Map` companion to a `CanBuildFrom`, instead of `collection.Map`. This cannot
+   * be changed in a binary compatible manner.
+   *
+   * The implicit here converts `mutable.Map` only, not `collection.Map`, because the latter would
+   * cause ambiguities between itself and the definition in scala-collection-compat.
+   */
+  implicit def mutableMapFactoryToCBF[K, V, CC[A, B] <: sc.mutable.Map[A, B] with sc.mutable.MapLike[A, B, CC[A, B]]](
+    fact: sc.generic.MapFactory[CC]): CanBuildFrom[Any, (K, V), CC[K, V]] = new CanBuildFrom[Any, (K, V), CC[K, V]] {
+    override def apply(from: Any): sc.mutable.Builder[(K, V), CC[K, V]] = apply()
+    override def apply(): sc.mutable.Builder[(K, V), CC[K, V]] = fact.newBuilder[K, V]
+  }
 }
