@@ -691,7 +691,7 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   val INTERNAL_COMPILE_INFO = info1(10000, OptimusPhases.APICHECK, "Compilation information: %s")
 
-  val DEPRECATING = warningOptional2(10500, OptimusPhases.APICHECK, "%s is deprecated: %s")
+  val DEPRECATING = warning2(10500, OptimusPhases.APICHECK, "%s is deprecated: %s")
   val DEPRECATING_LIGHT = preIgnore(warningOptional2(10501, OptimusPhases.APICHECK, "%s is deprecated: %s"))
   val AUTO_ASYNC_OFF = info0(10553, OptimusPhases.AUTOASYNC, "Not asyncing collection, due to asyncOff request.")
   val ASYNC_CONTAINS_INCOMPATIBLE =
