@@ -548,6 +548,7 @@ object Properties extends KnownProperties {
   val sysLoc = prop[String]
   val logname = prop[String]
   val time = prop[String]
+  val invocationStyle = prop[String]
 
   val appLaunchContextType = prop[String]
   val appLaunchContextEnv = prop[String]
@@ -664,9 +665,9 @@ object StallPlugin {
   type Value = String
 
   val None = "None"
-  val DAL  = "DAL"
+  val DAL = "DAL"
   val Dist = "DIST"
-  val DMC  = "DMC"
+  val DMC = "DMC"
 }
 
 object RequestsStallInfo {
