@@ -25,8 +25,13 @@ object StagingSettings {
     val debugName = "debug:"
     val rewriteCollectionSeqName = "rewriteCollectionSeq:"
     val rewriteMapValuesName = "rewriteMapValues:"
+    val rewriteBreakOutOpsName = "rewriteBreakOutOps:"
     val rewriteBreakOutArgsName = "rewriteBreakOutArgs:"
     val rewriteVarargsToSeqName = "rewriteVarargsToSeq:"
+    val rewriteMapConcatWidenName = "rewriteMapConcatWiden:"
+    val rewriteNilaryInfixName = "rewriteNilaryInfix:"
+    val unitCompanionName = "unitCompanion:"
+    val anyFormattedName = "anyFormatted:"
   }
 }
 object StagingPlugin {
@@ -53,10 +58,20 @@ object StagingPlugin {
       pluginData.rewriteConfig.rewriteCollectionSeq = parseOption(option, rewriteCollectionSeqName, false)
     else if (option.startsWith(rewriteMapValuesName))
       pluginData.rewriteConfig.rewriteMapValues = parseOption(option, rewriteMapValuesName, false)
+    else if (option.startsWith(rewriteBreakOutOpsName))
+      pluginData.rewriteConfig.rewriteBreakOutOps = parseOption(option, rewriteBreakOutOpsName, false)
     else if (option.startsWith(rewriteBreakOutArgsName))
       pluginData.rewriteConfig.rewriteBreakOutArgs = parseOption(option, rewriteBreakOutArgsName, false)
     else if (option.startsWith(rewriteVarargsToSeqName))
       pluginData.rewriteConfig.rewriteVarargsToSeq = parseOption(option, rewriteVarargsToSeqName, false)
+    else if (option.startsWith(rewriteMapConcatWidenName))
+      pluginData.rewriteConfig.rewriteMapConcatWiden = parseOption(option, rewriteMapConcatWidenName, false)
+    else if (option.startsWith(rewriteNilaryInfixName))
+      pluginData.rewriteConfig.rewriteNilaryInfix = parseOption(option, rewriteNilaryInfixName, false)
+    else if (option.startsWith(unitCompanionName))
+      pluginData.rewriteConfig.unitCompanion = parseOption(option, unitCompanionName, false)
+    else if (option.startsWith(anyFormattedName))
+      pluginData.rewriteConfig.anyFormatted = parseOption(option, anyFormattedName, false)
     else error(s"unknown option '$option'")
   }
 

@@ -9,14 +9,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform
+package optimus.scala212
 
-import scala.annotation.StaticAnnotation
-import scala.annotation.compileTimeOnly
+import scala.{collection => sc}
 
-class staged extends StaticAnnotation
-
-object staged {
-  @compileTimeOnly("should be eliminated by the staging plugin")
-  def scalaVersionRange(s: String): Boolean = ???
-}
+object DefaultSeq {}

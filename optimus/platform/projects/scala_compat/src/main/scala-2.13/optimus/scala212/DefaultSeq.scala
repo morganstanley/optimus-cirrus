@@ -9,14 +9,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform
+package optimus.scala212
 
-import scala.annotation.StaticAnnotation
-import scala.annotation.compileTimeOnly
+import scala.{collection => sc}
 
-class staged extends StaticAnnotation
-
-object staged {
-  @compileTimeOnly("should be eliminated by the staging plugin")
-  def scalaVersionRange(s: String): Boolean = ???
+object DefaultSeq {
+  type Seq[+A] = sc.Seq[A]
+  val Seq: sc.Seq.type = sc.Seq
+  type IndexedSeq[+A] = sc.IndexedSeq[A]
+  val IndexedSeq: sc.IndexedSeq.type = sc.IndexedSeq
+  def toVarargsSeq[A](s: sc.Seq[A]): scala.collection.immutable.Seq[A] = s match {
+    case is: scala.collection.immutable.Seq[a] => is.asInstanceOf[scala.collection.immutable.Seq[A]]
+    case _                                     => s.toSeq
+  }
+  def toVarargsSeq[A](s: Array[A]): scala.collection.immutable.Seq[A] =
+    scala.collection.immutable.ArraySeq.unsafeWrapArray(s)
 }

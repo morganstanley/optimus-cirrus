@@ -21,14 +21,14 @@ object Args4JOptionHandlers {
 
   private val NoArgStr = "NO_ARG"
 
-  abstract class DelimitedArgumentOptionHandler[A](parser: CmdLineParser, option: OptionDef, setter: Setter[Seq[A]])
-      extends OneArgumentOptionHandler[Seq[A]](parser, option, setter) {
-    override def parse(arg: String): Seq[A] = arg.split(",").iterator.map(convert(_)).toSeq
+  abstract class DelimitedArgumentOptionHandler[A](parser: CmdLineParser, option: OptionDef, setter: Setter[collection.Seq[A]])
+      extends OneArgumentOptionHandler[collection.Seq[A]](parser, option, setter) {
+    override def parse(arg: String): collection.Seq[A] = arg.split(",").iterator.map(convert(_)).toSeq
 
     def convert(s: String): A
   }
 
-  class DelimitedStringOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Seq[String]])
+  class DelimitedStringOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[collection.Seq[String]])
       extends DelimitedArgumentOptionHandler[String](parser, option, setter) {
     def convert(s: String): String = s
   }
@@ -36,16 +36,16 @@ object Args4JOptionHandlers {
   abstract class GroupedDelimitedArgumentOptionHandler[A](
       parser: CmdLineParser,
       option: OptionDef,
-      setter: Setter[Seq[A]])
-      extends OneArgumentOptionHandler[Seq[A]](parser, option, setter) {
-    override def parse(arg: String): Seq[A] = arg.split(";").iterator.map(convert(_)).toSeq
+      setter: Setter[collection.Seq[A]])
+      extends OneArgumentOptionHandler[collection.Seq[A]](parser, option, setter) {
+    override def parse(arg: String): collection.Seq[A] = arg.split(";").iterator.map(convert(_)).toSeq
 
     def convert(s: String): A
   }
 
-  class GroupedDelimitedStringOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Seq[Seq[String]]])
-      extends GroupedDelimitedArgumentOptionHandler[Seq[String]](parser, option, setter) {
-    override def convert(s: String): Seq[String] = s.split(",")
+  class GroupedDelimitedStringOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[collection.Seq[collection.Seq[String]]])
+      extends GroupedDelimitedArgumentOptionHandler[collection.Seq[String]](parser, option, setter) {
+    override def convert(s: String): collection.Seq[String] = s.split(",")
   }
 
   abstract class OptionOptionHandler[A](parser: CmdLineParser, option: OptionDef, setter: Setter[Option[A]])

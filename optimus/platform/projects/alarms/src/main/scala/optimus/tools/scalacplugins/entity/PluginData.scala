@@ -123,9 +123,18 @@ class PluginData(private val global: Global) {
   object rewriteConfig {
     var rewriteCollectionSeq: Boolean = false
     var rewriteMapValues: Boolean = false
+    var rewriteBreakOutOps = false
     var rewriteBreakOutArgs = false
     var rewriteVarargsToSeq = false
-    def anyEnabled = rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutArgs || rewriteVarargsToSeq
+    var rewriteMapConcatWiden = false
+    var rewriteNilaryInfix = false
+    var unitCompanion = false
+    var anyFormatted = false
+    def anyEnabled =
+      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteBreakOutArgs || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || unitCompanion || anyFormatted
+
+    // disabled in some unit tests
+    var useOptimusCompat: Boolean = true
   }
 }
 

@@ -12,7 +12,7 @@
 package optimus.scalacompat
 
 import scala.collection.generic.CanBuildFrom
-import scala.{ collection => sc }
+import scala.{collection => sc}
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
@@ -40,9 +40,6 @@ package object collection {
   implicit class BuildFromOps[-From, -Elem, +Repr](val bf: BuildFrom[From, Elem, Repr]) extends AnyVal {
     def newBuilder(from: From): sc.mutable.Builder[Elem, Repr] = bf.apply(from)
   }
-  implicit class FactoryOps[-Elem, +Repr](val bf: sc.compat.Factory[Elem, Repr]) extends AnyVal {
-    def newBuilder: sc.mutable.Builder[Elem, Repr] = bf.apply()
-  }
   type IterableFactory[+CC[X] <: sc.GenTraversable[X]] = sc.generic.GenericCompanion[CC]
   def newBuilderFor[A, CC](t: TraversableLike[A, CC]): sc.mutable.Builder[A, CC] = t match {
     case _: sc.generic.HasNewBuilder[A, CC] =>
@@ -50,6 +47,9 @@ package object collection {
     case _ =>
       throw new UnsupportedOperationException(s"Collection ${t.getClass} must implement HasNewBuilder")
   }
+  def buildFromFor[A, CC[A]](t: sc.Iterable[Any], implicitArgs: Any*): sc.generic.CanBuildFrom[Any, A, CC[A]] =
+    throw new UnsupportedOperationException("not supported on 2.12.x")
+
   def knownSize(t: sc.GenTraversableOnce[_]): Int = {
     CanEqual.knownSize(t)
   }
@@ -139,4 +139,16 @@ package object collection {
     override def apply(from: Any): sc.mutable.Builder[(K, V), CC[K, V]] = apply()
     override def apply(): sc.mutable.Builder[(K, V), CC[K, V]] = fact.newBuilder[K, V]
   }
+
+  implicit class BreakOutToFactory[E, O](private val factory: sc.compat.Factory[E, O]) extends AnyVal {
+    def breakOut: sc.generic.CanBuildFrom[Any, E, O] = new sc.generic.CanBuildFrom[Any, E, O] {
+      override def apply(from: Any): sc.mutable.Builder[E, O] = factory()
+      override def apply(): sc.mutable.Builder[E, O] = factory()
+    }
+  }
+
+  def FloatOrdering: Ordering[Float] = Ordering.Float
+  def DoubleOrdering: Ordering[Double] = Ordering.Double
+
+  object ParCollectionConverters
 }

@@ -47,11 +47,11 @@ object FileUtils {
   }
 
   def getCSVReader(filename: String, separator: Char): CSVReader = {
-    new CSVReader(new BufferedReader(new InputStreamReader(new FileInputStream(filename))), separator)
+    new CSVReader(new BufferedReader(new InputStreamReader(new FileInputStream(filename))), separator, '"', '\\')
   }
 
   def getCSVWriter(filename: String, separator: Char, append: Boolean = false): CSVWriter = {
-    new CSVWriter(new OutputStreamWriter(new FileOutputStream(filename, append)), separator)
+    new CSVWriter(new OutputStreamWriter(new FileOutputStream(filename, append)), separator, '"', '\\')
   }
 
 }

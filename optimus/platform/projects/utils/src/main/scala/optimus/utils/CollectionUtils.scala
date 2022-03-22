@@ -15,10 +15,10 @@ import java.{util => ju}
 
 import optimus.utils.CollectionUtils.ExtraTraversableOps2
 import optimus.utils.CollectionUtils.TraversableOps
+import optimus.scalacompat.collection._
+import optimus.scalacompat.collection.BuildFrom
 
 import scala.collection.SeqLike
-import scala.collection.TraversableLike
-import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable.Seq
 import scala.util._
 
@@ -79,7 +79,7 @@ object CollectionUtils extends CollectionUtils {
       else throw new IllegalArgumentException(f(as))
 
     /** Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, use fallback */
-    def singleOptionOr(fallback: Option[A]): Option[A] =
+    def singleOptionOr(fallback: => Option[A]): Option[A] =
       if (zeroOneOrMany < 2) as.headOption else fallback
 
     /**
@@ -151,11 +151,14 @@ object CollectionUtils extends CollectionUtils {
      * (this is named 'collect' rather than 'filter' because the type of the returned collection is
      * changed to be a collection of T, and this follows the convention of collect in the scala api)
      */
-    def collectInstancesOf[X](implicit xManifest: Manifest[X], cbf: CanBuildFrom[Repr[T], X, Repr[X]]): Repr[X] = {
+    def collectInstancesOf[X](implicit xManifest: Manifest[X], cbf: BuildFrom[Repr[T], X, Repr[X]]): Repr[X] = {
       val cls = xManifest.runtimeClass
-      underlying.collect {
-        case c if cls.isInstance(c) => c.asInstanceOf[X]
-      }(cbf)
+      val builder = cbf.newBuilder(underlying)
+      underlying.foreach {
+        case c if cls.isInstance(c) => builder += c.asInstanceOf[X]
+        case _ =>
+      }
+      builder.result()
     }
 
     def collectInstancesNotOf[X](implicit xManifest: Manifest[X]): Repr[T] = {
@@ -172,13 +175,11 @@ object CollectionUtils extends CollectionUtils {
 
     def collectAllInstancesOf[X](
         implicit xManifest: Manifest[X],
-        cbf: CanBuildFrom[Repr[T], X, Repr[X]]): Option[Repr[X]] = {
+        cbf: BuildFrom[Repr[T], X, Repr[X]]): Option[Repr[X]] = {
       val collected = collectInstancesOf[X]
       if (collected.size == underlying.size) Some(collected) else None
     }
-
   }
-
 }
 
 // note that this is inherited by optimus.platform package object, so you only need to import it if you can't see platform
@@ -197,8 +198,10 @@ trait CollectionUtils {
       case (k, kvs) => k -> kvs.map { case (_, v) => v }.toSeq.distinct.single
     }
 
-    def toGroupedMap: Map[A, Seq[B]] = iterable.groupBy(_._1).map {
-      case (k, kvs) => k -> kvs.map { case (_, v) => v }.to[Seq]
+    def toGroupedMap: Map[A, Seq[B]] = {
+      iterable.groupBy(_._1).map {
+        case (k, kvs) => k -> kvs.map { case (_, v) => v }.toVector
+      }
     }
 
     def toGroupedMap[C](f: Traversable[B] => C): Map[A, C] =

@@ -38,6 +38,14 @@ class CodingStandardsComponent(
       def initial: TraversalState = TraversalState(inDefDef = false, inLastExpr = false, inDef = false)
     }
 
+    private object ScalaCollectionWildcardImport {
+      def unapply(t: Tree): Boolean = t match {
+        case Import(Ident(c), imps) => c == nme.collection && imps.exists(_.name == nme.WILDCARD)
+        case Import(Select(Ident(s), c), sel) if s == nme.scala_ => unapply(Import(Ident(c), sel))
+        case _ => false
+      }
+    }
+
     private var state = TraversalState.initial
     override def traverse(tree: Tree) {
       tree match {
@@ -69,6 +77,9 @@ class CodingStandardsComponent(
             super.traverse(tree)
             state = oldState
           }
+
+        case ScalaCollectionWildcardImport() =>
+          alarm(StagingErrors.NO_COLLECTION_WILDCARD_IMPORT, tree.pos)
 
         case Import(pre, _) =>
           def loop(tree: Tree) {
