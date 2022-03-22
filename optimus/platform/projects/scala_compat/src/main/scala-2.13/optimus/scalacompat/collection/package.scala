@@ -11,7 +11,7 @@
  */
 package optimus.scalacompat
 
-import scala.{collection => sc}
+import scala.{ collection => sc }
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
@@ -31,8 +31,26 @@ package object collection {
   type IterableView[+A] = sc.View[A]
   type SeqView[+A] = sc.SeqView[A]
 
-  def newBuilderFor[A, CC[A]](t: sc.IterableOps[A, CC, CC[A]]): sc.mutable.Builder[A, CC[A]] =
-    t.iterableFactory.newBuilder[A]
+  def newBuilderFor[A, CC[A]](t: sc.IterableOps[A, CC, CC[A]]): sc.mutable.Builder[A, CC[A]] = {
+    BuilderProvider.exposedBuilder(t).asInstanceOf[sc.mutable.Builder[A, CC[A]]]
+  }
+  def buildFromFor[A, CC[A]](t: sc.IterableOps[Any, CC, CC[_]], implicitArgs: Any*): sc.BuildFrom[Any, A, CC[A]] = {
+    val bf = t match {
+      case t: sc.BitSet =>
+        sc.BuildFrom.buildFromBitSet
+      case t: sc.SortedSet[A] =>
+        sc.BuildFrom.buildFromSortedSetOps(implicitArgs.head.asInstanceOf[Ordering[A]])
+      case t: sc.SortedMap[k, v] =>
+        sc.BuildFrom.buildFromSortedMapOps(implicitArgs.head.asInstanceOf[Ordering[A]])
+      case t: Map[k, v] =>
+        sc.BuildFrom.buildFromMapOps
+//      case t: sc.ArrayOps[a] =>
+//        sc.BuildFrom.buildFromArray(implicitArgs.head.asInstanceOf[scala.reflect.ClassTag[A]])
+      case t =>
+        sc.BuildFrom.buildFromIterableOps
+    }
+    bf.asInstanceOf[sc.BuildFrom[Any, A, CC[A]]]
+  }
   implicit class GenTraversableOnceSeqOp[C <: sc.IterableOnce[_]](val coll: C) extends AnyVal {
     def seq: coll.type = coll
   }
@@ -57,11 +75,27 @@ package object collection {
       override def newBuilder(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder[A, B]
     }
   }
+  implicit class BreakOutToFactory[E, O](private val factory: sc.compat.Factory[E, O]) extends AnyVal {
+    def breakOut: sc.BuildFrom[Any, E, O] = new sc.BuildFrom[Any, E, O] {
+      override def fromSpecific(from: Any)(it: sc.IterableOnce[E]): O = factory.newBuilder.addAll(it).result()
+      override def newBuilder(from: Any): sc.mutable.Builder[E, O] = factory.newBuilder
+    }
+  }
+  def FloatOrdering: Ordering[Float] = Ordering.Float.IeeeOrdering
+  def DoubleOrdering: Ordering[Double] = Ordering.Double.IeeeOrdering
 
-  // TODO: make polymorphic like 2.12 version
-  implicit class MapValuesFilterKeysNow[K, +V](private val self: sc.Map[K, V]) extends AnyVal {
-    def mapValuesNow[W](f: V => W): Map[K, W] = self.view.mapValues(f).toMap
-    def filterKeysNow(p: K => Boolean): Map[K, V] = self.view.filterKeys(p).toMap
+  implicit class MapValuesFilterKeysNow[K, +V, Repr <: sc.MapOps[K, V, Iterable2, Repr]](private val self: Repr with sc.Map[K, V]) extends AnyVal {
+    def mapValuesNow[W, That](f: V => W)(implicit bf: sc.BuildFrom[Repr, (K, W), That]): That = {
+      self match {
+        case im: sc.immutable.Map[K, V] =>
+          im.transform((k, v) => f(v)).asInstanceOf[That]
+        case _ =>
+          val b = bf.newBuilder(self)
+          self.foreachEntry((k, v) => b.addOne((k, f(v))))
+          b.result()
+      }
+    }
+    def filterKeysNow(p: K => Boolean): Repr = self.filter{ case (k, _) => p(k) }
   }
 
   implicit class IterableOnceConvertTo[A](private val coll: IterableOnce[A]) {
@@ -69,6 +103,8 @@ package object collection {
      * Convert a collection into a different collection type.
      * This is an alias for `collection.to(Target)` used while cross-building with 2.12.
      */
-    def convertTo[C](factory: Factory[A, C]): C = coll.to(factory)
+    def convertTo[C](factory: sc.compat.Factory[A, C]): C = coll.to(factory)
   }
+
+  lazy val ParCollectionConverters = scala.collection.parallel.CollectionConverters
 }

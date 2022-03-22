@@ -27,8 +27,8 @@ package object json {
   def jsonReader[T](implicit reader: JsonReader[T]) = reader
   def jsonWriter[T](implicit writer: JsonWriter[T]) = writer
 
-  implicit def pimpAny[T](any: T) = new PimpedAny(any)
-  implicit def pimpString(string: String) = new PimpedString(string)
+  implicit def enrichAny[T](any: T) = new RichAny(any)
+  implicit def enrichString(string: String) = new RichString(string)
 }
 
 package json {
@@ -36,11 +36,11 @@ package json {
       extends RuntimeException(msg, cause)
   class SerializationException(msg: String) extends RuntimeException(msg)
 
-  private[json] class PimpedAny[T](any: T) {
+  private[json] class RichAny[T](any: T) {
     def toJson(implicit writer: JsonWriter[T]): JsValue = writer.write(any)
   }
 
-  private[json] class PimpedString(string: String) {
+  private[json] class RichString(string: String) {
     @deprecated("deprecated in favor of parseJson", "1.2.6")
     def asJson: JsValue = parseJson
     def parseJson: JsValue = JsonParser(string)

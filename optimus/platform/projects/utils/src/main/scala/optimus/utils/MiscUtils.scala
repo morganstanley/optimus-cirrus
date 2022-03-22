@@ -21,6 +21,7 @@ import scala.collection.immutable
 import scala.reflect.macros.whitebox
 import scala.util.Try
 
+/** @see [[TypeClasses]] */
 object MiscUtils {
 
   //  The idea is that you can call niceBreak from code you're actively developing,
@@ -330,11 +331,9 @@ object MiscUtils {
       traverseEither(f(_).fold[Either[Unit, B]](Left(()))(Right(_))).toOption
   }
 
-  implicit def toImmutableSet[T](cs: collection.Set[T]): immutable.Set[T] = new immutable.Set[T] {
-    override def contains(elem: T) = cs.contains(elem)
-    override def +(elem: T) = cs.toSet + elem
-    override def -(elem: T) = cs.toSet - elem
-    override def iterator = cs.iterator
+  implicit def toImmutableSet[T](cs: collection.Set[T]): immutable.Set[T] = cs match {
+    case is: collection.immutable.Set[T] => is
+    case x => x.toSet
   }
 
   implicit class OrderingChain[T](private val self: Ordering[T]) extends AnyVal {

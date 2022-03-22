@@ -17,9 +17,9 @@ import scala.annotation.tailrec
  * @param s
  * @tparam T
  */
-class SeqExplore[T] private (s: Seq[T]) {
+class SeqExplore[T] private (s: collection.Seq[T]) {
 
-  private def continueWith(s: Seq[T]) = new SeqExplore(s)
+  private def continueWith(s: collection.Seq[T]) = new SeqExplore(s)
 
   /**
    * Search until the predicate matches.
@@ -28,7 +28,7 @@ class SeqExplore[T] private (s: Seq[T]) {
    */
   @tailrec final def until(f: T => Boolean): SeqExplore[T] = {
     s match {
-      case Seq() =>
+      case collection.Seq() =>
         this
       case x +: xs if (f(x)) =>
         this
@@ -77,5 +77,5 @@ class SeqExplore[T] private (s: Seq[T]) {
 }
 
 object SeqExplore {
-  def apply[T](s: Seq[T]) = new SeqExplore(s)
+  def apply[T](s: collection.Seq[T]) = new SeqExplore(s)
 }

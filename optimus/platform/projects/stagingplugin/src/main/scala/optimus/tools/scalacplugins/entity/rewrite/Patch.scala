@@ -27,7 +27,7 @@ case class Patch(span: Position, replacement: String) {
   def delta: Int = replacement.length - (span.end - span.start)
 }
 
-class Patches(patches: Array[Patch], val source: SourceFile, encoding: Charset) {
+class Patches(patches: Array[Patch], val source: SourceFile, underlyingFile: Path, encoding: Charset) {
 
   lazy val applied: String = {
     // not source.content, which sometimes includes a synthetic \n at the EOF
@@ -57,34 +57,51 @@ class Patches(patches: Array[Patch], val source: SourceFile, encoding: Charset) 
     val bytes = applied.getBytes(encoding)
     Files.write(underlyingFile, bytes)
   }
-  private def underlyingFile: Path =
-    if (source.file.getClass.getName.endsWith("xsbt.ZincVirtualFile")) {
-      val path = source.file.asInstanceOf[{ def underlying(): { def id(): String } }].underlying().id()
-      Paths.get(path)
-    } else {
-      source.file.file.toPath
-    }
 }
 object Patches {
-
-  def apply(patches: Seq[Patch], source: SourceFile, encoding: Charset) = {
-    val patchesArray = patches.toArray
-    util.Arrays.sort(patchesArray, Ordering.by[Patch, Int](_.span.start))
-    def patchesOverlap: Option[(Patch, Patch)] = {
-      if (patchesArray.nonEmpty) {
-        patchesArray.reduceLeft { (p1, p2) =>
-          if (p1.span.end > p2.span.start) {
-            return Some((p1, p2))
-          }
-          p2
-        }
-      }
+  def underlyingFile(source: SourceFile): Option[Path] = {
+    val fileClass = source.file.getClass.getName
+    if (fileClass.endsWith("xsbt.ZincVirtualFile")) {
+      val path = source.file.asInstanceOf[{ def underlying(): { def id(): String } }].underlying().id()
+      val p = Paths.get(path)
+      // Generated source file don't have physical files on disk
+      Some(p).filter(Files.exists(_))
+    } else if (fileClass.endsWith("OptimusStringVirtualFile"))
       None
+    else
+      Some(source.file.file.toPath)
+  }
+
+  /** Source code at a position. Either a line with caret (offset), else the code at the range position. */
+  def codeOf(pos: Position, source: SourceFile): String =
+    if (pos.start < pos.end) new String(source.content.slice(pos.start, pos.end))
+    else {
+      val line = source.offsetToLine(pos.point)
+      val code = source.lines(line).next()
+      val caret = " " * (pos.point - source.lineToOffset(line)) + "^"
+      s"$code\n$caret"
     }
-    patchesOverlap match {
-      case Some((p1, p2)) => throw new IllegalArgumentException("patches overlap: " + p1 + " " + p2)
-      case None           =>
+
+  private def checkNoOverlap(patches: Array[Patch], source: SourceFile): Boolean = {
+    var ok = true
+    for (Array(p1, p2) <- patches.sliding(2) if p1.span.end > p2.span.start) {
+      ok = false
+      val msg = s"""
+                   |overlapping patches;
+                   |
+                   |add `${p1.replacement}` at
+                   |${codeOf(p1.span, source)}
+                   |
+                   |add `${p2.replacement}` at
+                   |${codeOf(p2.span, source)}""".stripMargin.trim
+      throw new IllegalArgumentException(msg)
     }
-    new Patches(patchesArray, source, encoding)
+    ok
+  }
+
+  def apply(patches: Array[Patch], source: SourceFile, underlyingFile: Path, encoding: Charset): Patches = {
+    util.Arrays.sort(patches, Ordering.by[Patch, Int](_.span.start))
+    checkNoOverlap(patches, source)
+    new Patches(patches, source, underlyingFile, encoding)
   }
 }

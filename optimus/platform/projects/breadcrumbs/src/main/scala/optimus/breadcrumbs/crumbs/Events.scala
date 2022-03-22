@@ -92,6 +92,9 @@ object Events extends KnownEvents {
   val RuntimeCreated = event("RuntimeCreated")
   val RuntimeShutDown = event("RuntimeShutDown")
 
+  val AppStartPerf = event("AppStartPerf")
+  val AppRestorPerf = event("AppRestorPerf")
+
   val GraphStalling = event("GraphStalling")
   val GraphStalled = event("GraphStalled")
   val StallDetected = event("StallDetected")

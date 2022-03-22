@@ -9,14 +9,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform
+package optimus.utils
 
-import scala.annotation.StaticAnnotation
-import scala.annotation.compileTimeOnly
+import scala.util.Try
 
-class staged extends StaticAnnotation
+trait OptimusStringUtils {
 
-object staged {
-  @compileTimeOnly("should be eliminated by the staging plugin")
-  def scalaVersionRange(s: String): Boolean = ???
+  implicit class ExtraStringOps(underlying: String) {
+    def emptyOrSome: Option[String] =
+      if (underlying.isEmpty) None else Some(underlying)
+
+    def isNullOrEmpty: Boolean = (underlying eq null) || (underlying.length == 0)
+  }
+
+  object IntParsable {
+    def unapply(candidate: String): Option[Int] = Try { candidate.toInt } toOption
+  }
+
 }

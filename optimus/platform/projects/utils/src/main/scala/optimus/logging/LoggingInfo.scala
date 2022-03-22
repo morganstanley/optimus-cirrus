@@ -14,16 +14,8 @@ package optimus.logging
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.collection.JavaConverters.asScalaIteratorConverter
 import java.net.InetAddress
-import java.nio.charset.Charset
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.time.Instant
-import java.util.concurrent.TimeUnit
 
 import optimus.platform.util.Log
-import org.apache.commons.io.FileUtils
-
-import scala.util.Properties
 import scala.util.control.NonFatal
 
 object Pid extends Log {
@@ -45,7 +37,9 @@ object Pid extends Log {
   }
 
   val pid: Option[Long] = try {
-    Some(ProcessHandle.current().pid)
+    val p = ProcessHandle.current().pid
+    log.info(s"pid: $p") // matching the format that used to be in Pid.scala
+    Some(p)
   } catch {
     case NonFatal(e) => complain(e)
   }
@@ -65,12 +59,12 @@ object LoggingInfo {
     }
   }
 
-  def getLogFiles(log: ch.qos.logback.core.spi.AppenderAttachable[_]): Seq[String] = {
+  def getLogFiles(log: ch.qos.logback.core.spi.AppenderAttachable[_]): collection.Seq[String] = {
     val appenders = log.iteratorForAppenders().asScala
     val files = appenders.flatMap {
       case a: ch.qos.logback.core.spi.AppenderAttachable[_] => getLogFiles(a)
       case a: ch.qos.logback.core.FileAppender[_]           => Seq(a.getFile)
-      case a: ch.qos.logback.core.ConsoleAppender[_]        => Seq("console")
+      case a: ch.qos.logback.core.ConsoleAppender[_]        => collection.Seq("console")
       case a                                                => Seq(a.toString)
     }
     files.toSeq
@@ -80,39 +74,4 @@ object LoggingInfo {
   lazy val getHost: String = getHostInetAddr.getHostName
   lazy val getUser: String = System.getProperty("user.name", "unknown")
   lazy val pid: Long = Pid.pidOrZero
-
-  def tmpLog(prefix: String):Path =  Paths.get(System.getProperty("java.io.tmpdir"), s"$prefix-$getHost-${ Pid.pidOrZero }-${ Instant.now }.log")
-
-  class Uploader(url: String, pathParam: String = "files=@%s") extends Log {
-
-    def upload(prefix: String, msg: String): Boolean = {
-      val path: Path = tmpLog(prefix)
-      val wrote = try {
-        FileUtils.write(path.toFile, msg, Charset.defaultCharset())
-        true
-      } catch {
-        case NonFatal(e) =>
-          log.warn(s"Unable to write to $path: $e")
-          false
-      }
-      wrote && upload(path)
-    }
-
-    def upload(path: Path): Boolean = {
-      if (Properties.isWin)
-        false
-      else
-        try {
-          val params = String.format(pathParam, path)
-          val builder = new ProcessBuilder("/usr/bin/curl", "-X", "POST", url, "-F", params)
-          val process = builder.start()
-          process.waitFor(10, TimeUnit.SECONDS)
-          true
-        } catch {
-          case NonFatal(e) =>
-            log.warn(s"Unable to send $path to $url: $e")
-            false
-        }
-    }
-  }
 }

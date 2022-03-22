@@ -18,6 +18,7 @@ object StagingPhase {
   object names {
     val parser = "parser" // scalac phase: parse source into ASTs, perform simple desugaring
     val typer = "typer"
+    val patmat = "patmat"
     val superaccessors = "superaccessors" // scalac phase: parse source into ASTs, perform simple desugaring
     val pickler = "pickler"
     val refchecks = "refchecks"
@@ -44,5 +45,5 @@ object StagingPhase {
   val ANNOTATING = OptimusPhaseInfo(optimus_annotator, "add annotations to library symbols", optimus_standards, namer)
   val FORWARDING =
     OptimusPhaseInfo(optimus_forwarding, "rewrite references to @forwarder values", typer, superaccessors)
-  val REWRITE = OptimusPhaseInfo(optimus_rewrite, "rewrite source files in-place during migration", pickler, refchecks)
+  val REWRITE = OptimusPhaseInfo(optimus_rewrite, "rewrite source files in-place during migration", typer, patmat)
 }

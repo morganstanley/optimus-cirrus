@@ -59,7 +59,7 @@ object ClassPathUtils {
   lazy val expandedApplicationClasspath = expandClasspath(applicationClasspath)
   lazy val expandedApplicationClasspathString = expandedApplicationClasspath.mkString(File.pathSeparator)
 
-  final def readClasspathEntries(classLoader: ClassLoader, excludeRegexes: Seq[String] = Seq.empty): Seq[Path] = {
+  final def readClasspathEntries(classLoader: ClassLoader, excludeRegexes: collection.Seq[String] = collection.Seq.empty): collection.Seq[Path] = {
     val excludePatterns = excludeRegexes map Pattern.compile
     def shouldExclude(path: String): Boolean =
       excludePatterns exists { _.matcher(path).matches }
@@ -107,7 +107,7 @@ object ClassPathUtils {
   }
 
   /** Recursively expands all Class-Path manifest entries */
-  final def expandClasspath(classPath: Seq[Path]): Seq[Path] = {
+  final def expandClasspath(classPath: collection.Seq[Path]): collection.Seq[Path] = {
     val effectiveClassPath = new ju.LinkedHashSet[Path]()
 
     def loadClassPath(file: Path): Unit = {

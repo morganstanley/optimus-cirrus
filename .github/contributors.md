@@ -9,7 +9,7 @@ Chris Marsh
 
 Cyrus Lyons ([@cbwl](http://github.com/cbwl))
 
-Harrison Houghton ([@hh-ms](http://github.com/hh-ms))
+Harrison Houghton ([@hrhino](http://github.com/hrhino))
 
 Sarthak Banerjee ([@sarthakbanerjee](http://github.com/sarthakbanerjee))
 

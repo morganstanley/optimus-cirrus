@@ -35,6 +35,12 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       20010,
       StagingPhase.STANDARDS,
       "Do not import paths containing explicit package objects (just remove .`package`)")
+
+  val NO_COLLECTION_WILDCARD_IMPORT =
+    error0(
+      20012,
+      StagingPhase.STANDARDS,
+      "Use named imports for the collection package (collection.immutable) instead of the wildcard import collection._ [NEW]")
 }
 
 object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
