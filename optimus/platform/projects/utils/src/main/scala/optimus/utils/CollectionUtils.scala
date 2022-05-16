@@ -44,10 +44,8 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * This returns an object of type A
-     * if this is the only element of the Traversable.
-     * Otherwise an exception is thorwn.
-     *
+     * This returns an object of type A if this is the only element of the Traversable. Otherwise an exception is
+     * thorwn.
      */
     def single: A = zeroOneOrMany match {
       case 0 => throw new NoSuchElementException("single on empty Traversable")
@@ -55,36 +53,42 @@ object CollectionUtils extends CollectionUtils {
       case _ => throw new IllegalArgumentException(s"single on multi-element Traversable: $as")
     }
 
-    /** Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, this method throws. */
+    /**
+     * Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, this method
+     * throws.
+     */
     def singleOption: Option[A] = zeroOneOrMany match {
       case 0 | 1 => as.headOption
       case _     => throw new IllegalArgumentException(s"singleOption on multi-element Traversable: $as")
     }
 
-    /** Returns Some(x) if there is a single element. If there are 0 or more than 1 elements, this method returns None. */
+    /**
+     * Returns Some(x) if there is a single element. If there are 0 or more than 1 elements, this method returns None.
+     */
     def singleOrNone: Option[A] = zeroOneOrMany match {
       case 1 => Some(as.head)
       case _ => None
     }
 
     /**
-     * An element of type A is returned if the Traversable is a singleton.
-     * Otherwise an exception flies.
+     * An element of type A is returned if the Traversable is a singleton. Otherwise an exception flies.
      *
-     * @param f a function that composes an exception message according to type A.
+     * @param f
+     *   a function that composes an exception message according to type A.
      * @return
      */
     def singleOrThrow(f: Traversable[A] => String): A =
       if (zeroOneOrMany == 1) as.head
       else throw new IllegalArgumentException(f(as))
 
-    /** Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, use fallback */
+    /**
+     * Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, use fallback
+     */
     def singleOptionOr(fallback: => Option[A]): Option[A] =
       if (zeroOneOrMany < 2) as.headOption else fallback
 
     /**
-     * Returns true if the Traversable contains one element ( possibly multiple times ).
-     * Returns false otherwise.
+     * Returns true if the Traversable contains one element ( possibly multiple times ). Returns false otherwise.
      */
     def isSingleDistinct: Boolean = zeroOneOrMany match {
       case 0 => false
@@ -93,8 +97,7 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns an element of type A if this is the only member of the Traversable.
-     * Otherwise an exception is thrown.
+     * Returns an element of type A if this is the only member of the Traversable. Otherwise an exception is thrown.
      */
     def singleDistinct: A = zeroOneOrMany match {
       case 0 => throw new IllegalArgumentException("Expected single element, but was empty!")
@@ -108,9 +111,8 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns None if the Traversable is empty.
-     * Returns Some(a) if a is the only element of type A contained by the Traversable.
-     * Otherwise exception flies.
+     * Returns None if the Traversable is empty. Returns Some(a) if a is the only element of type A contained by the
+     * Traversable. Otherwise exception flies.
      * @return
      */
     def singleDistinctOption: Option[A] =
@@ -148,15 +150,15 @@ object CollectionUtils extends CollectionUtils {
     /**
      * returns only those elements of the collection which are instances of the specified type
      *
-     * (this is named 'collect' rather than 'filter' because the type of the returned collection is
-     * changed to be a collection of T, and this follows the convention of collect in the scala api)
+     * (this is named 'collect' rather than 'filter' because the type of the returned collection is changed to be a
+     * collection of T, and this follows the convention of collect in the scala api)
      */
     def collectInstancesOf[X](implicit xManifest: Manifest[X], cbf: BuildFrom[Repr[T], X, Repr[X]]): Repr[X] = {
       val cls = xManifest.runtimeClass
       val builder = cbf.newBuilder(underlying)
       underlying.foreach {
         case c if cls.isInstance(c) => builder += c.asInstanceOf[X]
-        case _ =>
+        case _                      =>
       }
       builder.result()
     }
@@ -173,8 +175,8 @@ object CollectionUtils extends CollectionUtils {
       }
     }
 
-    def collectAllInstancesOf[X](
-        implicit xManifest: Manifest[X],
+    def collectAllInstancesOf[X](implicit
+        xManifest: Manifest[X],
         cbf: BuildFrom[Repr[T], X, Repr[X]]): Option[Repr[X]] = {
       val collected = collectInstancesOf[X]
       if (collected.size == underlying.size) Some(collected) else None
@@ -190,17 +192,17 @@ trait CollectionUtils {
     new ExtraTraversableOps2[T, Repr](t)
 
   implicit class TraversableTuple2Ops[A, B](iterable: Traversable[(A, B)]) {
-    def toSingleMap: Map[A, B] = iterable.groupBy(_._1).map {
-      case (k, kvs) => k -> kvs.map { case (_, v) => v }.single
+    def toSingleMap: Map[A, B] = iterable.groupBy(_._1).map { case (k, kvs) =>
+      k -> kvs.map { case (_, v) => v }.single
     }
 
-    def toDistinctMap: Map[A, B] = iterable.groupBy(_._1).map {
-      case (k, kvs) => k -> kvs.map { case (_, v) => v }.toSeq.distinct.single
+    def toDistinctMap: Map[A, B] = iterable.groupBy(_._1).map { case (k, kvs) =>
+      k -> kvs.map { case (_, v) => v }.toSeq.distinct.single
     }
 
     def toGroupedMap: Map[A, Seq[B]] = {
-      iterable.groupBy(_._1).map {
-        case (k, kvs) => k -> kvs.map { case (_, v) => v }.toVector
+      iterable.groupBy(_._1).map { case (k, kvs) =>
+        k -> kvs.map { case (_, v) => v }.toVector
       }
     }
 

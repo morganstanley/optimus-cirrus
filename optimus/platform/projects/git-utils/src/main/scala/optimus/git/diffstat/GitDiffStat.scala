@@ -27,7 +27,7 @@ object GitDiffStat {
         result ++ BundleDiffStat.sumIfKeysMatch(cur, bd)
     }
 
-    //construct aggregate line stats
+    // construct aggregate line stats
     val allLines: HunkStat = {
       val a = diffs
         .flatMap(_.hunks)
@@ -36,7 +36,7 @@ object GitDiffStat {
       if (a.nonEmpty) a.reduce[HunkStat]((h1: HunkStat, h2: HunkStat) => h1 + h2) else HunkStat()
     }
 
-    //construct aggregate file stats
+    // construct aggregate file stats
     val allFiles =
       if (diffs.nonEmpty) diffs.map(FileStat(_)).reduce((f1, f2) => f1 + f2) else FileStat()
 
@@ -87,7 +87,7 @@ object BundleDiffStat {
     else if (diff.isFileDeletion)
       BundleDiffStat(bundleFrom(fileName), lines.added, lines.removed, filesRemoved = 1)
     else {
-      //modified lines are owned by the TO file if modified and moved across bundle boundary, this is imperfect but we could also run with rename detection off
+      // modified lines are owned by the TO file if modified and moved across bundle boundary, this is imperfect but we could also run with rename detection off
       val isSameBundle = diff.fromFileName == diff.toFileName
       if (forceFromFileStatWhenModified) {
         if (isSameBundle)

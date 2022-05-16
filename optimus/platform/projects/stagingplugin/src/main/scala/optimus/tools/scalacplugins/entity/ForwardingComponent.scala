@@ -21,7 +21,7 @@ import transform._
 class ForwardingComponent(
     val pluginData: PluginData,
     val global: Global,
-    val phaseInfo: OptimusPhaseInfo,
+    val phaseInfo: OptimusPhaseInfo
 ) extends PluginComponent
     with WithOptimusPhase
     with Transform
@@ -41,10 +41,12 @@ class ForwardingComponent(
     def unapply(tree: Tree): Option[Symbol] = tree match {
       case ref: RefTree if ref.symbol.isFinal =>
         val sym = ref.symbol
-        _forwarder.getOrElseUpdate(sym, sym.info.resultType match {
-          case SingleType(_, ref) if sym.owner hasAnnotation ForwarderAttr => Some(ref)
-          case _                                                           => None
-        })
+        _forwarder.getOrElseUpdate(
+          sym,
+          sym.info.resultType match {
+            case SingleType(_, ref) if sym.owner hasAnnotation ForwarderAttr => Some(ref)
+            case _                                                           => None
+          })
       case _ => None
     }
   }

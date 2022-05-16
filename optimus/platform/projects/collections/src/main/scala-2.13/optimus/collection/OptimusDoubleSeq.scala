@@ -17,21 +17,34 @@ import java.util
 import java.util.Arrays
 
 import scala.annotation.switch
-import scala.collection.GenIterable
-import scala.collection.GenTraversableOnce
-import scala.collection.IndexedSeqOptimized
-import scala.collection.TraversableOnce
-import scala.collection.generic.CanBuildFrom
+import scala.collection.IndexedSeqView
+import scala.collection.IterableFactoryDefaults
+import scala.collection.IterableOnce
+import scala.collection.immutable.ArraySeq
+import scala.collection.immutable.StrictOptimizedSeqOps
 import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.collection.mutable.WrappedArray
 import scala.reflect.ClassTag
 import scala.util.hashing.MurmurHash3
 
-object OptimusDoubleSeq extends OSeqCompanion[Double] {
-  def from(t: TraversableOnce[Double]): OptimusDoubleSeq = {
+object OptimusDoubleSeq
+    extends OSeqCompanion[Double]
+    with scala.collection.SpecificIterableFactory[Double, OptimusDoubleSeq] {
+  def from(t: IterableOnce[Double]): OptimusDoubleSeq = {
     t match {
       case os: OptimusDoubleSeq => os
       case _                    => withSharedBuilder(_ ++= t)
+    }
+  }
+
+  override def newBuilder: mutable.Builder[Double, OptimusDoubleSeq] = genCBF.newBuilder()
+  override def fromSpecific(it: IterableOnce[Double]): OptimusDoubleSeq = {
+    if (it.knownSize == 0) empty
+    else {
+      val builder = genCBF.newBuilder()
+      builder ++= it
+      builder.result()
     }
   }
 
@@ -46,20 +59,31 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
   private val emptyHolder = new OptimusDoubleSeq(Array.emptyDoubleArray)
 
   def empty: OptimusDoubleSeq = emptyHolder
-  def apply(elems: Double*): OptimusDoubleSeq =
+  override def apply(elems: Double*): OptimusDoubleSeq =
     /* we have to copy the array to protect from code like
     val data = Array(1d, 2d, 3d, 4d, 5d, 6d, 7d, 8d, 9d, 10d)
     val exposed = OptimusDoubleSeq(data :_*)
      */
-    if (elems.isEmpty) empty else apply(elems.toArray)
+    if (elems.isEmpty) empty
+    else {
+      elems match {
+        case as: ArraySeq.ofDouble =>
+          apply(as.unsafeArray)
+        case _ =>
+          apply(elems.toArray)
+      }
+    }
   def apply(elems: Array[Double]): OptimusDoubleSeq =
     if (elems.length == 0) empty else new OptimusDoubleSeq(elems.clone())
 
-  def newBuilder: OptimusDoubleBuilder[OptimusDoubleSeq] =
-    genCBF()
   private[collection] def borrowBuilder[A]: OptimusDoubleBuilder[OptimusDoubleSeq] = genCBF.borrowBuilder()
 
-  implicit def canBuildFrom: OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
+  // support `coll.apar.map(f)(OptimusDoubleSeq.breakOut)
+  def breakOut[T]: OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
+  // support `collection.to(OptimusDoubleSeq)`
+  implicit def factoryToCBF(
+      facotry: OptimusDoubleSeq.type
+  ): OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
   private[collection] object genCBF
       extends OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double](
         "OptimusDoubleSeq.genCBF",
@@ -81,23 +105,23 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
       override protected def newArray(size: Int): Array[Double] = new Array[Double](size)
       override protected def copyToArray(): Array[Double] = util.Arrays.copyOf(elems, elemsIndex)
 
-      override def +=(elem: Double): this.type = {
+      override def addOne(elem: Double): this.type = {
         prepareForAdditional(1)
         elems(elemsIndex) = elem
         elemsIndex += 1
         this
       }
 
-      override def ++=(xs: TraversableOnce[Double]): this.type = xs match {
-        case xs: WrappedArray.ofDouble =>
-          copyFromArray(xs.array, 0, xs.length)
+      override def addAll(xs: IterableOnce[Double]): this.type = xs match {
+        case xs: ArraySeq.ofDouble =>
+          copyFromArray(xs.unsafeArray, 0, xs.length)
           this
         case xs: OptimusDoubleSeq =>
           flushToArrays()
           addArray(xs.data)
           this
         case _ =>
-          super.++=(xs)
+          super.addAll(xs)
       }
 
       override def result() = {
@@ -160,11 +184,11 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
       unsafeFromArray(res)
     }
   }
-  //internal methods
+  // internal methods
   private[collection] def unsafeFromArray(elems: Array[Double]): OptimusDoubleSeq =
     if (elems.length == 0) empty else new OptimusDoubleSeq(elems)
 
-  //optimised apply methods to avoid array copying
+  // optimised apply methods to avoid array copying
   def apply(): OptimusDoubleSeq = empty
   def apply(d1: Double): OptimusDoubleSeq =
     unsafeFromArray(Array(d1))
@@ -174,15 +198,13 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
     unsafeFromArray(Array(d1, d2, d3))
   def apply(d1: Double, d2: Double, d3: Double, d4: Double): OptimusDoubleSeq =
     unsafeFromArray(Array(d1, d2, d3, d4))
-  //OSeqCompanion methods
+  // OSeqCompanion methods
   override private[collection] def emptyOS[A <: Double]: OSeq[A] =
     empty.asInstanceOf[OSeq[A]]
   override private[collection] def tabulateOS[A <: Double](size: Int)(elemFn: OSeqTabulate[A]): OSeq[A] =
     tabulate(size)(elemFn).asInstanceOf[OSeq[A]]
   override private[collection] def fillOS[A <: Double](size: Int)(elem: A): OSeq[A] =
     fill(size)(elem).asInstanceOf[OSeq[A]]
-  override private[collection] def canBuildFromOS[A <: Double]: OptimusCanBuildFrom[Seq[A], A, OSeq[A], Double] =
-    genCBF.asInstanceOf[OptimusCanBuildFrom[Seq[A], A, OSeq[A], Double]]
 }
 object OptimusDoubleSeqSettings extends OSeqImpl {
   override def minArraySize: Int = 10000
@@ -190,18 +212,22 @@ object OptimusDoubleSeqSettings extends OSeqImpl {
 }
 
 /**
- * A wrapper for [[Array]]s of primitive [[Double]] values.
- * This optimises memory and CPU use by not boxing when not needed
- * It exhibits efficient indexing compared to the default IndexSeq ([[Vector]]).
- * It is optimus friendly with a lazily cached hashcode
+ * A wrapper for [[Array]]s of primitive [[Double]] values. This optimises memory and CPU use by not boxing when not
+ * needed It exhibits efficient indexing compared to the default IndexSeq ([[Vector]]). It is optimus friendly with a
+ * lazily cached hashcode
  */
 final class OptimusDoubleSeq private (private val data: Array[Double])
     extends OSeq[Double]
-    with IndexedSeqOptimized[Double, OptimusDoubleSeq] {
-  import OptimusDoubleSeq.empty
-  import OptimusDoubleSeq.genCBF
+    with immutable.IndexedSeqOps[Double, OSeq, OptimusDoubleSeq]
+    with StrictOptimizedSeqOps[Double, OSeq, OptimusDoubleSeq]
+    with IterableFactoryDefaults[Double, OSeq] {
+
   import OptimusDoubleSeq.unsafeFromArray
 
+  override protected def fromSpecific(coll: IterableOnce[Double]): OptimusDoubleSeq =
+    OptimusDoubleSeq.fromSpecific(coll)
+  override protected def newSpecificBuilder: mutable.Builder[Double, OptimusDoubleSeq] = OptimusDoubleSeq.newBuilder
+  override def empty: OptimusDoubleSeq = OptimusDoubleSeq.empty
   override def length: Int = data.length
   override def apply(idx: Int): Double = data(idx)
   override def equals(other: Any): Boolean = other match {
@@ -219,25 +245,27 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     else {
       // use seqSeed so that hashCode is consistent with Seq[Double]'s
       val hashCode = MurmurHash3.arrayHash(data, MurmurHash3.seqSeed)
-      //note - this is order important
-      //hashcode must be written before known
+      // note - this is order important
+      // hashcode must be written before known
       _hashCode = hashCode
-      //volatile write, forces the _hashcode to be visible
+      // volatile write, forces the _hashcode to be visible
       _knownHashCode = true
       hashCode
     }
-  override def sameElements[B >: Double](other: GenIterable[B]): Boolean = {
+  override def sameElements[B >: Double](other: IterableOnce[B]): Boolean = {
     other match {
       case that: OptimusDoubleSeq =>
         this.size == that.size && this.hashCode == that.hashCode &&
-          (java.util.Arrays.equals(this.data, that.data))
+        (java.util.Arrays.equals(this.data, that.data))
       case _ =>
         super.sameElements(other)
     }
   }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[Double]] */
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[Double]]
+   */
   override def sum[B >: Double](implicit num: Numeric[B]): B =
     if (num ne Numeric.DoubleIsFractional) {
       super.sum(num)
@@ -251,8 +279,10 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       result
     }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[Double]] */
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[Double]]
+   */
   override def product[B >: Double](implicit num: Numeric[B]): B =
     if (num ne Numeric.DoubleIsFractional) {
       super.product(num)
@@ -266,127 +296,174 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       result
     }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[OptimusDoubleSeq]]
-   *             optimised to zero allocation and return this if the result would == this to save memory and later hashcode*/
-  override def map[B, That](f: Double => B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    if (bf eq genCBF) {
-      if (isEmpty) empty.asInstanceOf[That]
-      else {
-        // here we know that B =:= Double and That =:= OptimusDoubleSeq
-        val f1 = f.asInstanceOf[Double => Double]
-        var newData: Array[Double] = null
-        var i = 0
-        while (i < data.length) {
-          val existing = data(i)
-          val result = f1(existing)
-          if ((newData eq null) && doubleToLongBits(existing) != doubleToLongBits(result)) {
-            newData = new Array[Double](data.length)
-            System.arraycopy(data, 0, newData, 0, i)
-          }
-          if (newData ne null)
-            newData(i) = result
-          i += 1
-        }
-        if (newData eq null) this.asInstanceOf[That]
-        else unsafeFromArray(newData).asInstanceOf[That]
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[OptimusDoubleSeq]] optimised to zero allocation and return this
+   * if the result would == this to save memory and later hashcode
+   */
+  def map[B](f: Double => Double): OptimusDoubleSeq = {
+    val f1 = f.asInstanceOf[Double => Double]
+    var newData: Array[Double] = null
+    var i = 0
+    while (i < data.length) {
+      val existing = data(i)
+      val result = f1(existing)
+      if ((newData eq null) && doubleToLongBits(existing) != doubleToLongBits(result)) {
+        newData = new Array[Double](data.length)
+        System.arraycopy(data, 0, newData, 0, i)
       }
-    } else super.map(f)(bf)
+      if (newData ne null)
+        newData(i) = result
+      i += 1
+    }
+    if (newData eq null) this
+    else unsafeFromArray(newData)
+  }
+  override def map[B](f: Double => B): OSeq[B] = {
+    super.map(f)
+  }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
   override def slice(from: Int, until: Int): OptimusDoubleSeq = {
     val lo = Math.min(Math.max(from, 0), data.length)
     val hi = Math.min(Math.max(until, lo), data.length)
-    if (lo == hi) empty
+    if (lo == hi) OptimusDoubleSeq.empty
     else if (lo == 0 && hi == data.length) this
     else unsafeFromArray(Arrays.copyOfRange(data, lo, hi))
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++[B >: Double, That](that: GenTraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    if ((bf eq genCBF) && that.hasDefiniteSize) {
-      // here we know that B =:= Double and That =:= OptimusDoubleSeq
-      val thatLength = that.size
-
-      if (isEmpty && that.isInstanceOf[OptimusDoubleSeq]) that.asInstanceOf[That]
-      else if (thatLength == 0) this.asInstanceOf[That]
-      else {
-        val newData = Arrays.copyOf(data, data.length + thatLength)
-        that.copyToArray(newData.asInstanceOf[Array[B]], data.length)
-        unsafeFromArray(newData).asInstanceOf[That]
-      }
-    } else super.++(that)(bf)
-
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++:[B >: Double, That](that: Traversable[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    ++:(that.asInstanceOf[TraversableOnce[B]])
-
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++:[B >: Double, That](that: TraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    if ((bf eq genCBF) && that.hasDefiniteSize) {
-      // here we know that B =:= Double and That =:= OptimusDoubleSeq
-      val thatLength = that.size
-      if (isEmpty && that.isInstanceOf[OptimusDoubleSeq]) that.asInstanceOf[That]
-      else if (thatLength == 0) this.asInstanceOf[That]
-      else {
-        val newData = new Array[Double](data.length + thatLength)
-        System.arraycopy(data, 0, newData, thatLength, data.length)
-        that.copyToArray(newData.asInstanceOf[Array[B]], 0)
-        unsafeFromArray(newData).asInstanceOf[That]
-      }
-    } else super.++:(that)(bf)
-
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
-  override def :+[B >: Double, That](that: B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    if (bf eq genCBF) {
-      // here we know that B =:= Double and That =:= OptimusDoubleSeq
-      val newData = Arrays.copyOf(data, data.length + 1)
-      newData(data.length) = that.asInstanceOf[Double]
-      unsafeFromArray(newData).asInstanceOf[That]
-    } else super.:+(that)(bf)
-
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
-  override def +:[B >: Double, That](that: B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
-    if (bf eq genCBF) {
-      // here we know that B =:= Double and That =:= OptimusDoubleSeq
-      val newData = new Array[Double](data.length + 1)
-      //do th arraycopy first as JVM elides the clear
-      System.arraycopy(data, 0, newData, 1, data.length)
-      newData(0) = that.asInstanceOf[Double]
-      unsafeFromArray(newData).asInstanceOf[That]
-    } else super.:+(that)(bf)
-
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
-  override def padTo[B >: Double, That](len: Int, elem: B)(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That = {
-    if (bf eq genCBF) {
-      // here we know that B =:= Double and That =:= OptimusDoubleSeq
-      if (length <= data.length) this.asInstanceOf[That]
-      else {
-        val newData = Arrays.copyOf(data, len)
-        Arrays.fill(newData, data.length, len, elem.asInstanceOf[Double])
-        unsafeFromArray(newData).asInstanceOf[That]
-      }
-    } else super.padTo(len, elem)
+  override def take(n: Int): OptimusDoubleSeq = {
+    slice(0, n)
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
-  override def copyToArray[B >: Double](xs: Array[B], start: Int, len: Int): Unit =
-    System.arraycopy(data, 0, xs, start, Math.min(start + len, data.length))
+  override def drop(n: Int): OptimusDoubleSeq = {
+    slice(n, length)
+  }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing, if the function is explicitly [[Double]]*/
+  override def takeRight(n: Int): OptimusDoubleSeq = {
+    slice(length - n, length)
+  }
+
+  override def dropRight(n: Int): OptimusDoubleSeq = {
+    slice(0, length - n)
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def appendedAll[B >: Double](that: IterableOnce[B]): OSeq[B] = {
+    def append(that: Array[Double]): OSeq[B] = {
+      val newLength = data.length + that.length
+      val newData = Arrays.copyOf(data, newLength)
+      System.arraycopy(that, 0, newData, data.length, that.length)
+      unsafeFromArray(newData)
+    }
+
+    that match {
+      case it: Iterable[B] if it.isEmpty => this
+      case ods: OptimusDoubleSeq         => append(ods.data)
+      case asod: ArraySeq.ofDouble       => append(asod.unsafeArray)
+      case _                             =>
+        // TODO: Could use a OptimusDoubleSeq builder optimistically assuming that that contains Doubles,
+        //       and fall back to an OptimusSeq builder if an element of a different type is detected.
+        //       Same applies for
+        super.appendedAll(that)
+    }
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def prependedAll[B >: Double](that: IterableOnce[B]): OSeq[B] = {
+    def prepend(that: Array[Double]): OSeq[B] = {
+      val newLength = data.length + that.length
+      val newData = Arrays.copyOf(that, newLength)
+      System.arraycopy(data, 0, newData, that.length, data.length)
+      unsafeFromArray(newData)
+    }
+
+    that match {
+      case it: Iterable[B] if it.isEmpty => this
+      case ods: OptimusDoubleSeq         => prepend(ods.data)
+      case asod: ArraySeq.ofDouble       => prepend(asod.unsafeArray)
+      case _                             => super.prependedAll(that)
+    }
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
+  override def appended[B >: Double](that: B): OSeq[B] = {
+    that match {
+      case d: Double =>
+        val newData = Arrays.copyOf(data, data.length + 1)
+        newData(data.length) = d
+        unsafeFromArray(newData).asInstanceOf[OptimusSeq[B]]
+      case _ =>
+        super.appended(that)
+    }
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
+  override def prepended[B >: Double](that: B): OSeq[B] = {
+    that match {
+      case _: Double =>
+        val newData = new Array[Double](data.length + 1)
+        // do th arraycopy first as JVM elides the clear
+        System.arraycopy(data, 0, newData, 1, data.length)
+        newData(0) = that.asInstanceOf[Double]
+        unsafeFromArray(newData).asInstanceOf[OptimusSeq[B]]
+      case _ =>
+        super.prepended(that)
+    }
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
+  override def padTo[B >: Double](len: Int, elem: B): OSeq[B] = {
+    if (length <= data.length) this.asInstanceOf[OptimusSeq[B]]
+    else {
+      elem match {
+        case d: Double =>
+          val newData = Arrays.copyOf(data, len)
+          Arrays.fill(newData, data.length, len, d)
+          unsafeFromArray(newData).asInstanceOf[OptimusSeq[B]]
+        case _ =>
+          super.padTo(len, elem)
+      }
+    }
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
+  override def copyToArray[B >: Double](xs: Array[B], start: Int, len: Int): Int = {
+    val n = OptimusSeq.elemsToCopyToArray(data.length, xs.length, start, len)
+    if (xs.getClass.getComponentType == classOf[Double]) {
+      System.arraycopy(data, 0, xs, start, n)
+      n
+    } else super.copyToArray(xs, start, len)
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing, if the function is explicitly [[Double]]
+   */
   override def foreach[U](f: Double => U): Unit = {
     var i = 0
     val len = length
@@ -396,20 +473,19 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     }
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
   override def toArray[B >: Double](implicit B: ClassTag[B]): Array[B] = {
     if (B.runtimeClass == classOf[Double]) {
       // here we know that B =:= Double
 
-      //if length is 0, we can share
+      // if length is 0, we can share
       (if (data.length == 0) data
        else data.clone()).asInstanceOf[Array[B]]
     } else super.toArray
   }
-
-  override protected[this] def newBuilder: mutable.Builder[Double, OptimusDoubleSeq] =
-    OptimusDoubleSeq.canBuildFrom.apply()
 
   override def head: Double = data.length match {
     case 0 => throw new NoSuchElementException("OptimusDoubleSeq.head")
@@ -421,12 +497,12 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
   }
   override def init: OptimusDoubleSeq = data.length match {
     case 0 => throw new UnsupportedOperationException("OptimusDoubleSeq.init")
-    case 1 => empty
+    case 1 => OptimusDoubleSeq.empty
     case _ => unsafeFromArray(Arrays.copyOf(data, data.length - 1))
   }
   override def tail: OptimusDoubleSeq = data.length match {
     case 0 => throw new UnsupportedOperationException("OptimusDoubleSeq.tail")
-    case 1 => empty
+    case 1 => OptimusDoubleSeq.empty
     case _ => unsafeFromArray(Arrays.copyOfRange(data, 1, data.length))
   }
 
@@ -440,7 +516,7 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       while (in < length) {
         val value = apply(in)
         if (include == f(value)) {
-          builder += value
+          builder.addOne(value)
         }
         in += 1
       }
@@ -449,9 +525,9 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     } finally builder.returnBorrowed()
 
   }
-  //non collection methods
+  // non collection methods
   def zipWith(other: OptimusDoubleSeq)(f: (Double, Double) => Double): OptimusDoubleSeq = {
-    if (this.isEmpty || other.isEmpty) empty
+    if (this.isEmpty || other.isEmpty) OptimusDoubleSeq.empty
     else {
       val thisData = this.data
       val thatData = other.data
@@ -466,7 +542,7 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
   }
 
   def mapWithIndexDouble(f: (Double /*value*/, Int /*index*/ ) => Double /*result*/ ): OptimusDoubleSeq =
-    if (isEmpty) empty
+    if (isEmpty) OptimusDoubleSeq.empty
     else {
       var newData: Array[Double] = null
       var i = 0
@@ -485,8 +561,11 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       else unsafeFromArray(newData)
     }
 
-  /** a bit like a .zipWithIndex.foldLeft or just foldLeft, but without the boxing and the intermediate collections
-   * Implementation note - we use FoldToDoubleWithIndex rather than a scala function type as Function3 is not @specialised  */
+  /**
+   * a bit like a .zipWithIndex.foldLeft or just foldLeft, but without the boxing and the intermediate collections
+   * Implementation note - we use FoldToDoubleWithIndex rather than a scala function type as Function3 is not
+   * \@specialised
+   */
   def foldLeftToDoubleWithIndex(initial: Double)(f: OptimusDoubleSeqFoldLeftWithIndex): Double = {
     var res = initial
     var i = 0
@@ -532,70 +611,75 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     foldLeftToDoubleWithIndex(0.0d)((_, previous, thisValue) => previous + thisValue * thisValue)
   }
 
-  def addAll(that1: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
+  def addAll(that1: IterableOnce[Double]): OptimusDoubleSeq = {
+    if (that1.knownSize == 0) this
     else
       OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
+        builder.addAll(this)
+        builder.addAll(that1)
       }
   }
-  def addAll(that1: TraversableOnce[Double], that2: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
+  def addAll(that1: IterableOnce[Double], that2: IterableOnce[Double]): OptimusDoubleSeq = {
+    if (that1.knownSize == 0) this
     else
       OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-      }
-  }
-  def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
+        builder.addAll(this)
+        builder.addAll(that1)
+        builder.addAll(that2)
       }
   }
   def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double],
-      that4: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
+      that1: IterableOnce[Double],
+      that2: IterableOnce[Double],
+      that3: IterableOnce[Double]): OptimusDoubleSeq = {
+    if (that1.knownSize == 0) this
     else
       OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
-        builder ++= that4
+        builder.addAll(this)
+        builder.addAll(that1)
+        builder.addAll(that2)
+        builder.addAll(that3)
       }
   }
   def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double],
-      that4: TraversableOnce[Double],
-      rest: TraversableOnce[Double]*): OptimusDoubleSeq = {
-    if (that1.isEmpty && that2.isEmpty && that3.isEmpty && that4.isEmpty && rest.forall(_.isEmpty)) this
+      that1: IterableOnce[Double],
+      that2: IterableOnce[Double],
+      that3: IterableOnce[Double],
+      that4: IterableOnce[Double]): OptimusDoubleSeq = {
+    if (that1.knownSize == 0) this
     else
       OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
-        builder ++= that4
-        rest foreach (builder ++= _)
+        builder.addAll(this)
+        builder.addAll(that1)
+        builder.addAll(that2)
+        builder.addAll(that3)
+        builder.addAll(that4)
+      }
+  }
+  def addAll(
+      that1: IterableOnce[Double],
+      that2: IterableOnce[Double],
+      that3: IterableOnce[Double],
+      that4: IterableOnce[Double],
+      rest: IterableOnce[Double]*): OptimusDoubleSeq = {
+    if (
+      that1.knownSize == 0 && that2.knownSize == 0 && that3.knownSize == 0 && that4.knownSize == 0 && rest.forall(
+        _.knownSize == 0)
+    ) this
+    else
+      OptimusDoubleSeq.withSharedBuilder { builder =>
+        builder.addAll(this)
+        builder.addAll(that1)
+        builder.addAll(that2)
+        builder.addAll(that3)
+        builder.addAll(that4)
+        rest foreach (builder.addAll(_))
       }
   }
 
-  //noinspection ScalaUnusedSymbol
+  override protected[this] def className: String = "OptimusDoubleSeq"
+
+  // noinspection ScalaUnusedSymbol
   @throws[ObjectStreamException]("supposedly needed by serialization")
   private[this] def readResolve(): AnyRef =
     if (data.isEmpty) empty else this

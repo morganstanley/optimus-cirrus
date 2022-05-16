@@ -11,8 +11,10 @@
  */
 package optimus.scalacompat
 
+import scala.collection.compat.Factory
 import scala.collection.generic.CanBuildFrom
-import scala.{collection => sc}
+import scala.reflect.ClassTag
+import scala.{ collection => sc }
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
@@ -29,6 +31,8 @@ package object collection {
       cbf.newBuilder(from).result()
     }
   }
+  def wrappedArrayFactory[T: ClassTag]: Factory[T, Seq[T]] = sc.mutable.WrappedArray.canBuildFrom
+
   type IterableLike[+A, +Repr] = sc.IterableLike[A, Repr]
   type MapLike[K, +V, +Repr <: MapLike[K, V, Repr] with sc.Map[K, V]] = sc.MapLike[K, V, Repr]
   type SeqLike[+A, +Repr] = sc.SeqLike[A, Repr]
@@ -76,46 +80,64 @@ package object collection {
         override def apply(): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
       }
   }
+  implicit class BreakOutToSortedMap[CC[A, B] <: sc.SortedMap[A, B] with sc.SortedMapLike[A, B, CC[A, B]]](
+      private val companion: sc.generic.SortedMapFactory[CC])
+      extends AnyVal {
+    def breakOut[A: Ordering, B]: sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] =
+      new sc.generic.CanBuildFrom[Any, (A, B), CC[A, B]] {
+        override def apply(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
+        override def apply(): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder
+      }
+  }
+  implicit class BreakOutToSortedSet[CC[A] <: sc.SortedSet[A] with sc.SortedSetLike[A, CC[A]]](
+      private val companion: sc.generic.SortedSetFactory[CC])
+      extends AnyVal {
+    def breakOut[A: Ordering]: sc.generic.CanBuildFrom[Any, A, CC[A]] =
+      new sc.generic.CanBuildFrom[Any, A, CC[A]] {
+        override def apply(from: Any): sc.mutable.Builder[A, CC[A]] = companion.newBuilder
+        override def apply(): sc.mutable.Builder[A, CC[A]] = companion.newBuilder
+      }
+  }
 
   implicit class MapValuesFilterKeysNow[K, V, Repr <: sc.MapLike[K, V, Repr] with sc.Map[K, V]](
       private val self: sc.MapLike[K, V, Repr])
       extends AnyVal {
+
     /**
      * A strict version of `mapValues` that is polymorphic in the resulting map type.
      *
-     * The built-in `mapValues` method returns a "view" on the original map where the transformation
-     * function is recomputed on each traversal. `mapValuesNow` eagerly builds a new map.
+     * The built-in `mapValues` method returns a "view" on the original map where the transformation function is
+     * recomputed on each traversal. `mapValuesNow` eagerly builds a new map.
      *
-     * The built-in `mapValues` method has a static return type `collection.Map`, an override
-     * in `SortedMap` refines the result type. `mapValuesNow` is polymorphic in the resulting map
-     * type, like the built-in `map` method.
+     * The built-in `mapValues` method has a static return type `collection.Map`, an override in `SortedMap` refines the
+     * result type. `mapValuesNow` is polymorphic in the resulting map type, like the built-in `map` method.
      */
     def mapValuesNow[W, That](f: V => W)(implicit bf: CanBuildFrom[Repr, (K, W), That]): That = self match {
       case im: sc.immutable.MapLike[K, V, Repr] => im.transform { case (_, v) => f(v) }
-      case _ => self.map { case (k, v) => (k, f(v)) }
+      case _                                    => self.map { case (k, v) => (k, f(v)) }
     }
 
     /**
      * A strict version of `filterKeys` that retains the map's static type.
      *
-     * The built-in `filterKeys` method has a static return type `collection.Map`, an override
-     * * in `SortedMap` refines the result type. `filterKeysNow` returns a map of the same type
-     * as the source, like the built-in `filter` method.
+     * The built-in `filterKeys` method has a static return type `collection.Map`, an override * in `SortedMap` refines
+     * the result type. `filterKeysNow` returns a map of the same type as the source, like the built-in `filter` method.
      */
     def filterKeysNow(p: K => Boolean): Repr = self.filter(kv => p(kv._1))
   }
 
   implicit class TraversableOnceConvertTo[A](private val coll: TraversableOnce[A]) {
+
     /**
      * Convert a collection into a different collection type.
      *
-     * When used with scala-collection-compat, this method is equivalent to using `.to(Target)` in Scala 2.13.
-     * With scala-collection-compat, the collection is only copied if necessary: if the source collection
-     * is immutable and matches the target type, it is returned unchanged.
+     * When used with scala-collection-compat, this method is equivalent to using `.to(Target)` in Scala 2.13. With
+     * scala-collection-compat, the collection is only copied if necessary: if the source collection is immutable and
+     * matches the target type, it is returned unchanged.
      *
-     * Compared to `.to[Target]` in Scala 2.12 (or `to(Target)` with scala-collection-compat), this
-     * method has a more precise static type; the `to[Target]` method returns a `CC[T]`, so the static
-     * type cannot be a `Map[K, V]` or a `BitSet`.
+     * Compared to `.to[Target]` in Scala 2.12 (or `to(Target)` with scala-collection-compat), this method has a more
+     * precise static type; the `to[Target]` method returns a `CC[T]`, so the static type cannot be a `Map[K, V]` or a
+     * `BitSet`.
      */
     def convertTo[C](cbf: CanBuildFrom[Nothing, A, C]): C = {
       val b = cbf()
@@ -127,15 +149,15 @@ package object collection {
   /**
    * Implicit conversion from `mutable.Map` companion to `CanBuildFrom` building a mutable map.
    *
-   * This is a workaround for a bug in scala-collection-compat, where `mapFactoryToCBF` by mistake only
-   * converts the `immutable.Map` companion to a `CanBuildFrom`, instead of `collection.Map`. This cannot
-   * be changed in a binary compatible manner.
+   * This is a workaround for a bug in scala-collection-compat, where `mapFactoryToCBF` by mistake only converts the
+   * `immutable.Map` companion to a `CanBuildFrom`, instead of `collection.Map`. This cannot be changed in a binary
+   * compatible manner.
    *
-   * The implicit here converts `mutable.Map` only, not `collection.Map`, because the latter would
-   * cause ambiguities between itself and the definition in scala-collection-compat.
+   * The implicit here converts `mutable.Map` only, not `collection.Map`, because the latter would cause ambiguities
+   * between itself and the definition in scala-collection-compat.
    */
   implicit def mutableMapFactoryToCBF[K, V, CC[A, B] <: sc.mutable.Map[A, B] with sc.mutable.MapLike[A, B, CC[A, B]]](
-    fact: sc.generic.MapFactory[CC]): CanBuildFrom[Any, (K, V), CC[K, V]] = new CanBuildFrom[Any, (K, V), CC[K, V]] {
+      fact: sc.generic.MapFactory[CC]): CanBuildFrom[Any, (K, V), CC[K, V]] = new CanBuildFrom[Any, (K, V), CC[K, V]] {
     override def apply(from: Any): sc.mutable.Builder[(K, V), CC[K, V]] = apply()
     override def apply(): sc.mutable.Builder[(K, V), CC[K, V]] = fact.newBuilder[K, V]
   }

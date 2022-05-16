@@ -14,13 +14,15 @@ package optimus.breadcrumbs.util
 import java.util
 
 /**
- * <p>Map implementation with maximum number of keys enforced. If adding a
- * key / value pair would push the size of the map above the maximum size, then
- * the pair having the key that was least recently used would be evicted.</p>
+ * <p>Map implementation with maximum number of keys enforced. If adding a key / value pair would push the size of the
+ * map above the maximum size, then the pair having the key that was least recently used would be evicted.</p>
  *
- * @param maxSize the maximum number of key / value pairs permitted in the map
- * @tparam K the type of keys maintained by this map
- * @tparam V the type of mapped values
+ * @param maxSize
+ *   the maximum number of key / value pairs permitted in the map
+ * @tparam K
+ *   the type of keys maintained by this map
+ * @tparam V
+ *   the type of mapped values
  */
 class LimitedSizeConcurrentHashMap[K, V](maxSize: Int) {
   require(maxSize > 0, s"maxSize must be > 0, but got $maxSize")

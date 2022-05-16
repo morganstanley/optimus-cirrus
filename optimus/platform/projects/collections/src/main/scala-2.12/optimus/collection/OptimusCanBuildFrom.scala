@@ -91,12 +91,12 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
       result
     }
 
-    //its virtual here, as the bimorphic dispatch is cheaper then the scala array length on a generic array
+    // its virtual here, as the bimorphic dispatch is cheaper then the scala array length on a generic array
     // = if (elems eq null) 0 else elems.length
     protected def capacity: Int
-    //effectively new Array[ArrayType](settings.maxArraySize)
+    // effectively new Array[ArrayType](settings.maxArraySize)
     protected def newArray(size: Int): Array[ArrayType]
-    //copyOf, but we cant do that on scala generic arrays
+    // copyOf, but we cant do that on scala generic arrays
     protected def copyToArray(): Array[ArrayType]
 
     protected def mkEmptyArray(): Array[ArrayType] = {
@@ -196,7 +196,7 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
         val nextIndex = ensureArrays(1)
         arrays(nextIndex) = data.asInstanceOf[Array[ArrayType]]
       } else {
-        //should not happen
+        // should not happen
         addFromArray(data, 0, data.length)
       }
     }
@@ -250,7 +250,7 @@ abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
 
   private[collection] def returnBorrowed()
 
-  //for flatMap support
+  // for flatMap support
   def addAll(xs: GenTraversableOnce[Elem]): this.type = xs match {
     case t1: TraversableOnce[Elem] => this ++= t1
     case _ =>
@@ -260,7 +260,7 @@ abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
   override def result(): To
 }
 abstract class OptimusDoubleBuilder[+To] extends OptimusBuilder[Double, To] {
-  //overridden to stop boxing
+  // overridden to stop boxing
   override def +=(elem: Double): this.type
   override def +=(elem1: Double, elem2: Double, elems: Double*): this.type = {
     this += elem1

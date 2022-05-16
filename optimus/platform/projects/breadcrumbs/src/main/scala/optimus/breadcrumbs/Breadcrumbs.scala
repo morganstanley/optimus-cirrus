@@ -114,7 +114,7 @@ private object BreadcrumbsVerifier {
     val wrongCrumbFromDal = c.source.name == "DAL" && (repr == null || repr == "")
     if (wrongCrumbFromDal) {
       val stackTrace = Thread.currentThread().getStackTrace.mkString("\n")
-      val chainedIdRepr = s"ChainedID(repr = $repr, depth = ${c.uuid.depth}, level = ${c.uuid.level}, " +
+      val chainedIdRepr = s"ChainedID(repr = $repr, depth = ${c.uuid.depth}, level = ${c.uuid.crumbLevel}, " +
         s"vertexId = ${c.uuid.vertexId})"
       log.debug(s"Crumb $c won't be sent due to empty repr in uuid $chainedIdRepr. Stack trace: $stackTrace")
       false
@@ -139,20 +139,19 @@ object Breadcrumbs {
   private val interestsLock = new ReentrantReadWriteLock()
 
   /**
-   * Register interest in crumbs published for the same VM but under a different ChainedID.
-   * While registration is active, all crumbs with the uuid root interestedIn (the suffix of this
-   * parameter is ignored) will be published as well with the uuid of task.
-   * For registrations of multiple tasks with the same uuid root, only the first will be published to.
+   * Register interest in crumbs published for the same VM but under a different ChainedID. While registration is
+   * active, all crumbs with the uuid root interestedIn (the suffix of this parameter is ignored) will be published as
+   * well with the uuid of task. For registrations of multiple tasks with the same uuid root, only the first will be
+   * published to.
    *
-   * For example, suppose a dist engine is publishing to a ChainedID root, which by astonishing coincidence happens
-   * to have acquired a random MSUuid of ROOT.  Then we get a task with the ID TASK-A#2#4.  Interest of the latter
-   * in the former will be registered in PhenotypeExcecutor.executeNodeFromBytes.  Going forward, any crumbs published
-   * with a root ID of ROOT will also be published to TASK-A#2#4.  Now suppose that we get, in the same process, a
-   * recursive task TASK-A#2#4#2, while #2#4 is still active of course and thus not yet deregistered.
-   * In this case, we do not publish engine events to all three possible IDs but just continue to send only to the engine
-   * root and to the first ID with root TASK-A we received, viz TASK-A#2#4, and we'll do so until all IDs with root
-   * TASK-A have been deregistered.
-   *
+   * For example, suppose a dist engine is publishing to a ChainedID root, which by astonishing coincidence happens to
+   * have acquired a random MSUuid of ROOT. Then we get a task with the ID TASK-A#2#4. Interest of the latter in the
+   * former will be registered in PhenotypeExcecutor.executeNodeFromBytes. Going forward, any crumbs published with a
+   * root ID of ROOT will also be published to TASK-A#2#4. Now suppose that we get, in the same process, a recursive
+   * task TASK-A#2#4#2, while #2#4 is still active of course and thus not yet deregistered. In this case, we do not
+   * publish engine events to all three possible IDs but just continue to send only to the engine root and to the first
+   * ID with root TASK-A we received, viz TASK-A#2#4, and we'll do so until all IDs with root TASK-A have been
+   * deregistered.
    */
   def registerInterest(interestedIn: ChainedID, task: ChainedID): Unit = {
     val rs = interestedIn.base
@@ -202,11 +201,12 @@ object Breadcrumbs {
       Seq(c)
     } else {
       interestsLock.readLock.lock()
-      val listeners = try {
-        Breadcrumbs.interests.get(c.uuid.base).toSeq.flatMap(_.values)
-      } finally {
-        interestsLock.readLock.unlock()
-      }
+      val listeners =
+        try {
+          Breadcrumbs.interests.get(c.uuid.base).toSeq.flatMap(_.values)
+        } finally {
+          interestsLock.readLock.unlock()
+        }
       val replicas = listeners.map { p =>
         new WithID(p._2, c)
       }
@@ -285,14 +285,15 @@ object Breadcrumbs {
   def isTraceEnabled: Boolean = impl.isEnabledForTrace
   def isDebugEnabled: Boolean = impl.isEnabledForDebug
   def isInfoEnabled: Boolean = impl.isEnabledForInfo
-  def isTraceEnabled(id: ChainedID): Boolean = impl.isEnabledForTrace || BreadcrumbLevel.Trace >= id.level
-  def isDebugEnabled(id: ChainedID): Boolean = impl.isEnabledForDebug || BreadcrumbLevel.Debug >= id.level
-  def isInfoEnabled(id: ChainedID): Boolean = impl.isEnabledForInfo || BreadcrumbLevel.Info >= id.level
+  def isTraceEnabled(id: ChainedID): Boolean = impl.isEnabledForTrace || BreadcrumbLevel.Trace >= id.crumbLevel
+  def isDebugEnabled(id: ChainedID): Boolean = impl.isEnabledForDebug || BreadcrumbLevel.Debug >= id.crumbLevel
+  def isInfoEnabled(id: ChainedID): Boolean = impl.isEnabledForInfo || BreadcrumbLevel.Info >= id.crumbLevel
 
   def send(c: Crumb): Boolean = impl.send(c)
 
-  /** The only legitimate (and that's a stretch) use of this method is to be called by reflection
-   * from modules that for some reason can't have breadcrumbs on their classpath.
+  /**
+   * The only legitimate (and that's a stretch) use of this method is to be called by reflection from modules that for
+   * some reason can't have breadcrumbs on their classpath.
    */
   private[optimus] def emergencySendForReflection(sourceName: String, msg: String): Unit = {
     object src extends Crumb.Source {
@@ -433,18 +434,19 @@ abstract class BreadcrumbsPublisher extends Filterable {
     if (uuid == null)
       Breadcrumbs.log.debug(
         s"null chain ID received from:\n${Thread.currentThread.getStackTrace.toSeq.mkString("\n ")}")
-    else if (collecting && level >= Math.min(this.level, uuid.level)) {
+    else if (collecting && level >= Math.min(this.level, uuid.crumbLevel)) {
       val c: Crumb = cf(uuid)
       scv.validate(c)
-      val filtered = try {
-        isFiltered(c)
-      } catch {
-        case t: Throwable =>
-          val msg = s"Unable to filter $c due to $t, discarded..."
-          Breadcrumbs.log.debug(msg)
-          warning.foreach(_.fail(msg))
-          true
-      }
+      val filtered =
+        try {
+          isFiltered(c)
+        } catch {
+          case t: Throwable =>
+            val msg = s"Unable to filter $c due to $t, discarded..."
+            Breadcrumbs.log.debug(msg)
+            warning.foreach(_.fail(msg))
+            true
+        }
 
       if (filtered) {
         Breadcrumbs.log.debug(s"Crumb $c was filtered")
@@ -466,7 +468,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
       cf: ChainedID => Crumb,
       level: BreadcrumbLevel.Level): Boolean = {
     var crumbSent = false
-    if (collecting && level >= Math.min(this.level, uuid.level)) {
+    if (collecting && level >= Math.min(this.level, uuid.crumbLevel)) {
       // Note: can't use get(,Callable), because we could end up being called recursively via logging;
       // an erroneous cache miss will just result in extra breadcrumbs being sent.
       if (key ne null) {
@@ -519,7 +521,7 @@ private[optimus] class BreadcrumbsRouter(
     }
   }
 
-  override def getFilter: Option[CrumbFilter] = {
+  override val getFilter: Option[CrumbFilter] = {
     if (rules.isEmpty)
       defaultPublisher.getFilter
     else
@@ -611,9 +613,14 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   private var producer: Option[KafkaProducer[String, String]] = None
   @volatile private var initialized: Boolean = false
   private[this] val topicMap: Seq[KafkaTopicMapping] = if (topicProps.containsKey(TopicMapKey)) {
-    topicProps.get(TopicMapKey).asInstanceOf[jList[jMap[String, String]]].asScala.map { jm: jMap[String, String] =>
-      KafkaTopicMapping.fromJava(jm)
-    }
+    topicProps
+      .get(TopicMapKey)
+      .asInstanceOf[jList[jMap[String, String]]]
+      .asScala
+      .map { jm: jMap[String, String] =>
+        KafkaTopicMapping.fromJava(jm)
+      }
+      .toSeq
   } else {
     Seq.empty[KafkaTopicMapping]
   }
@@ -764,6 +771,17 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
   override def init(): Unit = publishers foreach { publisher =>
     log.info(s"Initializing $publisher")
     runProtected(publisher.init)
+  }
+
+  override val getFilter: Option[CrumbFilter] = {
+    val filters = publishers.foldLeft(Seq.empty[CrumbFilter])((acc, p) => acc ++ p.getFilter)
+    if (filters.nonEmpty) {
+      val result = new CompositeFilter()
+      filters.foreach(result.addFilter(_))
+      Some(result)
+    }
+    else
+      None
   }
 
   protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {

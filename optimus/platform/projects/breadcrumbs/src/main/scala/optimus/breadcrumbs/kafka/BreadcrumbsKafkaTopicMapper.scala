@@ -23,7 +23,7 @@ import org.apache.log4j.Logger.getLogger
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 
-private[breadcrumbs] case class KafkaTopic(topic: String) extends AnyVal
+private[breadcrumbs] final case class KafkaTopic(topic: String) extends AnyVal
 
 private[breadcrumbs] sealed trait KafkaTopicProperty {
   def name: String
@@ -50,7 +50,7 @@ private[breadcrumbs] object KafkaTopicProperty {
   }
 }
 
-private[breadcrumbs] case class KafkaTopicMapping(property: KafkaTopicProperty, value: String, topic: KafkaTopic)
+private[breadcrumbs] final case class KafkaTopicMapping(property: KafkaTopicProperty, value: String, topic: KafkaTopic)
 private[breadcrumbs] object KafkaTopicMapping {
   import KafkaTopicProperty.DefaultProperty
 
@@ -70,7 +70,7 @@ private[breadcrumbs] object KafkaTopicMapping {
   }
 }
 
-private[breadcrumbs] case class BreadcrumbsKafkaTopicMappingKey(attr: String, prop: KafkaTopicProperty)
+private[breadcrumbs] final case class BreadcrumbsKafkaTopicMappingKey(attr: String, prop: KafkaTopicProperty)
 
 private[breadcrumbs] sealed trait BreadcrumbsKafkaTopicMapperT {
   def size: Int
@@ -137,11 +137,10 @@ private[breadcrumbs] class BreadcrumbsKafkaTopicMapper(topicsMap: Seq[KafkaTopic
         .map(cProp => m.get(key.prop).get(cProp))
         .orElse({
           log.trace(s"Could not find prop ${key.prop} in ${m
-            .map({
-              case (xKey: KafkaTopicProperty, xVal: TrieMap[String, KafkaTopic]) =>
+              .map({ case (xKey: KafkaTopicProperty, xVal: TrieMap[String, KafkaTopic]) =>
                 s"$xKey -> ${xVal.map({ case (yKey: String, yVal: KafkaTopic) => s"${yKey} -> ${yVal.topic}" }).mkString(", ")}"
-            })
-            .mkString(" | ")}")
+              })
+              .mkString(" | ")}")
           None
         })
     }

@@ -148,9 +148,8 @@ package object datetime {
           (m, "minutes"),
           (s, "seconds")
         ).filter(r => r._1 != 0)
-          .map {
-            case (i, str) =>
-              s"$i $str"
+          .map { case (i, str) =>
+            s"$i $str"
           }
           .mkString(" ")
       }

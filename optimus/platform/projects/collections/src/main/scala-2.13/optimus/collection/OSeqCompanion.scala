@@ -18,5 +18,4 @@ private[collection] trait OSeqCompanion[U] {
   private[collection] def tabulateOS[A <: U](size: Int)(elemFn: OSeqTabulate[A]): OSeq[A]
   private[collection] def fillOS[A <: U](size: Int)(elem: A): OSeq[A]
 
-  private[collection] def canBuildFromOS[A <: U]: OptimusCanBuildFrom[Seq[A], A, OSeq[A], U]
 }

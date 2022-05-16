@@ -17,8 +17,10 @@ object DALAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
   // DAL macro (DALMacro.scala)
   val BACK_REFERENCE_TYPE_MISMATCH =
     error2(41000, "Function passed to backReference has wrong result type: expected %s, got %s")
-  val MISMATCHED_ENTITY_INDEX_TYPE = error2(41003, "Expected type '%s' in @indexed property or def in Entity but found type '%s'")
-  val MISMATCHED_EVENT_INDEX_TYPE = error2(41004, "Expected type '%s' in @indexed property or def in Event but found type '%s'")
+  val MISMATCHED_ENTITY_INDEX_TYPE =
+    error2(41003, "Expected type '%s' in @indexed property or def in Entity but found type '%s'")
+  val MISMATCHED_EVENT_INDEX_TYPE =
+    error2(41004, "Expected type '%s' in @indexed property or def in Event but found type '%s'")
   val MUST_INDEX_PROPERTY = error1(41002, "Property %s must be @indexed.")
   val NO_PROPERTY_IN_COMPANION = error2(41001, "Cannot find %s member of companion %s")
 }

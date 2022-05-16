@@ -15,7 +15,30 @@ import optimus.tools.scalacplugins.entity.StagingPhase
 
 object CodeStyleErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val RETURN_STATEMENT =
-    error0(20011, StagingPhase.STANDARDS, s"${OptimusAlarms.NewTag} Return statement is not needed here")
+    error0(20011, StagingPhase.STANDARDS, s"Return statement is not needed here")
+}
+
+object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
+  val NON_FINAL_INNER_CASE_CLASS =
+    preIgnore(
+      warningOptional0(
+        10002,
+        StagingPhase.POST_TYPER_STANDARDS,
+        "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
+      )
+    )
+  val NON_FINAL_CASE_CLASS =
+    preIgnore(
+      warningOptional0(
+        10003,
+        StagingPhase.POST_TYPER_STANDARDS,
+        "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
+      )
+    )
+
+  val DISOUCRAGED_STATEMENT = preIgnore(
+    warningOptional2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
+  )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
@@ -24,7 +47,8 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val STAGING_DEPRECATED = error1(
     20001,
     StagingPhase.STAGING,
-    "Staging marker %s is deprecated and will be removed.  Please remove staging block.")
+    "Staging marker %s is deprecated and will be removed.  Please remove staging block."
+  )
   val INVALID_STAGING_PREDICATE = error1(20002, StagingPhase.STAGING, "invalid staging predicate: %s")
   val MUTIPLE_STAGING_OBJECT =
     error0(20003, StagingPhase.STAGING, "staging imports only support one import for each object")
@@ -34,13 +58,15 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(
       20010,
       StagingPhase.STANDARDS,
-      "Do not import paths containing explicit package objects (just remove .`package`)")
+      "Do not import paths containing explicit package objects (just remove .`package`)"
+    )
 
   val NO_COLLECTION_WILDCARD_IMPORT =
     error0(
       20012,
       StagingPhase.STANDARDS,
-      "Use named imports for the collection package (collection.immutable) instead of the wildcard import collection._ [NEW]")
+      "Use named imports for the collection package (collection.immutable) instead of the wildcard import collection._"
+    )
 }
 
 object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -49,8 +75,6 @@ object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   // code-standards phase warnings
   val UNTYPED_IMPLICIT = preIgnore(
-    warningOptional1(
-      10005,
-      StagingPhase.STANDARDS,
-      "Public implicit methods and classes should have explicit type: %s"))
+    warningOptional1(10005, StagingPhase.STANDARDS, "Public implicit methods and classes should have explicit type: %s")
+  )
 }

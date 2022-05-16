@@ -131,7 +131,7 @@ object OptimusReporter {
         c.info(position, msg, force || !alarm.isInfo)
       case OptimusAlarmType.DEBUG =>
         throw new IllegalStateException(s"DEBUG level alarms should be automatically lifted to INFO or suppressed")
-      case OptimusAlarmType.SILENT => //ignore it
+      case OptimusAlarmType.SILENT => // ignore it
       case _                       => throw new IllegalStateException(s"unexpected level $newLevel")
     }
   }

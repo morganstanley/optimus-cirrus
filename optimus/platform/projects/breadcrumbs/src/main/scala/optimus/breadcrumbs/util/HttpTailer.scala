@@ -49,10 +49,14 @@ class HttpTailer(url: String, periodMs: Int, blockSize: Int, userCallback: Try[S
 
   /**
    * Schedule http get for specific range:
-   * @param i2 Last byte offset previously read (-1 if never read)
-   * @param n Known total available size
-   * @param content Content read in previous fetch
-   * @param probe True if this call is just to probe for total available size
+   * @param i2
+   *   Last byte offset previously read (-1 if never read)
+   * @param n
+   *   Known total available size
+   * @param content
+   *   Content read in previous fetch
+   * @param probe
+   *   True if this call is just to probe for total available size
    */
   private def processContentAndScheduleRangeFetch(i2: Long, n: Long, content: String, probe: Boolean = false): Unit = {
     log.debug(s"scheduleRangeFetch(i2=$i2, n=$n, content-length=${content.length}, probe=$probe)")
@@ -86,12 +90,14 @@ class HttpTailer(url: String, periodMs: Int, blockSize: Int, userCallback: Try[S
                 processContentAndScheduleRangeFetch(i2, n, "")
               // Lacking any content length is a hard error; if length is zero, that's equivalent to an unsatisfied
               // range request.
-              else if (response
-                         .getHeaders("Content-Length")
-                         .headOption
-                         .fold {
-                           throw new HttpException("Missing Content-Length")
-                         }(_.getValue.toInt == 0))
+              else if (
+                response
+                  .getHeaders("Content-Length")
+                  .headOption
+                  .fold {
+                    throw new HttpException("Missing Content-Length")
+                  }(_.getValue.toInt == 0)
+              )
                 processContentAndScheduleRangeFetch(i2, n, "") // No content; keep trying.
               else {
                 // The only acceptable response codes a this point are in the 200 range.
@@ -167,7 +173,8 @@ object HttpTailerCli extends App {
   val tailer = new HttpTailer(
     url,
     delayMs,
-    blockSizeBytes, {
+    blockSizeBytes,
+    {
       case Success(s) =>
         // If you complain about this line during review, you haven't been paying attention.
         // Printing the result to stdout directly.

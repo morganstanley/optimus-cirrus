@@ -27,21 +27,15 @@ object JavaVersionCompat {
   def getFinalRefCount: Int = finalRefCountMethod.invoke(null).asInstanceOf[Int]
 
   /**
-   * @return the PlatformClassLoader of cl, if any. This is useful because on Java 9+ any classloader not (indirectly)
-   *         parented to the PlatformClassLoader cannot load classes from any non-base Java modules. In Java 8 and
-   *         earlier it's fine to use null as the parent for a classloader
+   * @return
+   *   the PlatformClassLoader of cl, if any. This is useful because on Java 9+ any classloader not (indirectly)
+   *   parented to the PlatformClassLoader cannot load classes from any non-base Java modules. In Java 8 and earlier
+   *   it's fine to use null as the parent for a classloader
    */
   @tailrec def platformClassLoader(cl: ClassLoader = getClass.getClassLoader): ClassLoader = {
     if (cl.getClass.getName == "jdk.internal.loader.ClassLoaders$PlatformClassLoader") cl
     else platformClassLoader(cl.getParent)
   }
-
-  import com.sun.management.OperatingSystemMXBean
-  private val osMXBeanClass = classOf[OperatingSystemMXBean]
-  private val getCpuMethod =
-    if (Properties.isJavaAtLeast("14")) osMXBeanClass.getMethod("getCpuLoad")
-    else osMXBeanClass.getMethod("getSystemCpuLoad")
-  def getSystemCpuLoad(bean: OperatingSystemMXBean): Double = getCpuMethod.invoke(bean).asInstanceOf[Double]
 
   object WatchEventModifiers {
     private def lookup[T <: Enum[T], V](cl: Class[_], nm: String): V = {

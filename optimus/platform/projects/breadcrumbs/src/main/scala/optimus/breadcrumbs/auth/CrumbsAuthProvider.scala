@@ -16,8 +16,8 @@ import java.{util => ju}
 import scala.collection.JavaConverters._
 
 /**
- * A service class to initialize authentication mechanisms for a breadcrumbs connection.
- * By default, does nothing at all.
+ * A service class to initialize authentication mechanisms for a breadcrumbs connection. By default, does nothing at
+ * all.
  */
 class CrumbsAuthProvider {
   def initAuth(props: ju.Map[String, AnyRef]) {}
@@ -33,6 +33,7 @@ object CrumbsAuthProvider {
         throw new IllegalArgumentException(s"Multiple ${classOf[CrumbsAuthProvider].getName} provided: [$loaded]")
     }
   }
-  implicit def asInstance(thiz: CrumbsAuthProvider.type): CrumbsAuthProvider = // yes we're totally a singleton why do you ask
+  implicit def asInstance(
+      thiz: CrumbsAuthProvider.type): CrumbsAuthProvider = // yes we're totally a singleton why do you ask
     instance
 }

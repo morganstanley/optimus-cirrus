@@ -148,7 +148,7 @@ private class X25519AesEncryptor(
   private val encryptionConfig = Map(
     1 -> EncryptorDecryptorConfig(compressed = false, encoded = true, new CommaPayloadDeSerializer("1")),
     2 -> EncryptorDecryptorConfig(compressed = true, encoded = false, new ByteArrayPayloadDeSerializer("2")),
-    3 -> EncryptorDecryptorConfig(compressed = false, encoded = false, new ByteArrayPayloadDeSerializer("3")),
+    3 -> EncryptorDecryptorConfig(compressed = false, encoded = false, new ByteArrayPayloadDeSerializer("3"))
   )
 
   private val base64RawEphemeralPublicKey = Base64.getEncoder.encodeToString(rawEphemeralPublicKey)
@@ -249,7 +249,7 @@ private class X25519AesDecryptor(keyGenerator: X25519AesKeyCalculator) extends D
   private val decryptionConfig = Map(
     '1' -> EncryptorDecryptorConfig(compressed = false, encoded = true, new CommaPayloadDeSerializer("1")),
     '2' -> EncryptorDecryptorConfig(compressed = true, encoded = false, new ByteArrayPayloadDeSerializer("2")),
-    '3' -> EncryptorDecryptorConfig(compressed = false, encoded = false, new ByteArrayPayloadDeSerializer("3")),
+    '3' -> EncryptorDecryptorConfig(compressed = false, encoded = false, new ByteArrayPayloadDeSerializer("3"))
   )
 
   private val cipher = X25519AesSchemeUtils.aesCbcPkcs5()
@@ -267,7 +267,7 @@ private class X25519AesDecryptor(keyGenerator: X25519AesKeyCalculator) extends D
         cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec)
         cipher.doFinal(decodedBytes)
       }
-      //verify that decrypted bytes are valid UTF-8 before sending to kafka
+      // verify that decrypted bytes are valid UTF-8 before sending to kafka
       val decompressedBytes = decompressPayload(decryptedBytes, decryptionConfig(version).compressed)
       charsetDecoder.get.reset()
       charsetDecoder.get.decode(ByteBuffer.wrap(decompressedBytes))
@@ -321,15 +321,11 @@ trait PayloadDeSerializer {
   def deserialize(array: Array[Byte]): Payload
 }
 
-private[crypto] case class Payload(key: Array[Byte], data: Array[Byte]) {}
+private[crypto] final case class Payload(key: Array[Byte], data: Array[Byte]) {}
 
 /**
- * CommaPayloadDeSerializer scheme:
- * array[0] = 0 - encoding version
- * array[1] = comma
- * array[2..M] = public_key
- * array[M+1] = comma
- * array[M+2, N] = payload
+ * CommaPayloadDeSerializer scheme: array[0] = 0 - encoding version array[1] = comma array[2..M] = public_key array[M+1]
+ * \= comma array[M+2, N] = payload
  */
 private class CommaPayloadDeSerializer(protocol: String) extends PayloadDeSerializer {
   private val separator: Byte = ','.toByte
@@ -351,11 +347,8 @@ private class CommaPayloadDeSerializer(protocol: String) extends PayloadDeSerial
 }
 
 /**
- * ByteArrayPayloadDeSerializer scheme:
- * array[0] = 0 - encoding version
- * array[1] = length_of_public_key
- * array[2..M] = public_key
- * array[M+1, N] = payload
+ * ByteArrayPayloadDeSerializer scheme: array[0] = 0 - encoding version array[1] = length_of_public_key array[2..M] =
+ * public_key array[M+1, N] = payload
  */
 private class ByteArrayPayloadDeSerializer(protocol: String) extends PayloadDeSerializer {
 

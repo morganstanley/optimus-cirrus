@@ -47,10 +47,9 @@ object AlarmCodeDumper extends App {
     writer.println("code,severity,class,message")
     alarmHolders.foreach { holder =>
       val className = holder.getClass.getSimpleName.replace("$", "")
-      holder.idToText.toSeq.sortBy(_._1.sn).foreach {
-        case (id, text) =>
-          val escapedText = """"${text.replace("\"", "\"\"")}""""
-          writer.println(s"${id.sn},${id.tpe},${className},${escapedText}")
+      holder.idToText.toSeq.sortBy(_._1.sn).foreach { case (id, text) =>
+        val escapedText = """"${text.replace("\"", "\"\"")}""""
+        writer.println(s"${id.sn},${id.tpe},${className},${escapedText}")
       }
     }
   } finally {

@@ -135,7 +135,8 @@ object Properties extends KnownProperties {
       if (ks.size == 1)
         properties.get(Properties.stringToKey(ks(0), None)).map { v =>
           Try(v.convertTo[String]).getOrElse(v.toString)
-        } else {
+        }
+      else {
         val k :: krest = ks.toList
         properties.get(Properties.stringToKey(k, None)).flatMap(get(_, krest))
       }
@@ -165,8 +166,8 @@ object Properties extends KnownProperties {
       override def read(json: JsValue): ZonedDateTime = {
         Try[ZonedDateTime] {
           ZonedDateTime.ofInstant(Instant.ofEpochMilli(json.convertTo[Long]), ZoneId.of("UTC"))
-        }.recover {
-          case _ => ZonedDateTime.parse(json.convertTo[String], DateTimeFormatter.ISO_ZONED_DATE_TIME)
+        }.recover { case _ =>
+          ZonedDateTime.parse(json.convertTo[String], DateTimeFormatter.ISO_ZONED_DATE_TIME)
         }.get
       }
       override def write(obj: ZonedDateTime): JsValue = obj.toInstant.toEpochMilli.toJson
@@ -203,7 +204,7 @@ object Properties extends KnownProperties {
     implicit def SortedSetJsonFormat[T: Ordering: JsonFormat]: RootJsonFormat[SortedSet[T]] =
       new RootJsonFormat[SortedSet[T]] {
         override def write(obj: SortedSet[T]): JsValue = obj.toSeq.toJson
-        override def read(json: JsValue): SortedSet[T] = TreeSet.empty[T] ++ json.convertTo[collection.Seq[T]]
+        override def read(json: JsValue): SortedSet[T] = TreeSet.empty[T] ++ json.convertTo[Seq[T]]
       }
 
     implicit val crumbNodeTypeJsonFormat = new EnumJsonConverter(CrumbNodeType)
@@ -225,7 +226,7 @@ object Properties extends KnownProperties {
         val (repr, depth, level, vuid) = json.convertTo[(String, Int, Int, String)]
         new ChainedID(repr, depth, level, vuid)
       }
-      override def write(obj: ChainedID): JsValue = (obj.repr, obj.depth, obj.level, obj.vertexId).toJson
+      override def write(obj: ChainedID): JsValue = (obj.repr, obj.depth, obj.crumbLevel, obj.vertexId).toJson
     }
 
     implicit object KeyJsonFormat extends RootJsonFormat[Key[_]] {
@@ -251,14 +252,19 @@ object Properties extends KnownProperties {
       }
 
       override def read(value: JsValue): ProfiledEventCause = {
-        value.asJsObject.getFields("eventName", "profilingData", "totalDurationMs", "actionSelfTimeMs", "childEvents") match {
+        value.asJsObject.getFields(
+          "eventName",
+          "profilingData",
+          "totalDurationMs",
+          "actionSelfTimeMs",
+          "childEvents") match {
           case Seq(eventName, profilingData, totalDuration, actionSelfTimeMs, children) =>
             ProfiledEventCause(
               eventName = eventName.convertTo[String],
               profilingData = profilingData.convertTo[Map[String, String]],
               totalDurationMs = totalDuration.convertTo[Long],
               actionSelfTimeMs = actionSelfTimeMs.convertTo[Long],
-              childEvents = children.convertTo[collection.Seq[JsValue]].map(c => read(c))
+              childEvents = children.convertTo[Seq[JsValue]].map(c => read(c))
             )
           case _ => throw deserializationError(s"ProfiledEventCause wrong format")
         }
@@ -281,13 +287,12 @@ object Properties extends KnownProperties {
     /*
       Add extra output fields to a json object on write, and ignore them on read
      */
-    import scala.collection.breakOut
     implicit class JsonWriterAugmenter[A](val origFormat: RootJsonFormat[A]) extends AnyVal {
       def augmentWriter(fs: (String, A => JsValue)*) = new RootJsonFormat[A] {
         override def write(obj: A): JsValue = {
-          val newFields: Map[String, JsValue] = fs.map {
-            case (k, f) => k -> f(obj)
-          }(breakOut)
+          val newFields: Map[String, JsValue] = fs.iterator.map { case (k, f) =>
+            k -> f(obj)
+          }.toMap
           origFormat.write(obj) match {
             case o: JsObject => o.copy(fields = o.fields ++ newFields)
             case j           => new JsObject(newFields + ("_original" -> j))
@@ -321,7 +326,9 @@ object Properties extends KnownProperties {
   // See GridProfilerUtils for an example.
   final class Elems(val m: List[Elem[_]]) extends ElemOrElems {
     def ++(o: TraversableOnce[Elem[_]]) = new Elems(m ++ o)
-    def +(o: Elems) = new Elems(m ++ o.m)
+    def +(es: Elems) = new Elems(m ++ es.m)
+    def :::(es: Elems) = new Elems(m ++ es.m)
+    def :::(eso: Option[Elems]) = eso.fold(this)(es => new Elems(m ++ es.m))
     def ::(e: Elem[_]) = new Elems(e :: m)
     def +(e: Elem[_]) = new Elems(e :: m)
     def ::(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
@@ -391,7 +398,7 @@ object Properties extends KnownProperties {
   def wildcatProperty[A: JsonWriter](name: String)(implicit writer: JsonWriter[A]): Key[A] =
     new WildcatKey[A](name, writer)
 
-  case class UnclassifiedException(exceptionName: String, msg: String) extends Exception(msg)
+  final case class UnclassifiedException(exceptionName: String, msg: String) extends Exception(msg)
 
   private[breadcrumbs] val _mappend = prop[String]
   private[optimus] val _meta = prop[MetaDataType.Value]
@@ -413,7 +420,7 @@ object Properties extends KnownProperties {
   val replicaFrom = prop[ChainedID]
   val requestId = prop[ChainedID]
   val exception = prop[Throwable]
-  val stackTrace = prop[collection.Seq[String]]
+  val stackTrace = prop[Seq[String]]
   val remoteException = prop[Throwable]
   val batchSize = propI
   val dalReqUuid = prop[String]
@@ -421,7 +428,7 @@ object Properties extends KnownProperties {
   val tEnded = prop[ZonedDateTime]
   val nodeType = prop[CrumbNodeType.Value]
   val name = prop[String]
-  val agents = prop[collection.Seq[String]]
+  val agents = prop[Seq[String]]
   val debug = prop[String]
   val priority = prop[String]
   val tasksExecutedOnEngine = propL
@@ -530,12 +537,12 @@ object Properties extends KnownProperties {
   val host = prop[String]
   val port = prop[String]
   val user = prop[String]
-  val args = prop[collection.Seq[String]]
+  val args = prop[Seq[String]]
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
   val event = prop[String]
   val duration = propL // event duration in milliseconds
-  val commands = prop[collection.Seq[String]]
+  val commands = prop[Seq[String]]
   val className = prop[String]
   val cmdLine = prop[String]
   val appDir = prop[String]
@@ -587,7 +594,7 @@ object Properties extends KnownProperties {
   val obtScope = prop[String]
   val obtCommit = prop[String]
   val obtWorkspace = prop[String]
-  val obtProgresses = prop[collection.Seq[(Instant, String, Double)]]
+  val obtProgresses = prop[Seq[(Instant, String, Double)]]
   val obtStart = prop[Instant]
   val obtEnd = prop[Instant]
   val obtWallTime = prop[Duration]
@@ -603,13 +610,13 @@ object Properties extends KnownProperties {
   val obtStats = prop[Map[String, Long]]
   val obtStatsByCategory = prop[Map[String, Map[String, Long]]]
   val obtStressTestIterations = propI
-  val obtStartCentiles = prop[collection.Seq[Instant]]
-  val obtEndCentiles = prop[collection.Seq[Instant]]
+  val obtStartCentiles = prop[Seq[Instant]]
+  val obtEndCentiles = prop[Seq[Instant]]
   val obtWallTimes = prop[Map[String, Long]]
-  val obtWallTimeCentiles = prop[collection.Seq[Duration]]
+  val obtWallTimeCentiles = prop[Seq[Duration]]
 
   // pgo group validation properties
-  val pgoDiff = prop[collection.Seq[Map[String, String]]]
+  val pgoDiff = prop[Seq[Map[String, String]]]
   val optconfPath = prop[String]
   val optconfAction = prop[String]
   val optconfApplyTimeElapsed = propL
@@ -620,6 +627,7 @@ object Properties extends KnownProperties {
   val hotspotEvicted = propL
   val hotspotInvalidated = propI
   val hotspotCacheHit = propL
+  val hotspotCacheHitFromDifferentTasks = propL
   val hotspotCacheMiss = propL
   val hotspotCacheTime = propL
   val hotspotXsLookupTime = propL
@@ -645,7 +653,7 @@ object Properties extends KnownProperties {
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
   val profSummary = prop[Map[String, JsObject]]
-  val profOpenedFiles = prop[collection.Seq[String]]
+  val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
 
   // Temporal surface tracing
@@ -655,9 +663,23 @@ object Properties extends KnownProperties {
   val vt = prop[Instant]
   val tt = prop[Instant]
   val dmcClientSummary = prop[Map[String, Long]]
+
+  /** givenOverlay use cases */
+  val currentScenario = prop[String]
+  val overlayScenario = prop[String]
+  val trivialOverlay = propB
+
+  /** EmailSender tracking */
+  val recipientDomains = prop[Seq[String]]
+  val senderAPI = prop[String]
+  val sender = prop[String]
+  val jobName = prop[String]
+
+  val fileContents = prop[String]
+
 }
 
-case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {
+final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {
   def take(n: Int): RequestsStallInfo = RequestsStallInfo(pluginType, reqCount, req.take(n))
 }
 
@@ -674,9 +696,9 @@ object RequestsStallInfo {
   val empty: RequestsStallInfo = RequestsStallInfo(StallPlugin.None, 0, Seq.empty)
 }
 
-case class Broker(host: String, port: String)
+final case class Broker(host: String, port: String)
 
-case class RequestSummary(
+final case class RequestSummary(
     uuid: String,
     user: String,
     clientMachine: String,
@@ -691,4 +713,4 @@ final case class ProfiledEventCause(
     profilingData: Map[String, String],
     totalDurationMs: Long,
     actionSelfTimeMs: Long,
-    childEvents: collection.Seq[ProfiledEventCause])
+    childEvents: Seq[ProfiledEventCause])

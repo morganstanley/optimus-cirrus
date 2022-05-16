@@ -40,8 +40,8 @@ trait ProductFormats extends ProductFormatsInstances {
 
   // helpers
 
-  protected def productElement2Field[T](fieldName: String, p: Product, ix: Int, rest: List[JsField] = Nil)(
-      implicit writer: JsonWriter[T]): List[JsField] = {
+  protected def productElement2Field[T](fieldName: String, p: Product, ix: Int, rest: List[JsField] = Nil)(implicit
+      writer: JsonWriter[T]): List[JsField] = {
     val value = p.productElement(ix).asInstanceOf[T]
     writer match {
       case _: OptionFormat[_] if (value == None) => rest
@@ -132,10 +132,11 @@ object ProductFormats {
                 if ('0' <= c && c <= '9') c - '0'
                 else if ('a' <= c && c <= 'f') c - 87
                 else if ('A' <= c && c <= 'F') c - 55
-                else -0xFFFF
+                else -0xffff
               }
               val ci = (hexValue(2) << 12) + (hexValue(3) << 8) + (hexValue(4) << 4) + hexValue(5)
-              if (ci >= 0) { ch = ci.toChar; ix + 6 } else ni
+              if (ci >= 0) { ch = ci.toChar; ix + 6 }
+              else ni
             case _ => ni
           }
           if (ni > ix + 1 && builder == null) new JStringBuilder(name.substring(0, ix)) else builder
@@ -149,17 +150,16 @@ object ProductFormats {
 }
 
 /**
- * This trait supplies an alternative rendering mode for optional case class members.
- * Normally optional members that are undefined (`None`) are not rendered at all.
- * By mixing in this trait into your custom JsonProtocol you can enforce the rendering of undefined members as `null`.
- * (Note that this only affect JSON writing, spray-json will always read missing optional members as well as `null`
- * optional members as `None`.)
+ * This trait supplies an alternative rendering mode for optional case class members. Normally optional members that are
+ * undefined (`None`) are not rendered at all. By mixing in this trait into your custom JsonProtocol you can enforce the
+ * rendering of undefined members as `null`. (Note that this only affect JSON writing, spray-json will always read
+ * missing optional members as well as `null` optional members as `None`.)
  */
 trait NullOptions extends ProductFormats {
   this: StandardFormats =>
 
-  override protected def productElement2Field[T](fieldName: String, p: Product, ix: Int, rest: List[JsField])(
-      implicit writer: JsonWriter[T]) = {
+  override protected def productElement2Field[T](fieldName: String, p: Product, ix: Int, rest: List[JsField])(implicit
+      writer: JsonWriter[T]) = {
     val value = p.productElement(ix).asInstanceOf[T]
     (fieldName, writer.write(value)) :: rest
   }

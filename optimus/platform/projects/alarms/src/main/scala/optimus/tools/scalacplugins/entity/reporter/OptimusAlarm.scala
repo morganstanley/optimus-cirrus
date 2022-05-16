@@ -42,6 +42,7 @@ object OptimusAlarms {
     StagingErrors.ensureLoaded()
     StagingNonErrorMessages.ensureLoaded()
     CodeStyleErrors.ensureLoaded()
+    CodeStyleNonErrorMessages.ensureLoaded()
     UIAlarms.ensureLoaded()
     VersioningAlarms.ensureLoaded()
     PluginMacrosAlarms.ensureLoaded()
@@ -63,7 +64,7 @@ object OptimusAlarms {
                 case Some(existing) =>
                   assert(
                     existing.id.sn == oab.id.sn && existing.id.tpe == oab.id.tpe && existing.template == oab.template &&
-                      existing.mandatory == oab.mandatory,
+                      existing.obtMandatory == oab.obtMandatory && existing.scalaMandatory == oab.scalaMandatory,
                     s"Duplicated message ID $sn"
                   )
                 case None => ()
@@ -86,11 +87,12 @@ object OptimusAlarms {
     state match {
       case ReadMode(_) => throw new IllegalStateException("already initialized")
       case RegistrationMode(registeredAlarms) =>
-        val idseq: mutable.Buffer[OptimusAlarmBuilder] = registeredAlarms.getOrElse(base, {
-          val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
-          registeredAlarms.put(base, idseq)
-          idseq
-        })
+        val idseq: mutable.Buffer[OptimusAlarmBuilder] = registeredAlarms.getOrElse(
+          base, {
+            val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
+            registeredAlarms.put(base, idseq)
+            idseq
+          })
         idseq += alarm
         alarm
     }
@@ -119,7 +121,7 @@ trait OptimusAlarms {
   private val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
   protected def preIgnore[B <: OptimusAlarmBuilder](b: B): B = {
     assert(b.id.tpe > OptimusAlarmType.INFO)
-    assert(!b.mandatory)
+    assert(!b.obtMandatory && !b.scalaMandatory)
     OptimusAlarms.preIgnoredAlarms += b.id.sn
     b
   }

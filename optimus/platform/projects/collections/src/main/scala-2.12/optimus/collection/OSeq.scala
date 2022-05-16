@@ -11,17 +11,21 @@
  */
 package optimus.collection
 
+import scala.annotation.compileTimeOnly
 import scala.collection.AbstractSeq
 import scala.reflect.ClassTag
 
 object OSeq {
-  def empty[T: ClassTag]: OSeq[T] = {
+  def emptySeq[T: ClassTag]: OSeq[T] = {
     getCompanion[T].emptyOS[Nothing]
   }
 
-  //optimised apply methods to avoid array copying
+  @compileTimeOnly("Use OSeq.emptySeq[T] instead, as of Scala 2.13 OSeq.empty cannot accept a ClassTag")
+  def empty[A]: OptimusSeq[A] = throw new UnsupportedOperationException()
+
+  // optimised apply methods to avoid array copying
   def apply[T: ClassTag](): OSeq[T] = {
-    empty[T]
+    emptySeq[T]
   }
   def apply(d1: Double): OptimusDoubleSeq = OptimusDoubleSeq.apply(d1)
   def apply(d1: Double, d2: Double): OptimusDoubleSeq = OptimusDoubleSeq.apply(d1, d2)
@@ -38,7 +42,7 @@ object OSeq {
     if (clz.isPrimitive) {
       clz match {
         case java.lang.Double.TYPE => OptimusDoubleSeq.asInstanceOf[OSeqCompanion[T]]
-        //TODO (OPTIMUS-45858): Other Data Types to be implemented for pattern matching in Collections
+        // TODO (OPTIMUS-45858): Other Data Types to be implemented for pattern matching in Collections
         case _ => OptimusSeq.asInstanceOf[OSeqCompanion[T]]
       }
     } else OptimusSeq.asInstanceOf[OSeqCompanion[T]]
@@ -79,8 +83,8 @@ abstract class OSeq[+T] private[collection] ()
       }
     }
   }
-  override def unzip3[A1, A2, A3](
-      implicit asTriple: T => (A1, A2, A3)): (OptimusSeq[A1], OptimusSeq[A2], OptimusSeq[A3]) = {
+  override def unzip3[A1, A2, A3](implicit
+      asTriple: T => (A1, A2, A3)): (OptimusSeq[A1], OptimusSeq[A2], OptimusSeq[A3]) = {
     if (isEmpty) {
       (OptimusSeq.empty, OptimusSeq.empty, OptimusSeq.empty)
     } else {

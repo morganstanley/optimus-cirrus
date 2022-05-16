@@ -51,7 +51,7 @@ trait TypeClasses {
       val builder = factory.newBuilder
       t.foreach {
         case b: B => builder += b
-        case _ =>
+        case _    =>
       }
       builder.result()
     }
@@ -122,13 +122,6 @@ trait TypeClasses {
   }
   class Extractor2[A, R](p: A => Boolean, f: A => R) extends Extractor[A, R](a => if (p(a)) Some(f(a)) else None)
   class StartingWith(pre: String) extends Extractor2[String, String](_ startsWith pre, _ stripPrefix pre)
-
-  final class ?[T](private[TypeClasses] val ot: Option[T]) {
-    def asOption: Option[T] = ot
-  }
-  def ?[T]: ?[T] = new ?(None)
-  implicit def asOption_?[T](t_? : ?[T]): Option[T] = t_?.asOption
-  implicit def fromValue_?[T](t: T): ?[T] = new ?(Some(t))
 }
 
 object TypeClasses extends TypeClasses {

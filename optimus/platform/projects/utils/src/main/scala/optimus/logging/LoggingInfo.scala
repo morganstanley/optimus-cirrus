@@ -30,23 +30,24 @@ object Pid extends Log {
   }
   // TODO (OPTIMUS-47224): This should really return Option[Long], but we need to ensure it doesn't break
   // DAL code.
-  val pidInt: Option[Int] = try {
-    Some(ProcessHandle.current().pid().toInt)
-  } catch {
-    case NonFatal(e) => complain(e)
-  }
+  val pidInt: Option[Int] =
+    try {
+      Some(ProcessHandle.current().pid().toInt)
+    } catch {
+      case NonFatal(e) => complain(e)
+    }
 
-  val pid: Option[Long] = try {
-    val p = ProcessHandle.current().pid
-    log.info(s"pid: $p") // matching the format that used to be in Pid.scala
-    Some(p)
-  } catch {
-    case NonFatal(e) => complain(e)
-  }
+  val pid: Option[Long] =
+    try {
+      val p = ProcessHandle.current().pid
+      log.info(s"pid: $p") // matching the format that used to be in Pid.scala
+      Some(p)
+    } catch {
+      case NonFatal(e) => complain(e)
+    }
 
   def pidOrZero(): Long = pid.getOrElse(0);
 }
-
 
 object LoggingInfo {
   def getLogFile: String = {

@@ -25,7 +25,7 @@ object RedBlackSupport {
     @inline private def treeMap = map match {
       case tm: TreeMap[A, B] => tm
       case _                 =>
-        //should not happen - API should only be used on TreeMaps, but in case it isnt
+        // should not happen - API should only be used on TreeMaps, but in case it isnt
         (TreeMap.newBuilder[A, B](map.ordering) ++= map).result
     }
     /*
@@ -43,12 +43,12 @@ object RedBlackSupport {
   }
   // expose some 2.13 features for SortedSets.
   // The common RedBlackTree was backported, but the APIs could not be made available directly
-  // due to binary compat, so we loop through a java class o make the call, as java can still call the methods needed
+  // due to binary compact, so we loop through a java class o make the call, as java can still call the methods needed
   implicit class TreeSetOps[A, B](val map: SortedSet[A]) extends AnyVal {
     @inline private def treeSet = map match {
       case ts: TreeSet[A] => ts
       case _              =>
-        //should not happen - API should only be used on TreeMaps, but in case it isnt
+        // should not happen - API should only be used on TreeMaps, but in case it isn't
         (TreeSet.newBuilder[A](map.ordering) ++= map).result
     }
     /*

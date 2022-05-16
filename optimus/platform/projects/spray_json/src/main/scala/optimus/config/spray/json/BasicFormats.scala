@@ -112,7 +112,7 @@ trait BasicFormats {
     def write(x: Char) = JsString(String.valueOf(x))
     def read(value: JsValue) = value match {
       case JsString(x) if x.length == 1 => x.charAt(0)
-      case x                            => deserializationError("Expected Char as single-character JsString, but got " + x)
+      case x => deserializationError("Expected Char as single-character JsString, but got " + x)
     }
   }
 

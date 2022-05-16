@@ -29,8 +29,8 @@ private[collection] object OptimusSeqEmpty extends OptimusSeq[Nothing] {
   override def map[B, That](f: Nothing => B)(implicit bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That =
     if (isCompatableCBF(bf)) this.asInstanceOf[That]
     else super.map(f)
-  override def flatMap[B, That](f: Nothing => GenTraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That =
+  override def flatMap[B, That](f: Nothing => GenTraversableOnce[B])(implicit
+      bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That =
     if (isCompatableCBF(bf)) this.asInstanceOf[That]
     else super.flatMap(f)
   override def foreach[U](f: Nothing => U): Unit = ()
@@ -45,14 +45,14 @@ private[collection] object OptimusSeqEmpty extends OptimusSeq[Nothing] {
   override def iterator: Iterator[Nothing] = Iterator.empty
   override def reverseIterator: Iterator[Nothing] = Iterator.empty
   override def collectFirst[B](pf: PartialFunction[Nothing, B]): Option[B] = None
-  override def collect[B, That](pf: PartialFunction[Nothing, B])(
-      implicit bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That = {
+  override def collect[B, That](pf: PartialFunction[Nothing, B])(implicit
+      bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That = {
     if (isCompatableCBF(bf)) this.asInstanceOf[That] else super.collect(pf)
   }
   override def head: Nothing = Iterator.empty.next
   override def tail: OptimusSeq[Nothing] = Iterator.empty.next
   override def last: Nothing = Iterator.empty.next
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (Nothing, Int) => B): OptimusSeq[B] = {
     this.asInstanceOf[OptimusSeq[B]]
   }
@@ -156,7 +156,7 @@ private[collection] class OptimusSeq1[+T](v1: T) extends SmallOptimusSeq[T] {
   override def head: T = v1
   override def tail: OptimusSeq[T] = OptimusSeq.empty
   override def last: T = v1
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val n1 = f(v1, 0)
     if (n1 == v1)
@@ -207,8 +207,10 @@ private[collection] class OptimusSeq2[+T](v1: T, v2: T) extends SmallOptimusSeq[
     if (isCompatableCBF(bf)) {
       val n1 = f(v1)
       val n2 = f(v2)
-      if ((n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
-          (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef]))
+      if (
+        (n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
+        (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef])
+      )
         this.asInstanceOf[That]
       else new OptimusSeq2(n1, n2).asInstanceOf[That]
     } else super.map(f)
@@ -223,7 +225,7 @@ private[collection] class OptimusSeq2[+T](v1: T, v2: T) extends SmallOptimusSeq[
   override def +:[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
     if (isCompatableCBF(bf)) new OptimusSeq3(that, v1, v2).asInstanceOf[That]
     else super.+:(that)
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val n1 = f(v1, 0)
     val n2 = f(v2, 1)
@@ -284,9 +286,11 @@ private[collection] class OptimusSeq3[+T](v1: T, v2: T, v3: T) extends SmallOpti
       val n1 = f(v1)
       val n2 = f(v2)
       val n3 = f(v3)
-      if ((n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
-          (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef]) &&
-          (n3.asInstanceOf[AnyRef] eq v3.asInstanceOf[AnyRef]))
+      if (
+        (n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
+        (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef]) &&
+        (n3.asInstanceOf[AnyRef] eq v3.asInstanceOf[AnyRef])
+      )
         this.asInstanceOf[That]
       else new OptimusSeq3(n1, n2, n3).asInstanceOf[That]
     } else super.map(f)
@@ -302,7 +306,7 @@ private[collection] class OptimusSeq3[+T](v1: T, v2: T, v3: T) extends SmallOpti
   override def +:[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
     if (isCompatableCBF(bf)) new OptimusSeq4(that, v1, v2, v3).asInstanceOf[That]
     else super.+:(that)
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val n1 = f(v1, 0)
     val n2 = f(v2, 1)
@@ -373,10 +377,12 @@ private[collection] class OptimusSeq4[+T](v1: T, v2: T, v3: T, v4: T) extends Sm
       val n2 = f(v2)
       val n3 = f(v3)
       val n4 = f(v4)
-      if ((n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
-          (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef]) &&
-          (n3.asInstanceOf[AnyRef] eq v3.asInstanceOf[AnyRef]) &&
-          (n4.asInstanceOf[AnyRef] eq v4.asInstanceOf[AnyRef]))
+      if (
+        (n1.asInstanceOf[AnyRef] eq v1.asInstanceOf[AnyRef]) &&
+        (n2.asInstanceOf[AnyRef] eq v2.asInstanceOf[AnyRef]) &&
+        (n3.asInstanceOf[AnyRef] eq v3.asInstanceOf[AnyRef]) &&
+        (n4.asInstanceOf[AnyRef] eq v4.asInstanceOf[AnyRef])
+      )
         this.asInstanceOf[That]
       else new OptimusSeq4(n1, n2, n3, n4).asInstanceOf[That]
     } else super.map(f)
@@ -394,7 +400,7 @@ private[collection] class OptimusSeq4[+T](v1: T, v2: T, v3: T, v4: T) extends Sm
   override def +:[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
     if (isCompatableCBF(bf)) OptimusArraySeq.unsafeFromAnyArray(Array[Any](that, v1, v2, v3, v4)).asInstanceOf[That]
     else super.+:(that)
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val n1 = f(v1, 0)
     val n2 = f(v2, 1)

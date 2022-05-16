@@ -52,19 +52,19 @@ private[collection] final class OptimusArraySeq[+T] private (
       (this eq that) || (
         data.length == that.data.length &&
           this.hashCode == that.hashCode && {
-          var offset = 0
-          var equal = true
-          while (equal && offset < data.length) {
-            val d1 = this.data(offset)
-            val d2 = that.data(offset)
-            equal = (d1 eq d2) || d1 == d2
-            offset += 1
+            var offset = 0
+            var equal = true
+            while (equal && offset < data.length) {
+              val d1 = this.data(offset)
+              val d2 = that.data(offset)
+              equal = (d1 eq d2) || d1 == d2
+              offset += 1
+            }
+            equal
           }
-          equal
-        }
       )
     case that: OptimusArraysSeq[_] =>
-      //OptimusArraysSeq can the more complex implemtation, so it seems sensible to have it in one place only
+      // OptimusArraysSeq can the more complex implemtation, so it seems sensible to have it in one place only
       that == this
     case that: OptimusSeq[_] => false
     case _                   => super.equals(other)
@@ -82,12 +82,12 @@ private[collection] final class OptimusArraySeq[+T] private (
     var builder: OptimusBuilder[T, OptimusSeq[T]] = null
     try {
       var i = 0
-      //all == true => builder == null && we can reuse the collection
-      //all == false && builder == null => return is empty
-      //all == false  && builder ne null => use content of the builder
+      // all == true => builder == null && we can reuse the collection
+      // all == false && builder == null => return is empty
+      // all == false  && builder ne null => use content of the builder
       var all = true
       while (i < data.length && all) {
-        //we are keeping all values currently
+        // we are keeping all values currently
         val value = data(i).asInstanceOf[T]
         if (include != f(value)) {
           if (i != 0) {
@@ -99,7 +99,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         i += 1
       }
       while (i < data.length && (builder eq null)) {
-        //we are keeping no values currently
+        // we are keeping no values currently
         val value = data(i).asInstanceOf[T]
         if (include == f(value)) {
           builder = OptimusSeq.borrowBuilder[T]
@@ -108,7 +108,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         i += 1
       }
       while (i < data.length && (builder ne null)) {
-        //we are keeping values in the builder
+        // we are keeping values in the builder
         val value = data(i).asInstanceOf[T]
         if (include == f(value))
           builder += data(i).asInstanceOf[T]
@@ -130,10 +130,10 @@ private[collection] final class OptimusArraySeq[+T] private (
   override def lastIndexOf[B >: T](elem: B, end: Int): Int =
     OptimusSeqSupport.lastIndexOf(data, 0, Math.min(length - 1, end), elem)
 
-  /** @inheritdoc
-   * optimised to avoid builder creation
-   * optimised to zero allocation if the result isempty
-   * optimised to zero allocation and return this if the result would == this
+  /**
+   * @inheritdoc
+   * optimised to avoid builder creation optimised to zero allocation if the result isempty optimised to zero allocation
+   * and return this if the result would == this
    */
   override def map[B, That](f: T => B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
     if (isCompatableCBF(bf)) {
@@ -149,7 +149,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         }
         i += 1
       }
-      //mop up the other values
+      // mop up the other values
       while (i < data.length) {
         val existing = data(i)
         val result = f(existing.asInstanceOf[T])
@@ -248,7 +248,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         .asInstanceOf[That]
     } else super.collect(pf)
   }
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     var newData: Array[Any] = null
     var i = 0
@@ -263,7 +263,7 @@ private[collection] final class OptimusArraySeq[+T] private (
       i += 1
     }
     // work though the rest of the values.
-    //if we enter the loop newData ne null
+    // if we enter the loop newData ne null
     while (i < data.length) {
       val existing = data(i)
       val result = f(existing.asInstanceOf[T], i)

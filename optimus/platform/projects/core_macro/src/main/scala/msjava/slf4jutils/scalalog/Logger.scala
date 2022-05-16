@@ -19,21 +19,22 @@ import org.slf4j.{Marker, Logger => SLF4JLogger}
 /**
  * Adapter for the [[org.slf4j.Logger]] interface, making it more usable from scala.
  *
- * Implemented using macros so that the message and any arguments are evaluated only if the corresponding target is enabled.
+ * Implemented using macros so that the message and any arguments are evaluated only if the corresponding target is
+ * enabled.
  *
  * This means that you can write things like
  *
  * log.debug(s"my message: $hugeObject")
  *
- * and pay almost zero runtime cost if log.isDebugEnabled is false. We skip the isEnabled check in the case of a single constant string
- * literal argument, with or without exception (e.g. log.info("hello world") or log.error("oh no!", ex))
+ * and pay almost zero runtime cost if log.isDebugEnabled is false. We skip the isEnabled check in the case of a single
+ * constant string literal argument, with or without exception (e.g. log.info("hello world") or log.error("oh no!", ex))
  * to avoid unnecessary code generation with no runtime benefit.
  *
- * There is no benefit to using the log4j style string interpolators ("my message: {}"). They are retained only for backward compatibility.
- * For all new code, just use s-string interpolation as in the above example.
+ * There is no benefit to using the log4j style string interpolators ("my message: {}"). They are retained only for
+ * backward compatibility. For all new code, just use s-string interpolation as in the above example.
  *
- * (Note that even though we only have a varargs version of the interpolating log methods, the macro does actually call the
- * more efficient 1 or 2 arg versions where possible, and this is tested for in LoggingMacrosTest)
+ * (Note that even though we only have a varargs version of the interpolating log methods, the macro does actually call
+ * the more efficient 1 or 2 arg versions where possible, and this is tested for in LoggingMacrosTest)
  */
 trait Intercept {
   def enable: Boolean
@@ -212,8 +213,8 @@ object LoggerMacros {
    *
    * There is no guard in the case of a string literal argument with no interpolation parameters
    *
-   * The markerArgs and rawArgs are inserted as-is, but the interpArgs have their type forced to Any (if two or fewer) or Object (if three or more)
-   * to force scalac to resolve the correct varargs vs. regular java logger methods.
+   * The markerArgs and rawArgs are inserted as-is, but the interpArgs have their type forced to Any (if two or fewer)
+   * or Object (if three or more) to force scalac to resolve the correct varargs vs. regular java logger methods.
    */
   def guardedLog(c: Context)(
       level: String,

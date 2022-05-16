@@ -14,23 +14,22 @@ package optimus.collection
 import java.util
 import java.util.Arrays
 
-import optimus.collection.OptimusSeqEmpty.isCompatableCBF
-
 import scala.annotation.switch
+import scala.annotation.unchecked.uncheckedVariance
 import scala.collection.AbstractIterator
-import scala.collection.GenIterable
-import scala.collection.GenTraversableOnce
-import scala.collection.IndexedSeqOptimized
-import scala.collection.TraversableOnce
-import scala.collection.generic.CanBuildFrom
-import scala.collection.immutable.CollectionsHook
+import scala.collection.IterableFactoryDefaults
+import scala.collection.SeqFactory
+import scala.collection.IterableOnce
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.runtime.AbstractFunction1
+import scala.util.hashing.MurmurHash3
 
-/** A companion object used to create instances of `OptimusSeq`.
+/**
+ * A companion object used to create instances of `OptimusSeq`.
  */
-object OptimusSeq extends OSeqCompanion[Any] {
-  def from[T](t: TraversableOnce[T]): OptimusSeq[T] = {
+object OptimusSeq extends SeqFactory[OptimusSeq] with OSeqCompanion[Any] {
+  def from[T](t: IterableOnce[T]): OptimusSeq[T] = {
     t match {
       case os: OptimusSeq[T] => os
       case _                 => withSharedBuilder[T](_ ++= t)
@@ -143,10 +142,15 @@ object OptimusSeq extends OSeqCompanion[Any] {
       }
   }
 
-  def newBuilder[A]: OptimusBuilder[A, OptimusSeq[A]] = canBuildFrom[A].apply()
+  def newBuilder[A]: OptimusBuilder[A, OptimusSeq[A]] = canBuildFrom[A].newBuilder()
   private[collection] def borrowBuilder[A]: OptimusBuilder[A, OptimusSeq[A]] = canBuildFrom[A].borrowBuilder()
-  implicit def canBuildFrom[T]: OptimusCanBuildFrom[OptimusSeq[_], T, OptimusSeq[T], AnyRef] =
+  private def canBuildFrom[T]: OptimusCanBuildFrom[OptimusSeq[_], T, OptimusSeq[T], AnyRef] =
     genCBF.asInstanceOf[OptimusCanBuildFrom[OptimusSeq[_], T, OptimusSeq[T], AnyRef]]
+  // support `coll.apar.map(f)(OptimusSeq.breakOut)
+  def breakOut[T]: OptimusCanBuildFrom[OptimusSeq[_], T, OptimusSeq[T], AnyRef] = canBuildFrom
+  // support `coll.to(OptimusSeq)`
+  implicit def factoryToCBF[T](factory: OptimusSeq.type): OptimusCanBuildFrom[OptimusSeq[_], T, OptimusSeq[T], AnyRef] =
+    canBuildFrom
   private[collection] object genCBF
       extends OptimusCanBuildFrom[Seq[AnyRef], AnyRef, OptimusSeq[AnyRef], AnyRef](
         "OptimusSeq.genCBF",
@@ -166,7 +170,7 @@ object OptimusSeq extends OSeqCompanion[Any] {
       override protected def newArray(size: Int): Array[AnyRef] = new Array[AnyRef](size)
       override protected def copyToArray(): Array[AnyRef] = util.Arrays.copyOf(elems, elemsIndex)
 
-      override def +=(elem: T): this.type = {
+      override def addOne(elem: T): this.type = {
         prepareForAdditional(1)
         addRaw(elem)
         this
@@ -176,7 +180,7 @@ object OptimusSeq extends OSeqCompanion[Any] {
         elemsIndex += 1
       }
 
-      override def ++=(xs: TraversableOnce[T]): this.type = {
+      override def addAll(xs: IterableOnce[T]): this.type = {
         xs match {
           case xs: OptimusSeq[T] =>
             xs match {
@@ -199,7 +203,7 @@ object OptimusSeq extends OSeqCompanion[Any] {
           case xs: mutable.WrappedArray.ofRef[_] =>
             copyFromArray(xs.array, 0, xs.length)
           case xs =>
-            if (!xs.isEmpty)
+            if (!xs.iterator.isEmpty)
               adder.addAll(xs)
         }
         this
@@ -208,7 +212,7 @@ object OptimusSeq extends OSeqCompanion[Any] {
       class Adder extends AbstractFunction1[T, Unit] {
         private[this] var remaining: Int = _
         private[this] var localElemIndex: Int = _
-        def addAll(xs: TraversableOnce[T]): Unit = {
+        def addAll(xs: IterableOnce[T]): Unit = {
           reset()
           xs foreach this
           elemsIndex = localElemIndex
@@ -247,9 +251,9 @@ object OptimusSeq extends OSeqCompanion[Any] {
           flushToArrays()
           trimArrays()
           val res = if (arrays.length == 1) {
-            //Optimise to retain the original collection??
-            //this means that we probably did a
-            //builder ++ coll; builder.result
+            // Optimise to retain the original collection??
+            // this means that we probably did a
+            // builder ++ coll; builder.result
             OptimusArraySeq.unsafeFromArray[T](arrays(0))
           } else
             OptimusArraysSeq[T](arrays, knownHashes)
@@ -267,8 +271,7 @@ object OptimusSeq extends OSeqCompanion[Any] {
     OptimusArraySeq.unsafeFromArray(elems)
   private def unsafeFromAnyArray[T](elems: Array[Any]): OptimusSeq[T] =
     OptimusArraySeq.unsafeFromAnyArray(elems)
-
-  //optimised apply methods
+  // optimised apply methods
   def apply(): OptimusSeq[Nothing] = EMPTY
   def apply[T](p1: T): OptimusSeq[T] = {
     new OptimusSeq1[T](p1)
@@ -282,22 +285,26 @@ object OptimusSeq extends OSeqCompanion[Any] {
   def apply[T](p1: T, p2: T, p3: T, p4: T): OptimusSeq[T] = {
     new OptimusSeq4[T](p1, p2, p3, p4)
   }
-  //OSeqCompanion methods
+  // OSeqCompanion methods
   override private[collection] def emptyOS[A <: Any]: OSeq[A] =
     empty[A]
   override private[collection] def tabulateOS[A <: Any](size: Int)(elemFn: OSeqTabulate[A]): OSeq[A] =
     tabulate(size)(elemFn)
   override private[collection] def fillOS[A <: Any](size: Int)(elem: A): OSeq[A] =
     fill(size)(elem)
-  override private[collection] def canBuildFromOS[A <: Any]: OptimusCanBuildFrom[Seq[A], A, OSeq[A], Any] =
-    genCBF.asInstanceOf[OptimusCanBuildFrom[Seq[A], A, OSeq[A], Any]]
 
   private[this] val _collectMarker = new AbstractFunction1[Any, Any] {
     override def apply(v1: Any): Any = this
   }
   private[collection] def collectMarker[A, B] = _collectMarker.asInstanceOf[Function1[A, B]]
+  private[collection] def elemsToCopyToArray(srcLen: Int, destLen: Int, start: Int, len: Int): Int =
+    math.max(math.min(math.min(len, srcLen), destLen - start), 0)
 }
-abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, OptimusSeq[T]] {
+abstract class OptimusSeq[+T]
+    extends OSeq[T]
+    with immutable.IndexedSeqOps[T, OptimusSeq, OptimusSeq[T]]
+    with immutable.StrictOptimizedSeqOps[T, OptimusSeq, OptimusSeq[T]]
+    with IterableFactoryDefaults[T, OptimusSeq] {
   import OptimusSeq.{EMPTY, collectMarker}
   @volatile private[this] var _knownHashCode: Boolean = _
   private[this] var _hashCode: Int = _
@@ -306,35 +313,33 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
     else {
       // use seqSeed so that hashCode is consistent with Seq[Double]'s
       val hashCode = computeHash
-      //note - this is order important
-      //hashcode must be written before known
+      // note - this is order important
+      // hashcode must be written before known
       _hashCode = hashCode
-      //volatile write, forces the _hashcode to be visible
+      // volatile write, forces the _hashcode to be visible
       _knownHashCode = true
       hashCode
     }
 
   override def stringPrefix = "OptimusSeq"
-  override def flatMap[B, That](f: T => GenTraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That = bf match {
-    case internal: OptimusCanBuildFrom[_, B, That, _] =>
-      var i = 0
-      val builder = internal.borrowBuilder()
-      try {
-        while (i < length) {
-          val orig = apply(i)
-          val res = f(orig)
-          builder addAll res
-          i += 1
-        }
-        builder.result()
-      } finally builder.returnBorrowed()
-    case _ => super.flatMap(f)
+  override def flatMap[B](f: T => IterableOnce[B]): OptimusSeq[B] = {
+    var i = 0
+    val builder = OptimusSeq.borrowBuilder[B]
+    try {
+      while (i < length) {
+        val orig = apply(i)
+        val res = f(orig)
+        builder addAll res
+        i += 1
+      }
+      builder.result()
+    } finally builder.returnBorrowed()
   }
 
-  /** @inheritdoc
-   * optimised to use efficient array copying when new data is needed
-   * optimised to save memory and later hashcode for known results
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed optimised to save memory and later hashcode for
+   * known results
    */
   override def slice(from: Int, to: Int): OptimusSeq[T] = {
     val lo = Math.min(Math.max(from, 0), size)
@@ -348,7 +353,7 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
         case 3 => new OptimusSeq3(apply(lo + 0), apply(lo + 1), apply(lo + 2))
         case 4 => new OptimusSeq4(apply(lo + 0), apply(lo + 1), apply(lo + 2), apply(lo + 3))
         case _ =>
-          //for a slice to be >4 it must by already > 4, so this must be a OptimusArray[s]Seq
+          // for a slice to be >4 it must by already > 4, so this must be a OptimusArray[s]Seq
           this match {
             case os: OptimusArraySeq[T] =>
               val range = Arrays.copyOfRange[AnyRef](os.data, lo, hi)
@@ -360,39 +365,52 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
       }
   }
 
-  /** @inheritdoc
-   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results */
-  override def ++[B >: T, That](that: GenTraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That = {
-    if (isCompatableCBF(bf)) {
-      if (that.isEmpty) this.asInstanceOf[That]
-      else if (this.isEmpty && that.isInstanceOf[OptimusSeq[B]]) that.asInstanceOf[That]
-      else {
-        OptimusSeq
-          .withSharedBuilder[B] { builder =>
-            builder ++= this
-            builder addAll that
-          }
-          .asInstanceOf[That]
-      }
-    } else super.++(that)(bf)
+  override def take(n: Int): OptimusSeq[T] = {
+    slice(0, n)
   }
 
-  override def ++:[B >: T, That](that: Traversable[B])(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      if (that.isEmpty) this.asInstanceOf[That]
-      else if (this.isEmpty && that.isInstanceOf[OptimusSeq[B]]) that.asInstanceOf[That]
-      else {
-        OptimusSeq
-          .withSharedBuilder[B] { builder =>
-            builder ++= that
-            builder ++= this
-          }
-          .asInstanceOf[That]
-      }
-    } else super.++:[B, That](that)(bf)
+  override def drop(n: Int): OptimusSeq[T] = {
+    slice(n, length)
+  }
 
-  final def isCompatableCBF(cbf: CanBuildFrom[_, _, _]): Boolean = CollectionsHook.isOptimusSeqCompatibleCBF(cbf)
+  override def takeRight(n: Int): OptimusSeq[T] = {
+    slice(length - n, length)
+  }
+
+  override def dropRight(n: Int): OptimusSeq[T] = {
+    slice(0, length - n)
+  }
+
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def appendedAll[B >: T](that: IterableOnce[B]): OptimusSeq[B] = {
+    if (that.knownSize == 0) this.asInstanceOf[OptimusSeq[B]]
+    else if (this.isEmpty && that.isInstanceOf[OptimusSeq[B]]) that.asInstanceOf[OptimusSeq[B]]
+    else {
+      OptimusSeq
+        .withSharedBuilder[B] { builder =>
+          builder ++= this
+          builder addAll that
+        }
+        .asInstanceOf[OptimusSeq[B]]
+    }
+  }
+
+  override def prependedAll[B >: T](that: IterableOnce[B]): OptimusSeq[B] = {
+    if (that.knownSize == 0) this.asInstanceOf[OptimusSeq[B]]
+    else if (this.isEmpty && that.isInstanceOf[OptimusSeq[B]]) that.asInstanceOf[OptimusSeq[B]]
+    else {
+      OptimusSeq
+        .withSharedBuilder[B] { builder =>
+          builder ++= that
+          builder ++= this
+        }
+        .asInstanceOf[OptimusSeq[B]]
+    }
+  }
 
   override final def filter(f: T => Boolean): OptimusSeq[T] = filter0(f, true)
   override final def filterNot(f: T => Boolean): OptimusSeq[T] = filter0(f, false)
@@ -425,9 +443,8 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
     new AbstractIterator[T] {
       var index = 0
       private val collSize = OptimusSeq.this.length
-      override def length: Int = collSize - index
-      override def size: Int = length
-      override def hasDefiniteSize: Boolean = true
+      override def size: Int = collSize - index
+      override def knownSize: Int = size
       override def hasNext: Boolean = index < collSize
 
       override def drop(n: Int): Iterator[T] = {
@@ -443,10 +460,9 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
   }
   override def reverseIterator: Iterator[T] = {
     new AbstractIterator[T] {
-      override def length: Int = index + 1
-      override def size: Int = length
+      override def size: Int = index + 1
       var index = OptimusSeq.this.length - 1
-      override def hasDefiniteSize: Boolean = true
+      override def knownSize: Int = size
       override def hasNext: Boolean = index >= 0
 
       override def drop(n: Int): Iterator[T] = {
@@ -463,16 +479,15 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
 
   override def head: T = apply(0)
 
-  override def tail: OptimusSeq[T] = drop(1)
+  override def tail: OptimusSeq[T] = OptimusSeq.from(drop(1))
 
   override def last: T = apply(size - 1)
 
-  override def zip[A1 >: T, B, That](that: GenIterable[B])(
-      implicit bf: CanBuildFrom[OptimusSeq[T], (A1, B), That]): That = {
-    if (isEmpty || that.isEmpty) {
-      OptimusCanBuildFrom.empty(bf, this)
+  override def zip[B](that: IterableOnce[B]): OptimusSeq[(T @uncheckedVariance, B)] = {
+    if (isEmpty || that.knownSize == 0) {
+      OptimusSeq.empty[(T, B)]
     } else {
-      val builder = OptimusCanBuildFrom.borrowIfPossible(bf, this)
+      val builder = OptimusSeq.borrowBuilder[(T, B)]
       try {
         val size = length
         var i = 0
@@ -495,12 +510,11 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
     }
   }
 
-  override def zipAll[B, A1 >: T, That](that: GenIterable[B], thisElem: A1, thatElem: B)(
-      implicit bf: CanBuildFrom[OptimusSeq[T], (A1, B), That]): That = {
-    if (isEmpty && that.isEmpty) {
-      OptimusCanBuildFrom.empty(bf, this)
+  override def zipAll[A1 >: T, B](that: Iterable[B], thisElem: A1, thatElem: B): OptimusSeq[(A1, B)] = {
+    if (isEmpty && that.knownSize == 0) {
+      OptimusSeq.empty[(A1, B)]
     } else {
-      val builder = OptimusCanBuildFrom.borrowIfPossible(bf, this)
+      val builder = OptimusSeq.borrowBuilder[(A1, B)]
       try {
         val size = length
         var i = 0
@@ -527,11 +541,12 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
       } finally OptimusBuilder.returnIfBorrowed(builder)
     }
   }
-  override def zipWithIndex[A1 >: T, That](implicit bf: CanBuildFrom[OptimusSeq[T], (A1, Int), That]): That = {
+
+  override def zipWithIndex: OptimusSeq[(T, Int)] = {
     if (isEmpty) {
-      OptimusCanBuildFrom.empty(bf, this)
+      OptimusSeq.empty[(T, Int)]
     } else {
-      val builder = OptimusCanBuildFrom.borrowIfPossible(bf, this)
+      val builder = OptimusSeq.borrowBuilder[(T, Int)]
       try {
         val size = length
         var i = 0
@@ -544,24 +559,27 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
     }
   }
 
-  /** Creates new builder for this collection
+  override def iterableFactory: SeqFactory[OptimusSeq] = OptimusSeq
+
+  /**
+   * Creates new builder for this collection
    */
-  override protected[this] def newBuilder: mutable.Builder[T, OptimusSeq[T]] =
-    OptimusSeq.newBuilder[T]
-  protected def computeHash: Int
+  final def computeHash: Int = {
+    MurmurHash3.indexedSeqHash(this, MurmurHash3.seqSeed)
+  }
 
   /// additional methods
 
-  def addAll[B >: T, That](that1: TraversableOnce[B]): OptimusSeq[B] = {
-    if (that1.isEmpty) this
+  def addAll[B >: T, That](that1: IterableOnce[B]): OptimusSeq[B] = {
+    if (that1.knownSize == 0) this
     else
       OptimusSeq.withSharedBuilder[B] { builder =>
         builder ++= this
         builder ++= that1
       }
   }
-  def addAll[B >: T, That](that1: TraversableOnce[B], that2: TraversableOnce[B]): OptimusSeq[B] = {
-    if (that1.isEmpty) this
+  def addAll[B >: T, That](that1: IterableOnce[B], that2: IterableOnce[B]): OptimusSeq[B] = {
+    if (that1.knownSize == 0) this
     else
       OptimusSeq.withSharedBuilder[B] { builder =>
         builder ++= this
@@ -569,11 +587,8 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
         builder ++= that2
       }
   }
-  def addAll[B >: T, That](
-      that1: TraversableOnce[B],
-      that2: TraversableOnce[B],
-      that3: TraversableOnce[B]): OptimusSeq[B] = {
-    if (that1.isEmpty) this
+  def addAll[B >: T, That](that1: IterableOnce[B], that2: IterableOnce[B], that3: IterableOnce[B]): OptimusSeq[B] = {
+    if (that1.knownSize == 0) this
     else
       OptimusSeq.withSharedBuilder[B] { builder =>
         builder ++= this
@@ -583,11 +598,11 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
       }
   }
   def addAll[B >: T, That](
-      that1: TraversableOnce[B],
-      that2: TraversableOnce[B],
-      that3: TraversableOnce[B],
-      that4: TraversableOnce[B]): OptimusSeq[B] = {
-    if (that1.isEmpty) this
+      that1: IterableOnce[B],
+      that2: IterableOnce[B],
+      that3: IterableOnce[B],
+      that4: IterableOnce[B]): OptimusSeq[B] = {
+    if (that1.knownSize == 0) this
     else
       OptimusSeq.withSharedBuilder[B] { builder =>
         builder ++= this
@@ -598,12 +613,15 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
       }
   }
   def addAll[B >: T, That](
-      that1: TraversableOnce[B],
-      that2: TraversableOnce[B],
-      that3: TraversableOnce[B],
-      that4: TraversableOnce[B],
-      rest: TraversableOnce[B]*): OptimusSeq[B] = {
-    if (that1.isEmpty && that2.isEmpty && that3.isEmpty && that4.isEmpty && rest.forall(_.isEmpty)) this
+      that1: IterableOnce[B],
+      that2: IterableOnce[B],
+      that3: IterableOnce[B],
+      that4: IterableOnce[B],
+      rest: IterableOnce[B]*): OptimusSeq[B] = {
+    if (
+      that1.knownSize == 0 && that2.knownSize == 0 && that3.knownSize == 0 && that4.knownSize == 0 && rest.forall(
+        _.knownSize == 0)
+    ) this
     else
       OptimusSeq.withSharedBuilder[B] { builder =>
         builder ++= this
@@ -614,13 +632,15 @@ abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, Optimu
         rest foreach (builder ++= _)
       }
   }
-  //extension methods
+  // extension methods
   /** similar to .zipWithIndex.map, but without the tupling */
   def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B]
+
+  override protected[this] def className: String = "OptimusSeq"
 }
 
 private[collection] object OptimusSeqImpl extends OSeqImpl {
-  private[this] def targetArrayExp = 6 //ie 64 elements
+  private[this] def targetArrayExp = 6 // ie 64 elements
   def minArraySize = 2 << (targetArrayExp - 1)
   def maxArraySize = 2 << (targetArrayExp + 1)
 }

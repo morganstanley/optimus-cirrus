@@ -96,13 +96,16 @@ object IO {
   }
 
   def usingQuietly[A <: AutoCloseable, B](resource: A)(f: A => B): B = {
-    try { f(resource) } finally { closeQuietly(resource) }
+    try { f(resource) }
+    finally { closeQuietly(resource) }
   }
   def usingQuietly[A, B](resource: A, closeFunction: () => Unit)(f: A => B): B = {
-    try { f(resource) } finally { closeQuietly(closeFunction) }
+    try { f(resource) }
+    finally { closeQuietly(closeFunction) }
   }
 
   def usingSilently[A <: AutoCloseable, B](resource: A)(f: A => B): B =
-    try { f(resource) } finally { closeSilently(resource) }
+    try { f(resource) }
+    finally { closeSilently(resource) }
 
 }

@@ -13,6 +13,7 @@ package optimus.breadcrumbs.filter
 
 import scala.collection.mutable.ArrayBuffer
 import optimus.breadcrumbs.crumbs.Crumb
+import optimus.breadcrumbs.crumbs.CrumbHint
 import optimus.breadcrumbs.filter.Result.Neutral
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -43,13 +44,16 @@ object CrumbFilter {
   private[optimus] val SOURCE_REGEX_ALLOW_LIST = "SourceRegexAllowList"
   private[optimus] val CRUMB_TYPE_ALLOW_LIST = "CrumbTypeAllowList"
   private[optimus] val LARGE_CRUMB_FILTER = "LargeCrumbFilter"
+  private[optimus] val CRUMB_HINT_FILTER = "CrumbHintFilter"
 
   def createFilter(filterConfigs: Seq[Map[String, AnyRef]]): Option[CrumbFilter] = {
     filterConfigs flatMap { config =>
       config.get("name").flatMap {
         case SOURCE_REGEX_ALLOW_LIST =>
           val regex = config
-            .getOrElse("pattern", throw new RuntimeException(s"No 'pattern' configured for a $SOURCE_REGEX_ALLOW_LIST."))
+            .getOrElse(
+              "pattern",
+              throw new RuntimeException(s"No 'pattern' configured for a $SOURCE_REGEX_ALLOW_LIST."))
             .toString
           log.info(s"CrumbFilter - $SOURCE_REGEX_ALLOW_LIST(regex = '$regex')")
           Some(new SourceRegexAllowList(regex))
@@ -58,6 +62,12 @@ object CrumbFilter {
             config.get("threshold").map(t => Integer.valueOf(t.toString)).getOrElse(DEFAULT_MAX_CRUMB_SIZE)
           log.info(s"CrumbFilter - $LARGE_CRUMB_FILTER(maxSize = $maxCrumbSize)")
           Some(new LargeCrumbFilter(maxCrumbSize))
+        case CRUMB_HINT_FILTER =>
+          val hint = config
+            .getOrElse("hint", throw new RuntimeException(s"No 'hint' configured for a $CRUMB_HINT_FILTER."))
+            .toString
+          log.info(s"CrumbFilter - $CRUMB_HINT_FILTER(hint = '$hint')")
+          Some(new CrumbHintFilter(CrumbHint.fromString(hint)))
         case CRUMB_TYPE_ALLOW_LIST =>
           val types = config
             .getOrElse("types", throw new RuntimeException(s"No 'types' specified for $CRUMB_TYPE_ALLOW_LIST"))
@@ -81,11 +91,15 @@ object CrumbFilter {
   }
 }
 
-abstract class AbstractFilter(protected[breadcrumbs] override val onMatch: Result, protected[breadcrumbs] override val onMismatch: Result) extends CrumbFilter {
+abstract class AbstractFilter(
+    protected[breadcrumbs] override val onMatch: Result,
+    protected[breadcrumbs] override val onMismatch: Result)
+    extends CrumbFilter {
   def filter(crumb: Crumb): Result = Neutral
 }
 
-final class SourceRegexAllowList(private[breadcrumbs] val pattern: String) extends AbstractFilter(Result.Accept, Result.Deny) {
+final class SourceRegexAllowList(private[breadcrumbs] val pattern: String)
+    extends AbstractFilter(Result.Accept, Result.Deny) {
   private val SourceRegexPattern = pattern.r.pattern
   override def filter(crumb: Crumb): Result = {
     if (SourceRegexPattern.matcher(crumb.source.name).matches) onMatch else onMismatch
@@ -94,7 +108,8 @@ final class SourceRegexAllowList(private[breadcrumbs] val pattern: String) exten
   override def toString() = s"${CrumbFilter.SOURCE_REGEX_ALLOW_LIST}[pattern='${pattern}']"
 }
 
-final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String]) extends AbstractFilter(Result.Accept, Result.Deny) {
+final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
+    extends AbstractFilter(Result.Accept, Result.Deny) {
   private[this] val processedTypes: Set[String] = types
     .map(_.replaceAll("Crumb$", ""))
     .map(t => s"${t.trim}Crumb")
@@ -108,13 +123,24 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String]) exte
   override def toString() = s"${CrumbFilter.CRUMB_TYPE_ALLOW_LIST}[types=${types.mkString("'", "', '", "'")}]"
 }
 
-final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer) extends AbstractFilter(Result.Deny, Result.Neutral) {
+final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer)
+    extends AbstractFilter(Result.Deny, Result.Neutral) {
   override def filter(crumb: Crumb): Result =
     if (crumb.asJSON.toString.length > threshold)
       onMatch
     else onMismatch
 
   override def toString() = s"${CrumbFilter.LARGE_CRUMB_FILTER}[threshold=$threshold]"
+}
+
+final class CrumbHintFilter(private[breadcrumbs] val hint: CrumbHint)
+    extends AbstractFilter(Result.Accept, Result.Deny) {
+  override def filter(crumb: Crumb) : Result =
+    if (crumb.hints contains hint)
+      onMatch
+  else onMismatch
+
+  override def toString() = s"${CrumbFilter.CRUMB_HINT_FILTER}[hint=$hint]"
 }
 
 object CompositeFilter {
@@ -131,13 +157,12 @@ final class CompositeFilter extends AbstractFilter(Result.Neutral, Result.Neutra
     // apply any filters unnecessarily
     // But still, we have to enumerate through all the filters there (without applying those after a matched though)
     // Ideally, we don't even need to iterate through all filters here (Scala doesn't seem to have a construct for that)
-    filters.foldLeft(Result.Neutral: Result) {
-      case (result, filter) =>
-        if (result == Result.Deny) result
-        else filter.filter(crumb)
+    filters.foldLeft(Result.Neutral: Result) { case (result, filter) =>
+      if (result == Result.Deny) result
+      else filter.filter(crumb)
     } match {
       case Result.Neutral => Result.Accept
-      case result => result
+      case result         => result
     }
   }
 
@@ -150,5 +175,5 @@ final class CompositeFilter extends AbstractFilter(Result.Neutral, Result.Neutra
     }
   }
 
-  override def toString=s"${getClass.getSimpleName}[filters=${filters.mkString("; ")}]"
+  override def toString = s"${getClass.getSimpleName}[filters=${filters.mkString("; ")}]"
 }

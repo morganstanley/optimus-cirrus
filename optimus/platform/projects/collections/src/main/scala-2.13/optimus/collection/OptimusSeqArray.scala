@@ -11,12 +11,8 @@
  */
 package optimus.collection
 
-import java.util.Arrays
-
 import optimus.collection.OptimusSeq.collectMarker
 
-import scala.collection.GenIterable
-import scala.collection.generic.CanBuildFrom
 import scala.reflect.ClassTag
 import scala.util.hashing.MurmurHash3
 
@@ -36,43 +32,31 @@ private[collection] final class OptimusArraySeq[+T] private (
   override def apply(idx: Int): T = data(idx).asInstanceOf[T]
 
   @volatile @transient var partialHashcode = knownPartialHashCode
-  override protected def computeHash: Int = {
-    var h = partialHashcode
-    if (partialHashcode == 0) {
-      h = MurmurHash3.seqSeed
-      var i = 0
-      while (i < data.length) {
-        h = MurmurHash3.mix(h, data(i).##)
-        i += 1
-      }
-      partialHashcode = h
-    }
-    MurmurHash3.finalizeHash(h, length)
-  }
+
   override def equals(other: Any): Boolean = other match {
     case that: OptimusArraySeq[_] =>
       (this eq that) || (
         data.length == that.data.length &&
           this.hashCode == that.hashCode && {
-          var offset = 0
-          var equal = true
-          while (equal && offset < data.length) {
-            val d1 = this.data(offset)
-            val d2 = that.data(offset)
-            equal = (d1 eq d2) || d1 == d2
-            offset += 1
+            var offset = 0
+            var equal = true
+            while (equal && offset < data.length) {
+              val d1 = this.data(offset)
+              val d2 = that.data(offset)
+              equal = (d1 eq d2) || d1 == d2
+              offset += 1
+            }
+            equal
           }
-          equal
-        }
       )
     case that: OptimusArraysSeq[_] =>
-      //OptimusArraysSeq can the more complex implemtation, so it seems sensible to have it in one place only
+      // OptimusArraysSeq can the more complex implemtation, so it seems sensible to have it in one place only
       that == this
     case that: OptimusSeq[_] => false
     case _                   => super.equals(other)
   }
 
-  override def sameElements[B >: T](other: GenIterable[B]): Boolean = {
+  override def sameElements[B >: T](other: IterableOnce[B]): Boolean = {
     other match {
       case that: OptimusSeq[B] =>
         this == that
@@ -84,12 +68,12 @@ private[collection] final class OptimusArraySeq[+T] private (
     var builder: OptimusBuilder[T, OptimusSeq[T]] = null
     try {
       var i = 0
-      //all == true => builder == null && we can reuse the collection
-      //all == false && builder == null => return is empty
-      //all == false  && builder ne null => use content of the builder
+      // all == true => builder == null && we can reuse the collection
+      // all == false && builder == null => return is empty
+      // all == false  && builder ne null => use content of the builder
       var all = true
       while (i < data.length && all) {
-        //we are keeping all values currently
+        // we are keeping all values currently
         val value = data(i).asInstanceOf[T]
         if (include != f(value)) {
           if (i != 0) {
@@ -101,7 +85,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         i += 1
       }
       while (i < data.length && (builder eq null)) {
-        //we are keeping no values currently
+        // we are keeping no values currently
         val value = data(i).asInstanceOf[T]
         if (include == f(value)) {
           builder = OptimusSeq.borrowBuilder[T]
@@ -110,7 +94,7 @@ private[collection] final class OptimusArraySeq[+T] private (
         i += 1
       }
       while (i < data.length && (builder ne null)) {
-        //we are keeping values in the builder
+        // we are keeping values in the builder
         val value = data(i).asInstanceOf[T]
         if (include == f(value))
           builder += data(i).asInstanceOf[T]
@@ -132,39 +116,42 @@ private[collection] final class OptimusArraySeq[+T] private (
   override def lastIndexOf[B >: T](elem: B, end: Int): Int =
     OptimusSeqSupport.lastIndexOf(data, 0, Math.min(length - 1, end), elem)
 
-  /** @inheritdoc
-   * optimised to avoid builder creation
-   * optimised to zero allocation if the result isempty
-   * optimised to zero allocation and return this if the result would == this
+  /**
+   * @inheritdoc
+   * optimised to avoid builder creation optimised to zero allocation if the result isempty optimised to zero allocation
+   * and return this if the result would == this
    */
-  override def map[B, That](f: T => B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      var newData: Array[Any] = null
-      var i = 0
-      while (i < data.length && (newData eq null)) {
-        val existing = data(i)
-        val result = f(existing.asInstanceOf[T])
-        if (result.asInstanceOf[AnyRef] ne existing) {
-          newData = new Array[Any](data.length)
-          System.arraycopy(data, 0, newData, 0, i)
-          newData(i) = result
-        }
-        i += 1
-      }
-      //mop up the other values
-      while (i < data.length) {
-        val existing = data(i)
-        val result = f(existing.asInstanceOf[T])
+  override def map[B](f: T => B): OptimusArraySeq[B] = {
+    var newData: Array[Any] = null
+    var i = 0
+    while (i < data.length && (newData eq null)) {
+      val existing = data(i)
+      val result = f(existing.asInstanceOf[T])
+      if (result.asInstanceOf[AnyRef] ne existing) {
+        newData = new Array[Any](data.length)
+        System.arraycopy(data, 0, newData, 0, i)
         newData(i) = result
-        i += 1
       }
-      if (newData eq null) this.asInstanceOf[That]
-      else OptimusArraySeq.unsafeFromAnyArray(newData).asInstanceOf[That]
-    } else super.map(f)(bf)
-
-  override def copyToArray[B >: T](xs: Array[B], start: Int, len: Int): Unit = {
+      i += 1
+    }
+    // mop up the other values
+    while (i < data.length) {
+      val existing = data(i)
+      val result = f(existing.asInstanceOf[T])
+      newData(i) = result
+      i += 1
+    }
+    if (newData eq null) this.asInstanceOf[OptimusArraySeq[B]]
+    else OptimusArraySeq.unsafeFromAnyArray(newData).asInstanceOf[OptimusArraySeq[B]]
+  }
+  override def copyToArray[B >: T](xs: Array[B], start: Int, len: Int): Int = {
     if (xs.getClass.getComponentType.isPrimitive) super.copyToArray(xs, start, len)
-    else System.arraycopy(data, 0, xs, start, Math.max(0, Math.min(xs.length - start, Math.min(len, data.length))))
+    else {
+      val n = Math.max(0, Math.min(xs.length - start, Math.min(len, data.length)))
+      System.arraycopy(data, 0, xs, start, n)
+      n
+    }
+
   }
 
   override def toArray[B >: T](implicit evidence$1: ClassTag[B]): Array[B] = {
@@ -175,25 +162,21 @@ private[collection] final class OptimusArraySeq[+T] private (
       res
     }
   }
-  override def :+[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { builder =>
-          builder ++= this
-          builder += that
-        }
-        .asInstanceOf[That]
-    } else super.:+(that)(bf)
+  override def appended[B >: T](that: B): OptimusSeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { builder =>
+        builder ++= this
+        builder += that
+      }
+  }
 
-  override def +:[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { builder =>
-          builder += that
-          builder ++= this
-        }
-        .asInstanceOf[That]
-    } else super.:+(that)(bf)
+  override def prepended[B >: T](that: B): OptimusSeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { builder =>
+        builder += that
+        builder ++= this
+      }
+  }
 
   override def iterator: Iterator[T] = {
     new Iterator[T] {
@@ -234,23 +217,21 @@ private[collection] final class OptimusArraySeq[+T] private (
     None
   }
 
-  override def collect[B, That](pf: PartialFunction[T, B])(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That = {
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { b =>
-          var index = 0
-          val marker = collectMarker[T, B]
-          while (index < data.length) {
-            val result = pf.applyOrElse(data(index).asInstanceOf[T], marker)
-            if (result.asInstanceOf[AnyRef] ne marker)
-              b += result
-            index += 1
-          }
+  override def collect[B](pf: PartialFunction[T, B]): OptimusArraySeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { b =>
+        var index = 0
+        val marker = collectMarker[T, B]
+        while (index < data.length) {
+          val result = pf.applyOrElse(data(index).asInstanceOf[T], marker)
+          if (result.asInstanceOf[AnyRef] ne marker)
+            b += result
+          index += 1
         }
-        .asInstanceOf[That]
-    } else super.collect(pf)
+      }
+      .asInstanceOf[OptimusArraySeq[B]]
   }
-  //extension methods
+  // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     var newData: Array[Any] = null
     var i = 0
@@ -265,7 +246,7 @@ private[collection] final class OptimusArraySeq[+T] private (
       i += 1
     }
     // work though the rest of the values.
-    //if we enter the loop newData ne null
+    // if we enter the loop newData ne null
     while (i < data.length) {
       val existing = data(i)
       val result = f(existing.asInstanceOf[T], i)
