@@ -73,17 +73,16 @@ object BreadcrumbsPropertyConfigurer {
     if (data eq null) return None
     val cases = data.asInstanceOf[JavaMap[String, JavaList[JavaMap[String, AnyRef]]]].get("cases")
     if (cases eq null) return None
-    val configs: Seq[Map[String, AnyRef]] = cases.asScala.map(_.asScala.toMap)
+    val configs: Seq[Map[String, AnyRef]] = cases.asScala.map(_.asScala.toMap).toSeq
     log.debug(s"Checking customization keys $customizationKeys against zk cases")
     configs
       .find { zkCase: Map[String, AnyRef] =>
         {
           log.debug(s"Checking against case $zkCase")
           // Every zk key should be present in the customization map and match.
-          zkCase.forall {
-            case (k, v) =>
-              (k == property) || (k == "_default") ||
-                customizationKeys.get(k).exists(_.matches(v.toString))
+          zkCase.forall { case (k, v) =>
+            (k == property) || (k == "_default") ||
+            customizationKeys.get(k).exists(_.matches(v.toString))
           }
         }
       }
@@ -100,9 +99,9 @@ object BreadcrumbsPropertyConfigurer {
       .map(new BreadcrumbConfigFromMap(_))
   }
 
-  /** Try to find an appropriate property source given a zk path (implicitly preceded by "breadcrumbs/".)
-   * If there's nothing at all at the path, we return none.
-   * If there's an "alias" attribute of type String, we recurse to evaluate
+  /**
+   * Try to find an appropriate property source given a zk path (implicitly preceded by "breadcrumbs/".) If there's
+   * nothing at all at the path, we return none. If there's an "alias" attribute of type String, we recurse to evaluate
    * it as a possible path.
    */
   private[this] def pathToPS(
@@ -125,7 +124,7 @@ object BreadcrumbsPropertyConfigurer {
     } else {
       Try { czkc.getData(p) }.toOption flatMap { nodeData =>
         // There's something in this context.  Either a value or a property source.
-        val alias = if (aliasingEnabled) nodeData.get("alias") else 0x4DC109DC
+        val alias = if (aliasingEnabled) nodeData.get("alias") else 0x4dc109dc
         alias match {
           case a: String if a.nonEmpty =>
             log.info(s"Following alias $a")
@@ -155,8 +154,8 @@ object BreadcrumbsPropertyConfigurer {
       Option(config.get(FilterKey)).map {
         // as consistent with other cases, for any breadcrumbs config related ZK node, the data has to be json
         // object convertible if they ever exist. (i.e., the cast will fail if the node exists but empty)
-        _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
-        // every valid filter should have a 'publisher' (kafka or log, for example) configured
+        _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala.toSeq
+          // every valid filter should have a 'publisher' (kafka or log, for example) configured
           .filter(_.asScala.get(PublisherKey).isDefined)
           .groupBy(_.get(PublisherKey).toString)
       }
@@ -165,16 +164,16 @@ object BreadcrumbsPropertyConfigurer {
 
   /**
    * Find kafka parameter map by from the "kafkaparams" or "topicparams" property of the specified property source.
-   * Treat "_merge" in the parameter map specially: it is taken to specify the path of another property source,
-   * from which to extract a base map, into which to merge.
+   * Treat "_merge" in the parameter map specially: it is taken to specify the path of another property source, from
+   * which to extract a base map, into which to merge.
    */
   private[this] def findParamsRecursivelyEx(
-    czkc: CachedZkaContext,
-    ps: PropertySource,
-    keys: Map[String, String],
-    property: String,
-    nestedArrayProperty: String = "",
-    nMaxRecursion: Int = maxMergeDepth): Option[JavaMap[String, AnyRef]] = {
+      czkc: CachedZkaContext,
+      ps: PropertySource,
+      keys: Map[String, String],
+      property: String,
+      nestedArrayProperty: String = "",
+      nMaxRecursion: Int = maxMergeDepth): Option[JavaMap[String, AnyRef]] = {
     if (nMaxRecursion <= 0)
       None
     else
@@ -225,12 +224,12 @@ object BreadcrumbsPropertyConfigurer {
 
     CachedZkaContext.withCache(zkc) { czkc =>
       /**
-       * Try to find an appropriate property source given a configuration map.  In order, try:
-       * 1. An explicit "breadcrumb.config" or "breadcrumb.config.location" element.  Treat its value as the subpath (after "/breadcrumbs/")
-       * 2. A runtime environment from "rtcEncv", "rtcMode" or zkMode", e.g. "dev".  Treat its value as the subpath.
-       * 3. An "optimus.dsi.uri".  Treat everything after the "//" as the subpath.
-       * 4. Try no subpath, i.e. "/breadcrumbs" directly.
-       * In all cases, the path may resolve to an alias, which pathToPS will resolve.
+       * Try to find an appropriate property source given a configuration map. In order, try:
+       *   1. An explicit "breadcrumb.config" or "breadcrumb.config.location" element. Treat its value as the subpath
+       *      (after "/breadcrumbs/") 2. A runtime environment from "rtcEncv", "rtcMode" or zkMode", e.g. "dev". Treat
+       *      its value as the subpath. 3. An "optimus.dsi.uri". Treat everything after the "//" as the subpath. 4. Try
+       *      no subpath, i.e. "/breadcrumbs" directly. In all cases, the path may resolve to an alias, which pathToPS
+       *      will resolve.
        */
       def findPS(appKeys: Map[String, String]): Option[PropertySource] = {
         try {
@@ -298,63 +297,71 @@ object BreadcrumbsPropertyConfigurer {
         val publishers = publisher.split(",")
         if (publishers.length > 1)
           new BreadcrumbsCompositePublisher(publishers.toSet map select)
-        else publisher match {
-          case KafkaPublisherKey => kafkaPublisher
-          case LogPublisherKey   => logPublisher
-          case NoPublisherKey => {
-            log.info("Publishing turned off, selecting crumb ignorer")
-            ignorer
+        else
+          publisher match {
+            case KafkaPublisherKey => kafkaPublisher
+            case LogPublisherKey   => logPublisher
+            case NoPublisherKey => {
+              log.info("Publishing turned off, selecting crumb ignorer")
+              ignorer
+            }
+            case x => {
+              log.info(s"Unknown breadcrumbs resource '$x', selecting crumb ignorer")
+              ignorer
+            }
           }
-          case x => {
-            log.info(s"Unknown breadcrumbs resource '$x', selecting crumb ignorer")
+      }
+
+      val configuredPublisher =
+        try {
+          (for (
+            ps <- maybePropertySource;
+            publisher <- findCase[String](ps, PublisherKey, keys)
+          )
+            yield select(publisher)) getOrElse ignorer
+        } catch {
+          case NonFatal(ex) =>
+            log.warn(s"Caught exception $ex configuring breadcrumbs; reverting to crumb ignorer")
+            log.debug("Exception:", ex)
             ignorer
-          }
         }
-      }
 
-      val configuredPublisher = try {
-        (for (ps <- maybePropertySource;
-              publisher <- findCase[String](ps, PublisherKey, keys))
-          yield select(publisher)) getOrElse ignorer
-      } catch {
-        case NonFatal(ex) =>
-          log.warn(s"Caught exception $ex configuring breadcrumbs; reverting to crumb ignorer")
-          log.debug("Exception:", ex)
-          ignorer
-      }
+      val routingConfiguration =
+        try {
+          (for (
+            ps <- maybePropertySource;
+            routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey)
+          )
+            yield {
+              Option(routing.get(RuleKey))
+                .map { _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala }
+                .getOrElse(Seq.empty)
+            }).getOrElse(Seq.empty)
+        } catch {
+          case NonFatal(ex) =>
+            log.warn(s"Caught exception $ex setting up breadcrumbs routing")
+            log.debug("Exception:", ex)
+            Seq.empty
+        }
 
-      val routingConfiguration = try {
-        (for (ps <- maybePropertySource;
-              routing <- findParamsRecursivelyEx(czkc, ps, keys, RoutingKey, RuleKey))
-          yield {
-            Option(routing.get(RuleKey))
-              .map { _.asInstanceOf[JavaList[JavaMap[String, Object]]].asScala }
-              .getOrElse(Seq.empty)
-          }).getOrElse(Seq.empty)
-      } catch {
-        case NonFatal(ex) =>
-          log.warn(s"Caught exception $ex setting up breadcrumbs routing")
-          log.debug("Exception:", ex)
-          Seq.empty
-      }
+      val rules =
+        try {
+          routingConfiguration.map { r =>
+            val filters = r.get(FilterKey).asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
+            CrumbFilter.createFilter(filters.map(_.asScala.toMap).toSeq) map { filter =>
+              val name = r.getOrDefault("name", "N/A").toString()
+              val publisher = select(Option(r.get(PublisherKey)).map(_.toString).getOrElse(NoPublisherKey))
+              CrumbRoutingRule(name, filter, publisher)
+            }
+          } collect { case Some(routingRule) => routingRule }
+        } catch {
+          case NonFatal(ex) =>
+            log.warn(s"Caught exception $ex setting up breadcrumbs routing, no rules will be applied")
+            log.debug("Exception:", ex)
+            Seq.empty
+        }
 
-      val rules = try {
-        routingConfiguration.map { r =>
-          val filters = r.get(FilterKey).asInstanceOf[JavaList[JavaMap[String, Object]]].asScala
-          CrumbFilter.createFilter(filters.map(_.asScala.toMap)) map { filter =>
-            val name = r.getOrDefault("name", "N/A").toString()
-            val publisher = select(Option(r.get(PublisherKey)).map(_.toString).getOrElse(NoPublisherKey))
-            CrumbRoutingRule(name, filter, publisher)
-          }
-        } collect { case Some(routingRule) => routingRule }
-      } catch {
-        case NonFatal(ex) =>
-          log.warn(s"Caught exception $ex setting up breadcrumbs routing, no rules will be applied")
-          log.debug("Exception:", ex)
-          Seq.empty
-      }
-
-      new BreadcrumbsRouter(rules, configuredPublisher)
+      new BreadcrumbsRouter(rules.toSeq, configuredPublisher)
     }
   }
 
@@ -398,7 +405,7 @@ object BreadcrumbsPropertyConfigurer {
             }
           } getOrElse new BreadcrumbsLoggingPublisher(conf) {
             override val savedCustomization = Some((keys, zkc))
-            override def toString = s"${ classOf[BreadcrumbsLoggingPublisher].getSimpleName }*"
+            override def toString = s"${classOf[BreadcrumbsLoggingPublisher].getSimpleName}*"
           }
         }
 
@@ -421,11 +428,12 @@ protected[breadcrumbs] class CachedZkaContext(val context: ZkaContext) {
       log.debug("cache size exceeded, will resolve request from Zookeeper")
       context.getData(childPath)
     } else
-      cache.getOrElseUpdate(childPath, {
-        log.debug("cache miss")
-        size += 1
-        context.getData(childPath)
-      })
+      cache.getOrElseUpdate(
+        childPath, {
+          log.debug("cache miss")
+          size += 1
+          context.getData(childPath)
+        })
   }
   def clear() = cache.clear()
 }

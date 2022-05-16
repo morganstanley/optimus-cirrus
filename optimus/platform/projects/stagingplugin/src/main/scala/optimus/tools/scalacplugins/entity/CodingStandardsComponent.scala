@@ -20,7 +20,7 @@ import reporter.{OptimusPluginReporter, StagingErrors, StagingNonErrorMessages}
 class CodingStandardsComponent(
     val pluginData: PluginData,
     val global: Global,
-    val phaseInfo: OptimusPhaseInfo,
+    val phaseInfo: OptimusPhaseInfo
 ) extends PluginComponent
     with OptimusPluginReporter
     with WithOptimusPhase {
@@ -42,7 +42,7 @@ class CodingStandardsComponent(
       def unapply(t: Tree): Boolean = t match {
         case Import(Ident(c), imps) => c == nme.collection && imps.exists(_.name == nme.WILDCARD)
         case Import(Select(Ident(s), c), sel) if s == nme.scala_ => unapply(Import(Ident(c), sel))
-        case _ => false
+        case _                                                   => false
       }
     }
 

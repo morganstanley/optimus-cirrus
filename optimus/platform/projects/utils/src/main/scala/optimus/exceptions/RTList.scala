@@ -29,7 +29,7 @@ object RTException extends Throwable with RTExceptionTrait {
     case t: Throwable => RTList.isRT(t)
     case _            => false
   }
-  //noinspection IfElseToFilterdOption
+  // noinspection IfElseToFilterdOption
   def unapply(t: Throwable): Option[Throwable] = if (RTList.isRT(t)) Some(t) else None
 }
 
@@ -59,7 +59,7 @@ object RTList {
     lines.map(parse).toSet
   }
 
-  //noinspection ExistsEquals (they're the same here, but we're being abusing equals so we may as well be explicit about it)
+  // noinspection ExistsEquals (they're the same here, but we're being abusing equals so we may as well be explicit about it)
   private def isProxy(t: Throwable): Boolean = proxyModules.exists(_ == t)
 
   private val additions: Set[String] =
@@ -86,7 +86,8 @@ object RTList {
   def isRT(t: Throwable): Boolean = {
     var horror: Throwable = null // So we can throw the exception outside of the cache callback
     val ret = isRTCache.get(
-      t, { () =>
+      t,
+      { () =>
         try {
           t.isInstanceOf[RTExceptionTrait] || t.isInstanceOf[RTExceptionInterface] ||
           isRTWithAdjustment(t.getClass.getCanonicalName) || isProxy(t)

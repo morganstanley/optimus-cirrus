@@ -16,16 +16,19 @@ import sun.management.ManagementFactoryHelper
 import scala.concurrent.duration._
 
 /**
- * @param findClassTime   Total time to load classes
- * @param initClassTime   Total time to run <clinit> methods
- * @param verifyClassTime Total time spent in HotSpot verifier
+ * @param findClassTime
+ *   Total time to load classes
+ * @param initClassTime
+ *   Total time to run <clinit> methods
+ * @param verifyClassTime
+ *   Total time spent in HotSpot verifier
  *
  * All times are in nanoseconds.
  */
 final case class ClassLoaderStats(
     findClassTime: Long,
     initClassTime: Long,
-    verifyClassTime: Long,
+    verifyClassTime: Long
 )
 object ClassLoaderStats {
   // previous versions of this utility used sun.misc.PerfCounter, which reports in nanos
@@ -33,7 +36,7 @@ object ClassLoaderStats {
   def snap() = ClassLoaderStats(
     findClassTime = mxBean.getClassLoadingTime.millis.toNanos,
     initClassTime = mxBean.getClassInitializationTime.millis.toNanos,
-    verifyClassTime = mxBean.getClassVerificationTime.millis.toNanos,
+    verifyClassTime = mxBean.getClassVerificationTime.millis.toNanos
   )
 
   private val mxBean = ManagementFactoryHelper.getHotspotClassLoadingMBean

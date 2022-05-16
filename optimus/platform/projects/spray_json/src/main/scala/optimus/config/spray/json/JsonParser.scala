@@ -75,7 +75,7 @@ class JsonParser(input: ParserInput) {
       case '{'                                                             => advance(); `object`()
       case '['                                                             => advance(); `array`()
       case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '-' => `number`()
-      case '"'                                                             => `string`(); jsValue = if (sb.length == 0) JsString.empty else JsString(sb.toString)
+      case '"' => `string`(); jsValue = if (sb.length == 0) JsString.empty else JsString(sb.toString)
       case _ =>
         val inputIterator = new Iterator[Char]() {
           override def hasNext: Boolean = cursorChar != EOI
@@ -212,18 +212,25 @@ class JsonParser(input: ParserInput) {
 
   ////////////////////////// HELPERS //////////////////////////
 
-  private def ch(c: Char): Boolean = if (cursorChar == c) { advance(); true } else false
-  private def ws(c: Char): Boolean = if (ch(c)) { ws(); true } else false
+  private def ch(c: Char): Boolean = if (cursorChar == c) { advance(); true }
+  else false
+  private def ws(c: Char): Boolean = if (ch(c)) { ws(); true }
+  else false
   private def advance(): Boolean = { cursorChar = input.nextChar(); true }
   private def appendSB(c: Char): Boolean = { sb.append(c); true }
   private def require(c: Char): Unit = if (!ch(c)) fail(s"'$c'")
 
-  protected final def fail(target: String, cursor: Int = input.cursor, errorChar: Char = cursorChar, hint: String = null): Nothing = {
+  protected final def fail(
+      target: String,
+      cursor: Int = input.cursor,
+      errorChar: Char = cursorChar,
+      hint: String = null): Nothing = {
     val ParserInput.Line(lineNr, col, text) = input.getLine(cursor)
     val summary = {
       val preamble =
         if (hint ne null) hint
-        else "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusdoc/GraphConfig"
+        else
+          "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusdoc/GraphConfig"
       val unexpected =
         if (errorChar != EOI) {
           val c = if (Character.isISOControl(errorChar)) "\\u%04x" format errorChar.toInt else errorChar.toString
@@ -243,14 +250,14 @@ class JsonParser(input: ParserInput) {
 trait ParserInput {
 
   /**
-   * Advance the cursor and get the next char.
-   * Since the char is required to be a 7-Bit ASCII char no decoding is required.
+   * Advance the cursor and get the next char. Since the char is required to be a 7-Bit ASCII char no decoding is
+   * required.
    */
   def nextChar(): Char
 
   /**
-   * Advance the cursor and get the next char, which could potentially be outside
-   * of the 7-Bit ASCII range. Therefore decoding might be required.
+   * Advance the cursor and get the next char, which could potentially be outside of the 7-Bit ASCII range. Therefore
+   * decoding might be required.
    */
   def nextUtf8Char(): Char
 
@@ -293,8 +300,8 @@ object ParserInput {
   private val UTF8 = Charset.forName("UTF-8")
 
   /**
-   * ParserInput reading directly off a byte array which is assumed to contain the UTF-8 encoded representation
-   * of the JSON input, without requiring a separate decoding step.
+   * ParserInput reading directly off a byte array which is assumed to contain the UTF-8 encoded representation of the
+   * JSON input, without requiring a separate decoding step.
    */
   class ByteArrayBasedParserInput(bytes: Array[Byte]) extends DefaultParserInput {
     private val byteBuffer = ByteBuffer.allocate(4)
@@ -302,7 +309,7 @@ object ParserInput {
     private val decoder = UTF8.newDecoder()
     def nextChar() = {
       _cursor += 1
-      if (_cursor < bytes.length) (bytes(_cursor) & 0xFF).toChar else EOI
+      if (_cursor < bytes.length) (bytes(_cursor) & 0xff).toChar else EOI
     }
     def nextUtf8Char() = {
       @tailrec def decode(byte: Byte, remainingBytes: Int): Char = {
@@ -325,9 +332,9 @@ object ParserInput {
       if (_cursor < bytes.length) {
         val byte = bytes(_cursor)
         if (byte >= 0) byte.toChar // 7-Bit ASCII
-        else if ((byte & 0xE0) == 0xC0) decode(byte, 1) // 2-byte UTF-8 sequence
-        else if ((byte & 0xF0) == 0xE0) decode(byte, 2) // 3-byte UTF-8 sequence
-        else if ((byte & 0xF8) == 0xF0)
+        else if ((byte & 0xe0) == 0xc0) decode(byte, 1) // 2-byte UTF-8 sequence
+        else if ((byte & 0xf0) == 0xe0) decode(byte, 2) // 3-byte UTF-8 sequence
+        else if ((byte & 0xf8) == 0xf0)
           decode(byte, 3) // 4-byte UTF-8 sequence, will probably produce an (unsupported) surrogate pair
         else ErrorChar
       } else EOI

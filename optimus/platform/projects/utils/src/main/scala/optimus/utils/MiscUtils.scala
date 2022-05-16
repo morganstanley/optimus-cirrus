@@ -115,39 +115,23 @@ object MiscUtils {
     }
 
     /**
-     Utility implicit macros to treat functions like monoids: appended left to right rather than composed right to left
-     The typical use case is when you need to apply sequential transformations and have considered using a var
-          var x: X = x0
-          x = foo(x) + 5
-          if(hmm(x)) {
-            x = blah(x/3)
-          }
-          x = postProcess(x)
-      but hate introducing mutation to your code, some monad,
-          Some(x).
-            map(foo(_) + 5).
-            map { x => if(hmm(x)) blah(x/3) else x }.
-            map(postProcess).
-            get
-      which seems both arbitrary (in that _any_ monad or functor would do) and a wasteful proliferation of
-      closures, which may introduce sync stacks.
-
-     Instead, you can write
-
-     x0 |> { x =>
-       foo(x) +5
-     }.applyIf(hmm(_)) { x =>
-       blah(x/3)
-     } |>  postProcess
-
-     All the functions applications get inlined, so the result is efficient and sync-stack-free.
-
+     * Utility implicit macros to treat functions like monoids: appended left to right rather than composed right to
+     * left The typical use case is when you need to apply sequential transformations and have considered using a var
+     * var x: X = x0 x = foo(x) + 5 if(hmm(x)) { x = blah(x/3) } x = postProcess(x) but hate introducing mutation to
+     * your code, some monad, Some(x). map(foo(_) + 5). map { x => if(hmm(x)) blah(x/3) else x }. map(postProcess). get
+     * which seems both arbitrary (in that _any_ monad or functor would do) and a wasteful proliferation of closures,
+     * which may introduce sync stacks.
+     *
+     * Instead, you can write
+     *
+     * x0 |> { x => foo(x) +5 }.applyIf(hmm(_)) { x => blah(x/3) } |> postProcess
+     *
+     * All the functions applications get inlined, so the result is efficient and sync-stack-free.
      */
     implicit final class Endoish[T](val t: T) extends AnyVal {
 
       /**
-       * A.k.a. pipe forward in F#.
-       * x |> f |> g |> h == h(g(f(x))
+       * A.k.a. pipe forward in F#. x |> f |> g |> h == h(g(f(x))
        */
       def |>[U >: T](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
       def pipe[U >: T](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
@@ -176,14 +160,14 @@ object MiscUtils {
       // def :?:[B >: A](tup: (Boolean, B)): List[B] = macro EndoishMacros.prependIf[B]
 
       /**
-       * The candidatePrependeeExpr will be evaluated and prepended only if booleanExpr is true.
-       *    otherPrependee ::  booleanExpression.so(candidatePrependeeExpr) :?: someList
+       * The candidatePrependeeExpr will be evaluated and prepended only if booleanExpr is true. otherPrependee ::
+       * booleanExpression.so(candidatePrependeeExpr) :?: someList
        */
       def :?:[B >: A](b: Option[B]): List[B] = macro EndoishMacros.prependIfNotNone[B]
 
       /**
-       * The candidatePrependeeExpr will be evaluated, and prepended if it is not null.
-       *    otherPrependee ::  possiblyNullPrependee :?: someListbbb
+       * The candidatePrependeeExpr will be evaluated, and prepended if it is not null. otherPrependee ::
+       * possiblyNullPrependee :?: someListbbb
        */
       def :?:[B >: A](b: B): List[B] = macro EndoishMacros.prependIfNotNull[B]
     }
@@ -290,8 +274,8 @@ object MiscUtils {
   implicit final class Traversablish[CC[X] <: Traversable[X], A](private val self: CC[A]) extends AnyVal {
     // alas, we have no Applicative, and must do this manually
     /**
-     * Map over `self` using `f`, returning a result only if `f` is defined for every element of `self`.
-     * Otherwise, return the first error found.
+     * Map over `self` using `f`, returning a result only if `f` is defined for every element of `self`. Otherwise,
+     * return the first error found.
      */
     def traverseEither[E, B](f: A => Either[E, B])(implicit cbf: CanBuildFrom[CC[A], B, CC[B]]): Either[E, CC[B]] = {
       val res = cbf(self); res.sizeHint(self) // result will be the same size as `self`, if we return a result
@@ -333,7 +317,7 @@ object MiscUtils {
 
   implicit def toImmutableSet[T](cs: collection.Set[T]): immutable.Set[T] = cs match {
     case is: collection.immutable.Set[T] => is
-    case x => x.toSet
+    case x                               => x.toSet
   }
 
   implicit class OrderingChain[T](private val self: Ordering[T]) extends AnyVal {

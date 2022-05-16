@@ -45,8 +45,8 @@ private[optimus] object OptimusMessageRegistry {
   def isOptimusMessage(msg: String) = prefixes.exists(msg.startsWith)
 
   /**
-   *  This is used in an annotation as error message (see optimus/platform/package.scala)
-   *  We have to put a static string here, otherwise we will get unexpected error message from scala refcheck phase
+   * This is used in an annotation as error message (see optimus/platform/package.scala) We have to put a static string
+   * here, otherwise we will get unexpected error message from scala refcheck phase
    */
   final val Illegal_Property_Level_Tweak = "Optimus: (1000) Illegal property-level tweak (Is tweak=true missing?)"
 }

@@ -15,7 +15,7 @@ import optimus.breadcrumbs.BreadcrumbsPublisher
 import optimus.breadcrumbs.filter.CrumbFilter
 
 private[optimus] final case class CrumbRoutingRule(
-  name: String,
-  matcher: CrumbFilter,
-  publisher: BreadcrumbsPublisher
+    name: String,
+    matcher: CrumbFilter,
+    publisher: BreadcrumbsPublisher
 )

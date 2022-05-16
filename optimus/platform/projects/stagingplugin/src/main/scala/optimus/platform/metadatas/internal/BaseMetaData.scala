@@ -100,10 +100,10 @@ private[optimus] object MetaDataFiles {
 
   val metadataFileNames: List[String] =
     MetaDataFiles.entityMetaDataFileName ::
-    MetaDataFiles.storedEntityMetaDataFileName ::
-    MetaDataFiles.embeddableMetaDataFileName ::
-    MetaDataFiles.eventMetaDataFileName ::
-    Nil
+      MetaDataFiles.storedEntityMetaDataFileName ::
+      MetaDataFiles.embeddableMetaDataFileName ::
+      MetaDataFiles.eventMetaDataFileName ::
+      Nil
 
   val fileCharset = "UTF-8"
 }
@@ -204,20 +204,18 @@ private[optimus] class ClassMetaData private (
   def isTrait: Boolean = 0 != (flags & ClassMetaData.flagIsTrait)
   def isEntity: Boolean = 0 != (flags & ClassMetaData.flagIsEntity)
   def isEmbeddable: Boolean = 0 != (flags & ClassMetaData.flagIsEmbeddable)
-  def isEvent : Boolean = 0 != (flags & ClassMetaData.flagIsEvent)
+  def isEvent: Boolean = 0 != (flags & ClassMetaData.flagIsEvent)
   def isStorableConcreteEntity: Boolean = {
     val setFlags = ClassMetaData.flagIsEntity | ClassMetaData.flagIsStorable
     val clearedFlags = ClassMetaData.flagIsAbstract | ClassMetaData.flagIsTrait
     (flags & setFlags) == setFlags && (flags & clearedFlags) == 0
   }
 
-
   // Metadata can be either an entity or an embeddable or an event
   require(isEmbeddable || isEntity || isEvent)
   require(!(isEvent && isEmbeddable))
   require(!(isEvent && isEntity))
   require(!(isEmbeddable && isEntity))
-
 
   private def packageIndex = fullClassName.lastIndexOf('.')
 
@@ -226,14 +224,12 @@ private[optimus] class ClassMetaData private (
   private var _children: Set[ClassMetaData] = Set.empty
   def children: Set[ClassMetaData] = _children
 
-  def allChildren: Set[ClassMetaData] = children.foldLeft(Set.empty[ClassMetaData]) {
-    case (found, child) =>
-      val currentChildren = child.allChildren
-      (found + child) ++ currentChildren
+  def allChildren: Set[ClassMetaData] = children.foldLeft(Set.empty[ClassMetaData]) { case (found, child) =>
+    val currentChildren = child.allChildren
+    (found + child) ++ currentChildren
   }
-  def allParents: Set[ClassMetaData] = parents.foldLeft(Set.empty[ClassMetaData]) {
-    case (found, parent) =>
-      (found + parent) ++ parent.allParents
+  def allParents: Set[ClassMetaData] = parents.foldLeft(Set.empty[ClassMetaData]) { case (found, parent) =>
+    (found + parent) ++ parent.allParents
   }
 
   def flagsToString: String =
@@ -245,7 +241,7 @@ private[optimus] class ClassMetaData private (
 
   override def toString =
     s"ClassMetaData[ package $packageName $flagsToString @stored @entity ${if (explicitSlotNumber) s"(schemaVersion=$slotNumber)"
-    else ""} $localClassName parents = ${parents map (_.fullClassName)} children = ${children map (_.fullClassName)}]"
+      else ""} $localClassName parents = ${parents map (_.fullClassName)} children = ${children map (_.fullClassName)}]"
 
   override def hashCode: Int = fullClassName.hashCode
   override def equals(that: Any): Boolean = {

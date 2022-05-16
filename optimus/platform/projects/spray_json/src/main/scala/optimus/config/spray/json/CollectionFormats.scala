@@ -44,8 +44,8 @@ trait CollectionFormats {
   }
 
   /**
-   * Supplies the JsonFormat for Maps. The implicitly available JsonFormat for the key type K must
-   * always write JsStrings, otherwise a [[spray.json.SerializationException]] will be thrown.
+   * Supplies the JsonFormat for Maps. The implicitly available JsonFormat for the key type K must always write
+   * JsStrings, otherwise a [[spray.json.SerializationException]] will be thrown.
    */
   implicit def mapFormat[K: JsonFormat, V: JsonFormat] = new RootJsonFormat[Map[K, V]] {
     def write(m: Map[K, V]) = JsObject {
@@ -83,8 +83,8 @@ trait CollectionFormats {
   implicit def setFormat[T: JsonFormat] = viaSeq[Set[T], T](seq => Set(seq: _*))
 
   /**
-   * A JsonFormat construction helper that creates a JsonFormat for an Iterable type I from a builder function
-   * List => I.
+   * A JsonFormat construction helper that creates a JsonFormat for an Iterable type I from a builder function List =>
+   * \I.
    */
   def viaSeq[I <: Iterable[T], T: JsonFormat](f: imm.Seq[T] => I): RootJsonFormat[I] = new RootJsonFormat[I] {
     def write(iterable: I) = JsArray(iterable.map(_.toJson).toVector)

@@ -11,6 +11,8 @@ Cyrus Lyons ([@cbwl](http://github.com/cbwl))
 
 Harrison Houghton ([@hrhino](http://github.com/hrhino))
 
+Nolita Ebama-Mpeta ([@musinoli](http://github.com/musinoli))
+
 Sarthak Banerjee ([@sarthakbanerjee](http://github.com/sarthakbanerjee))
 
 Valerie Saunders Duncan ([@ms-valerie](http://github.com/ms-valerie))

@@ -77,7 +77,7 @@ object EncryptorDecryptor {
     }
   }
 
-  private[crypto] case class EncryptorDecryptorConfig(
+  private[crypto] final case class EncryptorDecryptorConfig(
       compressed: Boolean = false,
       encoded: Boolean = false,
       payloadDeSerializer: PayloadDeSerializer) {}

@@ -32,7 +32,7 @@ object Vertex {
 
   import DefaultJsonProtocol._
 
-  case class Edge(tpe: EdgeType.EdgeType, vuid: MSUuid) extends Ordered[Edge] {
+  final case class Edge(tpe: EdgeType.EdgeType, vuid: MSUuid) extends Ordered[Edge] {
     override def compare(that: Edge): Int = vuid.toString.compare(that.vuid.toString)
     var vo: Option[Vertex] = None
     override def toString = s"E($tpe, $vuid, ${vo.isDefined})"
@@ -77,7 +77,7 @@ object Vertex {
     cm.merge(fname)
   }
 
-  case class NameTree(name: String, kids: Map[NameTree, Int]) {
+  final case class NameTree(name: String, kids: Map[NameTree, Int]) {
     override def toString: String = name + kids.mkString("<<", ", ", ">>")
     def outline(): Unit = {
       def outline(depth: Int, n: Int, nt: NameTree): Unit = {
@@ -107,10 +107,7 @@ object Vertex {
   }
 
   /**
-   * Given an input Vertex iterator prev
-   *      v0, v1, v2, ....
-   * Return the concatenation of iterators
-   *      f(v0), f(v1), f(v2), ...
+   * Given an input Vertex iterator prev v0, v1, v2, .... Return the concatenation of iterators f(v0), f(v1), f(v2), ...
    */
   private class NestedIterator(prev: Iterator[Vertex], f: Vertex => Iterator[Vertex]) extends Iterator[Vertex] {
     var i: Iterator[Vertex] = Iterator.empty
@@ -137,15 +134,10 @@ object Vertex {
   }
 
   /**
-   * Given an input iterator prev that produces vertices along with some arbitrary accumulated result:
-   *    (v0, r0), (v1, r1), ....
-   * Produce another iterator that is the concatenation of iterators
-   *    f(v0).map { v => (v,rf(r0,v))},  f(v1).map { v => (v,rf(r1,v))}, ...
-   * So, if the output of f(v_i) is
-   *    v_i0, v_i1, v_i2, ...
-   * We'll have the concatenation of iterators producing
-   *    (v_00,rf(r0,v_00) , (v_01,rf(r0,v01), ....
-   *    (v_10,rf(r1,v_10) , (v_11,rf(r1,v11), ....
+   * Given an input iterator prev that produces vertices along with some arbitrary accumulated result: (v0, r0), (v1,
+   * r1), .... Produce another iterator that is the concatenation of iterators f(v0).map { v => (v,rf(r0,v))}, f(v1).map
+   * { v => (v,rf(r1,v))}, ... So, if the output of f(v_i) is v_i0, v_i1, v_i2, ... We'll have the concatenation of
+   * iterators producing (v_00,rf(r0,v_00) , (v_01,rf(r0,v01), .... (v_10,rf(r1,v_10) , (v_11,rf(r1,v11), ....
    */
   private class NestedAccumulatingIterator[R](
       prev: Iterator[(Vertex, R)],
@@ -200,24 +192,41 @@ object Vertex {
   // Intermediate class for accumulating a sequence of iterator-creators fs
   class Navigator(v0: Vertex, fs: Seq[Vertex => Iterator[Vertex]]) {
 
-    def seek(f: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-      true
-    }, down: Boolean = true, maxDepth: Int = Int.MaxValue) =
-      new Navigator(v0, fs :+ { v: Vertex =>
-        v.seek(f, pred, down, maxDepth)
-      })
-    def stalk(f: Vertex => Boolean, avoid: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-      true
-    }, down: Boolean = true, maxDepth: Int = Int.MaxValue) =
-      new Navigator(v0, fs :+ { v: Vertex =>
-        v.stalk(f, avoid, pred, down, maxDepth)
-      })
-    def next(pred: EdgeType.EdgeType => Boolean = { _ =>
-      true
-    }, down: Boolean = true) =
-      new Navigator(v0, fs :+ { v: Vertex =>
-        v.next(pred, down)
-      })
+    def seek(
+        f: Vertex => Boolean,
+        pred: EdgeType.EdgeType => Boolean = { _ =>
+          true
+        },
+        down: Boolean = true,
+        maxDepth: Int = Int.MaxValue) =
+      new Navigator(
+        v0,
+        fs :+ { v: Vertex =>
+          v.seek(f, pred, down, maxDepth)
+        })
+    def stalk(
+        f: Vertex => Boolean,
+        avoid: Vertex => Boolean,
+        pred: EdgeType.EdgeType => Boolean = { _ =>
+          true
+        },
+        down: Boolean = true,
+        maxDepth: Int = Int.MaxValue) =
+      new Navigator(
+        v0,
+        fs :+ { v: Vertex =>
+          v.stalk(f, avoid, pred, down, maxDepth)
+        })
+    def next(
+        pred: EdgeType.EdgeType => Boolean = { _ =>
+          true
+        },
+        down: Boolean = true) =
+      new Navigator(
+        v0,
+        fs :+ { v: Vertex =>
+          v.next(pred, down)
+        })
 
     // Return the final value along the path of iterator-creators
     def targets: Iterator[Vertex] = nestedIterator(Seq(v0).iterator, fs.toList)
@@ -235,7 +244,7 @@ object Vertex {
     /*
      E.g. find all DAL requests that are exactly one level of disting away
         v.nav.seek(_.has(P.distedTo)).next().stalk(_.has(P.requestId), _.has(P.distedTo)).targets
-   */
+     */
 
   }
 
@@ -245,7 +254,7 @@ object Vertex {
 }
 
 // Remember to update Vertex.vertexFormat if changing the number of arguments!
-case class Vertex(
+final case class Vertex(
     uuid: ChainedID,
     vuid: MSUuid,
     tFirst: ZonedDateTime,
@@ -297,9 +306,12 @@ case class Vertex(
   def apply[A](k: Properties.Key[A]): A = get(k).get
   def apply(k: String*): String = get(k: _*).get
 
-  def compress(fn: Vertex => String = _.name, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true): NameTree = {
+  def compress(
+      fn: Vertex => String = _.name,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true): NameTree = {
 
     val v2n = mutable.Map.empty[MSUuid, NameTree]
     val n2v = mutable.Map.empty[NameTree, Vertex]
@@ -324,22 +336,30 @@ case class Vertex(
 
   /**
    * Iterate along a depth first traversal.
-   * @param pred - predicate for edge type (default all)
-   * @param down - true (default) for following children, false for follow parents
-   * @param maxDepth - (default infinite)
-   * @param term - if set, predicate for terminating traversal.
+   * @param pred
+   *   \- predicate for edge type (default all)
+   * @param down
+   *   \- true (default) for following children, false for follow parents
+   * @param maxDepth
+   *   \- (default infinite)
+   * @param term
+   *   \- if set, predicate for terminating traversal.
    * @return
    */
-  def iterator(pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue, term: Vertex => Boolean = { _ =>
-    false
-  }): Iterator[Vertex] = new Iterator[Vertex] {
+  def iterator(
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue,
+      term: Vertex => Boolean = { _ =>
+        false
+      }): Iterator[Vertex] = new Iterator[Vertex] {
     private val seen = mutable.Set.empty[MSUuid]
     private var stack: List[(Vertex, Int)] = List((Vertex.this, 0))
     private def pushChildren(v: Vertex, i: Int): Unit =
       if (i <= maxDepth && !term(v)) {
-        (if (down) v.children else v.parents)
+        unsorted(if (down) v.children else v.parents)
           .filter { e =>
             pred(e.tpe) && !seen(e.vuid)
           }
@@ -363,17 +383,19 @@ case class Vertex(
 
   def nav = new Navigator(this, Seq.empty)
 
-  def up(): Iterable[Vertex] = parents.map(_.vo.get)
-  def up(pred: EdgeType.EdgeType => Boolean): Iterable[Vertex] = parents.filter(e => pred(e.tpe)).map(_.vo.get)
-  def down(): Iterable[Vertex] = children.map(_.vo.get)
-  def down(pred: EdgeType.EdgeType => Boolean): Iterable[Vertex] = children.filter(e => pred(e.tpe)).map(_.vo.get)
+  def up(): Iterable[Vertex] = unsorted(parents).map(_.vo.get)
+  def up(pred: EdgeType.EdgeType => Boolean): Iterable[Vertex] =
+    unsorted(parents).filter(e => pred(e.tpe)).map(_.vo.get)
+  def down(): Iterable[Vertex] = unsorted(children).map(_.vo.get)
+  def down(pred: EdgeType.EdgeType => Boolean): Iterable[Vertex] =
+    unsorted(children).filter(e => pred(e.tpe)).map(_.vo.get)
   @tailrec
   private def iPath(vs: Vector[Vertex], is: List[Int]): Iterable[Vertex] = {
     if (is.isEmpty)
       vs
     else {
       val is1 = is.head
-      val ng = (if (is1 > 0) vs.last.children else vs.last.parents).map(_.vo.get)
+      val ng = unsorted(if (is1 > 0) vs.last.children else vs.last.parents).map(_.vo.get)
       val i = Math.abs(is1)
       if (ng.size < i)
         vs
@@ -383,53 +405,87 @@ case class Vertex(
   }
 
   /**
-   * Return the sequence of vertices obtained by following a path of i'th children (if i>0)
-   * or parents (if i<0).  The first child of course is 1.  Note that edges are represented
-   * internally as an ordered set, so use of this function should be reproducible.
-   * * @param is
+   * Return the sequence of vertices obtained by following a path of i'th children (if i>0) or parents (if i<0). The
+   * first child of course is 1. Note that edges are represented internally as an ordered set, so use of this function
+   * should be reproducible. * @param is
    * @return
    */
   def iPath(is: Int*): Iterable[Vertex] = iPath(Vector(this), is.toList)
 
-  def foldLeft[Z](z: Z)(f: (Z, Vertex) => Z, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Z =
+  def foldLeft[Z](z: Z)(
+      f: (Z, Vertex) => Z,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Z =
     iterator(pred, down, maxDepth).foldLeft(z)(f)
 
-  def foreach(f: Vertex => Unit, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Unit =
+  def foreach(
+      f: Vertex => Unit,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Unit =
     iterator(pred, down, maxDepth).foreach(f)
 
-  def collect[A](pf: PartialFunction[Vertex, A], pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Iterable[A] =
+  def collect[A](
+      pf: PartialFunction[Vertex, A],
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Iterable[A] =
     iterator(pred, down, maxDepth).collect(pf).toIterable
 
-  def find(f: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Option[Vertex] =
+  def find(
+      f: Vertex => Boolean,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Option[Vertex] =
     iterator(pred, down).find(f)
 
-  def seek(f: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
+  def seek(
+      f: Vertex => Boolean,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
     iterator(pred, down, maxDepth, f).filter(f)
 
-  def stalk(f: Vertex => Boolean, avoid: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
-    iterator(pred, down, maxDepth, { v =>
-      f(v) || avoid(v)
-    }).filter(f)
+  def stalk(
+      f: Vertex => Boolean,
+      avoid: Vertex => Boolean,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
+    iterator(
+      pred,
+      down,
+      maxDepth,
+      { v =>
+        f(v) || avoid(v)
+      }).filter(f)
 
-  def next(pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true): Iterator[Vertex] = iterator(pred, down, 1).drop(1)
+  def next(
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true): Iterator[Vertex] = iterator(pred, down, 1).drop(1)
 
-  def filter(f: Vertex => Boolean, pred: EdgeType.EdgeType => Boolean = { _ =>
-    true
-  }, down: Boolean = true, maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
+  def filter(
+      f: Vertex => Boolean,
+      pred: EdgeType.EdgeType => Boolean = { _ =>
+        true
+      },
+      down: Boolean = true,
+      maxDepth: Int = Int.MaxValue): Iterator[Vertex] =
     iterator(pred, down, maxDepth).filter(f)
-
+  private def unsorted[A](s: scala.collection.immutable.SortedSet[A]): scala.collection.immutable.Set[A] = s
 }

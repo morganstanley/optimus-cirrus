@@ -21,7 +21,10 @@ object Args4JOptionHandlers {
 
   private val NoArgStr = "NO_ARG"
 
-  abstract class DelimitedArgumentOptionHandler[A](parser: CmdLineParser, option: OptionDef, setter: Setter[collection.Seq[A]])
+  abstract class DelimitedArgumentOptionHandler[A](
+      parser: CmdLineParser,
+      option: OptionDef,
+      setter: Setter[collection.Seq[A]])
       extends OneArgumentOptionHandler[collection.Seq[A]](parser, option, setter) {
     override def parse(arg: String): collection.Seq[A] = arg.split(",").iterator.map(convert(_)).toSeq
 
@@ -43,7 +46,10 @@ object Args4JOptionHandlers {
     def convert(s: String): A
   }
 
-  class GroupedDelimitedStringOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[collection.Seq[collection.Seq[String]]])
+  class GroupedDelimitedStringOptionHandler(
+      parser: CmdLineParser,
+      option: OptionDef,
+      setter: Setter[collection.Seq[collection.Seq[String]]])
       extends GroupedDelimitedArgumentOptionHandler[collection.Seq[String]](parser, option, setter) {
     override def convert(s: String): collection.Seq[String] = s.split(",")
   }

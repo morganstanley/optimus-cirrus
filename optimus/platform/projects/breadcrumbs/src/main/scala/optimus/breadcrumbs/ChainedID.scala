@@ -13,26 +13,34 @@ package optimus.breadcrumbs
 
 import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{List => JavaList, ArrayList => JavaArrayList}
+import java.util.{ ArrayList => JavaArrayList }
+import java.util.{ List => JavaList }
+import java.util.{ UUID => JUUID }
 
-import msjava.base.util.uuid.{MSUuid => UUID}
+import msjava.base.util.uuid.{ MSUuid => UUID }
 import optimus.utils.PropertyUtils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+/**
+ * @param depth
+ *   To support nested/scoped tracking
+ * @param crumbLevel
+ *   See BreadcrumbLevel (warn, info, debug ...)
+ */
 @SerialVersionUID(2017071401L)
-final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, val level: Int, val vertexId: String)
+final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, val crumbLevel: Int, val vertexId: String)
     extends Serializable {
   private[optimus] def this(repr: String, depth: Int, level: Int) = this(repr, depth, level, (new UUID).toString)
   @transient private lazy val id = new AtomicInteger(0)
   private[optimus] def this(addr: InetAddress) = this(addr.getCanonicalHostName, 0, ChainedID.level)
-  private[optimus] def this(j: java.util.UUID) = this(j.toString, 0, ChainedID.level)
-  def child: ChainedID = child(this.level)
+  private[optimus] def this(j: JUUID) = this(j.toString, 0, ChainedID.level)
+  def child: ChainedID = child(this.crumbLevel)
   def child(level: Int): ChainedID = new ChainedID(s"$repr#${id.incrementAndGet()}", depth + 1, level)
-  def batch: ChainedID = new ChainedID(s"$repr#BATCH:${id.incrementAndGet()}", depth + 1, this.level)
+  def batch: ChainedID = new ChainedID(s"$repr#BATCH:${id.incrementAndGet()}", depth + 1, this.crumbLevel)
 
   def child(tag: ChainedID.TagTypes.TagTypes): ChainedID =
-    new ChainedID(s"$repr#$tag:${id.incrementAndGet()}", depth + 1, level)
+    new ChainedID(s"$repr#$tag:${id.incrementAndGet()}", depth + 1, crumbLevel)
 
   override def equals(that: Any): Boolean = that match {
     case that: ChainedID => that.vertexId == this.vertexId
@@ -40,7 +48,7 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
   }
   override def hashCode: Int = vertexId.hashCode
   override def toString: String = repr
-  def prettyPrint: String = if (this.level == ChainedID.level) repr else s"$repr (level: $level)"
+  def prettyPrint: String = if (this.crumbLevel == ChainedID.level) repr else s"$repr (level: $crumbLevel)"
   def base: String = repr.replaceFirst("#[\\d#]+$", "")
 
   private[optimus] def asList: JavaArrayList[String] = ChainedID.asList(this)
@@ -77,7 +85,7 @@ object ChainedID {
     result.add(ChainedID.ArrayRepVersion.toString) // 0
     result.add(c.repr) // 1
     result.add(c.depth.toString) // 2
-    result.add(c.level.toString) // 3
+    result.add(c.crumbLevel.toString) // 3
     result.add(c.vertexId) // 4
     result
   }
@@ -93,7 +101,5 @@ object ChainedID {
     log.error(s"root chainedId: $cid (this is not an actual error!)")
     cid
   }
-  def create(level: Int = ChainedID.level): ChainedID = root.synchronized {
-    root.child(level)
-  }
+  def create(level: Int = ChainedID.level): ChainedID = root.child(level)
 }

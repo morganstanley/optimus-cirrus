@@ -6,3 +6,10 @@ This product includes software developed at Morgan Stanley.
 
 This product includes software developed at the Apache Software Foundation (http://www.apache.org/), including:
   - Apache ZooKeeper (https://zookeeper.apache.org/)
+
+This product bundles software from http://github.com/scalamacros/macrology201, which is available under a "3-clause BSD" license.
+For details, see optimus/platform/projects/core_macro/src/main/scala/optimus/utils/internal/Splicer.scala
+
+This product includes software developed by other groups and added in accordance with their Apache 2.0 licenses. Projects include:
+  - https://github.com/spray/spray-json (in spray_json module; refer to https://github.com/spray/spray-json/pull/222/files)
+  - https://github.com/corretto/hotpatch-for-apache-log4j2 (in optimus/platform/projects/entityagent/src/main/java/optimus/JndiDefanger.java)

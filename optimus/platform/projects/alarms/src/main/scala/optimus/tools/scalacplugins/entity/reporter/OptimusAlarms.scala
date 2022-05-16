@@ -46,6 +46,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       "Incorrect usage of %s.  You probably should not be using it at all."
     )
 
+  val NOWARN = error1(20516, OptimusPhases.APICHECK, "Illegal use of @nowarn: %s")
+
   // auto async
   val UNABLE_TO_PARALLELIZE_COLLECTION =
     errorOptional1(20553, OptimusPhases.AUTOASYNC, "Unable to parallelize %s; must explicitly choose apar or aseq")
@@ -53,7 +55,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     errorOptional1(
       20554,
       OptimusPhases.AUTOASYNC,
-      "Illegal async operation over %s; No non-RT calls found detected, so .apar (rather than .aseq) should be appropriate.")
+      "Illegal async operation over %s; Only RT calls found so .apar (rather than .aseq) should be appropriate."
+    )
   val UNMARKED_ASYNC_CLOSURE_D =
     errorOptional1(
       20555,
@@ -64,7 +67,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     errorOptional1(
       20556,
       OptimusPhases.AUTOASYNC,
-      "Illegal async operation over %s; Possible non-RT calls found,so  consider whether .aseq (vs .apar) is necessary.")
+      "Illegal async operation over %s; Possible non-RT calls found,so  consider whether .aseq (vs .apar) is necessary."
+    )
 
   // optimus_valaccessors phase errors
   val TRANSFORM_ERROR_AUTOASYNC = error1(20557, OptimusPhases.AUTOASYNC, "Error in autoasync transform:\n%s")
@@ -75,6 +79,14 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NO_ASNODE_VARIANT_FOUND =
     error1(20559, OptimusPhases.AUTOASYNC, "No asNode/asAsync variant found for %s")
 
+  val ERROR_LOCATION_TAG_GENERATION =
+    error1(20560, OptimusPhases.GENERATE_LOCATION_TAG, "Error in generating location tag transform:\n%s")
+
+  val ERROR_LOCATION_TAG_MATCHING_METHOD = error2(
+    20561,
+    OptimusPhases.GENERATE_LOCATION_TAG,
+    "There needs to be exactly 1 matching method but found %s. Method name: %s")
+
   // Unclassified transformation errors
   val TRANSFORM_ERROR_ADJUST_AST = error2(21000, OptimusPhases.ADJUST_AST, "Error transforming in %s: %s")
 
@@ -83,7 +95,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val KEY_INDEX_MUST_STABLE = error0(
     21002,
     OptimusPhases.ADJUST_AST,
-    "@key/@indexed members must be stable (non-@node or @node(tweak=false) or final @node val) ")
+    "@key/@indexed members must be stable (non-@node or @node(tweak=false) or final @node val) "
+  )
   val KEY_INDEX_WITH_PRIVATE =
     error0(21003, OptimusPhases.ADJUST_AST, "Illegal private[this] @key/@indexed (if ctor param, add 'val')")
   val MULTI_PRIMARY_KEY = error2(21004, OptimusPhases.ADJUST_AST, "%s \"%s\" cannot have multiple non-secondary keys")
@@ -95,7 +108,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val UNSUPPORTED_KEY_INDEX_SPEC = error1(
     21009,
     OptimusPhases.ADJUST_AST,
-    "Unsupported entry in @key/@index def specification. Expected: identifier, found: %s")
+    "Unsupported entry in @key/@index def specification. Expected: identifier, found: %s"
+  )
 
   // These rules have either been removed or made more general - old values kept as comments for documentation purposes
   // val NO_INDEX_ON_EVENT_TRAIT = error0(1010, OptimusPhases.ADJUST_AST, "Unsupported indexes on event traits")
@@ -122,7 +136,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODE_WITH_FORMAL_PARAM = error0(
     21201,
     OptimusPhases.ADJUST_AST,
-    "Illegal @node on formal param (did you forget val on a constructor param?)")
+    "Illegal @node on formal param (did you forget val on a constructor param?)"
+  )
   val NODE_WITH_PRIVATE_VAL = error0(21202, OptimusPhases.ADJUST_AST, "Illegal private[this] @node val")
   val NODE_WITH_PRIVATE_DEF = error0(21203, OptimusPhases.ADJUST_AST, "Illegal private[this] @node def")
   val NODE_WITH_VAR = error0(21204, OptimusPhases.ADJUST_AST, "@node not allowed on vars")
@@ -141,7 +156,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       21302,
       OptimusPhases.ADJUST_AST,
-      "Illegal lazy val in %s definition. Refactor your code or try annotating with @givenRuntimeEnv")
+      "Illegal lazy val in %s definition. Refactor your code or try annotating with @givenRuntimeEnv"
+    )
   val VAR_IN_ENTITY = error1(21303, OptimusPhases.ADJUST_AST, "Illegal var in %s definition.")
   val ENTITY_WITH_CASE_CLASS = error0(21304, OptimusPhases.ADJUST_AST, "Illegal @entity case class")
   val METHOD_LOCAL_ENTITY = error0(21305, OptimusPhases.ADJUST_AST, "Illegal method-local @entity definition.")
@@ -174,7 +190,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       21320,
       OptimusPhases.ADJUST_AST,
-      "Illegal implicit @%s declaration; write an explicit implicit conversion instead")
+      "Illegal implicit @%s declaration; write an explicit implicit conversion instead"
+    )
 
   val EVENT_WITH_MULTI_ARGLIST =
     error0(21500, OptimusPhases.ADJUST_AST, "@event constructors must have exactly one arglist.")
@@ -187,13 +204,18 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(21506, OptimusPhases.REF_CHECKS, "@event(contained=true) must not contain @key/@indexed fields")
   val UNKNOWN_PARAM_OF_EVENT =
     error1(21507, OptimusPhases.ADJUST_AST, "Unknown named parameter of @event annotation: %s")
-  val UNNAMED_PARAM_OF_EVENT = error0(21508, OptimusPhases.ADJUST_AST, "@event definition must use named arguments in annotation (contained or projected)")
+  val UNNAMED_PARAM_OF_EVENT = error0(
+    21508,
+    OptimusPhases.ADJUST_AST,
+    "@event definition must use named arguments in annotation (contained or projected)"
+  )
 
   val ASYNC_WITH_VAL = error0(21601, OptimusPhases.ADJUST_AST, "Illegal @async val, @async is only permitted with def")
   val NONENTITY_NODE_WITH_VAL = error0(
     21602,
     OptimusPhases.ADJUST_AST,
-    "Illegal non-entity @node val, @node only works with def in non-entity types")
+    "Illegal non-entity @node val, @node only works with def in non-entity types"
+  )
   val ELEVATED_WITH_WRONG_ANNOTATION =
     error1(21603, OptimusPhases.REF_CHECKS, "Invalid use of @elevated in conjunction with @%s")
   val ASYNC_WITH_WRONG_ANNOTATION =
@@ -227,11 +249,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val PROJECTED_INVALID_DEF = error0(
     21867,
     OptimusPhases.ADJUST_AST,
-    "Invalid use of @projected on def. Consider either add @indexed or change rhs to embeddable attribute paths")
+    "Invalid use of @projected on def. Consider either add @indexed or change rhs to embeddable attribute paths"
+  )
   val STORED_PROJECTED_INVALID_VAL = error0(
     21868,
     OptimusPhases.ADJUST_AST,
-    "please use @projected instead of @stored(projected = true) before val definition if you want use accelerator feature")
+    "please use @projected instead of @stored(projected = true) before val definition if you want use accelerator feature"
+  )
   val PROJECTED_FIELD_MISSING =
     error0(21869, OptimusPhases.ADJUST_AST, "projected is set to be true but there is no stored field in embeddable")
   val PROJECTED_WITH_REIFIED = error0(21870, OptimusPhases.ADJUST_AST, "Invalid use of @projected with @reified")
@@ -240,13 +264,15 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val VARIADIC_CTOR_PARAM = error1(
     21917,
     OptimusPhases.ADJUST_AST,
-    "Unsupported variadic constructor parameter '%s' on @entity. Consider using a Seq instead.")
+    "Unsupported variadic constructor parameter '%s' on @entity. Consider using a Seq instead."
+  )
   val EMBEDDABLE_ONLY_WITH_CASE_CLASS =
     error0(21900, OptimusPhases.ADJUST_AST, "@embeddable is only supported on case classes and sealed traits")
   val EMBEDDABLE_ONLY_WITH_CASE_OBJECT = error0(
     21901,
     OptimusPhases.ADJUST_AST,
-    "@embeddable object is not supported. Did you mean @embeddable case object?")
+    "@embeddable object is not supported. Did you mean @embeddable case object?"
+  )
 
   // removed: val LAZY_VALS_MUST_BE_SI = error0(21902, OptimusPhases.ADJUST_AST, "Async lazy vals must be @scenarioIndependent")
 
@@ -255,7 +281,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val EMBEDDABLE_SUBTYPE_NAME_CONFLICT = error2(
     20021,
     OptimusPhases.EMBEDDABLE,
-    "Cannot define %s more than once which extend the same @embeddable trait %s")
+    "Cannot define %s more than once which extend the same @embeddable trait %s"
+  )
   val EMBEDDABLE_SUBTYPE =
     error2(20022, OptimusPhases.EMBEDDABLE, "Subtype %s of @embeddable type %s must be marked @embeddable")
 
@@ -267,7 +294,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       21908,
       OptimusPhases.ADJUST_AST,
-      "Default arguments are unsupported on @embeddable/@stable private constructors")
+      "Default arguments are unsupported on @embeddable/@stable private constructors"
+    )
   val ONLY_ALLOW_NODE_FOR_EMBEDDABLE_CTOR =
     error1(21910, OptimusPhases.ADJUST_AST, "Only @embeddable/@stable constructors are allowed to be @node")
   val ALL_EMBEDDABLE_CTOR_MUST_BE_NODE_IF_ONE_IS_NODE =
@@ -275,7 +303,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NO_READRESOLVE_OVERRIDDEN_IS_ALLOWED_IN_NODE_EMBEDDABLE =
     error1(21912, OptimusPhases.EMBEDDABLE, "No readResolve overridden is allowed to in @node embeddable/stable")
 
-  //@embeddable are warnings ATM, but should become errors after we fix the code
+  // @embeddable are warnings ATM, but should become errors after we fix the code
   val NO_CUSTOM_METHOD_IN_EMBEDDABLE_CASE_CLASS =
     // TODO (OPTIMUS-30981): make this a warningOptional1 later
     infoOptional1(21920, OptimusPhases.EMBEDDABLE, "@embeddable case classes should not declare custom %s methods")
@@ -292,47 +320,54 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(
       21924,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case classes cannot be marked @stable (but we always treat them as stable)")
+      "@embeddable case classes cannot be marked @stable (but we always treat them as stable)"
+    )
   val STABLE_CASE_CLASS_NOT_FINAL =
     error0(
       21925,
       OptimusPhases.EMBEDDABLE,
-      "@stable case class isn't final or effectively final (sealed with no subclases)")
+      "@stable case class isn't final or effectively final (sealed with no subclases)"
+    )
   val EMBEDDABLE_CASE_CLASS_NOT_FINAL =
     error0(
       21926,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case class isn't final or effectively final (sealed with no subclases)")
+      "@embeddable case class isn't final or effectively final (sealed with no subclases)"
+    )
 
   val STABLE_CASE_CLASS_HAS_OUTER =
     error1(
       21927,
       OptimusPhases.EMBEDDABLE,
-      "@stable case class has on outer reference that isn't a plain package or object - %s")
+      "@stable case class has on outer reference that isn't a plain package or object - %s"
+    )
   val EMBEDDABLE_CASE_CLASS_HAS_OUTER =
     error1(
       21928,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case class has on outer reference that isn't a plain package or object - %s")
+      "@embeddable case class has on outer reference that isn't a plain package or object - %s"
+    )
 
   val STABLE_WITHOUT_PARAMS =
     error0(
       21929,
       OptimusPhases.EMBEDDABLE,
-      "@stable case classes without params don't make sense. Make it a case object?")
+      "@stable case classes without params don't make sense. Make it a case object?"
+    )
   val EMBEDDABLE_WITHOUT_PARAMS =
     // TODO (OPTIMUS-30981): make this a warningOptional0 later
     infoOptional0(
       21930,
       OptimusPhases.EMBEDDABLE,
-      "@embeddable case classes without params don't make sense. Make it a case object?")
+      "@embeddable case classes without params don't make sense. Make it a case object?"
+    )
 
   val ILLEGAL_ANNOTATION = error2(
     21931,
     OptimusPhases.ADJUST_AST,
     "@%s is not permitted %s"
   )
-  //TODO (OPTIMUS-31928): Delete this eventailly
+  // TODO (OPTIMUS-31928): Delete this eventailly
   val EMBBEDDABLE_WITH_IGNORED =
     error0(21932, OptimusPhases.EMBEDDABLE, "@embeddable case classes cannot have @notPartOfIdentity parameters)")
 
@@ -340,7 +375,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODE_ARITY_LIMIT = error0(
     21620,
     OptimusPhases.PROPERTY_INFO,
-    "Implementation restriction: @node defs may not have more than 21 parameters")
+    "Implementation restriction: @node defs may not have more than 21 parameters"
+  )
 
   // attachment phase errors
   val CLASSIFIER_TRANSFORM_ERROR = error1(20500, OptimusPhases.CLASSIFIER, "Unable to transform tree: %s\n")
@@ -349,17 +385,20 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val PROJECTED_NOTSET = error0(
     21942,
     OptimusPhases.REF_CHECKS,
-    "projected is not set to be true but @projected is marked on some stored field")
+    "projected is not set to be true but @projected is marked on some stored field"
+  )
   val PROJECTED_ANNOTATION_MISSING = error0(
     21943,
     OptimusPhases.REF_CHECKS,
-    "projected is set to be true but @projected is not marked on any stored field")
+    "projected is set to be true but @projected is not marked on any stored field"
+  )
   val PROJECTED_NONSTORED_PROPERTY =
     error0(21944, OptimusPhases.REF_CHECKS, "@projected cannot be applied to non-stored property")
   val PROJECTED_NONCTOR_PROPERTY = error0(
     21945,
     OptimusPhases.REF_CHECKS,
-    "@projected must be applied to primary constructor properties for embeddable")
+    "@projected must be applied to primary constructor properties for embeddable"
+  )
   val PROJECTED_NOTSTORED_ENTITY_EVENT =
     error0(21946, OptimusPhases.REF_CHECKS, "only @stored entity/event class can be projected")
   val PROJECTED_NOTFINAL_EVENT =
@@ -383,11 +422,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(
       21952,
       OptimusPhases.REF_CHECKS,
-      "def with @projected only supports embeddable attribute paths/types or simple compound field")
+      "def with @projected only supports embeddable attribute paths/types or simple compound field"
+    )
   val PROJECTED_DEF_MUST_REFER_CTOR_PARAM = error0(
     21953,
     OptimusPhases.REF_CHECKS,
-    "def with @projected should only refer to constructor parameters of @embeddables")
+    "def with @projected should only refer to constructor parameters of @embeddables"
+  )
   val PROJECTED_DEF_MUST_REFER_NONTWEAKABLE =
     error0(21954, OptimusPhases.REF_CHECKS, "def with @projected should only refer to non-tweakable property")
   val PROJECTED_INVALID_ENTITY =
@@ -403,7 +444,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(
       21972,
       OptimusPhases.REF_CHECKS,
-      "@reified should be used on def of entity/event/embeddable, the def must be final")
+      "@reified should be used on def of entity/event/embeddable, the def must be final"
+    )
 
   val TWEAKNODE_WITH_COVARIANT_TYPE =
     errorOptional2(22001, OptimusPhases.REF_CHECKS, "Tweakable node with type %s references covariant type %s")
@@ -412,14 +454,19 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val CHILD_PARENT_MUST_BE_SET = error0(
     22002,
     OptimusPhases.REF_CHECKS,
-    "@stored(childToParent=true) val must be an immutable.Set or optimus.platform.CovariantSet of an @stored @entity type")
+    "@stored(childToParent=true) val must be an immutable.Set or optimus.platform.CovariantSet of an @stored @entity type"
+  )
   val INDEX_MUST_EMBEDDABLE_PATH =
     error0(22003, OptimusPhases.REF_CHECKS, "@indexed only supported on embeddable attribute paths/types")
   val INDEX_MUST_REFER_CTOR_PARAM =
     error0(22004, OptimusPhases.REF_CHECKS, "Index may only refer to constructor parameters of @embeddables")
   val KEY_INDEX_MUST_STABLE2 =
     error0(22005, OptimusPhases.REF_CHECKS, "@key/@index members must be stable, non-@node values")
-  val CANT_GENERATE_INDEX2 = error1(22006, OptimusPhases.REF_CHECKS, "Cannot generate an index from %s") // FIXME: duplicate error message in different phases, redundant check?
+  val CANT_GENERATE_INDEX2 = error1(
+    22006,
+    OptimusPhases.REF_CHECKS,
+    "Cannot generate an index from %s"
+  ) // FIXME: duplicate error message in different phases, redundant check?
   val INDEX_SEQ_DEF_MAP_ON_ENTITY =
     error1(
       22007,
@@ -449,7 +496,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val IMPLICIT_OVERRIDE_ERROR = error1(
     22111,
     OptimusPhases.REF_CHECKS,
-    "Can't implicit override val (define a same name private val with parent class): %s")
+    "Can't implicit override val (define a same name private val with parent class): %s"
+  )
   val DEF_OVERRIDE_VAL = error2(22112, OptimusPhases.REF_CHECKS, "Can't override val with def: %s.%s")
 
   val LOSE_ANNO_WHEN_OVERRIDE =
@@ -472,21 +520,29 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NONSTORABLE_EXTEND_STORABLE = error5(
     22304,
     OptimusPhases.REF_CHECKS,
-    "%s inherits from an %s class or trait, must also be marked %s (%s, %s)") // redundant check as 2303?
+    "%s inherits from an %s class or trait, must also be marked %s (%s, %s)"
+  ) // redundant check as 2303?
   val SOAP_OBJ_MUST_ENTITY = error0(22305, OptimusPhases.REF_CHECKS, "A @soapobject must be an @entity object.")
   val STORABLE_WITH_DELAYED_INIT =
     error1(22306, OptimusPhases.REF_CHECKS, "Invalid use of %s on a subclass of DelayedInit (e.g. LegacyOptimusApp)")
-  val METHOD_LOCAL_ENTITY2 = error0(22307, OptimusPhases.REF_CHECKS, "Illegal method-local @entity definition") // redundant ?
+  val METHOD_LOCAL_ENTITY2 =
+    error0(22307, OptimusPhases.REF_CHECKS, "Illegal method-local @entity definition") // redundant ?
   val ENTITY_WITH_EMBEDDABLE = error0(
     22308,
     OptimusPhases.REF_CHECKS,
-    "one class can't be @embeddable @entity, you only can use one of them") // lift to adjust_ast phase?
+    "one class can't be @embeddable @entity, you only can use one of them"
+  ) // lift to adjust_ast phase?
   val INNER_ENTITY_MUST_TRANSIENT = error1(22309, OptimusPhases.REF_CHECKS, "inner class %s must be @transient")
-  val ENTITY_WITH_WRONG_TYPE = error0(22310, OptimusPhases.REF_CHECKS, "@entity only supported on class or module def") // lift to adjust_ast phase?
+  val ENTITY_WITH_WRONG_TYPE = error0(
+    22310,
+    OptimusPhases.REF_CHECKS,
+    "@entity only supported on class or module def"
+  ) // lift to adjust_ast phase?
   val EMBEDDABLE_WITH_WRONG_TYPE = error0(
     22311,
     OptimusPhases.REF_CHECKS,
-    "@embeddable only supported on case class or object def") // lift to adjust_ast phase?
+    "@embeddable only supported on case class or object def"
+  ) // lift to adjust_ast phase?
   val ENTITY_WITH_MULTI_DEFAULT_KEY =
     error2(22312, OptimusPhases.REF_CHECKS, "Entity has multiple default @keys, inheriting %s from %s")
   val EMBEDDABLE_INHERITED_VAL_OR_VAL =
@@ -495,26 +551,37 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val ENTITY_EXTEND_NONENTITY_STRONG = errorOptional3(
     22315,
     OptimusPhases.REF_CHECKS,
-    "@entity class %s cannot extend non-entity class %s that contains non-abstract methods (%s)")
+    "@entity class %s cannot extend non-entity class %s that contains non-abstract methods (%s)"
+  )
   val EVENT_EXTEND_NONEVENT = error3(
     22316,
     OptimusPhases.REF_CHECKS,
-    "@event class %s cannot extend non-event class %s that contains non-abstract methods (%s)")
-  val EVENT_WITH_WRONG_TYPE = error0(22317, OptimusPhases.REF_CHECKS, "@event only supported on class or module def") // lift to adjust_ast phase?
+    "@event class %s cannot extend non-event class %s that contains non-abstract methods (%s)"
+  )
+  val EVENT_WITH_WRONG_TYPE =
+    error0(22317, OptimusPhases.REF_CHECKS, "@event only supported on class or module def") // lift to adjust_ast phase?
 
   val ENTITY_OBJECT_EXTEND_NONENTITY_STRONG = errorOptional3(
     22318,
     OptimusPhases.REF_CHECKS,
-    "@entity object %s cannot extend non-entity class %s that contains non-abstract methods (%s)")
+    "@entity object %s cannot extend non-entity class %s that contains non-abstract methods (%s)"
+  )
   val ENTITY_STORED_EXTENDS_NONENTITY_STRONG = errorOptional3(
     22319,
     OptimusPhases.REF_CHECKS,
-    "@stored @entity class %s cannot extend non-entity class %s that contains non-abstract methods (%s)")
+    "@stored @entity class %s cannot extend non-entity class %s that contains non-abstract methods (%s)"
+  )
+  val ENTITY_PROPERTY_INFO_ACCIDENTAL_OVERRIDE = error3(
+    sn = 22320,
+    OptimusPhases.REF_CHECKS,
+    "implementation restriction: %s extending its companion %s leads to a name clash due to the synthetic PropertyInfo %s generated in the object. Please rename the object or its parent."
+  )
   val REFLECTIVE_NODE_INVOCATION =
     error1(
       22359,
       OptimusPhases.REF_CHECKS,
-      "implementation restriction: illegal reflective call to structural node/async method %s")
+      "implementation restriction: illegal reflective call to structural node/async method %s"
+    )
 
   val LOCAL_NODE = error0(22400, OptimusPhases.REF_CHECKS, "Illegal local @node definition")
   val NOT_SUPPORTED_NODE =
@@ -530,7 +597,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val USER_BAD_ENTITY_CREATER = error4(
     22901,
     OptimusPhases.REF_CHECKS,
-    s"User-defined %s.%s cannot call %s.%s: Crossing the streams.") // what's this for?
+    s"User-defined %s.%s cannot call %s.%s: Crossing the streams."
+  ) // what's this for?
   val BANED_METHOD = error1(22902, OptimusPhases.REF_CHECKS, "Use of %s in this project is denied")
   val UPCAST_WITH_WRONG_TYPE =
     error0(22903, OptimusPhases.REF_CHECKS, "@upcasting only supported on concrete @entity class or @event class")
@@ -556,18 +624,30 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error2(
       22909,
       OptimusPhases.REF_CHECKS,
-      "Due to implementation limitations, @node method %s cannot contain a forbidden parameter name %s")
+      "Due to implementation limitations, @node method %s cannot contain a forbidden parameter name %s"
+    )
   val NO_UNIQUE_INDEXED_COLLECTION =
     error1(22910, OptimusPhases.REF_CHECKS, "Unique Indexes not allowed for Collection types")
+
+  val ITERATOR_ESCAPES =
+    warningOptional2(22911, OptimusPhases.REF_CHECKS, s"${OptimusAlarms.NewTag} Escaping iterator of type %s. %s")
 
   // entity relationship phase errors
   val TRAVERSE_ERROR1 = error3(23100, OptimusPhases.ENTITY_RELATIONSHIP, "Error traversing in %s: %s\n%s")
 
   // optimus_valaccessors phase errors
-  val TRANSFORM_ERROR3 = error1(25000, OptimusPhases.VAL_ACCESSORS, "Error in redirect accessors transform:\n%s") // remove such kind of error? throw exception instead?
+  val TRANSFORM_ERROR3 = error1(
+    25000,
+    OptimusPhases.VAL_ACCESSORS,
+    "Error in redirect accessors transform:\n%s"
+  ) // remove such kind of error? throw exception instead?
 
   // optimus_entityinfo phase errors
-  val TRANSFORM_ERROR4 = error1(26000, OptimusPhases.ENTITY_INFO, "Error in entity info transform:\n%s") // remove such kind of error? throw exception instead?
+  val TRANSFORM_ERROR4 = error1(
+    26000,
+    OptimusPhases.ENTITY_INFO,
+    "Error in entity info transform:\n%s"
+  ) // remove such kind of error? throw exception instead?
   val KEY_SHADOWED =
     error2(26001, OptimusPhases.ENTITY_INFO, "Entity/event %s inherits conflicting definitions of keys/indexes:\n\t%s")
   val INLINE_ENTITY_WITH_INDEX_KEY =
@@ -575,10 +655,15 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val INDEX_ADDED_TO_EXISTING_STORED_VAL = errorOptional2(
     26003,
     OptimusPhases.ENTITY_INFO,
-    "Entity/event %s adds an index/key to fields that has its storage determined by type %s")
+    "Entity/event %s adds an index/key to fields that has its storage determined by type %s"
+  )
 
   // node lift phase errors
-  val TRANSFORM_ERROR5 = error2(26050, OptimusPhases.NODE_LIFT, "Error transforming in %s: %s") // remove such kind of error? throw exception instead?
+  val TRANSFORM_ERROR5 = error2(
+    26050,
+    OptimusPhases.NODE_LIFT,
+    "Error transforming in %s: %s"
+  ) // remove such kind of error? throw exception instead?
   val LIFT_NONTWEAK = error1(26051, OptimusPhases.NODE_LIFT, "%s is not tweakable")
   val LIFT_NONNODE = error2(26052, OptimusPhases.NODE_LIFT, "%s.%s is not a @node")
   val LIFT_NONPROP =
@@ -600,20 +685,26 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
   // optimus_generatenodemethods phase errors
   val GENERATENODES_TRANSFORM_ERROR =
-    error1(26500, OptimusPhases.GENERATE_NODE_METHODS, "Unable to transform tree: %s\n") // remove such kind of error? throw exception instead?
+    error1(
+      26500,
+      OptimusPhases.GENERATE_NODE_METHODS,
+      "Unable to transform tree: %s\n"
+    ) // remove such kind of error? throw exception instead?
 
   // async graph phase errors
   val ASYNC_TRANSFORM_ERROR = errorOptional2(
     27000,
     OptimusPhases.ASYNC_GRAPH,
-    "Error in async transform of %s (rewriting may be necessary): %s") // remove such kind of error? throw exception instead?
+    "Error in async transform of %s (rewriting may be necessary): %s"
+  ) // remove such kind of error? throw exception instead?
 
   val LOCAL_TYPER_ERROR = error3(27001, OptimusPhases.ASYNC_GRAPH, "tpe: %s\nLast block\n%s\n%s")
 
   val WRONG_TWEAK_HANDLER_RETURN_TYPE = error1(
     27100,
     OptimusPhases.ASYNC_GRAPH,
-    "Incorrect tweak handler return type: required scala.Seq[optimus.platform.Tweak], found %s")
+    "Incorrect tweak handler return type: required scala.Seq[optimus.platform.Tweak], found %s"
+  )
   val WRONG_TWEAK_HANDLER_PARAM_TYPE =
     error2(27102, OptimusPhases.ASYNC_GRAPH, "Incorrect tweak handler parameter type(s): required (%s), found (%s)")
   val TWEAK_BYNAME_IN_NODE = error1(
@@ -625,7 +716,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val UNHANDLED_FUNCTION_PATTERN = error1(
     27200,
     OptimusPhases.ASYNC_GRAPH,
-    "Can't recognize function pattern; try to rewrite with explicit closure arguments: %s")
+    "Can't recognize function pattern; try to rewrite with explicit closure arguments: %s"
+  )
   val NODELIFT_ETA_EXPANSION = error2(
     27201,
     OptimusPhases.ASYNC_GRAPH,
@@ -664,11 +756,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val EXPORT_WRONG_PARAM = error3(
     29004,
     OptimusPhases.SAFE_EXPORT_CHECK,
-    "%s is exported but its parameter %s of type %s is not serialisable, a scala primitive, or a ProgressReporter")
+    "%s is exported but its parameter %s of type %s is not serialisable, a scala primitive, or a ProgressReporter"
+  )
   val EXPORT_WRONG_RETRUN_TYPE = error2(
     29005,
     OptimusPhases.SAFE_EXPORT_CHECK,
-    "%s is exported but its return type %s is not serialisable or a scala primitive")
+    "%s is exported but its return type %s is not serialisable or a scala primitive"
+  )
   val EXPORT_WRONG_LOCATION = error1(
     29006,
     OptimusPhases.SAFE_EXPORT_CHECK,
@@ -685,6 +779,20 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error2(29009, OptimusPhases.SAFE_EXPORT_CHECK, "%s is exported, but contains parameter %s with default value")
   // default error message
 
+  // 2.13 migration related
+  val TO_CONVERSION_TYPE_ARG =
+    error0(
+      sn = 29100,
+      OptimusPhases.REF_CHECKS,
+      "[NEW] For Scala 2.13 compatibility, replace `to[X]` by `to(X)`; this requires an `import scala.collection.compat._`")
+  val PREDEF_FALLBACK_STRING_CBF =
+    error0(
+      sn = 29101,
+      OptimusPhases.REF_CHECKS,
+      """[NEW]The implicit Predef.fallbackStringCanBuildFrom is used here.
+      |This implicit instance is inferred when a `Seq` (or an unspecified) CanBuildFrom is required, but it builds an `IndexedSeq`.
+      |Instead, use an explicit conversion / CanBuildFrom for List, IndexedSeq or Vector.
+      |Enable "Show Implicit Hints" in IntelliJ to display the implicit argument.""".stripMargin)
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -693,6 +801,16 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   val DEPRECATING = warning2(10500, OptimusPhases.APICHECK, "%s is deprecated: %s")
   val DEPRECATING_LIGHT = preIgnore(warningOptional2(10501, OptimusPhases.APICHECK, "%s is deprecated: %s"))
+
+  val UNUSED_NOWARN = warning1(10502, OptimusPhases.APICHECK, "Unused or redundant @nowarn: %s")
+
+  val INCORRECT_ADVANCED_USAGE_LIGHT =
+    preIgnore(
+      warningOptional1(
+        10510,
+        OptimusPhases.APICHECK,
+        "Incorrect usage of %s.  You probably should not be using it at all."))
+
   val AUTO_ASYNC_OFF = info0(10553, OptimusPhases.AUTOASYNC, "Not asyncing collection, due to asyncOff request.")
   val ASYNC_CONTAINS_INCOMPATIBLE =
     info0(10554, OptimusPhases.AUTOASYNC, "Not asyncing, due to problematic constructs in closure.")
@@ -700,7 +818,8 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val POSSIBLE_NON_RT = infoOptional2(
     10556,
     OptimusPhases.AUTOASYNC,
-    "Possible non-RT operation %s in async closure of %s; consider when choosing aseq/apar.")
+    "Possible non-RT operation %s in async closure of %s; consider when choosing aseq/apar."
+  )
   val VAR_IN_ASYNC_CLOSURE = infoOptional0(10557, OptimusPhases.AUTOASYNC, "Possible reference to var")
   val UNNECESSARY_ASYNC_DEBUG = debug0(10558, OptimusPhases.AUTOASYNC, "Unnecessarily marked async")
   val VIEW_WITH_ASYNC = warning0(10559, OptimusPhases.AUTOASYNC, "Views are not compatible with async collections.")
@@ -712,7 +831,8 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     info0(
       10563,
       OptimusPhases.AUTOASYNC,
-      "Iterable.collect must by async'd manually.(No non-RT calls detected; .apar is likely appropriate.)")
+      "Iterable.collect must by async'd manually.(No non-RT calls detected; .apar is likely appropriate.)"
+    )
   val ASYNC_TRY = preIgnore(warningOptional0(10564, OptimusPhases.AUTOASYNC, "Do not use try/catch with async body."))
   val MANUAL_OPTION_ASYNC_COLLECT =
     warning0(10565, OptimusPhases.AUTOASYNC, "Option.collect must by async'd manually.")
@@ -720,15 +840,18 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     info0(
       10566,
       OptimusPhases.AUTOASYNC,
-      "Iterable.collect must by async'd manually.(Possible non-RT calls detected; .aseq may be necessary.)")
+      "Iterable.collect must by async'd manually.(Possible non-RT calls detected; .aseq may be necessary.)"
+    )
   val ASYNC_CLOSURE =
     preIgnore(
-      errorOptional1(10567, OptimusPhases.AUTOASYNC, "Async call found in closure passed as sync argument to %s"))
+      errorOptional1(10567, OptimusPhases.AUTOASYNC, "Async call found in closure passed as sync argument to %s")
+    )
   val ASYNC_CLOSURE_AUTO =
     infoOptional1(
       10568,
       OptimusPhases.AUTOASYNC,
-      "Async call found in closure passed as sync argument to auto-async'd %s")
+      "Async call found in closure passed as sync argument to auto-async'd %s"
+    )
 
   val UNHANDLED_COMBINATOR_DEBUG = debug1(10569, OptimusPhases.AUTOASYNC, "Unhandled combinator transformation %s")
   val SUPRESS_ASYNC_LABEL_DEBUG =
@@ -748,12 +871,13 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val ASYNC_CLOSURE_ERROR =
     warningOptional1(10576, OptimusPhases.AUTOASYNC, "Async call found in closure passed as sync argument to %s")
   val TRY_CATCH_NODE = preIgnore(
-    warningOptional1(10577, OptimusPhases.AUTOASYNC, "try/catch with potentially non-RT exception: %s"))
+    warningOptional1(10577, OptimusPhases.AUTOASYNC, "try/catch with potentially non-RT exception: %s")
+  )
 
   val ARTIFACT_ASYNC_CLOSURE =
     debug2(10588, OptimusPhases.AUTOASYNC, "Unpicking artifact %s: %s")
 
-  //optimus refcheck node type warnings
+  // optimus refcheck node type warnings
   val MUTABLE_NODE_PARAMS =
     warningOptional0(10600, OptimusPhases.REF_CHECKS, "Using mutable (e.g Array) types as node parameters")
   val MUTABLE_NODE_RETTYPES =
@@ -780,13 +904,15 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val RELY_ON_BROKEN_BEHAVIOUR = warningOptional2(
     15000,
     OptimusPhases.VAL_ACCESSORS,
-    "This code was relying on broken behaviour. To retain the old behaviour change: %s to super.%s")
+    "This code was relying on broken behaviour. To retain the old behaviour change: %s to super.%s"
+  )
 
   // optimus_storedprops phase warnings
   val ILLEGAL_TWEAK_BODY = warningOptional1(
     16000,
     OptimusPhases.REF_CHECKS,
-    "Illegal use of %s as tweak body!  (use transactionTimeNow or validTimeNow)")
+    "Illegal use of %s as tweak body!  (use transactionTimeNow or validTimeNow)"
+  )
 
   // async graph phase warnings
   val CALL_ON_GRAPH_IN_CTOR =
@@ -807,12 +933,17 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     warning0(
       17004,
       OptimusPhases.ASYNC_GRAPH,
-      "Do not use apar/aseq in a val in an object. This is a deadlock waiting to happen.")
+      "Do not use apar/aseq in a val in an object. This is a deadlock waiting to happen."
+    )
 
   val DEAD_NODE_CALL =
     warningOptional1(17005, OptimusPhases.ASYNC_GRAPH, "Dead code: result of call to @node%s is not used.")
 
   val CODE_MOTION = info1(17006, OptimusPhases.ASYNC_GRAPH, "Code motion: %s")
+
+  // location tag phase warnings
+  val LOCATION_TAG_INVALID_USE = preIgnore(
+    warningOptional0(17100, OptimusPhases.GENERATE_LOCATION_TAG, "Invalid use of location tag"))
 
   val GENPROPERTYINFO_FALLBACK =
     info2(18000, OptimusPhaseInfo.NoPhase, "Falling back to GenPropertyInfo for %s on %s")

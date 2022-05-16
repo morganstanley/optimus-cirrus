@@ -22,6 +22,7 @@ object CrumbHints {
 
   final val LongTerm = Set[CrumbHint](LongTermRetentionHint)
   final val Alert = Set[CrumbHint](AlertableHint)
+  final val Diagnostics = Set[CrumbHint](DiagnosticsHint)
   private[breadcrumbs] final val Mock = Set[CrumbHint](MockCrumbHint)
 }
 
@@ -29,6 +30,8 @@ private[optimus] object CrumbHint {
   implicit def ordering[A <: CrumbHint]: Ordering[A] = Ordering.by(_.toString)
   private[breadcrumbs] def fromString(prop: String): CrumbHint = prop match {
     case CrumbHint.LongTermRetentionHint.toString => LongTermRetentionHint
+    case CrumbHint.AlertableHint.toString         => AlertableHint
+    case CrumbHint.DiagnosticsHint.toString       => DiagnosticsHint
     case MockCrumbHint.toString                   => MockCrumbHint
     case _                                        => throw new IllegalArgumentException(s"Invalid CrumbHint: $prop")
   }
@@ -37,11 +40,12 @@ private[optimus] object CrumbHint {
     prop.split(",").map(CrumbHint.fromString).toSet
   }
 
-  // Use this hint to attempt to send the crumb to the long-term retention splunk index
-  // To route to a Kafka Topic using the hint, entry should look similar to this:
-  // { property: "CrumbHint", value: "retention~long", topic: "long" }
+  // To route to a Kafka Topic using a hint, entry should look similar to this:
+  // { property: "CrumbHint", value: "myHintType~myHintValue", topic: "long" }
   // To route to a Splunk Index using the hint, the -sth config entry should look similar to this (`~` required):
-  // 'retention~long: long; foo~bar: fooHintIndex; foo~bar,retention~long: fooAndLongIndex'
+  // 'myHintType~myHintValue: myIndex; foo~bar: fooHintIndex; foo~bar,myHintType~myHintValue: fooAndMyIndex'
+
+  // Use this hint to attempt to send the crumb to the long-term retention splunk index
   private[optimus] case object LongTermRetentionHint extends CrumbHint {
     override def hintType: String = "retention"
     override def hintValue: String = "long"
@@ -49,13 +53,16 @@ private[optimus] object CrumbHint {
   }
 
   // Use this hint to route the crumb via a low latency data path dedicated to alerts
-  // To route to a Kafka Topic using the hint, entry should look similar to this:
-  // { property: "CrumbHint", value: "retention~long", topic: "long" }
-  // To route to a Splunk Index using the hint, the -sth config entry should look similar to this (`~` required):
-  // 'alert~always: long; foo~bar: fooHintIndex; foo~bar,alert~always: fooAndAlertIndex'
   private[optimus] case object AlertableHint extends CrumbHint {
     override def hintType: String = "alert"
     override def hintValue: String = "always"
+    override final lazy val toString: String = s"$hintType~$hintValue"
+  }
+
+  // Use this hint to send the crumb unconditionally to a physically separate diagnostics partition
+  private[optimus] case object DiagnosticsHint extends CrumbHint {
+    override def hintType: String = "diag"
+    override def hintValue: String = "raw"
     override final lazy val toString: String = s"$hintType~$hintValue"
   }
 

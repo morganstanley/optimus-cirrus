@@ -60,6 +60,12 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
   private[collection] def borrowBuilder[A]: OptimusDoubleBuilder[OptimusDoubleSeq] = genCBF.borrowBuilder()
 
   implicit def canBuildFrom: OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
+  // support `coll.apar.map(f)(OptimusDoubleSeq.breakOut)
+  def breakOut[T]: OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
+  // support `collection.to(OptimusDoubleSeq)`
+  implicit def factoryToCBF(
+      facotry: OptimusDoubleSeq.type
+  ): OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double] = genCBF
   private[collection] object genCBF
       extends OptimusCanBuildFrom[Seq[Double], Double, OptimusDoubleSeq, Double](
         "OptimusDoubleSeq.genCBF",
@@ -160,11 +166,11 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
       unsafeFromArray(res)
     }
   }
-  //internal methods
+  // internal methods
   private[collection] def unsafeFromArray(elems: Array[Double]): OptimusDoubleSeq =
     if (elems.length == 0) empty else new OptimusDoubleSeq(elems)
 
-  //optimised apply methods to avoid array copying
+  // optimised apply methods to avoid array copying
   def apply(): OptimusDoubleSeq = empty
   def apply(d1: Double): OptimusDoubleSeq =
     unsafeFromArray(Array(d1))
@@ -174,7 +180,7 @@ object OptimusDoubleSeq extends OSeqCompanion[Double] {
     unsafeFromArray(Array(d1, d2, d3))
   def apply(d1: Double, d2: Double, d3: Double, d4: Double): OptimusDoubleSeq =
     unsafeFromArray(Array(d1, d2, d3, d4))
-  //OSeqCompanion methods
+  // OSeqCompanion methods
   override private[collection] def emptyOS[A <: Double]: OSeq[A] =
     empty.asInstanceOf[OSeq[A]]
   override private[collection] def tabulateOS[A <: Double](size: Int)(elemFn: OSeqTabulate[A]): OSeq[A] =
@@ -190,10 +196,9 @@ object OptimusDoubleSeqSettings extends OSeqImpl {
 }
 
 /**
- * A wrapper for [[Array]]s of primitive [[Double]] values.
- * This optimises memory and CPU use by not boxing when not needed
- * It exhibits efficient indexing compared to the default IndexSeq ([[Vector]]).
- * It is optimus friendly with a lazily cached hashcode
+ * A wrapper for [[Array]]s of primitive [[Double]] values. This optimises memory and CPU use by not boxing when not
+ * needed It exhibits efficient indexing compared to the default IndexSeq ([[Vector]]). It is optimus friendly with a
+ * lazily cached hashcode
  */
 final class OptimusDoubleSeq private (private val data: Array[Double])
     extends OSeq[Double]
@@ -219,10 +224,10 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     else {
       // use seqSeed so that hashCode is consistent with Seq[Double]'s
       val hashCode = MurmurHash3.arrayHash(data, MurmurHash3.seqSeed)
-      //note - this is order important
-      //hashcode must be written before known
+      // note - this is order important
+      // hashcode must be written before known
       _hashCode = hashCode
-      //volatile write, forces the _hashcode to be visible
+      // volatile write, forces the _hashcode to be visible
       _knownHashCode = true
       hashCode
     }
@@ -230,14 +235,16 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     other match {
       case that: OptimusDoubleSeq =>
         this.size == that.size && this.hashCode == that.hashCode &&
-          (java.util.Arrays.equals(this.data, that.data))
+        (java.util.Arrays.equals(this.data, that.data))
       case _ =>
         super.sameElements(other)
     }
   }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[Double]] */
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[Double]]
+   */
   override def sum[B >: Double](implicit num: Numeric[B]): B =
     if (num ne Numeric.DoubleIsFractional) {
       super.sum(num)
@@ -251,8 +258,10 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       result
     }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[Double]] */
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[Double]]
+   */
   override def product[B >: Double](implicit num: Numeric[B]): B =
     if (num ne Numeric.DoubleIsFractional) {
       super.product(num)
@@ -266,9 +275,11 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       result
     }
 
-  /** @inheritdoc
-   *             optimised to avoid boxing where the result is a [[OptimusDoubleSeq]]
-   *             optimised to zero allocation and return this if the result would == this to save memory and later hashcode*/
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing where the result is a [[OptimusDoubleSeq]] optimised to zero allocation and return this
+   * if the result would == this to save memory and later hashcode
+   */
   override def map[B, That](f: Double => B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     if (bf eq genCBF) {
       if (isEmpty) empty.asInstanceOf[That]
@@ -293,8 +304,11 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       }
     } else super.map(f)(bf)
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
   override def slice(from: Int, until: Int): OptimusDoubleSeq = {
     val lo = Math.min(Math.max(from, 0), data.length)
     val hi = Math.min(Math.max(until, lo), data.length)
@@ -303,10 +317,13 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     else unsafeFromArray(Arrays.copyOfRange(data, lo, hi))
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++[B >: Double, That](that: GenTraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def ++[B >: Double, That](that: GenTraversableOnce[B])(implicit
+      bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     if ((bf eq genCBF) && that.hasDefiniteSize) {
       // here we know that B =:= Double and That =:= OptimusDoubleSeq
       val thatLength = that.size
@@ -320,16 +337,22 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       }
     } else super.++(that)(bf)
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++:[B >: Double, That](that: Traversable[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def ++:[B >: Double, That](that: Traversable[B])(implicit
+      bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     ++:(that.asInstanceOf[TraversableOnce[B]])
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode for known results*/
-  override def ++:[B >: Double, That](that: TraversableOnce[B])(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying when new data is needed, and this/empty to save memory and later hashcode
+   * for known results
+   */
+  override def ++:[B >: Double, That](that: TraversableOnce[B])(implicit
+      bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     if ((bf eq genCBF) && that.hasDefiniteSize) {
       // here we know that B =:= Double and That =:= OptimusDoubleSeq
       val thatLength = that.size
@@ -343,8 +366,10 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       }
     } else super.++:(that)(bf)
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
   override def :+[B >: Double, That](that: B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     if (bf eq genCBF) {
       // here we know that B =:= Double and That =:= OptimusDoubleSeq
@@ -353,22 +378,26 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       unsafeFromArray(newData).asInstanceOf[That]
     } else super.:+(that)(bf)
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
   override def +:[B >: Double, That](that: B)(implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That =
     if (bf eq genCBF) {
       // here we know that B =:= Double and That =:= OptimusDoubleSeq
       val newData = new Array[Double](data.length + 1)
-      //do th arraycopy first as JVM elides the clear
+      // do th arraycopy first as JVM elides the clear
       System.arraycopy(data, 0, newData, 1, data.length)
       newData(0) = that.asInstanceOf[Double]
       unsafeFromArray(newData).asInstanceOf[That]
     } else super.:+(that)(bf)
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
-  override def padTo[B >: Double, That](len: Int, elem: B)(
-      implicit bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That = {
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
+  override def padTo[B >: Double, That](len: Int, elem: B)(implicit
+      bf: CanBuildFrom[OptimusDoubleSeq, B, That]): That = {
     if (bf eq genCBF) {
       // here we know that B =:= Double and That =:= OptimusDoubleSeq
       if (length <= data.length) this.asInstanceOf[That]
@@ -380,13 +409,17 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     } else super.padTo(len, elem)
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
   override def copyToArray[B >: Double](xs: Array[B], start: Int, len: Int): Unit =
     System.arraycopy(data, 0, xs, start, Math.min(start + len, data.length))
 
-  /** @inheritdoc
-   *             optimised to avoid boxing, if the function is explicitly [[Double]]*/
+  /**
+   * @inheritdoc
+   * optimised to avoid boxing, if the function is explicitly [[Double]]
+   */
   override def foreach[U](f: Double => U): Unit = {
     var i = 0
     val len = length
@@ -396,13 +429,15 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     }
   }
 
-  /** @inheritdoc
-   *             optimised to use efficient array copying*/
+  /**
+   * @inheritdoc
+   * optimised to use efficient array copying
+   */
   override def toArray[B >: Double](implicit B: ClassTag[B]): Array[B] = {
     if (B.runtimeClass == classOf[Double]) {
       // here we know that B =:= Double
 
-      //if length is 0, we can share
+      // if length is 0, we can share
       (if (data.length == 0) data
        else data.clone()).asInstanceOf[Array[B]]
     } else super.toArray
@@ -449,7 +484,7 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     } finally builder.returnBorrowed()
 
   }
-  //non collection methods
+  // non collection methods
   def zipWith(other: OptimusDoubleSeq)(f: (Double, Double) => Double): OptimusDoubleSeq = {
     if (this.isEmpty || other.isEmpty) empty
     else {
@@ -485,8 +520,11 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       else unsafeFromArray(newData)
     }
 
-  /** a bit like a .zipWithIndex.foldLeft or just foldLeft, but without the boxing and the intermediate collections
-   * Implementation note - we use FoldToDoubleWithIndex rather than a scala function type as Function3 is not @specialised  */
+  /**
+   * a bit like a .zipWithIndex.foldLeft or just foldLeft, but without the boxing and the intermediate collections
+   * Implementation note - we use FoldToDoubleWithIndex rather than a scala function type as Function3 is not
+   * \@specialised
+   */
   def foldLeftToDoubleWithIndex(initial: Double)(f: OptimusDoubleSeqFoldLeftWithIndex): Double = {
     var res = initial
     var i = 0
@@ -595,7 +633,7 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       }
   }
 
-  //noinspection ScalaUnusedSymbol
+  // noinspection ScalaUnusedSymbol
   @throws[ObjectStreamException]("supposedly needed by serialization")
   private[this] def readResolve(): AnyRef =
     if (data.isEmpty) empty else this

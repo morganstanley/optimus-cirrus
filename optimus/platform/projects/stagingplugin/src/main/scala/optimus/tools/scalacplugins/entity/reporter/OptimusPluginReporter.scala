@@ -18,6 +18,7 @@ import scala.collection.mutable
 import scala.reflect.internal.util.Position
 import scala.tools.nsc.Global
 import scala.tools.nsc.Reporting
+import scala.util.matching.Regex
 
 trait OptimusPluginReporter {
   val global: Global
@@ -28,17 +29,24 @@ trait OptimusPluginReporter {
 
   def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit = {
     val cfgLevel = pluginData.alarmConfig.getConfiguredLevel(alarm, pos)
-    val newLevel = if (isLocallySuppressed(alarm, pos) || isNew(alarm)) OptimusAlarmType.INFO else cfgLevel
+    val locallySuppressed = isLocallySuppressed(alarm, pos)
+    val hasNew = isNew(alarm)
+    val newLevel = if (locallySuppressed || hasNew) OptimusAlarmType.INFO else cfgLevel
 
     newLevel match {
       case OptimusAlarmType.ERROR   => global.reporter.error(pos, alarm.toString())
       case OptimusAlarmType.WARNING => global.reporter.warning(pos, alarm.toString())
       case OptimusAlarmType.INFO    =>
+        // when a `[NEW]` message is suppressed by nowarn, drop the `[NEW]` tag to avoid the
+        // message being re-promoted to Error in BSPTraceListener.
+        val msgNoNew =
+          if (hasNew && locallySuppressed) alarm.toString().replaceAllLiterally(OptimusAlarms.NewTag, "").trim()
+          else alarm.toString()
         // the prefix [SUPPRESSED] is later removed by OBT and the compilation message lifted back to warning.
         // This allows us to suppress a warning at the compile level, but not at the user level.
-        val msg: String = if (!alarm.isInfo) s"${OptimusAlarms.SuppressedTag} $alarm" else alarm.toString()
+        val msg: String = if (!alarm.isInfo) s"${OptimusAlarms.SuppressedTag} $msgNoNew" else msgNoNew
         global.reporter.echo(pos, msg)
-      case OptimusAlarmType.SILENT => //ignore it!
+      case OptimusAlarmType.SILENT => // ignore it!
       case _                       => throw new IllegalStateException(s"unexpected level $newLevel")
     }
   }
@@ -54,14 +62,18 @@ trait OptimusPluginReporter {
 
   // Check if `alarm` is suppressed at `pos` without actually issuing it (see the INFO case above)
   private def isLocallySuppressed(alarm: OptimusPluginAlarm, pos: Position): Boolean = {
-    // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
-    val asMessage = Reporting.Message.Plain(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
-    val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]
-    if (suppressed && alarm.mandatory) {
-      // tsk tsk, now you get TWO errors.
-      global.globalError(pos, s"Optimus: cannot suppress mandatory alarm #${alarm.id.sn}")
-      false
-    } else suppressed
+    if (alarm.toString().contains("@nowarn"))
+      false // Very silly to suppress an error that's already about illegal suppression
+    else {
+      // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
+      val asMessage = Reporting.Message.Plain(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
+      val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]
+      if (suppressed && alarm.scalaMandatory) {
+        // If we report this as an error, we'll abort before showing the actual illegal suppression, so make it a warning.
+        global.reporter.warning(pos, s"Optimus: cannot suppress mandatory alarm #${alarm.id.sn}")
+        false
+      } else suppressed
+    }
   }
 
   // Allow for new alarms (signified by "[NEW]" in the message) to not immediately fail the build
@@ -128,8 +140,9 @@ trait OptimusPluginReporter {
     global.abort(s"Optimus internal error. Please contact the graph team: $msg")
   }
 
-  /** Creates a passable approximation of an expression which will create this tree.
-   * Useful to use with [[internalErrorAbort]] for when they ask for help, for some value of "they".
+  /**
+   * Creates a passable approximation of an expression which will create this tree. Useful to use with
+   * [[internalErrorAbort]] for when they ask for help, for some value of "they".
    */
   def printRaw(tree: global.Tree): String = {
     import java.io._

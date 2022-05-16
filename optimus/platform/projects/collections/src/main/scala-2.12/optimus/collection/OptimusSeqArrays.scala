@@ -38,7 +38,7 @@ private[collection] object OptimusArraysSeq {
       }
       res
     }
-    //it doesn't make sense for the hashes to be for all of the data
+    // it doesn't make sense for the hashes to be for all of the data
     assert((knownHashesOrNull eq null) || knownHashesOrNull.length < arrays.length)
     new OptimusArraysSeq[T](arrays, offsets, knownHashesOrNull)
   }
@@ -54,9 +54,9 @@ private[collection] final class OptimusArraysSeq[+T] private (
 
   override def length = offsets(offsets.length - 1)
 
-  //its really a lazy val, just reset on serialisation
+  // its really a lazy val, just reset on serialisation
   @transient private[this] var hashes = knownHashes
-  //its racey, run hashes only transitions from null => array
+  // its racey, run hashes only transitions from null => array
   // should not really need to cop, as the builder should respect the immutability, but safer to not trust
   private[collection] def copyKnownHashes = if (hashes eq null) null else hashes.clone()
 
@@ -123,8 +123,8 @@ private[collection] final class OptimusArraysSeq[+T] private (
     other match {
       case that: OptimusArraySeq[_] =>
         length == that.length &&
-          this.hashCode == that.hashCode &&
-          compare(this.arrays, Array(that.data))
+        this.hashCode == that.hashCode &&
+        compare(this.arrays, Array(that.data))
       case that: OptimusArraysSeq[_] =>
         (this eq that) || (length == that.length &&
           this.hashCode == that.hashCode &&
@@ -273,11 +273,11 @@ private[collection] final class OptimusArraysSeq[+T] private (
     result
   }
 
-  /** @inheritdoc
-   * optimised to avoid builder creation
-   * optimised to reduce allocation and return this if the result would == this
-   * optimised to reduce allocation where one of the arrays transformed is identical (structural sharing)
-   * optimised to maintain known partial hashes
+  /**
+   * @inheritdoc
+   * optimised to avoid builder creation optimised to reduce allocation and return this if the result would == this
+   * optimised to reduce allocation where one of the arrays transformed is identical (structural sharing) optimised to
+   * maintain known partial hashes
    */
   override def map[B, That](f: T => B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
     if (isCompatableCBF(bf)) {
@@ -339,14 +339,14 @@ private[collection] final class OptimusArraysSeq[+T] private (
     }
   }
   // lo and hi are sensible and always not everything
-  //hi is exclusive
+  // hi is exclusive
   private[collection] def sliceSafe(lo: Int, hi: Int): OptimusSeq[T] = {
     val from_target = Arrays.binarySearch(offsets, lo)
 
     val to_target = Arrays.binarySearch(offsets, hi)
 
     if (from_target >= 0 && to_target == from_target + 1) {
-      //special case - its the whole of an existing array
+      // special case - its the whole of an existing array
       val partialHash = if (from_target == 0 && hashes != null) hashes(0) else 0
       OptimusArraySeq.unsafeFromArray[T](arrays(from_target), partialHash)
     } else {
@@ -356,7 +356,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
         var toCopy = hi - lo
         while (toCopy > 0) {
 
-          //share the array if we can
+          // share the array if we can
           if (inputCopyStart == 0 && toCopy >= arrays(inputArrayIndex).length) {
             b.addSharedArray(arrays(inputArrayIndex))
             toCopy -= arrays(inputArrayIndex).length
@@ -487,7 +487,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
         .asInstanceOf[That]
     } else super.collect(pf)
   }
-  //extension methods
+  // extension methods
   /** similar to .zipWithIndex.map, but without the tupling */
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val builder = OptimusSeq.borrowBuilder[B]

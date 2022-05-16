@@ -18,6 +18,8 @@ import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.reflect.internal.Flags
+import scala.reflect.internal.ModifierFlags
 import scala.reflect.internal.util.Position
 import scala.reflect.internal.util.SourceFile
 import scala.reflect.internal.util.TriState
@@ -30,11 +32,7 @@ import scala.tools.nsc.transform.TypingTransformers
 /**
  * Automated code rewrites and supporting infrastructure.
  */
-class RewriteComponent(
-    val pluginData: PluginData,
-    val global: Global,
-    val phaseInfo: OptimusPhaseInfo,
-    stagingEnabled: => Boolean = true)
+class RewriteComponent(val pluginData: PluginData, val global: Global, val phaseInfo: OptimusPhaseInfo)
     extends PluginComponent
     with TypingTransformers
     with OptimusPluginReporter
@@ -63,19 +61,36 @@ class RewriteComponent(
     override def apply(unit: CompilationUnit): Unit = {
       val config = pluginData.rewriteConfig
       if (config.anyEnabled) {
-        val underlyingFile = Patches.underlyingFile(unit.source).getOrElse(return)
+        val underlyingFile = Patches
+          .underlyingFile(unit.source)
+          .getOrElse(return
+          )
         val state = new RewriteState(ParseTree(unit.source))
         def go(bool: Boolean, trans: RewriteTypingTransformer) =
           if (bool) trans.transform(unit.body)
         go(config.rewriteCollectionSeq, new CollectionSeqTransformer(unit, state)) // Seq -> collection.Seq
         go(config.rewriteMapValues, new MapValuesRewriter(unit, state))
-        go(config.rewriteBreakOutOps, new BreakoutToIteratorOp(unit, state)) // c.op()(breakOut) => c.iterator.op().to(R)
-        go(config.rewriteBreakOutArgs, new BreakOutArgsRewriter(unit, state)) // collection.breakOut -> pack.Collection.breakOut
-        go(config.rewriteVarargsToSeq, new VarargsToSeq(unit, state)) // f(xs: _*) -> f(xs.toSeq: _*) if xs is not immutable.Seq
-        go(config.rewriteMapConcatWiden, new MapConcat(unit, state)) // Map[A, X] ++ Map[B, Y]: add comment, 2.13 doesn't lub keys
+        go(
+          config.rewriteBreakOutOps,
+          new BreakoutToIteratorOp(unit, state)
+        ) // c.op()(breakOut) => c.iterator.op().to(R)
+        go(
+          config.rewriteAsyncBreakOutOps,
+          new AsyncBreakOutToCompanionBreakOut(unit, state)
+        ) // collection.breakOut -> pack.Collection.breakOut
+        go(config.rewriteToConversion, new ToConversion(unit, state))
+        go(
+          config.rewriteVarargsToSeq,
+          new VarargsToSeq(unit, state)
+        ) // f(xs: _*) -> f(xs.toSeq: _*) if xs is not immutable.Seq
+        go(
+          config.rewriteMapConcatWiden,
+          new MapConcat(unit, state)
+        ) // Map[A, X] ++ Map[B, Y]: add comment, 2.13 doesn't lub keys
         go(config.rewriteNilaryInfix, new NilaryInfixRewriter(unit, state)) // obj foo () -> obj.foo()
         go(config.unitCompanion, new UnitCompanion(unit, state)) // val x: Unit = Unit -> val x: Unit = ()
         go(config.anyFormatted, new AnyFormatted(unit, state)) // value.formatted("%fmt") -> f"$value%fmt"
+        go(config.rewriteCaseClassToFinal, new CaseClassTransformer(unit, state))
         if (state.newImports.nonEmpty) new AddImports(unit, state).run(unit.body)
         patchSets += Patches(state.patches.toArray, unit.source, underlyingFile, encoding)
       }
@@ -118,7 +133,8 @@ class RewriteComponent(
           index(x.pos) = x
           x match {
             case _: Ident =>
-              index(x.pos.focusStart) = x // Needed for @storable @entity class C(val x: Seq[Int]), maybe fixable in the entity plugin instead?
+              index(x.pos.focusStart) =
+                x // Needed for @storable @entity class C(val x: Seq[Int]), maybe fixable in the entity plugin instead?
             case _ =>
           }
         }
@@ -245,9 +261,9 @@ class RewriteComponent(
     }
 
     /**
-     * traverse qualifier, type args and argss of an application.
-     * calling `super.traverse(tree)` can lead to the same case triggering again, e.g., in
-     * `Apply(TypeApply(f, targs), args)`, the `Apply` and `TypeApply` trees might both match.
+     * traverse qualifier, type args and argss of an application. calling `super.traverse(tree)` can lead to the same
+     * case triggering again, e.g., in `Apply(TypeApply(f, targs), args)`, the `Apply` and `TypeApply` trees might both
+     * match.
      */
     protected def traverseApplicationRest(tree: Tree): Unit = tree match {
       case Application(fun, targs, argss) =>
@@ -331,14 +347,14 @@ class RewriteComponent(
 
     /**
      * Select `.code`, wrap in parens if it's infix. Example:
-     *  - tree: `coll.mapValues[T](fun)`
-     *  - code: `toMap`
+     *   - tree: `coll.mapValues[T](fun)`
+     *   - code: `toMap`
      *
      * `tree` could be infix `coll mapValues fun` in source.
      *
      * `reuseParens`: if `tree` already has parens around it, whether to insert new parens or not. example:
-     *    - `foo(coll mapValues fun)`      => cannot reuse parens, need `foo((coll mapValues fun).toMap)`
-     *    - `(col map f).map(g)(breakOut)` => can reuse parens, `(col map f).iterator.map(g).to(T)`
+     *   - `foo(coll mapValues fun)` => cannot reuse parens, need `foo((coll mapValues fun).toMap)`
+     *   - `(col map f).map(g)(breakOut)` => can reuse parens, `(col map f).iterator.map(g).to(T)`
      */
     def selectFromInfix(tree: Tree, code: String, parseTree: ParseTree, reuseParens: Boolean): List[Patch] = {
       val patches = mutable.ListBuffer[Patch]()
@@ -397,6 +413,9 @@ class RewriteComponent(
     lazy val breakOutSym =
       definitions.getMemberMethod(rootMirror.getPackageObject("scala.collection"), TermName("breakOut"))
 
+    lazy val toSym =
+      definitions.getMemberMethod(rootMirror.getClassIfDefined("scala.collection.GenTraversableOnce"), TermName("to"))
+
     lazy val GenIterableLikeSym = rootMirror.getRequiredClass("scala.collection.GenIterableLike")
     lazy val CollectionMapSym = rootMirror.requiredClass[collection.Map[_, _]]
     lazy val ImmutableMapSym = rootMirror.requiredClass[collection.immutable.Map[_, _]]
@@ -411,6 +430,24 @@ class RewriteComponent(
     lazy val ArraySym = definitions.ArrayClass
     lazy val CollectionBitSetSym = rootMirror.requiredClass[collection.BitSet]
 
+    lazy val directConversions: Map[Symbol, String] = Map(
+      CollectionMapSym -> "toMap",
+      ImmutableMapSym -> "toMap",
+      CollectionSetSym -> "toSet",
+      ImmutableSetSym -> "toSet",
+      // Don't use toSeq, in 2.12 it calls toStream (unless overridden)
+      // Due to `fallbackStringCanBuildFrom`, `to[Seq]` and `(breakOut): Seq` build an IndexedSeq
+      CollectionSeqSym -> "toIndexedSeq",
+      ImmutableSeqSym -> "toIndexedSeq",
+      CollectionIndexedSeqSym -> "toIndexedSeq",
+      ImmutableIndexedSeqSym -> "toIndexedSeq",
+      ImmutableListSym -> "toList",
+      ImmutableVectorSym -> "toVector",
+      ArraySym -> "toArray"
+    )
+
+    lazy val OptimusAsyncBaseSym = rootMirror.getClassIfDefined("optimus.platform.AsyncBase")
+
     def isInferredArg(tree: Tree): Boolean = tree match {
       case tt: TypeTree => tt.original eq null
       case _ =>
@@ -422,27 +459,29 @@ class RewriteComponent(
     }
   }
 
-  private class BreakOutArgsRewriter(unit: CompilationUnit, state: RewriteState)
+  private class AsyncBreakOutToCompanionBreakOut(unit: CompilationUnit, state: RewriteState)
       extends RewriteTypingTransformer(unit) {
     import BreakoutInfo._
 
+    private def needImport(companion: Symbol) = companion.name.toString match {
+      case "OptimusSeq" | "OptimusDoubleSeq" => false
+      case _                                 => true
+    }
+
     override def transform(tree: Tree): Tree = tree match {
-      case _ if breakOutSym == NoSymbol => tree
-      case Application(fun, targs, argss) if fun.symbol == breakOutSym =>
-        if (!state.eliminatedBreakOuts(tree)) {
-          val inferredBreakOut = targs.forall(isInferredArg) && mforall(argss)(isInferredArg)
-          if (inferredBreakOut) {
-            val renderer = new TypeRenderer(this)
-            if (targs.isEmpty) {
-              globalError(tree.pos, "empty targs: " + (tree, targs))
-            } else {
-              val companionStr = renderer.apply(targs.last.tpe.typeSymbol.tpeHK) + ".breakOut"
-              // println(s"tree=$tree adding breakout at ${tree.pos}")
-              state.patches += Patch(tree.pos, companionStr)
-            }
-          }
+      case _ if breakOutSym == NoSymbol || OptimusAsyncBaseSym == NoSymbol => tree
+
+      case Application(Select(coll, _), _, _ :+ List(bo @ Application(boFun, boTargs, _)))
+          if boFun.symbol == breakOutSym && coll.tpe.typeSymbol.isNonBottomSubClass(OptimusAsyncBaseSym) =>
+        val companion = boTargs.last.tpe.typeSymbol.companionModule
+        if (companion.exists) {
+          val breakOutStr = qualifiedSelectTerm(companion) + ".breakOut"
+          state.patches += Patch(bo.pos, breakOutStr)
+          if (needImport(companion))
+            state.newImports += OptimusCompatCollectionImport
         }
-        tree
+        super.transform(tree)
+
       case _ => super.transform(tree)
     }
   }
@@ -454,24 +493,16 @@ class RewriteComponent(
     // could use `.view`, but `++:` is deprecated in Iterable on 2.13 (not in Seq), so probably not worth it
     val breakOutMethods = Set("map", "collect", "flatMap", "++", "scanLeft", "zip", "zipAll")
 
-    lazy val directConversions: Map[Symbol, String] = Map(
-      CollectionMapSym -> "toMap", ImmutableMapSym -> "toMap",
-      CollectionSetSym -> "toSet", ImmutableSetSym -> "toSet",
-      // don't use toSeq, in 2.12 it calls toStream
-      CollectionSeqSym -> "toList", ImmutableSeqSym -> "toList",
-      CollectionIndexedSeqSym -> "toIndexedSeq", ImmutableIndexedSeqSym -> "toIndexedSeq",
-      ImmutableListSym -> "toList",
-      ImmutableVectorSym -> "toVector",
-      ArraySym -> "toArray"
-    )
     val Predef_fallbackStringCanBuildFrom = definitions.PredefModule.info.member(TermName("fallbackStringCanBuildFrom"))
 
     // coll.fun[targs](args)(breakOut) --> coll.iterator.fun[targs](args).to(Target)
     override def transform(tree: Tree): Tree = tree match {
       case Application(Select(coll, funName), _, argss :+ List(bo @ Application(boFun, boTargs, List(List(boArg)))))
           if boFun.symbol == breakOutSym =>
-        if (coll.tpe.typeSymbol.isNonBottomSubClass(GenIterableLikeSym) &&
-            breakOutMethods.contains(funName.decode)) {
+        if (
+          coll.tpe.typeSymbol.isNonBottomSubClass(GenIterableLikeSym) &&
+          breakOutMethods.contains(funName.decode)
+        ) {
           def patch(conversion: String): Unit = {
             state.patches ++= selectFromInfix(coll, "iterator", state.parseTree, reuseParens = true)
             state.patches += Patch(withEnclosingParens(bo.pos), conversion)
@@ -479,27 +510,52 @@ class RewriteComponent(
               state.patches ++= selectFromInfix(argss.head.head, "iterator", state.parseTree, reuseParens = false)
             state.eliminatedBreakOuts += bo
           }
-          val targetClass = boTargs.last.tpe.typeSymbol
           boArg match {
             case Application(fun, _, _) if fun.symbol == Predef_fallbackStringCanBuildFrom =>
               patch(".toIndexedSeq")
+
             case _ =>
-
-              val conversion = directConversions.get(targetClass) match {
-                case Some(conv) => s".$conv"
-                case _ =>
-                  val convertMethod =
-                    if (targetClass.isNonBottomSubClass(CollectionMapSym) || targetClass.isNonBottomSubClass(
-                      CollectionBitSetSym)) {
-                      state.newImports += OptimusCompatCollectionImport
-                      "convertTo"
-                    } else "to"
-                  state.newImports += CollectionCompatImport
-                  s".$convertMethod(${qualifiedSelectTerm(boTargs.last.tpe.typeSymbol.companionModule)})"
-
+              val targetClass = boTargs.last.tpe.typeSymbol
+              val companion = targetClass.companionModule
+              if (companion.exists) {
+                val conversion = directConversions.get(targetClass) match {
+                  case Some(conv) => s".$conv"
+                  case _ =>
+                    val convertMethod =
+                      if (
+                        targetClass.isNonBottomSubClass(CollectionMapSym) || targetClass.isNonBottomSubClass(
+                          CollectionBitSetSym)
+                      ) {
+                        state.newImports += OptimusCompatCollectionImport
+                        "convertTo"
+                      } else "to"
+                    state.newImports += CollectionCompatImport
+                    s".$convertMethod(${qualifiedSelectTerm(companion)})"
+                }
+                patch(conversion)
               }
-              patch(conversion)
           }
+        }
+        traverseApplicationRest(tree)
+        tree
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
+  private class ToConversion(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    import BreakoutInfo._
+    val isToMethod = new MethodMatcher(toSym)
+    override def transform(tree: Tree): Tree = tree match {
+      case Application(fun, targs, _) if isToMethod(fun.symbol) && !isInferredArg(targs.head) =>
+        val targetClass = targs.head.tpe.typeSymbol
+        val companion = targetClass.companionModule
+        if (companion.exists) {
+          val conversion = directConversions.getOrElse(targetClass, {
+            state.newImports += CollectionCompatImport
+            s"to(${ qualifiedSelectTerm(companion) })"
+          })
+          state.patches += Patch(tree.pos.withStart(fun.pos.point), conversion)
         }
         traverseApplicationRest(tree)
         tree
@@ -542,7 +598,42 @@ class RewriteComponent(
     }
   }
 
-  /** Rewrites Idents that refer to scala.Seq/IndexedSeq as collection.Seq (or scala.collection.Seq if qualification is needed) */
+  // rewrites non final non sealed abstract case classes to have the final
+  private class CaseClassTransformer(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    var inClass = false
+    private def alarmOnCaseClass(mods: Modifiers): Boolean =
+      !inClass && mods.isCase && !(mods.isSealed && mods.hasAbstractFlag) && !mods.isFinal
+
+    override def transform(tree: Tree): Tree = {
+      tree match {
+        case ClassDef(mods, _, _, _) if alarmOnCaseClass(mods) =>
+          // these lines do the same thing as mods.calculateFlagString but put the access modifiers first
+
+          // adding final flag and removing sealed flag
+          val basis = (mods.flags & ~ModifierFlags.SEALED) | ModifierFlags.FINAL
+          val accessString = mods.accessString
+          val newModsStringAccessFirst =
+            s"${accessString}${if (accessString.length == 0) "" else " "}${mods.flagBitsToString(basis & ~ModifierFlags.AccessFlags)}"
+          val newPos = tree.pos.withEnd(tree.pos.focus.end)
+          state.patches += Patch(newPos, s"$newModsStringAccessFirst class ")
+          tree
+
+        case _: ClassDef =>
+          val oldInClass = inClass
+          inClass = true
+          super.transform(tree)
+          inClass = oldInClass
+          tree
+
+        case _ => super.transform(tree)
+      }
+    }
+  }
+
+  /**
+   * Rewrites Idents that refer to scala.Seq/IndexedSeq as collection.Seq (or scala.collection.Seq if qualification is
+   * needed)
+   */
   private class CollectionSeqTransformer(unit: CompilationUnit, state: RewriteState)
       extends RewriteTypingTransformer(unit) {
     case class Rewrite(name: String, typeAlias: Symbol, termAlias: Symbol, cls: Symbol, module: Symbol)
@@ -597,8 +688,8 @@ class RewriteComponent(
       case ctx =>
         ctx.enclosingContextChain.iterator
           .map(_.tree)
-          .collect {
-            case imp: Import => imp
+          .collect { case imp: Import =>
+            imp
           }
           .toList
     }
@@ -618,21 +709,21 @@ class RewriteComponent(
 
     // no need to add `toMap` if it's already there, or in `m.mapValues(f).apply(x)`
     // curTree is the next outer tree (tracked by TypingTransformer)
-    def skipRewrite = PartialFunction.cond(curTree) {
-      case SelectSym(_, ToMap() | MapApply()) => true
+    def skipRewrite = PartialFunction.cond(curTree) { case SelectSym(_, ToMap() | MapApply()) =>
+      true
     }
 
     private object IsGroupMap {
       def unapply(tree: Tree): Option[(Select, Select, Function, Tree)] = tree match {
         case SelectSym(tree, ToMap()) => unapply(tree)
         case Application(
-            mapValues @ SelectSym(Application(groupBy @ SelectSym(rec, GroupBy()), _, _), MapValues()),
-            _,
-            List(
+              mapValues @ SelectSym(Application(groupBy @ SelectSym(rec, GroupBy()), _, _), MapValues()),
+              _,
               List(
-                map @ Function(
-                  List(mapValuesParam),
-                  Application(mapMeth @ SelectSym(mapQual, MapMethod()), _, List(List(_), _*))))))
+                List(
+                  map @ Function(
+                    List(mapValuesParam),
+                    Application(mapMeth @ SelectSym(mapQual, MapMethod()), _, List(List(_), _*))))))
             if mapValuesParam.symbol == mapQual.symbol =>
           Some((groupBy, mapValues, map, mapMeth))
         case _ => None
@@ -663,7 +754,10 @@ class RewriteComponent(
               })
           }
         } // replace ".groupBy" with ".groupMap"
-        state.patches += Patch(Pos(mapValues.qualifier.pos.end, mapMeth.pos.end), "") // remove  ".mapValues { xs => xs.map"  (eating leading whitespace)
+        state.patches += Patch(
+          Pos(mapValues.qualifier.pos.end, mapMeth.pos.end),
+          ""
+        ) // remove  ".mapValues { xs => xs.map"  (eating leading whitespace)
         state.patches += Patch(Pos(map.pos.end, tree.pos.end), "") // remove  "}" or ").toMap"
         state.newImports += CollectionCompatImport
         traverseApplicationRest(tree)
@@ -699,7 +793,7 @@ class RewriteComponent(
     }
   }
   private class UnitCompanion(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
-    val unitModule = rootMirror.requiredModule[Unit.type]
+    val unitModule = definitions.UnitClass.companionModule
     override def transform(tree: Tree): Tree = tree match {
       case Application(sel: Select, targs, argss) if sel.qualifier.symbol == unitModule =>
         transformTrees(targs)

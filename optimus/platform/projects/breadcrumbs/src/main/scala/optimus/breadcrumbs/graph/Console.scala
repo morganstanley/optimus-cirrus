@@ -13,22 +13,10 @@ package optimus.breadcrumbs.graph
 
 import optimus.platform.utils.ClassPathUtils
 
-import scala.tools.nsc.Settings
-import scala.tools.nsc.interpreter.ILoop
+import optimus.scalacompat.repl.Repl
 
 object Console extends App {
-  val cl = new ConsoleLoop()
-  val settings = new Settings
-  settings.usejavacp.value = true
-  settings.classpath.value = ClassPathUtils.expandedApplicationClasspathString
-  settings.deprecation.value = true
-  cl.process(settings)
-}
-
-class ConsoleLoop extends ILoop {
-
-  override def prompt = "==> "
-  val initialCommands = """
+  val autoRun = """
   import optimus.breadcrumbs.crumbs.{Events => Ev}
   import optimus.breadcrumbs.crumbs.{EdgeType => Ed}
   import optimus.breadcrumbs.crumbs.{Properties=>P}
@@ -38,14 +26,5 @@ class ConsoleLoop extends ILoop {
   import optimus.breadcrumbs.crumbs.Properties.JsonImplicits._
   import Vertex._
   """
-
-  override def createInterpreter(): Unit = {
-    super.createInterpreter()
-    intp.interpret(initialCommands)
-  }
-
-  override def printWelcome(): Unit = {
-    echo("Breadcrumbs REPL")
-  }
-
+  Repl.run(autoRun, "==> ", "Breadcrumbs REPL", ClassPathUtils.expandedApplicationClasspathString)
 }

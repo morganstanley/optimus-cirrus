@@ -32,8 +32,8 @@ object FileUtils {
 
       usingQuietly(reader) { r =>
         r.readAll().asScala.toArray
-      }.map {
-        case Array(k, v) => (k, v)
+      }.map { case Array(k, v) =>
+        (k, v)
       }.toMap
     }.getOrElse(Map.empty)
   }

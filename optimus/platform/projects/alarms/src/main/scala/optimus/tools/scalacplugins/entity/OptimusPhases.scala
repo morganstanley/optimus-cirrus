@@ -44,6 +44,7 @@ object OptimusPhases {
     val optimus_generatenodemethods = "optimus_generatenodemethods"
     val optimus_asyncgraph = "optimus_asyncgraph"
     val optimus_autoasync = "optimus_autoasync"
+    val optimus_location_tag = "optimus_location_tag"
 
     val patmat = "patmat" // scalac phase: translate match expressions
     val superaccessors = "superaccessors" // scalac phase: add super accessors in traits and nested classes
@@ -78,8 +79,8 @@ object OptimusPhases {
   def phaseBlock(names: (String, String)*): List[OptimusPhaseInfo] = {
     names
       .sliding(3)
-      .map {
-        case Seq((prev, _), (name, desc), (next, _)) => OptimusPhaseInfo(name, desc, prev, next)
+      .map { case Seq((prev, _), (name, desc), (next, _)) =>
+        OptimusPhaseInfo(name, desc, prev, next)
       }
       .toList
   }
@@ -98,7 +99,7 @@ object OptimusPhases {
     _SAFE_EXPORT_CHECK,
     _APICHECK,
     _VAL_ACCESSORS,
-    _REF_CHECKS,
+    _REF_CHECKS
   ) = phaseBlock(
     typer -> "",
     StagingPhase.FORWARDING.nameAndDescription,
@@ -106,28 +107,50 @@ object OptimusPhases {
     optimus_entity_relationship -> "generate metadata for the ComputeEntityRelationships app (likely redundant with optimus_export)",
     optimus_propertyinfo -> "create property info vals on entity companions",
     optimus_safeInteropExportCheck -> "validate uses of @exported annotation",
-    optimus_apicheck -> "warn on deprecated API usage",
+    optimus_apicheck -> "warn on deprecated API usage and other optimus API misuses",
     optimus_valaccessors -> "transform stored vals and add entity args methods",
     optimus_refchecks -> "check sundry optimus-specific requirements",
     superaccessors -> ""
   )
-  private val List(_EMBEDDABLE, _ENTITY_INFO, _AUTOASYNC) =
-    phaseBlock(
-      pickler -> "",
-      optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes",
-      optimus_entityinfo -> "generate info/$info members for entities",
-      optimus_autoasync -> "prepare collection and Option methods for asynchronous transform",
-      patmat -> ""
-    )
-  private val List(_GENERATE_NODE_METHODS, _NODE_LIFT) =
-    phaseBlock(
-      patmat -> "",
-      optimus_generatenodemethods -> "generate $queued/$newNode methods for nodes",
-      optimus_nodelift -> "transform arguments to @nodeLift parameters",
-      refchecks -> ""
-    )
+  // TODO:(OPTIMUS-24229) Remove is212 branches after upgrade to Scala 2.13.x is fully complete
+  private val is212 = scala.util.Properties.releaseVersion.getOrElse("").contains("2.12.")
+  private val List(_EMBEDDABLE, _ENTITY_INFO, _AUTOASYNC, _GENERATE_LOCATION_TAG, _GENERATE_NODE_METHODS, _NODE_LIFT) = {
+    val optimus_embeddable_described = optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes"
+    val optimus_entityinfo_described = optimus_entityinfo -> "generate info/$info members for entities"
+    val optimus_location_tag_described = optimus_location_tag -> "generate unique location tag"
+    val optimus_autoasync_described = optimus_autoasync -> "prepare collection and Option methods for asynchronous transform"
+    val optimus_generatenodemethods_described = optimus_generatenodemethods -> "generate $queued/$newNode methods for nodes"
+    val optimus_nodelift_described = optimus_nodelift -> "transform arguments to @nodeLift parameters"
+    if (is212) {
+      phaseBlock(
+        pickler -> "",
+        optimus_embeddable_described,
+        optimus_entityinfo_described,
+        optimus_location_tag_described,
+        optimus_autoasync_described,
+        patmat -> ""
+      ) ++ phaseBlock(
+        patmat -> "",
+        optimus_generatenodemethods_described,
+        optimus_nodelift_described,
+        refchecks -> ""
+      )
+    } else {
+      phaseBlock(
+        pickler -> "",
+        optimus_embeddable_described,
+        optimus_entityinfo_described,
+        optimus_location_tag_described,
+        optimus_autoasync_described,
+        optimus_generatenodemethods_described,
+        optimus_nodelift_described,
+        refchecks -> "",
+      )
+    }
+  }
+
   private val _ASYNC_GRAPH =
-    OptimusPhaseInfo(optimus_asyncgraph, "create node classes and state machines", refchecks, explicitouter)
+    OptimusPhaseInfo(optimus_asyncgraph, "create node classes and state machines", if (is212) refchecks else patmat, explicitouter)
   private val List(_OPTIMUS_CONSTRUCTORS, _POSITION) =
     phaseBlock(
       mixin -> "",
@@ -152,6 +175,7 @@ object OptimusPhases {
   val EMBEDDABLE = _EMBEDDABLE
   val ENTITY_INFO = _ENTITY_INFO
   val AUTOASYNC = _AUTOASYNC
+  val GENERATE_LOCATION_TAG = _GENERATE_LOCATION_TAG
   val GENERATE_NODE_METHODS = _GENERATE_NODE_METHODS
   val NODE_LIFT = _NODE_LIFT
   val ASYNC_GRAPH = _ASYNC_GRAPH

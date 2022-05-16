@@ -14,6 +14,7 @@ package optimus.git.diffparser.model
 import java.util.regex.Pattern
 
 import scala.collection.immutable.Seq
+import scala.collection.compat._
 
 final case class Range(lineStart: Int, lineCount: Int)
 
@@ -44,10 +45,12 @@ object Hunk {
     val matcher = LineRangePattern.matcher(currentLine)
     if (matcher.matches) {
       val range1Start = matcher.group(1)
-      val range1Count = if (matcher.group(2) != null) { matcher.group(2) } else { "1" }
+      val range1Count = if (matcher.group(2) != null) { matcher.group(2) }
+      else { "1" }
       val fromRange: Range = Range(range1Start.toInt, range1Count.toInt)
       val range2Start = matcher.group(3)
-      val range2Count = if (matcher.group(4) != null) { matcher.group(4) } else { "1" }
+      val range2Count = if (matcher.group(4) != null) { matcher.group(4) }
+      else { "1" }
       val toRange: Range = Range(range2Start.toInt, range2Count.toInt)
       Hunk(fromRange, toRange, Seq.empty)
     } else {
@@ -146,7 +149,7 @@ final case class Diff(fromFileName: String, toFileName: String, headerLines: Seq
       // example line: 'index 22e835517..e06a070ca 100644'
       headerLines
         .find(_.startsWith("index"))
-        .map(_.split(" ").to[Seq])
+        .map(_.split(" ").to(Seq))
         .fold("")(_.last)
     }
 

@@ -43,7 +43,9 @@ class PluginData(private val global: Global) {
       // if the compiler's classpath caching is not enabled, manually close the classloader else it can be left open
       // which causes the file lock on the Jar to be held, preventing recompilation of the plugin
       val noCache = global.settings.CachePolicy.None
-      if (global.settings.YcacheMacroClassLoader.value == noCache && global.settings.YcachePluginClassLoader.value == noCache) {
+      if (
+        global.settings.YcacheMacroClassLoader.value == noCache && global.settings.YcachePluginClassLoader.value == noCache
+      ) {
         import scala.reflect.internal.util.ScalaClassLoader.URLClassLoader
         getClass.getClassLoader match {
           case cl: URLClassLoader =>
@@ -73,7 +75,7 @@ class PluginData(private val global: Global) {
       OptimusAlarms.get(id) match {
         case None =>
           sys.error(s"Unknown alarm id $id")
-        case Some(alarm) if alarm.mandatory && alarm.id.tpe != OptimusAlarmType.INFO =>
+        case Some(alarm) if alarm.obtMandatory && alarm.id.tpe != OptimusAlarmType.INFO =>
           sys.error(s"Cannot ignore mandatory alarm id $id")
         case Some(_: OptimusAlarmBuilder) => // ok
       }
@@ -124,14 +126,16 @@ class PluginData(private val global: Global) {
     var rewriteCollectionSeq: Boolean = false
     var rewriteMapValues: Boolean = false
     var rewriteBreakOutOps = false
-    var rewriteBreakOutArgs = false
+    var rewriteAsyncBreakOutOps = false
+    var rewriteToConversion = false
     var rewriteVarargsToSeq = false
     var rewriteMapConcatWiden = false
     var rewriteNilaryInfix = false
     var unitCompanion = false
     var anyFormatted = false
+    var rewriteCaseClassToFinal = false
     def anyEnabled =
-      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteBreakOutArgs || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || unitCompanion || anyFormatted
+      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || unitCompanion || anyFormatted || rewriteCaseClassToFinal
 
     // disabled in some unit tests
     var useOptimusCompat: Boolean = true

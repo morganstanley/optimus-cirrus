@@ -45,16 +45,16 @@ import scala.collection.mutable.ArrayBuffer
 
 class CrumbMergerArgs {
   @ArgOption(name = "--aftercomplete")
-  var waitAfterComplete = 1000l
+  var waitAfterComplete = 1000L
 
   @ArgOption(name = "--completion")
   var completionRegexString = "Completed|AppCompleted|RuntimeShutDown|DalClientRespRcvd"
 
   @ArgOption(name = "--aftersilence")
-  var waitAfterSilence: Long = 3600 * 1000l
+  var waitAfterSilence: Long = 3600 * 1000L
 
   @ArgOption(name = "--progress")
-  var progress = 0l
+  var progress = 0L
 
   @ArgOption(name = "--input", handler = classOf[StringHandler])
   var name: Option[String] = None
@@ -101,9 +101,9 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
   private val vertexCompletionTimes = mutable.Map.empty[String, Long]
   private val vertexMaps = vertices :: vertexUpdateTimes :: vertexCompletionTimes :: Nil
 
-  private var nVertex = 0l
-  private var purged = 0l
-  private var i = 0l
+  private var nVertex = 0L
+  private var purged = 0L
+  private var i = 0L
 
   // Look for a vertex that we already know about, and create a  new one if necessary.
   private def getExisting(vuid: String, uuid: String, t: Long): Vertex =
@@ -138,17 +138,19 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
   private def process(in: InputStream, f: Vertex => Unit): Unit = {
 
     Source.fromInputStream(in).getLines.foreach { line =>
-      for (crumb: Map[String, JsValue] <- Try(line.parseJson.convertTo[Map[String, JsValue]]);
-           // Actual id deriving from the publishing app
-           appVuid <- crumb.getAs[String](Headers.VertexId);
-           appUuid <- crumb.getAs[String](Headers.Uuid);
-           // Special treatment of replicas, which should have original ownership restored
-           replica = crumb.getAs[ChainedID]("replicaFrom");
-           vuid <- replica.map(_.vertexId) orElse Some(appVuid);
-           uuid <- replica.map(_.repr) orElse Some(appUuid);
-           t <- crumb.getAs[Long](Headers.Time);
-           ctype <- crumb.getAs[String]("crumb");
-           src = crumb.getAs[String]("src")) {
+      for (
+        crumb: Map[String, JsValue] <- Try(line.parseJson.convertTo[Map[String, JsValue]]);
+        // Actual id deriving from the publishing app
+        appVuid <- crumb.getAs[String](Headers.VertexId);
+        appUuid <- crumb.getAs[String](Headers.Uuid);
+        // Special treatment of replicas, which should have original ownership restored
+        replica = crumb.getAs[ChainedID]("replicaFrom");
+        vuid <- replica.map(_.vertexId) orElse Some(appVuid);
+        uuid <- replica.map(_.repr) orElse Some(appUuid);
+        t <- crumb.getAs[Long](Headers.Time);
+        ctype <- crumb.getAs[String]("crumb");
+        src = crumb.getAs[String]("src")
+      ) {
         val zdt = toZDT(t)
         i = i + 1
         if (progress > 0 && (i % progress) == 0)
@@ -173,9 +175,11 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
               vertexCompletionTimes(vuid) = t
           }
         } else if (ctype == "Edge" || ctype == "Host") {
-          for (edge <- crumb.getAs[String]("edgeType");
-               pvuid <- crumb.getAs[String]("pvuid");
-               puuid <- crumb.getAs[String]("parent")) {
+          for (
+            edge <- crumb.getAs[String]("edgeType");
+            pvuid <- crumb.getAs[String]("pvuid");
+            puuid <- crumb.getAs[String]("parent")
+          ) {
             val existingParentVertex = getExisting(pvuid, puuid, t)
             insertEdges(edge)(existingVertex, vuid, uuid)(existingParentVertex, pvuid, puuid)
           }
@@ -198,8 +202,8 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
 
         if ((i % cleanup) == 0) {
           val done: Seq[String] = vertexCompletionTimes
-            .filter {
-              case (_, tc) => tc < (t - cleanup)
+            .filter { case (_, tc) =>
+              tc < (t - cleanup)
             }
             .keys
             .toSeq
@@ -234,8 +238,10 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
 
     // Look for uuid matches between orphans and leaves.  This should not be necessary if vuids are correctly propagated
     if (args.inverVuid) {
-      for ((uuid, vc) <- orphans; // child
-           vp <- leaves.get(uuid)) {
+      for (
+        (uuid, vc) <- orphans; // child
+        vp <- leaves.get(uuid)
+      ) {
         // parent
         val tFirst = if (vc.tFirst.isBefore(vp.tFirst)) vc.tFirst else vp.tFirst
         val tLast = if (vc.tLast.isAfter(vp.tLast)) vc.tLast else vp.tLast
@@ -251,7 +257,7 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
       }
     }
 
-    Vertex.connect(vertices)
+    Vertex.connect(vertices.toSeq)
     vertices
 
   }

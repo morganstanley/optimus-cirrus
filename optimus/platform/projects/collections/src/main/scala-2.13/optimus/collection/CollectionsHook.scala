@@ -15,44 +15,11 @@ import java.util
 
 import optimus.collection.OptimusSeq
 
-import scala.collection.WrappedCanBuildFrom
 import scala.collection.generic.CanBuildFrom
 import org.slf4j.LoggerFactory
-
-import scala.collection.WrappedCanBuildFrom
 
 object CollectionsHook {
   val log = LoggerFactory.getLogger(this.getClass)
 
-  private[this] val allOptimusSeqCompatableCBF = new util.IdentityHashMap[AnyRef, String]()
-  private def addCBF(cbf: CanBuildFrom[_, _, _], comment: String): Unit = {
-    val existing = allOptimusSeqCompatableCBF.put(cbf, comment)
-    if (existing ne null) {
-      log.info(s"shared canBuildFrom?? $existing, $comment")
-    }
-  }
-  private def checkNotPresent(cbf: CanBuildFrom[_, _, _], comment: String): Unit = {
-    val existing = allOptimusSeqCompatableCBF.remove(cbf)
-    if (existing ne null) {
-      log.warn(s"shared excluded canBuildFrom?? $existing, $comment")
-    }
-  }
-  addCBF(OptimusSeq.canBuildFrom[String], "OptimusSeq")
-  addCBF(scala.collection.immutable.IndexedSeq.canBuildFrom[String], "immutable.IndexedSeq")
-  addCBF(scala.collection.IndexedSeq.canBuildFrom[String], "collection.IndexedSeq")
-  addCBF(scala.collection.immutable.Seq.canBuildFrom[String], "immutable.Seq")
-  addCBF(scala.collection.Seq.canBuildFrom[String], "collection.Seq")
-  addCBF(scala.collection.immutable.Iterable.canBuildFrom[String], "scala.collection.immutable.Iterable")
-  addCBF(scala.collection.Iterable.canBuildFrom[String], "scala.collection.Iterable")
-  addCBF(scala.collection.immutable.Traversable.canBuildFrom[String], "immutable.Traversable")
-  addCBF(scala.collection.Traversable.canBuildFrom[String], "collection.Traversable")
-
-  checkNotPresent(Vector.canBuildFrom[String], "Vector")
-  checkNotPresent(List.canBuildFrom[String], "List")
-
-  def isOptimusSeqCompatibleCBF(cbf: CanBuildFrom[_, _, _]): Boolean = {
-    allOptimusSeqCompatableCBF.containsKey(cbf) ||
-    (cbf.isInstanceOf[WrappedCanBuildFrom[_, _, _]] && isOptimusSeqCompatibleCBF(
-      cbf.asInstanceOf[WrappedCanBuildFrom[_, _, _]].wrapped))
-  }
+  def isOptimusSeqCompatableCBF(cbf: CanBuildFrom[_, _, _]): Boolean = false
 }

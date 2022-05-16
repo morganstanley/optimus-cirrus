@@ -12,10 +12,10 @@
 package msjava.slf4jutils
 
 /**
- * This package contains utility classes and methods to use the SLF4J logging API from scala.  The three major components
+ * This package contains utility classes and methods to use the SLF4J logging API from scala. The three major components
  * contained within this package are:
- *    - Factory methods for obtaining a logger: [[msjava.slf4jutils.scalalog]].getLogger
- *    - An adapter for the SLF4J Logger interface: [[msjava.slf4jutils.scalalog.Logger]]
+ *   - Factory methods for obtaining a logger: [[msjava.slf4jutils.scalalog]].getLogger
+ *   - An adapter for the SLF4J Logger interface: [[msjava.slf4jutils.scalalog.Logger]]
  *
  * Log statements are automatically guarded so that the arguments are not evaluated when the log layer is disabled.
  */
@@ -33,7 +33,8 @@ package object scalalog {
   /**
    * Factory method to obtain a [[msjava.slf4jutils.scalalog.Logger]] with any [[String]] as a name
    *
-   * @param loggerName the string to use as the logger name
+   * @param loggerName
+   *   the string to use as the logger name
    */
   def getLogger(loggerName: String): Logger = {
     new Logger(factory.getLogger(loggerName))
@@ -45,7 +46,8 @@ package object scalalog {
   /**
    * Factory method to obtain a [[msjava.slf4jutils.scalalog.Logger]] from a Class[_] instance
    *
-   * @param clazz Class[_] instance for which to name the [[msjava.slf4jutils.scalalog.Logger]]
+   * @param clazz
+   *   Class[_] instance for which to name the [[msjava.slf4jutils.scalalog.Logger]]
    */
   def getLogger(clazz: Class[_]): Logger = {
     val className = clazz.getName
@@ -60,7 +62,8 @@ package object scalalog {
   /**
    * Factory method which should be used to obtain a [[msjava.slf4jutils.scalalog.Logger]] for Classes and Traits
    *
-   * @tparam T type for which to name the [[msjava.slf4jutils.scalalog.Logger]]
+   * @tparam T
+   *   type for which to name the [[msjava.slf4jutils.scalalog.Logger]]
    */
   def getLogger[T](implicit m: ClassTag[T]): Logger = {
     this.getLogger(m.runtimeClass)
@@ -69,7 +72,8 @@ package object scalalog {
   /**
    * Factory method which should be used to obtain a [[msjava.slf4jutils.scalalog.Logger]] for Objects
    *
-   * @param o object for which to name the [[msjava.slf4jutils.scalalog.Logger]]
+   * @param o
+   *   object for which to name the [[msjava.slf4jutils.scalalog.Logger]]
    */
   def getLogger[T](o: T)(implicit m: ClassTag[T]): Logger = {
     this.getLogger(m.runtimeClass)

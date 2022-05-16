@@ -933,7 +933,7 @@ trait ProductFormatsInstances { self: ProductFormats with StandardFormats =>
       P17: JF,
       T <: Product: ClassTag](
       construct: (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17) => T)
-    : RootJsonFormat[T] = {
+      : RootJsonFormat[T] = {
     val Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17) = extractFieldNames(
       classTag[T])
     jsonFormat(construct, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17)
@@ -1042,7 +1042,7 @@ trait ProductFormatsInstances { self: ProductFormats with StandardFormats =>
       P18: JF,
       T <: Product: ClassTag](
       construct: (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18) => T)
-    : RootJsonFormat[T] = {
+      : RootJsonFormat[T] = {
     val Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18) = extractFieldNames(
       classTag[T])
     jsonFormat(construct, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18)
@@ -1156,7 +1156,7 @@ trait ProductFormatsInstances { self: ProductFormats with StandardFormats =>
       P19: JF,
       T <: Product: ClassTag](
       construct: (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19) => T)
-    : RootJsonFormat[T] = {
+      : RootJsonFormat[T] = {
     val Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19) = extractFieldNames(
       classTag[T])
     jsonFormat(construct, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19)
@@ -1275,7 +1275,7 @@ trait ProductFormatsInstances { self: ProductFormats with StandardFormats =>
       P20: JF,
       T <: Product: ClassTag](
       construct: (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20) => T)
-    : RootJsonFormat[T] = {
+      : RootJsonFormat[T] = {
     val Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20) =
       extractFieldNames(classTag[T])
     jsonFormat(construct, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20)
@@ -1419,7 +1419,7 @@ trait ProductFormatsInstances { self: ProductFormats with StandardFormats =>
       P21: JF,
       T <: Product: ClassTag](
       construct: (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10, P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21) => T)
-    : RootJsonFormat[T] = {
+      : RootJsonFormat[T] = {
     val Array(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21) =
       extractFieldNames(classTag[T])
     jsonFormat(

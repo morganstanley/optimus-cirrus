@@ -35,7 +35,7 @@ package optimus.logging {
       PatternLayout.defaultConverterMap.put("d", classOf[DateConverter].getName)
       PatternLayout.defaultConverterMap.put("date", classOf[DateConverter].getName)
 
-      //we could also add some stuff about logging optimus aware stuff here
+      // we could also add some stuff about logging optimus aware stuff here
       true
     }
 
@@ -53,13 +53,13 @@ package optimus.logging {
       }
     }
     override def convert(event: ILoggingEvent): String = {
-      //Note - After Java 11 migration this can be improved
-      //to walk the stack
+      // Note - After Java 11 migration this can be improved
+      // to walk the stack
       val fqn: String = getFullyQualifiedName(event)
       val abbreviator = getAbbreviator
 
       if (abbreviator eq null) fqn
-      //the default abbreviator generates loads of garbage, so cache the responses
+      // the default abbreviator generates loads of garbage, so cache the responses
       else {
         val exists = cachedNames.get(fqn)
         if (exists ne null) exists

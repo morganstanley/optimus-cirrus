@@ -22,26 +22,17 @@ import scala.reflect.NameTransformer
 import scala.util.matching.Regex
 
 /**
- * The purpose of these objects is to catch otherwise over-general exceptions thrown by
- * legacy libraries that can't be immediately changed to throw more specific ones.
- * For example, if we had a root-solver function that threw
- *    RuntimeException("solution not within bounds")
- * we have reason to believe that is in fact a referentially-transparent result, one that
- * would occur every time the particular function arguments were passed, but we still don't
- * want to allow all Runtime Exceptions.
- * The example below would allow you to write
+ * The purpose of these objects is to catch otherwise over-general exceptions thrown by legacy libraries that can't be
+ * immediately changed to throw more specific ones. For example, if we had a root-solver function that threw
+ * RuntimeException("solution not within bounds") we have reason to believe that is in fact a referentially-transparent
+ * result, one that would occur every time the particular function arguments were passed, but we still don't want to
+ * allow all Runtime Exceptions. The example below would allow you to write
  *
- *    NodeTry {
- *      solve(f,a,b)
- *    } recover {
- *      case _:IllegalArgumentException => NaN
- *      case t@TestSolverExceptionProxy =>
- *         log.info(s"Harrumph: ${ t.getMessage} ")
- *         doSomethingCoverWithBounds()
- *    }
+ * NodeTry { solve(f,a,b) } recover { case _:IllegalArgumentException => NaN case t@TestSolverExceptionProxy =>
+ * log.info(s"Harrumph: ${ t.getMessage} ") doSomethingCoverWithBounds() }
  *
- * The overridden equals method causes the case to match, while the derivation from
- * ExceptionProxy is treated by our macros as an exception from the usual rules.
+ * The overridden equals method causes the case to match, while the derivation from ExceptionProxy is treated by our
+ * macros as an exception from the usual rules.
  *
  * Note that these are loaded from [[RTList.ProxyConfig]] files; simply declaring one is no longer sufficient.
  */

@@ -35,12 +35,13 @@ class DateConverter extends ClassicConverter {
       case Some(specified)                 => specified
     }
 
-    formatter = try new DateFormatter(datePattern)
-    catch {
-      case e: IllegalArgumentException =>
-        addWarn(s"Cannot create DateFormatter - probably the pattern isn't legal '$datePattern'", e)
-        new DateFormatter(CoreConstants.ISO8601_PATTERN)
-    }
+    formatter =
+      try new DateFormatter(datePattern)
+      catch {
+        case e: IllegalArgumentException =>
+          addWarn(s"Cannot create DateFormatter - probably the pattern isn't legal '$datePattern'", e)
+          new DateFormatter(CoreConstants.ISO8601_PATTERN)
+      }
     options match {
       case _ :: timezone :: _ =>
         formatter.setTimeZone(TimeZone.getTimeZone(timezone))
@@ -50,8 +51,8 @@ class DateConverter extends ClassicConverter {
   override def convert(event: ILoggingEvent): String = formatter.format(event.getTimeStamp)
 }
 object DateFormatter {
-  //we try to use java.text.DontCareFieldPosition.INSTANCE, because it make the generation of dates faster
-  //if we cant access then we fall back to  new FieldPosition(0), which is functionally the same, but slower and allocates a little
+  // we try to use java.text.DontCareFieldPosition.INSTANCE, because it make the generation of dates faster
+  // if we cant access then we fall back to  new FieldPosition(0), which is functionally the same, but slower and allocates a little
   private val dontCareFieldPosition = buildField
 
   private[this] def buildField = {
@@ -71,9 +72,9 @@ object DateFormatter {
 
 }
 class DateFormatter(val pattern: String) {
-  //only called with a synchronized lock on this
+  // only called with a synchronized lock on this
   private val dateFormat = new SimpleDateFormat(pattern, DateFormatSymbols.getInstance)
-  //cached values, only mutated or read with a lock on this
+  // cached values, only mutated or read with a lock on this
   private var prevTime = 0L
   private var prevFormatted = ""
   // avoid allocation in each format operation

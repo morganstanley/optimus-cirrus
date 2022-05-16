@@ -14,53 +14,32 @@ package optimus.collection
 import java.util
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.GenTraversableOnce
-import scala.collection.TraversableOnce
+import scala.annotation.compileTimeOnly
+import scala.collection.BuildFrom
+import scala.collection.IterableOnce
 import scala.collection.generic.CanBuildFrom
 import scala.collection.mutable
-import scala.collection.immutable
-import scala.collection.immutable.CollectionsHook
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
-private[collection] object OptimusCanBuildFrom {
-  private[collection] def empty[From, Elem, To](bf: CanBuildFrom[From, Elem, To], coll: OSeq[_]): To = bf match {
-    case internal: OptimusCanBuildFrom[From, Elem, To, _] => internal.empty
-    case _ =>
-      if (CollectionsHook.isOptimusSeqCompatibleCBF(bf)) {
-        val empty =
-          if (coll.isInstanceOf[OptimusDoubleSeq])
-            OptimusDoubleSeq.empty
-          else
-            OptimusSeq.empty
-        empty.asInstanceOf[To]
-      } else bf.apply().result()
-  }
-  private[collection] def borrowIfPossible[From, Elem, To](
-      bf: CanBuildFrom[From, Elem, To],
-      coll: OSeq[_]): mutable.Builder[Elem, To] = bf match {
-    case internal: OptimusCanBuildFrom[From, Elem, To, _] => internal.borrowBuilder()
-    case _ =>
-      if (CollectionsHook.isOptimusSeqCompatibleCBF(bf)) {
-        val borrowed =
-          if (coll.isInstanceOf[OptimusDoubleSeq])
-            OptimusDoubleSeq.borrowBuilder[Elem]
-          else
-            OptimusSeq.borrowBuilder[Elem]
-        borrowed.asInstanceOf[mutable.Builder[Elem, To]]
-      } else bf.apply();
-  }
-}
+private[collection] object OptimusCanBuildFrom {}
 private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayType: ClassTag](
     override val toString: String,
     val empty: To,
     val settings: OSeqImpl
-) extends CanBuildFrom[From, Elem, To] {
+) extends BuildFrom[From, Elem, To] {
   type BuilderType <: OptimusBuilder[Elem, To]
-  override def apply(from: From): BuilderType = makeBuilder()
-  override def apply(): BuilderType = makeBuilder()
+
+  override def fromSpecific(from: From)(it: IterableOnce[Elem]): To = (makeBuilder() ++= it).result()
+  override def newBuilder(from: From): BuilderType = makeBuilder()
+  def newBuilder(): BuilderType = makeBuilder()
 
   /** its the same as apply, but the intent is to borrow/return, so its useful to separate the use case */
   private[collection] def borrowBuilder(): BuilderType = builderFromPooledOrMake()
+  @deprecated("Not supported on scala 2.13.x")
+  private[collection] def borrowIfPossible[From, Elem, To](
+      bf: CanBuildFrom[From, Elem, To],
+      coll: OSeq[_]): mutable.Builder[Elem, To] = ???
 
   protected def makeBuilder(): BuilderType
 
@@ -91,12 +70,12 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
       result
     }
 
-    //its virtual here, as the bimorphic dispatch is cheaper then the scala array length on a generic array
+    // its virtual here, as the bimorphic dispatch is cheaper then the scala array length on a generic array
     // = if (elems eq null) 0 else elems.length
     protected def capacity: Int
-    //effectively new Array[ArrayType](settings.maxArraySize)
+    // effectively new Array[ArrayType](settings.maxArraySize)
     protected def newArray(size: Int): Array[ArrayType]
-    //copyOf, but we cant do that on scala generic arrays
+    // copyOf, but we cant do that on scala generic arrays
     protected def copyToArray(): Array[ArrayType]
 
     protected def mkEmptyArray(): Array[ArrayType] = {
@@ -158,7 +137,7 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
         copyFromArray(data.asInstanceOf[Array[_ <: ArrayType]], start, end)
       else {
         val slowData = new Array[ArrayType](end)
-        mutable.WrappedArray.make(data).copyToArray(slowData)
+        mutable.WrappedArray.make(data).copyToArray(slowData.asInstanceOf[Array[Any]])
         copyFromArray(slowData.asInstanceOf[Array[_ <: ArrayType]], start, end)
       }
     }
@@ -176,7 +155,7 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
       }
     }
 
-    override def addFrom(data: Seq[Elem], start: Int, end: Int): Unit = {
+    override def addFrom(data: collection.Seq[Elem], start: Int, end: Int): Unit = {
       prepareForAdditional(end - start)
       var toCopy = end - start
       var sourceStart = start
@@ -196,7 +175,7 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
         val nextIndex = ensureArrays(1)
         arrays(nextIndex) = data.asInstanceOf[Array[ArrayType]]
       } else {
-        //should not happen
+        // should not happen
         addFromArray(data, 0, data.length)
       }
     }
@@ -241,28 +220,20 @@ object OptimusBuilder {
 }
 abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
 
-  def addFrom(data: Seq[Elem], start: Int, end: Int): Unit
-
+  def addFrom(data: collection.Seq[Elem], start: Int, end: Int): Unit
+  def addOne(elem1: Elem, elem2: Elem, elems: Elem*): this.type = +=(elem1, elem2, elems: _*)
   private[collection] def resultSize: Int
   private[collection] def addFromArray(data: Array[_], start: Int, end: Int): Unit
   // allows structural sharing of arrays. Only used by higher order functions in ArraysSeq
   private[collection] def addSharedArray(data: Array[_]): Unit
 
   private[collection] def returnBorrowed()
-
-  //for flatMap support
-  def addAll(xs: GenTraversableOnce[Elem]): this.type = xs match {
-    case t1: TraversableOnce[Elem] => this ++= t1
-    case _ =>
-      xs foreach +=
-      this
-  }
   override def result(): To
 }
 abstract class OptimusDoubleBuilder[+To] extends OptimusBuilder[Double, To] {
-  //overridden to stop boxing
-  override def +=(elem: Double): this.type
-  override def +=(elem1: Double, elem2: Double, elems: Double*): this.type = {
+  // overridden to stop boxing
+  override def addOne(elem: Double): this.type
+  override def addOne(elem1: Double, elem2: Double, elems: Double*): this.type = {
     this += elem1
     this += elem2
     this ++= elems

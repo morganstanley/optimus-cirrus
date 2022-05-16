@@ -11,7 +11,8 @@
  */
 package optimus.scalacompat
 
-import scala.{ collection => sc }
+import scala.{collection => sc}
+import scala.reflect.ClassTag
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
@@ -19,6 +20,7 @@ package object collection {
     case _             => false
   }
   def empty[From, Elem, Repr](bf: BuildFrom[From, Elem, Repr], from: From): Repr = bf.newBuilder(from).result()
+  def wrappedArrayFactory[T: ClassTag]: sc.Factory[T, Seq[T]] = sc.immutable.ArraySeq
 
   type IterableLike[+A, +Repr] = sc.IterableOps[A, Any, Repr]
   type Iterable2[A, B] = sc.Iterable[(A, B)]
@@ -75,6 +77,20 @@ package object collection {
       override def newBuilder(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder[A, B]
     }
   }
+  implicit class BreakOutToSortedMap[CC[_, _]](private val companion: sc.SortedMapFactory[CC]) extends AnyVal {
+    def breakOut[A: Ordering, B]: sc.BuildFrom[Any, (A, B), CC[A, B]] = new sc.BuildFrom[Any, (A, B), CC[A, B]] {
+      override def fromSpecific(from: Any)(it: sc.IterableOnce[(A, B)]): CC[A, B] =
+        companion.newBuilder[A, B].addAll(it).result()
+      override def newBuilder(from: Any): sc.mutable.Builder[(A, B), CC[A, B]] = companion.newBuilder[A, B]
+    }
+  }
+  implicit class BreakOutToSortedIterable[CC[_]](private val companion: sc.SortedIterableFactory[CC]) extends AnyVal {
+    def breakOut[A: Ordering]: sc.BuildFrom[Any, A, CC[A]] = new sc.BuildFrom[Any, A, CC[A]] {
+      override def fromSpecific(from: Any)(it: sc.IterableOnce[A]): CC[A] =
+        companion.newBuilder[A].addAll(it).result()
+      override def newBuilder(from: Any): sc.mutable.Builder[A, CC[A]] = companion.newBuilder[A]
+    }
+  }
   implicit class BreakOutToFactory[E, O](private val factory: sc.compat.Factory[E, O]) extends AnyVal {
     def breakOut: sc.BuildFrom[Any, E, O] = new sc.BuildFrom[Any, E, O] {
       override def fromSpecific(from: Any)(it: sc.IterableOnce[E]): O = factory.newBuilder.addAll(it).result()
@@ -84,7 +100,9 @@ package object collection {
   def FloatOrdering: Ordering[Float] = Ordering.Float.IeeeOrdering
   def DoubleOrdering: Ordering[Double] = Ordering.Double.IeeeOrdering
 
-  implicit class MapValuesFilterKeysNow[K, +V, Repr <: sc.MapOps[K, V, Iterable2, Repr]](private val self: Repr with sc.Map[K, V]) extends AnyVal {
+  implicit class MapValuesFilterKeysNow[K, +V, Repr <: sc.MapOps[K, V, Iterable2, Repr]](
+      private val self: Repr with sc.Map[K, V])
+      extends AnyVal {
     def mapValuesNow[W, That](f: V => W)(implicit bf: sc.BuildFrom[Repr, (K, W), That]): That = {
       self match {
         case im: sc.immutable.Map[K, V] =>
@@ -95,15 +113,16 @@ package object collection {
           b.result()
       }
     }
-    def filterKeysNow(p: K => Boolean): Repr = self.filter{ case (k, _) => p(k) }
+    def filterKeysNow(p: K => Boolean): Repr = self.filter { case (k, _) => p(k) }
   }
 
   implicit class IterableOnceConvertTo[A](private val coll: IterableOnce[A]) {
+
     /**
-     * Convert a collection into a different collection type.
-     * This is an alias for `collection.to(Target)` used while cross-building with 2.12.
+     * Convert a collection into a different collection type. This is an alias for `collection.to(Target)` used while
+     * cross-building with 2.12.
      */
-    def convertTo[C](factory: sc.compat.Factory[A, C]): C = coll.to(factory)
+    def convertTo[C](factory: sc.Factory[A, C]): C = coll.iterator.to(factory)
   }
 
   lazy val ParCollectionConverters = scala.collection.parallel.CollectionConverters

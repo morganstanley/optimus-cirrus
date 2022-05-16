@@ -20,6 +20,7 @@ import optimus.breadcrumbs.crumbs.Properties.Key
 import spray.json.JsValue
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 
 // Base property type for events
 private[breadcrumbs] trait Event extends Key[ZonedDateTime] {
@@ -35,7 +36,7 @@ private[breadcrumbs] trait Event extends Key[ZonedDateTime] {
   override def toString: String = name
 }
 
-case class SourcedEvent(override val source: String, override val name: String) extends Event {
+final case class SourcedEvent(override val source: String, override val name: String) extends Event {
   override def toString = s"$source:$name"
 }
 
@@ -50,8 +51,8 @@ abstract class KnownEvents private[crumbs] extends Enumeration {
 
 object KnownEvents {
   abstract class Set private[crumbs] (val kps: KnownEvents*)
-  private[crumbs] lazy val allKnownEvents = {
-    Events.values.map(_.asInstanceOf[Events.EventVal]) | {
+  private[crumbs] lazy val allKnownEvents: immutable.Set[Events.EventVal] = {
+    Events.values.iterator.map(_.asInstanceOf[Events.EventVal]).toSet | {
       ju.ServiceLoader.load(classOf[Set]).asScala.flatMap(_.kps).toSet.flatMap((_: KnownEvents).set)
     }
   }
@@ -93,7 +94,7 @@ object Events extends KnownEvents {
   val RuntimeShutDown = event("RuntimeShutDown")
 
   val AppStartPerf = event("AppStartPerf")
-  val AppRestorPerf = event("AppRestorPerf")
+  val AppRestorePerf = event("AppRestorePerf")
 
   val GraphStalling = event("GraphStalling")
   val GraphStalled = event("GraphStalled")

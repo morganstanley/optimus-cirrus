@@ -65,7 +65,7 @@ trait RootJsonReader[T] extends JsonReader[T]
 trait RootJsonWriter[T] extends JsonWriter[T]
 
 /**
- * A special JsonFormat signaling that the format produces a legal JSON root object, i.e. either a JSON array
- * or a JSON object.
+ * A special JsonFormat signaling that the format produces a legal JSON root object, i.e. either a JSON array or a JSON
+ * object.
  */
 trait RootJsonFormat[T] extends JsonFormat[T] with RootJsonReader[T] with RootJsonWriter[T]

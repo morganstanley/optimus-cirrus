@@ -15,13 +15,13 @@ import scala.tools.nsc._
 import scala.tools.nsc.plugins._
 
 /**
- * Adds annotations to pre-existing (i.e. library) symbols.
- * Currently only supports @deprecated but could easily be modified to add other annotations.
+ * Adds annotations to pre-existing (i.e. library) symbols. Currently only supports @deprecated but could easily be
+ * modified to add other annotations.
  */
 class AnnotatingComponent(
     val pluginData: PluginData,
     val global: Global,
-    val phaseInfo: OptimusPhaseInfo,
+    val phaseInfo: OptimusPhaseInfo
 ) extends PluginComponent
     with WithOptimusPhase {
   import global._
@@ -45,28 +45,45 @@ class AnnotatingComponent(
   private def useInstead(alt: String, neu: Boolean = false) =
     s"${if (neu) "[NEW]" else ""}use $alt instead (deprecated by optimus staging)"
 
-  private val deprecations = Seq[(String, String)](
+  private val reason = "lazy collections are discouraged http://optimusdoc/ReviewBuddy#Lazy_Collections"
+  private val view = "view"
+  private val discourageds = Seq[(String, List[String])](
+    "scala.collection.TraversableLike.view" -> List(view, reason),
+    "scala.collection.IterableLike.view" -> List(view, reason),
+    "scala.collection.SeqLike.view" -> List(view, reason)
+  )
+
+  private val deprecations = Seq[(String, List[String])](
     // "org.something.Deprecated" -> useInstead("org.something.ToUseInstead")
   )
 
-  private val deprecatings = Seq[(String, String)](
-    "scala.Predef.StringFormat.formatted" -> useInstead(
-      "`formatString.format(value)` or the `f\"\"` string interpolator",
-      neu = true)
+  private val deprecatings = Seq[(String, List[String])](
+    "scala.Predef.StringFormat.formatted" -> List(
+      useInstead("`formatString.format(value)` or the `f\"\"` string interpolator", neu = true)
+    ),
+    "scala.collection.breakOut" -> List(
+      """collection.breakOut does not exist on Scala 2.13.
+        |For operations on standard library collections:
+        |  - use `coll.iterator.map(f).toMap`
+        |  - for less common target types, add `import scala.collection.compat._` and use `.to(SortedSet)`
+        |  - for target types with 0 or 2 type parameters, also add `import optimus.scalacompat.collection._` and use `.convertTo(SortedMap)`
+        | For operations on async collections (`apar` or `aseq`):
+        |   - add `import optimus.scalacompat.collection._` and use `coll.apar.map(f)(TargetType.breakOut)`""".stripMargin
+    )
   )
 
   private lazy val deprecatedAnno = rootMirror.getRequiredClass("scala.deprecated")
   private lazy val deprecatingAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.deprecating")
   private lazy val constAnno = rootMirror.getClassIfDefined("scala.annotation.ConstantAnnotation")
+  private lazy val discouragedAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.discouraged")
 
   def newPhase(prev: scala.tools.nsc.Phase): StdPhase = new StdPhase(prev) {
-    private def add(targets: Seq[(String, String)], annot: Symbol): Unit = annot match {
+    private def add(targets: Seq[(String, List[String])], annot: Symbol): Unit = annot match {
       case annotClass: ClassSymbol =>
-        targets.foreach {
-          case (oldName, msg) =>
-            lookup(oldName).foreach { oldSym =>
-              addAnnotationInfo(oldSym, annotClass, List(msg))
-            }
+        targets.foreach { case (oldName, msg) =>
+          lookup(oldName).foreach { oldSym =>
+            addAnnotationInfo(oldSym, annotClass, msg)
+          }
         }
 
       case _ => // annot class not found on classpath, do nothing
@@ -74,6 +91,7 @@ class AnnotatingComponent(
     def apply(unit: global.CompilationUnit): Unit = {
       add(deprecations, deprecatedAnno)
       add(deprecatings, deprecatingAnno)
+      add(discourageds, discouragedAnno)
     }
   }
 
@@ -89,8 +107,8 @@ class AnnotatingComponent(
         args
           .zip(annotCls.primaryConstructor.info.params)
           .iterator
-          .map {
-            case (arg, paramSym) => (paramSym.name, toConstArg(arg))
+          .map { case (arg, paramSym) =>
+            (paramSym.name, toConstArg(arg))
           }
           .toList
       }

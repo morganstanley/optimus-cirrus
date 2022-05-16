@@ -16,11 +16,14 @@ import scala.runtime.AbstractFunction1
 object OptimusSeqUtils {
 
   /**
-   * maps across `source` and returns an OptimusSeq[T] containing the result, or source if fn doesn't
-   * change any of the values (compared via `eq`)
-   * @param source the source collection
-   * @param fn the transformation to apply
-   * @tparam T the content type
+   * maps across `source` and returns an OptimusSeq[T] containing the result, or source if fn doesn't change any of the
+   * values (compared via `eq`)
+   * @param source
+   *   the source collection
+   * @param fn
+   *   the transformation to apply
+   * @tparam T
+   *   the content type
    * @return
    */
   def mapConserve[T](source: Seq[T], fn: T => T): Seq[T] = {
@@ -28,10 +31,10 @@ object OptimusSeqUtils {
     else
       source match {
         case os: OptimusSeq[T] =>
-          //all OptimusSeq map operation conserve, and are tuned for size
+          // all OptimusSeq map operation conserve, and are tuned for size
           os.map(fn)(OptimusSeq.canBuildFrom)
         case os: OptimusDoubleSeq =>
-          //all OptimusDoubleSeq map operation conserve, and are tuned for size
+          // all OptimusDoubleSeq map operation conserve, and are tuned for size
           os.map(fn.asInstanceOf[Double => Double])(OptimusDoubleSeq.canBuildFrom).asInstanceOf[Seq[T]]
         case ra: collection.immutable.IndexedSeq[T] =>
           // Indexed sequences do not add any new methods to `Seq`, but promise
@@ -102,7 +105,7 @@ object OptimusSeqUtils {
 
             def result = if (builder eq null) source else builder.result
           }
-          //its basically an object, but this avoids the LazyRef creation
+          // its basically an object, but this avoids the LazyRef creation
           val accumulator = new Accumulator
           try {
             source foreach accumulator

@@ -28,8 +28,8 @@ object MacroUtils {
   def showCode[U](body: => U): String = macro Show.showCodeImpl[U]
 
   /**
-   * returns a deep copy of the input tree (but does not copy the symbols or types, so you'd better make sure it's
-   * an untypechecked tree
+   * returns a deep copy of the input tree (but does not copy the symbols or types, so you'd better make sure it's an
+   * untypechecked tree
    */
   def dupTree(c: blackbox.Context)(t: c.Tree): c.Tree = {
     import c.universe._
@@ -66,7 +66,7 @@ object MacroUtils {
   // def foo(bar: Int)(implicit loc: SourceLocation) {
   //   println("called foo(" + bar + ") at " + loc)
   // }
-  case class SourceLocation(line: Int, method: String, className: String) {
+  final case class SourceLocation(line: Int, method: String, className: String) {
     override def toString: String = s"($className:$line)"
   }
   object SourceLocation {
@@ -84,13 +84,12 @@ object MacroUtils {
   /**
    * typechecks the inputTree and validates that:
    *
-   *   a) the symbol owner hierarchy matches the AST hierarchy
-   *   b) there are no untypedchecked subtrees
+   * a) the symbol owner hierarchy matches the AST hierarchy b) there are no untypedchecked subtrees
    *
-   *  Both of these are common mistakes which are not caught by the typechecker and which cause difficult to
-   *  understand and reproduce errors from the compiler backend, so are worth catching early.
+   * Both of these are common mistakes which are not caught by the typechecker and which cause difficult to understand
+   * and reproduce errors from the compiler backend, so are worth catching early.
    *
-   *  Returns the typechecked and validated tree.
+   * Returns the typechecked and validated tree.
    */
   def typecheckAndValidate(c: blackbox.Context)(inputTree: c.Tree): c.Tree = {
     import scala.collection.mutable
@@ -211,7 +210,7 @@ object MacroUtils {
 
   /**
    * Use this to ensure that compilation is RT
-   * */
+   */
   def relativeSourcePath(c: blackbox.Context)(pos: c.Position): String = {
     val path = pos.source.file.canonicalPath
     if (path.nonEmpty) {
@@ -248,7 +247,7 @@ object MacroUtils {
   }
 
   /**
-  Extract a function/closure that might be wrapped in a block for no particular reason
+   * Extract a function/closure that might be wrapped in a block for no particular reason
    */
   def functionN(c: blackbox.Context)(tree: c.Tree): (List[c.universe.ValDef], c.universe.Tree) = {
     import c.universe._
@@ -262,14 +261,7 @@ object MacroUtils {
   }
 
   /**
-  Given
-     arg
-     { param => rhsStuff(param) }
-  Rewrite to
-     {
-        val param = arg
-        rhsStuff(param)
-     }
+   * Given arg { param => rhsStuff(param) } Rewrite to { val param = arg rhsStuff(param) }
    */
   def applyFunctionInline(c: blackbox.Context)(f: c.Tree, argVal: c.Tree): c.Tree = {
     import c.universe._, c.internal._, decorators._
@@ -294,7 +286,7 @@ object MacroUtils {
   }
 
   /**
-    Apply the function to a reference to the symbol
+   * Apply the function to a reference to the symbol
    */
   def applyFunctionToSym(c: blackbox.Context)(f: c.Tree, argSym: c.Symbol): c.Tree = {
     import c.universe._
@@ -302,7 +294,7 @@ object MacroUtils {
   }
 
   /**
-    Create a temporary variable; give it a value and an owner.
+   * Create a temporary variable; give it a value and an owner.
    */
   def temporaryValDef(c: blackbox.Context)(
       name: String,
@@ -323,14 +315,11 @@ object MacroUtils {
 class MacroMethod[C <: blackbox.Context](val c: C) {
 
   /**
-   * With a context like
-   *       someObject.method(a,b,c)
-   *  Extract a list of Trees corresponding to someObject, a, b, c
+   * With a context like someObject.method(a,b,c) Extract a list of Trees corresponding to someObject, a, b, c
    *
-   *  In an ideal world, this AST would be just
-   *      Apply(Select(someObjectTree, methodName), List(aTree,bTree,cTree)),
-   *  but the Select can be buried under a TypeApply (and possibly other Tree elements)
-   *  so we do a find for Select(someObjectTree, methodName).
+   * In an ideal world, this AST would be just Apply(Select(someObjectTree, methodName), List(aTree,bTree,cTree)), but
+   * the Select can be buried under a TypeApply (and possibly other Tree elements) so we do a find for
+   * Select(someObjectTree, methodName).
    */
   def extractThisAndArgs(c: blackbox.Context, method: String): List[c.Tree] = {
     import c.universe._
@@ -365,9 +354,8 @@ class MacroMethod[C <: blackbox.Context](val c: C) {
     val argVals = extractThisAndArgs(c, methodName)
     val t = f.tree match {
       case Function(args: List[Tree], body: Tree) =>
-        val argAssigns = (args).zip(argVals).map {
-          case (arg, rhs) =>
-            internal.setSymbol(ValDef(Modifiers(), arg.name, arg.tpt, MacroUtils.splice(c)(rhs)), arg.symbol)
+        val argAssigns = (args).zip(argVals).map { case (arg, rhs) =>
+          internal.setSymbol(ValDef(Modifiers(), arg.name, arg.tpt, MacroUtils.splice(c)(rhs)), arg.symbol)
         }
         Block(argAssigns, MacroUtils.splice(c)(body))
       case _ =>
@@ -379,17 +367,15 @@ class MacroMethod[C <: blackbox.Context](val c: C) {
 
   /**
    * variant of macroMethod that erases type of function arguments, expecting them to be properly inferred when
-   *  assigned.
-   *
+   * assigned.
    */
   def subclassMacroMethod[T](methodName: String, returnType: c.Tree, f: c.Expr[_]): c.Expr[T] = {
     import c.universe._
     val argVals = extractThisAndArgs(c, methodName)
     val t = f.tree match {
       case Function(args: List[Tree], body: Tree) =>
-        val argAssigns = (args).zip(argVals).map {
-          case (arg, rhs) =>
-            ValDef(arg.mods, arg.name, TypeTree(), MacroUtils.splice(c)(rhs))
+        val argAssigns = (args).zip(argVals).map { case (arg, rhs) =>
+          ValDef(arg.mods, arg.name, TypeTree(), MacroUtils.splice(c)(rhs))
         }
         Block(argAssigns, MacroUtils.splice(c)(body))
       case _ =>
@@ -464,7 +450,8 @@ object Show {
           var yet = false
           vparamss.foreach { l: List[ValDef] =>
             {
-              if (yet) { sb ++ "," } else { yet = true }
+              if (yet) { sb ++ "," }
+              else { yet = true }
               addList(ind + 4, l)
             }
           }
@@ -519,7 +506,7 @@ object Show {
           sb ++= ","
           addline(ind + 2, showRaw(name) + ")")
 
-        //def apply(mods: c.universe.Modifiers,name: c.universe.TermName,tpt: c.universe.Tree,rhs: c.universe.Tree): c.universe.ValDef
+        // def apply(mods: c.universe.Modifiers,name: c.universe.TermName,tpt: c.universe.Tree,rhs: c.universe.Tree): c.universe.ValDef
         case x @ ValDef(mods, name, tpt, rhs) =>
           addline(ind, "ValDef(" + abbrev(x))
           addline(ind + 2, showRaw(mods) + "," + showRaw(name) + ",")

@@ -17,8 +17,6 @@ import java.util.Objects
 import optimus.collection.OptimusSeq.collectMarker
 
 import scala.collection.AbstractIterator
-import scala.collection.GenIterable
-import scala.collection.generic.CanBuildFrom
 import scala.reflect.ClassTag
 import scala.util.hashing.MurmurHash3
 
@@ -38,7 +36,7 @@ private[collection] object OptimusArraysSeq {
       }
       res
     }
-    //it doesn't make sense for the hashes to be for all of the data
+    // it doesn't make sense for the hashes to be for all of the data
     assert((knownHashesOrNull eq null) || knownHashesOrNull.length < arrays.length)
     new OptimusArraysSeq[T](arrays, offsets, knownHashesOrNull)
   }
@@ -54,36 +52,12 @@ private[collection] final class OptimusArraysSeq[+T] private (
 
   override def length = offsets(offsets.length - 1)
 
-  //its really a lazy val, just reset on serialisation
+  // its really a lazy val, just reset on serialisation
   @transient private[this] var hashes = knownHashes
-  //its racey, run hashes only transitions from null => array
+  // its racey, run hashes only transitions from null => array
   // should not really need to cop, as the builder should respect the immutability, but safer to not trust
   private[collection] def copyKnownHashes = if (hashes eq null) null else hashes.clone()
 
-  override protected def computeHash: Int = {
-    var hashes = this.hashes
-    var arrayIndex = 0
-    var hash = MurmurHash3.seqSeed
-    if (hashes eq null) {
-      hashes = new Array[Int](arrays.length)
-    } else {
-      arrayIndex = hashes.length
-      if (hashes.length < arrays.length) {
-        hashes = Arrays.copyOf(hashes, arrays.length)
-      }
-    }
-    while (arrayIndex < arrays.length) {
-      var i = 0
-      val a = arrays(arrayIndex)
-      while (i < a.length) {
-        hash = MurmurHash3.mix(hash, a(i).##)
-        i += 1
-      }
-      hashes(arrayIndex) = hash
-      arrayIndex += 1
-    }
-    MurmurHash3.finalizeHash(hash, length)
-  }
   override def apply(idx: Int): T = {
     if (idx < 0 || idx >= length)
       throw new IndexOutOfBoundsException(s"index : $idx")
@@ -123,8 +97,8 @@ private[collection] final class OptimusArraysSeq[+T] private (
     other match {
       case that: OptimusArraySeq[_] =>
         length == that.length &&
-          this.hashCode == that.hashCode &&
-          compare(this.arrays, Array(that.data))
+        this.hashCode == that.hashCode &&
+        compare(this.arrays, Array(that.data))
       case that: OptimusArraysSeq[_] =>
         (this eq that) || (length == that.length &&
           this.hashCode == that.hashCode &&
@@ -135,7 +109,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
         super.equals(other)
     }
   }
-  override def sameElements[B >: T](other: GenIterable[B]): Boolean = {
+  override def sameElements[B >: T](other: IterableOnce[B]): Boolean = {
     other match {
       case that: OptimusSeq[B] =>
         this == that
@@ -273,52 +247,52 @@ private[collection] final class OptimusArraysSeq[+T] private (
     result
   }
 
-  /** @inheritdoc
-   * optimised to avoid builder creation
-   * optimised to reduce allocation and return this if the result would == this
-   * optimised to reduce allocation where one of the arrays transformed is identical (structural sharing)
-   * optimised to maintain known partial hashes
+  /**
+   * @inheritdoc
+   * optimised to avoid builder creation optimised to reduce allocation and return this if the result would == this
+   * optimised to reduce allocation where one of the arrays transformed is identical (structural sharing) optimised to
+   * maintain known partial hashes
    */
-  override def map[B, That](f: T => B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      var newArrays: Array[Array[AnyRef]] = null
-      var newKnownHashes: Array[Int] = null
-      var i = 0
-      while (i < arrays.length) {
-        val data = arrays(i)
-        var newData: Array[Any] = null
-        var j = 0
-        while (j < data.length) {
-          val existing = data(j)
-          val result = f(existing.asInstanceOf[T])
-          if (newData eq null) {
-            if (result.asInstanceOf[AnyRef] ne existing) {
-              newData = new Array[Any](data.length)
-              System.arraycopy(data, 0, newData, 0, j)
-              newData(j) = result
-              if (newArrays eq null) {
-                newArrays = arrays.clone()
-                if (i > 0 && hashes != null)
-                  newKnownHashes = Arrays.copyOf(hashes, Math.min(i, hashes.length))
-              }
-            }
-          } else
+  override def map[B](f: T => B): OptimusArraysSeq[B] = {
+    var newArrays: Array[Array[AnyRef]] = null
+    var newKnownHashes: Array[Int] = null
+    var i = 0
+    while (i < arrays.length) {
+      val data = arrays(i)
+      var newData: Array[Any] = null
+      var j = 0
+      while (j < data.length) {
+        val existing = data(j)
+        val result = f(existing.asInstanceOf[T])
+        if (newData eq null) {
+          if (result.asInstanceOf[AnyRef] ne existing) {
+            newData = new Array[Any](data.length)
+            System.arraycopy(data, 0, newData, 0, j)
             newData(j) = result
-          j += 1
-        }
-        if (newArrays ne null)
-          newArrays(i) = if (newData eq null) data else newData.asInstanceOf[Array[AnyRef]]
-        i += 1
+            if (newArrays eq null) {
+              newArrays = arrays.clone()
+              if (i > 0 && hashes != null)
+                newKnownHashes = Arrays.copyOf(hashes, Math.min(i, hashes.length))
+            }
+          }
+        } else
+          newData(j) = result
+        j += 1
       }
-      if (newArrays eq null) this.asInstanceOf[That]
-      else new OptimusArraysSeq(newArrays, offsets, newKnownHashes).asInstanceOf[That]
-    } else super.map(f)(bf)
+      if (newArrays ne null)
+        newArrays(i) = if (newData eq null) data else newData.asInstanceOf[Array[AnyRef]]
+      i += 1
+    }
+    if (newArrays eq null) this.asInstanceOf[OptimusArraysSeq[B]]
+    else new OptimusArraysSeq(newArrays, offsets, newKnownHashes).asInstanceOf[OptimusArraysSeq[B]]
+  }
 
-  override def copyToArray[B >: T](xs: Array[B], start: Int, len: Int): Unit = {
+  override def copyToArray[B >: T](xs: Array[B], start: Int, len: Int): Int = {
     if (xs.getClass.getComponentType.isPrimitive) super.copyToArray(xs, start, len)
     else {
       var outputOffset = start
-      var remaining = Math.min(length, Math.max(0, len))
+      val actualLen = Math.min(length, Math.max(0, len))
+      var remaining = actualLen
       var index = 0
       while (remaining > 0) {
         val toCopy = Math.min(arrays(index).length, remaining)
@@ -327,6 +301,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
         remaining -= toCopy
         index += 1
       }
+      actualLen
     }
   }
 
@@ -339,14 +314,14 @@ private[collection] final class OptimusArraysSeq[+T] private (
     }
   }
   // lo and hi are sensible and always not everything
-  //hi is exclusive
+  // hi is exclusive
   private[collection] def sliceSafe(lo: Int, hi: Int): OptimusSeq[T] = {
     val from_target = Arrays.binarySearch(offsets, lo)
 
     val to_target = Arrays.binarySearch(offsets, hi)
 
     if (from_target >= 0 && to_target == from_target + 1) {
-      //special case - its the whole of an existing array
+      // special case - its the whole of an existing array
       val partialHash = if (from_target == 0 && hashes != null) hashes(0) else 0
       OptimusArraySeq.unsafeFromArray[T](arrays(from_target), partialHash)
     } else {
@@ -356,7 +331,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
         var toCopy = hi - lo
         while (toCopy > 0) {
 
-          //share the array if we can
+          // share the array if we can
           if (inputCopyStart == 0 && toCopy >= arrays(inputArrayIndex).length) {
             b.addSharedArray(arrays(inputArrayIndex))
             toCopy -= arrays(inputArrayIndex).length
@@ -371,26 +346,23 @@ private[collection] final class OptimusArraysSeq[+T] private (
       }
     }
   }
+  override def appended[B >: T](that: B): OptimusArraysSeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { builder =>
+        builder ++= this
+        builder += that
+      }
+      .asInstanceOf[OptimusArraysSeq[B]]
+  }
 
-  override def :+[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { builder =>
-          builder ++= this
-          builder += that
-        }
-        .asInstanceOf[That]
-    } else super.:+(that)(bf)
-
-  override def +:[B >: T, That](that: B)(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That =
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { builder =>
-          builder += that
-          builder ++= this
-        }
-        .asInstanceOf[That]
-    } else super.:+(that)(bf)
+  override def prepended[B >: T](that: B): OptimusArraysSeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { builder =>
+        builder += that
+        builder ++= this
+      }
+      .asInstanceOf[OptimusArraysSeq[B]]
+  }
 
   override def head: T = arrays(0)(0).asInstanceOf[T]
 
@@ -463,28 +435,26 @@ private[collection] final class OptimusArraysSeq[+T] private (
     None
   }
 
-  override def collect[B, That](pf: PartialFunction[T, B])(implicit bf: CanBuildFrom[OptimusSeq[T], B, That]): That = {
-    if (isCompatableCBF(bf)) {
-      OptimusSeq
-        .withSharedBuilder[B] { b =>
-          val marker = collectMarker[T, B]
-          var arrayIndex = 0
-          while (arrayIndex < arrays.length) {
-            val currentArray: Array[AnyRef] = arrays(arrayIndex)
-            var indexInArray = 0
-            while (indexInArray < currentArray.length) {
-              val result = pf.applyOrElse(currentArray(indexInArray).asInstanceOf[T], marker)
-              if (result.asInstanceOf[AnyRef] ne marker)
-                b += result
-              indexInArray += 1
-            }
-            arrayIndex += 1
+  override def collect[B](pf: PartialFunction[T, B]): OptimusArraySeq[B] = {
+    OptimusSeq
+      .withSharedBuilder[B] { b =>
+        val marker = collectMarker[T, B]
+        var arrayIndex = 0
+        while (arrayIndex < arrays.length) {
+          val currentArray: Array[AnyRef] = arrays(arrayIndex)
+          var indexInArray = 0
+          while (indexInArray < currentArray.length) {
+            val result = pf.applyOrElse(currentArray(indexInArray).asInstanceOf[T], marker)
+            if (result.asInstanceOf[AnyRef] ne marker)
+              b += result
+            indexInArray += 1
           }
+          arrayIndex += 1
         }
-        .asInstanceOf[That]
-    } else super.collect(pf)
+      }
+      .asInstanceOf[OptimusArraySeq[B]]
   }
-  //extension methods
+  // extension methods
   /** similar to .zipWithIndex.map, but without the tupling */
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {
     val builder = OptimusSeq.borrowBuilder[B]

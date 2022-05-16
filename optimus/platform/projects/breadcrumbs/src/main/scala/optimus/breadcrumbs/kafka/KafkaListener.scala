@@ -46,7 +46,7 @@ import org.apache.kafka.common.security.JaasUtils
 import org.apache.kafka.common.utils.Time
 import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
-import org.kohsuke.args4j.{ Option => ArgOption }
+import org.kohsuke.args4j.{Option => ArgOption}
 import org.slf4j.LoggerFactory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -191,28 +191,27 @@ trait KafkaRecordParserT {
   protected def parseRecord(s: ConsumerRecord[String, String]): Try[Map[String, JsValue]] =
     Try {
       s.value.take(100000).parseJson.convertTo[Map[String, JsValue]]
-    }.recoverWith {
-      case t: Throwable =>
-        val (lastFailedParseTime, waitMs): (Instant, Long) =
-          lastFailedParseTimeAndWaitMs.getOrElse(t.getClass, (Instant.EPOCH, -1))
-        val nowMs: Instant = patch.MilliInstant.now
-        val elapsedMs: Long = nowMs.toEpochMilli - lastFailedParseTime.toEpochMilli
-        val msg: String = s"Failed to parse ${s.value.take(1000)} $t"
-        val didLogError: Boolean = if (elapsedMs > waitMs) {
-          logError(msg)
-          true
-        } else {
-          logger.debug(msg)
-          false
-        }
-        if (elapsedMs > maxLastFailedParseWaitMs * 2) {
-          // Reset if we went long enough without failing.
-          lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, 100))
-        } else if (didLogError && waitMs < maxLastFailedParseWaitMs) {
-          // Double the previous time between failure logging.
-          lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, waitMs * 2))
-        }
-        Failure(t)
+    }.recoverWith { case t: Throwable =>
+      val (lastFailedParseTime, waitMs): (Instant, Long) =
+        lastFailedParseTimeAndWaitMs.getOrElse(t.getClass, (Instant.EPOCH, -1))
+      val nowMs: Instant = patch.MilliInstant.now
+      val elapsedMs: Long = nowMs.toEpochMilli - lastFailedParseTime.toEpochMilli
+      val msg: String = s"Failed to parse ${s.value.take(1000)} $t"
+      val didLogError: Boolean = if (elapsedMs > waitMs) {
+        logError(msg)
+        true
+      } else {
+        logger.debug(msg)
+        false
+      }
+      if (elapsedMs > maxLastFailedParseWaitMs * 2) {
+        // Reset if we went long enough without failing.
+        lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, 100))
+      } else if (didLogError && waitMs < maxLastFailedParseWaitMs) {
+        // Double the previous time between failure logging.
+        lastFailedParseTimeAndWaitMs.put(t.getClass, (nowMs, waitMs * 2))
+      }
+      Failure(t)
     }
 }
 
@@ -245,7 +244,7 @@ object KafkaListener extends App with KafkaRecordParserT {
   private val counts: Cache[String, java.lang.Long] =
     CacheBuilder.newBuilder.maximumSize(10000).build[String, java.lang.Long]
 
-  private case class FileEntry(uuid: String, f: PrintWriter, var tPrinted: Long, var tFlushed: Long)
+  private final case class FileEntry(uuid: String, f: PrintWriter, var tPrinted: Long, var tFlushed: Long)
   private val files = new java.util.HashMap[String, FileEntry] // so we can iterate and delete
 
   private def isBadSeed(uuid: String) = {
@@ -267,18 +266,15 @@ object KafkaListener extends App with KafkaRecordParserT {
       } orElse Try[Long] {
         LocalDateTime.parse(timeArg).atZone(ZoneId.of("UTC")).toEpochSecond * 1000L
       }).map { targ =>
-          if (targ <= 0)
-            System.currentTimeMillis() + targ
-          else
-            targ
-        }
-        .recover {
-          case e: Throwable =>
-            logger.error(s"Unable to parse $timeArg: $e")
-            System.exit(-1)
-            0L
-        }
-        .get
+        if (targ <= 0)
+          System.currentTimeMillis() + targ
+        else
+          targ
+      }.recover { case e: Throwable =>
+        logger.error(s"Unable to parse $timeArg: $e")
+        System.exit(-1)
+        0L
+      }.get
 
   private val t1: Long = parseTimeArg(startTimeArg)
   private var tFinal = parseTimeArg(endTimeArg)
@@ -297,7 +293,7 @@ object KafkaListener extends App with KafkaRecordParserT {
   private val zkClient = KafkaZkClient(zkHosts, JaasUtils.isZkSecurityEnabled, 30000, 30000, Int.MaxValue, Time.SYSTEM)
   private val partitions = zkClient.getReplicaAssignmentForTopics(topics.split(",").toSet).keys.toSeq
 
-  private val consumers: Seq[KafkaConsumer[String, String]] = retry(3, 60000l, logger) { () =>
+  private val consumers: Seq[KafkaConsumer[String, String]] = retry(3, 60000L, logger) { () =>
     partitions.map { p =>
       val c = new KafkaConsumer[String, String](props)
       c.assign(Seq(p).asJava)
@@ -309,15 +305,14 @@ object KafkaListener extends App with KafkaRecordParserT {
       }
       c
     }
-  } {
-    case _: NullPointerException =>
-      true
+  } { case _: NullPointerException =>
+    true
   }
 
   private trait QElem {
     def t: Long
   }
-  private case class QCrumb(
+  private final case class QCrumb(
       uuid: String,
       override val t: Long,
       tKafka: Long,
@@ -356,16 +351,20 @@ object KafkaListener extends App with KafkaRecordParserT {
           while (queue.size > 50000) Thread.sleep(100)
           val crs = c.poll(Duration.ofMillis(1000L))
           crs.iterator().asScala.foreach { s =>
-            for (m <- parseRecord(s);
-                 tKafka = s.timestamp();
-                 uuidFull <- getAs[String](m, "uuid").flatMap(uuidRegex.unapplySeq).flatMap(_.headOption);
-                 tLogged <- getAs[Long](m, "t")) {
+            for (
+              m <- parseRecord(s);
+              tKafka = s.timestamp();
+              uuidFull <- getAs[String](m, "uuid").flatMap(uuidRegex.unapplySeq).flatMap(_.headOption);
+              tLogged <- getAs[Long](m, "t")
+            ) {
               val uuid = uuidFull.split("#").head
               if (uuid.length == 0) {
                 bad += 1
-              } else if (uuid.startsWith(prefix)
-                         && (hashPoolSize == 0 || (Math.abs(uuid.hashCode) % hashPoolSize) == hashPoolId)
-                         && !isBadSeed(uuid)) {
+              } else if (
+                uuid.startsWith(prefix)
+                && (hashPoolSize == 0 || (Math.abs(uuid.hashCode) % hashPoolSize) == hashPoolId)
+                && !isBadSeed(uuid)
+              ) {
                 getAs[String](m, "event").filter(killPastEventRegex.unapplySeq(_).isDefined).foreach { event =>
                   logger.info(s"Truncating $uuid due to $event event")
                   badSeeds.put(uuidFull, event)
@@ -393,7 +392,9 @@ object KafkaListener extends App with KafkaRecordParserT {
                   }
                 }
               }
-              if ((tLogged > tFinal && tKafka > tFinal) && (tLogged > (tFinal + endSlop) && tKafka > (tFinal + endSlop)))
+              if (
+                (tLogged > tFinal && tKafka > tFinal) && (tLogged > (tFinal + endSlop) && tKafka > (tFinal + endSlop))
+              )
                 continue = false
             }
           }
@@ -409,11 +410,14 @@ object KafkaListener extends App with KafkaRecordParserT {
 
   if (plexDir.isDefined) {
     val timer = new Timer
-    timer.schedule(new TimerTask {
-      override def run(): Unit = {
-        queue.offer(new QPing)
-      }
-    }, 0L, flushAfterMs)
+    timer.schedule(
+      new TimerTask {
+        override def run(): Unit = {
+          queue.offer(new QPing)
+        }
+      },
+      0L,
+      flushAfterMs)
   }
 
   private def cleanUp(): Unit = {
@@ -468,10 +472,12 @@ object KafkaListener extends App with KafkaRecordParserT {
             val t = System.currentTimeMillis()
             if (plexDir.isDefined) {
               try {
-                val fe @ FileEntry(_, f, _, _) = files.computeIfAbsent(uuid, { u =>
-                  logger.debug(s"Opening $u")
-                  FileEntry(u, new PrintWriter(new FileWriter(s"${plexDir.get}/$u", true)), t, t - 1)
-                })
+                val fe @ FileEntry(_, f, _, _) = files.computeIfAbsent(
+                  uuid,
+                  { u =>
+                    logger.debug(s"Opening $u")
+                    FileEntry(u, new PrintWriter(new FileWriter(s"${plexDir.get}/$u", true)), t, t - 1)
+                  })
                 if (asJson) f.println /* deliberately printing to stdout in CLI app */ (prefix + m.toJson.toString)
                 else f.println /* deliberately printing to stdout in CLI app */ (prefix + m.toString)
                 fe.tPrinted = t

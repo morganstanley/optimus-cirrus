@@ -25,11 +25,12 @@ import org.kohsuke.args4j.spi.Setter
 private[optimus] class PathHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[_ >: Path])
     extends PathOptionHandler(parser, option, setter) {
   override def parse(argument: String): Path = {
-    val res = try {
-      Paths.get(argument)
-    } catch {
-      case _: Throwable => throw new CmdLineException(owner, Messages.ILLEGAL_PATH, argument)
-    }
+    val res =
+      try {
+        Paths.get(argument)
+      } catch {
+        case _: Throwable => throw new CmdLineException(owner, Messages.ILLEGAL_PATH, argument)
+      }
     if (!Files.exists(res))
       throw new CmdLineException(parser, new IllegalArgumentException(s"$argument doesn't exist"))
     if (!Files.isReadable(res))

@@ -21,13 +21,12 @@ import scala.util.Try
 import msjava.slf4jutils.scalalog.getLogger
 
 /**
- * RT List Config
- * 1) provides an emergency mechanism for addition & removal of RT exceptions
- * 2) matching based on exception type (fqcn) and message patterns
+ * RT List Config 1) provides an emergency mechanism for addition & removal of RT exceptions 2) matching based on
+ * exception type (fqcn) and message patterns
  *
- * Format of the allow-list:
- * 1) Semi-colon separated matchers (i.e. each matcher matches with one exception, by asserting multiple criterion per matcher)
- * 2) Comma separated criterion (i.e. all criterion in a matcher has an implicit "AND" logic that forms the assertion)
+ * Format of the allow-list: 1) Semi-colon separated matchers (i.e. each matcher matches with one exception, by
+ * asserting multiple criterion per matcher) 2) Comma separated criterion (i.e. all criterion in a matcher has an
+ * implicit "AND" logic that forms the assertion)
  *
  * ```
  * optimus.additional.rt.exceptions=<operator>:<keyword>,<operator>:<keyword>;...
@@ -35,11 +34,8 @@ import msjava.slf4jutils.scalalog.getLogger
  * optimus.removed.rt.exception.classes=<exception fqcn>;...
  * ```
  *
- * where `<operator>` currently supports:
- * 1) `fqcn`: an exact match of a full-qualified class name
- * 2) `contains`: a sub-string match of the message of an exception
- * 3) `equals`: an exact match of the message of an exception
- *
+ * where `<operator>` currently supports: 1) `fqcn`: an exact match of a full-qualified class name 2) `contains`: a
+ * sub-string match of the message of an exception 3) `equals`: an exact match of the message of an exception
  *
  * Example:
  *
@@ -101,7 +97,7 @@ object RTListConfig extends RTListConfigTrait {
 }
 
 import ExceptionMatcher.MatchingCriteria
-private[optimus] case class ExceptionMatcher(matchingCriterion: MatchingCriteria*) {
+private[optimus] final case class ExceptionMatcher(matchingCriterion: MatchingCriteria*) {
   override val toString: String = matchingCriterion.map(_.toString).mkString(",")
 }
 private[optimus] object ExceptionMatcher {
@@ -111,16 +107,16 @@ private[optimus] object ExceptionMatcher {
   }
 
   object MatchingCriteria {
-    case class FQCNMatch(needle: String) extends MatchingCriteria {
+    final case class FQCNMatch(needle: String) extends MatchingCriteria {
       override def matchWith(fqcn: String, msg: String): Boolean = needle equals fqcn
       override val toString: String = s"fqcn:${needle}"
     }
     object MessageMatch {
-      case class EqualsMatch(needle: String) extends MatchingCriteria {
+      final case class EqualsMatch(needle: String) extends MatchingCriteria {
         override def matchWith(fqcn: String, msg: String): Boolean = needle equals msg
         override val toString: String = s"equals:${needle}"
       }
-      case class ContainsMatch(needle: String) extends MatchingCriteria {
+      final case class ContainsMatch(needle: String) extends MatchingCriteria {
         override def matchWith(fqcn: String, msg: String): Boolean = msg contains needle
         override val toString: String = s"contains:${needle}"
       }

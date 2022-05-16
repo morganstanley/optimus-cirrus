@@ -26,23 +26,24 @@ object JProfiler {
   val active = PropertyUtils.get("optimus.profiling.jprofiler", false)
 
   lazy val controller: Option[Controller] = if (active) {
-    try Some {
-      val lookup = MethodHandles.lookup
-      val c_Controller = Class.forName("com.jprofiler.api.agent.Controller")
-      val c_BookmarkColor = Class.forName("com.jprofiler.api.agent.Controller$BookmarkColor")
-      val m_BookmarkColor_init =
-        lookup.findConstructor(c_BookmarkColor, MT.fromMethodDescriptorString("(III)V", null))
-      val m_Controller_addBookmark =
-        lookup.findStatic(
-          c_Controller,
-          "addBookmark",
-          MT.methodType(classOf[Unit], classOf[String], c_BookmarkColor, classOf[Boolean]))
-      (description: String, color: BookmarkColor, dashed: Boolean) =>
-        {
+    try
+      Some {
+        val lookup = MethodHandles.lookup
+        val c_Controller = Class.forName("com.jprofiler.api.agent.Controller")
+        val c_BookmarkColor = Class.forName("com.jprofiler.api.agent.Controller$BookmarkColor")
+        val m_BookmarkColor_init =
+          lookup.findConstructor(c_BookmarkColor, MT.fromMethodDescriptorString("(III)V", null))
+        val m_Controller_addBookmark =
+          lookup.findStatic(
+            c_Controller,
+            "addBookmark",
+            MT.methodType(classOf[Unit], classOf[String], c_BookmarkColor, classOf[Boolean]))
+        (description: String, color: BookmarkColor, dashed: Boolean) => {
           val jpColor = m_BookmarkColor_init.invoke(color.red, color.green, color.blue)
           m_Controller_addBookmark.invoke(description, jpColor, dashed)
         }
-    } catch {
+      }
+    catch {
       case NonFatal(ex) =>
         logger.error(s"Can't initialize JProfiler", ex)
         None

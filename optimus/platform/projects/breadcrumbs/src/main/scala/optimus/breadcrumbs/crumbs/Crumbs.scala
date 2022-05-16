@@ -112,7 +112,7 @@ private[breadcrumbs] class FlushMarker extends Crumb(ChainedID.root) {
 
 object CrumbNodeType extends Enumeration {
   type CrumbNodeType = Value
-  val GenericNode, NullNode, UserAction, CalculationUnit, DataRequest, DistributedCalculation, DMCCalculation, Trace =
+  val GenericNode, NullNode, UserAction, CalculationUnit, DataRequest, DistributedCalculation, DMCCalculation, Trace, JobNode =
     Value
 }
 
@@ -239,6 +239,8 @@ object PropertiesCrumb {
       Set.empty[CrumbHint])
   def apply(uuid: ChainedID, source: Crumb.Source, elems: Properties.Elems) =
     new PropertiesCrumb(uuid, source, Map.empty[String, String], elems.toMap, Set.empty[CrumbHint])
+  def apply(uuid: ChainedID, source: Crumb.Source, elems: Properties.Elems, hints: Set[CrumbHint]) =
+    new PropertiesCrumb(uuid, source, Map.empty[String, String], elems.toMap, hints)
 
   @varargs def apply(uuid: ChainedID, source: Crumb.Source, hints: Set[CrumbHint], elems: Properties.Elem[_]*) =
     new PropertiesCrumb(uuid, source, Map.empty[String, String], Map[String, JsValue](elems.map(_.toTuple): _*), hints)
@@ -309,7 +311,12 @@ class LogPropertiesCrumb(
     m: Map[String, String],
     jsonProperties: Map[String, JsValue] = Map.empty,
     hints: Set[CrumbHint] = Set.empty[CrumbHint])
-    extends PropertiesCrumb(uuid, source, m, jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"), hints) {
+    extends PropertiesCrumb(
+      uuid,
+      source,
+      m,
+      jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"),
+      hints) {
   def this(uuid: ChainedID, m: Map[String, String]) = this(uuid, Crumb.OptimusSource, m)
   def this(uuid: ChainedID, m: Map[String, String], hints: Set[CrumbHint]) =
     this(uuid, Crumb.OptimusSource, m, hints = hints)
@@ -326,7 +333,7 @@ class LogPropertiesCrumb(
 object LogPropertiesCrumb {
   private[breadcrumbs] def loginfo =
     Properties.jsMap(Properties.host -> LoggingInfo.getHost, Properties.logFile -> LoggingInfo.getLogFile)
-  case class Location(m: Map[String, JsValue])
+  final case class Location(m: Map[String, JsValue])
   def location(drop: Int): Location = {
     val st = Thread.currentThread().getStackTrace.toSeq.tail
     Location(
@@ -457,6 +464,7 @@ object Crumb {
   object OptimusSource extends Source { override val name: String = Headers.DefaultSource }
   object RuntimeSource extends Source { override val name = "RT" }
   object GCSource extends Source { override val name = "GC" }
+  object ObservableSource extends Source { override val name = "OBS" }
   def newSource(sourceName: String) = new Source {
     override def name = sourceName
   }

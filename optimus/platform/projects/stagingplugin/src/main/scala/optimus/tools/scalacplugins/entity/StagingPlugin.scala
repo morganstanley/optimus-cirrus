@@ -26,12 +26,14 @@ object StagingSettings {
     val rewriteCollectionSeqName = "rewriteCollectionSeq:"
     val rewriteMapValuesName = "rewriteMapValues:"
     val rewriteBreakOutOpsName = "rewriteBreakOutOps:"
-    val rewriteBreakOutArgsName = "rewriteBreakOutArgs:"
+    val rewriteAsyncBreakOutOpsName = "rewriteAsyncBreakOutOps:"
+    val rewriteToConversionName = "rewriteToConversion:"
     val rewriteVarargsToSeqName = "rewriteVarargsToSeq:"
     val rewriteMapConcatWidenName = "rewriteMapConcatWiden:"
     val rewriteNilaryInfixName = "rewriteNilaryInfix:"
     val unitCompanionName = "unitCompanion:"
     val anyFormattedName = "anyFormatted:"
+    val rewriteCaseClassToFinalName = "rewriteCaseClassToFinal:"
   }
 }
 object StagingPlugin {
@@ -60,8 +62,10 @@ object StagingPlugin {
       pluginData.rewriteConfig.rewriteMapValues = parseOption(option, rewriteMapValuesName, false)
     else if (option.startsWith(rewriteBreakOutOpsName))
       pluginData.rewriteConfig.rewriteBreakOutOps = parseOption(option, rewriteBreakOutOpsName, false)
-    else if (option.startsWith(rewriteBreakOutArgsName))
-      pluginData.rewriteConfig.rewriteBreakOutArgs = parseOption(option, rewriteBreakOutArgsName, false)
+    else if (option.startsWith(rewriteAsyncBreakOutOpsName))
+      pluginData.rewriteConfig.rewriteAsyncBreakOutOps = parseOption(option, rewriteAsyncBreakOutOpsName, false)
+    else if (option.startsWith(rewriteToConversionName))
+      pluginData.rewriteConfig.rewriteToConversion = parseOption(option, rewriteToConversionName, false)
     else if (option.startsWith(rewriteVarargsToSeqName))
       pluginData.rewriteConfig.rewriteVarargsToSeq = parseOption(option, rewriteVarargsToSeqName, false)
     else if (option.startsWith(rewriteMapConcatWidenName))
@@ -72,6 +76,8 @@ object StagingPlugin {
       pluginData.rewriteConfig.unitCompanion = parseOption(option, unitCompanionName, false)
     else if (option.startsWith(anyFormattedName))
       pluginData.rewriteConfig.anyFormatted = parseOption(option, anyFormattedName, false)
+    else if (option.startsWith(rewriteCaseClassToFinalName))
+      pluginData.rewriteConfig.rewriteCaseClassToFinal = parseOption(option, rewriteCaseClassToFinalName, false)
     else error(s"unknown option '$option'")
   }
 
@@ -105,6 +111,8 @@ class StagingPlugin(val global: Global) extends Plugin {
     new StagingComponent(pluginData, global, StagingPhase.STAGING), // Before optimus_adjustast in entityplugin
     new CodingStandardsComponent(pluginData, global, StagingPhase.STANDARDS),
     new AnnotatingComponent(pluginData, global, StagingPhase.ANNOTATING),
+    new PostTyperCodingStandardsComponent(pluginData, global, StagingPhase.POST_TYPER_STANDARDS),
+    new GeneralAPICheckComponent(pluginData, global, StagingPhase.GENERAL_API_CHECK),
     new ForwardingComponent(pluginData, global, StagingPhase.FORWARDING),
     new rewrite.RewriteComponent(pluginData, global, StagingPhase.REWRITE)
   )
