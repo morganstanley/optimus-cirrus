@@ -124,7 +124,7 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
 }
 
 final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer)
-    extends AbstractFilter(Result.Deny, Result.Neutral) {
+    extends AbstractFilter(Result.Deny, Result.Accept) {
   override def filter(crumb: Crumb): Result =
     if (crumb.asJSON.toString.length > threshold)
       onMatch
@@ -147,18 +147,17 @@ object CompositeFilter {
   def unapply(arg: CompositeFilter): Option[CompositeFilter] = Some(arg)
 }
 
-final class CompositeFilter extends AbstractFilter(Result.Neutral, Result.Neutral) with Iterable[CrumbFilter] {
+final class CompositeFilter extends AbstractFilter(Result.Accept, Result.Deny) with Iterable[CrumbFilter] {
   private val filters = ArrayBuffer[CrumbFilter]()
 
   override def iterator: Iterator[CrumbFilter] = filters.toIterator
 
   override def filter(crumb: Crumb): Result = {
-    // Here we want the very first Deny result (if any), and we also don't want to
-    // apply any filters unnecessarily
-    // But still, we have to enumerate through all the filters there (without applying those after a matched though)
-    // Ideally, we don't even need to iterate through all filters here (Scala doesn't seem to have a construct for that)
+    // Here we want the very first onMismatch result (if any), and we also don't want to apply any filters unnecessarily
+    // But still, we have to enumerate through all the filters there (without applying those after a match, though)
+    // Ideally, we shouldn't even need to iterate through all filters here, but Scala doesn't seem to have a construct for that
     filters.foldLeft(Result.Neutral: Result) { case (result, filter) =>
-      if (result == Result.Deny) result
+      if (result == this.onMismatch) result
       else filter.filter(crumb)
     } match {
       case Result.Neutral => Result.Accept

@@ -157,8 +157,8 @@ class EdgeCrumb(val child: ChainedID, val parent: ChainedID, val edge: EdgeType.
   override def hashCode: Int = uuid.hashCode ^ parent.hashCode ^ edge.hashCode
 }
 
-class HostCrumb(child: ChainedID, host: InetAddress, src: Crumb.Source = OptimusSource)
-    extends EdgeCrumb(child, new ChainedID(host), EdgeType.HostedBy, src) {
+class HostCrumb(child: ChainedID, host: InetAddress, source: Crumb.Source = OptimusSource)
+    extends EdgeCrumb(child, new ChainedID(host), EdgeType.HostedBy, source) {
   // Caching "InetAddress.getLocalHost" avoids unnecessary DNS lookups and should be fine as hostname is not
   // expected to change during app runtime.
   def this(child: ChainedID) = this(child, LoggingInfo.getHostInetAddr)
@@ -166,7 +166,7 @@ class HostCrumb(child: ChainedID, host: InetAddress, src: Crumb.Source = Optimus
 object HostCrumb {
   def apply(child: ChainedID, host: InetAddress) = new HostCrumb(child, host)
   def apply(child: ChainedID) = new HostCrumb(child, InetAddress.getLocalHost)
-  def apply(child: ChainedID, src: Crumb.Source) = new HostCrumb(child, InetAddress.getLocalHost, src)
+  def apply(child: ChainedID, source: Crumb.Source) = new HostCrumb(child, InetAddress.getLocalHost, source)
 }
 
 class EventCrumb(uuid: ChainedID, source: Crumb.Source, val event: Event) extends Crumb(uuid, source) {

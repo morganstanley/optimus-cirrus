@@ -209,6 +209,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     OptimusPhases.ADJUST_AST,
     "@event definition must use named arguments in annotation (contained or projected)"
   )
+  val ABSTRACT_CONTAINED_EVENT = error0(
+    21509,
+    OptimusPhases.ADJUST_AST,
+    "@event(contained=true) cannot be abstract"
+  )
 
   val ASYNC_WITH_VAL = error0(21601, OptimusPhases.ADJUST_AST, "Illegal @async val, @async is only permitted with def")
   val NONENTITY_NODE_WITH_VAL = error0(
@@ -576,6 +581,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     OptimusPhases.REF_CHECKS,
     "implementation restriction: %s extending its companion %s leads to a name clash due to the synthetic PropertyInfo %s generated in the object. Please rename the object or its parent."
   )
+  val CONTAINED_EVENT_EXTEND_CONTAINED_EVENT = error3(
+    22321,
+    OptimusPhases.REF_CHECKS,
+    "@event(contained=true) class %s cannot extend @event(contained=true) class"
+  )
   val REFLECTIVE_NODE_INVOCATION =
     error1(
       22359,
@@ -784,15 +794,17 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(
       sn = 29100,
       OptimusPhases.REF_CHECKS,
-      "[NEW] For Scala 2.13 compatibility, replace `to[X]` by `to(X)`; this requires an `import scala.collection.compat._`")
+      "[NEW] For Scala 2.13 compatibility, replace `to[X]` by `to(X)`; this requires an `import scala.collection.compat._`"
+    )
   val PREDEF_FALLBACK_STRING_CBF =
     error0(
       sn = 29101,
       OptimusPhases.REF_CHECKS,
       """[NEW]The implicit Predef.fallbackStringCanBuildFrom is used here.
-      |This implicit instance is inferred when a `Seq` (or an unspecified) CanBuildFrom is required, but it builds an `IndexedSeq`.
-      |Instead, use an explicit conversion / CanBuildFrom for List, IndexedSeq or Vector.
-      |Enable "Show Implicit Hints" in IntelliJ to display the implicit argument.""".stripMargin)
+        |This implicit instance is inferred when a `Seq` (or an unspecified) CanBuildFrom is required, but it builds an `IndexedSeq`.
+        |Instead, use an explicit conversion / CanBuildFrom for List, IndexedSeq or Vector.
+        |Enable "Show Implicit Hints" in IntelliJ to display the implicit argument.""".stripMargin
+    )
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {

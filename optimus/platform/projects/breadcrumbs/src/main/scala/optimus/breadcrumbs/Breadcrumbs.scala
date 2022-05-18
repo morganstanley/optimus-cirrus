@@ -536,7 +536,7 @@ private[optimus] class BreadcrumbsRouter(
   }
 
   protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
-    route(c) send (c)
+    route(c) send(c)
   }
 
   override def flush(): Unit = publishers foreach { publisher =>
