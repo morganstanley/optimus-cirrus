@@ -25,4 +25,6 @@ public interface AbsMillisTimeSource {
    * @return the difference between absDeadlineMillis and absTimeMillis()
    */
   public int relMillisRemaining(long absDeadlineMillis);
+
+  public String name();
 }

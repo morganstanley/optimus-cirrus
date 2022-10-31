@@ -18,7 +18,7 @@ import com.netflix.config.WatchedUpdateListener
 import msjava.zkapi.PropertySource
 import org.yaml.snakeyaml.Yaml
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable.{Map => MutableMap}
 
 trait YamlPropertySource extends PropertySource {
@@ -39,7 +39,7 @@ protected[breadcrumbs] final class ReadOnlyYamlPropertySource(context: YamlConte
     "Unsupported update listener management operation attempted on read-only property source"
 
   private lazy val sourceObject = {
-    if (property isEmpty)
+    if (property.isEmpty)
       context.data asScala
     else
       property.split("/").foldLeft(context.data asScala) { (acc, element) =>

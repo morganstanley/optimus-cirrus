@@ -49,9 +49,9 @@ private[collection] object OptimusSeqEmpty extends OptimusSeq[Nothing] {
       bf: CanBuildFrom[OptimusSeq[Nothing], B, That]): That = {
     if (isCompatableCBF(bf)) this.asInstanceOf[That] else super.collect(pf)
   }
-  override def head: Nothing = Iterator.empty.next
-  override def tail: OptimusSeq[Nothing] = Iterator.empty.next
-  override def last: Nothing = Iterator.empty.next
+  override def head: Nothing = Iterator.empty.next()
+  override def tail: OptimusSeq[Nothing] = Iterator.empty.next()
+  override def last: Nothing = Iterator.empty.next()
   // extension methods
   override def mapWithIndex[B](f: (Nothing, Int) => B): OptimusSeq[B] = {
     this.asInstanceOf[OptimusSeq[B]]

@@ -38,8 +38,8 @@ object JavaVersionCompat {
   }
 
   object WatchEventModifiers {
-    private def lookup[T <: Enum[T], V](cl: Class[_], nm: String): V = {
-      Enum.valueOf(cl.asInstanceOf[Class[T]], nm).asInstanceOf[V]
+    private def lookup[T <: java.lang.Enum[T], V](cl: Class[_], nm: String): V = {
+      java.lang.Enum.valueOf(cl.asInstanceOf[Class[T]], nm).asInstanceOf[V]
     }
 
     val highSensititivty: WatchEvent.Modifier =

@@ -11,11 +11,17 @@
  */
 package optimus.logging
 
-import scala.collection.JavaConverters.asScalaBufferConverter
-import scala.collection.JavaConverters.asScalaIteratorConverter
+import scala.jdk.CollectionConverters._
 import java.net.InetAddress
-
 import optimus.platform.util.Log
+
+import scala.collection.mutable
+import scala.io.Source
+import optimus.scalacompat.collection._
+import scala.util.Try
+import scala.util.Success
+import scala.util.Failure
+import scala.util.Properties
 import scala.util.control.NonFatal
 
 object Pid extends Log {
@@ -71,8 +77,55 @@ object LoggingInfo {
     files.toSeq
   }
 
+  // I'm worried that this might be huge for some apps, causing the crumb to exceed the size limit and get dropped
+  def getJavaOpts(): String = {
+    Option(System.getenv("JAVA_OPTS"))
+      .map(_.trim)
+      .map { o =>
+        // the --add-exports / --add-opens are generally uninformative and waste room in our 2k limit
+        // drop args after we reach 2000 chars
+        val withoutJigsaw = o.split(" ").filterNot(_ startsWith "--add-").mkString(" ")
+        if (withoutJigsaw.length > 2000) withoutJigsaw.substring(0, 1997) + "..." else withoutJigsaw
+      }
+      .orNull
+  }
+
   lazy val getHostInetAddr: InetAddress = InetAddress.getLocalHost
   lazy val getHost: String = getHostInetAddr.getHostName
   lazy val getUser: String = System.getProperty("user.name", "unknown")
-  lazy val pid: Long = Pid.pidOrZero
+  lazy val pid: Long = Pid.pidOrZero()
+  lazy val gsfControllerId: Option[String] = Option(System.getenv("GSF_CONTROLLER_ID"))
 }
+
+object HardwareInfo {
+  private val MapRe = """(\S.*\S)\s*\:\s*(.*\S)\s*""".r
+  private var id = -1
+  lazy val allCpuInfo: Try[Map[Int, Map[String, String]]] = Try {
+      val cpus = mutable.HashMap.empty[Int, mutable.HashMap[String, String]]
+      Source.fromFile("/proc/cpuinfo").getLines().foreach {
+        case MapRe("processor", sid) =>
+          id = sid.toInt
+          cpus += id -> mutable.HashMap.empty
+        case MapRe(k, v) if id >= 0 =>
+          cpus(id) += k.replaceAllLiterally(" ", "_") -> v
+        case _ =>
+      }
+      cpus.toMap.mapValuesNow(_.toMap)
+  }
+
+  // TODO (OPTIMUS-51948): Consider making extracted info part of DTC key
+  lazy val cpuInfo: Map[String, String] = if(Properties.isWin) Map("exception" -> "windows") else
+    allCpuInfo.flatMap(infos => Try(infos(0) + ("processors" -> (id+1).toString))) match {
+      case Success(map) => map
+      case Failure(t) => Map("exception" -> t.toString)
+    }
+  lazy val memInfo: Map[String, String] = if(Properties.isWin) Map("exception" -> "windows") else Try {
+    Source.fromFile("/proc/meminfo").getLines.collect {
+      case MapRe(k, v) => k -> v
+    }.toMap
+  } match {
+    case Success(map) => map
+    case Failure(t) => Map("exception" -> t.toString)
+  }
+}
+

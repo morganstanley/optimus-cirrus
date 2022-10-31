@@ -12,13 +12,13 @@
 package optimus.breadcrumbs.zookeeper
 
 import java.io.Closeable
-import java.util.{List => JavaList, ArrayList => JavaArrayList, Map => JavaMap, HashMap => JavaHashMap}
-
+import java.util.{ArrayList => JavaArrayList, HashMap => JavaHashMap, List => JavaList, Map => JavaMap}
 import msjava.zkapi.PropertySource
 import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import msjava.zkapi.internal.ZkaData
 import msjava.zkapi.internal.ZkaPropertySource
+import optimus.breadcrumbs.Breadcrumbs.SetupFlags
 import optimus.breadcrumbs._
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.filter.CrumbFilter
@@ -26,7 +26,7 @@ import optimus.breadcrumbs.routing.CrumbRoutingRule
 import optimus.utils.PropertyUtils
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -68,7 +68,11 @@ object BreadcrumbsPropertyConfigurer {
   }
    */
 
-  def findCase[A](ps: PropertySource, property: String, customizationKeys: Map[String, String]): Option[A] = {
+  def findCase[A](
+      ps: PropertySource,
+      property: String,
+      customizationKeys: Map[String, String],
+      verbose: Boolean = false): Option[A] = {
     val data = ps.getProperty(property)
     if (data eq null) return None
     val cases = data.asInstanceOf[JavaMap[String, JavaList[JavaMap[String, AnyRef]]]].get("cases")
@@ -80,10 +84,19 @@ object BreadcrumbsPropertyConfigurer {
         {
           log.debug(s"Checking against case $zkCase")
           // Every zk key should be present in the customization map and match.
-          zkCase.forall { case (k, v) =>
+          val exists = zkCase.forall { case (k, v) =>
             (k == property) || (k == "_default") ||
             customizationKeys.get(k).exists(_.matches(v.toString))
           }
+          if (verbose) {
+            val maybeFallback =
+              if ((zkCase.keys.size == 1) && (zkCase.keySet.contains(property) || zkCase.keySet.contains("_default")))
+                "fallback"
+              else ""
+            val matched = if (exists) "MATCHED" else "did not match"
+            log.info(s"configuration for $property $matched $maybeFallback case $zkCase")
+          }
+          exists
         }
       }
       .map { c: Map[String, AnyRef] =>
@@ -220,7 +233,9 @@ object BreadcrumbsPropertyConfigurer {
 
   private[breadcrumbs] def implFromConfig(
       zkc: ZkaContext,
-      appKeys: Map[String, String] = Map()): BreadcrumbsPublisher = {
+      appKeys: Map[String, String] = Map(),
+      setupFlags: SetupFlags = SetupFlags.None
+  ): BreadcrumbsPublisher = {
 
     CachedZkaContext.withCache(zkc) { czkc =>
       /**
@@ -312,11 +327,12 @@ object BreadcrumbsPropertyConfigurer {
           }
       }
 
+      val verboseSetup = Set(SetupFlags.StrictInit, SetupFlags.VerboseInit).exists(setupFlags.contains(_))
       val configuredPublisher =
         try {
           (for (
             ps <- maybePropertySource;
-            publisher <- findCase[String](ps, PublisherKey, keys)
+            publisher <- findCase[String](ps, PublisherKey, keys, verbose = verboseSetup)
           )
             yield select(publisher)) getOrElse ignorer
         } catch {
@@ -325,6 +341,10 @@ object BreadcrumbsPropertyConfigurer {
             log.debug("Exception:", ex)
             ignorer
         }
+
+      if (setupFlags.contains(SetupFlags.StrictInit) && configuredPublisher.isInstanceOf[BreadcrumbsIgnorer]) {
+        throw new IllegalArgumentException("Crumb configuration would result in no publisher being enabled")
+      }
 
       val routingConfiguration =
         try {
@@ -448,7 +468,7 @@ protected[breadcrumbs] object CachedZkaContext {
     try {
       f(cache)
     } finally {
-      cache.clear
+      cache.clear()
     }
   }
 }

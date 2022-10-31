@@ -9,17 +9,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package scala.collection.immutable
+package optimus.utils
 
-import java.util
+import optimus.utils.MacroUtils.splice
+import optimus.utils.MacroUtils.typecheckAndValidate
 
-import optimus.collection.OptimusSeq
+import scala.reflect.macros.blackbox.Context
 
-import scala.collection.generic.CanBuildFrom
-import org.slf4j.LoggerFactory
+class AdvancedUtilsMacros(val c: Context) {
+  import c.universe._
+  final def timedImpl(f: c.Tree): c.Tree = {
+    val startTime = c.freshName(TermName("startTime"))
+    val result = c.freshName(TermName("result"))
 
-object CollectionsHook {
-  val log = LoggerFactory.getLogger(this.getClass)
-
-  def isOptimusSeqCompatableCBF(cbf: CanBuildFrom[_, _, _]): Boolean = false
+    typecheckAndValidate(c)(q"""
+      val $startTime = _root_.optimus.graph.OGTrace.nanoTime()
+      val $result = ${splice(c)(f)}
+      _root_.optimus.platform.AdvancedUtils.timedValueSink($startTime, $result)
+    """)
+  }
 }

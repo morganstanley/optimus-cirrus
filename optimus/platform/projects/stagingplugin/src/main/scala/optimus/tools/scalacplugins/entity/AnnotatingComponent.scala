@@ -14,6 +14,12 @@ package optimus.tools.scalacplugins.entity
 import scala.tools.nsc._
 import scala.tools.nsc.plugins._
 
+object AnnotatingComponent {
+  val lazyReason =
+    "Lazy collections may cause code to get executed outside of the optimus scope that is expected: http://optimusdoc/ReviewBuddy#Lazy_Collections"
+  val streamFunctions: Seq[String] = Seq("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "range")
+}
+
 /**
  * Adds annotations to pre-existing (i.e. library) symbols. Currently only supports @deprecated but could easily be
  * modified to add other annotations.
@@ -27,31 +33,53 @@ class AnnotatingComponent(
   import global._
 
   /**
-   * lookup class / object or term member
-   *   - a.C: class C and object C
-   *   - a.C.foo: term members `foo` in class or object C
+   * lookup class / object or term member. For `x.y.z`, returns all type and term symbols `z` located either in class or
+   * module `x.y`.
+   *
+   * If `z` ends with `$`, only returns terms. If `z` ends in `#`, only return types.
    */
   private def lookup(name: String): Seq[Symbol] = {
-    def templates(n: String) = Seq(rootMirror.getModuleIfDefined(n), rootMirror.getClassIfDefined(n)).filter(_.exists)
-    val tps = templates(name)
-    if (tps.nonEmpty) tps
-    else {
-      val dot = name.lastIndexOf(".")
-      val owners = templates(name.substring(0, dot))
-      owners.flatMap(_.info.member(TermName(name.substring(dot + 1))).alternatives)
-    }
+    val last = name.last
+    val trm = last == '$' || last != '#'
+    val tpe = last == '#' || last != '$'
+    def owners(n: String) =
+      Set(rootMirror.getModuleIfDefined(n), rootMirror.getModuleIfDefined(n), rootMirror.getClassIfDefined(n))
+        .filter(_.exists)
+    def members(o: Symbol, n: String) =
+      ((if (tpe) o.info.member(TypeName(n)) else NoSymbol) ::
+        (if (trm) o.info.member(TermName(n)) else NoSymbol).alternatives).filter(_.exists)
+    val dot = name.lastIndexOf(".")
+    val memberName = name.substring(dot + 1).stripSuffix("$").stripSuffix("#")
+    owners(name.substring(0, dot)).flatMap(o => members(o, memberName)).toSeq
   }
 
   private def useInstead(alt: String, neu: Boolean = false) =
     s"${if (neu) "[NEW]" else ""}use $alt instead (deprecated by optimus staging)"
 
-  private val reason = "lazy collections are discouraged http://optimusdoc/ReviewBuddy#Lazy_Collections"
   private val view = "view"
+  private val mapValues = "mapValues"
+  private val mapValuesReasonSuffix = ". Please import optimus.scalacompat.collection._ and use mapValuesNow instead"
+  private val withFilter = "withFilter"
+  private val toStream = "toStream"
+  private val streamPrefix = "scala.collection.immutable.Stream."
   private val discourageds = Seq[(String, List[String])](
-    "scala.collection.TraversableLike.view" -> List(view, reason),
-    "scala.collection.IterableLike.view" -> List(view, reason),
-    "scala.collection.SeqLike.view" -> List(view, reason)
-  )
+    "scala.collection.TraversableLike.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.IterableLike.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.SeqLike.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.immutable.MapLike.mapValues" -> List(
+      mapValues,
+      AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
+    "scala.collection.MapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
+    "scala.collection.GenMapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
+    "scala.collection.TraversableLike.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason),
+    "scala.collection.TraversableOnce.MonadOps.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason),
+    "scala.collection.GenTraversableOnce.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
+    "scala.collection.IterableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
+    "scala.collection.TraversableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason)
+  ) ++
+    AnnotatingComponent.streamFunctions
+      .map(s => streamPrefix + s)
+      .zip(AnnotatingComponent.streamFunctions.map(s => List(s, AnnotatingComponent.lazyReason)))
 
   private val deprecations = Seq[(String, List[String])](
     // "org.something.Deprecated" -> useInstead("org.something.ToUseInstead")
@@ -59,7 +87,7 @@ class AnnotatingComponent(
 
   private val deprecatings = Seq[(String, List[String])](
     "scala.Predef.StringFormat.formatted" -> List(
-      useInstead("`formatString.format(value)` or the `f\"\"` string interpolator", neu = true)
+      useInstead("`formatString.format(value)` or the `f\"\"` string interpolator")
     ),
     "scala.collection.breakOut" -> List(
       """collection.breakOut does not exist on Scala 2.13.
@@ -69,7 +97,12 @@ class AnnotatingComponent(
         |  - for target types with 0 or 2 type parameters, also add `import optimus.scalacompat.collection._` and use `.convertTo(SortedMap)`
         | For operations on async collections (`apar` or `aseq`):
         |   - add `import optimus.scalacompat.collection._` and use `coll.apar.map(f)(TargetType.breakOut)`""".stripMargin
-    )
+    ),
+    "scala.Unit$" -> List("`Unit` value is not allowed in source; use `()` for the value of type `Unit`"),
+    "scala.Predef.any2stringadd" -> List(
+      "instead of `object + string`, use a string interpolation or `\"\" + object + string`."),
+    "scala.collection.JavaConverters" -> List(useInstead("scala.jdk.CollectionConverters")),
+    "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters"))
   )
 
   private lazy val deprecatedAnno = rootMirror.getRequiredClass("scala.deprecated")

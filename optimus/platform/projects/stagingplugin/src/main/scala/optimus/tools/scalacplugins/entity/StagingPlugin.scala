@@ -33,7 +33,9 @@ object StagingSettings {
     val rewriteNilaryInfixName = "rewriteNilaryInfix:"
     val unitCompanionName = "unitCompanion:"
     val anyFormattedName = "anyFormatted:"
+    val any2StringAddName = "any2StringAdd:"
     val rewriteCaseClassToFinalName = "rewriteCaseClassToFinal:"
+    val slowCompilationWarningThresholdMsName = "slowCompilationWarningThresholdMs:"
   }
 }
 object StagingPlugin {
@@ -42,6 +44,8 @@ object StagingPlugin {
     case "true" | "enable" | "1" | "on"    => true
     case _                                 => default
   }
+
+  def parseInt(option: String, name: String): Int = option.substring(name.length).toInt
 
   def parseReportConfig(option: String, name: String): Set[String] = {
     option.substring(name.length).split(";").toSet
@@ -76,8 +80,12 @@ object StagingPlugin {
       pluginData.rewriteConfig.unitCompanion = parseOption(option, unitCompanionName, false)
     else if (option.startsWith(anyFormattedName))
       pluginData.rewriteConfig.anyFormatted = parseOption(option, anyFormattedName, false)
+    else if (option.startsWith(any2StringAddName))
+      pluginData.rewriteConfig.any2StringAdd = parseOption(option, any2StringAddName, false)
     else if (option.startsWith(rewriteCaseClassToFinalName))
       pluginData.rewriteConfig.rewriteCaseClassToFinal = parseOption(option, rewriteCaseClassToFinalName, false)
+    else if (option.startsWith(slowCompilationWarningThresholdMsName))
+      pluginData.slowCompilationWarningThresholdMs = parseInt(option, slowCompilationWarningThresholdMsName)
     else error(s"unknown option '$option'")
   }
 
@@ -113,7 +121,6 @@ class StagingPlugin(val global: Global) extends Plugin {
     new AnnotatingComponent(pluginData, global, StagingPhase.ANNOTATING),
     new PostTyperCodingStandardsComponent(pluginData, global, StagingPhase.POST_TYPER_STANDARDS),
     new GeneralAPICheckComponent(pluginData, global, StagingPhase.GENERAL_API_CHECK),
-    new ForwardingComponent(pluginData, global, StagingPhase.FORWARDING),
     new rewrite.RewriteComponent(pluginData, global, StagingPhase.REWRITE)
   )
 }

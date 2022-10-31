@@ -25,7 +25,7 @@ import java.util.regex.Pattern
 
 import org.slf4j.LoggerFactory.getLogger
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 

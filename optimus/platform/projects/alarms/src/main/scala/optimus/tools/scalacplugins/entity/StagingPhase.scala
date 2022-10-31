@@ -26,7 +26,6 @@ object StagingPhase {
     val optimus_staging = "optimus_staging"
     val optimus_annotator = "optimus_annotator"
     val optimus_standards = "optimus_standards"
-    val optimus_forwarding = "optimus_forwarding"
     val optimus_rewrite = "optimus_rewrite"
     val optimus_general_apicheck = "optimus_general_apicheck"
     val optimus_post_typer_standards = "optimus_post_typer_standards"
@@ -56,8 +55,6 @@ object StagingPhase {
     optimus_general_apicheck,
     "API checks not specific to Optimus internals",
     typer,
-    optimus_forwarding)
-  val FORWARDING =
-    OptimusPhaseInfo(optimus_forwarding, "rewrite references to @forwarder values", typer, superaccessors)
+    superaccessors)
   val REWRITE = OptimusPhaseInfo(optimus_rewrite, "rewrite source files in-place during migration", typer, patmat)
 }

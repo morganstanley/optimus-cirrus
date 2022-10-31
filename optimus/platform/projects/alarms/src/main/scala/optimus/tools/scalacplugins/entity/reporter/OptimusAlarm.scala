@@ -43,6 +43,7 @@ object OptimusAlarms {
     StagingNonErrorMessages.ensureLoaded()
     CodeStyleErrors.ensureLoaded()
     CodeStyleNonErrorMessages.ensureLoaded()
+    Scala213MigrationMessages.ensureLoaded()
     UIAlarms.ensureLoaded()
     VersioningAlarms.ensureLoaded()
     PluginMacrosAlarms.ensureLoaded()

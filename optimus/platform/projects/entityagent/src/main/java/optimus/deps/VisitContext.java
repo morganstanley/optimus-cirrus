@@ -57,8 +57,11 @@ public class VisitContext {
   // WARNING: Dangerous with potential class shadowing/hacks
   //          But deemed reasonable for performance reason (reduce CPU load and minimize object trashing).
   protected static boolean dependencyOfInterest(String name) {
-    assert(name.contains("/") || (name.indexOf('.') == name.lastIndexOf('.')));
-    return !name.startsWith("java/lang/") && !name.startsWith("java/util/") && !name.startsWith("scala/");
+    assert (name.contains("/") || (name.indexOf('.') == name.lastIndexOf('.')));
+    return !name.startsWith("java/lang/") &&
+           !name.startsWith("java/util/") &&
+           !name.startsWith("java/io/Serializable") &&
+           !name.startsWith("scala/");
   }
 
   String addClassDependencyFromSimpleTypeDesc(String descriptor) {

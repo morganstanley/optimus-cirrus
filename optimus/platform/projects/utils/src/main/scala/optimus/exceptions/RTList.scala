@@ -21,7 +21,7 @@ import optimus.utils.MiscUtils.Endoish._
 import org.apache.commons.io.IOUtils
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.reflect.NameTransformer
 
 object RTException extends Throwable with RTExceptionTrait {
@@ -82,6 +82,17 @@ object RTList {
     matched
   }
 
+  implicit class ExceptionOps(val e: Throwable) extends AnyVal {
+    def isRT = RTList.isRT(e)
+  }
+
+  // Returns true if it was previously uncached
+  private[exceptions] def setAsRT(t: Throwable): Boolean = {
+    val wasNotCached = isRTCache.getIfPresent(t)eq null
+    if(wasNotCached) isRTCache.put(t, true)
+    wasNotCached
+  }
+  // weakKeys means that identity equality is used
   private val isRTCache = CacheBuilder.newBuilder().weakKeys().maximumSize(100000).build[Throwable, JBoolean]()
   def isRT(t: Throwable): Boolean = {
     var horror: Throwable = null // So we can throw the exception outside of the cache callback

@@ -31,10 +31,8 @@ object OptimusPhases {
 
     val typer = "typer" // scalac phase: the meat and potatoes: type the trees
 
-    val optimus_forwarding = StagingPhase.names.optimus_forwarding
     val optimus_classifier = "optimus_classifier"
     val optimus_apicheck = "optimus_apicheck"
-    val optimus_entity_relationship = "optimus_entity_relationship"
     val optimus_refchecks = "optimus_refchecks"
     val optimus_valaccessors = "optimus_valaccessors"
     val optimus_embeddable = "optimus_embeddable"
@@ -43,8 +41,8 @@ object OptimusPhases {
     val optimus_nodelift = "optimus_nodelift"
     val optimus_generatenodemethods = "optimus_generatenodemethods"
     val optimus_asyncgraph = "optimus_asyncgraph"
-    val optimus_autoasync = "optimus_autoasync"
     val optimus_location_tag = "optimus_location_tag"
+    val optimus_autoasync = "optimus_autoasync"
 
     val patmat = "patmat" // scalac phase: translate match expressions
     val superaccessors = "superaccessors" // scalac phase: add super accessors in traits and nested classes
@@ -92,9 +90,7 @@ object OptimusPhases {
     namer -> ""
   )
   private val List(
-    _FORWARDING,
     _CLASSIFIER,
-    _ENTITY_RELATIONSHIP,
     _PROPERTY_INFO,
     _SAFE_EXPORT_CHECK,
     _APICHECK,
@@ -102,9 +98,7 @@ object OptimusPhases {
     _REF_CHECKS
   ) = phaseBlock(
     typer -> "",
-    StagingPhase.FORWARDING.nameAndDescription,
     optimus_classifier -> "mark nodes and other symbols of interest",
-    optimus_entity_relationship -> "generate metadata for the ComputeEntityRelationships app (likely redundant with optimus_export)",
     optimus_propertyinfo -> "create property info vals on entity companions",
     optimus_safeInteropExportCheck -> "validate uses of @exported annotation",
     optimus_apicheck -> "warn on deprecated API usage and other optimus API misuses",
@@ -114,7 +108,7 @@ object OptimusPhases {
   )
   // TODO:(OPTIMUS-24229) Remove is212 branches after upgrade to Scala 2.13.x is fully complete
   private val is212 = scala.util.Properties.releaseVersion.getOrElse("").contains("2.12.")
-  private val List(_EMBEDDABLE, _ENTITY_INFO, _AUTOASYNC, _GENERATE_LOCATION_TAG, _GENERATE_NODE_METHODS, _NODE_LIFT) = {
+  private val List(_EMBEDDABLE, _ENTITY_INFO, _GENERATE_LOCATION_TAG, _AUTOASYNC, _GENERATE_NODE_METHODS, _NODE_LIFT) = {
     val optimus_embeddable_described = optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes"
     val optimus_entityinfo_described = optimus_entityinfo -> "generate info/$info members for entities"
     val optimus_location_tag_described = optimus_location_tag -> "generate unique location tag"
@@ -164,9 +158,7 @@ object OptimusPhases {
     OptimusPhaseInfo(optimus_capturebyvalue, "move captured values into @captureByValue closures", uncurry, fields)
 
   val ADJUST_AST = _ADJUST_AST
-  val FORWARDING = _FORWARDING
   val CLASSIFIER = _CLASSIFIER
-  val ENTITY_RELATIONSHIP = _ENTITY_RELATIONSHIP
   val PROPERTY_INFO = _PROPERTY_INFO
   val SAFE_EXPORT_CHECK = _SAFE_EXPORT_CHECK
   val APICHECK = _APICHECK
@@ -174,8 +166,8 @@ object OptimusPhases {
   val VAL_ACCESSORS = _VAL_ACCESSORS
   val EMBEDDABLE = _EMBEDDABLE
   val ENTITY_INFO = _ENTITY_INFO
-  val AUTOASYNC = _AUTOASYNC
   val GENERATE_LOCATION_TAG = _GENERATE_LOCATION_TAG
+  val AUTOASYNC = _AUTOASYNC
   val GENERATE_NODE_METHODS = _GENERATE_NODE_METHODS
   val NODE_LIFT = _NODE_LIFT
   val ASYNC_GRAPH = _ASYNC_GRAPH

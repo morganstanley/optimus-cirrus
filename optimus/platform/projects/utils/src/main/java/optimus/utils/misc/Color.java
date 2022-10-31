@@ -40,7 +40,7 @@ public class Color {
   public final static Color CYAN = cyan;
   public final static Color blue = new Color(0, 0, 255);
   public final static Color BLUE = blue;
-  int value;
+  private int value;
 
   private static void testColorValueRange(int r, int g, int b, int a) {
     boolean rangeError = false;
@@ -80,13 +80,9 @@ public class Color {
     return value;
   }
 
-  static int getRGB(int r, int g, int b) {
-    return getRGB(r, g, b, 255);
-  }
-
-  static int getRGB(int r, int g, int b, int a) {
+  private static int getRGB(int r, int g, int b, int a) {
     testColorValueRange(r, g, b, a);
-    return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | ((b & 0xFF) << 0);
+    return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | ((b & 0xFF));
   }
 
 }

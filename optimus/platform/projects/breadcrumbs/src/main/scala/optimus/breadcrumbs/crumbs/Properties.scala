@@ -24,14 +24,15 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.immutable.SortedSet
 import scala.collection.immutable.TreeSet
 import scala.language.implicitConversions
 import scala.util.Try
 
 abstract class KnownProperties private[crumbs] extends Enumeration {
-  import Properties.{Elem, Key}
+  import Properties.Elem
+  import Properties.Key
 
   // copied out of Enumeration.scala
   private def nextNameOrNull = if (nextName != null && nextName.hasNext) nextName.next() else null
@@ -57,7 +58,7 @@ abstract class KnownProperties private[crumbs] extends Enumeration {
   class EnumeratedKeyLong(nme: String) extends EnumeratedKey[Long](nme) {
     def this() = this(nextNameOrNull)
     def elem(i: Long): Elem[Long] = Elem(this, i)
-    def apply(i: Long) = Elem(this, i)
+    def apply(i: Long): Elem[Long] = Elem(this, i)
   }
   class EnumeratedKeyDouble extends EnumeratedKey[Double] {
     def elem(d: Double): Elem[Double] = Elem(this, d)
@@ -207,9 +208,9 @@ object Properties extends KnownProperties {
         override def read(json: JsValue): SortedSet[T] = TreeSet.empty[T] ++ json.convertTo[Seq[T]]
       }
 
-    implicit val crumbNodeTypeJsonFormat = new EnumJsonConverter(CrumbNodeType)
+    implicit val crumbNodeTypeJsonFormat: EnumJsonConverter[CrumbNodeType.type] = new EnumJsonConverter(CrumbNodeType)
 
-    implicit val metaDataTypeJsonFormat = new EnumJsonConverter(MetaDataType)
+    implicit val metaDataTypeJsonFormat: EnumJsonConverter[MetaDataType.type] = new EnumJsonConverter(MetaDataType)
 
     implicit object EventJsonFormat extends RootJsonFormat[Event] {
       override def read(json: JsValue): Event = Events.parseEvent(json.convertTo[String])
@@ -311,7 +312,7 @@ object Properties extends KnownProperties {
     }
 
   }
-  import JsonImplicits._, EventCauseJsonProtocol._
+  import JsonImplicits._
   import spray.json._
   import DefaultJsonProtocol._
 
@@ -418,6 +419,7 @@ object Properties extends KnownProperties {
   val engineId = prop[ChainedID]
   val engine = prop[String]
   val replicaFrom = prop[ChainedID]
+  val currentlyRunning = prop[Seq[ChainedID]]
   val requestId = prop[ChainedID]
   val exception = prop[Throwable]
   val stackTrace = prop[Seq[String]]
@@ -445,8 +447,6 @@ object Properties extends KnownProperties {
   val gcUsedHeapBeforeGC = propD
   val gcUsedOldGenBeforeGC = propD
   val gcUsedHeapAfterGC = propD
-  val gcUsedOldGenAfterGC = propD
-  val gcUsedHeapAfterCleanup = propD
   val gcUsedOldGenAfterCleanup = propD
   val gcMaxOldGen = propD
   val gcMaxHeap = propD
@@ -488,6 +488,16 @@ object Properties extends KnownProperties {
   val gcCacheRemaining = propI
   val gcCleanupsFired = propL
   val gcMinorsSinceMajor = propL
+
+  //
+  val gcMinUsedHeapAfterGC = propD
+  val gcMinUsedHeapBeforeGC = propD
+  val gcMaxUsedHeapAfterGC = propD
+  val gcMaxUsedHeapBeforeGC = propD
+  val gcUsedOldGenAfterGC = propD
+  val gcUsedHeapAfterCleanup = propD
+  val gcNumMinor = propI
+  val gcNumMajor = propI
 
   val clearCacheLevel = propL
   val triggerRatio = propD
@@ -556,6 +566,7 @@ object Properties extends KnownProperties {
   val logname = prop[String]
   val time = prop[String]
   val invocationStyle = prop[String]
+  val gsfControllerId = prop[String]
 
   val appLaunchContextType = prop[String]
   val appLaunchContextEnv = prop[String]
@@ -603,6 +614,7 @@ object Properties extends KnownProperties {
   val obtDurationByPhase = prop[Map[String, Map[String, Long]]]
   val obtDurationCentilesByPhase = prop[Map[String, Seq[Long]]]
   val obtDurationByCategory = prop[Map[String, Map[String, Long]]]
+  val obtDurationByScenario = prop[Map[String, Map[String, Long]]]
   val obtDurationCentilesByCategory = prop[Map[String, Seq[Long]]]
   val obtFailuresByCategory = prop[Map[String, Int]]
   val obtErrorsByCategory = prop[Map[String, Long]]
@@ -635,6 +647,7 @@ object Properties extends KnownProperties {
   val hotspotCacheBenefit = propL
   val hotspotAvgCacheTime = propL
   val hotspotAncSelfTime = propL
+  val hotspotPostCompleteTime = propL
   val hotspotWallTime = propL
   val hotspotSelfTime = propL
   val hotspotTweakLookupTime = propL
@@ -669,6 +682,13 @@ object Properties extends KnownProperties {
   val overlayScenario = prop[String]
   val trivialOverlay = propB
 
+  /** XSFT cycle recovery (NodeTaskInfo name) */
+  val xsftCycle = prop[String]
+  val xsftStack = prop[String]
+
+  /** Used to detect whether a certain feature is being used */
+  val feature = prop[String]
+
   /** EmailSender tracking */
   val recipientDomains = prop[Seq[String]]
   val senderAPI = prop[String]
@@ -677,6 +697,20 @@ object Properties extends KnownProperties {
 
   val fileContents = prop[String]
 
+  val cpuInfo = prop[Map[String, String]]
+  val memInfo = prop[Map[String, String]]
+
+  /** Catch production uses of -Doptimus.runtime.allowIllegalOverrideOfInitialRuntimeEnvironment=true */
+  val overrideInitRuntimeEnv = propB
+
+  /** Graph Stress Test history and tinmings */
+  val stressTestInjector = prop[String]
+  val stressTestSuite = prop[String]
+  val stressTestGraph = prop[String]
+  val stressTestTest = prop[String]
+  // measured in seconds
+  val stressTestAvgGraphTimeS = propD
+  val stressTestFailure = propB
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

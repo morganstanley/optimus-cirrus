@@ -14,6 +14,6 @@ package optimus.tools.scalacplugins.entity.reporter
 object HandlerAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
   protected val macroType = OptimusMacroType.UI_MACRO
 
-  val NEED_HANDLER_ANNO = warning0(63206, "definition of method used as handler should be annotated @handle")
-  val NO_SIGNAL_EVENT_HANDLER = warningOptional0(63209, "no signal events type is found in handler")
+  val NEED_HANDLER_ANNO = error0(63206, "definition of method used as handler should be annotated @handle")
+  val NO_SIGNAL_EVENT_HANDLER = warning0(63209, "no signal events type is found in handler")
 }

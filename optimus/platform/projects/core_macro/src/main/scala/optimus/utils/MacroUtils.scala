@@ -104,8 +104,8 @@ object MacroUtils {
 
       override def traverse(tree: Tree): Unit = {
         // just putting these here to make it clear what's happening inside the match
-        def keepGoing { super.traverse(tree) }
-        def stop {}
+        def keepGoing: Unit = { super.traverse(tree) }
+        def stop: Unit = {}
 
         val prevTree = currentTree
         currentTree = tree
@@ -423,7 +423,7 @@ object Show {
       addline(indent, "List(")
       l.foreach { e =>
         if (yet)
-          sb ++ ","
+          sb ++= ","
         else
           yet = true
         tearUp(e, indent + 2)
@@ -445,24 +445,24 @@ object Show {
               rhs: g.Tree) =>
           addline(ind, "DefDef(" + abbrev(x))
           addline(ind + 2, showRaw(mods) + "," + showRaw(name) + ",")
-          addList(ind + 2, tparams); sb ++ ","
+          addList(ind + 2, tparams); sb ++= ","
           addline(ind + 2, "List(")
           var yet = false
           vparamss.foreach { l: List[ValDef] =>
             {
-              if (yet) { sb ++ "," }
+              if (yet) { sb ++= "," }
               else { yet = true }
               addList(ind + 4, l)
             }
           }
-          sb ++ "),"
-          tearUp(tpt, ind + 2); sb ++ ","
-          tearUp(rhs, ind + 2); sb ++ ")"
+          sb ++= "),"
+          tearUp(tpt, ind + 2); sb ++= ","
+          tearUp(rhs, ind + 2); sb ++= ")"
 
         case x @ PackageDef(t, l) =>
           addline(ind, "PackageDef(" + abbrev(x))
           tearUp(t, ind + 2)
-          sb ++ ","
+          sb ++= ","
           addList(ind + 2, l)
           sb ++= ")"
 
@@ -470,14 +470,14 @@ object Show {
           addline(ind, "ModuleDef(" + abbrev(x))
           addline(ind + 2, showRaw(mods) + "," + showRaw(name) + ",")
           tearUp(impl, ind + 2)
-          sb ++ ")"
+          sb ++= ")"
 
         case x @ Template(parents, self, body) =>
           addline(ind, "Template(")
-          addList(ind + 2, parents); sb ++ ","
-          tearUp(self, ind + 2); sb ++ ","
-          addList(ind + 2, body); sb ++ ","
-          sb ++ ")"
+          addList(ind + 2, parents); sb ++= ","
+          tearUp(self, ind + 2); sb ++= ","
+          addList(ind + 2, body); sb ++= ","
+          sb ++= ")"
 
         case x @ Apply(a1, l: List[Tree]) =>
           addline(ind, "Apply(" + abbrev(x))

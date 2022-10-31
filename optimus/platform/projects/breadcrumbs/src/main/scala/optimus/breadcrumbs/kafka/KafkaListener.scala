@@ -51,7 +51,7 @@ import org.slf4j.LoggerFactory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.Failure
 import scala.util.Try
 
@@ -290,7 +290,7 @@ object KafkaListener extends App with KafkaRecordParserT {
   props.put(CommonClientConfigs.RECEIVE_BUFFER_CONFIG, "1000000")
   props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
-  private val zkClient = KafkaZkClient(zkHosts, JaasUtils.isZkSecurityEnabled, 30000, 30000, Int.MaxValue, Time.SYSTEM)
+  private val zkClient = KafkaZkClient(zkHosts, JaasUtils.isZkSaslEnabled, 30000, 30000, Int.MaxValue, Time.SYSTEM)
   private val partitions = zkClient.getReplicaAssignmentForTopics(topics.split(",").toSet).keys.toSeq
 
   private val consumers: Seq[KafkaConsumer[String, String]] = retry(3, 60000L, logger) { () =>

@@ -24,16 +24,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         template))
   }
 
-  def errorOptional0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
   def error1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
     register(
       OptimusAlarmBuilder1(
@@ -41,16 +31,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         phase,
         obtMandatory = true,
         scalaMandatory = true,
-        template))
-  }
-
-  def errorOptional1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
         template))
   }
 
@@ -64,16 +44,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         template))
   }
 
-  def errorOptional2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
   def error3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
     register(
       OptimusAlarmBuilder3(
@@ -81,16 +51,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         phase,
         obtMandatory = true,
         scalaMandatory = true,
-        template))
-  }
-
-  def errorOptional3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
-    register(
-      OptimusAlarmBuilder3(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
         template))
   }
 
@@ -119,32 +79,12 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
       OptimusAlarmBuilder0(
         alarmId(sn, OptimusAlarmType.WARNING),
         phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningOptional0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
         obtMandatory = false,
         scalaMandatory = false,
         template))
   }
 
   def warning1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningOptional1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
     register(
       OptimusAlarmBuilder1(
         alarmId(sn, OptimusAlarmType.WARNING),
@@ -159,26 +99,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
       OptimusAlarmBuilder2(
         alarmId(sn, OptimusAlarmType.WARNING),
         phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningObtNonSuppressible2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = false,
-        template))
-  }
-
-  def warningOptional2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
         obtMandatory = false,
         scalaMandatory = false,
         template))
@@ -189,8 +109,8 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
       OptimusAlarmBuilder3(
         alarmId(sn, OptimusAlarmType.WARNING),
         phase,
-        obtMandatory = true,
-        scalaMandatory = true,
+        obtMandatory = false,
+        scalaMandatory = false,
         template))
   }
 
@@ -204,16 +124,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         template))
   }
 
-  def infoOptional0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
   def info1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
     register(
       OptimusAlarmBuilder1(
@@ -221,16 +131,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         phase,
         obtMandatory = true,
         scalaMandatory = true,
-        template))
-  }
-
-  def infoOptional1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
         template))
   }
 
@@ -244,16 +144,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         template))
   }
 
-  def infoOptional2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
   def info3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
     register(
       OptimusAlarmBuilder3(
@@ -261,16 +151,6 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         phase,
         obtMandatory = true,
         scalaMandatory = true,
-        template))
-  }
-
-  def infoOptional3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
-    register(
-      OptimusAlarmBuilder3(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
         template))
   }
 

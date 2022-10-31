@@ -18,6 +18,6 @@ object RelationalAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHel
     abort2(101000, "%s is annotated as @noDalPriql so cannot be executed as a DAL query e.g. from(%s)")
 
   val CANNOT_REIFY_ERROR = abort1(101001, "Cannot reify the target code with error: %s")
-  val NON_INDEX_FILTER = warning0(101234, "Non-index filter will be executed on client side instead of server side.")
+  val NON_INDEX_FILTER = error0(101234, "Non-index filter will be executed on client side instead of server side.")
 
 }

@@ -12,7 +12,6 @@
 package optimus.exceptions
 
 import java.util.concurrent.atomic.AtomicInteger
-
 import optimus.exceptions.config.ExceptionMatcher
 import optimus.exceptions.config.RTListConfig
 import optimus.utils.PropertyUtils
@@ -36,60 +35,65 @@ import scala.util.matching.Regex
  *
  * Note that these are loaded from [[RTList.ProxyConfig]] files; simply declaring one is no longer sufficient.
  */
+
 trait ExceptionProxy extends Throwable with RTExceptionTrait {
-  override def toString: String = getClass.getName stripSuffix NameTransformer.MODULE_INSTANCE_NAME
+  import ExceptionProxy._
+  @volatile private var nWaterMark = 1
+  @volatile private var n = 0
+  def nCaught = n
+  def matches(t: Throwable): Boolean
+  val isDeprecated = false
+  def dep = if (isDeprecated) "Deprecated " else ""
+
+  override def toString: String =  getClass.getSimpleName
+
+  final override def equals(obj: Any): Boolean = {
+    obj match {
+      case t: Throwable if matches(t) => {
+        if (RTList.setAsRT(t)) {  // so we handle only the first match of a particular exception instance
+          registerComplaintForTestingPurposes()
+          n += 1
+          if (n >= nWaterMark) {
+            nWaterMark *= 10
+            notifiers.foreach { case (_, f) =>
+              f(t, this, n)
+            }
+          }
+        }
+        !isDeprecated || allowDeprecated
+      }
+      case _ => false
+    }
+  }
 }
 
-private[optimus] object ExceptionProxy {
+object ExceptionProxy {
+  @volatile private var notifiers = Map.empty[String, (Throwable, ExceptionProxy, Int) => Unit]
 
   // This reflective nonsense is necessary, because utils does not depend on breadcrumbs.
   // We will eventually move the exception proxies out optimus.platform altogether.
-  import scala.reflect.runtime.{universe => ru}
-  private val send: ru.MethodMirror = {
-    val mirror: ru.Mirror = ru.runtimeMirror(getClass.getClassLoader)
-    val bcSym: ru.ModuleSymbol = mirror.staticModule("optimus.breadcrumbs.Breadcrumbs")
-    val moduleMirror: ru.ModuleMirror = mirror.reflectModule(bcSym)
-    val instanceMirror = mirror.reflect(moduleMirror.instance)
-    val sendSymbol: ru.MethodSymbol =
-      moduleMirror.symbol.typeSignature.decl(ru.TermName("emergencySendForReflection")).asMethod
-    instanceMirror.reflectMethod(sendSymbol)
+  private val testing = "yesplease" == System.getProperty("optimus.exceptions.testing", "nope")
+  private val complaints = new AtomicInteger(0)
+  private def registerComplaintForTestingPurposes(): Unit = if(testing) {
+    complaints.incrementAndGet()
   }
+  def complaintsForTestingPurposes: Int = complaints.get()
 
-  private val log = LoggerFactory.getLogger(this.getClass)
-
-  val screamed = new AtomicInteger(0)
-
-  def scream(proxy: ExceptionProxy, why: String, t: Throwable, n: Int): Unit = {
-    screamed.incrementAndGet()
-    val proxyName = proxy.getClass.getSimpleName
-    val msg = t.getMessage.take(1000)
-    val stack = t.getStackTrace.take(10).mkString(";")
-    val newmsg = s"""$why; "$msg"; $proxyName[$n] """
-    log.error(newmsg, t)
-    send("ExceptionProxy", s"$newmsg $stack")
-  }
-
-}
-
-private object Deprecated {
-  val allowDeprecated: Boolean = PropertyUtils.get("optimus.exception.allow.deprecated", default = true)
-  val maxScreams = 2
-}
-
-trait Deprecated {
-  self: ExceptionProxy =>
-
-  private var n = 0
-
-  override def equals(obj: Any): Boolean = {
-    val matched = super.equals(obj)
-    matched && {
-      n += 1
-      if (n <= Deprecated.maxScreams) // shouldn't be necessary due to caching, but let's be careful about spam
-        ExceptionProxy.scream(this, "Deprecated proxy matched!", obj.asInstanceOf[Throwable], n)
-      Deprecated.allowDeprecated
+  def registerNotifier(key: String, notifier: Option[(Throwable, ExceptionProxy, Int) => Unit]): Unit = {
+    notifier match {
+      case Some(f) =>
+        notifiers += key -> f
+      case None =>
+        notifiers -= key
     }
   }
+
+  private val allowDeprecated: Boolean = PropertyUtils.get("optimus.exception.allow.deprecated", default = true)
+
+}
+
+trait Deprecated extends ExceptionProxy {
+  override val isDeprecated = true
 }
 
 object RuntimeExceptionWithMessage {
@@ -106,22 +110,26 @@ object ExceptionWithMessage {
   }
 }
 
-class RuntimeExceptionMatching(matcher: Regex) extends Throwable {
-  override def equals(obj: Any): Boolean = obj match {
+class RuntimeExceptionMatching(matcher: Regex) extends ExceptionProxy {
+  final override def matches(t: Throwable): Boolean = t match {
     case RuntimeExceptionWithMessage(msg) => matcher.unapplySeq(msg).isDefined
     case _                                => false
   }
 }
 
-class RuntimeExceptionGreedyMatching(contains: String, matcher: Regex) extends Throwable {
-  override def equals(obj: Any): Boolean = obj match {
+class RuntimeExceptionGreedyMatching(contains: String, matcher: Regex) extends ExceptionProxy {
+  final override def matches(t: Throwable): Boolean = t match {
     case RuntimeExceptionWithMessage(msg) => msg.contains(contains) && matcher.unapplySeq(msg).isDefined
     case _                                => false
   }
 }
 
 object TestSolverExceptionProxy
-    extends RuntimeExceptionContaining("this is a bogus exception for testing")
+  extends RuntimeExceptionContaining("this is a bogus exception for testing")
+    with ExceptionProxy
+
+object NotificationTestExceptionProxy
+  extends RuntimeExceptionContaining("this is a bogus exception for notification testing")
     with ExceptionProxy
 
 object TestDeprecatedExceptionProxy
@@ -137,15 +145,15 @@ object TestRuntimeExceptionMatching
     extends RuntimeExceptionMatching("(?s).*(0 \\( 0 \\) > x \\( [-+]\\d+\\.\\d+ \\).*BLECCHO).*".r)
     with ExceptionProxy
 
-class RuntimeExceptionContaining(contains: String) extends Throwable {
-  override def equals(obj: Any): Boolean = obj match {
+class RuntimeExceptionContaining(contains: String) extends ExceptionProxy {
+  final override def matches(t: Throwable): Boolean = t match {
     case RuntimeExceptionWithMessage(msg) => msg.contains(contains)
     case _                                => false
   }
 }
 
-class ExceptionContaining(contains: String) extends Throwable {
-  override def equals(obj: Any): Boolean = obj match {
+class ExceptionContaining(contains: String) extends ExceptionProxy {
+  final override def matches(t: Throwable): Boolean = t match {
     case ExceptionWithMessage(msg) => msg.contains(contains)
     case _                         => false
   }
@@ -159,20 +167,16 @@ object AdditionalExceptionProxy extends Throwable with ExceptionProxy {
       .map(_.split(';').map(ExceptionMatcher.Parser.parse).toSet)
       .getOrElse(Set.empty[ExceptionMatcher])
 
-  override def equals(obj: Any): Boolean = obj match {
-    case t: Throwable =>
-      val fqcn = t.getClass.getCanonicalName
-      val msg = Option(t.getMessage).getOrElse(fqcn)
-      val matchedMatcher = additions.find { matcher =>
-        matcher.matchingCriterion.forall { _.matchWith(fqcn, msg) }
-      }
-
-      matchedMatcher.foreach { m =>
-        log.warn(
-          s"[RTList] added to allow-list dynamically: $fqcn (message=$msg) (via optimus.additional.rt.exceptions) (rule=${m})")
-      }
-
-      matchedMatcher.isDefined
-    case _ => false
+  final override def matches(t: Throwable): Boolean = {
+    val fqcn = t.getClass.getCanonicalName
+    val msg = Option(t.getMessage).getOrElse(fqcn)
+    val matchedMatcher = additions.find { matcher =>
+      matcher.matchingCriterion.forall { _.matchWith(fqcn, msg) }
+    }
+    matchedMatcher.foreach { m =>
+      log.warn(
+        s"[RTList] added to allow-list dynamically: $fqcn (message=$msg) (via optimus.additional.rt.exceptions) (rule=${m})")
+    }
+    matchedMatcher.isDefined
   }
 }

@@ -27,9 +27,14 @@ import javax.mail.internet.MimeMultipart
 
 object Mail {
 
+  private def toAddress(addresses: Seq[String]): Array[Address] =
+    addresses.map(new InternetAddress(_)).toArray[Address]
+
   def send(
       from: String,
       to: Seq[String],
+      cc: Seq[String] = Seq(),
+      bcc: Seq[String] = Seq(),
       subject: String,
       body: String,
       replyTo: Option[Seq[String]] = None,
@@ -41,8 +46,10 @@ object Mail {
     val message = new MimeMessage(session)
 
     message.setFrom(new InternetAddress(from))
-    message.addRecipients(Message.RecipientType.TO, to.map(new InternetAddress(_)).toArray[Address])
-    replyTo.foreach(replyTo => message.setReplyTo(replyTo.map(new InternetAddress(_)).toArray))
+    message.addRecipients(Message.RecipientType.TO, toAddress(to))
+    message.addRecipients(Message.RecipientType.CC, toAddress(cc))
+    message.addRecipients(Message.RecipientType.BCC, toAddress(bcc))
+    replyTo.foreach(replyTo => message.setReplyTo(toAddress(replyTo)))
 
     attachments.foreach { attachment =>
       val messageBodyPart = new MimeBodyPart()

@@ -14,7 +14,6 @@ package optimus.tools.scalacplugins.entity
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.nio.file.Path
-
 import optimus.tools.scalacplugins.entity.reporter._
 
 import scala.reflect.internal.util.NoPosition
@@ -68,6 +67,11 @@ class PluginData(private val global: Global) {
 
   def configureBasic(): Unit = {
     global.perRunCaches.recordCache(onCompileFinished)
+    // always install the threshold profiler since it's lightweight and we always want to know about very slow compilation
+    val thresholdProfiler = new ThresholdProfiler(global.reporter.echo,
+      thresholdNs = slowCompilationWarningThresholdMs * 1000000)
+    // keep the existing profiler (if any) so that we don't prevent -Yprofile from working
+    global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
   }
 
   class AlarmLevelConfiguration(val ignore: Set[Int], val silence: Set[Int], val debug: Boolean) {
@@ -115,8 +119,8 @@ class PluginData(private val global: Global) {
         template: String): String =
       config.getConfiguredLevel(alarmId, OptimusAlarmType.withName(alarmLevel)).toString
 
-    def getConfiguredLevel(alarm: OptimusAlarmBase, position: Position): OptimusAlarmType.Tpe =
-      config.getConfiguredLevel(alarm.id.sn, alarm.id.tpe)
+    def getConfiguredLevel(alarmId: Int, level: OptimusAlarmType.Tpe): OptimusAlarmType.Tpe =
+      config.getConfiguredLevel(alarmId, level)
 
     private lazy val config: AlarmLevelConfiguration = {
       new AlarmLevelConfiguration(alarmConfig.ignore, alarmConfig.silence, alarmConfig.debug)
@@ -131,15 +135,23 @@ class PluginData(private val global: Global) {
     var rewriteVarargsToSeq = false
     var rewriteMapConcatWiden = false
     var rewriteNilaryInfix = false
+    var rewritePostfix = false
     var unitCompanion = false
+    var procedureSyntax = false
+    var autoApplication = false
+    var nilaryOverride = false
     var anyFormatted = false
+    var any2StringAdd = false
+    var importShadow = false
     var rewriteCaseClassToFinal = false
     def anyEnabled =
-      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || unitCompanion || anyFormatted || rewriteCaseClassToFinal
+      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || rewritePostfix || unitCompanion || procedureSyntax || autoApplication || nilaryOverride || anyFormatted || any2StringAdd || importShadow || rewriteCaseClassToFinal
 
     // disabled in some unit tests
     var useOptimusCompat: Boolean = true
   }
+
+  var slowCompilationWarningThresholdMs = 20 * 1000L
 }
 
 object PublishDefinition {

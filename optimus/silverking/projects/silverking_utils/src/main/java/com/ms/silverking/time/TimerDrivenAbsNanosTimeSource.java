@@ -68,6 +68,13 @@ public class TimerDrivenAbsNanosTimeSource extends TimerTask implements AbsNanos
   }
 
   @Override
+  public String name() {
+    return String.format(
+        "TimerDrivenAbsNanosTimeSource(absTimeMillis=%d,relTimeNanos=%d,nanoOriginTimeMillis=%d,lastTimeNanos=%d)",
+        absTimeMillis, relTimeNanos, nanoOriginTimeMillis, lastTimeNanos.get());
+  }
+
+  @Override
   public void run() {
     relTimeNanos = System.nanoTime();
     absTimeMillis = System.currentTimeMillis();

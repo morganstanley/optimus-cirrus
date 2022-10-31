@@ -160,22 +160,12 @@ class StagingComponent(
       case _ => transform(tree) :: Nil
     }
 
-    def transStat(tree: Tree): List[Tree] = tree match {
-      case If(ann @ Annotated(annot, cond), ttree, ftree) if isAnnotationNamed(annot, tpnames.staged) => {
-        if (eval(cond))
-          expand(ttree)
-        else
-          expand(ftree)
-      }
-      case _ => List(super.transform(tree))
-    }
-
     override def transform(tree: Tree): Tree =
       if (!stagingEnabled) tree
       else
         tree match {
           case ModuleDef(_, name, t @ Template(_, _, init :: If(ann @ Annotated(annot, cond), ttree, ftree) :: Nil))
-              if name.decodedName.toString == "StagingImports" && isAnnotationNamed(annot, tpnames.staged) => {
+              if name.decodedName.toString == "StagingImports" && isAnnotationNamed(annot, tpnames.staged) =>
             val stats =
               if (eval(cond))
                 expand(ttree)
@@ -189,23 +179,17 @@ class StagingComponent(
               alarm(StagingErrors.MUTIPLE_STAGING_OBJECT, tree.pos)
               EmptyTree
             }
-          }
-          case Block(stats, res) =>
-            treeCopy.Block(tree, stats flatMap transStat, res)
-          case Template(parents, self, body) =>
-            treeCopy.Template(tree, parents, self, body flatMap transStat)
-          case If(ann @ Annotated(annot, cond), ttree, ftree) if isAnnotationNamed(annot, tpnames.staged) => {
-            val stats =
-              if (eval(cond))
-                expand(ttree)
-              else
-                expand(ftree)
-            if (stats.isEmpty)
-              atPos(tree.pos)(Block())
-            else
-              atPos(tree.pos)(Block(stats.init, stats.last))
-          }
-          case _ => super.transform(tree)
+          case _: Template =>
+            super.transform(tree) match {
+              case Template(parents, self, List(Block(stats, expr))) =>
+                treeCopy.Template(tree, parents, self, stats :+ expr)
+              case t => t
+            }
+          case If(Annotated(annot, cond), ttree, ftree) if isAnnotationNamed(annot, tpnames.staged) =>
+            if (eval(cond)) transform(ttree)
+            else transform(ftree)
+          case _ =>
+            super.transform(tree)
         }
   }
 

@@ -21,24 +21,94 @@ object CodeStyleErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
   val NON_FINAL_INNER_CASE_CLASS =
     preIgnore(
-      warningOptional0(
+      warning0(
         10002,
         StagingPhase.POST_TYPER_STANDARDS,
-        "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
-      )
-    )
-  val NON_FINAL_CASE_CLASS =
-    preIgnore(
-      warningOptional0(
-        10003,
-        StagingPhase.POST_TYPER_STANDARDS,
-        "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
+        "Case classes encapsulated in other classes should be moved to the outermost containing class's companion object and marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
       )
     )
 
-  val DISOUCRAGED_STATEMENT = preIgnore(
-    warningOptional2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
+  val NON_FINAL_CASE_CLASS = warning0(
+    10003,
+    StagingPhase.POST_TYPER_STANDARDS,
+    "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
   )
+
+  val DISCOURAGED_CONSTRUCT = preIgnore(
+    warning2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
+  )
+
+  val MOCK_FINAL_CASE_CLASS =
+    warning0(10007, StagingPhase.POST_TYPER_STANDARDS, "Don't mock final case classes")
+}
+
+object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAlarmHelper {
+  val TO_CONVERSION_TYPE_ARG =
+    error0(
+      sn = 20301,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "For Scala 2.13 compatibility, replace `to[X]` by `to(X)`; this requires an `import scala.collection.compat._`"
+    )
+
+  val PREDEF_FALLBACK_STRING_CBF =
+    error0(
+      sn = 20302,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """The implicit Predef.fallbackStringCanBuildFrom is used here.
+        |This implicit instance is inferred when a `Seq` (or an unspecified) CanBuildFrom is required, but it builds an `IndexedSeq`.
+        |Instead, use an explicit conversion / CanBuildFrom for List, IndexedSeq or Vector.
+        |Enable "Show Implicit Hints" in IntelliJ to display the implicit argument.""".stripMargin
+    )
+
+  val VIEW_BOUND =
+    error0(
+      sn = 20303,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "View bounds <% are deprecated in 2.13. `def f[T <% B]` is equivalent to `def f[T](implicit ev: T => B)`."
+    )
+
+  val NILARY_INFIX =
+    error0(
+      sn = 20304,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """Methods with an empty parameter list cannot be called infix. Examples:
+        |  - `obj operation ()`           -> `obj.operation()`
+        |  - `obj toString`               -> `obj.toString`
+        |  - `sequence { op } { op } end` -> `sequence { op } { op }.end""".stripMargin
+    )
+
+  val PROCEDURE_SYNTAX =
+    error0(
+      sn = 20305,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Procedure syntax `def f { statements() }` is deprecated, use an explicit return type instead: `def f: Unit = { statements() }`."
+    )
+
+  val NILARY_OVERRIDE =
+    error2(
+      sn = 20306,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Inconsistent override: the overridden method %s is defined %s"
+    )
+
+  val AUTO_APPLICATION =
+    error1(
+      sn = 20307,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Auto-application (insertion of an empty parameter list) is deprecated, write %s() instead.")
+
+  val NULLARY_IN_213 =
+    error1(
+      sn = 20308,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Method %s doesn't have a parameter list in Scala 2.13. Remove the empty argument list () for cross-building.")
+
+  val MAP_CONCAT_WIDENS =
+    error2(
+      sn = 20309,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "[NEW] The key type of the operand of ++ is not a sub-type of the receiver's key type. Type inference will differ in Scala 2.13. Remedies: A) widen the the key type of the declaration of the receiver; B) Use `m1.toSeq ++ m2` if a Map is not needed; C) use m1 +~+ m2 or Map.fromAll(m1, m2) from optimus.util.CollectionUtils._ replicate the Scala 2.12 behaviour. K_receiver=%s K_op=%s"
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
@@ -67,14 +137,21 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       StagingPhase.STANDARDS,
       "Use named imports for the collection package (collection.immutable) instead of the wildcard import collection._"
     )
+
+  val AUGMENT_STRING =
+    error0(
+      20013,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "[NEW]Suspicious use of implicit Predef.augmentString. Use .toSeq if you really want to treat it as a Seq[Char]. Consider if surrounding code should be a map rather than flatMap. Prefer + rather than ++ for String concatenation."
+    )
 }
 
 object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
   // staging phase warnings
-  val UNKNOWN_STAGING_MARKER = warning1(10004, StagingPhase.STAGING, "Unknown staging marker type: %s")
+  val UNKNOWN_STAGING_MARKER = error1(10004, StagingPhase.STAGING, "Unknown staging marker type: %s")
 
   // code-standards phase warnings
   val UNTYPED_IMPLICIT = preIgnore(
-    warningOptional1(10005, StagingPhase.STANDARDS, "Public implicit methods and classes should have explicit type: %s")
+    warning1(10005, StagingPhase.POST_TYPER_STANDARDS, "Public implicit methods and classes should have explicit type: %s")
   )
 }

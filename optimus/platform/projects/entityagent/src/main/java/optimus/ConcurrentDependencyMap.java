@@ -32,7 +32,7 @@ public class ConcurrentDependencyMap<V> {
   }
 
   // @return Never `null`.
-  Set<V> getSafeCopy(String key) {
+  public Set<V> getSafeCopy(String key) {
     Set<V> smuggledCopy = new HashSet<>();
     dependencies.computeIfPresent(key, (k, v) -> {
       smuggledCopy.addAll(v);
@@ -52,11 +52,11 @@ public class ConcurrentDependencyMap<V> {
     return dependenciesCopy; // Defensive copy
   }
 
-  int getDependenciesCount() {
+  public int getDependenciesCount() {
     return dependencies.values().stream().mapToInt(Set::size).sum();
   }
 
-  int size() {
+  public int size() {
     return dependencies.size();
   }
 }

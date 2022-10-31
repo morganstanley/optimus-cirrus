@@ -15,7 +15,7 @@ import javax.security.auth.login.AppConfigurationEntry
 import javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag
 import msjava.kerberos.auth.MSKerberosConfiguration
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 //TODO: (OPTIMUS-48905): merge KerberosSupport with this implementation
 trait KerberosAuthentication {

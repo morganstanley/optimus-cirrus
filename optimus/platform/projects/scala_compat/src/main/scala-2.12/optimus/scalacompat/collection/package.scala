@@ -14,7 +14,7 @@ package optimus.scalacompat
 import scala.collection.compat.Factory
 import scala.collection.generic.CanBuildFrom
 import scala.reflect.ClassTag
-import scala.{ collection => sc }
+import scala.{collection => sc}
 
 package object collection {
   def isView(c: Iterable[_]): Boolean = c match {
@@ -56,6 +56,10 @@ package object collection {
 
   def knownSize(t: sc.GenTraversableOnce[_]): Int = {
     CanEqual.knownSize(t)
+  }
+  def simpleFactory[A, B](f: => sc.mutable.Builder[A, B]): sc.compat.Factory[A, B] =   new sc.compat.Factory[A, B] {
+    override def apply(from: Nothing): sc.mutable.Builder[A, B] = apply()
+    override def apply(): sc.mutable.Builder[A, B] = f
   }
   implicit class BreakOutTo[CC[A] <: sc.GenTraversable[A]](private val companion: sc.generic.GenericCompanion[CC])
       extends AnyVal {

@@ -115,10 +115,10 @@ object Vertex {
     def calcNext(): Option[Vertex] = {
       while (cachedNext.isEmpty) {
         if (i.hasNext) {
-          cachedNext = Some(Some(i.next))
+          cachedNext = Some(Some(i.next()))
           cachedNext.get
         } else if (prev.hasNext) {
-          i = f(prev.next)
+          i = f(prev.next())
         } else {
           cachedNext = Some(None)
         }
@@ -149,10 +149,10 @@ object Vertex {
     def calcNext(): Option[(Vertex, R)] = {
       while (cachedNext.isEmpty) {
         if (i.hasNext) {
-          cachedNext = Some(Some(i.next))
+          cachedNext = Some(Some(i.next()))
           cachedNext.get
         } else if (prev.hasNext) {
-          val (vp, rp) = prev.next
+          val (vp, rp) = prev.next()
           i = f(vp).map { v =>
             (v, rf(rp, v))
           }

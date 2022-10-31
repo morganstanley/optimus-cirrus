@@ -14,14 +14,14 @@ package optimus.breadcrumbs
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.{ArrayList => jArrayList}
-import java.util.{List => jList}
-import java.util.{Map => jMap}
-
+import java.util.{ ArrayList => jArrayList }
+import java.util.{ List => jList }
+import java.util.{ Map => jMap }
 import com.google.common.cache.CacheBuilder
 import msjava.base.util.internal.SystemPropertyUtils
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.BreadcrumbLevel.Level
+import optimus.breadcrumbs.Breadcrumbs.SetupFlags
 import optimus.cloud.CloudUtil
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs._
@@ -40,7 +40,7 @@ import org.apache.kafka.clients.producer.RecordMetadata
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -140,9 +140,7 @@ object Breadcrumbs {
 
   /**
    * Register interest in crumbs published for the same VM but under a different ChainedID. While registration is
-   * active, all crumbs with the uuid root interestedIn (the suffix of this parameter is ignored) will be published as
-   * well with the uuid of task. For registrations of multiple tasks with the same uuid root, only the first will be
-   * published to.
+   * active, all crumbs with the uuid interestedIn will be published as well with the uuid of task.
    *
    * For example, suppose a dist engine is publishing to a ChainedID root, which by astonishing coincidence happens to
    * have acquired a random MSUuid of ROOT. Then we get a task with the ID TASK-A#2#4. Interest of the latter in the
@@ -152,10 +150,34 @@ object Breadcrumbs {
    * publish engine events to all three possible IDs but just continue to send only to the engine root and to the first
    * ID with root TASK-A we received, viz TASK-A#2#4, and we'll do so until all IDs with root TASK-A have been
    * deregistered.
+   *
+   * You might also want to dual publish within an engine, e.g. to associate GC events with a current calculation that
+   * is scoped by a chainID. This is permitted, but we will never publish an id to its ancestors, e.g. If you
+   * {{{
+   * registerInterest(AAAAA#1, AAAAA#2)
+   * registerInterest(AAAAA#1, AAAAA#1#5)
+   * }}}
+   * then crumbs sent to AAAAA#1 will also go to #2 and #1#5, but not vice versa.
    */
-  def registerInterest(interestedIn: ChainedID, task: ChainedID): Unit = {
+
+  final case class Registration private[Breadcrumbs] (interestedIn: ChainedID, task: ChainedID) {
+    private var deregistered: Boolean = false
+    def deregister(): Unit = this.synchronized {
+      if (!deregistered) {
+        deregisterInterest(interestedIn, task)
+        deregistered = true
+      }
+    }
+    def deregister[A](a: A): A = {
+      deregister()
+      a
+    }
+  }
+
+  def registerInterest(task: ChainedID): Registration = registerInterest(ChainedID.root, task)
+  def registerInterest(interestedIn: ChainedID, task: ChainedID): Registration = {
     val rs = interestedIn.base
-    val ts = task.base
+    val ts = task.repr
     interestsLock.writeLock.lock()
     try {
       if (!interests.contains(rs)) {
@@ -169,14 +191,15 @@ object Breadcrumbs {
         interests.put(rs, m)
       }
     } finally {
-      log.debug(s"registerInterest($interestedIn,$task) --> $interests")
+      log.debug(s"registerInterest($rs, $ts) --> $interests")
       interestsLock.writeLock.unlock()
     }
+    Registration(interestedIn, task)
   }
 
-  def deregisterInterest(interestedIn: ChainedID, task: ChainedID): Unit = {
+  private def deregisterInterest(interestedIn: ChainedID, task: ChainedID): Unit = {
     val rs = interestedIn.base
-    val ts = task.base
+    val ts = task.repr
     interestsLock.writeLock.lock()
     try {
       if (interests.contains(rs) && interests(rs).contains(ts)) {
@@ -189,28 +212,36 @@ object Breadcrumbs {
           interests.put(rs, interests(rs) + (ts -> (i - 1, c)))
       }
     } finally {
-      log.debug(s"de-registerInterest($interestedIn,$task) --> $interests")
+      log.debug(s"de-registerInterest($rs, $ts) --> $interests")
       interestsLock.writeLock.unlock()
     }
   }
 
   def currentRegisteredInterests: Map[String, Map[String, (Int, ChainedID)]] = interests.toMap
 
-  private[breadcrumbs] def replicate(c: Crumb): Seq[Crumb] = {
-    if (c.source.flags.contains(CrumbFlag.DoNotReplicate)) {
-      Seq(c)
+  private[breadcrumbs] def replicate(c: Crumb): Iterable[Crumb] = {
+    if (c.flags.contains(CrumbFlag.DoNotReplicateOrAnnotate)) {
+      Some(c)
     } else {
       interestsLock.readLock.lock()
-      val listeners =
-        try {
-          Breadcrumbs.interests.get(c.uuid.base).toSeq.flatMap(_.values)
-        } finally {
-          interestsLock.readLock.unlock()
+      try {
+        val doNotReplicate = c.flags.contains(CrumbFlag.DoNotReplicate)
+        interests.get(c.uuid.base).fold[Iterable[Crumb]](Some(c)) { regs: Map[String, (Int, ChainedID)] =>
+          var outOfProcessReplicas: List[Crumb] = Nil
+          var listeners: List[ChainedID] = Nil
+          regs.valuesIterator.foreach { i: (Int, ChainedID) =>
+            val listener = i._2
+            if (!doNotReplicate && c.uuid.base != listener.base)
+              outOfProcessReplicas = new WithReplicaFrom(listener, c) :: outOfProcessReplicas
+            if (!c.uuid.repr.startsWith(listener.repr))
+              listeners = listener :: listeners
+          }
+          val cc = if (listeners.nonEmpty) new WithCurrentlyRunning(c, listeners) else c
+          cc :: outOfProcessReplicas
         }
-      val replicas = listeners.map { p =>
-        new WithID(p._2, c)
+      } finally {
+        interestsLock.readLock.unlock()
       }
-      c +: replicas
     }
   }
 
@@ -262,10 +293,20 @@ object Breadcrumbs {
     case _                            => false
   }
 
+  sealed trait SetupFlag
+  type SetupFlags = Set[SetupFlag]
+  object SetupFlags {
+    // Throw if the supplied config would not enable any crumbs to be sent
+    private[optimus] case object StrictInit extends SetupFlag
+    private[optimus] case object VerboseInit extends SetupFlag
+
+    val None = Set.empty[SetupFlag]
+  }
+
   // Customize a publisher.  This can only be done once - subsequent attempts will be
   // relatively cheaply ignored.
-  private[optimus] def customizedInit(keys: => Map[String, String], zkc: => ZkaContext): Unit = this.synchronized {
-    val newImpl = impl.customize(keys, zkc)
+  private[optimus] def customizedInit(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): Unit = this.synchronized {
+    val newImpl = impl.customize(keys, zkc, setupFlags)
     if (newImpl ne impl)
       setImpl(newImpl)
   }
@@ -290,18 +331,6 @@ object Breadcrumbs {
   def isInfoEnabled(id: ChainedID): Boolean = impl.isEnabledForInfo || BreadcrumbLevel.Info >= id.crumbLevel
 
   def send(c: Crumb): Boolean = impl.send(c)
-
-  /**
-   * The only legitimate (and that's a stretch) use of this method is to be called by reflection from modules that for
-   * some reason can't have breadcrumbs on their classpath.
-   */
-  private[optimus] def emergencySendForReflection(sourceName: String, msg: String): Unit = {
-    object src extends Crumb.Source {
-      override def name: String = sourceName
-    }
-    val crumb = LogPropertiesCrumb(ChainedID.root, src, Properties.logMsg -> msg)
-    send(crumb) &&: Flush
-  }
 
   // Instantiates and sends crumb if and only if publisher or uuid level is trace/debug/info/warn/error enabled.
   def trace(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.trace(uuid, cf)
@@ -370,7 +399,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
   private[breadcrumbs] lazy val level: Level = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT"))
   private val scv = new StandardCrumbValidator
   def savedCustomization: Option[(Map[String, String], ZkaContext)] = None
-  def customize(keys: => Map[String, String], zkc: => ZkaContext): BreadcrumbsPublisher = this
+  def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = this
   def collecting: Boolean
   def init(): Unit
 
@@ -417,9 +446,10 @@ abstract class BreadcrumbsPublisher extends Filterable {
   protected def warning: Option[ThrottledWarnOrDebug] = None
 
   final protected[breadcrumbs] def send(c: Crumb): Boolean = {
-    if (c.uuid.base.length > 0)
-      Breadcrumbs.replicate(c).forall(sendInternal)
-    else {
+    if (c.uuid.base.length > 0) {
+      val cs = Breadcrumbs.replicate(c)
+      cs.forall(sendInternal)
+    } else {
       Breadcrumbs.log
         .warn(s"Not sending crumb with empty uuid base: $c", new IllegalArgumentException("Empty UUID base"))
       false
@@ -536,7 +566,8 @@ private[optimus] class BreadcrumbsRouter(
   }
 
   protected[breadcrumbs] override def sendInternal(c: Crumb): Boolean = {
-    route(c) send(c)
+    val r = route(c)
+    r.sendInternal(c)
   }
 
   override def flush(): Unit = publishers foreach { publisher =>
@@ -552,14 +583,6 @@ object BreadcrumbsRouter {
   private val log: Logger = LoggerFactory.getLogger(classOf[BreadcrumbsRouter])
 }
 
-abstract private[optimus] class BreadcrumbsAnalyzer extends BreadcrumbsPublisher {
-  // please implement sendInternal
-  final override def collecting: Boolean = true
-  override def init(): Unit = {}
-  override def flush(): Unit = {}
-  override def shutdown(): Unit = {}
-}
-
 class BreadcrumbsIgnorer extends BreadcrumbsPublisher {
   override val collecting = false
   override def init(): Unit = {}
@@ -569,9 +592,9 @@ class BreadcrumbsIgnorer extends BreadcrumbsPublisher {
 }
 
 class DeferredConfigurationBreadcrumbsPublisher() extends BreadcrumbsPublisher {
-  override def customize(keys: => Map[String, String], zkc: => ZkaContext): BreadcrumbsPublisher = {
+  override def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
     Breadcrumbs.log.info(s"${this.getClass} reconfiguring with $keys")
-    BreadcrumbsPropertyConfigurer.implFromConfig(zkc, keys)
+    BreadcrumbsPropertyConfigurer.implFromConfig(zkc, keys, setupFlags)
   }
   override def collecting: Boolean = true
   override def init(): Unit = {
@@ -762,7 +785,7 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
   import Breadcrumbs.runProtected
   import BreadcrumbsCompositePublisher.log
 
-  override def customize(keys: => Map[String, String], zkc: => ZkaContext): BreadcrumbsPublisher = {
+  override def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
     new BreadcrumbsCompositePublisher(publishers.map(_.customize(keys, zkc)))
   }
 
@@ -779,8 +802,7 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
       val result = new CompositeFilter()
       filters.foreach(result.addFilter(_))
       Some(result)
-    }
-    else
+    } else
       None
   }
 
@@ -805,5 +827,36 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
   override def shutdown(): Unit = publishers foreach { publisher =>
     log.info(s"Shutting down $publisher")
     runProtected(publisher.shutdown)
+  }
+}
+
+trait BreadcrumbRegistration {
+  import scala.language.experimental.macros
+  def withRegistration[T](interestedIn: ChainedID)(block: T): T = macro BreadcrumbRegistration.withRegistrationImpl[T]
+  def withRootRegistration[T](block: T): T = macro BreadcrumbRegistration.withRootRegistrationImpl[T]
+}
+
+object BreadcrumbRegistration extends BreadcrumbRegistration {
+  import scala.reflect.macros.blackbox.Context
+
+  def withRegistrationImpl[T: c.WeakTypeTag](c: Context)(interestedIn: c.Expr[ChainedID])(
+      block: c.Expr[T]): c.Expr[T] = {
+    import c.universe._
+    val reg = c.internal.reificationSupport.freshTermName("reg")
+    val ret = q"""{
+       val $reg = _root_.optimus.breadcrumbs.Breadcrumbs.registerInterest($interestedIn, _root_.optimus.platform.EvaluationContext.scenarioStack.getTrackingNodeID)
+       ${reg}.deregister($block)
+    }"""
+    c.Expr[T](ret)
+  }
+
+  def withRootRegistrationImpl[T: c.WeakTypeTag](c: Context)(block: c.Expr[T]): c.Expr[T] = {
+    import c.universe._
+    val reg = c.internal.reificationSupport.freshTermName("reg")
+    val ret = q"""{
+       val $reg = _root_.optimus.breadcrumbs.Breadcrumbs.registerInterest(_root_.optimus.platform.EvaluationContext.scenarioStack.getTrackingNodeID)
+       ${reg}.deregister($block)
+    }"""
+    c.Expr[T](ret)
   }
 }

@@ -71,6 +71,11 @@ public final class TimerDrivenTimeSource extends TimerTask implements RelNanosAb
   }
 
   @Override
+  public String name() {
+    return String.format("TimerDrivenTimeSource(absTimeMillis=%d,relTimeNanos=%d)", absTimeMillis, relTimeNanos);
+  }
+
+  @Override
   public void run() {
     updateTimes();
   }

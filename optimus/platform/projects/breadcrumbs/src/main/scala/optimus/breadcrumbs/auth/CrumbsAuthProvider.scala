@@ -13,14 +13,14 @@ package optimus.breadcrumbs
 package auth
 
 import java.{util => ju}
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
  * A service class to initialize authentication mechanisms for a breadcrumbs connection. By default, does nothing at
  * all.
  */
 class CrumbsAuthProvider {
-  def initAuth(props: ju.Map[String, AnyRef]) {}
+  def initAuth(props: ju.Map[String, AnyRef]): Unit = {}
 }
 
 object CrumbsAuthProvider {

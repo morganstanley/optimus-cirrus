@@ -102,7 +102,7 @@ public enum DiffParser {
 
     @Override
     public PartialDiff modifyDiff(PartialDiff diff, String currentLine) {
-      return diff.setFromFileName(currentLine.replace("--- ", ""));
+      return diff.setFromFileName(currentLine.replace("--- ", "").trim());
     }
   },
   /**
@@ -121,9 +121,10 @@ public enum DiffParser {
         throw new IllegalStateException("A TO_FILE line ('+++') must be directly followed by a HUNK_START line ('@@')!");
       }
     }
+
     @Override
     public PartialDiff modifyDiff(PartialDiff diff, String currentLine) {
-      return diff.setToFileName(currentLine.replace("+++ ", ""));
+      return diff.setToFileName(currentLine.replace("+++ ", "").trim());
     }
   },
   /**
@@ -144,6 +145,7 @@ public enum DiffParser {
         return NEUTRAL_LINE;
       }
     }
+
     @Override
     public PartialDiff modifyDiff(PartialDiff diff, String currentLine) {
       return diff.addHunk(Hunk.fromLine(currentLine));
@@ -168,10 +170,13 @@ public enum DiffParser {
         return TO_LINE;
       } else if (Hunk.isHunkStart(line)) {
         return HUNK_START;
+      } else if (isStart(line)) {
+        return END;
       } else {
         return NEUTRAL_LINE;
       }
     }
+
     @Override
     public PartialDiff modifyDiff(PartialDiff diff, String currentLine) {
       return diff.addLine(Line.from(currentLine.substring(1)));
@@ -196,6 +201,8 @@ public enum DiffParser {
         return TO_LINE;
       } else if (Hunk.isHunkStart(line)) {
         return HUNK_START;
+      } else if (isStart(line)) {
+        return END;
       } else {
         return NEUTRAL_LINE;
       }
@@ -222,6 +229,8 @@ public enum DiffParser {
         return TO_LINE;
       } else if (Hunk.isHunkStart(line)) {
         return HUNK_START;
+      } else if (isStart(line)) {
+        return END;
       } else {
         return NEUTRAL_LINE;
       }
@@ -276,10 +285,11 @@ public enum DiffParser {
       logTransition(currentLine, state, newState);
       currentDiff = newState.modifyDiff(currentDiff, currentLine);
       if (newState.equals(END)) {
-        parsedDiffs.add(currentDiff.toDiff());
+        Diff finishedDiff = currentDiff.toDiff();
+        parsedDiffs.add(finishedDiff);
+        logger.info("Finished parsing " + finishedDiff.getFileName());
         currentDiff = PartialDiff.empty();
       }
-
       state = newState;
     }
 

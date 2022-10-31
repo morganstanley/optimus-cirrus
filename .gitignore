@@ -1,9 +1,15 @@
+# Usage guidelines
+#
+# A set of global Git ignores.
+# If you want to add some local paths, please add a .gitignore inside the project/directory where the files reside.
+
 # General
 *.log
 *.orig
 *.hprof
 
 # IntelliJ IDEA
+.attach_pid*
 .idea
 /.shelf/
 
@@ -26,3 +32,6 @@ diff-chunked.txt
 
 # TODO (OPTIMUS-41799): fix zinc + jcstress and remove this
 *_jcstress.java
+
+# configuration file that should never go to codetree
+mischief.obt

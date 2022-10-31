@@ -137,7 +137,7 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
 
   private def process(in: InputStream, f: Vertex => Unit): Unit = {
 
-    Source.fromInputStream(in).getLines.foreach { line =>
+    Source.fromInputStream(in).getLines().foreach { line =>
       for (
         crumb: Map[String, JsValue] <- Try(line.parseJson.convertTo[Map[String, JsValue]]);
         // Actual id deriving from the publishing app

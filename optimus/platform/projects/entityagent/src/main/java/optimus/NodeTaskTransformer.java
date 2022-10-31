@@ -46,6 +46,10 @@ public class NodeTaskTransformer implements ClassFileTransformer {
     }
     if (DiagnosticSettings.traceTweaksEnabled)
       properties.add("TweakInfection");
+    if (DiagnosticSettings.traceEnqueuer)
+      properties.add("Enqueuer");
+    if (DiagnosticSettings.awaitStacks)
+      properties.add("EnqueuerStackHash");
 
     ClassReader crSource = new ClassReader(bytes);
     ClassWriter cw = new ClassWriter(crSource, 0);
