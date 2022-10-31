@@ -88,27 +88,7 @@ trait OptimusMacroAlarmHelper { self: OptimusMacroAlarmsBase =>
         template))
   }
 
-  def info0(sn: Int, template: String): OptimusMacroAlarmBuilder0 = {
-    register(
-      OptimusMacroAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.INFO),
-        macroType,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
   def warning0(sn: Int, template: String): OptimusMacroAlarmBuilder0 = {
-    register(
-      OptimusMacroAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        macroType,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningOptional0(sn: Int, template: String): OptimusMacroAlarmBuilder0 = {
     register(
       OptimusMacroAlarmBuilder0(
         alarmId(sn, OptimusAlarmType.WARNING),
@@ -123,32 +103,12 @@ trait OptimusMacroAlarmHelper { self: OptimusMacroAlarmsBase =>
       OptimusMacroAlarmBuilder1(
         alarmId(sn, OptimusAlarmType.WARNING),
         macroType,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningOptional1(sn: Int, template: String): OptimusMacroAlarmBuilder1 = {
-    register(
-      OptimusMacroAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        macroType,
         obtMandatory = false,
         scalaMandatory = false,
         template))
   }
 
   def warning2(sn: Int, template: String): OptimusMacroAlarmBuilder2 = {
-    register(
-      OptimusMacroAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        macroType,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warningOptional2(sn: Int, template: String): OptimusMacroAlarmBuilder2 = {
     register(
       OptimusMacroAlarmBuilder2(
         alarmId(sn, OptimusAlarmType.WARNING),
@@ -185,16 +145,6 @@ trait OptimusMacroAlarmHelper { self: OptimusMacroAlarmsBase =>
         macroType,
         obtMandatory = true,
         scalaMandatory = true,
-        template))
-  }
-
-  def abortOptional2(sn: Int, template: String): OptimusMacroAlarmBuilder2 = {
-    register(
-      OptimusMacroAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.ABORT),
-        macroType,
-        obtMandatory = false,
-        scalaMandatory = false,
         template))
   }
 

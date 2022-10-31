@@ -211,3 +211,13 @@ class ofInterestInIDE(val reason: String = "optimus") extends StaticAnnotation
 
 /* Mark the @node a job, which brings enhanced node lifecycle observability through event publishing */
 class job extends StaticAnnotation
+
+/**
+ * Nodes that are recursive and rely on tweaks to end the recursion cause cycles when XSFT is enabled.
+ * We have dynamic cycle recovery for these cases but it's slow, and only runs on graph stall, so can affect batch sizes.
+ * Nodes that get into this case are tracked with breadcrumbs (query: index=main source=RT payload.xsftCycle=*).
+ * For now, @recursive will just revert to default caching for these nodes. In future we'll improve this so we re-enable
+ * XSFT when tweak dependencies are learned once a node has run.
+ * Note this currently does nothing unless XSFT is enabled.
+ */
+class recursive extends StaticAnnotation

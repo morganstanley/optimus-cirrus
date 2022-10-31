@@ -77,7 +77,7 @@ object ImmutableArray {
 
   def wrapped[A](as: Array[A]): ImmutableArray[A] = new ImmutableArray(as)
 
-  implicit def canBuildFrom[T: ClassTag, Node[_]]: CanBuildFrom[ImmutableArray[Node[T]], T, ImmutableArray[T]] = {
+  private def canBuildFrom[T: ClassTag, Node[_]]: CanBuildFrom[ImmutableArray[Node[T]], T, ImmutableArray[T]] = {
     new CanBuildFrom[ImmutableArray[Node[T]], T, ImmutableArray[T]] {
       override def fromSpecific(from: ImmutableArray[Node[T]])(it: IterableOnce[T]): ImmutableArray[T] = {
         ImmutableArray.wrapped(Array.from(it))

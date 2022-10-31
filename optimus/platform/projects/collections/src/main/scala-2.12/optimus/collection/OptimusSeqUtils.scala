@@ -103,7 +103,7 @@ object OptimusSeqUtils {
               size += 1
             }
 
-            def result = if (builder eq null) source else builder.result
+            def result = if (builder eq null) source else builder.result()
           }
           // its basically an object, but this avoids the LazyRef creation
           val accumulator = new Accumulator

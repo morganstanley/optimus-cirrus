@@ -26,10 +26,12 @@ import org.slf4j.LoggerFactory
 import spray.json._
 import DefaultJsonProtocol._
 import optimus.breadcrumbs.crumbs
+import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs.Crumb.Headers
 import optimus.breadcrumbs.crumbs.Crumb.OptimusSource
 import optimus.logging.LoggingInfo
 import optimus.utils.datetime.ZoneIds
+
 import scala.annotation.varargs
 import scala.collection.immutable.HashMap
 import optimus.scalacompat.collection._
@@ -55,6 +57,7 @@ sealed abstract class Crumb(
   protected def J[T: JsonWriter: JsonFormat](k: String, v: T): (String, JsValue) = (k, v.toJson)
   protected def J[T: JsonWriter: JsonFormat](kv: (String, T)): (String, JsValue) = (kv._1, kv._2.toJson)
   private[breadcrumbs] final val hintString: String = hints.toSeq.sorted.mkString(",")
+  def flags = source.flags
   final val header =
     Map(
       Headers.Crumb -> clazz.toString,
@@ -85,22 +88,31 @@ sealed abstract class Crumb(
     builder.result()
   }
 
+  private[breadcrumbs] def debugString = s"$clazz($prettyNow, $uuid, ${asJMap}"
+
   private[breadcrumbs] def properties: Map[String, String]
   // Pre-jsonized properties.  Usually empty.
-  private[crumbs] def jsonProperties: Map[String, JsValue] = Map.empty[String, JsValue]
+  private[breadcrumbs] def jsonProperties: Map[String, JsValue] = Map.empty[String, JsValue]
 
   // Making this a lazy val to avoid multiple conversions, but this means the caller must be sure by the time this
   // is called, the Crumb is at its final shape to be sent, i.e., no more property fields would be added.
   private[optimus] final lazy val asJSON: JsValue = asJMap.toJson
 }
 
-private[breadcrumbs] class WithID(uuid: ChainedID, crumb: Crumb) extends Crumb(uuid, crumb.source) {
-  override val hints: Set[CrumbHint] = crumb.hints
+private[breadcrumbs] class WithReplicaFrom(uuid: ChainedID, crumb: Crumb) extends Crumb(uuid, crumb.source, crumb.hints) {
   private[crumbs] override def clazz = crumb.clazz
   override val t: Long = crumb.t
   private[breadcrumbs] override def properties: Map[String, String] = crumb.properties
-  private[crumbs] override def jsonProperties: Map[String, JsValue] =
+  private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
     crumb.jsonProperties + (Properties.replicaFrom -> crumb.uuid).toTuple
+}
+
+private[breadcrumbs] class WithCurrentlyRunning(crumb: Crumb, uuids: Seq[ChainedID]) extends Crumb(crumb.uuid, crumb.source, crumb.hints) {
+  private[crumbs] override def clazz = crumb.clazz
+  override val t: Long = crumb.t
+  private[breadcrumbs] override def properties: Map[String, String] = crumb.properties
+  private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
+    crumb.jsonProperties + (Properties.currentlyRunning -> uuids).toTuple
 }
 
 private[breadcrumbs] class FlushMarker extends Crumb(ChainedID.root) {
@@ -191,11 +203,11 @@ object EventCrumb {
 }
 
 class PropertiesCrumb(
-    uuid: ChainedID,
-    source: Crumb.Source,
-    val m: Map[String, String],
-    override val jsonProperties: Map[String, JsValue] = Map.empty,
-    hints: Set[CrumbHint] = Set.empty[CrumbHint])
+  uuid: ChainedID,
+  source: Crumb.Source,
+  val m: Map[String, String],
+  override val jsonProperties: Map[String, JsValue] = Map.empty,
+  hints: Set[CrumbHint] = Set.empty[CrumbHint])
     extends Crumb(uuid, source, hints) {
   def this(uuid: ChainedID, elems: (String, String)*) = this(uuid, Crumb.OptimusSource, Map(elems: _*))
   def this(uuid: ChainedID, hints: Set[CrumbHint], elems: (String, String)*) =
@@ -268,6 +280,18 @@ object PropertiesCrumb {
       hints: Set[CrumbHint] = Set.empty[CrumbHint]) = new PropertiesCrumb(uuid, source, m, jsonProperties, hints)
 }
 
+class DiagPropertiesCrumb(
+  uuid: ChainedID,
+  source: Crumb.Source,
+  jsonProperties: Map[String, JsValue])
+  extends PropertiesCrumb(uuid, source, Map.empty[String,String], jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"), CrumbHints.Diagnostics) {
+  override def flags: Set[CrumbFlag] = source.flags + CrumbFlag.DoNotReplicate
+}
+
+object DiagPropertiesCrumb {
+  def apply(uuid: ChainedID, source: Crumb.Source, elems: Properties.Elems) = new DiagPropertiesCrumb(uuid, source, elems.toMap)
+}
+
 class EventPropertiesCrumb(
     uuid: ChainedID,
     source: Crumb.Source,
@@ -334,7 +358,7 @@ object LogPropertiesCrumb {
   private[breadcrumbs] def loginfo =
     Properties.jsMap(Properties.host -> LoggingInfo.getHost, Properties.logFile -> LoggingInfo.getLogFile)
   final case class Location(m: Map[String, JsValue])
-  def location(drop: Int): Location = {
+ def location(drop: Int): Location = {
     val st = Thread.currentThread().getStackTrace.toSeq.tail
     Location(
       st.dropWhile(_.getClassName.contains(".breadcrumbs."))
@@ -450,6 +474,7 @@ object Crumb {
   sealed trait CrumbFlag
   object CrumbFlag {
     case object DoNotReplicate extends CrumbFlag
+    case object DoNotReplicateOrAnnotate extends CrumbFlag
   }
 
   type CrumbFlags = Set[CrumbFlag]
@@ -496,7 +521,7 @@ object Crumb {
     override def next: Crumb =
       if (crumbIterator.hasNext) crumbIterator.next()
       else {
-        val payload = payloadIterator.next
+        val payload = payloadIterator.next()
         log.trace(payload)
         val bytes = Base64.decode(payload, Base64.GZIP)
         val bis = new ByteArrayInputStream(bytes)

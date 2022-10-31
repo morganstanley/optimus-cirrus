@@ -73,6 +73,7 @@ object CrumbFilter {
             .getOrElse("types", throw new RuntimeException(s"No 'types' specified for $CRUMB_TYPE_ALLOW_LIST"))
             .toString
             .split(",")
+            .map(_.trim)
             .toSet
           log.info(s"CrumbFilter - $CRUMB_TYPE_ALLOW_LIST($types)")
           Some(new CrumbTypeAllowList(types))

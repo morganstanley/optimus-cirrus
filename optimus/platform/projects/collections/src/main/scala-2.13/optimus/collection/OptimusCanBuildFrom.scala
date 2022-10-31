@@ -215,7 +215,7 @@ object OptimusBuilder {
   def returnIfBorrowed[To](builder: mutable.Builder[_, To]): Unit = builder match {
     case internal: OptimusBuilder[_, To] =>
       internal.returnBorrowed()
-    case _ => builder.result()
+    case _ =>
   }
 }
 abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {

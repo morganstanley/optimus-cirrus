@@ -133,8 +133,8 @@ object MiscUtils {
       /**
        * A.k.a. pipe forward in F#. x |> f |> g |> h == h(g(f(x))
        */
-      def |>[U >: T](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
-      def pipe[U >: T](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
+      def |>[U](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
+      def pipe[U](f: T => U): U = macro EndoishMacros.pipeImpl[T, U]
 
       // Transform if a condition is met:
       //   myList.applyIf(doScaleUp)(_.map(x => 100*x))
@@ -335,6 +335,10 @@ object MiscUtils {
 
   implicit class NumericFoldable[A](private val self: Iterable[A]) extends AnyVal {
     def sumOf[B](f: A => B)(implicit B: Numeric[B]): B = self.foldLeft(B.zero)((b, a) => B.plus(b, f(a)))
+  }
+
+  implicit class Optionable[T](private val t: T) {
+    def optionally(pred: T => Boolean): Option[T] = if(pred(t)) Some(t) else None
   }
 
 }

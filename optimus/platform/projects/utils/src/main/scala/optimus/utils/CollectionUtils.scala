@@ -188,7 +188,7 @@ object CollectionUtils extends CollectionUtils {
 trait CollectionUtils {
   implicit def traversable2Ops[A](as: Traversable[A]): TraversableOps[A] = new TraversableOps(as)
 
-  implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](t: Repr[T]) =
+  implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](t: Repr[T]): ExtraTraversableOps2[T,Repr] =
     new ExtraTraversableOps2[T, Repr](t)
 
   implicit class TraversableTuple2Ops[A, B](iterable: Traversable[(A, B)]) {
@@ -231,6 +231,44 @@ trait CollectionUtils {
     def onFailure(action: Throwable => Unit): Try[A] = {
       if (underlying.isFailure) action(underlying.failed.get) else ();
       underlying
+    }
+  }
+  implicit class MapFromMaps(private val underlying: Map.type) {
+    /**
+     * Build a map with the Tuple elements in `maps`.
+     *
+     * @see the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent
+     *      that advises when this method should be used to avoid different compilation under different
+     *      Scala versions.
+     *
+     * @see MapFromMap.fromAll for an alternative API to concatenate such maps
+     */
+    def fromAll[K, V](maps: Iterable[(K, V)]*): Map[K, V] = {
+      val builder = Map.newBuilder[K, V]
+      maps.foreach(builder ++= _)
+      builder.result()
+    }
+  }
+  implicit class OptimusMapOps[M[A, B] <: Map[A, B], K, V](private val self: M[K, V]) {
+    /**
+     * Concatenate the `self` Map with the Tuple elements in `those`, potentially resulting in a Map
+     * with wider key/value types than `self`
+     *
+     * In Scala 2.12 this could be expressed directly with `self ++ those`, but in Scala 2.13
+     * this no longer returns a Map unless the key type of `those` is a subtype of `K`
+     *
+     * @see the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent
+     * that advises when this method should be used to avoid different compilation under different
+     * Scala versions.
+     *
+     * @see MapFromMap.fromAll for an alternative API to concatenate such maps
+     */
+    def +~+[A >: (K, V), That <: Map[_, _]](those: Traversable[A])(
+      implicit buildFrom: BuildFrom[M[K, V], A, That]): That = {
+      val builder = buildFrom.apply(self)
+      builder ++= self
+      builder ++= those
+      builder.result()
     }
   }
 }

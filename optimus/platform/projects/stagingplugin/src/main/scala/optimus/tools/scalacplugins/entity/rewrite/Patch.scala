@@ -87,7 +87,7 @@ object Patches {
     for (Array(p1, p2) <- patches.sliding(2) if p1.span.end > p2.span.start) {
       ok = false
       val msg = s"""
-                   |overlapping patches;
+                   |overlapping patches in $source;
                    |
                    |add `${p1.replacement}` at
                    |${codeOf(p1.span, source)}

@@ -1,5 +1,6 @@
 optimus.exceptions.AdditionalExceptionProxy
 optimus.exceptions.TestDeprecatedExceptionProxy
+optimus.exceptions.NotificationTestExceptionProxy
 optimus.exceptions.TestRuntimeExceptionGreedyMatching
 optimus.exceptions.TestRuntimeExceptionMatching
 optimus.exceptions.TestSolverExceptionProxy

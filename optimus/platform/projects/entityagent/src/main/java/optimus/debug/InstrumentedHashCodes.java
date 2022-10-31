@@ -29,7 +29,7 @@ public class InstrumentedHashCodes {
   public static int hashCode(Object o) {
     var threadState = state.get();
     if (threadState.recurseCount > 0) {
-      System.err.println(">>> " + o.getClass().getName());
+      System.err.println(">>> hash/recursive" + o.getClass().getName());
     }
     return System.identityHashCode(0);
   }

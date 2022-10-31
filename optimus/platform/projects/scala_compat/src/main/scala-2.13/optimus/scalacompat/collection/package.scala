@@ -11,10 +11,11 @@
  */
 package optimus.scalacompat
 
-import scala.{collection => sc}
+import scala.collection.mutable
+import scala.{ collection => sc }
 import scala.reflect.ClassTag
 
-package object collection {
+package object collection extends MapBuildFromImplicits {
   def isView(c: Iterable[_]): Boolean = c match {
     case _: sc.View[_] => true
     case _             => false
@@ -36,27 +37,15 @@ package object collection {
   def newBuilderFor[A, CC[A]](t: sc.IterableOps[A, CC, CC[A]]): sc.mutable.Builder[A, CC[A]] = {
     BuilderProvider.exposedBuilder(t).asInstanceOf[sc.mutable.Builder[A, CC[A]]]
   }
-  def buildFromFor[A, CC[A]](t: sc.IterableOps[Any, CC, CC[_]], implicitArgs: Any*): sc.BuildFrom[Any, A, CC[A]] = {
-    val bf = t match {
-      case t: sc.BitSet =>
-        sc.BuildFrom.buildFromBitSet
-      case t: sc.SortedSet[A] =>
-        sc.BuildFrom.buildFromSortedSetOps(implicitArgs.head.asInstanceOf[Ordering[A]])
-      case t: sc.SortedMap[k, v] =>
-        sc.BuildFrom.buildFromSortedMapOps(implicitArgs.head.asInstanceOf[Ordering[A]])
-      case t: Map[k, v] =>
-        sc.BuildFrom.buildFromMapOps
-//      case t: sc.ArrayOps[a] =>
-//        sc.BuildFrom.buildFromArray(implicitArgs.head.asInstanceOf[scala.reflect.ClassTag[A]])
-      case t =>
-        sc.BuildFrom.buildFromIterableOps
-    }
-    bf.asInstanceOf[sc.BuildFrom[Any, A, CC[A]]]
-  }
+
   implicit class GenTraversableOnceSeqOp[C <: sc.IterableOnce[_]](val coll: C) extends AnyVal {
     def seq: coll.type = coll
   }
   def knownSize(t: sc.Iterable[_]): Int = t.knownSize
+  def simpleFactory[A, B](f: => sc.mutable.Builder[A, B]): sc.compat.Factory[A, B] = new sc.compat.Factory[A, B] {
+    override def fromSpecific(it: IterableOnce[A]): B = newBuilder.addAll(it).result()
+    override def newBuilder: mutable.Builder[A, B] = f
+  }
   implicit class BreakOutTo[CC[_]](private val companion: sc.IterableFactory[CC]) extends AnyVal {
     def breakOut[A]: sc.BuildFrom[Any, A, CC[A]] = new sc.BuildFrom[Any, A, CC[A]] {
       override def fromSpecific(from: Any)(it: sc.IterableOnce[A]): CC[A] = companion.newBuilder[A].addAll(it).result()
@@ -126,4 +115,8 @@ package object collection {
   }
 
   lazy val ParCollectionConverters = scala.collection.parallel.CollectionConverters
+
+  implicit class ToStringPrefix(c: Iterable[_]) {
+    def stringPrefix: String = BuilderProvider.stringPrefix(c)
+  }
 }

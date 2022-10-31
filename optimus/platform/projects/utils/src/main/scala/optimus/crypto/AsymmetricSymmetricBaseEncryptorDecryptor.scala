@@ -17,7 +17,7 @@ import java.util.Base64
 import com.google.common.base.Splitter
 import javax.crypto.Cipher
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 trait EncryptionProviderBuilder {
   def cipherName: String

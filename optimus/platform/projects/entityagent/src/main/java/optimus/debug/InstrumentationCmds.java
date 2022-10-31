@@ -22,7 +22,8 @@ import java.util.List;
 
 import optimus.graph.DiagnosticSettings;
 
-@SuppressWarnings("unused") // A number of methods in the class are called via reflection when loaded from a config
+@SuppressWarnings({ "unused", "WeakerAccess" })
+// A number of methods in the class are called via reflection when loaded from a config
 public class InstrumentationCmds {
 
   private static class ScalaWorksheetAlmostParser extends StringTokenizer {
@@ -98,6 +99,41 @@ public class InstrumentationCmds {
   }
 
   /**
+   * @param fieldName new field to be injected to class on which methodName is defined
+   * @param methodName fully qualified method name to intercept
+   */
+  public static void injectCurrentNodeAndStackToField(String fieldName, String methodName) {
+   InstrumentationConfig.addRecordPrefixCallIntoMemberWithStackTrace(fieldName, asMethodRef(methodName), traceCurrentNodeAndStack);
+  }
+
+  /**
+   * Inject field containing construction site stack into class className
+   * @param className class to trace construction of
+   */
+  public static void recordConstructorInvocationSite(String className) {
+   InstrumentationConfig.recordConstructorInvocationSite(className);
+  }
+
+  /**
+   * Inject field containing construction site stack into all entities
+   */
+  public static void recordAllEntityConstructorInvocationSites() {
+    instrumentAllEntities = EntityInstrumentationType.recordConstructedAt;
+  }
+
+  /**
+   * Make class className extend interfaceToAdd
+   * Used to add marker interfaces on the fly
+   * @param className class to be extended
+   * @param interfaceToAdd interface or trait to add
+   */
+  public static void addInterface(String className, String interfaceToAdd) {
+    var jvmClassName = className.replace('.', '/');
+    var jvmInterfaceName = interfaceToAdd.replace('.', '/');
+    InstrumentationConfig.addInterfacePatch(jvmClassName, jvmInterfaceName);
+  }
+
+  /**
    * Inject into the Entity identified by className a method equalsForCaching that compares by identity
    * <p>The reason to do this, is to get cache hits only on exactly the same entity instance.
    * This in some cases avoids the issue with the entity caching some unstable value and re-using it in wrong context</p>
@@ -125,6 +161,16 @@ public class InstrumentationCmds {
   public static void traceAsNode(String methodRef) {
     MethodRef from = asMethodRef(methodRef);
     addTraceEntryAsNode(from);
+  }
+
+  /**
+   * Instrument @methodRef to record the invocation as a leaf node, and trigger all parents to be recorded
+   *
+   * @param methodRef Full name reference name Such package.className.methodName
+   */
+  public static void traceAsNodeAndParents(String methodRef) {
+    MethodRef from = asMethodRef(methodRef);
+    addTraceEntryAsNodeAndParents(from);
   }
 
   /**
@@ -183,14 +229,14 @@ public class InstrumentationCmds {
    */
   public static void excludeMethodFromModuleCtorReporting(String methodToPatch) {
     MethodRef mref = asMethodRef(methodToPatch);
-    var patch = addPrefixCall(mref, InstrumentedModuleCtor.mrPause, false, false);
-    addSuffixCall(mref, InstrumentedModuleCtor.mrResume);
+    var patch = addPrefixCall(mref, InstrumentationConfig.imcPause, false, false);
+    addSuffixCall(mref, InstrumentationConfig.imcResume);
     patch.passLocalValue = true;
   }
 
   /**
    * Instrument entity @className constructors to call a prefix/postfix methods to mark/unmark entity ctor as running
-   * @see InstrumentationCmds#markAllEntityCtors()
+   * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    * @see InstrumentationCmds#prefixCallWithDumpOnEntityConstructing(java.lang.String)
    * @param className Fully specified package.subpackage.className
    */
@@ -202,8 +248,8 @@ public class InstrumentationCmds {
   /**
    * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors as running
    */
-  public static void markAllEntityCtors() {
-    instrumentAllEntities = true;
+  public static void markAllEntityCtorsForSIDetection() {
+    instrumentAllEntities = EntityInstrumentationType.markScenarioStack;
   }
 
   /**
@@ -224,6 +270,24 @@ public class InstrumentationCmds {
   }
 
   /**
+   * Instrument callouts and report touching tweakables or entity ctor (which should be RT)
+   * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
+   */
+  public static void reportTouchingTweakableInEntityConstructor() {
+    InstrumentationConfig.addVerifyScenarioStackCalls();
+    reportTouchingTweakable = true;
+  }
+
+  /**
+   * Instrument callouts and report touching tweaked values or entity ctor (which should be RT)
+   * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
+   */
+  public static void reportFindingTweaksInEntityConstructor() {
+    InstrumentationConfig.addVerifyScenarioStackCalls();
+    reportFindingTweaks = true;
+  }
+
+  /**
    * Cache all entity creations.
    * Instrument all def apply(): E on E$ extends EntityCompanion to cache their values
    * @apiNote Use to check the suspicions that entity have mutable fields OR refer to unique values that don't participate
@@ -239,5 +303,31 @@ public class InstrumentationCmds {
   public static void cache(String methodRef) {
     var cacheFunction = asMethodRef(methodRef);
     addCacheFunction(cacheFunction);
+  }
+
+  /** Instrument Exception constructor to call NodeTrace */
+  public static void traceSelfAndParentOnException() {
+    InstrumentationConfig.addTraceSelfAndParentOnException();
+  }
+
+  /**
+   * When traceSelfAndParentOnException or individual exception reporting is enabled, some call stacks can be disabled
+   * @param methodToPatch fully specified method reference
+   * @see optimus.debug.InstrumentationCmds#traceSelfAndParentOnException()
+   */
+  public static void excludeMethodFromExceptionReporting(String methodToPatch) {
+    MethodRef mref = asMethodRef(methodToPatch);
+    var patch = addPrefixCall(mref, InstrumentationConfig.iecPause, false, false);
+    addSuffixCall(mref, InstrumentationConfig.iecResume);
+    patch.passLocalValue = true;
+  }
+
+  /** Sometimes developers inadvertanly write non-RT constructors. Enabling this probe will often find those issues */
+  public static void verifyEntityDeepEqualityDuringCaching() {
+    var suffix = addSuffixCall(equalsHook, expectEquals);
+    suffix.suffixWithThis = true;
+    suffix.suffixWithReturnValue = true;
+    suffix.suffixWithArgs = true;
+    suffix.suffixNoArgumentBoxing = true;
   }
 }

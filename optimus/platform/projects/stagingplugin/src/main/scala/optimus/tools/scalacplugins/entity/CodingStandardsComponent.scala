@@ -28,7 +28,8 @@ class CodingStandardsComponent(
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit) {
-      standardsTraverser traverse unit.body
+      if (!pluginData.rewriteConfig.anyEnabled)
+        standardsTraverser traverse unit.body
     }
   }
 
@@ -52,10 +53,6 @@ class CodingStandardsComponent(
         case Return(retVal) if state.inLastExpr => alarm(CodeStyleErrors.RETURN_STATEMENT, retVal.pos)
 
         case vdd: ValOrDefDef =>
-          import vdd._
-          if (!state.inDef && mods.isImplicit && mods.isPublic && tpt.isEmpty)
-            alarm(StagingNonErrorMessages.UNTYPED_IMPLICIT(name), tree.pos)
-
           var alreadyTraversed = false
           vdd match {
             case dd: DefDef =>

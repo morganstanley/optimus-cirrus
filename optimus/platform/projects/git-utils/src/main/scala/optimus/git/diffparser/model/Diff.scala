@@ -15,6 +15,7 @@ import java.util.regex.Pattern
 
 import scala.collection.immutable.Seq
 import scala.collection.compat._
+import scala.collection.mutable
 
 final case class Range(lineStart: Int, lineCount: Int)
 
@@ -23,25 +24,36 @@ object LineType extends Enumeration {
   val From, To, Neutral = Value
 }
 
-final case class Line(tpe: LineType.Value, content: String)
+final case class Line(tpe: LineType.Value, content: String) {
+  def isNeutral: Boolean = tpe == LineType.Neutral
+  def isFrom: Boolean = tpe == LineType.From
+  def isTo: Boolean = tpe == LineType.To
+}
 object Line {
   def from(content: String): Line = Line(LineType.From, content)
   def to(content: String): Line = Line(LineType.To, content)
   def neutral(content: String): Line = Line(LineType.Neutral, content)
 }
 
-final case class Hunk(fromFileRange: Range, toFileRange: Range, lines: Seq[Line]) {
+final case class PartialHunk(fromFileRange: Range, toFileRange: Range, lines: mutable.Buffer[Line]) {
   def this(fromFileRange: Range, toFileRange: Range) { // used from Java
-    this(fromFileRange, toFileRange, Seq.empty)
+    this(fromFileRange, toFileRange, mutable.Buffer.empty)
   }
 
-  def addLine(line: Line): Hunk = this.copy(lines = this.lines :+ line)
+  def addLine(line: Line): PartialHunk = {
+    this.lines :+ line
+    this
+  }
+
+  def toHunk(): Hunk = Hunk(fromFileRange, toFileRange, lines.to(Seq))
 }
+final case class Hunk(fromFileRange: Range, toFileRange: Range, lines: Seq[Line])
+
 object Hunk {
   private val LineRangePattern: Pattern =
     Pattern.compile("^.*-([0-9]+)(?:,([0-9]+))? \\+([0-9]+)(?:,([0-9]+))?.*$")
 
-  def fromLine(currentLine: String): Hunk = {
+  def fromLine(currentLine: String): PartialHunk = {
     val matcher = LineRangePattern.matcher(currentLine)
     if (matcher.matches) {
       val range1Start = matcher.group(1)
@@ -52,7 +64,7 @@ object Hunk {
       val range2Count = if (matcher.group(4) != null) { matcher.group(4) }
       else { "1" }
       val toRange: Range = Range(range2Start.toInt, range2Count.toInt)
-      Hunk(fromRange, toRange, Seq.empty)
+      PartialHunk(fromRange, toRange, mutable.Buffer.empty)
     } else {
       throw new IllegalStateException(
         s"No line ranges found in the following hunk start line: '$currentLine'. Expected something like '-1,5 +3,5'.")
@@ -66,14 +78,14 @@ object PartialDiff {
   private val RealPathSuffixPattern = Pattern.compile("([^/]/|src://|dst://)(.+)")
   private val HeaderFilePattern = Pattern.compile("diff --git (\\w/.+|src://.+) (\\w/.+|dst://.+)")
 
-  def empty: PartialDiff = PartialDiff(None, None, Seq.empty, Seq.empty)
+  def empty: PartialDiff = PartialDiff(None, None, mutable.Buffer.empty, mutable.Buffer.empty)
 
   /**
    * When file is deleted, path is set as '/dev/null'. Otherwise we drop the first 2 characters
    */
   def getRealPath(fileName: String): String = {
     val m = PartialDiff.RealPathSuffixPattern.matcher(fileName)
-    if (fileName.equals("/dev/null")) {
+    if (fileName.equals(Diff.noFile)) {
       fileName
     } else if (m.find()) {
       m.group(2)
@@ -96,19 +108,25 @@ object PartialDiff {
 final case class PartialDiff(
     fromFileName: Option[String],
     toFileName: Option[String],
-    headerLines: Seq[String],
-    hunks: Seq[Hunk]) {
+    headerLines: mutable.Buffer[String],
+    hunks: mutable.Buffer[PartialHunk]) {
 
   import PartialDiff._
 
-  def addLine(line: Line): PartialDiff =
-    this.copy(hunks = hunks.updated(hunks.size - 1, hunks.last.copy(lines = hunks.last.lines :+ line)))
+  def addLine(line: Line): PartialDiff = {
+    hunks.last.lines += line
+    this
+  }
 
-  def addHunk(hunk: Hunk): PartialDiff =
-    this.copy(hunks = hunks :+ hunk)
+  def addHunk(hunk: PartialHunk): PartialDiff = {
+    hunks += hunk
+    this
+  }
 
-  def addHeaderLine(line: String): PartialDiff =
-    this.copy(headerLines = headerLines :+ line)
+  def addHeaderLine(line: String): PartialDiff = {
+    headerLines += line
+    this
+  }
 
   def setToFileName(name: String): PartialDiff =
     this.copy(toFileName = Some(name))
@@ -121,8 +139,8 @@ final case class PartialDiff(
       // in case of new / deleted / renamed files there are no +++ / --- lines
       getRealPath(fromFileName.getOrElse(fileNameFromHeader(headerLines.head, fromFile = true))),
       getRealPath(toFileName.getOrElse(fileNameFromHeader(headerLines.head, fromFile = false))),
-      headerLines,
-      hunks
+      headerLines.to(Seq),
+      hunks.map(_.toHunk()).to(Seq)
     )
 }
 
@@ -132,6 +150,9 @@ final case class Diff(fromFileName: String, toFileName: String, headerLines: Seq
   import Diff._
 
   def isNewFile: Boolean = headerLines.exists(_.startsWith(newFileMsg))
+  def isRenamedFile: Boolean =
+    Seq(renamedFileFromMsg, renamedFileToMsg).forall(line => headerLines.exists(_.startsWith(line)))
+  def isRenamedIdenticalFile: Boolean = isRenamedFile && headerLines.contains(identicalFileContents)
   def isFileDeletion: Boolean = headerLines.exists(_.startsWith(deletedFileMsg))
   def isFileModeChange: Boolean = headerLines.exists(_.startsWith(newFileModeMsg))
 
@@ -154,12 +175,17 @@ final case class Diff(fromFileName: String, toFileName: String, headerLines: Seq
     }
 
   def getFileName: String = {
-    if (toFileName.equals("/dev/null")) fromFileName else toFileName
+    if (toFileName.equals(noFile)) fromFileName else toFileName
   }
 }
 
 object Diff {
+  val noFile: String = "/dev/null"
   val newFileMsg: String = "new file mode "
   val deletedFileMsg: String = "deleted file mode "
   val newFileModeMsg: String = "new mode "
+  val identicalFileContents: String = "similarity index 100%"
+  val renamedFileFromMsg: String = "rename from "
+  val renamedFileToMsg: String = "rename to "
+
 }

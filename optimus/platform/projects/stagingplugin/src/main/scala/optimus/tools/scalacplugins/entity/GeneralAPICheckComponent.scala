@@ -11,8 +11,9 @@
  */
 package optimus.tools.scalacplugins.entity
 
-import java.util.regex.PatternSyntaxException
+import optimus.tools.scalacplugins.entity.reporter.OptimusAlarms
 
+import java.util.regex.PatternSyntaxException
 import optimus.tools.scalacplugins.entity.reporter.OptimusErrors
 import optimus.tools.scalacplugins.entity.reporter.OptimusNonErrorMessages
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
@@ -261,6 +262,8 @@ class GeneralAPICheckComponent(
 
     import noWarns._
 
+    private val ScopeExtractor = ".*\\(SCOPE=([\\w\\-\\.]+)\\).*".r
+
     val scopeId = settings.defines.value.collectFirst {
       case s if s.startsWith("-DscopeId=") => s.substring("-DscopeId=".length)
     }
@@ -279,23 +282,23 @@ class GeneralAPICheckComponent(
         annInfo.stringArg(0) match {
           case Some(msg) =>
             val typeAndFullName = s"${calleeSym.kindString} ${calleeSym.fullName}"
-            val noWarnRegexes: Seq[Regex] =
+            val noWarnRegexes: Seq[(Regex, Position)] =
               posNoWarn.collect {
-                case ((DepId, p), (_, r)) if p.includes(callerPos) => r
+                case ((DepId, p), (_, r)) if p.includes(callerPos) => (r, p)
               } ++
                 path.collect {
                   case callerTree: MemberDef
                       if callerTree.hasSymbolField && symNoWarn.contains((DepId, callerTree.symbol)) =>
-                    symNoWarn((DepId, callerTree.symbol))._2
-                }
+                    (symNoWarn((DepId, callerTree.symbol))._2, callerTree.symbol.pos)
+                }.distinct
             // Check for a match now, so we can record that the nowarn was used, even we don't emit a deprecating warning.
             // We're allowing redundant nowarns along the traversal path (hence fold rather than exists), because they're awfully common.
-            val matched = noWarnRegexes.foldLeft(false) {
-              case (_, r) if r.findFirstIn(calleeSym.fullName).isDefined =>
+            val matchedNowarnPositions = noWarnRegexes.collect {
+              case (r, p) if r.findFirstIn(calleeSym.fullName).isDefined =>
                 unusedNoWarn -= r
-                true
-              case (z, _) => z
+                p
             }
+            val matched = matchedNowarnPositions.nonEmpty
             if (
               currentOwner.ownerChain
                 .exists(x => x.hasAnnotation(DeprecatingAnnotation) || x.companion.hasAnnotation(DeprecatingAnnotation))
@@ -314,7 +317,20 @@ class GeneralAPICheckComponent(
                 msg + " (no appropriate @nowarn found)"
               )
             } else if (matched) {
-              alarm(OptimusNonErrorMessages.DEPRECATING_LIGHT, callerPos, typeAndFullName, msg)
+              // when a `[NEW]` message is suppressed by nowarn, drop the `[NEW]` tag to avoid the
+              // message being re-promoted to Error in BSPTraceListener.
+              alarm(
+                OptimusNonErrorMessages.DEPRECATING_LIGHT,
+                callerPos,
+                typeAndFullName,
+                msg.replaceAllLiterally(OptimusAlarms.NewTag, "").trim())
+              val contactInfo = msg match {
+                case ScopeExtractor(id) => s"[$id]"
+                case _                  => "appropriate"
+              }
+              matchedNowarnPositions.foreach { p =>
+                alarm(OptimusNonErrorMessages.NOWARN_DEPRECATION, p, typeAndFullName, contactInfo)
+              }
             } else {
               alarm(
                 OptimusNonErrorMessages.DEPRECATING,

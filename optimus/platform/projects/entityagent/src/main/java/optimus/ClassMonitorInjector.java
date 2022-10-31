@@ -11,13 +11,9 @@
  */
 package optimus;
 
-import static optimus.ClassMonitorInjector.FILE_PREFIX;
-import static optimus.ClassMonitorInjector.NETWORK_PREFIX;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.lang.instrument.ClassFileTransformer;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
@@ -36,7 +32,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
+
 import optimus.deps.CollectedDependencies;
 import optimus.deps.DynamicDependencyDiscoveryClassVisitor;
 import optimus.deps.InterProcessFile;
@@ -59,7 +55,6 @@ import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Type;
-
 
 /**
  * This class is used to monitor all class usage across any program that is run with it enabled.
@@ -105,18 +100,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   // very frequent, repeated access across all threads
   private static final Map<String, Integer> usedClasses = new ConcurrentHashMap<>(estimatedNumberOfClasses);
 
-  // track remote resources separately as they are already known Optimus classes we care about
-  // -- happens when a remote task completes (UI and GSF)
-  private static final Set<String> usedRemoteClasses = ConcurrentHashMap.newKeySet();
-  private static final Set<String> remoteClassDependencies = ConcurrentHashMap.newKeySet();
-  // track remote resources separately as they are already "pruned" to contain read-only resources
-  // -- happens when a remote task completes (UI and GSF)
-  private static final Set<String> usedRemoteResources = ConcurrentHashMap.newKeySet();
-
   // cache for optimus class check
   // -- only populated during transformation
-  private static final Map<String, ClassLoader> allTransformedOptimusClassesAndTheirClassloader =
-      new ConcurrentHashMap<>();
+  private static final Map<String, ClassLoader> allTransformedOptimusClassesAndTheirClassloader = new ConcurrentHashMap<>();
   // mapping of a class and its dependencies (other classes)
   // -- populated during transformation, except for some resources when it happens during execution
   private static final ConcurrentDependencyMap<String> classDependencies = new ConcurrentDependencyMap<>();
@@ -161,23 +147,24 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   // Exempt are DTC, CMI and their related structures
   // This has positive performance impact, eliminates thread contention and even CHM deadlock.
-  public static final List<String> instrumentationExemptedClasses = Arrays.asList(
-      "optimus/ClassMonitorInjector",
-      "optimus/ResourceAccessType",
-      "optimus/ResourceDependency",
-      "optimus/comparison/Explanation",
-      "optimus/comparison/Explanation$",
-      "optimus/comparison/ExplanationState",
-      "optimus/comparison/ExplanationState$",
-      "optimus/comparison/StringDiffExplainer",
-      "optimus/comparison/StringDiffExplainer$",
-      "optimus/comparison/Tabulator",
-      "optimus/comparison/Tabulator$"
-  );
-  public static final List<ExemptedPackage> instrumentationExemptedPackages = Arrays.asList(
-      new ExemptedPackage("optimus/graph/", "optimus.platform.core.main", "core.jar"),
-      new ExemptedPackage("optimus/dtc/", "optimus.platform.distributed_test_cache.", "distributed_test_cache.jar")
-  );
+  public static final List<String> instrumentationExemptedClasses = Arrays.asList("optimus/ClassMonitorInjector",
+                                                                                  "optimus/ResourceAccessType",
+                                                                                  "optimus/ResourceDependency",
+                                                                                  "optimus/comparison/Explanation",
+                                                                                  "optimus/comparison/Explanation$",
+                                                                                  "optimus/comparison/ExplanationState",
+                                                                                  "optimus/comparison/ExplanationState$",
+                                                                                  "optimus/comparison/StringDiffExplainer",
+                                                                                  "optimus/comparison/StringDiffExplainer$",
+                                                                                  "optimus/comparison/Tabulator",
+                                                                                  "optimus/comparison/Tabulator$");
+  public static final List<ExemptedPackage> instrumentationExemptedPackages = Arrays.asList(new ExemptedPackage("optimus/graph/",
+                                                                                                                "optimus.platform.core.main",
+                                                                                                                "core.jar"),
+                                                                                            new ExemptedPackage(
+                                                                                                "optimus/dtc/",
+                                                                                                "optimus.platform.distributed_test_cache.",
+                                                                                                "distributed_test_cache.jar"));
   // CAUTION: This list is dynamic and cannot be used to analyze cached dependencies!
   //          Used only by DTC and CMI internals
   public static final List<String> classesFromExemptedPackages = new CopyOnWriteArrayList<>();
@@ -204,7 +191,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     Path rejectedPrefix;
     try {
       prefix = getCodetreeArtifactPrefix();
-      rejectedPrefix = prefix != null ? prefix.resolve("ide_config") : prefix;
+      rejectedPrefix = prefix != null
+                       ? prefix.resolve("ide_config")
+                       : prefix;
     } catch (Throwable t) {
       prefix = null;
       rejectedPrefix = null;
@@ -218,7 +207,10 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   private void markTransformationUnsafe(String transformedClassName, String throwableText) {
-    recordInternalEvent(String.format("%s error during transformation of class %s: %s", CMI_ERROR, transformedClassName, throwableText));
+    recordInternalEvent(String.format("%s error during transformation of class %s: %s",
+                                      CMI_ERROR,
+                                      transformedClassName,
+                                      throwableText));
   }
 
   public static final TransformationStatistics statistics = new TransformationStatistics();
@@ -226,9 +218,11 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   // For testing only
   public static final AtomicBoolean rejectResourcesThatCannotBeFound = new AtomicBoolean(true);
 
+  private static final List<CollectedDependencies> remoteDependenciesList = new CopyOnWriteArrayList<>();
+
   private static Path getCodetreeArtifactPrefix() throws MalformedURLException, URISyntaxException {
-    URL resourceURL = ClassMonitorInjector.class.getClassLoader().getResource(
-        constructDependencyName(ClassMonitorInjector.class.getName()));
+    URL resourceURL = ClassMonitorInjector.class.getClassLoader().getResource(constructDependencyName(
+        ClassMonitorInjector.class.getName()));
     if (resourceURL != null) {
       Path thisJarPath = Paths.get(new URL(resourceURL.getPath().split("!")[0]).toURI());
       boolean isBuildDirJar = thisJarPath.getFileName().toString().contains("HASH");
@@ -267,8 +261,11 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+  public byte[] transform(ClassLoader loader,
+                          String className,
+                          Class<?> classBeingRedefined,
+                          ProtectionDomain protectionDomain,
+                          byte[] classfileBuffer) {
 
     // Deal with arrays of some type by removing the square brackets
     String classResourceName = transformToClassResourceName(className);
@@ -300,7 +297,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         visitors.add(OptimusDependencyDiscoveryClassVisitor.class);
 
         // Instrumenting (i.e. adding instructions) is optional, but we still need to collect static dependencies!
-        boolean exemptedPackage = instrumentationExemptedPackages.stream().anyMatch(iep -> iep.isExempted(loader, classResourceName));
+        boolean exemptedPackage = instrumentationExemptedPackages.stream().anyMatch(iep -> iep.isExempted(loader,
+                                                                                                          classResourceName));
         instrumentClass = !instrumentationExemptedClasses.contains(className) && !exemptedPackage;
         if (instrumentClass) {
           visitors.add(OptimusMethodEntryDependencyDiscoveryClassVisitor.class);
@@ -308,8 +306,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         if (exemptedPackage) {
           classesFromExemptedPackages.add(classResourceName);
         }
-      }
-      else {
+      } else {
         // Always instrument third party classes for resources and dynamic class usage
         instrumentClass = true;
       }
@@ -323,16 +320,14 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         ClassWriter classWriter = new ClassWriter(classReader, ClassWriter.COMPUTE_MAXS);
         ClassVisitor finalVisitor = classWriter;
         for (Class<? extends ClassVisitor> visitor : visitors) {
-          finalVisitor =
-              visitor.getConstructor(VisitContext.class, ClassVisitor.class)
-                  .newInstance(context, finalVisitor);
+          finalVisitor = visitor.getConstructor(VisitContext.class, ClassVisitor.class).newInstance(context,
+                                                                                                    finalVisitor);
         }
         statistics.visited.incrementAndGet();
         classReader.accept(finalVisitor, 0);
         context.wrapUp();
         return classWriter.toByteArray();
-      }
-      else {
+      } else {
         statistics.unchanged.incrementAndGet();
         return classfileBuffer;
       }
@@ -343,11 +338,15 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
   }
 
-  public synchronized static void clearUsageData() {
+  public synchronized static void clearLocalUsageData() {
     usedClasses.clear();
-    usedRemoteResources.clear();
-    usedRemoteClasses.clear();
     internalEvents.clear();
+  }
+
+  public synchronized static void clearAllUsageData() {
+    usedClasses.clear();
+    internalEvents.clear();
+    remoteDependenciesList.clear();
   }
 
   // Only to peek at internal structure
@@ -361,25 +360,28 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   // [GSF] Used by the OptimusCalculationServiceHandler on the grid engine to get the information for the client
-  // [Out-of-process UI] Used by ClassMonitorServlet on the server side to pass on used classes to the client
-  public static CollectedDependencies getUsedDependenciesAndReset() {
+  public static CollectedDependencies getLocallyUsedDependenciesAndReset() {
     return getUsedRawDependencies(true, true);
   }
 
   // [GSF] Used in GSFGridDistributionClient to track the remote execution dependencies
-  // [Out-of-process UI] Used in UiAppTestSession to track the remote execution dependencies
   public static void logRemoteClassAndResourceUsage(CollectedDependencies dependencies) {
-    usedRemoteClasses.addAll(dependencies.getUsedClasses());
-    usedRemoteResources.addAll(dependencies.getResourceDependencies());
-    remoteClassDependencies.addAll(dependencies.getClassDependencies());
-    internalEvents.addAll(dependencies.getInternalEvents());
+    remoteDependenciesList.add(dependencies);
+  }
+
+  public static List<CollectedDependencies> getRemotelyUsedDependenciesAndReset() {
+    List<CollectedDependencies> remoteDependenciesListCopy = List.copyOf(remoteDependenciesList);
+    remoteDependenciesList.clear();
+    return remoteDependenciesListCopy;
   }
 
   public static void logClassUsage(String className) {
     if (showTopN > NOT_COUNTING_HITS) {
-      usedClasses.compute(className, (key, v) -> v != null ? v + 1 : 1);
-    }
-    else {
+      usedClasses.compute(className,
+                          (key, v) -> v != null
+                                      ? v + 1
+                                      : 1);
+    } else {
       usedClasses.putIfAbsent(className, NOT_COUNTING_HITS); // Not counting + optimization
     }
   }
@@ -392,18 +394,23 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     logClassUsage(className);
     if (dependency != null) {
       if (isClassDependency) {
-        Class<?> dependencyClass = (dependency instanceof Class) ? (Class) dependency : dependency.getClass();
-        computeAndAddClassDependency(dependencyClass.getClassLoader(), className, constructDependencyName(dependencyClass.getName()));
+        Class<?> dependencyClass = (dependency instanceof Class)
+                                   ? (Class) dependency
+                                   : dependency.getClass();
+        computeAndAddClassDependency(dependencyClass.getClassLoader(),
+                                     className,
+                                     constructDependencyName(dependencyClass.getName()));
       } else {
         if (dependency instanceof ResourceDependency) {
           computeAndAddResourceDependency(className, (ResourceDependency) dependency);
         } else if (!dependency.toString().endsWith(classExtension)) {
           computeAndAddResourceDependency(className,
-              new ResourceDependency(dependency.toString(), ResourceAccessType.input));
+                                          new ResourceDependency(dependency.toString(), ResourceAccessType.input));
         } else {
-          recordInternalEvent(
-              String.format("%s Unmanaged resource type %s from %s: add code to ignore or handle", CMI_WARN,
-                  dependency.toString(), className));
+          recordInternalEvent(String.format("%s Unmanaged resource type %s from %s: add code to ignore or handle",
+                                            CMI_WARN,
+                                            dependency.toString(),
+                                            className));
         }
       }
     }
@@ -417,7 +424,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     // Ignore jars: they are covered by class path
     if (!resourcePath.endsWith(".jar")) {
       logClassAndResourceUsage(new ResourceDependency(resourcePath, ResourceAccessType.fromFileAccessMode(accessMode)),
-          false, className);
+                               false,
+                               className);
     }
   }
 
@@ -426,7 +434,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   private static boolean isClassOrJarResource(URL resource) {
-    return (resource.getProtocol().equals("jar") || resource.getProtocol().equals("file")) && (resource.getPath().endsWith(classExtension) || resource.getPath().endsWith(".jar"));
+    return (resource.getProtocol().equals("jar") || resource.getProtocol().equals("file")) &&
+           (resource.getPath().endsWith(classExtension) || resource.getPath().endsWith(".jar"));
   }
 
   public static void logUrlResourceUsage(URL resource, String className) {
@@ -440,12 +449,15 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       try {
         // This occurs because windows local absolute paths (e.g. D:\foo\bar) get encoded as file:////D:/foo/bar,
         // so the "path" component of the URL starts with ////D:/, not D:. We need to remove the ////
-        Path path = resource.getPath().startsWith("////") ? Paths.get(resource.getPath().substring(4)) : Paths.get(
-            resource.toURI());
+        Path path = resource.getPath().startsWith("////")
+                    ? Paths.get(resource.getPath().substring(4))
+                    : Paths.get(resource.toURI());
         logFileResourceUsage(path.toFile(), "r", className);
       } catch (URISyntaxException | FileSystemNotFoundException | UnsupportedOperationException | InvalidPathException e) {
-        recordInternalEvent(
-            String.format("%s Cannot parse URI %s from %s: ignored", CMI_WARN, resource.toString(), className));
+        recordInternalEvent(String.format("%s Cannot parse URI %s from %s: ignored",
+                                          CMI_WARN,
+                                          resource.toString(),
+                                          className));
       }
     } else {
       logNetworkResourceUsage(resource.toString(), className);
@@ -497,37 +509,32 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     logClassAndResourceUsage(new ResourceDependency(networkAddress, ResourceAccessType.network), false, className);
   }
 
-  // Internal and testing
   public synchronized static CollectedDependencies getUsedRawDependencies(boolean clearInternalState,
-      boolean sanitize) {
-    Set<String> usedResourcesCopy = new HashSet<>();
-    usedRemoteResources.forEach(usedResourcesCopy::add); // collection addAll has a bug, please to do not use
-    if (clearInternalState)
-      usedRemoteResources.clear();
+                                                                          boolean sanitize) {
+    Set<String> usedClassesCopy = instrumentationExemptedClasses.stream()
+                                                                .map(ClassMonitorInjector::constructDependencyName)
+                                                                .collect(Collectors.toSet());
 
-    Set<String> usedClassesCopy = instrumentationExemptedClasses.stream().map(
-        ClassMonitorInjector::constructDependencyName).collect(Collectors.toSet());
     classesFromExemptedPackages.forEach(usedClassesCopy::add);
     usedClasses.keySet().forEach(usedClassesCopy::add); // collection addAll has a bug, please to do not use
     if (showTopN > NOT_COUNTING_HITS) {
-      List<Map.Entry<String, Integer>> sortedUsage = usedClasses.entrySet().stream().sorted((o1, o2) -> o2.getValue().compareTo(o1.getValue())).collect(Collectors.toList());
-      String topList = sortedUsage.subList(0, Math.min(showTopN, sortedUsage.size())).stream().map(
-          (entry) -> String.format("%s (%d)", entry.getKey(), entry.getValue())).collect(Collectors.joining("\n - "));
-      recordInternalEvent(String.format("%s Internal CMI state: top %d used classes: \n - %s.", CMI_INFO, showTopN, topList));
+      List<Map.Entry<String, Integer>> sortedUsage = usedClasses.entrySet()
+                                                                .stream()
+                                                                .sorted((o1, o2) -> o2.getValue()
+                                                                                      .compareTo(o1.getValue()))
+                                                                .collect(Collectors.toList());
+      String topList = sortedUsage.subList(0, Math.min(showTopN, sortedUsage.size()))
+                                  .stream()
+                                  .map((entry) -> String.format("%s (%d)", entry.getKey(), entry.getValue()))
+                                  .collect(Collectors.joining("\n - "));
+      recordInternalEvent(String.format("%s Internal CMI state: top %d used classes: \n - %s.",
+                                        CMI_INFO,
+                                        showTopN,
+                                        topList));
     }
     if (clearInternalState) {
       usedClasses.clear();
     }
-
-    Set<String> usedRemoteClassesCopy = new HashSet<>();
-    usedRemoteClasses.forEach(usedRemoteClassesCopy::add); // collection addAll has a bug, please to do not use
-    if (clearInternalState)
-      usedRemoteClasses.clear();
-
-    Set<String> remoteClassDependenciesCopy = new HashSet<>();
-    remoteClassDependencies.forEach(remoteClassDependenciesCopy::add); // collection addAll has a bug, please to do not use
-    if (clearInternalState)
-      remoteClassDependencies.clear();
 
     Set<String> allClassDependencies = new HashSet<>();
     Set<ResourceDependency> allResourceDependencies = new HashSet<>();
@@ -536,21 +543,26 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
 
     if (sanitize) {
-      recordInternalEvent(
-          String.format("%s Sanitizing %s classes and %s resources.", CMI_INFO, allClassDependencies.size(),
-              allResourceDependencies.size()));
+      recordInternalEvent(String.format("%s Sanitizing %s classes and %s resources.",
+                                        CMI_INFO,
+                                        allClassDependencies.size(),
+                                        allResourceDependencies.size()));
       // remove any class that is not from Optimus
       int unrefinedClassDependencySize = allClassDependencies.size();
       allClassDependencies.removeIf(d -> !isLoadedOptimusClass(d));
-      recordInternalEvent(
-          String.format("%s We removed %s classes to retain only those that were truly needed (i.e. class loaded).",
-                        CMI_INFO, (unrefinedClassDependencySize - allClassDependencies.size())));
+      recordInternalEvent(String.format(
+          "%s We removed %s classes to retain only those that were truly needed (i.e. class loaded).",
+          CMI_INFO,
+          (unrefinedClassDependencySize - allClassDependencies.size())));
 
       int unrefinedResourceDependencySize = allResourceDependencies.size();
       // Remove anything that is read and written to
-      allResourceDependencies.removeIf(d -> allResourceDependencies.stream().anyMatch(
-          d2 -> d2.getResourceId().equals(d.getResourceId()) && !d2.getAccessType().equals(
-              d.getAccessType()) && d2.getAccessType().created));
+      allResourceDependencies.removeIf(d -> allResourceDependencies.stream()
+                                                                   .anyMatch(d2 -> d2.getResourceId()
+                                                                                     .equals(d.getResourceId()) &&
+                                                                                   !d2.getAccessType()
+                                                                                      .equals(d.getAccessType()) &&
+                                                                                   d2.getAccessType().created));
       // Remove any dependency that is also written to (without reading back)
       allResourceDependencies.removeIf(d -> d.getAccessType().created);
       // Remove read-only paths and missing files
@@ -562,8 +574,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
               try {
                 input = new URL(d.getResourceId()).openStream();
               } finally {
-                if (input != null)
-                  input.close();
+                if (input != null) { input.close(); }
               }
             } else {
               Path path = Paths.get(d.getResourceId());
@@ -578,67 +589,87 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         return false; // Retain
       });
       // Remove loop back addresses
-     allResourceDependencies.removeIf(
-          d -> d.getAccessType().equals(ResourceAccessType.network) && (d.getResourceId().contains(
-              "localhost") || d.getResourceId().contains("127.0.0.1")));
-      recordInternalEvent(
-          String.format("%s We removed %s resources to exclude those generated by the test, using loopback interface or that are not found", CMI_INFO, (unrefinedResourceDependencySize - allResourceDependencies.size())));
+      allResourceDependencies.removeIf(d -> d.getAccessType().equals(ResourceAccessType.network) &&
+                                            (d.getResourceId().contains("localhost") || d.getResourceId().contains(
+                                                "127.0.0.1")));
+      recordInternalEvent(String.format(
+          "%s We removed %s resources to exclude those generated by the test, using loopback interface or that are not found",
+          CMI_INFO,
+          (unrefinedResourceDependencySize - allResourceDependencies.size())));
       // Remove DTC internal files passed between processes, determined by system properties.
       int resourceCountBeforeTrim = allResourceDependencies.size();
       String resultFileProp = systemProperties.getProperty(InterProcessFile.lookupResult.sysProp, "None");
       String runContextProp = systemProperties.getProperty(InterProcessFile.runContext.sysProp, "None");
-      allResourceDependencies.removeIf(d -> d.getResourceId().equals(resultFileProp) || d.getResourceId().equals(runContextProp));
-      recordInternalEvent(
-          String.format("%s We removed %s resource(s) to exclude those generated by the DTC infra for inter-process communication.", CMI_INFO, (resourceCountBeforeTrim - allResourceDependencies.size())));
-      recordInternalEvent(String.format("%s Sanitizing complete: left with %s classes and %s resources.", CMI_INFO,
-          allClassDependencies.size(), allResourceDependencies.size()));
+      allResourceDependencies.removeIf(d -> d.getResourceId().equals(resultFileProp) ||
+                                            d.getResourceId().equals(runContextProp));
+      recordInternalEvent(String.format(
+          "%s We removed %s resource(s) to exclude those generated by the DTC infra for inter-process communication.",
+          CMI_INFO,
+          (resourceCountBeforeTrim - allResourceDependencies.size())));
+      recordInternalEvent(String.format("%s Sanitizing complete: left with %s classes and %s resources.",
+                                        CMI_INFO,
+                                        allClassDependencies.size(),
+                                        allResourceDependencies.size()));
     }
 
-    recordInternalEvent(String.format("%s Internal CMI state: collected thus far %s class dependencies for %s classes.", CMI_INFO,
-                                      classDependencies.getDependenciesCount(), classDependencies.size()));
-    recordInternalEvent(String.format("%s Internal CMI state: collected thus far %s resources dependencies for %s classes.", CMI_INFO,
-                                      resourceDependencies.getDependenciesCount(), resourceDependencies.size()));
-    recordInternalEvent(String.format("%s Internal CMI state: transformation internals [transformed classes = %s, optimus jars = %s out of %s, optimus classes = %s out of %s].", CMI_INFO,
+    recordInternalEvent(String.format("%s Internal CMI state: collected thus far %s class dependencies for %s classes.",
+                                      CMI_INFO,
+                                      classDependencies.getDependenciesCount(),
+                                      classDependencies.size()));
+    recordInternalEvent(String.format(
+        "%s Internal CMI state: collected thus far %s resources dependencies for %s classes.",
+        CMI_INFO,
+        resourceDependencies.getDependenciesCount(),
+        resourceDependencies.size()));
+    recordInternalEvent(String.format(
+        "%s Internal CMI state: transformation internals [transformed classes = %s, optimus jars = %s out of %s, optimus classes = %s out of %s].",
+        CMI_INFO,
         allTransformedOptimusClassesAndTheirClassloader.size(),
-        cachedIsOptimusJar.values().stream().mapToInt(b -> b ? 1 : 0).sum(), cachedIsOptimusJar.size(),
-        cachedIsOptimusClass.values().stream().mapToInt(b -> b ? 1 : 0).sum(), cachedIsOptimusClass.size()));
-
+        cachedIsOptimusJar.values()
+                          .stream()
+                          .mapToInt(b -> b
+                                         ? 1
+                                         : 0)
+                          .sum(),
+        cachedIsOptimusJar.size(),
+        cachedIsOptimusClass.values()
+                            .stream()
+                            .mapToInt(b -> b
+                                           ? 1
+                                           : 0)
+                            .sum(),
+        cachedIsOptimusClass.size()));
 
     // Delayed capture and reset
     List<String> internalEventsCopy = new ArrayList<>();
     internalEvents.forEach(internalEventsCopy::add); // collection addAll has a bug, please to do not use
-    if (clearInternalState)
-      internalEvents.clear();
+    if (clearInternalState) { internalEvents.clear(); }
 
-    // Merging after sanitization as we don't want to remove remote dependencies because we did not see them in this JVM
-    remoteClassDependenciesCopy.forEach(allClassDependencies::add); // collection addAll has a bug, please to do not use
-    usedRemoteClassesCopy.forEach(usedClassesCopy::add); // collection addAll has a bug, please to do not use
-    usedResourcesCopy.addAll(
-        allResourceDependencies.stream().map(ResourceDependency::getQualifiedResourceId).collect(Collectors.toSet()));
+    Set<String> usedResourcesCopy = allResourceDependencies.stream()
+                                                           .map(ResourceDependency::getQualifiedResourceId)
+                                                           .collect(Collectors.toSet());
 
-
-
+    // Capture and reset
     recordInternalEvent(String.format("%s Internal CMI state: %d all class dependencies are collected",
                                       CMI_INFO,
                                       allClassDependencies.size()));
-
-    recordInternalEvent(String.format("%s Internal CMI state: %d remote class dependencies are collected",
-                                      CMI_INFO,
-                                      remoteClassDependenciesCopy.size()));
 
     recordInternalEvent(String.format("%s Internal CMI state: %d used all class are collected",
                                       CMI_INFO,
                                       usedClassesCopy.size()));
 
-    recordInternalEvent(String.format("%s Internal CMI state: %d used remote class are collected",
-                                      CMI_INFO,
-                                      usedRemoteClassesCopy.size()));
-
     recordInternalEvent(String.format("%s Internal CMI state: %d used resources are collected",
                                       CMI_INFO,
                                       usedResourcesCopy.size()));
 
-    return new CollectedDependencies(usedClassesCopy, allClassDependencies, usedResourcesCopy, internalEventsCopy);
+    return new CollectedDependencies(usedClassesCopy,
+                                     allClassDependencies,
+                                     usedResourcesCopy,
+                                     internalEventsCopy,
+                                     systemProperties,
+                                     environmentVariableMap,
+                                     new HashSet<>(),
+                                     new ArrayList<>());
   }
 
   // If not found, the result set is empty
@@ -662,8 +693,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     resourceDependencies.add(className, resource);
   }
 
-  private synchronized static void collectUsedClassesAndResources(String className, Set<String> allClassDependencies,
-      Set<ResourceDependency> allResourceDependencies) {
+  private synchronized static void collectUsedClassesAndResources(String className,
+                                                                  Set<String> allClassDependencies,
+                                                                  Set<ResourceDependency> allResourceDependencies) {
     if (allClassDependencies.add(className)) {
       allResourceDependencies.addAll(resourceDependencies.getSafeCopy(className));
       for (String dependency : classDependencies.getSafeCopy(className)) {
@@ -674,7 +706,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   // Only invoke if obtained from Class<?>.getName()
   public static String constructDependencyName(String dependencyName) {
-    assert(!dependencyName.contains("[]"));
+    assert (!dependencyName.contains("[]"));
     return dependencyName.replace('.', '/') + classExtension;
   }
 
@@ -691,12 +723,14 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       default:
         dependencyName = dependencyType.getClassName(); // Beautified version for native types
     }
-    assert(!dependencyName.contains("."));
+    assert (!dependencyName.contains("."));
     return dependencyName + classExtension;
   }
 
   private static boolean isSyntheticDynamicClass(String resourcePath) {
-    return resourcePath.contains("$MockitoMock$") || resourcePath.contains("$$FastClassByGuice$$") || resourcePath.contains("$$EnhancerBySpringCGLIB$$");
+    return resourcePath.contains("$MockitoMock$") ||
+           resourcePath.contains("$$FastClassByGuice$$") ||
+           resourcePath.contains("$$EnhancerBySpringCGLIB$$");
   }
 
   private static boolean rememberAsOptimusClass(String resourcePath, boolean isOptimusClass) {
@@ -707,19 +741,23 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     return isOptimusClass;
   }
 
-  private static Set<String> nativeTypes = new HashSet<>(
-      Arrays.asList("int.class", "boolean.class", "long.class", "float.class", "double.class", "byte.class",
-          "char.class", "short.class", "void.class"));
+  private static Set<String> nativeTypes = new HashSet<>(Arrays.asList("int.class",
+                                                                       "boolean.class",
+                                                                       "long.class",
+                                                                       "float.class",
+                                                                       "double.class",
+                                                                       "byte.class",
+                                                                       "char.class",
+                                                                       "short.class",
+                                                                       "void.class"));
 
   // NOTE: This is on a hot critical path, so its performance is important
   public static boolean isOptimusClass(ClassLoader classLoader, String resourcePath) {
 
-    if (cachedIsOptimusClass.containsKey(resourcePath))
-      return cachedIsOptimusClass.get(resourcePath);
+    if (cachedIsOptimusClass.containsKey(resourcePath)) { return cachedIsOptimusClass.get(resourcePath); }
 
     // Memory footprint reduction
-    if (isSyntheticDynamicClass(resourcePath))
-      return false;
+    if (isSyntheticDynamicClass(resourcePath)) { return false; }
 
     if (nativeTypes.contains(resourcePath)) {
       return rememberAsOptimusClass(resourcePath, false);
@@ -751,7 +789,10 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       // If not a JAR, then it could be an unsupported protocol (as we discovered with jrt)
       // However, the OBT test runner does unpack some jars given some suites expect to find files from filesystem
       // (i.e. do not use Class.getResource...), so they happen to be effectively from Optimus
-      recordInternalEvent(String.format("%s Resource %s in %s is assumed from Optimus", CMI_INFO, resourcePath, resourceUrl));
+      recordInternalEvent(String.format("%s Resource %s in %s is assumed from Optimus",
+                                        CMI_INFO,
+                                        resourcePath,
+                                        resourceUrl));
       return rememberAsOptimusClass(resourcePath, true);
     }
   }
@@ -809,51 +850,7 @@ enum ResourceAccessType {
   }
 }
 
-class ResourceDependency implements Serializable {
-  private final String resourceId;
-  private final ResourceAccessType accessType;
 
-  ResourceDependency(String resourceId, ResourceAccessType accessType) {
-    super();
-    this.resourceId = resourceId;
-    this.accessType = accessType;
-  }
 
-  public String getResourceId() {
-    return resourceId;
-  }
 
-  String getQualifiedResourceId() {
-    switch (accessType) {
-    case network:
-      return NETWORK_PREFIX + resourceId;
-    default:
-      return FILE_PREFIX + resourceId;
-    }
-  }
-
-  ResourceAccessType getAccessType() {
-    return accessType;
-  }
-
-  @Override
-  public String toString() {
-    return "ResourceDependency{" + "resourceId='" + resourceId + '\'' + ", accessType=" + accessType + '}';
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o)
-      return true;
-    if (o == null || getClass() != o.getClass())
-      return false;
-    ResourceDependency that = (ResourceDependency) o;
-    return Objects.equals(resourceId, that.resourceId) && accessType == that.accessType;
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(resourceId, accessType);
-  }
-}
 

@@ -26,6 +26,7 @@ object RTListStatic {
   private val basics: Set[String] = (classOf[RTExceptionTrait] :: classOf[RTExceptionInterface]
     :: classOf[IllegalArgumentException] :: classOf[UnsupportedOperationException]
     :: classOf[InvalidParameterException] :: classOf[IndexOutOfBoundsException]
+    :: classOf[StringIndexOutOfBoundsException]
     :: classOf[ArrayIndexOutOfBoundsException] :: classOf[NumberFormatException] :: classOf[ArithmeticException]
     :: classOf[NoSuchMethodError] :: classOf[NoSuchMethodException]
     :: classOf[NullPointerException] :: classOf[NoSuchElementException] :: classOf[NotImplementedError]

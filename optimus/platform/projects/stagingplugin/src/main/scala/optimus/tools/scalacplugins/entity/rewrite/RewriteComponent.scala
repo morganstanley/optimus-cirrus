@@ -13,7 +13,6 @@ package optimus.tools.scalacplugins.entity
 package rewrite
 
 import java.nio.charset.Charset
-
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 
 import scala.annotation.tailrec
@@ -88,8 +87,14 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
           new MapConcat(unit, state)
         ) // Map[A, X] ++ Map[B, Y]: add comment, 2.13 doesn't lub keys
         go(config.rewriteNilaryInfix, new NilaryInfixRewriter(unit, state)) // obj foo () -> obj.foo()
+        go(config.rewritePostfix, new PostfixRewriter(unit, state)) // obj foo () -> obj.foo()
         go(config.unitCompanion, new UnitCompanion(unit, state)) // val x: Unit = Unit -> val x: Unit = ()
+        go(config.procedureSyntax, new ProcedureSyntax(unit, state)) // val x: Unit = Unit -> val x: Unit = ()
+        go(config.autoApplication, new AutoApplication(unit, state)) // foo.close -> foo.close()
+        go(config.nilaryOverride, new NilaryOverride(unit, state)) // def close -> def close()
         go(config.anyFormatted, new AnyFormatted(unit, state)) // value.formatted("%fmt") -> f"$value%fmt"
+        go(config.any2StringAdd, new Any2StringAdd(unit, state)) // obj + "" -> "" + obj + ""
+        go(config.importShadow, new ImportShadow(unit, state)) // https://github.com/scala/scala/pull/7609
         go(config.rewriteCaseClassToFinal, new CaseClassTransformer(unit, state))
         if (state.newImports.nonEmpty) new AddImports(unit, state).run(unit.body)
         patchSets += Patches(state.patches.toArray, unit.source, underlyingFile, encoding)
@@ -188,13 +193,9 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       case _ =>
     }
 
-    private object MacroExpansion {
-      def unapply(t: Tree): Option[Tree] = t.attachments.get[analyzer.MacroExpansionAttachment].map(_.expandee)
-    }
-
     override def transform(t: Tree): Tree = t match {
       case MacroExpansion(expandee) =>
-        super.transform(expandee)
+        transform(expandee)
       case Typed(expr, tt @ TypeTree()) =>
         val origToVisit = tt.original match {
           case null              => None
@@ -310,39 +311,75 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       }
     }
 
-    def codeOf(pos: Position) = Patches.codeOf(pos, unit.source)
+    def codeOf(pos: Position): String = Patches.codeOf(pos, unit.source)
+    def charAt(offset: Int): Char = unit.source.content(offset)
 
     def withEnclosingParens(pos: Position): Position = {
       @tailrec def skip(offset: Int, inc: Int): Int =
-        if (unit.source.content(offset).isWhitespace) skip(offset + inc, inc) else offset
+        if (charAt(offset).isWhitespace) skip(offset + inc, inc) else offset
 
       val closingPos = skip(pos.end, 1)
-      val closing = unit.source.content(closingPos)
+      val closing = charAt(closingPos)
 
       def checkOpening(expected: Char) = {
         val openingPos = skip(pos.start - 1, -1)
-        val opening = unit.source.content(openingPos)
+        val opening = charAt(openingPos)
         if (opening == expected) withEnclosingParens(pos.withStart(openingPos).withEnd(closingPos + 1))
         else pos
       }
       if (closing == ')') checkOpening('(')
       else if (closing == '}') checkOpening('{')
+      else if (closing == ']') checkOpening('[')
       else pos
     }
 
+    def skipWhitespaceAndComments(source: SourceFile, offset: Int): Int = {
+      val chars = source.content
+      if (chars(offset).isWhitespace) skipWhitespaceAndComments(source, offset + 1)
+      else if (offset + 1 < chars.length && chars(offset) == '/') {
+        if (chars(offset + 1) == '/') {
+          val e = chars.indexOf('\n', offset)
+          if (e == -1) offset else skipWhitespaceAndComments(source, e + 1)
+        } else if (chars(offset + 1) == '*') {
+          var i = offset + 2
+          var found = false
+          while (i + 1 < chars.length && !found) {
+            if (chars(i) == '*' && chars(i + 1) == '/') found = true
+            else i += 1
+          }
+          if (found) skipWhitespaceAndComments(source, i + 2)
+          else offset
+        } else offset
+      } else offset
+    }
+
+    private lazy val xmlElem = rootMirror.getClassIfDefined("scala.xml.Elem")
     def isInfix(tree: Tree, parseTree: ParseTree): TriState = tree match {
       case sel: Select =>
         // look at parse tree; e.g. `Foo(arg)` in source would have AST `pack.Foo.apply(arg)`, so it's a Select after
         // typer. We should not use the positions of the typer trees to go back to the source.
         parseTree.index.get(sel.pos) match {
           case Some(fun: Select) =>
-            val qualEnd = withEnclosingParens(fun.qualifier.pos).end
-            val c = unit.source.content(unit.source.skipWhitespace(qualEnd))
+            // Workaround for https://github.com/scala/bug/issues/12597
+            val fixXmlPos = sel.qualifier.tpe.typeSymbol.isNonBottomSubClass(xmlElem) &&
+              charAt(fun.qualifier.pos.end - 1) == '>' &&
+              charAt(fun.qualifier.pos.start) != '<' &&
+              charAt(fun.qualifier.pos.start - 1) == '<'
+            val qualPos = if (fixXmlPos) fun.qualifier.pos.withStart(fun.qualifier.pos.start - 1) else fun.qualifier.pos
+            val qualEnd = withEnclosingParens(qualPos).end
+            val c = charAt(skipWhitespaceAndComments(unit.source, qualEnd))
             c != '.'
           case _ => TriState.Unknown
         }
-      case Application(fun, _, _) => isInfix(fun, parseTree)
-      case _                      => TriState.Unknown
+      case app: ApplyImplicitView if app.args.length == 1 =>
+        isInfix(app.args.head, parseTree)
+      case app: ApplyToImplicitArgs =>
+        isInfix(app.fun, parseTree)
+      case Application(fun, _, _) =>
+        isInfix(fun, parseTree)
+      case Block(List(vd: ValDef), expr) if vd.symbol.isSynthetic =>
+        isInfix(expr, parseTree)
+      case _ => TriState.Unknown
     }
 
     /**
@@ -368,6 +405,37 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       }
       patches.toList
     }
+  }
+
+  object OriginalTreeTraverser {
+    def collect[B](tree: Tree)(f: PartialFunction[Tree, B]): List[B] = {
+      val results = mutable.ListBuffer[B]()
+      new OriginalTreeTraverser {
+        override def traverse(tree: Tree): Unit = {
+          if (f.isDefinedAt(tree))
+            results += f(tree)
+          super.traverse(tree)
+        }
+      }.traverse(tree)
+      results.toList
+    }
+  }
+
+  private class OriginalTreeTraverser extends Traverser {
+    override def traverse(tree: Tree): Unit = tree match {
+      case tt: TypeTree if tt.original != null =>
+        val saved = tt.original.tpe
+        tt.original.setType(tt.tpe)
+        try traverse(tt.original)
+        finally tt.original.setType(saved)
+      case MacroExpansion(t) =>
+        traverse(t)
+      case _ =>
+        super.traverse(tree)
+    }
+  }
+  private object MacroExpansion {
+    def unapply(t: Tree): Option[Tree] = t.attachments.get[analyzer.MacroExpansionAttachment].map(_.expandee).filter(_ ne t)
   }
 
   class TypeRenderer(rewriteTypingTransformer: RewriteTypingTransformer) extends TypeMap {
@@ -551,10 +619,11 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         val targetClass = targs.head.tpe.typeSymbol
         val companion = targetClass.companionModule
         if (companion.exists) {
-          val conversion = directConversions.getOrElse(targetClass, {
-            state.newImports += CollectionCompatImport
-            s"to(${ qualifiedSelectTerm(companion) })"
-          })
+          val conversion = directConversions.getOrElse(
+            targetClass, {
+              state.newImports += CollectionCompatImport
+              s"to(${qualifiedSelectTerm(companion)})"
+            })
           state.patches += Patch(tree.pos.withStart(fun.pos.point), conversion)
         }
         traverseApplicationRest(tree)
@@ -599,7 +668,8 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   }
 
   // rewrites non final non sealed abstract case classes to have the final
-  private class CaseClassTransformer(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+  private class CaseClassTransformer(unit: CompilationUnit, state: RewriteState)
+      extends RewriteTypingTransformer(unit) {
     var inClass = false
     private def alarmOnCaseClass(mods: Modifiers): Boolean =
       !inClass && mods.isCase && !(mods.isSealed && mods.hasAbstractFlag) && !mods.isFinal
@@ -778,20 +848,51 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   }
 
   private class NilaryInfixRewriter(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    def skipSpace(offset: Int): Int = {
+      val c = charAt(offset)
+      if (c == ' ' || c == '\t') skipSpace(offset + 1) else offset
+    }
+
+    private def isUnary(sym: Symbol) = sym.name.startsWith("unary_")
+
     override def transform(tree: Tree): Tree = tree match {
-      case Application(fun: Select, _, List(Nil)) if isInfix(fun, state.parseTree) == TriState.True =>
+      case Application(fun: Select, _, List(Nil))
+          if !isUnary(fun.symbol) && isInfix(fun, state.parseTree) == TriState.True =>
         state.patches ++= {
           // skip the whitespace, so `qual foo ()` doesn't become `qual. foo ()`
           selectFromInfix(fun.qualifier, "", state.parseTree, reuseParens = true) match {
-            case ps :+ p => ps :+ p.copy(span = p.span.withEnd(unit.source.skipWhitespace(p.span.end)))
+            case ps :+ p => ps :+ p.copy(span = p.span.withEnd(skipSpace(p.span.end)))
           }
         }
-        state.patches += Patch(fun.pos.focusEnd.withEnd(unit.source.skipWhitespace(fun.pos.end)), "")
+        fun.removeAttachment[PostfixAttachment.type] // prevent PostfixRewriter from handling this one too
+        val next = skipSpace(fun.pos.end)
+        if (charAt(next) == '(')
+          state.patches += Patch(fun.pos.focusEnd.withEnd(next), "")
         super.transform(tree)
       case _ =>
         super.transform(tree)
     }
   }
+
+  private class PostfixRewriter(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    def skipSpace(offset: Int): Int = {
+      val c = charAt(offset)
+      if (c == ' ' || c == '\t') skipSpace(offset + 1) else offset
+    }
+
+    override def transform(tree: Tree): Tree = tree match {
+      case Select(qual, name) if tree.hasAttachment[PostfixAttachment.type] =>
+        state.patches ++= {
+          selectFromInfix(qual, "", state.parseTree, reuseParens = true) match {
+            case ps :+ p => ps :+ p.copy(span = p.span.withEnd(skipSpace(p.span.end)))
+          }
+        }
+        super.transform(tree)
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
   private class UnitCompanion(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
     val unitModule = definitions.UnitClass.companionModule
     override def transform(tree: Tree): Tree = tree match {
@@ -803,6 +904,134 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       case _ if tree.symbol == unitModule =>
         state.patches += Patch(tree.pos, "()")
         tree
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
+  private class ProcedureSyntax(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    import definitions.UnitClass
+
+    // Abstract `def f` and `def f()` have tpt.pos == dd.pos (range positions).
+    // All others have point position: `def f { }`, `def f() { }`, `def f(x: Int)`, `def f(x: Int) { }`
+    // The point position is at the identifier `f`.
+    private def isProcedureUnit(tpt: TypeTree, dd: DefDef) =
+      !dd.symbol.isSynthetic &&
+        tpt.tpe.typeSymbol == UnitClass &&
+        tpt.original != null &&
+        (tpt.pos.isOffset || tpt.pos == dd.pos)
+
+    override def transform(tree: Tree): Tree = tree match {
+      case dd @ DefDef(_, _, tps, pss, tpt: TypeTree, rhs) if isProcedureUnit(tpt, dd) =>
+        def next(c: Char, from: Int) = unit.source.content.indexOf(c, from) + 1
+        val pos =
+          if (rhs.isEmpty) tree.pos.end
+          else {
+            val ps = tps.map(_ -> ']') ::: pss.flatten.map(_ -> ')')
+            val p =
+              if (ps.nonEmpty) ps.map({ case (p, close) => next(close, p.pos.end) }).max
+              else unit.source.content.indexWhere(c => !c.isUnicodeIdentifierPart, tpt.pos.end)
+            if (pss == List(Nil)) next(')', p) else p
+          }
+        state.patches += Patch(Position.offset(tree.pos.source, pos), ": Unit" + (if (rhs.nonEmpty) " =" else ""))
+        super.transform(tree)
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
+  private class AutoApplication(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    import rootMirror.{requiredClass => cls}
+    import definitions.{getMemberMethod => meth}
+    lazy val nilaryIn213: Set[Symbol] = Set(
+      definitions.Any_##,
+      definitions.Any_toString,
+      definitions.Any_hashCode,
+    ) ++ {
+      val numericOps = definitions.getMemberClass(cls[scala.math.Numeric[_]], TypeName("Ops"))
+      Set(nme.UNARY_-.toString, "abs", "signum", "toInt", "toLong", "toFloat", "toDouble").map(n =>
+        meth(numericOps, TermName(n)): Symbol)
+    } + meth(cls[scala.math.ScalaNumericConversions], TermName("underlying")) ++ {
+      val numConv = cls[scala.math.ScalaNumericAnyConversions]
+      Set("isWhole", "underlying", "byteValue", "shortValue", "intValue", "longValue", "floatValue", "doubleValue").map(n =>
+        meth(numConv, TermName(n))
+      )
+    } ++ {
+      val bd = cls[scala.math.BigDecimal]
+      Set("toBigInt", "toBigIntExact").map(n => meth(bd, TermName(n)))
+    }
+    lazy val nilaryIn213Names = nilaryIn213.map(_.name)
+
+    def ignore(sym: Symbol) = nilaryIn213Names(sym.name) && nilaryIn213.exists(m =>
+      sym.overrideChain.contains(m))
+    def check(sym: Symbol): Boolean = !sym.isConstructor && sym.paramss == List(Nil) && !ignore(sym) &&
+      !sym.overrideChain.exists(sym => sym.isJavaDefined || definitions.isUniversalMember(sym))
+
+    override def transform(tree: Tree): Tree = tree match {
+      case dd: DefDef if dd.symbol.isSynthetic || dd.symbol.isAccessor =>
+        tree
+      case Application(fun, _, List(Nil)) if check(fun.symbol) =>
+        val isAutoApplied = tree.hasAttachment[AutoApplicationAttachment.type]
+        def scalaTestAssert = fun match {
+          case Select(Ident(n), _) => n.toString.startsWith("$org_scalatest")
+          case _ => false
+        }
+        if (isAutoApplied && !scalaTestAssert)
+          state.patches += Patch(tree.pos.focusEnd, "()")
+        traverseApplicationRest(tree)
+        tree
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
+  private class NilaryOverride(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    val NoFix = 0
+    val MakeNilary = 1
+    val MakeNullary = 2
+
+    val BeanPeeler = "(?:get|set|is)(.+)".r
+
+    def check(sym: Symbol, paramss: List[List[ValDef]]): Int = {
+      val skip = sym.typeParams.nonEmpty || sym.isSynthetic || sym.isAccessor || sym.isConstructor ||
+        !sym.isOverridingSymbol || sym.overrides.exists(sym => sym.isJavaDefined || definitions.isUniversalMember(sym)) || {
+        sym.name.toString match {
+          case BeanPeeler(rest) => sym.owner.tpe.member(TermName(rest.updated(0, rest(0).toLower)).localName)
+            .annotations.exists(_.tpe.typeSymbol.name.toString.contains("BeanProperty"))
+          case _ => false
+        }
+      }
+
+      if (skip) NoFix
+      else {
+        val base = sym.allOverriddenSymbols.last
+        // checking `paramss` instead of `sym.paramss`: in namer, a nullary method overriding a nilary one
+        // obtains an empty parameter list. so even if paramss == List(Nil), the method can be nullary.
+        if (paramss == List(Nil) && base.paramss == Nil)
+          MakeNullary
+        else if (paramss == Nil && base.paramss == List(Nil))
+          MakeNilary
+        else NoFix
+      }
+    }
+
+    override def transform(tree: Tree): Tree = tree match {
+      case dd: DefDef  =>
+        val fix = check(dd.symbol, dd.vparamss)
+        if (fix != NoFix) {
+          val identEnd = unit.source.content.indexWhere(c => !(c.isUnicodeIdentifierPart || c == '$'), dd.pos.point)
+          if (fix == MakeNilary)
+            state.patches += Patch(Position.offset(dd.pos.source, identEnd), "()")
+          else {
+            var listStart = skipWhitespaceAndComments(unit.source, identEnd)
+            if (charAt(listStart) != '(') listStart = -1
+            if (listStart > 0 && charAt(listStart + 1) == ')')
+              state.patches += Patch(Position.range(dd.pos.source, listStart, listStart, listStart + 2), "")
+            else
+              state.patches += Patch(dd.pos.focusStart, "/* TODO-2.13-nilary-overriding-nullary */")
+          }
+        }
+        super.transform(tree)
       case _ =>
         super.transform(tree)
     }
@@ -855,6 +1084,73 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
     }
   }
 
+  private class Any2StringAdd(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    val any2sa = definitions.PredefModule.info.member(TermName("any2stringadd")).filter(_.isMethod)
+    override def transform(tree: Tree): Tree = tree match {
+      case Select(Application(fun: Select, _, List(List(obj))), plus) if fun.symbol == any2sa && plus == nme.ADD =>
+        if (isInfix(tree, state.parseTree) == TriState.True && BreakoutInfo.isInferredArg(fun)) {
+          state.patches += Patch(obj.pos.focusStart, "\"\" + ")
+        }
+        tree
+
+      case _ => super.transform(tree)
+    }
+  }
+
+  private class ImportShadow(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    lazy val identNames = state.parseTree.tree.collect { case Ident(n) =>
+      n
+    }.toSet
+
+    private def wasIdent(sel: Select) = state.parseTree.index.get(sel.pos) match {
+      case Some(Ident(n)) => sel.name == n
+      case _              => false
+    }
+    lazy val identSyms = OriginalTreeTraverser.collect(unit.body) {
+      case id: Ident => id.symbol
+      case sel: Select if wasIdent(sel) => sel.symbol
+    }.toSet
+
+    lazy val packageObjectInUnit = OriginalTreeTraverser.collect(unit.body) { case m: ModuleDef if m.symbol.isPackageObject => m.symbol }.toSet
+
+    override def transform(tree: Tree): Tree = tree match {
+      case imp: Import =>
+        if (imp.selectors.exists(_.name == nme.WILDCARD)) {
+          val unimported = imp.selectors.filter(_.rename != null).map(_.name.toString).toSet
+          val importedSyms = imp.expr.tpe.members.filterNot(_.isPrivate).filterNot(m => unimported(m.name.toString))
+          val enclPackage = localTyper.context.nextEnclosing(_.owner.isPackageClass).owner
+          def importClashes(importSym: Symbol) = identNames.contains(importSym.name) && {
+            val fromPackage = enclPackage.info.member(importSym.name)
+            val result = fromPackage.exists && fromPackage != importSym && identSyms.contains(fromPackage) &&
+              // current file defines package object `foo`, don't need exclude `foo` from wildcard import
+               !(fromPackage.hasPackageFlag && packageObjectInUnit.contains(fromPackage.packageObject)) && {
+              val packageSymSource = fromPackage.sourceFile
+              packageSymSource == null || packageSymSource.path != unit.source.file.path
+            }
+            result
+          }
+          importedSyms.filter(importClashes).toList match {
+            case Nil =>
+            case ms  =>
+              // distinct: if both term and type symbols are in there
+              val shadows = ms.map(m => s"${m.name} => _").distinct.mkString("", ", ", ", ")
+              val pos = Position.offset(imp.pos.source, imp.selectors.head.namePos)
+              if (imp.selectors.length > 1)
+                state.patches += Patch(pos, shadows)
+              else {
+                state.patches += Patch(pos, "{" + shadows)
+                state.patches += Patch(imp.pos.focusEnd, "}")
+              }
+          }
+        }
+        tree
+
+      case _: ClassDef | _: ModuleDef => tree // only work on top-level imports
+
+      case _ => super.transform(tree)
+    }
+  }
+
   private class MapConcat(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
     val TraversableLike_++ =
       rootMirror.getClassIfDefined("scala.collection.TraversableLike").info.decl(TermName("++").encodedName)
@@ -867,12 +1163,21 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
               if fun.symbol == TraversableLike_++ &&
                 qual.tpe.typeSymbol.isNonBottomSubClass(symbolOf[collection.Map[Any, Any]]) =>
             val renderer = new TypeRenderer(this)
-            val k1 = targs.head.tpe.typeArgs.head
-            val k = qual.tpe.baseType(symbolOf[collection.Map[Any, Any]]).typeArgs.head.upperBound
-            if (!(k1 <:< k)) {
-              state.patches += Patch(fun.pos.focusEnd, s"/* TODO_213: K=${renderer(k)} K1=${renderer(k1)}*/")
+            val b1 = targs.head.tpe
+            b1.baseType(symbolOf[Tuple2[Any, Any]]) match {
+              case NoType =>
+              case tp =>
+                val k1 = tp.typeArgs.head
+                val k = qual.tpe.baseType(symbolOf[collection.Map[Any, Any]]).typeArgs.head.upperBound
+                if (!(k1 <:< k)) {
+                  state.patches += Patch(fun.pos.focusEnd, s"/* TODO_213: K=${renderer(k)} K1=${renderer(k1)}*/")
+                }
             }
-            super.transform(tree)
+
+            super.transform(qual)
+            super.transformTrees(targs)
+            argss.foreach(super.transformTrees(_))
+            tree
           case _ =>
             super.transform(tree)
         }

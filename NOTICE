@@ -13,3 +13,4 @@ For details, see optimus/platform/projects/core_macro/src/main/scala/optimus/uti
 This product includes software developed by other groups and added in accordance with their Apache 2.0 licenses. Projects include:
   - https://github.com/spray/spray-json (in spray_json module; refer to https://github.com/spray/spray-json/pull/222/files)
   - https://github.com/corretto/hotpatch-for-apache-log4j2 (in optimus/platform/projects/entityagent/src/main/java/optimus/JndiDefanger.java)
+  - https://github.com/thombergs/diffparser (in git-utils/src/main/scala/optimus/git/diffparser/DiffParser.java)

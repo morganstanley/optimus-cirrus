@@ -54,6 +54,11 @@ public final class SystemTimeSource implements RelNanosAbsMillisTimeSource, AbsN
   }
 
   @Override
+  public String name() {
+    return "SystemTimeSource(absNanosTimeSource=" + absNanosTimeSource.name() + ")";
+  }
+
+  @Override
   public long absTimeNanos() {
     return absNanosTimeSource.absTimeNanos();
   }

@@ -88,12 +88,6 @@ trait TypeClasses {
     }
   }
 
-  implicit class WhateverOps[A](a: A) {
-    def when(cond: Boolean)(endo: A => A): A = if (cond) endo(a) else a
-    def tap(fn: A => Unit): A = { fn(a); a }
-    def returning[B](r: => B): B = r
-  }
-
   implicit class FieldFilter[F[a] <: TraversableLike[a, F[a]], T](private val scopes: F[T]) {
     def fieldFilter(field: T => String, matchStr: Option[String]): F[T] = matchStr match {
       case Some(str) =>

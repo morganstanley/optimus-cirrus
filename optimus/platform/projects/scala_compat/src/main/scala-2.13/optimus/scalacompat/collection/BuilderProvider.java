@@ -27,4 +27,7 @@ public abstract class BuilderProvider {
   public static Builder exposedBuilder(Object coll) {
     return ((IterableOps) coll).newSpecificBuilder();
   }
+  public static String stringPrefix(Object coll) {
+    return ((scala.collection.Iterable) coll).stringPrefix();
+  }
 }

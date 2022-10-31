@@ -26,7 +26,7 @@ object RedBlackSupport {
       case tm: TreeMap[A, B] => tm
       case _                 =>
         // should not happen - API should only be used on TreeMaps, but in case it isnt
-        (TreeMap.newBuilder[A, B](map.ordering) ++= map).result
+        (TreeMap.newBuilder[A, B](map.ordering) ++= map).result()
     }
     /*
      * returns the key and value of the entry whose key is < the supplied key, or None
@@ -49,7 +49,7 @@ object RedBlackSupport {
       case ts: TreeSet[A] => ts
       case _              =>
         // should not happen - API should only be used on TreeMaps, but in case it isn't
-        (TreeSet.newBuilder[A](map.ordering) ++= map).result
+        (TreeSet.newBuilder[A](map.ordering) ++= map).result()
     }
     /*
      * returns the key and value of the entry whose key is < the supplied key, or None

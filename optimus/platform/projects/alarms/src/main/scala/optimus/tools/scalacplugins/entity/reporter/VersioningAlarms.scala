@@ -14,7 +14,7 @@ package optimus.tools.scalacplugins.entity.reporter
 object VersioningAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
   protected val macroType = OptimusMacroType.VERSIONING_MACRO
 
-  val IDENTICAL_SOURCE_DESTINATION = warningOptional0(
+  val IDENTICAL_SOURCE_DESTINATION = warning0(
     81000,
     "The source and destination types are structurally identical. This transformer will never be executed.")
   val KEY_TYPE_MISMATCH = abort2(82000, "The @key properties of %s and %s must match.")

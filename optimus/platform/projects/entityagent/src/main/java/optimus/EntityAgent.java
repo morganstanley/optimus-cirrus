@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.JarFile;
 
 import optimus.debug.InstrumentationConfig;
 import optimus.debug.InstrumentationInjector;
@@ -48,6 +50,10 @@ public class EntityAgent {
   }
 
   private static class EntityAgentTransformer implements ClassFileTransformer {
+    boolean canTransformCoreClasses;
+    EntityAgentTransformer(boolean canTransformCoreClasses) {
+      this.canTransformCoreClasses = canTransformCoreClasses;
+    }
     NodeMethodsInjector nmi = new NodeMethodsInjector();
     ChaosMonkeyInjector chaosInjector = new ChaosMonkeyInjector();
     CollectionInjector collInjector = new CollectionInjector();
@@ -78,7 +84,7 @@ public class EntityAgent {
         transformed = safeTransform(chaosInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      if(InstrumentationConfig.isEnabled())
+      if (InstrumentationConfig.isEnabled() & canTransformCoreClasses)
         transformed = safeTransform(instrInjector, loader, clsName, clsRedefined, domain, transformed);
 
       ClassFileTransformer cft = customTransformers.get(clsName);
@@ -157,6 +163,30 @@ public class EntityAgent {
       return;
     }
 
+    // To patch java core classes to call our methods, we need to explicitly put the jar containing those methods on the
+    // botstrap class loader path.  To find that jar, we let our current classloader search for a class we added just to be
+    // searched for.
+
+    var allowCorePatches = false;
+    try {
+      var cn = "optimus.DoNotUseMeOutsideEntityAgent";
+      var extJar = Class.forName(cn).getProtectionDomain().getCodeSource().getLocation().getPath();
+      instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(extJar));
+      logMsg("Added " + extJar + " on classpath to bootstrap path.");
+      allowCorePatches = true;
+    } catch (Throwable e) {
+      var agentPath = EntityAgent.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+      var possibleEAExt = new File(agentPath).getParentFile().listFiles((dir, name) -> name.contains("entityagent-ext"));
+      if(possibleEAExt != null && possibleEAExt.length > 0) {
+        var extJar = possibleEAExt[0];
+        instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(extJar));
+        logMsg("Added " + extJar + " from directory to bootstrap path");
+        allowCorePatches = true;
+      }
+    }
+    if(!allowCorePatches)
+      logMsg("Cannot patch core classes.");
+
     System.setProperty("ENTITY_AGENT_VERSION", VERSION_STRING);
     EntityAgent.instrumentation = instrumentation;
     logMsg("supports " +
@@ -206,11 +236,10 @@ public class EntityAgent {
     if (DiagnosticSettings.useStrictMath) {
       strictenMath();
     }
-
     // org/apache/logging/log4j/core/lookup/JndiLookup is used in LogJam exploit
     instrumentation.addTransformer(new JndiDefanger());
 
-    EntityAgentTransformer transformer = new EntityAgentTransformer();
+    EntityAgentTransformer transformer = new EntityAgentTransformer(allowCorePatches);
     instrumentation.addTransformer(transformer, true);
   }
 

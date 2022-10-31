@@ -78,8 +78,8 @@ abstract class OSeq[+T] private[collection] ()
         }
         (aBuilder.result(), bBuilder.result())
       } finally {
-        aBuilder.returnBorrowed
-        bBuilder.returnBorrowed
+        aBuilder.returnBorrowed()
+        bBuilder.returnBorrowed()
       }
     }
   }
@@ -103,9 +103,9 @@ abstract class OSeq[+T] private[collection] ()
         }
         (aBuilder.result(), bBuilder.result(), cBuilder.result())
       } finally {
-        aBuilder.returnBorrowed
-        bBuilder.returnBorrowed
-        cBuilder.returnBorrowed
+        aBuilder.returnBorrowed()
+        bBuilder.returnBorrowed()
+        cBuilder.returnBorrowed()
       }
     }
   }

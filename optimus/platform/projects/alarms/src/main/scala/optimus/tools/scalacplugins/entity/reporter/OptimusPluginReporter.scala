@@ -18,7 +18,6 @@ import scala.collection.mutable
 import scala.reflect.internal.util.Position
 import scala.tools.nsc.Global
 import scala.tools.nsc.Reporting
-import scala.util.matching.Regex
 
 trait OptimusPluginReporter {
   val global: Global
@@ -28,7 +27,8 @@ trait OptimusPluginReporter {
   import OptimusPluginReporter._
 
   def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit = {
-    val cfgLevel = pluginData.alarmConfig.getConfiguredLevel(alarm, pos)
+    val level = alarm.id.tpe
+    val cfgLevel = pluginData.alarmConfig.getConfiguredLevel(alarm.id.sn, level)
     val locallySuppressed = isLocallySuppressed(alarm, pos)
     val hasNew = isNew(alarm)
     val newLevel = if (locallySuppressed || hasNew) OptimusAlarmType.INFO else cfgLevel
@@ -37,10 +37,11 @@ trait OptimusPluginReporter {
       case OptimusAlarmType.ERROR   => global.reporter.error(pos, alarm.toString())
       case OptimusAlarmType.WARNING => global.reporter.warning(pos, alarm.toString())
       case OptimusAlarmType.INFO    =>
-        // when a `[NEW]` message is suppressed by nowarn, drop the `[NEW]` tag to avoid the
-        // message being re-promoted to Error in BSPTraceListener.
+        // when a `[NEW]` message is also suppressed, drop the `[NEW]` tag to avoid the
+        // message being re-promoted to Error in BSPTraceListener/StandardBuilder
+        val isSuppressed = locallySuppressed || level != cfgLevel
         val msgNoNew =
-          if (hasNew && locallySuppressed) alarm.toString().replaceAllLiterally(OptimusAlarms.NewTag, "").trim()
+          if (hasNew && isSuppressed) alarm.toString().replaceAllLiterally(OptimusAlarms.NewTag, "").trim()
           else alarm.toString()
         // the prefix [SUPPRESSED] is later removed by OBT and the compilation message lifted back to warning.
         // This allows us to suppress a warning at the compile level, but not at the user level.
@@ -60,11 +61,19 @@ trait OptimusPluginReporter {
     }
   }
 
+  // override for forcing suppression when testing
+  protected[reporter] def suppressOverrideInTesting(msg: AlarmId): Boolean = false
+
   // Check if `alarm` is suppressed at `pos` without actually issuing it (see the INFO case above)
   private def isLocallySuppressed(alarm: OptimusPluginAlarm, pos: Position): Boolean = {
     if (alarm.toString().contains("@nowarn"))
       false // Very silly to suppress an error that's already about illegal suppression
-    else {
+    else if (global.currentRun eq null) {
+      /* In testing, there is no currentRun, and so therefore calling PerRunReporting_isSuppressed below causes a NPE.
+       * We still want to be able to test that suppressing work as expected so we put a test hook in here.
+       */
+      suppressOverrideInTesting(alarm.id)
+    } else {
       // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
       val asMessage = Reporting.Message.Plain(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
       val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]

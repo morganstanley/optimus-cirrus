@@ -62,11 +62,11 @@ object UIAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
     63200,
     "Invalid return type of a handler function (%s). " +
       "Expected a Gesture, sequence of tweaks or sequence of GUI widgets.")
-  val HANDLER_SUBTYPE_CHECK = warningOptional2(
+  val HANDLER_SUBTYPE_CHECK = warning2(
     63201,
     "The handler parameter type (%s) is a specific version " +
       "of the required parameter (%s). This may result in a runtime error.")
-  val INVALID_HANDLER_PARAM = abortOptional2(
+  val INVALID_HANDLER_PARAM = abort2(
     63202,
     "Invalid type of a handler function parameter (%s). " +
       "Expected a type sharing the type hierarchy with %s.")
@@ -81,7 +81,7 @@ object UIAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
     63205,
     "Invalid type of a handler (%s). " +
       "A ui handler must be either a @handle function or a gesture.")
-  val OPTION_CONVERSION_BINDING = warningOptional0(
+  val OPTION_CONVERSION_BINDING = warning0(
     63208,
     "Using default implicit converter from Option[T] to T is not safe. Consider use your implicit converter.")
 }

@@ -12,8 +12,8 @@
 package optimus.breadcrumbs.graph
 
 import optimus.platform.utils.ClassPathUtils
-
-import optimus.scalacompat.repl.Repl
+import optimus.scalacompat.repl.ScalaRepl
+import optimus.scalacompat.repl.ScalaReplSettings
 
 object Console extends App {
   val autoRun = """
@@ -26,5 +26,11 @@ object Console extends App {
   import optimus.breadcrumbs.crumbs.Properties.JsonImplicits._
   import Vertex._
   """
-  Repl.run(autoRun, "==> ", "Breadcrumbs REPL", ClassPathUtils.expandedApplicationClasspathString)
+  ScalaRepl.start(new ScalaReplSettings {
+    override def prompt = Some("==> ")
+    override def welcomeMessage = Some("Breadcrumbs REPL")
+    override def classpath = ClassPathUtils.expandedApplicationClasspathString
+    override def useJavaClasspath = true
+    override def seedScript = autoRun
+  })
 }

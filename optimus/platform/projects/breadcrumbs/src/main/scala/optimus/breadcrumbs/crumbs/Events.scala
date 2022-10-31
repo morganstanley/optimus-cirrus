@@ -19,7 +19,7 @@ import Properties.JsonImplicits._
 import optimus.breadcrumbs.crumbs.Properties.Key
 import spray.json.JsValue
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.immutable
 
 // Base property type for events
@@ -95,6 +95,7 @@ object Events extends KnownEvents {
 
   val AppStartPerf = event("AppStartPerf")
   val AppRestorePerf = event("AppRestorePerf")
+  val AppEventPerf = event("AppEventPerf")
 
   val GraphStalling = event("GraphStalling")
   val GraphStalled = event("GraphStalled")
@@ -148,4 +149,6 @@ object Events extends KnownEvents {
   val TemporalSurfaceTrace = event("TemporalSurfaceTrace")
 
   val PublicationQueueDepth = event("PublicationQueueDepth")
+  val DalBanWriteEntity = event("DalBanWriteEntity")
+
 }

@@ -24,7 +24,7 @@ import ch.qos.logback.core.CoreConstants
 class DateConverter extends ClassicConverter {
   private[this] var formatter: DateFormatter = null
   override def start(): Unit = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     val options: List[String] = getOptionList match {
       case null => List()
       case list => list.asScala.toList

@@ -20,8 +20,7 @@ import java.util.regex.Pattern
  */
 private[optimus] object OptimusMessageRegistry {
   private val prefix = "Optimus"
-  // TODO (OPTIMUS-13558): This needs to support multiline log lines
-  private val PluginMessage = s"$prefix: \\((\\d+)\\) (.*)".r
+  private val PluginMessage = s"(?s)$prefix: \\((\\d+)\\) (.*)".r
 
   def getMessage(alarm: OptimusAlarmBase) = generateOptimusMessage(alarm.id.sn, alarm.message)
 
@@ -32,10 +31,9 @@ private[optimus] object OptimusMessageRegistry {
    * Used in the test framework, get the meaningful payload in the error/warning message
    */
   val suppressedPrefix = s"${OptimusAlarms.SuppressedTag} $prefix"
-  private val SuppressedPluginMessage = s"${Pattern.quote(suppressedPrefix)}: \\((\\d+)\\) (.*)".r
+  private val SuppressedPluginMessage = s"(?s)${Pattern.quote(suppressedPrefix)}: \\((\\d+)\\) (.*)".r
 
-  // TODO (OPTIMUS-13558): Remove replace hack when jira done
-  def getOriginalMessage(msg: String): (Int, String) = msg.replace('\n', ' ') match {
+  def getOriginalMessage(msg: String): (Int, String) = msg match {
     case PluginMessage(sn, m)           => (sn.toInt, m)
     case SuppressedPluginMessage(sn, m) => (sn.toInt, m)
     case other                          => (-1, other)

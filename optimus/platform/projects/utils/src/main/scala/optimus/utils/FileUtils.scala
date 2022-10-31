@@ -16,12 +16,13 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-
-import au.com.bytecode.opencsv.CSVReader
-import au.com.bytecode.opencsv.CSVWriter
+import com.opencsv.CSVReader
+import com.opencsv.CSVWriter
 import optimus.platform.IO.usingQuietly
 
-import scala.collection.JavaConverters._
+import java.net.URL
+import java.util.zip.ZipFile
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object FileUtils {
@@ -38,7 +39,7 @@ object FileUtils {
     }.getOrElse(Map.empty)
   }
 
-  def writeToFileTwoColumns(filename: String, data: Seq[Array[String]]) {
+  def writeToFileTwoColumns(filename: String, data: Seq[Array[String]]): Unit = {
     val writer = getCSVWriter(filename, '\t')
 
     usingQuietly(writer) { w =>
@@ -54,4 +55,29 @@ object FileUtils {
     new CSVWriter(new OutputStreamWriter(new FileOutputStream(filename, append)), separator, '"', '\\')
   }
 
+  // For any app/test that dynamically discovers resources within a package dynamically at runtime on the classpath
+  // (e.g. docs, templates, directives, scenarios for parameterized tests)
+  //
+  // Use ClassLoader#getResource to locate the folder
+  // Use Class#getResource and Class#getResourceAsStream to fetch the content
+  //
+  // It is suggested to filter by file extension and some other pattern. This function returns resources in subfolders
+  // as well.
+  def resourcesFromPathInJar(url: URL): Seq[String] = {
+    require(Option(url).nonEmpty)
+    val fileless = url.getPath.stripPrefix("file:")
+    val jarFile = new ZipFile(fileless.substring(0, fileless.indexOf(jarFileSeparator)))
+    try {
+      val pathInJar = fileless.substring(fileless.indexOf(jarFileSeparator) + jarFileSeparator.length)
+      (
+        for {
+          entry <- jarFile.entries().asScala
+          if entry.getName.startsWith(pathInJar) && entry.getName != pathInJar // skip folder itself
+          if !entry.getName.endsWith("/") // no folder
+        } yield "/" + entry.getName
+      ).toList
+
+    } finally jarFile.close()
+  }
+  private val jarFileSeparator: String = "!/"
 }
