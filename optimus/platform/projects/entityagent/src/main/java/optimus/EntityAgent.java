@@ -42,10 +42,10 @@ public class EntityAgent {
   private static final ConcurrentHashMap<String, ClassFileTransformer> customTransformers = new ConcurrentHashMap<>();
   static private final String VERSION_STRING = "Entity Agent(v8)";
 
-  private static void logMsg(String msg) {
+  public static void logMsg(String msg) {
     if (!silent) { System.out.println(VERSION_STRING + ": " + msg); }
   }
-  private static void logErrMsg(String msg) {
+  public static void logErrMsg(String msg) {
     if (!silent) { System.err.println(VERSION_STRING + ": " + msg); }
   }
 
@@ -162,6 +162,8 @@ public class EntityAgent {
       logMsg("already loaded.");
       return;
     }
+
+    InstrumentationConfig.init();
 
     // To patch java core classes to call our methods, we need to explicitly put the jar containing those methods on the
     // botstrap class loader path.  To find that jar, we let our current classloader search for a class we added just to be

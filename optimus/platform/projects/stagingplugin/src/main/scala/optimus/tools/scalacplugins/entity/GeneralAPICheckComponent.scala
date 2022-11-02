@@ -282,7 +282,7 @@ class GeneralAPICheckComponent(
         annInfo.stringArg(0) match {
           case Some(msg) =>
             val typeAndFullName = s"${calleeSym.kindString} ${calleeSym.fullName}"
-            val noWarnRegexes: Seq[(Regex, Position)] =
+            val noWarnRegexes: Seq[(Regex, Position)] = {
               posNoWarn.collect {
                 case ((DepId, p), (_, r)) if p.includes(callerPos) => (r, p)
               } ++
@@ -290,7 +290,8 @@ class GeneralAPICheckComponent(
                   case callerTree: MemberDef
                       if callerTree.hasSymbolField && symNoWarn.contains((DepId, callerTree.symbol)) =>
                     (symNoWarn((DepId, callerTree.symbol))._2, callerTree.symbol.pos)
-                }.distinct
+                }
+            }.distinct
             // Check for a match now, so we can record that the nowarn was used, even we don't emit a deprecating warning.
             // We're allowing redundant nowarns along the traversal path (hence fold rather than exists), because they're awfully common.
             val matchedNowarnPositions = noWarnRegexes.collect {

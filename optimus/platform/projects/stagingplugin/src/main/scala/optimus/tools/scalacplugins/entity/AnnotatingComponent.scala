@@ -62,7 +62,9 @@ class AnnotatingComponent(
   private val withFilter = "withFilter"
   private val toStream = "toStream"
   private val streamPrefix = "scala.collection.immutable.Stream."
+  private val lazyListPrefix = "scala.collection.immutable.LazyList."
   private val discourageds = Seq[(String, List[String])](
+    // 2.12
     "scala.collection.TraversableLike.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.IterableLike.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.SeqLike.view" -> List(view, AnnotatingComponent.lazyReason),
@@ -75,11 +77,19 @@ class AnnotatingComponent(
     "scala.collection.TraversableOnce.MonadOps.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason),
     "scala.collection.GenTraversableOnce.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
     "scala.collection.IterableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
-    "scala.collection.TraversableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason)
+    "scala.collection.TraversableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
+    // 2.13
+    "scala.collection.IterableOps.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.SeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.IndexedSeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.MapOps.view" -> List(view, AnnotatingComponent.lazyReason),
+    "scala.collection.IterableOps.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason)
   ) ++
     AnnotatingComponent.streamFunctions
-      .map(s => streamPrefix + s)
-      .zip(AnnotatingComponent.streamFunctions.map(s => List(s, AnnotatingComponent.lazyReason)))
+      .flatMap(s =>
+        List(
+          streamPrefix + s -> List(s, AnnotatingComponent.lazyReason),
+          lazyListPrefix + s -> List(s, AnnotatingComponent.lazyReason)))
 
   private val deprecations = Seq[(String, List[String])](
     // "org.something.Deprecated" -> useInstead("org.something.ToUseInstead")
