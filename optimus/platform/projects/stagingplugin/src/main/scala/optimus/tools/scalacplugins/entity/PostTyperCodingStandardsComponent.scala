@@ -11,6 +11,7 @@
  */
 package optimus.tools.scalacplugins.entity
 
+import optimus.scalacompat.isAtLeastScala2_13
 import optimus.scalacompat.isScala2_12
 import optimus.tools.scalacplugins.entity.reporter._
 
@@ -209,6 +210,14 @@ class PostTyperCodingStandardsComponent(
             // "abc" ++ "def" // just use +
             // List("a", "b", "").flatMap(x => a + ",") // just use .map(...).mkString
             alarm(StagingErrors.AUGMENT_STRING, fun.pos)
+        }
+      }
+
+      if (isAtLeastScala2_13) {
+        if (sym.name == IterableOnceOps_to.name && sym.overrideChain.contains(IterableOnceOps_to)) {
+          val sym = tree.tpe.typeSymbol
+          if (sym.isNonBottomSubClass(StreamClass) || sym.isNonBottomSubClass(LazyListClass))
+            alarm(CodeStyleNonErrorMessages.DISCOURAGED_CONSTRUCT, fun.pos, sym.name, AnnotatingComponent.lazyReason)
         }
       }
 

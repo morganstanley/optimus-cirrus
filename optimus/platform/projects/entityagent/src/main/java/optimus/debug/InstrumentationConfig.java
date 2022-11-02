@@ -499,16 +499,22 @@ public class InstrumentationConfig {
 
   private static void injectLdPreloadRemover() {
     if (System.getProperty("os.name", "a great mystery").startsWith("Linux")) {
-      var unload = new MethodRef(MiscPatches.cls, MiscPatches.removeLdPreloadMethod);
-      String pbCls = "java/lang/ProcessBuilder";
-
-      var mref = new MethodRef(pbCls, "<init>");
-      var patch = addSuffixCall(mref, unload);
-      patch.suffixWithThis = true;
+      String cls = "optimus/patches/MiscPatches";
+      String removeLdPreloadMethod = "remove_LD_PRELOAD";
+      try {
+        var unload = new MethodRef(cls, removeLdPreloadMethod);
+        String pbCls = "java/lang/ProcessBuilder";
+        var mref = new MethodRef(pbCls, "<init>");
+        var patch = addSuffixCall(mref, unload);
+        patch.suffixWithThis = true;
+      } catch (Exception e) {
+        EntityAgent.logMsg("Unable to load LD_PRELOAD remover: " + e);
+      }
     }
   }
 
-  static {
+  public static void init() {
     injectLdPreloadRemover();
   }
+
 }
