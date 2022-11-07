@@ -83,5 +83,5 @@ object UIAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
       "A ui handler must be either a @handle function or a gesture.")
   val OPTION_CONVERSION_BINDING = warning0(
     63208,
-    "Using default implicit converter from Option[T] to T is not safe. Consider use your implicit converter.")
+    "Using default implicit converter from Option[T] to T is not safe. Consider using your own implicit converter.")
 }

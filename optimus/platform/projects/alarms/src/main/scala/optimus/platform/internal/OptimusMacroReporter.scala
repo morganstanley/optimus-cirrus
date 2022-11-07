@@ -111,31 +111,44 @@ object OptimusReporter {
       }
       case _ => throw new IllegalStateException(s"OptimusReporter failed ${c.getClass}")
     }
-    val newLevelString = pluginDataAccess.getConfiguredLevelRaw(
-      alarm.id.sn,
-      alarm.message,
-      alarm.id.tpe.toString,
-      position.source.path,
-      position.line,
-      position.column,
-      alarm.template)
-    val newLevel = OptimusAlarmType.withName(newLevelString)
 
-    newLevel match {
-      case OptimusAlarmType.ERROR   => c.error(position, alarm.toString())
-      case OptimusAlarmType.WARNING => c.warning(position, alarm.toString())
-      case OptimusAlarmType.INFO    =>
-        // the prefix [SUPPRESSED] is later removed by OBT and the compilation message lifted back to warning.
-        // This allows us to suppress a warning at the compile level, but not at the user level.
-        val msg: String = if (!alarm.isInfo) s"${OptimusAlarms.SuppressedTag} $alarm" else alarm.toString()
-        c.info(position, msg, force || !alarm.isInfo)
-      case OptimusAlarmType.DEBUG =>
-        throw new IllegalStateException(s"DEBUG level alarms should be automatically lifted to INFO or suppressed")
-      case OptimusAlarmType.SILENT => // ignore it
-      case _                       => throw new IllegalStateException(s"unexpected level $newLevel")
+    if (pluginDataAccess.obtWarnConf) {
+      val msg = alarm.toString()
+      alarm.id.tpe match {
+        case OptimusAlarmType.ERROR   => c.error(position, msg)
+        case OptimusAlarmType.WARNING => c.warning(position, msg)
+        case OptimusAlarmType.INFO    => c.info(position, msg, force)
+        case OptimusAlarmType.DEBUG => if (pluginDataAccess.debugMessages) c.info(position, msg, force)
+        case OptimusAlarmType.SILENT => // ignore it
+        case unexpected              => throw new IllegalStateException(s"unexpected level $unexpected")
+      }
+    } else {
+      // TODO (OPTIMUS-51339): all this code is going away when obt does the level configuration on its own
+      val newLevelString = pluginDataAccess.getConfiguredLevelRaw(
+        alarm.id.sn,
+        alarm.message,
+        alarm.id.tpe.toString,
+        position.source.path,
+        position.line,
+        position.column,
+        alarm.template)
+      val newLevel = OptimusAlarmType.withName(newLevelString)
+
+      newLevel match {
+        case OptimusAlarmType.ERROR   => c.error(position, alarm.toString())
+        case OptimusAlarmType.WARNING => c.warning(position, alarm.toString())
+        case OptimusAlarmType.INFO    =>
+          // the prefix [SUPPRESSED] is later removed by OBT and the compilation message lifted back to warning.
+          // This allows us to suppress a warning at the compile level, but not at the user level.
+          val msg: String = if (!alarm.isInfo) s"${OptimusAlarms.SuppressedTag} $alarm" else alarm.toString()
+          c.info(position, msg, force || !alarm.isInfo)
+        case OptimusAlarmType.DEBUG =>
+          throw new IllegalStateException(s"DEBUG level alarms should be automatically lifted to INFO or suppressed")
+        case OptimusAlarmType.SILENT => // ignore it
+        case _                       => throw new IllegalStateException(s"unexpected level $newLevel")
+      }
     }
   }
-
   private[internal] def abortImpl(c: Context)(opalarm: OptimusMacroAlarm, position: c.universe.Position): Nothing = {
     assert(opalarm.isAbort, "Optimus macro internal error: abort expected")
     c.abort(position, opalarm.toString)

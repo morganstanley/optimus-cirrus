@@ -216,6 +216,7 @@ case class OptimusPluginAlarm(
 trait OptimusAlarmBuilder {
   val id: AlarmId
   val template: String
+  // TODO (OPTIMUS-51339): remove both of those when OBT takes over all warning config
   val obtMandatory: Boolean
   val scalaMandatory: Boolean
 }

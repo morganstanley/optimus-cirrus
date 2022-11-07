@@ -120,6 +120,7 @@ trait OptimusAlarms {
   final val maxSn = 9999
   protected def base: Int
   private val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
+  // TODO (OPTIMUS-51339): deprecated when configuration for moves to OBT
   protected def preIgnore[B <: OptimusAlarmBuilder](b: B): B = {
     assert(b.id.tpe > OptimusAlarmType.INFO)
     assert(!b.obtMandatory && !b.scalaMandatory)
