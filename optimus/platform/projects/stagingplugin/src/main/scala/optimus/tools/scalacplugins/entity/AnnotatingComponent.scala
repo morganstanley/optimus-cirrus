@@ -59,7 +59,6 @@ class AnnotatingComponent(
   private val view = "view"
   private val mapValues = "mapValues"
   private val mapValuesReasonSuffix = ". Please import optimus.scalacompat.collection._ and use mapValuesNow instead"
-  private val withFilter = "withFilter"
   private val toStream = "toStream"
   private val streamPrefix = "scala.collection.immutable.Stream."
   private val lazyListPrefix = "scala.collection.immutable.LazyList."
@@ -73,8 +72,6 @@ class AnnotatingComponent(
       AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
     "scala.collection.MapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
     "scala.collection.GenMapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
-    "scala.collection.TraversableLike.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason),
-    "scala.collection.TraversableOnce.MonadOps.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason),
     "scala.collection.GenTraversableOnce.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
     "scala.collection.IterableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
     "scala.collection.TraversableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
@@ -82,8 +79,7 @@ class AnnotatingComponent(
     "scala.collection.IterableOps.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.SeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.IndexedSeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
-    "scala.collection.MapOps.view" -> List(view, AnnotatingComponent.lazyReason),
-    "scala.collection.IterableOps.withFilter" -> List(withFilter, AnnotatingComponent.lazyReason)
+    "scala.collection.MapOps.view" -> List(view, AnnotatingComponent.lazyReason)
   ) ++
     AnnotatingComponent.streamFunctions
       .flatMap(s =>

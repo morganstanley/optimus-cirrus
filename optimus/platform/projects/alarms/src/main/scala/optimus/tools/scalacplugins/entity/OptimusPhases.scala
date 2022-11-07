@@ -106,7 +106,7 @@ object OptimusPhases {
     optimus_refchecks -> "check sundry optimus-specific requirements",
     superaccessors -> ""
   )
-  // TODO:(OPTIMUS-24229) Remove is212 branches after upgrade to Scala 2.13.x is fully complete
+  // TODO (OPTIMUS-24229): Remove is212 branches after upgrade to Scala 2.13.x is fully complete
   private val is212 = scala.util.Properties.releaseVersion.getOrElse("").contains("2.12.")
   private val List(_EMBEDDABLE, _ENTITY_INFO, _GENERATE_LOCATION_TAG, _AUTOASYNC, _GENERATE_NODE_METHODS, _NODE_LIFT) = {
     val optimus_embeddable_described = optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes"
@@ -183,6 +183,8 @@ object PluginDataAccessFromReflection {
   // e.g. String, Int etc. Keep in step with trait PluginDataAccess below
 
   type PluginDataAccess = {
+    def debugMessages: Boolean
+    def obtWarnConf: Boolean
     def getConfiguredLevelRaw(
         alarmId: Int,
         alarmString: String,
@@ -194,8 +196,11 @@ object PluginDataAccessFromReflection {
   }
 }
 trait PluginDataAccess {
-  type Sourced = { def source: SourceFile }
   val pluginData: PluginData
+  def debugMessages: Boolean = pluginData.alarmConfig.debug
+  // TODO (OPTIMUS-51339): remove when OBT always deal with warnings itself
+  def obtWarnConf: Boolean = pluginData.alarmConfig.obtWarnConf
+
   // we have to access this reflectively as it is typically loaded in a different classloader
   // it is also essential that all of the passed types are simple types in the parent classloader
   // e.g. String, Int etc. Keep in step with trait {{PluginDataAccessFromReflection.PluginDataAccess}} above

@@ -23,6 +23,7 @@ object StagingSettings {
     val ignoreName = "ignore:"
     val silenceName = "silence:"
     val debugName = "debug:"
+    val obtWarnConfName = "obtWarnConf:"
     val rewriteCollectionSeqName = "rewriteCollectionSeq:"
     val rewriteMapValuesName = "rewriteMapValues:"
     val rewriteBreakOutOpsName = "rewriteBreakOutOps:"
@@ -57,9 +58,12 @@ object StagingPlugin {
   def processCommonOption(option: String, pluginData: PluginData, error: String => Unit): Unit = {
     import StagingSettings.OptionNames._
 
+    // TODO (OPTIMUS-51339): add a deprecation warning message when ignore is passed at the same time as obtWarnConf.
+
     if (option.startsWith(ignoreName)) pluginData.alarmConfig.ignore = parseReportConfigInt(option, ignoreName)
     else if (option.startsWith(silenceName)) pluginData.alarmConfig.silence = parseReportConfigInt(option, silenceName)
     else if (option.startsWith(debugName)) pluginData.alarmConfig.debug = parseOption(option, debugName, false)
+    else if (option.startsWith(obtWarnConfName)) pluginData.alarmConfig.obtWarnConf = parseOption(option, obtWarnConfName, false)
     else if (option.startsWith(rewriteCollectionSeqName))
       pluginData.rewriteConfig.rewriteCollectionSeq = parseOption(option, rewriteCollectionSeqName, false)
     else if (option.startsWith(rewriteMapValuesName))

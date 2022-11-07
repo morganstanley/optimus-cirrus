@@ -26,7 +26,30 @@ trait OptimusPluginReporter {
 
   import OptimusPluginReporter._
 
-  def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit = {
+  // TODO (OPTIMUS-51339): Remove the flag and make alarmNew the only option. When that is done, we can also remove
+  //  alarmConfig and hasNew.
+  def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit =
+    if (pluginData.alarmConfig.obtWarnConf) alarmObt(alarm, pos) else alarmLegacy(alarm, pos)
+
+  def alarmObt(alarm: OptimusPluginAlarm, pos: Position): Unit = {
+    val level = alarm.id.tpe
+    val locallySuppressed = isLocallySuppressed(alarm, pos)
+    val msg = {
+      val msg = alarm.toString()
+      if (locallySuppressed) s"${OptimusAlarms.SuppressedTag} $msg" else msg
+    }
+
+    level match {
+      case OptimusAlarmType.ERROR   => global.reporter.error(pos, msg)
+      case OptimusAlarmType.WARNING => global.reporter.warning(pos, msg)
+      case OptimusAlarmType.INFO    => global.reporter.echo(pos, msg)
+      case OptimusAlarmType.DEBUG   => if (pluginData.alarmConfig.debug) global.reporter.echo(pos, msg)
+      case OptimusAlarmType.SILENT  => // ignore it!
+      case unexpected               => throw new IllegalStateException(s"unexpected level $unexpected")
+    }
+  }
+
+  def alarmLegacy(alarm: OptimusPluginAlarm, pos: Position): Unit = {
     val level = alarm.id.tpe
     val cfgLevel = pluginData.alarmConfig.getConfiguredLevel(alarm.id.sn, level)
     val locallySuppressed = isLocallySuppressed(alarm, pos)
@@ -85,6 +108,7 @@ trait OptimusPluginReporter {
     }
   }
 
+  // TODO (OPTIMUS-51339): Remove when OBT loads the new list by itself.
   // Allow for new alarms (signified by "[NEW]" in the message) to not immediately fail the build
   private def isNew(alarm: OptimusPluginAlarm): Boolean = alarm.toString().contains(OptimusAlarms.NewTag)
 

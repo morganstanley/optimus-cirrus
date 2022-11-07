@@ -128,6 +128,12 @@ object TypeClasses extends TypeClasses {
   }
 }
 
-class DuplicateKeyException(val keys: Seq[Any])
-    extends IllegalArgumentException(keys.mkString(", "))
+class DuplicateKeyException(val keys: Seq[Any], prefix: String = "")
+    extends IllegalArgumentException(DuplicateKeyException.message(keys, prefix))
     with RTExceptionTrait
+
+object DuplicateKeyException {
+  private def message(keys: Seq[Any], prefix: String) =
+    if (prefix.nonEmpty) s"$prefix: ${keys.mkString(", ")}"
+    else keys.mkString(", ")
+}

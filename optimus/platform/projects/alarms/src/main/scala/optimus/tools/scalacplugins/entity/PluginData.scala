@@ -74,6 +74,7 @@ class PluginData(private val global: Global) {
     global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
   }
 
+  // TODO (OPTIMUS-51339): Deprecate because all this logic is moving to OBT
   class AlarmLevelConfiguration(val ignore: Set[Int], val silence: Set[Int], val debug: Boolean) {
     private def checkMandatory(id: Int): Unit = {
       OptimusAlarms.get(id) match {
@@ -102,8 +103,10 @@ class PluginData(private val global: Global) {
     }
   }
 
+  // TODO (OPTIMUS-51339): Deprecate because all this logic is moving to OBT
   // all the values are be set by compiler plugin -P parameter
   object alarmConfig {
+    var obtWarnConf = false // if true, use the OBT controlled warning process
     var debug = false
     // used to control the warning/error reporting level
     var ignore = Set.empty[Int]

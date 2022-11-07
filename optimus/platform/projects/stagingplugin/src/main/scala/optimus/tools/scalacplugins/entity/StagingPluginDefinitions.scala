@@ -50,7 +50,7 @@ trait StagingPluginDefinitions {
   } ++ {
     val bd = requiredClass[scala.math.BigDecimal]
     Set("toBigInt", "toBigIntExact").map(n => getMemberMethod(bd, TermName(n)))
-  }
+  } + getMemberMethod(requiredClass[scala.concurrent.duration.Duration], TermName("isFinite"))
 
   lazy val nullaryIn213Names = nullaryIn213.map(_.name)
 
