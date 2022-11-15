@@ -199,9 +199,9 @@ class PostTyperCodingStandardsComponent(
       if ((sym == Predef_augmentString || sym == Predef_wrapString) && !argss.exists(_.exists(_.pos.isOffset))) {
         enclosingTrees(1) match {
           case _: Select => // okay, e.g. "".exists(f)
-          case _: Apply => // okay, e.g. def foo(s: Seq[Char]); foo("")
-          case _: Typed => // okay, "": Seq[Char]
-          case _ =>
+          case _: Apply  => // okay, e.g. def foo(s: Seq[Char]); foo("")
+          case _: Typed  => // okay, "": Seq[Char]
+          case _         =>
             // dangerous:
             // xs.flatMap(x => if (cond) "s" else List("")  // should be List("s")
             // (sb: StringBuffer) => sb ++ "foo" (should be ++=)
@@ -222,6 +222,22 @@ class PostTyperCodingStandardsComponent(
       }
 
       if (isScala2_12) {
+        def is212OnlySource = fun.pos.source.path.split("[/\\\\]").contains("scala-2.12")
+
+        if (
+          fun.tpe.paramss.lengthCompare(1) > 0 && sym.owner.isNonBottomSubClass(
+            GenTraversableOnceClass) && !is212OnlySource
+        )
+          fun.tpe.paramss.last match {
+            case List(cbf) if cbf.isImplicit && cbf.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass) =>
+              if (argss.length == fun.tpe.paramss.length) argss.last match {
+                case List(arg) if arg.pos.start != arg.pos.end =>
+                  alarm(Scala213MigrationMessages.EXPLICIT_CBF_ARGUMENT, fun.pos)
+                case _ =>
+              }
+            case _ =>
+          }
+
         if (sym.name == GenTraversableOnce_to.name && sym.overrideChain.contains(GenTraversableOnce_to))
           targs match {
             case List(tt: TypeTree) if tt.original != null =>
@@ -274,14 +290,14 @@ class PostTyperCodingStandardsComponent(
           }
 
         fun match {
-          case Select(qual, _) if fun.symbol == TraversableLike_++ && qual.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass) =>
-            val b1 = targs.head.tpe
-            b1.baseType(definitions.TupleClass(2)) match {
-              case NoType =>
-              case tp =>
-                val k1 = tp.typeArgs.head
-                val k = qual.tpe.baseType(CollectionMapClass).typeArgs.head.upperBound
-                alarm(Scala213MigrationMessages.MAP_CONCAT_WIDENS, fun.pos, k, k1)
+          case Select(qual, _)
+              if fun.symbol == TraversableLike_++ && qual.tpe.typeSymbol.isNonBottomSubClass(
+                CollectionMapClass) && tree.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass) =>
+            val receiverKey = qual.tpe.baseType(CollectionMapClass).typeArgs.head
+            val resultKey = tree.tpe.baseType(CollectionMapClass).typeArgs.head
+            if (!(receiverKey =:= resultKey)) {
+              val argKey = targs.head.tpe.baseType(definitions.TupleClass(2)).typeArgs.headOption.getOrElse("?")
+              alarm(Scala213MigrationMessages.MAP_CONCAT_WIDENS, fun.pos, receiverKey, argKey)
             }
           case _ =>
         }

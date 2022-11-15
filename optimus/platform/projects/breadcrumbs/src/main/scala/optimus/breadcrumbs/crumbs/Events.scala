@@ -87,6 +87,8 @@ object Events extends KnownEvents {
 
   val InternalTestEvent = event("InternalTestEvent")
 
+  val ClientLog = event("ClientLog")
+
   val Completed = event("Completed")
   val AppStarted = event("AppStarted")
   val AppCompleted = event("AppCompleted")

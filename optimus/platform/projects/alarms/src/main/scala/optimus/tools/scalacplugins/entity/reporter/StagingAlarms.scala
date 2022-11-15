@@ -107,7 +107,18 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
     error2(
       sn = 20309,
       StagingPhase.POST_TYPER_STANDARDS,
-      "[NEW] The key type of the operand of ++ is not a sub-type of the receiver's key type. Type inference will differ in Scala 2.13. Remedies: A) widen the the key type of the declaration of the receiver; B) Use `m1.toSeq ++ m2` if a Map is not needed; C) use m1 +~+ m2 or Map.fromAll(m1, m2) from optimus.util.CollectionUtils._ replicate the Scala 2.12 behaviour. K_receiver=%s K_op=%s"
+      """The key type of the argument of ++ is not a sub-type of the receiver's key type. Type inference will differ in Scala 2.13. Remedies:
+        |  - widen the the key type of the declaration of the receiver
+        |  - Use `m1.toSeq ++ m2` if a Map is not needed
+        |  -`import optimus.utils.CollectionUtils._` and use m1 +~+ m2 or Map.fromAll(m1, m2) to replicate the Scala 2.12 behaviour
+        |Receiver key type: %s, Argument key type: %s.""".stripMargin
+    )
+
+  val EXPLICIT_CBF_ARGUMENT =
+    warning0(
+      sn = 20310,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """Explicit arguments for the `CanBuildFrom` parameter are not supported. Collection operations in Scala 2.13 no longer have such a parameter.""".stripMargin
     )
 }
 
