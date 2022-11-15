@@ -68,6 +68,8 @@ object MacroUtils {
   // }
   final case class SourceLocation(line: Int, method: String, className: String) {
     override def toString: String = s"($className:$line)"
+    /** Provide full details (method-class-line) on given SourceLocation. */
+    def details: String = s"$method ($className:$line)"
   }
   object SourceLocation {
     implicit def makeSourceLocation: SourceLocation = macro sourceLocationMacro

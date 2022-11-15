@@ -16,11 +16,17 @@ package optimus.systemexit;
  */
 public class ExitInterceptProp {
 
-  public static String name = "exit.intercept";
+  public static final String name = "exit.intercept";
 
-  /**
-   * Intercept Test Worker java.lang.System.exit calls to log environment data and
-   * non-Test-Worker exit calls to throw a SystemExitInterceptedException runtime exception
-   */
-  public static String interceptAll = "intercept-all";
+  private static String value() {
+    return System.getProperty(ExitInterceptProp.name,"none").toLowerCase();
+  }
+
+  public static boolean requestIntercept() {
+    return value().contains("intercept-all");
+  }
+
+  public static boolean requestInfoDump() {
+    return requestIntercept() && value().contains("info");
+  }
 }

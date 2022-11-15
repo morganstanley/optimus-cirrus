@@ -19,6 +19,7 @@
 
 # Stratosphere
 *.local.runconf
+profiles/*local.conf
 
 # Used when project is imported from bsp
 .bsp

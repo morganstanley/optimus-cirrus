@@ -13,8 +13,19 @@ package optimus.systemexit;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.function.Consumer;
 
 public class SystemExitReplacement {
+
+  static HashMap<String, Consumer<Integer>> hooks = new HashMap<>();
+  static public synchronized void setHook(String name, Consumer<Integer> hook) {
+    if(hook == null)
+      hooks.remove(name);
+    else
+      hooks.put(name, hook);
+  }
+
   // we replace System.exit with this code
   public static void exit(int status) {
     Method exitImpl;
@@ -45,21 +56,20 @@ public class SystemExitReplacement {
   public static void exitImpl(int status) {
     StandardSystemExitLogger logger = new StandardSystemExitLogger();
     SystemExitGetOsInfo getOsInfo = new SystemExitGetOsInfo(logger);
-    SystemExitStrategy exitStrategy = getOsInfo.getSystemExitStrategy();
 
-    if (exitStrategy == SystemExitStrategy.EXIT) {
-      logger.debug("[EXIT-INTERCEPT] normal exit");
-      Runtime.getRuntime().exit(status);
-    } else if (exitStrategy == SystemExitStrategy.LOG_AND_EXIT) {
-      logger.debug("[EXIT-INTERCEPT] logged exit");
-      getOsInfo.getInfo();
-      Runtime.getRuntime().exit(status);
-    } else if (exitStrategy == SystemExitStrategy.LOG_AND_THROW) {
+    if (getOsInfo.doIntercept()) {
       logger.debug("[EXIT-INTERCEPT] logged exit with exception");
       getOsInfo.getInfo();
+      synchronized(hooks) {
+        for (Consumer<Integer> hook : hooks.values()) {
+          hook.accept(status);
+        }
+      }
       throw new SystemExitInterceptedException();
-    } else if (exitStrategy == SystemExitStrategy.SUPPRESS_EXIT) {
-      logger.debug("[EXIT-INTERCEPT] exit suppressed");
+    }
+    else {
+      logger.debug("[EXIT-INTERCEPT] normal exit");
+      Runtime.getRuntime().exit(status);
     }
   }
 }

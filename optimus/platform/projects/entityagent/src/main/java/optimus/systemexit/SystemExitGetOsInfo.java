@@ -136,17 +136,8 @@ public class SystemExitGetOsInfo {
     return false;
   }
 
-  public SystemExitStrategy getSystemExitStrategy() {
-    String exitInterceptProp = System.getProperty(ExitInterceptProp.name);
-    if (exitInterceptProp != null) {
-      exitInterceptProp = exitInterceptProp.toLowerCase();
-    }
-    boolean isAllowedExit = isAllowedExit();
-
-    if (!isAllowedExit && ExitInterceptProp.interceptAll.equals(exitInterceptProp)) {
-      return SystemExitStrategy.LOG_AND_THROW;
-    }
-    return SystemExitStrategy.EXIT;
+  public boolean doIntercept() {
+    return !isAllowedExit() && ExitInterceptProp.requestIntercept();
   }
 
 }

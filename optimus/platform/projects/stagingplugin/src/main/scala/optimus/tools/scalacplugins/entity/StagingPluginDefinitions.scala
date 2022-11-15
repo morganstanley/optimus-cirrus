@@ -23,6 +23,7 @@ trait StagingPluginDefinitions {
   lazy val GenTraversableOnceClass = getClassIfDefined("scala.collection.GenTraversableOnce")
   lazy val GenTraversableOnce_to = getMemberIfDefined(GenTraversableOnceClass, TermName("to"))
   lazy val IterableOnceOpsClass = getClassIfDefined("scala.collection.IterableOnceOps")
+  lazy val CanBuildFromClass = getClassIfDefined("scala.collection.generic.CanBuildFrom")
   lazy val IterableOnceOps_to = getMemberIfDefined(IterableOnceOpsClass, TermName("to"))
   lazy val StreamClass = getClassIfDefined("scala.collection.immutable.Stream")
   lazy val LazyListClass = getClassIfDefined("scala.collection.immutable.LazyList")
