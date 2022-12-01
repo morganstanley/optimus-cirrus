@@ -120,6 +120,13 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       """Explicit arguments for the `CanBuildFrom` parameter are not supported. Collection operations in Scala 2.13 no longer have such a parameter.""".stripMargin
     )
+
+  val DOUBLE_BUILDER_PLUSEQ =
+    error0(
+      sn = 20311,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """Calling `OptimusDoubleBuilder.+=` boxes the argument double value, use `addOne` instead.""".stripMargin
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {

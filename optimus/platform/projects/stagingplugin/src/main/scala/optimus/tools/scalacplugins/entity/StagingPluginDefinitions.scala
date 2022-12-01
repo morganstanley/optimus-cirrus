@@ -18,7 +18,7 @@ trait StagingPluginDefinitions {
   val global: Global
   import global._
   import definitions._
-  import rootMirror.{getClassIfDefined, requiredClass}
+  import rootMirror.{getClassIfDefined, getRequiredClass, requiredClass}
 
   lazy val GenTraversableOnceClass = getClassIfDefined("scala.collection.GenTraversableOnce")
   lazy val GenTraversableOnce_to = getMemberIfDefined(GenTraversableOnceClass, TermName("to"))
@@ -35,8 +35,18 @@ trait StagingPluginDefinitions {
 
   lazy val ValAccessorAnnotation = getClassIfDefined("optimus.platform.annotations.valAccessor")
   lazy val CollectionMapClass = requiredClass[scala.collection.Map[Any, Any]]
-  lazy val TraversableLike_++ = if (isAtLeastScala2_13) NoSymbol else
-    definitions.getDecl(rootMirror.getRequiredClass("scala.collection.TraversableLike"), TermName("++").encodedName)
+  lazy val TraversableLike_++ =
+    if (isAtLeastScala2_13) NoSymbol
+    else
+      definitions.getDecl(getRequiredClass("scala.collection.TraversableLike"), TermName("++").encodedName)
+
+  private def oneArg(s: Symbol) = s.paramss match {
+    case List(List(_)) => true
+    case _             => false
+  }
+  lazy val OptimusDoubleBuilderClass = getClassIfDefined("optimus.collection.OptimusDoubleBuilder")
+  lazy val GrowablePlusEquals =
+    getClassIfDefined("scala.collection.mutable.Growable").info.member(TermName("+=").encode).filter(oneArg)
 
   def isValAccessor(sym: Symbol) = ValAccessorAnnotation.exists && sym.hasAnnotation(ValAccessorAnnotation)
 

@@ -119,4 +119,9 @@ package object collection extends MapBuildFromImplicits {
   implicit class ToStringPrefix(c: Iterable[_]) {
     def stringPrefix: String = BuilderProvider.stringPrefix(c)
   }
+
+  implicit class MutableIndexedSeqViewSlice[A](private val self: MutableIndexedSeqView.SomeIndexedSeqOps[A]) {
+    def viewSlice(from: Int, until: Int): MutableIndexedSeqView[A] = new MutableIndexedSeqView[A](self, from, until)
+  }
+  implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
 }

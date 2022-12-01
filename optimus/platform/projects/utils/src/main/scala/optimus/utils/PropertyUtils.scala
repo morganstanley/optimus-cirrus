@@ -37,4 +37,20 @@ object PropertyUtils {
     else if ("0" == value || "false" == value) false
     else throw new IllegalArgumentException(s"Can't parse >>$value<< to boolean.")
 
+  def propertyMap(orig: Map[String, String], overridess: String*): Map[String, String] = {
+    orig ++ propertyMap(overridess: _*)
+  }
+
+  def propertyMap(settingss: String*): Map[String, String] =
+    settingss.foldLeft(Map.empty[String, String]) {
+      case (z, null) => z
+      case (z, value) =>
+        z ++ value
+          .split("[;:]")
+          .map(_.split('='))
+          .collect { case Array(k, v) =>
+            (k, v)
+          }
+          .toMap
+    }
 }

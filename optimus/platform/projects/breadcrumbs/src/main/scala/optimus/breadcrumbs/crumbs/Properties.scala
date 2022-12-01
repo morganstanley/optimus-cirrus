@@ -246,6 +246,7 @@ object Properties extends KnownProperties {
         JsObject(
           "eventName" -> JsString(event.eventName),
           "profilingData" -> event.profilingData.toJson,
+          "startTimeMs" -> JsNumber(event.startTimeMs),
           "totalDurationMs" -> JsNumber(event.totalDurationMs),
           "actionSelfTimeMs" -> JsNumber(event.actionSelfTimeMs),
           "childEvents" -> JsArray(event.childEvents.map(child => write(child).toJson).toVector)
@@ -256,13 +257,15 @@ object Properties extends KnownProperties {
         value.asJsObject.getFields(
           "eventName",
           "profilingData",
+          "startTimeMs",
           "totalDurationMs",
           "actionSelfTimeMs",
           "childEvents") match {
-          case Seq(eventName, profilingData, totalDuration, actionSelfTimeMs, children) =>
+          case Seq(eventName, profilingData, startTimeMs, totalDuration, actionSelfTimeMs, children) =>
             ProfiledEventCause(
               eventName = eventName.convertTo[String],
               profilingData = profilingData.convertTo[Map[String, String]],
+              startTimeMs = startTimeMs.convertTo[Long],
               totalDurationMs = totalDuration.convertTo[Long],
               actionSelfTimeMs = actionSelfTimeMs.convertTo[Long],
               childEvents = children.convertTo[Seq[JsValue]].map(c => read(c))
@@ -745,6 +748,21 @@ final case class RequestSummary(
 final case class ProfiledEventCause(
     eventName: String,
     profilingData: Map[String, String],
+    startTimeMs: Long,
     totalDurationMs: Long,
     actionSelfTimeMs: Long,
-    childEvents: Seq[ProfiledEventCause])
+    childEvents: Seq[ProfiledEventCause]) {
+  def prettyPrint(level: Int = 0, path: String = "0"): String = {
+    val stringBuilder = new StringBuilder
+    stringBuilder.append("Profile Details:\n")
+    prettyPrintImpl(stringBuilder, level, path)
+    stringBuilder.toString
+  }
+
+  def prettyPrintImpl(sb: StringBuilder, level: Int = 0, path: String = ""): Unit = {
+    sb.append(s"${" " * level}$path. $eventName\t$totalDurationMs\n")
+    childEvents.zipWithIndex.foreach { case (s, i) =>
+      s.prettyPrintImpl(sb, level + 1, s"$path-$i")
+    }
+  }
+}

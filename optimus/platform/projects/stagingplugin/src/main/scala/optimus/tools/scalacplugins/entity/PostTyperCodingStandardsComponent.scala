@@ -219,6 +219,12 @@ class PostTyperCodingStandardsComponent(
           if (sym.isNonBottomSubClass(StreamClass) || sym.isNonBottomSubClass(LazyListClass))
             alarm(CodeStyleNonErrorMessages.DISCOURAGED_CONSTRUCT, fun.pos, sym.name, AnnotatingComponent.lazyReason)
         }
+
+        if (sym == GrowablePlusEquals) fun match {
+          case Select(qual, _) if qual.tpe.typeSymbol == OptimusDoubleBuilderClass =>
+            alarm(Scala213MigrationMessages.DOUBLE_BUILDER_PLUSEQ, fun.pos)
+          case _ =>
+        }
       }
 
       if (isScala2_12) {
@@ -293,8 +299,12 @@ class PostTyperCodingStandardsComponent(
           case Select(qual, _)
               if fun.symbol == TraversableLike_++ && qual.tpe.typeSymbol.isNonBottomSubClass(
                 CollectionMapClass) && tree.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass) =>
-            val receiverKey = qual.tpe.baseType(CollectionMapClass).typeArgs.head
-            val resultKey = tree.tpe.baseType(CollectionMapClass).typeArgs.head
+            def argKeepExistential(tp: Type) = tp match {
+              case ExistentialType(_, u) => u.typeArgs.head
+              case _ => tp.typeArgs.head
+            }
+            val receiverKey = argKeepExistential(qual.tpe.baseType(CollectionMapClass))
+            val resultKey = argKeepExistential(tree.tpe.baseType(CollectionMapClass))
             if (!(receiverKey =:= resultKey)) {
               val argKey = targs.head.tpe.baseType(definitions.TupleClass(2)).typeArgs.headOption.getOrElse("?")
               alarm(Scala213MigrationMessages.MAP_CONCAT_WIDENS, fun.pos, receiverKey, argKey)

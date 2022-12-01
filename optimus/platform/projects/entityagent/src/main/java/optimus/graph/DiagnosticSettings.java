@@ -103,6 +103,9 @@ public class DiagnosticSettings {
   final public static String throwOnOptconfParsingFailureStr = "optimus.profile.testNonExistingNodesAtRuntime";
   final public static boolean throwOnOptconfParsingFailure = getBoolProperty(throwOnOptconfParsingFailureStr, false);
 
+  // if optimus.profile.testNonExistingNodesAtRuntime is set to true then this sys prop does not do anything
+  final public static boolean warnOnOptconfParsingFailure = getBoolProperty("optimus.profiler.warnOnOptconfParseError", true);
+
   public final static String XSFT_PROPERTY = "optimus.profile.enableXSFT";
   /**
    * Not final, can be configured through command line.
@@ -136,7 +139,8 @@ public class DiagnosticSettings {
    */
   public static boolean proxyInWaitChain = getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
 
-  final public static boolean awaitStacks =  getBoolProperty("optimus.graph.async.profiler.awaitStacks", false);
+  final public static String asyncProfilerSettings = getStringProperty("optimus.graph.async.profiler", System.getenv("ASYNC_PROFILER_SETTINGS"));
+  final public static boolean awaitStacks;
 
   public static double infoDumpPeriodicityHours = getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
@@ -467,7 +471,7 @@ public class DiagnosticSettings {
       infoDumpDir = System.getenv("DIAGNOSTIC_DUMP_DIR");
     if(infoDumpDir == null)
       infoDumpDir = System.getProperty("java.io.tmpdir");
-
+    awaitStacks = asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true");
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
     syntheticGraphMethodsEnabled = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);
     isAsyncStackTracesEnabled = traceEnqueuer && syntheticGraphMethodsEnabled;

@@ -389,6 +389,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     "Implementation restriction: @node defs may not have more than 21 parameters"
   )
 
+  // propertyinfo phase errors
+  val EMBEDDABLE_HAS_DEFAULT_UNPICKLEABLE_VALUE = error0(
+    21621,
+    OptimusPhases.REF_CHECKS,
+    "HasDefaultUnpickleableValue type param should be of the same @embeddable sealed trait type for which companion has been defined."
+  )
+
   // attachment phase errors
   val CLASSIFIER_TRANSFORM_ERROR = error1(20500, OptimusPhases.CLASSIFIER, "Unable to transform tree: %s\n")
 

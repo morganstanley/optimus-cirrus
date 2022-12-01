@@ -15,6 +15,8 @@ import scala.collection.BuildFrom
 import scala.collection.BuildFrom
 import scala.collection.SortedMap
 import scala.collection.SortedMapOps
+import scala.xml.Node
+import scala.xml.NodeSeq
 
 trait MapBuildFromImplicitsLow {
   implicit def buildFromMapOpsToIterable[K0, V0, A]: BuildFrom[Map[K0, V0], A, Iterable[A]] =
@@ -27,4 +29,6 @@ trait MapBuildFromImplicits extends MapBuildFromImplicitsLow {
   implicit def buildFromMapOps[CC[X, Y] <: Map[X, Y] with collection.MapOps[X, Y, CC, _], K0, V0, K, V]
       : BuildFrom[CC[K0, V0], (K, V), CC[K, V]] =
     BuildFrom.buildFromMapOps
+
+  implicit def NodeSeqBuildFrom[A]: BuildFrom[NodeSeq, A, Seq[A]] = BuildFrom.buildFromIterableOps[Seq, Node, A]
 }
