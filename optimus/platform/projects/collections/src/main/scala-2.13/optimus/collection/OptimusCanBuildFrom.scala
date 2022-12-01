@@ -221,7 +221,7 @@ object OptimusBuilder {
 abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
 
   def addFrom(data: collection.Seq[Elem], start: Int, end: Int): Unit
-  def addOne(elem1: Elem, elem2: Elem, elems: Elem*): this.type = +=(elem1, elem2, elems: _*)
+  def addOne(elem1: Elem, elem2: Elem, elems: Elem*): this.type = addOne(elem1).addOne(elem2).addAll(elems)
   private[collection] def resultSize: Int
   private[collection] def addFromArray(data: Array[_], start: Int, end: Int): Unit
   // allows structural sharing of arrays. Only used by higher order functions in ArraysSeq
@@ -233,10 +233,6 @@ abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
 abstract class OptimusDoubleBuilder[+To] extends OptimusBuilder[Double, To] {
   // overridden to stop boxing
   override def addOne(elem: Double): this.type
-  override def addOne(elem1: Double, elem2: Double, elems: Double*): this.type = {
-    this += elem1
-    this += elem2
-    this ++= elems
-    this
-  }
+  override def addOne(elem1: Double, elem2: Double, elems: Double*): this.type =
+    addOne(elem1).addOne(elem2).addAll(elems)
 }

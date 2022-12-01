@@ -177,4 +177,14 @@ package object collection {
   def DoubleOrdering: Ordering[Double] = Ordering.Double
 
   object ParCollectionConverters
+
+  implicit class immutableSortedSetHasUnsorted[A](private val self: sc.immutable.SortedSet[A]) {
+    def unsorted: sc.immutable.Set[A] = self
+  }
+
+  implicit class MutableIndexedSeqViewSlice[A](private val self: sc.mutable.IndexedSeq[A]) {
+    def viewSlice(from: Int, until: Int): sc.mutable.IndexedSeqView[A, sc.mutable.IndexedSeq[A]] =
+      self.view.slice(from, until)
+  }
+  implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
 }

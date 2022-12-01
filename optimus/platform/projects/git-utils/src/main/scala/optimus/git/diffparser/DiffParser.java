@@ -274,7 +274,8 @@ public enum DiffParser {
   }
 
   public static List<Diff> parse(String text) {
-    ParseWindow window = new ParseWindow(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
+    ParseWindow window = new ParseWindow(new ByteArrayInputStream(text.stripLeading()
+                                                                      .getBytes(StandardCharsets.UTF_8)));
     DiffParser state = INITIAL;
     List<Diff> parsedDiffs = new ArrayList<>();
     PartialDiff currentDiff = PartialDiff.empty();
@@ -321,9 +322,13 @@ public enum DiffParser {
     if (nextStartLine == null) {
       // We reached the end of the stream.
       return true;
-    } else if (currentLine.equals("")) {
+    } else if (currentLine.isEmpty()) {
       // new line, check if the next is new diff
       return isStart(nextStartLine);
+    } else if (isStart(currentLine)) {
+      // we're already at the start of the next chunk, insert a new line to parse properly
+      window.addLine(0, "");
+      return true;
     } else if (isStart(nextStartLine)) {
       window.addLine(1, "");
       return false;

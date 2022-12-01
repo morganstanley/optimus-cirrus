@@ -38,7 +38,7 @@ object OptimusDoubleSeq
     }
   }
 
-  override def newBuilder: mutable.Builder[Double, OptimusDoubleSeq] = genCBF.newBuilder()
+  override def newBuilder: OptimusDoubleBuilder[OptimusDoubleSeq] = genCBF.newBuilder()
   override def fromSpecific(it: IterableOnce[Double]): OptimusDoubleSeq = {
     if (it.knownSize == 0) empty
     else {

@@ -13,7 +13,7 @@ package optimus.scala212
 
 import scala.{collection => sc}
 
-object DefaultSeq {
+object DefaultSeq extends optimus.scalacompat.collection.MapBuildFromImplicits {
   type Seq[+A] = sc.Seq[A]
   val Seq: sc.Seq.type = sc.Seq
   type IndexedSeq[+A] = sc.IndexedSeq[A]
