@@ -44,8 +44,9 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * This returns an object of type A if this is the only element of the Traversable. Otherwise an exception is
-     * thorwn.
+     * Resolution logic
+     *   - This returns an object of type A if this is the only element of the Traversable.
+     *   - Otherwise an exception is thrown.
      */
     def single: A = zeroOneOrMany match {
       case 0 => throw new NoSuchElementException("single on empty Traversable")
@@ -54,8 +55,9 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, this method
-     * throws.
+     * Resolution logic
+     *   - Returns Some(x) if there is a single element or None if empty.
+     *   - If more than 1 elements are found, this method throws.
      */
     def singleOption: Option[A] = zeroOneOrMany match {
       case 0 | 1 => as.headOption
@@ -63,7 +65,9 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns Some(x) if there is a single element. If there are 0 or more than 1 elements, this method returns None.
+     * Resolution logic
+     *   - Returns Some(x) if there is a single element.
+     *   - If there are 0 or more than 1 elements, this method returns None.
      */
     def singleOrNone: Option[A] = zeroOneOrMany match {
       case 1 => Some(as.head)
@@ -85,7 +89,7 @@ object CollectionUtils extends CollectionUtils {
      * Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, use fallback
      */
     def singleOptionOr(fallback: => Option[A]): Option[A] =
-      if (zeroOneOrMany < 2) as.headOption else fallback
+      if (zeroOneOrMany < 2) singleOption else fallback
 
     /**
      * Returns true if the Traversable contains one element ( possibly multiple times ). Returns false otherwise.
@@ -97,7 +101,9 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns an element of type A if this is the only member of the Traversable. Otherwise an exception is thrown.
+     * Resolution logic
+     *   - Returns an element of type A if this is the only member of the Traversable.
+     *   - Otherwise an exception is thrown.
      */
     def singleDistinct: A = zeroOneOrMany match {
       case 0 => throw new IllegalArgumentException("Expected single element, but was empty!")
@@ -111,9 +117,10 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Returns None if the Traversable is empty. Returns Some(a) if a is the only element of type A contained by the
-     * Traversable. Otherwise exception flies.
-     * @return
+     * Resolution logic
+     *   - Returns Some(a) if a is the only element of type A contained by the Traversable
+     *   - Returns None if the Traversable is empty
+     *   - Otherwise exception flies.
      */
     def singleDistinctOption: Option[A] =
       if (zeroOneOrMany < 2) as.headOption
@@ -124,6 +131,16 @@ object CollectionUtils extends CollectionUtils {
             throw new IllegalArgumentException(
               s"Expected zero or one distinct element, but found $n: [${as.mkString(",")}]")
         }
+
+    /**
+     * Resolution logic
+     *   - Returns Some(a) if a is the only element of type A contained by the Traversable
+     *   - Returns None if the Traversable is empty
+     *   - Otherwise returns single distinct value or None if no distinct value.
+     */
+    def singleDistinctOrNone: Option[A] =
+      if (zeroOneOrMany < 2) as.headOption
+      else as.toSet.singleOrNone
 
     /** Not async friendly, for that see singleOrElseAsync. */
     def singleOptionOrElse(nonSingleHandler: (Int, Traversable[A]) => Option[A]): Option[A] = as.size match {
@@ -188,8 +205,9 @@ object CollectionUtils extends CollectionUtils {
 trait CollectionUtils {
   implicit def traversable2Ops[A](as: Traversable[A]): TraversableOps[A] = new TraversableOps(as)
 
-  implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](t: Repr[T]): ExtraTraversableOps2[T,Repr] =
-    new ExtraTraversableOps2[T, Repr](t)
+  implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](
+      t: Repr[T]
+  ): ExtraTraversableOps2[T, Repr] = new ExtraTraversableOps2[T, Repr](t)
 
   implicit class TraversableTuple2Ops[A, B](iterable: Traversable[(A, B)]) {
     def toSingleMap: Map[A, B] = iterable.groupBy(_._1).map { case (k, kvs) =>
@@ -234,14 +252,16 @@ trait CollectionUtils {
     }
   }
   implicit class MapFromMaps(private val underlying: Map.type) {
+
     /**
      * Build a map with the Tuple elements in `maps`.
      *
-     * @see the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent
-     *      that advises when this method should be used to avoid different compilation under different
-     *      Scala versions.
+     * @see
+     *   the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent that advises when
+     *   this method should be used to avoid different compilation under different Scala versions.
      *
-     * @see MapFromMap.fromAll for an alternative API to concatenate such maps
+     * @see
+     *   MapFromMap.fromAll for an alternative API to concatenate such maps
      */
     def fromAll[K, V](maps: Iterable[(K, V)]*): Map[K, V] = {
       val builder = Map.newBuilder[K, V]
@@ -250,21 +270,24 @@ trait CollectionUtils {
     }
   }
   implicit class OptimusMapOps[M[A, B] <: Map[A, B], K, V](private val self: M[K, V]) {
+
     /**
-     * Concatenate the `self` Map with the Tuple elements in `those`, potentially resulting in a Map
-     * with wider key/value types than `self`
+     * Concatenate the `self` Map with the Tuple elements in `those`, potentially resulting in a Map with wider
+     * key/value types than `self`
      *
-     * In Scala 2.12 this could be expressed directly with `self ++ those`, but in Scala 2.13
-     * this no longer returns a Map unless the key type of `those` is a subtype of `K`
+     * In Scala 2.12 this could be expressed directly with `self ++ those`, but in Scala 2.13 this no longer returns a
+     * Map unless the key type of `those` is a subtype of `K`
      *
-     * @see the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent
-     * that advises when this method should be used to avoid different compilation under different
-     * Scala versions.
+     * @see
+     *   the related lint rule in optimus.tools.scalacplugins.entity.PostTyperCodingStandardsComponent that advises when
+     *   this method should be used to avoid different compilation under different Scala versions.
      *
-     * @see MapFromMap.fromAll for an alternative API to concatenate such maps
+     * @see
+     *   MapFromMap.fromAll for an alternative API to concatenate such maps
      */
-    def +~+[A >: (K, V), That <: Map[_, _]](those: Traversable[A])(
-      implicit buildFrom: BuildFrom[M[K, V], A, That]): That = {
+    def +~+[A >: (K, V), That <: Map[_, _]](
+        those: Traversable[A]
+    )(implicit buildFrom: BuildFrom[M[K, V], A, That]): That = {
       val builder = buildFrom.apply(self)
       builder ++= self
       builder ++= those

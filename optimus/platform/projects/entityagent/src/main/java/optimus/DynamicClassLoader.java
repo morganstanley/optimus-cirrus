@@ -9,12 +9,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.tools.scalacplugins.entity
+package optimus;
 
-final case class OptimusPhaseInfo(phaseName: String, description: String, runsAfter: String, runsBefore: String) {
-  def nameAndDescription = (phaseName, description)
-}
+public class DynamicClassLoader extends ClassLoader {
 
-object OptimusPhaseInfo {
-  val NoPhase = OptimusPhaseInfo("NoPhase", "<no phase>", "parser", "terminal")
+  public DynamicClassLoader() {
+    new DynamicClassLoader(this.getClass());
+  }
+
+  public DynamicClassLoader(Class<?> cls) {
+    super(cls.getClassLoader());
+  }
+
+  public Class<?> loadClass(byte[] bytes) {
+    return defineClass(null /* Use from byte code */, bytes, 0, bytes.length);
+  }
+
+  public Object createInstance(byte[] bytes) {
+    try {
+      var cls = loadClass(bytes);
+      return cls.getConstructor().newInstance();
+    } catch (Exception ex) {
+      ex.printStackTrace();
+      return null;
+    }
+  }
 }

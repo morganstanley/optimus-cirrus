@@ -12,15 +12,15 @@
 package optimus.scalacompat.collection
 
 import scala.collection.BuildFrom
-import scala.collection.BuildFrom
 import scala.collection.SortedMap
 import scala.collection.SortedMapOps
+import scala.collection.immutable
 import scala.xml.Node
 import scala.xml.NodeSeq
 
 trait MapBuildFromImplicitsLow {
-  implicit def buildFromMapOpsToIterable[K0, V0, A]: BuildFrom[Map[K0, V0], A, Iterable[A]] =
-    BuildFrom.buildFromIterableOps[Iterable, (K0, V0), A]
+  implicit def buildFromMapOpsToIterable[K0, V0, A]: BuildFrom[Map[K0, V0], A, immutable.Iterable[A]] =
+    BuildFrom.buildFromIterableOps[immutable.Iterable, (K0, V0), A]
 }
 
 trait MapBuildFromImplicits extends MapBuildFromImplicitsLow {
@@ -31,4 +31,8 @@ trait MapBuildFromImplicits extends MapBuildFromImplicitsLow {
     BuildFrom.buildFromMapOps
 
   implicit def NodeSeqBuildFrom[A]: BuildFrom[NodeSeq, A, Seq[A]] = BuildFrom.buildFromIterableOps[Seq, Node, A]
+
+  implicit def enumerationValueSetToSortedSetBuildFrom[E <: Enumeration with Singleton, A](
+    implicit A: Ordering[A]): BuildFrom[E#ValueSet, A, immutable.SortedSet[A]] =
+    BuildFrom.buildFromSortedSetOps[immutable.SortedSet, E#Value, A](A)
 }

@@ -84,6 +84,10 @@ public class DiagnosticSettings {
    */
   final public static boolean injectNodeMethods;  // Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
   /**
+   * Detect and report any non-RT behaviour
+   */
+  final public static boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
+  /**
    * Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true)
    */
   final public static boolean enableXSReporting;

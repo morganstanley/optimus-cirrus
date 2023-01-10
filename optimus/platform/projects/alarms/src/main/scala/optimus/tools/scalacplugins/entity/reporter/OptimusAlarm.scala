@@ -150,7 +150,7 @@ object OptimusAlarmType extends Enumeration {
   val SILENT, DEBUG, INFO, WARNING, ERROR, ABORT = Value
 }
 
-case class AlarmId(sn: Int, tpe: OptimusAlarmType.Tpe)
+final case class AlarmId(sn: Int, tpe: OptimusAlarmType.Tpe)
 
 trait OptimusAlarmBase {
   val id: AlarmId

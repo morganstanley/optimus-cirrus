@@ -26,6 +26,7 @@ import optimus.graph.DiagnosticSettings;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.util.ASMifier;
+import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
 
 public class BiopsyLab {
@@ -60,11 +61,22 @@ public class BiopsyLab {
     return writer.toString();
   }
 
-  static void dumpClass(String className, byte[] classfileBuffer) throws IOException {
-    if (DiagnosticSettings.classDumpLocation != null) {
-      File parent = new File(DiagnosticSettings.classDumpLocation);
+  public static String byteCodeAsString(byte[] bytes) {
+    StringWriter writer = new StringWriter();
+    TraceClassVisitor traceClassVisitor = new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
+    new ClassReader(bytes).accept(traceClassVisitor, 0);
+    return writer.toString();
+  }
+
+  static void dumpClass( String className, byte[] classfileBuffer) throws IOException {
+    dumpClass(DiagnosticSettings.classDumpLocation, className, classfileBuffer);
+  }
+
+  static void dumpClass(String folder, String className, byte[] classfileBuffer) throws IOException {
+    if (folder != null) {
+      File parent = new File(folder);
       if (!parent.exists())
-        throw new VerifyError("could not read output directory " + DiagnosticSettings.classDumpLocation);
+        throw new VerifyError("could not read output directory " + folder);
       File classOutfile = new File(parent, className.replace('/', '.') + ".class");
       if (!classOutfile.createNewFile())
         throw new VerifyError("could not create output file " + classOutfile.getAbsolutePath());

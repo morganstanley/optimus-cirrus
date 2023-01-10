@@ -98,6 +98,7 @@ object Events extends KnownEvents {
   val AppStartPerf = event("AppStartPerf")
   val AppRestorePerf = event("AppRestorePerf")
   val AppEventPerf = event("AppEventPerf")
+  val AppClientResourceUsage = event("AppClientResourceUsage")
 
   val GraphStalling = event("GraphStalling")
   val GraphStalled = event("GraphStalled")

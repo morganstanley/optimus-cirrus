@@ -157,7 +157,7 @@ object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     )
 
   val AUGMENT_STRING =
-    error0(
+    warning0(
       20013,
       StagingPhase.POST_TYPER_STANDARDS,
       "[NEW]Suspicious use of implicit Predef.augmentString. Use .toSeq if you really want to treat it as a Seq[Char]. Consider if surrounding code should be a map rather than flatMap. Prefer + rather than ++ for String concatenation."

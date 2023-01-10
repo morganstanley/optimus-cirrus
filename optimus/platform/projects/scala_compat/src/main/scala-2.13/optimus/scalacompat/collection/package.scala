@@ -12,7 +12,7 @@
 package optimus.scalacompat
 
 import scala.collection.mutable
-import scala.{ collection => sc }
+import scala.{collection => sc}
 import scala.reflect.ClassTag
 
 package object collection extends MapBuildFromImplicits {
@@ -24,6 +24,7 @@ package object collection extends MapBuildFromImplicits {
   def wrappedArrayFactory[T: ClassTag]: sc.Factory[T, Seq[T]] = sc.immutable.ArraySeq
 
   type IterableLike[+A, +Repr] = sc.IterableOps[A, Any, Repr]
+  type IterableOnceOps[+A, +CC[_], +C] = sc.IterableOnceOps[A, CC, C]
   type Iterable2[A, B] = sc.Iterable[(A, B)]
   type MapLike[K, +V, +Repr] = sc.MapOps[K, V, Iterable2, Repr]
   type SeqLike[A, +Repr] = sc.SeqOps[A, Any, Repr]

@@ -12,13 +12,16 @@
 package optimus.debug;
 import static optimus.debug.InstrumentationConfig.*;
 
-
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.StringTokenizer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import optimus.graph.DiagnosticSettings;
 
@@ -72,11 +75,26 @@ public class InstrumentationCmds {
       for (var function : DiagnosticSettings.instrumentationCache)
         cache(function);
     }
+    if (DiagnosticSettings.enableRTVerifier || DiagnosticSettings.instrumentationConfig != null)
+      loadAndParseConfig();
+  }
 
-    if (DiagnosticSettings.instrumentationConfig == null)
-      return;
+  private static void loadAndParseConfig() {
     try {
-      List<String> lines = Files.readAllLines(Paths.get(DiagnosticSettings.instrumentationConfig));
+      List<String> lines = null;
+      if (DiagnosticSettings.instrumentationConfig != null)
+        lines = Files.readAllLines(Paths.get(DiagnosticSettings.instrumentationConfig));
+      else if (DiagnosticSettings.enableRTVerifier) {
+        try (var resource = ClassLoader.getSystemResourceAsStream("rt_verifier.sc")) {
+          assert resource != null;
+          var reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8));
+          lines = reader.lines().collect(Collectors.toList());
+        }
+      }
+
+      if (lines == null)
+        return;
+
       boolean inComment = false;  // Reading lines between /* and */
       for (String line : lines) {
         if (line.startsWith("import ") || line.startsWith("//"))
@@ -131,6 +149,18 @@ public class InstrumentationCmds {
     var jvmClassName = className.replace('.', '/');
     var jvmInterfaceName = interfaceToAdd.replace('.', '/');
     InstrumentationConfig.addInterfacePatch(jvmClassName, jvmInterfaceName);
+  }
+
+  /**
+   * Injects all natives call from a package with prefix and suffix calls.
+   * @param packagePrefix the prefix of the package to inject
+   * @param prefixCall the prefix call to inject
+   * @param suffixCall the suffix call to inject
+   * */
+  public static void wrapAllNative(String packagePrefix, String prefixCall, String suffixCall) {
+    InstrumentationConfig.instrumentAllNativePackagePrefixes = packagePrefix;
+    InstrumentationConfig.instrumentNativePrefix = prefixCall;
+    InstrumentationConfig.instrumentNativeSuffix = suffixCall;
   }
 
   /**

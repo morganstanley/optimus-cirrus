@@ -183,8 +183,8 @@ object PluginDataAccessFromReflection {
   // e.g. String, Int etc. Keep in step with trait PluginDataAccess below
 
   type PluginDataAccess = {
-    def debugMessages: Boolean
     def obtWarnConf: Boolean
+    def debugMessages: Boolean
     def getConfiguredLevelRaw(
         alarmId: Int,
         alarmString: String,
@@ -198,8 +198,7 @@ object PluginDataAccessFromReflection {
 trait PluginDataAccess {
   val pluginData: PluginData
   def debugMessages: Boolean = pluginData.alarmConfig.debug
-  // TODO (OPTIMUS-51339): remove when OBT always deal with warnings itself
-  def obtWarnConf: Boolean = pluginData.alarmConfig.obtWarnConf
+  def obtWarnConf: Boolean = pluginData.obtWarnConf
 
   // we have to access this reflectively as it is typically loaded in a different classloader
   // it is also essential that all of the passed types are simple types in the parent classloader

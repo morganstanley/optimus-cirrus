@@ -150,7 +150,7 @@ trait OptimusMacroAlarmHelper { self: OptimusMacroAlarmsBase =>
 
 }
 
-case class OptimusMacroAlarm(id: AlarmId, tpe: OptimusMacroType, message: String, template: String)
+final case class OptimusMacroAlarm(id: AlarmId, tpe: OptimusMacroType, message: String, template: String)
     extends OptimusAlarmBase
 
 abstract class OptimusMacroAlarmBuilder(val id: AlarmId, val tpe: OptimusMacroType, val template: String)
@@ -162,7 +162,7 @@ abstract class OptimusMacroAlarmBuilder(val id: AlarmId, val tpe: OptimusMacroTy
     OptimusMacroAlarm(id, tpe, String.format(template, args: _*), template)
 }
 
-case class OptimusMacroAlarmBuilder0(
+final case class OptimusMacroAlarmBuilder0(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -172,7 +172,7 @@ case class OptimusMacroAlarmBuilder0(
   def apply() = buildImpl0(obtMandatory, scalaMandatory: Boolean)
 }
 
-case class OptimusMacroAlarmBuilder1(
+final case class OptimusMacroAlarmBuilder1(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -182,7 +182,7 @@ case class OptimusMacroAlarmBuilder1(
   def apply(arg: Any) = buildImpl(obtMandatory, scalaMandatory: Boolean, arg.toString)
 }
 
-case class OptimusMacroAlarmBuilder2(
+final case class OptimusMacroAlarmBuilder2(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -192,7 +192,7 @@ case class OptimusMacroAlarmBuilder2(
   def apply(arg1: Any, arg2: Any) = buildImpl(obtMandatory, scalaMandatory: Boolean, arg1.toString, arg2.toString)
 }
 
-case class OptimusMacroAlarmBuilder3(
+final case class OptimusMacroAlarmBuilder3(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -203,7 +203,7 @@ case class OptimusMacroAlarmBuilder3(
     buildImpl(obtMandatory, scalaMandatory: Boolean, arg1.toString, arg2.toString, arg3.toString)
 }
 
-case class OptimusMacroAlarmBuilder4(
+final case class OptimusMacroAlarmBuilder4(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -214,7 +214,7 @@ case class OptimusMacroAlarmBuilder4(
     buildImpl(obtMandatory, scalaMandatory: Boolean, arg1.toString, arg2.toString, arg3.toString, arg4.toString)
 }
 
-case class OptimusMacroAlarmBuilder5(
+final case class OptimusMacroAlarmBuilder5(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,
@@ -232,7 +232,7 @@ case class OptimusMacroAlarmBuilder5(
       arg5.toString)
 }
 
-case class OptimusMacroAlarmBuilder6(
+final case class OptimusMacroAlarmBuilder6(
     override val id: AlarmId,
     override val tpe: OptimusMacroType,
     obtMandatory: Boolean,

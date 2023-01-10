@@ -477,6 +477,7 @@ object Properties extends KnownProperties {
   val gcNativeJVMFootprint = propI
   val gcNativeJVMHeap = propI // different from GCMonitor properties in that it's not correlated with a GC
   val gcNativeAlloc = propI
+  val gcNativeManagedAlloc = propI
   val gcNativeRSS = propI
   val gcNativeSurrogateRSS = propI
   val cacheClearCount = propL
@@ -491,6 +492,21 @@ object Properties extends KnownProperties {
   val gcCacheRemaining = propI
   val gcCleanupsFired = propL
   val gcMinorsSinceMajor = propL
+  val gcCacheMemoryUsage = propL
+  val gcNonCacheMemoryUsage = propL
+  val gcMemoryLimit = propL
+
+  val allocationName = prop[String]
+  val allocationInfo = prop[String]
+  val allocationEntriesCount = propL
+  val allocationMemoryUsage = propL
+  val allocationKeyspacesCount = propL
+
+  val evictionTime = propL // eviction time in ns
+  val expiredCount = propL
+  val expiredMemory = propL
+  val evictedCount = propL
+  val evictedMemory = propL
 
   //
   val gcMinUsedHeapAfterGC = propD
@@ -550,6 +566,8 @@ object Properties extends KnownProperties {
   val host = prop[String]
   val port = prop[String]
   val user = prop[String]
+  val clusterName = prop[String]
+  val server = prop[Map[String, JsValue]]
   val args = prop[Seq[String]]
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
@@ -570,6 +588,7 @@ object Properties extends KnownProperties {
   val time = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
+  val state = prop[String]
 
   val appLaunchContextType = prop[String]
   val appLaunchContextEnv = prop[String]
@@ -714,6 +733,17 @@ object Properties extends KnownProperties {
   // measured in seconds
   val stressTestAvgGraphTimeS = propD
   val stressTestFailure = propB
+
+  /** Genesis startup time on Minigrid */
+  val jvmUptime = propL
+
+  val userWarningsAdded = prop[Map[String, Int]]
+  val userWarningsRemoved = prop[Map[String, Int]]
+  val totalWarningsAdded = propI
+  val totalWarningsRemoved = propI
+  val numBadBaseline = propI
+  val numFileReadErrors = propI
+  val buildNumber = propI
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

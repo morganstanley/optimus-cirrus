@@ -26,10 +26,10 @@ trait OptimusPluginReporter {
 
   import OptimusPluginReporter._
 
-  // TODO (OPTIMUS-51339): Remove the flag and make alarmNew the only option. When that is done, we can also remove
+  // TODO (OPTIMUS-51339): Remove the flag and make alarmObt the only option. When that is done, we can also remove
   //  alarmConfig and hasNew.
   def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit =
-    if (pluginData.alarmConfig.obtWarnConf) alarmObt(alarm, pos) else alarmLegacy(alarm, pos)
+    if (pluginData.obtWarnConf) alarmObt(alarm, pos) else alarmLegacy(alarm, pos)
 
   def alarmObt(alarm: OptimusPluginAlarm, pos: Position): Unit = {
     val level = alarm.id.tpe
@@ -110,7 +110,16 @@ trait OptimusPluginReporter {
 
   // TODO (OPTIMUS-51339): Remove when OBT loads the new list by itself.
   // Allow for new alarms (signified by "[NEW]" in the message) to not immediately fail the build
-  private def isNew(alarm: OptimusPluginAlarm): Boolean = alarm.toString().contains(OptimusAlarms.NewTag)
+  private def isNew(alarm: OptimusPluginAlarm): Boolean = {
+    val isNew = alarm.toString().contains(OptimusAlarms.NewTag)
+    if (isNew) {
+      assert(
+        alarm.isWarning,
+        s"{open square braket} NEW {close square braket} can only be applied to warnings!\nerror encountered while processing ${alarm.toString()}"
+      )
+    }
+    isNew
+  }
 
   def alarm(builder: OptimusAlarmBuilder0, pos: Position): Unit = alarm(builder(), pos)
   def alarm(builder: OptimusAlarmBuilder1, pos: Position, arg: Any): Unit = alarm(builder(arg), pos)

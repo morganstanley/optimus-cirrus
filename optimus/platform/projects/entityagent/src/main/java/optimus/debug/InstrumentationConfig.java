@@ -37,6 +37,9 @@ public class InstrumentationConfig {
   static EntityInstrumentationType instrumentAllEntities = EntityInstrumentationType.none;
   static boolean instrumentAllModuleConstructors = false;
   public static boolean instrumentAllHashCodes = false;
+  public static String instrumentAllNativePackagePrefixes = null;
+  public static String instrumentNativePrefix = null;
+  public static String instrumentNativeSuffix = null;
   static boolean instrumentAllEntityApplies = false;
   public static boolean reportTouchingTweakable = false;
   public static boolean reportFindingTweaks = false;
@@ -71,6 +74,9 @@ public class InstrumentationConfig {
   private static final MethodRef exceptionHook = new MethodRef(IEC_TYPE, "exceptionInitializing");
   static InstrumentationConfig.MethodRef iecPause = new InstrumentationConfig.MethodRef(IEC_TYPE, "pauseReporting", "()I");
   static InstrumentationConfig.MethodRef iecResume = new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
+
+  static final MethodRef nativePrefix = new MethodRef(IS, "nativePrefix");
+  static final MethodRef nativeSuffix = new MethodRef(IS, "nativeSuffix");
 
   static InstrumentationConfig.MethodRef expectEquals = new InstrumentationConfig.MethodRef(IS, "expectAllToEquals", "(ZLoptimus/platform/storable/Entity;Loptimus/platform/storable/Entity;)V");
   static InstrumentationConfig.MethodRef equalsHook = new InstrumentationConfig.MethodRef(ENTITY_TYPE, "argsEqualsHook");
@@ -239,6 +245,7 @@ public class InstrumentationConfig {
     boolean poisonCacheEquality;
     boolean cacheAllApplies;
     boolean bracketAllLzyComputes;
+    boolean wrapNativeCalls;
 
     String replaceObjectAsBase;
     MethodPatch allMethodsPatch;
