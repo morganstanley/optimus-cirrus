@@ -11,22 +11,21 @@
  */
 package optimus.breadcrumbs.graph
 
-import spray.json._
-import optimus.breadcrumbs.crumbs.Properties.JsonImplicits._
-
-import scala.collection.mutable
-import java.time.ZonedDateTime
-
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.EdgeType
 import optimus.breadcrumbs.crumbs.Event
 import optimus.breadcrumbs.crumbs.Events
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.Properties.JsonImplicits._
+import optimus.scalacompat.collection._
 import spray.json.JsValue
+import spray.json._
 
+import java.time.ZonedDateTime
 import scala.annotation.tailrec
 import scala.collection.immutable.SortedSet
+import scala.collection.mutable
 
 object Vertex {
 
@@ -102,7 +101,7 @@ object Vertex {
             m + ((nt, i + 1))
           }
       }
-      new NameTree(name, s.mapValues(compress(_)).toMap)
+      new NameTree(name, s.mapValuesNow(compress(_)))
     }
   }
 

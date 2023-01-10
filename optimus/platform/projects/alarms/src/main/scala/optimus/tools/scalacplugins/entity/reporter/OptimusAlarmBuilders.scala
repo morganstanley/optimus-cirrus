@@ -204,7 +204,7 @@ abstract class OptimusErrorsBase extends OptimusAlarms with OptimusPluginAlarmHe
   final protected val base = 20000
 }
 
-case class OptimusPluginAlarm(
+final case class OptimusPluginAlarm(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     message: String,
@@ -229,7 +229,7 @@ trait OptimusPluginAlarmBuilder extends OptimusAlarmBuilder {
     OptimusPluginAlarm(id, phase, String.format(template, args: _*), template, obtMandatory, scalaMandatory)
 }
 
-case class OptimusAlarmBuilder0(
+final case class OptimusAlarmBuilder0(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,
@@ -240,7 +240,7 @@ case class OptimusAlarmBuilder0(
   def as(tpe: OptimusAlarmType.Tpe): OptimusAlarmBuilder0 = copy(id = id.copy(tpe = tpe))
 }
 
-case class OptimusAlarmBuilder1(
+final case class OptimusAlarmBuilder1(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,
@@ -251,7 +251,7 @@ case class OptimusAlarmBuilder1(
   def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
 }
 
-case class OptimusAlarmBuilder2(
+final case class OptimusAlarmBuilder2(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,
@@ -262,7 +262,7 @@ case class OptimusAlarmBuilder2(
   def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
 }
 
-case class OptimusAlarmBuilder3(
+final case class OptimusAlarmBuilder3(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,
@@ -274,7 +274,7 @@ case class OptimusAlarmBuilder3(
   def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
 }
 
-case class OptimusAlarmBuilder4(
+final case class OptimusAlarmBuilder4(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,
@@ -286,7 +286,7 @@ case class OptimusAlarmBuilder4(
   def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
 }
 
-case class OptimusAlarmBuilder5(
+final case class OptimusAlarmBuilder5(
     id: AlarmId,
     phase: OptimusPhaseInfo,
     obtMandatory: Boolean,

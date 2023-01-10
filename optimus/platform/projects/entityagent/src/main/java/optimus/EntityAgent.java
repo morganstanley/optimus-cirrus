@@ -39,6 +39,11 @@ public class EntityAgent {
   private static final boolean silent = Boolean.getBoolean("optimus.entityagent.silent");
   private static Instrumentation instrumentation;
 
+  private static final String nativePrefix = "entityagent_";
+  public static String nativePrefix(String name) {
+    return nativePrefix + name;
+  }
+
   private static final ConcurrentHashMap<String, ClassFileTransformer> customTransformers = new ConcurrentHashMap<>();
   static private final String VERSION_STRING = "Entity Agent(v8)";
 
@@ -243,6 +248,8 @@ public class EntityAgent {
 
     EntityAgentTransformer transformer = new EntityAgentTransformer(allowCorePatches);
     instrumentation.addTransformer(transformer, true);
+    if (instrumentation.isNativeMethodPrefixSupported()) instrumentation.setNativeMethodPrefix(transformer, nativePrefix);
+    else logErrMsg("Native Method Prefix not supported. Skipping...");
   }
 
   /*

@@ -17,6 +17,9 @@ import org.kohsuke.args4j.OptionDef
 import org.kohsuke.args4j.spi.OneArgumentOptionHandler
 import org.kohsuke.args4j.spi.Setter
 
+import java.nio.file.Path
+import java.nio.file.Paths
+
 object Args4JOptionHandlers {
 
   private val NoArgStr = "NO_ARG"
@@ -85,5 +88,10 @@ object Args4JOptionHandlers {
       val Array(first, second) = argument.split(",")
       (first, second)
     }
+  }
+
+  class PathOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Path]])
+      extends OptionOptionHandler[Path](parser, option, setter) {
+    def convert(s: String): Path = Paths.get(s)
   }
 }

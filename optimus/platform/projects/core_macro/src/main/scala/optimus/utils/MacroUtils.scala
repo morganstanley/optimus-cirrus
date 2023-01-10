@@ -66,21 +66,30 @@ object MacroUtils {
   // def foo(bar: Int)(implicit loc: SourceLocation) {
   //   println("called foo(" + bar + ") at " + loc)
   // }
-  final case class SourceLocation(line: Int, method: String, className: String) {
+  final case class SourceLocation(line: Int, method: String, className: String, sourceName: String) {
     override def toString: String = s"($className:$line)"
+
     /** Provide full details (method-class-line) on given SourceLocation. */
     def details: String = s"$method ($className:$line)"
+
+    // IntelliJ friendly format
+    def stackTraceString = s"$className.$method($sourceName:$line)"
+    def asStackTraceElement = new StackTraceElement(className, method, sourceName, line)
   }
+
   object SourceLocation {
     implicit def makeSourceLocation: SourceLocation = macro sourceLocationMacro
 
     final def sourceLocationMacro(c: blackbox.Context): c.Expr[SourceLocation] = {
       import c.universe._
       val line = c.Expr[Int](Literal(Constant(c.enclosingPosition.line)))
+      val sourceName = c.Expr[String](Literal(Constant(c.enclosingPosition.source.file.name)))
       val method = c.Expr[String](Literal(Constant(enclosingMethod(c).fullName)))
       val className = c.Expr[String](Literal(Constant(enclosingClass(c).fullName)))
-      reify(SourceLocation(line.splice, method.splice, className.splice))
+      reify(SourceLocation(line.splice, method.splice, className.splice, sourceName.splice))
     }
+
+    val Unknown = SourceLocation(-1, "Unknown", "Unknown", "Unknown")
   }
 
   /**

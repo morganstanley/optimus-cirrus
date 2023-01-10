@@ -11,7 +11,7 @@
  */
 package optimus.tools.scalacplugins.entity.reporter
 
-case class OptimusMacroType(base: Int, name: String, description: String)
+final case class OptimusMacroType(base: Int, name: String, description: String)
 
 object OptimusMacroType {
 

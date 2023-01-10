@@ -19,6 +19,7 @@ import optimus.tools.scalacplugins.entity.reporter._
 import scala.reflect.internal.util.NoPosition
 import scala.reflect.internal.util.Position
 import scala.reflect.internal.util.SourceFile
+import scala.sys.props
 import scala.tools.nsc.Global
 
 class PluginData(private val global: Global) {
@@ -68,8 +69,8 @@ class PluginData(private val global: Global) {
   def configureBasic(): Unit = {
     global.perRunCaches.recordCache(onCompileFinished)
     // always install the threshold profiler since it's lightweight and we always want to know about very slow compilation
-    val thresholdProfiler = new ThresholdProfiler(global.reporter.echo,
-      thresholdNs = slowCompilationWarningThresholdMs * 1000000)
+    val thresholdProfiler =
+      new ThresholdProfiler(global.reporter.echo, thresholdNs = slowCompilationWarningThresholdMs * 1000000)
     // keep the existing profiler (if any) so that we don't prevent -Yprofile from working
     global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
   }
@@ -103,10 +104,10 @@ class PluginData(private val global: Global) {
     }
   }
 
+  val obtWarnConf = global.settings.defines.value.contains("-Doptimus.buildtool.warnings=true")
   // TODO (OPTIMUS-51339): Deprecate because all this logic is moving to OBT
   // all the values are be set by compiler plugin -P parameter
   object alarmConfig {
-    var obtWarnConf = false // if true, use the OBT controlled warning process
     var debug = false
     // used to control the warning/error reporting level
     var ignore = Set.empty[Int]

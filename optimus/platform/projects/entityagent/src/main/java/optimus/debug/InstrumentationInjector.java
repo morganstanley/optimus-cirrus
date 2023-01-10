@@ -20,6 +20,7 @@ import static optimus.debug.InstrumentationInjector.OBJECT_DESC;
 import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
 import static optimus.debug.InstrumentationInjector.SCALA_NOTHING;
 import static optimus.debug.InstrumentationInjector.OBJECT_TYPE;
+import static optimus.debug.InstrumentationConfig.instrumentAllNativePackagePrefixes;
 import static optimus.debug.InstrumentationConfig.patchForSuffixAsNode;
 import static optimus.debug.InstrumentationConfig.patchForCachingMethod;
 import static optimus.debug.InstrumentationConfig.patchForBracketingLzyCompute;
@@ -31,6 +32,8 @@ import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import optimus.DynamicClassLoader;
+import optimus.EntityAgent;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -55,6 +58,10 @@ public class InstrumentationInjector implements ClassFileTransformer {
                           byte[] bytes) throws IllegalClassFormatException {
 
     InstrumentationConfig.ClassPatch patch = InstrumentationConfig.forClass(className);
+    if (instrumentAllNativePackagePrefixes != null && className.startsWith(instrumentAllNativePackagePrefixes)) {
+      patch = new InstrumentationConfig.ClassPatch();
+      patch.wrapNativeCalls = true;
+    }
     if (patch == null && !InstrumentationConfig.instrumentAnyGroups())
       return bytes;
 
@@ -192,12 +199,83 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     return returnType.equals(className.substring(0, className.length() - 1));
   }
 
+  // TODO (OPTIMUS-53248): Make this more generic and generate CallWithArgs
+  private void writeNativeMethodCall(String name, String desc) {
+    ClassWriter cw = new ClassWriter(0);
+    var clsName = "call_" + name;
+    cw.visit(V11, ACC_PUBLIC | ACC_SUPER, clsName, null, "optimus/graph/InstrumentationSupport$CallWithArgs", null);
+    cw.visitInnerClass("optimus/graph/InstrumentationSupport$CallWithArgs",
+                       "optimus/graph/InstrumentationSupport",
+                       "CallWithArgs",
+                       ACC_PUBLIC | ACC_STATIC | ACC_ABSTRACT);
+    {
+      var mv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
+      mv.visitCode();
+      mv.visitVarInsn(ALOAD, 0);
+      mv.visitMethodInsn(INVOKESPECIAL, "optimus/graph/InstrumentationSupport$CallWithArgs", "<init>", "()V", false);
+      mv.visitInsn(RETURN);
+      mv.visitMaxs(1, 1);
+      mv.visitEnd();
+    }
+    {
+      var argTypes = Type.getArgumentTypes(desc);
+      var mv = cw.visitMethod(ACC_PROTECTED, "apply", "(JLjava/lang/Object;JLjava/lang/Object;)Z", null, null);
+      mv.visitCode();
+      mv.visitVarInsn(LLOAD, 1);
+      mv.visitVarInsn(ALOAD, 3);
+      mv.visitTypeInsn(CHECKCAST, argTypes[1].getInternalName());
+      mv.visitVarInsn(LLOAD, 4);
+      mv.visitVarInsn(ALOAD, 6);
+      mv.visitTypeInsn(CHECKCAST, argTypes[1].getInternalName());
+      mv.visitMethodInsn(INVOKESTATIC, className, EntityAgent.nativePrefix(name), desc, false);
+      mv.visitInsn(IRETURN);
+      mv.visitMaxs(6, 7);
+      mv.visitEnd();
+    }
+    cw.visitEnd();
+    new DynamicClassLoader().createInstance(cw.toByteArray());
+  }
+
+  // TODO (OPTIMUS-53248): Make this more generic and generate CallWithArgs
+  private void writeNativeWrapper(int access, String name, String desc, String signature, String[] exceptions) {
+    var useAccess = access & ~ACC_NATIVE;
+    var mvWriter = cv.visitMethod(useAccess, name, desc, signature, exceptions);
+    var mv = new GeneratorAdapter(mvWriter, useAccess, name, desc);
+
+    mv.visitCode();
+    mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativePrefix.cls, InstrumentationConfig.nativePrefix.method, "()V", false);
+
+    // call original method
+    mv.loadArgs();
+    mv.visitMethodInsn(INVOKESTATIC, className, EntityAgent.nativePrefix(name), desc, false);
+
+
+    if(className.equals("AIOP/Java/VolSwigJNI") && name.equals("VolNode_isEqualTo")) {
+      mv.dup();
+      mv.loadArgs();
+      var descX= "(ZJ"+ OBJECT_DESC + "J" + OBJECT_DESC + ")V";
+      mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativeSuffix.cls, InstrumentationConfig.nativeSuffix.method, descX, false);
+      writeNativeMethodCall(name, desc);
+    } else
+     mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativeSuffix.cls, InstrumentationConfig.nativeSuffix.method, "()V", false);
+
+    mv.returnValue();
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
+  }
+
   public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
     if (classPatch.methodForward != null && name.equals(classPatch.methodForward.from.method))
       seenForwardedMethod = true;
 
-    MethodVisitor mv = cv.visitMethod(access, name, desc, signature, exceptions);
-    if(classPatch.allMethodsPatch != null)
+    MethodVisitor mv;
+    if (classPatch.wrapNativeCalls && (access & ACC_NATIVE) != 0) {
+      writeNativeWrapper(access, name, desc, signature, exceptions);
+      mv = cv.visitMethod(access, EntityAgent.nativePrefix(name), desc, signature, exceptions);
+    } else
+      mv = cv.visitMethod(access, name, desc, signature, exceptions);
+
+    if (classPatch.allMethodsPatch != null)
       return new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
     InstrumentationConfig.MethodPatch methodPatch = classPatch.forMethod(name, desc);
     if (methodPatch != null)

@@ -34,6 +34,7 @@ package object collection {
   def wrappedArrayFactory[T: ClassTag]: Factory[T, Seq[T]] = sc.mutable.WrappedArray.canBuildFrom
 
   type IterableLike[+A, +Repr] = sc.IterableLike[A, Repr]
+  type IterableOnceOps[+A, +CC[_], +C] = sc.TraversableLike[A, C]
   type MapLike[K, +V, +Repr <: MapLike[K, V, Repr] with sc.Map[K, V]] = sc.MapLike[K, V, Repr]
   type SeqLike[+A, +Repr] = sc.SeqLike[A, Repr]
   type SetLike[A, +Repr <: SetLike[A, Repr] with sc.Set[A]] = sc.SetLike[A, Repr]
@@ -57,7 +58,7 @@ package object collection {
   def knownSize(t: sc.GenTraversableOnce[_]): Int = {
     CanEqual.knownSize(t)
   }
-  def simpleFactory[A, B](f: => sc.mutable.Builder[A, B]): sc.compat.Factory[A, B] =   new sc.compat.Factory[A, B] {
+  def simpleFactory[A, B](f: => sc.mutable.Builder[A, B]): sc.compat.Factory[A, B] = new sc.compat.Factory[A, B] {
     override def apply(from: Nothing): sc.mutable.Builder[A, B] = apply()
     override def apply(): sc.mutable.Builder[A, B] = f
   }

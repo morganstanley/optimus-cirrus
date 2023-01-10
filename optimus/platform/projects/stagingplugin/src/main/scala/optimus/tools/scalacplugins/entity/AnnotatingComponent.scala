@@ -57,21 +57,17 @@ class AnnotatingComponent(
     s"${if (neu) "[NEW]" else ""}use $alt instead (deprecated by optimus staging)"
 
   private val view = "view"
-  private val mapValues = "mapValues"
-  private val mapValuesReasonSuffix = ". Please import optimus.scalacompat.collection._ and use mapValuesNow instead"
+  private val mapValuesReasonSuffix =
+    ". Please import optimus.scalacompat.collection._ and use mapValuesNow / filterKeysNow instead."
   private val toStream = "toStream"
   private val streamPrefix = "scala.collection.immutable.Stream."
   private val lazyListPrefix = "scala.collection.immutable.LazyList."
+
   private val discourageds = Seq[(String, List[String])](
     // 2.12
     "scala.collection.TraversableLike.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.IterableLike.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.SeqLike.view" -> List(view, AnnotatingComponent.lazyReason),
-    "scala.collection.immutable.MapLike.mapValues" -> List(
-      mapValues,
-      AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
-    "scala.collection.MapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
-    "scala.collection.GenMapLike.mapValues" -> List(mapValues, AnnotatingComponent.lazyReason + mapValuesReasonSuffix),
     "scala.collection.GenTraversableOnce.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
     "scala.collection.IterableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
     "scala.collection.TraversableLike.toStream" -> List(toStream, AnnotatingComponent.lazyReason),
@@ -109,7 +105,17 @@ class AnnotatingComponent(
       "instead of `object + string`, use a string interpolation or `\"\" + object + string`."),
     "scala.collection.JavaConverters" -> List(useInstead("scala.jdk.CollectionConverters")),
     "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters"))
-  )
+  ) ++ List(
+    "MapLike",
+    "GenMapLike",
+    "SortedMapLike",
+    "concurrent.TrieMap",
+    "immutable.MapLike",
+    "immutable.SortedMap",
+    "mutable.LinkedHashMap",
+    "parallel.ParMapLike")
+    .flatMap(c => List(s"scala.collection.$c.mapValues", s"scala.collection.$c.filterKeys"))
+    .map(_ -> List(AnnotatingComponent.lazyReason + mapValuesReasonSuffix))
 
   private lazy val deprecatedAnno = rootMirror.getRequiredClass("scala.deprecated")
   private lazy val deprecatingAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.deprecating")
