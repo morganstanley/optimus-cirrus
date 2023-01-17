@@ -21,7 +21,6 @@ import static optimus.debug.InstrumentationInjector.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationInjector.OBJECT_DESC;
 
 import optimus.EntityAgent;
-import optimus.patches.MiscPatches;
 
 enum EntityInstrumentationType {
   markScenarioStack, recordConstructedAt, none
@@ -47,7 +46,7 @@ public class InstrumentationConfig {
   final private static String ENTITY_TYPE = "optimus/platform/storable/Entity";
   final private static String SS_TYPE = "optimus/platform/ScenarioStack";
   final private static String OGSC_TYPE = "optimus/graph/OGSchedulerContext";
-  final private static String IS =  "optimus/graph/InstrumentationSupport";
+  public final static String IS =  "optimus/graph/InstrumentationSupport";
   final static String CACHED_VALUE_TYPE = "optimus/graph/InstrumentationSupport$CachedValue";
   private final static String IMC_TYPE = "optimus/debug/InstrumentedModuleCtor";
   private final static String IEC_TYPE = "optimus/debug/InstrumentedExceptionCtor";
@@ -75,8 +74,11 @@ public class InstrumentationConfig {
   static InstrumentationConfig.MethodRef iecPause = new InstrumentationConfig.MethodRef(IEC_TYPE, "pauseReporting", "()I");
   static InstrumentationConfig.MethodRef iecResume = new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
 
-  static final MethodRef nativePrefix = new MethodRef(IS, "nativePrefix");
-  static final MethodRef nativeSuffix = new MethodRef(IS, "nativeSuffix");
+
+  public final static String CALL_WITH_ARGS_NAME = "CallWithArgs";
+  public final static String CALL_WITH_ARGS = IS + "$" + CALL_WITH_ARGS_NAME;
+  static final MethodRef nativePrefix = new MethodRef(IS, "nativePrefix", "()V");
+  static final MethodRef nativeSuffix = new MethodRef(IS, "nativeSuffix", "()V");
 
   static InstrumentationConfig.MethodRef expectEquals = new InstrumentationConfig.MethodRef(IS, "expectAllToEquals", "(ZLoptimus/platform/storable/Entity;Loptimus/platform/storable/Entity;)V");
   static InstrumentationConfig.MethodRef equalsHook = new InstrumentationConfig.MethodRef(ENTITY_TYPE, "argsEqualsHook");
@@ -196,6 +198,7 @@ public class InstrumentationConfig {
     boolean suffixWithReturnValue;
     boolean suffixWithArgs;
     boolean suffixNoArgumentBoxing;
+    boolean suffixWithCallArgs;     ///  All arguments are packaged into custom generated class
     FieldRef storeToField;
     ClassPatch classPatch;
     BiPredicate<String, String> predicate;
@@ -381,6 +384,13 @@ public class InstrumentationConfig {
   static MethodPatch addSuffixCall(MethodRef from, MethodRef to) {
     var methodPatch = putIfAbsentMethodPatch(from);
     methodPatch.suffix = to;
+    return methodPatch;
+  }
+
+  public static MethodPatch addSuffixCallWithCallsArgs(MethodRef from, MethodRef to) {
+    var methodPatch = putIfAbsentMethodPatch(from);
+    methodPatch.suffix = to;
+    methodPatch.suffixWithCallArgs = true;
     return methodPatch;
   }
 

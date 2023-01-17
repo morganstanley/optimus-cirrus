@@ -75,6 +75,12 @@ object MacroUtils {
     // IntelliJ friendly format
     def stackTraceString = s"$className.$method($sourceName:$line)"
     def asStackTraceElement = new StackTraceElement(className, method, sourceName, line)
+    def clickableSource: String = {
+      // if method name is already fully qualified, don't prepend class name
+      val prefix = if (method.contains(".")) method else s"$className.$method"
+      val fileName = sourceName.drop(sourceName.lastIndexOf("/") + 1)
+      s"$prefix($fileName:$line)"
+    }
   }
 
   object SourceLocation {

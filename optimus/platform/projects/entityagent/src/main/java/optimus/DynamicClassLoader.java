@@ -11,6 +11,8 @@
  */
 package optimus;
 
+import java.lang.invoke.MethodHandles;
+
 public class DynamicClassLoader extends ClassLoader {
 
   public DynamicClassLoader() {
@@ -24,6 +26,16 @@ public class DynamicClassLoader extends ClassLoader {
   public Class<?> loadClass(byte[] bytes) {
     return defineClass(null /* Use from byte code */, bytes, 0, bytes.length);
   }
+
+  public static Class<?> loadClassInCurrentClassLoader(byte[] bytes){
+    try {
+      return MethodHandles.lookup().defineClass(bytes);
+    } catch (IllegalAccessException ex) {
+      ex.printStackTrace();
+      return null;
+    }
+  }
+
 
   public Object createInstance(byte[] bytes) {
     try {

@@ -238,6 +238,15 @@ trait CollectionUtils {
     def onEmpty(action: => Unit): Option[A] = {
       if (underlying.isEmpty) action else (); underlying
     }
+    // TODO(OPTIMUS-48501) Just use Option.zip once 2.12 support is not needed
+    def zipp[B](ob: Option[B]): Option[(A, B)] = underlying match {
+      case Some(x) =>
+        ob match {
+          case Some(y) => Some((x, y))
+          case _       => None
+        }
+      case _ => None
+    }
   }
 
   implicit class OptimusTryOps[A](underlying: Try[A]) {

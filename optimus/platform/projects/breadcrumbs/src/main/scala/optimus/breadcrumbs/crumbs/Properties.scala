@@ -414,6 +414,7 @@ object Properties extends KnownProperties {
   val `type` = prop[String]
   val subtype = prop[String]
   val description = prop[String]
+  val crumbType = prop[String]
   val proid = prop[String]
   val node = prop[String]
   val logFile = prop[String]
