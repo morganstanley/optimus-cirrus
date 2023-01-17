@@ -15,6 +15,7 @@ import static optimus.debug.EntityInstrumentationType.markScenarioStack;
 import static optimus.debug.EntityInstrumentationType.none;
 import static optimus.debug.EntityInstrumentationType.recordConstructedAt;
 import static optimus.debug.InstrumentationConfig.CACHED_VALUE_TYPE;
+import static optimus.debug.InstrumentationConfig.CALL_WITH_ARGS;
 import static optimus.debug.InstrumentationInjector.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationInjector.OBJECT_DESC;
 import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
@@ -34,6 +35,7 @@ import java.util.Arrays;
 
 import optimus.DynamicClassLoader;
 import optimus.EntityAgent;
+import optimus.graph.rtverifier.CallWithArgsGenerator;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -243,7 +245,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     var mv = new GeneratorAdapter(mvWriter, useAccess, name, desc);
 
     mv.visitCode();
-    mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativePrefix.cls, InstrumentationConfig.nativePrefix.method, "()V", false);
+    mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativePrefix.cls, InstrumentationConfig.nativePrefix.method, InstrumentationConfig.nativePrefix.descriptor, false);
 
     // call original method
     mv.loadArgs();
@@ -533,6 +535,16 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       descriptor += loadThisOrNull();
     if(patch.suffixWithArgs) {
       loadArgs();
+    }
+    if(patch.suffixWithCallArgs) {
+      var newClsName = CallWithArgsGenerator.generateClassName(getName());
+      var newBytes = CallWithArgsGenerator.create(newClsName, getArgumentTypes());
+      DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
+      mv.visitTypeInsn(NEW, newClsName);
+      dup();
+      loadArgs();
+      mv.visitMethodInsn(INVOKESPECIAL, newClsName, "<init>", Type.getMethodDescriptor(Type.VOID_TYPE, getArgumentTypes()), false);
+      descriptor += "L" + CALL_WITH_ARGS + ";";
     }
 
     descriptor += ")V";

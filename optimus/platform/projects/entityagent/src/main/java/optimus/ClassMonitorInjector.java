@@ -14,8 +14,6 @@ package optimus;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.lang.instrument.ClassFileTransformer;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
@@ -372,7 +370,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     remoteDependenciesList.add(dependencies);
   }
 
-  public static List<CollectedDependencies> getRemotelyUsedDependenciesAndReset() {
+  public static List<CollectedDependencies> collectRemotelyUsedDependenciesAndReset() {
     List<CollectedDependencies> remoteDependenciesListCopy = List.copyOf(remoteDependenciesList);
     remoteDependenciesList.clear();
     return remoteDependenciesListCopy;

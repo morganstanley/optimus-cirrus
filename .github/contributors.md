@@ -15,6 +15,8 @@ Nolita Ebama-Mpeta ([@musinoli](http://github.com/musinoli))
 
 Sarthak Banerjee ([@sarthakbanerjee](http://github.com/sarthakbanerjee))
 
+Tony Lam ([@calltl](http://github.com/calltl))
+
 Valerie Saunders Duncan ([@ms-valerie](http://github.com/ms-valerie))
 
 [@vincentdyleung](http://github.com/vincentdyleung)
