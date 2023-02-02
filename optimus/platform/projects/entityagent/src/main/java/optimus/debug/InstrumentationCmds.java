@@ -215,6 +215,18 @@ public class InstrumentationCmds {
   }
 
   /**
+   * Instrument @methodToPatch to call @methodToCall as the first call
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void suffixCall(String methodToPatch, String methodToCall) throws ClassNotFoundException {
+    MethodRef from = asMethodRef(methodToPatch);
+    MethodRef to = asMethodRef(methodToCall);
+    var suffix = InstrumentationConfig.addSuffixCall(from, to);
+    suffix.suffixWithThis = true;
+  }
+
+  /**
    * Instrument @methodToPatch to dump node and jvm stack if called while marked entity is constructing
    * @see InstrumentationCmds#markScenarioStackAsInitializing(java.lang.String)
    * @param methodToPatch full name package1.class2.methodName1
@@ -236,6 +248,8 @@ public class InstrumentationCmds {
    * Only useful if you also executed markAllModuleCtors
    * @see optimus.debug.InstrumentationCmds#markAllModuleCtors()
    * @see optimus.debug.InstrumentedModuleCtor#trigger()
+   * @see optimus.debug.RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see optimus.debug.RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void prefixECCurrentWithTriggerIfInModuleCtor() {
     prefixCall("optimus.graph.OGSchedulerContext.current", "optimus.debug.InstrumentedModuleCtor.trigger");
@@ -277,6 +291,10 @@ public class InstrumentationCmds {
 
   /**
    * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors as running
+   * @see InstrumentationCmds#reportFindingTweaksInEntityConstructor()
+   * @see InstrumentationCmds#reportTouchingTweakableInEntityConstructor()
+   * @see optimus.debug.RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
+   * @see optimus.debug.RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
    */
   public static void markAllEntityCtorsForSIDetection() {
     instrumentAllEntities = EntityInstrumentationType.markScenarioStack;
@@ -284,6 +302,8 @@ public class InstrumentationCmds {
 
   /**
    * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module ctors as running
+   * @see optimus.debug.RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see optimus.debug.RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void markAllModuleCtors() {
     instrumentAllModuleConstructors = true;
@@ -302,6 +322,7 @@ public class InstrumentationCmds {
   /**
    * Instrument callouts and report touching tweakables or entity ctor (which should be RT)
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
+   * @see optimus.debug.RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
    */
   public static void reportTouchingTweakableInEntityConstructor() {
     InstrumentationConfig.addVerifyScenarioStackCalls();
@@ -311,6 +332,7 @@ public class InstrumentationCmds {
   /**
    * Instrument callouts and report touching tweaked values or entity ctor (which should be RT)
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
+   * @see optimus.debug.RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
    */
   public static void reportFindingTweaksInEntityConstructor() {
     InstrumentationConfig.addVerifyScenarioStackCalls();

@@ -17,10 +17,8 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-import static optimus.debug.InstrumentationInjector.OBJECT_ARR_DESC;
-import static optimus.debug.InstrumentationInjector.OBJECT_DESC;
-
 import optimus.EntityAgent;
+import org.objectweb.asm.Type;
 
 enum EntityInstrumentationType {
   markScenarioStack, recordConstructedAt, none
@@ -42,6 +40,10 @@ public class InstrumentationConfig {
   static boolean instrumentAllEntityApplies = false;
   public static boolean reportTouchingTweakable = false;
   public static boolean reportFindingTweaks = false;
+
+  public static final String OBJECT_DESC = "Ljava/lang/Object;";
+  public static final String OBJECT_ARR_DESC = "[Ljava/lang/Object;";
+  public static final Type OBJECT_TYPE = Type.getObjectType("java/lang/Object");
 
   final private static String ENTITY_TYPE = "optimus/platform/storable/Entity";
   final private static String SS_TYPE = "optimus/platform/ScenarioStack";
@@ -73,7 +75,6 @@ public class InstrumentationConfig {
   private static final MethodRef exceptionHook = new MethodRef(IEC_TYPE, "exceptionInitializing");
   static InstrumentationConfig.MethodRef iecPause = new InstrumentationConfig.MethodRef(IEC_TYPE, "pauseReporting", "()I");
   static InstrumentationConfig.MethodRef iecResume = new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
-
 
   public final static String CALL_WITH_ARGS_NAME = "CallWithArgs";
   public final static String CALL_WITH_ARGS = IS + "$" + CALL_WITH_ARGS_NAME;

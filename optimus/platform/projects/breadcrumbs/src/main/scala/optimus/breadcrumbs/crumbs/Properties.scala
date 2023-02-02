@@ -709,6 +709,11 @@ object Properties extends KnownProperties {
   val xsftCycle = prop[String]
   val xsftStack = prop[String]
 
+  /** RT verifier violations */
+  val rtvViolation = prop[String]
+  val rtvLocation = prop[String]
+  val rtvStack = prop[String]
+
   /** Used to detect whether a certain feature is being used */
   val feature = prop[String]
 

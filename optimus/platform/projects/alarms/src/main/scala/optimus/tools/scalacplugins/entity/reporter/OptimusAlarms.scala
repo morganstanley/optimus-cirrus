@@ -921,6 +921,12 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     "This code was relying on broken behaviour. To retain the old behaviour change: %s to super.%s"
   )
 
+  val DEALIASING = info2(
+    15001,
+    OptimusPhases.VAL_ACCESSORS,
+    "Removing alias of %s to tweakable %s"
+  )
+
   // optimus_storedprops phase warnings
   val ILLEGAL_TWEAK_BODY = warning1(
     16000,

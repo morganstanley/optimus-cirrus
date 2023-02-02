@@ -306,8 +306,8 @@ abstract class OptimusSeq[+T]
     with immutable.StrictOptimizedSeqOps[T, OptimusSeq, OptimusSeq[T]]
     with IterableFactoryDefaults[T, OptimusSeq] {
   import OptimusSeq.{EMPTY, collectMarker}
-  @volatile private[this] var _knownHashCode: Boolean = _
-  private[this] var _hashCode: Int = _
+  @transient @volatile private[this] var _knownHashCode: Boolean = _
+  @transient private[this] var _hashCode: Int = _
   override def hashCode: Int =
     if (_knownHashCode) _hashCode
     else {

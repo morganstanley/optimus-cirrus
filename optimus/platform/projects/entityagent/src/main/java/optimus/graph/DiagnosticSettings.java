@@ -151,6 +151,9 @@ public class DiagnosticSettings {
   public static String infoDumpDir;
   public static boolean infoDumpOnShutdown = getBoolProperty("optimus.diagnostic.dump.shutdown", false);
 
+  /** For startup profiling (not wiring this through cmd line since application code will never need to use it) */
+  public static boolean shutdownAfterStartup = getBoolProperty("optimus.profile.shutdownAfterStartup", false);
+
   /**
    * Whether we are running on a Client or on a Grid engine
    */
