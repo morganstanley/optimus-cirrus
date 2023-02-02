@@ -306,8 +306,8 @@ object OptimusSeq extends OSeqCompanion[Any] {
 }
 abstract class OptimusSeq[+T] extends OSeq[T] with IndexedSeqOptimized[T, OptimusSeq[T]] {
   import OptimusSeq.{EMPTY, collectMarker}
-  @volatile private[this] var _knownHashCode: Boolean = _
-  private[this] var _hashCode: Int = _
+  @transient @volatile private[this] var _knownHashCode: Boolean = _
+  @transient private[this] var _hashCode: Int = _
   override def hashCode: Int =
     if (_knownHashCode) _hashCode
     else {

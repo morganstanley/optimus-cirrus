@@ -156,7 +156,7 @@ public class EntityAgent {
       } catch (IllegalClassFormatException e) {
         throw e;
       } catch (Throwable t) {
-        logErrMsg("safeTransform error: '" + transformer.getClass().getName() + "': " + t.toString());
+        logErrMsg("safeTransform error: '" + transformer.getClass().getName() + "': " + t);
         return input;
       }
     }
@@ -197,7 +197,7 @@ public class EntityAgent {
     System.setProperty("ENTITY_AGENT_VERSION", VERSION_STRING);
     EntityAgent.instrumentation = instrumentation;
     logMsg("supports " +
-           (instrumentation.isRetransformClassesSupported() ? "retransform " : " ") + new Date().toString() +
+           (instrumentation.isRetransformClassesSupported() ? "retransform " : " ") + new Date() +
            " trace: " + DiagnosticSettings.traceAvailable + " isClassMonitorEnabled: " + DiagnosticSettings.isClassMonitorEnabled);
     String propOverride = System.getProperty("optimus.entityagent.props.override");
     if (propOverride != null) { agentArgs = propOverride; }

@@ -558,6 +558,7 @@ private[optimus] class BreadcrumbsRouter(
       None
   }
 
+  // [SEE_BREADCRUMB_FILTERING]
   private def route(c: Crumb): BreadcrumbsPublisher = {
     val targetPublisher = rules
       .find { _.matcher matches c }

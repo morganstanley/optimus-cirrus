@@ -16,15 +16,16 @@ import static optimus.debug.EntityInstrumentationType.none;
 import static optimus.debug.EntityInstrumentationType.recordConstructedAt;
 import static optimus.debug.InstrumentationConfig.CACHED_VALUE_TYPE;
 import static optimus.debug.InstrumentationConfig.CALL_WITH_ARGS;
-import static optimus.debug.InstrumentationInjector.OBJECT_ARR_DESC;
-import static optimus.debug.InstrumentationInjector.OBJECT_DESC;
-import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
-import static optimus.debug.InstrumentationInjector.SCALA_NOTHING;
-import static optimus.debug.InstrumentationInjector.OBJECT_TYPE;
+import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
+import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
+import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
 import static optimus.debug.InstrumentationConfig.instrumentAllNativePackagePrefixes;
 import static optimus.debug.InstrumentationConfig.patchForSuffixAsNode;
 import static optimus.debug.InstrumentationConfig.patchForCachingMethod;
 import static optimus.debug.InstrumentationConfig.patchForBracketingLzyCompute;
+import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
+import static optimus.debug.InstrumentationInjector.SCALA_NOTHING;
+
 import static org.objectweb.asm.Opcodes.ACC_INTERFACE;
 
 import java.lang.instrument.ClassFileTransformer;
@@ -49,11 +50,8 @@ import org.objectweb.asm.commons.GeneratorAdapter;
 /** In doubt see: var asm = BiopsyLab.byteCodeAsAsm(cw.toByteArray()); */
 public class InstrumentationInjector implements ClassFileTransformer {
   final static Type SCALA_NOTHING = Type.getType("Lscala/runtime/Nothing$;");
-  final static String OBJECT_DESC = "Ljava/lang/Object;";
   final static String ENTITY_DESC = "Loptimus/platform/storable/Entity;";
   private final static String ENTITY_COMPANION_BASE = "Loptimus/platform/storable/EntityCompanionBase;";
-  final static String OBJECT_ARR_DESC = "[Ljava/lang/Object;";
-  final static Type OBJECT_TYPE = Type.getObjectType("java/lang/Object");
 
   @Override
   public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
@@ -537,13 +535,18 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       loadArgs();
     }
     if(patch.suffixWithCallArgs) {
-      var newClsName = CallWithArgsGenerator.generateClassName(getName());
-      var newBytes = CallWithArgsGenerator.create(newClsName, getArgumentTypes());
+      Type thisOwner = Type.getObjectType(patch.from.cls);
+      String newClsName = CallWithArgsGenerator.generateClassName(getName());
+      byte[] newBytes = CallWithArgsGenerator.create(newClsName, thisOwner, getArgumentTypes(), getReturnType(), getName());
       DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
+      String ctrDescriptor = CallWithArgsGenerator.getCtrDescriptor(thisOwner, getArgumentTypes());
+      dup();
       mv.visitTypeInsn(NEW, newClsName);
       dup();
+      loadThis();
       loadArgs();
-      mv.visitMethodInsn(INVOKESPECIAL, newClsName, "<init>", Type.getMethodDescriptor(Type.VOID_TYPE, getArgumentTypes()), false);
+      mv.visitMethodInsn(INVOKESPECIAL, newClsName, "<init>", ctrDescriptor, false);
+      descriptor += getReturnType().getDescriptor();
       descriptor += "L" + CALL_WITH_ARGS + ";";
     }
 

@@ -76,7 +76,9 @@ class AnnotatingComponent(
     "scala.collection.SeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.IndexedSeqOps.view" -> List(view, AnnotatingComponent.lazyReason),
     "scala.collection.MapOps.view" -> List(view, AnnotatingComponent.lazyReason)
-  ) ++
+  )
+
+  private val discouragedStream =
     AnnotatingComponent.streamFunctions
       .flatMap(s =>
         List(
@@ -122,12 +124,16 @@ class AnnotatingComponent(
   private lazy val constAnno = rootMirror.getClassIfDefined("scala.annotation.ConstantAnnotation")
   private lazy val discouragedAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.discouraged")
 
+  private lazy val genTraversableFactory =
+    rootMirror.getClassIfDefined("scala.collection.generic.GenTraversableFactory")
+
   def newPhase(prev: scala.tools.nsc.Phase): StdPhase = new StdPhase(prev) {
-    private def add(targets: Seq[(String, List[String])], annot: Symbol): Unit = annot match {
+    private def add(targets: Seq[(String, List[String])], annot: Symbol, pred: Symbol => Boolean = _ => true): Unit = annot match {
       case annotClass: ClassSymbol =>
         targets.foreach { case (oldName, msg) =>
           lookup(oldName).foreach { oldSym =>
-            addAnnotationInfo(oldSym, annotClass, msg)
+            if(pred(oldSym))
+              addAnnotationInfo(oldSym, annotClass, msg)
           }
         }
 
@@ -137,6 +143,7 @@ class AnnotatingComponent(
       add(deprecations, deprecatedAnno)
       add(deprecatings, deprecatingAnno)
       add(discourageds, discouragedAnno)
+      add(discouragedStream, discouragedAnno, _.owner != genTraversableFactory)
     }
   }
 
