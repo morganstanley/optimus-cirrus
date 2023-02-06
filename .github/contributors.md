@@ -5,6 +5,8 @@ If you would like to be mentioned, please contact the internal Optimus group (if
 ## Contributors
 Adam Fitzgerald ([@afitz](http://github.com/afitz))
 
+Andrew Brett ([@ephemerist](http://github.com/ephemerist))
+
 Chris Marsh
 
 Cyrus Lyons ([@cbwl](http://github.com/cbwl))
