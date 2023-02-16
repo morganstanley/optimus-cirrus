@@ -41,9 +41,7 @@ import optimus.git.diffparser.model.PartialDiff;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Every method here must be, otherwise the parser does not work properly.
- */
+/** Every method here must be, otherwise the parser does not work properly. */
 public enum DiffParser {
   INITIAL {
     @Override
@@ -62,9 +60,7 @@ public enum DiffParser {
       return diff;
     }
   },
-  /**
-   * The parser is in this state if it is currently parsing a header line.
-   */
+  /** The parser is in this state if it is currently parsing a header line. */
   HEADER {
     @Override
     public DiffParser nextState(ParseWindow window) {
@@ -85,8 +81,8 @@ public enum DiffParser {
   },
   /**
    * The parser is in this state if it is currently parsing the line containing the "from" file.
-   * <p/>
-   * Example line:<br/>
+   *
+   * <p>Example line:<br>
    * {@code --- /path/to/file.txt}
    */
   FROM_FILE {
@@ -96,7 +92,8 @@ public enum DiffParser {
       if (isToFile(line)) {
         return TO_FILE;
       } else {
-        throw new IllegalStateException("A FROM_FILE line ('---') must be directly followed by a TO_FILE line ('+++')!");
+        throw new IllegalStateException(
+            "A FROM_FILE line ('---') must be directly followed by a TO_FILE line ('+++')!");
       }
     }
 
@@ -107,8 +104,8 @@ public enum DiffParser {
   },
   /**
    * The parser is in this state if it is currently parsing the line containing the "to" file.
-   * <p/>
-   * Example line:<br/>
+   *
+   * <p>Example line:<br>
    * {@code +++ /path/to/file.txt}
    */
   TO_FILE {
@@ -118,7 +115,8 @@ public enum DiffParser {
       if (Hunk.isHunkStart(line)) {
         return HUNK_START;
       } else {
-        throw new IllegalStateException("A TO_FILE line ('+++') must be directly followed by a HUNK_START line ('@@')!");
+        throw new IllegalStateException(
+            "A TO_FILE line ('+++') must be directly followed by a HUNK_START line ('@@')!");
       }
     }
 
@@ -129,8 +127,8 @@ public enum DiffParser {
   },
   /**
    * The parser is in this state if it is currently parsing a line containing the header of a hunk.
-   * <p/>
-   * Example line:<br/>
+   *
+   * <p>Example line:<br>
    * {@code @@ -1,5 +2,6 @@}
    */
   HUNK_START {
@@ -152,10 +150,10 @@ public enum DiffParser {
     }
   },
   /**
-   * The parser is in this state if it is currently parsing a line containing a line that is in the first file,
-   * but not the second (a "from" line).
-   * <p/>
-   * Example line:<br/>
+   * The parser is in this state if it is currently parsing a line containing a line that is in the
+   * first file, but not the second (a "from" line).
+   *
+   * <p>Example line:<br>
    * {@code - only the dash at the start is important}
    */
   FROM_LINE {
@@ -183,10 +181,10 @@ public enum DiffParser {
     }
   },
   /**
-   * The parser is in this state if it is currently parsing a line containing a line that is in the second file,
-   * but not the first (a "to" line).
-   * <p/>
-   * Example line:<br/>
+   * The parser is in this state if it is currently parsing a line containing a line that is in the
+   * second file, but not the first (a "to" line).
+   *
+   * <p>Example line:<br>
    * {@code + only the plus at the start is important}
    */
   TO_LINE {
@@ -214,8 +212,8 @@ public enum DiffParser {
     }
   },
   /**
-   * The parser is in this state if it is currently parsing a line that is contained in both files (a "neutral" line).
-   * This line can contain any string.
+   * The parser is in this state if it is currently parsing a line that is contained in both files
+   * (a "neutral" line). This line can contain any string.
    */
   NEUTRAL_LINE {
     @Override
@@ -242,8 +240,8 @@ public enum DiffParser {
     }
   },
   /**
-   * The parser is in this state if it is currently parsing a line that is the delimiter between two Diffs.
-   * This line is always a new line.
+   * The parser is in this state if it is currently parsing a line that is the delimiter between two
+   * Diffs. This line is always a new line.
    */
   END {
     @Override
@@ -259,8 +257,8 @@ public enum DiffParser {
   };
 
   /**
-   * Returns the next state of the state machine depending on the current state and the content of a window of lines around the line
-   * that is currently being parsed.
+   * Returns the next state of the state machine depending on the current state and the content of a
+   * window of lines around the line that is currently being parsed.
    *
    * @param window the window around the line currently being parsed.
    * @return the next state of the state machine.
@@ -274,8 +272,9 @@ public enum DiffParser {
   }
 
   public static List<Diff> parse(String text) {
-    ParseWindow window = new ParseWindow(new ByteArrayInputStream(text.stripLeading()
-                                                                      .getBytes(StandardCharsets.UTF_8)));
+    ParseWindow window =
+        new ParseWindow(
+            new ByteArrayInputStream(text.stripLeading().getBytes(StandardCharsets.UTF_8)));
     DiffParser state = INITIAL;
     List<Diff> parsedDiffs = new ArrayList<>();
     PartialDiff currentDiff = PartialDiff.empty();
@@ -335,7 +334,6 @@ public enum DiffParser {
     } else {
       return false;
     }
-
   }
 
   private static final Logger logger = LoggerFactory.getLogger(DiffParser.class);

@@ -16,14 +16,18 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 
-/** @see MilliInstant */
+/**
+ * @see MilliInstant
+ */
 public class MilliZonedDateTime {
   public static ZonedDateTime now() {
     return ZonedDateTime.now().truncatedTo(ChronoUnit.MILLIS);
   }
+
   public static ZonedDateTime now(Clock clock) {
     return ZonedDateTime.now(clock).truncatedTo(ChronoUnit.MILLIS);
   }
+
   public static ZonedDateTime now(ZoneId zone) {
     return ZonedDateTime.now(zone).truncatedTo(ChronoUnit.MILLIS);
   }

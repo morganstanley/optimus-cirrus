@@ -15,18 +15,15 @@ import java.time.Clock;
 import java.time.Instant;
 
 public class MilliInstant {
-  // TODO (OPTIMUS-33822): Delete all this when we know that > ms precision in Instant will not break the DAL.
+  // TODO (OPTIMUS-33822): Delete all this when we know that > ms precision in Instant will not
+  // break the DAL.
 
-  /**
-   Like java.time.now() but with precision limited to milliseconds
-   */
+  /** Like java.time.now() but with precision limited to milliseconds */
   public static Instant now() {
     return Instant.ofEpochMilli(Clock.systemUTC().millis());
   }
 
-  /**
-   * Like java.time.now(Clock), but with precision limited to milliseconds.
-   */
+  /** Like java.time.now(Clock), but with precision limited to milliseconds. */
   public static Instant now(Clock clock) {
     return Instant.ofEpochMilli(clock.millis());
   }

@@ -15,13 +15,12 @@ import scala.collection.generic.HasNewBuilder;
 import scala.collection.mutable.Builder;
 
 /**
- * Scala's TraversableLike.newBuilder is private[this], which causes problems in AsyncBase, where
- * we need to create new instances of wrapped collection classes. Unfortunately, Iterable.companion
+ * Scala's TraversableLike.newBuilder is private[this], which causes problems in AsyncBase, where we
+ * need to create new instances of wrapped collection classes. Unfortunately, Iterable.companion
  * returns companion objects that are degenerate, e.g. we get the same builder for every variety of
  * Set.
  *
- * This workaround exposes newBuilder via Java, which does not support instance-level privacy.
- *
+ * <p>This workaround exposes newBuilder via Java, which does not support instance-level privacy.
  */
 public abstract class BuilderProvider implements HasNewBuilder<Object, Object> {
   public static <A, CC> Builder<A, CC> exposedBuilder(HasNewBuilder<A, CC> coll) {

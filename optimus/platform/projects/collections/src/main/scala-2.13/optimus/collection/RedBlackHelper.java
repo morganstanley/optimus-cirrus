@@ -23,8 +23,8 @@ import scala.math.Ordering;
 class RedBlackHelper {
   private RedBlackHelper() {}
 
-  private final static Field treeMapField;
-  private final static Field treeSetField;
+  private static final Field treeMapField;
+  private static final Field treeSetField;
 
   static {
     try {
@@ -37,19 +37,23 @@ class RedBlackHelper {
     }
   }
 
-  static <A, B> scala.Option<scala.Tuple2<A, B>> maxBefore(A key, TreeMap<A, B> map) throws IllegalAccessException {
+  static <A, B> scala.Option<scala.Tuple2<A, B>> maxBefore(A key, TreeMap<A, B> map)
+      throws IllegalAccessException {
     RedBlackTree.Tree<A, B> tree = (RedBlackTree.Tree<A, B>) treeMapField.get(map);
     Ordering<A> ordering = map.ordering();
     RedBlackTree.Tree<A, B> result = RedBlackTree$.MODULE$.maxBefore(tree, key, ordering);
-    scala.Tuple2<A, B> y = result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
+    scala.Tuple2<A, B> y =
+        result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
     return Option.apply(y);
   }
 
-  static <A, B> scala.Option<scala.Tuple2<A, B>> minAfter(A key, TreeMap<A, B> map) throws IllegalAccessException {
+  static <A, B> scala.Option<scala.Tuple2<A, B>> minAfter(A key, TreeMap<A, B> map)
+      throws IllegalAccessException {
     RedBlackTree.Tree<A, B> tree = (RedBlackTree.Tree<A, B>) treeMapField.get(map);
     Ordering<A> ordering = map.ordering();
     RedBlackTree.Tree<A, B> result = RedBlackTree$.MODULE$.minAfter(tree, key, ordering);
-    scala.Tuple2<A, B> y = result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
+    scala.Tuple2<A, B> y =
+        result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
     return Option.apply(y);
   }
 

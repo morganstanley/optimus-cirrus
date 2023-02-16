@@ -11,6 +11,8 @@
  */
 package optimus.debug;
 
+import static org.objectweb.asm.Type.VOID_TYPE;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.function.BiPredicate;
@@ -27,7 +29,7 @@ enum EntityInstrumentationType {
 public class InstrumentationConfig {
   final private static HashMap<String, ClassPatch> clsPatches = new HashMap<>();
   final private static HashMap<String, Boolean> entityClasses = new HashMap<>();
-  final private static HashMap<String, Boolean> moduleExclusions = new HashMap<>();
+  final private static HashMap<String, Boolean> moduleOrEntityExclusions = new HashMap<>();
   final private static ArrayList<ClassPatch> multiClsPatches = new ArrayList<>();
 
   public static boolean setExceptionHookToTraceAsNodeOnStartup;
@@ -56,6 +58,9 @@ public class InstrumentationConfig {
   private static final String CACHED_VALUE_DESC = "L" + CACHED_VALUE_TYPE + ";";
   private static final String CACHED_FUNC_DESC = "(I" + OBJECT_DESC + OBJECT_ARR_DESC + ")" + CACHED_VALUE_DESC;
 
+  public static final String THROWABLE = "java/lang/Throwable";
+  public static final Type THROWABLE_TYPE = Type.getObjectType(THROWABLE);
+
   static final String __constructedAt = "constructedAt";
 
   private static final MethodRef traceAsNode = new MethodRef(IS, "traceAsNode");
@@ -76,8 +81,15 @@ public class InstrumentationConfig {
   static InstrumentationConfig.MethodRef iecPause = new InstrumentationConfig.MethodRef(IEC_TYPE, "pauseReporting", "()I");
   static InstrumentationConfig.MethodRef iecResume = new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
 
-  public final static String CALL_WITH_ARGS_NAME = "CallWithArgs";
-  public final static String CALL_WITH_ARGS = IS + "$" + CALL_WITH_ARGS_NAME;
+  public final static String CWA_INNER_NAME = "CallWithArgs";
+  public final static String CWA = IS + "$" + CWA_INNER_NAME;
+  public final static Type CWA_TYPE = Type.getObjectType(CWA);
+
+  static final MethodRef cwaPrefix = new MethodRef(IS, "cwaPrefix", Type.getMethodDescriptor(CWA_TYPE, CWA_TYPE));
+  static final MethodRef cwaSuffix = new MethodRef(IS, "cwaSuffix", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, OBJECT_TYPE));
+  static final MethodRef cwaSuffixOnException =
+      new MethodRef(IS, "cwaSuffixOnException", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, THROWABLE_TYPE));
+
   static final MethodRef nativePrefix = new MethodRef(IS, "nativePrefix", "()V");
   static final MethodRef nativeSuffix = new MethodRef(IS, "nativeSuffix", "()V");
 
@@ -122,15 +134,15 @@ public class InstrumentationConfig {
     return true;
   }
 
-  static boolean isModuleExcluded(String className) {
-    synchronized (moduleExclusions) {
-      return moduleExclusions.containsKey(className);
+  static boolean isModuleOrEntityExcluded(String className) {
+    synchronized (moduleOrEntityExclusions) {
+      return moduleOrEntityExclusions.containsKey(className);
     }
   }
 
-  static void addModuleExclusion(String className) {
-    synchronized (moduleExclusions) {
-      moduleExclusions.put(className, Boolean.TRUE);
+  static void addModuleOrEntityExclusion(String className) {
+    synchronized (moduleOrEntityExclusions) {
+      moduleOrEntityExclusions.put(className, Boolean.TRUE);
     }
   }
 
@@ -188,18 +200,20 @@ public class InstrumentationConfig {
     final public MethodRef from;
     public MethodRef prefix;
     public MethodRef suffix;
+    public MethodRef suffixOnException; // suffix call used if an exception was thrown
     FieldRef cacheInField;
     boolean checkAndReturn;
+    boolean localValueIsCallWithArgs;  // constructs an object of a class derived from CallWithArgs instead of passing object[]
     boolean prefixWithID;
     boolean prefixWithThis;
     boolean prefixWithArgs;
-    boolean passLocalValue;
+    boolean passLocalValue; // saves the result of the prefix into a value, and than passes it to the suffix
     boolean suffixWithID;
     boolean suffixWithThis;
-    boolean suffixWithReturnValue;
+    boolean suffixWithReturnValue; // calls suffix, then it returns the original value
     boolean suffixWithArgs;
     boolean suffixNoArgumentBoxing;
-    boolean suffixWithCallArgs;     ///  All arguments are packaged into custom generated class
+    boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception thrown
     FieldRef storeToField;
     ClassPatch classPatch;
     BiPredicate<String, String> predicate;
@@ -388,13 +402,21 @@ public class InstrumentationConfig {
     return methodPatch;
   }
 
-  public static MethodPatch addSuffixCallWithCallsArgs(MethodRef from, MethodRef to) {
-    var methodPatch = putIfAbsentMethodPatch(from);
-    methodPatch.suffix = to;
-    methodPatch.suffixWithCallArgs = true;
-    return methodPatch;
+  public static MethodPatch addDefaultRecording(MethodRef from) {
+    return addRecording(from, cwaPrefix, cwaSuffix, cwaSuffixOnException);
   }
 
+  public static MethodPatch addRecording(MethodRef from, MethodRef prefix, MethodRef suffix, MethodRef onException) {
+    MethodPatch methodPatch = putIfAbsentMethodPatch(from);
+    methodPatch.localValueIsCallWithArgs = true;
+    methodPatch.wrapWithTryCatch = true;
+    methodPatch.passLocalValue = true;
+    methodPatch.suffixWithReturnValue = true;
+    methodPatch.prefix = prefix;
+    methodPatch.suffix = suffix;
+    methodPatch.suffixOnException = onException;
+    return methodPatch;
+  }
 
   /** Hook should probably be added just once, but it's actually OK to call it multiple times */
   private static void addExceptionHook() {
@@ -488,12 +510,15 @@ public class InstrumentationConfig {
     return fieldRef;
   }
 
-  public static void addModuleConstructionIntercept(String clsName) {
+  public static ClassPatch addModuleConstructionIntercept(String clsName) {
     var mref = new MethodRef(clsName, "<clinit>");
     addPrefixCall(mref, InstrumentationConfig.imcEnterCtor, false, false);
     addSuffixCall(mref, InstrumentationConfig.imcExitCtor);
-    putIfAbsentClassPatch(clsName).bracketAllLzyComputes = true;
+    var classPatch = putIfAbsentClassPatch(clsName);
+    classPatch.bracketAllLzyComputes = true;
+    return classPatch;
   }
+
   public static void addAllMethodPatchAndChangeSuper(
       Object id,
       Predicate<String> classPredicate,
