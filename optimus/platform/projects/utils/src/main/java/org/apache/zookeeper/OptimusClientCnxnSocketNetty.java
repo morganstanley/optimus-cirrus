@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,7 +16,8 @@
  * limitations under the License.
  */
 
-// N.B. This is adapted from ZK 3.5.5, we need to redo the patch after move to a later version of ZK!!!
+// N.B. This is adapted from ZK 3.5.5, we need to redo the patch after move to a later version of
+// ZK!!!
 
 package org.apache.zookeeper;
 
@@ -66,9 +67,9 @@ import org.slf4j.LoggerFactory;
 import static org.apache.zookeeper.common.X509Exception.SSLContextException;
 
 /**
- * ClientCnxnSocketNetty implements ClientCnxnSocket abstract methods.
- * It's responsible for connecting to server, reading/writing network traffic and
- * being a layer between network data and higher level packets.
+ * ClientCnxnSocketNetty implements ClientCnxnSocket abstract methods. It's responsible for
+ * connecting to server, reading/writing network traffic and being a layer between network data and
+ * higher level packets.
  */
 public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
 
@@ -76,7 +77,9 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
 
   static {
     if (!(Info.MAJOR == 3 && Info.MINOR == 5 && Info.MICRO == 5)) {
-      LOG.error("The Excepted ZK version is 3.5.5, but we have {} now, need to upgrade the OptimusClientCnxnSocketNetty class to fit the ZK version", Version.getVersion());
+      LOG.error(
+          "The Excepted ZK version is 3.5.5, but we have {} now, need to upgrade the OptimusClientCnxnSocketNetty class to fit the ZK version",
+          Version.getVersion());
       System.exit(255);
     }
   }
@@ -104,7 +107,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     initProperties();
   }
 
-  /**
+  /*
    * lifecycles diagram:
    * <p/>
    * loop:
@@ -145,67 +148,70 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   void connect(InetSocketAddress addr) {
     firstConnect = new CountDownLatch(1);
 
-    Bootstrap bootstrap = new Bootstrap()
-        .group(eventLoopGroup)
-        .channel(NettyUtils.nioOrEpollSocketChannel())
-        .option(ChannelOption.SO_LINGER, -1)
-        .option(ChannelOption.TCP_NODELAY, true)
-        .handler(new ZKClientPipelineFactory(addr.getHostString(), addr.getPort()));
+    Bootstrap bootstrap =
+        new Bootstrap()
+            .group(eventLoopGroup)
+            .channel(NettyUtils.nioOrEpollSocketChannel())
+            .option(ChannelOption.SO_LINGER, -1)
+            .option(ChannelOption.TCP_NODELAY, true)
+            .handler(new ZKClientPipelineFactory(addr.getHostString(), addr.getPort()));
     bootstrap = configureBootstrapAllocator(bootstrap);
     bootstrap.validate();
 
     connectLock.lock();
     try {
       connectFuture = bootstrap.connect(addr);
-      connectFuture.addListener((ChannelFutureListener) channelFuture -> {
-        // this lock guarantees that channel won't be assigned after cleanup().
-        boolean connected = false;
-        connectLock.lock();
-        try {
-          if (!channelFuture.isSuccess()) {
-            LOG.info("future isn't success, cause:", channelFuture.cause());
-            return;
-          } else if (connectFuture == null) {
-            LOG.info("connect attempt cancelled");
-            // If the connect attempt was cancelled but succeeded
-            // anyway, make sure to close the channel, otherwise
-            // we may leak a file descriptor.
-            channelFuture.channel().close();
-            return;
-          }
-          // setup channel, variables, connection, etc.
-          channel = channelFuture.channel();
+      connectFuture.addListener(
+          (ChannelFutureListener)
+              channelFuture -> {
+                // this lock guarantees that channel won't be assigned after cleanup().
+                boolean connected = false;
+                connectLock.lock();
+                try {
+                  if (!channelFuture.isSuccess()) {
+                    LOG.info("future isn't success, cause:", channelFuture.cause());
+                    return;
+                  } else if (connectFuture == null) {
+                    LOG.info("connect attempt cancelled");
+                    // If the connect attempt was cancelled but succeeded
+                    // anyway, make sure to close the channel, otherwise
+                    // we may leak a file descriptor.
+                    channelFuture.channel().close();
+                    return;
+                  }
+                  // setup channel, variables, connection, etc.
+                  channel = channelFuture.channel();
 
-          disconnected.set(false);
-          initialized = false;
-          lenBuffer.clear();
-          incomingBuffer = lenBuffer;
+                  disconnected.set(false);
+                  initialized = false;
+                  lenBuffer.clear();
+                  incomingBuffer = lenBuffer;
 
-          sendThread.primeConnection();
-          updateNow();
-          updateLastSendAndHeard();
+                  sendThread.primeConnection();
+                  updateNow();
+                  updateLastSendAndHeard();
 
-          if (sendThread.tunnelAuthInProgress()) {
-            waitSasl.drainPermits();
-            needSasl.set(true);
-            sendPrimePacket();
-          } else {
-            needSasl.set(false);
-          }
-          connected = true;
-        } finally {
-          connectFuture = null;
-          connectLock.unlock();
-          if (connected) {
-            LOG.info("channel is connected: {}", channelFuture.channel());
-          }
-          // need to wake on connect success or failure to avoid
-          // timing out ClientCnxn.SendThread which may be
-          // blocked waiting for first connect in doTransport().
-          wakeupCnxn();
-          firstConnect.countDown();
-        }
-      });
+                  if (sendThread.tunnelAuthInProgress()) {
+                    waitSasl.drainPermits();
+                    needSasl.set(true);
+                    sendPrimePacket();
+                  } else {
+                    needSasl.set(false);
+                  }
+                  connected = true;
+                } finally {
+                  connectFuture = null;
+                  connectLock.unlock();
+                  if (connected) {
+                    LOG.info("channel is connected: {}", channelFuture.channel());
+                  }
+                  // need to wake on connect success or failure to avoid
+                  // timing out ClientCnxn.SendThread which may be
+                  // blocked waiting for first connect in doTransport().
+                  wakeupCnxn();
+                  firstConnect.countDown();
+                }
+              });
     } finally {
       connectLock.unlock();
     }
@@ -252,8 +258,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   @Override
-  void connectionPrimed() {
-  }
+  void connectionPrimed() {}
 
   @Override
   void packetAdded() {
@@ -285,9 +290,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   @Override
-  void doTransport(int waitTimeOut,
-      List<Packet> pendingQueue,
-      ClientCnxn cnxn)
+  void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn)
       throws IOException, InterruptedException {
     try {
       if (!firstConnect.await(waitTimeOut, TimeUnit.MILLISECONDS)) {
@@ -310,9 +313,8 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
       // channel disconnection happened
       if (disconnected.get()) {
         addBack(head);
-        throw new EndOfStreamException("channel for sessionid 0x"
-            + Long.toHexString(sessionId)
-            + " is lost");
+        throw new EndOfStreamException(
+            "channel for sessionid 0x" + Long.toHexString(sessionId) + " is lost");
       }
       if (head != null) {
         doWrite(pendingQueue, head, cnxn);
@@ -330,9 +332,9 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
 
   /**
    * Sends a packet to the remote peer and flushes the channel.
+   *
    * @param p packet to send.
-   * @return a ChannelFuture that will complete when the write operation
-   *         succeeds or fails.
+   * @return a ChannelFuture that will complete when the write operation succeeds or fails.
    */
   private ChannelFuture sendPktAndFlush(Packet p) {
     return sendPkt(p, true);
@@ -340,20 +342,21 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
 
   /**
    * Sends a packet to the remote peer but does not flush() the channel.
+   *
    * @param p packet to send.
-   * @return a ChannelFuture that will complete when the write operation
-   *         succeeds or fails.
+   * @return a ChannelFuture that will complete when the write operation succeeds or fails.
    */
   private ChannelFuture sendPktOnly(Packet p) {
     return sendPkt(p, false);
   }
 
   // Use a single listener instance to reduce GC
-  private final GenericFutureListener<Future<Void>> onSendPktDoneListener = f -> {
-    if (f.isSuccess()) {
-      sentCount.getAndIncrement();
-    }
-  };
+  private final GenericFutureListener<Future<Void>> onSendPktDoneListener =
+      f -> {
+        if (f.isSuccess()) {
+          sentCount.getAndIncrement();
+        }
+      };
 
   private ChannelFuture sendPkt(Packet p, boolean doFlush) {
     // Assuming the packet will be sent out successfully. Because if it fails,
@@ -361,9 +364,8 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     p.createBB();
     updateLastSend();
     final ByteBuf writeBuffer = Unpooled.wrappedBuffer(p.bb);
-    final ChannelFuture result = doFlush
-        ? channel.writeAndFlush(writeBuffer)
-        : channel.write(writeBuffer);
+    final ChannelFuture result =
+        doFlush ? channel.writeAndFlush(writeBuffer) : channel.write(writeBuffer);
     result.addListener(onSendPktDoneListener);
     return result;
   }
@@ -373,17 +375,15 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     sendPktAndFlush(outgoingQueue.remove());
   }
 
-  /**
-   * doWrite handles writing the packets from outgoingQueue via network to server.
-   */
+  /** doWrite handles writing the packets from outgoingQueue via network to server. */
   private void doWrite(List<Packet> pendingQueue, Packet p, ClientCnxn cnxn) {
     updateNow();
     boolean anyPacketsSent = false;
     while (true) {
       if (p != WakeupPacket.getInstance()) {
-        if ((p.requestHeader != null) &&
-            (p.requestHeader.getType() != ZooDefs.OpCode.ping) &&
-            (p.requestHeader.getType() != ZooDefs.OpCode.auth)) {
+        if ((p.requestHeader != null)
+            && (p.requestHeader.getType() != ZooDefs.OpCode.ping)
+            && (p.requestHeader.getType() != ZooDefs.OpCode.auth)) {
           p.requestHeader.setXid(cnxn.getXid());
           synchronized (pendingQueue) {
             pendingQueue.add(p);
@@ -445,8 +445,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   /**
-   * ZKClientPipelineFactory is the netty pipeline factory for this netty
-   * connection implementation.
+   * ZKClientPipelineFactory is the netty pipeline factory for this netty connection implementation.
    */
   private class ZKClientPipelineFactory extends ChannelInitializer<SocketChannel> {
     private SSLContext sslContext = null;
@@ -487,8 +486,8 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   /**
-   * ZKClientHandler is the netty handler that sits in netty upstream last
-   * place. It mainly handles read traffic and helps synchronize connection state.
+   * ZKClientHandler is the netty handler that sits in netty upstream last place. It mainly handles
+   * read traffic and helps synchronize connection state.
    */
   private class ZKClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
     AtomicBoolean channelClosed = new AtomicBoolean(false);
@@ -500,8 +499,8 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     }
 
     /**
-     * netty handler has encountered problems. We are cleaning it up and tell outside to close
-     * the channel/connection.
+     * netty handler has encountered problems. We are cleaning it up and tell outside to close the
+     * channel/connection.
      */
     private void cleanup() {
       if (!channelClosed.compareAndSet(false, true)) {
@@ -516,8 +515,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
       updateNow();
       while (buf.isReadable()) {
         if (incomingBuffer.remaining() > buf.readableBytes()) {
-          int newLimit = incomingBuffer.position()
-              + buf.readableBytes();
+          int newLimit = incomingBuffer.position() + buf.readableBytes();
           incomingBuffer.limit(newLimit);
         }
         buf.readBytes(incomingBuffer);
@@ -555,20 +553,18 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   /**
-   * Sets the test ByteBufAllocator. This allocator will be used by all
-   * future instances of this class.
-   * It is not recommended to use this method outside of testing.
-   * @param allocator the ByteBufAllocator to use for all netty buffer
-   *                  allocations.
+   * Sets the test ByteBufAllocator. This allocator will be used by all future instances of this
+   * class. It is not recommended to use this method outside of testing.
+   *
+   * @param allocator the ByteBufAllocator to use for all netty buffer allocations.
    */
   static void setTestAllocator(ByteBufAllocator allocator) {
     TEST_ALLOCATOR.set(allocator);
   }
 
   /**
-   * Clears the test ByteBufAllocator. The default allocator will be used
-   * by all future instances of this class.
-   * It is not recommended to use this method outside of testing.
+   * Clears the test ByteBufAllocator. The default allocator will be used by all future instances of
+   * this class. It is not recommended to use this method outside of testing.
    */
   static void clearTestAllocator() {
     TEST_ALLOCATOR.set(null);

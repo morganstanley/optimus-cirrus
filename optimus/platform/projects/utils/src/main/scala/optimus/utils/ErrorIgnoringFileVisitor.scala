@@ -25,7 +25,6 @@ abstract class ErrorIgnoringFileVisitor extends SimpleFileVisitor[Path] {
    * longer there we probably don't need to do anything about them
    */
   override def visitFileFailed(file: Path, exc: IOException): FileVisitResult = {
-    ErrorIgnoringFileVisitor.log.debug(s"Unable to visit path: $file (probably it was deleted while we were scanning)")
     FileVisitResult.CONTINUE
   }
 }

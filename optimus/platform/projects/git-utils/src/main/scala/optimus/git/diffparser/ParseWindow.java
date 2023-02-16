@@ -36,9 +36,9 @@ import java.io.Reader;
 import java.util.LinkedList;
 
 /**
- * A {@link ParseWindow} slides through the lines of a input stream and
- * offers methods to get the currently focused line as well as upcoming lines.
- * It is backed by an automatically resizing {@link LinkedList}
+ * A {@link ParseWindow} slides through the lines of a input stream and offers methods to get the
+ * currently focused line as well as upcoming lines. It is backed by an automatically resizing
+ * {@link LinkedList}
  *
  * @author Tom Hombergs <tom.hombergs@gmail.com>
  */
@@ -49,17 +49,15 @@ public class ParseWindow {
   }
 
   /**
-   * Looks ahead from the current line and retrieves a line that will be the
-   * focus line after the window has slided forward.
+   * Looks ahead from the current line and retrieves a line that will be the focus line after the
+   * window has slided forward.
    *
-   * @param distance the number of lines to look ahead. Must be greater or equal 0.
-   *                 0 returns the focus line. 1 returns the first line after the
-   *                 current focus line and so on. Note that all lines up to the
-   *                 returned line will be held in memory until the window has
-   *                 slided past them, so be careful not to look ahead too far!
-   * @return the line identified by the distance parameter that lies ahead of
-   * the focus line. Returns null if the line cannot be read because
-   * it lies behind the end of the stream.
+   * @param distance the number of lines to look ahead. Must be greater or equal 0. 0 returns the
+   *     focus line. 1 returns the first line after the current focus line and so on. Note that all
+   *     lines up to the returned line will be held in memory until the window has slided past them,
+   *     so be careful not to look ahead too far!
+   * @return the line identified by the distance parameter that lies ahead of the focus line.
+   *     Returns null if the line cannot be read because it lies behind the end of the stream.
    */
   public String getFutureLine(int distance) {
     try {
@@ -68,7 +66,6 @@ public class ParseWindow {
     } catch (IndexOutOfBoundsException ignored) {
       return null;
     }
-
   }
 
   public void addLine(int pos, String line) {
@@ -78,8 +75,7 @@ public class ParseWindow {
   /**
    * Resizes the sliding window to the given size, if necessary.
    *
-   * @param newSize the new size of the window (i.e. the number of lines in the
-   *                window).
+   * @param newSize the new size of the window (i.e. the number of lines in the window).
    */
   private void resizeWindowIfNecessary(int newSize) {
     try {
@@ -100,8 +96,8 @@ public class ParseWindow {
   /**
    * Slides the window forward one line.
    *
-   * @return the next line that is in the focus of this window or null if the
-   * end of the stream has been reached.
+   * @return the next line that is in the focus of this window or null if the end of the stream has
+   *     been reached.
    */
   public String slideForward() {
     try {
@@ -121,7 +117,6 @@ public class ParseWindow {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-
   }
 
   private String getNextLine() throws IOException {
@@ -131,9 +126,9 @@ public class ParseWindow {
   }
 
   /**
-   * Guarantees that a virtual blank line is injected at the end of the input
-   * stream to ensure the parser attempts to transition to the {@code END}
-   * state, if necessary, when the end of stream is reached.
+   * Guarantees that a virtual blank line is injected at the end of the input stream to ensure the
+   * parser attempts to transition to the {@code END} state, if necessary, when the end of stream is
+   * reached.
    */
   private String getNextLineOrVirtualBlankLineAtEndOfStream(String nextLine) {
     if ((nextLine == null) && !isEndOfStream) {
@@ -145,9 +140,8 @@ public class ParseWindow {
   }
 
   /**
-   * Returns the line currently focused by this window. This is actually the
-   * same line as returned by {@link #slideForward()} but calling
-   * this method does not slide the window forward a step.
+   * Returns the line currently focused by this window. This is actually the same line as returned
+   * by {@link #slideForward()} but calling this method does not slide the window forward a step.
    *
    * @return the currently focused line.
    */

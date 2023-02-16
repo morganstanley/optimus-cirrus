@@ -23,8 +23,8 @@ import scala.math.Ordering;
 class RedBlackHelper {
   private RedBlackHelper() {}
 
-  private final static Field treeMapField;
-  private final static Field treeSetField;
+  private static final Field treeMapField;
+  private static final Field treeSetField;
 
   static {
     try {
@@ -37,23 +37,23 @@ class RedBlackHelper {
     }
   }
 
-  static <A, B> scala.Option<scala.Tuple2<A, B>> maxBefore(A key, TreeMap<A, B> map) throws IllegalAccessException {
+  static <A, B> scala.Option<scala.Tuple2<A, B>> maxBefore(A key, TreeMap<A, B> map)
+      throws IllegalAccessException {
     NewRedBlackTree.Tree<A, B> tree = (NewRedBlackTree.Tree<A, B>) treeMapField.get(map);
     Ordering<A> ordering = map.ordering();
     NewRedBlackTree.Tree<A, B> result = NewRedBlackTree$.MODULE$.maxBefore(tree, key, ordering);
-    scala.Tuple2<A, B> y = result == null
-                           ? null
-                           : new scala.Tuple2<A, B>(result.key(), result.value());
+    scala.Tuple2<A, B> y =
+        result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
     return Option.apply(y);
   }
 
-  static <A, B> scala.Option<scala.Tuple2<A, B>> minAfter(A key, TreeMap<A, B> map) throws IllegalAccessException {
+  static <A, B> scala.Option<scala.Tuple2<A, B>> minAfter(A key, TreeMap<A, B> map)
+      throws IllegalAccessException {
     NewRedBlackTree.Tree<A, B> tree = (NewRedBlackTree.Tree<A, B>) treeMapField.get(map);
     Ordering<A> ordering = map.ordering();
     NewRedBlackTree.Tree<A, B> result = NewRedBlackTree$.MODULE$.minAfter(tree, key, ordering);
-    scala.Tuple2<A, B> y = result == null
-                           ? null
-                           : new scala.Tuple2<A, B>(result.key(), result.value());
+    scala.Tuple2<A, B> y =
+        result == null ? null : new scala.Tuple2<A, B>(result.key(), result.value());
     return Option.apply(y);
   }
 
@@ -61,9 +61,7 @@ class RedBlackHelper {
     NewRedBlackTree.Tree<A, ?> tree = (NewRedBlackTree.Tree<A, ?>) treeSetField.get(set);
     Ordering<A> ordering = set.ordering();
     NewRedBlackTree.Tree<A, ?> result = NewRedBlackTree$.MODULE$.maxBefore(tree, key, ordering);
-    A y = result == null
-          ? null
-          : result.key();
+    A y = result == null ? null : result.key();
     return Option.apply(y);
   }
 
@@ -71,9 +69,7 @@ class RedBlackHelper {
     NewRedBlackTree.Tree<A, ?> tree = (NewRedBlackTree.Tree<A, ?>) treeSetField.get(set);
     Ordering<A> ordering = set.ordering();
     NewRedBlackTree.Tree<A, ?> result = NewRedBlackTree$.MODULE$.minAfter(tree, key, ordering);
-    A y = result == null
-          ? null
-          : result.key();
+    A y = result == null ? null : result.key();
     return Option.apply(y);
   }
 }

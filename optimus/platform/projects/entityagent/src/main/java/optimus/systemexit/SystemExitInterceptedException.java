@@ -17,11 +17,14 @@ package optimus.systemexit;
  * tests). Utilized when exit.intercept system property is set to 'intercept-all'
  */
 public class SystemExitInterceptedException extends RuntimeException {
-  public SystemExitInterceptedException() {
-    super("[EXIT-INTERCEPT] instrumented System.exit exception");
+  private final int exitStatus;
+
+  public SystemExitInterceptedException(int exitStatus) {
+    super("[EXIT-INTERCEPT] instrumented System.exit(" + exitStatus + ") exception");
+    this.exitStatus = exitStatus;
   }
 
-  public SystemExitInterceptedException(String message) {
-    super(message);
+  public int exitStatus() {
+    return exitStatus;
   }
 }

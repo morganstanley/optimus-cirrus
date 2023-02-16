@@ -16,9 +16,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Currently tells the DAL reader to intern this value before setting it
- */
+/** Currently tells the DAL reader to intern this value before setting it */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
 public @interface _intern {}

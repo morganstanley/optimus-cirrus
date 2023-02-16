@@ -14,15 +14,7 @@ package optimus.debug;
 import static optimus.debug.EntityInstrumentationType.markScenarioStack;
 import static optimus.debug.EntityInstrumentationType.none;
 import static optimus.debug.EntityInstrumentationType.recordConstructedAt;
-import static optimus.debug.InstrumentationConfig.CACHED_VALUE_TYPE;
-import static optimus.debug.InstrumentationConfig.CALL_WITH_ARGS;
-import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
-import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
-import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
-import static optimus.debug.InstrumentationConfig.instrumentAllNativePackagePrefixes;
-import static optimus.debug.InstrumentationConfig.patchForSuffixAsNode;
-import static optimus.debug.InstrumentationConfig.patchForCachingMethod;
-import static optimus.debug.InstrumentationConfig.patchForBracketingLzyCompute;
+import static optimus.debug.InstrumentationConfig.*;
 import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
 import static optimus.debug.InstrumentationInjector.SCALA_NOTHING;
 
@@ -57,22 +49,22 @@ public class InstrumentationInjector implements ClassFileTransformer {
   public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
                           byte[] bytes) throws IllegalClassFormatException {
 
-    InstrumentationConfig.ClassPatch patch = InstrumentationConfig.forClass(className);
+    ClassPatch patch = forClass(className);
     if (instrumentAllNativePackagePrefixes != null && className.startsWith(instrumentAllNativePackagePrefixes)) {
-      patch = new InstrumentationConfig.ClassPatch();
+      patch = new ClassPatch();
       patch.wrapNativeCalls = true;
     }
-    if (patch == null && !InstrumentationConfig.instrumentAnyGroups())
+    if (patch == null && !instrumentAnyGroups())
       return bytes;
 
     ClassReader crSource = new ClassReader(bytes);
 
-    var entityInstrType = InstrumentationConfig.instrumentAllEntities;
-    if (entityInstrType != none && InstrumentationConfig.isEntity(className, crSource.getSuperName())) {
-      if (entityInstrType == markScenarioStack) InstrumentationConfig.addMarkScenarioStackAsInitializing(className);
-      else if (entityInstrType == recordConstructedAt) InstrumentationConfig.recordConstructorInvocationSite(className);
+    var entityInstrType = instrumentAllEntities;
+    if (entityInstrType != none && shouldInstrumentEntity(className, crSource.getSuperName())) {
+      if (entityInstrType == markScenarioStack) addMarkScenarioStackAsInitializing(className);
+      else if (entityInstrType == recordConstructedAt) recordConstructorInvocationSite(className);
       if (patch == null)
-        patch = InstrumentationConfig.forClass(className);  // Re-read reconfigured value
+        patch = forClass(className);  // Re-read reconfigured value
     }
 
     boolean addHashCode = shouldAddHashCode(loader, crSource, className);
@@ -80,22 +72,18 @@ public class InstrumentationInjector implements ClassFileTransformer {
       setForwardMethodToNewHashCode(className, patch);
 
     if (patch == null && addHashCode) {
-      patch = new InstrumentationConfig.ClassPatch();
+      patch = new ClassPatch();
       setForwardMethodToNewHashCode(className, patch);
     }
 
-    if (InstrumentationConfig.instrumentAllEntityApplies && shouldCacheApplyMethods(crSource, className)) {
+    if (instrumentAllEntityApplies && shouldCacheApplyMethods(crSource, className)) {
       if (patch == null)
-        patch = new InstrumentationConfig.ClassPatch();
+        patch = new ClassPatch();
       patch.cacheAllApplies = true;
     }
 
-    if (InstrumentationConfig.instrumentAllModuleConstructors && shouldAddModuleConstructorBracketing(loader, className)) {
-      InstrumentationConfig.addModuleConstructionIntercept(className);
-      if (patch == null)
-        patch = InstrumentationConfig.forClass(className);  // Re-read reconfigured value
-      patch.bracketAllLzyComputes = true;
-    }
+    if (instrumentAllModuleConstructors && shouldInstrumentModuleCtor(loader, className))
+      patch = addModuleConstructionIntercept(className);
 
     if (patch == null)
       return bytes;
@@ -116,21 +104,18 @@ public class InstrumentationInjector implements ClassFileTransformer {
     return false;
   }
 
-  private boolean shouldAddModuleConstructorBracketing(ClassLoader loader, String className) {
-    if (loader == null)
-      return false;
 
-    if (!className.endsWith("$"))
-      return false;    // Looking for companion objects
+  private boolean shouldInstrumentEntity(String className, String superName) {
+    return isEntity(className, superName) && !isModuleOrEntityExcluded(className);
+  }
 
-    if (className.startsWith("scala"))
-      return false;
-
-    return !InstrumentationConfig.isModuleExcluded(className);
+  private boolean shouldInstrumentModuleCtor(ClassLoader loader, String className) {
+    var isModuleCtor = loader != null && className.endsWith("$") && !className.startsWith("scala");
+    return isModuleCtor && !isModuleOrEntityExcluded(className);
   }
 
   private boolean shouldAddHashCode(ClassLoader loader, ClassReader crSource, String className) {
-    if (!InstrumentationConfig.instrumentAllHashCodes)
+    if (!instrumentAllHashCodes)
       return false;
     // Interfaces are not included
     if ((crSource.getAccess() & ACC_INTERFACE) != 0)
@@ -150,18 +135,18 @@ public class InstrumentationInjector implements ClassFileTransformer {
     return !className.startsWith("sun/") && !className.startsWith("java/security");
   }
 
-  private void setForwardMethodToNewHashCode(String className, InstrumentationConfig.ClassPatch patch) {
-    var mrHashCode = new InstrumentationConfig.MethodRef(className, "hashCode", "()I");
-    patch.methodForward = new InstrumentationConfig.MethodForward(mrHashCode, InstrumentedHashCodes.mrHashCode);
+  private void setForwardMethodToNewHashCode(String className, ClassPatch patch) {
+    var mrHashCode = new MethodRef(className, "hashCode", "()I");
+    patch.methodForward = new MethodForward(mrHashCode, InstrumentedHashCodes.mrHashCode);
   }
 }
 
 class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
-  private final InstrumentationConfig.ClassPatch classPatch;
+  private final ClassPatch classPatch;
   private final String className;
   private boolean seenForwardedMethod;
 
-  InstrumentationInjectorAdapter(InstrumentationConfig.ClassPatch patch, String className, ClassVisitor cv) {
+  InstrumentationInjectorAdapter(ClassPatch patch, String className, ClassVisitor cv) {
     super(ASM9, cv);
     this.classPatch = patch;
     this.className = className;
@@ -243,7 +228,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     var mv = new GeneratorAdapter(mvWriter, useAccess, name, desc);
 
     mv.visitCode();
-    mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativePrefix.cls, InstrumentationConfig.nativePrefix.method, InstrumentationConfig.nativePrefix.descriptor, false);
+    mv.visitMethodInsn(INVOKESTATIC,  nativePrefix.cls, nativePrefix.method, nativePrefix.descriptor, false);
 
     // call original method
     mv.loadArgs();
@@ -254,10 +239,10 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
       mv.dup();
       mv.loadArgs();
       var descX= "(ZJ"+ OBJECT_DESC + "J" + OBJECT_DESC + ")V";
-      mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativeSuffix.cls, InstrumentationConfig.nativeSuffix.method, descX, false);
+      mv.visitMethodInsn(INVOKESTATIC,  nativeSuffix.cls, nativeSuffix.method, descX, false);
       writeNativeMethodCall(name, desc);
     } else
-     mv.visitMethodInsn(INVOKESTATIC,  InstrumentationConfig.nativeSuffix.cls, InstrumentationConfig.nativeSuffix.method, "()V", false);
+     mv.visitMethodInsn(INVOKESTATIC,  nativeSuffix.cls, nativeSuffix.method, "()V", false);
 
     mv.returnValue();
     mv.visitMaxs(0, 0);
@@ -277,8 +262,8 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
 
     if (classPatch.allMethodsPatch != null)
       return new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
-    InstrumentationConfig.MethodPatch methodPatch = classPatch.forMethod(name, desc);
-    if (methodPatch != null)
+    MethodPatch methodPatch = classPatch.forMethod(name, desc);
+    if (methodPatch != null && (methodPatch.predicate == null || methodPatch.predicate.test(name, desc)))
       return new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
     else if (classPatch.cacheAllApplies && name.equals("apply") && isCreateEntityMethod(desc))
       return new InstrumentationInjectorMethodVisitor(patchForCachingMethod(className, name), mv, access, name, desc);
@@ -290,7 +275,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
       return mv; // Just copy the entire method
   }
 
-  private void writeGetterMethod(InstrumentationConfig.GetterMethod getter) {
+  private void writeGetterMethod(GetterMethod getter) {
     var desc = getter.mRef.descriptor == null ? "()" + OBJECT_DESC : getter.mRef.descriptor;
     MethodVisitor mv = cv.visitMethod(ACC_PUBLIC, getter.mRef.method, desc, null, null);
     mv.visitCode();
@@ -327,7 +312,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     mv.visitEnd();
   }
 
-  private void writeImplementForwardCall(InstrumentationConfig.MethodForward forwards) {
+  private void writeImplementForwardCall(MethodForward forwards) {
     assert forwards.from.descriptor != null;
     var mv = cv.visitMethod(ACC_PUBLIC, forwards.from.method, forwards.from.descriptor, null, null);
     var mv2 = new GeneratorAdapter(mv, ACC_PUBLIC, forwards.from.method, forwards.from.descriptor);
@@ -368,26 +353,41 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
 }
 
 class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opcodes {
-  private final InstrumentationConfig.MethodPatch patch;
+  private final MethodPatch patch;
   private final Label __localValueStart = new Label();
   private final Label __localValueEnd = new Label();
   private int __localValue;     // When local passing is enabled this will point to a slot for local var
   private Type localValueType;
   private String localValueDesc;
+  private String callWithArgsCtorDescriptor;
+  private String callWithArgsType;
   private int methodID;         // If allocation requested
   private boolean thisIsAvailable;
-  private boolean doTransform;
-  InstrumentationInjectorMethodVisitor(InstrumentationConfig.MethodPatch patch, MethodVisitor mv, int access,
+  private final Label tryBlockStart = new Label();
+  private final Label tryBlockEnd = new Label();
+  private final Label catchBlockStart = new Label();
+  private final Label catchBlockEnd = new Label();
+  InstrumentationInjectorMethodVisitor(MethodPatch patch, MethodVisitor mv, int access,
                                        String name, String descriptor) {
     super(ASM9, mv, access, name, descriptor);
     this.patch = patch;
 
-    this.doTransform = patch.predicate == null || patch.predicate.test(name, methodDesc);
-
-    if (patch.passLocalValue) {
+    if (patch.passLocalValue && !patch.localValueIsCallWithArgs) {
       localValueType = patch.prefix.descriptor != null
                        ? Type.getMethodType(patch.prefix.descriptor).getReturnType()
                        : OBJECT_TYPE;
+      localValueDesc = localValueType.getDescriptor();
+    }
+
+    if (patch.localValueIsCallWithArgs) {
+      // we generate a CallWithArgs instance...
+      Type thisOwner = Type.getObjectType(patch.from.cls);
+      callWithArgsType = CallWithArgsGenerator.generateClassName(getName());
+      byte[] newBytes = CallWithArgsGenerator.create(callWithArgsType, thisOwner, getArgumentTypes(), getReturnType(), getName());
+      DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
+      callWithArgsCtorDescriptor = CallWithArgsGenerator.getCtrDescriptor(thisOwner, getArgumentTypes());
+      // ...and we pass our CallWithArgs instance to the suffix calls
+      localValueType = Type.getObjectType(InstrumentationConfig.CWA);
       localValueDesc = localValueType.getDescriptor();
     }
   }
@@ -408,7 +408,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   private String loadMethodID() {
     if (methodID == 0)
-      methodID = InstrumentationConfig.allocateID(patch.from);
+      methodID = allocateID(patch.from);
     mv.visitIntInsn(SIPUSH, methodID);
     return "I";
   }
@@ -421,7 +421,15 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     return OBJECT_DESC;
   }
 
-  private void ifNotZeroReturn(InstrumentationConfig.FieldRef fpatch) {
+  private String loadLocalValueIfRequested() {
+    if (patch.passLocalValue) {
+      mv.visitVarInsn(localValueType.getOpcode(ILOAD), __localValue);
+      return localValueType.getDescriptor();
+    }
+    return "";
+  }
+
+  private void ifNotZeroReturn(FieldRef fpatch) {
     loadThis();
     mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
     Label label1 = new Label();
@@ -436,8 +444,10 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     if (patch.cacheInField != null)
       ifNotZeroReturn(patch.cacheInField);
 
-    if (patch.prefix == null)
-      return;
+    if (patch.prefix == null && !patch.localValueIsCallWithArgs)
+      return; // prefix is implied for localValueIsCallWithArgs
+
+    MethodRef prefix = patch.prefix;
 
     if (patch.passLocalValue) {
       visitLabel(__localValueStart);
@@ -448,23 +458,34 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     if (patch.prefixWithID)
       descriptor += loadMethodID();
 
-    if(patch.prefixWithThis) {
+    if(patch.prefixWithThis)
       descriptor += loadThisOrNull();
-    }
+
     if (patch.prefixWithArgs) {
       loadArgArray();
       descriptor += OBJECT_ARR_DESC;
     }
+
     if (patch.passLocalValue || patch.storeToField != null)
       descriptor += ")" + OBJECT_DESC;
     else
       descriptor += ")V";
 
-    // If descriptor was supplied just use that
-    if (patch.prefix.descriptor != null)
-      descriptor = patch.prefix.descriptor;
+    if (patch.localValueIsCallWithArgs) {
+      mv.visitTypeInsn(NEW, callWithArgsType);
+      dup();
+      loadThis();
+      loadArgs();
+      mv.visitMethodInsn(INVOKESPECIAL, callWithArgsType, "<init>", callWithArgsCtorDescriptor, false);
+    }
 
-    mv.visitMethodInsn(Opcodes.INVOKESTATIC, patch.prefix.cls, patch.prefix.method, descriptor, false);
+    if (prefix != null) {
+      if (prefix.descriptor != null) // If descriptor was supplied just use that
+        descriptor = prefix.descriptor;
+
+      mv.visitMethodInsn(INVOKESTATIC, prefix.cls, prefix.method, descriptor, false);
+    }
+
     if (patch.passLocalValue) {
       mv.visitVarInsn(localValueType.getOpcode(ISTORE), __localValue);
     } else if (patch.storeToField != null) {
@@ -484,13 +505,17 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       mv.visitInsn(ARETURN);
       mv.visitLabel(continueLabel);
     }
+
+    if (patch.wrapWithTryCatch) {
+      mv.visitTryCatchBlock(tryBlockStart, tryBlockEnd, catchBlockStart, THROWABLE);
+      mv.visitLabel(tryBlockStart);
+    }
   }
 
   @Override
   public void visitCode() {
     super.visitCode();
-    if(doTransform)
-      injectMethodPrefix();
+    injectMethodPrefix();
   }
 
   @Override
@@ -501,11 +526,8 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   @Override
   protected void onMethodExit(int opcode) {
-    if(!doTransform)
-      return;
-
-    if(opcode == ATHROW && patch.suffixNoArgumentBoxing)
-      return; // DO not generate exit call at the point of exception throw
+    if (opcode == ATHROW && (patch.suffixNoArgumentBoxing || patch.wrapWithTryCatch))
+      return; // do not generate exit call at the point of exception throw
 
     if (patch.cacheInField != null) {
       dup();
@@ -523,32 +545,17 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       dupReturnValueOrNullForVoid(opcode, !patch.suffixNoArgumentBoxing);
       descriptor += OBJECT_DESC;
     }
-    if (patch.passLocalValue) {
-      mv.visitVarInsn(localValueType.getOpcode(ILOAD), __localValue);
-      descriptor += localValueType.getDescriptor();
-    }
+
+    descriptor += loadLocalValueIfRequested();
+
     if (patch.suffixWithID)
       descriptor += loadMethodID();
+
     if (patch.suffixWithThis)
       descriptor += loadThisOrNull();
-    if(patch.suffixWithArgs) {
+
+    if (patch.suffixWithArgs)
       loadArgs();
-    }
-    if(patch.suffixWithCallArgs) {
-      Type thisOwner = Type.getObjectType(patch.from.cls);
-      String newClsName = CallWithArgsGenerator.generateClassName(getName());
-      byte[] newBytes = CallWithArgsGenerator.create(newClsName, thisOwner, getArgumentTypes(), getReturnType(), getName());
-      DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
-      String ctrDescriptor = CallWithArgsGenerator.getCtrDescriptor(thisOwner, getArgumentTypes());
-      dup();
-      mv.visitTypeInsn(NEW, newClsName);
-      dup();
-      loadThis();
-      loadArgs();
-      mv.visitMethodInsn(INVOKESPECIAL, newClsName, "<init>", ctrDescriptor, false);
-      descriptor += getReturnType().getDescriptor();
-      descriptor += "L" + CALL_WITH_ARGS + ";";
-    }
 
     descriptor += ")V";
 
@@ -556,12 +563,12 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     if (patch.suffix.descriptor != null)
       descriptor = patch.suffix.descriptor;
 
-    mv.visitMethodInsn(Opcodes.INVOKESTATIC, patch.suffix.cls, patch.suffix.method, descriptor, false);
+    mv.visitMethodInsn(INVOKESTATIC, patch.suffix.cls, patch.suffix.method, descriptor, false);
   }
 
   @Override
   public void visitMethodInsn(int opcodeAndSource, String owner, String name, String descriptor, boolean isInterface) {
-    if(patch.classPatch != null && patch.classPatch.replaceObjectAsBase != null &&
+    if (patch.classPatch != null && patch.classPatch.replaceObjectAsBase != null &&
         opcodeAndSource == INVOKESPECIAL && owner.equals(OBJECT_TYPE.getInternalName()))
       owner = patch.classPatch.replaceObjectAsBase;
     super.visitMethodInsn(opcodeAndSource, owner, name, descriptor, isInterface);
@@ -569,10 +576,26 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   @Override
   public void visitMaxs(int maxStack, int maxLocals) {
-    if (doTransform && patch.passLocalValue) {
+    if (patch.wrapWithTryCatch) {
+      visitLabel(tryBlockEnd);
+      mv.visitInsn(NOP);
+      visitLabel(catchBlockStart);
+
+      var suffixOnException = patch.suffixOnException;
+      if (suffixOnException != null) {
+        dup();
+        var descriptor = "(" + THROWABLE_TYPE.getDescriptor() + loadLocalValueIfRequested() + ")V";
+        mv.visitMethodInsn(INVOKESTATIC, suffixOnException.cls, suffixOnException.method, descriptor, false);
+      }
+      throwException();
+      visitLabel(catchBlockEnd);
+    }
+
+    if (patch.passLocalValue) {
       visitLabel(__localValueEnd);
       mv.visitLocalVariable("__locValue", localValueDesc, null, __localValueStart, __localValueEnd, __localValue);
     }
+
     super.visitMaxs(maxStack, maxLocals);
   }
 }

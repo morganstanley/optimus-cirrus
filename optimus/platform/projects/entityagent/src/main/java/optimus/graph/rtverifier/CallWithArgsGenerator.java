@@ -14,8 +14,8 @@ package optimus.graph.rtverifier;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static optimus.debug.InstrumentationConfig.IS;
-import static optimus.debug.InstrumentationConfig.CALL_WITH_ARGS_NAME;
-import static optimus.debug.InstrumentationConfig.CALL_WITH_ARGS;
+import static optimus.debug.InstrumentationConfig.CWA_INNER_NAME;
+import static optimus.debug.InstrumentationConfig.CWA;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
 
@@ -43,8 +43,8 @@ public class CallWithArgsGenerator implements Opcodes {
   private static ClassWriter createClassWriter(String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 
-    cw.visit(V11, ACC_PUBLIC | ACC_SUPER, className, null, CALL_WITH_ARGS, null);
-    cw.visitInnerClass(CALL_WITH_ARGS, IS, CALL_WITH_ARGS_NAME, ACC_PUBLIC | ACC_STATIC | ACC_ABSTRACT);
+    cw.visit(V11, ACC_PUBLIC | ACC_SUPER, className, null, CWA, null);
+    cw.visitInnerClass(CWA, IS, CWA_INNER_NAME, ACC_PUBLIC | ACC_STATIC | ACC_ABSTRACT);
     generateFields(cw, originalOwner, args);
     generateCtor(cw, className, originalOwner, args);
     generateArgsMethod(cw, className, args);
@@ -71,7 +71,7 @@ public class CallWithArgsGenerator implements Opcodes {
 
     mv.visitCode();
     mv.visitVarInsn(ALOAD, 0);
-    mv.visitMethodInsn(INVOKESPECIAL, CALL_WITH_ARGS, "<init>", "()V", false);
+    mv.visitMethodInsn(INVOKESPECIAL, CWA, "<init>", "()V", false);
     var argSlot = 1;
 
     argSlot += assignField(mv, className, argSlot, "original", originalOwner);
@@ -128,11 +128,11 @@ public class CallWithArgsGenerator implements Opcodes {
     var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "reApply", descriptor);
 
     mv.visitCode();
-    mv.visitVarInsn(ALOAD, 0);
+    mv.loadThis();
     mv.visitFieldInsn(GETFIELD, className, "original", originalOwner.getDescriptor());
 
     for (int i = 0; i < args.length; i++) {
-      mv.visitVarInsn(ALOAD, 0);
+      mv.loadThis();
       mv.visitFieldInsn(GETFIELD, className, "arg" + i, args[i].getDescriptor());
     }
 

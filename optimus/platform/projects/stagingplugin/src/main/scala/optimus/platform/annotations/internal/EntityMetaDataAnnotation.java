@@ -17,7 +17,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target({ ElementType.TYPE })
+@Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface EntityMetaDataAnnotation {
@@ -35,8 +35,10 @@ public @interface EntityMetaDataAnnotation {
 
   // these fields are in line with the attribute names
   // if we add/modify fields in this annotation then we need to keep this is step
-  // additionally the code that generates this annotation in OptimusNames, AdjustAst should be kept in line
-  // this is also parsed in code, so MetaDataReader and EntityHierarchyManager will need corresponding changes
+  // additionally the code that generates this annotation in OptimusNames, AdjustAst should be kept
+  // in line
+  // this is also parsed in code, so MetaDataReader and EntityHierarchyManager will need
+  // corresponding changes
 
   public static String name_slotNumber = "slotNumber";
   public static String name_explicitSlotNumber = "explicitSlotNumber";

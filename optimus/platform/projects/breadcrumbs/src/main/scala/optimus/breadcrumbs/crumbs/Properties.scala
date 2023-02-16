@@ -750,6 +750,9 @@ object Properties extends KnownProperties {
   val numBadBaseline = propI
   val numFileReadErrors = propI
   val buildNumber = propI
+
+  val oldCacheSize = propI
+  val newCacheSize = propI
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

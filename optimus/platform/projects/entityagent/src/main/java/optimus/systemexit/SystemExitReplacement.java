@@ -65,7 +65,7 @@ public class SystemExitReplacement {
           hook.accept(status);
         }
       }
-      throw new SystemExitInterceptedException();
+      throw new SystemExitInterceptedException(status);
     }
     else {
       logger.debug("[EXIT-INTERCEPT] normal exit");

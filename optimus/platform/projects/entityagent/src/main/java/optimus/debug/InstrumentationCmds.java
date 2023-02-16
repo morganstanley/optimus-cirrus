@@ -246,30 +246,40 @@ public class InstrumentationCmds {
   /**
    * Inject prefix call InstrumentedModuleCtor.trigger in EvaluationContext.current
    * Only useful if you also executed markAllModuleCtors
-   * @see optimus.debug.InstrumentationCmds#markAllModuleCtors()
-   * @see optimus.debug.InstrumentedModuleCtor#trigger()
-   * @see optimus.debug.RTVerifierCategory#MODULE_CTOR_EC_CURRENT
-   * @see optimus.debug.RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
+   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentedModuleCtor#trigger()
+   * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void prefixECCurrentWithTriggerIfInModuleCtor() {
-    prefixCall("optimus.graph.OGSchedulerContext.current", "optimus.debug.InstrumentedModuleCtor.trigger");
+    var moduleCtorTrigger = "optimus.debug.InstrumentedModuleCtor.trigger";
+    prefixCall("optimus.graph.OGSchedulerContext.current", moduleCtorTrigger);
+    /* eventually we will detect the methods with an annotation:
+    prefixCall("optimus.platform.ScenarioStack.getNode", moduleCtorTrigger);
+    prefixCall("optimus.platform.ScenarioStack.env", moduleCtorTrigger);
+    prefixCall("optimus.platform.ScenarioStack.getTrackingNodeID", moduleCtorTrigger);
+    prefixCall("optimus.platform.ScenarioStack.getParentTrackingNode", moduleCtorTrigger);
+    prefixCall("optimus.platform.ScenarioStack.pluginTags", moduleCtorTrigger);
+    prefixCall("optimus.platform.ScenarioStack.findPluginTag", moduleCtorTrigger);
+    */
   }
 
   /**
    * When markAllModuleCtors is requested this function allows additions to the exclusion list
    * @param className JVM class name of the module
-   * @see optimus.debug.InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    */
-  public static void excludeModuleFromModuleCtorReporting(String className) {
+  public static void excludeFromModuleOrEntityCtorReporting(String className) {
     var jvmName = className.replace('.', '/');
-    InstrumentationConfig.addModuleExclusion(jvmName);
+    InstrumentationConfig.addModuleOrEntityExclusion(jvmName);
   }
 
   /**
    * When markAllModuleCtors or individual module bracketing is enabled, some call stacks can be disabled
    * @param methodToPatch fully specified method reference
-   * @see optimus.debug.InstrumentationCmds#markAllModuleCtors()
-   * @see optimus.debug.InstrumentationConfig#addModuleConstructionIntercept
+   * @see InstrumentationCmds#markAllModuleCtors()
+   * @see InstrumentationConfig#addModuleConstructionIntercept
    */
   public static void excludeMethodFromModuleCtorReporting(String methodToPatch) {
     MethodRef mref = asMethodRef(methodToPatch);
@@ -293,8 +303,8 @@ public class InstrumentationCmds {
    * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors as running
    * @see InstrumentationCmds#reportFindingTweaksInEntityConstructor()
    * @see InstrumentationCmds#reportTouchingTweakableInEntityConstructor()
-   * @see optimus.debug.RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
-   * @see optimus.debug.RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
+   * @see RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
+   * @see RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
    */
   public static void markAllEntityCtorsForSIDetection() {
     instrumentAllEntities = EntityInstrumentationType.markScenarioStack;
@@ -302,8 +312,8 @@ public class InstrumentationCmds {
 
   /**
    * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module ctors as running
-   * @see optimus.debug.RTVerifierCategory#MODULE_CTOR_EC_CURRENT
-   * @see optimus.debug.RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
+   * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void markAllModuleCtors() {
     instrumentAllModuleConstructors = true;
@@ -311,9 +321,9 @@ public class InstrumentationCmds {
 
   /**
    * Instrument all classes that don't implement (and base class doesn't either) their own hashCode.
-   * Therefore relying on identity hashCodes with calls to optimus.debug.InstrumentedHashCodes#hashCode(java.lang.Object)
+   * Therefore relying on identity hashCodes with calls to InstrumentedHashCodes#hashCode(java.lang.Object)
    * @apiNote Use to flag values that use identity hashCode while being used as a key in property caching
-   * @see optimus.debug.InstrumentedHashCodes#hashCode(java.lang.Object)
+   * @see InstrumentedHashCodes#hashCode(java.lang.Object)
    */
   public static void reportSuspiciousHashCodesCalls() {
     instrumentAllHashCodes = true;
@@ -322,7 +332,7 @@ public class InstrumentationCmds {
   /**
    * Instrument callouts and report touching tweakables or entity ctor (which should be RT)
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
-   * @see optimus.debug.RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
+   * @see RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
    */
   public static void reportTouchingTweakableInEntityConstructor() {
     InstrumentationConfig.addVerifyScenarioStackCalls();
@@ -332,7 +342,7 @@ public class InstrumentationCmds {
   /**
    * Instrument callouts and report touching tweaked values or entity ctor (which should be RT)
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
-   * @see optimus.debug.RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
+   * @see RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
    */
   public static void reportFindingTweaksInEntityConstructor() {
     InstrumentationConfig.addVerifyScenarioStackCalls();
@@ -365,7 +375,7 @@ public class InstrumentationCmds {
   /**
    * When traceSelfAndParentOnException or individual exception reporting is enabled, some call stacks can be disabled
    * @param methodToPatch fully specified method reference
-   * @see optimus.debug.InstrumentationCmds#traceSelfAndParentOnException()
+   * @see InstrumentationCmds#traceSelfAndParentOnException()
    */
   public static void excludeMethodFromExceptionReporting(String methodToPatch) {
     MethodRef mref = asMethodRef(methodToPatch);

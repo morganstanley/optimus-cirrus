@@ -9,16 +9,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package patch;
 
-import java.time.LocalTime;
-import java.time.temporal.ChronoUnit;
+package msjava.msnet.ssl;
 
-/**
- * @see MilliInstant
- */
-public class MilliLocalTime {
-  public static LocalTime now() {
-    return LocalTime.now().truncatedTo(ChronoUnit.MILLIS);
-  }
+import javax.net.ssl.SSLEngine;
+
+public interface SSLEngineFactory {
+  SSLEngine createServerEngine();
+
+  SSLEngine createClientEngine();
+
+  void dispose(SSLEngine sslEngine);
 }

@@ -15,18 +15,18 @@ import scala.collection.IterableOps;
 import scala.collection.mutable.Builder;
 
 /**
- * Scala's IterableOps.newSpecificBuilder is protected, which causes problems in AsyncBase, where
- * we need to create new instances of wrapped collection classes. Unfortunately, Iterable.companion
+ * Scala's IterableOps.newSpecificBuilder is protected, which causes problems in AsyncBase, where we
+ * need to create new instances of wrapped collection classes. Unfortunately, Iterable.companion
  * returns companion objects that are degenerate, e.g. we get the same builder for every variety of
  * Set.
  *
- * This workaround exposes newSpecificBuilder via Java, which does not support Scala protected
- *
+ * <p>This workaround exposes newSpecificBuilder via Java, which does not support Scala protected
  */
 public abstract class BuilderProvider {
   public static Builder exposedBuilder(Object coll) {
     return ((IterableOps) coll).newSpecificBuilder();
   }
+
   public static String stringPrefix(Object coll) {
     return ((scala.collection.Iterable) coll).stringPrefix();
   }
