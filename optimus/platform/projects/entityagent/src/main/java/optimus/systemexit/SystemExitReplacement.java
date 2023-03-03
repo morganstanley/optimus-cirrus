@@ -11,45 +11,18 @@
  */
 package optimus.systemexit;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.function.Consumer;
 
 public class SystemExitReplacement {
+  private static final HashMap<String, Consumer<Integer>> hooks = new HashMap<>();
 
-  static HashMap<String, Consumer<Integer>> hooks = new HashMap<>();
-  static public synchronized void setHook(String name, Consumer<Integer> hook) {
-    if(hook == null)
-      hooks.remove(name);
-    else
-      hooks.put(name, hook);
-  }
-
-  // we replace System.exit with this code
-  public static void exit(int status) {
-    Method exitImpl;
-    try {
-      // exitImpl relies on various optimus.systemexit.* classes which are not available in the boot classloader
-      // which System is in. Rather than adding to the bootclasspath in every test, we simply pick ourselves up
-      // from the system (i.e. regular) classloader where we have access to everything we want
-      Class<?> thisInSystemClassloader = ClassLoader.getSystemClassLoader().loadClass(
-          "optimus.systemexit.SystemExitReplacement");
-      exitImpl = thisInSystemClassloader.getMethod("exitImpl", Integer.TYPE);
-    }
-    catch (Exception ex) {
-      throw new RuntimeException(
-          "Unable to find optimus.systemexit.SystemExitReplacement.exitImpl in System classloader",ex);
-    }
-    try {
-      exitImpl.invoke(null, status);
-    }
-    catch (IllegalAccessException ex) {
-      throw new RuntimeException(ex);
-    }
-    catch (InvocationTargetException ex) {
-      // this will be the optimus.systemexit.SystemExitInterceptedException that we are expecting
-      throw (RuntimeException)ex.getTargetException();
+  static public void setHook(String name, Consumer<Integer> hook) {
+    synchronized (hooks) {
+      if (hook == null)
+        hooks.remove(name);
+      else
+        hooks.put(name, hook);
     }
   }
 

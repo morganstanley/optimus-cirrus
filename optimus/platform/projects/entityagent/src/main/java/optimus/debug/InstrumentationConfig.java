@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import optimus.EntityAgent;
+import optimus.systemexit.SystemExitReplacement;
 import org.objectweb.asm.Type;
 
 enum EntityInstrumentationType {
@@ -100,7 +101,8 @@ public class InstrumentationConfig {
   private final static String getNodeDesc = "(Loptimus/graph/PropertyNode;Loptimus/graph/OGSchedulerContext;)Loptimus/graph/Node;";
   private final static String verifySSGetNodeDesc = "(Loptimus/graph/Node;Loptimus/platform/ScenarioStack;Loptimus/graph/PropertyNode;Loptimus/graph/OGSchedulerContext;)V";
   private static final InstrumentationConfig.MethodRef verifyScenarioStackGetNode = new InstrumentationConfig.MethodRef(IS, "verifyScenarioStackGetNode", verifySSGetNodeDesc);
-  private static final InstrumentationConfig.MethodRef verifyRunAndWaitEntry = new InstrumentationConfig.MethodRef(IS, "runAndWaitEntry", "(Loptimus/graph/OGSchedulerContext;)V");
+  private static final InstrumentationConfig.MethodRef verifyRunAndWaitEntry =
+      new InstrumentationConfig.MethodRef(IS, "runAndWaitEntry", "(Loptimus/graph/OGSchedulerContext;Loptimus/graph/NodeTask;)V");
   private static final InstrumentationConfig.MethodRef verifyRunAndWaitExit = new InstrumentationConfig.MethodRef(IS, "runAndWaitExit", "(Loptimus/graph/OGSchedulerContext;)V");
   private static final InstrumentationConfig.MethodRef scenarioStackGetNode = new InstrumentationConfig.MethodRef(SS_TYPE, "getNode", getNodeDesc);
   private static final InstrumentationConfig.MethodRef runAndWait = new InstrumentationConfig.MethodRef(OGSC_TYPE, "runAndWait");
@@ -148,21 +150,29 @@ public class InstrumentationConfig {
 
   static void addVerifyScenarioStackCalls() {
     var ssHook = addSuffixCall(scenarioStackGetNode, verifyScenarioStackGetNode);
+    ssHook.noArgumentBoxing = true;
     ssHook.suffixWithThis = true;
     ssHook.suffixWithArgs = true;
-    ssHook.suffixNoArgumentBoxing = true;
     ssHook.suffixWithReturnValue = true;
 
-    var runAndWaitEntry = addPrefixCall(runAndWait, verifyRunAndWaitEntry, false, false);
+    var runAndWaitEntry = addPrefixCall(runAndWait, verifyRunAndWaitEntry, false, true);
+    runAndWaitEntry.noArgumentBoxing = true;
     runAndWaitEntry.prefixWithThis = true;
 
     var runAndWaitExit = addSuffixCall(runAndWait, verifyRunAndWaitExit);
-    runAndWaitExit.suffixNoArgumentBoxing = true;
     runAndWaitExit.suffixWithThis = true;
   }
 
   public static void recordConstructorInvocationSite(String className) {
     addRecordPrefixCallIntoMemberWithCallSite(__constructedAt, asMethodRef(className + ".<init>"));
+  }
+
+  public static void addSystemExitPrefix() {
+    var systemExit = new MethodRef("java/lang/System", "exit");
+    var systemExitPrefix = new MethodRef("optimus/debug/InstrumentedSystem", "exitPrefix", "(I)V");
+    var prefix = addPrefixCall(systemExit, systemExitPrefix, false, true);
+    InstrumentedSystem.callback = SystemExitReplacement::exitImpl;
+    prefix.noArgumentBoxing = true;
   }
 
   public static class MethodDesc {
@@ -212,11 +222,15 @@ public class InstrumentationConfig {
     boolean suffixWithThis;
     boolean suffixWithReturnValue; // calls suffix, then it returns the original value
     boolean suffixWithArgs;
-    boolean suffixNoArgumentBoxing;
+    boolean noArgumentBoxing;
     boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception thrown
     FieldRef storeToField;
     ClassPatch classPatch;
     BiPredicate<String, String> predicate;
+
+    boolean shouldInject(String name, String descriptor) {
+      return predicate == null || predicate.test(name, descriptor) || (classPatch.replaceObjectAsBase != null && name.equals("<init>"));
+    }
 
     MethodPatch(MethodRef from) { this.from = from; }
   }

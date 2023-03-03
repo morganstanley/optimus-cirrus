@@ -406,11 +406,11 @@ private object TweakLookup {
   /**
    * Returns the related PropertyInfos touched in the property-tweak-targets
    */
-  def propertyTweakTargetTaskInfos(s: ScenarioStack): Set[NodeTaskInfo] = {
+  private def propertyTweakTargetTaskInfos(s: ScenarioStack): Set[NodeTaskInfo] = {
     val l = new mutable.ListBuffer[NodeTaskInfo]
     var ss = s
     while (!ss.isRoot) {
-      l ++= ss.expandedPropertyTweaks.map(_.target.propertyInfo)
+      l ++= ss._cacheID.allPropertyTweaksInfos
       ss = ss.parent
     }
     l.toSet
@@ -419,11 +419,11 @@ private object TweakLookup {
   /**
    * Returns the related PropertyInfos touched in the instance-tweak-targets
    */
-  def instanceTweakTargetTaskInfos(s: ScenarioStack): Set[NodeTaskInfo] = {
+  private def instanceTweakTargetTaskInfos(s: ScenarioStack): Set[NodeTaskInfo] = {
     val l = new mutable.ListBuffer[NodeTaskInfo]
     var ss = s
     while (!ss.isRoot) {
-      l ++= ss.expandedInstanceTweaks.map(_.target.propertyInfo)
+      l ++= ss._cacheID.allInstanceTweaksInfos
       ss = ss.parent
     }
     l.toSet

@@ -254,7 +254,9 @@ public class InstrumentationCmds {
   public static void prefixECCurrentWithTriggerIfInModuleCtor() {
     var moduleCtorTrigger = "optimus.debug.InstrumentedModuleCtor.trigger";
     prefixCall("optimus.graph.OGSchedulerContext.current", moduleCtorTrigger);
-    /* eventually we will detect the methods with an annotation:
+    /* eventually we will detect the methods with an annotation. Until then:
+      @see optimus.graph.OGSchedulerContext#_TRACESUPPORT_unsafe_current()
+
     prefixCall("optimus.platform.ScenarioStack.getNode", moduleCtorTrigger);
     prefixCall("optimus.platform.ScenarioStack.env", moduleCtorTrigger);
     prefixCall("optimus.platform.ScenarioStack.getTrackingNodeID", moduleCtorTrigger);
@@ -390,6 +392,6 @@ public class InstrumentationCmds {
     suffix.suffixWithThis = true;
     suffix.suffixWithReturnValue = true;
     suffix.suffixWithArgs = true;
-    suffix.suffixNoArgumentBoxing = true;
+    suffix.noArgumentBoxing = true;
   }
 }

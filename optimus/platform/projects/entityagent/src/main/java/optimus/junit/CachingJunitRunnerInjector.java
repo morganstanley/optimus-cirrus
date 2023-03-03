@@ -11,6 +11,7 @@
  */
 package optimus.junit;
 
+import static optimus.EntityAgent.*;
 import static org.objectweb.asm.Opcodes.ACC_ABSTRACT;
 import static org.objectweb.asm.Opcodes.ACC_NATIVE;
 import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
@@ -23,6 +24,7 @@ import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 
+import optimus.graph.DiagnosticSettings;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -32,24 +34,40 @@ import org.objectweb.asm.Opcodes;
 public class CachingJunitRunnerInjector implements ClassFileTransformer {
   public static final String JUNIT_RUNNER_CLASS = "org/junit/runner/Runner";
   public static final String RUN_INTERNAL_METHOD_NAME = "runInternalDontCollide";
-  private static final Class baseClass;
-  private static final Class dtcHelperClass;
+
+  private static final boolean baseClassFound;
+  private static final boolean dtcHelperClassFound;
+
+  private final boolean failedState;
 
   static {
-    Class baseClass_ = null;
-    Class dtcHelperClass_ = null;
-    try {
-      baseClass_ = Class.forName("org.junit.runner.Runner");
-    } catch (ClassNotFoundException e) {
-      //baseClass will be null, usage later is guarded
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    // WARNING!
+    //    We must absolutely avoid doing class loading here before transformation can begin!
+    //    'getResourceAsStream' does not cause class loading, so we are safe with it.
+    baseClassFound = loader.getResource("org/junit/runner/Runner.class") != null;
+    dtcHelperClassFound = loader.getResource("optimus/dtc/runners/DTCDynamicRunnerHelper.class") != null;
+  }
+
+  public CachingJunitRunnerInjector() {
+    super();
+
+    this.failedState = !dtcHelperClassFound || !baseClassFound;
+
+    if (DiagnosticSettings.isClassMonitorEnabled && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+      // we've got the instrumentation system property but no dtc on classpath!
+      // we will report only one, if we are asked to instrument
+      if (!dtcHelperClassFound) {
+        logErrMsg(
+            "optimus.dtc.runners.DTCDynamicRunnerHelper not found on classpath, cannot dynamically instrument junit tests for DTC");
+      }
+
+      // if we have the instrumentation system property but not junit on the classpath...
+      if (!baseClassFound) {
+        logErrMsg(
+            "org.junit.runner.Runner not found on classpath, cannot dynamically instrument junit tests for DTC");
+      }
     }
-    try {
-      dtcHelperClass_ = Class.forName("optimus.dtc.runners.DTCDynamicRunnerHelper");
-    } catch (ClassNotFoundException e) {
-      //dtcHelperClass will be null, usage later is guarded
-    }
-    baseClass = baseClass_;
-    dtcHelperClass = dtcHelperClass_;
   }
 
   private boolean extendsRunner(ClassLoader loader, String className) {
@@ -58,30 +76,28 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
     else if (className.equals(JUNIT_RUNNER_CLASS))
       return true;
 
+    // getResourceAsStream does not cause class loading, which we must absolutely avoid
     InputStream is = loader.getResourceAsStream(className + ".class");
     ClassReader reader;
-    try {
+    try(is) {
+      if (is == null)
+        throw new RuntimeException(String.format("Class not found: %s", className));
       reader = new ClassReader(is);
     } catch (IOException e) {
       // throwing here will be logged by safeTransform
       throw new RuntimeException(e);
-    } finally {
-      try {
-        is.close();
-      } catch (IOException e) {
-        //ignore
-      }
-
     }
     return extendsRunner(loader, reader.getSuperName());
   }
 
-  static boolean skipName(String name) {
-    return name.startsWith("com.sun")
-        || name.startsWith("java.")
-        || name.startsWith("jdk.") // java 9+
-        || name.startsWith("scala.")
-        || name.startsWith("sun.")
+  private static boolean skipName(String name) {
+    return name.startsWith("com/sun")
+        || name.startsWith("java/")
+        || name.startsWith("jdk/") // java 9+
+        || name.startsWith("scala/")
+        || name.startsWith("sun/")
+        || name.startsWith("ch/qos/")
+        || name.startsWith("org/slf4j/")
         ;
   }
 
@@ -89,20 +105,8 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
   public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
       ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
 
-    // if we've got the instrumentation system property but no dtc on classpath, will get logged by safeTransform
-    if (dtcHelperClass == null) {
-      throw new RuntimeException(new ClassNotFoundException(
-          "optimus.dtc.runners.DTCDynamicRunnerHelper not found on classpath, cannot dynamically instrument junit " + "tests for DTC"));
-    }
-
-    // if we have the instrumentation system property but not junit on the classpath...
-    if (baseClass == null) {
-      throw new RuntimeException(new ClassNotFoundException(
-          "org.junit.runner.Runner not found on classpath, cannot dynamically instrument junit tests for DTC"));
-    }
-
-    // not interested in bootstrap classpath or core java/scala classes
-    if (loader == null || skipName(className)) {
+    // not interested in bootstrap classpath or core java/scala classes or being in a bad state
+    if (failedState || loader == null || skipName(className)) {
       return null;
     }
 
@@ -131,6 +135,9 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
         //
         if (visitedRunMethod) {
           inVisitEnd = true; //flag so we can avoid re-writing the 'new' run method
+
+          // We had renamed the 'run' method into 'runInternalDontCollide` in 'visitMethod', leaving a gap.
+          // We thus inject a new 'run' method that points to DTCRunnerHelper.runStatic(Runner, RunNotifier).
           MethodVisitor mv = visitMethod(ACC_PUBLIC, "run", "(Lorg/junit/runner/notification/RunNotifier;)V", null,
               null);
           mv.visitCode();
@@ -141,7 +148,6 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
           mv.visitInsn(Opcodes.RETURN);
           mv.visitMaxs(2, 2);
           mv.visitEnd();
-
         }
       }
 
@@ -150,15 +156,20 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
         if (!inVisitEnd && name.equals("run") && desc.equals(
             "(Lorg/junit/runner/notification/RunNotifier;)V") && (access & (ACC_NATIVE | ACC_ABSTRACT)) == 0) {
           visitedRunMethod = true;
+
+          // Rename the 'run' method as 'runInternalDontCollide', which will leave a gap that is filled in visitEnd.
           return new MethodVisitor(Opcodes.ASM9,
               super.visitMethod(access, RUN_INTERNAL_METHOD_NAME, desc, signature, exceptions)) {
             @Override
             public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
               if (owner.equals(classReader.getSuperName()) && "run".equals(
-                  name) && "(Lorg/junit/runner/notification/RunNotifier;)V".equals(descriptor))
+                  name) && "(Lorg/junit/runner/notification/RunNotifier;)V".equals(descriptor)) {
+                // Let's rewire to point to the internal method we injected in the parent so we do not land
+                // back into DTCRunnerHelper in a nested way.
                 super.visitMethodInsn(opcode, owner, RUN_INTERNAL_METHOD_NAME, descriptor, isInterface);
-              else
+              } else {
                 super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+              }
             }
           };
         } else {

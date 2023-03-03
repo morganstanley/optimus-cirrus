@@ -40,6 +40,7 @@ object RTListStatic {
     "org.apache.commons.math3.exception.NumberIsTooLargeException" ::
     "org.apache.commons.lang.NotImplementedException" ::
     "org.apache.commons.lang3.NotImplementedException" ::
+    "org.xml.sax.SAXParseException" ::
     Nil).toSet
 
   // Not so sure about these. Please add comments when augmenting.

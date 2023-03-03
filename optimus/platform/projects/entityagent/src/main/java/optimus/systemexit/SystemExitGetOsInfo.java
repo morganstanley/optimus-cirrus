@@ -16,9 +16,9 @@ import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Properties;
 
 import javax.management.Attribute;
@@ -69,7 +69,7 @@ public class SystemExitGetOsInfo {
   private void getEnvVars() {
     logger.info("environment variables:");
 
-    for (Map.Entry entry : System.getenv().entrySet()) {
+    for (var entry : System.getenv().entrySet()) {
       logger.info("[env] " + entry.getKey() + "=" + entry.getValue());
     }
   }
@@ -88,7 +88,8 @@ public class SystemExitGetOsInfo {
     getEnvVars();
   }
 
-  private static List<String> DirectAllowedPatterns = new ArrayList<>();
+  private static final List<String> DirectAllowedPatterns = new ArrayList<>();
+
   static {
     // we need to allow intellij's JUnitStarter and CommandLineWrapper.main methods to exit otherwise the process will
     // never end. (n.b. unit tests are never run on this thread)
@@ -97,8 +98,24 @@ public class SystemExitGetOsInfo {
     // StallDetector is allowed to kill a process if there is 'no progress' after a certain amount of time
     DirectAllowedPatterns.add("optimus.graph.diagnostics.DefaultStallDetector");
     DirectAllowedPatterns.add("optimus.buildtool.testrunner.worker.OptimusTestWorker");
+
+    /*
+     * Exempt certain classes from having their System.exit calls rewritten.
+     * These classes need to take down the whole JVM, even in tests, because the scheduler
+     * is left in an inconsistent state, and often the {@link SystemExitInterceptedException}
+     * is ignored or thrown on a thread where it does not show up as a test failure.
+     * Such failures do, however, manifest as different and subtle bugs (broken nodes,
+     * false stalls not attributed to the test in question, ...).
+     */
+    DirectAllowedPatterns.add("optimus.graph.NodeTask"); // logAndDie on various unrecoverable illegal states
+    DirectAllowedPatterns.add("optimus.graph.GCNative"); // die when not loaded properly and when we fails completely to free up any memory
+    DirectAllowedPatterns.add("optimus.graph.OGScheduler"); // like NodeTask, die when we have no hope of remaining consistent
+    DirectAllowedPatterns.add("optimus.graph.OGSchedulerContext"); // die on exception thrown from adapt()
+    DirectAllowedPatterns.add("optimus.graph.OGTraceStore"); // die if the trace gets knackered somehow
   }
+
   private final List<String> anywhereAllowedPatterns = loadPatternsFromFile("anywhere-allowed-patterns");
+
   private List<String> loadPatternsFromFile(String patternName) {
     Properties properties = new Properties();
     try {
@@ -107,7 +124,12 @@ public class SystemExitGetOsInfo {
     } catch (IOException | NullPointerException ex) {
       new ArrayList<String>();
     }
-    return Arrays.asList(properties.getProperty(patternName).split(","));
+    String patternString = properties.getProperty(patternName);
+    if (patternString.isBlank())
+      return Collections.emptyList();
+    else {
+      return Arrays.asList(patternString.split(","));
+    }
   }
 
   // we allow System.exit if called *directly* from any of the DirectAllowedPatterns method patterns,
@@ -124,7 +146,7 @@ public class SystemExitGetOsInfo {
           return true;
       }
 
-      if (elem.contains("optimus.systemexit.SystemExitReplacement.exit")) {
+      if (elem.contains("java.lang.System.exit")) {
         systemExitPosition = i;
       } else if (i == systemExitPosition + 1) {
         for (String allowlistedPattern : DirectAllowedPatterns) {
