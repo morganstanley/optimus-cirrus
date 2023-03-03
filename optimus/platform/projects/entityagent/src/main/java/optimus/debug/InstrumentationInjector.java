@@ -263,7 +263,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     if (classPatch.allMethodsPatch != null)
       return new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
     MethodPatch methodPatch = classPatch.forMethod(name, desc);
-    if (methodPatch != null && (methodPatch.predicate == null || methodPatch.predicate.test(name, desc)))
+    if (methodPatch != null)
       return new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
     else if (classPatch.cacheAllApplies && name.equals("apply") && isCreateEntityMethod(desc))
       return new InstrumentationInjectorMethodVisitor(patchForCachingMethod(className, name), mv, access, name, desc);
@@ -367,10 +367,13 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
   private final Label tryBlockEnd = new Label();
   private final Label catchBlockStart = new Label();
   private final Label catchBlockEnd = new Label();
+  private final boolean doInject;
+
   InstrumentationInjectorMethodVisitor(MethodPatch patch, MethodVisitor mv, int access,
                                        String name, String descriptor) {
     super(ASM9, mv, access, name, descriptor);
     this.patch = patch;
+    this.doInject = patch.predicate == null || patch.predicate.test(name, methodDesc);
 
     if (patch.passLocalValue && !patch.localValueIsCallWithArgs) {
       localValueType = patch.prefix.descriptor != null
@@ -397,10 +400,11 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       visitInsn(ACONST_NULL);
     else if (opcode == ARETURN || opcode == ATHROW)
       dup();
-    else if (opcode == LRETURN || opcode == DRETURN)
-      dup2(); // double/long take two slots
     else {
-      dup();
+      if (opcode == LRETURN || opcode == DRETURN)
+        dup2(); // double/long take two slots
+      else
+        dup();
       if (boxValueTypes)
         box(Type.getReturnType(this.methodDesc));
     }
@@ -419,6 +423,16 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     else
       loadThis();
     return OBJECT_DESC;
+  }
+
+  private String loadArgsInlineOrAsArray() {
+    if (patch.noArgumentBoxing) {
+      loadArgs();
+      return "";  // Rely on descriptor explicitly supplied
+    } else {
+      loadArgArray();
+      return OBJECT_ARR_DESC;
+    }
   }
 
   private String loadLocalValueIfRequested() {
@@ -461,10 +475,8 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     if(patch.prefixWithThis)
       descriptor += loadThisOrNull();
 
-    if (patch.prefixWithArgs) {
-      loadArgArray();
-      descriptor += OBJECT_ARR_DESC;
-    }
+    if (patch.prefixWithArgs)
+      descriptor += loadArgsInlineOrAsArray();
 
     if (patch.passLocalValue || patch.storeToField != null)
       descriptor += ")" + OBJECT_DESC;
@@ -515,7 +527,8 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
   @Override
   public void visitCode() {
     super.visitCode();
-    injectMethodPrefix();
+    if (doInject)
+      injectMethodPrefix();
   }
 
   @Override
@@ -526,7 +539,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   @Override
   protected void onMethodExit(int opcode) {
-    if (opcode == ATHROW && (patch.suffixNoArgumentBoxing || patch.wrapWithTryCatch))
+    if (opcode == ATHROW && (patch.noArgumentBoxing || patch.wrapWithTryCatch))
       return; // do not generate exit call at the point of exception throw
 
     if (patch.cacheInField != null) {
@@ -536,13 +549,13 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       mv.visitFieldInsn(PUTFIELD, patch.from.cls, patch.cacheInField.name, patch.cacheInField.type);
     }
 
-    if (patch.suffix == null)
+    if (patch.suffix == null || !doInject)
       return;
 
     var descriptor = "(";
 
     if (patch.suffixWithReturnValue) {
-      dupReturnValueOrNullForVoid(opcode, !patch.suffixNoArgumentBoxing);
+      dupReturnValueOrNullForVoid(opcode, !patch.noArgumentBoxing);
       descriptor += OBJECT_DESC;
     }
 
@@ -555,7 +568,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       descriptor += loadThisOrNull();
 
     if (patch.suffixWithArgs)
-      loadArgs();
+      descriptor += loadArgsInlineOrAsArray();
 
     descriptor += ")V";
 
@@ -576,6 +589,10 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   @Override
   public void visitMaxs(int maxStack, int maxLocals) {
+    if (!doInject) {
+      super.visitMaxs(maxStack, maxLocals);
+      return;
+    }
     if (patch.wrapWithTryCatch) {
       visitLabel(tryBlockEnd);
       mv.visitInsn(NOP);

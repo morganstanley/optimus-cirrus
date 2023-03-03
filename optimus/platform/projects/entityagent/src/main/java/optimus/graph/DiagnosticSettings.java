@@ -68,6 +68,7 @@ public class DiagnosticSettings {
   final public static boolean isClassMonitorEnabled;
   final public static int showThisNumberOfTopUsedClasses;
   final public static boolean keepFullTraceFile;
+  final public static String traceToOverride;
   final public static String fullTraceDir;
   final public static boolean profileShowThreadSummary; // light profile shows per-thread breakdown at shutdown
   final public static boolean profilerDisableHotspotsCSV;
@@ -83,10 +84,20 @@ public class DiagnosticSettings {
    * __profileId, getProfileId, cctor are injected in CompletableNode derived classes to better attribute profile data
    */
   final public static boolean injectNodeMethods;  // Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
+
   /**
    * Detect and report any non-RT behaviour
    */
   final public static boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
+  /**
+   * Publish RT violations as crumbs in splunk
+   */
+  final public static boolean publishRTVerifierCrumbs = getBoolProperty("optimus.rt.verifier.crumbs", true);
+  /**
+   * Report RT violations to file
+   */
+  final public static boolean writeRTVerifierReport = getBoolProperty("optimus.rt.verifier.report", false);
+
   /**
    * Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true)
    */
@@ -148,6 +159,7 @@ public class DiagnosticSettings {
 
   public static double infoDumpPeriodicityHours = getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
+  public static boolean fakeOutOfMemoryErrorOnKill = getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
   public static String infoDumpDir;
   public static boolean infoDumpOnShutdown = getBoolProperty("optimus.diagnostic.dump.shutdown", false);
 
@@ -459,6 +471,8 @@ public class DiagnosticSettings {
     classDumpClasses = getStringPropertyAsSet(AGENT_DUMP_CLASSES);
     classBiopsyClasses = getStringPropertyAsSet(AGENT_BIOPSY_CLASSES);
     classDumpEnabled = !classDumpClasses.isEmpty() || !classBiopsyClasses.isEmpty();
+
+    traceToOverride = getStringProperty("optimus.traceTo", null);
 
     // set this to true to avoid deleting the backing storage for the full trace: this is intended to be useful
     // when debugging the full trace profiler (the user-serviceable full trace is produced by --profile-graph

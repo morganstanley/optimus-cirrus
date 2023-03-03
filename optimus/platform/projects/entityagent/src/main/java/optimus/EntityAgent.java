@@ -31,7 +31,6 @@ import optimus.graph.LockInjector;
 import optimus.graph.chaos.ChaosMonkeyInjector;
 import optimus.junit.CachingJunitRunnerInjector;
 import optimus.systemexit.ExitInterceptProp;
-import optimus.systemexit.SystemExitTransformer;
 import optimus.testidle.TestIdle;
 import optimus.testidle.TestIdleTransformer;
 
@@ -171,7 +170,7 @@ public class EntityAgent {
     InstrumentationConfig.init();
 
     // To patch java core classes to call our methods, we need to explicitly put the jar containing those methods on the
-    // botstrap class loader path.  To find that jar, we let our current classloader search for a class we added just to be
+    // bootstrap class loader path.  To find that jar, we let our current classloader search for a class we added just to be
     // searched for.
 
     var allowCorePatches = false;
@@ -232,10 +231,6 @@ public class EntityAgent {
       customTransformers.put("optimus/core/TPDMask", new TPDMaskTransfomer());
     }
 
-    if (System.getProperty(ExitInterceptProp.name) != null) {
-      instrumentation.addTransformer(new SystemExitTransformer(), instrumentation.isRetransformClassesSupported());
-      instrumentation.retransformClasses(java.lang.System.class);
-    }
     if (System.getProperty(TestIdle.monitorIdlePropertyName) != null) {
       instrumentation.addTransformer(new TestIdleTransformer(), true);
     }
@@ -248,6 +243,12 @@ public class EntityAgent {
 
     EntityAgentTransformer transformer = new EntityAgentTransformer(allowCorePatches);
     instrumentation.addTransformer(transformer, true);
+
+    if (System.getProperty(ExitInterceptProp.name) != null) {
+      InstrumentationConfig.addSystemExitPrefix();
+      instrumentation.retransformClasses(java.lang.System.class);
+    }
+
     if (instrumentation.isNativeMethodPrefixSupported()) instrumentation.setNativeMethodPrefix(transformer, nativePrefix);
     else logErrMsg("Native Method Prefix not supported. Skipping...");
   }
