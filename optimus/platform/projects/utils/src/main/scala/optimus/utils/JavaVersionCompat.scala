@@ -50,16 +50,6 @@ object JavaVersionCompat {
 
   private val selChImplClass = Class.forName("sun.nio.ch.SelChImpl")
   private val selChImplKill = selChImplClass.getMethod("kill")
-
-  // Used in tests to ensure port is freed up before the next test runs
-  def forceKill(sChannel: ServerSocketChannel): Boolean = {
-    sChannel.close() // kill has no effect without close in java 11
-    selChImplClass.isAssignableFrom(sChannel.getClass) && {
-      selChImplKill.invoke(sChannel)
-      true
-    }
-  }
-
 }
 
 package compat {

@@ -49,8 +49,9 @@ class PostTyperCodingStandardsComponent(
     private def alarmOnCaseClass(mods: Modifiers): Boolean =
       mods.isCase && !(mods.isSealed && mods.hasAbstractFlag) && !mods.isFinal
 
-    private def checkDiscouraged(tree: Select): Unit = {
+    private def checkSelection(tree: Select): Unit = {
       val sym = tree.symbol
+
       if (sym != null && tree.symbol.hasAnnotation(DiscouragedAnnotation)) {
         val annInfo = sym.getAnnotation(DiscouragedAnnotation).get
         alarm(
@@ -58,6 +59,24 @@ class PostTyperCodingStandardsComponent(
           tree.pos,
           annInfo.stringArg(0).get,
           annInfo.stringArg(1).get)
+      }
+
+      if (isScala2_12) {
+        val qual = tree.qualifier
+        val pos = tree.pos
+        if (qual.tpe != null && pos.isDefined && pos.start != pos.end && pos == tree.qualifier.pos) {
+          val qualSym = qual.tpe.typeSymbol
+          if (
+            qualSym == IntClass && sym == IntToFloat ||
+            qualSym == LongClass && (sym == LongToFloat || sym == LongToDouble)
+          )
+            alarm(
+              Scala213MigrationMessages.INT_TO_FLOAT,
+              tree.pos,
+              qualSym.name,
+              sym.tpe.finalResultType.typeSymbol.name,
+              sym.name)
+        }
       }
     }
 
@@ -89,7 +108,7 @@ class PostTyperCodingStandardsComponent(
             traverse(qual)
             traverse(vd)
           case sel: Select =>
-            checkDiscouraged(sel)
+            checkSelection(sel)
             super.traverse(tree)
           case ClassDef(mods, _, _, _) if alarmOnCaseClass(mods) =>
             if (!inClass)
@@ -301,7 +320,7 @@ class PostTyperCodingStandardsComponent(
                 CollectionMapClass) && tree.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass) =>
             def argKeepExistential(tp: Type) = tp match {
               case ExistentialType(_, u) => u.typeArgs.head
-              case _ => tp.typeArgs.head
+              case _                     => tp.typeArgs.head
             }
             val receiverKey = argKeepExistential(qual.tpe.baseType(CollectionMapClass))
             val resultKey = argKeepExistential(tree.tpe.baseType(CollectionMapClass))

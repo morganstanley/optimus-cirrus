@@ -152,15 +152,26 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Injects all natives call from a package with prefix and suffix calls.
+   * Injects all natives call with default prefix, suffix, and .
    * @param packagePrefix the prefix of the package to inject
-   * @param prefixCall the prefix call to inject
-   * @param suffixCall the suffix call to inject
    * */
-  public static void wrapAllNative(String packagePrefix, String prefixCall, String suffixCall) {
-    InstrumentationConfig.instrumentAllNativePackagePrefixes = packagePrefix;
+  public static void wrapAllNative(String packagePrefix) {
+    wrapAllNative(packagePrefix, cwaPrefix, cwaSuffix, cwaSuffixOnException);
+  }
+
+
+  /**
+   * Injects all natives call from a package with prefix, suffix, and suffix on exception calls.
+   * @param packagePrefix the prefix of the package to inject
+   * @param prefixCall method to call before the execution
+   * @param suffixCall method to call after successful execution
+   * @param onException method to call if exception is thrown during the execution
+   * */
+  public static void wrapAllNative(String packagePrefix, MethodRef prefixCall, MethodRef suffixCall, MethodRef onException) {
+    InstrumentationConfig.instrumentAllNativePackagePrefixes = packagePrefix.replace('.', '/');
     InstrumentationConfig.instrumentNativePrefix = prefixCall;
     InstrumentationConfig.instrumentNativeSuffix = suffixCall;
+    InstrumentationConfig.instrumentNativeSuffixOnException = onException;
   }
 
   /**

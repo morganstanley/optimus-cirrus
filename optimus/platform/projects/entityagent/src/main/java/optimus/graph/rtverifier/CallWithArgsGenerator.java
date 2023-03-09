@@ -19,6 +19,7 @@ import static optimus.debug.InstrumentationConfig.CWA;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
 
+import optimus.debug.CommonAdapter;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
@@ -31,29 +32,35 @@ public class CallWithArgsGenerator implements Opcodes {
   private final static AtomicInteger counter = new AtomicInteger(0);
 
   public static String generateClassName(String methodName) {
-    return String.join("_", "optimus/CA", methodName, Integer.toString(counter.getAndIncrement()));
+    return String.join("_", "optimus/CWA", methodName, Integer.toString(counter.getAndIncrement()));
   }
 
-  public static byte[] create(String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
-    ClassWriter cw = createClassWriter(className, originalOwner, args, returnType, originalMethod);
+  public static byte[] create(int access, String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
+    ClassWriter cw = createClassWriter(access, className, originalOwner, args, returnType, originalMethod);
     cw.visitEnd();
     return cw.toByteArray();
   }
 
-  private static ClassWriter createClassWriter(String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
+  private static ClassWriter createClassWriter(int access, String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
     ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 
     cw.visit(V11, ACC_PUBLIC | ACC_SUPER, className, null, CWA, null);
     cw.visitInnerClass(CWA, IS, CWA_INNER_NAME, ACC_PUBLIC | ACC_STATIC | ACC_ABSTRACT);
-    generateFields(cw, originalOwner, args);
-    generateCtor(cw, className, originalOwner, args);
-    generateArgsMethod(cw, className, args);
-    generateReApplyMethod(cw, className, originalOwner, args, returnType, originalMethod);
+
+    Type cwaClass = Type.getObjectType(className);
+
+    generateFields(cw, access, originalOwner, args);
+    generateCtor(cw, cwaClass, access, originalOwner, args);
+    generateArgsMethod(cw, cwaClass, args);
+    generateReApplyMethod(cw, cwaClass, access, originalOwner, args, returnType, originalMethod);
     return cw;
   }
 
-  private static void generateFields(ClassWriter cw, Type originalOwner, Type[] args) {
-    generatePrivateField(cw, "original", originalOwner);
+  private static void generateFields(ClassWriter cw, int access, Type originalOwner, Type[] args) {
+    // We generate the field original to hold the instance of the class only if the method is non-static
+    if (!CommonAdapter.hasStaticAccess(access))
+      generatePrivateField(cw, "original", originalOwner);
+
     for (int i = 0; i < args.length; i++) {
       generatePrivateField(cw, "arg" + i, args[i]);
     }
@@ -64,19 +71,22 @@ public class CallWithArgsGenerator implements Opcodes {
     fv.visitEnd();
   }
 
-  private static void generateCtor(ClassWriter cw, String className, Type originalOwner, Type[] args) {
-    String descriptor = getCtrDescriptor(originalOwner, args);
+  private static void generateCtor(ClassWriter cw, Type cwaClass, int access, Type originalOwner, Type[] args) {
+    String descriptor = getCtrDescriptor(access, originalOwner, args);
     MethodVisitor mvWriter = cw.visitMethod(ACC_PUBLIC, "<init>", descriptor, null, null);
     var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "<init>", descriptor);
 
     mv.visitCode();
-    mv.visitVarInsn(ALOAD, 0);
+    mv.loadThis();
     mv.visitMethodInsn(INVOKESPECIAL, CWA, "<init>", "()V", false);
     var argSlot = 1;
 
-    argSlot += assignField(mv, className, argSlot, "original", originalOwner);
+    // We assign original only if the method is non-static
+    if (!CommonAdapter.hasStaticAccess(access))
+      argSlot += assignField(mv, cwaClass, argSlot, "original", originalOwner);
+
     for (int i = 0; i < args.length; i++) {
-      argSlot += assignField(mv, className, argSlot, "arg" + i, args[i]);
+      argSlot += assignField(mv, cwaClass, argSlot, "arg" + i, args[i]);
     }
 
     mv.visitInsn(RETURN);
@@ -84,34 +94,38 @@ public class CallWithArgsGenerator implements Opcodes {
     mv.visitEnd();
   }
 
-  public static String getCtrDescriptor(Type originalOwner, Type[] args) {
-    var argsToPass = new Type[args.length + 1];
-    argsToPass[0] = originalOwner;
-    System.arraycopy(args, 0, argsToPass, 1, args.length);
+  public static String getCtrDescriptor(int access, Type originalOwner, Type[] args) {
+    var argsToPass = args;
+    // We need to also prepend the instance of the class if the method is non-static
+    if (!CommonAdapter.hasStaticAccess(access)) {
+      argsToPass = new Type[args.length + 1];
+      argsToPass[0] = originalOwner;
+      System.arraycopy(args, 0, argsToPass, 1, args.length);
+    }
 
     return Type.getMethodDescriptor(Type.VOID_TYPE, argsToPass);
   }
 
-  private static int assignField(MethodVisitor mv, String className, int argSlot, String name, Type arg) {
-    mv.visitVarInsn(ALOAD, 0);
+  private static int assignField(GeneratorAdapter mv, Type cwaClass, int argSlot, String name, Type arg) {
+    mv.loadThis();
     mv.visitVarInsn(arg.getOpcode(ILOAD), argSlot);
-    mv.visitFieldInsn(PUTFIELD, className, name, arg.getDescriptor());
+    mv.putField(cwaClass, name, arg);
     return arg.getSize();
   }
 
-  private static void generateArgsMethod(ClassWriter cw, String className, Type[] args) {
+  private static void generateArgsMethod(ClassWriter cw, Type cwaClass, Type[] args) {
     String descriptor = Type.getMethodDescriptor(Type.getObjectType(OBJECT_ARR_DESC));
 
     MethodVisitor mvWriter = cw.visitMethod(ACC_PUBLIC, "args", descriptor, null, null);
     var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "args", descriptor);
     mv.visitCode();
-    mv.visitIntInsn(BIPUSH, args.length);
+    mv.push(args.length);
     mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
     for (int i = 0; i < args.length; i++) {
       mv.dup();
-      mv.visitIntInsn(BIPUSH, i);
+      mv.push(i);
       mv.loadThis();
-      mv.visitFieldInsn(GETFIELD, className, "arg" + i, args[i].getDescriptor());
+      mv.getField(cwaClass, "arg" + i, args[i]);
       mv.box(args[i]);
       mv.visitInsn(AASTORE);
     }
@@ -120,7 +134,7 @@ public class CallWithArgsGenerator implements Opcodes {
     mv.visitEnd();
   }
 
-  private static void generateReApplyMethod(ClassWriter cw, String className, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
+  private static void generateReApplyMethod(ClassWriter cw, Type cwaClass, int access, Type originalOwner, Type[] args, Type returnType, String originalMethod) {
     var originalDescriptor = Type.getMethodDescriptor(returnType, args);
 
     String descriptor = Type.getMethodDescriptor(OBJECT_TYPE);
@@ -128,15 +142,20 @@ public class CallWithArgsGenerator implements Opcodes {
     var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "reApply", descriptor);
 
     mv.visitCode();
-    mv.loadThis();
-    mv.visitFieldInsn(GETFIELD, className, "original", originalOwner.getDescriptor());
+
+    // We put the class instance into the stack if the method is non-static
+    if (!CommonAdapter.hasStaticAccess(access)) {
+      mv.loadThis();
+      mv.getField(cwaClass, "original", originalOwner);
+    }
 
     for (int i = 0; i < args.length; i++) {
       mv.loadThis();
-      mv.visitFieldInsn(GETFIELD, className, "arg" + i, args[i].getDescriptor());
+      mv.getField(cwaClass, "arg" + i, args[i]);
     }
 
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, originalOwner.getInternalName(), originalMethod, originalDescriptor, false);
+    var opcode = CommonAdapter.invokeStaticOrVirtual(access);
+    mv.visitMethodInsn(opcode, originalOwner.getInternalName(), originalMethod, originalDescriptor, false);
     mv.valueOf(returnType);
 
     mv.visitInsn(ARETURN);
