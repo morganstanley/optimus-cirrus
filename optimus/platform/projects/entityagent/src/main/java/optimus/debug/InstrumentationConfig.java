@@ -37,9 +37,12 @@ public class InstrumentationConfig {
   static EntityInstrumentationType instrumentAllEntities = EntityInstrumentationType.none;
   static boolean instrumentAllModuleConstructors = false;
   public static boolean instrumentAllHashCodes = false;
+
   public static String instrumentAllNativePackagePrefixes = null;
-  public static String instrumentNativePrefix = null;
-  public static String instrumentNativeSuffix = null;
+  public static MethodRef instrumentNativePrefix = null;
+  public static MethodRef instrumentNativeSuffix = null;
+  public static MethodRef instrumentNativeSuffixOnException = null;
+
   static boolean instrumentAllEntityApplies = false;
   public static boolean reportTouchingTweakable = false;
   public static boolean reportFindingTweaks = false;
@@ -88,11 +91,7 @@ public class InstrumentationConfig {
 
   static final MethodRef cwaPrefix = new MethodRef(IS, "cwaPrefix", Type.getMethodDescriptor(CWA_TYPE, CWA_TYPE));
   static final MethodRef cwaSuffix = new MethodRef(IS, "cwaSuffix", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, OBJECT_TYPE));
-  static final MethodRef cwaSuffixOnException =
-      new MethodRef(IS, "cwaSuffixOnException", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, THROWABLE_TYPE));
-
-  static final MethodRef nativePrefix = new MethodRef(IS, "nativePrefix", "()V");
-  static final MethodRef nativeSuffix = new MethodRef(IS, "nativeSuffix", "()V");
+  static final MethodRef cwaSuffixOnException = new MethodRef(IS, "cwaSuffixOnException", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, THROWABLE_TYPE));
 
   static InstrumentationConfig.MethodRef expectEquals = new InstrumentationConfig.MethodRef(IS, "expectAllToEquals", "(ZLoptimus/platform/storable/Entity;Loptimus/platform/storable/Entity;)V");
   static InstrumentationConfig.MethodRef equalsHook = new InstrumentationConfig.MethodRef(ENTITY_TYPE, "argsEqualsHook");
@@ -124,7 +123,7 @@ public class InstrumentationConfig {
 
   static boolean instrumentAnyGroups() {
     return instrumentAllHashCodes || instrumentAllEntities != EntityInstrumentationType.none
-           || instrumentAllEntityApplies || instrumentAllModuleConstructors;
+           || instrumentAllEntityApplies || instrumentAllModuleConstructors || instrumentAllNativePackagePrefixes != null;
   }
 
   public static boolean isEntity(String className, String superName) {
@@ -229,7 +228,7 @@ public class InstrumentationConfig {
     BiPredicate<String, String> predicate;
 
     boolean shouldInject(String name, String descriptor) {
-      return predicate == null || predicate.test(name, descriptor) || (classPatch.replaceObjectAsBase != null && name.equals("<init>"));
+      return predicate == null || predicate.test(name, descriptor);
     }
 
     MethodPatch(MethodRef from) { this.from = from; }
@@ -304,10 +303,16 @@ public class InstrumentationConfig {
     return patch;
   }
 
-  static MethodPatch patchForBracketingLzyCompute(String clsName, String method) {
+  static MethodPatch patchForLzyCompute(String clsName, String method) {
     var patch = new MethodPatch(new MethodRef(clsName, method));
     patch.prefix = InstrumentationConfig.imcEnterCtor;
     patch.suffix = InstrumentationConfig.imcExitCtor;
+    return patch;
+  }
+
+  static MethodPatch patchForNativeRecoding(String clsName, String method) {
+    var patch = new MethodPatch(new MethodRef(clsName, method));
+    setUpRecording(patch, instrumentNativePrefix, instrumentNativeSuffix, instrumentNativeSuffixOnException);
     return patch;
   }
 
@@ -422,6 +427,11 @@ public class InstrumentationConfig {
 
   public static MethodPatch addRecording(MethodRef from, MethodRef prefix, MethodRef suffix, MethodRef onException) {
     MethodPatch methodPatch = putIfAbsentMethodPatch(from);
+    setUpRecording(methodPatch, prefix, suffix, onException);
+    return methodPatch;
+  }
+
+  static void setUpRecording(MethodPatch methodPatch, MethodRef prefix, MethodRef suffix, MethodRef onException) {
     methodPatch.localValueIsCallWithArgs = true;
     methodPatch.wrapWithTryCatch = true;
     methodPatch.passLocalValue = true;
@@ -429,7 +439,6 @@ public class InstrumentationConfig {
     methodPatch.prefix = prefix;
     methodPatch.suffix = suffix;
     methodPatch.suffixOnException = onException;
-    return methodPatch;
   }
 
   /** Hook should probably be added just once, but it's actually OK to call it multiple times */

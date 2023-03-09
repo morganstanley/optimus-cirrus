@@ -96,6 +96,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         go(config.any2StringAdd, new Any2StringAdd(unit, state)) // obj + "" -> "" + obj + ""
         go(config.importShadow, new ImportShadow(unit, state)) // https://github.com/scala/scala/pull/7609
         go(config.rewriteCaseClassToFinal, new CaseClassTransformer(unit, state))
+        go(config.intToFloat, new IntToFloat(unit, state))
         if (state.newImports.nonEmpty) new AddImports(unit, state).run(unit.body)
         patchSets += Patches(state.patches.toArray, unit.source, underlyingFile, encoding)
       }
@@ -1183,5 +1184,28 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         }
         tree
       }
+  }
+
+  private class IntToFloat(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    import definitions._
+    val intToFloat = IntClass.tpe.member(TermName("toFloat"))
+    val longToFloat = LongClass.tpe.member(TermName("toFloat"))
+    val longToDouble = LongClass.tpe.member(TermName("toDouble"))
+    override def transform(tree: Tree): Tree = tree match {
+      case s @ Select(r, _) if r.tpe != null && r.tpe.typeSymbol == IntClass && s.symbol == intToFloat =>
+        if (s.pos.end != s.pos.start &&  codeOf(s.pos) == codeOf(r.pos))
+          state.patches ++= selectFromInfix(r, "toFloat", state.parseTree, false)
+        tree
+      case s @ Select(r, _) if r.tpe != null && r.tpe.typeSymbol == LongClass && s.symbol == longToFloat =>
+        if (s.pos.end != s.pos.start && codeOf(s.pos) == codeOf(r.pos))
+          state.patches ++= selectFromInfix(r, "toFloat", state.parseTree, false)
+        tree
+      case s @ Select(r, _) if r.tpe != null && r.tpe.typeSymbol == LongClass && s.symbol == longToDouble =>
+        if (s.pos.end != s.pos.start && codeOf(s.pos) == codeOf(r.pos))
+          state.patches ++= selectFromInfix(r, "toDouble", state.parseTree, false)
+        tree
+      case _ =>
+        super.transform(tree)
+    }
   }
 }

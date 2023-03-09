@@ -36,7 +36,6 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.commons.GeneratorAdapter;
 
 /** In doubt see: var asm = BiopsyLab.byteCodeAsAsm(cw.toByteArray()); */
@@ -48,12 +47,7 @@ public class InstrumentationInjector implements ClassFileTransformer {
   @Override
   public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
                           byte[] bytes) throws IllegalClassFormatException {
-
     ClassPatch patch = forClass(className);
-    if (instrumentAllNativePackagePrefixes != null && className.startsWith(instrumentAllNativePackagePrefixes)) {
-      patch = new ClassPatch();
-      patch.wrapNativeCalls = true;
-    }
     if (patch == null && !instrumentAnyGroups())
       return bytes;
 
@@ -74,6 +68,12 @@ public class InstrumentationInjector implements ClassFileTransformer {
     if (patch == null && addHashCode) {
       patch = new ClassPatch();
       setForwardMethodToNewHashCode(className, patch);
+    }
+
+    if (instrumentAllNativePackagePrefixes != null && className.startsWith(instrumentAllNativePackagePrefixes)) {
+      if (patch == null)
+        patch = new ClassPatch();
+      patch.wrapNativeCalls = true;
     }
 
     if (instrumentAllEntityApplies && shouldCacheApplyMethods(crSource, className)) {
@@ -184,95 +184,55 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     return returnType.equals(className.substring(0, className.length() - 1));
   }
 
-  // TODO (OPTIMUS-53248): Make this more generic and generate CallWithArgs
-  private void writeNativeMethodCall(String name, String desc) {
-    ClassWriter cw = new ClassWriter(0);
-    var clsName = "call_" + name;
-    cw.visit(V11, ACC_PUBLIC | ACC_SUPER, clsName, null, "optimus/graph/InstrumentationSupport$CallWithArgs", null);
-    cw.visitInnerClass("optimus/graph/InstrumentationSupport$CallWithArgs",
-                       "optimus/graph/InstrumentationSupport",
-                       "CallWithArgs",
-                       ACC_PUBLIC | ACC_STATIC | ACC_ABSTRACT);
-    {
-      var mv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null);
-      mv.visitCode();
-      mv.visitVarInsn(ALOAD, 0);
-      mv.visitMethodInsn(INVOKESPECIAL, "optimus/graph/InstrumentationSupport$CallWithArgs", "<init>", "()V", false);
-      mv.visitInsn(RETURN);
-      mv.visitMaxs(1, 1);
-      mv.visitEnd();
-    }
-    {
-      var argTypes = Type.getArgumentTypes(desc);
-      var mv = cw.visitMethod(ACC_PROTECTED, "apply", "(JLjava/lang/Object;JLjava/lang/Object;)Z", null, null);
-      mv.visitCode();
-      mv.visitVarInsn(LLOAD, 1);
-      mv.visitVarInsn(ALOAD, 3);
-      mv.visitTypeInsn(CHECKCAST, argTypes[1].getInternalName());
-      mv.visitVarInsn(LLOAD, 4);
-      mv.visitVarInsn(ALOAD, 6);
-      mv.visitTypeInsn(CHECKCAST, argTypes[1].getInternalName());
-      mv.visitMethodInsn(INVOKESTATIC, className, EntityAgent.nativePrefix(name), desc, false);
-      mv.visitInsn(IRETURN);
-      mv.visitMaxs(6, 7);
-      mv.visitEnd();
-    }
-    cw.visitEnd();
-    new DynamicClassLoader().createInstance(cw.toByteArray());
-  }
-
-  // TODO (OPTIMUS-53248): Make this more generic and generate CallWithArgs
-  private void writeNativeWrapper(int access, String name, String desc, String signature, String[] exceptions) {
-    var useAccess = access & ~ACC_NATIVE;
-    var mvWriter = cv.visitMethod(useAccess, name, desc, signature, exceptions);
-    var mv = new GeneratorAdapter(mvWriter, useAccess, name, desc);
-
-    mv.visitCode();
-    mv.visitMethodInsn(INVOKESTATIC,  nativePrefix.cls, nativePrefix.method, nativePrefix.descriptor, false);
-
-    // call original method
-    mv.loadArgs();
-    mv.visitMethodInsn(INVOKESTATIC, className, EntityAgent.nativePrefix(name), desc, false);
-
-
-    if(className.equals("AIOP/Java/VolSwigJNI") && name.equals("VolNode_isEqualTo")) {
-      mv.dup();
-      mv.loadArgs();
-      var descX= "(ZJ"+ OBJECT_DESC + "J" + OBJECT_DESC + ")V";
-      mv.visitMethodInsn(INVOKESTATIC,  nativeSuffix.cls, nativeSuffix.method, descX, false);
-      writeNativeMethodCall(name, desc);
-    } else
-     mv.visitMethodInsn(INVOKESTATIC,  nativeSuffix.cls, nativeSuffix.method, "()V", false);
-
-    mv.returnValue();
-    mv.visitMaxs(0, 0);
-    mv.visitEnd();
+  /** Generates the forward call that matches all the arguments */
+  private void writeNativeWrapper(CommonAdapter mv, int access, String name, String desc) {
+    mv.writeCallForward(className, EntityAgent.nativePrefix(name), access, desc);
   }
 
   public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
     if (classPatch.methodForward != null && name.equals(classPatch.methodForward.from.method))
       seenForwardedMethod = true;
 
-    MethodVisitor mv;
-    if (classPatch.wrapNativeCalls && (access & ACC_NATIVE) != 0) {
-      writeNativeWrapper(access, name, desc, signature, exceptions);
-      mv = cv.visitMethod(access, EntityAgent.nativePrefix(name), desc, signature, exceptions);
-    } else
-      mv = cv.visitMethod(access, name, desc, signature, exceptions);
-
-    if (classPatch.allMethodsPatch != null)
-      return new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
+    var isNativeCall = (access & ACC_NATIVE) != 0;
+    CommonAdapter mv = null;  // Build up a chain of MethodVisitor to satisfy the transformation requirement
     MethodPatch methodPatch = classPatch.forMethod(name, desc);
-    if (methodPatch != null)
-      return new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
-    else if (classPatch.cacheAllApplies && name.equals("apply") && isCreateEntityMethod(desc))
-      return new InstrumentationInjectorMethodVisitor(patchForCachingMethod(className, name), mv, access, name, desc);
-    else if (classPatch.traceValsAsNodes && maybeSimpleGetter(access, name, desc))
-      return new InstrumentationInjectorMethodVisitor(patchForSuffixAsNode(className, name), mv, access, name, desc);
-    else if (classPatch.bracketAllLzyComputes && name.endsWith("$lzycompute"))
-      return new InstrumentationInjectorMethodVisitor(patchForBracketingLzyCompute(className, name), mv, access, name, desc);
-    else
-      return mv; // Just copy the entire method
+
+    if (classPatch.replaceObjectAsBase != null)
+      mv = new SuperConstructorCallReplacement(mv, access, name, desc, OBJECT_TYPE.getInternalName(), classPatch.replaceObjectAsBase);
+
+    if (classPatch.allMethodsPatch != null && classPatch.allMethodsPatch.shouldInject(name, desc))
+      mv = new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
+
+    if (methodPatch != null && methodPatch.shouldInject(name, desc))
+      mv = new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
+
+    if (classPatch.wrapNativeCalls && isNativeCall)
+      mv = new InstrumentationInjectorMethodVisitor(patchForNativeRecoding(className, name), mv, access, name, desc);
+
+    if (classPatch.cacheAllApplies && name.equals("apply") && isCreateEntityMethod(desc))
+      mv = new InstrumentationInjectorMethodVisitor(patchForCachingMethod(className, name), mv, access, name, desc);
+
+    if (classPatch.traceValsAsNodes && maybeSimpleGetter(access, name, desc))
+      mv = new InstrumentationInjectorMethodVisitor(patchForSuffixAsNode(className, name), mv, access, name, desc);
+
+    if (classPatch.bracketAllLzyComputes && name.endsWith("$lzycompute"))
+      mv = new InstrumentationInjectorMethodVisitor(patchForLzyCompute(className, name), mv, access, name, desc);
+
+    // If no transformations were requested just do the default (could have called super.visitMethod())
+    if (mv == null)
+      return cv.visitMethod(access, name, desc, signature, exceptions);
+
+    // If native method was requested to be transformed (we can't)
+    // generate a wrapper and transform the wrapper
+    mv.resetMV(cv.visitMethod(access & ~ACC_NATIVE, name, desc, signature, exceptions));
+
+    if (isNativeCall) {
+      writeNativeWrapper(mv, access, name, desc);
+      // and write out prefixed native method (the outside will finish writing this on)
+      return cv.visitMethod(access, EntityAgent.nativePrefix(name), desc, signature, exceptions);
+    } else {
+      return mv; // Return original or the combined chain!
+    }
   }
 
   private void writeGetterMethod(GetterMethod getter) {
@@ -352,131 +312,42 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 }
 
-class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opcodes {
+class InstrumentationInjectorMethodVisitor extends CommonAdapter {
   private final MethodPatch patch;
-  private final Label __localValueStart = new Label();
-  private final Label __localValueEnd = new Label();
-  private int __localValue;     // When local passing is enabled this will point to a slot for local var
-  private Type localValueType;
-  private String localValueDesc;
   private String callWithArgsCtorDescriptor;
   private String callWithArgsType;
-  private int methodID;         // If allocation requested
-  private boolean thisIsAvailable;
   private final Label tryBlockStart = new Label();
   private final Label tryBlockEnd = new Label();
   private final Label catchBlockStart = new Label();
   private final Label catchBlockEnd = new Label();
-  private final boolean doInject;
 
   InstrumentationInjectorMethodVisitor(MethodPatch patch, MethodVisitor mv, int access,
                                        String name, String descriptor) {
-    super(ASM9, mv, access, name, descriptor);
+    super(mv, access, name, descriptor);
     this.patch = patch;
-    this.doInject = patch.predicate == null || patch.predicate.test(name, methodDesc);
-
-    if (patch.passLocalValue && !patch.localValueIsCallWithArgs) {
-      localValueType = patch.prefix.descriptor != null
-                       ? Type.getMethodType(patch.prefix.descriptor).getReturnType()
-                       : OBJECT_TYPE;
-      localValueDesc = localValueType.getDescriptor();
-    }
-
-    if (patch.localValueIsCallWithArgs) {
-      // we generate a CallWithArgs instance...
-      Type thisOwner = Type.getObjectType(patch.from.cls);
-      callWithArgsType = CallWithArgsGenerator.generateClassName(getName());
-      byte[] newBytes = CallWithArgsGenerator.create(callWithArgsType, thisOwner, getArgumentTypes(), getReturnType(), getName());
-      DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
-      callWithArgsCtorDescriptor = CallWithArgsGenerator.getCtrDescriptor(thisOwner, getArgumentTypes());
-      // ...and we pass our CallWithArgs instance to the suffix calls
-      localValueType = Type.getObjectType(InstrumentationConfig.CWA);
-      localValueDesc = localValueType.getDescriptor();
-    }
-  }
-
-  private void dupReturnValueOrNullForVoid(int opcode, boolean boxValueTypes) {
-    if (opcode == RETURN)
-      visitInsn(ACONST_NULL);
-    else if (opcode == ARETURN || opcode == ATHROW)
-      dup();
-    else {
-      if (opcode == LRETURN || opcode == DRETURN)
-        dup2(); // double/long take two slots
-      else
-        dup();
-      if (boxValueTypes)
-        box(Type.getReturnType(this.methodDesc));
-    }
-  }
-
-  private String loadMethodID() {
-    if (methodID == 0)
-      methodID = allocateID(patch.from);
-    mv.visitIntInsn(SIPUSH, methodID);
-    return "I";
-  }
-
-  private String loadThisOrNull() {
-    if ((methodAccess & ACC_STATIC) != 0 || (!thisIsAvailable && getName().equals("<init>")))
-      mv.visitInsn(ACONST_NULL);    // static will just pass null and ctor will temporarily pass null
-    else
-      loadThis();
-    return OBJECT_DESC;
-  }
-
-  private String loadArgsInlineOrAsArray() {
-    if (patch.noArgumentBoxing) {
-      loadArgs();
-      return "";  // Rely on descriptor explicitly supplied
-    } else {
-      loadArgArray();
-      return OBJECT_ARR_DESC;
-    }
-  }
-
-  private String loadLocalValueIfRequested() {
-    if (patch.passLocalValue) {
-      mv.visitVarInsn(localValueType.getOpcode(ILOAD), __localValue);
-      return localValueType.getDescriptor();
-    }
-    return "";
-  }
-
-  private void ifNotZeroReturn(FieldRef fpatch) {
-    loadThis();
-    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
-    Label label1 = new Label();
-    mv.visitJumpInsn(IFEQ, label1);
-    loadThis();
-    mv.visitFieldInsn(GETFIELD, patch.from.cls, fpatch.name, fpatch.type);
-    mv.visitInsn(IRETURN);
-    mv.visitLabel(label1);
   }
 
   private void injectMethodPrefix() {
     if (patch.cacheInField != null)
-      ifNotZeroReturn(patch.cacheInField);
+      ifNotZeroReturn(patch, patch.cacheInField);
 
     if (patch.prefix == null && !patch.localValueIsCallWithArgs)
       return; // prefix is implied for localValueIsCallWithArgs
 
     MethodRef prefix = patch.prefix;
 
-    if (patch.passLocalValue) {
-      visitLabel(__localValueStart);
-      __localValue = newLocal(localValueType);
-    }
+    if (patch.passLocalValue)
+      visitLocalValueStart();
 
     var descriptor = "(";
     if (patch.prefixWithID)
-      descriptor += loadMethodID();
+      descriptor += loadMethodID(patch);
 
     if(patch.prefixWithThis)
       descriptor += loadThisOrNull();
 
     if (patch.prefixWithArgs)
-      descriptor += loadArgsInlineOrAsArray();
+      descriptor += loadArgsInlineOrAsArray(patch);
 
     if (patch.passLocalValue || patch.storeToField != null)
       descriptor += ")" + OBJECT_DESC;
@@ -486,7 +357,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     if (patch.localValueIsCallWithArgs) {
       mv.visitTypeInsn(NEW, callWithArgsType);
       dup();
-      loadThis();
+      loadThisIfNonStatic();
       loadArgs();
       mv.visitMethodInsn(INVOKESPECIAL, callWithArgsType, "<init>", callWithArgsCtorDescriptor, false);
     }
@@ -499,7 +370,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     }
 
     if (patch.passLocalValue) {
-      mv.visitVarInsn(localValueType.getOpcode(ISTORE), __localValue);
+      storeLocalValue();
     } else if (patch.storeToField != null) {
       loadThis();
       swap();
@@ -507,11 +378,11 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
     }
 
     if (patch.checkAndReturn) {
-      mv.visitVarInsn(ALOAD, __localValue);
+      loadLocalValue();
       mv.visitFieldInsn(GETFIELD, CACHED_VALUE_TYPE, "hasResult", "Z");
       var continueLabel = new Label();
       mv.visitJumpInsn(IFEQ, continueLabel);
-      mv.visitVarInsn(ALOAD, __localValue);
+      loadLocalValue();
       mv.visitFieldInsn(GETFIELD, CACHED_VALUE_TYPE, "result", OBJECT_DESC);
       mv.visitTypeInsn(CHECKCAST, Type.getReturnType(methodDesc).getInternalName());
       mv.visitInsn(ARETURN);
@@ -526,15 +397,25 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
 
   @Override
   public void visitCode() {
-    super.visitCode();
-    if (doInject)
-      injectMethodPrefix();
-  }
+    if (patch.passLocalValue && !patch.localValueIsCallWithArgs) {
+      var localValueType = patch.prefix.descriptor != null
+                           ? Type.getMethodType(patch.prefix.descriptor).getReturnType()
+                           : OBJECT_TYPE;
+      setLocalValueTypeAndDesc(localValueType);
+    }
 
-  @Override
-  protected void onMethodEnter() {
-    // Consider adding code to report 'this' in the case of constructor
-    thisIsAvailable = true;
+    if (patch.localValueIsCallWithArgs) {
+      // we generate a CallWithArgs instance...
+      Type thisOwner = Type.getObjectType(patch.from.cls);
+      callWithArgsType = CallWithArgsGenerator.generateClassName(getName());
+      byte[] newBytes = CallWithArgsGenerator.create(methodAccess, callWithArgsType, thisOwner, getArgumentTypes(), getReturnType(), getName());
+      DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
+      callWithArgsCtorDescriptor = CallWithArgsGenerator.getCtrDescriptor(methodAccess, thisOwner, getArgumentTypes());
+      // ...and we pass our CallWithArgs instance to the suffix calls
+      setLocalValueTypeAndDesc(Type.getObjectType(InstrumentationConfig.CWA));
+    }
+    super.visitCode();
+    injectMethodPrefix();
   }
 
   @Override
@@ -549,26 +430,25 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       mv.visitFieldInsn(PUTFIELD, patch.from.cls, patch.cacheInField.name, patch.cacheInField.type);
     }
 
-    if (patch.suffix == null || !doInject)
+    if (patch.suffix == null)
       return;
 
     var descriptor = "(";
 
-    if (patch.suffixWithReturnValue) {
-      dupReturnValueOrNullForVoid(opcode, !patch.noArgumentBoxing);
-      descriptor += OBJECT_DESC;
-    }
+    if (patch.suffixWithReturnValue)
+      descriptor += dupReturnValueOrNullForVoid(opcode, !patch.noArgumentBoxing);
 
-    descriptor += loadLocalValueIfRequested();
+    if (patch.passLocalValue)
+      descriptor += loadLocalValue();
 
     if (patch.suffixWithID)
-      descriptor += loadMethodID();
+      descriptor += loadMethodID(patch);
 
     if (patch.suffixWithThis)
       descriptor += loadThisOrNull();
 
     if (patch.suffixWithArgs)
-      descriptor += loadArgsInlineOrAsArray();
+      descriptor += loadArgsInlineOrAsArray(patch);
 
     descriptor += ")V";
 
@@ -580,19 +460,7 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
   }
 
   @Override
-  public void visitMethodInsn(int opcodeAndSource, String owner, String name, String descriptor, boolean isInterface) {
-    if (patch.classPatch != null && patch.classPatch.replaceObjectAsBase != null &&
-        opcodeAndSource == INVOKESPECIAL && owner.equals(OBJECT_TYPE.getInternalName()))
-      owner = patch.classPatch.replaceObjectAsBase;
-    super.visitMethodInsn(opcodeAndSource, owner, name, descriptor, isInterface);
-  }
-
-  @Override
   public void visitMaxs(int maxStack, int maxLocals) {
-    if (!doInject) {
-      super.visitMaxs(maxStack, maxLocals);
-      return;
-    }
     if (patch.wrapWithTryCatch) {
       visitLabel(tryBlockEnd);
       mv.visitInsn(NOP);
@@ -601,17 +469,15 @@ class InstrumentationInjectorMethodVisitor extends AdviceAdapter implements Opco
       var suffixOnException = patch.suffixOnException;
       if (suffixOnException != null) {
         dup();
-        var descriptor = "(" + THROWABLE_TYPE.getDescriptor() + loadLocalValueIfRequested() + ")V";
+        var descriptor = "(" + THROWABLE_TYPE.getDescriptor() + loadLocalValueIfRequested(patch) + ")V";
         mv.visitMethodInsn(INVOKESTATIC, suffixOnException.cls, suffixOnException.method, descriptor, false);
       }
       throwException();
       visitLabel(catchBlockEnd);
     }
 
-    if (patch.passLocalValue) {
-      visitLabel(__localValueEnd);
-      mv.visitLocalVariable("__locValue", localValueDesc, null, __localValueStart, __localValueEnd, __localValue);
-    }
+    if (patch.passLocalValue)
+      visitLocalValueEnd();
 
     super.visitMaxs(maxStack, maxLocals);
   }

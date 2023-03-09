@@ -30,6 +30,10 @@ trait StagingPluginDefinitions {
   lazy val Predef_augmentString = getMemberIfDefined(definitions.PredefModule, TermName("augmentString"))
   lazy val Predef_wrapString = getMemberIfDefined(definitions.PredefModule, TermName("wrapString"))
 
+  lazy val IntToFloat = IntClass.tpe.member(TermName("toFloat"))
+  lazy val LongToFloat = LongClass.tpe.member(TermName("toFloat"))
+  lazy val LongToDouble = LongClass.tpe.member(TermName("toDouble"))
+
   lazy val Predef_fallbackStringCBF =
     definitions.getMemberIfDefined(PredefModule, TermName("fallbackStringCanBuildFrom"))
 

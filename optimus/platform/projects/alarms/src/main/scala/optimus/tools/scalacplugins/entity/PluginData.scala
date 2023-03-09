@@ -148,8 +148,9 @@ class PluginData(private val global: Global) {
     var any2StringAdd = false
     var importShadow = false
     var rewriteCaseClassToFinal = false
+    var intToFloat = false
     def anyEnabled =
-      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || rewritePostfix || unitCompanion || procedureSyntax || autoApplication || nilaryOverride || anyFormatted || any2StringAdd || importShadow || rewriteCaseClassToFinal
+      rewriteCollectionSeq || rewriteMapValues || rewriteBreakOutOps || rewriteAsyncBreakOutOps || rewriteToConversion || rewriteVarargsToSeq || rewriteMapConcatWiden || rewriteNilaryInfix || rewritePostfix || unitCompanion || procedureSyntax || autoApplication || nilaryOverride || anyFormatted || any2StringAdd || importShadow || rewriteCaseClassToFinal || intToFloat
 
     // disabled in some unit tests
     var useOptimusCompat: Boolean = true

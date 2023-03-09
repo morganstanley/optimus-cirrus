@@ -127,6 +127,13 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       """Calling `OptimusDoubleBuilder.+=` boxes the argument double value, use `addOne` instead.""".stripMargin
     )
+
+  val INT_TO_FLOAT =
+    warning3(
+      sn = 20312,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """[NEW]Widening conversion from %s to %s is deprecated because it loses precision, add an explicit `%s`.""".stripMargin
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
