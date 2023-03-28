@@ -147,7 +147,7 @@ object CovariantSet extends IterableFactory[CovariantSet] {
     def hasElem(elem: Any) = elem == elem1
     def iterator: Iterator[A] = Iterator(elem1)
     override def size = 1
-    def -[B >: A](elem: B): CovariantSet[A] = if (elem == elem1) empty else this
+    def -[B >: A](elem: B): CovariantSet[A] = if (elem == elem1) CovariantSet.empty else this
     def +[B >: A](elem: B): CovariantSet[B] = if (elem == elem1) this else new Set2(elem1, elem)
   }
 

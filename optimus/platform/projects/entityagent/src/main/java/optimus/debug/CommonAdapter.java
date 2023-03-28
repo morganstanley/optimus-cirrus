@@ -125,9 +125,9 @@ public class CommonAdapter extends AdviceAdapter {
       else
         dup();
       if (boxValueTypes)
-        box(Type.getReturnType(this.methodDesc));
+        valueOf(Type.getReturnType(this.methodDesc));
     }
-    return OBJECT_DESC;   // TODO: For non-boxing case return proper descriptor
+    return OBJECT_DESC;   // TODO (OPTIMUS-53248): For non-boxing case return proper descriptor
   }
 
   protected String loadArgsInlineOrAsArray(MethodPatch patch) {

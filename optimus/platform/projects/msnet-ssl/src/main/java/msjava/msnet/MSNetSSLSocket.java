@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Optional;
 
 import javax.annotation.Nullable;
+import javax.naming.InvalidNameException;
+import javax.naming.ldap.LdapName;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
@@ -206,7 +208,21 @@ public class MSNetSSLSocket extends MSNetTCPSocket {
   }
 
   private String getUserIdFromPrincipalName(String pname) {
-    return pname.split(",")[0].substring("CN=".length()).split("@")[0];
+    String cn;
+    try {
+      LdapName ln = new LdapName(pname);
+      cn =
+          ln.getRdns().stream()
+              .filter(i -> i.getType().equalsIgnoreCase("CN"))
+              .findFirst()
+              .get()
+              .getValue()
+              .toString();
+    } catch (InvalidNameException e) {
+      LOGGER.warn("Parsing failed with LdapName, fall back to use legacy parsing.", e);
+      cn = pname.split(",")[0].substring("CN=".length());
+    }
+    return cn.split("@")[0];
   }
 
   public MSNetAuthContext getAuthContext() throws SSLPeerUnverifiedException {

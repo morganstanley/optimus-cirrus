@@ -206,6 +206,17 @@ sealed class upcastingTarget(val domain: UpcastDomain) extends StaticAnnotation
  */
 final case class nodeDebug(dir: String)
 
+/**
+ * Annotate a class with @meta to supply metadata for the CasC's manifest generator
+ */
+trait DalMetadata
+class metaV1(
+    /** Ownership - owner's email address */
+    val owner: String,
+    /** Catalog - an object that extends DalMetadata */
+    val catalog: DalMetadata
+) extends annotation.StaticAnnotation
+
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it
 // doesn't actually get compiled, and if it did it wouldn't do anything.
 class ofInterestInIDE(val reason: String = "optimus") extends StaticAnnotation

@@ -206,7 +206,7 @@ class ScalaRepl private (val intp: ScalaInterpreter, replSettings: ScalaReplSett
 
   val iLoop: ILoop = new ILoop(config, replSettings.in.orNull, replSettings.out) {
     override def createInterpreter(interpreterSettings: Settings): Unit = {
-      intp = ScalaRepl.this.intp.iMain
+      this.intp = ScalaRepl.this.intp.iMain
     }
 
     override def printWelcome(): Unit =
@@ -224,12 +224,12 @@ class ScalaRepl private (val intp: ScalaInterpreter, replSettings: ScalaReplSett
     )
 
     private def bindingsCommand(line: String): Result =
-      bindings.foreach(b => intp.reporter.printMessage(b.name + ": " + b.value.toString))
+      bindings.foreach(b => this.intp.reporter.printMessage(b.name + ": " + b.value.toString))
 
     private def hintCommand(line: String): Result = {
       ReplStrings.words(line) match {
-        case "all" :: Nil => intp.reporter.printMessage(getHints)
-        case _            => intp.reporter.printMessage(getHint())
+        case "all" :: Nil => this.intp.reporter.printMessage(getHints)
+        case _            => this.intp.reporter.printMessage(getHint())
       }
     }
   }

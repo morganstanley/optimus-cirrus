@@ -11,8 +11,6 @@
  */
 package optimus.tools.scalacplugins.entity
 
-import optimus.scalacompat.isAtLeastScala2_13
-import optimus.scalacompat.isScala2_12
 import optimus.tools.scalacplugins.entity.reporter._
 
 import scala.collection.mutable
@@ -65,18 +63,53 @@ class PostTyperCodingStandardsComponent(
         val qual = tree.qualifier
         val pos = tree.pos
         if (qual.tpe != null && pos.isDefined && pos.start != pos.end && pos == tree.qualifier.pos) {
-          val qualSym = qual.tpe.typeSymbol
-          if (
-            qualSym == IntClass && sym == IntToFloat ||
-            qualSym == LongClass && (sym == LongToFloat || sym == LongToDouble)
-          )
-            alarm(
-              Scala213MigrationMessages.INT_TO_FLOAT,
-              tree.pos,
-              qualSym.name,
-              sym.tpe.finalResultType.typeSymbol.name,
-              sym.name)
+          if (IntegralToFloating(sym)) {
+            if (IsIntegralDivision(qual))
+              alarm(
+                Scala213MigrationMessages.INTEGRAL_DIVISION_TO_FLOATING,
+                tree.pos,
+                sym.name)
+            val qualSym = qual.tpe.typeSymbol
+            if (
+              qualSym == IntClass && sym == IntToFloat ||
+                qualSym == LongClass && (sym == LongToFloat || sym == LongToDouble)
+            )
+              alarm(
+                Scala213MigrationMessages.INT_TO_FLOAT,
+                tree.pos,
+                qualSym.name,
+                sym.tpe.finalResultType.typeSymbol.name,
+                sym.name)
+          }
         }
+      }
+    }
+
+    object IsIntegralDivision extends Traverser {
+      lazy val ScalaIntegralValueClasses: Set[Symbol] = Set(
+        CharClass,
+        ByteClass,
+        ShortClass,
+        IntClass,
+        LongClass)
+
+      private var res = false
+      def apply(t: Tree): Boolean = {
+        res = false
+        traverse(t)
+        res
+      }
+
+      private def isInt(t: Tree) = ScalaIntegralValueClasses(t.tpe.typeSymbol)
+      override def traverse(tree: Tree): Unit = tree match {
+        case Apply(Select(q, nme.DIV), _) if isInt(q) =>
+          res = true
+        case Apply(Select(a1, _), List(a2)) if isInt(tree) && isInt(a1) && isInt(a2) =>
+          traverse(a1)
+          traverse(a2)
+        case Select(q, _) if isInt(tree) && isInt(q) =>
+          traverse(q)
+        case _ =>
       }
     }
 

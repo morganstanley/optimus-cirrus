@@ -490,6 +490,11 @@ object Crumb {
   object RuntimeSource extends Source { override val name = "RT" }
   object GCSource extends Source { override val name = "GC" }
   object ObservableSource extends Source { override val name = "OBS" }
+  object ProfilerSource extends Crumb.Source {
+    override val name: String = "PROF"
+    override val flags = Set(CrumbFlag.DoNotReplicate)
+  }
+
   def newSource(sourceName: String) = new Source {
     override def name = sourceName
   }

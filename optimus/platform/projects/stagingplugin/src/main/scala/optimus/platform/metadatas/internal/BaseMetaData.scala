@@ -52,6 +52,32 @@ case class EntityBaseMetaData(
   }
 }
 
+case class MetaBaseMetaData(
+    fullClassName: String,
+    packageName: String,
+    owner: String,
+    catalogClass: String,
+    isEntity: Boolean,
+    isStorable: Boolean,
+    isObject: Boolean,
+    isTrait: Boolean,
+    parentNames: List[String])
+    extends BaseMetaData {
+
+  override def flags: Byte = {
+    var flag = 0
+    if (isStorable) flag |= ClassMetaData.flagIsStorable
+    if (isEntity) flag |= ClassMetaData.flagIsEntity
+    if (isObject) flag |= ClassMetaData.flagIsObject
+    if (isTrait) flag |= ClassMetaData.flagIsTrait
+    flag |= ClassMetaData.flagIsMeta
+    flag.toByte
+  }
+
+  def slotNumber: Int = -1
+  def explicitSlotNumber: Boolean = false
+}
+
 case class EmbeddableBaseMetaData(
     fullClassName: String,
     packageName: String,
@@ -97,12 +123,14 @@ private[optimus] object MetaDataFiles {
   val embeddableMetaDataFileName = "embeddable.json"
   val eventMetaDataFileName = "event.json"
   val storedEntityMetaDataFileName = "stored.json"
+  val metaSquaredDataFileName = "meta.json"
 
   val metadataFileNames: List[String] =
     MetaDataFiles.entityMetaDataFileName ::
       MetaDataFiles.storedEntityMetaDataFileName ::
       MetaDataFiles.embeddableMetaDataFileName ::
       MetaDataFiles.eventMetaDataFileName ::
+      MetaDataFiles.metaSquaredDataFileName ::
       Nil
 
   val fileCharset = "UTF-8"
@@ -116,6 +144,8 @@ private[optimus] object ClassMetaData {
   val flagIsEntity: Byte = 0x10
   val flagIsEmbeddable: Byte = 0x20
   val flagIsEvent: Byte = 0x40
+  // just in time
+  val flagIsMeta: Byte = -0x80
 
   class MetaDataBuilder[T <: BaseMetaData](raw: Map[String, T]) {
     // mutable data used for performance to build result
@@ -205,6 +235,7 @@ private[optimus] class ClassMetaData private (
   def isEntity: Boolean = 0 != (flags & ClassMetaData.flagIsEntity)
   def isEmbeddable: Boolean = 0 != (flags & ClassMetaData.flagIsEmbeddable)
   def isEvent: Boolean = 0 != (flags & ClassMetaData.flagIsEvent)
+  def isMeta: Boolean = 0 != (flags & ClassMetaData.flagIsMeta)
   def isStorableConcreteEntity: Boolean = {
     val setFlags = ClassMetaData.flagIsEntity | ClassMetaData.flagIsStorable
     val clearedFlags = ClassMetaData.flagIsAbstract | ClassMetaData.flagIsTrait
@@ -212,7 +243,7 @@ private[optimus] class ClassMetaData private (
   }
 
   // Metadata can be either an entity or an embeddable or an event
-  require(isEmbeddable || isEntity || isEvent)
+  require(isEmbeddable || isEntity || isEvent || isMeta)
   require(!(isEvent && isEmbeddable))
   require(!(isEvent && isEntity))
   require(!(isEmbeddable && isEntity))
@@ -259,11 +290,13 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
   implicit val embeddableBaseMetaDataProtocol: RootJsonFormat[EmbeddableBaseMetaData] =
     jsonFormat5(EmbeddableBaseMetaData.apply)
   implicit val eventBaseMetaDataProtocol: RootJsonFormat[EventBaseMetaData] = jsonFormat5(EventBaseMetaData.apply)
+  implicit val metaBaseMetaDataProtocol: RootJsonFormat[MetaBaseMetaData] = jsonFormat9(MetaBaseMetaData.apply)
   implicit object BaseMetaDataFormat extends RootJsonFormat[BaseMetaData] {
     def write(b: BaseMetaData): JsValue = {
       b match {
         case md: EntityBaseMetaData     => md.toJson
         case md: EmbeddableBaseMetaData => md.toJson
+        case md: MetaBaseMetaData       => md.toJson
         case md: EventBaseMetaData      => md.toJson
       }
     }

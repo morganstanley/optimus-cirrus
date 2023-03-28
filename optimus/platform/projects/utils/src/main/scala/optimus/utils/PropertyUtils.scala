@@ -16,18 +16,20 @@ object PropertyUtils {
   // Look first for -Dfoo.bar.baz and then for OPTIMUS_DIST_FOO_BAR_BAZ.
   // While this could be a generic utility, its real purpose is to lever
   // the auto-distribution of OPTIMUS_DIST-prefixed environment variables.
-  val Prefix = "optimus.dist"
-  val empty: Map[String, String] = Map()
+  private val Prefix = "optimus.dist."
+  private def asEnv(s: String) = s.toUpperCase.replaceAllLiterally(".", "_")
   def flag(k: String) = get(k, false)
   def get(k: String, default: => Boolean): Boolean = get(k).map(parseBoolean(_)).getOrElse(default)
   def get(k: String, default: => Int): Int = get(k).map(_.toInt).getOrElse(default)
   def get(k: String, default: => String): String = get(k).getOrElse(default)
-  def get(k: String, overrides: Map[String, String] = empty): Option[String] = {
+  def get(k: String, overrides: Map[String, String] = Map.empty): Option[String] = {
     overrides.get(k) orElse {
       Option(System.getProperty(k))
     } orElse {
-      val kv = (if (k.startsWith(Prefix)) k else s"$Prefix.$k").toUpperCase.replaceAll("\\.", "_")
-      Option(System.getenv(kv))
+      Option(System.getenv(asEnv(k)))
+    } orElse {
+      val kv = (if (k.startsWith(Prefix)) k else s"$Prefix$k")
+      Option(System.getenv(asEnv(kv)))
     }
   }
 

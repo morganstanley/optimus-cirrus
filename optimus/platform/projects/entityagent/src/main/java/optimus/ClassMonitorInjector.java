@@ -150,21 +150,25 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   public static final List<String> instrumentationExemptedClasses = Arrays.asList("optimus/ClassMonitorInjector",
                                                                                   "optimus/ResourceAccessType",
                                                                                   "optimus/ResourceDependency",
-                                                                                  "optimus/comparison/Explanation",
-                                                                                  "optimus/comparison/Explanation$",
-                                                                                  "optimus/comparison/ExplanationState",
-                                                                                  "optimus/comparison/ExplanationState$",
-                                                                                  "optimus/comparison/StringDiffExplainer",
-                                                                                  "optimus/comparison/StringDiffExplainer$",
-                                                                                  "optimus/comparison/Tabulator",
-                                                                                  "optimus/comparison/Tabulator$");
+                                                                                  "optimus/utils/Explanation",
+                                                                                  "optimus/utils/Explanation$",
+                                                                                  "optimus/utils/ExplanationState",
+                                                                                  "optimus/utils/ExplanationState$",
+                                                                                  "optimus/utils/StringDiffExplainer",
+                                                                                  "optimus/utils/StringDiffExplainer$",
+                                                                                  "optimus/utils/Tabulator",
+                                                                                  "optimus/utils/Tabulator$");
   public static final List<ExemptedPackage> instrumentationExemptedPackages = Arrays.asList(new ExemptedPackage("optimus/graph/",
                                                                                                                 "optimus.platform.core.main",
                                                                                                                 "core.jar"),
                                                                                             new ExemptedPackage(
                                                                                                 "optimus/dtc/",
-                                                                                                "optimus.platform.distributed_test_cache.",
-                                                                                                "distributed_test_cache.jar"));
+                                                                                                "optimus.platform.dtc_collector.",
+                                                                                                "dtc_collector.jar"),
+                                                                                            new ExemptedPackage(
+                                                                                                "optimus/dtc/",
+                                                                                                "optimus.platform.dtc_runners.",
+                                                                                                "dtc_runners.jar"));
   // CAUTION: This list is dynamic and cannot be used to analyze cached dependencies!
   //          Used only by DTC and CMI internals
   public static final List<String> classesFromExemptedPackages = new CopyOnWriteArrayList<>();
@@ -314,6 +318,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         visitors.add(DynamicDependencyDiscoveryClassVisitor.class);
         statistics.instrumented.incrementAndGet();
       }
+      else {
+        statistics.unchanged.incrementAndGet();
+      }
       if (visitors.size() > 0) {
         VisitContext context = new VisitContext(loader, className, classResourceName);
         ClassReader classReader = new ClassReader(classfileBuffer);
@@ -328,7 +335,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         context.wrapUp();
         return classWriter.toByteArray();
       } else {
-        statistics.unchanged.incrementAndGet();
+        statistics.ignored.incrementAndGet();
         return classfileBuffer;
       }
     } catch (Throwable t) {
@@ -361,16 +368,16 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   // [GSF] Used by the OptimusCalculationServiceHandler on the grid engine to get the information for the client
   // [UI] Used by ClassMonitorServlet inside the UI backend
-  public static CollectedDependencies collectLocallyUsedDependenciesAndReset() {
+  public static CollectedDependencies collectLocalRawDependenciesAndReset() {
     return getUsedRawDependencies(true, true);
   }
 
-  // [GSF] Used in GSFGridDistributionClient to track the remote execution dependencies
-  public static void logRemoteClassAndResourceUsage(CollectedDependencies dependencies) {
+  // [GSF] Used in GSFGridDistributionClient to track the remote execution dependencies (we cannot expose DTC to it)
+  public static void logRemoteRawDependencies(CollectedDependencies dependencies) {
     remoteDependenciesList.add(dependencies);
   }
 
-  public static List<CollectedDependencies> collectRemotelyUsedDependenciesAndReset() {
+  public static List<CollectedDependencies> collectRemoteRawDependenciesAndReset() {
     List<CollectedDependencies> remoteDependenciesListCopy = List.copyOf(remoteDependenciesList);
     remoteDependenciesList.clear();
     return remoteDependenciesListCopy;
@@ -511,13 +518,14 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   // NEVER mix in remote dependencies: this is meant only to capture local ones.
+  // ONLY meant for testing; use #collectLocalRawDependenciesAndReset() otherwise
   public synchronized static CollectedDependencies getUsedRawDependencies(boolean clearInternalState,
                                                                           boolean sanitize) {
     Set<String> usedClassesCopy = instrumentationExemptedClasses.stream()
                                                                 .map(ClassMonitorInjector::constructDependencyName)
                                                                 .collect(Collectors.toSet());
 
-    classesFromExemptedPackages.forEach(usedClassesCopy::add);
+    classesFromExemptedPackages.forEach(usedClassesCopy::add); // collection addAll has a bug, please to do not use
     usedClasses.keySet().forEach(usedClassesCopy::add); // collection addAll has a bug, please to do not use
     if (showTopN > NOT_COUNTING_HITS) {
       List<Map.Entry<String, Integer>> sortedUsage = usedClasses.entrySet()
@@ -796,12 +804,15 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       }
     } else {
       // If not a JAR, then it could be an unsupported protocol (as we discovered with jrt)
-      // However, the OBT test runner does unpack some jars given some suites expect to find files from filesystem
+      // However, the Optimus Test Runner (OTR) does unpack some jars given some suites expect to find files from filesystem
       // (i.e. do not use Class.getResource...), so they happen to be effectively from Optimus
-      recordInternalEvent(String.format("%s Resource %s in %s is assumed from Optimus",
-                                        CMI_INFO,
-                                        resourcePath,
-                                        resourceUrl));
+      if (!resourceUrl.toString().endsWith("/classes/" + resourcePath)) {
+        // It does not look like it is related to Optimus Test Runner (OTR)
+        recordInternalEvent(String.format("%s Resource %s in %s is assumed from Optimus",
+                                          CMI_INFO,
+                                          resourcePath,
+                                          resourceUrl));
+      }
       return rememberAsOptimusClass(resourcePath, true);
     }
   }
