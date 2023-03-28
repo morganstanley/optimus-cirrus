@@ -135,8 +135,33 @@ object Breadcrumbs {
   val queue = new ArrayBlockingQueue[Crumb](queueLength)
   val drainTime: Int = PropertyUtils.get(queueDrainTime, 2000)
 
+  private val registrationCallbacks = new mutable.HashMap[String, (ChainedID, Boolean) => Unit]
   private[breadcrumbs] val interests = new mutable.HashMap[String, Map[String, (Int, ChainedID)]]
   private val interestsLock = new ReentrantReadWriteLock()
+
+  // For custom handling of registration
+  def registerRegistrationCallback(id: String, cb: (ChainedID, Boolean) => Unit): Unit =  {
+    interestsLock.writeLock.lock()
+    try {
+      registrationCallbacks.put(id, cb)
+    } finally {
+      interestsLock.writeLock().unlock()
+    }
+  }
+
+  final case class Registration private[Breadcrumbs] (interestedIn: ChainedID, task: ChainedID) {
+    private var deregistered: Boolean = false
+    def deregister(): Unit = this.synchronized {
+      if (!deregistered) {
+        deregisterInterest(interestedIn, task)
+        deregistered = true
+      }
+    }
+    def deregister[A](a: A): A = {
+      deregister()
+      a
+    }
+  }
 
   /**
    * Register interest in crumbs published for the same VM but under a different ChainedID. While registration is
@@ -159,27 +184,13 @@ object Breadcrumbs {
    * }}}
    * then crumbs sent to AAAAA#1 will also go to #2 and #1#5, but not vice versa.
    */
-
-  final case class Registration private[Breadcrumbs] (interestedIn: ChainedID, task: ChainedID) {
-    private var deregistered: Boolean = false
-    def deregister(): Unit = this.synchronized {
-      if (!deregistered) {
-        deregisterInterest(interestedIn, task)
-        deregistered = true
-      }
-    }
-    def deregister[A](a: A): A = {
-      deregister()
-      a
-    }
-  }
-
   def registerInterest(task: ChainedID): Registration = registerInterest(ChainedID.root, task)
   def registerInterest(interestedIn: ChainedID, task: ChainedID): Registration = {
     val rs = interestedIn.base
     val ts = task.repr
     interestsLock.writeLock.lock()
     try {
+      registrationCallbacks.values.foreach(_ (task, true))
       if (!interests.contains(rs)) {
         interests.put(rs, Map(ts -> (1, task)))
       } else if (!interests(rs).contains(ts)) {
@@ -202,6 +213,7 @@ object Breadcrumbs {
     val ts = task.repr
     interestsLock.writeLock.lock()
     try {
+      registrationCallbacks.values.foreach(_ (task, false))
       if (interests.contains(rs) && interests(rs).contains(ts)) {
         val (i, c) = interests(rs)(ts)
         if (i <= 1) {

@@ -34,6 +34,7 @@ public class DiagnosticSettings {
   private final static String ENABLE_XS_REPORTING = "optimus.profile.xsreporting";
   public final static String TRACE_TWEAKS = "optimus.profile.traceTweaks";
   public final static String CLASS_USAGE_MONITOR = "optimus.monitor.classUsage";
+  public final static String CLASS_USAGE_MONITOR_OVERHEAD_TRACE = "optimus.monitor.classUsage.overheadTrace";
   private final static String SHOW_TOP_N_CLASS_USAGE = "optimus.monitor.classUsage.showTopN";
   private final static String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
 
@@ -66,6 +67,7 @@ public class DiagnosticSettings {
 
   final public static boolean enableJunitRunnerMonitorInjection;
   final public static boolean isClassMonitorEnabled;
+  final public static boolean isClassMonitorOverheadTraceEnabled;
   final public static int showThisNumberOfTopUsedClasses;
   final public static boolean keepFullTraceFile;
   final public static String traceToOverride;
@@ -96,7 +98,7 @@ public class DiagnosticSettings {
   /**
    * Report RT violations to file
    */
-  final public static boolean writeRTVerifierReport = getBoolProperty("optimus.rt.verifier.report", false);
+  final public static boolean writeRTVerifierReport = getBoolProperty("optimus.rt.verifier.report", true);
 
   /**
    * Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true)
@@ -154,7 +156,7 @@ public class DiagnosticSettings {
    */
   public static boolean proxyInWaitChain = getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
 
-  final public static String asyncProfilerSettings = getStringProperty("optimus.graph.async.profiler", System.getenv("ASYNC_PROFILER_SETTINGS"));
+  final public static String asyncProfilerSettings;
   final public static boolean awaitStacks;
 
   public static double infoDumpPeriodicityHours = getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
@@ -284,7 +286,7 @@ public class DiagnosticSettings {
     return (p == null) ? deflt : Double.parseDouble(p);
   }
 
-  private static boolean parseBooleanWithDefault(String value, boolean deflt) {
+  public static boolean parseBooleanWithDefault(String value, boolean deflt) {
     if (value == null)
       return deflt;
     else if ("1".equals(value) || "true".equals(value))
@@ -456,6 +458,8 @@ public class DiagnosticSettings {
     isClassMonitorEnabled = getBoolProperty(CLASS_USAGE_MONITOR, false) || parseBooleanWithDefault(System.getenv(
         "OPTIMUS_DIST_CLASS_MONITOR"), false);
 
+    isClassMonitorOverheadTraceEnabled = getBoolProperty(CLASS_USAGE_MONITOR_OVERHEAD_TRACE, false);
+
     showThisNumberOfTopUsedClasses = getIntProperty(SHOW_TOP_N_CLASS_USAGE, 0);
 
     useStrictMath = getBoolProperty(USE_STRICT_MATH, false);
@@ -492,6 +496,10 @@ public class DiagnosticSettings {
       infoDumpDir = System.getenv("DIAGNOSTIC_DUMP_DIR");
     if(infoDumpDir == null)
       infoDumpDir = System.getProperty("java.io.tmpdir");
+    String aps = getStringProperty("optimus.graph.async.profiler");
+    if( aps == null) aps = System.getenv("ASYNC_PROFILER_SETTINGS");
+    if (aps == null) aps = System.getenv("OPTIMUS_DIST_ASYNC_PROFILER_SETTINGS");
+    asyncProfilerSettings = aps;
     awaitStacks = asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true");
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
     syntheticGraphMethodsEnabled = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);

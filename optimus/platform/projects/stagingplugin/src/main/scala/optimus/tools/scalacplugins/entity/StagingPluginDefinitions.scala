@@ -12,7 +12,6 @@
 package optimus.tools.scalacplugins.entity
 
 import scala.tools.nsc.Global
-import optimus.scalacompat.isAtLeastScala2_13
 
 trait StagingPluginDefinitions {
   val global: Global
@@ -29,10 +28,15 @@ trait StagingPluginDefinitions {
   lazy val LazyListClass = getClassIfDefined("scala.collection.immutable.LazyList")
   lazy val Predef_augmentString = getMemberIfDefined(definitions.PredefModule, TermName("augmentString"))
   lazy val Predef_wrapString = getMemberIfDefined(definitions.PredefModule, TermName("wrapString"))
+  def isAtLeastScala2_13 = IterableOnceOpsClass != NoSymbol
+  def isScala2_12 = !isAtLeastScala2_13
 
   lazy val IntToFloat = IntClass.tpe.member(TermName("toFloat"))
+  lazy val IntToDouble = IntClass.tpe.member(TermName("toDouble"))
   lazy val LongToFloat = LongClass.tpe.member(TermName("toFloat"))
   lazy val LongToDouble = LongClass.tpe.member(TermName("toDouble"))
+
+  lazy val IntegralToFloating: Set[Symbol] = Set(IntToFloat, IntToDouble, LongToFloat, LongToDouble)
 
   lazy val Predef_fallbackStringCBF =
     definitions.getMemberIfDefined(PredefModule, TermName("fallbackStringCanBuildFrom"))

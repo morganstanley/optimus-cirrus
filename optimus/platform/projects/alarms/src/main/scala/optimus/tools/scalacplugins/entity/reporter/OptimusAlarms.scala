@@ -508,9 +508,9 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val ILLEGAL_COVARIANT_OVERRIDE =
     error4(22108, OptimusPhases.REF_CHECKS, "Illegal covariant override of %s in %s: expected %s, got %s.")
   val NODE_OVERLOAD_ERROR =
-    error3(22109, OptimusPhases.REF_CHECKS, "Can't overload @node methods, but get %s and %s (%s)")
+    error1(22109, OptimusPhaseInfo.Namer, "Can't overload @node methods, see overload on line (%s)")
   val CREATE_NODE_TRAIT_OVERLOAD_ERROR =
-    error2(22110, OptimusPhases.REF_CHECKS, "Can't overload @createNodeTrait methods, but get %s and %s")
+    error1(22110, OptimusPhaseInfo.Namer, "Can't overload @createNodeTrait methods, see overload on line (%s)")
   val IMPLICIT_OVERRIDE_ERROR = error1(
     22111,
     OptimusPhases.REF_CHECKS,
@@ -910,7 +910,28 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     "Accessing a ctor parameter in a non-transient entity is unsafe. A JVM default value would be used if expression is evaluated. (That may also happen if a stored node is not found in the serialized stream)"
   )
   val SI_CALL_NONSI =
-    warning0(12002, OptimusPhases.REF_CHECKS, "Scenario independent node cannot call scenario dependent node")
+    warning2(
+      12002,
+      OptimusPhases.REF_CHECKS,
+      "Call to (possibly) scenario dependent node %s from scenario independent context %s. Any tweak access will cause a runtime exception!"
+    )
+  val SI_CALL_NONSI_NOT_NODE = preIgnore(
+    warning2(
+      12003,
+      OptimusPhases.REF_CHECKS,
+      "Call to (possibly) scenario dependent async function %s from a scenario independent context %s. Any tweak access will cause a runtime exception!"
+    )
+  )
+  // This should be an error!
+  val TWEAK_IN_SI_CONTEXT =
+    preIgnore(
+      warning2(
+        12004,
+        OptimusPhases.REF_CHECKS,
+        "Tweak %s cannot be resolved in a scenario-independent context %s. If the context is an SI node, you'll get a crash. If it's an entity constructor, you'll get UNDEFINED BEHAVIOUR."
+      )
+    )
+
   val HANDLE_IN_NODE = warning0(12203, OptimusPhases.REF_CHECKS, "cannot call @handle methods inside @node")
   val IMPURE_IN_NODE = info0(12205, OptimusPhases.REF_CHECKS, "Invalid call to @impure from @node")
 
@@ -970,6 +991,12 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   val NOPOSITION = info1(19009, OptimusPhases.POSITION, "INFO: %s is not positioned")
 
+  val INCORRECT_CATALOG =
+    error1(
+      19101,
+      OptimusPhases.EXPORTINFO,
+      "This Catalog %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog for an example"
+    )
   // removed:
   //   val EMBEDDABLE_APPLY_REMOVAL = info1(
   //     19010,

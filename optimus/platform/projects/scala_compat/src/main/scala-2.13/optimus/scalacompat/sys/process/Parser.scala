@@ -9,13 +9,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.tools.scalacplugins.entity
+package optimus.scalacompat.sys.process
 
-final case class OptimusPhaseInfo(phaseName: String, description: String, runsAfter: String, runsBefore: String) {
-  def nameAndDescription: (String, String) = (phaseName, description)
-}
+import scala.tools.nsc.settings.MutableSettings
 
-object OptimusPhaseInfo {
-  val NoPhase: OptimusPhaseInfo = OptimusPhaseInfo("NoPhase", "<no phase>", "parser", "terminal")
-  val Namer: OptimusPhaseInfo = OptimusPhaseInfo("namer", "scala_namer_phase", "", "")
+object Parser {
+  def tokenize(command: String): List[String] =
+    new MutableSettings(_ => ()).splitParams(command)
 }

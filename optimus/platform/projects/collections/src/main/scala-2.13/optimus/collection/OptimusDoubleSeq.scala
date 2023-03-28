@@ -127,7 +127,7 @@ object OptimusDoubleSeq
       override def result() = {
         val res: OptimusDoubleSeq = if (arrays eq null) {
           (elemsIndex: @switch) match {
-            case 0 => empty
+            case 0 => OptimusDoubleSeq.empty
             case _ =>
               if (capacity == elemsIndex) {
                 val res = unsafeFromArray(elems)

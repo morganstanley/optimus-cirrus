@@ -118,11 +118,28 @@ package object collection extends MapBuildFromImplicits {
   lazy val ParCollectionConverters = scala.collection.parallel.CollectionConverters
 
   implicit class ToStringPrefix(c: Iterable[_]) {
-    def stringPrefix: String = BuilderProvider.stringPrefix(c)
+    def stringPrefix: String = BuilderProvider.className(c)
   }
 
   implicit class MutableIndexedSeqViewSlice[A](private val self: MutableIndexedSeqView.SomeIndexedSeqOps[A]) {
     def viewSlice(from: Int, until: Int): MutableIndexedSeqView[A] = new MutableIndexedSeqView[A](self, from, until)
   }
   implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
+  // used widely, let's keep it for now
+  def asScalaBuffer[A](as: java.util.List[A]): sc.mutable.Buffer[A] = {
+    import scala.jdk.javaapi.{CollectionConverters => CC}
+    CC.asScala(as)
+  }
+
+  final private class DeepArray(as: Array[_]) extends sc.IndexedSeq[Any] {
+    override def apply(i: Int): Any = {
+      val a = as(i)
+      if (a.getClass.isArray) new DeepArray(a.asInstanceOf[Array[_]])
+      else a
+    }
+    override def length: Int = as.length
+  }
+  implicit class ArrayDeepOps(private val self: Array[_]) {
+    def deep: sc.IndexedSeq[Any] = new DeepArray(self)
+  }
 }

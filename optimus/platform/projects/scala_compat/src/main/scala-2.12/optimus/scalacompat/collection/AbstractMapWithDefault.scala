@@ -9,13 +9,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.tools.scalacplugins.entity
+package optimus.scalacompat.collection
 
-final case class OptimusPhaseInfo(phaseName: String, description: String, runsAfter: String, runsBefore: String) {
-  def nameAndDescription: (String, String) = (phaseName, description)
-}
-
-object OptimusPhaseInfo {
-  val NoPhase: OptimusPhaseInfo = OptimusPhaseInfo("NoPhase", "<no phase>", "parser", "terminal")
-  val Namer: OptimusPhaseInfo = OptimusPhaseInfo("namer", "scala_namer_phase", "", "")
+abstract class AbstractMapWithDefault[A, +B](underlying: Map[A, B], defaultValue: A => B)
+    extends Map.WithDefault[A, B](underlying, defaultValue) {
+  override def +[B1 >: B](kv: (A, B1)): Map.WithDefault[A, B1] = updated(kv._1, kv._2)
+  override def -(key: A): Map.WithDefault[A, B] = removed(key)
+  def removed(key: A): Map.WithDefault[A, B]
 }

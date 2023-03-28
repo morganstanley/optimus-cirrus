@@ -134,6 +134,13 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       """[NEW]Widening conversion from %s to %s is deprecated because it loses precision, add an explicit `%s`.""".stripMargin
     )
+
+  val INTEGRAL_DIVISION_TO_FLOATING =
+    warning1(
+      sn = 20313,
+      StagingPhase.POST_TYPER_STANDARDS,
+      """[NEW]Integral division is implicitly converted (widened) to a floating point value. Add an explicit `.%s`.""".stripMargin
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {

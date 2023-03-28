@@ -126,7 +126,7 @@ public class CallWithArgsGenerator implements Opcodes {
       mv.push(i);
       mv.loadThis();
       mv.getField(cwaClass, "arg" + i, args[i]);
-      mv.box(args[i]);
+      mv.valueOf(args[i]);
       mv.visitInsn(AASTORE);
     }
     mv.visitInsn(ARETURN);

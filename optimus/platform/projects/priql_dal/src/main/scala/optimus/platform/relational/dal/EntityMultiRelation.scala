@@ -192,7 +192,7 @@ class EntityMultiRelation[T <: Entity](
       expr: BinaryExpressionElement): Boolean = {
     val l = verifyServerSideBinaryExpressionElement(entityElement, expr.left.asInstanceOf[BinaryExpressionElement])
     val r = verifyServerSideBinaryExpressionElement(entityElement, expr.right.asInstanceOf[BinaryExpressionElement])
-    if (l == true || r == true)
+    if (l || r)
       throw new RelationalException("only nonIndexFilter is allowed on both sides of ||")
     else false
   }

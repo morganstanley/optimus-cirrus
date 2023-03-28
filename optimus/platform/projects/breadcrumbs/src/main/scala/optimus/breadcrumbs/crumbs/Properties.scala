@@ -160,6 +160,23 @@ object Properties extends KnownProperties {
       }
     }
 
+    implicit object NestedElemsJsonConverter extends RootJsonFormat[Elems] {
+      override def write(obj: Elems): JsValue = {
+        obj.toMap.toJson
+      }
+      override def read(json: JsValue): Elems = {
+        val kvs = json.convertTo[Map[String, JsValue]]
+        val elems = kvs.map {
+          case (stringKey,jsValue) => {
+            val prop = stringToKey(stringKey, None).asInstanceOf[Key[Any]]
+            val value = prop.parse(jsValue)
+            Elem(prop, value)
+          }
+        }.toSeq
+        Elems(elems:_*)
+      }
+    }
+
     implicit def toZonedDateTime(t: Instant): ZonedDateTime =
       ZonedDateTime.ofInstant(t, ZoneId.of("UTC"))
 
@@ -338,6 +355,8 @@ object Properties extends KnownProperties {
     def ::(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def +(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def toMap: Map[String, JsValue] = m.map(_.toTuple).toMap
+
+    override def toString = toMap.toString
   }
 
   object Elems {
@@ -391,7 +410,7 @@ object Properties extends KnownProperties {
   // For adding properties outside the central registry that use the mechanics of crumb
   // property serialization but of course won't be deserializable without the projects that
   // define them on the classpath.
-  private class WildcatKey[A](nme: String, writer: JsonWriter[A]) extends Key[A] {
+  sealed class WildcatKey[A](nme: String, writer: JsonWriter[A]) extends Key[A] {
     override def name: String = nme
     override def toString = name
     override def source: String = Crumb.Headers.DefaultSource
@@ -536,6 +555,9 @@ object Properties extends KnownProperties {
   val profDalWritesDist = propI
   val profDalResultsDist = propI
   val profMaxHeap = propL
+  val profCurrHeap = propL
+  val profMaxNonHeap = propL
+  val profCurrNonHeap = propL
   val profJvmCPUTime = propL
   val profJvmCPULoad = propD
   val profSysCPULoad = propD
@@ -553,6 +575,27 @@ object Properties extends KnownProperties {
   val profThreads = prop[Map[String, Map[String, Long]]]
   val profMetricsDiff = prop[Map[String, Map[String, Array[Double]]]]
   val profSS = prop[Map[String, Array[String]]]
+
+  val profStallTime = propL
+  val pluginWaits = prop[Map[String, Long]]
+  val pluginWaitSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val pluginStallTimes = prop[Map[String, Long]]
+  val pluginStallTimesSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val profDALBatches = propI
+  val profDALCommands = propI
+  val profGCDuration = propL
+  val profGCMajorDuration = propL
+  val profGCMinorDuration = propL
+  val profGCMajors = propI
+  val profGCMinors = propI
+  val profCommitedMB = propL
+  val profHeapMB = propL
+
+  val snapTimeMs = propL
+  val snapTimeUTC = prop[String]
+  val snapEpochId = propL
+
+  val pulse = prop[Elems]
 
   val profiledEvent = prop[ProfiledEventCause]
   val profilingMode = prop[String]
@@ -691,9 +734,14 @@ object Properties extends KnownProperties {
   val profSummary = prop[Map[String, JsObject]]
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
+  val profStacks = prop[Seq[(Double, Double, String)]]
+  val profStack = prop[Seq[String]]
+  val profStackId = prop[String]
+  val profPreOptimusStartup = propL
 
   // Temporal surface tracing
   val tsQueryClassName = prop[String]
+  val tsQueryType = prop[String]
   val tsTag = prop[String]
 
   val vt = prop[Instant]
@@ -713,6 +761,10 @@ object Properties extends KnownProperties {
   val rtvViolation = prop[String]
   val rtvLocation = prop[String]
   val rtvStack = prop[String]
+
+  val targetNode = prop[String]
+  val requestingNode = prop[String]
+  val exceptionTrace = prop[String]
 
   /** Used to detect whether a certain feature is being used */
   val feature = prop[String]
