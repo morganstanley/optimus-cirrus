@@ -123,6 +123,9 @@ public class DiagnosticSettings {
   // if optimus.profile.testNonExistingNodesAtRuntime is set to true then this sys prop does not do anything
   final public static boolean warnOnOptconfParsingFailure = getBoolProperty("optimus.profiler.warnOnOptconfParseError", true);
 
+  // if throwBadSchedulerStateException is true, when a test doesn't clean up scheduler state, it will throw exception
+  final public static boolean throwBadSchedulerStateException = getBoolProperty("optimus.profiler.throwBadSchedulerStateException", true);
+
   public final static String XSFT_PROPERTY = "optimus.profile.enableXSFT";
   /**
    * Not final, can be configured through command line.

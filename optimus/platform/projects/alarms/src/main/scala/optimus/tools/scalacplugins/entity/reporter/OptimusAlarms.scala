@@ -527,7 +527,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   //     22203,
   //     OptimusPhases.REF_CHECKS,
   //     "override non @%s method %s with @%s, the async transform won't happen when use base class's type")
-  val IMPURE_IN_NODE = error0(22205, OptimusPhases.REF_CHECKS, "Invalid call to @impure from @node")
+  val IMPURE_IN_NODE = error2(22205, OptimusPhases.REF_CHECKS, "Invalid call to @impure method %s from RT context %s")
 
   val TRANSIENT_INHERIT =
     error2(22300, OptimusPhases.REF_CHECKS, "entity %s must be @transient as supertype %s is marked @transient")
@@ -806,6 +806,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val JOB_SINGLEPARAM_NONSTOREDENTITY =
     error0(sn = 29108, OptimusPhases.REF_CHECKS, "@job may only have one single parameter of type @stored @entity")
   val JOB_WITHOUT_NODE_ASYNC = error0(29109, OptimusPhases.ADJUST_AST, "@job may be only set on a @node / @async")
+
+  val POISONED_PLACEHOLDER = error1(29200, OptimusPhases.POSITION, "A placeholder method wasn't replaced during compilation: %s")
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -932,8 +934,8 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
       )
     )
 
-  val HANDLE_IN_NODE = warning0(12203, OptimusPhases.REF_CHECKS, "cannot call @handle methods inside @node")
-  val IMPURE_IN_NODE = info0(12205, OptimusPhases.REF_CHECKS, "Invalid call to @impure from @node")
+  val HANDLE_IN_NODE = warning2(12203, OptimusPhases.REF_CHECKS, "Cannot call @handle method %s inside RT context %s")
+  val IMPURE_IN_NODE = info2(12205, OptimusPhases.REF_CHECKS, "Invalid call to @impure method %s from RT context %s")
 
   // optimus_valaccessors phase warnings
   val RELY_ON_BROKEN_BEHAVIOUR = warning2(
