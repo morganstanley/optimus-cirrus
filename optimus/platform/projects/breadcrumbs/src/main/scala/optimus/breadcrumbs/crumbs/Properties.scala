@@ -167,13 +167,13 @@ object Properties extends KnownProperties {
       override def read(json: JsValue): Elems = {
         val kvs = json.convertTo[Map[String, JsValue]]
         val elems = kvs.map {
-          case (stringKey,jsValue) => {
+          case (stringKey, jsValue) => {
             val prop = stringToKey(stringKey, None).asInstanceOf[Key[Any]]
             val value = prop.parse(jsValue)
             Elem(prop, value)
           }
         }.toSeq
-        Elems(elems:_*)
+        Elems(elems: _*)
       }
     }
 
@@ -440,6 +440,7 @@ object Properties extends KnownProperties {
   val distedTo = prop[String]
   val distedFrom = prop[String]
   val engineId = prop[ChainedID]
+ val engineRoot = prop[String]
   val engine = prop[String]
   val replicaFrom = prop[ChainedID]
   val currentlyRunning = prop[Seq[ChainedID]]
@@ -542,10 +543,15 @@ object Properties extends KnownProperties {
   val triggerRatio = propD
   val includeSI = propB
 
+  val profStarts = propL
   val profTimes = propL
   val profWallTime = propL
   val profGraphTime = propL
   val profSelfTime = propL
+  val profGraphSpinTime = propL
+  val profGraphCpuTime = propL
+  val profGraphWaitTime = propL
+  val profGraphIdleTime = propL
   val profDalReads = propL
   val profDalEntities = propL
   val profDalWrites = propL
@@ -579,8 +585,10 @@ object Properties extends KnownProperties {
   val profStallTime = propL
   val pluginWaits = prop[Map[String, Long]]
   val pluginWaitSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val pluginStarts = prop[Map[String, Long]]
+  val pluginStartSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
   val pluginStallTimes = prop[Map[String, Long]]
-  val pluginStallTimesSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val pluginStallTimesSeq = prop[Seq[Map[String, String]]] // for splunk happiness
   val profDALBatches = propI
   val profDALCommands = propI
   val profGCDuration = propL
@@ -590,6 +598,9 @@ object Properties extends KnownProperties {
   val profGCMinors = propI
   val profCommitedMB = propL
   val profHeapMB = propL
+  val profNonAuxBlockingTime = propL
+  val profStartupEventTime = propL
+  val profHandlerEventTime = propL
 
   val snapTimeMs = propL
   val snapTimeUTC = prop[String]
@@ -734,7 +745,8 @@ object Properties extends KnownProperties {
   val profSummary = prop[Map[String, JsObject]]
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
-  val profStacks = prop[Seq[(Double, Double, String)]]
+  val profStacks = prop[Seq[(Double, Double, String, String)]]
+  val miniGridCalc = prop[String]
   val profStack = prop[Seq[String]]
   val profStackId = prop[String]
   val profPreOptimusStartup = propL
@@ -747,6 +759,8 @@ object Properties extends KnownProperties {
   val vt = prop[Instant]
   val tt = prop[Instant]
   val dmcClientSummary = prop[Map[String, Long]]
+
+  val plugin = prop[String]
 
   /** givenOverlay use cases */
   val currentScenario = prop[String]
