@@ -233,12 +233,12 @@ object Breadcrumbs {
 
   private[breadcrumbs] def replicate(c: Crumb): Iterable[Crumb] = {
     if (c.flags.contains(CrumbFlag.DoNotReplicateOrAnnotate)) {
-      Some(c)
+      List(c)
     } else {
       interestsLock.readLock.lock()
       try {
         val doNotReplicate = c.flags.contains(CrumbFlag.DoNotReplicate)
-        interests.get(c.uuid.base).fold[Iterable[Crumb]](Some(c)) { regs: Map[String, (Int, ChainedID)] =>
+        interests.get(c.uuid.base).fold[Iterable[Crumb]](List(c)) { regs: Map[String, (Int, ChainedID)] =>
           var outOfProcessReplicas: List[Crumb] = Nil
           var listeners: List[ChainedID] = Nil
           regs.valuesIterator.foreach { i: (Int, ChainedID) =>

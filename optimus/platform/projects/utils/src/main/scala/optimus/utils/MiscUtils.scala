@@ -337,8 +337,13 @@ object MiscUtils {
     def sumOf[B](f: A => B)(implicit B: Numeric[B]): B = self.foldLeft(B.zero)((b, a) => B.plus(b, f(a)))
   }
 
-  implicit class Optionable[T](private val t: T) {
+  // blah.optionally(pred) = Some(blah) if pred(blah)
+  implicit class Optionable[T](private val t: T)  extends AnyVal {
     def optionally(pred: T => Boolean): Option[T] = if(pred(t)) Some(t) else None
+  }
+  // bool.thenSome(blah) = Some(blah) if bool
+  implicit class ThenSome(private val pred: Boolean) extends AnyVal {
+    def thenSome[T](t: => T): Option[T] = if (pred) Some(t) else None
   }
 
 }
