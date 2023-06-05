@@ -35,7 +35,8 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
     extends PluginComponent
     with TypingTransformers
     with OptimusPluginReporter
-    with WithOptimusPhase {
+    with WithOptimusPhase
+    with StagingPluginDefinitions {
   import global._
 
   object names {}
@@ -97,6 +98,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         go(config.importShadow, new ImportShadow(unit, state)) // https://github.com/scala/scala/pull/7609
         go(config.rewriteCaseClassToFinal, new CaseClassTransformer(unit, state))
         go(config.intToFloat, new IntToFloat(unit, state))
+        go(config.unsorted, new Unsorted(unit, state))
         if (state.newImports.nonEmpty) new AddImports(unit, state).run(unit.body)
         patchSets += Patches(state.patches.toArray, unit.source, underlyingFile, encoding)
       }
@@ -146,14 +148,6 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         }
       }
       new ParseTree(unit.body, index)
-    }
-  }
-
-  // Applied.unapply matches any tree, not just applications
-  private object Application {
-    def unapply(t: GenericApply): Some[(Tree, List[Tree], List[List[Tree]])] = {
-      val applied = treeInfo.dissectApplied(t)
-      Some((applied.core, applied.targs, applied.argss))
     }
   }
 
@@ -436,7 +430,8 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
     }
   }
   private object MacroExpansion {
-    def unapply(t: Tree): Option[Tree] = t.attachments.get[analyzer.MacroExpansionAttachment].map(_.expandee).filter(_ ne t)
+    def unapply(t: Tree): Option[Tree] =
+      t.attachments.get[analyzer.MacroExpansionAttachment].map(_.expandee).filter(_ ne t)
   }
 
   class TypeRenderer(rewriteTypingTransformer: RewriteTypingTransformer) extends TypeMap {
@@ -947,24 +942,22 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
     lazy val nilaryIn213: Set[Symbol] = Set(
       definitions.Any_##,
       definitions.Any_toString,
-      definitions.Any_hashCode,
+      definitions.Any_hashCode
     ) ++ {
       val numericOps = definitions.getMemberClass(cls[scala.math.Numeric[_]], TypeName("Ops"))
       Set(nme.UNARY_-.toString, "abs", "signum", "toInt", "toLong", "toFloat", "toDouble").map(n =>
         meth(numericOps, TermName(n)): Symbol)
     } + meth(cls[scala.math.ScalaNumericConversions], TermName("underlying")) ++ {
       val numConv = cls[scala.math.ScalaNumericAnyConversions]
-      Set("isWhole", "underlying", "byteValue", "shortValue", "intValue", "longValue", "floatValue", "doubleValue").map(n =>
-        meth(numConv, TermName(n))
-      )
+      Set("isWhole", "underlying", "byteValue", "shortValue", "intValue", "longValue", "floatValue", "doubleValue").map(
+        n => meth(numConv, TermName(n)))
     } ++ {
       val bd = cls[scala.math.BigDecimal]
       Set("toBigInt", "toBigIntExact").map(n => meth(bd, TermName(n)))
     }
     lazy val nilaryIn213Names = nilaryIn213.map(_.name)
 
-    def ignore(sym: Symbol) = nilaryIn213Names(sym.name) && nilaryIn213.exists(m =>
-      sym.overrideChain.contains(m))
+    def ignore(sym: Symbol) = nilaryIn213Names(sym.name) && nilaryIn213.exists(m => sym.overrideChain.contains(m))
     def check(sym: Symbol): Boolean = !sym.isConstructor && sym.paramss == List(Nil) && !ignore(sym) &&
       !sym.overrideChain.exists(sym => sym.isJavaDefined || definitions.isUniversalMember(sym))
 
@@ -975,7 +968,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         val isAutoApplied = tree.hasAttachment[AutoApplicationAttachment.type]
         def scalaTestAssert = fun match {
           case Select(Ident(n), _) => n.toString.startsWith("$org_scalatest")
-          case _ => false
+          case _                   => false
         }
         if (isAutoApplied && !scalaTestAssert)
           state.patches += Patch(tree.pos.focusEnd, "()")
@@ -995,13 +988,17 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
 
     def check(sym: Symbol, paramss: List[List[ValDef]]): Int = {
       val skip = sym.typeParams.nonEmpty || sym.isSynthetic || sym.isAccessor || sym.isConstructor ||
-        !sym.isOverridingSymbol || sym.overrides.exists(sym => sym.isJavaDefined || definitions.isUniversalMember(sym)) || {
-        sym.name.toString match {
-          case BeanPeeler(rest) => sym.owner.tpe.member(TermName(rest.updated(0, rest(0).toLower)).localName)
-            .annotations.exists(_.tpe.typeSymbol.name.toString.contains("BeanProperty"))
-          case _ => false
+        !sym.isOverridingSymbol || sym.overrides.exists(sym =>
+          sym.isJavaDefined || definitions.isUniversalMember(sym)) || {
+          sym.name.toString match {
+            case BeanPeeler(rest) =>
+              sym.owner.tpe
+                .member(TermName(rest.updated(0, rest(0).toLower)).localName)
+                .annotations
+                .exists(_.tpe.typeSymbol.name.toString.contains("BeanProperty"))
+            case _ => false
+          }
         }
-      }
 
       if (skip) NoFix
       else {
@@ -1017,7 +1014,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
     }
 
     override def transform(tree: Tree): Tree = tree match {
-      case dd: DefDef  =>
+      case dd: DefDef =>
         val fix = check(dd.symbol, dd.vparamss)
         if (fix != NoFix) {
           val identEnd = unit.source.content.indexWhere(c => !(c.isUnicodeIdentifierPart || c == '$'), dd.pos.point)
@@ -1107,12 +1104,15 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
       case Some(Ident(n)) => sel.name == n
       case _              => false
     }
-    lazy val identSyms = OriginalTreeTraverser.collect(unit.body) {
-      case id: Ident => id.symbol
-      case sel: Select if wasIdent(sel) => sel.symbol
-    }.toSet
+    lazy val identSyms = OriginalTreeTraverser
+      .collect(unit.body) {
+        case id: Ident                    => id.symbol
+        case sel: Select if wasIdent(sel) => sel.symbol
+      }
+      .toSet
 
-    lazy val packageObjectInUnit = OriginalTreeTraverser.collect(unit.body) { case m: ModuleDef if m.symbol.isPackageObject => m.symbol }.toSet
+    lazy val packageObjectInUnit =
+      OriginalTreeTraverser.collect(unit.body) { case m: ModuleDef if m.symbol.isPackageObject => m.symbol }.toSet
 
     override def transform(tree: Tree): Tree = tree match {
       case imp: Import =>
@@ -1124,10 +1124,10 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
             val fromPackage = enclPackage.info.member(importSym.name)
             val result = fromPackage.exists && fromPackage != importSym && identSyms.contains(fromPackage) &&
               // current file defines package object `foo`, don't need exclude `foo` from wildcard import
-               !(fromPackage.hasPackageFlag && packageObjectInUnit.contains(fromPackage.packageObject)) && {
-              val packageSymSource = fromPackage.sourceFile
-              packageSymSource == null || packageSymSource.path != unit.source.file.path
-            }
+              !(fromPackage.hasPackageFlag && packageObjectInUnit.contains(fromPackage.packageObject)) && {
+                val packageSymSource = fromPackage.sourceFile
+                packageSymSource == null || packageSymSource.path != unit.source.file.path
+              }
             result
           }
           importedSyms.filter(importClashes).toList match {
@@ -1187,13 +1187,14 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   }
 
   private class IntToFloat(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+
     import definitions._
     val intToFloat = IntClass.tpe.member(TermName("toFloat"))
     val longToFloat = LongClass.tpe.member(TermName("toFloat"))
     val longToDouble = LongClass.tpe.member(TermName("toDouble"))
     override def transform(tree: Tree): Tree = tree match {
       case s @ Select(r, _) if r.tpe != null && r.tpe.typeSymbol == IntClass && s.symbol == intToFloat =>
-        if (s.pos.end != s.pos.start &&  codeOf(s.pos) == codeOf(r.pos))
+        if (s.pos.end != s.pos.start && codeOf(s.pos) == codeOf(r.pos))
           state.patches ++= selectFromInfix(r, "toFloat", state.parseTree, false)
         tree
       case s @ Select(r, _) if r.tpe != null && r.tpe.typeSymbol == LongClass && s.symbol == longToFloat =>
@@ -1204,6 +1205,18 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         if (s.pos.end != s.pos.start && codeOf(s.pos) == codeOf(r.pos))
           state.patches ++= selectFromInfix(r, "toDouble", state.parseTree, false)
         tree
+      case _ =>
+        super.transform(tree)
+    }
+  }
+
+  private class Unsorted(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
+    override def transform(tree: Tree): Tree = tree match {
+      case NeedsUnsorted(qual) =>
+
+        state.patches ++= selectFromInfix(qual, "unsorted", state.parseTree, false)
+        state.newImports += OptimusCompatCollectionImport
+        super.transform(tree)
       case _ =>
         super.transform(tree)
     }

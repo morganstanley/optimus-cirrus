@@ -186,7 +186,9 @@ class DALEntityBitemporalSpaceProvider(
       case s =>
         throw new IllegalArgumentException(s"Expected Array[PersistentEntity], found: ${s}")
     }
-    entity.groupBy(_.serialized.entityRef).apar map { case (eref, ent) =>
+    // after groupBy, we have to call '.toVector' to turn the collection type from Map[_,_] to Vector[_]
+    // otherwise if multiple 'from's are None, we will get wrong results.
+    entity.groupBy(_.serialized.entityRef).toVector.apar map { case (eref, ent) =>
       val (from, to) = ent match {
         case a :: Nil =>
           if (a.vtInterval.contains(range.vtRange.from) && a.txInterval.contains(range.ttRange.from)) {
@@ -205,7 +207,7 @@ class DALEntityBitemporalSpaceProvider(
       }
 
       (from map (fr => getEntity[T](fr, frLoadContext)), to map (t => getEntity[T](t, toLoadContext)))
-    } toSeq
+    }
   }
 
   @async def getDeltaInVT[T <: Entity](fromVt: Instant, changeKind: UpdateKind): Seq[EntityChange[T]] = {

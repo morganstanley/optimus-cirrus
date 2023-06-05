@@ -187,6 +187,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
                   lenBuffer.clear();
                   incomingBuffer = lenBuffer;
 
+                  // regex-ignore-line (open-sourcing)
                   sendThread.primeConnection();
                   updateNow();
                   updateLastSendAndHeard();
@@ -194,7 +195,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
                   if (sendThread.tunnelAuthInProgress()) {
                     waitSasl.drainPermits();
                     needSasl.set(true);
-                    sendPrimePacket();
+                    sendPrimingPacket();
                   } else {
                     needSasl.set(false);
                   }
@@ -257,7 +258,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     waitSasl.release();
   }
 
-  @Override
+  @Override // regex-ignore-line (open-sourcing)
   void connectionPrimed() {}
 
   @Override
@@ -370,7 +371,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     return result;
   }
 
-  private void sendPrimePacket() {
+  private void sendPrimingPacket() {
     // assuming the first packet is the priming packet.
     sendPktAndFlush(outgoingQueue.remove());
   }

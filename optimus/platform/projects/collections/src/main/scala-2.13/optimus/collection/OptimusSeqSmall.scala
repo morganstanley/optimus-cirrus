@@ -52,7 +52,7 @@ private[collection] sealed abstract class SmallOptimusSeq[+T] extends OptimusSeq
       this.length == that.length &&
       this.hashCode == that.hashCode && {
         var i = length - 1
-        while (i > 0) {
+        while (i >= 0) {
           if (this(i) != that(i))
             return false
           i -= 1

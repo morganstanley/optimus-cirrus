@@ -141,6 +141,13 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       """[NEW]Integral division is implicitly converted (widened) to a floating point value. Add an explicit `.%s`.""".stripMargin
     )
+
+  val NEEDS_UNSORTED =
+    warning0(
+      sn = 20314,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Transforming a Sorted Set/Map to and unsorted Set/Map now requires explicit demarcation with coll.unsorted.map; this requires an `import optimus.scalacompat.collection._"
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {

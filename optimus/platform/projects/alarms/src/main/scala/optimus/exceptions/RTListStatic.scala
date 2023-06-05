@@ -11,10 +11,10 @@
  */
 package optimus.exceptions
 
+import java.lang.reflect.InvocationTargetException
 import java.security.InvalidParameterException
 import java.time.DateTimeException
 import java.time.format.DateTimeParseException
-
 import scala.reflect.internal.MissingRequirementError
 
 trait RTExceptionTrait
@@ -43,10 +43,16 @@ object RTListStatic {
     "org.xml.sax.SAXParseException" ::
     Nil).toSet
 
-  // Not so sure about these. Please add comments when augmenting.
-  private val dubious: Set[String] =
-    (classOf[ScalaReflectionException] :: classOf[MissingRequirementError]
+  private val dubious: Set[String] = {
+    // 2 exceptions is to allow handling reflection exceptions in NodeTry.
+    // The exception is deemed RT or not based on the underlying exception
+    // See ReflectionExceptionProxy
+    (classOf[ScalaReflectionException]
+      :: classOf[InvocationTargetException]
+      // Not so sure about this one Please add comments when augmenting.
+      :: classOf[MissingRequirementError]
       :: Nil).map(_.getCanonicalName).toSet
+  }
 
   private[optimus] val members = basics ++ notAlwaysOnClasspath ++ dubious
 }

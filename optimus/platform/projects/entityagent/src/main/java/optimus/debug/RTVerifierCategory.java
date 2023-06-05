@@ -22,4 +22,8 @@ public class RTVerifierCategory {
   public final static String MODULE_LAZY_VAL_EC_CURRENT = "MODULE_LAZY_VAL_EC_CURRENT";
   public final static String TWEAK_IN_ENTITY_CTOR = "TWEAK_IN_ENTITY_CTOR";
   public final static String TWEAKABLE_IN_ENTITY_CTOR = "TWEAKABLE_IN_ENTITY_CTOR";
+  public final static String NON_RT_NODE = "NON_RT_NODE";
+
+  public final static String UTRACK_OVER_INVALIDATION = "UTRACK_OVER_INVALIDATION";
+  public final static String UI_INVALIDATION_AFTER_EVAL = "UI_INVALIDATION_AFTER_EVAL";
 }

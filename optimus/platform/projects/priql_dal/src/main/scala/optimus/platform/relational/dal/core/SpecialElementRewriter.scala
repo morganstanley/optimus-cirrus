@@ -98,9 +98,14 @@ class SpecialElementRewriter private (private val searchScope: RelationElement) 
             ifFalse @ BinaryExpressionElement(EQ, c1, c2, _),
             _) =>
         val c0Opt = test match {
-          case BinaryExpressionElement(EQ, c0: ColumnElement, ConstValueElement(null, _), _)
-              if c0.name.startsWith(DALProvider.EntityRef) =>
-            Some(c0)
+          case BinaryExpressionElement(EQ, c0: ColumnElement, ConstValueElement(null, _), _) =>
+            if (c0.name.startsWith(DALProvider.EntityRef)) Some(c0)
+            else
+              (c1, c2) match {
+                case (`c0`, c: ConstValueElement) if c.value != null => Some(c0)
+                case (c: ConstValueElement, `c0`) if c.value != null => Some(c0)
+                case _                                               => None
+              }
           case BinaryExpressionElement(EQ, he: DALHeapEntityElement, ConstValueElement(null, _), _) =>
             Some(he.members.head.asInstanceOf[ColumnElement])
           case _ => None

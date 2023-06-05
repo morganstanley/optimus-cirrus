@@ -440,10 +440,13 @@ object Properties extends KnownProperties {
   val distedTo = prop[String]
   val distedFrom = prop[String]
   val engineId = prop[ChainedID]
- val engineRoot = prop[String]
+  val engineRoot = prop[String]
   val engine = prop[String]
   val replicaFrom = prop[ChainedID]
   val currentlyRunning = prop[Seq[ChainedID]]
+  val currentScopes = prop[Seq[String]]
+  val currentRoots = prop[Seq[String]]
+  val dedupKey = prop[String]
   val requestId = prop[ChainedID]
   val exception = prop[Throwable]
   val stackTrace = prop[Seq[String]]
@@ -583,12 +586,10 @@ object Properties extends KnownProperties {
   val profSS = prop[Map[String, Array[String]]]
 
   val profStallTime = propL
-  val pluginWaits = prop[Map[String, Long]]
-  val pluginWaitSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val pluginInFlight = prop[Map[String, Long]]
   val pluginStarts = prop[Map[String, Long]]
-  val pluginStartSeq = prop[Seq[Map[String, String]]]  // for splunk happiness
+  val pluginBlockTimes = prop[Map[String, Long]]
   val pluginStallTimes = prop[Map[String, Long]]
-  val pluginStallTimesSeq = prop[Seq[Map[String, String]]] // for splunk happiness
   val profDALBatches = propI
   val profDALCommands = propI
   val profGCDuration = propL
@@ -687,6 +688,7 @@ object Properties extends KnownProperties {
   val obtEnd = prop[Instant]
   val obtWallTime = prop[Duration]
   val obtCategory = prop[String]
+  val obtBenchmarkScenario = prop[String]
   val obtBuildId = prop[String]
   val obtDurationByPhase = prop[Map[String, Map[String, Long]]]
   val obtDurationCentilesByPhase = prop[Map[String, Seq[Long]]]
@@ -703,6 +705,17 @@ object Properties extends KnownProperties {
   val obtEndCentiles = prop[Seq[Instant]]
   val obtWallTimes = prop[Map[String, Long]]
   val obtWallTimeCentiles = prop[Seq[Duration]]
+
+  val obtTaskStart = prop[Instant]
+  val obtTaskEnd = prop[Instant]
+  val obtTaskDuration = prop[Duration]
+  val obtTaskCmd = prop[String]
+  val obtTaskExitCode = propI
+  val obtTaskState = prop[String]
+  val obtTaskTryCount = propI
+  val obtTaskMaxTryCount = propI
+  val obtUploadHost = prop[String]
+  val obtUploadTargetDir = prop[String]
 
   // pgo group validation properties
   val pgoDiff = prop[Seq[Map[String, String]]]
@@ -745,9 +758,14 @@ object Properties extends KnownProperties {
   val profSummary = prop[Map[String, JsObject]]
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
-  val profStacks = prop[Seq[(Double, Double, String, String)]]
+  val profStacks = prop[Seq[Elems]]
+  val stackElem = prop[String]
+  val selfCount = propI
+  val totalCount = propI
   val miniGridCalc = prop[String]
   val profStack = prop[Seq[String]]
+  val profCollapsed = prop[String]
+  val stackThumb = prop[Map[String, Int]]
   val profStackId = prop[String]
   val profPreOptimusStartup = propL
 
@@ -776,6 +794,10 @@ object Properties extends KnownProperties {
   val rtvLocation = prop[String]
   val rtvStack = prop[String]
 
+  /** Instrumented node + all concrete implementations */
+  val baseClass = prop[String]
+  val concreteClass = prop[String]
+
   val targetNode = prop[String]
   val requestingNode = prop[String]
   val exceptionTrace = prop[String]
@@ -797,7 +819,11 @@ object Properties extends KnownProperties {
   /** Catch production uses of -Doptimus.runtime.allowIllegalOverrideOfInitialRuntimeEnvironment=true */
   val overrideInitRuntimeEnv = propB
 
-  /** Graph Stress Test history and tinmings */
+  val schedulerState = prop[String]
+  val scalaFallbackModule = prop[String] // object that was looked up
+  val scalaFallbackCls = prop[String]    // class it was looked up from
+
+  /** Graph Stress Test history and timings */
   val stressTestInjector = prop[String]
   val stressTestSuite = prop[String]
   val stressTestGraph = prop[String]
@@ -806,7 +832,7 @@ object Properties extends KnownProperties {
   val stressTestAvgGraphTimeS = propD
   val stressTestFailure = propB
 
-  /** Genesis startup time on Minigrid */
+  /** startup time on Minigrid */
   val jvmUptime = propL
 
   val userWarningsAdded = prop[Map[String, Int]]

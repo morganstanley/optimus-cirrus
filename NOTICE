@@ -10,10 +10,14 @@ This product includes software developed at the Apache Software Foundation (http
 This product bundles software from http://github.com/scalamacros/macrology201, which is available under a "3-clause BSD" license.
 For details, see optimus/platform/projects/core_macro/src/main/scala/optimus/utils/internal/Splicer.scala
 
+This product includes software developed by Oracle. For details, see optimus/buildtool/projects/app/src/main/scala/optimus/buildtool/files/WatchServiceDirectoryWatcher.scala
+
 This product includes software developed by other groups and added in accordance with their Apache 2.0 licenses. Projects include:
-  - https://github.com/spray/spray-json (in optimus.platform.spray_json module; refer to https://github.com/spray/spray-json/pull/222/files)
+  - https://github.com/apache/httpcomponents-core (in optimus/buildtool/projects/app/src/main/scala/org/apache/http/ssl/SSLContexts.java)
+  - https://github.com/census-instrumentation/opencensus-java (in optimus/buildtool/projects/app/src/main/scala/io/opencensus/contrib/http/util/HttpPropagationUtil.java)
   - https://github.com/corretto/hotpatch-for-apache-log4j2 (in optimus/platform/projects/entityagent/src/main/java/optimus/JndiDefanger.java)
-  - https://github.com/thombergs/diffparser (in git-utils/src/main/scala/optimus/git/diffparser/DiffParser.java)
   - https://github.com/gradle/gradle (in optimus.buildtool.htmlreport), specifically from the 'core' and 'testing-base' subprojects
-  - https://github.com/scala/scala (in optimus/buildtool/projects/core/src/main/scala/optimus/buildtool/utils/parser/Parser.scala)
   - https://github.com/pelamfi/pelam-scala-incubator (in optimus/buildtool/projects/runconf/src/main/scala/optimus/buildtool/runconf/compile/TopologicalSort.scala)
+  - https://github.com/scala/scala (in optimus/buildtool/projects/core/src/main/scala/optimus/buildtool/utils/parser/Parser.scala)
+  - https://github.com/spray/spray-json (in optimus.platform.spray_json module; refer to https://github.com/spray/spray-json/pull/222/files)
+  - https://github.com/thombergs/diffparser (in git-utils/src/main/scala/optimus/git/diffparser/DiffParser.java)

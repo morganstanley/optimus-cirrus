@@ -60,8 +60,6 @@ import java.util.concurrent.locks.LockSupport;
  * Java Collections Framework</a>.
  *
  * @param <E> the type of elements held in this collection
- * @author Doug Lea
- * @since 1.7
  */
 public class SpinningTransferQueue<E> extends AbstractQueue<E> implements TransferQueue<E>, java.io.Serializable {
 

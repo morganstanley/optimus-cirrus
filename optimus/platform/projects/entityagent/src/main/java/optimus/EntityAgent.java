@@ -29,6 +29,7 @@ import optimus.debug.InstrumentationInjector;
 import optimus.graph.DiagnosticSettings;
 import optimus.graph.LockInjector;
 import optimus.graph.chaos.ChaosMonkeyInjector;
+import optimus.graph.cleaner.CleanerInjector;
 import optimus.junit.CachingJunitRunnerInjector;
 import optimus.systemexit.ExitInterceptProp;
 import optimus.testidle.TestIdle;
@@ -65,7 +66,7 @@ public class EntityAgent {
     CachingJunitRunnerInjector cachingJunitInjector = new CachingJunitRunnerInjector();
     InstrumentationInjector instrInjector = new InstrumentationInjector();
     HotCodeReplaceTransformer hotCodeReplaceTransformer = new HotCodeReplaceTransformer(instrumentation);
-
+    CleanerInjector cleanerInjector = new CleanerInjector();
     {
       if (DiagnosticSettings.enableHotCodeReplace) {
         hotCodeReplaceTransformer.startPolling();
@@ -82,6 +83,10 @@ public class EntityAgent {
 
       if (DiagnosticSettings.enableHotCodeReplace) {
         transformed = safeTransform(hotCodeReplaceTransformer, loader, clsName, clsRedefined, domain, transformed);
+      }
+
+      if (DiagnosticSettings.rewriteDisposable) {
+        transformed = safeTransform(cleanerInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
       if (DiagnosticSettings.chaosEnabled) {

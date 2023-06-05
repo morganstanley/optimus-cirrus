@@ -11,6 +11,8 @@
  */
 package optimus;
 
+import static optimus.debug.InstrumentationConfig.OBJECT_CLS_NAME;
+
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
@@ -244,7 +246,7 @@ class CollectionInjectHelper implements Opcodes {
   private static int genParam(MethodVisitor mv, Type[] paramTypes, boolean isStatic) {
 
     visitConstNum(mv, paramTypes.length);
-    mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+    mv.visitTypeInsn(ANEWARRAY, OBJECT_CLS_NAME);
 
     int readIndex = isStatic ? 0 : 1;
     int arrayIndex = 0;

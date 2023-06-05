@@ -23,6 +23,7 @@ import optimus.platform.relational.dal.core.IndexColumnInfo
 import optimus.platform.relational.data.DbQueryTreeReducerBase
 import optimus.platform.relational.data.QueryCommand
 import optimus.platform.relational.data.QueryParameter
+import optimus.platform.relational.data.language.QueryLanguage
 import optimus.platform.relational.data.mapping.MappingEntity
 import optimus.platform.relational.data.mapping.MappingEntityLookup
 import optimus.platform.relational.data.mapping.QueryMapping
@@ -43,7 +44,7 @@ class DALEntityBitemporalSpaceReducer(override val provider: DALProvider) extend
 
   override def createMapping(): QueryMapping = new DALEntityBitemporalSpaceMapping
 
-  override def createLanguage(lookup: MappingEntityLookup) = new DALEntityBitemporalSpaceLanguage(lookup)
+  override def createLanguage(lookup: MappingEntityLookup): QueryLanguage = new DALEntityBitemporalSpaceLanguage(lookup)
 
   override protected def buildInner(e: RelationElement): RelationElement =
     throw new RelationalUnsupportedException("Inner query is not supported")
@@ -73,12 +74,12 @@ object DALEntityBitemporalSpaceReducer {
       import BinaryExpressionType._
 
       def isCollection(column: ColumnElement): Boolean = column.columnInfo match {
-        case i: IndexColumnInfo => i.index.isCollection
+        case i: IndexColumnInfo => i.isCollection
         case _                  => false
       }
 
       def isIndexedField(column: ColumnElement): Boolean = column.columnInfo match {
-        case i: IndexColumnInfo => i.index.indexed && !i.index.unique
+        case i: IndexColumnInfo => i.indexed && !i.unique
         case _                  => false
       }
 

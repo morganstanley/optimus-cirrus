@@ -11,16 +11,18 @@
  */
 package optimus.platform.relational.dal.core
 
-import optimus.platform.dal.DSIStorageInfo
-import optimus.platform.dal.EntityResolverWriteImpl
 import optimus.platform.EvaluationContext
 import optimus.platform.NoKey
+import optimus.platform.dal.DSIStorageInfo
+import optimus.platform.dal.EntityResolverWriteImpl
 import optimus.platform.dsi.Feature
 import optimus.platform.relational._
 import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.dal.accelerated.DALAccExecutionProvider
+import optimus.platform.relational.dal.core.DALReferenceReducer.DALReferenceMapping
 import optimus.platform.relational.dal.internal.RawReferenceKey
 import optimus.platform.relational.data.Aggregator
+import optimus.platform.relational.data.DataProvider
 import optimus.platform.relational.data.QueryCommand
 import optimus.platform.relational.data.QueryTranslator
 import optimus.platform.relational.data.language.QueryDialect
@@ -34,7 +36,6 @@ import optimus.platform.relational.data.translation.AliasReplacer
 import optimus.platform.relational.data.translation.OrderByRewriter
 import optimus.platform.relational.data.tree.AliasedElement
 import optimus.platform.relational.data.tree.ColumnElement
-import optimus.platform.relational.data.tree.DALHeapEntityElement
 import optimus.platform.relational.data.tree.DbEntityElement
 import optimus.platform.relational.data.tree.OptionElement
 import optimus.platform.relational.data.tree.ProjectionElement
@@ -55,7 +56,7 @@ class DALReferenceReducer(p: DALProvider) extends DALReducer(p) {
   import DALReferenceReducer._
 
   override def createMapping(): QueryMapping = new DALReferenceMapping
-  override def createLanguage(lookup: MappingEntityLookup) = new DALReferenceLanguage(lookup)
+  override def createLanguage(lookup: MappingEntityLookup): QueryLanguage = new DALReferenceLanguage(lookup)
 
   protected override def compileAndExecute(
       command: QueryCommand,
@@ -205,7 +206,7 @@ object DALReferenceReducer {
     }
   }
 
-  private object DALReferenceBinder extends QueryBinder {
+  private object DALReferenceBinder extends DALQueryBinder {
     def bind(mapper: QueryMapper, e: RelationElement): RelationElement = {
       new DALReferenceBinder(mapper, e).bind(e)
     }
@@ -218,17 +219,32 @@ object DALReferenceReducer {
         case MemberElement(e: DbEntityElement, DALProvider.StorageInfo) if member.name == "versionedRef" =>
           // _.dal$storageInfo.asInstanceOf[DSIStorage].versionedRef
           super.bindMember(e, MemberInfo(e.rowTypeInfo, DALProvider.VersionedRef, DALProvider.VersionedRefType))
-
-        case e: DALHeapEntityElement =>
-          e.memberNames
-            .zip(e.members)
-            .collectFirst {
-              case (name, e) if name == member.name => e
-            }
-            .getOrElse(makeMemberAccess(source, member))
-
         case _ => super.bindMember(source, member)
       }
     }
+  }
+}
+
+class DALRegisteredIndexReferenceReducer(provider: DALProvider) extends DALReferenceReducer(provider) {
+  import DALRegisteredIndexReferenceReducer._
+  override def createMapping(): QueryMapping = new DALRegisteredIndexReferenceMapping
+  override def createLanguage(lookup: MappingEntityLookup): QueryLanguage =
+    new DALRegisteredIndexReferenceLanguage(lookup)
+}
+
+object DALRegisteredIndexReferenceReducer {
+
+  class DALRegisteredIndexReferenceLanguage(l: MappingEntityLookup) extends DALRegisteredIndexLanguage(l) {
+    override def canBeWhere(e: RelationElement): Boolean = {
+      val result = super.canBeWhere(e)
+      if (!result)
+        throw new RelationalUnsupportedException(
+          "DAL reference query only supports '==' or 'contains' or comparison operators or combinations with '&&' on indexed fields in filter.")
+      result
+    }
+  }
+
+  class DALRegisteredIndexReferenceMapping extends DALReferenceMapping {
+    override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
   }
 }

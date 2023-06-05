@@ -144,7 +144,7 @@ private[optimus] object ClassMetaData {
   val flagIsEntity: Byte = 0x10
   val flagIsEmbeddable: Byte = 0x20
   val flagIsEvent: Byte = 0x40
-  // just in time
+  // just in time, last bit of the unsigned java Byte
   val flagIsMeta: Byte = -0x80
 
   class MetaDataBuilder[T <: BaseMetaData](raw: Map[String, T]) {

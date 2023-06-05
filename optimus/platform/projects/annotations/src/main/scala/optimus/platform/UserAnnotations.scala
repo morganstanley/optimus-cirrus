@@ -35,6 +35,13 @@ class node(tweak: Boolean) extends StaticAnnotation {
 class scenarioIndependent extends StaticAnnotation
 
 /**
+ * @see
+ *   http://optimusdoc/BasicAnnotations
+ */
+@getter
+class siRhs extends StaticAnnotation
+
+/**
  * Mark an @node def to be evaluated (and then cached) using the initial runtime environment.
  * @see
  *   http://optimusdoc/BasicAnnotations
@@ -209,13 +216,16 @@ final case class nodeDebug(dir: String)
 /**
  * Annotate a class with @meta to supply metadata for the CasC's manifest generator
  */
+// docs-snippet:MetaDeclaration
 trait DalMetadata
-class metaV1(
-    /** Ownership - owner's email address */
-    val owner: String,
+trait OwnershipMetadata
+class meta(
+    /** Ownership - an object that extends OwnershipMetadata */
+    val owner: OwnershipMetadata,
     /** Catalog - an object that extends DalMetadata */
     val catalog: DalMetadata
 ) extends annotation.StaticAnnotation
+// docs-snippet:MetaDeclaration
 
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it
 // doesn't actually get compiled, and if it did it wouldn't do anything.

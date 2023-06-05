@@ -30,6 +30,7 @@ enum EntityInstrumentationType {
 public class InstrumentationConfig {
   final private static HashMap<String, ClassPatch> clsPatches = new HashMap<>();
   final private static HashMap<String, Boolean> entityClasses = new HashMap<>();
+  final private static HashMap<String, Boolean> derivedClasses = new HashMap<>();
   final private static HashMap<String, Boolean> moduleOrEntityExclusions = new HashMap<>();
   final private static ArrayList<ClassPatch> multiClsPatches = new ArrayList<>();
 
@@ -47,9 +48,13 @@ public class InstrumentationConfig {
   public static boolean reportTouchingTweakable = false;
   public static boolean reportFindingTweaks = false;
 
+  static MethodRef instrumentAllDerivedClasses;
+
+  public static final String STRING_DESC = "Ljava/lang/String;";
   public static final String OBJECT_DESC = "Ljava/lang/Object;";
   public static final String OBJECT_ARR_DESC = "[Ljava/lang/Object;";
-  public static final Type OBJECT_TYPE = Type.getObjectType("java/lang/Object");
+  public static final String OBJECT_CLS_NAME = "java/lang/Object";
+  public static final Type OBJECT_TYPE = Type.getObjectType(OBJECT_CLS_NAME);
 
   final private static String ENTITY_TYPE = "optimus/platform/storable/Entity";
   final private static String SS_TYPE = "optimus/platform/ScenarioStack";
@@ -64,6 +69,9 @@ public class InstrumentationConfig {
 
   public static final String THROWABLE = "java/lang/Throwable";
   public static final Type THROWABLE_TYPE = Type.getObjectType(THROWABLE);
+
+  public static final String CLEANABLE_FIELD_NAME = "_cleanable";
+  public static final Type CLEANABLE_TYPE = Type.getObjectType("java/lang/ref/Cleaner$Cleanable");
 
   static final String __constructedAt = "constructedAt";
 
@@ -92,6 +100,10 @@ public class InstrumentationConfig {
   static final MethodRef cwaPrefix = new MethodRef(IS, "cwaPrefix", Type.getMethodDescriptor(CWA_TYPE, CWA_TYPE));
   static final MethodRef cwaSuffix = new MethodRef(IS, "cwaSuffix", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, OBJECT_TYPE));
   static final MethodRef cwaSuffixOnException = new MethodRef(IS, "cwaSuffixOnException", Type.getMethodDescriptor(VOID_TYPE, CWA_TYPE, THROWABLE_TYPE));
+
+  // Note: prefix needs type descriptor because of anonymous generated inner class derived from CWA (see CallWithArgsGenerator)
+  public static MethodRef timerStart = new MethodRef(IS, "timerStart", Type.getMethodDescriptor(CWA_TYPE, CWA_TYPE));
+  public static MethodRef timerEnd = new MethodRef(IS, "timerEnd");
 
   static InstrumentationConfig.MethodRef expectEquals = new InstrumentationConfig.MethodRef(IS, "expectAllToEquals", "(ZLoptimus/platform/storable/Entity;Loptimus/platform/storable/Entity;)V");
   static InstrumentationConfig.MethodRef equalsHook = new InstrumentationConfig.MethodRef(ENTITY_TYPE, "argsEqualsHook");
@@ -126,15 +138,34 @@ public class InstrumentationConfig {
            || instrumentAllEntityApplies || instrumentAllModuleConstructors || instrumentAllNativePackagePrefixes != null;
   }
 
-  public static boolean isEntity(String className, String superName) {
-    synchronized (entityClasses) {
-      if (!entityClasses.containsKey(superName))
+  private static boolean keepHierarchy(HashMap<String, Boolean> table, String className, String superName) {
+    //noinspection SynchronizationOnLocalVariableOrMethodParameter
+    synchronized (table) {
+      if (!table.containsKey(superName))
         return false;
-      entityClasses.putIfAbsent(className, Boolean.TRUE);
+      table.putIfAbsent(className, Boolean.TRUE);
     }
     return true;
   }
 
+  public static boolean isEntity(String className, String superName) {
+    return keepHierarchy(entityClasses, className, superName);
+  }
+
+  /** For reporting */
+  public static String instrumentedBaseClass() {
+    return instrumentAllDerivedClasses != null ? instrumentAllDerivedClasses.cls : null;
+  }
+
+  public static void initialiseDerivedClassFromBase(String baseClassName) {
+    derivedClasses.putIfAbsent(baseClassName, Boolean.TRUE);
+  }
+
+  public static boolean isDerivedClass(String className, String superName) {
+    return keepHierarchy(derivedClasses, className, superName);
+  }
+
+  @SuppressWarnings("BooleanMethodIsAlwaysInverted")
   static boolean isModuleOrEntityExcluded(String className) {
     synchronized (moduleOrEntityExclusions) {
       return moduleOrEntityExclusions.containsKey(className);
@@ -225,10 +256,10 @@ public class InstrumentationConfig {
     boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception thrown
     FieldRef storeToField;
     ClassPatch classPatch;
-    BiPredicate<String, String> predicate;
+    BiPredicate<String, Integer> predicate;
 
-    boolean shouldInject(String name, String descriptor) {
-      return predicate == null || predicate.test(name, descriptor);
+    boolean shouldInject(String descriptor, int flags) {
+      return predicate == null || predicate.test(descriptor, flags);
     }
 
     MethodPatch(MethodRef from) { this.from = from; }
@@ -283,11 +314,9 @@ public class InstrumentationConfig {
 
     MethodPatch forMethod(String name, String desc) {
       for (MethodPatch patch : methodPatches) {
-        if(patch.from.method.equals(name)) {
-          if (patch.from.descriptor == null || desc.equals(patch.from.descriptor)) {
-            patch.classPatch = this;
+        if (patch.from.method.equals(name)) {
+          if (patch.from.descriptor == null || desc.equals(patch.from.descriptor))
             return patch;
-          }
         }
       }
       return null;
@@ -383,6 +412,7 @@ public class InstrumentationConfig {
     var methodPatch = clsPatch.forMethod(from.method, from.descriptor);
     if (methodPatch == null) {
       methodPatch = new MethodPatch(from);
+      methodPatch.classPatch = clsPatch;
       clsPatch.methodPatches.add(methodPatch);
     }
     return methodPatch;
@@ -421,10 +451,16 @@ public class InstrumentationConfig {
     return methodPatch;
   }
 
+  @SuppressWarnings("unused")
   public static MethodPatch addDefaultRecording(MethodRef from) {
     return addRecording(from, cwaPrefix, cwaSuffix, cwaSuffixOnException);
   }
 
+  public static MethodPatch addStartCounterAndTimer(MethodRef from) {
+    return addRecording(from, timerStart, timerEnd, null);
+  }
+
+  // Note: prefix method requires descriptors specified: Type.getMethodDescriptor(CWA_TYPE, CWA_TYPE)
   public static MethodPatch addRecording(MethodRef from, MethodRef prefix, MethodRef suffix, MethodRef onException) {
     MethodPatch methodPatch = putIfAbsentMethodPatch(from);
     setUpRecording(methodPatch, prefix, suffix, onException);
@@ -516,6 +552,7 @@ public class InstrumentationConfig {
     return fieldPatch;
   }
 
+  @SuppressWarnings("unused")
   public static void addRecordPrefixCallIntoMemberWithStackTrace(String fieldName, MethodRef mref) {
     addRecordPrefixCallIntoMemberWithStackTrace(fieldName, mref, traceAsStackCollector);
   }
@@ -535,8 +572,10 @@ public class InstrumentationConfig {
 
   public static ClassPatch addModuleConstructionIntercept(String clsName) {
     var mref = new MethodRef(clsName, "<clinit>");
-    addPrefixCall(mref, InstrumentationConfig.imcEnterCtor, false, false);
-    addSuffixCall(mref, InstrumentationConfig.imcExitCtor);
+    var methodPatch = addPrefixCall(mref, InstrumentationConfig.imcEnterCtor, false, false);
+    methodPatch.wrapWithTryCatch = true;
+    methodPatch.suffix = InstrumentationConfig.imcExitCtor;
+    methodPatch.suffixOnException = InstrumentationConfig.imcExitCtor;
     var classPatch = putIfAbsentClassPatch(clsName);
     classPatch.bracketAllLzyComputes = true;
     return classPatch;
@@ -545,7 +584,7 @@ public class InstrumentationConfig {
   public static void addAllMethodPatchAndChangeSuper(
       Object id,
       Predicate<String> classPredicate,
-      BiPredicate<String, String> methodPredicate,
+      BiPredicate<String, Integer> methodPredicate,
       String newBase, MethodRef prefix, MethodRef suffix) {
     // This shouldn't happen very often
     if(multiClsPatches.stream().anyMatch(c -> id.equals(c.id)))  return;

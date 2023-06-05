@@ -99,10 +99,10 @@ object PubSubMappingEntityFactory {
     def getMappedMember(member: String): MemberInfo = mappedMemberLookup(member)
     def isMapped(member: String): Boolean = mappedMemberLookup.contains(member)
     def getColumnInfo(member: MemberInfo): ColumnInfo = member match {
-      case m: IndexMemberInfo => new IndexColumnInfo(m.index)
+      case m: IndexMemberInfo => IndexColumnInfo(m.index)
       case _ =>
         getMappedMember(member.name) match {
-          case m: IndexMemberInfo => new IndexColumnInfo(m.index)
+          case m: IndexMemberInfo => IndexColumnInfo(m.index)
           case m                  => ColumnInfo(ColumnType.Default, m.unpickler)
         }
     }

@@ -24,8 +24,6 @@ import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.dal.DALQueryMethod
 import optimus.platform.relational.dal.internal.RawReferenceKey
 import optimus.platform.relational.data.Aggregator
-import optimus.platform.relational.data.mapping.MemberInfo
-import optimus.platform.relational.data.mapping.QueryBinder
 import optimus.platform.relational.data.mapping.QueryMapper
 import optimus.platform.relational.data.translation.AliasReplacer
 import optimus.platform.relational.data.translation.DefaultBinder
@@ -34,6 +32,7 @@ import optimus.platform.relational.data.tree._
 import optimus.platform.relational.inmemory.ScalaTypeMultiRelation
 import optimus.platform.relational.tree._
 import optimus.platform.storable.Entity
+import optimus.platform.storable.EntityReference
 
 import scala.collection.mutable
 
@@ -74,6 +73,90 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
         case sel: SelectElement => hasFilterCondition(sel)
         case _                  => false
       }
+  }
+
+  override def handleFuncCall(func: FuncElement): RelationElement = {
+    import BinaryExpressionType._
+    import DALProvider.EntityRef
+    import IndexColumnInfo.asEntityRefColumnInfo
+
+    func.callee match {
+      case mc: MethodCallee if mc.method.declaringType <:< classOf[Iterable[_]] =>
+        val inst = visitElement(func.instance)
+        val resultOpt = (inst, func.arguments) match {
+          case (c: ColumnElement, List(LambdaElement(_, body, Seq(lp)))) =>
+            (c.columnInfo, mc.method.name, body) match {
+              case (i: IndexColumnInfo, "exists", BinaryExpressionElement(op, left, right, _)) if i.isCollection =>
+                (op, left, right) match {
+                  case (EQ, p: ParameterElement, const: ConstValueElement) if p eq lp =>
+                    val desc = new RuntimeMethodDescriptor(mc.method.declaringType, "contains", TypeInfo.BOOLEAN)
+                    Some(ElementFactory.call(c, desc, List(const)))
+                  case (EQ, const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                    val desc = new RuntimeMethodDescriptor(mc.method.declaringType, "contains", TypeInfo.BOOLEAN)
+                    Some(ElementFactory.call(c, desc, List(const)))
+                  case (EQ, MemberElement(p: ParameterElement, EntityRef), ConstValueElement(_: EntityReference, _))
+                      if p eq lp =>
+                    val rowTypeInfo = typeInfo[Iterable[EntityReference]]
+                    val col = new ColumnElement(rowTypeInfo, c.alias, c.name, asEntityRefColumnInfo(i))
+                    val desc = new RuntimeMethodDescriptor(rowTypeInfo, "contains", TypeInfo.BOOLEAN)
+                    Some(ElementFactory.call(col, desc, List(right)))
+                  case (EQ, ConstValueElement(_: EntityReference, _), MemberElement(p: ParameterElement, EntityRef))
+                      if p eq lp =>
+                    val rowTypeInfo = typeInfo[Iterable[EntityReference]]
+                    val col = new ColumnElement(rowTypeInfo, c.alias, c.name, asEntityRefColumnInfo(i))
+                    val desc = new RuntimeMethodDescriptor(rowTypeInfo, "contains", TypeInfo.BOOLEAN)
+                    Some(ElementFactory.call(col, desc, List(left)))
+                  case _ => None
+                }
+              case _ => None
+            }
+          case _ => None
+        }
+        resultOpt.getOrElse(updateFuncCall(func, inst, visitElementList(func.arguments)))
+      case mc: MethodCallee if mc.method.declaringType <:< classOf[Option[_]] =>
+        val inst = visitElement(func.instance)
+        val resultOpt = (inst, func.arguments) match {
+          case (c: ColumnElement, List(LambdaElement(_, body, Seq(lp)))) =>
+            (c.columnInfo, mc.method.name, body) match {
+              case (i: IndexColumnInfo, "exists", BinaryExpressionElement(op, left, right, _)) =>
+                (op, left, right) match {
+                  case (EQ, p: ParameterElement, const: ConstValueElement) if p eq lp =>
+                    val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
+                    Some(ElementFactory.equal(c, ElementFactory.constant(Some(const.value), optType)))
+                  case (EQ, const: ConstValueElement, p: ParameterElement) if p eq lp =>
+                    val optType = TypeInfo(classOf[Option[_]], const.rowTypeInfo)
+                    Some(ElementFactory.equal(c, ElementFactory.constant(Some(const.value), optType)))
+                  case (EQ, MemberElement(p: ParameterElement, EntityRef), ConstValueElement(eref: EntityReference, _))
+                      if p eq lp =>
+                    val rowTypeInfo = typeInfo[Option[EntityReference]]
+                    val col = new ColumnElement(rowTypeInfo, c.alias, c.name, asEntityRefColumnInfo(i))
+                    val constOpt = ElementFactory.constant(Some(eref), rowTypeInfo)
+                    Some(ElementFactory.equal(col, constOpt))
+                  case (EQ, ConstValueElement(eref: EntityReference, _), MemberElement(p: ParameterElement, EntityRef))
+                      if p eq lp =>
+                    val rowTypeInfo = typeInfo[Option[EntityReference]]
+                    val col = new ColumnElement(rowTypeInfo, c.alias, c.name, asEntityRefColumnInfo(i))
+                    val constOpt = ElementFactory.constant(Some(eref), rowTypeInfo)
+                    Some(ElementFactory.equal(col, constOpt))
+                  case (ITEM_IS_IN, p: ParameterElement, ConstValueElement(values: Iterable[_], _)) if p eq lp =>
+                    val rowTypeInfo = typeInfo[Iterable[Option[EntityReference]]]
+                    val constOpt = ElementFactory.constant(values.map(Some(_)), rowTypeInfo)
+                    Some(visitElement(ElementFactory.makeBinary(ITEM_IS_IN, c, constOpt)))
+                  case (ITEM_IS_IN, MemberElement(p, EntityRef), ConstValueElement(erefs: Iterable[_], _)) if p eq lp =>
+                    val rowTypeInfo = typeInfo[Iterable[Option[EntityReference]]]
+                    val col = new ColumnElement(rowTypeInfo, c.alias, c.name, asEntityRefColumnInfo(i))
+                    val constOpt = ElementFactory.constant(erefs.map(Some(_)), rowTypeInfo)
+                    Some(visitElement(ElementFactory.makeBinary(ITEM_IS_IN, col, constOpt)))
+                  case _ => None
+                }
+              case _ => None
+            }
+          case _ => None
+        }
+        resultOpt.getOrElse(updateFuncCall(func, inst, visitElementList(func.arguments)))
+      case _ => super.handleFuncCall(func)
+    }
+
   }
 
   override def handleMethod(method: MethodElement): RelationElement = {
@@ -126,7 +209,7 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
     def canBeAggregate(c: ColumnElement, shapeType: TypeInfo[_]): Boolean = {
       c.columnInfo match {
         case i: IndexColumnInfo if i.columnType == ColumnType.Index =>
-          i.index.storableClass == shapeType.clazz
+          i.storableClass == shapeType.clazz
         case _ =>
           false
       }
@@ -335,8 +418,11 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
 
   /**
    * Optimize DAL conditions:
-   *   1. when there are unique/key conditions, only execute them on the server side 2. otherwise run index conditions
-   *      on the server side 3. when sortByTT...take... is used, run all conditions on the server side
+   *   1. when there are unique/key conditions, only execute them on the server side
+   *
+   * 2. otherwise run index conditions on the server side
+   *
+   * 3. when sortByTT...take... is used, run all conditions on the server side
    */
   protected class ConditionOptimizer extends DbQueryTreeVisitor {
     private[this] var dynamicConditions: List[FuncElement] = Nil
@@ -347,16 +433,57 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
 
     private def rewriteCondition(cond: RelationElement): RelationElement = {
       cond match {
-        case BinaryExpressionElement(EQ, c: ColumnElement, v: ConstValueElement, _) =>
+        case BinaryExpressionElement(_, c: ColumnElement, v: ConstValueElement, _) =>
           cond
-        case BinaryExpressionElement(EQ, v: ConstValueElement, c: ColumnElement, _) =>
-          ElementFactory.equal(c, v)
+        case BinaryExpressionElement(op, v: ConstValueElement, c: ColumnElement, _) =>
+          op match {
+            case BinaryExpressionType.EQ => ElementFactory.equal(c, v)
+            case BinaryExpressionType.LT => ElementFactory.greaterThan(c, v)
+            case BinaryExpressionType.LE => ElementFactory.greaterThanOrEqual(c, v)
+            case BinaryExpressionType.GT => ElementFactory.lessThan(c, v)
+            case BinaryExpressionType.GE => ElementFactory.lessThanOrEqual(c, v)
+            case _                       => throw new RelationalUnsupportedException(s"Unsupported binary op: $op")
+          }
+        // This is to allow "!dt.isAfter(someDt)" and "!dt.isBefore(someDt)" into <= and >=
+        // expressions respectively, where "dt" field is registered @indexed.
+        case BinaryExpressionElement(
+              EQ,
+              FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement),
+              ConstValueElement(false, _),
+              _) =>
+          mc.method.name match {
+            case "isAfter"  => ElementFactory.lessThanOrEqual(c, v)
+            case "isBefore" => ElementFactory.greaterThanOrEqual(c, v)
+            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
+          }
+        case BinaryExpressionElement(
+              EQ,
+              FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement),
+              ConstValueElement(false, _),
+              _) =>
+          mc.method.name match {
+            case "isAfter"  => ElementFactory.greaterThanOrEqual(c, v)
+            case "isBefore" => ElementFactory.lessThanOrEqual(c, v)
+            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
+          }
         case c: ContainsElement if c.element.isInstanceOf[ColumnElement] =>
           cond
         case c: ColumnElement =>
           ElementFactory.equal(c, ElementFactory.constant(true))
-        case FuncElement(_, List(v: ConstValueElement), c: ColumnElement) =>
-          ElementFactory.equal(c, v)
+        case FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement) =>
+          mc.method.name match {
+            case "isAfter"  => ElementFactory.greaterThan(c, v)
+            case "isBefore" => ElementFactory.lessThan(c, v)
+            case "contains" => ElementFactory.equal(c, v)
+            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
+          }
+        case FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement) =>
+          mc.method.name match {
+            case "isAfter"  => ElementFactory.lessThan(c, v)
+            case "isBefore" => ElementFactory.greaterThan(c, v)
+            case "contains" => ElementFactory.equal(c, v)
+            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
+          }
         case _ =>
           throw new RelationalUnsupportedException(s"Unsupported condition pattern: $cond")
       }
@@ -396,23 +523,36 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
       // "canBeWhere" guarantee that the conditions here are valid
       Query
         .flattenBOOLANDConditions(proj.select.where)
-        .foreach(ex =>
-          ex match {
-            case BinaryExpressionElement(EQ, c: ColumnElement, _: ConstValueElement, _) =>
-              map.get(c.columnInfo.columnType).append(ex)
-            case BinaryExpressionElement(EQ, _: ConstValueElement, c: ColumnElement, _) =>
-              map.get(c.columnInfo.columnType).append(ex)
-            case c: ContainsElement if c.element.isInstanceOf[ColumnElement] =>
-              map.get(c.element.asInstanceOf[ColumnElement].columnInfo.columnType).append(ex)
-            case c: ColumnElement =>
-              map.get(c.columnInfo.columnType).append(ex)
-            case ConstValueElement(v: Boolean, _) =>
-              alwaysFalse |= !v
-            case FuncElement(_, List(_: ConstValueElement), c: ColumnElement) =>
-              map.get(c.columnInfo.columnType).append(ex)
-            case _ =>
-              throw new RelationalUnsupportedException(s"Unsupported condition pattern: $ex")
-          })
+        .foreach {
+          case ex @ BinaryExpressionElement(_, c: ColumnElement, _: ConstValueElement, _) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex @ BinaryExpressionElement(_, _: ConstValueElement, c: ColumnElement, _) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex @ BinaryExpressionElement(
+                EQ,
+                FuncElement(_, List(_: ConstValueElement), c: ColumnElement),
+                ConstValueElement(false, _),
+                _) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex @ BinaryExpressionElement(
+                EQ,
+                FuncElement(_, List(c: ColumnElement), _: ConstValueElement),
+                ConstValueElement(false, _),
+                _) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex @ (c: ContainsElement) if c.element.isInstanceOf[ColumnElement] =>
+            map.get(c.element.asInstanceOf[ColumnElement].columnInfo.columnType).append(ex)
+          case ex @ (c: ColumnElement) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ConstValueElement(v: Boolean, _) =>
+            alwaysFalse |= !v
+          case ex @ FuncElement(_, List(_: ConstValueElement), c: ColumnElement) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex @ FuncElement(_, List(c: ColumnElement), _: ConstValueElement) =>
+            map.get(c.columnInfo.columnType).append(ex)
+          case ex =>
+            throw new RelationalUnsupportedException(s"Unsupported condition pattern: $ex")
+        }
 
       if (alwaysFalse) {
         ScalaTypeMultiRelation(Vector.empty, proj.key, MethodPosition.unknown, proj.rowTypeInfo, false, proj.keyPolicy)
@@ -497,22 +637,9 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
   }
 }
 
-object DALBinder extends QueryBinder {
+object DALBinder extends DALQueryBinder {
   def bind(mapper: QueryMapper, e: RelationElement): RelationElement = {
     new DALBinder(mapper, e).bind(e)
-  }
-
-  override def bindMember(source: RelationElement, member: MemberInfo): RelationElement = {
-    source match {
-      case e: DALHeapEntityElement =>
-        e.memberNames
-          .zip(e.members)
-          .collectFirst {
-            case (name, e) if name == member.name => e
-          }
-          .getOrElse(makeMemberAccess(source, member))
-      case _ => super.bindMember(source, member)
-    }
   }
 
   private val arrangeKey = RawReferenceKey[Entity]((t: Entity) => t.dal$entityRef)
