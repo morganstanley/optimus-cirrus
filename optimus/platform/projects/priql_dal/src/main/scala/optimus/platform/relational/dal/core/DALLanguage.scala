@@ -46,7 +46,7 @@ class DALLanguage(val lookup: MappingEntityLookup) extends QueryLanguage {
     import BinaryExpressionType._
 
     def isCollection(column: ColumnElement): Boolean = column.columnInfo match {
-      case i: IndexColumnInfo => i.index.isCollection
+      case i: IndexColumnInfo => i.isCollection
       case _                  => false
     }
 

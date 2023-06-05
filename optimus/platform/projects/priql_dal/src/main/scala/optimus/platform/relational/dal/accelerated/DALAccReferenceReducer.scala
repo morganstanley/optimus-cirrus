@@ -21,6 +21,7 @@ import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.mapping.QueryBinder
 import optimus.platform.relational.data.mapping.QueryMapper
 import optimus.platform.relational.data.tree.ColumnElement
+import optimus.platform.relational.data.tree.DALHeapEntityElement
 import optimus.platform.relational.data.tree.DbEntityElement
 import optimus.platform.relational.data.tree.OptionElement
 import optimus.platform.relational.data.tree.ProjectionElement
@@ -164,6 +165,8 @@ object DALAccReferenceReducer {
             if member.name == "initiatingEvent" && mc.name == "entityEventView" =>
           // _.initiatingEvent
           super.bindMember(e, MemberInfo(e.rowTypeInfo, DALProvider.InitiatingEvent, member.memberType))
+        case e: DALHeapEntityElement if e.members.size == 1 && member.name == DALProvider.EntityRef =>
+          e.members.head
         case _ => super.bindMember(source, member)
       }
     }

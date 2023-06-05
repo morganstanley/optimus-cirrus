@@ -42,8 +42,9 @@ import optimus.platform.relational.tree.ProviderRelation
 import optimus.platform.relational.tree.QueryExplainItem
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.storable.{Entity => OptimusEntity}
-import optimus.platform.storable.Key
+import optimus.platform.storable.NonUniqueKey
 import optimus.platform.storable.SerializedKey
+import optimus.platform.storable.UniqueKey
 
 import scala.collection.immutable.VectorBuilder
 import scala.collection.mutable.ListBuffer
@@ -153,7 +154,18 @@ class DALExecutionProvider[T](
           case Some(Binary(Equal, _: Property, r @ RichConstant(_, _, Some(index))))
               if (index.unique || index.storableClass == entity) && sortBy.isEmpty && take.isEmpty =>
             val RichConstant(v, _, _) = AsyncValueEvaluator.evaluate(r)
-            val k = index.makeKey(checkLoadContext(v, loadCtx)).asInstanceOf[Key[OptimusEntity]]
+            val sk = index.toSerializedKey(checkLoadContext(v, loadCtx))
+            val k = if (index.unique) {
+              new UniqueKey[OptimusEntity] {
+                def toSerializedKey = sk
+                def subjectClass = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+              }
+            } else {
+              new NonUniqueKey[OptimusEntity] {
+                def toSerializedKey = sk
+                def subjectClass = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+              }
+            }
             // query equivalent to Entity.index.find(...) or Entity.get(...)
             val seqOpId = SequenceTiming.create("DALExecutionProvider.findByIndex")
             val result = Query.Tracer.trace(

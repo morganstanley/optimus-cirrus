@@ -17,7 +17,9 @@ import static optimus.debug.InstrumentationConfig.IS;
 import static optimus.debug.InstrumentationConfig.CWA_INNER_NAME;
 import static optimus.debug.InstrumentationConfig.CWA;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
+import static optimus.debug.InstrumentationConfig.OBJECT_CLS_NAME;
 import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
+import static optimus.debug.InstrumentationConfig.STRING_DESC;
 
 import optimus.debug.CommonAdapter;
 import org.objectweb.asm.ClassWriter;
@@ -53,6 +55,7 @@ public class CallWithArgsGenerator implements Opcodes {
     generateCtor(cw, cwaClass, access, originalOwner, args);
     generateArgsMethod(cw, cwaClass, args);
     generateReApplyMethod(cw, cwaClass, access, originalOwner, args, returnType, originalMethod);
+    generateFullNameMethod(cw, originalOwner, originalMethod);
     return cw;
   }
 
@@ -120,7 +123,7 @@ public class CallWithArgsGenerator implements Opcodes {
     var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "args", descriptor);
     mv.visitCode();
     mv.push(args.length);
-    mv.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+    mv.visitTypeInsn(ANEWARRAY, OBJECT_CLS_NAME);
     for (int i = 0; i < args.length; i++) {
       mv.dup();
       mv.push(i);
@@ -129,6 +132,21 @@ public class CallWithArgsGenerator implements Opcodes {
       mv.valueOf(args[i]);
       mv.visitInsn(AASTORE);
     }
+    mv.visitInsn(ARETURN);
+    mv.visitMaxs(0, 0);
+    mv.visitEnd();
+  }
+
+  /* Consider map from id to name instead (TODO: OPTIMUS-57169) */
+  private static void generateFullNameMethod(ClassWriter cw, Type originalOwner, String originalMethod) {
+    String descriptor = "()" + STRING_DESC;
+
+    MethodVisitor mvWriter = cw.visitMethod(ACC_PUBLIC, "fullName", descriptor, null, null);
+    var mv = new GeneratorAdapter(mvWriter, ACC_PUBLIC, "fullName", descriptor);
+    mv.visitCode();
+
+    var name = originalOwner.getClassName() + originalMethod;
+    mv.push(name);
     mv.visitInsn(ARETURN);
     mv.visitMaxs(0, 0);
     mv.visitEnd();

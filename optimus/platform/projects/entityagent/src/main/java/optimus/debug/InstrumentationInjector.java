@@ -19,12 +19,14 @@ import static optimus.debug.InstrumentationInjector.ENTITY_DESC;
 import static optimus.debug.InstrumentationInjector.SCALA_NOTHING;
 
 import static org.objectweb.asm.Opcodes.ACC_INTERFACE;
+import static org.objectweb.asm.Opcodes.ASM9;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.BiPredicate;
 
 import optimus.DynamicClassLoader;
 import optimus.EntityAgent;
@@ -85,6 +87,11 @@ public class InstrumentationInjector implements ClassFileTransformer {
     if (instrumentAllModuleConstructors && shouldInstrumentModuleCtor(loader, className))
       patch = addModuleConstructionIntercept(className);
 
+    if (instrumentAllDerivedClasses != null) {
+      var selfOrDerived = instrumentAllDerivedClasses.cls.equals(className) || isDerivedClass(className, crSource.getSuperName());
+      if (selfOrDerived) findNodeMethodsAndAddTimers(instrumentAllDerivedClasses.method, new ClassReader(bytes));
+    }
+
     if (patch == null)
       return bytes;
 
@@ -92,6 +99,38 @@ public class InstrumentationInjector implements ClassFileTransformer {
     ClassVisitor cv = new InstrumentationInjectorAdapter(patch, className, cw);
     crSource.accept(cv, ClassReader.SKIP_FRAMES);
     return cw.toByteArray();
+  }
+
+  private void findNodeMethodsAndAddTimers(String methodName, ClassReader crSource) {
+    final var expectedClassPrefix = "$" + methodName + "$node";
+
+    /*
+      Don't instrument synthetic bridge method! [SEE_SKIP_SYNTHETIC_BRIDGE]
+      We generate a synthetic bridge to the real return type of func:
+         public final synthetic bridge func()Ljava/lang/Object;
+
+      This has the following instruction (e.g. for the node method InstrumentationEntity.presentValue)
+         INVOKEVIRTUAL optimus/profiler/InstrumentationEntity$$presentValue$node$1.func ()I
+
+      To call the method with the real return type:
+         public final func()I
+
+      The instrumentation should only go on the 'real' func, ie, not on the bridge one
+     */
+    final BiPredicate<String, Integer> skipSyntheticBridge = (ignored, flags) -> (flags & Opcodes.ACC_BRIDGE) == 0;
+
+    var cv = new ClassVisitor(ASM9) {
+      @Override
+      public void visitInnerClass(String name, String outerName, String innerName, int access) {
+        if (innerName.startsWith(expectedClassPrefix)) {
+          var mp1 = addStartCounterAndTimer(new MethodRef(name, "funcFSM"));
+          var mp2 = addStartCounterAndTimer(new MethodRef(name, "func"));
+          mp1.predicate = skipSyntheticBridge;
+          mp2.predicate = skipSyntheticBridge;
+        }
+      }
+    };
+    crSource.accept(cv, ClassReader.SKIP_CODE);
   }
 
   private boolean shouldCacheApplyMethods(ClassReader crSource, String className) {
@@ -200,10 +239,10 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     if (classPatch.replaceObjectAsBase != null)
       mv = new SuperConstructorCallReplacement(mv, access, name, desc, OBJECT_TYPE.getInternalName(), classPatch.replaceObjectAsBase);
 
-    if (classPatch.allMethodsPatch != null && classPatch.allMethodsPatch.shouldInject(name, desc))
+    if (classPatch.allMethodsPatch != null && classPatch.allMethodsPatch.shouldInject(desc, access))
       mv = new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
 
-    if (methodPatch != null && methodPatch.shouldInject(name, desc))
+    if (methodPatch != null && methodPatch.shouldInject(desc, access))
       mv = new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
 
     if (classPatch.wrapNativeCalls && isNativeCall)

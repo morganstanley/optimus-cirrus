@@ -21,6 +21,8 @@ import com.opencsv.CSVWriter
 import optimus.platform.IO.usingQuietly
 
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -80,4 +82,22 @@ object FileUtils {
     } finally jarFile.close()
   }
   private val jarFileSeparator: String = "!/"
+
+  /**
+   * If executable and resource are in a single .jar, getting the URI and converting to a File to get the Path won't
+   * work (you can only access the resource as a stream and not as a URI).
+   * See https://stackoverflow.com/questions/51705451
+   * @param basePath path to file under resources/ dir
+   * @param fileName file name (no path) with extension
+   * @param tmpPrefix prefix for tmp file created
+   * @return absolute path as string
+   */
+  def getResourcePath(basePath: String, fileName: String, tmpPrefix: String = ""): String = {
+    val name = if (basePath.isEmpty) fileName else s"$basePath/$fileName"
+    val resourceStream = getClass.getClassLoader.getResourceAsStream(name)
+    assert(resourceStream ne null)
+    val path = Files.createTempFile(tmpPrefix, fileName)
+    Files.copy(resourceStream, path, StandardCopyOption.REPLACE_EXISTING)
+    path.toString
+  }
 }

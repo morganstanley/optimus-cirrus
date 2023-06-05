@@ -28,10 +28,7 @@ import optimus.platform.relational.tree.TypeInfo
 private[dal] final case class NamedValue(name: String) extends Expression
 
 // Used to represent Const value with TypeInfo. Will be pickled when executed.
-private[dal] final case class RichConstant(
-    value: Any,
-    rowTypeInfo: TypeInfo[_],
-    index: Option[IndexInfo[_, Any]] = None)
+private[dal] final case class RichConstant(value: Any, rowTypeInfo: TypeInfo[_], index: Option[IndexColumnInfo] = None)
     extends Expression
 
 private[dal] class DALExpressionVisitor extends ExpressionVisitor {

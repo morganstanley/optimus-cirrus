@@ -363,6 +363,11 @@ class PostTyperCodingStandardsComponent(
             }
           case _ =>
         }
+        tree match {
+          case NeedsUnsorted(qual) =>
+            alarm(Scala213MigrationMessages.NEEDS_UNSORTED, qual.pos)
+          case _ =>
+        }
       }
     }
   }

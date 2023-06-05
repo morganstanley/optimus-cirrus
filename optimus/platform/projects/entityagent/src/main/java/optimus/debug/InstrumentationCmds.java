@@ -117,6 +117,18 @@ public class InstrumentationCmds {
   }
 
   /**
+   * Enable start counter and self time tracing for given node or JVM function and all overrides.
+   * WARNING: this must only be set for one class at a time (we only store one class hierarchy). (TODO: OPTIMUS-57169)
+   * Note that 'self time' here accounts for just the CPU time of the node itself, and does not include its entire
+   * sub-graph of compute. To do this we would need to instrument all nodes in that subgraph. (TODO: OPTIMUS-57169)
+   * @param methodName fully qualified node or JVM function name
+   */
+  public static void profileStartsAndSelfTimeOfThisAndDerivedClasses(String methodName) {
+    instrumentAllDerivedClasses = asMethodRef(methodName);
+    InstrumentationConfig.initialiseDerivedClassFromBase(instrumentAllDerivedClasses.cls); // trace derived classes
+  }
+
+  /**
    * @param fieldName new field to be injected to class on which methodName is defined
    * @param methodName fully qualified method name to intercept
    */

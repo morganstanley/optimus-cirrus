@@ -18,6 +18,7 @@ import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.data.DbQueryTreeReducerBase
 import optimus.platform.relational.data.QueryCommand
 import optimus.platform.relational.data.language.FormattedQuery
+import optimus.platform.relational.data.language.QueryLanguage
 import optimus.platform.relational.data.mapping.MappingEntityLookup
 import optimus.platform.relational.data.mapping.QueryMapping
 import optimus.platform.relational.data.tree.ColumnElement
@@ -34,7 +35,7 @@ import optimus.platform.relational.tree.TypeInfo
 class DALReducer(val provider: DALProvider) extends DbQueryTreeReducerBase {
 
   def createMapping(): QueryMapping = new DALMapping
-  def createLanguage(lookup: MappingEntityLookup) = new DALLanguage(lookup)
+  def createLanguage(lookup: MappingEntityLookup): QueryLanguage = new DALLanguage(lookup)
 
   protected override def buildInner(e: RelationElement): RelationElement = {
     throw new RelationalUnsupportedException("Inner query is not supported")
@@ -93,4 +94,9 @@ class DALReducer(val provider: DALProvider) extends DbQueryTreeReducerBase {
     // for regular DAL query, we do not need ComparisonRewriter
     translator.dialect.format(proj.select)
   }
+}
+
+class DALRegisteredIndexReducer(provider: DALProvider) extends DALReducer(provider) {
+  override def createMapping(): QueryMapping = new DALRegisteredIndexMapping
+  override def createLanguage(lookup: MappingEntityLookup): QueryLanguage = new DALRegisteredIndexLanguage(lookup)
 }

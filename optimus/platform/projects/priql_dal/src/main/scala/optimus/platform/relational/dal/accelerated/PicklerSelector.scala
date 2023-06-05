@@ -12,17 +12,6 @@
 package optimus.platform.relational.dal.accelerated
 
 import optimus.breadcrumbs.ChainedID
-
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
-import java.time.LocalTime
-import java.time.OffsetTime
-import java.time.YearMonth
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.Period
-import optimus.graph._
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.cm.Knowable
@@ -37,11 +26,22 @@ import optimus.platform.storable.Entity
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.VersionedReference
 
-import scala.collection.{Map, SortedSet, immutable}
-import scala.reflect.ManifestFactory
-import scala.reflect.runtime.{currentMirror => cm}
-import scala.reflect.runtime.{universe => ru}
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.OffsetTime
+import java.time.Period
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import scala.collection.compat._
+import scala.collection.Map
+import scala.collection.SortedSet
+import scala.collection.immutable
+import scala.reflect.ManifestFactory
+import scala.reflect.runtime.{ currentMirror => cm }
+import scala.reflect.runtime.{ universe => ru }
 
 object PicklerSelector {
   val IdentityPickler = new IdentityPickler[Any]
@@ -454,6 +454,4 @@ private[accelerated] class AggColumnUnpickler(length: Int) extends Unpickler[Fie
           throw new RelationalUnsupportedException(s"Can't unpickle value $pickled since an Iterable is expected.")
       }
   }
-  override def unpickle$queued(pickled: Any, ctxt: PickledInputStream): Node[FieldReader] =
-    new AlreadyCompletedNode(unpickle(pickled, ctxt))
 }

@@ -11,20 +11,17 @@
  */
 package optimus.platform.relational.dal
 
-import java.time.Instant
 import optimus.entity.ClassEntityInfo
 import optimus.graph.Node
 import optimus.platform._
-import optimus.platform._
 import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation
-import optimus.platform.dal.DSIStorageInfo
 import optimus.platform.dal.DalAPI
-import optimus.platform.dal.EntitySerializer
-import optimus.platform.pickling.Unpickler
+import optimus.platform.dal.SessionFetcher
 import optimus.platform.dsi.bitemporal.QueryPlan
 import optimus.platform.pickling.IdentityUnpickler
 import optimus.platform.pickling.OptionUnpickler
+import optimus.platform.pickling.Unpickler
 import optimus.platform.relational.EntitledOnlySupport
 import optimus.platform.relational.KeyPropagationPolicy
 import optimus.platform.relational.PriqlSettings
@@ -51,6 +48,9 @@ import optimus.platform.storable.EntityReferenceHolder
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.storable.VersionedReference
 
+import java.time.Instant
+import scala.util._
+
 class DALProvider(
     val classEntityInfo: ClassEntityInfo,
     rowTypeInfo: TypeInfo[_],
@@ -71,12 +71,15 @@ class DALProvider(
 
   override def reducersFor(category: ExecutionCategory): List[ReducerVisitor] = {
     def wrapped(r: ReducerVisitor) = new ProjectedViewOnlyReducer(r)
-    def mkDALReducer = new core.DALReducer(this)
-    def mkDALReferenceReducer = new core.DALReferenceReducer(this)
+    def mkDALReducer = if (this.supportsRegisteredIndexes) mkDALRegisteredIndexReducer else new core.DALReducer(this)
+    def mkDALReferenceReducer =
+      if (this.supportsRegisteredIndexes) mkDALRegisteredIndexReferenceReducer else new core.DALReferenceReducer(this)
     def mkAccReducer = new accelerated.DALAccReducer(this)
     def mkAccReferenceReducer = new accelerated.DALAccReferenceReducer(this)
     def mkDeltaReducer = new DALEntityBitemporalSpaceReducer(this)
     def mkSamplingReducer = new DALSamplingReducer(this)
+    def mkDALRegisteredIndexReducer = new core.DALRegisteredIndexReducer(this)
+    def mkDALRegisteredIndexReferenceReducer = new core.DALRegisteredIndexReferenceReducer(this)
     category match {
       case ExecutionCategory.Execute if enableProjectedPriql => List(mkAccReducer, mkDALReducer)
       case ExecutionCategory.Execute                         => List(wrapped(mkAccReducer), mkDALReducer)
@@ -139,6 +142,17 @@ class DALProvider(
   override def copyAsEntitledOnly() =
     new DALProvider(classEntityInfo, rowTypeInfo, key, pos, dalApi, canBeProjected, keyPolicy, true)
 
+  val supportsRegisteredIndexes: Boolean = {
+    if (EvaluationContext.isInitialised) {
+      Option(EvaluationContext.env)
+        .flatMap(env => Option(env.entityResolver))
+        .exists {
+          case f: SessionFetcher =>
+            f.dsi.serverFeatures().registeredIndexes.exists(_.supports(classEntityInfo.runtimeClass.getName))
+          case _ => false
+        }
+    } else false
+  }
 }
 
 object DALProvider {

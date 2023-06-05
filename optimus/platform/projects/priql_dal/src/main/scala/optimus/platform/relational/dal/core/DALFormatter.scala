@@ -11,7 +11,6 @@
  */
 package optimus.platform.relational.dal.core
 
-import optimus.entity.IndexInfo
 import optimus.platform.dsi.bitemporal.QueryPlan
 import optimus.platform.dsi.expressions.Binary
 import optimus.platform.dsi.expressions.BinaryOperator
@@ -64,9 +63,9 @@ class DALFormatter extends DALFormatterBase {
     } else super.handleColumn(column)
   }
 
-  private def getIndexInfo[T <: Storable](c: ColumnElement): Option[IndexInfo[T, Any]] = {
+  protected def getIndexInfo[T <: Storable](c: ColumnElement): Option[IndexColumnInfo] = {
     c.columnInfo match {
-      case i: IndexColumnInfo => Some(i.index.asInstanceOf[IndexInfo[T, Any]])
+      case i: IndexColumnInfo => Some(i)
       case _                  => None
     }
   }
@@ -106,6 +105,40 @@ class DALFormatter extends DALFormatterBase {
 object DALFormatter {
   def format(element: RelationElement): ExpressionQuery = {
     val formatter = new DALFormatter
+    val e = formatter.visitElement(element)
+    ExpressionQuery(formatter.getExpression(e), QueryPlan.Default)
+  }
+}
+
+class DALRegisteredIndexFormatter extends DALFormatter {
+
+  protected override def handleBinaryExpression(binary: BinaryExpressionElement): RelationElement = {
+    binary match {
+      case BinaryExpressionElement(
+            BinaryExpressionType.GT | BinaryExpressionType.GE | BinaryExpressionType.LT | BinaryExpressionType.LE,
+            c: ColumnElement,
+            v: ConstValueElement,
+            _) =>
+        val l = getExpression(visitElement(c))
+        val r = RichConstant(v.value, v.rowTypeInfo, getIndexInfo(c))
+        ExpressionElement(Binary(DALFormatterHelper.binaryOperator(binary.op), l, r))
+      case BinaryExpressionElement(
+            BinaryExpressionType.GT | BinaryExpressionType.GE | BinaryExpressionType.LT | BinaryExpressionType.LE,
+            v: ConstValueElement,
+            c: ColumnElement,
+            _) =>
+        val l = getExpression(visitElement(c))
+        val r = RichConstant(v.value, v.rowTypeInfo, getIndexInfo(c))
+        ExpressionElement(Binary(DALFormatterHelper.binaryOperator(binary.op), l, r))
+      case _ =>
+        super.handleBinaryExpression(binary)
+    }
+  }
+}
+
+object DALRegisteredIndexFormatter {
+  def format(element: RelationElement): ExpressionQuery = {
+    val formatter = new DALRegisteredIndexFormatter
     val e = formatter.visitElement(element)
     ExpressionQuery(formatter.getExpression(e), QueryPlan.Default)
   }

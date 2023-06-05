@@ -17,15 +17,20 @@ import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
 import optimus.platform.pickling.Unpickler
+import optimus.platform.relational.RelationalUnsupportedException
 import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
 import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.storable.EntityReference
+import optimus.platform.storable.SerializedKey
+import optimus.platform.storable.Storable
 
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 import optimus.scalacompat.collection._
+
 import scala.collection.compat._
 
 object DALMappingEntityFactory {
@@ -62,10 +67,10 @@ object DALMappingEntityFactory {
     def getMappedMember(member: String): MemberInfo = mappedMemberLookup(member)
     def isMapped(member: String): Boolean = mappedMemberLookup.contains(member)
     def getColumnInfo(member: MemberInfo): ColumnInfo = member match {
-      case m: IndexMemberInfo => new IndexColumnInfo(m.index)
+      case m: IndexMemberInfo => IndexColumnInfo(m.index)
       case _ =>
         getMappedMember(member.name) match {
-          case m: IndexMemberInfo => new IndexColumnInfo(m.index)
+          case m: IndexMemberInfo => IndexColumnInfo(m.index)
           case m                  => ColumnInfo(ColumnType.Default, m.unpickler)
         }
     }
@@ -80,14 +85,8 @@ object DALMappingEntityFactory {
   }
 }
 
-class IndexMemberInfo(val reflectType: TypeInfo[_], val memberType: TypeInfo[_], val index: IndexInfo[_, _])
+class IndexMemberInfo(val reflectType: TypeInfo[_], val memberType: TypeInfo[_], val index: IndexInfo[_ <: Storable, _])
     extends MemberInfo {
   def name = index.name
-  def unpickler: Option[Unpickler[_]] = None
-}
-
-class IndexColumnInfo(val index: IndexInfo[_, _]) extends ColumnInfo {
-  val columnType =
-    if (!index.unique) ColumnType.Index else if (index.indexed) ColumnType.UniqueIndex else ColumnType.Key
   def unpickler: Option[Unpickler[_]] = None
 }

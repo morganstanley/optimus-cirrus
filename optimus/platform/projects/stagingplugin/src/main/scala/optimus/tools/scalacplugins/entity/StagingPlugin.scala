@@ -36,6 +36,7 @@ object StagingSettings {
     val any2StringAddName = "any2StringAdd:"
     val rewriteCaseClassToFinalName = "rewriteCaseClassToFinal:"
     val slowCompilationWarningThresholdMsName = "slowCompilationWarningThresholdMs:"
+    val unsortedName = "unsorted:"
   }
 }
 object StagingPlugin {
@@ -88,6 +89,8 @@ object StagingPlugin {
       pluginData.rewriteConfig.rewriteCaseClassToFinal = parseOption(option, rewriteCaseClassToFinalName, false)
     else if (option.startsWith(slowCompilationWarningThresholdMsName))
       pluginData.slowCompilationWarningThresholdMs = parseInt(option, slowCompilationWarningThresholdMsName)
+    else if (option.startsWith(unsortedName))
+      pluginData.rewriteConfig.unsorted = parseOption(option, unsortedName, false)
     else error(s"unknown option '$option'")
   }
 

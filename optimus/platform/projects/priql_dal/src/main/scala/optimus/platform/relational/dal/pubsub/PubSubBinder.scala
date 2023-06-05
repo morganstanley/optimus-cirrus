@@ -39,7 +39,7 @@ class PubSubBinder(mapper: QueryMapper, root: RelationElement) extends DALBinder
   }
 }
 
-object PubSubBinder extends QueryBinder {
+object PubSubBinder extends DALQueryBinder {
   def bind(mapper: QueryMapper, e: RelationElement): RelationElement = {
     new PubSubBinder(mapper, e).bind(e)
   }

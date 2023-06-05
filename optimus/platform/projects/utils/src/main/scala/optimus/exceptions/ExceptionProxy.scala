@@ -17,6 +17,7 @@ import optimus.exceptions.config.RTListConfig
 import optimus.utils.PropertyUtils
 import org.slf4j.LoggerFactory
 
+import java.lang.reflect.InvocationTargetException
 import scala.reflect.NameTransformer
 import scala.util.matching.Regex
 
@@ -178,5 +179,15 @@ object AdditionalExceptionProxy extends Throwable with ExceptionProxy {
         s"[RTList] added to allow-list dynamically: $fqcn (message=$msg) (via optimus.additional.rt.exceptions) (rule=${m})")
     }
     matchedMatcher.isDefined
+  }
+}
+
+object ReflectionExceptionProxy extends ExceptionProxy {
+  override def matches(t: Throwable): Boolean = {
+    t match {
+      case e: ScalaReflectionException  => Option(e.getCause) exists { RTList.isRT }
+      case e: InvocationTargetException => Option(e.getTargetException) exists { RTList.isRT }
+      case _ => false
+    }
   }
 }

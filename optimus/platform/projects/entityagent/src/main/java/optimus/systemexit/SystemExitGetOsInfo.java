@@ -97,7 +97,7 @@ public class SystemExitGetOsInfo {
     DirectAllowedPatterns.add("ScalaTestRunner.main");
     // StallDetector is allowed to kill a process if there is 'no progress' after a certain amount of time
     DirectAllowedPatterns.add("optimus.graph.diagnostics.DefaultStallDetector");
-    DirectAllowedPatterns.add("optimus.buildtool.testrunner.worker.OptimusTestWorker");
+    DirectAllowedPatterns.add("optimus.buildtool.testrunner.worker.OptimusTestWorkerClient");
 
     /*
      * Exempt certain classes from having their System.exit calls rewritten.

@@ -65,7 +65,7 @@ public class StorageFormat {
     int checksumLength;
     short ccss;
 
-    if (storageParams.compressedSizeSet()) {
+    if (storageParams.compressedSizeSet()) { // regex-ignore-line (open-sourcing) due to false positive on URL detection
       compressedLength = storageParams.getCompressedSize();
     } else {
       compressedLength = value.remaining();

@@ -1,3 +1,4 @@
+
 This is a list of past or current contributors to the Optimus Cirrus project who have chosen to have their name and/or username listed. 
 
 If you would like to be mentioned, please contact the internal Optimus group (if currently employed at MS) or `optimus_cirrus (at) morganstanley (dot) com` to discuss. 
@@ -10,6 +11,8 @@ Andrew Brett ([@ephemerist](http://github.com/ephemerist))
 Chris Marsh
 
 Cyrus Lyons ([@cbwl](http://github.com/cbwl))
+
+Gjeta Gjyshinca
 
 Harrison Houghton ([@hrhino](http://github.com/hrhino))
 

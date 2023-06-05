@@ -20,6 +20,7 @@ import optimus.platform.relational.dal.core.DALDialect
 import optimus.platform.relational.dal.core.DALLanguage
 import optimus.platform.relational.dal.core.DALMapper
 import optimus.platform.relational.dal.core.DALMapping
+import optimus.platform.relational.dal.core.DALQueryBinder
 import optimus.platform.relational.dal.core.DALReducer
 import optimus.platform.relational.dal.core.ExpressionQuery
 import optimus.platform.relational.data.QueryCommand
@@ -27,11 +28,9 @@ import optimus.platform.relational.data.QueryTranslator
 import optimus.platform.relational.data.language.QueryDialect
 import optimus.platform.relational.data.language.QueryLanguage
 import optimus.platform.relational.data.mapping.MappingEntityLookup
-import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.mapping.QueryBinder
 import optimus.platform.relational.data.mapping.QueryMapper
 import optimus.platform.relational.data.mapping.QueryMapping
-import optimus.platform.relational.data.tree.DALHeapEntityElement
 import optimus.platform.relational.data.tree.ProjectionElement
 import optimus.platform.relational.data.tree.SelectElement
 import optimus.platform.relational.tree.ConstValueElement
@@ -84,22 +83,9 @@ class DALSamplingReducer(p: DALProvider) extends DALReducer(p) {
     override val binder: QueryBinder = DALSamplingBinder
   }
 
-  object DALSamplingBinder extends QueryBinder {
+  object DALSamplingBinder extends DALQueryBinder {
     def bind(mapper: QueryMapper, e: RelationElement): RelationElement = {
       new DALSamplingBinder(mapper, e).bind(e)
-    }
-
-    override def bindMember(source: RelationElement, member: MemberInfo): RelationElement = {
-      source match {
-        case e: DALHeapEntityElement =>
-          e.memberNames
-            .zip(e.members)
-            .collectFirst {
-              case (name, e) if name == member.name => e
-            }
-            .getOrElse(makeMemberAccess(source, member))
-        case _ => super.bindMember(source, member)
-      }
     }
   }
 

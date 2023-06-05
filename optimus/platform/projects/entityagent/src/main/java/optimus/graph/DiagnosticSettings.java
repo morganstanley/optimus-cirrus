@@ -78,6 +78,11 @@ public class DiagnosticSettings {
   final public static boolean profileCacheContention;
   final public static boolean profileSummaryJson;
 
+  /* This is the folder where heapdumps are saved. Defaults to fullTraceDir if not set. */
+  final public static String heapProfileDir;
+  /* Settings for the heap profile dumps as a list of colon separated key-value pairs. See HeapSampling.scala for details. */
+  final public static String heapProfileSettings;
+
   /**
    * If true entityplugin will inject additional fields into NodeTask.
    */
@@ -91,6 +96,10 @@ public class DiagnosticSettings {
    * Detect and report any non-RT behaviour
    */
   final public static boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
+
+  final public static boolean enableRTVNodeRerunner = getBoolProperty("optimus.rt.verifier.node.rerunner", false);
+  final public static boolean rtvNodeRerunnerExcludeByDefault = getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+
   /**
    * Publish RT violations as crumbs in splunk
    */
@@ -131,7 +140,7 @@ public class DiagnosticSettings {
    * Not final, can be configured through command line.
    * Note: volatile in case it changes during a DistClientInfo snapshot. Writing happens in NodeTrace under lock.
    */
-  public volatile static boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, false);
+  public volatile static boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, true);
   final public static int tweakUsageQWords = getIntProperty("optimus.graph.tweakUsageQWords", 6);
 
   final public static String instrumentationConfig = getStringProperty("optimus.instrument.cfg");
@@ -159,13 +168,22 @@ public class DiagnosticSettings {
    */
   public static boolean proxyInWaitChain = getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
 
+  /** if true we capture the cancelled node in the ScopeWasCancelledException, which is expensive (because we can't
+   * reuse the same exception for every cancelled node in that scope) but really helpful for diagnosing unexpected
+   * cancellations
+    */
+  public static boolean includeCancelledNodeInException =
+      getBoolProperty("optimus.diagnostic.includeCancelledNodeInException", false);
+
   final public static String asyncProfilerSettings;
   final public static boolean awaitStacks;
+  final public static boolean repairEnqueuerChain;
+  final public static int awaitChainHashStrategy;
 
   public static double infoDumpPeriodicityHours = getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
   public static boolean fakeOutOfMemoryErrorOnKill = getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
-  public static String infoDumpDir;
+  final public static String infoDumpDir;
   public static boolean infoDumpOnShutdown = getBoolProperty("optimus.diagnostic.dump.shutdown", false);
 
   /** For startup profiling (not wiring this through cmd line since application code will never need to use it) */
@@ -259,6 +277,11 @@ public class DiagnosticSettings {
 
   public final static boolean useDebugCppAgent = getBoolProperty("optimus.graph.debugCppAgent", false);
 
+  public final static boolean rewriteDisposable = getBoolProperty("optimus.graph.disposable.rewrite", false);
+  // these should be set when ensuring the specific SWIG objects are loaded
+  public static String disposableInterfaceToRewrite = null;
+  public static String disposablePackageToRewrite = null;
+
   @SuppressWarnings("unused")   // Invoked by reflection
   public static List<String> forwardedProperties() {
     List<String> ret = new ArrayList<>();
@@ -321,11 +344,15 @@ public class DiagnosticSettings {
     return res;
   }
 
-  public static String[] parseStringArrayProperty(String string_) {
+  public static String[] parseStringArrayProperty(String string_, String delim) {
     if (string_ == null)
       return null;
     else
-      return string_.split(";");
+      return string_.split(delim);
+  }
+
+  public static String[] parseStringArrayProperty(String string_) {
+    return parseStringArrayProperty(string_, ";");
   }
 
   private static Set<String> getStringPropertyAsSet(String name) {
@@ -434,7 +461,7 @@ public class DiagnosticSettings {
     initialProfile = getInitialProfile(profileString, graphConsoleArgs);
     initialProfileFolder = System.getProperty(PROFILE_FOLDER_PROPERTY);
     initialProfileAggregation = System.getProperty(PROFILE_AGGREGATION_PROPERTY);
-    initialProfileCustomFilter = parseStringArrayProperty(System.getProperty(PROFILE_CUSTOM_FILTER_PROPERTY));
+    initialProfileCustomFilter = parseStringArrayProperty(System.getProperty(PROFILE_CUSTOM_FILTER_PROPERTY), ",");
     initialProfileHotspotFilter = parseStringArrayProperty(System.getProperty(PROFILE_HOTSPOTS_FILTER_PROPERTY));
 
     evaluateNodeOnTouch = getBoolProperty(EVALUATE_NODE_ON_TOUCH, false);
@@ -488,22 +515,43 @@ public class DiagnosticSettings {
     // the dir for the live trace file. Defaults to something like C:\\Users\\username\\AppData\\Local\\Temp\\ogtrace
     String defaultTraceDir = System.getProperty("java.io.tmpdir") + File.separator + "ogtrace-" + System.getProperty("user.name");
     fullTraceDir = getStringProperty("optimus.profiler.fullTraceDir", defaultTraceDir);
+
+    {
+      var hpd = getStringProperty("optimus.graph.heap.profiler.dir");
+      if (hpd == null) hpd = System.getenv("HEAP_PROFILER_DIR");
+      if (hpd == null) hpd = fullTraceDir;
+      heapProfileDir = hpd;
+    }
+
+    {
+      var hpf = getStringProperty("optimus.graph.heap.profiler");
+      if (hpf == null) hpf = System.getenv("HEAP_PROFILER_SETTINGS");
+      heapProfileSettings = hpf;
+    }
+
     // for the case where all you want is ogtrace/optconf and not the hotspots CSV. It can also be suppressed using
     // filtesr, but this is simpler
     profilerDisableHotspotsCSV = getBoolProperty("optimus.profiler.disableHotspotsCSV", false);
 
     keepStaleTraces = getBoolProperty("optimus.profiler.keepStaleTraces", false);
 
-    infoDumpDir = getStringProperty("optimus.diagnostic.dump.dir");
-    if(infoDumpDir == null)
-      infoDumpDir = System.getenv("DIAGNOSTIC_DUMP_DIR");
-    if(infoDumpDir == null)
-      infoDumpDir = System.getProperty("java.io.tmpdir");
-    String aps = getStringProperty("optimus.graph.async.profiler");
-    if( aps == null) aps = System.getenv("ASYNC_PROFILER_SETTINGS");
-    if (aps == null) aps = System.getenv("OPTIMUS_DIST_ASYNC_PROFILER_SETTINGS");
-    asyncProfilerSettings = aps;
+    {
+      var ifd = getStringProperty("optimus.diagnostic.dump.dir");
+      if(ifd == null) ifd = System.getenv("DIAGNOSTIC_DUMP_DIR");
+      if(ifd == null) ifd = System.getProperty("java.io.tmpdir");
+      infoDumpDir = ifd;
+    }
+
+    {
+      var aps = getStringProperty("optimus.graph.async.profiler");
+      if (aps == null) aps = System.getenv("ASYNC_PROFILER_SETTINGS");
+      if (aps == null) aps = System.getenv("OPTIMUS_DIST_ASYNC_PROFILER_SETTINGS");
+      asyncProfilerSettings = aps;
+    }
+
     awaitStacks = asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true");
+    repairEnqueuerChain = getBoolProperty("optimus.graph.enqueue.repair", awaitStacks);
+    awaitChainHashStrategy = getIntProperty("optimus.graph.enqueue.hash.strategy", 0);
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
     syntheticGraphMethodsEnabled = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);
     isAsyncStackTracesEnabled = traceEnqueuer && syntheticGraphMethodsEnabled;

@@ -27,12 +27,12 @@ import java.nio.file.Paths;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -41,7 +41,7 @@ import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
-import optimus.deps.CollectedDependencies;
+import optimus.deps.CmiCollectedDependencies;
 import optimus.deps.DynamicDependencyDiscoveryClassVisitor;
 import optimus.deps.InterProcessFile;
 import optimus.deps.OptimusDependencyDiscoveryClassVisitor;
@@ -119,8 +119,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   public static final String javaLangClassLoader = "java/lang/ClassLoader";
   public static final String classExtension = ".class";
 
-  private static String contextTag = "";
-
   // This is to prevent lumping test classes by accident. This is meant only for production code.
   public static class ExemptedPackage {
     final String packageBase;
@@ -178,7 +176,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   private static final List<String> internalEvents = new CopyOnWriteArrayList<>();
 
   // capturing the system property and environment variables on startup of JVM
-  public static volatile Properties systemProperties = getSystemProperties();
+  public static volatile Map<String, String> systemProperties = getSystemProperties();
   public static volatile Map<String, String> environmentVariableMap = getEnvironmentVariableMap();
 
   public static final String FILE_PREFIX = "file|";
@@ -206,10 +204,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     rejectedLocalJarPathPrefix = rejectedPrefix;
   }
 
-  public static void setContextTag(String tag) {
-    contextTag = String.format("[%s] ", tag); // extra space is on purpose
-  }
-
   private void markTransformationUnsafe(String transformedClassName, String throwableText) {
     recordInternalEvent(String.format("%s error during transformation of class %s: %s",
                                       CMI_ERROR,
@@ -221,8 +215,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   // For testing only
   public static final AtomicBoolean rejectResourcesThatCannotBeFound = new AtomicBoolean(true);
-
-  private static final List<CollectedDependencies> remoteDependenciesList = new CopyOnWriteArrayList<>();
 
   private static Path getCodetreeArtifactPrefix() throws MalformedURLException, URISyntaxException {
     URL resourceURL = ClassMonitorInjector.class.getClassLoader().getResource(constructDependencyName(
@@ -238,14 +230,14 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     return null;
   }
 
-  public static Properties getSystemProperties() {
-    Properties p = new Properties();
-    p.putAll(System.getProperties());
-    return p;
+  public static Map<String, String> getSystemProperties() {
+    HashMap<String, String> p = new HashMap<>();
+    System.getProperties().forEach((key, value) -> p.put(key.toString(), value.toString()));
+    return Collections.unmodifiableMap(p);
   }
 
   public static Map<String, String> getEnvironmentVariableMap() {
-    return new HashMap<>(System.getenv());
+    return Collections.unmodifiableMap(System.getenv());
   }
 
   // When a class is loaded, it means it was truly needed.
@@ -257,7 +249,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   public static void recordInternalEvent(String event) {
-    internalEvents.add(contextTag + event);
+    internalEvents.add(event);
   }
 
   private static String transformToClassResourceName(String className) {
@@ -345,15 +337,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
   }
 
-  public synchronized static void clearLocalUsageData() {
-    usedClasses.clear();
-    internalEvents.clear();
-  }
-
   public synchronized static void clearAllUsageData() {
     usedClasses.clear();
     internalEvents.clear();
-    remoteDependenciesList.clear();
   }
 
   // Only to peek at internal structure
@@ -368,19 +354,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   // [GSF] Used by the OptimusCalculationServiceHandler on the grid engine to get the information for the client
   // [UI] Used by ClassMonitorServlet inside the UI backend
-  public static CollectedDependencies collectLocalRawDependenciesAndReset() {
+  public static CmiCollectedDependencies collectLocalRawDependenciesAndReset() {
     return getUsedRawDependencies(true, true);
-  }
-
-  // [GSF] Used in GSFGridDistributionClient to track the remote execution dependencies (we cannot expose DTC to it)
-  public static void logRemoteRawDependencies(CollectedDependencies dependencies) {
-    remoteDependenciesList.add(dependencies);
-  }
-
-  public static List<CollectedDependencies> collectRemoteRawDependenciesAndReset() {
-    List<CollectedDependencies> remoteDependenciesListCopy = List.copyOf(remoteDependenciesList);
-    remoteDependenciesList.clear();
-    return remoteDependenciesListCopy;
   }
 
   public static void logClassUsage(String className) {
@@ -403,7 +378,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     if (dependency != null) {
       if (isClassDependency) {
         Class<?> dependencyClass = (dependency instanceof Class)
-                                   ? (Class) dependency
+                                   ? (Class<?>) dependency
                                    : dependency.getClass();
         computeAndAddClassDependency(dependencyClass.getClassLoader(),
                                      className,
@@ -417,7 +392,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         } else {
           recordInternalEvent(String.format("%s Unmanaged resource type %s from %s: add code to ignore or handle",
                                             CMI_WARN,
-                                            dependency.toString(),
+                                            dependency,
                                             className));
         }
       }
@@ -464,7 +439,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       } catch (URISyntaxException | FileSystemNotFoundException | UnsupportedOperationException | InvalidPathException e) {
         recordInternalEvent(String.format("%s Cannot parse URI %s from %s: ignored",
                                           CMI_WARN,
-                                          resource.toString(),
+                                          resource,
                                           className));
       }
     } else {
@@ -517,10 +492,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     logClassAndResourceUsage(new ResourceDependency(networkAddress, ResourceAccessType.network), false, className);
   }
 
-  // NEVER mix in remote dependencies: this is meant only to capture local ones.
   // ONLY meant for testing; use #collectLocalRawDependenciesAndReset() otherwise
-  public synchronized static CollectedDependencies getUsedRawDependencies(boolean clearInternalState,
-                                                                          boolean sanitize) {
+  public synchronized static CmiCollectedDependencies getUsedRawDependencies(boolean clearInternalState,
+                                                                             boolean sanitize) {
     Set<String> usedClassesCopy = instrumentationExemptedClasses.stream()
                                                                 .map(ClassMonitorInjector::constructDependencyName)
                                                                 .collect(Collectors.toSet());
@@ -616,8 +590,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
           (unrefinedResourceDependencySize - allResourceDependencies.size())));
       // Remove DTC internal files passed between processes, determined by system properties.
       int resourceCountBeforeTrim = allResourceDependencies.size();
-      String resultFileProp = systemProperties.getProperty(InterProcessFile.lookupResult.sysProp, "None");
-      String runContextProp = systemProperties.getProperty(InterProcessFile.runContext.sysProp, "None");
+      String resultFileProp = systemProperties.getOrDefault(InterProcessFile.lookupResult.sysProp, "None");
+      String runContextProp = systemProperties.getOrDefault(InterProcessFile.runContext.sysProp, "None");
       allResourceDependencies.removeIf(d -> d.getResourceId().equals(resultFileProp) ||
                                             d.getResourceId().equals(runContextProp));
       recordInternalEvent(String.format(
@@ -679,14 +653,12 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     internalEvents.forEach(internalEventsCopy::add); // collection addAll has a bug, please to do not use
     if (clearInternalState) { internalEvents.clear(); }
 
-    return new CollectedDependencies(usedClassesCopy,
-                                     allClassDependencies,
-                                     usedResourcesCopy,
-                                     internalEventsCopy,
-                                     systemProperties,
-                                     environmentVariableMap,
-                                     new HashSet<>(),
-                                     new ArrayList<>());
+    return new CmiCollectedDependencies(usedClassesCopy,
+                                        allClassDependencies,
+                                        usedResourcesCopy,
+                                        internalEventsCopy,
+                                        systemProperties,
+                                        environmentVariableMap);
   }
 
   // If not found, the result set is empty

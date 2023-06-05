@@ -12,6 +12,7 @@
 package optimus.breadcrumbs.crumbs
 
 import optimus.breadcrumbs.ChainedID
+
 import java.io.ByteArrayInputStream
 import java.io.ObjectInputStream
 import java.net.InetAddress
@@ -20,7 +21,6 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-
 import optimus.breadcrumbs.Breadcrumbs
 import org.slf4j.LoggerFactory
 import spray.json._
@@ -36,6 +36,8 @@ import scala.annotation.varargs
 import scala.collection.immutable.HashMap
 import optimus.scalacompat.collection._
 
+import java.util.concurrent.atomic.AtomicInteger
+
 // Keep explicit serial version IDs to coordinate reading from WT.
 // This is an argument for converting this entire hierarchy to straight string maps.
 @SerialVersionUID(2020060801L)
@@ -48,6 +50,7 @@ sealed abstract class Crumb(
   val t: Long = System.currentTimeMillis()
   def zdt: ZonedDateTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(t), ZoneIds.UTC)
   val now: String = t.toString
+  val locator: String = Crumb.newLocator()
   def prettyNow: String = Crumb.prettyNow(t)
   private[crumbs] def clazz: String = this.getClass.getName match {
     case Crumb.extractClass(c) => c
@@ -60,11 +63,12 @@ sealed abstract class Crumb(
   def flags = source.flags
   final val header =
     Map(
-      Headers.Crumb -> clazz.toString,
+      Headers.Crumb -> clazz,
       Headers.Source -> source.toString,
       Headers.Uuid -> uuid.toString,
       Headers.VertexId -> uuid.vertexId,
-      Headers.Time -> t.toString
+      Headers.Time -> t.toString,
+      Headers.CrumbLocator -> locator
     )
   final protected def cleanProperties: Map[String, String] =
     (properties.mapValuesNow { v =>
@@ -76,6 +80,7 @@ sealed abstract class Crumb(
     builder += J(Headers.Crumb, clazz.toJson)
     builder += J(Headers.Source, source.toString)
     builder += J(Headers.Uuid, uuid.toString)
+    builder += J(Headers.CrumbLocator, locator)
     builder += J(Headers.VertexId, uuid.vertexId)
     builder += J(Headers.Time, t)
     if (hints.nonEmpty) {
@@ -456,9 +461,10 @@ object Crumb {
 
   object Headers {
     val Crumb = "crumb"
-    val Uuid = "uuid"
+    val Uuid = "uuid"      // toString component of ChainedID, probably unique, subject to grid retries
+    val VertexId = "vuid"  // truly unique component of ChainedID
+    val CrumbLocator = "loc"    // unique identifier of an individual crumb (multiple crumbs may be issued with the above)
     val Parent = "parent"
-    val VertexId = "vuid"
     val ParentVertexId = "pvuid"
     val Source = "src"
     val Time = "t"
@@ -467,6 +473,8 @@ object Crumb {
     val Hints = "hints"
   }
 
+  private val count = new AtomicInteger(0)
+  private def newLocator(): String = ChainedID.root.base + "L" + count.incrementAndGet()
   private val log = LoggerFactory.getLogger("Crumbs")
 
   import net.iharder.base64.Base64

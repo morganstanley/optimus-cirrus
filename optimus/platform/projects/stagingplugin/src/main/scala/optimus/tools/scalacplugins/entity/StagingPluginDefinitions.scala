@@ -26,6 +26,8 @@ trait StagingPluginDefinitions {
   lazy val IterableOnceOps_to = getMemberIfDefined(IterableOnceOpsClass, TermName("to"))
   lazy val StreamClass = getClassIfDefined("scala.collection.immutable.Stream")
   lazy val LazyListClass = getClassIfDefined("scala.collection.immutable.LazyList")
+  lazy val SortedSetClass = symbolOf[collection.immutable.SortedSet[Any]]
+
   lazy val Predef_augmentString = getMemberIfDefined(definitions.PredefModule, TermName("augmentString"))
   lazy val Predef_wrapString = getMemberIfDefined(definitions.PredefModule, TermName("wrapString"))
   def isAtLeastScala2_13 = IterableOnceOpsClass != NoSymbol
@@ -86,6 +88,23 @@ trait StagingPluginDefinitions {
     def unapply(t: GenericApply): Some[(Tree, List[Tree], List[List[Tree]])] = {
       val applied = treeInfo.dissectApplied(t)
       Some((applied.core, applied.targs, applied.argss))
+    }
+  }
+
+  object NeedsUnsorted {
+    def unapply(tree: Tree): Option[Tree] = tree match {
+      case Apply(Apply(TypeApply(sel @ Select(qual, _), _), _), List(buildFrom)) =>
+        val calledOnSortedSet = qual.tpe.typeSymbol.isNonBottomSubClass(SortedSetClass)
+        val takesCanBuildFrom = buildFrom.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass)
+        if (calledOnSortedSet && takesCanBuildFrom) {
+          val usesUnsorted = sel.name.string_==("unsorted")
+          val resultIsSorted =
+            buildFrom.tpe.baseType(CanBuildFromClass).typeArgs.last.typeSymbol.isNonBottomSubClass(SortedSetClass)
+          if (!resultIsSorted && !usesUnsorted) {
+            Some(qual)
+          } else None
+        } else None
+      case _ => None
     }
   }
 

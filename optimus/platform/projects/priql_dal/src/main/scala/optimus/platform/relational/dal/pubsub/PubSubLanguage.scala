@@ -42,7 +42,7 @@ class PubSubLanguage(lkup: MappingEntityLookup) extends DALLanguage(lkup) {
       case _                  => false
     }
     def isCollection(column: ColumnElement): Boolean = column.columnInfo match {
-      case i: IndexColumnInfo => i.index.isCollection
+      case i: IndexColumnInfo => i.isCollection
       case _                  => false
     }
 

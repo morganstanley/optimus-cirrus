@@ -44,17 +44,6 @@ public class JVMUtil {
     }
   }
 
-  public static void debugSystemExitCall() {
-    final SecurityManager securityManager = new SecurityManager() {
-      public void checkPermission(Permission permission) {
-        if (permission.getName().startsWith("exitVM")) {
-          Thread.dumpStack();
-        }
-      }
-    };
-    System.setSecurityManager(securityManager);
-  }
-
   /**
    * @param args
    */

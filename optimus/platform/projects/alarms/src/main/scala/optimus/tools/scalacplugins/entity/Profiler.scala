@@ -39,7 +39,9 @@ class ThresholdProfiler(reporter: (Position, String) => Unit, thresholdNs: Long)
     timeStack = timeStack.tail
     val duration = System.nanoTime() - startTime
     if (duration > thresholdNs) {
-      reporter(sym.pos, ThresholdProfiler.MessageString(sym.name.toString, duration / 1000000000d))
+      val fullName = sym.ownerChain.map(_.nameString).reverse.mkString(".")
+      val location = sym.sourceFile.path
+      reporter(sym.pos, ThresholdProfiler.MessageString(s"$fullName in $location", duration / 1000000000d))
 
       // Since we've already attributed this time, it's confusing to also blame the path that got us to here (which
       // is not necessarily just the enclosing owners, because the typechecker jumps to callees when needed). So we

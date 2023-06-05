@@ -25,10 +25,8 @@ package object scalalog {
   import msjava.slf4jutils.scalalog.Logger
   import org.slf4j.ILoggerFactory
 
-  private[this] var factory: ILoggerFactory = SLF4JLoggerFactory.getILoggerFactory
-
-  // for testing
-  private[scalalog] def setSlf4jLoggerFactory(loggerFactory: ILoggerFactory) = { factory = loggerFactory }
+  // don't capture this in a val - it can change
+  private[this] def factory: ILoggerFactory = SLF4JLoggerFactory.getILoggerFactory
 
   /**
    * Factory method to obtain a [[msjava.slf4jutils.scalalog.Logger]] with any [[String]] as a name

@@ -47,9 +47,6 @@ object JavaVersionCompat {
     val fileTree: WatchEvent.Modifier =
       lookup(Class.forName("com.sun.nio.file.ExtendedWatchEventModifier"), "FILE_TREE")
   }
-
-  private val selChImplClass = Class.forName("sun.nio.ch.SelChImpl")
-  private val selChImplKill = selChImplClass.getMethod("kill")
 }
 
 package compat {

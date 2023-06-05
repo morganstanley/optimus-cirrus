@@ -27,8 +27,7 @@ import optimus.platform.TemporalContext
 import optimus.platform.dsi.bitemporal.DSIQueryTemporality
 import optimus.platform.dsi.bitemporal.Result
 import optimus.platform.dsi.expressions.Binary
-import optimus.platform.dsi.expressions.BinaryOperator.AndAlso
-import optimus.platform.dsi.expressions.BinaryOperator.Equal
+import optimus.platform.dsi.expressions.BinaryOperator._
 import optimus.platform.dsi.expressions.Constant
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.In
@@ -117,7 +116,10 @@ trait DALQueryUtil {
     where match {
       case Binary(AndAlso, l, r) =>
         AndTemporalSurfaceQuery(toTemporalSurfaceQuery[T](l, realClass), toTemporalSurfaceQuery[T](r, realClass))
-      case Binary(Equal, _: Property, Constant(sk: SerializedKey, _)) =>
+      case Binary(
+            Equal | GreaterThan | GreaterThanOrEqual | LessThan | LessThanOrEqual,
+            _: Property,
+            Constant(sk: SerializedKey, _)) =>
         toTemporalSurfaceQuery(sk, realClass)
       case In(_: Property, Right(v)) =>
         v.map { case Constant(sk: SerializedKey, _) => toTemporalSurfaceQuery(sk, realClass) }
@@ -130,7 +132,7 @@ trait DALQueryUtil {
   class ConstFormatter(loadCtx: TemporalContext) extends DALExpressionVisitor {
     override protected def visitRichConstant(c: RichConstant): Expression = {
       c.index map { idx =>
-        Constant(idx.makeKey(checkLoadContext(c.value, loadCtx)).toSerializedKey, TypeCode.SerializedKey)
+        Constant(idx.toSerializedKey(checkLoadContext(c.value, loadCtx)), TypeCode.SerializedKey)
       } getOrElse {
         Constant(c.value, typeCode(c.value))
       }

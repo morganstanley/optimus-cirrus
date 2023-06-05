@@ -647,7 +647,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error2(
       22909,
       OptimusPhases.REF_CHECKS,
-      "Due to implementation limitations, @node method %s cannot contain a forbidden parameter name %s"
+      "Due to implementation limitations, @node/@createNodeTrait method %s cannot contain a forbidden parameter name %s"
     )
   val NO_UNIQUE_INDEXED_COLLECTION =
     error1(22910, OptimusPhases.REF_CHECKS, "Unique Indexes not allowed for Collection types")
@@ -807,7 +807,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error0(sn = 29108, OptimusPhases.REF_CHECKS, "@job may only have one single parameter of type @stored @entity")
   val JOB_WITHOUT_NODE_ASYNC = error0(29109, OptimusPhases.ADJUST_AST, "@job may be only set on a @node / @async")
 
-  val POISONED_PLACEHOLDER = error1(29200, OptimusPhases.POSITION, "A placeholder method wasn't replaced during compilation: %s")
+  val POISONED_PLACEHOLDER =
+    error1(29200, OptimusPhases.POSITION, "A placeholder method wasn't replaced during compilation: %s")
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -993,12 +994,20 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   val NOPOSITION = info1(19009, OptimusPhases.POSITION, "INFO: %s is not positioned")
 
-  val INCORRECT_CATALOG =
+  val INCORRECT_META_FIELDS =
     error1(
       19101,
       OptimusPhases.EXPORTINFO,
-      "This Catalog %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog for an example"
+      "This Catalog/Owner %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
     )
+
+  val POTENTIALLY_BROKEN_PROPERTY_TWEAKING =
+    warning4(
+      16002,
+      OptimusPhases.ENTITY_INFO,
+      "%s in class %s is NOT property tweakable through \n  %s := ... \nbecause its concrete implementation is from a mixin trait. %s"
+    )
+
   // removed:
   //   val EMBEDDABLE_APPLY_REMOVAL = info1(
   //     19010,

@@ -1,6 +1,6 @@
 # Usage guidelines
 #
-# A set of global Git ignores.
+# A set of global Git ignores. This file is open-sourced.
 # If you want to add some local paths, please add a .gitignore inside the project/directory where the files reside.
 
 # General
@@ -36,3 +36,6 @@ diff-chunked.txt
 
 # configuration file that should never go to codetree
 mischief.obt
+
+# EOF
+# See top of file for .gitignore guidelines.

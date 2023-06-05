@@ -48,7 +48,21 @@ class DALMapping extends BasicMapping {
   }
 
   override def isProviderSupported(dp: DataProvider): Boolean = {
-    dp.isInstanceOf[DALProvider]
+    dp match {
+      case provider: DALProvider => !provider.supportsRegisteredIndexes
+      case _                     => false
+    }
+  }
+}
+
+class DALRegisteredIndexMapping extends DALMapping {
+  override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
+}
+
+object DALRegisteredIndexMapping {
+  def isProviderSupported(dp: DataProvider): Boolean = dp match {
+    case provider: DALProvider => provider.supportsRegisteredIndexes
+    case _                     => false
   }
 }
 

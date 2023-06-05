@@ -114,6 +114,16 @@ trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
         template))
   }
 
+  def warning4(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder4 = {
+    register(
+      OptimusAlarmBuilder4(
+        alarmId(sn, OptimusAlarmType.WARNING),
+        phase,
+        obtMandatory = false,
+        scalaMandatory = false,
+        template))
+  }
+
   def info0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
     register(
       OptimusAlarmBuilder0(
