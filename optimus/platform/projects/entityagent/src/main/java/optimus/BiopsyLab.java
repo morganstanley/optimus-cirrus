@@ -51,32 +51,35 @@ public class BiopsyLab {
     }
   }
 
-  // Not expected to contain more than a dozen biopsies, so choosing low memory footprint over faster access
+  // Not expected to contain more than a dozen biopsies, so choosing low memory footprint over
+  // faster access
   private static final List<Biopsy> biopsies = Collections.synchronizedList(new ArrayList<>());
 
   public static String byteCodeAsAsm(byte[] bytes) {
     StringWriter writer = new StringWriter();
-    TraceClassVisitor traceClassVisitor = new TraceClassVisitor(null, new ASMifier(), new PrintWriter(writer));
+    TraceClassVisitor traceClassVisitor =
+        new TraceClassVisitor(null, new ASMifier(), new PrintWriter(writer));
     new ClassReader(bytes).accept(traceClassVisitor, 0);
     return writer.toString();
   }
 
   public static String byteCodeAsString(byte[] bytes) {
     StringWriter writer = new StringWriter();
-    TraceClassVisitor traceClassVisitor = new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
+    TraceClassVisitor traceClassVisitor =
+        new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
     new ClassReader(bytes).accept(traceClassVisitor, 0);
     return writer.toString();
   }
 
-  static void dumpClass( String className, byte[] classfileBuffer) throws IOException {
+  static void dumpClass(String className, byte[] classfileBuffer) throws IOException {
     dumpClass(DiagnosticSettings.classDumpLocation, className, classfileBuffer);
   }
 
-  static void dumpClass(String folder, String className, byte[] classfileBuffer) throws IOException {
+  static void dumpClass(String folder, String className, byte[] classfileBuffer)
+      throws IOException {
     if (folder != null) {
       File parent = new File(folder);
-      if (!parent.exists())
-        throw new VerifyError("could not read output directory " + folder);
+      if (!parent.exists()) throw new VerifyError("could not read output directory " + folder);
       File classOutfile = new File(parent, className.replace('/', '.') + ".class");
       if (!classOutfile.createNewFile())
         throw new VerifyError("could not create output file " + classOutfile.getAbsolutePath());
@@ -98,6 +101,8 @@ public class BiopsyLab {
   }
 
   public static Optional<Biopsy> getBiopsy(Class<?> clazz) {
-    return biopsies.stream().filter((biopsy -> biopsy.className.equals(constructClassName(clazz.getName())))).findFirst();
+    return biopsies.stream()
+        .filter((biopsy -> biopsy.className.equals(constructClassName(clazz.getName()))))
+        .findFirst();
   }
 }

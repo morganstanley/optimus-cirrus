@@ -22,12 +22,13 @@ import java.util.Set;
 import org.objectweb.asm.*;
 
 final class StrictMathTransformer implements ClassFileTransformer {
-  private static final String
-      C_Math = Type.getInternalName(Math.class),
+  private static final String C_Math = Type.getInternalName(Math.class),
       C_StrictMath = Type.getInternalName(StrictMath.class);
 
-  // All methods common between Math and StrictMath (apparently some like incrementExact are missing)
+  // All methods common between Math and StrictMath (apparently some like incrementExact are
+  // missing)
   private static final Set<String> methods;
+
   static {
     Set<String> mathMethods = new HashSet<>(), strictMathMethods = new HashSet<>();
     for (Method method : Math.class.getMethods()) {
@@ -43,7 +44,8 @@ final class StrictMathTransformer implements ClassFileTransformer {
   }
 
   @Override
-  public byte[] transform(ClassLoader loader, String name, Class<?> prev, ProtectionDomain pd, byte[] cbuf) {
+  public byte[] transform(
+      ClassLoader loader, String name, Class<?> prev, ProtectionDomain pd, byte[] cbuf) {
 
     ClassWriter cw = new ClassWriter(0);
     MathStrictener cv = new MathStrictener(cw);
@@ -63,10 +65,12 @@ final class StrictMathTransformer implements ClassFileTransformer {
     }
 
     @Override
-    public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] exns) {
+    public MethodVisitor visitMethod(
+        int access, String name, String desc, String sig, String[] exns) {
       return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, name, desc, sig, exns)) {
         @Override
-        public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean iface) {
+        public void visitMethodInsn(
+            int opcode, String owner, String name, String desc, boolean iface) {
           if (owner.equals(C_Math) && methods.contains(name)) {
             changed = true;
             super.visitMethodInsn(opcode, C_StrictMath, name, desc, iface);

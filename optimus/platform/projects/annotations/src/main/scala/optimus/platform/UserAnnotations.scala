@@ -123,7 +123,8 @@ class indexed(
  *   http://optimusdoc/BasicAnnotations
  */
 @field
-class stored(val childToParent: Boolean = false, val projected: Boolean = false) extends StaticAnnotation
+class stored(val childToParent: Boolean = false, val projected: Boolean = false, val fullTextSearch: Boolean = false)
+    extends StaticAnnotation
 
 /**
  * @see

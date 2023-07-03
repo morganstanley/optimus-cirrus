@@ -40,33 +40,44 @@ public class EntityAgent {
   private static Instrumentation instrumentation;
 
   private static final String nativePrefix = "entityagent_";
+
   public static String nativePrefix(String name) {
     return nativePrefix + name;
   }
 
-  private static final ConcurrentHashMap<String, ClassFileTransformer> customTransformers = new ConcurrentHashMap<>();
-  static private final String VERSION_STRING = "Entity Agent(v8)";
+  private static final ConcurrentHashMap<String, ClassFileTransformer> customTransformers =
+      new ConcurrentHashMap<>();
+  private static final String VERSION_STRING = "Entity Agent(v8)";
 
   public static void logMsg(String msg) {
-    if (!silent) { System.out.println(VERSION_STRING + ": " + msg); }
+    if (!silent) {
+      System.out.println(VERSION_STRING + ": " + msg);
+    }
   }
+
   public static void logErrMsg(String msg) {
-    if (!silent) { System.err.println(VERSION_STRING + ": " + msg); }
+    if (!silent) {
+      System.err.println(VERSION_STRING + ": " + msg);
+    }
   }
 
   private static class EntityAgentTransformer implements ClassFileTransformer {
     boolean canTransformCoreClasses;
+
     EntityAgentTransformer(boolean canTransformCoreClasses) {
       this.canTransformCoreClasses = canTransformCoreClasses;
     }
+
     NodeMethodsInjector nmi = new NodeMethodsInjector();
     ChaosMonkeyInjector chaosInjector = new ChaosMonkeyInjector();
     CollectionInjector collInjector = new CollectionInjector();
     SyntheticMethodInjector syntheticMethodInjector = new SyntheticMethodInjector();
     CachingJunitRunnerInjector cachingJunitInjector = new CachingJunitRunnerInjector();
     InstrumentationInjector instrInjector = new InstrumentationInjector();
-    HotCodeReplaceTransformer hotCodeReplaceTransformer = new HotCodeReplaceTransformer(instrumentation);
+    HotCodeReplaceTransformer hotCodeReplaceTransformer =
+        new HotCodeReplaceTransformer(instrumentation);
     CleanerInjector cleanerInjector = new CleanerInjector();
+
     {
       if (DiagnosticSettings.enableHotCodeReplace) {
         hotCodeReplaceTransformer.startPolling();
@@ -74,27 +85,36 @@ public class EntityAgent {
     }
 
     @Override
-    public byte[] transform(ClassLoader loader, String clsName, Class<?> clsRedefined, ProtectionDomain domain,
-                            byte[] classfileBuffer) throws IllegalClassFormatException {
-      if (clsName == null)
-        return null;  // Handle nameless classes
+    public byte[] transform(
+        ClassLoader loader,
+        String clsName,
+        Class<?> clsRedefined,
+        ProtectionDomain domain,
+        byte[] classfileBuffer)
+        throws IllegalClassFormatException {
+      if (clsName == null) return null; // Handle nameless classes
 
       byte[] transformed = classfileBuffer;
 
       if (DiagnosticSettings.enableHotCodeReplace) {
-        transformed = safeTransform(hotCodeReplaceTransformer, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(
+                hotCodeReplaceTransformer, loader, clsName, clsRedefined, domain, transformed);
       }
 
       if (DiagnosticSettings.rewriteDisposable) {
-        transformed = safeTransform(cleanerInjector, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(cleanerInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
       if (DiagnosticSettings.chaosEnabled) {
-        transformed = safeTransform(chaosInjector, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(chaosInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
       if (InstrumentationConfig.isEnabled() & canTransformCoreClasses)
-        transformed = safeTransform(instrInjector, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(instrInjector, loader, clsName, clsRedefined, domain, transformed);
 
       ClassFileTransformer cft = customTransformers.get(clsName);
 
@@ -107,56 +127,79 @@ public class EntityAgent {
       }
 
       if (DiagnosticSettings.collectionTraceEnabled) {
-        transformed = safeTransform(collInjector, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(collInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
       if (DiagnosticSettings.syntheticGraphMethodsEnabled) {
-        transformed = safeTransform(syntheticMethodInjector, loader, clsName, clsRedefined, domain, transformed);
+        transformed =
+            safeTransform(
+                syntheticMethodInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      if (DiagnosticSettings.isClassMonitorEnabled && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
-        transformed = safeTransform(cachingJunitInjector, loader, clsName, clsRedefined, domain, transformed);
+      if (DiagnosticSettings.isClassMonitorEnabled
+          && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+        transformed =
+            safeTransform(cachingJunitInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      // This transformation should be last in order so we won't miss usage of some class added by previous
+      // This transformation should be last in order so we won't miss usage of some class added by
+      // previous
       // transformations
-      if (DiagnosticSettings.isClassMonitorEnabled && !clsName.equals(ClassMonitorInjector.class.getName())) {
-        // The agent should load the app's CMI, and not use its own, since its own CMI is unaware of optimus classes
+      if (DiagnosticSettings.isClassMonitorEnabled
+          && !clsName.equals(ClassMonitorInjector.class.getName())) {
+        // The agent should load the app's CMI, and not use its own, since its own CMI is unaware of
+        // optimus classes
         ClassFileTransformer classMonitorInjector = ClassMonitorInjector.instance(loader);
         if (classMonitorInjector != null) {
-          transformed = safeTransform(classMonitorInjector, loader, clsName, clsRedefined, domain, transformed);
+          transformed =
+              safeTransform(
+                  classMonitorInjector, loader, clsName, clsRedefined, domain, transformed);
         }
       }
 
       if (DiagnosticSettings.classDumpEnabled) {
-        if (DiagnosticSettings.classDumpClasses != null && DiagnosticSettings.classDumpClasses.contains(clsName)) {
+        if (DiagnosticSettings.classDumpClasses != null
+            && DiagnosticSettings.classDumpClasses.contains(clsName)) {
           try {
             BiopsyLab.dumpClass(clsName, transformed == null ? classfileBuffer : transformed);
           } catch (IOException ioe) {
             throw new RuntimeException(clsName, ioe);
           }
         }
-        if (DiagnosticSettings.classBiopsyClasses != null &&
-            DiagnosticSettings.classBiopsyClasses.contains(clsName)) {
+        if (DiagnosticSettings.classBiopsyClasses != null
+            && DiagnosticSettings.classBiopsyClasses.contains(clsName)) {
           BiopsyLab.takeBiopsyOfClass(clsName, classfileBuffer, transformed);
         }
       }
 
       // the contract is that we return null if we didn't modify the class
-      if (transformed == classfileBuffer) { return null; } else { return transformed; }
+      if (transformed == classfileBuffer) {
+        return null;
+      } else {
+        return transformed;
+      }
     }
 
-    // the transform method is annoyingly non-chainable because it returns null if it isn't interested in the class.
+    // the transform method is annoyingly non-chainable because it returns null if it isn't
+    // interested in the class.
     // this method adapts it to return the input instead
-    private byte[] safeTransform(ClassFileTransformer transformer,
-                                 ClassLoader loader,
-                                 String className,
-                                 Class<?> classBeingRedefined,
-                                 ProtectionDomain protectionDomain,
-                                 byte[] input) throws IllegalClassFormatException {
+    private byte[] safeTransform(
+        ClassFileTransformer transformer,
+        ClassLoader loader,
+        String className,
+        Class<?> classBeingRedefined,
+        ProtectionDomain protectionDomain,
+        byte[] input)
+        throws IllegalClassFormatException {
       try {
-        byte[] transformed = transformer.transform(loader, className, classBeingRedefined, protectionDomain, input);
-        if (transformed == null) { return input; } else { return transformed; }
+        byte[] transformed =
+            transformer.transform(loader, className, classBeingRedefined, protectionDomain, input);
+        if (transformed == null) {
+          return input;
+        } else {
+          return transformed;
+        }
       } catch (IllegalClassFormatException e) {
         throw e;
       } catch (Throwable t) {
@@ -174,8 +217,10 @@ public class EntityAgent {
 
     InstrumentationConfig.init();
 
-    // To patch java core classes to call our methods, we need to explicitly put the jar containing those methods on the
-    // bootstrap class loader path.  To find that jar, we let our current classloader search for a class we added just to be
+    // To patch java core classes to call our methods, we need to explicitly put the jar containing
+    // those methods on the
+    // bootstrap class loader path.  To find that jar, we let our current classloader search for a
+    // class we added just to be
     // searched for.
 
     var allowCorePatches = false;
@@ -186,29 +231,39 @@ public class EntityAgent {
       logMsg("Added " + extJar + " on classpath to bootstrap path.");
       allowCorePatches = true;
     } catch (Throwable e) {
-      var agentPath = EntityAgent.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-      var possibleEAExt = new File(agentPath).getParentFile().listFiles((dir, name) -> name.contains("entityagent-ext"));
-      if(possibleEAExt != null && possibleEAExt.length > 0) {
+      var agentPath =
+          EntityAgent.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+      var possibleEAExt =
+          new File(agentPath)
+              .getParentFile()
+              .listFiles((dir, name) -> name.contains("entityagent-ext"));
+      if (possibleEAExt != null && possibleEAExt.length > 0) {
         var extJar = possibleEAExt[0];
         instrumentation.appendToBootstrapClassLoaderSearch(new JarFile(extJar));
         logMsg("Added " + extJar + " from directory to bootstrap path");
         allowCorePatches = true;
       }
     }
-    if(!allowCorePatches)
-      logMsg("Cannot patch core classes.");
+    if (!allowCorePatches) logMsg("Cannot patch core classes.");
 
     System.setProperty("ENTITY_AGENT_VERSION", VERSION_STRING);
     EntityAgent.instrumentation = instrumentation;
-    logMsg("supports " +
-           (instrumentation.isRetransformClassesSupported() ? "retransform " : " ") + new Date() +
-           " trace: " + DiagnosticSettings.traceAvailable + " isClassMonitorEnabled: " + DiagnosticSettings.isClassMonitorEnabled);
+    logMsg(
+        "supports "
+            + (instrumentation.isRetransformClassesSupported() ? "retransform " : " ")
+            + new Date()
+            + " trace: "
+            + DiagnosticSettings.traceAvailable
+            + " isClassMonitorEnabled: "
+            + DiagnosticSettings.isClassMonitorEnabled);
     String propOverride = System.getProperty("optimus.entityagent.props.override");
-    if (propOverride != null) { agentArgs = propOverride; }
-    String[] props = agentArgs == null
-                     ? new String[0]
-                     : agentArgs.split(";");
-    if (propOverride != null) { props = propOverride.split(";"); }
+    if (propOverride != null) {
+      agentArgs = propOverride;
+    }
+    String[] props = agentArgs == null ? new String[0] : agentArgs.split(";");
+    if (propOverride != null) {
+      props = propOverride.split(";");
+    }
     String lockPrefix = "lock=";
     for (String prop : props) {
       if (prop.equals("doublebox")) {
@@ -216,17 +271,20 @@ public class EntityAgent {
       } else if (prop.startsWith(lockPrefix)) {
         String className = prop.substring(lockPrefix.length());
         // (don't use a lambda here because ClassFileTransformer isn't a SAM interface in Java 9+)
-        customTransformers.put(className, new ClassFileTransformer() {
-          @Override
-          public byte[] transform(ClassLoader loader,
-                                  String name,
-                                  Class<?> redef,
-                                  ProtectionDomain protectionDomain,
-                                  byte[] classfileBuffer) {
-            logMsg("injecting locks on native methods in " + className);
-            return LockInjector.inject(classfileBuffer);
-          }
-        });
+        customTransformers.put(
+            className,
+            new ClassFileTransformer() {
+              @Override
+              public byte[] transform(
+                  ClassLoader loader,
+                  String name,
+                  Class<?> redef,
+                  ProtectionDomain protectionDomain,
+                  byte[] classfileBuffer) {
+                logMsg("injecting locks on native methods in " + className);
+                return LockInjector.inject(classfileBuffer);
+              }
+            });
       }
     }
 
@@ -254,7 +312,8 @@ public class EntityAgent {
       instrumentation.retransformClasses(java.lang.System.class);
     }
 
-    if (instrumentation.isNativeMethodPrefixSupported()) instrumentation.setNativeMethodPrefix(transformer, nativePrefix);
+    if (instrumentation.isNativeMethodPrefixSupported())
+      instrumentation.setNativeMethodPrefix(transformer, nativePrefix);
     else logErrMsg("Native Method Prefix not supported. Skipping...");
   }
 
@@ -272,7 +331,8 @@ public class EntityAgent {
    * by fixing it at a Scala level.
    */
   private static void insertDoubleBoxTransformer() {
-    logMsg("rewriting java.lang.Double.valueOf to optimus.DoubleBox.boxToDouble for selected classes.");
+    logMsg(
+        "rewriting java.lang.Double.valueOf to optimus.DoubleBox.boxToDouble for selected classes.");
 
     List<String> doubleBoxTargets = new ArrayList<>();
     // these catch all boxings in scala code (even our dependencies)
@@ -286,11 +346,9 @@ public class EntityAgent {
     doubleBoxTargets.add("com/sun/xml/bind/v2/model/impl/RuntimeBuiltinLeafInfoImpl");
 
     DoubleBox.boxToDouble(0.0); // avoid NoClassDefFoundError later
-    ClassFileTransformer doubleBoxTransformer = new MethodRewriteTransformer(doubleBoxTargets,
-                                                                             "java/lang/Double",
-                                                                             "valueOf",
-                                                                             "optimus/DoubleBox",
-                                                                             "boxToDouble");
+    ClassFileTransformer doubleBoxTransformer =
+        new MethodRewriteTransformer(
+            doubleBoxTargets, "java/lang/Double", "valueOf", "optimus/DoubleBox", "boxToDouble");
     instrumentation.addTransformer(doubleBoxTransformer, true);
   }
 
@@ -309,4 +367,3 @@ public class EntityAgent {
     }
   }
 }
-

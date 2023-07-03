@@ -18,11 +18,12 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * In an emergency situation this code allows you to inject 'synchronized' method prefix before native methods
- * It was used against SWIG generated wrappers to synchronize C/C++ methods suspected of not being thread safe
- * Manually typing synchronized keyword in auto-generated methods is not easy :)
+ * In an emergency situation this code allows you to inject 'synchronized' method prefix before
+ * native methods It was used against SWIG generated wrappers to synchronize C/C++ methods suspected
+ * of not being thread safe Manually typing synchronized keyword in auto-generated methods is not
+ * easy :)
  *
- * lock=className
+ * <p>lock=className
  */
 public class LockInjector {
   public static byte[] inject(byte[] bytes) {
@@ -39,10 +40,10 @@ class AddLockInjectionAdapter extends ClassVisitor implements Opcodes {
     super(ASM9, cv);
   }
 
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     if ((access & ACC_NATIVE) != 0)
       return cv.visitMethod(access | ACC_SYNCHRONIZED, name, desc, signature, exceptions);
-    else
-      return cv.visitMethod(access, name, desc, signature, exceptions);
+    else return cv.visitMethod(access, name, desc, signature, exceptions);
   }
 }

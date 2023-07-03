@@ -55,13 +55,14 @@ public class VisitContext {
   }
 
   // WARNING: Dangerous with potential class shadowing/hacks
-  //          But deemed reasonable for performance reason (reduce CPU load and minimize object trashing).
+  //          But deemed reasonable for performance reason (reduce CPU load and minimize object
+  // trashing).
   protected static boolean dependencyOfInterest(String name) {
     assert (name.contains("/") || (name.indexOf('.') == name.lastIndexOf('.')));
-    return !name.startsWith("java/lang/") &&
-           !name.startsWith("java/util/") &&
-           !name.startsWith("java/io/Serializable") &&
-           !name.startsWith("scala/");
+    return !name.startsWith("java/lang/")
+        && !name.startsWith("java/util/")
+        && !name.startsWith("java/io/Serializable")
+        && !name.startsWith("scala/");
   }
 
   String addClassDependencyFromSimpleTypeDesc(String descriptor) {
@@ -80,8 +81,7 @@ public class VisitContext {
         addClassDependency(argType);
       }
       addClassDependency(type.getReturnType());
-    }
-    else {
+    } else {
       addClassDependencyAsResource(constructDependencyNameFromSimpleType(type));
     }
   }
@@ -89,8 +89,10 @@ public class VisitContext {
   void addClassDependencyFromValue(Object value) {
     if (value instanceof Type) {
       addClassDependencyAsResource(constructDependencyNameFromSimpleType((Type) value));
-    }
-    else if (value != null && !value.getClass().isPrimitive() && !value.getClass().isSynthetic() && !value.getClass().getName().startsWith("java.lang.")) {
+    } else if (value != null
+        && !value.getClass().isPrimitive()
+        && !value.getClass().isSynthetic()
+        && !value.getClass().getName().startsWith("java.lang.")) {
       System.out.println("Unsupported '" + value + "'");
     }
   }
@@ -122,7 +124,8 @@ public class VisitContext {
   }
 
   private void addClassDependencyAsResource(String classDependencyResourceName) {
-    assert (classDependencyResourceName == null || classDependencyResourceName.endsWith(classExtension));
+    assert (classDependencyResourceName == null
+        || classDependencyResourceName.endsWith(classExtension));
     if (classDependencyResourceName != null && dependencyOfInterest(classDependencyResourceName)) {
       addClassDependencyAsResourceInternal(classDependencyResourceName);
     }
@@ -130,7 +133,7 @@ public class VisitContext {
 
   private void addClassDependencyAsResourceInternal(String classDependencyResourceName) {
     // Do not call dependencyOfInterest() twice in flow
-    assert(classDependencyResourceName != null);
+    assert (classDependencyResourceName != null);
     assert (classDependencyResourceName.endsWith(classExtension));
     if (!classResourceName.equals(classDependencyResourceName)) {
       // Exclude self
@@ -138,8 +141,12 @@ public class VisitContext {
     }
   }
 
-  <T, U extends T> T visitIfInterested(String classDependencyResourceName, T defaultVisitor, BiFunction<VisitContext, T, U> visitorFactory) {
-    if (dependencyOfInterest(classDependencyResourceName) && ClassMonitorInjector.isOptimusClass(loader, classDependencyResourceName)) {
+  <T, U extends T> T visitIfInterested(
+      String classDependencyResourceName,
+      T defaultVisitor,
+      BiFunction<VisitContext, T, U> visitorFactory) {
+    if (dependencyOfInterest(classDependencyResourceName)
+        && ClassMonitorInjector.isOptimusClass(loader, classDependencyResourceName)) {
       return visitorFactory.apply(moveTo(classDependencyResourceName), defaultVisitor);
     }
     return defaultVisitor;
@@ -161,7 +168,8 @@ public class VisitContext {
   }
 
   public VisitContext moveTo(String classResourceName) {
-    VisitContext child = new VisitContext(loader, classResourceName.replace(classExtension, ""), classResourceName);
+    VisitContext child =
+        new VisitContext(loader, classResourceName.replace(classExtension, ""), classResourceName);
     childrenContext.add(child);
     return child;
   }

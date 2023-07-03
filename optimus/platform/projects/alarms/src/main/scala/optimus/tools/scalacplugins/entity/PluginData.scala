@@ -75,61 +75,17 @@ class PluginData(private val global: Global) {
     global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
   }
 
-  // TODO (OPTIMUS-51339): Deprecate because all this logic is moving to OBT
-  class AlarmLevelConfiguration(val ignore: Set[Int], val silence: Set[Int], val debug: Boolean) {
-    private def checkMandatory(id: Int): Unit = {
-      OptimusAlarms.get(id) match {
-        case None =>
-          sys.error(s"Unknown alarm id $id")
-        case Some(alarm) if alarm.obtMandatory && alarm.id.tpe != OptimusAlarmType.INFO =>
-          sys.error(s"Cannot ignore mandatory alarm id $id")
-        case Some(_: OptimusAlarmBuilder) => // ok
-      }
-    }
+  // warns if obtWarnConf is set
+  if (global.settings.defines.value.contains("-Doptimus.buildtool.warnings=false"))
+    global.reporter.warning(NoPosition, "-Doptimus.buildtool.warnings=false is deprecated!")
 
-    ignore.foreach(checkMandatory)
-    silence.foreach(checkMandatory)
-
-    def getConfiguredLevel(sn: Int, declaredLevel: OptimusAlarmType.Tpe): OptimusAlarmType.Tpe = {
-      // DEBUG level messages are always either lifted to INFO or downgraded to IGNORE depending
-      // on whether -entity:debug flag .
-      if (declaredLevel == OptimusAlarmType.DEBUG) {
-        if (debug)
-          OptimusAlarmType.INFO
-        else
-          OptimusAlarmType.SILENT
-      } else if (silence.contains(sn)) OptimusAlarmType.SILENT
-      else if (ignore.contains(sn) || OptimusAlarms.preIgnored.contains(sn)) OptimusAlarmType.INFO
-      else declaredLevel
-    }
-  }
-
-  val obtWarnConf = global.settings.defines.value.contains("-Doptimus.buildtool.warnings=true")
-  // TODO (OPTIMUS-51339): Deprecate because all this logic is moving to OBT
   // all the values are be set by compiler plugin -P parameter
   object alarmConfig {
     var debug = false
     // used to control the warning/error reporting level
-    var ignore = Set.empty[Int]
     var silence = Set.empty[Int]
-
-    def getConfiguredLevelRaw(
-        alarmId: Int,
-        alarmString: String,
-        alarmLevel: String,
-        positionSource: String,
-        positionLine: Int,
-        positionCol: Int,
-        template: String): String =
-      config.getConfiguredLevel(alarmId, OptimusAlarmType.withName(alarmLevel)).toString
-
-    def getConfiguredLevel(alarmId: Int, level: OptimusAlarmType.Tpe): OptimusAlarmType.Tpe =
-      config.getConfiguredLevel(alarmId, level)
-
-    private lazy val config: AlarmLevelConfiguration = {
-      new AlarmLevelConfiguration(alarmConfig.ignore, alarmConfig.silence, alarmConfig.debug)
-    }
   }
+
   object rewriteConfig {
     var rewriteCollectionSeq: Boolean = false
     var rewriteMapValues: Boolean = false

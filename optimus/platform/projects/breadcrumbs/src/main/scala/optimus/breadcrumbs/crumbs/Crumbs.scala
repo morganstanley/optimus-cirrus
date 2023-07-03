@@ -529,9 +529,9 @@ object Crumb {
    */
   def iterator(payloads: Iterable[String]): Iterator[Crumb] = new Iterator[Crumb] {
     val payloadIterator: Iterator[String] = payloads.iterator
-    var crumbIterator: Iterator[Crumb] = new Iterator[Crumb] { def hasNext = false; def next: Crumb = null }
+    var crumbIterator: Iterator[Crumb] = new Iterator[Crumb] { def hasNext = false; def next(): Crumb = null }
     override def hasNext: Boolean = crumbIterator.hasNext || payloadIterator.hasNext
-    override def next: Crumb =
+    override def next(): Crumb =
       if (crumbIterator.hasNext) crumbIterator.next()
       else {
         val payload = payloadIterator.next()
@@ -541,7 +541,7 @@ object Crumb {
         val ois = new ObjectInputStream(bis)
         crumbIterator = new Iterator[Crumb] {
           override def hasNext: Boolean = bis.available() > 0
-          override def next: Crumb = {
+          override def next(): Crumb = {
             val c = ois.readObject().asInstanceOf[Crumb]
             log.trace(c.toString)
             c

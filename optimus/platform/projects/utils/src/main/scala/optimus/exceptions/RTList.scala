@@ -30,7 +30,7 @@ object RTException extends Throwable with RTExceptionTrait {
     case _            => false
   }
   // noinspection IfElseToFilterdOption
-  def unapply(t: Throwable): Option[Throwable] = if (RTList.isRT(t)) Some(t) else None
+  def unapply[T <: Throwable](t: T): Option[T] = if (RTList.isRT(t)) Some(t) else None
 }
 
 object RTList {

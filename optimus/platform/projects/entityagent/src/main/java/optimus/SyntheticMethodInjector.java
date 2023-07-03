@@ -24,35 +24,43 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * Class transformer for marking graph / internal methods as synthetic so that they can easily be hidden from the
- * debugger view
+ * Class transformer for marking graph / internal methods as synthetic so that they can easily be
+ * hidden from the debugger view
  */
 public class SyntheticMethodInjector implements ClassFileTransformer {
 
-  private String[] classPrefixExcludeList = new String[]{
-      "optimus/graph/OG",
-      "optimus/graph/Scheduler",
-      "optimus/graph/Node",
-      "optimus/graph/Tweak",
-      "optimus/graph/Evaluation"
-  };
+  private String[] classPrefixExcludeList =
+      new String[] {
+        "optimus/graph/OG",
+        "optimus/graph/Scheduler",
+        "optimus/graph/Node",
+        "optimus/graph/Tweak",
+        "optimus/graph/Evaluation"
+      };
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
 
     ClassReader classReader = new ClassReader(classfileBuffer);
 
     if (classNameInExcludeList(classReader.getClassName())) {
       ClassWriter classWriter = new ClassWriter(classReader, 0);
-      ClassVisitor classVisitor = new ClassVisitor(Opcodes.ASM9, classWriter) {
-        @Override
-        public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-          return super.visitMethod(access | ACC_SYNTHETIC, name, desc, signature, exceptions);
-        }
-      };
+      ClassVisitor classVisitor =
+          new ClassVisitor(Opcodes.ASM9, classWriter) {
+            @Override
+            public MethodVisitor visitMethod(
+                int access, String name, String desc, String signature, String[] exceptions) {
+              return super.visitMethod(access | ACC_SYNTHETIC, name, desc, signature, exceptions);
+            }
+          };
 
-      classReader.accept(classVisitor,0);
+      classReader.accept(classVisitor, 0);
       return classWriter.toByteArray();
     }
 

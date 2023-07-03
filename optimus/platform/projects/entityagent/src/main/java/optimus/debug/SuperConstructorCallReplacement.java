@@ -17,21 +17,27 @@ import org.objectweb.asm.Opcodes;
 /**
  * Helper method visitor to replace calls to OLD_BASE.super.function with NEW_BASE.super.function
  * Useful when changing the base class
- *  */
+ */
 class SuperConstructorCallReplacement extends CommonAdapter {
   private final String originalBase;
   private final String newBase;
 
-  SuperConstructorCallReplacement(MethodVisitor mv,  int access, String name, String descriptor, String originalBase, String newBase) {
+  SuperConstructorCallReplacement(
+      MethodVisitor mv,
+      int access,
+      String name,
+      String descriptor,
+      String originalBase,
+      String newBase) {
     super(mv, access, name, descriptor);
     this.originalBase = originalBase;
     this.newBase = newBase;
   }
 
   @Override
-  public void visitMethodInsn(int opcodeAndSource, String owner, String name, String descriptor, boolean isInterface) {
-    if (opcodeAndSource == INVOKESPECIAL && owner.equals(originalBase))
-      owner = newBase;
+  public void visitMethodInsn(
+      int opcodeAndSource, String owner, String name, String descriptor, boolean isInterface) {
+    if (opcodeAndSource == INVOKESPECIAL && owner.equals(originalBase)) owner = newBase;
     super.visitMethodInsn(opcodeAndSource, owner, name, descriptor, isInterface);
   }
 }

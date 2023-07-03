@@ -1,0 +1,267 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package optimus.platform.relational.persistence.protocol;
+
+option optimize_for = LITE_RUNTIME;
+
+message TypeInfo { 
+    // corresponds to TypeInfo
+    enum Category {
+    QUERY_SINGLE = 0;
+    QUERY_MULTI = 1;
+    STRUCTURE = 2;
+    PRIMITIVE = 3;
+    STRING = 4;
+    COLLECTION = 5;
+    ENTITY = 6;
+    JAVA_OBJ = 7;
+    SCALA_OBJ = 8;
+    Nothing = 100;
+  }
+  
+  required int32 id = 1;
+  required string name = 2;
+  required Category category = 3;
+  optional int32 nativeSize = 4;
+  optional int32 alignment = 5;
+  
+  repeated string interfaceNames = 10;
+  optional string concreteClassName = 11;
+  repeated string structuralMethods = 12;
+  repeated ConstructorParamsInfo constructorParams = 13;
+  repeated TypeRef typeParams = 14;
+}
+
+message ConstructorParamsInfo {
+  required string paramName = 1;
+  required string className = 2;
+}
+
+message TypeRef {
+  required int32 index = 1;
+}
+
+message KDBData {
+  required bytes content = 1;
+  repeated TypeRef typeInfos = 2;
+}
+
+message Relation {
+  required int32 version = 1;
+  required RelationElement root = 2;
+  repeated TypeInfo typeInfos = 3;
+}
+
+message RelationElement {
+  enum ElementType {
+    Invalid = 0;
+    Method = 1; // like WHERE, SELECT etc
+    BinaryExpression = 2; // something like "a >= 5"
+    MemberRef = 3; // member access
+    Parameter = 4;
+    Let = 5;
+    ConstValue= 6;
+    RuntimeExec = 7; // A node that has to be executed at run-time. For in-memory data those will perform filtering etc
+    UnaryExpression = 8;
+    Provider = 9; // source, e.g. IQueryable?
+    ExpressionList = 10;
+    Lvalue = 11; // designates C-style l-value expression
+    ForteFuncCall = 12; // a call to a Forte func
+    Reductor = 13; // a user-defined aggregation
+    Constructor = 14; // call to a ctor of some Forte type
+    TernaryExpression = 15; // represents 'bool ? A : B' expression
+    IndexedMemberRef = 19;
+    SerializedValue = 20;
+  }
+  
+  required ElementType nodeType = 1;
+  required TypeRef itemType = 2;
+  optional bytes data = 50;
+  repeated RelationKey keys = 51;
+  
+  optional ConstValueElement constValue = 4;
+  optional FuncElement func = 5;
+  optional ExpressionListElement expressionList = 6;
+  optional ProviderRelation provider = 7;
+  optional MethodElement method = 8;
+  optional LetElement let = 9;
+  optional MemberElement member = 10;
+  optional LValueElement lValue = 11;
+  optional BinaryExpressionElement binary = 12;
+  optional UnaryExpressionElement unary = 13;
+  optional ParameterElement parameter = 14;
+  optional CtorElement ctor = 15;
+  optional TernaryOpElement ternaryOp = 16;
+  optional ReductorElement reductor = 17;
+  optional IndexedMemberElement indexMemberElement= 18;
+  optional SerializedValueElement serializedValueElement = 19;
+}
+
+message RelationKey {
+  optional string name = 1;
+  optional TypeRef typeInfo = 2;
+}
+
+
+message IndexedMemberElement {
+  required string memberName = 1;
+  required RelationElement instance = 2;
+  required bool unique = 3;
+  required bool indexed = 4;
+  required string typeName = 5;
+  repeated string propertyNames = 6;
+  optional bool refFilter = 7;
+}
+
+message ConstValueElement {
+  optional TypeRef typeInfo = 1; // if this is a Class[_]
+  optional bytes value = 2;
+}
+
+message MethodElement {
+  enum QueryMethodType {
+    INVALID = 0;
+    WHERE = 1;
+    OUTPUT = 2; // e.g. 'select' or 'project'
+    INNER_JOIN = 3;
+    SORT = 4;
+    GROUP_BY = 5;
+    LEFT_OUTER_JOIN = 6;
+    RIGHT_OUTER_JOIN = 7;
+    FULL_OUTER_JOIN = 8;
+    DO_FUNC_METHOD = 9; // a user function to invoked for every row
+    GROUP_ALL = 10; //tells that entire table to be treated as a single group
+    TAKE = 11; // instructs to take certain range of rows from result
+    TAKE_DISTINCT = 12; // take distinct elements only
+	UNION = 13;
+	EXTEND = 14;
+	EXTEND_TYPED = 15;
+	DIVISION = 17;
+	EXTRACT = 18;
+    REPLACE = 25;
+	UNTYPE = 90;
+	CAST = 91;
+	SHAPE = 92;
+  }
+  
+  required QueryMethodType queryMethod = 1;
+  repeated MethodArg arguments = 2;
+}
+
+message ExpressionListElement {
+  repeated RelationElement relElems = 1;
+}
+
+message ProviderRelation {
+  required string providerType = 1;
+  optional string providerDeserializerName = 2;
+}
+
+message FuncElement { // no real lambda in scala and C++, like InvokeExpression in C#
+  required Callee callee = 1;
+  repeated MethodArg arguments = 2;
+  // force resType
+}
+
+message LetElement {
+  required string name = 1;
+  required RelationElement subject = 2;
+}
+
+message MemberElement {
+  required string memberName = 1;
+  optional RelationElement instance = 2;
+  optional bytes metadata = 3;
+}
+
+message LValueElement {
+  required RelationElement instance = 1;
+}
+
+message BinaryExpressionElement {
+  enum BinaryExpressionType {
+    EQ = 0;
+    NE = 1;
+    LT = 2;
+    LE = 3;
+    GT = 4;
+    GE = 5;
+    BOOLAND = 6; // "&&"
+    BOOLOR = 7;
+    PLUS = 8;
+    MINUS = 9;
+    MUL = 10;
+    DIV = 11;
+    MODULO = 12;
+    ASSIGN = 13; // for use in projections only
+    ITEM_IS_IN = 14; // "a in ['a','b']"
+    COLLECTION_ELEMENT = 15;
+    NOT_SUPPORTED = 16;
+    ITEM_IS_NOT_IN = 17;
+  }
+  
+  required BinaryExpressionType exprType = 1;
+  required RelationElement left = 2;
+  required RelationElement right = 3;
+}
+
+message UnaryExpressionElement {
+  enum UnaryExpressionType {     
+    PLUS = 0; // e.g. something like '+a', which doesn't make sense      
+    MINUS = 1; // e.g. something like '-a'  
+    BOOLNEG = 2; // e.g. something like '!a' or boolean NOT 
+    MaybeValCheck = 3; // check of value presence inside 'maybe'  
+    MaybeValue = 4;  // retrieval of actual value from a 'maybe'
+    IsNull = 5; // checks if value is empty e.g. is NULL
+  }
+  
+  required UnaryExpressionType exprType = 1;
+  required RelationElement operand = 2;
+}
+
+message SerializedValueElement {
+ optional TypeRef typeInfo = 1;
+ required bytes value = 2;
+}
+
+message ParameterElement {
+  required string name = 1;
+}
+
+message CtorElement {
+  required string name = 1;
+  required ExpressionListElement argument = 2;
+}
+
+message TernaryOpElement {
+  required RelationElement test = 1;
+  required RelationElement choiceA = 2;
+  required RelationElement choiceB = 3;
+  // runtime env?
+}
+
+message ReductorElement {
+  repeated MethodArg arguments = 1;
+  optional TypeRef reductorType = 2;
+}
+
+message Callee { // defines a methodInfo
+  optional TypeRef resType = 1;
+  required string name = 2;
+  required string signiture = 3;
+  repeated TypeRef arguments = 4;
+}
+
+message MethodArg {
+  required string name = 1;
+  optional RelationElement relational = 2;
+}

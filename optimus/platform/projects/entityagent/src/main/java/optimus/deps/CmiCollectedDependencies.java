@@ -16,25 +16,29 @@ import java.util.Map;
 import java.util.Set;
 
 public class CmiCollectedDependencies {
-  private final Set<String> usedClasses;
-  private final Set<String> classDependencies;
-  private final Set<String> resourceDependencies;
-  private final List<String> internalEvents;
-  private final Map<String, String> systemProperties;
-  private final Map<String, String> environmentVariables;
+  public final Set<String> usedClasses;
+  public final Set<String> classDependencies;
+  public final Set<ResourceDependency> resourceDependencies;
+  public final List<String> internalEvents;
+  public final Map<String, String> systemProperties;
+  public final Map<String, String> environmentVariables;
+  public final CmiCollectionStateSnapshot snapshot;
 
-  public CmiCollectedDependencies(Set<String> usedClasses,
-                                  Set<String> classDependencies,
-                                  Set<String> resourceDependencies,
-                                  List<String> internalEvents,
-                                  Map<String, String> systemProperties,
-                                  Map<String, String> environmentVariables) {
+  public CmiCollectedDependencies(
+      Set<String> usedClasses,
+      Set<String> classDependencies,
+      Set<ResourceDependency> resourceDependencies,
+      List<String> internalEvents,
+      Map<String, String> systemProperties,
+      Map<String, String> environmentVariables,
+      CmiCollectionStateSnapshot snapshot) {
     this.usedClasses = Set.copyOf(usedClasses);
     this.classDependencies = Set.copyOf(classDependencies);
     this.resourceDependencies = Set.copyOf(resourceDependencies);
     this.internalEvents = List.copyOf(internalEvents);
     this.systemProperties = Map.copyOf(systemProperties);
     this.environmentVariables = Map.copyOf(environmentVariables);
+    this.snapshot = snapshot;
   }
 
   public Set<String> getUsedClasses() {
@@ -45,7 +49,7 @@ public class CmiCollectedDependencies {
     return classDependencies;
   }
 
-  public Set<String> getResourceDependencies() {
+  public Set<ResourceDependency> getResourceDependencies() {
     return resourceDependencies;
   }
 
@@ -59,5 +63,9 @@ public class CmiCollectedDependencies {
 
   public Map<String, String> getEnvironmentVariables() {
     return environmentVariables;
+  }
+
+  public CmiCollectionStateSnapshot getSnapshot() {
+    return snapshot;
   }
 }

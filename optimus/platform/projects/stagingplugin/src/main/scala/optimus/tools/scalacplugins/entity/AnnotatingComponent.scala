@@ -16,7 +16,7 @@ import scala.tools.nsc.plugins._
 
 object AnnotatingComponent {
   val lazyReason =
-    "Lazy collections may cause code to get executed outside of the optimus scope that is expected: http://optimusdoc/ReviewBuddy#Lazy_Collections"
+    "Lazy collections may cause code to get executed outside of the optimus scope that is expected: http://codetree-docs/optimus/docs/QualityAssurance/ReviewRules.html#Lazy-Collections"
   val streamFunctions: Seq[String] = Seq("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "range")
 }
 
@@ -106,7 +106,8 @@ class AnnotatingComponent(
     "scala.Predef.any2stringadd" -> List(
       "instead of `object + string`, use a string interpolation or `\"\" + object + string`."),
     "scala.collection.JavaConverters" -> List(useInstead("scala.jdk.CollectionConverters")),
-    "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters"))
+    "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters")),
+    "scala.collection.mutable.MutableList" -> List(useInstead("scala.collection.mutable.ListBuffer"))
   ) ++ List(
     "MapLike",
     "GenMapLike",
@@ -128,17 +129,18 @@ class AnnotatingComponent(
     rootMirror.getClassIfDefined("scala.collection.generic.GenTraversableFactory")
 
   def newPhase(prev: scala.tools.nsc.Phase): StdPhase = new StdPhase(prev) {
-    private def add(targets: Seq[(String, List[String])], annot: Symbol, pred: Symbol => Boolean = _ => true): Unit = annot match {
-      case annotClass: ClassSymbol =>
-        targets.foreach { case (oldName, msg) =>
-          lookup(oldName).foreach { oldSym =>
-            if(pred(oldSym))
-              addAnnotationInfo(oldSym, annotClass, msg)
+    private def add(targets: Seq[(String, List[String])], annot: Symbol, pred: Symbol => Boolean = _ => true): Unit =
+      annot match {
+        case annotClass: ClassSymbol =>
+          targets.foreach { case (oldName, msg) =>
+            lookup(oldName).foreach { oldSym =>
+              if (pred(oldSym))
+                addAnnotationInfo(oldSym, annotClass, msg)
+            }
           }
-        }
 
-      case _ => // annot class not found on classpath, do nothing
-    }
+        case _ => // annot class not found on classpath, do nothing
+      }
     def apply(unit: global.CompilationUnit): Unit = {
       add(deprecations, deprecatedAnno)
       add(deprecatings, deprecatingAnno)

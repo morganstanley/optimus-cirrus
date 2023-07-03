@@ -22,8 +22,7 @@ public class DecryptionByteArraySerializer implements Serializer<byte[]> {
   private final Decryptor decryptor = EncryptorDecryptor.buildDecryptor();
 
   @Override
-  public void configure(Map<String, ?> configs, boolean isKey) {
-  }
+  public void configure(Map<String, ?> configs, boolean isKey) {}
 
   @Override
   public byte[] serialize(String topic, byte[] data) {
@@ -31,7 +30,5 @@ public class DecryptionByteArraySerializer implements Serializer<byte[]> {
   }
 
   @Override
-  public void close() {
-
-  }
+  public void close() {}
 }

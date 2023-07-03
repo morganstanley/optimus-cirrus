@@ -24,20 +24,25 @@ import org.objectweb.asm.MethodVisitor;
 
 /**
  * this transformer modifies the RunNotifier so that we can listen to Junit test execution
- * <p>
- * the attached listener - a TestManager will emit a thread dump if this stream of messages becomes idle
+ *
+ * <p>the attached listener - a TestManager will emit a thread dump if this stream of messages
+ * becomes idle
  */
 public class TestIdleTransformer implements ClassFileTransformer {
-  final private static String
-      C_RunNotifier    = "org/junit/runner/notification/RunNotifier",
-      C_TestManager    = "optimus/platform/tests/common/TestManager",
+  private static final String C_RunNotifier = "org/junit/runner/notification/RunNotifier",
+      C_TestManager = "optimus/platform/tests/common/TestManager",
       M_recordNotifier = "recordNotifier",
       D_recordNotifier = "(L" + C_RunNotifier + ";)V",
-      M_ctor           = "<init>";
+      M_ctor = "<init>";
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
     if (C_RunNotifier.equals(className)) {
       boolean hasTestManager = loader.getResource(C_TestManager + ".class") != null;
       if (hasTestManager) {
@@ -54,22 +59,27 @@ public class TestIdleTransformer implements ClassFileTransformer {
   }
 
   private static class TestIdleClassVisitor extends ClassVisitor {
-    TestIdleClassVisitor(ClassVisitor cv) { super(ASM9, cv); }
+    TestIdleClassVisitor(ClassVisitor cv) {
+      super(ASM9, cv);
+    }
 
     @Override
-    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+    public MethodVisitor visitMethod(
+        int access, String name, String descriptor, String signature, String[] exceptions) {
       MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
       if (!name.equals(M_ctor)) return mv;
-      else return new MethodVisitor(ASM9, mv) {
-        @Override
-        public void visitInsn(int opcode) {
-          if (opcode == RETURN) {
-            super.visitVarInsn(ALOAD, 0);
-            super.visitMethodInsn(INVOKESTATIC, C_TestManager, M_recordNotifier, D_recordNotifier, false);
+      else
+        return new MethodVisitor(ASM9, mv) {
+          @Override
+          public void visitInsn(int opcode) {
+            if (opcode == RETURN) {
+              super.visitVarInsn(ALOAD, 0);
+              super.visitMethodInsn(
+                  INVOKESTATIC, C_TestManager, M_recordNotifier, D_recordNotifier, false);
+            }
+            super.visitInsn(opcode);
           }
-          super.visitInsn(opcode);
-        }
-      };
+        };
     }
   }
 }

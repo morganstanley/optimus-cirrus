@@ -24,7 +24,8 @@ public class DynamicDependencyDiscoveryClassVisitor extends BaseClassVisitor {
     super(context, classVisitor);
   }
 
-  protected MethodVisitor createMethodVisitor(MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
+  protected MethodVisitor createMethodVisitor(
+      MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
     return new DynamicDependencyDiscoveryMethodVisitor(context, mv);
   }
 }

@@ -18,9 +18,9 @@ import java.io.IOException;
 import java.io.PrintWriter;
 
 /**
- * Standard logger for System.exit instrumentation. Logs to the standard error output
- * based on the level specified by exit.intercept.log.level system property (DEBUG, INFO,
- * WARN or ERROR). If exit.intercept.log.file system property
+ * Standard logger for System.exit instrumentation. Logs to the standard error output based on the
+ * level specified by exit.intercept.log.level system property (DEBUG, INFO, WARN or ERROR). If
+ * exit.intercept.log.file system property
  */
 public class StandardSystemExitLogger implements SystemExitLogger {
 
@@ -55,8 +55,11 @@ public class StandardSystemExitLogger implements SystemExitLogger {
       if (isValidLogFile(file)) {
         logFile = file;
       } else {
-        warn("Log file for System.exit intercepts does not exist (" + logFileProperty + " property) for the path: " +
-            logFilePath);
+        warn(
+            "Log file for System.exit intercepts does not exist ("
+                + logFileProperty
+                + " property) for the path: "
+                + logFilePath);
       }
     }
 
@@ -73,20 +76,17 @@ public class StandardSystemExitLogger implements SystemExitLogger {
 
   @Override
   public void debug(String msg) {
-    if (LogLevel.DEBUG.aboveOr(logLevel))
-      logOutput("[DEBUG] " + msg);
+    if (LogLevel.DEBUG.aboveOr(logLevel)) logOutput("[DEBUG] " + msg);
   }
 
   @Override
   public void info(String msg) {
-    if (LogLevel.INFO.aboveOr(logLevel))
-      logOutput("[INFO] " + msg);
+    if (LogLevel.INFO.aboveOr(logLevel)) logOutput("[INFO] " + msg);
   }
 
   @Override
   public void warn(String msg) {
-    if (LogLevel.WARN.aboveOr(logLevel))
-      logOutput("[WARN] " + msg);
+    if (LogLevel.WARN.aboveOr(logLevel)) logOutput("[WARN] " + msg);
   }
 
   private void logOutput(String msg) {
@@ -107,11 +107,13 @@ public class StandardSystemExitLogger implements SystemExitLogger {
         pw = new PrintWriter(new BufferedWriter(fw));
         pw.println(msg);
       } catch (IOException e) {
-        warn("Could not write to System.exit intercepts log file (" + logFileProperty + " property)");
+        warn(
+            "Could not write to System.exit intercepts log file ("
+                + logFileProperty
+                + " property)");
       } finally {
         if (pw != null) pw.close();
       }
     }
   }
-
 }

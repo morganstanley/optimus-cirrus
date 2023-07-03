@@ -10,6 +10,7 @@
  * limitations under the License.
  */
 package optimus.debug;
+
 import static optimus.debug.InstrumentationConfig.*;
 
 import java.io.BufferedReader;
@@ -25,22 +26,23 @@ import java.util.stream.Collectors;
 
 import optimus.graph.DiagnosticSettings;
 
-@SuppressWarnings({ "unused", "WeakerAccess" })
+@SuppressWarnings({"unused", "WeakerAccess"})
 // A number of methods in the class are called via reflection when loaded from a config
 public class InstrumentationCmds {
 
   private static class ScalaWorksheetAlmostParser extends StringTokenizer {
-    final static String Q = "\"";
-    final static String D = " \t\n\r\f,()";
+    static final String Q = "\"";
+    static final String D = " \t\n\r\f,()";
     String function;
     ArrayList<Object> args = new ArrayList<>();
     ArrayList<Class<?>> argTypes = new ArrayList<>();
 
-    ScalaWorksheetAlmostParser(String text) { super(text, D); }
+    ScalaWorksheetAlmostParser(String text) {
+      super(text, D);
+    }
 
     void parse() {
-      if (hasMoreTokens())
-        function = nextToken();
+      if (hasMoreTokens()) function = nextToken();
       while (hasMoreTokens()) {
         var lastToken = nextToken(D);
         if (lastToken.startsWith(Q) && lastToken.endsWith(Q)) {
@@ -48,7 +50,7 @@ public class InstrumentationCmds {
           argTypes.add(String.class);
         } else if (lastToken.startsWith("\"")) {
           var endToken = nextToken(Q);
-          nextToken(D);   // eat the quote
+          nextToken(D); // eat the quote
           args.add(lastToken.substring(1) + endToken);
           argTypes.add(String.class);
         } else if (lastToken.equals("true")) {
@@ -69,11 +71,12 @@ public class InstrumentationCmds {
     }
   }
 
-  /** either from file (instrumentationConfig) or inline from system property (instrumentationCache) */
+  /**
+   * either from file (instrumentationConfig) or inline from system property (instrumentationCache)
+   */
   static void loadCommands() {
     if (DiagnosticSettings.instrumentationCache != null) {
-      for (var function : DiagnosticSettings.instrumentationCache)
-        cache(function);
+      for (var function : DiagnosticSettings.instrumentationCache) cache(function);
     }
     if (DiagnosticSettings.enableRTVerifier || DiagnosticSettings.instrumentationConfig != null)
       loadAndParseConfig();
@@ -92,13 +95,11 @@ public class InstrumentationCmds {
         }
       }
 
-      if (lines == null)
-        return;
+      if (lines == null) return;
 
-      boolean inComment = false;  // Reading lines between /* and */
+      boolean inComment = false; // Reading lines between /* and */
       for (String line : lines) {
-        if (line.startsWith("import ") || line.startsWith("//"))
-          continue;
+        if (line.startsWith("import ") || line.startsWith("//")) continue;
         if (line.startsWith("/*")) {
           inComment = true;
           continue;
@@ -118,14 +119,17 @@ public class InstrumentationCmds {
 
   /**
    * Enable start counter and self time tracing for given node or JVM function and all overrides.
-   * WARNING: this must only be set for one class at a time (we only store one class hierarchy). (TODO: OPTIMUS-57169)
-   * Note that 'self time' here accounts for just the CPU time of the node itself, and does not include its entire
-   * sub-graph of compute. To do this we would need to instrument all nodes in that subgraph. (TODO: OPTIMUS-57169)
+   * WARNING: this must only be set for one class at a time (we only store one class hierarchy).
+   * (TODO: OPTIMUS-57169) Note that 'self time' here accounts for just the CPU time of the node
+   * itself, and does not include its entire sub-graph of compute. To do this we would need to
+   * instrument all nodes in that subgraph. (TODO: OPTIMUS-57169)
+   *
    * @param methodName fully qualified node or JVM function name
    */
   public static void profileStartsAndSelfTimeOfThisAndDerivedClasses(String methodName) {
     instrumentAllDerivedClasses = asMethodRef(methodName);
-    InstrumentationConfig.initialiseDerivedClassFromBase(instrumentAllDerivedClasses.cls); // trace derived classes
+    InstrumentationConfig.initialiseDerivedClassFromBase(
+        instrumentAllDerivedClasses.cls); // trace derived classes
   }
 
   /**
@@ -133,27 +137,27 @@ public class InstrumentationCmds {
    * @param methodName fully qualified method name to intercept
    */
   public static void injectCurrentNodeAndStackToField(String fieldName, String methodName) {
-   InstrumentationConfig.addRecordPrefixCallIntoMemberWithStackTrace(fieldName, asMethodRef(methodName), traceCurrentNodeAndStack);
+    InstrumentationConfig.addRecordPrefixCallIntoMemberWithStackTrace(
+        fieldName, asMethodRef(methodName), traceCurrentNodeAndStack);
   }
 
   /**
    * Inject field containing construction site stack into class className
+   *
    * @param className class to trace construction of
    */
   public static void recordConstructorInvocationSite(String className) {
-   InstrumentationConfig.recordConstructorInvocationSite(className);
+    InstrumentationConfig.recordConstructorInvocationSite(className);
   }
 
-  /**
-   * Inject field containing construction site stack into all entities
-   */
+  /** Inject field containing construction site stack into all entities */
   public static void recordAllEntityConstructorInvocationSites() {
     instrumentAllEntities = EntityInstrumentationType.recordConstructedAt;
   }
 
   /**
-   * Make class className extend interfaceToAdd
-   * Used to add marker interfaces on the fly
+   * Make class className extend interfaceToAdd Used to add marker interfaces on the fly
+   *
    * @param className class to be extended
    * @param interfaceToAdd interface or trait to add
    */
@@ -165,21 +169,23 @@ public class InstrumentationCmds {
 
   /**
    * Injects all natives call with default prefix, suffix, and .
+   *
    * @param packagePrefix the prefix of the package to inject
-   * */
+   */
   public static void wrapAllNative(String packagePrefix) {
     wrapAllNative(packagePrefix, cwaPrefix, cwaSuffix, cwaSuffixOnException);
   }
 
-
   /**
    * Injects all natives call from a package with prefix, suffix, and suffix on exception calls.
+   *
    * @param packagePrefix the prefix of the package to inject
    * @param prefixCall method to call before the execution
    * @param suffixCall method to call after successful execution
    * @param onException method to call if exception is thrown during the execution
-   * */
-  public static void wrapAllNative(String packagePrefix, MethodRef prefixCall, MethodRef suffixCall, MethodRef onException) {
+   */
+  public static void wrapAllNative(
+      String packagePrefix, MethodRef prefixCall, MethodRef suffixCall, MethodRef onException) {
     InstrumentationConfig.instrumentAllNativePackagePrefixes = packagePrefix.replace('.', '/');
     InstrumentationConfig.instrumentNativePrefix = prefixCall;
     InstrumentationConfig.instrumentNativeSuffix = suffixCall;
@@ -187,9 +193,12 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Inject into the Entity identified by className a method equalsForCaching that compares by identity
-   * <p>The reason to do this, is to get cache hits only on exactly the same entity instance.
-   * This in some cases avoids the issue with the entity caching some unstable value and re-using it in wrong context</p>
+   * Inject into the Entity identified by className a method equalsForCaching that compares by
+   * identity
+   *
+   * <p>The reason to do this, is to get cache hits only on exactly the same entity instance. This
+   * in some cases avoids the issue with the entity caching some unstable value and re-using it in
+   * wrong context
    */
   public static void addCacheIdentityPoisoning(String className) {
     var clsPatch = putIfAbsentClassPatch(className);
@@ -217,7 +226,8 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument @methodRef to record the invocation as a leaf node, and trigger all parents to be recorded
+   * Instrument @methodRef to record the invocation as a leaf node, and trigger all parents to be
+   * recorded
    *
    * @param methodRef Full name reference name Such package.className.methodName
    */
@@ -228,6 +238,7 @@ public class InstrumentationCmds {
 
   /**
    * Instrument @methodToPatch to call @methodToCall as the first call
+   *
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
    */
@@ -239,10 +250,12 @@ public class InstrumentationCmds {
 
   /**
    * Instrument @methodToPatch to call @methodToCall as the first call
+   *
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
    */
-  public static void suffixCall(String methodToPatch, String methodToCall) throws ClassNotFoundException {
+  public static void suffixCall(String methodToPatch, String methodToCall)
+      throws ClassNotFoundException {
     MethodRef from = asMethodRef(methodToPatch);
     MethodRef to = asMethodRef(methodToCall);
     var suffix = InstrumentationConfig.addSuffixCall(from, to);
@@ -250,7 +263,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument @methodToPatch to dump node and jvm stack if called while marked entity is constructing
+   * Instrument @methodToPatch to dump node and jvm stack if called while marked entity is
+   * constructing
+   *
    * @see InstrumentationCmds#markScenarioStackAsInitializing(java.lang.String)
    * @param methodToPatch full name package1.class2.methodName1
    */
@@ -259,7 +274,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument @methodToPatch to dump node and jvm stack if called from a cacheable node (transitively)
+   * Instrument @methodToPatch to dump node and jvm stack if called from a cacheable node
+   * (transitively)
+   *
    * @param methodToPatch full name package1.class2.methodName1
    */
   public static void prefixCallWithDumpOnTransitivelyCached(String methodToPatch) {
@@ -267,8 +284,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Inject prefix call InstrumentedModuleCtor.trigger in EvaluationContext.current
-   * Only useful if you also executed markAllModuleCtors
+   * Inject prefix call InstrumentedModuleCtor.trigger in EvaluationContext.current Only useful if
+   * you also executed markAllModuleCtors
+   *
    * @see InstrumentationCmds#markAllModuleCtors()
    * @see InstrumentedModuleCtor#trigger()
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
@@ -291,6 +309,7 @@ public class InstrumentationCmds {
 
   /**
    * When markAllModuleCtors is requested this function allows additions to the exclusion list
+   *
    * @param className JVM class name of the module
    * @see InstrumentationCmds#markAllModuleCtors()
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
@@ -301,7 +320,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * When markAllModuleCtors or individual module bracketing is enabled, some call stacks can be disabled
+   * When markAllModuleCtors or individual module bracketing is enabled, some call stacks can be
+   * disabled
+   *
    * @param methodToPatch fully specified method reference
    * @see InstrumentationCmds#markAllModuleCtors()
    * @see InstrumentationConfig#addModuleConstructionIntercept
@@ -314,7 +335,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument entity @className constructors to call a prefix/postfix methods to mark/unmark entity ctor as running
+   * Instrument entity @className constructors to call a prefix/postfix methods to mark/unmark
+   * entity ctor as running
+   *
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    * @see InstrumentationCmds#prefixCallWithDumpOnEntityConstructing(java.lang.String)
    * @param className Fully specified package.subpackage.className
@@ -325,7 +348,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors as running
+   * Instrument all entity constructors to call a prefix/postfix methods to mark/unmark entity ctors
+   * as running
+   *
    * @see InstrumentationCmds#reportFindingTweaksInEntityConstructor()
    * @see InstrumentationCmds#reportTouchingTweakableInEntityConstructor()
    * @see RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
@@ -336,7 +361,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module ctors as running
+   * Instrument all module constructors to call a prefix/postfix methods to mark/unmark module ctors
+   * as running
+   *
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
    * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
@@ -346,8 +373,11 @@ public class InstrumentationCmds {
 
   /**
    * Instrument all classes that don't implement (and base class doesn't either) their own hashCode.
-   * Therefore relying on identity hashCodes with calls to InstrumentedHashCodes#hashCode(java.lang.Object)
-   * @apiNote Use to flag values that use identity hashCode while being used as a key in property caching
+   * Therefore relying on identity hashCodes with calls to
+   * InstrumentedHashCodes#hashCode(java.lang.Object)
+   *
+   * @apiNote Use to flag values that use identity hashCode while being used as a key in property
+   *     caching
    * @see InstrumentedHashCodes#hashCode(java.lang.Object)
    */
   public static void reportSuspiciousHashCodesCalls() {
@@ -356,6 +386,7 @@ public class InstrumentationCmds {
 
   /**
    * Instrument callouts and report touching tweakables or entity ctor (which should be RT)
+   *
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    * @see RTVerifierCategory#TWEAKABLE_IN_ENTITY_CTOR
    */
@@ -366,6 +397,7 @@ public class InstrumentationCmds {
 
   /**
    * Instrument callouts and report touching tweaked values or entity ctor (which should be RT)
+   *
    * @see InstrumentationCmds#markAllEntityCtorsForSIDetection()
    * @see RTVerifierCategory#TWEAK_IN_ENTITY_CTOR
    */
@@ -375,18 +407,17 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Cache all entity creations.
-   * Instrument all def apply(): E on E$ extends EntityCompanion to cache their values
-   * @apiNote Use to check the suspicions that entity have mutable fields OR refer to unique values that don't participate
-   * in Entity identity
+   * Cache all entity creations. Instrument all def apply(): E on E$ extends EntityCompanion to
+   * cache their values
+   *
+   * @apiNote Use to check the suspicions that entity have mutable fields OR refer to unique values
+   *     that don't participate in Entity identity
    */
   public static void cacheAllEntities() {
     instrumentAllEntityApplies = true;
   }
 
-  /**
-   * Instrument a given @methodRef to be cached
-   */
+  /** Instrument a given @methodRef to be cached */
   public static void cache(String methodRef) {
     var cacheFunction = asMethodRef(methodRef);
     addCacheFunction(cacheFunction);
@@ -398,7 +429,9 @@ public class InstrumentationCmds {
   }
 
   /**
-   * When traceSelfAndParentOnException or individual exception reporting is enabled, some call stacks can be disabled
+   * When traceSelfAndParentOnException or individual exception reporting is enabled, some call
+   * stacks can be disabled
+   *
    * @param methodToPatch fully specified method reference
    * @see InstrumentationCmds#traceSelfAndParentOnException()
    */
@@ -409,7 +442,10 @@ public class InstrumentationCmds {
     patch.passLocalValue = true;
   }
 
-  /** Sometimes developers inadvertanly write non-RT constructors. Enabling this probe will often find those issues */
+  /**
+   * Sometimes developers inadvertanly write non-RT constructors. Enabling this probe will often
+   * find those issues
+   */
   public static void verifyEntityDeepEqualityDuringCaching() {
     var suffix = addSuffixCall(equalsHook, expectEquals);
     suffix.suffixWithThis = true;

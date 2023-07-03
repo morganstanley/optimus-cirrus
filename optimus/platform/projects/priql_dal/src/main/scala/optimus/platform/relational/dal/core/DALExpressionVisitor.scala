@@ -18,6 +18,8 @@ import optimus.platform._
 import optimus.platform.dsi.expressions.Constant
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.ExpressionVisitor
+import optimus.platform.dsi.expressions.Function
+import optimus.platform.dsi.expressions.OptionOps
 import optimus.platform.dsi.expressions.TypeCode
 import optimus.platform.relational.AsyncValueHolder
 import optimus.platform.relational.RelationalException
@@ -76,7 +78,7 @@ object AsyncValueEvaluator {
       case r =>
         parpared.put(r, r)
     }
-    new RichConstantReplacer(parpared).visit(e)
+    new RichConstantReplacer(parpared).visit(OptionValueRemover.remove(e))
   }
 
   @async def evaluate(e: Expression): Expression = {
@@ -107,6 +109,18 @@ object AsyncValueEvaluator {
       extends DALExpressionVisitor {
     override protected def visitRichConstant(c: RichConstant): Expression = {
       richConstantLookup.get(c)
+    }
+  }
+
+  // only used for print query plan since we do not evaluate asyncValue for display
+  private object OptionValueRemover extends DALExpressionVisitor {
+    def remove(e: Expression): Expression = visit(e)
+
+    override protected def visitFunction(f: Function): Expression = {
+      f match {
+        case Function(OptionOps.Value.Name, List(c @ RichConstant(_: AsyncValueHolder[_], _, _))) => c
+        case _ => super.visitFunction(f)
+      }
     }
   }
 }

@@ -25,14 +25,20 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 /**
- * To check how the code should looks like in ASM format, we can use: org.objectweb.asm.util.ASMifier
- * to analyze some class file, and it can tell how the ASM code look like
+ * To check how the code should looks like in ASM format, we can use:
+ * org.objectweb.asm.util.ASMifier to analyze some class file, and it can tell how the ASM code look
+ * like
  */
 public class CollectionInjector implements ClassFileTransformer {
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
 
     ClassReader source = new ClassReader(classfileBuffer);
 
@@ -63,8 +69,12 @@ class CollectionClassAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public MethodVisitor visitMethod(final int access, final String name,
-      final String desc, final String signature, final String[] exceptions) {
+  public MethodVisitor visitMethod(
+      final int access,
+      final String name,
+      final String desc,
+      final String signature,
+      final String[] exceptions) {
 
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
 
@@ -82,6 +92,7 @@ class CollectionMethodVisitor extends MethodVisitor implements Opcodes {
   private String mDesc;
   private String mName;
   private String cName;
+
   CollectionMethodVisitor(String cname, String mname, int access, String desc, MethodVisitor mv) {
     super(ASM9, mv);
     cName = cname;
@@ -105,6 +116,7 @@ class CollectionCtorVisitor extends MethodVisitor implements Opcodes {
   private String mDesc;
   private String mName;
   private String cName;
+
   CollectionCtorVisitor(String cname, String mname, String desc, MethodVisitor mv) {
     super(ASM9, mv);
     cName = cname;
@@ -132,8 +144,12 @@ class NoneCollectionClassAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public MethodVisitor visitMethod(final int access, final String name,
-      final String desc, final String signature, final String[] exceptions) {
+  public MethodVisitor visitMethod(
+      final int access,
+      final String name,
+      final String desc,
+      final String signature,
+      final String[] exceptions) {
 
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
 
@@ -144,6 +160,7 @@ class NoneCollectionClassAdapter extends ClassVisitor implements Opcodes {
 class CollectionInvokerVisitor extends MethodVisitor implements Opcodes {
   private String mName;
   private String cName;
+
   CollectionInvokerVisitor(String cname, String mname, MethodVisitor mv) {
     super(ASM9, mv);
     cName = cname;
@@ -159,20 +176,24 @@ class CollectionInvokerVisitor extends MethodVisitor implements Opcodes {
   }
 }
 
-/**
- * Helper method which define the ASM injection invoke to the Support methods (hooks)
- */
+/** Helper method which define the ASM injection invoke to the Support methods (hooks) */
 class CollectionInjectHelper implements Opcodes {
-  private static void traceCtorInvoked(MethodVisitor mv, String colCls, String method, String desc) {
+  private static void traceCtorInvoked(
+      MethodVisitor mv, String colCls, String method, String desc) {
     mv.visitVarInsn(ALOAD, 0);
     mv.visitLdcInsn(colCls);
     mv.visitLdcInsn(method);
     mv.visitLdcInsn(desc);
-    mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceCtorInvoked",
-        "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        "optimus/graph/CollectionTraceSupport",
+        "traceCtorInvoked",
+        "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        false);
   }
 
-  static void traceCtorInvokedWithParam(MethodVisitor mv, String colCls, String method, String desc) {
+  static void traceCtorInvokedWithParam(
+      MethodVisitor mv, String colCls, String method, String desc) {
     Type[] paramTypes = Type.getArgumentTypes(desc);
     if (paramTypes.length > 0) {
       int index = genParam(mv, paramTypes, false);
@@ -181,8 +202,12 @@ class CollectionInjectHelper implements Opcodes {
       mv.visitLdcInsn(method);
       mv.visitLdcInsn(desc);
       mv.visitVarInsn(ALOAD, index);
-      mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceCtorInvokedWithParam",
-          "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V", false);
+      mv.visitMethodInsn(
+          INVOKESTATIC,
+          "optimus/graph/CollectionTraceSupport",
+          "traceCtorInvokedWithParam",
+          "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V",
+          false);
     } else {
       traceCtorInvoked(mv, colCls, method, desc);
     }
@@ -193,8 +218,12 @@ class CollectionInjectHelper implements Opcodes {
     mv.visitLdcInsn(colCls);
     mv.visitLdcInsn(method);
     mv.visitLdcInsn(desc);
-    mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceInvoked",
-        "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        "optimus/graph/CollectionTraceSupport",
+        "traceInvoked",
+        "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        false);
   }
 
   static void traceInvokedWithParam(MethodVisitor mv, String colCls, String method, String desc) {
@@ -206,22 +235,32 @@ class CollectionInjectHelper implements Opcodes {
       mv.visitLdcInsn(method);
       mv.visitLdcInsn(desc);
       mv.visitVarInsn(ALOAD, index);
-      mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceInvokedWithParam",
-          "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V", false);
+      mv.visitMethodInsn(
+          INVOKESTATIC,
+          "optimus/graph/CollectionTraceSupport",
+          "traceInvokedWithParam",
+          "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V",
+          false);
     } else {
       traceInvoked(mv, colCls, method, desc);
     }
   }
 
-  private static void traceStaticInvoked(MethodVisitor mv, String colCls, String method, String desc) {
+  private static void traceStaticInvoked(
+      MethodVisitor mv, String colCls, String method, String desc) {
     mv.visitLdcInsn(colCls);
     mv.visitLdcInsn(method);
     mv.visitLdcInsn(desc);
-    mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceStaticInvoked",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        "optimus/graph/CollectionTraceSupport",
+        "traceStaticInvoked",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        false);
   }
 
-  static void traceStaticInvokedWithParam(MethodVisitor mv, String colCls, String method, String desc) {
+  static void traceStaticInvokedWithParam(
+      MethodVisitor mv, String colCls, String method, String desc) {
     Type[] paramTypes = Type.getArgumentTypes(desc);
     if (paramTypes.length > 0) {
       int index = genParam(mv, paramTypes, true);
@@ -229,8 +268,12 @@ class CollectionInjectHelper implements Opcodes {
       mv.visitLdcInsn(method);
       mv.visitLdcInsn(desc);
       mv.visitVarInsn(ALOAD, index);
-      mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceStaticInvokedWithParam",
-          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V", false);
+      mv.visitMethodInsn(
+          INVOKESTATIC,
+          "optimus/graph/CollectionTraceSupport",
+          "traceStaticInvokedWithParam",
+          "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V",
+          false);
     } else {
       traceStaticInvoked(mv, colCls, method, desc);
     }
@@ -243,6 +286,7 @@ class CollectionInjectHelper implements Opcodes {
       mv.visitIntInsn(BIPUSH, num);
     }
   }
+
   private static int genParam(MethodVisitor mv, Type[] paramTypes, boolean isStatic) {
 
     visitConstNum(mv, paramTypes.length);
@@ -255,32 +299,37 @@ class CollectionInjectHelper implements Opcodes {
       visitConstNum(mv, arrayIndex++);
       if (tp.equals(Type.BOOLEAN_TYPE)) {
         mv.visitVarInsn(ILOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Boolean", "valueOf", "(Z)Ljava/lang/Boolean;", false);
       } else if (tp.equals(Type.BYTE_TYPE)) {
         mv.visitVarInsn(ILOAD, readIndex);
         mv.visitMethodInsn(INVOKESTATIC, "java/lang/Byte", "valueOf", "(B)Ljava/lang/Byte;", false);
       } else if (tp.equals(Type.CHAR_TYPE)) {
         mv.visitVarInsn(ILOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Character", "valueOf", "(C)Ljava/lang/Character;", false);
       } else if (tp.equals(Type.SHORT_TYPE)) {
         mv.visitVarInsn(ILOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Short", "valueOf", "(S)Ljava/lang/Short;", false);
       } else if (tp.equals(Type.INT_TYPE)) {
         mv.visitVarInsn(ILOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
       } else if (tp.equals(Type.LONG_TYPE)) {
         mv.visitVarInsn(LLOAD, readIndex);
         mv.visitMethodInsn(INVOKESTATIC, "java/lang/Long", "valueOf", "(J)Ljava/lang/Long;", false);
         ++readIndex;
       } else if (tp.equals(Type.FLOAT_TYPE)) {
         mv.visitVarInsn(FLOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Float", "valueOf", "(F)Ljava/lang/Float;", false);
       } else if (tp.equals(Type.DOUBLE_TYPE)) {
         mv.visitVarInsn(DLOAD, readIndex);
-        mv.visitMethodInsn(INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
+        mv.visitMethodInsn(
+            INVOKESTATIC, "java/lang/Double", "valueOf", "(D)Ljava/lang/Double;", false);
         ++readIndex;
-      } else
-        mv.visitVarInsn(ALOAD, readIndex);
+      } else mv.visitVarInsn(ALOAD, readIndex);
 
       mv.visitInsn(AASTORE);
       ++readIndex;
@@ -291,13 +340,23 @@ class CollectionInjectHelper implements Opcodes {
     return readIndex;
   }
 
-  static void traceUserInvoked(MethodVisitor mv, String invoker, String callerMethod, String colCls, String method, String desc) {
+  static void traceUserInvoked(
+      MethodVisitor mv,
+      String invoker,
+      String callerMethod,
+      String colCls,
+      String method,
+      String desc) {
     mv.visitLdcInsn(invoker);
     mv.visitLdcInsn(callerMethod);
     mv.visitLdcInsn(colCls);
     mv.visitLdcInsn(method);
     mv.visitLdcInsn(desc);
-    mv.visitMethodInsn(INVOKESTATIC, "optimus/graph/CollectionTraceSupport", "traceUserInvoked",
-        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        "optimus/graph/CollectionTraceSupport",
+        "traceUserInvoked",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+        false);
   }
 }

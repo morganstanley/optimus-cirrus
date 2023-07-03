@@ -20,12 +20,14 @@ import org.objectweb.asm.MethodVisitor;
 // via dynamic tracing of called method on Optimus classes.
 //
 public class OptimusMethodEntryDependencyDiscoveryClassVisitor extends BaseClassVisitor {
-  public OptimusMethodEntryDependencyDiscoveryClassVisitor(VisitContext context, ClassVisitor classVisitor) {
+  public OptimusMethodEntryDependencyDiscoveryClassVisitor(
+      VisitContext context, ClassVisitor classVisitor) {
     super(context, classVisitor);
   }
 
   @Override
-  protected MethodVisitor createMethodVisitor(MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
+  protected MethodVisitor createMethodVisitor(
+      MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
     return new OptimusMethodEntryDependencyDiscoveryMethodVisitor(context, mv);
   }
 }

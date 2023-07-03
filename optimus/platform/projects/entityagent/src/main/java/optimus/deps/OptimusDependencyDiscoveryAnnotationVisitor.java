@@ -44,7 +44,9 @@ public class OptimusDependencyDiscoveryAnnotationVisitor extends AnnotationVisit
   @Override
   public AnnotationVisitor visitAnnotation(String name, String descriptor) {
     String annotationName = context.addClassDependencyFromSimpleTypeDesc(descriptor);
-    return context.visitIfInterested(annotationName, super.visitAnnotation(name, descriptor),
+    return context.visitIfInterested(
+        annotationName,
+        super.visitAnnotation(name, descriptor),
         OptimusDependencyDiscoveryAnnotationVisitor::new);
   }
 }

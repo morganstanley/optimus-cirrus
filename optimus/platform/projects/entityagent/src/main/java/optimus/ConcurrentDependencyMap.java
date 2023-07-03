@@ -17,27 +17,32 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-// To avoid any risk to make thread unsafe access, the structures are hidden here and access heavily restricted
+// To avoid any risk to make thread unsafe access, the structures are hidden here and access heavily
+// restricted
 //
 // Uses `HashSet` internally since they are guarded by the CHM's `compute` atomicity
 public class ConcurrentDependencyMap<V> {
   private final Map<String, Set<V>> dependencies = new ConcurrentHashMap<>();
 
   public void add(String key, V value) {
-    dependencies.compute(key, (k, v) -> {
-      Set<V> entries = (v == null) ? new HashSet<>() : v;
-      entries.add(value);
-      return entries;
-    });
+    dependencies.compute(
+        key,
+        (k, v) -> {
+          Set<V> entries = (v == null) ? new HashSet<>() : v;
+          entries.add(value);
+          return entries;
+        });
   }
 
   // @return Never `null`.
   public Set<V> getSafeCopy(String key) {
     Set<V> smuggledCopy = new HashSet<>();
-    dependencies.computeIfPresent(key, (k, v) -> {
-      smuggledCopy.addAll(v);
-      return v;
-    });
+    dependencies.computeIfPresent(
+        key,
+        (k, v) -> {
+          smuggledCopy.addAll(v);
+          return v;
+        });
     return smuggledCopy;
   }
 

@@ -11,20 +11,19 @@
  */
 package optimus;
 
-final public class DoubleBox {
-    private DoubleBox() { }
+public final class DoubleBox {
+  private DoubleBox() {}
 
-    private static final Double DOUBLE_ZERO = Double.valueOf(0.0);
-    private static final long DOUBLE_ZERO_BITS = Double.doubleToLongBits(0.0);
-    private static final Double DOUBLE_NEG_ZERO = Double.valueOf(-0.0);
+  private static final Double DOUBLE_ZERO = Double.valueOf(0.0);
+  private static final long DOUBLE_ZERO_BITS = Double.doubleToLongBits(0.0);
+  private static final Double DOUBLE_NEG_ZERO = Double.valueOf(-0.0);
 
-    public static final Double boxToDouble(double d) {
-        // Double differentiates zero / negative zero, but primitive == does not
-        // also note that Double.NaN.equals(Double.NaN) is true, unlike primitive
-        if (d == 0.0) {
-            if (Double.doubleToLongBits(d) == DOUBLE_ZERO_BITS) return DOUBLE_ZERO;
-            else return DOUBLE_NEG_ZERO;
-        } else return Double.valueOf(d);
-    }
-
+  public static final Double boxToDouble(double d) {
+    // Double differentiates zero / negative zero, but primitive == does not
+    // also note that Double.NaN.equals(Double.NaN) is true, unlike primitive
+    if (d == 0.0) {
+      if (Double.doubleToLongBits(d) == DOUBLE_ZERO_BITS) return DOUBLE_ZERO;
+      else return DOUBLE_NEG_ZERO;
+    } else return Double.valueOf(d);
+  }
 }

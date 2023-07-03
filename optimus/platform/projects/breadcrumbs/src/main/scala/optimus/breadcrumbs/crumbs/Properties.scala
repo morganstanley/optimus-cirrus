@@ -99,6 +99,14 @@ object Properties extends KnownProperties {
       m.get(k).flatMap(x => Try(x.convertTo[T]).toOption).getOrElse(default)
     def getp[A: JsonReader](k: Properties.Key[A]): Option[A] =
       m.get(k.toString).flatMap(x => Try(x.convertTo[A]).toOption)
+    def get[T](k: EnumeratedKey[T]): Option[T] = m.get(k.name).map(k.parse)
+
+    // These two methods avoid converting fully parsing the Elems entry
+    def getAsMap(k: Key[Elems]): Option[Map[String, JsValue]] =
+      m.get(k.name).map(_.convertTo[Map[String, JsValue]])
+
+    def getAsSeqMap(k: Key[Seq[Elems]]): Option[Seq[Map[String, JsValue]]] =
+      m.get(k.name).map(_.convertTo[Seq[Map[String, JsValue]]])
   }
 
   implicit class MapPropToJsonOps(properties: Map[Properties.Key[_], JsValue]) {
@@ -355,7 +363,6 @@ object Properties extends KnownProperties {
     def ::(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def +(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def toMap: Map[String, JsValue] = m.map(_.toTuple).toMap
-
     override def toString = toMap.toString
   }
 
@@ -588,7 +595,7 @@ object Properties extends KnownProperties {
   val profStallTime = propL
   val pluginInFlight = prop[Map[String, Long]]
   val pluginStarts = prop[Map[String, Long]]
-  val pluginBlockTimes = prop[Map[String, Long]]
+  val pluginFullWaitTimes = prop[Map[String, Long]]
   val pluginStallTimes = prop[Map[String, Long]]
   val profDALBatches = propI
   val profDALCommands = propI
@@ -642,6 +649,8 @@ object Properties extends KnownProperties {
   val sysLoc = prop[String]
   val logname = prop[String]
   val time = prop[String]
+  val splunkTime = prop[String]
+  val rootUuid = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
   val state = prop[String]
@@ -760,8 +769,9 @@ object Properties extends KnownProperties {
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
   val stackElem = prop[String]
-  val selfCount = propI
-  val totalCount = propI
+  val stackType = prop[String]
+  val selfCount = propL
+  val totalCount = propL
   val miniGridCalc = prop[String]
   val profStack = prop[Seq[String]]
   val profCollapsed = prop[String]
@@ -821,7 +831,7 @@ object Properties extends KnownProperties {
 
   val schedulerState = prop[String]
   val scalaFallbackModule = prop[String] // object that was looked up
-  val scalaFallbackCls = prop[String]    // class it was looked up from
+  val scalaFallbackCls = prop[String] // class it was looked up from
 
   /** Graph Stress Test history and timings */
   val stressTestInjector = prop[String]

@@ -11,15 +11,13 @@
  */
 package optimus.systemexit;
 
-/**
- * System exit intercept property
- */
+/** System exit intercept property */
 public class ExitInterceptProp {
 
   public static final String name = "exit.intercept";
 
   private static String value() {
-    return System.getProperty(ExitInterceptProp.name,"none").toLowerCase();
+    return System.getProperty(ExitInterceptProp.name, "none").toLowerCase();
   }
 
   public static boolean requestIntercept() {

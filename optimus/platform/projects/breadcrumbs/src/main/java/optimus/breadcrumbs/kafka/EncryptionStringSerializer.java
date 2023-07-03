@@ -35,11 +35,10 @@ public class EncryptionStringSerializer implements Serializer<String> {
   }
 
   @Override
-  public void close() {
+  public void close() {}
 
-  }
-
-  private boolean getBooleanProperty(Map<String, ?> configs, String propertyName, boolean defaultValue) {
+  private boolean getBooleanProperty(
+      Map<String, ?> configs, String propertyName, boolean defaultValue) {
     Object compressValue = configs.get(propertyName);
     boolean value;
     if (compressValue == null) {
@@ -62,5 +61,4 @@ public class EncryptionStringSerializer implements Serializer<String> {
 
     return value;
   }
-
 }

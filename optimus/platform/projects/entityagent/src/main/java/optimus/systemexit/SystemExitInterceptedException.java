@@ -12,9 +12,9 @@
 package optimus.systemexit;
 
 /**
- * Runtime exception to be thrown to suppress Runtime.exit to be called
- * for instrumented System.exit invocations (e.g. for application unit/functional
- * tests). Utilized when exit.intercept system property is set to 'intercept-all'
+ * Runtime exception to be thrown to suppress Runtime.exit to be called for instrumented System.exit
+ * invocations (e.g. for application unit/functional tests). Utilized when exit.intercept system
+ * property is set to 'intercept-all'
  */
 public class SystemExitInterceptedException extends RuntimeException {
   private final int exitStatus;

@@ -42,16 +42,21 @@ import org.objectweb.asm.commons.GeneratorAdapter;
 
 /** In doubt see: var asm = BiopsyLab.byteCodeAsAsm(cw.toByteArray()); */
 public class InstrumentationInjector implements ClassFileTransformer {
-  final static Type SCALA_NOTHING = Type.getType("Lscala/runtime/Nothing$;");
-  final static String ENTITY_DESC = "Loptimus/platform/storable/Entity;";
-  private final static String ENTITY_COMPANION_BASE = "Loptimus/platform/storable/EntityCompanionBase;";
+  static final Type SCALA_NOTHING = Type.getType("Lscala/runtime/Nothing$;");
+  static final String ENTITY_DESC = "Loptimus/platform/storable/Entity;";
+  private static final String ENTITY_COMPANION_BASE =
+      "Loptimus/platform/storable/EntityCompanionBase;";
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
-                          byte[] bytes) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] bytes)
+      throws IllegalClassFormatException {
     ClassPatch patch = forClass(className);
-    if (patch == null && !instrumentAnyGroups())
-      return bytes;
+    if (patch == null && !instrumentAnyGroups()) return bytes;
 
     ClassReader crSource = new ClassReader(bytes);
 
@@ -59,8 +64,7 @@ public class InstrumentationInjector implements ClassFileTransformer {
     if (entityInstrType != none && shouldInstrumentEntity(className, crSource.getSuperName())) {
       if (entityInstrType == markScenarioStack) addMarkScenarioStackAsInitializing(className);
       else if (entityInstrType == recordConstructedAt) recordConstructorInvocationSite(className);
-      if (patch == null)
-        patch = forClass(className);  // Re-read reconfigured value
+      if (patch == null) patch = forClass(className); // Re-read reconfigured value
     }
 
     boolean addHashCode = shouldAddHashCode(loader, crSource, className);
@@ -72,15 +76,14 @@ public class InstrumentationInjector implements ClassFileTransformer {
       setForwardMethodToNewHashCode(className, patch);
     }
 
-    if (instrumentAllNativePackagePrefixes != null && className.startsWith(instrumentAllNativePackagePrefixes)) {
-      if (patch == null)
-        patch = new ClassPatch();
+    if (instrumentAllNativePackagePrefixes != null
+        && className.startsWith(instrumentAllNativePackagePrefixes)) {
+      if (patch == null) patch = new ClassPatch();
       patch.wrapNativeCalls = true;
     }
 
     if (instrumentAllEntityApplies && shouldCacheApplyMethods(crSource, className)) {
-      if (patch == null)
-        patch = new ClassPatch();
+      if (patch == null) patch = new ClassPatch();
       patch.cacheAllApplies = true;
     }
 
@@ -88,12 +91,14 @@ public class InstrumentationInjector implements ClassFileTransformer {
       patch = addModuleConstructionIntercept(className);
 
     if (instrumentAllDerivedClasses != null) {
-      var selfOrDerived = instrumentAllDerivedClasses.cls.equals(className) || isDerivedClass(className, crSource.getSuperName());
-      if (selfOrDerived) findNodeMethodsAndAddTimers(instrumentAllDerivedClasses.method, new ClassReader(bytes));
+      var selfOrDerived =
+          instrumentAllDerivedClasses.cls.equals(className)
+              || isDerivedClass(className, crSource.getSuperName());
+      if (selfOrDerived)
+        findNodeMethodsAndAddTimers(instrumentAllDerivedClasses.method, new ClassReader(bytes));
     }
 
-    if (patch == null)
-      return bytes;
+    if (patch == null) return bytes;
 
     ClassWriter cw = new ClassWriter(crSource, ClassWriter.COMPUTE_FRAMES);
     ClassVisitor cv = new InstrumentationInjectorAdapter(patch, className, cw);
@@ -105,44 +110,42 @@ public class InstrumentationInjector implements ClassFileTransformer {
     final var expectedClassPrefix = "$" + methodName + "$node";
 
     /*
-      Don't instrument synthetic bridge method! [SEE_SKIP_SYNTHETIC_BRIDGE]
-      We generate a synthetic bridge to the real return type of func:
-         public final synthetic bridge func()Ljava/lang/Object;
+     Don't instrument synthetic bridge method! [SEE_SKIP_SYNTHETIC_BRIDGE]
+     We generate a synthetic bridge to the real return type of func:
+        public final synthetic bridge func()Ljava/lang/Object;
 
-      This has the following instruction (e.g. for the node method InstrumentationEntity.presentValue)
-         INVOKEVIRTUAL optimus/profiler/InstrumentationEntity$$presentValue$node$1.func ()I
+     This has the following instruction (e.g. for the node method InstrumentationEntity.presentValue)
+        INVOKEVIRTUAL optimus/profiler/InstrumentationEntity$$presentValue$node$1.func ()I
 
-      To call the method with the real return type:
-         public final func()I
+     To call the method with the real return type:
+        public final func()I
 
-      The instrumentation should only go on the 'real' func, ie, not on the bridge one
-     */
-    final BiPredicate<String, Integer> skipSyntheticBridge = (ignored, flags) -> (flags & Opcodes.ACC_BRIDGE) == 0;
+     The instrumentation should only go on the 'real' func, ie, not on the bridge one
+    */
+    final BiPredicate<String, Integer> skipSyntheticBridge =
+        (ignored, flags) -> (flags & Opcodes.ACC_BRIDGE) == 0;
 
-    var cv = new ClassVisitor(ASM9) {
-      @Override
-      public void visitInnerClass(String name, String outerName, String innerName, int access) {
-        if (innerName.startsWith(expectedClassPrefix)) {
-          var mp1 = addStartCounterAndTimer(new MethodRef(name, "funcFSM"));
-          var mp2 = addStartCounterAndTimer(new MethodRef(name, "func"));
-          mp1.predicate = skipSyntheticBridge;
-          mp2.predicate = skipSyntheticBridge;
-        }
-      }
-    };
+    var cv =
+        new ClassVisitor(ASM9) {
+          @Override
+          public void visitInnerClass(String name, String outerName, String innerName, int access) {
+            if (innerName.startsWith(expectedClassPrefix)) {
+              var mp1 = addStartCounterAndTimer(new MethodRef(name, "funcFSM"));
+              var mp2 = addStartCounterAndTimer(new MethodRef(name, "func"));
+              mp1.predicate = skipSyntheticBridge;
+              mp2.predicate = skipSyntheticBridge;
+            }
+          }
+        };
     crSource.accept(cv, ClassReader.SKIP_CODE);
   }
 
   private boolean shouldCacheApplyMethods(ClassReader crSource, String className) {
-    if (!className.endsWith("$"))
-      return false;    // Looking for companion objects
+    if (!className.endsWith("$")) return false; // Looking for companion objects
     String[] interfaces = crSource.getInterfaces();
-    for (String iface : interfaces)
-      if (ENTITY_COMPANION_BASE.equals(iface))
-        return true;
+    for (String iface : interfaces) if (ENTITY_COMPANION_BASE.equals(iface)) return true;
     return false;
   }
-
 
   private boolean shouldInstrumentEntity(String className, String superName) {
     return isEntity(className, superName) && !isModuleOrEntityExcluded(className);
@@ -154,21 +157,16 @@ public class InstrumentationInjector implements ClassFileTransformer {
   }
 
   private boolean shouldAddHashCode(ClassLoader loader, ClassReader crSource, String className) {
-    if (!instrumentAllHashCodes)
-      return false;
+    if (!instrumentAllHashCodes) return false;
     // Interfaces are not included
-    if ((crSource.getAccess() & ACC_INTERFACE) != 0)
-      return false;
+    if ((crSource.getAccess() & ACC_INTERFACE) != 0) return false;
     // Only class with base class Object should be patched
-    if (!crSource.getSuperName().equals(OBJECT_TYPE.getInternalName()))
-      return false;
+    if (!crSource.getSuperName().equals(OBJECT_TYPE.getInternalName())) return false;
 
-    if (loader == null)
-      return false;
+    if (loader == null) return false;
 
     // Probably should be extracted
-    if(className.startsWith("scala/reflect"))
-      return false;
+    if (className.startsWith("scala/reflect")) return false;
 
     // Presumably we know what we are doing, also ProfilerEventsWriter for sure needs to be ignored
     return !className.startsWith("sun/") && !className.startsWith("java/security");
@@ -192,26 +190,36 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+  public void visit(
+      int version,
+      int access,
+      String name,
+      String signature,
+      String superName,
+      String[] interfaces) {
     var finalInterfaces = interfaces;
     if (!classPatch.interfacePatches.isEmpty()) {
-      finalInterfaces = Arrays.copyOf(interfaces, interfaces.length + classPatch.interfacePatches.size());
+      finalInterfaces =
+          Arrays.copyOf(interfaces, interfaces.length + classPatch.interfacePatches.size());
       var index = interfaces.length;
-      for (var newInterface : classPatch.interfacePatches)
-        finalInterfaces[index++] = newInterface;
+      for (var newInterface : classPatch.interfacePatches) finalInterfaces[index++] = newInterface;
     }
-    var useSuperName = classPatch.replaceObjectAsBase != null && (access & ACC_INTERFACE) == 0 &&  OBJECT_TYPE.getInternalName().equals(superName)
-                       ? classPatch.replaceObjectAsBase : superName;
+    var useSuperName =
+        classPatch.replaceObjectAsBase != null
+                && (access & ACC_INTERFACE) == 0
+                && OBJECT_TYPE.getInternalName().equals(superName)
+            ? classPatch.replaceObjectAsBase
+            : superName;
     super.visit(version, access, name, signature, useSuperName, finalInterfaces);
   }
 
   private static boolean maybeSimpleGetter(int access, String name, String desc) {
-    if((access & ACC_STATIC) != 0)    // 1. Only care about "normal" vals
-      return false;
-    if (!desc.startsWith("()"))       // 2. Takes no args
-      return false;
-    if (name.contains("$"))           // 3. Some hidden method we probably don't care about
-      return false;
+    if ((access & ACC_STATIC) != 0) // 1. Only care about "normal" vals
+    return false;
+    if (!desc.startsWith("()")) // 2. Takes no args
+    return false;
+    if (name.contains("$")) // 3. Some hidden method we probably don't care about
+    return false;
 
     // 4. Return type can't be void or scala.Nothing
     Type fieldType = Type.getReturnType(desc);
@@ -228,38 +236,57 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     mv.writeCallForward(className, EntityAgent.nativePrefix(name), access, desc);
   }
 
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     if (classPatch.methodForward != null && name.equals(classPatch.methodForward.from.method))
       seenForwardedMethod = true;
 
     var isNativeCall = (access & ACC_NATIVE) != 0;
-    CommonAdapter mv = null;  // Build up a chain of MethodVisitor to satisfy the transformation requirement
+    CommonAdapter mv =
+        null; // Build up a chain of MethodVisitor to satisfy the transformation requirement
     MethodPatch methodPatch = classPatch.forMethod(name, desc);
 
     if (classPatch.replaceObjectAsBase != null)
-      mv = new SuperConstructorCallReplacement(mv, access, name, desc, OBJECT_TYPE.getInternalName(), classPatch.replaceObjectAsBase);
+      mv =
+          new SuperConstructorCallReplacement(
+              mv,
+              access,
+              name,
+              desc,
+              OBJECT_TYPE.getInternalName(),
+              classPatch.replaceObjectAsBase);
 
     if (classPatch.allMethodsPatch != null && classPatch.allMethodsPatch.shouldInject(desc, access))
-      mv = new InstrumentationInjectorMethodVisitor(classPatch.allMethodsPatch, mv, access, name, desc);
+      mv =
+          new InstrumentationInjectorMethodVisitor(
+              classPatch.allMethodsPatch, mv, access, name, desc);
 
     if (methodPatch != null && methodPatch.shouldInject(desc, access))
       mv = new InstrumentationInjectorMethodVisitor(methodPatch, mv, access, name, desc);
 
     if (classPatch.wrapNativeCalls && isNativeCall)
-      mv = new InstrumentationInjectorMethodVisitor(patchForNativeRecoding(className, name), mv, access, name, desc);
+      mv =
+          new InstrumentationInjectorMethodVisitor(
+              patchForNativeRecoding(className, name), mv, access, name, desc);
 
     if (classPatch.cacheAllApplies && name.equals("apply") && isCreateEntityMethod(desc))
-      mv = new InstrumentationInjectorMethodVisitor(patchForCachingMethod(className, name), mv, access, name, desc);
+      mv =
+          new InstrumentationInjectorMethodVisitor(
+              patchForCachingMethod(className, name), mv, access, name, desc);
 
     if (classPatch.traceValsAsNodes && maybeSimpleGetter(access, name, desc))
-      mv = new InstrumentationInjectorMethodVisitor(patchForSuffixAsNode(className, name), mv, access, name, desc);
+      mv =
+          new InstrumentationInjectorMethodVisitor(
+              patchForSuffixAsNode(className, name), mv, access, name, desc);
 
     if (classPatch.bracketAllLzyComputes && name.endsWith("$lzycompute"))
-      mv = new InstrumentationInjectorMethodVisitor(patchForLzyCompute(className, name), mv, access, name, desc);
+      mv =
+          new InstrumentationInjectorMethodVisitor(
+              patchForLzyCompute(className, name), mv, access, name, desc);
 
-    // If no transformations were requested just do the default (could have called super.visitMethod())
-    if (mv == null)
-      return cv.visitMethod(access, name, desc, signature, exceptions);
+    // If no transformations were requested just do the default (could have called
+    // super.visitMethod())
+    if (mv == null) return cv.visitMethod(access, name, desc, signature, exceptions);
 
     // If native method was requested to be transformed (we can't)
     // generate a wrapper and transform the wrapper
@@ -281,12 +308,14 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     mv.visitVarInsn(ALOAD, 0);
     mv.visitFieldInsn(GETFIELD, className, getter.field.name, getter.field.type);
     mv.visitInsn(ARETURN);
-    mv.visitMaxs(0, 0);  // The real values will be populated automatically
+    mv.visitMaxs(0, 0); // The real values will be populated automatically
     mv.visitEnd();
   }
 
   private void writeEqualsForCachingOverride() {
-    var mv = cv.visitMethod(ACC_PUBLIC, "equalsForCachingInternal", "(" + ENTITY_DESC + ")Z", null, null);
+    var mv =
+        cv.visitMethod(
+            ACC_PUBLIC, "equalsForCachingInternal", "(" + ENTITY_DESC + ")Z", null, null);
     mv.visitCode();
     Label label0 = new Label();
     mv.visitLabel(label0);
@@ -301,7 +330,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
     mv.visitInsn(ICONST_0);
     mv.visitLabel(label2);
-    mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] { Opcodes.INTEGER });
+    mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] {Opcodes.INTEGER});
     mv.visitInsn(IRETURN);
     Label label3 = new Label();
     mv.visitLabel(label3);
@@ -325,10 +354,12 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
       forwardsToArgs.add(argTypes[i]);
     }
 
-    Type forwardsToType = Type.getMethodType(mv2.getReturnType(), forwardsToArgs.toArray(new Type[0]));
-    mv2.visitMethodInsn(INVOKESTATIC, forwards.to.cls, forwards.to.method, forwardsToType.getDescriptor(), false);
+    Type forwardsToType =
+        Type.getMethodType(mv2.getReturnType(), forwardsToArgs.toArray(new Type[0]));
+    mv2.visitMethodInsn(
+        INVOKESTATIC, forwards.to.cls, forwards.to.method, forwardsToType.getDescriptor(), false);
     mv2.returnValue();
-    mv2.visitMaxs(0,0); // The real values will be populated automatically
+    mv2.visitMaxs(0, 0); // The real values will be populated automatically
     mv2.visitEnd();
   }
 
@@ -337,11 +368,9 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     if (classPatch.methodForward != null && !seenForwardedMethod)
       writeImplementForwardCall(classPatch.methodForward);
 
-    if (classPatch.getterMethod != null)
-      writeGetterMethod(classPatch.getterMethod);
+    if (classPatch.getterMethod != null) writeGetterMethod(classPatch.getterMethod);
 
-    if (classPatch.poisonCacheEquality)
-      writeEqualsForCachingOverride();
+    if (classPatch.poisonCacheEquality) writeEqualsForCachingOverride();
 
     for (var fpatch : classPatch.fieldRefs) {
       var type = fpatch.type;
@@ -360,50 +389,44 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
   private final Label catchBlockStart = new Label();
   private final Label catchBlockEnd = new Label();
 
-  InstrumentationInjectorMethodVisitor(MethodPatch patch, MethodVisitor mv, int access,
-                                       String name, String descriptor) {
+  InstrumentationInjectorMethodVisitor(
+      MethodPatch patch, MethodVisitor mv, int access, String name, String descriptor) {
     super(mv, access, name, descriptor);
     this.patch = patch;
   }
 
   private void injectMethodPrefix() {
-    if (patch.cacheInField != null)
-      ifNotZeroReturn(patch, patch.cacheInField);
+    if (patch.cacheInField != null) ifNotZeroReturn(patch, patch.cacheInField);
 
     if (patch.prefix == null && !patch.localValueIsCallWithArgs)
       return; // prefix is implied for localValueIsCallWithArgs
 
     MethodRef prefix = patch.prefix;
 
-    if (patch.passLocalValue)
-      visitLocalValueStart();
+    if (patch.passLocalValue) visitLocalValueStart();
 
     var descriptor = "(";
-    if (patch.prefixWithID)
-      descriptor += loadMethodID(patch);
+    if (patch.prefixWithID) descriptor += loadMethodID(patch);
 
-    if(patch.prefixWithThis)
-      descriptor += loadThisOrNull();
+    if (patch.prefixWithThis) descriptor += loadThisOrNull();
 
-    if (patch.prefixWithArgs)
-      descriptor += loadArgsInlineOrAsArray(patch);
+    if (patch.prefixWithArgs) descriptor += loadArgsInlineOrAsArray(patch);
 
-    if (patch.passLocalValue || patch.storeToField != null)
-      descriptor += ")" + OBJECT_DESC;
-    else
-      descriptor += ")V";
+    if (patch.passLocalValue || patch.storeToField != null) descriptor += ")" + OBJECT_DESC;
+    else descriptor += ")V";
 
     if (patch.localValueIsCallWithArgs) {
       mv.visitTypeInsn(NEW, callWithArgsType);
       dup();
       loadThisIfNonStatic();
       loadArgs();
-      mv.visitMethodInsn(INVOKESPECIAL, callWithArgsType, "<init>", callWithArgsCtorDescriptor, false);
+      mv.visitMethodInsn(
+          INVOKESPECIAL, callWithArgsType, "<init>", callWithArgsCtorDescriptor, false);
     }
 
     if (prefix != null) {
       if (prefix.descriptor != null) // If descriptor was supplied just use that
-        descriptor = prefix.descriptor;
+      descriptor = prefix.descriptor;
 
       mv.visitMethodInsn(INVOKESTATIC, prefix.cls, prefix.method, descriptor, false);
     }
@@ -437,9 +460,10 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
   @Override
   public void visitCode() {
     if (patch.passLocalValue && !patch.localValueIsCallWithArgs) {
-      var localValueType = patch.prefix.descriptor != null
-                           ? Type.getMethodType(patch.prefix.descriptor).getReturnType()
-                           : OBJECT_TYPE;
+      var localValueType =
+          patch.prefix.descriptor != null
+              ? Type.getMethodType(patch.prefix.descriptor).getReturnType()
+              : OBJECT_TYPE;
       setLocalValueTypeAndDesc(localValueType);
     }
 
@@ -447,9 +471,17 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
       // we generate a CallWithArgs instance...
       Type thisOwner = Type.getObjectType(patch.from.cls);
       callWithArgsType = CallWithArgsGenerator.generateClassName(getName());
-      byte[] newBytes = CallWithArgsGenerator.create(methodAccess, callWithArgsType, thisOwner, getArgumentTypes(), getReturnType(), getName());
+      byte[] newBytes =
+          CallWithArgsGenerator.create(
+              methodAccess,
+              callWithArgsType,
+              thisOwner,
+              getArgumentTypes(),
+              getReturnType(),
+              getName());
       DynamicClassLoader.loadClassInCurrentClassLoader(newBytes);
-      callWithArgsCtorDescriptor = CallWithArgsGenerator.getCtrDescriptor(methodAccess, thisOwner, getArgumentTypes());
+      callWithArgsCtorDescriptor =
+          CallWithArgsGenerator.getCtrDescriptor(methodAccess, thisOwner, getArgumentTypes());
       // ...and we pass our CallWithArgs instance to the suffix calls
       setLocalValueTypeAndDesc(Type.getObjectType(InstrumentationConfig.CWA));
     }
@@ -469,31 +501,25 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
       mv.visitFieldInsn(PUTFIELD, patch.from.cls, patch.cacheInField.name, patch.cacheInField.type);
     }
 
-    if (patch.suffix == null)
-      return;
+    if (patch.suffix == null) return;
 
     var descriptor = "(";
 
     if (patch.suffixWithReturnValue)
       descriptor += dupReturnValueOrNullForVoid(opcode, !patch.noArgumentBoxing);
 
-    if (patch.passLocalValue)
-      descriptor += loadLocalValue();
+    if (patch.passLocalValue) descriptor += loadLocalValue();
 
-    if (patch.suffixWithID)
-      descriptor += loadMethodID(patch);
+    if (patch.suffixWithID) descriptor += loadMethodID(patch);
 
-    if (patch.suffixWithThis)
-      descriptor += loadThisOrNull();
+    if (patch.suffixWithThis) descriptor += loadThisOrNull();
 
-    if (patch.suffixWithArgs)
-      descriptor += loadArgsInlineOrAsArray(patch);
+    if (patch.suffixWithArgs) descriptor += loadArgsInlineOrAsArray(patch);
 
     descriptor += ")V";
 
     // If descriptor was supplied just use that
-    if (patch.suffix.descriptor != null)
-      descriptor = patch.suffix.descriptor;
+    if (patch.suffix.descriptor != null) descriptor = patch.suffix.descriptor;
 
     mv.visitMethodInsn(INVOKESTATIC, patch.suffix.cls, patch.suffix.method, descriptor, false);
   }
@@ -508,15 +534,16 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
       var suffixOnException = patch.suffixOnException;
       if (suffixOnException != null) {
         dup();
-        var descriptor = "(" + THROWABLE_TYPE.getDescriptor() + loadLocalValueIfRequested(patch) + ")V";
-        mv.visitMethodInsn(INVOKESTATIC, suffixOnException.cls, suffixOnException.method, descriptor, false);
+        var descriptor =
+            "(" + THROWABLE_TYPE.getDescriptor() + loadLocalValueIfRequested(patch) + ")V";
+        mv.visitMethodInsn(
+            INVOKESTATIC, suffixOnException.cls, suffixOnException.method, descriptor, false);
       }
       throwException();
       visitLabel(catchBlockEnd);
     }
 
-    if (patch.passLocalValue)
-      visitLocalValueEnd();
+    if (patch.passLocalValue) visitLocalValueEnd();
 
     super.visitMaxs(maxStack, maxLocals);
   }

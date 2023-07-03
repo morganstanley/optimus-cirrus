@@ -23,35 +23,46 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 /**
- * Rewrites methods in matching classes to call ChaosMonkeyRuntime.chaosHook.
- * Allows injection of code for testing purposes.
+ * Rewrites methods in matching classes to call ChaosMonkeyRuntime.chaosHook. Allows injection of
+ * code for testing purposes.
  */
 public class ChaosMonkeyInjector implements ClassFileTransformer {
   private static final String OUR_PACKAGE = "optimus/graph/chaos/";
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
     if (!className.startsWith(OUR_PACKAGE) && matchesFilter(className)) {
       ClassReader classReader = new ClassReader(classfileBuffer);
       ClassWriter classWriter = new ClassWriter(classReader, 0);
-      ClassVisitor visitor = new ClassVisitor(Opcodes.ASM9, classWriter) {
-        @Override
-        public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-          MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
-          return new MethodVisitor(Opcodes.ASM9, mv) {
+      ClassVisitor visitor =
+          new ClassVisitor(Opcodes.ASM9, classWriter) {
             @Override
-            public void visitCode() {
-              super.visitMethodInsn(Opcodes.INVOKESTATIC, OUR_PACKAGE + "ChaosMonkeyRuntime", "chaosHook", "()V", false);
+            public MethodVisitor visitMethod(
+                int access, String name, String desc, String signature, String[] exceptions) {
+              MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
+              return new MethodVisitor(Opcodes.ASM9, mv) {
+                @Override
+                public void visitCode() {
+                  super.visitMethodInsn(
+                      Opcodes.INVOKESTATIC,
+                      OUR_PACKAGE + "ChaosMonkeyRuntime",
+                      "chaosHook",
+                      "()V",
+                      false);
+                }
+              };
             }
           };
-        }
-      };
 
       classReader.accept(visitor, 0);
       return classWriter.toByteArray();
-    }
-    else return null;
+    } else return null;
   }
 
   // n.b. can't use Java8 streams because it crashes the classloader

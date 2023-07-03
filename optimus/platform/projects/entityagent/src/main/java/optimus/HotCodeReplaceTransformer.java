@@ -54,7 +54,9 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
   }
 
   private static void log(String message, boolean always) {
-    if (always || DiagnosticSettings.enableHotCodeReplaceLogging) { System.out.println("HCR>> " + message); }
+    if (always || DiagnosticSettings.enableHotCodeReplaceLogging) {
+      System.out.println("HCR>> " + message);
+    }
   }
 
   private final Instrumentation instrumentation;
@@ -62,9 +64,11 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
   // cache conversions from String to Path, since these can be comparitively slow
   private static final ConcurrentHashMap<String, Path> paths = new ConcurrentHashMap<>();
 
-  // original jar is the one (indirectly) on the real java.class.path. All of the classes coming to transform will have
+  // original jar is the one (indirectly) on the real java.class.path. All of the classes coming to
+  // transform will have
   // been loaded from these jars
-  private final ConcurrentHashMap<String, ObtJarMetadata> originalClassJarToMetadata = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, ObtJarMetadata> originalClassJarToMetadata =
+      new ConcurrentHashMap<>();
 
   private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -73,25 +77,29 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
   }
 
   /**
-   * Intercepts loading from build_obt jars to a) record the classloading and b) replace bytes with those loaded
-   * from the most version of the jar (if the current jar is not the original jar)
+   * Intercepts loading from build_obt jars to a) record the classloading and b) replace bytes with
+   * those loaded from the most version of the jar (if the current jar is not the original jar)
    */
   @Override
-  public byte[] transform(ClassLoader loader,
-                          String className,
-                          Class<?> classBeingRedefined,
-                          ProtectionDomain protectionDomain,
-                          byte[] classfileBuffer) {
-    if (protectionDomain == null || protectionDomain.getCodeSource().getLocation() == null) { return classfileBuffer; }
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer) {
+    if (protectionDomain == null || protectionDomain.getCodeSource().getLocation() == null) {
+      return classfileBuffer;
+    }
     String jarPath = protectionDomain.getCodeSource().getLocation().getPath();
 
     if (isObtClassJar(jarPath) || isInstalledClassJar(jarPath)) {
       Lock readLock = lock.readLock();
       readLock.lock();
       try {
-        ObtJarMetadata metadata = originalClassJarToMetadata.computeIfAbsent(jarPath,
-                                                                             p -> new ObtJarMetadata(p,
-                                                                                                     DiagnosticSettings.enableHotCodeReplaceAutoClose));
+        ObtJarMetadata metadata =
+            originalClassJarToMetadata.computeIfAbsent(
+                jarPath,
+                p -> new ObtJarMetadata(p, DiagnosticSettings.enableHotCodeReplaceAutoClose));
         metadata.recordClassLoad(className, loader);
 
         log("Loading requested for " + className + " from OBT jar " + jarPath);
@@ -108,29 +116,34 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
 
   private static final String HASHED_JAR = "([^\\\\/]+?)(?:\\.INCR)?\\.HASH[0-9a-f]+\\.jar";
   // Group 1 is scope
-  private static final Pattern OBT_HASHED_PATHING_JAR = Pattern.compile(".*[\\\\/]pathing[\\\\/]" + HASHED_JAR);
+  private static final Pattern OBT_HASHED_PATHING_JAR =
+      Pattern.compile(".*[\\\\/]pathing[\\\\/]" + HASHED_JAR);
   // Group 1 is jar directory path, group 2 is scope
   static final Pattern OBT_HASHED_CLASS_JAR = Pattern.compile("(.*)[\\\\/]" + HASHED_JAR);
 
-  private static final Pattern OBT_INSTALLED_PATHING_JAR = Pattern.compile(
-      "[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/](?:bin[\\\\/]..[\\\\/])?lib/(\\w+)(?:\\.(\\w+))?-runtimeAppPathing\\.jar");
+  private static final Pattern OBT_INSTALLED_PATHING_JAR =
+      Pattern.compile(
+          "[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/](?:bin[\\\\/]..[\\\\/])?lib/(\\w+)(?:\\.(\\w+))?-runtimeAppPathing\\.jar");
 
   // Example:
   // /my/network/path/install/optimus/platform/local/install/common/lib/entityagent.jar
-  static final Pattern OBT_INSTALLED_CLASS_JAR = Pattern.compile(
-      ".*[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/]lib[\\\\/](\\w+)(?:\\.(\\w+))?\\.jar");
+  static final Pattern OBT_INSTALLED_CLASS_JAR =
+      Pattern.compile(
+          ".*[\\\\/](\\w+)[\\\\/](\\w+)[\\\\/]\\w+[\\\\/]install[\\\\/]common[\\\\/]lib[\\\\/](\\w+)(?:\\.(\\w+))?\\.jar");
 
   private static String pathingScopeForHashedJar(String jarPath) {
     Matcher matcher = OBT_HASHED_PATHING_JAR.matcher(jarPath);
-    if (matcher.find()) { return matcher.group(1); } else { return null; }
+    if (matcher.find()) {
+      return matcher.group(1);
+    } else {
+      return null;
+    }
   }
 
   private static ScopeId pathingScopeForInstalledJar(String jarPath) {
     Matcher matcher = OBT_INSTALLED_PATHING_JAR.matcher(jarPath);
     if (matcher.find()) {
-      String scopeType = matcher.group(4) != null
-                         ? matcher.group(4)
-                         : "main";
+      String scopeType = matcher.group(4) != null ? matcher.group(4) : "main";
       return new ScopeId(matcher.group(1), matcher.group(2), matcher.group(3), scopeType);
     } else {
       return null;
@@ -141,7 +154,9 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
     return paths.computeIfAbsent(jarPath, Paths::get);
   }
 
-  static boolean isObtClassJar(String jarPath) { return OBT_HASHED_CLASS_JAR.matcher(jarPath).matches(); }
+  static boolean isObtClassJar(String jarPath) {
+    return OBT_HASHED_CLASS_JAR.matcher(jarPath).matches();
+  }
 
   private static boolean isInstalledClassJar(String jarPath) {
     return OBT_INSTALLED_CLASS_JAR.matcher(jarPath).matches();
@@ -149,7 +164,11 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
 
   static FileTime lastModified(Path path) {
     try {
-      if (Files.exists(path)) { return Files.getLastModifiedTime(path); } else { return FileTime.fromMillis(0); }
+      if (Files.exists(path)) {
+        return Files.getLastModifiedTime(path);
+      } else {
+        return FileTime.fromMillis(0);
+      }
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -158,7 +177,8 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
   // Convert leading "/", "///" etc. to "//"
   static String standardize(String path) {
     int length = path.length();
-    if ((length == 1 && path.charAt(0) == '/') || (length > 1 && path.charAt(0) == '/' && path.charAt(1) != '/')) {
+    if ((length == 1 && path.charAt(0) == '/')
+        || (length > 1 && path.charAt(0) == '/' && path.charAt(1) != '/')) {
       path = '/' + path;
     }
 
@@ -166,7 +186,9 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
     while (path.length() > count && path.charAt(count) == '/') {
       count++;
     }
-    if (count > 2) { path = path.substring(count - 2); }
+    if (count > 2) {
+      path = path.substring(count - 2);
+    }
 
     return path;
   }
@@ -176,46 +198,52 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
      * Watches for changes to mapping to current class jars (for the class jars we actually loaded stuff from) and
      * kicks off retransformation on any loaded classes which changed hash.
      */
-    final Thread t = new Thread("ObtHotCodeReplaceWatcher") {
-      @Override
-      public void run() {
-        try {
-          final String classpath = System.getProperty("java.class.path");
-          ClasspathState classpathState = null;
-          for (String jar : classpath.split(File.pathSeparator)) {
-            final String hashedPathingScope = pathingScopeForHashedJar(jar);
-            if (hashedPathingScope != null) {
-              final Path hashedPathingJar = getPath(jar);
-              log("Scope: " + hashedPathingScope + " (jar: " + hashedPathingJar + ")");
+    final Thread t =
+        new Thread("ObtHotCodeReplaceWatcher") {
+          @Override
+          public void run() {
+            try {
+              final String classpath = System.getProperty("java.class.path");
+              ClasspathState classpathState = null;
+              for (String jar : classpath.split(File.pathSeparator)) {
+                final String hashedPathingScope = pathingScopeForHashedJar(jar);
+                if (hashedPathingScope != null) {
+                  final Path hashedPathingJar = getPath(jar);
+                  log("Scope: " + hashedPathingScope + " (jar: " + hashedPathingJar + ")");
 
-              // eg. C:/path/to/workspace/build_obt/1.23/pathing/a.b.c.d.HASH123.jar =>
-              // C:/path/to/workspace/build_obt/classpath-mapping.txt
-              Path classPathMappingFile = hashedPathingJar.getParent().getParent().getParent().resolve(
-                  "classpath-mapping.txt");
+                  // eg. C:/path/to/workspace/build_obt/1.23/pathing/a.b.c.d.HASH123.jar =>
+                  // C:/path/to/workspace/build_obt/classpath-mapping.txt
+                  Path classPathMappingFile =
+                      hashedPathingJar
+                          .getParent()
+                          .getParent()
+                          .getParent()
+                          .resolve("classpath-mapping.txt");
 
-              classpathState = new ObtCurrentMapping(hashedPathingScope, classPathMappingFile);
-              break;
-            }
-            ScopeId installedPathingScope = pathingScopeForInstalledJar(jar);
-            if (installedPathingScope != null) {
-              final Path installedPathingJar = getPath(jar);
-              log("Scope: " + installedPathingScope + " (jar: " + installedPathingJar + ")");
-              classpathState = new InstalledPathingJar(installedPathingScope, installedPathingJar);
-              break;
+                  classpathState = new ObtCurrentMapping(hashedPathingScope, classPathMappingFile);
+                  break;
+                }
+                ScopeId installedPathingScope = pathingScopeForInstalledJar(jar);
+                if (installedPathingScope != null) {
+                  final Path installedPathingJar = getPath(jar);
+                  log("Scope: " + installedPathingScope + " (jar: " + installedPathingJar + ")");
+                  classpathState =
+                      new InstalledPathingJar(installedPathingScope, installedPathingJar);
+                  break;
+                }
+              }
+
+              if (classpathState != null) {
+                scanForClassJarUpdates(classpathState);
+              } else {
+
+                log("No pathing jar found on classpath: " + classpath);
+              }
+            } catch (Exception e) {
+              e.printStackTrace();
             }
           }
-
-          if (classpathState != null) {
-            scanForClassJarUpdates(classpathState);
-          } else {
-
-            log("No pathing jar found on classpath: " + classpath);
-          }
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    };
+        };
     t.setName("HotCodeReplace");
     t.setDaemon(true);
     t.start();
@@ -234,31 +262,40 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
           Map<String, String> newJarsByStableName = new HashMap<>();
           for (String jar : changedJars) {
             final String stableName = classpathState.stableName(jar);
-            if (stableName != null) { newJarsByStableName.put(stableName, jar); }
+            if (stableName != null) {
+              newJarsByStableName.put(stableName, jar);
+            }
           }
 
           int nUpdatedJars = 0;
           int nUpdatedClasses = 0;
 
           // for each loaded jar that has changed, find changed loaded classes and reload them
-          for (Map.Entry<String, ObtJarMetadata> nameToMetadata : originalClassJarToMetadata.entrySet()) {
+          for (Map.Entry<String, ObtJarMetadata> nameToMetadata :
+              originalClassJarToMetadata.entrySet()) {
             String originalJar = nameToMetadata.getKey();
             String stableName = classpathState.stableName(originalJar);
             if (stableName != null) {
               String newJar = newJarsByStableName.get(stableName);
               if (newJar != null) {
                 String oldJar = nameToMetadata.getValue().getCurrentJarPath();
-                String updatedJar = classpathState.classpathIsMutable()
-                                    ? newJar
-                                    : oldJar;
+                String updatedJar = classpathState.classpathIsMutable() ? newJar : oldJar;
                 log("Updating " + oldJar + " to " + updatedJar);
-                Collection<Class<?>> updatedClasses = nameToMetadata.getValue().updateJarPath(updatedJar);
+                Collection<Class<?>> updatedClasses =
+                    nameToMetadata.getValue().updateJarPath(updatedJar);
                 if (!updatedClasses.isEmpty()) {
                   instrumentation.retransformClasses(updatedClasses.toArray(new Class[0]));
                 }
                 String oldJarName = jarName(oldJar);
                 String newJarName = jarName(updatedJar);
-                log("Updated " + updatedClasses.size() + " classes (" + oldJarName + " -> " + newJarName + ")");
+                log(
+                    "Updated "
+                        + updatedClasses.size()
+                        + " classes ("
+                        + oldJarName
+                        + " -> "
+                        + newJarName
+                        + ")");
                 nUpdatedJars++;
                 nUpdatedClasses += updatedClasses.size();
               }
@@ -271,7 +308,12 @@ public class HotCodeReplaceTransformer implements ClassFileTransformer {
         }
       }
       long endTime = System.currentTimeMillis();
-      log("Detected " + changedJars.size() + " class jar updates in " + (endTime - startTime) + "ms");
+      log(
+          "Detected "
+              + changedJars.size()
+              + " class jar updates in "
+              + (endTime - startTime)
+              + "ms");
 
       Thread.sleep(1000);
     }
@@ -292,7 +334,8 @@ interface ClasspathState {
 }
 
 /**
- * Keeps track of the current OBT class jars (expanded from the pathing jar manifest) for a particular scope of interest
+ * Keeps track of the current OBT class jars (expanded from the pathing jar manifest) for a
+ * particular scope of interest
  */
 class ObtCurrentMapping implements ClasspathState {
   private final Path classPathMappingFile;
@@ -305,7 +348,8 @@ class ObtCurrentMapping implements ClasspathState {
   ObtCurrentMapping(String scope, Path classPathMappingFile) throws IOException {
     this.scope = scope;
     this.classPathMappingFile = classPathMappingFile;
-    this.classPathMappingLastModified = HotCodeReplaceTransformer.lastModified(classPathMappingFile);
+    this.classPathMappingLastModified =
+        HotCodeReplaceTransformer.lastModified(classPathMappingFile);
     this.currentPathingJar = resolvePathingJar();
     this.currentJars = loadObtJarsFromCurrentPathingJar();
   }
@@ -314,7 +358,9 @@ class ObtCurrentMapping implements ClasspathState {
   // returns C:/path/to/workspace/build_obt/1.23/java/a.b.c.d
   public String stableName(String jarPath) {
     Matcher m = HotCodeReplaceTransformer.OBT_HASHED_CLASS_JAR.matcher(jarPath);
-    if (m.matches()) { return HotCodeReplaceTransformer.standardize(m.group(1) + "/" + m.group(2)); } else {
+    if (m.matches()) {
+      return HotCodeReplaceTransformer.standardize(m.group(1) + "/" + m.group(2));
+    } else {
       return null;
     }
   }
@@ -325,8 +371,8 @@ class ObtCurrentMapping implements ClasspathState {
   }
 
   /**
-   * returns new names for jars from the manifest of the scope of interest which have changed since the last call
-   * to this method
+   * returns new names for jars from the manifest of the scope of interest which have changed since
+   * the last call to this method
    */
   public Set<String> pollForChangedJars() throws IOException {
     // lots of short circuits for efficiency reasons
@@ -349,9 +395,7 @@ class ObtCurrentMapping implements ClasspathState {
     return Collections.emptySet();
   }
 
-  /**
-   * Loads the current pathing jar for specific scope from the classpath-mapping.txt file
-   */
+  /** Loads the current pathing jar for specific scope from the classpath-mapping.txt file */
   private Path resolvePathingJar() throws IOException {
     if (Files.exists(classPathMappingFile)) {
       for (String line : Files.readAllLines(classPathMappingFile)) {
@@ -359,30 +403,31 @@ class ObtCurrentMapping implements ClasspathState {
           return HotCodeReplaceTransformer.getPath(line.substring(line.indexOf('\t') + 1));
         }
       }
-      throw new IllegalArgumentException("Couldn't find scope " + scope + " in " + classPathMappingFile);
+      throw new IllegalArgumentException(
+          "Couldn't find scope " + scope + " in " + classPathMappingFile);
     } else {
       HotCodeReplaceTransformer.log("No mapping file found at " + classPathMappingFile);
       return null;
     }
   }
 
-  /**
-   * Returns all build_obt jars from the classpath manifest of the specified pathing jar
-   */
+  /** Returns all build_obt jars from the classpath manifest of the specified pathing jar */
   private Collection<String> loadObtJarsFromCurrentPathingJar() throws IOException {
     if (currentPathingJar != null) {
       try (JarFile jar = new JarFile(currentPathingJar.toFile())) {
-        String[] classpath = jar.getManifest().getMainAttributes().getValue("Class-Path").split(" ");
-        Stream<String> obtJars = Arrays.stream(classpath).filter(HotCodeReplaceTransformer::isObtClassJar);
+        String[] classpath =
+            jar.getManifest().getMainAttributes().getValue("Class-Path").split(" ");
+        Stream<String> obtJars =
+            Arrays.stream(classpath).filter(HotCodeReplaceTransformer::isObtClassJar);
         return obtJars.map(f -> f.replace("file://", "")).collect(Collectors.toList());
       }
-    } else { return Collections.emptyList(); }
+    } else {
+      return Collections.emptyList();
+    }
   }
 }
 
-/**
- * Keeps track of jars within an installed pathing jar
- */
+/** Keeps track of jars within an installed pathing jar */
 class InstalledPathingJar implements ClasspathState {
   private final ScopeId scopeId;
   private Map<Path, FileTime> currentFingerprints;
@@ -394,22 +439,31 @@ class InstalledPathingJar implements ClasspathState {
       String[] cp = jar.getManifest().getMainAttributes().getValue("Class-Path").split(" ");
       // Assume all relative paths are potentially-updatable jars
       Stream<String> obtJars = Arrays.stream(cp).filter(f -> !f.startsWith("file://"));
-      Set<Path> classJars = obtJars.map(p -> pathingJar.getParent()
-                                                       .resolve(HotCodeReplaceTransformer.getPath(p))
-                                                       .normalize()).collect(Collectors.toSet());
+      Set<Path> classJars =
+          obtJars
+              .map(
+                  p ->
+                      pathingJar
+                          .getParent()
+                          .resolve(HotCodeReplaceTransformer.getPath(p))
+                          .normalize())
+              .collect(Collectors.toSet());
       this.currentClassJars = loadFileTimes(classJars);
     }
-    Path installRoot = pathingJar.normalize()
-                                 .getParent()
-                                 .getParent()
-                                 .getParent()
-                                 .getParent()
-                                 .getParent()
-                                 .getParent()
-                                 .getParent();
-    Set<Path> fingerprints = Files.walk(installRoot)
-                                  .filter(p -> p.getFileName().toString().equals("fingerprints.txt"))
-                                  .collect(Collectors.toSet());
+    Path installRoot =
+        pathingJar
+            .normalize()
+            .getParent()
+            .getParent()
+            .getParent()
+            .getParent()
+            .getParent()
+            .getParent()
+            .getParent();
+    Set<Path> fingerprints =
+        Files.walk(installRoot)
+            .filter(p -> p.getFileName().toString().equals("fingerprints.txt"))
+            .collect(Collectors.toSet());
     this.currentFingerprints = loadFileTimes(fingerprints);
   }
 
@@ -419,16 +473,10 @@ class InstalledPathingJar implements ClasspathState {
     // pathing-jar-based paths and classloader paths (even when both are absolute)
     Matcher m = HotCodeReplaceTransformer.OBT_INSTALLED_CLASS_JAR.matcher(jarPath);
     if (m.matches()) {
-      String meta = m.group(1) != null
-                    ? m.group(1)
-                    : scopeId.getMeta();
-      String bundle = m.group(2) != null
-                      ? m.group(2)
-                      : scopeId.getBundle();
+      String meta = m.group(1) != null ? m.group(1) : scopeId.getMeta();
+      String bundle = m.group(2) != null ? m.group(2) : scopeId.getBundle();
       String module = m.group(3);
-      String tpe = m.group(4) != null
-                   ? m.group(4)
-                   : "main";
+      String tpe = m.group(4) != null ? m.group(4) : "main";
       return meta + "." + bundle + "." + module + "." + tpe;
     } else {
       return null;
@@ -442,7 +490,8 @@ class InstalledPathingJar implements ClasspathState {
 
   private Map<Path, FileTime> loadFileTimes(Set<Path> paths) {
     Stream<Path> stream = paths.stream();
-    return stream.collect(Collectors.toMap(Function.identity(), HotCodeReplaceTransformer::lastModified));
+    return stream.collect(
+        Collectors.toMap(Function.identity(), HotCodeReplaceTransformer::lastModified));
   }
 
   public Set<String> pollForChangedJars() {
@@ -456,10 +505,13 @@ class InstalledPathingJar implements ClasspathState {
         difference.entrySet().removeAll(currentClassJars.entrySet());
         currentClassJars = newClassJars;
         return difference.keySet().stream().map(Path::toString).collect(Collectors.toSet());
-      } else { return Collections.emptySet(); }
-    } else { return Collections.emptySet(); }
+      } else {
+        return Collections.emptySet();
+      }
+    } else {
+      return Collections.emptySet();
+    }
   }
-
 }
 
 final class Pair<T, U> {
@@ -481,8 +533,12 @@ final class Pair<T, U> {
 
   @Override
   public boolean equals(Object o) {
-    if (this == o) { return true; }
-    if (o == null || getClass() != o.getClass()) { return false; }
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     Pair<?, ?> pair = (Pair<?, ?>) o;
     return first.equals(pair.first) && second.equals(pair.second);
   }
@@ -546,7 +602,11 @@ class ObtJarMetadata {
     private JarFile jar;
 
     JarSession() throws IOException {
-      if (autoCloseJar) { jar = new JarFile(currentJarPath); } else { jar = currentJar; }
+      if (autoCloseJar) {
+        jar = new JarFile(currentJarPath);
+      } else {
+        jar = currentJar;
+      }
     }
 
     public JarFile getJar() {
@@ -555,18 +615,20 @@ class ObtJarMetadata {
 
     @Override
     public void close() throws IOException {
-      if (autoCloseJar) { jar.close(); }
+      if (autoCloseJar) {
+        jar.close();
+      }
     }
   }
 
-  /**
-   * Initializes current and original class -> hash mappings
-   */
+  /** Initializes current and original class -> hash mappings */
   ObtJarMetadata(String originalJarPath, boolean autoCloseJar) {
     this.currentJarPath = originalJarPath;
     this.autoCloseJar = autoCloseJar;
     try {
-      if (!autoCloseJar) { this.currentJar = new JarFile(currentJarPath); }
+      if (!autoCloseJar) {
+        this.currentJar = new JarFile(currentJarPath);
+      }
       try (JarSession session = new JarSession()) {
         this.originalClassesToHashes = loadClassHashes(session.getJar());
         this.currentClassesToHashes = originalClassesToHashes;
@@ -581,14 +643,14 @@ class ObtJarMetadata {
   }
 
   /**
-   * if the current jar jas a different hash for className, returns the bytes from that class in that jar, else returns
-   * originalClassBytes
+   * if the current jar jas a different hash for className, returns the bytes from that class in
+   * that jar, else returns originalClassBytes
    */
   byte[] loadReplacementClassBytes(String className, byte[] originalClassBytes) throws IOException {
     // optimization - don't reload class if it's the same as the original
     String originalHash = originalClassesToHashes.get(className);
-    if (currentClassesToHashes == originalClassesToHashes || (originalHash != null && originalHash.equals(
-        currentClassesToHashes.get(className)))) {
+    if (currentClassesToHashes == originalClassesToHashes
+        || (originalHash != null && originalHash.equals(currentClassesToHashes.get(className)))) {
       HotCodeReplaceTransformer.log("Skipping reload for " + className + " since it's unchanged");
       return originalClassBytes;
     } else {
@@ -602,7 +664,8 @@ class ObtJarMetadata {
             pos += inStream.read(bytes, pos, bytes.length - pos);
           }
 
-          HotCodeReplaceTransformer.log("Reloaded " + className + " from " + currentJarPath + " since it's changed");
+          HotCodeReplaceTransformer.log(
+              "Reloaded " + className + " from " + currentJarPath + " since it's changed");
           return bytes;
         }
       }
@@ -610,8 +673,8 @@ class ObtJarMetadata {
   }
 
   /**
-   * Loads class hashes from newJarPath, updates internal state, and returns any loaded classes for which the hash has
-   * changed.
+   * Loads class hashes from newJarPath, updates internal state, and returns any loaded classes for
+   * which the hash has changed.
    */
   Collection<Class<?>> updateJarPath(String newJarPath) {
     ArrayList<Class<?>> changedClasses = new ArrayList<>();
@@ -624,10 +687,12 @@ class ObtJarMetadata {
         String loadedClassName = loadedClassAndLoader.getFirst();
         String newHash = newHashes.get(loadedClassName);
         if (newHash != null && !newHash.equals(currentClassesToHashes.get(loadedClassName))) {
-          Class<?> loadedClass = loadedClassAndLoader.getSecond().loadClass(loadedClassName.replace('/', '.'));
+          Class<?> loadedClass =
+              loadedClassAndLoader.getSecond().loadClass(loadedClassName.replace('/', '.'));
           changedClasses.add(loadedClass);
         } else if (newHash == null) {
-          HotCodeReplaceTransformer.log("No new hash found for " + loadedClassName + "; not reloading");
+          HotCodeReplaceTransformer.log(
+              "No new hash found for " + loadedClassName + "; not reloading");
         }
       }
 
@@ -643,30 +708,38 @@ class ObtJarMetadata {
       throw new RuntimeException(e);
     }
 
-    HotCodeReplaceTransformer.log(changedClasses.size() + " loaded class(es) are changed in " + newJarPath);
+    HotCodeReplaceTransformer.log(
+        changedClasses.size() + " loaded class(es) are changed in " + newJarPath);
     return changedClasses;
   }
 
-  static private Map<String, String> loadClassHashes(JarFile jar) throws IOException {
+  private static Map<String, String> loadClassHashes(JarFile jar) throws IOException {
     HashMap<String, String> classToHash = new HashMap<>();
     ZipEntry hashFile = jar.getEntry("META-INF/optimus/entryHashes.sha256");
     if (hashFile != null) {
-      try (BufferedReader entryHashes = new BufferedReader(new InputStreamReader(jar.getInputStream(hashFile)))) {
+      try (BufferedReader entryHashes =
+          new BufferedReader(new InputStreamReader(jar.getInputStream(hashFile)))) {
 
         String line;
         while ((line = entryHashes.readLine()) != null) {
           int tabIdx = line.indexOf("\t");
           if (tabIdx > 0) {
-            String className = line.substring(0, tabIdx - 6).replace('\\',
-                                                                     '/'); // strip off .class; also obt has a bug on Windows where \\ is used instead of / in the
+            String className =
+                line.substring(0, tabIdx - 6)
+                    .replace(
+                        '\\',
+                        '/'); // strip off .class; also obt has a bug on Windows where \\ is used
+            // instead of / in the
             // entryHashes file
-            String hash = line.substring(tabIdx + 5); // skip the constant "HASH" part to save a few bytes
+            String hash =
+                line.substring(tabIdx + 5); // skip the constant "HASH" part to save a few bytes
             classToHash.put(className, hash);
           }
         }
       }
 
-      HotCodeReplaceTransformer.log("Loaded " + classToHash.size() + " class hashes from " + jar.getName());
+      HotCodeReplaceTransformer.log(
+          "Loaded " + classToHash.size() + " class hashes from " + jar.getName());
     } else {
       HotCodeReplaceTransformer.log("No class hashes found in " + jar.getName());
     }

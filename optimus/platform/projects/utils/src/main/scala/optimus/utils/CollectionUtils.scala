@@ -159,6 +159,17 @@ object CollectionUtils extends CollectionUtils {
       case 1 => as.head
       case n => nonSingleHandler(n, as)
     }
+
+    def groupReduceStable[K, V](key: A => K, value: A => V)(reduce: (V, V) => V, build: (K, V) => A): Seq[A] = {
+      val result = new java.util.LinkedHashMap[K, V]()
+      for (a <- as) {
+        val k = key(a)
+        val v = value(a)
+        result.merge(k, v, (v1: V, v2: V) => reduce(v1, v2))
+      }
+      import scala.jdk.CollectionConverters._
+      result.entrySet.iterator.asScala.map(entry => build(entry.getKey, entry.getValue)).toVector
+    }
   }
 
   class ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](underlying: Repr[T]) {

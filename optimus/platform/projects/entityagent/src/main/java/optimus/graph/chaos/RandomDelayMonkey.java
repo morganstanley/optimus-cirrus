@@ -14,14 +14,15 @@ package optimus.graph.chaos;
 import java.util.Random;
 
 /**
- * Causes random delays to occur when the chaosHook is triggered. Useful for flushing out race conditions when
- * repeatedly stress testing concurrent code by varying the ordering of actions between different threads.
+ * Causes random delays to occur when the chaosHook is triggered. Useful for flushing out race
+ * conditions when repeatedly stress testing concurrent code by varying the ordering of actions
+ * between different threads.
  */
 public class RandomDelayMonkey implements ChaosMonkeyRuntime.ChaosMonkey {
   private ThreadLocal<ThreadData> threadLocalData = ThreadLocal.withInitial(() -> new ThreadData());
 
-  public static volatile int MaxNanosBetweenDelays = 500*1000;
-  public static volatile int MaxLoopsPerDelay = 1000*1000;
+  public static volatile int MaxNanosBetweenDelays = 500 * 1000;
+  public static volatile int MaxLoopsPerDelay = 1000 * 1000;
 
   static int DummyField = 0;
 

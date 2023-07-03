@@ -18,7 +18,6 @@ object OptimusAlarms {
   private case class RegistrationMode(alarms: mutable.Map[Int, mutable.Buffer[OptimusAlarmBuilder]]) extends State
   private case class ReadMode(alarms: Map[Int, OptimusAlarmBuilder]) extends State
 
-  val NewTag = "[NEW]"
   val SuppressedTag = "[SUPPRESSED]"
 
   @volatile private var state: State = RegistrationMode(mutable.HashMap())
@@ -108,25 +107,11 @@ object OptimusAlarms {
       init()
       get(id)
   }
-
-  // These act as if they'd been suppressed in .obt, which means they'll be reported as INFO but show up in the IDE
-  // and Overlord as WARNING
-  private val preIgnoredAlarms = mutable.HashSet.empty[Int]
-  def preIgnored: Set[Int] = preIgnoredAlarms.toSet
-
 }
 
 trait OptimusAlarms {
-  final val maxSn = 9999
   protected def base: Int
   private val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
-  // TODO (OPTIMUS-51339): deprecated when configuration for moves to OBT
-  protected def preIgnore[B <: OptimusAlarmBuilder](b: B): B = {
-    assert(b.id.tpe > OptimusAlarmType.INFO)
-    assert(!b.obtMandatory && !b.scalaMandatory)
-    OptimusAlarms.preIgnoredAlarms += b.id.sn
-    b
-  }
 
   // This is used as a hack to make sure alarm classes get loaded
   def ensureLoaded(): Unit = {}

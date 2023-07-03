@@ -20,7 +20,7 @@
       <OnMatch>NEUTRAL</OnMatch>
     </filter>
     <encoder>
-      <pattern>%d{hh:mm:ss} [%-13thread] >> %msg%n</pattern>
+      <pattern>%d{hh:mm:ss.SSS} [%-13thread] >> %msg%n</pattern>
     </encoder> 
   </appender> 
   <appender name="STDOUT" class="msjava.logbackutils.async.AsyncAppender">

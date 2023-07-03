@@ -25,20 +25,23 @@ public abstract class BaseClassVisitor extends ClassVisitor {
 
   protected final VisitContext context;
 
-  BaseClassVisitor(
-      VisitContext context, ClassVisitor classVisitor) {
+  BaseClassVisitor(VisitContext context, ClassVisitor classVisitor) {
     super(ASM_API, classVisitor);
 
     this.context = context;
   }
 
-  protected abstract MethodVisitor createMethodVisitor(MethodVisitor mv, String name, String desc, String signature, String[] exceptions);
+  protected abstract MethodVisitor createMethodVisitor(
+      MethodVisitor mv, String name, String desc, String signature, String[] exceptions);
 
   @Override
-  public final MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public final MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
 
-    if (((access & ACC_NATIVE) != 0) || ((access & ACC_ABSTRACT) != 0) || ((access & ACC_INTERFACE) != 0)) {
+    if (((access & ACC_NATIVE) != 0)
+        || ((access & ACC_ABSTRACT) != 0)
+        || ((access & ACC_INTERFACE) != 0)) {
       return mv;
     }
 
