@@ -12,18 +12,17 @@
 package optimus.debug;
 
 /**
- *  Category that could be searched in splunk
- *  Sample:
- *  source=RT payload.rtvViolation=MODULE_CTOR_EC_CURRENT | stats count by payload.rtvLocation
- * */
+ * Category that could be searched in splunk Sample: source=RT
+ * payload.rtvViolation=MODULE_CTOR_EC_CURRENT | stats count by payload.rtvLocation
+ */
 public class RTVerifierCategory {
-  public final static String NONE = "RTV_CATEGORY_UNKNOWN";
-  public final static String MODULE_CTOR_EC_CURRENT = "MODULE_CTOR_EC_CURRENT";
-  public final static String MODULE_LAZY_VAL_EC_CURRENT = "MODULE_LAZY_VAL_EC_CURRENT";
-  public final static String TWEAK_IN_ENTITY_CTOR = "TWEAK_IN_ENTITY_CTOR";
-  public final static String TWEAKABLE_IN_ENTITY_CTOR = "TWEAKABLE_IN_ENTITY_CTOR";
-  public final static String NON_RT_NODE = "NON_RT_NODE";
+  public static final String NONE = "RTV_CATEGORY_UNKNOWN";
+  public static final String MODULE_CTOR_EC_CURRENT = "MODULE_CTOR_EC_CURRENT";
+  public static final String MODULE_LAZY_VAL_EC_CURRENT = "MODULE_LAZY_VAL_EC_CURRENT";
+  public static final String TWEAK_IN_ENTITY_CTOR = "TWEAK_IN_ENTITY_CTOR";
+  public static final String TWEAKABLE_IN_ENTITY_CTOR = "TWEAKABLE_IN_ENTITY_CTOR";
+  public static final String NON_RT_NODE = "NON_RT_NODE";
 
-  public final static String UTRACK_OVER_INVALIDATION = "UTRACK_OVER_INVALIDATION";
-  public final static String UI_INVALIDATION_AFTER_EVAL = "UI_INVALIDATION_AFTER_EVAL";
+  public static final String UTRACK_OVER_INVALIDATION = "UTRACK_OVER_INVALIDATION";
+  public static final String UI_INVALIDATION_AFTER_EVAL = "UI_INVALIDATION_AFTER_EVAL";
 }

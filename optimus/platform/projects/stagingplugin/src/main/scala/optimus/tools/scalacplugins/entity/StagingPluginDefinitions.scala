@@ -27,6 +27,9 @@ trait StagingPluginDefinitions {
   lazy val StreamClass = getClassIfDefined("scala.collection.immutable.Stream")
   lazy val LazyListClass = getClassIfDefined("scala.collection.immutable.LazyList")
   lazy val SortedSetClass = symbolOf[collection.immutable.SortedSet[Any]]
+  lazy val ParallelizableClass = getClassIfDefined("scala.collection.Parallelizable")
+  lazy val Parallelizable_par = getMemberIfDefined(ParallelizableClass, TermName("par"))
+  lazy val AsyncBaseClass = getClassIfDefined("optimus.platform.AsyncBase")
 
   lazy val Predef_augmentString = getMemberIfDefined(definitions.PredefModule, TermName("augmentString"))
   lazy val Predef_wrapString = getMemberIfDefined(definitions.PredefModule, TermName("wrapString"))
@@ -93,17 +96,29 @@ trait StagingPluginDefinitions {
 
   object NeedsUnsorted {
     def unapply(tree: Tree): Option[Tree] = tree match {
-      case Apply(Apply(TypeApply(sel @ Select(qual, _), _), _), List(buildFrom)) =>
-        val calledOnSortedSet = qual.tpe.typeSymbol.isNonBottomSubClass(SortedSetClass)
-        val takesCanBuildFrom = buildFrom.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass)
-        if (calledOnSortedSet && takesCanBuildFrom) {
-          val usesUnsorted = sel.name.string_==("unsorted")
-          val resultIsSorted =
-            buildFrom.tpe.baseType(CanBuildFromClass).typeArgs.last.typeSymbol.isNonBottomSubClass(SortedSetClass)
-          if (!resultIsSorted && !usesUnsorted) {
-            Some(qual)
+      case Apply(Apply(x, _), List(buildFrom)) if tree.isInstanceOf[ApplyToImplicitArgs] =>
+        def finish(collType: Type, sel: Select, col: Tree) = {
+                      val takesCanBuildFrom = buildFrom.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass)
+          val calledOnSortedSet = collType.typeSymbol.isNonBottomSubClass(SortedSetClass)
+
+          if (calledOnSortedSet && takesCanBuildFrom) {
+            val usesUnsorted = sel.name.string_==("unsorted")
+            val resultIsSorted =
+              buildFrom.tpe.baseType(CanBuildFromClass).typeArgs.last.typeSymbol.isNonBottomSubClass(SortedSetClass)
+            if (!resultIsSorted && !usesUnsorted) {
+              Some(col)
+            } else None
           } else None
-        } else None
+        }
+        x match {
+          case TypeApply(sel @ Select(Select(view @ Apply(TypeApply(_, List(_, collType)), col :: Nil), name), _), _)
+              if view.symbol.name.string_==("collToAsyncMarker") =>
+            finish(collType.tpe, sel, col)
+          case TypeApply(sel @ Select(qual, _), _) =>
+            finish(qual.tpe, sel, qual)
+          case _ =>
+            None
+        }
       case _ => None
     }
   }

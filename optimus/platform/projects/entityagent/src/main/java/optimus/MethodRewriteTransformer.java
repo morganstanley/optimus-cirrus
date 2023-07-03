@@ -18,60 +18,64 @@ import java.util.Collection;
 import org.objectweb.asm.*;
 
 /**
- * The necessary boilerplate to make MethodRewriteVisitor usable from
- * an Instrumentation instance (i.e. javaagent).
+ * The necessary boilerplate to make MethodRewriteVisitor usable from an Instrumentation instance
+ * (i.e. javaagent).
  *
- * Don't forget to load the class for the toClass before
- * instrumentation or you could get runtime exceptions.
+ * <p>Don't forget to load the class for the toClass before instrumentation or you could get runtime
+ * exceptions.
  */
 class MethodRewriteTransformer implements ClassFileTransformer {
 
-    private final String fromClass, fromMethod, toClass, toMethod;
-    private final Collection<String> targets;
+  private final String fromClass, fromMethod, toClass, toMethod;
+  private final Collection<String> targets;
 
-    // if targets is null, try to detect everywhere this could be
-    // applicable (everything should be opt-in)
-    MethodRewriteTransformer(Collection<String> targets,
-                             String fromClass,
-                             String fromMethod,
-                             String toClass,
-                             String toMethod) {
-        this.targets = targets;
-        this.fromClass = fromClass;
-        this.fromMethod = fromMethod;
-        this.toClass = toClass;
-        this.toMethod = toMethod;
+  // if targets is null, try to detect everywhere this could be
+  // applicable (everything should be opt-in)
+  MethodRewriteTransformer(
+      Collection<String> targets,
+      String fromClass,
+      String fromMethod,
+      String toClass,
+      String toMethod) {
+    this.targets = targets;
+    this.fromClass = fromClass;
+    this.fromMethod = fromMethod;
+    this.toClass = toClass;
+    this.toMethod = toMethod;
+  }
+
+  @Override
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] origBytes)
+      throws IllegalClassFormatException {
+    if (targets != null) {
+      boolean match = false;
+      for (String target : targets) {
+        if (className.startsWith(target)) {
+          match = true;
+          break;
+        }
+      }
+      if (!match) return null;
     }
 
-    @Override
-    public byte[] transform(ClassLoader loader,
-                            String className,
-                            Class<?> classBeingRedefined,
-                            ProtectionDomain protectionDomain,
-                            byte[] origBytes) throws IllegalClassFormatException {
-        if (targets != null) {
-            boolean match = false;
-            for (String target: targets) {
-                if (className.startsWith(target)) {
-                    match = true;
-                    break;
-                }
-            }
-            if (!match) return null;
-        }
+    ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
+    MethodRewriteVisitor cv =
+        new MethodRewriteVisitor(cw, fromClass, fromMethod, toClass, toMethod);
+    ClassReader cr = new ClassReader(origBytes);
+    cr.accept(cv, ClassReader.SKIP_FRAMES);
 
-        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
-        MethodRewriteVisitor cv = new MethodRewriteVisitor(cw, fromClass, fromMethod, toClass, toMethod);
-        ClassReader cr = new ClassReader(origBytes);
-        cr.accept(cv, ClassReader.SKIP_FRAMES);
-
-        if (!cv.isChanged()) {
-            return null;
-        }
-        if (targets == null) {
-            System.err.println("COULD MAKE CHANGES TO " + className);
-            return null;
-        }
-        return cw.toByteArray();
+    if (!cv.isChanged()) {
+      return null;
     }
+    if (targets == null) {
+      System.err.println("COULD MAKE CHANGES TO " + className);
+      return null;
+    }
+    return cw.toByteArray();
+  }
 }

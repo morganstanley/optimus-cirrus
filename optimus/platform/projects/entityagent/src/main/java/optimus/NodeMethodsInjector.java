@@ -26,14 +26,19 @@ import org.objectweb.asm.Type;
 public class NodeMethodsInjector implements ClassFileTransformer {
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
 
     ClassReader source = new ClassReader(classfileBuffer);
     String superName = source.getSuperName();
 
-    if ("optimus/graph/CompletableNodeM".equals(superName) ||
-        (superName != null && superName.startsWith("optimus/graph/profiled/"))) {
+    if ("optimus/graph/CompletableNodeM".equals(superName)
+        || (superName != null && superName.startsWith("optimus/graph/profiled/"))) {
       ClassReader crSource = new ClassReader(classfileBuffer);
       ClassWriter cw = new ClassWriter(crSource, 0);
       NodeMethodsInjectorAdapter cv = new NodeMethodsInjectorAdapter(className, cw);
@@ -45,9 +50,9 @@ public class NodeMethodsInjector implements ClassFileTransformer {
 }
 
 class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
-  final public static String fieldName = "__profileId";
-  final public static String fieldType = "I";
-  final static String nodeTraceCls = "optimus/graph/NodeTrace";
+  public static final String fieldName = "__profileId";
+  public static final String fieldType = "I";
+  static final String nodeTraceCls = "optimus/graph/NodeTrace";
 
   private boolean seenCCtor;
   private String className;
@@ -58,7 +63,13 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+  public void visit(
+      int version,
+      int access,
+      String name,
+      String signature,
+      String superName,
+      String[] interfaces) {
     super.visit(version, access, name, signature, superName, interfaces);
     {
       FieldVisitor fv = cv.visitField(ACC_FINAL + ACC_STATIC, fieldName, fieldType, null, null);
@@ -87,13 +98,13 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
     if ((access & ACC_STATIC) == ACC_STATIC && "<clinit>".equals(name) && "()V".equals(desc)) {
       seenCCtor = true;
       return new CtorMethodVisitor(className, mv);
-    } else
-      return mv;
+    } else return mv;
   }
 
   public void visitEnd() {
@@ -103,7 +114,6 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
     }
     super.visitEnd();
   }
-
 }
 
 class CtorMethodVisitor extends MethodVisitor implements Opcodes {
@@ -122,8 +132,16 @@ class CtorMethodVisitor extends MethodVisitor implements Opcodes {
 
   static void writeCtorBody(MethodVisitor mv, String className) {
     mv.visitLdcInsn(Type.getObjectType(className));
-    mv.visitMethodInsn(INVOKESTATIC, NodeMethodsInjectorAdapter.nodeTraceCls, "allocateAnonPNodeTaskInfo",
-        "(Ljava/lang/Class;)" + NodeMethodsInjectorAdapter.fieldType, false);
-    mv.visitFieldInsn(PUTSTATIC, className, NodeMethodsInjectorAdapter.fieldName, NodeMethodsInjectorAdapter.fieldType);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        NodeMethodsInjectorAdapter.nodeTraceCls,
+        "allocateAnonPNodeTaskInfo",
+        "(Ljava/lang/Class;)" + NodeMethodsInjectorAdapter.fieldType,
+        false);
+    mv.visitFieldInsn(
+        PUTSTATIC,
+        className,
+        NodeMethodsInjectorAdapter.fieldName,
+        NodeMethodsInjectorAdapter.fieldType);
   }
 }

@@ -26,12 +26,8 @@ trait OptimusPluginReporter {
 
   import OptimusPluginReporter._
 
-  // TODO (OPTIMUS-51339): Remove the flag and make alarmObt the only option. When that is done, we can also remove
-  //  alarmConfig and hasNew.
-  def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit =
-    if (pluginData.obtWarnConf) alarmObt(alarm, pos) else alarmLegacy(alarm, pos)
-
-  def alarmObt(alarm: OptimusPluginAlarm, pos: Position): Unit = {
+  def alarm(alarm: OptimusPluginAlarm, pos: Position): Unit = {
+    if (pluginData.alarmConfig.silence(alarm.id.sn)) return
     val level = alarm.id.tpe
     val locallySuppressed = isLocallySuppressed(alarm, pos)
     val msg = {
@@ -46,32 +42,6 @@ trait OptimusPluginReporter {
       case OptimusAlarmType.DEBUG   => if (pluginData.alarmConfig.debug) global.reporter.echo(pos, msg)
       case OptimusAlarmType.SILENT  => // ignore it!
       case unexpected               => throw new IllegalStateException(s"unexpected level $unexpected")
-    }
-  }
-
-  def alarmLegacy(alarm: OptimusPluginAlarm, pos: Position): Unit = {
-    val level = alarm.id.tpe
-    val cfgLevel = pluginData.alarmConfig.getConfiguredLevel(alarm.id.sn, level)
-    val locallySuppressed = isLocallySuppressed(alarm, pos)
-    val hasNew = isNew(alarm)
-    val newLevel = if (locallySuppressed || hasNew) OptimusAlarmType.INFO else cfgLevel
-
-    newLevel match {
-      case OptimusAlarmType.ERROR   => global.reporter.error(pos, alarm.toString())
-      case OptimusAlarmType.WARNING => global.reporter.warning(pos, alarm.toString())
-      case OptimusAlarmType.INFO    =>
-        // when a `[NEW]` message is also suppressed, drop the `[NEW]` tag to avoid the
-        // message being re-promoted to Error in BSPTraceListener/StandardBuilder
-        val isSuppressed = locallySuppressed || level != cfgLevel
-        val msgNoNew =
-          if (hasNew && isSuppressed) alarm.toString().replaceAllLiterally(OptimusAlarms.NewTag, "").trim()
-          else alarm.toString()
-        // the prefix [SUPPRESSED] is later removed by OBT and the compilation message lifted back to warning.
-        // This allows us to suppress a warning at the compile level, but not at the user level.
-        val msg: String = if (!alarm.isInfo) s"${OptimusAlarms.SuppressedTag} $msgNoNew" else msgNoNew
-        global.reporter.echo(pos, msg)
-      case OptimusAlarmType.SILENT => // ignore it!
-      case _                       => throw new IllegalStateException(s"unexpected level $newLevel")
     }
   }
 
@@ -106,19 +76,6 @@ trait OptimusPluginReporter {
         false
       } else suppressed
     }
-  }
-
-  // TODO (OPTIMUS-51339): Remove when OBT loads the new list by itself.
-  // Allow for new alarms (signified by "[NEW]" in the message) to not immediately fail the build
-  private def isNew(alarm: OptimusPluginAlarm): Boolean = {
-    val isNew = alarm.toString().contains(OptimusAlarms.NewTag)
-    if (isNew) {
-      assert(
-        alarm.isWarning,
-        s"{open square braket} NEW {close square braket} can only be applied to warnings!\nerror encountered while processing ${alarm.toString()}"
-      )
-    }
-    isNew
   }
 
   def alarm(builder: OptimusAlarmBuilder0, pos: Position): Unit = alarm(builder(), pos)

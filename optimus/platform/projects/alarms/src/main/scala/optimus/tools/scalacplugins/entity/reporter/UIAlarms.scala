@@ -54,6 +54,12 @@ object UIAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHelper {
     "Invalid type in the gui block: %s. Gui block can " +
       "only contain gui widgets, import statements or variables returning gui widgets / collection of gui widgets."
   )
+
+  val INVALID_TYPE_MOBILE = abort1(
+    63210,
+    "Invalid type in the mgui block: %s. mgui block can " +
+      "only contain mobile gui widgets, import statements or variables returning mobile gui widgets / collection of mobile gui widgets."
+  )
   val MACRO_EXCEPTION = abort2(63101, "GuiBlockMacro exception %s while type checking %s")
   val INVALID_EXPR = abort1(63102, "Invalid form of transformed expression: %s")
 

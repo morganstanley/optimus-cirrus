@@ -20,23 +20,20 @@ object CodeStyleErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
 object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
   val NON_FINAL_INNER_CASE_CLASS =
-    preIgnore(
-      warning0(
-        10002,
-        StagingPhase.POST_TYPER_STANDARDS,
-        "Case classes encapsulated in other classes should be moved to the outermost containing class's companion object and marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
-      )
+    warning0(
+      10002,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Case classes encapsulated in other classes should be moved to the outermost containing class's companion object and marked final in most cases:  http://codetree-docs/optimus/docs/QualityAssurance/ReviewRules.html#non-final-case-class"
     )
 
   val NON_FINAL_CASE_CLASS = warning0(
     10003,
     StagingPhase.POST_TYPER_STANDARDS,
-    "Case classes should be marked final in most cases:  http://optimusdoc/ReviewBuddy#non_final_case_class"
+    "Case classes should be marked final in most cases:  http://codetree-docs/optimus/docs/QualityAssurance/ReviewRules.html#non-final-case-class"
   )
 
-  val DISCOURAGED_CONSTRUCT = preIgnore(
+  val DISCOURAGED_CONSTRUCT =
     warning2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
-  )
 
   val MOCK_FINAL_CASE_CLASS =
     warning0(10007, StagingPhase.POST_TYPER_STANDARDS, "Don't mock final case classes")
@@ -101,7 +98,8 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
     error1(
       sn = 20308,
       StagingPhase.POST_TYPER_STANDARDS,
-      "Method %s doesn't have a parameter list in Scala 2.13. Remove the empty argument list () for cross-building.")
+      "Method %s doesn't have a parameter list in Scala 2.13. Remove the empty argument list () for cross-building."
+    )
 
   val MAP_CONCAT_WIDENS =
     error2(
@@ -148,6 +146,12 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       "Transforming a Sorted Set/Map to and unsorted Set/Map now requires explicit demarcation with coll.unsorted.map; this requires an `import optimus.scalacompat.collection._"
     )
+  val IMPORT_PARCOLLECTIONS =
+    warning0(
+      sn = 20315,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "For cross-building with Scala 2.13, using `.par` requires adding `import optimus.scalacompat.collection.ParCollectionConverters._`"
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
@@ -190,7 +194,9 @@ object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val UNKNOWN_STAGING_MARKER = error1(10004, StagingPhase.STAGING, "Unknown staging marker type: %s")
 
   // code-standards phase warnings
-  val UNTYPED_IMPLICIT = preIgnore(
-    warning1(10005, StagingPhase.POST_TYPER_STANDARDS, "Public implicit methods and classes should have explicit type: %s")
-  )
+  val UNTYPED_IMPLICIT =
+    warning1(
+      10005,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Public implicit methods and classes should have explicit type: %s")
 }

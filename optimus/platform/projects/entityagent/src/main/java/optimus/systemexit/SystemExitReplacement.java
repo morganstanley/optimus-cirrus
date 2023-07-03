@@ -17,12 +17,10 @@ import java.util.function.Consumer;
 public class SystemExitReplacement {
   private static final HashMap<String, Consumer<Integer>> hooks = new HashMap<>();
 
-  static public void setHook(String name, Consumer<Integer> hook) {
+  public static void setHook(String name, Consumer<Integer> hook) {
     synchronized (hooks) {
-      if (hook == null)
-        hooks.remove(name);
-      else
-        hooks.put(name, hook);
+      if (hook == null) hooks.remove(name);
+      else hooks.put(name, hook);
     }
   }
 
@@ -33,14 +31,13 @@ public class SystemExitReplacement {
     if (getOsInfo.doIntercept()) {
       logger.debug("[EXIT-INTERCEPT] logged exit with exception");
       getOsInfo.getInfo();
-      synchronized(hooks) {
+      synchronized (hooks) {
         for (Consumer<Integer> hook : hooks.values()) {
           hook.accept(status);
         }
       }
       throw new SystemExitInterceptedException(status);
-    }
-    else {
+    } else {
       logger.debug("[EXIT-INTERCEPT] normal exit");
       Runtime.getRuntime().exit(status);
     }

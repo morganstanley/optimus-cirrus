@@ -16,8 +16,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Records the className#methodName of each method which calls the ChaosMonkeyRuntime hook. Useful for asserting that
- * the Chaos infrastructure is configured properly.
+ * Records the className#methodName of each method which calls the ChaosMonkeyRuntime hook. Useful
+ * for asserting that the Chaos infrastructure is configured properly.
  */
 public class RecordingMonkey implements ChaosMonkeyRuntime.ChaosMonkey {
   public final Set<String> recordedMethods = Collections.synchronizedSet(new HashSet<String>());

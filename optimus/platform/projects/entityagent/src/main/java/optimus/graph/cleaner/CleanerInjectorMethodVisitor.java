@@ -25,7 +25,13 @@ class CleanerInjectorMethodVisitor extends CommonAdapter {
   private final String name;
   private final String descriptor;
 
-  CleanerInjectorMethodVisitor(CommonAdapter mv, Type classType, int callSiteID, int access, String name, String descriptor) {
+  CleanerInjectorMethodVisitor(
+      CommonAdapter mv,
+      Type classType,
+      int callSiteID,
+      int access,
+      String name,
+      String descriptor) {
     super(mv, access, name, descriptor);
     this.classType = classType;
     this.callSiteID = callSiteID;
@@ -40,13 +46,15 @@ class CleanerInjectorMethodVisitor extends CommonAdapter {
     if (isPointerCtor) assignCleanableField();
   }
 
-  private static final String registerDesc = Type.getMethodDescriptor(
-      CLEANABLE_TYPE,
-      OBJECT_TYPE /* this */,
-      Type.LONG_TYPE /* pointer*/,
-      Type.BOOLEAN_TYPE /* ownership */,
-      Type.INT_TYPE /* callSiteID */);
+  private static final String registerDesc =
+      Type.getMethodDescriptor(
+          CLEANABLE_TYPE,
+          OBJECT_TYPE /* this */,
+          Type.LONG_TYPE /* pointer*/,
+          Type.BOOLEAN_TYPE /* ownership */,
+          Type.INT_TYPE /* callSiteID */);
   private static final String CLEANER_SUPPORT = "optimus/graph/cleaner/CleanerSupport";
+
   private void assignCleanableField() {
     loadThis();
     dup();
@@ -55,5 +63,4 @@ class CleanerInjectorMethodVisitor extends CommonAdapter {
     visitMethodInsn(INVOKESTATIC, CLEANER_SUPPORT, "register", registerDesc, false);
     putField(classType, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE);
   }
-
 }

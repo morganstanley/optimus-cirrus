@@ -12,10 +12,13 @@
 package optimus.debug;
 
 public class InstrumentedHashCodes {
-  static InstrumentationConfig.MethodRef mrHashCode = new InstrumentationConfig.MethodRef("optimus/debug/InstrumentedHashCodes", "hashCode");
+  static InstrumentationConfig.MethodRef mrHashCode =
+      new InstrumentationConfig.MethodRef("optimus/debug/InstrumentedHashCodes", "hashCode");
+
   private static class HashCodeState {
     int recurseCount;
   }
+
   private static ThreadLocal<HashCodeState> state = ThreadLocal.withInitial(HashCodeState::new);
 
   public static void enterReporting() {

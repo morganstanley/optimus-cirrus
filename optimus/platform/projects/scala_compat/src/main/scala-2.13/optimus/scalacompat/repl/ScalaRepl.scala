@@ -94,7 +94,7 @@ class ScalaInterpreter private (settings: Settings, interpreterSettings: ScalaIn
       logInit("* Loading Optimus entity compiler plugin...")
       settings.plugin.value ++= jars :: Nil
       settings.require.value ++= "entity" :: Nil
-      settings.pluginOptions.value ++= "entity:silence:17000;17001" :: Nil
+      settings.pluginOptions.value ++= "entity:silence:10571;17000;17001" :: Nil
     })
 
     val (scalaReplArgsProcessingSuccess, unprocessedScalaReplArgs) =

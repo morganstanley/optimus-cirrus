@@ -33,11 +33,14 @@ class PostTyperCodingStandardsComponent(
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit) {
       if (!pluginData.rewriteConfig.anyEnabled)
-        standardsTraverser.traverse(unit.body)
+        new StandardsTraverser(unit).traverse(unit.body)
     }
   }
 
-  private object standardsTraverser extends Traverser {
+  private class StandardsTraverser(unit: CompilationUnit) extends Traverser {
+    lazy val is212OnlySource = unit.source.path.split("[/\\\\]").contains("scala-2.12")
+    lazy val sourceString = new String(unit.source.content)
+
     var inClass = false
     var inMacroExpansion: Boolean = false
     var enclosingDefs: List[DefTree] = Nil
@@ -81,6 +84,11 @@ class PostTyperCodingStandardsComponent(
                 sym.tpe.finalResultType.typeSymbol.name,
                 sym.name)
           }
+        }
+
+        if (sym.name == Parallelizable_par.name && !is212OnlySource && sym.overrideChain.contains(Parallelizable_par)) {
+          if (!sourceString.contains("ParCollectionConverters._"))
+            alarm(Scala213MigrationMessages.IMPORT_PARCOLLECTIONS, tree.pos)
         }
       }
     }
@@ -209,7 +217,7 @@ class PostTyperCodingStandardsComponent(
 
         val nilaryOverrideMismatch = {
           val skip = sym.typeParams.nonEmpty || sym.isSynthetic || sym.isAccessor || sym.isConstructor ||
-            sym.name.containsChar('$') || sym.owner.name.containsChar('$') || // synthetics, like stateMachine$async
+            sym.name.containsChar('$') || sym.owner.name.toString.contains("stateMachine$async") ||
             !sym.isOverridingSymbol || sym.overrides.exists(sym =>
               sym.isJavaDefined || definitions.isUniversalMember(sym)) || {
               sym.name.toString match {
@@ -280,8 +288,6 @@ class PostTyperCodingStandardsComponent(
       }
 
       if (isScala2_12) {
-        def is212OnlySource = fun.pos.source.path.split("[/\\\\]").contains("scala-2.12")
-
         if (
           fun.tpe.paramss.lengthCompare(1) > 0 && sym.owner.isNonBottomSubClass(
             GenTraversableOnceClass) && !is212OnlySource
@@ -363,6 +369,7 @@ class PostTyperCodingStandardsComponent(
             }
           case _ =>
         }
+
         tree match {
           case NeedsUnsorted(qual) =>
             alarm(Scala213MigrationMessages.NEEDS_UNSORTED, qual.pos)

@@ -54,7 +54,8 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath typePath, String descriptor, boolean visible) {
+  public AnnotationVisitor visitTypeAnnotation(
+      int typeRef, TypePath typePath, String descriptor, boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
         super.visitTypeAnnotation(typeRef, typePath, descriptor, visible),
@@ -62,7 +63,8 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public AnnotationVisitor visitParameterAnnotation(int parameter, String descriptor, boolean visible) {
+  public AnnotationVisitor visitParameterAnnotation(
+      int parameter, String descriptor, boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
         super.visitParameterAnnotation(parameter, descriptor, visible),
@@ -70,7 +72,8 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public AnnotationVisitor visitInsnAnnotation(int typeRef, TypePath typePath, String descriptor, boolean visible) {
+  public AnnotationVisitor visitInsnAnnotation(
+      int typeRef, TypePath typePath, String descriptor, boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
         super.visitInsnAnnotation(typeRef, typePath, descriptor, visible),
@@ -78,7 +81,8 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public AnnotationVisitor visitTryCatchAnnotation(int typeRef, TypePath typePath, String descriptor, boolean visible) {
+  public AnnotationVisitor visitTryCatchAnnotation(
+      int typeRef, TypePath typePath, String descriptor, boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
         super.visitTryCatchAnnotation(typeRef, typePath, descriptor, visible),
@@ -86,11 +90,18 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public AnnotationVisitor visitLocalVariableAnnotation(int typeRef, TypePath typePath, Label[] start, Label[] end,
-      int[] index, String descriptor, boolean visible) {
+  public AnnotationVisitor visitLocalVariableAnnotation(
+      int typeRef,
+      TypePath typePath,
+      Label[] start,
+      Label[] end,
+      int[] index,
+      String descriptor,
+      boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
-        super.visitLocalVariableAnnotation(typeRef, typePath, start, end, index, descriptor, visible),
+        super.visitLocalVariableAnnotation(
+            typeRef, typePath, start, end, index, descriptor, visible),
         OptimusDependencyDiscoveryAnnotationVisitor::new);
   }
 
@@ -103,8 +114,14 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   // Handle methods which returns Class, resource URL, or new class instance
   public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
     super.visitMethodInsn(opcode, owner, name, desc, itf);
-    if (name.equals("$init$") || name.equals("<clinit>") || name.equals(
-        "<init>") || opcode == INVOKESTATIC || opcode == INVOKEINTERFACE || opcode == INVOKEVIRTUAL || opcode == INVOKEDYNAMIC || opcode == INVOKESPECIAL) {
+    if (name.equals("$init$")
+        || name.equals("<clinit>")
+        || name.equals("<init>")
+        || opcode == INVOKESTATIC
+        || opcode == INVOKEINTERFACE
+        || opcode == INVOKEVIRTUAL
+        || opcode == INVOKEDYNAMIC
+        || opcode == INVOKESPECIAL) {
       if (!owner.equals(context.className)) {
         context.addClassDependency(owner);
       }
@@ -134,7 +151,8 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
   }
 
   @Override
-  public void visitLocalVariable(String name, String descriptor, String signature, Label start, Label end, int index) {
+  public void visitLocalVariable(
+      String name, String descriptor, String signature, Label start, Label end, int index) {
     super.visitLocalVariable(name, descriptor, signature, start, end, index);
     if (!name.equals("this")) {
       if (signature != null) {
@@ -151,11 +169,11 @@ public class OptimusDependencyDiscoveryMethodVisitor extends MethodVisitor {
     if (constant instanceof Type) {
       Type tpe = (Type) constant;
       switch (tpe.getSort()) {
-      case Type.OBJECT:
-      case Type.ARRAY:
-      case Type.METHOD:
-        context.addClassDependency(tpe);
-        break;
+        case Type.OBJECT:
+        case Type.ARRAY:
+        case Type.METHOD:
+          context.addClassDependency(tpe);
+          break;
       }
     } else if (constant instanceof Handle) {
       Handle handle = (Handle) constant;

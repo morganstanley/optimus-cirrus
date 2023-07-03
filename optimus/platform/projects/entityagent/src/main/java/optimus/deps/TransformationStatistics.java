@@ -23,6 +23,18 @@ public class TransformationStatistics {
 
   @Override
   public String toString() {
-    return "TransformationStatistics{ignored=" + ignored + ", unchanged=" + unchanged + ", visited=" + visited + ", instrumented=" + instrumented + ", optimusClasses=" + optimusClasses + ", failures=" + failures + '}';
+    return "TransformationStatistics{ignored="
+        + ignored
+        + ", unchanged="
+        + unchanged
+        + ", visited="
+        + visited
+        + ", instrumented="
+        + instrumented
+        + ", optimusClasses="
+        + optimusClasses
+        + ", failures="
+        + failures
+        + '}';
   }
 }

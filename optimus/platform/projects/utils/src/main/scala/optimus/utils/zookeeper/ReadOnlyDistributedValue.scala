@@ -12,11 +12,12 @@
 package optimus.utils.zookeeper
 
 import java.io.Closeable
-
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.utils.curator.DeprecatedNodeCache
 import org.apache.curator.framework.CuratorFramework
 import org.apache.curator.framework.recipes.cache.NodeCache
 import org.apache.curator.framework.recipes.cache.NodeCacheListener
+
 import scala.ref.WeakReference
 
 private[optimus] object ReadOnlyDistributedValue {
@@ -32,7 +33,7 @@ abstract class ReadOnlyDistributedValue[T](
   // can be overwritten for testing
   def onNodeChange(v: Option[T]): Unit
 
-  private val cache = new NodeCache(curator, path)
+  private val cache = new DeprecatedNodeCache(curator, path)
 
   if (weak)
     cache.getListenable.addListener(WeakNodeCacheListener(cache, this))
@@ -52,7 +53,7 @@ abstract class ReadOnlyDistributedValue[T](
 }
 
 private class WeakNodeCacheListener[T] private (
-    val cache: NodeCache,
+    val cache: DeprecatedNodeCache,
     val value: WeakReference[ReadOnlyDistributedValue[T]])
     extends NodeCacheListener {
   def nodeChanged(): Unit = {
@@ -64,7 +65,7 @@ private class WeakNodeCacheListener[T] private (
 }
 
 private object WeakNodeCacheListener {
-  def apply[T](cache: NodeCache, value: ReadOnlyDistributedValue[T]): NodeCacheListener = {
+  def apply[T](cache: DeprecatedNodeCache, value: ReadOnlyDistributedValue[T]): NodeCacheListener = {
     new WeakNodeCacheListener[T](cache, WeakReference(value))
   }
 }

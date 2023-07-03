@@ -30,12 +30,15 @@ public class OptimusDependencyDiscoveryClassVisitor extends BaseClassVisitor {
 
   @Override
   public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-    return context.visitIfInterested(context.addClassDependencyFromSimpleTypeDesc(descriptor), super.visitAnnotation(descriptor, visible),
+    return context.visitIfInterested(
+        context.addClassDependencyFromSimpleTypeDesc(descriptor),
+        super.visitAnnotation(descriptor, visible),
         OptimusDependencyDiscoveryAnnotationVisitor::new);
   }
 
   @Override
-  public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath typePath, String descriptor, boolean visible) {
+  public AnnotationVisitor visitTypeAnnotation(
+      int typeRef, TypePath typePath, String descriptor, boolean visible) {
     return context.visitIfInterested(
         context.addClassDependencyFromSimpleTypeDesc(descriptor),
         super.visitTypeAnnotation(typeRef, typePath, descriptor, visible),
@@ -43,7 +46,13 @@ public class OptimusDependencyDiscoveryClassVisitor extends BaseClassVisitor {
   }
 
   @Override
-  public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+  public void visit(
+      int version,
+      int access,
+      String name,
+      String signature,
+      String superName,
+      String[] interfaces) {
     super.visit(version, access, name, signature, superName, interfaces);
     context.addClassDependency(superName);
     context.addClassDependenciesFromSignature(signature);
@@ -71,7 +80,8 @@ public class OptimusDependencyDiscoveryClassVisitor extends BaseClassVisitor {
   }
 
   @Override
-  public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
+  public FieldVisitor visitField(
+      int access, String name, String descriptor, String signature, Object value) {
     FieldVisitor fv = super.visitField(access, name, descriptor, signature, value);
     context.addClassDependenciesFromSignature(signature);
     context.addClassDependencyFromSimpleTypeDesc(descriptor);
@@ -80,12 +90,12 @@ public class OptimusDependencyDiscoveryClassVisitor extends BaseClassVisitor {
   }
 
   @Override
-  protected MethodVisitor createMethodVisitor(MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
+  protected MethodVisitor createMethodVisitor(
+      MethodVisitor mv, String name, String desc, String signature, String[] exceptions) {
     // Doing both the signature and the description is redundant: the signature is richer
     if (signature != null) {
       context.addClassDependenciesFromSignature(signature);
-    }
-    else {
+    } else {
       context.addClassDependencyFromMethodDesc(desc);
     }
     context.addClassDependencies(exceptions); // Signatures do not generally include exceptions

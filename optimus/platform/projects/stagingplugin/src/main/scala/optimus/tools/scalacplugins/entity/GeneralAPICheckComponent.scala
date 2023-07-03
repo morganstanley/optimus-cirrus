@@ -318,13 +318,7 @@ class GeneralAPICheckComponent(
                 msg + " (no appropriate @nowarn found)"
               )
             } else if (matched) {
-              // when a `[NEW]` message is suppressed by nowarn, drop the `[NEW]` tag to avoid the
-              // message being re-promoted to Error in BSPTraceListener.
-              alarm(
-                OptimusNonErrorMessages.DEPRECATING_LIGHT,
-                callerPos,
-                typeAndFullName,
-                msg.replaceAllLiterally(OptimusAlarms.NewTag, "").trim())
+              alarm(OptimusNonErrorMessages.DEPRECATING_LIGHT, callerPos, typeAndFullName, msg)
               val contactInfo = msg match {
                 case ScopeExtractor(id) => s"[$id]"
                 case _                  => "appropriate"

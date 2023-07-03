@@ -20,7 +20,6 @@ import scala.tools.nsc.plugins.Plugin
 
 object StagingSettings {
   object OptionNames {
-    val ignoreName = "ignore:"
     val silenceName = "silence:"
     val debugName = "debug:"
     val rewriteCollectionSeqName = "rewriteCollectionSeq:"
@@ -58,10 +57,7 @@ object StagingPlugin {
   def processCommonOption(option: String, pluginData: PluginData, error: String => Unit): Unit = {
     import StagingSettings.OptionNames._
 
-    // TODO (OPTIMUS-51339): Remove ignore: and silence: when OBT has taken over warnings.
-
-    if (option.startsWith(ignoreName)) pluginData.alarmConfig.ignore = parseReportConfigInt(option, ignoreName)
-    else if (option.startsWith(silenceName)) pluginData.alarmConfig.silence = parseReportConfigInt(option, silenceName)
+    if (option.startsWith(silenceName)) pluginData.alarmConfig.silence = parseReportConfigInt(option, silenceName)
     else if (option.startsWith(debugName)) pluginData.alarmConfig.debug = parseOption(option, debugName, false)
     else if (option.startsWith(rewriteCollectionSeqName))
       pluginData.rewriteConfig.rewriteCollectionSeq = parseOption(option, rewriteCollectionSeqName, false)

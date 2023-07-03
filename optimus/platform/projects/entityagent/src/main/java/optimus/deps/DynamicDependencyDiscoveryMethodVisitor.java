@@ -34,80 +34,83 @@ public class DynamicDependencyDiscoveryMethodVisitor extends MethodVisitor {
   // - ProcessBuilder
   // - scala.io.Source
 
-
   // Handle methods which returns Class, resource URL, or new class instance
   public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
     switch (owner) {
-    case ClassMonitorInjector.javaLangClass:
-    case ClassMonitorInjector.javaLangClassLoader:
-      switch (name) {
-      case "getResource":
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-        instrumentation.addCallToLoggerForUrlResource(mv); // Logging the return type
-        break;
-      case "getResourceAsStream":
-        switch (owner) {
-        case ClassMonitorInjector.javaLangClass:
-          instrumentation.addCallToLoggerForStreamResourceOnClass(mv);
-          break;
-        case ClassMonitorInjector.javaLangClassLoader:
-          instrumentation.addCallToLoggerForStreamResourceOnClassLoader(mv);
-          break;
-        default:
-          throw new IllegalStateException(String.format("We do not know how to handle this case with '%s'", owner));
+      case ClassMonitorInjector.javaLangClass:
+      case ClassMonitorInjector.javaLangClassLoader:
+        switch (name) {
+          case "getResource":
+            super.visitMethodInsn(opcode, owner, name, desc, itf);
+            instrumentation.addCallToLoggerForUrlResource(mv); // Logging the return type
+            break;
+          case "getResourceAsStream":
+            switch (owner) {
+              case ClassMonitorInjector.javaLangClass:
+                instrumentation.addCallToLoggerForStreamResourceOnClass(mv);
+                break;
+              case ClassMonitorInjector.javaLangClassLoader:
+                instrumentation.addCallToLoggerForStreamResourceOnClassLoader(mv);
+                break;
+              default:
+                throw new IllegalStateException(
+                    String.format("We do not know how to handle this case with '%s'", owner));
+            }
+            super.visitMethodInsn(opcode, owner, name, desc, itf);
+            break;
+          case "getResources":
+            instrumentation.addCallToLoggerForResources(mv);
+            super.visitMethodInsn(opcode, owner, name, desc, itf);
+            break;
+          case "forName":
+          case "loadClass":
+            super.visitMethodInsn(opcode, owner, name, desc, itf);
+            instrumentation.addCallToLoggerForClassUsage(mv); // Logging the return type
+            break;
+          default:
+            super.visitMethodInsn(opcode, owner, name, desc, itf);
         }
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-        break;
-      case "getResources":
-        instrumentation.addCallToLoggerForResources(mv);
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-        break;
-      case "forName":
-      case "loadClass":
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-        instrumentation.addCallToLoggerForClassUsage(mv); // Logging the return type
         break;
       default:
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-      }
-      break;
-    default:
-      if (name.equals("<init>")) {
-        switch (owner) {
-        case "java/io/FileInputStream":
-          // Skip very heaving SessionUtils for which there is no benefit to track (access to .class)
-          if (!context.classResourceName.startsWith("optimus/session/utils/SessionUtils")) {
-            instrumentation.addCallToLoggerForFileInputResource(mv, context.className, owner, name, desc);
+        if (name.equals("<init>")) {
+          switch (owner) {
+            case "java/io/FileInputStream":
+              // Skip very heaving SessionUtils for which there is no benefit to track (access to
+              // .class)
+              if (!context.classResourceName.startsWith("optimus/session/utils/SessionUtils")) {
+                instrumentation.addCallToLoggerForFileInputResource(
+                    mv, context.className, owner, name, desc);
+              }
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              break;
+            case "java/io/FileOutputStream":
+              instrumentation.addCallToLoggerForFileOutputResource(
+                  mv, context.className, owner, name, desc);
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              break;
+            case "java/io/RandomAccessFile":
+              instrumentation.addCallToLoggerForFileRandomAccessResource(
+                  mv, context.className, owner, name, desc);
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              break;
+            case "java/net/URI":
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              instrumentation.addCallToLoggerForUriResource(mv);
+              break;
+            case "java/net/URL":
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              instrumentation.addCallToLoggerForUrlResource(mv);
+              break;
+            case "msjava/msnet/MSNetInetAddress":
+              instrumentation.addCallToLoggerForMSInetAddressResource(mv, desc);
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
+              break;
+            default:
+              super.visitMethodInsn(opcode, owner, name, desc, itf);
           }
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          break;
-        case "java/io/FileOutputStream":
-          instrumentation.addCallToLoggerForFileOutputResource(mv, context.className, owner, name, desc);
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          break;
-        case "java/io/RandomAccessFile":
-          instrumentation.addCallToLoggerForFileRandomAccessResource(mv, context.className, owner, name, desc);
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          break;
-        case "java/net/URI":
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          instrumentation.addCallToLoggerForUriResource(mv);
-          break;
-        case "java/net/URL":
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          instrumentation.addCallToLoggerForUrlResource(mv);
-          break;
-        case "msjava/msnet/MSNetInetAddress":
-          instrumentation.addCallToLoggerForMSInetAddressResource(mv, desc);
-          super.visitMethodInsn(opcode, owner, name, desc, itf);
-          break;
-        default:
+        } else {
           super.visitMethodInsn(opcode, owner, name, desc, itf);
         }
-      }
-      else {
-        super.visitMethodInsn(opcode, owner, name, desc, itf);
-      }
     }
   }
 

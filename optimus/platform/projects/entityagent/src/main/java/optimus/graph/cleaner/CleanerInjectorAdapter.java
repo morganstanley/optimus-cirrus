@@ -31,14 +31,17 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     var isFinalizeMethod = name.equals("finalize") && desc.equals("()V");
     if (isFinalizeMethod) return null; // remove the method!
 
     var isDeleteMethod = name.equals("delete") && desc.equals("()V");
     if (isDeleteMethod) {
       var methodFinder = new MethodInvokeFinder(INVOKESTATIC, "delete_", "(J)V");
-      callSiteID = CleanerSupport.registerCallSiteAtCompile(methodFinder.foundOwner, methodFinder.foundMethod, callSiteID);
+      callSiteID =
+          CleanerSupport.registerCallSiteAtCompile(
+              methodFinder.foundOwner, methodFinder.foundMethod, callSiteID);
       return null; // remove the method!
     }
 
@@ -48,7 +51,7 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
     var methodWriter = super.visitMethod(access, name, desc, signature, exceptions);
     var mv = CommonAdapter.wrap(methodWriter, access, name, desc);
 
-    var isDisposeMethod =  name.equals("dispose") && desc.equals("()V");
+    var isDisposeMethod = name.equals("dispose") && desc.equals("()V");
     if (isDisposeMethod) {
       callCleanableClean(mv); // write the new implementation
       return null; // remove the old implementation
@@ -92,7 +95,8 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
     }
 
     @Override
-    public void visitMethodInsn(int code, String owner, String name, String desc, boolean isInterface) {
+    public void visitMethodInsn(
+        int code, String owner, String name, String desc, boolean isInterface) {
       var matches = code == opcode && name.startsWith(nameStart) && desc.equals(descriptor);
       if (matches) {
         foundOwner = owner;

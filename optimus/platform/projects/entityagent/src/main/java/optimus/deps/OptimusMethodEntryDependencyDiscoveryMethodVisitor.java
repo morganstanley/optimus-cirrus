@@ -41,6 +41,11 @@ public class OptimusMethodEntryDependencyDiscoveryMethodVisitor extends MethodVi
   private void addCallToLoggerForCurrentClassUsage(MethodVisitor mv) {
     // First param is always already loaded and is a class name
     mv.visitLdcInsn(context.classResourceName);
-    mv.visitMethodInsn(INVOKESTATIC, "optimus/ClassMonitorInjector", "logClassUsage", "(Ljava/lang/String;)V", false);
+    mv.visitMethodInsn(
+        INVOKESTATIC,
+        "optimus/ClassMonitorInjector",
+        "logClassUsage",
+        "(Ljava/lang/String;)V",
+        false);
   }
 }

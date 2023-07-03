@@ -28,8 +28,13 @@ import org.objectweb.asm.Opcodes;
 public class CleanerInjector implements ClassFileTransformer, Opcodes {
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] bytes) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] bytes)
+      throws IllegalClassFormatException {
     // do nothing if not from an package to rewrite or configuration is missing
     var packageToRewrite = DiagnosticSettings.disposablePackageToRewrite;
     if (packageToRewrite == null || !className.startsWith(packageToRewrite)) return bytes;
@@ -52,15 +57,14 @@ public class CleanerInjector implements ClassFileTransformer, Opcodes {
     if (interfaceToRewrite == null) return false;
 
     String[] interfaces = crSource.getInterfaces();
-    for (String iface: interfaces)
-      if (iface.equals(interfaceToRewrite))
-        return true;
+    for (String iface : interfaces) if (iface.equals(interfaceToRewrite)) return true;
     return false;
   }
 
   private void generateCleanableField(ClassWriter cw) {
-    FieldVisitor fv = cw.visitField(ACC_PRIVATE, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE.getDescriptor(), null, null);
+    FieldVisitor fv =
+        cw.visitField(
+            ACC_PRIVATE, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE.getDescriptor(), null, null);
     fv.visitEnd();
   }
-
 }

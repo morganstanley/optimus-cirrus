@@ -23,16 +23,14 @@ import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.allocateID;
 
-/**
- * A collection of useful ASM helper functions built on top of AdviceAdapter
- */
+/** A collection of useful ASM helper functions built on top of AdviceAdapter */
 public class CommonAdapter extends AdviceAdapter {
-  private int methodID;         // If allocation requested
+  private int methodID; // If allocation requested
   private boolean thisIsAvailable;
 
   private final Label __localValueStart = new Label();
   private final Label __localValueEnd = new Label();
-  private int __localValue;     // When local passing is enabled this will point to a slot for local var
+  private int __localValue; // When local passing is enabled this will point to a slot for local var
   private Type localValueType;
   private String localValueDesc;
 
@@ -43,15 +41,13 @@ public class CommonAdapter extends AdviceAdapter {
   /** To gain access to convenience functions here we need to wrap the original MethodVisitor */
   public static CommonAdapter wrap(MethodVisitor omv, int access, String name, String desc) {
     return omv instanceof CommonAdapter
-           ? (CommonAdapter) omv
-           : new CommonAdapter(omv, access, name, desc);
+        ? (CommonAdapter) omv
+        : new CommonAdapter(omv, access, name, desc);
   }
 
   public void resetMV(MethodVisitor newMethodVisitor) {
-    if (mv == null)
-      mv = newMethodVisitor;
-    else if (mv instanceof CommonAdapter)
-      ((CommonAdapter) mv).resetMV(newMethodVisitor);
+    if (mv == null) mv = newMethodVisitor;
+    else if (mv instanceof CommonAdapter) ((CommonAdapter) mv).resetMV(newMethodVisitor);
   }
 
   @Override
@@ -72,7 +68,8 @@ public class CommonAdapter extends AdviceAdapter {
 
   protected void visitLocalValueEnd() {
     visitLabel(__localValueEnd);
-    mv.visitLocalVariable("__locValue", localValueDesc, null, __localValueStart, __localValueEnd, __localValue);
+    mv.visitLocalVariable(
+        "__locValue", localValueDesc, null, __localValueStart, __localValueEnd, __localValue);
   }
 
   protected String loadLocalValueIfRequested(MethodPatch patch) {
@@ -100,40 +97,33 @@ public class CommonAdapter extends AdviceAdapter {
   }
 
   protected String loadMethodID(MethodPatch patch) {
-    if (methodID == 0)
-      methodID = allocateID(patch.from);
+    if (methodID == 0) methodID = allocateID(patch.from);
     mv.visitIntInsn(SIPUSH, methodID);
     return "I";
   }
 
   protected String loadThisOrNull() {
     if ((methodAccess & ACC_STATIC) != 0 || (!thisIsAvailable && getName().equals("<init>")))
-      mv.visitInsn(ACONST_NULL);    // static will just pass null and ctor will temporarily pass null
-    else
-      loadThis();
+      mv.visitInsn(ACONST_NULL); // static will just pass null and ctor will temporarily pass null
+    else loadThis();
     return OBJECT_DESC;
   }
 
   protected String dupReturnValueOrNullForVoid(int opcode, boolean boxValueTypes) {
-    if (opcode == RETURN)
-      visitInsn(ACONST_NULL);
-    else if (opcode == ARETURN || opcode == ATHROW)
-      dup();
+    if (opcode == RETURN) visitInsn(ACONST_NULL);
+    else if (opcode == ARETURN || opcode == ATHROW) dup();
     else {
-      if (opcode == LRETURN || opcode == DRETURN)
-        dup2(); // double/long take two slots
-      else
-        dup();
-      if (boxValueTypes)
-        valueOf(Type.getReturnType(this.methodDesc));
+      if (opcode == LRETURN || opcode == DRETURN) dup2(); // double/long take two slots
+      else dup();
+      if (boxValueTypes) valueOf(Type.getReturnType(this.methodDesc));
     }
-    return OBJECT_DESC;   // TODO (OPTIMUS-53248): For non-boxing case return proper descriptor
+    return OBJECT_DESC; // TODO (OPTIMUS-53248): For non-boxing case return proper descriptor
   }
 
   protected String loadArgsInlineOrAsArray(MethodPatch patch) {
     if (patch.noArgumentBoxing) {
       loadArgs();
-      return "";  // Rely on descriptor explicitly supplied
+      return ""; // Rely on descriptor explicitly supplied
     } else {
       loadArgArray();
       return OBJECT_ARR_DESC;
@@ -178,11 +168,10 @@ public class CommonAdapter extends AdviceAdapter {
   }
 
   public static int invokeStaticOrVirtual(int access) {
-    return hasStaticAccess(access)? INVOKESTATIC : INVOKEVIRTUAL;
+    return hasStaticAccess(access) ? INVOKESTATIC : INVOKEVIRTUAL;
   }
 
   public static Boolean hasStaticAccess(int access) {
     return (access & ACC_STATIC) != 0;
   }
-
 }

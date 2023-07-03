@@ -30,13 +30,17 @@ public class OptimusDependencyDiscoveryFieldVisitor extends FieldVisitor {
   @Override
   public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
     return context.visitIfInterested(
-        context.addClassDependencyFromSimpleTypeDesc(descriptor), super.visitAnnotation(descriptor, visible),
+        context.addClassDependencyFromSimpleTypeDesc(descriptor),
+        super.visitAnnotation(descriptor, visible),
         OptimusDependencyDiscoveryAnnotationVisitor::new);
   }
 
   @Override
-  public AnnotationVisitor visitTypeAnnotation(int typeRef, TypePath typePath, String descriptor, boolean visible) {
-    return context.visitIfInterested(context.addClassDependencyFromSimpleTypeDesc(descriptor), super.visitTypeAnnotation(typeRef, typePath, descriptor, visible),
+  public AnnotationVisitor visitTypeAnnotation(
+      int typeRef, TypePath typePath, String descriptor, boolean visible) {
+    return context.visitIfInterested(
+        context.addClassDependencyFromSimpleTypeDesc(descriptor),
+        super.visitTypeAnnotation(typeRef, typePath, descriptor, visible),
         OptimusDependencyDiscoveryAnnotationVisitor::new);
   }
 

@@ -34,15 +34,21 @@ class AddFieldsAdapter extends ClassVisitor implements Opcodes {
     }
   }
 
-  public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+  public void visit(
+      int version,
+      int access,
+      String name,
+      String signature,
+      String superName,
+      String[] interfaces) {
     cname = name;
     cv.visit(version, access, name, signature, superName, interfaces);
   }
 
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     String fieldName = accessors.get(name);
-    if(fieldName == null)
-      return cv.visitMethod(access, name, desc, signature, exceptions);
+    if (fieldName == null) return cv.visitMethod(access, name, desc, signature, exceptions);
 
     Type returnType = Type.getReturnType(desc);
     if (returnType != Type.VOID_TYPE) {

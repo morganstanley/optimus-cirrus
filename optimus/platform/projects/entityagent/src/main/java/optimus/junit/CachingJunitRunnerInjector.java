@@ -46,7 +46,8 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
     //    We must absolutely avoid doing class loading here before transformation can begin!
     //    'getResourceAsStream' does not cause class loading, so we are safe with it.
     baseClassFound = loader.getResource("org/junit/runner/Runner.class") != null;
-    dtcHelperClassFound = loader.getResource("optimus/dtc/runners/DTCDynamicRunnerHelper.class") != null;
+    dtcHelperClassFound =
+        loader.getResource("optimus/dtc/runners/DTCDynamicRunnerHelper.class") != null;
   }
 
   public CachingJunitRunnerInjector() {
@@ -54,7 +55,8 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
 
     this.failedState = !dtcHelperClassFound || !baseClassFound;
 
-    if (DiagnosticSettings.isClassMonitorEnabled && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+    if (DiagnosticSettings.isClassMonitorEnabled
+        && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
       // we've got the instrumentation system property but no dtc on classpath!
       // we will report only one, if we are asked to instrument
       if (!dtcHelperClassFound) {
@@ -71,17 +73,14 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
   }
 
   private boolean extendsRunner(ClassLoader loader, String className) {
-    if (className == null || skipName(className))
-      return false;
-    else if (className.equals(JUNIT_RUNNER_CLASS))
-      return true;
+    if (className == null || skipName(className)) return false;
+    else if (className.equals(JUNIT_RUNNER_CLASS)) return true;
 
     // getResourceAsStream does not cause class loading, which we must absolutely avoid
     InputStream is = loader.getResourceAsStream(className + ".class");
     ClassReader reader;
-    try(is) {
-      if (is == null)
-        throw new RuntimeException(String.format("Class not found: %s", className));
+    try (is) {
+      if (is == null) throw new RuntimeException(String.format("Class not found: %s", className));
       reader = new ClassReader(is);
     } catch (IOException e) {
       // throwing here will be logged by safeTransform
@@ -97,13 +96,17 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
         || name.startsWith("scala/")
         || name.startsWith("sun/")
         || name.startsWith("ch/qos/")
-        || name.startsWith("org/slf4j/")
-        ;
+        || name.startsWith("org/slf4j/");
   }
 
   @Override
-  public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
-      ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer)
+      throws IllegalClassFormatException {
 
     // not interested in bootstrap classpath or core java/scala classes or being in a bad state
     if (failedState || loader == null || skipName(className)) {
@@ -112,7 +115,8 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
 
     ClassReader classReader = new ClassReader(classfileBuffer);
 
-    // is className assignableFrom junit runner base - without loading any new classes, as they won't be transformed if
+    // is className assignableFrom junit runner base - without loading any new classes, as they
+    // won't be transformed if
     // we do it from here
     if (!extendsRunner(loader, classReader.getSuperName())) {
       return null;
@@ -120,63 +124,85 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
 
     ClassWriter classWriter = new ClassWriter(classReader, ClassWriter.COMPUTE_MAXS);
 
-    ClassVisitor visitor = new ClassVisitor(Opcodes.ASM9, classWriter) {
-      private boolean inVisitEnd = false;
-      private boolean visitedRunMethod = false;
+    ClassVisitor visitor =
+        new ClassVisitor(Opcodes.ASM9, classWriter) {
+          private boolean inVisitEnd = false;
+          private boolean visitedRunMethod = false;
 
-      @Override
-      public void visitEnd() {
-        //Target ASM Byte Code:
-        // 0: aload_0
-        // 1: aload_1
-        // 2: invokestatic  #8 // Method runStatic:(Lorg/junit/runner/Runner;
-        // Lorg/junit/runner/notification/RunNotifier;)V
-        // 5: return
-        //
-        if (visitedRunMethod) {
-          inVisitEnd = true; //flag so we can avoid re-writing the 'new' run method
+          @Override
+          public void visitEnd() {
+            // Target ASM Byte Code:
+            // 0: aload_0
+            // 1: aload_1
+            // 2: invokestatic  #8 // Method runStatic:(Lorg/junit/runner/Runner;
+            // Lorg/junit/runner/notification/RunNotifier;)V
+            // 5: return
+            //
+            if (visitedRunMethod) {
+              inVisitEnd = true; // flag so we can avoid re-writing the 'new' run method
 
-          // We had renamed the 'run' method into 'runInternalDontCollide` in 'visitMethod', leaving a gap.
-          // We thus inject a new 'run' method that points to DTCRunnerHelper.runStatic(Runner, RunNotifier).
-          MethodVisitor mv = visitMethod(ACC_PUBLIC, "run", "(Lorg/junit/runner/notification/RunNotifier;)V", null,
-              null);
-          mv.visitCode();
-          mv.visitVarInsn(ALOAD, 0);
-          mv.visitVarInsn(ALOAD, 1);
-          mv.visitMethodInsn(INVOKESTATIC, "optimus/dtc/runners/DTCRunnerHelper", "runStatic",
-              "(Lorg/junit/runner/Runner;Lorg/junit/runner/notification/RunNotifier;)V", false);
-          mv.visitInsn(Opcodes.RETURN);
-          mv.visitMaxs(2, 2);
-          mv.visitEnd();
-        }
-      }
-
-      @Override
-      public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-        if (!inVisitEnd && name.equals("run") && desc.equals(
-            "(Lorg/junit/runner/notification/RunNotifier;)V") && (access & (ACC_NATIVE | ACC_ABSTRACT)) == 0) {
-          visitedRunMethod = true;
-
-          // Rename the 'run' method as 'runInternalDontCollide', which will leave a gap that is filled in visitEnd.
-          return new MethodVisitor(Opcodes.ASM9,
-              super.visitMethod(access, RUN_INTERNAL_METHOD_NAME, desc, signature, exceptions)) {
-            @Override
-            public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-              if (owner.equals(classReader.getSuperName()) && "run".equals(
-                  name) && "(Lorg/junit/runner/notification/RunNotifier;)V".equals(descriptor)) {
-                // Let's rewire to point to the internal method we injected in the parent so we do not land
-                // back into DTCRunnerHelper in a nested way.
-                super.visitMethodInsn(opcode, owner, RUN_INTERNAL_METHOD_NAME, descriptor, isInterface);
-              } else {
-                super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
-              }
+              // We had renamed the 'run' method into 'runInternalDontCollide` in 'visitMethod',
+              // leaving a gap.
+              // We thus inject a new 'run' method that points to DTCRunnerHelper.runStatic(Runner,
+              // RunNotifier).
+              MethodVisitor mv =
+                  visitMethod(
+                      ACC_PUBLIC,
+                      "run",
+                      "(Lorg/junit/runner/notification/RunNotifier;)V",
+                      null,
+                      null);
+              mv.visitCode();
+              mv.visitVarInsn(ALOAD, 0);
+              mv.visitVarInsn(ALOAD, 1);
+              mv.visitMethodInsn(
+                  INVOKESTATIC,
+                  "optimus/dtc/runners/DTCRunnerHelper",
+                  "runStatic",
+                  "(Lorg/junit/runner/Runner;Lorg/junit/runner/notification/RunNotifier;)V",
+                  false);
+              mv.visitInsn(Opcodes.RETURN);
+              mv.visitMaxs(2, 2);
+              mv.visitEnd();
             }
-          };
-        } else {
-          return super.visitMethod(access, name, desc, signature, exceptions);
-        }
-      }
-    };
+          }
+
+          @Override
+          public MethodVisitor visitMethod(
+              int access, String name, String desc, String signature, String[] exceptions) {
+            if (!inVisitEnd
+                && name.equals("run")
+                && desc.equals("(Lorg/junit/runner/notification/RunNotifier;)V")
+                && (access & (ACC_NATIVE | ACC_ABSTRACT)) == 0) {
+              visitedRunMethod = true;
+
+              // Rename the 'run' method as 'runInternalDontCollide', which will leave a gap that is
+              // filled in visitEnd.
+              return new MethodVisitor(
+                  Opcodes.ASM9,
+                  super.visitMethod(
+                      access, RUN_INTERNAL_METHOD_NAME, desc, signature, exceptions)) {
+                @Override
+                public void visitMethodInsn(
+                    int opcode, String owner, String name, String descriptor, boolean isInterface) {
+                  if (owner.equals(classReader.getSuperName())
+                      && "run".equals(name)
+                      && "(Lorg/junit/runner/notification/RunNotifier;)V".equals(descriptor)) {
+                    // Let's rewire to point to the internal method we injected in the parent so we
+                    // do not land
+                    // back into DTCRunnerHelper in a nested way.
+                    super.visitMethodInsn(
+                        opcode, owner, RUN_INTERNAL_METHOD_NAME, descriptor, isInterface);
+                  } else {
+                    super.visitMethodInsn(opcode, owner, name, descriptor, isInterface);
+                  }
+                }
+              };
+            } else {
+              return super.visitMethod(access, name, desc, signature, exceptions);
+            }
+          }
+        };
     classReader.accept(visitor, 0);
 
     return classWriter.toByteArray();

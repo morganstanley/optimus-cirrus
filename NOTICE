@@ -10,7 +10,9 @@ This product includes software developed at the Apache Software Foundation (http
 This product bundles software from http://github.com/scalamacros/macrology201, which is available under a "3-clause BSD" license.
 For details, see optimus/platform/projects/core_macro/src/main/scala/optimus/utils/internal/Splicer.scala
 
-This product includes software developed by Oracle. For details, see optimus/buildtool/projects/app/src/main/scala/optimus/buildtool/files/WatchServiceDirectoryWatcher.scala
+This product includes software developed by Oracle. For details, see
+  - optimus/buildtool/projects/app/src/main/scala/optimus/buildtool/files/WatchServiceDirectoryWatcher.scala
+  - optimus/buildtool/projects/app/src/main/scala/sbt/internal/inc/zip/ZipCentralDir.java
 
 This product includes software developed by other groups and added in accordance with their Apache 2.0 licenses. Projects include:
   - https://github.com/apache/httpcomponents-core (in optimus/buildtool/projects/app/src/main/scala/org/apache/http/ssl/SSLContexts.java)

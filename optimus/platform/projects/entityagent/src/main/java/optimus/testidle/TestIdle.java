@@ -12,6 +12,6 @@
 package optimus.testidle;
 
 public class TestIdle {
-  public final static String monitorIdlePropertyName = "optimus.test.idle.monitor.minutes";
-  public final static String artifactDirectory = "optimus.test.metadata.artifacts";
+  public static final String monitorIdlePropertyName = "optimus.test.idle.monitor.minutes";
+  public static final String artifactDirectory = "optimus.test.metadata.artifacts";
 }

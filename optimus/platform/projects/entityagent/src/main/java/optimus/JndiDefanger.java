@@ -37,11 +37,12 @@ public class JndiDefanger implements ClassFileTransformer {
 
   public static final String goAway = "JndiLookup#lookup now returns this sentence unconditionally";
 
-  public byte[] transform(ClassLoader loader,
-                          String className,
-                          Class<?> classBeingRedefined,
-                          ProtectionDomain protectionDomain,
-                          byte[] classfileBuffer) {
+  public byte[] transform(
+      ClassLoader loader,
+      String className,
+      Class<?> classBeingRedefined,
+      ProtectionDomain protectionDomain,
+      byte[] classfileBuffer) {
 
     if (className != null && className.endsWith("/JndiLookup")) {
       String msg = "Defanging" + className + " (" + loader + ")";
@@ -49,23 +50,26 @@ public class JndiDefanger implements ClassFileTransformer {
       t.printStackTrace(System.err);
       t.printStackTrace(System.out);
       ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-      ClassVisitor cv = new ClassVisitor(Opcodes.ASM9, cw) {
-        @Override
-        public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-          MethodVisitor mv = cv.visitMethod(access, name, desc, signature, exceptions);
-          if ("lookup".equals(name)) {
-            mv = new MethodVisitor(Opcodes.ASM9, mv) {
-              @Override
-              public void visitCode() {
-                mv.visitCode();
-                mv.visitLdcInsn(goAway);
-                mv.visitInsn(Opcodes.ARETURN);
+      ClassVisitor cv =
+          new ClassVisitor(Opcodes.ASM9, cw) {
+            @Override
+            public MethodVisitor visitMethod(
+                int access, String name, String desc, String signature, String[] exceptions) {
+              MethodVisitor mv = cv.visitMethod(access, name, desc, signature, exceptions);
+              if ("lookup".equals(name)) {
+                mv =
+                    new MethodVisitor(Opcodes.ASM9, mv) {
+                      @Override
+                      public void visitCode() {
+                        mv.visitCode();
+                        mv.visitLdcInsn(goAway);
+                        mv.visitInsn(Opcodes.ARETURN);
+                      }
+                    };
               }
-            };
-          }
-          return mv;
-        }
-      };
+              return mv;
+            }
+          };
       ClassReader cr = new ClassReader(classfileBuffer);
       cr.accept(cv, 0);
       return cw.toByteArray();

@@ -44,10 +44,11 @@ public class SystemExitGetOsInfo {
     }
   }
 
-  private void cpuLoad() throws MalformedObjectNameException, ReflectionException, InstanceNotFoundException {
+  private void cpuLoad()
+      throws MalformedObjectNameException, ReflectionException, InstanceNotFoundException {
     MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
     ObjectName osObject = ObjectName.getInstance("java.lang:type=OperatingSystem");
-    AttributeList attrList = mBeanServer.getAttributes(osObject, new String[] { "SystemCpuLoad" });
+    AttributeList attrList = mBeanServer.getAttributes(osObject, new String[] {"SystemCpuLoad"});
 
     if (!attrList.isEmpty()) {
       Attribute attr = (Attribute) attrList.get(0);
@@ -91,11 +92,13 @@ public class SystemExitGetOsInfo {
   private static final List<String> DirectAllowedPatterns = new ArrayList<>();
 
   static {
-    // we need to allow intellij's JUnitStarter and CommandLineWrapper.main methods to exit otherwise the process will
+    // we need to allow intellij's JUnitStarter and CommandLineWrapper.main methods to exit
+    // otherwise the process will
     // never end. (n.b. unit tests are never run on this thread)
     DirectAllowedPatterns.add("JUnitStarter.main");
     DirectAllowedPatterns.add("ScalaTestRunner.main");
-    // StallDetector is allowed to kill a process if there is 'no progress' after a certain amount of time
+    // StallDetector is allowed to kill a process if there is 'no progress' after a certain amount
+    // of time
     DirectAllowedPatterns.add("optimus.graph.diagnostics.DefaultStallDetector");
     DirectAllowedPatterns.add("optimus.buildtool.testrunner.worker.OptimusTestWorkerClient");
 
@@ -107,14 +110,22 @@ public class SystemExitGetOsInfo {
      * Such failures do, however, manifest as different and subtle bugs (broken nodes,
      * false stalls not attributed to the test in question, ...).
      */
-    DirectAllowedPatterns.add("optimus.graph.NodeTask"); // logAndDie on various unrecoverable illegal states
-    DirectAllowedPatterns.add("optimus.graph.GCNative"); // die when not loaded properly and when we fails completely to free up any memory
-    DirectAllowedPatterns.add("optimus.graph.OGScheduler"); // like NodeTask, die when we have no hope of remaining consistent
-    DirectAllowedPatterns.add("optimus.graph.OGSchedulerContext"); // die on exception thrown from adapt()
-    DirectAllowedPatterns.add("optimus.graph.OGTraceStore"); // die if the trace gets knackered somehow
+    DirectAllowedPatterns.add(
+        "optimus.graph.NodeTask"); // logAndDie on various unrecoverable illegal states
+    DirectAllowedPatterns.add(
+        "optimus.graph.GCNative"); // die when not loaded properly and when we fails completely to
+    // free up any memory
+    DirectAllowedPatterns.add(
+        "optimus.graph.OGScheduler"); // like NodeTask, die when we have no hope of remaining
+    // consistent
+    DirectAllowedPatterns.add(
+        "optimus.graph.OGSchedulerContext"); // die on exception thrown from adapt()
+    DirectAllowedPatterns.add(
+        "optimus.graph.OGTraceStore"); // die if the trace gets knackered somehow
   }
 
-  private final List<String> anywhereAllowedPatterns = loadPatternsFromFile("anywhere-allowed-patterns");
+  private final List<String> anywhereAllowedPatterns =
+      loadPatternsFromFile("anywhere-allowed-patterns");
 
   private List<String> loadPatternsFromFile(String patternName) {
     Properties properties = new Properties();
@@ -125,15 +136,16 @@ public class SystemExitGetOsInfo {
       new ArrayList<String>();
     }
     String patternString = properties.getProperty(patternName);
-    if (patternString.isBlank())
-      return Collections.emptyList();
+    if (patternString.isBlank()) return Collections.emptyList();
     else {
       return Arrays.asList(patternString.split(","));
     }
   }
 
-  // we allow System.exit if called *directly* from any of the DirectAllowedPatterns method patterns,
-  // and if called anywhere from the AnywhereAllowedPatterns (which are loaded from file, if it exists,  in case they
+  // we allow System.exit if called *directly* from any of the DirectAllowedPatterns method
+  // patterns,
+  // and if called anywhere from the AnywhereAllowedPatterns (which are loaded from file, if it
+  // exists,  in case they
   // are business-related classes)
   // TODO (OPTIMUS-30207): use StackWalker instead of this
   private boolean isAllowedExit() {
@@ -142,16 +154,14 @@ public class SystemExitGetOsInfo {
     for (int i = 0; i < stackTrace.length; i++) {
       String elem = stackTrace[i].toString();
       for (String allowlistedPattern : anywhereAllowedPatterns) {
-        if (elem.contains(allowlistedPattern))
-          return true;
+        if (elem.contains(allowlistedPattern)) return true;
       }
 
       if (elem.contains("java.lang.System.exit")) {
         systemExitPosition = i;
       } else if (i == systemExitPosition + 1) {
         for (String allowlistedPattern : DirectAllowedPatterns) {
-          if (elem.contains(allowlistedPattern))
-            return true;
+          if (elem.contains(allowlistedPattern)) return true;
         }
       }
     }
@@ -161,5 +171,4 @@ public class SystemExitGetOsInfo {
   public boolean doIntercept() {
     return !isAllowedExit() && ExitInterceptProp.requestIntercept();
   }
-
 }

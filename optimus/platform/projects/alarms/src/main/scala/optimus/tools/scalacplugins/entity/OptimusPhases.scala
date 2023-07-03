@@ -34,6 +34,7 @@ object OptimusPhases {
     val optimus_classifier = "optimus_classifier"
     val optimus_apicheck = "optimus_apicheck"
     val optimus_refchecks = "optimus_refchecks"
+    val optimus_dal_refchecks = "optimus_dal_refchecks"
     val optimus_valaccessors = "optimus_valaccessors"
     val optimus_embeddable = "optimus_embeddable"
     val optimus_entityinfo = "optimus_entityinfo"
@@ -95,7 +96,8 @@ object OptimusPhases {
     _SAFE_EXPORT_CHECK,
     _APICHECK,
     _VAL_ACCESSORS,
-    _REF_CHECKS
+    _REF_CHECKS,
+    _DAL_REF_CHECKS
   ) = phaseBlock(
     typer -> "",
     optimus_classifier -> "mark nodes and other symbols of interest",
@@ -104,16 +106,26 @@ object OptimusPhases {
     optimus_apicheck -> "warn on deprecated API usage and other optimus API misuses",
     optimus_valaccessors -> "transform stored vals and add entity args methods",
     optimus_refchecks -> "check sundry optimus-specific requirements",
+    optimus_dal_refchecks -> "check dal-specific requirements",
     superaccessors -> ""
   )
   // TODO (OPTIMUS-24229): Remove is212 branches after upgrade to Scala 2.13.x is fully complete
   private val is212 = scala.util.Properties.releaseVersion.getOrElse("").contains("2.12.")
-  private val List(_EMBEDDABLE, _ENTITY_INFO, _GENERATE_LOCATION_TAG, _AUTOASYNC, _GENERATE_NODE_METHODS, _NODE_LIFT) = {
-    val optimus_embeddable_described = optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes"
+  private val List(
+    _EMBEDDABLE,
+    _ENTITY_INFO,
+    _GENERATE_LOCATION_TAG,
+    _AUTOASYNC,
+    _GENERATE_NODE_METHODS,
+    _NODE_LIFT) = {
+    val optimus_embeddable_described =
+      optimus_embeddable -> "generate synthetic methods for @embeddable and @stable classes"
     val optimus_entityinfo_described = optimus_entityinfo -> "generate info/$info members for entities"
     val optimus_location_tag_described = optimus_location_tag -> "generate unique location tag"
-    val optimus_autoasync_described = optimus_autoasync -> "prepare collection and Option methods for asynchronous transform"
-    val optimus_generatenodemethods_described = optimus_generatenodemethods -> "generate $queued/$newNode methods for nodes"
+    val optimus_autoasync_described =
+      optimus_autoasync -> "prepare collection and Option methods for asynchronous transform"
+    val optimus_generatenodemethods_described =
+      optimus_generatenodemethods -> "generate $queued/$newNode methods for nodes"
     val optimus_nodelift_described = optimus_nodelift -> "transform arguments to @nodeLift parameters"
     if (is212) {
       phaseBlock(
@@ -138,13 +150,17 @@ object OptimusPhases {
         optimus_autoasync_described,
         optimus_generatenodemethods_described,
         optimus_nodelift_described,
-        refchecks -> "",
+        refchecks -> ""
       )
     }
   }
 
   private val _ASYNC_GRAPH =
-    OptimusPhaseInfo(optimus_asyncgraph, "create node classes and state machines", if (is212) refchecks else patmat, explicitouter)
+    OptimusPhaseInfo(
+      optimus_asyncgraph,
+      "create node classes and state machines",
+      if (is212) refchecks else patmat,
+      explicitouter)
   private val List(_OPTIMUS_CONSTRUCTORS, _POSITION) =
     phaseBlock(
       mixin -> "",
@@ -163,6 +179,7 @@ object OptimusPhases {
   val SAFE_EXPORT_CHECK = _SAFE_EXPORT_CHECK
   val APICHECK = _APICHECK
   val REF_CHECKS = _REF_CHECKS
+  val DAL_REF_CHECKS = _DAL_REF_CHECKS
   val VAL_ACCESSORS = _VAL_ACCESSORS
   val EMBEDDABLE = _EMBEDDABLE
   val ENTITY_INFO = _ENTITY_INFO
@@ -183,42 +200,14 @@ object PluginDataAccessFromReflection {
   // e.g. String, Int etc. Keep in step with trait PluginDataAccess below
 
   type PluginDataAccess = {
-    def obtWarnConf: Boolean
     def debugMessages: Boolean
-    def getConfiguredLevelRaw(
-        alarmId: Int,
-        alarmString: String,
-        alarmLevel: String,
-        positionSource: String,
-        positionLine: Int,
-        positionCol: Int,
-        template: String): String
+    def silence(alarmId: Int): Boolean
   }
 }
 trait PluginDataAccess {
   val pluginData: PluginData
   def debugMessages: Boolean = pluginData.alarmConfig.debug
-  def obtWarnConf: Boolean = pluginData.obtWarnConf
-
-  // we have to access this reflectively as it is typically loaded in a different classloader
-  // it is also essential that all of the passed types are simple types in the parent classloader
-  // e.g. String, Int etc. Keep in step with trait {{PluginDataAccessFromReflection.PluginDataAccess}} above
-  def getConfiguredLevelRaw(
-      alarmId: Int,
-      alarmString: String,
-      alarmLevel: String,
-      positionSource: String,
-      positionLine: Int,
-      positionCol: Int,
-      template: String): String =
-    pluginData.alarmConfig.getConfiguredLevelRaw(
-      alarmId,
-      alarmString,
-      alarmLevel,
-      positionSource,
-      positionLine,
-      positionCol,
-      template)
+  def silence(alarmId: Int): Boolean = pluginData.alarmConfig.silence(alarmId)
 }
 
 object ScalaVersionData {

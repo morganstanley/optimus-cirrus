@@ -31,25 +31,23 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 public class NodeTaskTransformer implements ClassFileTransformer {
-  final static String nodeTaskTpe = "optimus/graph/NodeTask";
-  final static String tpdMaskTpe = "optimus/core/TPDMask";
-  final static String nodeTaskDesc = "Loptimus/graph/NodeTask;";
-  final static String tpdMaskDesc = "Loptimus/core/TPDMask;";
+  static final String nodeTaskTpe = "optimus/graph/NodeTask";
+  static final String tpdMaskTpe = "optimus/core/TPDMask";
+  static final String nodeTaskDesc = "Loptimus/graph/NodeTask;";
+  static final String tpdMaskDesc = "Loptimus/core/TPDMask;";
 
   @Override
-  public byte[] transform(ClassLoader loader, String name, Class<?> redef, ProtectionDomain pd, byte[] bytes) {
+  public byte[] transform(
+      ClassLoader loader, String name, Class<?> redef, ProtectionDomain pd, byte[] bytes) {
     List<String> properties = new ArrayList<>();
     if (DiagnosticSettings.traceAvailable) {
       properties.add("Profile");
       properties.add("Id");
       properties.add("SelfPlusANCTime");
     }
-    if (DiagnosticSettings.traceTweaksEnabled)
-      properties.add("TweakInfection");
-    if (DiagnosticSettings.traceEnqueuer)
-      properties.add("Enqueuer");
-    if (DiagnosticSettings.awaitStacks)
-      properties.add("EnqueuerStackHash");
+    if (DiagnosticSettings.traceTweaksEnabled) properties.add("TweakInfection");
+    if (DiagnosticSettings.traceEnqueuer) properties.add("Enqueuer");
+    if (DiagnosticSettings.awaitStacks) properties.add("EnqueuerStackHash");
 
     ClassReader crSource = new ClassReader(bytes);
     ClassWriter cw = new ClassWriter(crSource, 0);
@@ -61,7 +59,8 @@ public class NodeTaskTransformer implements ClassFileTransformer {
 
 class TPDMaskTransfomer implements ClassFileTransformer {
   @Override
-  public byte[] transform(ClassLoader loader, String name, Class<?> redef, ProtectionDomain pd, byte[] bytes) {
+  public byte[] transform(
+      ClassLoader loader, String name, Class<?> redef, ProtectionDomain pd, byte[] bytes) {
     ClassReader crSource = new ClassReader(bytes);
     ClassWriter cw = new ClassWriter(crSource, 0);
     ClassVisitor cv = new TPDMaskAdapter(cw);
@@ -71,30 +70,30 @@ class TPDMaskTransfomer implements ClassFileTransformer {
 }
 
 class TPDMaskAdapter extends ClassVisitor implements Opcodes {
-  private final static String removeField0 = "m0";
-  private final static String removeField1 = "m1";
+  private static final String removeField0 = "m0";
+  private static final String removeField1 = "m1";
 
   TPDMaskAdapter(ClassVisitor cv) {
     super(ASM9, cv);
   }
 
   @Override
-  public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
-    if (removeField0.equals(name) || removeField1.equals(name))
-      return null;
+  public FieldVisitor visitField(
+      int access, String name, String descriptor, String signature, Object value) {
+    if (removeField0.equals(name) || removeField1.equals(name)) return null;
     return super.visitField(access, name, descriptor, signature, value);
   }
 
   @Override
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
     if ("fillFromArray".equals(name)) {
       return new MethodVisitor(ASM9, mv) {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
             mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 1);
@@ -118,8 +117,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
 
           // new long[DiagnosticSettings.tweakUsageQWords]
           mv.visitIntInsn(BIPUSH, DiagnosticSettings.tweakUsageQWords);
@@ -147,8 +145,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
 
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
             mv.visitVarInsn(ALOAD, 0);
@@ -175,8 +172,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
 
           Label retTrue = new Label();
           Label retLabel = new Label();
@@ -198,7 +194,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
           mv.visitInsn(ICONST_1);
 
           mv.visitLabel(retLabel);
-          mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] { Opcodes.INTEGER });
+          mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] {Opcodes.INTEGER});
           mv.visitInsn(IRETURN);
           Label endLabel = new Label();
           mv.visitLabel(endLabel);
@@ -215,8 +211,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
 
           Label retFalse = new Label();
           Label retLabel = new Label();
@@ -239,7 +234,7 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
           mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
           mv.visitInsn(ICONST_0);
           mv.visitLabel(retLabel);
-          mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] { Opcodes.INTEGER });
+          mv.visitFrame(Opcodes.F_SAME1, 0, null, 1, new Object[] {Opcodes.INTEGER});
           mv.visitInsn(IRETURN);
           Label endLabel = new Label();
           mv.visitLabel(endLabel);
@@ -263,34 +258,32 @@ class TPDMaskAdapter extends ClassVisitor implements Opcodes {
   }
 }
 
-/**
- * [SEE_MASK_SUPPORT_GENERATION]
- */
+/** [SEE_MASK_SUPPORT_GENERATION] */
 class NodeTaskAdapter extends AddFieldsAdapter {
-  private final static String removeField0 = "_tpd0";
-  private final static String removeField1 = "_tpd1";
+  private static final String removeField0 = "_tpd0";
+  private static final String removeField1 = "_tpd1";
 
   NodeTaskAdapter(List<String> properties, ClassVisitor cv) {
     super(properties, cv);
   }
 
   @Override
-  public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
-    if (removeField0.equals(name) || removeField1.equals(name))
-      return null;
+  public FieldVisitor visitField(
+      int access, String name, String descriptor, String signature, Object value) {
+    if (removeField0.equals(name) || removeField1.equals(name)) return null;
     return super.visitField(access, name, descriptor, signature, value);
   }
 
   @Override
-  public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+  public MethodVisitor visitMethod(
+      int access, String name, String desc, String signature, String[] exceptions) {
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
     if ("setTweakPropertyDependency".equals(name)) {
       return new MethodVisitor(ASM9, mv) {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
             mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 1);
@@ -313,8 +306,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
             mv.visitVarInsn(ALOAD, 0);
             mv.visitInsn(DUP); // <-- Extra 'this' used with PUTFIELD
@@ -340,8 +332,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
             mv.visitVarInsn(ALOAD, 1);
             mv.visitInsn(DUP); // <-- Extra 'mask' used with PUTFIELD
@@ -367,8 +358,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           Label falseLabel = new Label();
           Label retLabel = new Label();
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
@@ -383,7 +373,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
             mv.visitJumpInsn(IFNE, falseLabel);
           }
           if (DiagnosticSettings.enablePerNodeTPDMask) {
-            mv.visitInsn(ICONST_1);  // return true
+            mv.visitInsn(ICONST_1); // return true
             mv.visitJumpInsn(GOTO, retLabel);
 
             mv.visitLabel(falseLabel);
@@ -391,10 +381,10 @@ class NodeTaskAdapter extends AddFieldsAdapter {
             mv.visitInsn(ICONST_0);
 
             mv.visitLabel(retLabel);
-            mv.visitFrame(F_SAME1, 0, null, 1, new Object[] { INTEGER });
+            mv.visitFrame(F_SAME1, 0, null, 1, new Object[] {INTEGER});
             mv.visitInsn(IRETURN);
           } else {
-            mv.visitInsn(ICONST_1);  // return true
+            mv.visitInsn(ICONST_1); // return true
             mv.visitInsn(IRETURN);
           }
 
@@ -413,8 +403,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
         @Override
         public void visitLineNumber(int line, Label start) {
           super.visitLineNumber(line, start);
-          if (mv == null)
-            return;
+          if (mv == null) return;
           Label retTrue = new Label();
           Label retLabel = new Label();
           for (int i = 0; i < DiagnosticSettings.tweakUsageQWords; ++i) {
@@ -428,7 +417,7 @@ class NodeTaskAdapter extends AddFieldsAdapter {
             mv.visitJumpInsn(IFNE, retTrue);
           }
           if (DiagnosticSettings.enablePerNodeTPDMask) {
-            mv.visitInsn(ICONST_0);  // return false
+            mv.visitInsn(ICONST_0); // return false
             mv.visitJumpInsn(GOTO, retLabel);
 
             mv.visitLabel(retTrue);
@@ -436,10 +425,10 @@ class NodeTaskAdapter extends AddFieldsAdapter {
             mv.visitInsn(ICONST_1);
 
             mv.visitLabel(retLabel);
-            mv.visitFrame(F_SAME1, 0, null, 1, new Object[] { INTEGER });
+            mv.visitFrame(F_SAME1, 0, null, 1, new Object[] {INTEGER});
             mv.visitInsn(IRETURN);
           } else {
-            mv.visitInsn(ICONST_1);  // return true
+            mv.visitInsn(ICONST_1); // return true
             mv.visitInsn(IRETURN);
           }
 

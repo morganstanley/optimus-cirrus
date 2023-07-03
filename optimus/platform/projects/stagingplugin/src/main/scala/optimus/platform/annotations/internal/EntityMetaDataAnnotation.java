@@ -33,6 +33,8 @@ public @interface EntityMetaDataAnnotation {
 
   boolean projected();
 
+  boolean fullTextSearch();
+
   // these fields are in line with the attribute names
   // if we add/modify fields in this annotation then we need to keep this is step
   // additionally the code that generates this annotation in OptimusNames, AdjustAst should be kept
@@ -46,4 +48,5 @@ public @interface EntityMetaDataAnnotation {
   public static String name_isTrait = "isTrait";
   public static String name_isObject = "isObject";
   public static String name_projected = "projected";
+  public static String name_fullTextSearch = "fullTextSearch";
 }

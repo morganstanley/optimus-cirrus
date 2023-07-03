@@ -67,6 +67,7 @@ public class SpinningTransferQueue<E> extends AbstractQueue<E> implements Transf
    * *** Overview of Dual Queues with Slack ***
    *
    * Dual Queues, introduced by Scherer and Scott
+   * regex-ignore-line (open-sourcing) persistent tag due to false match on URL
    * (http://www.cs.rice.edu/~wns1/papers/2004-DISC-DDS.pdf) are
    * (linked) queues in which nodes may represent either data or
    * requests.  When a thread tries to enqueue a data node, but

@@ -20,269 +20,304 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * WARNING: If adding fields to this file, be aware that it will be loaded
- * with the AGENT if the EntityAgent is loaded via a -javaagent
- * option at run time. This may lead to using an old version of
- * this class if an old version of the EntityAgent is referenced,
- * and consequently runtime errors (usually NoSuchFieldError)
+ * WARNING: If adding fields to this file, be aware that it will be loaded with the AGENT if the
+ * EntityAgent is loaded via a -javaagent option at run time. This may lead to using an old version
+ * of this class if an old version of the EntityAgent is referenced, and consequently runtime errors
+ * (usually NoSuchFieldError)
  */
 public class DiagnosticSettings {
   // Env variable exported by grid engine launcher script on grid engines
-  private final static String IS_ON_ENGINE = "IS_ON_ENGINE"; // 1 = running on grid engine
+  private static final String IS_ON_ENGINE = "IS_ON_ENGINE"; // 1 = running on grid engine
 
-  private final static String PROFILE_INSTRUMENT = "optimus.profile.instrument";
-  private final static String ENABLE_XS_REPORTING = "optimus.profile.xsreporting";
-  public final static String TRACE_TWEAKS = "optimus.profile.traceTweaks";
-  public final static String CLASS_USAGE_MONITOR = "optimus.monitor.classUsage";
-  public final static String CLASS_USAGE_MONITOR_OVERHEAD_TRACE = "optimus.monitor.classUsage.overheadTrace";
-  private final static String SHOW_TOP_N_CLASS_USAGE = "optimus.monitor.classUsage.showTopN";
-  private final static String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
+  private static final String PROFILE_INSTRUMENT = "optimus.profile.instrument";
+  private static final String ENABLE_XS_REPORTING = "optimus.profile.xsreporting";
+  public static final String TRACE_TWEAKS = "optimus.profile.traceTweaks";
+  public static final String CLASS_USAGE_MONITOR = "optimus.monitor.classUsage";
+  public static final String CLASS_USAGE_MONITOR_OVERHEAD_TRACE =
+      "optimus.monitor.classUsage.overheadTrace";
+  private static final String SHOW_TOP_N_CLASS_USAGE = "optimus.monitor.classUsage.showTopN";
+  private static final String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
 
-  private final static String PROFILE_LVL_TEMPORAL_SURFACE = "optimus.scheduler.profile.temporalsurface"; // aka --profile-temporal-surface
-  private final static String PROFILE_TS_FOLDER_PROPERTY = "optimus.scheduler.profile.temporalsurface.folder"; // aka --profile-ts-folder
+  private static final String PROFILE_LVL_TEMPORAL_SURFACE =
+      "optimus.scheduler.profile.temporalsurface"; // aka --profile-temporal-surface
+  private static final String PROFILE_TS_FOLDER_PROPERTY =
+      "optimus.scheduler.profile.temporalsurface.folder"; // aka --profile-ts-folder
 
-  private final static String PROFILE_PROPERTY = "optimus.scheduler.profile"; // aka --profile-graph
-  private final static String PROFILE_FOLDER_PROPERTY = "optimus.scheduler.profile.folder"; // aka --profile-csvfolder
-  private final static String PROFILE_AGGREGATION_PROPERTY = "optimus.scheduler.profile.aggregation"; // aka --profile-aggregation
-  private final static String PROFILE_CUSTOM_FILTER_PROPERTY = "optimus.scheduler.profile.filters.custom"; // aka --profile-custom-metrics
-  private final static String PROFILE_HOTSPOTS_FILTER_PROPERTY = "optimus.scheduler.profile.filters.hotspots"; // aka --profile-hotspot-filters
+  private static final String PROFILE_PROPERTY = "optimus.scheduler.profile"; // aka --profile-graph
+  private static final String PROFILE_FOLDER_PROPERTY =
+      "optimus.scheduler.profile.folder"; // aka --profile-csvfolder
+  private static final String PROFILE_AGGREGATION_PROPERTY =
+      "optimus.scheduler.profile.aggregation"; // aka --profile-aggregation
+  private static final String PROFILE_CUSTOM_FILTER_PROPERTY =
+      "optimus.scheduler.profile.filters.custom"; // aka --profile-custom-metrics
+  private static final String PROFILE_HOTSPOTS_FILTER_PROPERTY =
+      "optimus.scheduler.profile.filters.hotspots"; // aka --profile-hotspot-filters
 
-  public final static String DEBUG_PROPERTY = "optimus.scheduler.console"; // console ???
-  private final static String EVALUATE_NODE_ON_TOUCH = "optimus.scheduler.evaluateNodeOnTouch";
+  public static final String DEBUG_PROPERTY = "optimus.scheduler.console"; // console ???
+  private static final String EVALUATE_NODE_ON_TOUCH = "optimus.scheduler.evaluateNodeOnTouch";
 
-  public final static String CHAOS_CLASSNAME_PREFIX_PROPERTY = "optimus.graph.chaos.classname.prefixes";
-  private final static String CHAOS_CLASSNAME_PREFIX_EXCLUDE_PROPERTY = "optimus.graph.chaos.classname.prefixes" +
-                                                                        ".exclude";
-  private final static String COLLECTION_TRACE_ENABLE_PROPERTY = "optimus.graph.collection.trace";
+  public static final String CHAOS_CLASSNAME_PREFIX_PROPERTY =
+      "optimus.graph.chaos.classname.prefixes";
+  private static final String CHAOS_CLASSNAME_PREFIX_EXCLUDE_PROPERTY =
+      "optimus.graph.chaos.classname.prefixes" + ".exclude";
+  private static final String COLLECTION_TRACE_ENABLE_PROPERTY = "optimus.graph.collection.trace";
 
-  private final static String AGENT_DUMP_CLASS_PREFIX = "optimus.entityagent.dump.";
-  private final static String AGENT_DUMP_LOCATION = AGENT_DUMP_CLASS_PREFIX + "location";
-  private final static String AGENT_DUMP_CLASSES = AGENT_DUMP_CLASS_PREFIX + "classes";
-  private final static String AGENT_BIOPSY_CLASSES = "optimus.entityagent.biopsy.classes";
+  private static final String AGENT_DUMP_CLASS_PREFIX = "optimus.entityagent.dump.";
+  private static final String AGENT_DUMP_LOCATION = AGENT_DUMP_CLASS_PREFIX + "location";
+  private static final String AGENT_DUMP_CLASSES = AGENT_DUMP_CLASS_PREFIX + "classes";
+  private static final String AGENT_BIOPSY_CLASSES = "optimus.entityagent.biopsy.classes";
 
-  private final static String SYNTHETIC_GRAPH_METHODS = "optimus.graph.markGraphMethodsSynthetic";
-  private final static String RESET_SS_ON_COMPLETION = "optimus.graph.resetScenarioStackOnCompletion";
+  private static final String SYNTHETIC_GRAPH_METHODS = "optimus.graph.markGraphMethodsSynthetic";
+  private static final String RESET_SS_ON_COMPLETION =
+      "optimus.graph.resetScenarioStackOnCompletion";
 
-  private final static String USE_STRICT_MATH = "optimus.strictfp";
+  private static final String USE_STRICT_MATH = "optimus.strictfp";
 
-  final public static boolean enableJunitRunnerMonitorInjection;
-  final public static boolean isClassMonitorEnabled;
-  final public static boolean isClassMonitorOverheadTraceEnabled;
-  final public static int showThisNumberOfTopUsedClasses;
-  final public static boolean keepFullTraceFile;
-  final public static String traceToOverride;
-  final public static String fullTraceDir;
-  final public static boolean profileShowThreadSummary; // light profile shows per-thread breakdown at shutdown
-  final public static boolean profilerDisableHotspotsCSV;
-  final public static boolean profileThreadCPUTime; // light profile includes per-thread CPU time
-  final public static boolean profileCacheContention;
-  final public static boolean profileSummaryJson;
+  public static final boolean enableJunitRunnerMonitorInjection;
+  public static final boolean isClassMonitorEnabled;
+  public static final boolean isClassMonitorOverheadTraceEnabled;
+  public static final int showThisNumberOfTopUsedClasses;
+  public static final boolean keepFullTraceFile;
+  public static final String traceToOverride;
+  public static final String fullTraceDir;
+  public static final boolean
+      profileShowThreadSummary; // light profile shows per-thread breakdown at shutdown
+  public static final boolean profilerDisableHotspotsCSV;
+  public static final boolean profileThreadCPUTime; // light profile includes per-thread CPU time
+  public static final boolean profileCacheContention;
+  public static final boolean profileSummaryJson;
 
   /* This is the folder where heapdumps are saved. Defaults to fullTraceDir if not set. */
-  final public static String heapProfileDir;
+  public static final String heapProfileDir;
   /* Settings for the heap profile dumps as a list of colon separated key-value pairs. See HeapSampling.scala for details. */
-  final public static String heapProfileSettings;
+  public static final String heapProfileSettings;
 
+  /** If true entityplugin will inject additional fields into NodeTask. */
+  public static boolean traceAvailable; // DO NOT USE IT ANYWHERE YOU WERE THINKING TO USE IT!!!
   /**
-   * If true entityplugin will inject additional fields into NodeTask.
+   * __profileId, getProfileId, cctor are injected in CompletableNode derived classes to better
+   * attribute profile data
    */
-  public static boolean traceAvailable;           // DO NOT USE IT ANYWHERE YOU WERE THINKING TO USE IT!!!
-  /**
-   * __profileId, getProfileId, cctor are injected in CompletableNode derived classes to better attribute profile data
-   */
-  final public static boolean injectNodeMethods;  // Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
+  public static final boolean
+      injectNodeMethods; // Defaults to traceAvailable, can't be turned off by a "nmi_off" flag
 
-  /**
-   * Detect and report any non-RT behaviour
-   */
-  final public static boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
+  /** Detect and report any non-RT behaviour */
+  public static final boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
 
-  final public static boolean enableRTVNodeRerunner = getBoolProperty("optimus.rt.verifier.node.rerunner", false);
-  final public static boolean rtvNodeRerunnerExcludeByDefault = getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+  public static final boolean enableRTVNodeRerunner =
+      getBoolProperty("optimus.rt.verifier.node.rerunner", false);
+  public static final boolean rtvNodeRerunnerExcludeByDefault =
+      getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
 
-  /**
-   * Publish RT violations as crumbs in splunk
-   */
-  final public static boolean publishRTVerifierCrumbs = getBoolProperty("optimus.rt.verifier.crumbs", true);
-  /**
-   * Report RT violations to file
-   */
-  final public static boolean writeRTVerifierReport = getBoolProperty("optimus.rt.verifier.report", true);
+  /** Publish RT violations as crumbs in splunk */
+  public static final boolean publishRTVerifierCrumbs =
+      getBoolProperty("optimus.rt.verifier.crumbs", true);
+  /** Report RT violations to file */
+  public static final boolean writeRTVerifierReport =
+      getBoolProperty("optimus.rt.verifier.report", true);
 
-  /**
-   * Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true)
-   */
-  final public static boolean enableXSReporting;
-  /**
-   * Collect tweaks we actually depended on
-   */
-  final public static boolean traceTweaksEnabled;
-  final public static boolean traceTweaksOnStart;
+  /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
+  public static final boolean enableXSReporting;
+  /** Collect tweaks we actually depended on */
+  public static final boolean traceTweaksEnabled;
+
+  public static final boolean traceTweaksOnStart;
   public static boolean traceTweaksOverflowDetected;
   /**
    * Used by graph team for testing async overloads (each will be given a unique name in profiling)
    */
-  final public static boolean profileOverloads = getBoolProperty("optimus.profile.profileOverloads", false);
+  public static final boolean profileOverloads =
+      getBoolProperty("optimus.profile.profileOverloads", false);
+  /** Used by graph team for testing non-exisiting nodes from optconf in runtime */
+  public static final String throwOnOptconfParsingFailureStr =
+      "optimus.profile.testNonExistingNodesAtRuntime";
+
+  public static final boolean throwOnOptconfParsingFailure =
+      getBoolProperty(throwOnOptconfParsingFailureStr, false);
+
+  // if optimus.profile.testNonExistingNodesAtRuntime is set to true then this sys prop does not do
+  // anything
+  public static final boolean warnOnOptconfParsingFailure =
+      getBoolProperty("optimus.profiler.warnOnOptconfParseError", true);
+
+  // if throwBadSchedulerStateException is true, when a test doesn't clean up scheduler state, it
+  // will throw exception
+  public static final boolean throwBadSchedulerStateException =
+      getBoolProperty("optimus.profiler.throwBadSchedulerStateException", true);
+
+  public static final String XSFT_PROPERTY = "optimus.profile.enableXSFT";
   /**
-   * Used by graph team for testing non-exisiting nodes from optconf in runtime
+   * Not final, can be configured through command line. Note: volatile in case it changes during a
+   * DistClientInfo snapshot. Writing happens in NodeTrace under lock.
    */
-  final public static String throwOnOptconfParsingFailureStr = "optimus.profile.testNonExistingNodesAtRuntime";
-  final public static boolean throwOnOptconfParsingFailure = getBoolProperty(throwOnOptconfParsingFailureStr, false);
+  public static volatile boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, true);
 
-  // if optimus.profile.testNonExistingNodesAtRuntime is set to true then this sys prop does not do anything
-  final public static boolean warnOnOptconfParsingFailure = getBoolProperty("optimus.profiler.warnOnOptconfParseError", true);
+  public static final int tweakUsageQWords = getIntProperty("optimus.graph.tweakUsageQWords", 6);
 
-  // if throwBadSchedulerStateException is true, when a test doesn't clean up scheduler state, it will throw exception
-  final public static boolean throwBadSchedulerStateException = getBoolProperty("optimus.profiler.throwBadSchedulerStateException", true);
-
-  public final static String XSFT_PROPERTY = "optimus.profile.enableXSFT";
-  /**
-   * Not final, can be configured through command line.
-   * Note: volatile in case it changes during a DistClientInfo snapshot. Writing happens in NodeTrace under lock.
-   */
-  public volatile static boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, true);
-  final public static int tweakUsageQWords = getIntProperty("optimus.graph.tweakUsageQWords", 6);
-
-  final public static String instrumentationConfig = getStringProperty("optimus.instrument.cfg");
+  public static final String instrumentationConfig = getStringProperty("optimus.instrument.cfg");
 
   // semi-colon separated list of functions to cache - NOT for production!
-  final public static List<String> instrumentationCache = getStringPropertyAsList("optimus.instrument.patch.cache");
-  final public static boolean resetScenarioStackOnCompletion = getBoolProperty(RESET_SS_ON_COMPLETION, true);
+  public static final List<String> instrumentationCache =
+      getStringPropertyAsList("optimus.instrument.patch.cache");
+  public static final boolean resetScenarioStackOnCompletion =
+      getBoolProperty(RESET_SS_ON_COMPLETION, true);
 
-  final public static boolean batchScopeTrackNodes = getBoolProperty("optimus.batchscope.trackNodes", false);
+  public static final boolean batchScopeTrackNodes =
+      getBoolProperty("optimus.batchscope.trackNodes", false);
 
   /**
-   * When set to 0 XSFT is not supported, and basically reverts to a previous version
-   * TPD won't be modified by optimus.NodeTaskTransformer at all and _tpd fields will be removed from NodeTask
-   * optimus.graph.NodeTask#isTweakPropertyDependencySubsetOf return 'true', this will stop updating any further masks
-   * optimus.graph.NodeTask#tweakPropertyDependenciesIntersect return 'true', this will stop looking up min ss
-   * optimus.graph.PropertyNode#initTrackingValue() will not ensureTweakMask as the result bits for masks will only be
-   * given to the properties that are actually tweaked (much smaller set) and wrap around is less likely to occur
+   * When set to 0 XSFT is not supported, and basically reverts to a previous version TPD won't be
+   * modified by optimus.NodeTaskTransformer at all and _tpd fields will be removed from NodeTask
+   * optimus.graph.NodeTask#isTweakPropertyDependencySubsetOf return 'true', this will stop updating
+   * any further masks optimus.graph.NodeTask#tweakPropertyDependenciesIntersect return 'true', this
+   * will stop looking up min ss optimus.graph.PropertyNode#initTrackingValue() will not
+   * ensureTweakMask as the result bits for masks will only be given to the properties that are
+   * actually tweaked (much smaller set) and wrap around is less likely to occur
    * [SEE_MASK_SUPPORT_GENERATION]
-   *  */
-  final public static boolean enablePerNodeTPDMask = tweakUsageQWords > 0;
-
-  final public static int proxyChainStackLimit = getIntProperty("optimus.cache.proxyChainStackLimit", 100);
-  /** enable to see proxies in wait chains. Generally not for users,
-   * Note: not final so it's easy to change in a debugger and see proxies
    */
-  public static boolean proxyInWaitChain = getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
+  public static final boolean enablePerNodeTPDMask = tweakUsageQWords > 0;
 
-  /** if true we capture the cancelled node in the ScopeWasCancelledException, which is expensive (because we can't
-   * reuse the same exception for every cancelled node in that scope) but really helpful for diagnosing unexpected
-   * cancellations
-    */
+  public static final int proxyChainStackLimit =
+      getIntProperty("optimus.cache.proxyChainStackLimit", 100);
+  /**
+   * enable to see proxies in wait chains. Generally not for users, Note: not final so it's easy to
+   * change in a debugger and see proxies
+   */
+  public static boolean proxyInWaitChain =
+      getBoolProperty("optimus.diagnostic.proxyInWaitChain", false);
+
+  /**
+   * if true we capture the cancelled node in the ScopeWasCancelledException, which is expensive
+   * (because we can't reuse the same exception for every cancelled node in that scope) but really
+   * helpful for diagnosing unexpected cancellations
+   */
   public static boolean includeCancelledNodeInException =
       getBoolProperty("optimus.diagnostic.includeCancelledNodeInException", false);
 
-  final public static String asyncProfilerSettings;
-  final public static boolean awaitStacks;
-  final public static boolean repairEnqueuerChain;
-  final public static int awaitChainHashStrategy;
+  public static final String asyncProfilerSettings;
+  public static final boolean awaitStacks;
+  public static final boolean repairEnqueuerChain;
+  public static final int awaitChainHashStrategy;
 
-  public static double infoDumpPeriodicityHours = getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
+  public static double infoDumpPeriodicityHours =
+      getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
-  public static boolean fakeOutOfMemoryErrorOnKill = getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
-  final public static String infoDumpDir;
-  public static boolean infoDumpOnShutdown = getBoolProperty("optimus.diagnostic.dump.shutdown", false);
-
-  /** For startup profiling (not wiring this through cmd line since application code will never need to use it) */
-  public static boolean shutdownAfterStartup = getBoolProperty("optimus.profile.shutdownAfterStartup", false);
+  public static boolean fakeOutOfMemoryErrorOnKill =
+      getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
+  public static final String infoDumpDir;
+  public static boolean infoDumpOnShutdown =
+      getBoolProperty("optimus.diagnostic.dump.shutdown", false);
 
   /**
-   * Whether we are running on a Client or on a Grid engine
+   * For startup profiling (not wiring this through cmd line since application code will never need
+   * to use it)
    */
-  final public static boolean onGrid;
+  public static boolean shutdownAfterStartup =
+      getBoolProperty("optimus.profile.shutdownAfterStartup", false);
+
+  /** Whether we are running on a Client or on a Grid engine */
+  public static final boolean onGrid;
 
   public static boolean profileRemote;
   public static boolean profileScenarioStackUsage;
 
   /**
-   * Use standalone, offline graph debugger (ie, not attached to any graph process) for loading ogtrace or
-   * graphprofile files
+   * Use standalone, offline graph debugger (ie, not attached to any graph process) for loading
+   * ogtrace or graphprofile files
    */
   public static boolean offlineReview;
 
   /**
-   * Avoid deleting ogtrace files (this is set in TraceReloaded to allow offline review of traces written to $TEMP)
+   * Avoid deleting ogtrace files (this is set in TraceReloaded to allow offline review of traces
+   * written to $TEMP)
    */
-  final public static boolean keepStaleTraces;
+  public static final boolean keepStaleTraces;
 
-  /**
-   * Used for async stack traces.
-   */
-  final public static boolean traceEnqueuer;
-  final public static String TRACE_ENQUEUER = "optimus.graph.traceEnqueuer";
+  /** Used for async stack traces. */
+  public static final boolean traceEnqueuer;
 
-  final public static boolean isAsyncStackTracesEnabled;
+  public static final String TRACE_ENQUEUER = "optimus.graph.traceEnqueuer";
 
-  final public static boolean showEnqueuedNotCompletedNodes = getBoolProperty("optimus.graph.showEnqueues", false);
+  public static final boolean isAsyncStackTracesEnabled;
+
+  public static final boolean showEnqueuedNotCompletedNodes =
+      getBoolProperty("optimus.graph.showEnqueues", false);
 
   public static String diag_consoleTitle;
+  /** Show GraphDebugger on the first use of graph if enabled */
+  public static final boolean diag_showConsole;
+
+  public static final boolean diag_stopOnGraphStart;
+  /** Clear registry preferences before loading debugger (in case we messed them up) */
+  public static final boolean diag_lustrate;
+
+  public static final String initialProfile;
+  public static final String initialProfileFolder;
+  public static final String initialProfileAggregation;
+  public static final String[] initialProfileCustomFilter;
+  public static final String[] initialProfileHotspotFilter;
+  public static final String initialTSProfile;
+  public static final String initialTSProfileFolder;
+  public static final boolean jvmDebugging;
+  public static final boolean evaluateNodeOnTouch;
+
+  public static final boolean chaosEnabled;
+  public static final List<String> chaosClassnamePrefixes;
+  public static final List<String> chaosClassnamePrefixExclusions;
+
+  public static final boolean collectionTraceEnabled;
+
   /**
-   * Show GraphDebugger on the first use of graph if enabled
+   * If enabled marks methods in optimus.graph.* as synthetic and this allows for nicer step through
+   * debugging
    */
-  public final static boolean diag_showConsole;
-  public final static boolean diag_stopOnGraphStart;
+  public static final boolean syntheticGraphMethodsEnabled;
+
   /**
-   * Clear registry preferences before loading debugger (in case we messed them up)
+   * If set, forces calls to transcendental functions in {@link Math} to use {@link StrictMath}
+   * instead.
    */
-  public final static boolean diag_lustrate;
+  public static final boolean useStrictMath;
 
-  public final static String initialProfile;
-  public final static String initialProfileFolder;
-  public final static String initialProfileAggregation;
-  public final static String[] initialProfileCustomFilter;
-  public final static String[] initialProfileHotspotFilter;
-  public final static String initialTSProfile;
-  public final static String initialTSProfileFolder;
-  public final static boolean jvmDebugging;
-  public final static boolean evaluateNodeOnTouch;
+  public static final String classDumpLocation;
+  public static final Set<String> classDumpClasses;
+  public static final boolean classDumpEnabled;
+  public static final Set<String> classBiopsyClasses;
+  public static final boolean outOfProcess = getBoolProperty("optimus.graph.outOfProcess", false);
+  public static final int clientPort = getIntProperty("optimus.graph.clientPort", 7700);
+  public static final boolean outOfProcessAppConsole =
+      parseConsoleArg(getStringProperty("optimus.graph.outOfProcessAppConsole", ""));
 
-  public final static boolean chaosEnabled;
-  public final static List<String> chaosClassnamePrefixes;
-  public final static List<String> chaosClassnamePrefixExclusions;
+  public static final boolean sequenceTiming =
+      getBoolProperty("optimus.seq.timings.capture", false);
+  public static final boolean sequenceTimingExperimental =
+      getBoolProperty("optimus.seq.timings.experimental", false);
+  public static final boolean explainPgoDecision =
+      getBoolProperty("optimus.profile.explainPgoDecision", false);
 
-  public final static boolean collectionTraceEnabled;
-
-  /** If enabled marks methods in optimus.graph.* as synthetic and this allows for nicer step through debugging */
-  public final static boolean syntheticGraphMethodsEnabled;
-
-  /** If set, forces calls to transcendental functions in {@link Math} to use {@link StrictMath} instead. */
-  public final static boolean useStrictMath;
-
-  public final static String classDumpLocation;
-  public final static Set<String> classDumpClasses;
-  public final static boolean classDumpEnabled;
-  public final static Set<String> classBiopsyClasses;
-  public final static boolean outOfProcess = getBoolProperty("optimus.graph.outOfProcess", false);
-  public final static int clientPort = getIntProperty("optimus.graph.clientPort", 7700);
-  public final static boolean outOfProcessAppConsole = parseConsoleArg(getStringProperty("optimus.graph.outOfProcessAppConsole",
-                                                                                         ""));
-
-  public final static boolean sequenceTiming = getBoolProperty("optimus.seq.timings.capture", false);
-  public final static boolean sequenceTimingExperimental = getBoolProperty("optimus.seq.timings.experimental", false);
-  public final static boolean explainPgoDecision = getBoolProperty("optimus.profile.explainPgoDecision", false);
-
-  public final static boolean enableHotCodeReplace = getBoolProperty("optimus.graph.enableHotCodeReplace", false);
+  public static final boolean enableHotCodeReplace =
+      getBoolProperty("optimus.graph.enableHotCodeReplace", false);
   // For some applications we don't want to hold references open to jars
-  public final static boolean enableHotCodeReplaceAutoClose = getBoolProperty("optimus.graph.enableHotCodeReplaceAutoClose",
-                                                                              false);
-  public final static boolean enableHotCodeReplaceLogging = getBoolProperty("optimus.graph.enableHotCodeReplaceLogging",
-                                                                            false);
+  public static final boolean enableHotCodeReplaceAutoClose =
+      getBoolProperty("optimus.graph.enableHotCodeReplaceAutoClose", false);
+  public static final boolean enableHotCodeReplaceLogging =
+      getBoolProperty("optimus.graph.enableHotCodeReplaceLogging", false);
 
-  public final static boolean duplicateNativeAllocations =
+  public static final boolean duplicateNativeAllocations =
       getBoolProperty("optimus.graph.native.duplicate", false);
-  public final static boolean captureNativeAllocations = duplicateNativeAllocations ||  getBoolProperty("optimus.graph.native.capture", false);
+  public static final boolean captureNativeAllocations =
+      duplicateNativeAllocations || getBoolProperty("optimus.graph.native.capture", false);
 
-  public final static boolean useDebugCppAgent = getBoolProperty("optimus.graph.debugCppAgent", false);
+  public static final boolean useDebugCppAgent =
+      getBoolProperty("optimus.graph.debugCppAgent", false);
 
-  public final static boolean rewriteDisposable = getBoolProperty("optimus.graph.disposable.rewrite", false);
+  public static final boolean rewriteDisposable =
+      getBoolProperty("optimus.graph.disposable.rewrite", false);
   // these should be set when ensuring the specific SWIG objects are loaded
   public static String disposableInterfaceToRewrite = null;
   public static String disposablePackageToRewrite = null;
 
-  @SuppressWarnings("unused")   // Invoked by reflection
+  @SuppressWarnings("unused") // Invoked by reflection
   public static List<String> forwardedProperties() {
     List<String> ret = new ArrayList<>();
     ret.add("optimus.graph.detectStalls");
@@ -295,7 +330,9 @@ public class DiagnosticSettings {
     return ret;
   }
 
-  private static boolean parseConsoleArg(String arg) { return arg.equals("stop"); }
+  private static boolean parseConsoleArg(String arg) {
+    return arg.equals("stop");
+  }
 
   public static int getIntProperty(String name, int deflt) {
     String p = System.getProperty(name);
@@ -313,14 +350,10 @@ public class DiagnosticSettings {
   }
 
   public static boolean parseBooleanWithDefault(String value, boolean deflt) {
-    if (value == null)
-      return deflt;
-    else if ("1".equals(value) || "true".equals(value))
-      return true;
-    else if ("0".equals(value) || "false".equals(value))
-      return false;
-    else
-      return deflt;
+    if (value == null) return deflt;
+    else if ("1".equals(value) || "true".equals(value)) return true;
+    else if ("0".equals(value) || "false".equals(value)) return false;
+    else return deflt;
   }
 
   public static boolean getBoolProperty(String name, boolean deflt) {
@@ -339,16 +372,15 @@ public class DiagnosticSettings {
   public static String getStringPropertyOrThrow(String name, String propDesc) {
     String res = System.getProperty(name);
     if (res == null)
-      throw new IllegalArgumentException(propDesc + " is not defined. Please specify a value for the sysprop " + name);
+      throw new IllegalArgumentException(
+          propDesc + " is not defined. Please specify a value for the sysprop " + name);
 
     return res;
   }
 
   public static String[] parseStringArrayProperty(String string_, String delim) {
-    if (string_ == null)
-      return null;
-    else
-      return string_.split(delim);
+    if (string_ == null) return null;
+    else return string_.split(delim);
   }
 
   public static String[] parseStringArrayProperty(String string_) {
@@ -357,16 +389,14 @@ public class DiagnosticSettings {
 
   private static Set<String> getStringPropertyAsSet(String name) {
     String prop = getStringProperty(name);
-    if (prop == null)
-      return Collections.emptySet();
+    if (prop == null) return Collections.emptySet();
     String[] asArr = parseStringArrayProperty(prop);
     return Set.of(asArr);
   }
 
   private static List<String> getStringPropertyAsList(String name) {
     String prop = getStringProperty(name);
-    if (prop == null)
-      return Collections.emptyList();
+    if (prop == null) return Collections.emptyList();
     String[] asArr = parseStringArrayProperty(prop);
     return List.of(asArr);
   }
@@ -374,18 +404,16 @@ public class DiagnosticSettings {
   public static boolean contains(String[] props, String flag) {
     if (props != null)
       for (String prop : props) {
-        if (flag.equals(prop))
-          return true;
-    }
+        if (flag.equals(prop)) return true;
+      }
     return false;
   }
 
   public static String valueOf(String[] props, String flag) {
     if (props != null)
       for (String prop : props) {
-        if (prop.startsWith(flag))
-          return prop.substring(flag.length());
-    }
+        if (prop.startsWith(flag)) return prop.substring(flag.length());
+      }
     return null;
   }
 
@@ -395,19 +423,17 @@ public class DiagnosticSettings {
     // legacy use
     // profile=1 means hotspots
     // profile=true means hotspots
-    if ("1".equals(profileString) || "true".equals(profileString))
-      result = "hotspots";
+    if ("1".equals(profileString) || "true".equals(profileString)) result = "hotspots";
     // console=traceOnStart means traceNodes even if profile= is set to something else
     // (it used to be that console=traceOnStart profile=true was required)
-    if (contains(graphConsoleArgs, "traceOnStart"))
-      result = "traceNodes";
+    if (contains(graphConsoleArgs, "traceOnStart")) result = "traceNodes";
     return result;
   }
 
   /**
-   * Returns jvm arg value if set, null otherwise (name should include -, eg, "-Xmx"). If the arg is a flag without a
-   * value, this just returns an empty string, but a non-null return value means the flag is set.
-   * Caller should deal with any further parsing
+   * Returns jvm arg value if set, null otherwise (name should include -, eg, "-Xmx"). If the arg is
+   * a flag without a value, this just returns an empty string, but a non-null return value means
+   * the flag is set. Caller should deal with any further parsing
    */
   public static String getJvmArg(String name) {
     RuntimeMXBean bean = ManagementFactory.getRuntimeMXBean();
@@ -423,8 +449,8 @@ public class DiagnosticSettings {
   }
 
   /**
-   * Note that maxMemory is supposed to return an approximation of available memory, not necessarily configured -Xmx.
-   * To get this, use getJvmArg("-Xmx") above
+   * Note that maxMemory is supposed to return an approximation of available memory, not necessarily
+   * configured -Xmx. To get this, use getJvmArg("-Xmx") above
    */
   public static long getMaxHeapMb() {
     Runtime runtime = Runtime.getRuntime();
@@ -432,7 +458,9 @@ public class DiagnosticSettings {
     return runtime.maxMemory() / mb;
   }
 
-  public static long jvmUpTimeInMs() { return ManagementFactory.getRuntimeMXBean().getUptime(); }
+  public static long jvmUpTimeInMs() {
+    return ManagementFactory.getRuntimeMXBean().getUptime();
+  }
 
   private static boolean existsInCmdLine(String key) {
     String cmdLine = System.getProperty("sun.java.command");
@@ -451,7 +479,8 @@ public class DiagnosticSettings {
     String profileString = System.getProperty(PROFILE_PROPERTY);
     String[] graphConsoleArgs = parseStringArrayProperty(System.getProperty(DEBUG_PROPERTY));
 
-    diag_showConsole = (!onGrid) && (graphConsoleArgs != null && !contains(graphConsoleArgs, "noconsole"));
+    diag_showConsole =
+        (!onGrid) && (graphConsoleArgs != null && !contains(graphConsoleArgs, "noconsole"));
     diag_consoleTitle = valueOf(graphConsoleArgs, "title=");
     diag_stopOnGraphStart = contains(graphConsoleArgs, "stop");
     diag_lustrate = contains(graphConsoleArgs, "lustrate");
@@ -461,8 +490,10 @@ public class DiagnosticSettings {
     initialProfile = getInitialProfile(profileString, graphConsoleArgs);
     initialProfileFolder = System.getProperty(PROFILE_FOLDER_PROPERTY);
     initialProfileAggregation = System.getProperty(PROFILE_AGGREGATION_PROPERTY);
-    initialProfileCustomFilter = parseStringArrayProperty(System.getProperty(PROFILE_CUSTOM_FILTER_PROPERTY), ",");
-    initialProfileHotspotFilter = parseStringArrayProperty(System.getProperty(PROFILE_HOTSPOTS_FILTER_PROPERTY));
+    initialProfileCustomFilter =
+        parseStringArrayProperty(System.getProperty(PROFILE_CUSTOM_FILTER_PROPERTY), ",");
+    initialProfileHotspotFilter =
+        parseStringArrayProperty(System.getProperty(PROFILE_HOTSPOTS_FILTER_PROPERTY));
 
     evaluateNodeOnTouch = getBoolProperty(EVALUATE_NODE_ON_TOUCH, false);
     profileScenarioStackUsage = contains(graphConsoleArgs, "stackUsageOnStart");
@@ -471,7 +502,8 @@ public class DiagnosticSettings {
     traceAvailable = getBoolProperty(PROFILE_INSTRUMENT, true) || jvmDebugging;
     injectNodeMethods = traceAvailable && !contains(graphConsoleArgs, "nmi_off");
 
-    boolean traceNodesOnStartup = existsInCmdLine("traceNodes") || "traceNodes".equalsIgnoreCase(initialProfile);
+    boolean traceNodesOnStartup =
+        existsInCmdLine("traceNodes") || "traceNodes".equalsIgnoreCase(initialProfile);
     enableXSReporting = getBoolProperty(ENABLE_XS_REPORTING, traceAvailable);
     traceTweaksOnStart = getBoolProperty(TRACE_TWEAKS, traceNodesOnStartup);
     traceTweaksEnabled = traceTweaksOnStart || jvmDebugging;
@@ -485,8 +517,9 @@ public class DiagnosticSettings {
 
     enableJunitRunnerMonitorInjection = getBoolProperty(ENABLE_JUNIT_RUNNER_MONITOR, false);
 
-    isClassMonitorEnabled = getBoolProperty(CLASS_USAGE_MONITOR, false) || parseBooleanWithDefault(System.getenv(
-        "OPTIMUS_DIST_CLASS_MONITOR"), false);
+    isClassMonitorEnabled =
+        getBoolProperty(CLASS_USAGE_MONITOR, false)
+            || parseBooleanWithDefault(System.getenv("OPTIMUS_DIST_CLASS_MONITOR"), false);
 
     isClassMonitorOverheadTraceEnabled = getBoolProperty(CLASS_USAGE_MONITOR_OVERHEAD_TRACE, false);
 
@@ -495,7 +528,8 @@ public class DiagnosticSettings {
     useStrictMath = getBoolProperty(USE_STRICT_MATH, false);
 
     chaosClassnamePrefixes = getStringPropertyAsList(CHAOS_CLASSNAME_PREFIX_PROPERTY);
-    chaosClassnamePrefixExclusions = getStringPropertyAsList(CHAOS_CLASSNAME_PREFIX_EXCLUDE_PROPERTY);
+    chaosClassnamePrefixExclusions =
+        getStringPropertyAsList(CHAOS_CLASSNAME_PREFIX_EXCLUDE_PROPERTY);
     chaosEnabled = !chaosClassnamePrefixes.isEmpty();
 
     // -Doptimus.graph.collection.trace=true to enable the feature
@@ -508,12 +542,19 @@ public class DiagnosticSettings {
 
     traceToOverride = getStringProperty("optimus.traceTo", null);
 
-    // set this to true to avoid deleting the backing storage for the full trace: this is intended to be useful
-    // when debugging the full trace profiler (the user-serviceable full trace is produced by --profile-graph
+    // set this to true to avoid deleting the backing storage for the full trace: this is intended
+    // to be useful
+    // when debugging the full trace profiler (the user-serviceable full trace is produced by
+    // --profile-graph
     // fulltrace))
     keepFullTraceFile = getBoolProperty("optimus.profile.keepFullTraceFile", false);
-    // the dir for the live trace file. Defaults to something like C:\\Users\\username\\AppData\\Local\\Temp\\ogtrace
-    String defaultTraceDir = System.getProperty("java.io.tmpdir") + File.separator + "ogtrace-" + System.getProperty("user.name");
+    // the dir for the live trace file. Defaults to something like
+    // C:\\Users\\username\\AppData\\Local\\Temp\\ogtrace
+    String defaultTraceDir =
+        System.getProperty("java.io.tmpdir")
+            + File.separator
+            + "ogtrace-"
+            + System.getProperty("user.name");
     fullTraceDir = getStringProperty("optimus.profiler.fullTraceDir", defaultTraceDir);
 
     {
@@ -529,7 +570,8 @@ public class DiagnosticSettings {
       heapProfileSettings = hpf;
     }
 
-    // for the case where all you want is ogtrace/optconf and not the hotspots CSV. It can also be suppressed using
+    // for the case where all you want is ogtrace/optconf and not the hotspots CSV. It can also be
+    // suppressed using
     // filtesr, but this is simpler
     profilerDisableHotspotsCSV = getBoolProperty("optimus.profiler.disableHotspotsCSV", false);
 
@@ -537,8 +579,8 @@ public class DiagnosticSettings {
 
     {
       var ifd = getStringProperty("optimus.diagnostic.dump.dir");
-      if(ifd == null) ifd = System.getenv("DIAGNOSTIC_DUMP_DIR");
-      if(ifd == null) ifd = System.getProperty("java.io.tmpdir");
+      if (ifd == null) ifd = System.getenv("DIAGNOSTIC_DUMP_DIR");
+      if (ifd == null) ifd = System.getProperty("java.io.tmpdir");
       infoDumpDir = ifd;
     }
 
@@ -553,7 +595,8 @@ public class DiagnosticSettings {
     repairEnqueuerChain = getBoolProperty("optimus.graph.enqueue.repair", awaitStacks);
     awaitChainHashStrategy = getIntProperty("optimus.graph.enqueue.hash.strategy", 0);
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
-    syntheticGraphMethodsEnabled = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);
+    syntheticGraphMethodsEnabled =
+        getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);
     isAsyncStackTracesEnabled = traceEnqueuer && syntheticGraphMethodsEnabled;
   }
 }

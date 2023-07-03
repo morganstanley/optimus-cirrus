@@ -42,7 +42,9 @@ public final class CleanerSupport {
     }
 
     private static final MethodType methodType = MethodType.methodType(void.class, long.class);
-    @Override public void run() {
+
+    @Override
+    public void run() {
       try {
         var methodRef = methodRefs.get(id);
         var mh = methodRef.mh;
@@ -57,13 +59,15 @@ public final class CleanerSupport {
     }
   }
 
-  public static Cleaner.Cleanable register(Object instance, long pointer, boolean ownership, int callSiteId) {
+  public static Cleaner.Cleanable register(
+      Object instance, long pointer, boolean ownership, int callSiteId) {
     // we don't register a cleanable if we do not own the instance
     if (!ownership) return null;
-    return cleaner.register(instance, new  State(callSiteId, pointer));
+    return cleaner.register(instance, new State(callSiteId, pointer));
   }
 
-  public static int registerCallSiteAtCompile(String deleteCls, String deleteMethod, int suggestedID) {
+  public static int registerCallSiteAtCompile(
+      String deleteCls, String deleteMethod, int suggestedID) {
     var id = suggestedID;
     var mr = new MethodRef(deleteCls, deleteMethod);
     if (suggestedID < 0) {
@@ -71,8 +75,7 @@ public final class CleanerSupport {
         id = methodRefs.size();
         methodRefs.add(mr);
       }
-    } else
-      methodRefs.set(id, mr);
+    } else methodRefs.set(id, mr);
     return id;
   }
 
@@ -86,5 +89,4 @@ public final class CleanerSupport {
     }
     return id;
   }
-
 }

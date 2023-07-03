@@ -42,7 +42,7 @@ package object collection extends MapBuildFromImplicits {
   implicit class GenTraversableOnceSeqOp[C <: sc.IterableOnce[_]](val coll: C) extends AnyVal {
     def seq: coll.type = coll
   }
-  def knownSize(t: sc.Iterable[_]): Int = t.knownSize
+  def knownSize(t: sc.IterableOnce[_]): Int = t.knownSize
   def simpleFactory[A, B](f: => sc.mutable.Builder[A, B]): sc.compat.Factory[A, B] = new sc.compat.Factory[A, B] {
     override def fromSpecific(it: IterableOnce[A]): B = newBuilder.addAll(it).result()
     override def newBuilder: mutable.Builder[A, B] = f
@@ -125,7 +125,7 @@ package object collection extends MapBuildFromImplicits {
     def viewSlice(from: Int, until: Int): MutableIndexedSeqView[A] = new MutableIndexedSeqView[A](self, from, until)
   }
   implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
-  // used widely, let's keep it for now
+  // used widely, let's keep it for now.
   def asScalaBuffer[A](as: java.util.List[A]): sc.mutable.Buffer[A] = {
     import scala.jdk.javaapi.{CollectionConverters => CC}
     CC.asScala(as)

@@ -12,6 +12,7 @@
 package optimus.platform.relational.dal.accelerated
 
 import optimus.entity.EntityInfoRegistry
+import optimus.graph.DiagnosticSettings
 import optimus.graph.Node
 import optimus.platform._
 import optimus.platform.dal.DalAPI
@@ -38,6 +39,7 @@ import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.temporalSurface.impl.TemporalContextImpl
 import optimus.platform.temporalSurface.operations.QueryByClass
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 
 class DALAccExecutionProvider[T](
@@ -62,9 +64,9 @@ class DALAccExecutionProvider[T](
 
   override def fillQueryExplainItem(level_id: Integer, table: mutable.ListBuffer[QueryExplainItem]): Unit = {
     val displayExpr = AsyncValueEvaluator.prepareForDisplay(expression)
-    val detail =
-      ExpressionSqlFormatter.format(ConstFormatter.format(displayExpr, null, true), new DefaultConstFormatter)
-    table += new QueryExplainItem(level_id, "DALAccess(Accelerated)", "-", detail, 0)
+    val forDisplay = ConstFormatter.format(displayExpr, null, true)
+    val detail = ExpressionSqlFormatter.format(forDisplay, new DefaultConstFormatter, PrintThreshold)
+    table += QueryExplainItem(level_id, "DALAccess(Accelerated)", "-", detail, 0)
   }
 
   @async override def get(): Iterable[T] = {
@@ -107,6 +109,15 @@ class DALAccExecutionProvider[T](
 
 object DALAccExecutionProvider {
   import DALExecutionProvider._
+
+  private val defaultPrintThreshold = AbbreviationThreshold(
+    Option(DiagnosticSettings.getIntProperty("optimus.priql.print.expressionListAbbreviationThreshold", 10)),
+    Option(DiagnosticSettings.getIntProperty("optimus.priql.print.expressionWhereAbbreviationThreshold", 500))
+  )
+  private val printThreshold = new AtomicReference(defaultPrintThreshold)
+  private[optimus] def setPrintThreshold(t: AbbreviationThreshold) = printThreshold.set(t)
+  private[optimus] def resetPrintThreshold() = printThreshold.set(defaultPrintThreshold)
+  def PrintThreshold = printThreshold.get
 
   class ConstFormatter(loadContext: TemporalContext, val forDisplay: Boolean) extends DALExpressionVisitor {
     protected override def visitFunction(f: Function): Expression = {

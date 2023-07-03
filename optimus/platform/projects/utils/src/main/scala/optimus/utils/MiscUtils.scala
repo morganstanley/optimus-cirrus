@@ -11,9 +11,11 @@
  */
 package optimus.utils
 
-import java.util.concurrent.atomic.AtomicLong
+import optimus.platform.util.Log
 
-import org.slf4j.Logger
+import java.util.concurrent.atomic.AtomicLong
+import org.slf4j
+import msjava.slf4jutils.scalalog
 
 import scala.collection.LinearSeq
 import scala.collection.generic.CanBuildFrom
@@ -26,7 +28,7 @@ object MiscUtils {
 
   //  The idea is that you can call niceBreak from code you're actively developing,
   // and the breakpoints you set here will not move around as you edit.
-  def niceBreak(s: String, index: Int = 0, log: Option[Logger] = None): Unit = {
+  def niceBreak(s: String, index: Int = 0, log: Option[slf4j.Logger] = None): Unit = {
     def breakHere() = log.foreach(_.debug(s))
     def orHere() = breakHere() // absolutely necessary
     index match {
@@ -49,7 +51,8 @@ object MiscUtils {
     def asScala: Option[A] = if (j.isPresent) Some(j.get()) else None
   }
 
-  def retry[A](n: Int, delay: Long, logger: Logger)(f: () => A)(shouldRetry: PartialFunction[Throwable, Boolean]): A = {
+  def retry[A](n: Int, delay: Long, logger: slf4j.Logger)(f: () => A)(
+      shouldRetry: PartialFunction[Throwable, Boolean]): A = {
     Try {
       f()
     }.recover {
@@ -338,8 +341,8 @@ object MiscUtils {
   }
 
   // blah.optionally(pred) = Some(blah) if pred(blah)
-  implicit class Optionable[T](private val t: T)  extends AnyVal {
-    def optionally(pred: T => Boolean): Option[T] = if(pred(t)) Some(t) else None
+  implicit class Optionable[T](private val t: T) extends AnyVal {
+    def optionally(pred: T => Boolean): Option[T] = if (pred(t)) Some(t) else None
   }
   // bool.thenSome(blah) = Some(blah) if bool
   implicit class ThenSome(private val pred: Boolean) extends AnyVal {
@@ -363,5 +366,34 @@ class Squelch(maxPerMinute: Int) {
       n.incrementAndGet()
       Some(f)
     }
+  }
+}
+
+class CountLogger(label: String, intervalMs: Long, log: slf4j.Logger) {
+
+  def this(label: String, intervalMs: Long, log: scalalog.Logger) =
+    this(label, intervalMs, log.javaLogger)
+
+  def this(label: String, intervalMs: Long) =
+    this(label, intervalMs, scalalog.getLogger(classOf[CountLogger]).javaLogger)
+
+  log.info(s"$label...")
+  private val dtNs = intervalMs * 1000000L
+  private val t0 = System.nanoTime()
+  private var t = 0L
+  private var tPrint = t0 + dtNs
+  private var n = 0
+  private def elapsed = Math.max((t - t0) / 1000000, 1)
+  def apply(): Unit = synchronized {
+    n += 1
+    t = System.nanoTime()
+    if (t > tPrint) {
+      tPrint = t + dtNs
+      log.info(s"$label n=$n elapsed=${elapsed}ms)")
+    }
+  }
+  def done(): Unit = synchronized {
+    t = System.nanoTime()
+    log.info(s"$label complete, n=$n, elapsed=${elapsed}ms, rate=${n * 1000 / elapsed}/sec")
   }
 }

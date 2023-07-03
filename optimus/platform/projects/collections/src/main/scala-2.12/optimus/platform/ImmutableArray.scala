@@ -85,8 +85,8 @@ object ImmutableArray {
         new mutable.Builder[T, ImmutableArray[T]] {
           private val buf = mutable.ArrayBuffer.empty[T]
           // Using ImmutableArray.wrapped here as a reference to the array should never escape
-          override def result: ImmutableArray[T] = ImmutableArray.wrapped[T](buf.toArray)
-          override def clear: Unit = buf.clear()
+          override def result(): ImmutableArray[T] = ImmutableArray.wrapped[T](buf.toArray)
+          override def clear(): Unit = buf.clear()
           override def +=(e: T): this.type = { buf += e; this }
         }
       }

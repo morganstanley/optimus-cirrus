@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-// N.B. This is adapted from ZK 3.5.5, we need to redo the patch after move to a later version of
+// N.B. This is adapted from ZK 3.8.1, we need to redo the patch after move to a later version of
 // ZK!!!
 
 package org.apache.zookeeper;
@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Iterator;
-import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -76,9 +76,9 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   private static final Logger LOG = LoggerFactory.getLogger(OptimusClientCnxnSocketNetty.class);
 
   static {
-    if (!(Info.MAJOR == 3 && Info.MINOR == 5 && Info.MICRO == 5)) {
+    if (!(Info.MAJOR == 3 && Info.MINOR == 8 && Info.MICRO == 1)) {
       LOG.error(
-          "The Excepted ZK version is 3.5.5, but we have {} now, need to upgrade the OptimusClientCnxnSocketNetty class to fit the ZK version",
+          "The Excepted ZK version is 3.8.1, but we have {} now, need to upgrade the OptimusClientCnxnSocketNetty class to fit the ZK version",
           Version.getVersion());
       System.exit(255);
     }
@@ -258,7 +258,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
     waitSasl.release();
   }
 
-  @Override // regex-ignore-line (open-sourcing)
+  @Override
   void connectionPrimed() {}
 
   @Override
@@ -291,7 +291,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   @Override
-  void doTransport(int waitTimeOut, List<Packet> pendingQueue, ClientCnxn cnxn)
+  void doTransport(int waitTimeOut, Queue<Packet> pendingQueue, ClientCnxn cnxn)
       throws IOException, InterruptedException {
     try {
       if (!firstConnect.await(waitTimeOut, TimeUnit.MILLISECONDS)) {
@@ -377,7 +377,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
   }
 
   /** doWrite handles writing the packets from outgoingQueue via network to server. */
-  private void doWrite(List<Packet> pendingQueue, Packet p, ClientCnxn cnxn) {
+  private void doWrite(Queue<Packet> pendingQueue, Packet p, ClientCnxn cnxn) {
     updateNow();
     boolean anyPacketsSent = false;
     while (true) {

@@ -54,10 +54,10 @@ final case class BuildResult(artifacts: Set[ClassFileArtifact]) extends DisplayS
   }
 
   @node private def compile(config: ScopeConfiguration): ClassFileArtifact = {
-    log.info(s"[${config.id}] Started compiling scope ${config.id.module}")
+    log.info(s"[${config.id}] Started compiling ${config.id.module} scope")
     val signatureArtifact = signatures(config)
     val classesArtifact = classes(config, signatureArtifact)
-    log.info(s"[${config.id}] Done compiling scope ${config.id.module}")
+    log.info(s"[${config.id}] Done compiling ${config.id.module} scope")
     classesArtifact
   }
 
@@ -86,10 +86,10 @@ final case class BuildResult(artifacts: Set[ClassFileArtifact]) extends DisplayS
       delay: Int,
       version: Int,
       dependencySignatures: Seq[SignatureArtifact]): Unit = {
-    log.info(s"[$scope] Started compile phase $phase for scope ${scope.module} (source version: $version)")
+    log.info(s"[$scope] Started compile phase $phase for ${scope.module} scope (source version: $version)")
     log.debug(s"[$scope] Dependencies: $dependencySignatures")
     Thread.sleep(delay * 1000)
-    log.info(s"[$scope] Done compile phase $phase for scope ${scope.module} (source version: $version)")
+    log.info(s"[$scope] Done compile phase $phase for ${scope.module} scope (source version: $version)")
   }
 }
 
@@ -100,10 +100,10 @@ object ScalaDays extends OptimusApp with Log {
   // 2. get their dependencies (usually by reading .obt files, but we'll hardcode them for the demo)
   private val configSource = dependenciesForScopes
 
-  // 3. create a build tool for scopes model and app given the dependency information
+  // 3. create a build tool for scopes 'model' and 'app' given the dependency information
   private val builder = BuildTool(Set(model, app), configSource)
 
-  // 4. simulate invalidating data sources
+  // 4. simulate invalidating 'data' sources
   private val sourceToInvalidate = configSource(data)
   private val updater = new ExternalVersionUpdater(data, firstVersionToPublish = 2)
   private val target = new BuildOutputTarget

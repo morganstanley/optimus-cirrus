@@ -40,7 +40,7 @@ class ThresholdProfiler(reporter: (Position, String) => Unit, thresholdNs: Long)
     val duration = System.nanoTime() - startTime
     if (duration > thresholdNs) {
       val fullName = sym.ownerChain.map(_.nameString).reverse.mkString(".")
-      val location = sym.sourceFile.path
+      val location = Option(sym.sourceFile).map(_.path).getOrElse("<no source file>")
       reporter(sym.pos, ThresholdProfiler.MessageString(s"$fullName in $location", duration / 1000000000d))
 
       // Since we've already attributed this time, it's confusing to also blame the path that got us to here (which
