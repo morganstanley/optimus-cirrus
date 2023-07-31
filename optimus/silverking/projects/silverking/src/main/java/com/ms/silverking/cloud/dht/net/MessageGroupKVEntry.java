@@ -41,7 +41,7 @@ public abstract class MessageGroupKVEntry extends MessageGroupKeyEntry {
   protected void initValBuffer(ByteBuffer[] buffers) {
     if (bufferIndex >= 0) {
       try {
-        // FIXME - NEED TO LOOK INTO USAGE OF NATIVE BUFFERS
+        // TODO (OPTIMUS-0000): NEED TO LOOK INTO USAGE OF NATIVE BUFFERS
 
         if (!buffers[bufferIndex].hasArray()) {
           int length;

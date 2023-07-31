@@ -13,6 +13,11 @@
 .idea
 /.shelf/
 
+# VSCode
+*.code-workspace
+.devcontainer
+.vscode
+
 # Python
 .mypy_cache/
 *.pyc

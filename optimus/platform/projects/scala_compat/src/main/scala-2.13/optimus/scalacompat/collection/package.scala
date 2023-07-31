@@ -27,6 +27,7 @@ package object collection extends MapBuildFromImplicits {
   type IterableOnceOps[+A, +CC[_], +C] = sc.IterableOnceOps[A, CC, C]
   type Iterable2[A, B] = sc.Iterable[(A, B)]
   type MapLike[K, +V, +Repr] = sc.MapOps[K, V, Iterable2, Repr]
+  type MapOps[K, +V, +CC[_, _] <: IterableLike[_, _], +C <: MapLike[K, V, C]] = sc.MapOps[K, V, CC, C]
   type SeqLike[A, +Repr] = sc.SeqOps[A, Any, Repr]
   type SetLike[A, +Repr <: sc.SetOps[A, Any, Repr]] = sc.SetOps[A, Any, Repr]
   type TraversableLike[+A, +Repr] = IterableLike[A, Repr]

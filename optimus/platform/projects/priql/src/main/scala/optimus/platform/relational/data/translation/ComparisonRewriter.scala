@@ -103,6 +103,7 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
         ElementFactory.makeBinary(BOOLAND, l, r)
       case NotApplicable if op == NE =>
         ElementFactory.makeBinary(EQ, KnowableElement.isNotApplicable(e), ElementFactory.constant(false))
+      case v => throw new MatchError(v)
     }
   }
 

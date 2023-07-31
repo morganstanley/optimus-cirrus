@@ -19,7 +19,7 @@ public interface AsyncSingleValueRetrieval<K, V> extends AsyncValueRetrieval<K, 
    * Returns the raw value if it is present.
    *
    * @return the raw value if it is present
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public V getValue() throws RetrievalException;
 }

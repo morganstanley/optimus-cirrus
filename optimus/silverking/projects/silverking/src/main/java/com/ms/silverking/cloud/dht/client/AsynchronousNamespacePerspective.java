@@ -25,7 +25,7 @@ public interface AsynchronousNamespacePerspective<K, V>
    * Failure of any operations will result in an WaitForCompletionException
    * which will contain a list of all failed operations.
    *
-   * @throws WaitForCompletionException TODO
+   * @throws WaitForCompletionException TODO (OPTIMUS-0000): describe
    */
   public void waitForActiveOps() throws WaitForCompletionException;
 }

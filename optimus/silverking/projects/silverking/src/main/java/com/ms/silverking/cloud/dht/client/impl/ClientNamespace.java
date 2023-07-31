@@ -153,7 +153,7 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
     case SYSTEM_TIME_MILLIS:
       versionProvider = new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource);
       break;
-    case SEQUENTIAL: // FIXME - for now treat sequential as nanos
+    case SEQUENTIAL: // TODO (OPTIMUS-0000): for now treat sequential as nanos
     case SYSTEM_TIME_NANOS:
       versionProvider = new AbsNanosVersionProvider(SystemTimeUtil.skSystemTimeSource);
       break;
@@ -220,7 +220,7 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
       break;
     default:
       opSender.addWorkForGrouping(opImpl, 0);
-      break; // FIXME - don't group
+      break; // TODO (OPTIMUS-0000): don't group
     }
   }
 
@@ -344,7 +344,7 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
   @Override
   public Namespace modifyNamespace(NamespaceOptions nsOptions) throws NamespaceModificationException {
     if (parent != null) {
-      // TODO: for now we just disallow the modification from cloned namespace
+      // TODO (OPTIMUS-0000): for now we just disallow the modification from cloned namespace
       throw new NamespaceModificationException("modification from cloned namespace is not currently supported");
     } else {
       return session.modifyNamespace(name, nsOptions);

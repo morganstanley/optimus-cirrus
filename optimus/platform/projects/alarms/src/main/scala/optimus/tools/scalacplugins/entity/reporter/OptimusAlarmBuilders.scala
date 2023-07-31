@@ -13,197 +13,23 @@ package optimus.tools.scalacplugins.entity.reporter
 
 import optimus.tools.scalacplugins.entity.OptimusPhaseInfo
 
-trait OptimusPluginAlarmHelper { self: OptimusAlarms =>
-  def error0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
+trait OptimusPluginAlarmHelper extends BuilderHelpers { self: OptimusAlarms =>
+  import OptimusAlarmType._
+  override type Info = OptimusPhaseInfo
+  private def builders(tpe: Tpe) =
+    (
+      newBuilder(OptimusAlarmBuilder0)(tpe),
+      newBuilder(OptimusAlarmBuilder1)(tpe),
+      newBuilder(OptimusAlarmBuilder2)(tpe),
+      newBuilder(OptimusAlarmBuilder3)(tpe),
+      newBuilder(OptimusAlarmBuilder4)(tpe),
+      newBuilder(OptimusAlarmBuilder5)(tpe)
+    )
 
-  def error1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def error2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def error3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
-    register(
-      OptimusAlarmBuilder3(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def error4(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder4 = {
-    register(
-      OptimusAlarmBuilder4(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def error5(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder5 = {
-    register(
-      OptimusAlarmBuilder5(
-        alarmId(sn, OptimusAlarmType.ERROR),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def warning0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def warning1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def warning2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def warning3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
-    register(
-      OptimusAlarmBuilder3(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def warning4(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder4 = {
-    register(
-      OptimusAlarmBuilder4(
-        alarmId(sn, OptimusAlarmType.WARNING),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def info0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def info1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def info2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def info3(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder3 = {
-    register(
-      OptimusAlarmBuilder3(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def info4(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder4 = {
-    register(
-      OptimusAlarmBuilder4(
-        alarmId(sn, OptimusAlarmType.INFO),
-        phase,
-        obtMandatory = true,
-        scalaMandatory = true,
-        template))
-  }
-
-  def debug0(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder0 = {
-    register(
-      OptimusAlarmBuilder0(
-        alarmId(sn, OptimusAlarmType.DEBUG),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def debug1(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder1 = {
-    register(
-      OptimusAlarmBuilder1(
-        alarmId(sn, OptimusAlarmType.DEBUG),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
-  def debug2(sn: Int, phase: OptimusPhaseInfo, template: String): OptimusAlarmBuilder2 = {
-    register(
-      OptimusAlarmBuilder2(
-        alarmId(sn, OptimusAlarmType.DEBUG),
-        phase,
-        obtMandatory = false,
-        scalaMandatory = false,
-        template))
-  }
-
+  final val (error0, error1, error2, error3, error4, error5) = builders(ERROR)
+  final val (warning0, warning1, warning2, warning3, warning4, _) = builders(WARNING)
+  final val (info0, info1, info2, info3, info4, info5) = builders(INFO)
+  final val (debug0, debug1, debug2, _, _, _) = builders(DEBUG)
 }
 
 abstract class OptimusNonErrorMessagesBase extends OptimusAlarms with OptimusPluginAlarmHelper {
@@ -214,96 +40,46 @@ abstract class OptimusErrorsBase extends OptimusAlarms with OptimusPluginAlarmHe
   final protected val base = 20000
 }
 
-final case class OptimusPluginAlarm(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    message: String,
-    template: String,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean)
+final case class OptimusPluginAlarm(id: AlarmId, phase: OptimusPhaseInfo, message: String, template: String)
     extends OptimusAlarmBase
-
-trait OptimusAlarmBuilder {
-  val id: AlarmId
-  val template: String
-  // TODO (OPTIMUS-51339): remove both of those when OBT takes over all warning config
-  val obtMandatory: Boolean
-  val scalaMandatory: Boolean
-}
 
 trait OptimusPluginAlarmBuilder extends OptimusAlarmBuilder {
   val phase: OptimusPhaseInfo
-  final protected def buildImpl0(obtMandatory: Boolean, scalaMandatory: Boolean): OptimusPluginAlarm =
-    OptimusPluginAlarm(id, phase, template, template, obtMandatory, scalaMandatory)
-  final protected def buildImpl(obtMandatory: Boolean, scalaMandatory: Boolean, args: String*): OptimusPluginAlarm =
-    OptimusPluginAlarm(id, phase, String.format(template, args: _*), template, obtMandatory, scalaMandatory)
+  final protected def buildImpl0(): OptimusPluginAlarm =
+    OptimusPluginAlarm(id, phase, template, template)
+  final protected def buildImpl(args: String*): OptimusPluginAlarm =
+    OptimusPluginAlarm(id, phase, String.format(template, args: _*), template)
 }
 
-final case class OptimusAlarmBuilder0(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder0(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
-  def apply() = buildImpl0(obtMandatory, scalaMandatory)
-  def as(tpe: OptimusAlarmType.Tpe): OptimusAlarmBuilder0 = copy(id = id.copy(tpe = tpe))
+  def apply() = buildImpl0()
 }
 
-final case class OptimusAlarmBuilder1(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder1(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
-  def apply(arg: Any) = buildImpl(obtMandatory, scalaMandatory, arg.toString)
-  def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
+  def apply(arg1: Any) = buildImpl(arg1.toString)
 }
 
-final case class OptimusAlarmBuilder2(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder2(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
-  def apply(arg1: Any, arg2: Any) = buildImpl(obtMandatory, scalaMandatory, arg1.toString, arg2.toString)
-  def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
+  def apply(arg1: Any, arg2: Any) = buildImpl(arg1.toString, arg2.toString)
 }
 
-final case class OptimusAlarmBuilder3(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder3(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
   def apply(arg1: Any, arg2: Any, arg3: Any) =
-    buildImpl(obtMandatory, scalaMandatory, arg1.toString, arg2.toString, arg3.toString)
-  def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
+    buildImpl(arg1.toString, arg2.toString, arg3.toString)
 }
 
-final case class OptimusAlarmBuilder4(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder4(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
   def apply(arg1: Any, arg2: Any, arg3: Any, arg4: Any) =
-    buildImpl(obtMandatory, scalaMandatory, arg1.toString, arg2.toString, arg3.toString, arg4.toString)
-  def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
+    buildImpl(arg1.toString, arg2.toString, arg3.toString, arg4.toString)
 }
 
-final case class OptimusAlarmBuilder5(
-    id: AlarmId,
-    phase: OptimusPhaseInfo,
-    obtMandatory: Boolean,
-    scalaMandatory: Boolean,
-    template: String)
+final case class OptimusAlarmBuilder5(id: AlarmId, phase: OptimusPhaseInfo, template: String)
     extends OptimusPluginAlarmBuilder {
   def apply(arg1: Any, arg2: Any, arg3: Any, arg4: Any, arg5: Any) =
-    buildImpl(obtMandatory, scalaMandatory, arg1.toString, arg2.toString, arg3.toString, arg4.toString, arg5.toString)
-  def as(tpe: OptimusAlarmType.Tpe) = copy(id = id.copy(tpe = tpe))
+    buildImpl(arg1.toString, arg2.toString, arg3.toString, arg4.toString, arg5.toString)
 }

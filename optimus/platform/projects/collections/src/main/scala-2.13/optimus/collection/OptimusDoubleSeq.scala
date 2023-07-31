@@ -370,7 +370,7 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
       case ods: OptimusDoubleSeq         => append(ods.data)
       case asod: ArraySeq.ofDouble       => append(asod.unsafeArray)
       case _                             =>
-        // TODO: Could use a OptimusDoubleSeq builder optimistically assuming that that contains Doubles,
+        // TODO (OPTIMUS-0000): Could use a OptimusDoubleSeq builder optimistically assuming that that contains Doubles,
         //       and fall back to an OptimusSeq builder if an element of a different type is detected.
         //       Same applies for
         super.appendedAll(that)

@@ -46,7 +46,7 @@ public final class GetOptions extends RetrievalOptions {
   }
 
   ///
-  /// FIXME - this is C++ only.
+  /// TODO (OPTIMUS-0000): this is C++ only.
   /// This should be removed once C++ SKGetOptions.cpp is using the other constructor below properly.
   ///
 

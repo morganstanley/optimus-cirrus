@@ -32,7 +32,7 @@ public class HashFunctionChecksum implements Checksum {
   public HashFunctionChecksum(Type type) {
     switch (type) {
     case Murmur3_32:
-      hashFunction = Hashing.murmur3_32();
+      hashFunction = Hashing.murmur3_32_fixed();
       break;
     case Murmur3_128:
       hashFunction = Hashing.murmur3_128();

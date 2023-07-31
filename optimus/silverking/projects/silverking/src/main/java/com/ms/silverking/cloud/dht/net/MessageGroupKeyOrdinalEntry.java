@@ -36,7 +36,7 @@ public class MessageGroupKeyOrdinalEntry extends MessageGroupKeyEntry {
   private static final int lslOffset = NumConversion.BYTES_PER_LONG;
   private static final int responseOffset = lslOffset + NumConversion.BYTES_PER_LONG;
 
-  // FIXME - probably eliminate the locally stored key since MessageGroupKeyEntry
+  // TODO (OPTIMUS-0000): probably eliminate the locally stored key since MessageGroupKeyEntry
   // can act as a key directly
   // also examine usage and getKey() usage in particular to see if we can
   // eliminate that call

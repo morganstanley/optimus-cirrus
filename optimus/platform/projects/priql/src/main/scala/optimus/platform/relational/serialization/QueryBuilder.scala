@@ -588,6 +588,7 @@ object QueryBuilder {
         extensions.foldLeft(srcBuilder) { case (queryBuilder, (extValue, extType)) =>
           ExtendTypedValue(queryBuilder, extValue, extType.cast[Any], method.pos).asInstanceOf[QueryBuilder[Any]]
         }
+      case as => throw new MatchError(as)
     }
   }
 
@@ -606,6 +607,7 @@ object QueryBuilder {
         replacements.foldLeft(srcBuilder) { case (queryBuilder, (repValue, repType)) =>
           ReplaceValue(queryBuilder, repValue, repType.cast[Any], method.pos)
         }
+      case as => throw new MatchError(as)
     }
   }
 

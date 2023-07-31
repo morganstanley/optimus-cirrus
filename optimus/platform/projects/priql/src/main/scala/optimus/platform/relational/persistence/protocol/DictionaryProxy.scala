@@ -12,7 +12,7 @@
 package optimus.platform.relational.persistence.protocol
 
 import java.lang.reflect.{Array => _, _}
-
+import scala.annotation.nowarn
 import scala.collection.mutable
 
 private[persistence] class DictionaryProxy(val methodToValues: mutable.HashMap[Method, Any]) extends InvocationHandler {
@@ -77,6 +77,7 @@ private[persistence] object DictionaryProxy {
   lazy val equalsMethod: Method = classOf[Object].getMethod("equals", Seq(classOf[Object]): _*)
   lazy val toStringMethod: Method = classOf[Object].getMethod("toString")
 
+  @nowarn("msg=bypasses cooperative equality")
   def objectEquals(x: Any, y: Any): Boolean = {
     if (x == null) y == null else x.equals(y)
   }

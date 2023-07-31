@@ -31,7 +31,7 @@ public class WeightSpecifications implements VersionedDefinition {
   //private final Map<String, Double>   classWeights;
   private final Map<String, Double> nodeWeights;
 
-  // FIXME - we need to be able to specify weights by groups of some sort
+  // TODO (OPTIMUS-0000): we need to be able to specify weights by groups of some sort
   // start with host groups, and require other topology levels to specify weights by ID
 
   public static final double defaultWeight = 1.0;

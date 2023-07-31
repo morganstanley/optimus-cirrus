@@ -160,6 +160,6 @@ public class MetaClientCore {
   }
 
   public void close() {
-    //zk.close(); // FIXME
+    //zk.close(); // TODO (OPTIMUS-0000): to be completed
   }
 }

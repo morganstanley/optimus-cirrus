@@ -28,7 +28,9 @@ import optimus.platform.relational.tree.ElementFactory
 import optimus.platform.relational.tree.RelationElement
 
 class PubSubReducer(val provider: DALProvider) extends DbQueryTreeReducerBase {
-  override def createMapping() = new PubSubMapping
+  override def createMapping() =
+    if (provider.supportsRegisteredIndexes) new PubSubRegisteredIndexMapping
+    else new PubSubMapping
 
   override def createLanguage(lookup: MappingEntityLookup) = new PubSubLanguage(lookup)
 

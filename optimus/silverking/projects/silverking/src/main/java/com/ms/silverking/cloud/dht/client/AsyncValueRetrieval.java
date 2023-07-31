@@ -24,7 +24,7 @@ public interface AsyncValueRetrieval<K, V> extends AsyncRetrieval<K, V> {
    * Returns raw values for all successfully complete retrievals.
    *
    * @return raw values for all successfully complete retrievals
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, V> getValues() throws RetrievalException;
 
@@ -33,7 +33,7 @@ public interface AsyncValueRetrieval<K, V> extends AsyncRetrieval<K, V> {
    *
    * @param key the given key
    * @return the raw value for the given key if it is present
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public V getValue(K key) throws RetrievalException;
 
@@ -48,7 +48,7 @@ public interface AsyncValueRetrieval<K, V> extends AsyncRetrieval<K, V> {
    *
    * @return raw values for all successfully complete retrievals that
    * have completed since the last call to this method and getLatestStoredValues()
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, V> getLatestValues() throws RetrievalException;
 

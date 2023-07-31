@@ -398,7 +398,7 @@ public class OptimusClientCnxnSocketNetty extends ClientCnxnSocket {
       }
       p = outgoingQueue.remove();
     }
-    // TODO: OPTIMUS-46358 maybe we should flush in the loop above every N packets/bytes
+    // TODO (OPTIMUS-46358): maybe we should flush in the loop above every N packets/bytes
     if (anyPacketsSent) {
       channel.flush();
     }

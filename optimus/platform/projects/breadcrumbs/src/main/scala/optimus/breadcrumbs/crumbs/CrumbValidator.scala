@@ -40,8 +40,8 @@ abstract class CrumbValidator {
 private[breadcrumbs] class StandardCrumbValidator extends CrumbValidator {
   def action: ValidationAction = ValidationAction.Default
   def validate(c: Crumb): Unit = {
-    val colliders = MetaKeys.keyset intersect c.properties.keys.toSet
-    if (colliders.nonEmpty) action.warn(colliders, c.properties)
+    val colliders = MetaKeys.keyset intersect c.stringProperties.keys.toSet
+    if (colliders.nonEmpty) action.warn(colliders, c.stringProperties)
   }
 }
 

@@ -433,7 +433,7 @@ public class PersistentAsyncServer<T extends Connection> implements IncomingConn
           if (backoff == null) {
             backoff = new RandomBackoff(newConnectionTimeoutController.getMaxAttempts(_dest),
                 initialConnectBackoffValue,
-                // TODO ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
+                // TODO (OPTIMUS-0000): ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
                 // it's good enough for now.
                 newConnectionTimeoutController.getRelativeTimeoutMillisForAttempt(_dest, 1), deadline);
           }
@@ -462,7 +462,7 @@ public class PersistentAsyncServer<T extends Connection> implements IncomingConn
         log.error("",ce);
         if (backoff == null) {
           backoff = new RandomBackoff(newConnectionTimeoutController.getMaxAttempts(_dest), initialConnectBackoffValue,
-              // TODO ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
+              // TODO (OPTIMUS-0000): ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
               // it's good enough for now.
               newConnectionTimeoutController.getRelativeTimeoutMillisForAttempt(_dest, 1), deadline);
         }
@@ -482,7 +482,7 @@ public class PersistentAsyncServer<T extends Connection> implements IncomingConn
         log.error("",ste);
         if (backoff == null) {
           backoff = new RandomBackoff(newConnectionTimeoutController.getMaxAttempts(_dest), initialConnectBackoffValue,
-              // TODO ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
+              // TODO (OPTIMUS-0000): ultimately this shouldn't hard-code the 1st attempt as the value can change per attempt, but
               // it's good enough for now.
               newConnectionTimeoutController.getRelativeTimeoutMillisForAttempt(_dest, 1), deadline);
         }

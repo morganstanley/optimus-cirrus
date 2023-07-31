@@ -41,7 +41,7 @@ public class NamedRingConfigurationUtil {
 
     _mc = new MetaClient(new NamedRingConfiguration(ringName, RingConfiguration.emptyTemplate), zkConfig);
 
-    // FIXME - version never changes
+    // TODO (OPTIMUS-0000): version never changes
     version = _mc.getZooKeeper().getLatestVersion(MetaPaths.getRingConfigPath(ringName));
     return new NamedRingConfiguration(ringName, new RingConfigurationZK(_mc).readFromZK(version, null));
   }

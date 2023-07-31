@@ -196,7 +196,7 @@ public final class IncomingMessageGroup implements IncomingData {
               //        IPAddrUtil.addrAndPortToString(originator), deadlineRelativeMillis);
               forward = EnumValues.forwardingMode[leadingBuffer.get(MessageFormat.forwardOffset)];
               readState = ReadState.BUFFER_LENGTHS;
-              // FIXME - ADD FALLTHROUGH FOR THIS CASE
+              // TODO (OPTIMUS-0000): ADD FALLTHROUGH FOR THIS CASE
             } else {
               //if (debug) {
               log.warn("*** No preamble match from channel {}***", channel);
@@ -238,7 +238,7 @@ public final class IncomingMessageGroup implements IncomingData {
         case BUFFERS:
           ByteBuffer curBuffer;
 
-          // FIXME - MERGE THESE READS EVENTUALLY
+          // TODO (OPTIMUS-0000): MERGE THESE READS EVENTUALLY
           curBuffer = buffers[curBufferIndex];
           //if (curBuffer.remaining() <= 0) {
           //    throw new IOException("curBuffer.remaining() <= 0");

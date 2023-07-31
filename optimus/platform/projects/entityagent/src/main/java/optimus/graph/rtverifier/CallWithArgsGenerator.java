@@ -152,7 +152,7 @@ public class CallWithArgsGenerator implements Opcodes {
     mv.visitEnd();
   }
 
-  /* Consider map from id to name instead (TODO: OPTIMUS-57169) */
+  /* TODO (OPTIMUS-57169): Consider map from id to name instead */
   private static void generateFullNameMethod(
       ClassWriter cw, Type originalOwner, String originalMethod) {
     String descriptor = "()" + STRING_DESC;

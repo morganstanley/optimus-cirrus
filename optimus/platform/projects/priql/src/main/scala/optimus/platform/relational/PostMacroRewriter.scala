@@ -267,6 +267,8 @@ private class PostMacroRewriter extends QueryTreeVisitor {
     arguments match {
       case ExpressionListElement(l1) :: ExpressionListElement(l2 @ List(ag)) :: _ =>
         ElementFactory.call(src, c.method, l1 ::: l2)
+      case x @ (_ :: _ :: _) =>
+        throw new MatchError(x)
       case x :: Nil =>
         if (c.name == "count")
           ElementFactory.call(src, c.method, List(x, ElementFactory.constant(Count.Boolean)))

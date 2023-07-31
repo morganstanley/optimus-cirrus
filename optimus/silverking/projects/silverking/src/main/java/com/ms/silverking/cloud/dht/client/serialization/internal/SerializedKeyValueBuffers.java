@@ -159,7 +159,7 @@ public class SerializedKeyValueBuffers {
     int valueLength;
     ByteBuffer valueBuffer;
 
-    // FIXME - optimize this with running position
+    // TODO (OPTIMUS-0000): optimize this with running position
     bufferIndex = keyBuffer.getShort(bufferIndexOffset(index));
     bufferOffset = keyBuffer.getInt(bufferOffsetOffset(index));
     valueLength = keyBuffer.getInt(valueLengthOffset(index));

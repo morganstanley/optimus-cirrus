@@ -376,6 +376,16 @@ object BitBucketScmTestRequest extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[BitBucketScmTestRequest] = jsonFormat1(BitBucketScmTestRequest.apply)
 }
 
+final case class BitBucketErrors(errors: Seq[BitBucketError])
+object BitBucketErrors extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[BitBucketErrors] = jsonFormat1(BitBucketErrors.apply)
+}
+
+final case class BitBucketError(context: Option[String], message: String, exceptionName: String)
+object BitBucketError extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[BitBucketError] = jsonFormat3(BitBucketError.apply)
+}
+
 object PRAction extends Enumeration {
   type PRAction = Value
   val Approved: PRAction = Value("APPROVED")
@@ -415,4 +425,11 @@ object ReviewerStatus extends Enumeration {
   val NeedsWork: ReviewerStatus = Value("NEEDS_WORK")
   val Approved: ReviewerStatus = Value("APPROVED")
   val Unapproved: ReviewerStatus = Value("UNAPPROVED")
+}
+
+final case class RequestingFilesFromBitBucket(isLastPage: Boolean, values: Seq[String], nextPageStart: Option[Int])
+    extends Paged[String]
+object RequestingFilesFromBitBucket extends DefaultJsonProtocol with NullOptions {
+  implicit lazy val format: RootJsonFormat[RequestingFilesFromBitBucket] =
+    jsonFormat3(RequestingFilesFromBitBucket.apply)
 }

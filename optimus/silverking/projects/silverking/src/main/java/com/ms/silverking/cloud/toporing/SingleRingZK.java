@@ -156,7 +156,7 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     }
     // pass empty weight specifications since only the reallocator
     // needs them
-    // FIXME - think about whether re-allocator will use this code
+    // TODO (OPTIMUS-0000): think about whether re-allocator will use this code
     singleRing.freeze(new WeightSpecifications(0));
     return singleRing;
   }
@@ -317,7 +317,7 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
       if (TopoRingConstants.verbose) {
         log.info("Valid: {} {}", ringInstancePath , mapName);
       }
-      // FIXME - version in single ring is unused
+      // TODO (OPTIMUS-0000): version in single ring is unused
       // verify that we can remove version in SingleRing
       topologyRing = singleRingZK.readFromZK(0L, null);
       maps.put(mapName, topologyRing);

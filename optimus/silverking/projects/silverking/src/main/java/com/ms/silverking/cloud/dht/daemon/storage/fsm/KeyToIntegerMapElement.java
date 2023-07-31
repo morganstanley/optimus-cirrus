@@ -57,7 +57,7 @@ public class KeyToIntegerMapElement extends LTVElement {
 
     htTotalEntries = htBufSize / (NumConversion.BYTES_PER_LONG * 2 + NumConversion.BYTES_PER_INT);
     segmentCuckooConfig = new WritableCuckooConfig(CuckooConfig.read(rawHTBuf, NumConversion.BYTES_PER_INT),
-        -1); // FIXME - verify -1
+        -1); // TODO (OPTIMUS-0000): verify -1
     segmentCuckooConfig = segmentCuckooConfig.newTotalEntries(htTotalEntries);
 
     keyToOffset = new IntBufferDHTKeyCuckoo(segmentCuckooConfig, htBuf);
@@ -84,7 +84,7 @@ public class KeyToIntegerMapElement extends LTVElement {
 
     mapSize = ((IntArrayDHTKeyCuckoo) keyToOffset).persistedSizeBytes();
 
-    // FIXME
+    // TODO (OPTIMUS-0000): to be completed
     legacyPersistedSize = NumConversion.BYTES_PER_INT + CuckooConfig.BYTES + mapSize;
     elementSize = NumConversion.BYTES_PER_INT * 2   // length + type
         + legacyPersistedSize;

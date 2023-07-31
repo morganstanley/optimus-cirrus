@@ -403,6 +403,7 @@ class IterableRewriter extends QueryTreeVisitor with MultiRelationRewriter {
         CollectionInvocationElement(asNode { () =>
           extendTypedValueSync(sf(), extVals)(src.param.projectedType())
         })
+      case vs => throw new MatchError(vs)
     }
   }
 
@@ -429,6 +430,7 @@ class IterableRewriter extends QueryTreeVisitor with MultiRelationRewriter {
         CollectionInvocationElement(asNode { () =>
           replaceValueSync(sf(), extVals)(src.param.projectedType())
         })
+      case vs => throw new MatchError(vs)
     }
     distinctByKey(invoke, m.key)
   }

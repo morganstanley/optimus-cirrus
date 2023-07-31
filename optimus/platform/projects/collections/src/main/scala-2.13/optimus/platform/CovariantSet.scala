@@ -42,7 +42,7 @@ trait CovariantSet[+A]
 
   /** Tests whether the set contains a given element - usually called through CovariantSetContra.contains() */
   protected[platform] def hasElem(
-      elem: Any): Boolean // TODO: Is there a better way to do this which doesn't require iterating over the entire set?
+      elem: Any): Boolean // TODO (OPTIMUS-0000): Is there a better way to do this which doesn't require iterating over the entire set?
 
   /** Creates a new set by adding all the elements contained in another collection to this set */
   override def concat[B >: A](xs: IterableOnce[B]): CovariantSet[B] =

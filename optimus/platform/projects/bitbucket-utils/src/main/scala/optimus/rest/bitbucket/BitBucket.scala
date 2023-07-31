@@ -12,10 +12,14 @@
 package optimus.rest.bitbucket
 
 import optimus.rest.RestApi
+import optimus.rest.UnsuccessfulRestCall
 import spray.json._
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 abstract class BitBucket(protected val instance: String, val timeout: Duration = 15.seconds)
     extends BitBucketApiUrls
@@ -23,10 +27,10 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     with RecursiveQuerier {
 
   def getPrData(project: String, repo: String, prNumber: Int): PrData =
-    get[BasePrData](apiPrUrl(project, repo, prNumber)).withInstance(instance)
+    handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)).withInstance(instance) }
 
   def getBasePrData(project: String, repo: String, prNumber: Int): BasePrData =
-    get[BasePrData](apiPrUrl(project, repo, prNumber))
+    handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)) }
 
   def getRecentPrData(project: String, repo: String, quantityWanted: Int = 500): Seq[BasePrData] = {
     val url = s"${apiPrActivitesUrl(project, repo)}?state=ALL"
@@ -161,6 +165,54 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
 
   def annotateCommit(commit: String, payload: String): Unit = {
     val url = apiGetBuildStatus(commit)
-    postWithoutResponse(url, Some(payload))
+    handleErrors { postWithoutResponse(url, Some(payload)) }
+  }
+
+  private def handleErrors[A](code: => A): A =
+    try code
+    catch {
+      case e: UnsuccessfulRestCall =>
+        import spray.json._
+        e.rawPayload.flatMap(_.parseJson.convertTo[BitBucketErrors].errors.headOption) match {
+          case Some(err) if err.exceptionName == "com.atlassian.bitbucket.pull.NoSuchPullRequestException" =>
+            throw NoSuchPullRequestException(err)
+          case Some(err) if err.exceptionName == "com.atlassian.bitbucket.project.NoSuchProjectException" =>
+            throw NoSuchProjectException(err)
+          case Some(other) =>
+            throw UncategorizedBitBucketException(other)
+          case None =>
+            throw e
+        }
+    }
+
+  def fetchFilesFromBitBucket(
+      hostPort: String,
+      api: String,
+      project: String,
+      repo: String,
+      dirToList: String,
+      at: String,
+      maxExpectedData: Option[Int] = None,
+      expectedPageSize: Int = 10000 // expected page size in a recursive call
+  ): Seq[String] = {
+
+    val url = s"http://$hostPort/$api/projects/$project/repos/$repo/files/$dirToList?at=$at"
+    queryPaged[String, RequestingFilesFromBitBucket](url, maxExpectedData, expectedPageSize)
   }
 }
+
+sealed trait BitBucketException {
+  def bitBucketError: BitBucketError
+}
+
+final case class UncategorizedBitBucketException(bitBucketError: BitBucketError)
+    extends RuntimeException(bitBucketError.message)
+    with BitBucketException
+
+final case class NoSuchPullRequestException(bitBucketError: BitBucketError)
+    extends RuntimeException(bitBucketError.message)
+    with BitBucketException
+
+final case class NoSuchProjectException(bitBucketError: BitBucketError)
+    extends RuntimeException(bitBucketError.message)
+    with BitBucketException

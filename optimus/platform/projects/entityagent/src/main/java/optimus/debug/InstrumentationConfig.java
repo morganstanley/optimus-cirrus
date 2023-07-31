@@ -407,15 +407,23 @@ public class InstrumentationConfig {
   public static MethodRef asMethodRef(String name) {
     String cleanName = name.trim();
     int lastDot = cleanName.lastIndexOf('.');
-    String cls = cleanName.substring(0, lastDot).replace('.', '/');
+    String cls = cleanName.substring(0, lastDot);
     String method = cleanName.substring(lastDot + 1);
+    return asMethodRef(cls, method);
+  }
+
+  public static MethodRef asMethodRef(Class<?> cls, String method) {
+    return asMethodRef(cls.getName(), method);
+  }
+
+  public static MethodRef asMethodRef(String className, String method) {
     int descriptorStart = method.indexOf('(');
     String descriptor = null;
     if (descriptorStart > 0) {
       descriptor = method.substring(descriptorStart);
       method = method.substring(0, descriptorStart);
     }
-    return new MethodRef(cls, method, descriptor);
+    return new MethodRef(className.replace('.', '/'), method, descriptor);
   }
 
   public static ClassPatch forClass(String className) {

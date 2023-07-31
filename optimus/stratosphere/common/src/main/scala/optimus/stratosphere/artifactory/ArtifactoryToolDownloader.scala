@@ -1,0 +1,233 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package optimus.stratosphere.artifactory
+
+import akka.http.scaladsl.model.Uri
+import optimus.stratosphere.bootstrap.StratosphereException
+import optimus.stratosphere.config.StratoWorkspaceCommon
+import optimus.stratosphere.filesanddirs.PathsOpts._
+import optimus.stratosphere.filesanddirs.Unzip
+import optimus.stratosphere.http.client.HttpClientFactory
+import optimus.stratosphere.utils.CommonProcess
+import optimus.stratosphere.utils.EnvironmentUtils
+import spray.json._
+
+import java.io.File
+import java.io.FileNotFoundException
+import java.nio.file.Path
+import scala.collection.compat._
+import scala.collection.immutable.Seq
+import scala.concurrent.duration._
+import scala.util.Try
+import scala.util.control.NonFatal
+
+object ArtifactoryToolDownloader {
+  private val extractionFlag: String = "--explode"
+
+  def installedTools(stratoWorkspace: StratoWorkspaceCommon): Seq[String] =
+    for {
+      tool <- stratoWorkspace.directoryStructure.toolsDir.dir.listDirs()
+      version <- tool.dir.listDirs()
+    } yield s"${tool.name} ver. ${version.name}"
+
+  def availableTools(stratoWorkspace: StratoWorkspaceCommon): Set[String] =
+    stratoWorkspace.artifactoryTools.availableTools.map(_.takeWhile(_ != '.'))
+
+  private def jfrogCliEnv(stratoWorkspace: StratoWorkspaceCommon): Map[String, String] =
+    Map(
+      "JFROG_CLI_OFFER_CONFIG" -> "false",
+      // .resolve("") is required to add the trailing '/'
+      "HOME" -> stratoWorkspace.internal.jfrog.home.getParent.resolve("").toString,
+      "JFROG_CLI_HOME_DIR" -> stratoWorkspace.internal.jfrog.home.resolve("").toString,
+      // setup_user does not like proxies
+      "HTTPS_PROXY" -> "",
+      "https_proxy" -> "",
+      "HTTP_PROXY" -> "",
+      "http_proxy" -> ""
+    )
+
+  def presetArtifactoryCredentials(stratoWorkspace: StratoWorkspaceCommon): Unit = {
+    val jfrogConfigFile = stratoWorkspace.internal.jfrog.configFile
+    lazy val credentials = Credential.fromJfrogConfFile(jfrogConfigFile)
+    lazy val artifactoryUrl = stratoWorkspace.internal.tools.artifactoryUrl
+    if (!jfrogConfigFile.exists() || jfrogConfigFile.toFile.length() == 0 || !artifactoryUrl.contains(credentials.host))
+      try {
+        ArtifactoryToolDownloader.setupUser(stratoWorkspace)
+      } catch {
+        case NonFatal(_) => stratoWorkspace.log.warning("Setting up artifactory credentials failed")
+      }
+    else
+      stratoWorkspace.log.debug("Artifactory credentials already present")
+  }
+
+  def setupUser(stratoWorkspace: StratoWorkspaceCommon): String = {
+    stratoWorkspace.log.info("Setting up artifactory configuration")
+    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.artifactorySetupCmd
+    val output = new CommonProcess(stratoWorkspace).runAndWaitFor(setupUserCommand, env = jfrogCliEnv(stratoWorkspace))
+
+    if (!stratoWorkspace.internal.jfrog.configFile.exists()) {
+      throw new StratosphereException(s"Setting up artifactory configuration failed:\n$output")
+    }
+
+    output
+  }
+
+  def downloadArtifact(
+      stratoWorkspace: StratoWorkspaceCommon,
+      artifactoryLocation: String,
+      downloadLocation: Path,
+      extract: Boolean = false): Unit = {
+
+    // we need a file separator at the end for artifactory download to put the file in the dir
+    val downloadTo = downloadLocation.toString + File.separator
+
+    def fetchApiKey(): String = {
+      val timeout = 30 seconds
+      val artifactoryUri = Uri(stratoWorkspace.internal.tools.artifactoryApikeyUrl)
+      val httpClient = HttpClientFactory
+        .factory(stratoWorkspace)
+        .createClient(artifactoryUri, "Artifactory", timeout, sendCrumbs = true)
+      val result = httpClient.get("/artifactory/api/security/apiKey")
+      try {
+        val apiKey = result.getString("apiKey")
+        stratoWorkspace.log.info(s"User API key exists: ${apiKey.nonEmpty}")
+        apiKey
+      } catch {
+        case NonFatal(apiAccessError) =>
+          stratoWorkspace.log.error(s"Failed to obtain user API key", apiAccessError)
+          throw apiAccessError
+      }
+    }
+
+    def downloadFromJfrog(): String = {
+      val jfrogCommand: Seq[String] = stratoWorkspace.internal.tools.jfrogCmd
+      val extractParams = if (extract) Seq(extractionFlag) else Seq()
+      val apiKeyParams = Seq("--apikey", fetchApiKey())
+      val jfrogDownloadCommand = jfrogCommand ++ extractParams ++ apiKeyParams ++ Seq(artifactoryLocation, downloadTo)
+      val output =
+        new CommonProcess(stratoWorkspace).runAndWaitFor(
+          jfrogDownloadCommand,
+          label = Some("JFrog download command"),
+          env = jfrogCliEnv(stratoWorkspace))
+      checkOutput(output)
+      output
+    }
+
+    if (Try(downloadFromJfrog()).isFailure) {
+      import stratoWorkspace.log
+
+      log.info("Download failed, setting up artifactory configuration and re-trying...")
+      try {
+        log.info(setupUser(stratoWorkspace))
+        log.info(downloadFromJfrog())
+      } catch {
+        case NonFatal(ex) =>
+          log.error(s"Failed to download $artifactoryLocation from artifactory")
+          if (artifactoryLocation.contains("-secure")) {
+            log.error(stratoWorkspace.internal.messages.afSecure(EnvironmentUtils.userName))
+          }
+          throw ex
+      }
+    }
+  }
+
+  private def checkOutput(output: String): Unit = {
+    import ArtifactoryResponseJsonProtocol._
+
+    // jfrog cli does not fail if you try to download from a non-existing path, instead it returns a JSON response like
+    // the one below, we need to check if 'success' is not 0 manually
+    //
+    // {
+    //  "status": "success",
+    //  "totals": {
+    //    "success": 0,
+    //    "failure": 0
+    //  }
+    // }
+
+    val result = output.parseJson.convertTo[ArtifactoryResponse]
+    require(result.totals.success > 0, "Download failed!")
+  }
+}
+
+class ArtifactoryToolDownloader(
+    stratoWorkspace: StratoWorkspaceCommon,
+    name: String,
+    requestedVersion: Option[String] = None) {
+
+  import ArtifactoryToolDownloader._
+  val version: String = requestedVersion.getOrElse(getProperty("version"))
+
+  object install {
+    val rootDir: Path = stratoWorkspace.directoryStructure.toolsDir.resolve(name)
+    val toolDir: Path = rootDir.resolve(version)
+  }
+
+  object cache {
+    val artifactoryLocation: String = getProperty("artifactory-path")
+    val rootDir: Path = stratoWorkspace.directoryStructure.artifactoryCache.resolve(name)
+    val toolDir: Path = rootDir.resolve(artifactoryLocation.split("/").to(Seq).drop(1).dropRight(1))
+  }
+
+  def install(forceReinstall: Boolean, verbose: Boolean = false): Boolean = {
+    try {
+      if (!install.toolDir.exists() || forceReinstall) {
+        stratoWorkspace.log.info(s"Installing $name ver. $version")
+        download()
+        extract()
+        stratoWorkspace.log.info(s"Installed $name at '${install.toolDir}'.")
+      } else if (verbose) {
+        stratoWorkspace.log.info(s"$name ver. $version already installed. Use '--force' to force re-install.")
+      }
+      true
+    } catch {
+      case t: Throwable =>
+        stratoWorkspace.log.error(s"Failed to install $name to '${install.toolDir}'!", t)
+        false
+    }
+  }
+
+  def uninstall(): Unit = {
+    stratoWorkspace.log.info(s"Removing $name installation from local drives")
+    cache.toolDir.deleteIfExists()
+    install.toolDir.deleteIfExists()
+  }
+
+  private def getProperty(prop: String): String =
+    stratoWorkspace.artifactoryTools.available.forName(name).getString(prop)
+
+  private def download(): Unit = {
+    install.rootDir.dir.create()
+    stratoWorkspace.log.info(s"Downloading $name from artifactory cache")
+    downloadArtifact(stratoWorkspace, cache.artifactoryLocation, cache.rootDir)
+  }
+
+  private def extract(): Unit = {
+    val installers = cache.toolDir.dir.list()
+
+    installers match {
+      case Seq() =>
+        throw new FileNotFoundException(s"""No artifact files found in '${cache.toolDir}'!""")
+      case Seq(installer) if installer.file.name.endsWith(".7z.exe") =>
+        stratoWorkspace.log.info(s"Unpacking $name from $installer to ${install.toolDir}")
+        val command = Seq(s"${installer.toString}", "-y", s"""-o"${install.toolDir.toString}"""")
+        val result = new CommonProcess(stratoWorkspace).runAndWaitFor(command, dir = Some(cache.rootDir))
+        stratoWorkspace.log.info(result)
+      case Seq(installer) if installer.file.name.endsWith(".zip") || installer.file.name.endsWith(".nupkg") =>
+        stratoWorkspace.log.info(s"Unpacking $name from $installer to ${install.toolDir}")
+        Unzip.extract(installer.toFile, install.toolDir.toFile)
+      case other =>
+        throw new FileNotFoundException(
+          s"""Unsupported artifact file(s) found in '${cache.toolDir}': ${other.map(_.name).mkString(",")}""")
+    }
+  }
+}

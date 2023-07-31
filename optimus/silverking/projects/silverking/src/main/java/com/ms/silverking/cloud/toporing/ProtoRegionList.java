@@ -37,7 +37,7 @@ class ProtoRegionList {
 
   private static Logger log = LoggerFactory.getLogger(ProtoRegionList.class);
 
-  private static final int minPrimaryUnderFailure = 1; // FIXME - temporarily hardcoded until minPrimaryUnderFailure
+  private static final int minPrimaryUnderFailure = 1; // TODO (OPTIMUS-0000): temporarily hardcoded until minPrimaryUnderFailure
   // code is complete
 
   private static final boolean debug = true;
@@ -373,7 +373,7 @@ class ProtoRegionList {
   public SingleRing toSingleRing(NodeClass nodeClass, RingTreeRecipe recipe) {
     SingleRing ring;
 
-    ring = new SingleRing(nodeClass, 0, recipe.storagePolicy.getName()); // FIXME - version of zero here
+    ring = new SingleRing(nodeClass, 0, recipe.storagePolicy.getName()); // TODO (OPTIMUS-0000): version of zero here
     for (ProtoRegion pr : getRegionList()) {
       ring.put(pr.getRegion().getEnd(),
           new RingEntry(pr.getPrimaryOwners(), pr.getSecondaryOwners(), pr.getRegion(), minPrimaryUnderFailure));

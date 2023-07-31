@@ -449,7 +449,7 @@ object OutputMethodElement {
   }
 
   def unapply(m: MethodElement) = m match {
-    case MethodElement(QueryMethod.OUTPUT, argList, projectedType: TypeInfo[_], key, pos: MethodPosition) => {
+    case MethodElement(QueryMethod.OUTPUT, argList, projectedType: TypeInfo[_], key, pos: MethodPosition) =>
       argList match {
         case List(MethodArg(_, src: MultiRelationElement), MethodArg(_, projectionSelector: ExpressionListElement)) =>
           Some((src, projectionSelector, None, projectedType, key, pos))
@@ -458,8 +458,8 @@ object OutputMethodElement {
               MethodArg(_, projectionSelector: ExpressionListElement),
               MethodArg(_, grpSourceAcc: RelationElement)) =>
           Some((src, projectionSelector, Some(grpSourceAcc), projectedType, key, pos))
+        case as => throw new MatchError(as)
       }
-    }
     case _ => None
   }
 }
@@ -555,13 +555,12 @@ object FlatMapMethodElement {
   }
 
   def unapply(m: MethodElement) = m match {
-    case MethodElement(QueryMethod.FLATMAP, argList, projectedType: TypeInfo[_], key, pos: MethodPosition) => {
-
+    case MethodElement(QueryMethod.FLATMAP, argList, projectedType: TypeInfo[_], key, pos: MethodPosition) =>
       argList match {
         case List(MethodArg(_, src: MultiRelationElement), MethodArg(_, flatMapSelector: ExpressionListElement)) =>
           Some((src, flatMapSelector, None, projectedType, key, pos))
+        case as => throw new MatchError(as)
       }
-    }
     case _ => None
   }
 }
