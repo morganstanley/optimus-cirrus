@@ -17,7 +17,7 @@ import msjava.kerberos.auth.MSKerberosConfiguration
 
 import scala.jdk.CollectionConverters._
 
-//TODO: (OPTIMUS-48905): merge KerberosSupport with this implementation
+//TODO (OPTIMUS-48905): merge KerberosSupport with this implementation
 trait KerberosAuthentication {
   def isKerberized: Boolean
 

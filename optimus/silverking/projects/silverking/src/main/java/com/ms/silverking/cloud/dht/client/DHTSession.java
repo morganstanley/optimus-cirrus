@@ -158,7 +158,7 @@ public interface DHTSession {
    * be deleted from disk.
    *
    * @param namespace name of the namespace
-   * @throws NamespaceDeletionException TODO
+   * @throws NamespaceDeletionException TODO (OPTIMUS-0000): describe
    */
   public void deleteNamespace(String namespace) throws NamespaceDeletionException;
 
@@ -166,7 +166,7 @@ public interface DHTSession {
    * Attempts recovery of a deleted namespace. This is only possible if namespace data has not been deleted from disk.
    *
    * @param namespace name of the namespace
-   * @throws NamespaceRecoverException TODO
+   * @throws NamespaceRecoverException TODO (OPTIMUS-0000): describe
    */
   public void recoverNamespace(String namespace) throws NamespaceRecoverException;
 

@@ -11,15 +11,18 @@
  */
 package optimus.utils
 
+import com.opencsv.CSVParserBuilder
+import com.opencsv.CSVReader
+import com.opencsv.CSVReaderBuilder
+import com.opencsv.CSVWriterBuilder
+import com.opencsv.ICSVWriter
+import optimus.platform.IO.usingQuietly
+
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-import com.opencsv.CSVReader
-import com.opencsv.CSVWriter
-import optimus.platform.IO.usingQuietly
-
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -50,11 +53,16 @@ object FileUtils {
   }
 
   def getCSVReader(filename: String, separator: Char): CSVReader = {
-    new CSVReader(new BufferedReader(new InputStreamReader(new FileInputStream(filename))), separator, '"', '\\')
+    new CSVReaderBuilder(new BufferedReader(new InputStreamReader(new FileInputStream(filename))))
+      .withCSVParser(new CSVParserBuilder().withSeparator(separator).build)
+      .build
   }
 
-  def getCSVWriter(filename: String, separator: Char, append: Boolean = false): CSVWriter = {
-    new CSVWriter(new OutputStreamWriter(new FileOutputStream(filename, append)), separator, '"', '\\')
+  def getCSVWriter(filename: String, separator: Char, append: Boolean = false): ICSVWriter = {
+    new CSVWriterBuilder(new OutputStreamWriter(new FileOutputStream(filename, append)))
+      .withSeparator(separator)
+      .withEscapeChar('\\')
+      .build()
   }
 
   // For any app/test that dynamically discovers resources within a package dynamically at runtime on the classpath
@@ -85,12 +93,16 @@ object FileUtils {
 
   /**
    * If executable and resource are in a single .jar, getting the URI and converting to a File to get the Path won't
-   * work (you can only access the resource as a stream and not as a URI).
-   * See https://stackoverflow.com/questions/51705451
-   * @param basePath path to file under resources/ dir
-   * @param fileName file name (no path) with extension
-   * @param tmpPrefix prefix for tmp file created
-   * @return absolute path as string
+   * work (you can only access the resource as a stream and not as a URI). See
+   * https://stackoverflow.com/questions/51705451
+   * @param basePath
+   *   path to file under resources/ dir
+   * @param fileName
+   *   file name (no path) with extension
+   * @param tmpPrefix
+   *   prefix for tmp file created
+   * @return
+   *   absolute path as string
    */
   def getResourcePath(basePath: String, fileName: String, tmpPrefix: String = ""): String = {
     val name = if (basePath.isEmpty) fileName else s"$basePath/$fileName"

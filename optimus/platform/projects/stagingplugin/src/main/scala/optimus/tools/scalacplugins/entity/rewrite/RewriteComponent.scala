@@ -280,6 +280,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
           util.Success(tree)
         case analyzer.SilentTypeError(err) =>
           util.Failure(new TypeError(err.errPos, err.errMsg))
+        case r => throw new MatchError(r)
       }
     }
 
@@ -818,6 +819,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
                 if (isInfix(groupBy, state.parseTree) == TriState.True) p.span.start
                 else unit.source.skipWhitespace(p.span.start)
               })
+            case _ => Nil
           }
         } // replace ".groupBy" with ".groupMap"
         state.patches += Patch(
@@ -858,6 +860,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
           // skip the whitespace, so `qual foo ()` doesn't become `qual. foo ()`
           selectFromInfix(fun.qualifier, "", state.parseTree, reuseParens = true) match {
             case ps :+ p => ps :+ p.copy(span = p.span.withEnd(skipSpace(p.span.end)))
+            case _       => Nil
           }
         }
         fun.removeAttachment[PostfixAttachment.type] // prevent PostfixRewriter from handling this one too
@@ -881,6 +884,7 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
         state.patches ++= {
           selectFromInfix(qual, "", state.parseTree, reuseParens = true) match {
             case ps :+ p => ps :+ p.copy(span = p.span.withEnd(skipSpace(p.span.end)))
+            case _       => Nil
           }
         }
         super.transform(tree)

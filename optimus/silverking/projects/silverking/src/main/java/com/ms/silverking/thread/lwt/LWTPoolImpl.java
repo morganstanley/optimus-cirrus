@@ -179,7 +179,7 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
     lock.lock();
     try {
       while (numActiveThreads() > targetSize) {
-        //removeThread(activeThreads.size() - 1); // FIXME
+        //removeThread(activeThreads.size() - 1); // TODO (OPTIMUS-0000): to be completed
         deactivateThread();
       }
     } finally {

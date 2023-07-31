@@ -22,8 +22,11 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
 class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
+  public static final String DELETE = "delete";
+  public static final String DELETE_DESC = "()V";
   private final Type classType;
-  private int callSiteID = -1;
+  int callSiteID = -1;
+  private final MethodInvokeFinder deleteParser = new MethodInvokeFinder("delete_", "(J)V");
 
   CleanerInjectorAdapter(String className, ClassVisitor cv) {
     super(ASM9, cv);
@@ -31,36 +34,55 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   @Override
+  public void visit(
+      int version,
+      int access,
+      String name,
+      String signature,
+      String superName,
+      String[] interfaces) {
+    super.visit(version, access, name, signature, superName, interfaces);
+  }
+
+  @Override
+  public void visitEnd() {
+    generateCleanableField();
+    if (callSiteID >= 0) {
+      CleanerSupport.registerCallSiteAtCompile(
+          deleteParser.foundOwner, deleteParser.foundMethod, callSiteID);
+      // write the new implementation
+      writeDeleteMethodBody();
+    }
+    super.visitEnd();
+  }
+
+  private void generateCleanableField() {
+    var fv =
+        visitField(ACC_PRIVATE, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE.getDescriptor(), null, null);
+    fv.visitEnd();
+  }
+
+  @Override
   public MethodVisitor visitMethod(
       int access, String name, String desc, String signature, String[] exceptions) {
-    var isFinalizeMethod = name.equals("finalize") && desc.equals("()V");
-    if (isFinalizeMethod) return null; // remove the method!
+    if (name.equals("finalize") && desc.equals("()V"))
+      return null; // remove the method! disables finalization!!!!
 
-    var isDeleteMethod = name.equals("delete") && desc.equals("()V");
-    if (isDeleteMethod) {
-      var methodFinder = new MethodInvokeFinder(INVOKESTATIC, "delete_", "(J)V");
-      callSiteID =
-          CleanerSupport.registerCallSiteAtCompile(
-              methodFinder.foundOwner, methodFinder.foundMethod, callSiteID);
-      return null; // remove the method!
+    if (name.equals(DELETE) && desc.equals(DELETE_DESC)) {
+      // find delete method and ignore the original code the method by not chaining to writer!
+      return deleteParser;
     }
-
-    var isPointerCtor = name.equals("<init>") && desc.equals("(JZ)V");
-    if (isPointerCtor) callSiteID = CleanerSupport.reserveCallSiteAtCompile(callSiteID);
-
     var methodWriter = super.visitMethod(access, name, desc, signature, exceptions);
     var mv = CommonAdapter.wrap(methodWriter, access, name, desc);
-
-    var isDisposeMethod = name.equals("dispose") && desc.equals("()V");
-    if (isDisposeMethod) {
-      callCleanableClean(mv); // write the new implementation
-      return null; // remove the old implementation
+    if (name.equals("<init>") && desc.equals("(JZ)V")) {
+      callSiteID = CleanerSupport.reserveCallSiteAtCompile();
     }
-
     return new CleanerInjectorMethodVisitor(mv, classType, callSiteID, access, name, desc);
   }
 
-  private void callCleanableClean(CommonAdapter mv) {
+  private void writeDeleteMethodBody() {
+    var methodWriter = super.visitMethod(ACC_PUBLIC, DELETE, DELETE_DESC, null, null);
+    var mv = CommonAdapter.wrap(methodWriter, ACC_PUBLIC, DELETE, DELETE_DESC);
     mv.visitCode();
 
     Label stopLabel = new Label();
@@ -70,7 +92,12 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
 
     mv.dup();
     mv.ifNull(stopLabel);
-    mv.visitMethodInsn(INVOKEVIRTUAL, CLEANABLE_TYPE.getInternalName(), "clean", "()V", false);
+    mv.visitMethodInsn(INVOKEINTERFACE, CLEANABLE_TYPE.getInternalName(), "clean", "()V", true);
+    if (deleteParser.superOwner != null) {
+      mv.loadThis();
+      mv.visitMethodInsn(
+          INVOKESPECIAL, deleteParser.superOwner, deleteParser.superMethod, DELETE_DESC, false);
+    }
     mv.returnValue();
 
     mv.visitLabel(stopLabel);
@@ -81,26 +108,29 @@ class CleanerInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   private static class MethodInvokeFinder extends MethodVisitor {
-    private final int opcode;
     private final String nameStart;
     private final String descriptor;
     public String foundOwner;
     public String foundMethod;
+    public String superOwner;
+    public String superMethod;
 
-    protected MethodInvokeFinder(int opcode, String nameStart, String descriptor) {
+    protected MethodInvokeFinder(String nameStart, String descriptor) {
       super(Opcodes.ASM9);
-      this.opcode = opcode;
       this.nameStart = nameStart;
       this.descriptor = descriptor;
     }
 
     @Override
     public void visitMethodInsn(
-        int code, String owner, String name, String desc, boolean isInterface) {
-      var matches = code == opcode && name.startsWith(nameStart) && desc.equals(descriptor);
-      if (matches) {
+        int opcode, String owner, String name, String desc, boolean isInterface) {
+      if (opcode == INVOKESTATIC && name.startsWith(nameStart) && desc.equals(descriptor)) {
         foundOwner = owner;
         foundMethod = name;
+      }
+      if (opcode == INVOKESPECIAL) {
+        superOwner = owner;
+        superMethod = name;
       }
     }
   }

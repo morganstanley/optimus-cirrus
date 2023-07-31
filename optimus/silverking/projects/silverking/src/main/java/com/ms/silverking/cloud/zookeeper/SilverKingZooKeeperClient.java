@@ -114,7 +114,7 @@ public class SilverKingZooKeeperClient {
   }
 
   private final CuratorWithBasePath curatorWithBasePath;
-  // TODO various other classes consume this at present in order to share ZK connections where the ZK Config matches.
+  // TODO (OPTIMUS-0000): various other classes consume this at present in order to share ZK connections where the ZK Config matches.
   // However it would be better to remove this in future and let Curator take care of the connection state management
   // for us.
   private final ZooKeeperConfig zkConfig;

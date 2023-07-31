@@ -127,7 +127,7 @@ public final class NewIncomingBufferedData implements IncomingData {
               readState = ReadState.HEADER_LENGTH;
               allocateBufferLengthsBuffer(headerLengthBufferInt.get(0));
               readState = ReadState.BUFFER_LENGTHS;
-              // FIXME - ADD FALLTHROUGH FOR THIS CASE
+              // TODO (OPTIMUS-0000): ADD FALLTHROUGH FOR THIS CASE
             } else {
               // mismatch - search for real preamble
               preambleAndHeaderLengthBuffer.clear();
@@ -158,7 +158,7 @@ public final class NewIncomingBufferedData implements IncomingData {
         case BUFFERS:
           ByteBuffer curBuffer;
 
-          // FIXME - MERGE THESE READS EVENTUALLY
+          // TODO (OPTIMUS-0000): MERGE THESE READS EVENTUALLY
           curBuffer = buffers[curBufferIndex];
           //if (curBuffer.remaining() <= 0) {
           //    throw new IOException("curBuffer.remaining() <= 0");

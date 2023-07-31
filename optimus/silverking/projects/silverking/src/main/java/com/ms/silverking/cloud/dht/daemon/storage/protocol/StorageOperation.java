@@ -26,9 +26,9 @@ public interface StorageOperation extends Operation<MessageGroupKeyEntry, PutRes
    *
    * @param key
    * @param replica
-   * @param storageState TODO
+   * @param storageState TODO (OPTIMUS-0000): describe
    * @param update
-   * @param pvComm       TODO
+   * @param pvComm       TODO (OPTIMUS-0000): describe
    */
   public void update(DHTKey key, IPAndPort replica, byte storageState, OpResult update, PutVirtualCommunicator pvComm);
 

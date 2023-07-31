@@ -11,18 +11,13 @@
  */
 package optimus.graph.cleaner;
 
-import static optimus.debug.InstrumentationConfig.CLEANABLE_FIELD_NAME;
-import static optimus.debug.InstrumentationConfig.CLEANABLE_TYPE;
-
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 
 import optimus.graph.DiagnosticSettings;
 import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.Opcodes;
 
 public class CleanerInjector implements ClassFileTransformer, Opcodes {
@@ -45,9 +40,10 @@ public class CleanerInjector implements ClassFileTransformer, Opcodes {
     if (!implementsDisposable(crSource)) return bytes;
 
     ClassWriter cw = new ClassWriter(crSource, ClassWriter.COMPUTE_FRAMES);
-    generateCleanableField(cw);
-    ClassVisitor cv = new CleanerInjectorAdapter(className, cw);
+    var cv = new CleanerInjectorAdapter(className, cw);
     crSource.accept(cv, ClassReader.SKIP_FRAMES);
+    // Check that the class was successfully transformed
+    if (cv.callSiteID < 0) return bytes;
     return cw.toByteArray();
   }
 
@@ -59,12 +55,5 @@ public class CleanerInjector implements ClassFileTransformer, Opcodes {
     String[] interfaces = crSource.getInterfaces();
     for (String iface : interfaces) if (iface.equals(interfaceToRewrite)) return true;
     return false;
-  }
-
-  private void generateCleanableField(ClassWriter cw) {
-    FieldVisitor fv =
-        cw.visitField(
-            ACC_PRIVATE, CLEANABLE_FIELD_NAME, CLEANABLE_TYPE.getDescriptor(), null, null);
-    fv.visitEnd();
   }
 }

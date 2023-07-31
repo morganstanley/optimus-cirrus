@@ -42,14 +42,14 @@ object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with Optimu
 object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val TO_CONVERSION_TYPE_ARG =
     error0(
-      sn = 20301,
+      20301,
       StagingPhase.POST_TYPER_STANDARDS,
       "For Scala 2.13 compatibility, replace `to[X]` by `to(X)`; this requires an `import scala.collection.compat._`"
     )
 
   val PREDEF_FALLBACK_STRING_CBF =
     error0(
-      sn = 20302,
+      20302,
       StagingPhase.POST_TYPER_STANDARDS,
       """The implicit Predef.fallbackStringCanBuildFrom is used here.
         |This implicit instance is inferred when a `Seq` (or an unspecified) CanBuildFrom is required, but it builds an `IndexedSeq`.
@@ -59,14 +59,14 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
 
   val VIEW_BOUND =
     error0(
-      sn = 20303,
+      20303,
       StagingPhase.POST_TYPER_STANDARDS,
       "View bounds <% are deprecated in 2.13. `def f[T <% B]` is equivalent to `def f[T](implicit ev: T => B)`."
     )
 
   val NILARY_INFIX =
     error0(
-      sn = 20304,
+      20304,
       StagingPhase.POST_TYPER_STANDARDS,
       """Methods with an empty parameter list cannot be called infix. Examples:
         |  - `obj operation ()`           -> `obj.operation()`
@@ -76,34 +76,34 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
 
   val PROCEDURE_SYNTAX =
     error0(
-      sn = 20305,
+      20305,
       StagingPhase.POST_TYPER_STANDARDS,
       "Procedure syntax `def f { statements() }` is deprecated, use an explicit return type instead: `def f: Unit = { statements() }`."
     )
 
   val NILARY_OVERRIDE =
     error2(
-      sn = 20306,
+      20306,
       StagingPhase.POST_TYPER_STANDARDS,
       "Inconsistent override: the overridden method %s is defined %s"
     )
 
   val AUTO_APPLICATION =
     error1(
-      sn = 20307,
+      20307,
       StagingPhase.POST_TYPER_STANDARDS,
       "Auto-application (insertion of an empty parameter list) is deprecated, write %s() instead.")
 
   val NULLARY_IN_213 =
     error1(
-      sn = 20308,
+      20308,
       StagingPhase.POST_TYPER_STANDARDS,
       "Method %s doesn't have a parameter list in Scala 2.13. Remove the empty argument list () for cross-building."
     )
 
   val MAP_CONCAT_WIDENS =
     error2(
-      sn = 20309,
+      20309,
       StagingPhase.POST_TYPER_STANDARDS,
       """The key type of the argument of ++ is not a sub-type of the receiver's key type. Type inference will differ in Scala 2.13. Remedies:
         |  - widen the the key type of the declaration of the receiver
@@ -114,41 +114,41 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
 
   val EXPLICIT_CBF_ARGUMENT =
     warning0(
-      sn = 20310,
+      20310,
       StagingPhase.POST_TYPER_STANDARDS,
       """Explicit arguments for the `CanBuildFrom` parameter are not supported. Collection operations in Scala 2.13 no longer have such a parameter.""".stripMargin
     )
 
   val DOUBLE_BUILDER_PLUSEQ =
     error0(
-      sn = 20311,
+      20311,
       StagingPhase.POST_TYPER_STANDARDS,
       """Calling `OptimusDoubleBuilder.+=` boxes the argument double value, use `addOne` instead.""".stripMargin
     )
 
   val INT_TO_FLOAT =
     warning3(
-      sn = 20312,
+      20312,
       StagingPhase.POST_TYPER_STANDARDS,
       """[NEW]Widening conversion from %s to %s is deprecated because it loses precision, add an explicit `%s`.""".stripMargin
     )
 
   val INTEGRAL_DIVISION_TO_FLOATING =
     warning1(
-      sn = 20313,
+      20313,
       StagingPhase.POST_TYPER_STANDARDS,
       """[NEW]Integral division is implicitly converted (widened) to a floating point value. Add an explicit `.%s`.""".stripMargin
     )
 
   val NEEDS_UNSORTED =
     warning0(
-      sn = 20314,
+      20314,
       StagingPhase.POST_TYPER_STANDARDS,
       "Transforming a Sorted Set/Map to and unsorted Set/Map now requires explicit demarcation with coll.unsorted.map; this requires an `import optimus.scalacompat.collection._"
     )
   val IMPORT_PARCOLLECTIONS =
     warning0(
-      sn = 20315,
+      20315,
       StagingPhase.POST_TYPER_STANDARDS,
       "For cross-building with Scala 2.13, using `.par` requires adding `import optimus.scalacompat.collection.ParCollectionConverters._`"
     )

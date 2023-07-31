@@ -41,7 +41,7 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
   /**
    * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts.
    *
-   * @param maxAttempts TODO
+   * @param maxAttempts TODO (OPTIMUS-0000): describe
    * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts
    */
   public SimpleSessionEstablishmentTimeoutController maxAttempts(int maxAttempts) {
@@ -53,7 +53,7 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
    * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
    * attemptRelativeTimeoutMillis.
    *
-   * @param attemptRelativeTimeoutMillis TODO
+   * @param attemptRelativeTimeoutMillis TODO (OPTIMUS-0000): describe
    * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
    * attemptRelativeTimeoutMillis
    */
@@ -65,7 +65,7 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
   /**
    * Create a SimpleTimeoutController like this instance, but with a new maxRelativeTimeoutMillis.
    *
-   * @param maxRelativeTimeoutMillis TODO
+   * @param maxRelativeTimeoutMillis TODO (OPTIMUS-0000): describe
    * @return a SimpleTimeoutController like this instance, but with a new maxRelativeTimeoutMillis
    */
   public SimpleSessionEstablishmentTimeoutController maxRelativeTimeoutMillis(int maxRelativeTimeoutMillis) {

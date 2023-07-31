@@ -180,7 +180,7 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
     AsyncSnapshotOperationImpl asyncSnapshotImpl;
 
     snapshotOperation = new SnapshotOperation(clientNamespace, version);
-    // FIXME: Snapshot is not supported in a server who enables traceID feature
+    // TODO (OPTIMUS-0000): Snapshot is not supported in a server who enables traceID feature
     clientNamespace.validateOpOptions(snapshotOperation.options);
     asyncSnapshotImpl = new AsyncSnapshotOperationImpl(snapshotOperation, clientNamespace.getContext(),
         clientNamespace.getAbsMillisTimeSource().absTimeMillis(), clientNamespace.getOriginator());
@@ -197,7 +197,7 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
     AsyncSyncRequestOperationImpl asyncSyncRequestOperationImpl;
 
     syncRequestOperation = new SyncRequestOperation(clientNamespace, version);
-    // FIXME: SyncRequest is not supported in a server who enables traceID feature
+    // TODO (OPTIMUS-0000): SyncRequest is not supported in a server who enables traceID feature
     clientNamespace.validateOpOptions(syncRequestOperation.options);
     asyncSyncRequestOperationImpl = new AsyncSyncRequestOperationImpl(syncRequestOperation,
         clientNamespace.getContext(), clientNamespace.getAbsMillisTimeSource().absTimeMillis(),

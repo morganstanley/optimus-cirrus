@@ -70,9 +70,16 @@ trait OptimusPluginReporter {
       // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
       val asMessage = Reporting.Message.Plain(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
       val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]
-      if (suppressed && alarm.scalaMandatory) {
+      if (suppressed && alarm.id.tpe != OptimusAlarmType.WARNING) {
         // If we report this as an error, we'll abort before showing the actual illegal suppression, so make it a warning.
-        global.reporter.warning(pos, s"Optimus: cannot suppress mandatory alarm #${alarm.id.sn}")
+        import optimus.tools.scalacplugins.entity.reporter.OptimusAlarmType._
+        val article = alarm.id.tpe match {
+          case SILENT | DEBUG | WARNING  => "a"
+          case INFO | ERROR | ABORT => "an"
+        }
+        global.reporter.warning(
+          pos,
+          s"Invalid @nowarn! Optimus: (${alarm.id.sn}) is $article ${alarm.id.tpe} message but only WARNING messages can be suppressed.")
         false
       } else suppressed
     }
@@ -89,50 +96,10 @@ trait OptimusPluginReporter {
   def alarm(builder: OptimusAlarmBuilder5, pos: Position, arg1: Any, arg2: Any, arg3: Any, arg4: Any, arg5: Any): Unit =
     alarm(builder(arg1, arg2, arg3, arg4, arg5), pos)
 
-  def alarm(builder: OptimusAlarmBuilder0, pos: Position, alarmed: mutable.Set[(Int, Position)]): Unit =
-    if (dedup(alarmed, builder, pos))
+  def alarmDedup(builder: OptimusAlarmBuilder0, pos: Position, alarmed: mutable.Set[(Int, Position)]): Unit =
+    if (dedup(alarmed, builder, pos)) {
       alarm(builder(), pos)
-  def alarm(builder: OptimusAlarmBuilder1, pos: Position, alarmed: mutable.Set[(Int, Position)], arg: Any): Unit =
-    if (dedup(alarmed, builder, pos))
-      alarm(builder(arg), pos)
-  def alarm(
-      builder: OptimusAlarmBuilder2,
-      pos: Position,
-      alarmed: mutable.Set[(Int, Position)],
-      arg1: Any,
-      arg2: Any): Unit =
-    if (dedup(alarmed, builder, pos))
-      alarm(builder(arg1, arg2), pos)
-  def alarm(
-      builder: OptimusAlarmBuilder3,
-      pos: Position,
-      alarmed: mutable.Set[(Int, Position)],
-      arg1: Any,
-      arg2: Any,
-      arg3: Any): Unit =
-    if (dedup(alarmed, builder, pos))
-      alarm(builder(arg1, arg2, arg3), pos)
-  def alarm(
-      builder: OptimusAlarmBuilder4,
-      pos: Position,
-      alarmed: mutable.Set[(Int, Position)],
-      arg1: Any,
-      arg2: Any,
-      arg3: Any,
-      arg4: Any): Unit =
-    if (dedup(alarmed, builder, pos))
-      alarm(builder(arg1, arg2, arg3, arg4), pos)
-  def alarm(
-      builder: OptimusAlarmBuilder5,
-      pos: Position,
-      alarmed: mutable.Set[(Int, Position)],
-      arg1: Any,
-      arg2: Any,
-      arg3: Any,
-      arg4: Any,
-      arg5: Any): Unit =
-    if (dedup(alarmed, builder, pos))
-      alarm(builder(arg1, arg2, arg3, arg4, arg5), pos)
+    }
 
   def internalErrorAbort(pos: Position, msg: String): Nothing = {
     global.reporter.error(pos, s"Optimus internal error. Please contact the graph team: $msg")

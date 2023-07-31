@@ -50,7 +50,7 @@ public interface Tracer extends HasTracerContext {
   void onLocalEnqueueRetrievalResult(SkTraceId traceID);
 
   // Phase 3: Take the results from queue and send them to destination (can be client or proxy)
-  // TODO: consider distinguish if result is sent from proxy or final replica
+  // TODO (OPTIMUS-0000): consider distinguish if result is sent from proxy or final replica
   void onBothDequeueAndAsyncSendRetrievalResult(SkTraceId traceID, List<RetrievalResult> results);
 
   // Phase 4: Proxy handles response messages

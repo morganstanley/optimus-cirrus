@@ -24,7 +24,7 @@ import com.ms.silverking.cloud.dht.net.MessageGroupRetrievalResponseEntry;
  */
 public class RetrievalGroup {
   private final ConcurrentMap<VersionConstraint, Object> retrievals;
-  // FIXME - THINK ABOUT CONCURRENCY IN THIS CLASS
+  // TODO (OPTIMUS-0000): THINK ABOUT CONCURRENCY IN THIS CLASS
   //private final ConcurrentNavigableMap<VersionConstraint,Retrieval> retrievals;
     /*
     private final List<Retrieval>   retrievals;
@@ -33,7 +33,7 @@ public class RetrievalGroup {
 
   //private static final VCComparator  vcComparator;
 
-  // FIXME - PROBABLY ONLY LOOK TO COMBINE OPERATIONS IF THE VERSION MATCH IS
+  // TODO (OPTIMUS-0000): PROBABLY ONLY LOOK TO COMBINE OPERATIONS IF THE VERSION MATCH IS
   // EXACT
 
   //static {
@@ -86,7 +86,7 @@ public class RetrievalGroup {
         try {
             boolean overlaps;
             
-            // FIXME - this is a placeholder implementation
+            // TODO (OPTIMUS-0000): this is a placeholder implementation
             // (whole class implementation is)
             // speed up once correct
             overlaps = false;
@@ -113,7 +113,7 @@ public class RetrievalGroup {
         if (existing != null) {
             throw new RuntimeException("duplicates not yet supported");
         } else {
-            // FIXME
+            // TODO (OPTIMUS-0000): to be completed
         }
         */
   }
@@ -144,7 +144,7 @@ public class RetrievalGroup {
         lock.lock();
         try {
             for (Retrieval retrieval : retrievals) {
-                // FIXME - need to look at metadata to see if this matches
+                // TODO (OPTIMUS-0000): need to look at metadata to see if this matches
                 if (true) {
                     retrieval.addResponse(entry);
                 }

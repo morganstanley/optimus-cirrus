@@ -24,8 +24,13 @@ public final class CleanerSupport {
     MethodHandle mh; // Lazily found as we need to be in the right class loader
 
     MethodRef(String owner, String name) {
-      this.owner = owner;
+      this.owner = owner.replace("/", ".") ;
       this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return owner + "." + name;
     }
   }
 
@@ -59,34 +64,21 @@ public final class CleanerSupport {
     }
   }
 
-  public static Cleaner.Cleanable register(
-      Object instance, long pointer, boolean ownership, int callSiteId) {
+  public static Cleaner.Cleanable register(Object instance, long pointer, boolean ownership, int callSiteId) {
     // we don't register a cleanable if we do not own the instance
     if (!ownership) return null;
     return cleaner.register(instance, new State(callSiteId, pointer));
   }
 
-  public static int registerCallSiteAtCompile(
-      String deleteCls, String deleteMethod, int suggestedID) {
-    var id = suggestedID;
-    var mr = new MethodRef(deleteCls, deleteMethod);
-    if (suggestedID < 0) {
-      synchronized (methodRefs) {
-        id = methodRefs.size();
-        methodRefs.add(mr);
-      }
-    } else methodRefs.set(id, mr);
-    return id;
+  public static void registerCallSiteAtCompile(String deleteCls, String deleteMethod, int id) {
+    methodRefs.set(id, new MethodRef(deleteCls, deleteMethod));
   }
 
-  public static int reserveCallSiteAtCompile(int suggestedID) {
-    var id = suggestedID;
-    if (suggestedID < 0) {
-      synchronized (methodRefs) {
-        id = methodRefs.size();
-        methodRefs.add(null);
-      }
+  public static int reserveCallSiteAtCompile() {
+    synchronized (methodRefs) {
+      var id = methodRefs.size();
+      methodRefs.add(null);
+      return id;
     }
-    return id;
   }
 }

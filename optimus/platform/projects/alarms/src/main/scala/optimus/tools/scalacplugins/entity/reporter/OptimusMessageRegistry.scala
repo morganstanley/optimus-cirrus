@@ -16,7 +16,7 @@ import java.util.regex.Pattern
 /**
  * This is the place we generate optimus specified error/warning message
  *
- * FIXME: Because currently, plugin don't depend on core project, so we duplicate some code here.
+ * TODO (OPTIMUS-0000): Because currently, plugin don't depend on core project, so we duplicate some code here.
  */
 private[optimus] object OptimusMessageRegistry {
   private val prefix = "Optimus"

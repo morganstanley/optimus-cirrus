@@ -14,9 +14,9 @@ package optimus.breadcrumbs
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.{ ArrayList => jArrayList }
-import java.util.{ List => jList }
-import java.util.{ Map => jMap }
+import java.util.{ArrayList => jArrayList}
+import java.util.{List => jList}
+import java.util.{Map => jMap}
 import com.google.common.cache.CacheBuilder
 import msjava.base.util.internal.SystemPropertyUtils
 import msjava.zkapi.internal.ZkaContext
@@ -140,7 +140,7 @@ object Breadcrumbs {
   private val interestsLock = new ReentrantReadWriteLock()
 
   // For custom handling of registration
-  def registerRegistrationCallback(id: String, cb: (Registration, Boolean) => Unit): Unit =  {
+  def registerRegistrationCallback(id: String, cb: (Registration, Boolean) => Unit): Unit = {
     interestsLock.writeLock.lock()
     try {
       registrationCallbacks.put(id, cb)
@@ -149,7 +149,11 @@ object Breadcrumbs {
     }
   }
 
-  final case class Registration private[Breadcrumbs] (interestedIn: ChainedID, task: ChainedID, scopeTag: Option[String]) {
+  final case class Registration private[Breadcrumbs] (
+      interestedIn: ChainedID,
+      task: ChainedID,
+      scopeTag: Option[String])
+      extends AutoCloseable {
     private var deregistered: Boolean = false
     def deregister(): Unit = this.synchronized {
       if (!deregistered) {
@@ -161,6 +165,7 @@ object Breadcrumbs {
       deregister()
       a
     }
+    override def close(): Unit = deregister()
   }
 
   /**
@@ -184,7 +189,8 @@ object Breadcrumbs {
    * }}}
    * then crumbs sent to AAAAA#1 will also go to #2 and #1#5, but not vice versa.
    */
-  def registerInterest(interestedIn: ChainedID, task: ChainedID): Registration = registerInterest(interestedIn, task, None)
+  def registerInterest(interestedIn: ChainedID, task: ChainedID): Registration =
+    registerInterest(interestedIn, task, None)
   def registerInterest(task: ChainedID): Registration = registerInterest(ChainedID.root, task, None)
   def registerInterest(interestedIn: ChainedID, task: ChainedID, tag: Option[String]): Registration = {
     val rs = interestedIn.base
@@ -192,7 +198,7 @@ object Breadcrumbs {
     val reg = Registration(interestedIn, task, tag)
     interestsLock.writeLock.lock()
     try {
-      registrationCallbacks.values.foreach(_ (reg, true))
+      registrationCallbacks.values.foreach(_(reg, true))
       if (!interests.contains(rs)) {
         interests.put(rs, Map(ts -> (1, task)))
       } else if (!interests(rs).contains(ts)) {
@@ -215,7 +221,7 @@ object Breadcrumbs {
     val ts = reg.task.repr
     interestsLock.writeLock.lock()
     try {
-      registrationCallbacks.values.foreach(_ (reg, false))
+      registrationCallbacks.values.foreach(_(reg, false))
       if (interests.contains(rs) && interests(rs).contains(ts)) {
         val (i, c) = interests(rs)(ts)
         if (i <= 1) {
@@ -319,7 +325,10 @@ object Breadcrumbs {
 
   // Customize a publisher.  This can only be done once - subsequent attempts will be
   // relatively cheaply ignored.
-  private[optimus] def customizedInit(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): Unit = this.synchronized {
+  private[optimus] def customizedInit(
+      keys: => Map[String, String],
+      zkc: => ZkaContext,
+      setupFlags: SetupFlags = SetupFlags.None): Unit = this.synchronized {
     val newImpl = impl.customize(keys, zkc, setupFlags)
     if (newImpl ne impl)
       setImpl(newImpl)
@@ -413,7 +422,10 @@ abstract class BreadcrumbsPublisher extends Filterable {
   private[breadcrumbs] lazy val level: Level = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT"))
   private val scv = new StandardCrumbValidator
   def savedCustomization: Option[(Map[String, String], ZkaContext)] = None
-  def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = this
+  def customize(
+      keys: => Map[String, String],
+      zkc: => ZkaContext,
+      setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = this
   def collecting: Boolean
   def init(): Unit
 
@@ -607,7 +619,10 @@ class BreadcrumbsIgnorer extends BreadcrumbsPublisher {
 }
 
 class DeferredConfigurationBreadcrumbsPublisher() extends BreadcrumbsPublisher {
-  override def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
+  override def customize(
+      keys: => Map[String, String],
+      zkc: => ZkaContext,
+      setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
     Breadcrumbs.log.info(s"${this.getClass} reconfiguring with $keys")
     BreadcrumbsPropertyConfigurer.implFromConfig(zkc, keys, setupFlags)
   }
@@ -800,7 +815,10 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
   import Breadcrumbs.runProtected
   import BreadcrumbsCompositePublisher.log
 
-  override def customize(keys: => Map[String, String], zkc: => ZkaContext, setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
+  override def customize(
+      keys: => Map[String, String],
+      zkc: => ZkaContext,
+      setupFlags: SetupFlags = SetupFlags.None): BreadcrumbsPublisher = {
     new BreadcrumbsCompositePublisher(publishers.map(_.customize(keys, zkc)))
   }
 

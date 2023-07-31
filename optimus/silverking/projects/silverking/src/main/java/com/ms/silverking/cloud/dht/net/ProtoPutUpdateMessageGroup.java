@@ -36,7 +36,7 @@ public class ProtoPutUpdateMessageGroup extends ProtoKeyedMessageGroup {
     optionsByteBuffer.put(storageState);
     for (MessageGroupKeyOrdinalEntry keyOrdinalEntry : destEntries) {
       addKey(keyOrdinalEntry);
-      // FIXME - the orginal is unused since it's the same and stored as
+      // TODO (OPTIMUS-0000): the orginal is unused since it's the same and stored as
       // storageState in the optionsByteBuffer
       // remove the per entry ordinal and remove the type from the list etc.
     }
@@ -55,7 +55,7 @@ public class ProtoPutUpdateMessageGroup extends ProtoKeyedMessageGroup {
     return getOptionBuffer(mg).getLong(PutUpdateMessageFormat.versionOffset);
   }
 
-  // FIXME - NEED TO MAKE CONSISTENT WHETHER WE USE THE PROTO CLASSES OR THE FORMAT CLASSES
+  // TODO (OPTIMUS-0000): NEED TO MAKE CONSISTENT WHETHER WE USE THE PROTO CLASSES OR THE FORMAT CLASSES
   // also need to decide where MetaDataUtil should live and how it should be used
 
   public static byte getStorageState(MessageGroup mg) {

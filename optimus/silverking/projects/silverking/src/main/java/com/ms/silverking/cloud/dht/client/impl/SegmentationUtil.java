@@ -103,7 +103,7 @@ public class SegmentationUtil {
     //System.out.printf("createSegmentMetaDataBuffer\t%s\t%d\t%d\n",
     //        StringUtil.byteArrayToHexString(creatorBytes), storedLength, uncompressedLength);
     segmentMetaDataBuffer = ByteBuffer.allocate(segmentedValueBufferLength + checksumType.length());
-    // FIXME - checksum the index data
+    // TODO (OPTIMUS-0000): checksum the index data
     if (creatorBytes.length != ValueCreator.BYTES) {
       throw new RuntimeException("Unexpected creatorBytes.length != ValueCreator.BYTES");
     }

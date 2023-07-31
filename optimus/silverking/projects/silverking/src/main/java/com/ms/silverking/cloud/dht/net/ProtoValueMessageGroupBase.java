@@ -31,7 +31,7 @@ abstract class ProtoValueMessageGroupBase extends ProtoKeyedMessageGroup {
   protected int curMultiValueBufferIndex;
   protected int totalValueBytes;
 
-  // FIXME - valueBufferSize should be computed based on some external information
+  // TODO (OPTIMUS-0000): valueBufferSize should be computed based on some external information
   protected static final int valueBufferSize = 16 * 1024;
   // Maximum number of value bytes to allow in a single message. The sum of the length of all values in
   // a message must be less than this limit. Operations that need to transfer more bytes over the

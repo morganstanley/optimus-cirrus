@@ -70,7 +70,7 @@ public final class WaitOptions extends RetrievalOptions {
   }
 
   ///
-  /// FIXME - this is C++ only.
+  /// TODO (OPTIMUS-0000): this is C++ only.
   /// This should be removed once C++ SKWaitOptions.cpp is using the other constructor below properly.
   ///
 
@@ -83,9 +83,9 @@ public final class WaitOptions extends RetrievalOptions {
    * @param secondaryTargets        constrains queried secondary replicas
    * @param retrievalType           what to retrieve (data, meta data, etc.)
    * @param versionConstraint       filter on the allowed versions
-   * @param nonExistenceResponse    TODO
-   * @param verifyChecksums         TODO
-   * @param returnInvalidations     TODO
+   * @param nonExistenceResponse    TODO (OPTIMUS-0000): describe
+   * @param verifyChecksums         TODO (OPTIMUS-0000): describe
+   * @param returnInvalidations     TODO (OPTIMUS-0000): describe
    * @param updateSecondariesOnMiss when true, secondary replicas queried in this operation will be updated on a miss
    * @param timeoutSeconds          return after timeoutSeconds if the values cannot be retrieved
    * @param threshold               return after a percentage of requested values are available
@@ -159,7 +159,7 @@ public final class WaitOptions extends RetrievalOptions {
    *                                    of the requested values could be retrieved
    * @param secondaryTargets            constrains queried secondary replicas
    * @param traceIDProvider             trace provider for message group
-   * @param allReplicasExcludedResponse TODO
+   * @param allReplicasExcludedResponse TODO (OPTIMUS-0000): describe
    * @param retrievalType               what to retrieve (data, meta data, etc.)
    * @param versionConstraint           filter on the allowed versions
    * @param verifyChecksums

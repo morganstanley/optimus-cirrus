@@ -133,7 +133,7 @@ public abstract class AsyncBase<T extends Connection> {
     return rVal;
   }
 
-  //TODO: we may need to remove this hardcode "/tmp/silverking/"
+  //TODO (OPTIMUS-0000): we may need to remove this hardcode "/tmp/silverking/"
   private static File statsBaseDir(int port) {
     return new File("/tmp/silverking/stats/" + port);
   }

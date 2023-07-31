@@ -33,7 +33,7 @@ public interface AsyncRetrieval<K, V> extends AsyncKeyedOperation<K> {
   /**
    * Block until this operation is complete.
    *
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public void waitForCompletion() throws RetrievalException;
 
@@ -41,7 +41,7 @@ public interface AsyncRetrieval<K, V> extends AsyncKeyedOperation<K> {
    * Returns StoredValues for all successfully complete retrievals.
    *
    * @return StoredValues for all successfully complete retrievals
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, ? extends StoredValue<V>> getStoredValues() throws RetrievalException;
 
@@ -50,7 +50,7 @@ public interface AsyncRetrieval<K, V> extends AsyncKeyedOperation<K> {
    *
    * @param key key to query
    * @return StoredValues for the given key if it is present
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public StoredValue<V> getStoredValue(K key) throws RetrievalException;
 
@@ -65,7 +65,7 @@ public interface AsyncRetrieval<K, V> extends AsyncKeyedOperation<K> {
    *
    * @return StoredValues for all successfully complete retrievals that
    * have completed since the last call to this method or AsyncValueRetrieval.getLatestStoredValues().
-   * @throws RetrievalException TODO
+   * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, ? extends StoredValue<V>> getLatestStoredValues() throws RetrievalException;
 }

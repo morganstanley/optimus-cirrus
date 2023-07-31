@@ -48,7 +48,7 @@ private[collection] object OptimusSeqEmpty extends OptimusSeq[Nothing] {
 private[collection] sealed abstract class SmallOptimusSeq[+T] extends OptimusSeq[T] {
   private[collection] def copyToBuilderArray(elems: Array[AnyRef], startIndex: Int): Unit
   override def equals(that: Any): Boolean = that match {
-    case that: OptimusSeq[T] => {
+    case that: OptimusSeq[_] => {
       this.length == that.length &&
       this.hashCode == that.hashCode && {
         var i = length - 1

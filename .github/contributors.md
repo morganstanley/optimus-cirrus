@@ -25,4 +25,4 @@ Tony Lam ([@calltl](http://github.com/calltl))
 
 Valerie Saunders Duncan ([@ms-valerie](http://github.com/ms-valerie))
 
-[@vincentdyleung](http://github.com/vincentdyleung)
+Diyu Liang ([@vincentdyleung](http://github.com/vincentdyleung))

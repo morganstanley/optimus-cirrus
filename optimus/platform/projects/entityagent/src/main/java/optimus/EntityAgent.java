@@ -31,6 +31,7 @@ import optimus.graph.LockInjector;
 import optimus.graph.chaos.ChaosMonkeyInjector;
 import optimus.graph.cleaner.CleanerInjector;
 import optimus.junit.CachingJunitRunnerInjector;
+import optimus.junit.OptimusTestWorkerClientInjector;
 import optimus.systemexit.ExitInterceptProp;
 import optimus.testidle.TestIdle;
 import optimus.testidle.TestIdleTransformer;
@@ -73,6 +74,8 @@ public class EntityAgent {
     CollectionInjector collInjector = new CollectionInjector();
     SyntheticMethodInjector syntheticMethodInjector = new SyntheticMethodInjector();
     CachingJunitRunnerInjector cachingJunitInjector = new CachingJunitRunnerInjector();
+    OptimusTestWorkerClientInjector optimusTestWorkerClientInjector =
+        new OptimusTestWorkerClientInjector();
     InstrumentationInjector instrInjector = new InstrumentationInjector();
     HotCodeReplaceTransformer hotCodeReplaceTransformer =
         new HotCodeReplaceTransformer(instrumentation);
@@ -137,15 +140,24 @@ public class EntityAgent {
                 syntheticMethodInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      if (DiagnosticSettings.isClassMonitorEnabled
-          && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+      if (DiagnosticSettings.isClassMonitorEnabled) {
+        if (DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+          transformed =
+              safeTransform(
+                  cachingJunitInjector, loader, clsName, clsRedefined, domain, transformed);
+        }
         transformed =
-            safeTransform(cachingJunitInjector, loader, clsName, clsRedefined, domain, transformed);
+            safeTransform(
+                optimusTestWorkerClientInjector,
+                loader,
+                clsName,
+                clsRedefined,
+                domain,
+                transformed);
       }
 
       // This transformation should be last in order so we won't miss usage of some class added by
-      // previous
-      // transformations
+      // previous transformations
       if (DiagnosticSettings.isClassMonitorEnabled
           && !clsName.equals(ClassMonitorInjector.class.getName())) {
         // The agent should load the app's CMI, and not use its own, since its own CMI is unaware of
@@ -158,6 +170,7 @@ public class EntityAgent {
         }
       }
 
+      // Not a transformation
       if (DiagnosticSettings.classDumpEnabled) {
         if (DiagnosticSettings.classDumpClasses != null
             && DiagnosticSettings.classDumpClasses.contains(clsName)) {

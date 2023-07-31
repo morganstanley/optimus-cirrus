@@ -31,7 +31,8 @@ import org.slf4j.LoggerFactory
 @SerialVersionUID(2017071401L)
 final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, val crumbLevel: Int, val vertexId: String)
     extends Serializable {
-  private[optimus] def this(repr: String, depth: Int, level: Int) = this(repr, depth, level, (new UUID).toString)
+  private[optimus] def this(repr: String, depth: Int, level: Int) =
+    this(repr, depth, level, if (depth == 0) repr else (new UUID).toString)
   @transient private lazy val id = new AtomicInteger(0)
   private[optimus] def this(addr: InetAddress) = this(addr.getCanonicalHostName, 0, ChainedID.level)
   private[optimus] def this(j: JUUID) = this(j.toString, 0, ChainedID.level)

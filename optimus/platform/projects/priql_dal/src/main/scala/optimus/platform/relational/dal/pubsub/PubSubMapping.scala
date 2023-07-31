@@ -13,6 +13,7 @@ package optimus.platform.relational.dal.pubsub
 
 import optimus.entity.EntityInfoRegistry
 import optimus.platform.relational.dal.core._
+import optimus.platform.relational.data.DataProvider
 import optimus.platform.relational.data.QueryTranslator
 import optimus.platform.relational.data.mapping._
 import optimus.platform.relational.tree.TypeInfo
@@ -26,6 +27,10 @@ class PubSubMapping extends DALMapping {
     val info = EntityInfoRegistry.getClassInfo(shape.clazz)
     PubSubMappingEntityFactory.create(info, shape, shape.runtimeClassName)
   }
+}
+
+class PubSubRegisteredIndexMapping extends PubSubMapping {
+  override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
 }
 
 class PubSubMapper(m: PubSubMapping, t: QueryTranslator) extends DALMapper(m, t) {

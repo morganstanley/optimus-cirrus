@@ -36,7 +36,7 @@ public class ProtoPutResponseMessageGroup extends ProtoKeyedMessageGroup {
         uuid, context, ByteBuffer.allocate(optionsBufferSize), numKeys, keyBufferAdditionalBytesPerKey, originator,
         deadlineRelativeMillis, ForwardingMode.FORWARD, maybeTraceID);
     if (hasTraceID) {
-      // FIXME: This is a temp workaround to preserve parent's base offset put in bufferList (but this leads to the
+      // TODO (OPTIMUS-0000): This is a temp workaround to preserve parent's base offset put in bufferList (but this leads to the
       //  risk where SK's serde codes could be misused
       bufferList.add(optionsByteBuffer);
     } else {

@@ -33,7 +33,7 @@ public class StoragePolicyGroup implements VersionedDefinition {
   private final Map<String, StoragePolicy> policies;
   private final ListMultimap<NodeClass, StoragePolicy> classPolicies;
 
-  // FIXME - deprecate the rootClassAndName
+  // TODO (OPTIMUS-0000): deprecate the rootClassAndName
 
   public static final String label = "StoragePolicyGroup";
 

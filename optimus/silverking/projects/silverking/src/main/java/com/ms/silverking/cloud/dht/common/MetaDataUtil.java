@@ -314,7 +314,7 @@ public class MetaDataUtil {
   }
 
   public static int getMetaDataLength(ByteBuffer storedValue, int baseOffset) {
-    // FIXME - this is ignoring user data
+    // TODO (OPTIMUS-0000): this is ignoring user data
     // current plan is to copy userdata when it is present
     return fixedMetaDataLength + getChecksumLength(storedValue, baseOffset);
   }

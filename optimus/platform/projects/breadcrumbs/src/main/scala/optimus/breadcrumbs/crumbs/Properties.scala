@@ -17,20 +17,21 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.{util => ju}
-
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.Objects
 import scala.annotation.varargs
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.SortedSet
 import scala.collection.immutable.TreeSet
+import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.util.Try
 
-abstract class KnownProperties private[crumbs] extends Enumeration {
+abstract class KnownProperties extends Enumeration {
   import Properties.Elem
   import Properties.Key
 
@@ -51,7 +52,8 @@ abstract class KnownProperties private[crumbs] extends Enumeration {
     final def elem(a: A): Elem[A] = Elem(this, a)
     def apply(a: A): Elem[A] = Elem(this, a)
   }
-  class EnumeratedKeyInt extends EnumeratedKey[Int] {
+  class EnumeratedKeyInt(nme: String) extends EnumeratedKey[Int](nme) {
+    def this() = this(nextNameOrNull)
     def elem(i: Int): Elem[Int] = Elem(this, i)
     def apply(i: Int): Elem[Int] = Elem(this, i)
   }
@@ -60,11 +62,18 @@ abstract class KnownProperties private[crumbs] extends Enumeration {
     def elem(i: Long): Elem[Long] = Elem(this, i)
     def apply(i: Long): Elem[Long] = Elem(this, i)
   }
-  class EnumeratedKeyDouble extends EnumeratedKey[Double] {
+  class EnumeratedKeyDouble(nme: String) extends EnumeratedKey[Double](nme) {
+    def this() = this(nextNameOrNull)
     def elem(d: Double): Elem[Double] = Elem(this, d)
     def apply(d: Double): Elem[Double] = Elem(this, d)
   }
-  class EnumeratedKeyBoolean extends EnumeratedKey[Boolean] {
+  class EnumeratedKeyFloat(nme: String) extends EnumeratedKey[Float](nme) {
+    def this() = this(nextNameOrNull)
+    def elem(d: Float): Elem[Float] = Elem(this, d)
+    def apply(d: Float): Elem[Float] = Elem(this, d)
+  }
+  class EnumeratedKeyBoolean(nme: String) extends EnumeratedKey[Boolean](nme) {
+    def this() = this(nextNameOrNull)
     def apply(b: Boolean): Elem[Boolean] = Elem(this, b)
     def elem(b: Boolean): Elem[Boolean] = Elem(this, b)
   }
@@ -72,10 +81,15 @@ abstract class KnownProperties private[crumbs] extends Enumeration {
   protected[this] def prop[A <: AnyRef: JsonReader: JsonWriter] = new EnumeratedKeyRef[A]
   protected[this] def prop[A <: AnyRef: JsonReader: JsonWriter](nme: String) = new EnumeratedKeyRef[A](nme)
   protected[this] def propI = new EnumeratedKeyInt
+  protected[this] def propI(nme: String) = new EnumeratedKeyInt(nme)
   protected[this] def propL = new EnumeratedKeyLong
   protected[this] def propL(nme: String) = new EnumeratedKeyLong(nme)
   protected[this] def propD = new EnumeratedKeyDouble
+  protected[this] def propD(nme: String) = new EnumeratedKeyDouble(nme)
   protected[this] def propB = new EnumeratedKeyBoolean
+  protected[this] def propB(nme: String) = new EnumeratedKeyBoolean(nme)
+  protected[this] def propF = new EnumeratedKeyFloat
+  protected[this] def propF(nme: String) = new EnumeratedKeyFloat(nme)
 
   private[crumbs] def set = values.asInstanceOf[Set[KnownProperties#EnumeratedKey[_]]]
 }
@@ -364,6 +378,10 @@ object Properties extends KnownProperties {
     def +(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def toMap: Map[String, JsValue] = m.map(_.toTuple).toMap
     override def toString = toMap.toString
+
+    // Extract a single element from the Elems list. If you want to extract many elements, use
+    // .toMap and then the implicit methods in MapStringToJsonOps.
+    def expensiveGet[T](key: Key[T]): Option[T] = m.find(_.k.name == key.name).map(_.v.asInstanceOf[T])
   }
 
   object Elems {
@@ -382,6 +400,8 @@ object Properties extends KnownProperties {
     def source: String
     def parse(js: JsValue): A
     def toJson(a: A): JsValue
+    def maybe(b: Boolean, a: => A): Option[Elem[A]] = if (b) Some(Elem(this, a)) else None
+    def maybe(p: A => Boolean, a: A): Option[Elem[A]] = if (p(a)) Some(Elem(this, a)) else None
   }
 
   class UntypedProperty(val name: String, src: Option[String]) extends Key[String] {
@@ -417,7 +437,7 @@ object Properties extends KnownProperties {
   // For adding properties outside the central registry that use the mechanics of crumb
   // property serialization but of course won't be deserializable without the projects that
   // define them on the classpath.
-  sealed class WildcatKey[A](nme: String, writer: JsonWriter[A]) extends Key[A] {
+  sealed class AdHocKey[A](nme: String, writer: JsonWriter[A]) extends Key[A] {
     override def name: String = nme
     override def toString = name
     override def source: String = Crumb.Headers.DefaultSource
@@ -425,8 +445,16 @@ object Properties extends KnownProperties {
     override def parse(js: JsValue): A = throw new NotImplementedError("This is a rogue property")
   }
 
-  def wildcatProperty[A: JsonWriter](name: String)(implicit writer: JsonWriter[A]): Key[A] =
-    new WildcatKey[A](name, writer)
+  def adhocProperty[A: JsonWriter](name: String)(implicit writer: JsonWriter[A]): Key[A] =
+    new AdHocKey[A](name, writer)
+
+  def adhocElems[A: JsonWriter](m: Map[String, A]): Elems =
+    Elems(m.map { case (k, v) =>
+      adhocProperty[A](k) -> v
+    }.toSeq: _*)
+  import java.util
+  def adhocStringElems(m: util.Map[String, String]): Elems = adhocElems(m.asScala.toMap)
+  def adhocStringElems(m: Map[String, String]): Elems = adhocElems(m)
 
   final case class UnclassifiedException(exceptionName: String, msg: String) extends Exception(msg)
 
@@ -451,6 +479,7 @@ object Properties extends KnownProperties {
   val engine = prop[String]
   val replicaFrom = prop[ChainedID]
   val currentlyRunning = prop[Seq[ChainedID]]
+  val distRunning = propI
   val currentScopes = prop[Seq[String]]
   val currentRoots = prop[Seq[String]]
   val dedupKey = prop[String]
@@ -613,10 +642,13 @@ object Properties extends KnownProperties {
   val snapTimeMs = propL
   val snapTimeUTC = prop[String]
   val snapEpochId = propL
+  val snapPeriod = propL
+  val canonicalPub = propB
 
   val pulse = prop[Elems]
 
   val profiledEvent = prop[ProfiledEventCause]
+  val profiledEventStatistics = prop[Map[String, JsValue]]
   val profilingMode = prop[String]
   val withConsole = propB
   val entityAgentVersion = prop[String]
@@ -653,6 +685,8 @@ object Properties extends KnownProperties {
   val rootUuid = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
+  val gsfEngineId = prop[String]
+  val kubeNodeName = prop[String]
   val state = prop[String]
 
   val appLaunchContextType = prop[String]
@@ -768,6 +802,7 @@ object Properties extends KnownProperties {
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
+  val numStacksPublished = propL
   val stackElem = prop[String]
   val stackType = prop[String]
   val selfCount = propL
@@ -778,6 +813,12 @@ object Properties extends KnownProperties {
   val stackThumb = prop[Map[String, Int]]
   val profStackId = prop[String]
   val profPreOptimusStartup = propL
+  val distWallTime = propL
+  val distTasksCompleted = propI
+  val distTasksReceived = propI
+  val gridTasksRunning = propI
+  val distBytesReceived = propL
+  val distBytesSent = propL
 
   // Temporal surface tracing
   val tsQueryClassName = prop[String]
@@ -799,8 +840,15 @@ object Properties extends KnownProperties {
   val xsftCycle = prop[String]
   val xsftStack = prop[String]
 
+  /** Cache time misreported task name */
+  val cacheTimeMisreported = prop[String]
+
+  /** OGTrace exception */
+  val ogtraceBackingStoreProblem = prop[String]
+
   /** RT verifier violations */
   val rtvViolation = prop[String]
+  val rtvModule = prop[String]
   val rtvLocation = prop[String]
   val rtvStack = prop[String]
 
@@ -824,6 +872,7 @@ object Properties extends KnownProperties {
   val fileContents = prop[String]
 
   val cpuInfo = prop[Map[String, String]]
+  val cpuCores = propI
   val memInfo = prop[Map[String, String]]
 
   /** Catch production uses of -Doptimus.runtime.allowIllegalOverrideOfInitialRuntimeEnvironment=true */
@@ -855,6 +904,8 @@ object Properties extends KnownProperties {
 
   val oldCacheSize = propI
   val newCacheSize = propI
+
+  val auxSchedulerTimedOutNodes = prop[Seq[String]]
 
 }
 

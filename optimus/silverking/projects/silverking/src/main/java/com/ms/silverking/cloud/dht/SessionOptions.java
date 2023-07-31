@@ -114,8 +114,8 @@ public final class SessionOptions {
   /**
    * Create a SessionOptions instance with a default timeout controller and disconnect policy.
    *
-   * @param dhtConfigProvider TODO
-   * @param preferredServer   TODO
+   * @param dhtConfigProvider TODO (OPTIMUS-0000): describe
+   * @param preferredServer   TODO (OPTIMUS-0000): describe
    */
   public SessionOptions(ClientDHTConfigurationProvider dhtConfigProvider, String preferredServer) {
     this(dhtConfigProvider, preferredServer, getDefaultTimeoutController(), SessionPolicyOnDisconnect.DoNothing);
@@ -124,7 +124,7 @@ public final class SessionOptions {
   /**
    * Create a SessionOptions instance with the default preferredServer and timeout controller
    *
-   * @param dhtConfigProvider TODO
+   * @param dhtConfigProvider TODO (OPTIMUS-0000): describe
    */
   public SessionOptions(ClientDHTConfigurationProvider dhtConfigProvider) {
     this(dhtConfigProvider, null);

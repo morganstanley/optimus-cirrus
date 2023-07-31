@@ -220,7 +220,7 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
           } else if (additionResult == ValueAdditionResult.ValueNeedsFragmentation) {
             fragment(key, messageGroups);
             continue;
-            // FIXME - call continue? how to handle the opUUIDs.add() below?
+            // TODO (OPTIMUS-0000): call continue? how to handle the opUUIDs.add() below?
           }
         } else {
           // The existing protoPutMG already had an entry for the given key.
