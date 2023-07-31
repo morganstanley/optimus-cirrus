@@ -42,7 +42,7 @@ public class LooseConsistencyWrite extends BaseStorageOperation<SingleWriterLoos
   
   @Override
   public void update(DHTKey key, IPAndPort replica, byte storageState, OpResult update, PutVirtualCommunicator pvComm) {
-    // FIXME - reduce or eliminate locking here
+    // TODO (OPTIMUS-0000): reduce or eliminate locking here
     synchronized (this) {
       SingleWriterLooseStorageEntryState entryState;
 

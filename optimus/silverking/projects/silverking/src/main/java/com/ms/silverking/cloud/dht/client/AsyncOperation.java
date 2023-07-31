@@ -36,7 +36,7 @@ public interface AsyncOperation {
   /**
    * Block until this operation is complete.
    *
-   * @throws OperationException TODO
+   * @throws OperationException TODO (OPTIMUS-0000): describe
    */
   public void waitForCompletion() throws OperationException;
 
@@ -46,7 +46,7 @@ public interface AsyncOperation {
    * @param timeout time to wait
    * @param unit    unit of time to wait
    * @return true if this operation is complete. false otherwise
-   * @throws OperationException TODO
+   * @throws OperationException TODO (OPTIMUS-0000): describe
    */
   public boolean waitForCompletion(long timeout, TimeUnit unit) throws OperationException;
 

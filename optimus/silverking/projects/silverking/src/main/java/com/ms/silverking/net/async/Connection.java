@@ -417,7 +417,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
     //locked = channelWriteLock.tryLock();
     //locked = !writing;
     //try {
-    //if (true || locked) {  // FIXME - determine why we must always enable
+    //if (true || locked) {  // TODO (OPTIMUS-0000): determine why we must always enable
     enableWrites();
     //}
     //} finally {

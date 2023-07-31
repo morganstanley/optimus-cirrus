@@ -118,7 +118,7 @@ public class ActiveClientOperationTable {
                                   boolean exclusionSetHasChanged) {
     boolean attemptHasTimedOut = operation.attemptHasTimedOut(curTimeMillis);
 
-    // TODO: rather than retrying on any exclusion, we ought to retry only if the
+    // TODO (OPTIMUS-0000): rather than retrying on any exclusion, we ought to retry only if the
     //  replica to which we are communicating for a given op has been excluded
     if (attemptHasTimedOut || (exclusionSetHasChanged && operation.retryOnExclusionChange(curTimeMillis))) {
       if (operation.getState() == OperationState.INCOMPLETE) {

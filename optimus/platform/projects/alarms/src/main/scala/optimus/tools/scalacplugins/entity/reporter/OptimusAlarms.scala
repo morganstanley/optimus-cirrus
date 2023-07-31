@@ -490,7 +490,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     22006,
     OptimusPhases.REF_CHECKS,
     "Cannot generate an index from %s"
-  ) // FIXME: duplicate error message in different phases, redundant check?
+  ) // TODO (OPTIMUS-0000): duplicate error message in different phases, redundant check?
   val INDEX_SEQ_DEF_MAP_ON_ENTITY =
     error1(
       22007,
@@ -596,7 +596,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     "@stored @entity class %s cannot extend non-entity class %s that contains non-abstract methods (%s)"
   )
   val ENTITY_PROPERTY_INFO_ACCIDENTAL_OVERRIDE = error3(
-    sn = 22320,
+    22320,
     OptimusPhases.REF_CHECKS,
     "implementation restriction: %s extending its companion %s leads to a name clash due to the synthetic PropertyInfo %s generated in the object. Please rename the object or its parent."
   )
@@ -647,7 +647,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // lazy val XFUNC_WITH_HANDLE = error0(XXX, OptimusPhases.REF_CHECKS, "@handle cannot be @xFunc")
 
   val RETURN_IN_NODE =
-    error1(22959, OptimusPhases.REF_CHECKS, template = "@node %s cannot contain return expressions")
+    error1(22959, OptimusPhases.REF_CHECKS, "@node %s cannot contain return expressions")
 
   val FORBIDDEN_PARAM_NAME =
     error2(
@@ -806,11 +806,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // default error message
 
   // @job-related [[JOB_EXPERIMENTAL]]
-  val JOB_WITH_VAL = error0(sn = 29106, OptimusPhases.ADJUST_AST, "@job cannot be set on vals")
+  val JOB_WITH_VAL = error0(29106, OptimusPhases.ADJUST_AST, "@job cannot be set on vals")
   val JOB_ENTITY_OR_NONOBJECT =
-    error0(sn = 29107, OptimusPhases.ADJUST_AST, "@job may be only set within a non-entity object")
+    error0(29107, OptimusPhases.ADJUST_AST, "@job may be only set within a non-entity object")
   val JOB_SINGLEPARAM_NONSTOREDENTITY =
-    error0(sn = 29108, OptimusPhases.REF_CHECKS, "@job may only have one single parameter of type @stored @entity")
+    error0(29108, OptimusPhases.REF_CHECKS, "@job may only have one single parameter of type @stored @entity")
   val JOB_WITHOUT_NODE_ASYNC = error0(29109, OptimusPhases.ADJUST_AST, "@job may be only set on a @node / @async")
   val NON_TOP_LEVEL_JOB_OWNER = error0(
     29110,
@@ -945,7 +945,6 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
       "Tweak %s cannot be resolved in a scenario-independent context %s. If the context is an SI node, you'll get a crash. If it's an entity constructor, you'll get UNDEFINED BEHAVIOUR."
     )
 
-  val HANDLE_IN_NODE = warning2(12203, OptimusPhases.REF_CHECKS, "Cannot call @handle method %s inside RT context %s")
   val IMPURE_IN_NODE = info2(12205, OptimusPhases.REF_CHECKS, "Invalid call to @impure method %s from RT context %s")
 
   // optimus_valaccessors phase warnings

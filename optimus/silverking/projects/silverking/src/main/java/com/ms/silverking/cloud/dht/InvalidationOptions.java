@@ -46,7 +46,7 @@ public class InvalidationOptions extends PutOptions {
         PutOptions.noLock);
   }
 
-  // FIXME - temp until legacy instances have current defs
+  // TODO (OPTIMUS-0000): temp until legacy instances have current defs
   public InvalidationOptions(OpTimeoutController opTimeoutController,
                              Set<SecondaryTarget> secondaryTargets,
                              Compression compression,
@@ -132,7 +132,7 @@ public class InvalidationOptions extends PutOptions {
    * @param opTimeoutController         opTimeoutController for the operation
    * @param secondaryTargets            constrains queried secondary replicas
    *                                    to operation solely on the node that receives this operation
-   * @param allReplicasExcludedResponse TODO
+   * @param allReplicasExcludedResponse TODO (OPTIMUS-0000): describe
    * @param version                     version of this object
    * @param lockSeconds                 seconds to lock this key
    */

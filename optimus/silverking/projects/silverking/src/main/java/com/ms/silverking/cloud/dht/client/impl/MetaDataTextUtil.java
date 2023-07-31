@@ -43,7 +43,7 @@ public class MetaDataTextUtil {
         } else {
             sb.append(StringUtil.byteArrayToHexString(userData));
         }
-        // FIXME complete user data
+        //TODO (OPTIMUS-0000): complete user data
         */
     return sb.toString();
   }
@@ -74,7 +74,7 @@ public class MetaDataTextUtil {
         } else {
             sb.append(StringUtil.byteArrayToHexString(userData));
         }
-        // FIXME complete user data
+        //TODO (OPTIMUS-0000): complete user data
         */
     return sb.toString();
   }

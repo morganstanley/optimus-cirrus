@@ -53,7 +53,7 @@ public class MetaUtil {
 
     String conf = mc.getSKFSConfig();
 
-    //FIXME: use of getLatestVersion (not getVersionPriorTo_floored) as it is independent of SK versioning
+    //TODO (OPTIMUS-0000): use of getLatestVersion (not getVersionPriorTo_floored) as it is independent of SK versioning
     if (MetaUtilOptions.dhtVersionUnspecified == skfsVersion) {
       skfsVersion = getLatestVersion(MetaPaths.getConfigPath(skfsConfigName));
     }
@@ -63,7 +63,7 @@ public class MetaUtil {
   }
 
   private void LoadFromFile(long skfsVersion, File target) throws KeeperException, IOException {
-    //FIXME: do I need below to handle dhtVersionUnspecified or is it automatic?
+    //TODO (OPTIMUS-0000): do I need below to handle dhtVersionUnspecified or is it automatic?
         /*
         if(MetaUtilOptions.dhtVersionUnspecified == skfsVersion) {
             skfsVersion = getLatestVersion(MetaPaths.getConfigPath(skfsConfigName));

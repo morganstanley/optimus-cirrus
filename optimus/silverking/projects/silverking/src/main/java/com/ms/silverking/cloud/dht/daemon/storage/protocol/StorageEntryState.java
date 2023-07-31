@@ -18,7 +18,7 @@ import com.ms.silverking.cloud.dht.common.OpResult;
  * Tracks the state at each replica.
  */
 abstract class StorageEntryState {
-  private static final int relTimeoutMillis = 100; // FIXME - make configurable
+  private static final int relTimeoutMillis = 100; // TODO (OPTIMUS-0000): make configurable
   static final int minRelTimeoutMillis = relTimeoutMillis;
 
   StorageEntryState() {

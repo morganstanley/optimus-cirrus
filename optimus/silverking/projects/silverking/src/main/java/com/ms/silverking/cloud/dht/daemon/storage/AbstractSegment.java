@@ -95,7 +95,7 @@ abstract class AbstractSegment implements ReadableSegment {
         log.info("AbstractSegment.retrieve {} {} {}", key, options, offset);
       }
       return retrieve(key, options, offset, verifySS);
-    } catch (RuntimeException re) { // FIXME - TEMP DEBUG
+    } catch (RuntimeException re) { // TODO (OPTIMUS-0000): TEMP DEBUG
       log.info("segment {} {} {}", getSegmentNumber(), key, options);
       re.printStackTrace();
       throw re;

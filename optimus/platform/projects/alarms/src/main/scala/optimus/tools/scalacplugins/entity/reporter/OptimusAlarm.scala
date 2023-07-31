@@ -11,6 +11,8 @@
  */
 package optimus.tools.scalacplugins.entity.reporter
 
+import optimus.tools.scalacplugins.entity.OptimusPhaseInfo
+
 import scala.collection.mutable
 
 object OptimusAlarms {
@@ -63,8 +65,7 @@ object OptimusAlarms {
               validatedAlarms.get(sn) match {
                 case Some(existing) =>
                   assert(
-                    existing.id.sn == oab.id.sn && existing.id.tpe == oab.id.tpe && existing.template == oab.template &&
-                      existing.obtMandatory == oab.obtMandatory && existing.scalaMandatory == oab.scalaMandatory,
+                    existing.id.sn == oab.id.sn && existing.id.tpe == oab.id.tpe && existing.template == oab.template,
                     s"Duplicated message ID $sn"
                   )
                 case None => ()
@@ -127,6 +128,19 @@ trait OptimusAlarms {
     require(sn >= 0)
     AlarmId(sn, tpe)
   }
+}
+
+trait BuilderHelpers { self: OptimusAlarms =>
+  import OptimusAlarmType._
+  type Info
+  private type Ctor[R] = (AlarmId, Info, String) => R
+  def newBuilder[R <: OptimusAlarmBuilder](builder: Ctor[R])(tpe: Tpe): (Int, Info, String) => R =
+    (sn: Int, phase: Info, template: String) => register(builder(alarmId(sn, tpe), phase, template))
+}
+
+trait OptimusAlarmBuilder {
+  val id: AlarmId
+  val template: String
 }
 
 object OptimusAlarmType extends Enumeration {

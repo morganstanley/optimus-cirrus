@@ -230,7 +230,7 @@ public class DHTConfiguration implements VersionedDefinition {
     try {
       instance = ObjectDefParser2.parse(DHTConfiguration.class, def);
     } catch (ObjectDefParseException odpe) {
-      // FIXME - below is temporary to allow interaction with old instances
+      // TODO (OPTIMUS-0000): below is temporary to allow interaction with old instances
       instance = ObjectDefParser2.parse(DHTConfiguration.class,
           def.replaceAll("passiveNodeHostGroups", "passiveNodes"));
     }

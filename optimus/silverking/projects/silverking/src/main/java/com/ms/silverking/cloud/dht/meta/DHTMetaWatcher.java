@@ -148,7 +148,7 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
         log.info("ringChanged: {}", ringName);
       }
       // We use MAX_VALUE below because if we happen to read a newer ring, it's not a problem
-      // FIXME - however versioning in readRing needs to be considered
+      // TODO (OPTIMUS-0000): however versioning in readRing needs to be considered
       // We want to make sure that we read consistent rings and don't read the same ring twice
       readRing(dhtConfig.getRingName(), Long.MAX_VALUE);
     } catch (Exception e) {
@@ -156,7 +156,7 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
     }
   }
 
-  // FIXME - think about zkidLimit
+  // TODO (OPTIMUS-0000): think about zkidLimit
   public void readRing(String ringName, long zkidLimit) throws KeeperException, IOException {
     com.ms.silverking.cloud.toporing.meta.MetaClient ringMC;
     //com.ms.silverking.cloud.meta.MetaClient             cloudMC;

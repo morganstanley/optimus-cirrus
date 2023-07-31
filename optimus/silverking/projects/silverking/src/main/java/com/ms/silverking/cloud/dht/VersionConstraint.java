@@ -85,7 +85,7 @@ public class VersionConstraint {
     this.mode = mode;
     this.maxCreationTime = maxCreationTime;
 
-    // FIXME - oldest used internally, think about whether the support
+    // TODO (OPTIMUS-0000): oldest used internally, think about whether the support
     // is sufficient for user usage. if not, we need to enforce restriction in client
     // api and not here any more
     //if (mode == Mode.OLDEST) {

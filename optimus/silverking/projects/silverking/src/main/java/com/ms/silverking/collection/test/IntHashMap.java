@@ -72,25 +72,25 @@ public final class IntHashMap<V> implements Map<Integer, V> {
 
   @Override
   public int size() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return 0;
   }
 
   @Override
   public boolean isEmpty() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return false;
   }
 
   @Override
   public boolean containsKey(Object key) {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return false;
   }
 
   @Override
   public boolean containsValue(Object value) {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return false;
   }
 
@@ -130,37 +130,37 @@ public final class IntHashMap<V> implements Map<Integer, V> {
 
   @Override
   public V remove(Object key) {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return null;
   }
 
   @Override
   public void putAll(Map<? extends Integer, ? extends V> m) {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
 
   }
 
   @Override
   public void clear() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
 
   }
 
   @Override
   public Set<Integer> keySet() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return null;
   }
 
   @Override
   public Collection<V> values() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return null;
   }
 
   @Override
   public Set<java.util.Map.Entry<Integer, V>> entrySet() {
-    // TODO Auto-generated method stub
+    // TODO (OPTIMUS-0000): Auto-generated method stub
     return null;
   }
 

@@ -21,7 +21,7 @@ public interface AbsMillisTimeSource {
   public long absTimeMillis();
 
   /**
-   * @param absDeadlineMillis TODO
+   * @param absDeadlineMillis TODO (OPTIMUS-0000): describe
    * @return the difference between absDeadlineMillis and absTimeMillis()
    */
   public int relMillisRemaining(long absDeadlineMillis);

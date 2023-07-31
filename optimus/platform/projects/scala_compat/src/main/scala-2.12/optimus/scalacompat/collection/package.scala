@@ -36,6 +36,7 @@ package object collection {
   type IterableLike[+A, +Repr] = sc.IterableLike[A, Repr]
   type IterableOnceOps[+A, +CC[_], +C] = sc.TraversableLike[A, C]
   type MapLike[K, +V, +Repr <: MapLike[K, V, Repr] with sc.Map[K, V]] = sc.MapLike[K, V, Repr]
+  type MapOps[K, +V, +CC[_, _] <: IterableLike[_, _], +C <: MapLike[K, V, C] with sc.Map[K, V]] = sc.MapLike[K, V, C]
   type SeqLike[+A, +Repr] = sc.SeqLike[A, Repr]
   type SetLike[A, +Repr <: SetLike[A, Repr] with sc.Set[A]] = sc.SetLike[A, Repr]
   type TraversableLike[+A, +Repr] = sc.TraversableLike[A, Repr]

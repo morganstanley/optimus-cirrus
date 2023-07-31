@@ -60,7 +60,7 @@ public class TreeBuilder {
    * @param creationTimeMillis
    * @param minVersion
    * @param maxVersion
-   * @param allowRegionNotFound TODO
+   * @param allowRegionNotFound TODO (OPTIMUS-0000): describe
    * @return
    */
   public static ChecksumTreeGroup build(Collection<RingRegion> regions, Iterator<KeyAndVersionChecksum> keyIterator,

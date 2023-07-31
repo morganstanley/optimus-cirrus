@@ -28,8 +28,8 @@ public class MessageGroupPutEntry extends MessageGroupKVEntry {
     storedLength = keyBuffer.getInt(offset + PutMessageFormat.compressedValueLengthOffset);
     checksum = new byte[checksumType.length()];
     System.arraycopy(keyBuffer.array(), offset + PutMessageFormat.checksumOffset, checksum, 0,
-        checksum.length); // FIXME - delete
-    // FIXME - CHECK ABOVE LINE
+        checksum.length); // TODO (OPTIMUS-0000): delete
+    // TODO (OPTIMUS-0000): CHECK ABOVE LINE
     initValBuffer(buffers);
   }
 

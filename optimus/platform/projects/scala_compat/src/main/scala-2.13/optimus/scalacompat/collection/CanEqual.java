@@ -26,7 +26,7 @@ public abstract class CanEqual {
     if (p1 == null || p2 == null) return false;
     return p1.length() == p2.length() && p1.hashCode() == p2.hashCode();
   }
-  // TODO Stable, OptimusCollections, things that we patch a hashcode into etc
+  // TODO (OPTIMUS-0000): Stable, OptimusCollections, things that we patch a hashcode into etc
   //  public static boolean canEqual(Stable p1, Stable p2) {
   //    if (p1 == p2)
   //      return true;

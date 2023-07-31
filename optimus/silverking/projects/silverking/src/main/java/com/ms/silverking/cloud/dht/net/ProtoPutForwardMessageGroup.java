@@ -124,7 +124,7 @@ public final class ProtoPutForwardMessageGroup extends ProtoValueMessageGroupBas
       keyByteBuffer.putInt(uncompressedValueSize);
       keyByteBuffer.putInt(compressedValueSize);
       keyByteBuffer.put(entry.getChecksum());
-      // FIXME - think about removing the need for size since strictly speaking it isn't necessary
+      // TODO (OPTIMUS-0000): think about removing the need for size since strictly speaking it isn't necessary
       value.position(value.position() + storedValueSize);
       bufferList.add(value);
     }

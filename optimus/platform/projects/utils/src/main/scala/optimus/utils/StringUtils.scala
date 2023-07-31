@@ -20,6 +20,9 @@ trait OptimusStringUtils {
       if (underlying.isEmpty) None else Some(underlying)
 
     def isNullOrEmpty: Boolean = (underlying eq null) || (underlying.length == 0)
+
+    def abbrev(n: Int, ellipsis: String = "..."): String = if(underlying.size <= n) underlying else underlying.substring(0, n-1) + ellipsis
+    def abbrev: String = abbrev(80)
   }
 
   object IntParsable {

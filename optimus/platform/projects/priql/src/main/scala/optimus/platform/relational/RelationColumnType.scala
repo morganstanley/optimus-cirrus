@@ -682,7 +682,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       new BitSet()
     } else {
       right match {
-        case r: RelationColumn[T] =>
+        case r: RelationColumn[T @unchecked] =>
           if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
             new BitSet()
           else {
@@ -698,7 +698,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       new BitSet()
     } else {
       right match {
-        case r: RelationColumn[T] =>
+        case r: RelationColumn[T @unchecked] =>
           if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
             new BitSet()
           else {
@@ -721,7 +721,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       new BitSet()
     } else {
       right match {
-        case r: RelationColumn[T] =>
+        case r: RelationColumn[T @unchecked] =>
           if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
             new BitSet()
           else {
@@ -746,7 +746,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       throw new RelationalException("right side of plus is null")
     }
     right match {
-      case r: RelationColumn[T] =>
+      case r: RelationColumn[T @unchecked] =>
         if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
           null
         else {
@@ -761,7 +761,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       throw new RelationalException("right side of minus is null")
     }
     right match {
-      case r: RelationColumn[T] =>
+      case r: RelationColumn[T @unchecked] =>
         if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
           null
         else {
@@ -776,7 +776,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       throw new RelationalException("right side of mul is null")
     }
     right match {
-      case r: RelationColumn[T] =>
+      case r: RelationColumn[T @unchecked] =>
         if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
           null
         else {
@@ -791,7 +791,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       throw new RelationalException("right side of div is null")
     }
     right match {
-      case r: RelationColumn[T] =>
+      case r: RelationColumn[T @unchecked] =>
         if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
           null
         else {
@@ -806,7 +806,7 @@ class RelationColumn[@specialized T](val columnType: Class[_], val columnName: S
       throw new RelationalException("right side of modulo is null")
     }
     right match {
-      case r: RelationColumn[T] =>
+      case r: RelationColumn[T @unchecked] =>
         if (!columnType.equals(r.columnType) || columnValues.size != r.columnValues.size)
           null
         else {
@@ -2180,7 +2180,7 @@ object Operator {
     override def eqArray(t1: Array[Any], t2: Array[Any], indicies: List[Int]): BitSet = {
       val bitset = new BitSet
       indicies.foreach(f => {
-        if (t1(f).equals(t2(f)))
+        if (t1(f) == t2(f))
           bitset += f
       })
       bitset
@@ -2189,7 +2189,7 @@ object Operator {
     override def eqSingle(t1: Array[Any], t2: Any, indicies: List[Int]): BitSet = {
       val bitset = new BitSet
       indicies.foreach(f => {
-        if (t1(f).equals(t2))
+        if (t1(f) == t2)
           bitset += f
       })
       bitset

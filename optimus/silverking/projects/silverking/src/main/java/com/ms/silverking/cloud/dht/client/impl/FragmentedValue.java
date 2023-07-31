@@ -46,7 +46,7 @@ abstract class FragmentedValue<R> implements ActiveKeyedOperationResultListener<
 
     prevResult = results.put(key, result);
     if (prevResult != null) {
-      // FIXME
+      // TODO (OPTIMUS-0000): to be completed
     } else {
       resultsReceived.incrementAndGet();
     }

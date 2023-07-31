@@ -108,7 +108,7 @@ public interface Namespace {
    *
    * @param name name of the child namespace
    * @return the child namespace
-   * @throws NamespaceCreationException TODO
+   * @throws NamespaceCreationException TODO (OPTIMUS-0000): describe
    */
   public Namespace clone(String name) throws NamespaceCreationException;
 
@@ -120,7 +120,7 @@ public interface Namespace {
    * @param version the version at which to create the clone. Must be greater than
    *                any version of any value currently stored in the namespace.
    * @return the child namespace
-   * @throws NamespaceCreationException TODO
+   * @throws NamespaceCreationException TODO (OPTIMUS-0000): describe
    */
   public Namespace clone(String name, long version) throws NamespaceCreationException;
 
@@ -132,7 +132,7 @@ public interface Namespace {
    * exist and must have identical options to this namespace.</p>
    *
    * @param target the name of the target to link to
-   * @throws NamespaceLinkException TODO
+   * @throws NamespaceLinkException TODO (OPTIMUS-0000): describe
    */
   public void linkTo(String target) throws NamespaceLinkException;
 

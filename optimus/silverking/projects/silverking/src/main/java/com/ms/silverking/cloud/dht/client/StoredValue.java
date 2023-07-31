@@ -33,7 +33,7 @@ public interface StoredValue<V> extends StoredValueBase<V>, MetaData {
   /**
    * Experimental - not yet supported
    *
-   * @return TODO
+   * @return TODO (OPTIMUS-0000): describe
    */
   public StoredValue<V> next();
 }

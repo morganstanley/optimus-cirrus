@@ -120,9 +120,9 @@ public class InstrumentationCmds {
   /**
    * Enable start counter and self time tracing for given node or JVM function and all overrides.
    * WARNING: this must only be set for one class at a time (we only store one class hierarchy).
-   * (TODO: OPTIMUS-57169) Note that 'self time' here accounts for just the CPU time of the node
+   * TODO (OPTIMUS-57169): Note that 'self time' here accounts for just the CPU time of the node
    * itself, and does not include its entire sub-graph of compute. To do this we would need to
-   * instrument all nodes in that subgraph. (TODO: OPTIMUS-57169)
+   * instrument all nodes in that subgraph.
    *
    * @param methodName fully qualified node or JVM function name
    */

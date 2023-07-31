@@ -60,9 +60,9 @@ public final class NamespacePerspectiveOptions<K, V> {
    * This constructor should generally be avoided. Instead, an instance of this class should be
    * obtained using Namespace.getDefaultNSPOptions().
    *
-   * @param keyClass                   TODO
-   * @param valueClass                 TODO
-   * @param keyDigestType              TODO
+   * @param keyClass                   TODO (OPTIMUS-0000): describe
+   * @param valueClass                 TODO (OPTIMUS-0000): describe
+   * @param keyDigestType              TODO (OPTIMUS-0000): describe
    * @param defaultPutOptions          default PutOptions. If null, the namespace default will be used
    *                                   as the perspective default
    * @param defaultInvalidationOptions default InvalidationOptions. If null, the namespace default will be used
@@ -71,8 +71,8 @@ public final class NamespacePerspectiveOptions<K, V> {
    *                                   as the perspective default
    * @param defaultWaitOptions         default WaitOptions. If null, the namespace default will be used
    *                                   as the perspective default
-   * @param defaultVersionProvider     TODO
-   * @param encrypterDecrypter         TODO
+   * @param defaultVersionProvider     TODO (OPTIMUS-0000): describe
+   * @param encrypterDecrypter         TODO (OPTIMUS-0000): describe
    */
   public NamespacePerspectiveOptions(Class<K> keyClass, Class<V> valueClass, KeyDigestType keyDigestType,
       PutOptions defaultPutOptions, InvalidationOptions defaultInvalidationOptions, GetOptions defaultGetOptions,

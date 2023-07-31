@@ -109,6 +109,8 @@ class ExcelReaderIterable[T <: Entity: TypeInfo](val excelRelation: ExcelMultiRe
           throw new RelationalException("the first line in excel table should be header whose cell type is String")
 
         case (ExcelHeader.NO_HEADER, _) => List.empty
+
+        case o => throw new MatchError(o) // exhaustivity doesn't support scala.Enumeration
       }
     }
 

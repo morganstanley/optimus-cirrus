@@ -343,12 +343,13 @@ object MiscUtils {
   // blah.optionally(pred) = Some(blah) if pred(blah)
   implicit class Optionable[T](private val t: T) extends AnyVal {
     def optionally(pred: T => Boolean): Option[T] = if (pred(t)) Some(t) else None
+
+    def orIfNull(u: T): T = if (t.asInstanceOf[AnyRef] ne null) t else u
   }
   // bool.thenSome(blah) = Some(blah) if bool
   implicit class ThenSome(private val pred: Boolean) extends AnyVal {
     def thenSome[T](t: => T): Option[T] = if (pred) Some(t) else None
   }
-
 }
 
 /*
@@ -369,6 +370,9 @@ class Squelch(maxPerMinute: Int) {
   }
 }
 
+/**
+ * Utility class for periodically logging while we perform some large number of tasks.
+ */
 class CountLogger(label: String, intervalMs: Long, log: slf4j.Logger) {
 
   def this(label: String, intervalMs: Long, log: scalalog.Logger) =
@@ -378,22 +382,24 @@ class CountLogger(label: String, intervalMs: Long, log: slf4j.Logger) {
     this(label, intervalMs, scalalog.getLogger(classOf[CountLogger]).javaLogger)
 
   log.info(s"$label...")
-  private val dtNs = intervalMs * 1000000L
-  private val t0 = System.nanoTime()
+  private val t0 = System.currentTimeMillis()
   private var t = 0L
-  private var tPrint = t0 + dtNs
+  private var tPrint = t0 + intervalMs
   private var n = 0
-  private def elapsed = Math.max((t - t0) / 1000000, 1)
-  def apply(): Unit = synchronized {
-    n += 1
-    t = System.nanoTime()
+  private def elapsed: Long = (t - t0) / 1000L
+  private def rate: Long = if (t <= t0) 0L else 1000L * n / (t - t0)
+  def apply(dn: Int): Unit = synchronized {
+    n += dn
+    t = System.currentTimeMillis()
     if (t > tPrint) {
-      tPrint = t + dtNs
-      log.info(s"$label n=$n elapsed=${elapsed}ms)")
+      tPrint = t + intervalMs
+      log.info(s"$label n=$n elapsed=${elapsed}s rate=${rate}/s)")
     }
   }
-  def done(): Unit = synchronized {
-    t = System.nanoTime()
-    log.info(s"$label complete, n=$n, elapsed=${elapsed}ms, rate=${n * 1000 / elapsed}/sec")
+  def apply(): Unit = apply(1)
+  def done(): Int = synchronized {
+    t = System.currentTimeMillis()
+    log.info(s"$label complete, n=$n, elapsed=${elapsed}s, rate=${rate}/s")
+    n
   }
 }

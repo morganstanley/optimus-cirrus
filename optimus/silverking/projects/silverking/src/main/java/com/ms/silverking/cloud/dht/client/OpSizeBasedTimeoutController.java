@@ -72,7 +72,7 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
    * @param constantTimeMillis              constant time in milliseconds
    * @param itemTimeMillis                  per-item time in milliseconds
    * @param nonKeyedOpMaxRelTimeoutMillis   maximum relative timeout in milliseconds
-   * @param exclusionChangeRetryInterval_ms TODO
+   * @param exclusionChangeRetryInterval_ms TODO (OPTIMUS-0000): describe
    */
   public OpSizeBasedTimeoutController(int maxAttempts, int constantTimeMillis, int itemTimeMillis,
       /*int keyedOpMaxRelTimeoutMillis,*/ int nonKeyedOpMaxRelTimeoutMillis, int exclusionChangeRetryInterval_ms) {

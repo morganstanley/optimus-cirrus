@@ -28,8 +28,8 @@ public interface MetaToolModule<T> {
    * Write to zookeeper using the version provided and ignoring any
    * version already present.
    *
-   * @param options TODO
-   * @return TODO
+   * @param options TODO (OPTIMUS-0000): describe
+   * @return TODO (OPTIMUS-0000): describe
    */
   public String writeToZK(T instance, MetaToolOptions options) throws IOException, KeeperException;
 

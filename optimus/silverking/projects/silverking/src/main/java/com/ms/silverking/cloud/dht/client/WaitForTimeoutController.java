@@ -29,7 +29,7 @@ public class WaitForTimeoutController implements OpTimeoutController {
   private final int internalRetryIntervalSeconds;
   private final int internalExclusionChangeRetryIntervalSeconds;
 
-  // FIXME - internal retries should be specified in ms
+  // TODO (OPTIMUS-0000): internal retries should be specified in ms
 
   static final int defaultInternalRetryIntervalSeconds = 20;
   static final int defaultExclusionChangeInternalRetryIntervalSeconds = 2;

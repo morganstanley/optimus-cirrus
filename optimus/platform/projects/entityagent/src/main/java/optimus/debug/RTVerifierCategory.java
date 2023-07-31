@@ -14,6 +14,8 @@ package optimus.debug;
 /**
  * Category that could be searched in splunk Sample: source=RT
  * payload.rtvViolation=MODULE_CTOR_EC_CURRENT | stats count by payload.rtvLocation
+ *
+ * These names must match those used in gridprofiler_rtv_categories.js
  */
 public class RTVerifierCategory {
   public static final String NONE = "RTV_CATEGORY_UNKNOWN";
