@@ -11,13 +11,9 @@
  */
 package com.ms.silverking.thread.lwt;
 
-/**
- * Provides LWT-related thread utilities.
- */
+/** Provides LWT-related thread utilities. */
 public class LWTThreadUtil {
-  /**
-   * Treat the current Java thread as an LWT thread.
-   */
+  /** Treat the current Java thread as an LWT thread. */
   public static void setLWTThread() {
     ThreadState.setLWTThread();
   }
@@ -31,10 +27,7 @@ public class LWTThreadUtil {
     return ThreadState.isLWTThread();
   }
 
-  /**
-   * Set the current LWT thread as blocked. Ignore if the
-   * current thread is not an LWT thread.
-   */
+  /** Set the current LWT thread as blocked. Ignore if the current thread is not an LWT thread. */
   public static void setBlocked() {
     if (ThreadState.isLWTCompatibleThread()) {
       ((LWTCompatibleThread) Thread.currentThread()).setBlocked();
@@ -42,8 +35,7 @@ public class LWTThreadUtil {
   }
 
   /**
-   * Set the current LWT thread as non-blocked. Ignore if the
-   * current thread is not an LWT thread.
+   * Set the current LWT thread as non-blocked. Ignore if the current thread is not an LWT thread.
    */
   public static void setNonBlocked() {
     if (ThreadState.isLWTCompatibleThread()) {

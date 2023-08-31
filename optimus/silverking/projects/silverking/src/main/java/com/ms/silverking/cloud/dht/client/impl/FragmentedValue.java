@@ -30,14 +30,19 @@ abstract class FragmentedValue<R> implements ActiveKeyedOperationResultListener<
 
   private static Logger log = LoggerFactory.getLogger(FragmentedValue.class);
 
-  FragmentedValue(DHTKey[] keys, DHTKey relayKey, ActiveKeyedOperationResultListener<R> parent,
+  FragmentedValue(
+      DHTKey[] keys,
+      DHTKey relayKey,
+      ActiveKeyedOperationResultListener<R> parent,
       boolean trackRelayKeyCompletion) {
     this.keys = keys;
     this.parent = parent;
     resultsReceived = new AtomicInteger();
     this.relayKey = relayKey;
     this.trackRelayKeyCompletion = trackRelayKeyCompletion ? 1 : 0;
-    results = new ConcurrentHashMap<>(keys.length + this.trackRelayKeyCompletion); // subkeys + the relay key
+    results =
+        new ConcurrentHashMap<>(
+            keys.length + this.trackRelayKeyCompletion); // subkeys + the relay key
   }
 
   @Override

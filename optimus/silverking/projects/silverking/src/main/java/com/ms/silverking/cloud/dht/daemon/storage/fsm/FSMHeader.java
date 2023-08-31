@@ -23,16 +23,15 @@ import com.ms.silverking.collection.TupleUtil;
 
 /**
  * Instantiated representation of FSMHeader used to access the header.
- * <p>
- * A header contains entries that describe the type and location of
- * LTVElements in the meta data segment.
- * <p>
- * The header does not contain the LTVElements themselves.
+ *
+ * <p>A header contains entries that describe the type and location of LTVElements in the meta data
+ * segment.
+ *
+ * <p>The header does not contain the LTVElements themselves.
  */
 public class FSMHeader {
   /**
-   * A header consists of several entries. Each
-   * entry maps an FSMElementType to the offset of the
+   * A header consists of several entries. Each entry maps an FSMElementType to the offset of the
    * LTVElement in the meta data segment.
    */
   private final Map<FSMElementType, Integer> entries;
@@ -68,8 +67,8 @@ public class FSMHeader {
     for (Map.Entry<FSMElementType, Integer> e : entries.entrySet()) {
       l.add(new Pair<>(e.getKey(), e.getValue()));
     }
-    return (List<Pair<FSMElementType, Integer>>) TupleUtil.copyAndSort(l, FSMHeaderElement.offsetFieldIndex,
-        IntegerComparator.instance);
+    return (List<Pair<FSMElementType, Integer>>)
+        TupleUtil.copyAndSort(l, FSMHeaderElement.offsetFieldIndex, IntegerComparator.instance);
   }
 
   public int getElementOffset(FSMElementType type) {

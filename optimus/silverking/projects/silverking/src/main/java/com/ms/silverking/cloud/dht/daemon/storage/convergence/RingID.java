@@ -17,9 +17,7 @@ import java.security.MessageDigest;
 import com.ms.silverking.cloud.dht.crypto.MD5Digest;
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * A RingID is a hash of a ring name to enable short, fixed-length identification of a ring.
- */
+/** A RingID is a hash of a ring name to enable short, fixed-length identification of a ring. */
 public class RingID {
   private final long msb;
   private final long lsb;

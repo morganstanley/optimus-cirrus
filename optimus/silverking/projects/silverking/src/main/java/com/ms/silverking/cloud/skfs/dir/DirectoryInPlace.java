@@ -25,7 +25,7 @@ public class DirectoryInPlace extends DirectoryBase {
   private static Logger log = LoggerFactory.getLogger(DirectoryInPlace.class);
 
   public DirectoryInPlace(byte[] buf, int offset, int limit) {
-    //System.out.printf("DirectoryInPlace %d %d %d\n", buf.length, offset, limit);
+    // System.out.printf("DirectoryInPlace %d %d %d\n", buf.length, offset, limit);
     this.buf = buf;
     this.offset = offset;
     this.limit = limit;
@@ -63,11 +63,12 @@ public class DirectoryInPlace extends DirectoryBase {
   }
 
   private int getEntryOffset(int index) {
-    //System.out.printf("getEntryOffset(%d)\n", index);
-    //System.out.printf("%d %d %d %d %d\n", offset + getIndexOffset() + indexFirstEntryOffset + index *
+    // System.out.printf("getEntryOffset(%d)\n", index);
+    // System.out.printf("%d %d %d %d %d\n", offset + getIndexOffset() + indexFirstEntryOffset +
+    // index *
     // DEI_ENTRY_SIZE, offset, getIndexOffset(), indexFirstEntryOffset, index * DEI_ENTRY_SIZE);
-    return NumConversion.bytesToIntLittleEndian(buf,
-        offset + getIndexOffset() + indexFirstEntryOffset + index * DEI_ENTRY_SIZE);
+    return NumConversion.bytesToIntLittleEndian(
+        buf, offset + getIndexOffset() + indexFirstEntryOffset + index * DEI_ENTRY_SIZE);
   }
 
   @Override
@@ -76,7 +77,8 @@ public class DirectoryInPlace extends DirectoryBase {
 
     offset = getEntryOffset(index);
     if (offset >= 0) {
-      //System.out.printf(">> getEntry %d %d %s\n", index, offset, getEntryAtOffset(offset).getV1());
+      // System.out.printf(">> getEntry %d %d %s\n", index, offset,
+      // getEntryAtOffset(offset).getV1());
       return getEntryAtOffset(offset).getV1();
     } else {
       log.info("Bad entry offset in DirectoryInPlace.getEntry()");
@@ -96,8 +98,8 @@ public class DirectoryInPlace extends DirectoryBase {
       entry = new DirectoryEntryInPlace(buf, this.offset + dataOffset + offset);
       eSize = entry.getNameLength();
       nextEntry = offset + DirectoryEntryBase.headerSize + eSize;
-      //System.out.printf("eSize %x %d\n", eSize, eSize);
-      //System.out.printf("nextEntry %d\n", nextEntry);
+      // System.out.printf("eSize %x %d\n", eSize, eSize);
+      // System.out.printf("nextEntry %d\n", nextEntry);
       return new Pair<>(entry, (long) nextEntry);
     }
   }

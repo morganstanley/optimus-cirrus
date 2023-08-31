@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.daemon.storage;
 
-/**
- * Group of offset lists for a given segment.
- */
+/** Group of offset lists for a given segment. */
 public interface OffsetListStore {
   /**
    * Returns an existing offset list

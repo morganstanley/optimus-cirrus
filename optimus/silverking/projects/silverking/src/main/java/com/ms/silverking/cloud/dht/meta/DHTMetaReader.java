@@ -27,8 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Reads new rings when necessary. Presents these as DHTMetaUpdates for compatibility with
- * legacy code.
+ * Reads new rings when necessary. Presents these as DHTMetaUpdates for compatibility with legacy
+ * code.
  */
 public class DHTMetaReader {
   private final MetaClient mc;
@@ -48,7 +48,8 @@ public class DHTMetaReader {
     dhtConfig = mc.getDHTConfiguration();
   }
 
-  public DHTMetaReader(ZooKeeperConfig zkConfig, String dhtName) throws IOException, KeeperException {
+  public DHTMetaReader(ZooKeeperConfig zkConfig, String dhtName)
+      throws IOException, KeeperException {
     this(zkConfig, dhtName, true);
   }
 
@@ -64,12 +65,15 @@ public class DHTMetaReader {
     return dhtConfig;
   }
 
-  public DHTMetaUpdate readRing(String curRing, Pair<Long, Long> ringVersionPair) throws KeeperException, IOException {
+  public DHTMetaUpdate readRing(String curRing, Pair<Long, Long> ringVersionPair)
+      throws KeeperException, IOException {
     return readRing(curRing, ringVersionPair.getV1(), ringVersionPair.getV2());
   }
 
-  public DHTMetaUpdate readRing(Triple<String, Long, Long> ringAndVersionPair) throws KeeperException, IOException {
-    return readRing(ringAndVersionPair.getV1(), ringAndVersionPair.getV2(), ringAndVersionPair.getV3());
+  public DHTMetaUpdate readRing(Triple<String, Long, Long> ringAndVersionPair)
+      throws KeeperException, IOException {
+    return readRing(
+        ringAndVersionPair.getV1(), ringAndVersionPair.getV2(), ringAndVersionPair.getV3());
   }
 
   public DHTMetaUpdate readRing(String ringName, long ringConfigVersion, long configInstanceVersion)
@@ -89,7 +93,9 @@ public class DHTMetaReader {
       ringConfig = new RingConfigurationZK(ringMC).readFromZK(ringConfigVersion, null);
     } catch (Exception e) {
       log.info("Ignoring: ", e);
-      ringConfig = new RingConfiguration(new CloudConfiguration(null, null, null), null, null, null, null, null);
+      ringConfig =
+          new RingConfiguration(
+              new CloudConfiguration(null, null, null), null, null, null, null, null);
     }
 
     // resolved
@@ -100,16 +106,22 @@ public class DHTMetaReader {
     ringMC = new com.ms.silverking.cloud.toporing.meta.MetaClient(namedRingConfig, zkConfig);
 
     if (enableLogging) {
-      log.info("configInstanceVersion:: {}" , configInstanceVersion);
+      log.info("configInstanceVersion:: {}", configInstanceVersion);
     }
     if (configInstanceVersion < 0) {
       throw new RuntimeException("Invalid configInstanceVersion: " + configInstanceVersion);
     }
 
-    // FUTURE - we shouldn't get here unless it's valid. Think about error messages if invalid, instead of waiting.
-    log.info("Waiting until valid {}" , ringMC.getMetaPaths().getConfigInstancePath(
-        ringConfigVersion) + " " + configInstanceVersion);
-    SingleRingZK.waitUntilValid(ringMC, ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
+    // FUTURE - we shouldn't get here unless it's valid. Think about error messages if invalid,
+    // instead of waiting.
+    log.info(
+        "Waiting until valid {}",
+        ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion)
+            + " "
+            + configInstanceVersion);
+    SingleRingZK.waitUntilValid(
+        ringMC,
+        ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
         configInstanceVersion);
     log.info("Valid");
 
@@ -127,7 +139,7 @@ public class DHTMetaReader {
       }
     }
     if (enableLogging) {
-      log.info("    ### {}  {}" , ringConfigVersion , configInstanceVersion);
+      log.info("    ### {}  {}", ringConfigVersion, configInstanceVersion);
     }
     return new DHTMetaUpdate(dhtConfig, namedRingConfig, ringTree, mc);
   }

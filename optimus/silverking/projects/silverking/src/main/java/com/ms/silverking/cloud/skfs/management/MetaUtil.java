@@ -53,7 +53,8 @@ public class MetaUtil {
 
     String conf = mc.getSKFSConfig();
 
-    //TODO (OPTIMUS-0000): use of getLatestVersion (not getVersionPriorTo_floored) as it is independent of SK versioning
+    // TODO (OPTIMUS-0000): use of getLatestVersion (not getVersionPriorTo_floored) as it is
+    // independent of SK versioning
     if (MetaUtilOptions.dhtVersionUnspecified == skfsVersion) {
       skfsVersion = getLatestVersion(MetaPaths.getConfigPath(skfsConfigName));
     }
@@ -63,13 +64,13 @@ public class MetaUtil {
   }
 
   private void LoadFromFile(long skfsVersion, File target) throws KeeperException, IOException {
-    //TODO (OPTIMUS-0000): do I need below to handle dhtVersionUnspecified or is it automatic?
-        /*
-        if(MetaUtilOptions.dhtVersionUnspecified == skfsVersion) {
-            skfsVersion = getLatestVersion(MetaPaths.getConfigPath(skfsConfigName));
-            skfsVersion++;
-        }
-        */
+    // TODO (OPTIMUS-0000): do I need below to handle dhtVersionUnspecified or is it automatic?
+    /*
+    if(MetaUtilOptions.dhtVersionUnspecified == skfsVersion) {
+        skfsVersion = getLatestVersion(MetaPaths.getConfigPath(skfsConfigName));
+        skfsVersion++;
+    }
+    */
 
     SKFSConfigurationZK skfsConfigZk = new SKFSConfigurationZK(mc);
     SKFSConfiguration skfsConfig = skfsConfigZk.readFromFile(target, skfsVersion);
@@ -79,15 +80,15 @@ public class MetaUtil {
   public void run(MetaUtilOptions options) throws KeeperException, IOException {
     File target = options.targetFile == null ? null : new File(options.targetFile);
     switch (options.command) {
-    case GetFromZK:
-      getFromZK(options.skfsVersion, target);
-      break;
-    case LoadFromFile:
-      LoadFromFile(options.skfsVersion, target);
-      break;
+      case GetFromZK:
+        getFromZK(options.skfsVersion, target);
+        break;
+      case LoadFromFile:
+        LoadFromFile(options.skfsVersion, target);
+        break;
 
-    default:
-      throw new RuntimeException("panic");
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -125,5 +126,4 @@ public class MetaUtil {
       System.exit(-1);
     }
   }
-
 }

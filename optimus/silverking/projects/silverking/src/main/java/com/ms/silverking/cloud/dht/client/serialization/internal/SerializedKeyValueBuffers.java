@@ -22,26 +22,19 @@ import com.ms.silverking.numeric.NumConversion;
 
 /**
  * Serialized K/V pairs.
- * <p>
- * For now, only use this for outgoing pairs.
- * <p>
- * Currently unused
- * FUTURE - consider removing
- * <p>
- * FUTURE - Incoming may not use this since incoming
- * from peers needs to carefully avoid copies and want to read straight into temporary storage.
- * This is a scaffolding class until that can be reviewed.
- * <p>
- * FUTURE - Think about moving the value length into the value of the
- * concat buffer. Dedicated doesn't need this. Probably make that move.
- * <p>
- * Key format:
- * <field> (<bytes>)
- * MSL          (8)
- * LSL          (8)
- * BufferIndex  (2)
- * BufferOffset (4)
- * ValueLength  (4)
+ *
+ * <p>For now, only use this for outgoing pairs.
+ *
+ * <p>Currently unused FUTURE - consider removing
+ *
+ * <p>FUTURE - Incoming may not use this since incoming from peers needs to carefully avoid copies
+ * and want to read straight into temporary storage. This is a scaffolding class until that can be
+ * reviewed.
+ *
+ * <p>FUTURE - Think about moving the value length into the value of the concat buffer. Dedicated
+ * doesn't need this. Probably make that move.
+ *
+ * <p>Key format: <field> (<bytes>) MSL (8) LSL (8) BufferIndex (2) BufferOffset (4) ValueLength (4)
  */
 public class SerializedKeyValueBuffers {
   private final ByteBuffer keyBuffer;
@@ -55,11 +48,14 @@ public class SerializedKeyValueBuffers {
   private static final int DEFAULT_CONCAT_BUFFER_SIZE = 1024 * 1024;
   private static final int DEFAULT_KEY_BUFFER_SIZE = 1024 * 1024;
   private static final int BYTES_PER_KEY =
-      2 * NumConversion.BYTES_PER_LONG + NumConversion.BYTES_PER_SHORT + 2 * NumConversion.BYTES_PER_INT;
+      2 * NumConversion.BYTES_PER_LONG
+          + NumConversion.BYTES_PER_SHORT
+          + 2 * NumConversion.BYTES_PER_INT;
 
-  public enum BufferMode {concatenated, dedicated}
-
-  ;
+  public enum BufferMode {
+    concatenated,
+    dedicated
+  };
 
   public SerializedKeyValueBuffers(ByteBuffer[] buffers) {
     keyBuffer = buffers[0];
@@ -138,18 +134,26 @@ public class SerializedKeyValueBuffers {
   }
 
   private int bufferOffsetOffset(int index) {
-    return NumConversion.BYTES_PER_INT + 2 * NumConversion.BYTES_PER_LONG + NumConversion.BYTES_PER_SHORT + index * BYTES_PER_KEY;
+    return NumConversion.BYTES_PER_INT
+        + 2 * NumConversion.BYTES_PER_LONG
+        + NumConversion.BYTES_PER_SHORT
+        + index * BYTES_PER_KEY;
   }
 
   private int valueLengthOffset(int index) {
-    return NumConversion.BYTES_PER_INT + 2 * NumConversion.BYTES_PER_LONG + NumConversion.BYTES_PER_SHORT + NumConversion.BYTES_PER_INT + index * BYTES_PER_KEY;
+    return NumConversion.BYTES_PER_INT
+        + 2 * NumConversion.BYTES_PER_LONG
+        + NumConversion.BYTES_PER_SHORT
+        + NumConversion.BYTES_PER_INT
+        + index * BYTES_PER_KEY;
   }
 
   public DHTKey getKey(int index) {
     if (index >= numKeys) {
       throw new IndexOutOfBoundsException("index > " + (numKeys - 1));
     } else {
-      return new SimpleKey(keyBuffer.getLong(mslOffset(index)), keyBuffer.getLong(lslOffset(index)));
+      return new SimpleKey(
+          keyBuffer.getLong(mslOffset(index)), keyBuffer.getLong(lslOffset(index)));
     }
   }
 
@@ -190,36 +194,36 @@ public class SerializedKeyValueBuffers {
 
       valueLength = value.remaining();
       switch (bufferMode) {
-      case concatenated:
-        ByteBuffer concatBuffer;
+        case concatenated:
+          ByteBuffer concatBuffer;
 
-        concatBuffer = valueBuffers.get(curConcatBufferIndex);
-        if (concatBuffer.remaining() < value.remaining()) {
-          short newIndex;
+          concatBuffer = valueBuffers.get(curConcatBufferIndex);
+          if (concatBuffer.remaining() < value.remaining()) {
+            short newIndex;
 
-          newIndex = addValueBuffer(ByteBuffer.allocate(concatBufferSize));
+            newIndex = addValueBuffer(ByteBuffer.allocate(concatBufferSize));
+            if (newIndex < 0) {
+              return false;
+            }
+            curConcatBufferIndex = newIndex;
+            concatBuffer = valueBuffers.get(curConcatBufferIndex);
+          }
+          valueBufferIndex = curConcatBufferIndex;
+          valueBufferOffset = concatBuffer.position();
+          concatBuffer.put(value);
+          break;
+        case dedicated:
+          int newIndex;
+
+          valueBufferIndex = (short) valueBuffers.size();
+          valueBufferOffset = 0;
+          newIndex = addValueBuffer(value);
           if (newIndex < 0) {
             return false;
           }
-          curConcatBufferIndex = newIndex;
-          concatBuffer = valueBuffers.get(curConcatBufferIndex);
-        }
-        valueBufferIndex = curConcatBufferIndex;
-        valueBufferOffset = concatBuffer.position();
-        concatBuffer.put(value);
-        break;
-      case dedicated:
-        int newIndex;
-
-        valueBufferIndex = (short) valueBuffers.size();
-        valueBufferOffset = 0;
-        newIndex = addValueBuffer(value);
-        if (newIndex < 0) {
-          return false;
-        }
-        break;
-      default:
-        throw new RuntimeException("panic");
+          break;
+        default:
+          throw new RuntimeException("panic");
       }
       keyBuffer.putLong(key.getMSL());
       keyBuffer.putLong(key.getLSL());

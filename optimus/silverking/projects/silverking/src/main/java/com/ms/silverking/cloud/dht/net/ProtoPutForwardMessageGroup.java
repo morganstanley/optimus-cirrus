@@ -26,25 +26,24 @@ import com.ms.silverking.id.UUIDBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * ProtoMessageGroup for forwarded put messages
- */
+/** ProtoMessageGroup for forwarded put messages */
 public final class ProtoPutForwardMessageGroup extends ProtoValueMessageGroupBase {
 
   private static Logger log = LoggerFactory.getLogger(ProtoPutForwardMessageGroup.class);
 
-  public ProtoPutForwardMessageGroup(UUIDBase uuid,
-                                     long context,
-                                     byte[] originator,
-                                     ByteBuffer optionsByteBuffer,
-                                     List<MessageGroupKeyEntry> destEntries,
-                                     ChecksumType checksumType,
-                                     int deadlineRelativeMillis,
-                                     SkTraceId maybeTraceID) {
+  public ProtoPutForwardMessageGroup(
+      UUIDBase uuid,
+      long context,
+      byte[] originator,
+      ByteBuffer optionsByteBuffer,
+      List<MessageGroupKeyEntry> destEntries,
+      ChecksumType checksumType,
+      int deadlineRelativeMillis,
+      SkTraceId maybeTraceID) {
     super(
         TraceIDProvider.isValidTraceID(maybeTraceID)
-        ? MessageType.LEGACY_PUT_TRACE
-        : MessageType.LEGACY_PUT,
+            ? MessageType.LEGACY_PUT_TRACE
+            : MessageType.LEGACY_PUT,
         uuid,
         context,
         destEntries.size(),
@@ -124,7 +123,8 @@ public final class ProtoPutForwardMessageGroup extends ProtoValueMessageGroupBas
       keyByteBuffer.putInt(uncompressedValueSize);
       keyByteBuffer.putInt(compressedValueSize);
       keyByteBuffer.put(entry.getChecksum());
-      // TODO (OPTIMUS-0000): think about removing the need for size since strictly speaking it isn't necessary
+      // TODO (OPTIMUS-0000): think about removing the need for size since strictly speaking it
+      // isn't necessary
       value.position(value.position() + storedValueSize);
       bufferList.add(value);
     }

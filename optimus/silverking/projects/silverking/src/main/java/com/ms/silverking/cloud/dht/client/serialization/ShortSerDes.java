@@ -15,9 +15,7 @@ import java.nio.ByteBuffer;
 
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Serializer/deserializer for Short
- */
+/** Serializer/deserializer for Short */
 public final class ShortSerDes implements BufferSerDes<Short> {
   @Override
   public ByteBuffer serializeToBuffer(Short n) {

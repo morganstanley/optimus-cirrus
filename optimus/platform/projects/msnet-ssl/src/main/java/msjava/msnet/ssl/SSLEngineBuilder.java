@@ -153,7 +153,7 @@ public class SSLEngineBuilder {
       assertPasswordNotNull("Keystore password cannot be set to null", config.keystorePassword);
       assertPasswordNotNull("Key password cannot be set to null", config.keyPassword);
 
-      KeyStore keyStore = KeyStore.getInstance("JKS");
+      KeyStore keyStore = KeyStore.getInstance(config.keystoreType.name());
       try (InputStream keyStoreIS = new FileInputStream(filepath)) {
         keyStore.load(keyStoreIS, config.keystorePassword.toCharArray());
       }
@@ -169,7 +169,7 @@ public class SSLEngineBuilder {
   private TrustManagerFactory createTrustManagerFactory(String filepath) {
     try {
       assertPasswordNotNull("Truststore password cannot be set to null", config.truststorePassword);
-      KeyStore trustStore = KeyStore.getInstance("JKS");
+      KeyStore trustStore = KeyStore.getInstance(config.truststoreType.name());
       try (InputStream trustStoreIS = new FileInputStream(filepath)) {
         trustStore.load(trustStoreIS, config.truststorePassword.toCharArray());
       }

@@ -52,8 +52,8 @@ public final class IntHashMap<V> implements Map<Integer, V> {
     Entry<V> entry;
 
     index = hashCode & (size - 1);
-    //index = Math.abs(hashCode) % size;
-    //index = (hashCode * hashCode) % size;
+    // index = Math.abs(hashCode) % size;
+    // index = (hashCode * hashCode) % size;
     startIndex = index;
     do {
       entry = entries[index];

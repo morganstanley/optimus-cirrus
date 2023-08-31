@@ -15,9 +15,7 @@ import com.ms.silverking.cloud.dht.client.ChecksumType;
 import com.ms.silverking.cloud.dht.client.Compression;
 import com.ms.silverking.cloud.dht.serverside.SSStorageParametersAndRequirements;
 
-/**
- * Wraps StorageParameters to hide internal optimizations from users of SSStorageParameters
- */
+/** Wraps StorageParameters to hide internal optimizations from users of SSStorageParameters */
 public class SSStorageParametersImpl implements SSStorageParametersAndRequirements {
   private final StorageParametersAndRequirements sp;
   private final int compressedSize;

@@ -85,7 +85,10 @@ class MergedStorageParameters implements SSStorageParameters {
   }
 
   public MergedStorageParameters merge(StorageParameters sp) {
-    return new MergedStorageParameters(Math.max(version, sp.getVersion()), Math.max(creationTime, sp.getCreationTime()),
-        sp.getValueCreator(), sp.getLockSeconds());
+    return new MergedStorageParameters(
+        Math.max(version, sp.getVersion()),
+        Math.max(creationTime, sp.getCreationTime()),
+        sp.getValueCreator(),
+        sp.getLockSeconds());
   }
 }

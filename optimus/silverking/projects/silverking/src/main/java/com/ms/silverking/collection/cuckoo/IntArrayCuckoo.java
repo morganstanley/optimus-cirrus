@@ -17,14 +17,12 @@ import com.ms.silverking.numeric.NumConversion;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-/**
- *
- */
+/** */
 public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntKeyIntEntry> {
   private final SubTable[] subTables;
 
   private static final int empty = IntCuckooConstants.empty;
-  private static final int[] extraShiftPerTable = { -1, -1, 32, -1, 16, -1, -1, -1, 8 };
+  private static final int[] extraShiftPerTable = {-1, -1, 32, -1, 16, -1, -1, -1, 8};
 
   private static final boolean debug = false;
   private static final boolean debugCycle = false;
@@ -39,8 +37,12 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     super(cuckooConfig);
     subTables = new SubTable[numSubTables];
     for (int i = 0; i < subTables.length; i++) {
-      subTables[i] = new SubTable(i, cuckooConfig.getNumSubTableBuckets(), entriesPerBucket,
-          extraShiftPerTable[numSubTables] * i);
+      subTables[i] =
+          new SubTable(
+              i,
+              cuckooConfig.getNumSubTableBuckets(),
+              entriesPerBucket,
+              extraShiftPerTable[numSubTables] * i);
     }
     setSubTables(subTables);
   }
@@ -116,10 +118,10 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     }
     subTable = subTables[attempt % subTables.length];
     if (debug) {
-      log.info("vacate: {} {} {}" , key ,attempt , (attempt % subTables.length));
+      log.info("vacate: {} {} {}", key, attempt, (attempt % subTables.length));
     }
     subTable.vacate(key, attempt, Math.abs(((int) (key + attempt) % subTable.entriesPerBucket)));
-    //subTable.vacate(msl, lsl, attempt, 0/*entriesPerBucket - 1*/);
+    // subTable.vacate(msl, lsl, attempt, 0/*entriesPerBucket - 1*/);
     success = subTable.put(key, value);
     if (!success) {
       throw new RuntimeException("panic");
@@ -128,7 +130,7 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
 
   public void display() {
     for (int i = 0; i < subTables.length; i++) {
-      log.info("subTable {}" , i);
+      log.info("subTable {}", i);
       subTables[i].display();
     }
   }
@@ -144,14 +146,14 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
 
     SubTable(int id, int numBuckets, int entriesPerBucket, int extraShift) {
       super(numBuckets, entriesPerBucket, _singleEntrySize);
-      //System.out.println("numEntries: "+ numBuckets +"\tentriesPerBucket: "+ entriesPerBucket);
+      // System.out.println("numEntries: "+ numBuckets +"\tentriesPerBucket: "+ entriesPerBucket);
       this.id = id;
       buf = new int[bufferSizeAtoms];
       values = new int[numBuckets * entriesPerBucket];
-      //keyShift = NumUtil.log2OfPerfectPower(bufferCapacity) - 1 + extraShift;
+      // keyShift = NumUtil.log2OfPerfectPower(bufferCapacity) - 1 + extraShift;
       keyShift = extraShift;
-      //System.out.printf("%d\t%x\n", NumUtil.log2OfPerfectPower(bufferCapacity) - 1, bitMask);
-      //keyShift = NumUtil.log2OfPerfectPower(bufferCapacity) - 1 + extraShift;
+      // System.out.printf("%d\t%x\n", NumUtil.log2OfPerfectPower(bufferCapacity) - 1, bitMask);
+      // keyShift = NumUtil.log2OfPerfectPower(bufferCapacity) - 1 + extraShift;
       clear();
     }
 
@@ -195,13 +197,13 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
         int entryIndex;
         int rVal;
 
-        //entryIndex = ((int)msl + i) & entriesMask;
+        // entryIndex = ((int)msl + i) & entriesMask;
         entryIndex = ((int) ((int) key >>> balanceShift) + i) & entriesMask;
-        //entryIndex = i;
+        // entryIndex = i;
         if (entryMatches(key, bucketIndex, entryIndex)) {
           putValue(bucketIndex, key, empty, entryIndex);
           if (debug) {
-            log.debug("removed from: {}" , id);
+            log.debug("removed from: {}", id);
           }
           return true;
         } else {
@@ -226,9 +228,9 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
       for (int i = 0; i < entriesPerBucket; i++) {
         int entryIndex;
 
-        //if (entryMatches(msl, lsl, index, i)) {
+        // if (entryMatches(msl, lsl, index, i)) {
         entryIndex = ((int) ((int) key >>> balanceShift) + i) & entriesMask;
-        //entryIndex = i;
+        // entryIndex = i;
         if (entryMatches(key, bucketIndex, entryIndex)) {
           return getValue(bucketIndex, entryIndex);
         }
@@ -244,7 +246,7 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
         int entryIndex;
 
         entryIndex = ((int) ((int) key >>> balanceShift) + i) & entriesMask;
-        //entryIndex = i;
+        // entryIndex = i;
         if (isEmpty(bucketIndex, entryIndex)) {
           putValue(bucketIndex, key, value, entryIndex);
           return true;
@@ -262,17 +264,17 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
         log.info(attempt + "\t" + key + "\t" + bucketIndex);
       }
       baseOffset = getHTEntryIndex(bucketIndex, entryIndex);
-      cuckooPut(buf[baseOffset + keyOffset], getValue(bucketIndex, entryIndex),
-          attempt + 1);
-      //System.out.println("marking as empty: "+ index +" "+ bucketIndex);
+      cuckooPut(buf[baseOffset + keyOffset], getValue(bucketIndex, entryIndex), attempt + 1);
+      // System.out.println("marking as empty: "+ index +" "+ bucketIndex);
       values[bucketIndex * entriesPerBucket + entryIndex] = empty;
       buf[baseOffset + keyOffset] = 0;
     }
 
     private int getBucketIndex(int key) {
-      //return Math.abs((int)(lsl >> keyShift)) % capacity;
+      // return Math.abs((int)(lsl >> keyShift)) % capacity;
       if (debug) {
-        //    System.out.printf("%x\t%x\t%x\t%d\n", lsl, bitMask, ((int)(lsl >> keyShift) & bitMask), ((int)(lsl >>
+        //    System.out.printf("%x\t%x\t%x\t%d\n", lsl, bitMask, ((int)(lsl >> keyShift) &
+        // bitMask), ((int)(lsl >>
         //    keyShift) & bitMask));
         log.info("bucketIndex {} -> {}", key, ((int) (key >>> keyShift) & bitMask));
       }
@@ -286,14 +288,14 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     }
 
     private void displayBucket(int bucketIndex) {
-      log.info("bucket {}" , bucketIndex);
+      log.info("bucket {}", bucketIndex);
       for (int i = 0; i < entriesPerBucket; i++) {
         displayEntry(bucketIndex, i);
       }
     }
 
     private void displayEntry(int bucketIndex, int entryIndex) {
-      log.info("{}  {}" , bucketIndex ,entryString(bucketIndex, entryIndex));
+      log.info("{}  {}", bucketIndex, entryString(bucketIndex, entryIndex));
     }
 
     private String entryString(int bucketIndex, int entryIndex) {
@@ -310,10 +312,10 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     private boolean entryMatches(int key, int bucketIndex, int entryIndex) {
       int baseOffset;
 
-      //displayEntry(bucketIndex, entryIndex);
+      // displayEntry(bucketIndex, entryIndex);
       baseOffset = getHTEntryIndex(bucketIndex, entryIndex);
-      //System.out.println("\t"+ entryIndex +"\t"+ bucketIndex +"\t"+ baseOffset);
-      //System.out.printf("%x:%x\t%x:%x\n",
+      // System.out.println("\t"+ entryIndex +"\t"+ bucketIndex +"\t"+ baseOffset);
+      // System.out.printf("%x:%x\t%x:%x\n",
       //        buf[baseOffset + mslOffset], buf[baseOffset + lslOffset],
       //        msl, lsl);
       return buf[baseOffset + keyOffset] == key;
@@ -333,11 +335,12 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     private void putValue(int index, int key, int value, int entryIndex) {
       int baseOffset;
 
-      //System.out.println(index +"\t"+ bucketIndex);
+      // System.out.println(index +"\t"+ bucketIndex);
       assert entryIndex < entriesPerBucket;
       baseOffset = getHTEntryIndex(index, entryIndex);
       buf[baseOffset + keyOffset] = key;
-      //System.out.println("baseOffset: "+ baseOffset +"\tmsl: "+ buf[entrySize * index + mslOffset));
+      // System.out.println("baseOffset: "+ baseOffset +"\tmsl: "+ buf[entrySize * index +
+      // mslOffset));
       values[index * entriesPerBucket + entryIndex] = value;
     }
   }
@@ -357,8 +360,10 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
       IntKeyIntEntry mapEntry;
 
       // precondition: moveToNonEmpty() has been called
-      mapEntry = new IntKeyIntEntry(subTables[subTable].getKey(bucket, entry),
-          subTables[subTable].getValue(bucket, entry));
+      mapEntry =
+          new IntKeyIntEntry(
+              subTables[subTable].getKey(bucket, entry),
+              subTables[subTable].getValue(bucket, entry));
       moveToNonEmpty();
       return mapEntry;
     }
@@ -368,14 +373,13 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     }
   }
 
-  public static IntArrayCuckoo rehash(
-      IntArrayCuckoo oldTable) {
+  public static IntArrayCuckoo rehash(IntArrayCuckoo oldTable) {
     IntArrayCuckoo newTable;
 
     newTable = new IntArrayCuckoo(oldTable.getConfig().doubleEntries());
     try {
       for (IntKeyIntEntry entry : oldTable) {
-        //System.out.println(entry);
+        // System.out.println(entry);
         newTable.put(entry.getKey(), entry.getValue());
       }
       return newTable;
@@ -384,8 +388,7 @@ public class IntArrayCuckoo extends CuckooBase<Integer> implements Iterable<IntK
     }
   }
 
-  public static IntArrayCuckoo rehashAndAdd(
-      IntArrayCuckoo oldTable, int key, int value) {
+  public static IntArrayCuckoo rehashAndAdd(IntArrayCuckoo oldTable, int key, int value) {
     IntArrayCuckoo newTable;
 
     newTable = rehash(oldTable);

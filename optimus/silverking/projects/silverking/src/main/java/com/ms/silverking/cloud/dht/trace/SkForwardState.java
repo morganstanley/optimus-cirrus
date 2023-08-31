@@ -18,21 +18,21 @@ import com.ms.silverking.net.IPAddrUtil;
 import com.ms.silverking.net.IPAndPort;
 
 /**
- * A SkTrace has the following three ways of state transformation:
- * 1. Proxy doesn't forward
- * NotForwarded@Client -> NotForwarded@Proxy -> NotForwarded@Client
- * 2. Proxy does local forward
- * NotForwarded@Client -> LocalForwarded@Proxy -> LocalForwarded@Client
- * 3. Proxy does remote forward
- * NotForwarded@Client -> RemoteForwarded@Proxy -> RemoteForwarded@Remote -> RemoteForwarded@Proxy ->
- * RemoteForwarded@Client
+ * A SkTrace has the following three ways of state transformation: 1. Proxy doesn't forward
+ * NotForwarded@Client -> NotForwarded@Proxy -> NotForwarded@Client 2. Proxy does local forward
+ * NotForwarded@Client -> LocalForwarded@Proxy -> LocalForwarded@Client 3. Proxy does remote forward
+ * NotForwarded@Client -> RemoteForwarded@Proxy -> RemoteForwarded@Remote -> RemoteForwarded@Proxy
+ * -> RemoteForwarded@Client
  */
 public enum SkForwardState {
-  NotForwarded, LocalForwarded, RemoteForwarded;
+  NotForwarded,
+  LocalForwarded,
+  RemoteForwarded;
 
   public static IPAndPort getLocalIpAndPort() {
-    return new IPAndPort(IPAddrUtil.localIP(),
-                         DHTNodePort.getDhtPort() == DHTConstants.uninitializedPort ? 0 : DHTNodePort.getDhtPort());
+    return new IPAndPort(
+        IPAddrUtil.localIP(),
+        DHTNodePort.getDhtPort() == DHTConstants.uninitializedPort ? 0 : DHTNodePort.getDhtPort());
   }
 
   public static SkForwardState nextForwardState(AddrAndPort replica) {

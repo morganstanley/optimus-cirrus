@@ -23,14 +23,16 @@ import com.ms.silverking.cloud.dht.net.ProtoVersionedBasicOpMessageGroup;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-
 public abstract class AsyncVersionedBasicOperationImpl extends AsyncNamespaceOperationImpl {
   private final VersionedBasicNamespaceOperation versionedOperation;
 
   private static Logger log = LoggerFactory.getLogger(AsyncVersionedBasicOperationImpl.class);
 
-  public AsyncVersionedBasicOperationImpl(VersionedBasicNamespaceOperation versionedOperation, Context context,
-      long curTime, byte[] originator) {
+  public AsyncVersionedBasicOperationImpl(
+      VersionedBasicNamespaceOperation versionedOperation,
+      Context context,
+      long curTime,
+      byte[] originator) {
     super(versionedOperation, context, curTime, originator);
     this.versionedOperation = versionedOperation;
   }
@@ -51,8 +53,7 @@ public abstract class AsyncVersionedBasicOperationImpl extends AsyncNamespaceOpe
   }
 
   @Override
-  void addToEstimate(MessageEstimate estimate) {
-  }
+  void addToEstimate(MessageEstimate estimate) {}
 
   @Override
   MessageEstimate createMessageEstimate() {
@@ -62,27 +63,30 @@ public abstract class AsyncVersionedBasicOperationImpl extends AsyncNamespaceOpe
   // FUTURE - think about moving this
   private static MessageType clientOpTypeToMessageType(ClientOpType clientOpType) {
     switch (clientOpType) {
-    case SNAPSHOT:
-      return MessageType.SNAPSHOT;
-    case SYNC_REQUEST:
-      return MessageType.SYNC_REQUEST;
-    default:
-      throw new RuntimeException("Unsupported clientOpType: " + clientOpType);
+      case SNAPSHOT:
+        return MessageType.SNAPSHOT;
+      case SYNC_REQUEST:
+        return MessageType.SYNC_REQUEST;
+      default:
+        throw new RuntimeException("Unsupported clientOpType: " + clientOpType);
     }
   }
 
   @Override
   ProtoMessageGroup createProtoMG(MessageEstimate estimate) {
-    return new ProtoVersionedBasicOpMessageGroup(clientOpTypeToMessageType(operation.getOpType()), operation.getUUID(),
-        context.contextAsLong(), versionedOperation.getVersion(), originator);
+    return new ProtoVersionedBasicOpMessageGroup(
+        clientOpTypeToMessageType(operation.getOpType()),
+        operation.getUUID(),
+        context.contextAsLong(),
+        versionedOperation.getVersion(),
+        originator);
   }
 
   @Override
-  ProtoMessageGroup createMessagesForIncomplete(ProtoMessageGroup protoMG, List<MessageGroup> messageGroups,
-      MessageEstimate estimate) {
+  ProtoMessageGroup createMessagesForIncomplete(
+      ProtoMessageGroup protoMG, List<MessageGroup> messageGroups, MessageEstimate estimate) {
     ((ProtoVersionedBasicOpMessageGroup) protoMG).setNonEmpty();
     protoMG.addToMessageGroupList(messageGroups);
     return createProtoMG(estimate);
   }
-
 }

@@ -34,7 +34,8 @@ public class RecoverOldAttr {
 
   private static final String attrNamespace = "attr";
 
-  public RecoverOldAttr(SKGridConfiguration gc, String namespace) throws ClientException, IOException {
+  public RecoverOldAttr(SKGridConfiguration gc, String namespace)
+      throws ClientException, IOException {
     DHTClient client;
     DHTSession session;
 
@@ -43,12 +44,17 @@ public class RecoverOldAttr {
     syncNSP = session.openSyncNamespacePerspective(namespace, String.class, byte[].class);
   }
 
-  public void recover(String file, long version, String outputFile) throws PutException, RetrievalException {
+  public void recover(String file, long version, String outputFile)
+      throws PutException, RetrievalException {
     StoredValue<byte[]> oldAttrValue;
     GetOptions getOptions;
 
-    getOptions = syncNSP.getOptions().getDefaultGetOptions().versionConstraint(
-        VersionConstraint.exactMatch(version)).nonExistenceResponse(NonExistenceResponse.NULL_VALUE);
+    getOptions =
+        syncNSP
+            .getOptions()
+            .getDefaultGetOptions()
+            .versionConstraint(VersionConstraint.exactMatch(version))
+            .nonExistenceResponse(NonExistenceResponse.NULL_VALUE);
     oldAttrValue = syncNSP.retrieve(file, getOptions);
     if (oldAttrValue == null || oldAttrValue.getValue() == null) {
       log.info("Couldn't find file {} version {}", file, version);
@@ -68,7 +74,7 @@ public class RecoverOldAttr {
         String file;
         long version;
         String namespace;
-        String  outputFile;
+        String outputFile;
 
         gc = SKGridConfiguration.parseFile(args[0]);
         file = args[1];

@@ -17,11 +17,9 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Currently unused
- * FUTURE - Consider removing this class
- * <p>
- * For a single NS, key, lists all admitted puts.
- * Current plan, vary only by Version.
+ * Currently unused FUTURE - Consider removing this class
+ *
+ * <p>For a single NS, key, lists all admitted puts. Current plan, vary only by Version.
  */
 public class PutGroup {
   private final List<Put> puts;
@@ -98,8 +96,8 @@ public class PutGroup {
     // probably pass in some method of sending this key on
     // need to reduce redundancy here
     // also need to combine for server/client
-    //for (Retrieval retrieval : retrievals) {
+    // for (Retrieval retrieval : retrievals) {
     // if we still need this guy, then send him on
-    //}
+    // }
   }
 }

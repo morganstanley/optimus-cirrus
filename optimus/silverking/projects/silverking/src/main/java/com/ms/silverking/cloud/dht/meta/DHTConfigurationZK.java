@@ -42,7 +42,8 @@ public class DHTConfigurationZK extends MetaToolModuleBase<DHTConfiguration, Met
   }
 
   @Override
-  public String writeToZK(DHTConfiguration dhtConfig, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(DHTConfiguration dhtConfig, MetaToolOptions options)
+      throws IOException, KeeperException {
     String path;
 
     path = zk.createString(base + "/", dhtConfig.toString(), CreateMode.PERSISTENT_SEQUENTIAL);

@@ -18,9 +18,7 @@ import java.util.Set;
 import com.google.common.collect.ImmutableList;
 import com.ms.silverking.text.StringUtil;
 
-/**
- * Represents a Node in a Topology.
- */
+/** Represents a Node in a Topology. */
 public abstract class Node {
   private final NodeClass nodeClass;
   private final List<Node> children;

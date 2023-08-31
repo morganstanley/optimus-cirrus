@@ -21,9 +21,13 @@ public class TimeAndVersionRetentionPolicy implements ValueRetentionPolicy {
   private final int minVersions;
   private final long timeSpanSeconds;
 
-  public enum Mode {wallClock, mostRecentValue}
+  public enum Mode {
+    wallClock,
+    mostRecentValue
+  }
 
-  static final TimeAndVersionRetentionPolicy template = new TimeAndVersionRetentionPolicy(Mode.wallClock, 1, 86400);
+  static final TimeAndVersionRetentionPolicy template =
+      new TimeAndVersionRetentionPolicy(Mode.wallClock, 1, 86400);
 
   static {
     ObjectDefParser2.addParser(template);
@@ -79,7 +83,9 @@ public class TimeAndVersionRetentionPolicy implements ValueRetentionPolicy {
     TimeAndVersionRetentionPolicy other;
 
     other = (TimeAndVersionRetentionPolicy) o;
-    return mode == other.mode && minVersions == other.minVersions && timeSpanSeconds == other.timeSpanSeconds;
+    return mode == other.mode
+        && minVersions == other.minVersions
+        && timeSpanSeconds == other.timeSpanSeconds;
   }
 
   /**

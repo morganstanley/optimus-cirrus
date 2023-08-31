@@ -25,12 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Prioritizes replicas as follows:
- * 1) equal to local ip
- * 2) in same subnet as local ip
- * 3) others
- * <p>
- * Within classes 2 and 3, a psuedorandom (but consistent per each ip) prioritization is used
+ * Prioritizes replicas as follows: 1) equal to local ip 2) in same subnet as local ip 3) others
+ *
+ * <p>Within classes 2 and 3, a psuedorandom (but consistent per each ip) prioritization is used
  */
 public class SubnetAwareReplicaPrioritizer implements ReplicaPrioritizer {
   private final IPAndPort myIPAndPort;
@@ -107,10 +104,10 @@ public class SubnetAwareReplicaPrioritizer implements ReplicaPrioritizer {
 
   private int compareRandomly(IPAndPort o1, IPAndPort o2) {
     if (o1.equals(o2)) {
-      //System.out.println("Equal");
+      // System.out.println("Equal");
       return 0;
     } else {
-      //System.out.println("Comparing randomly");
+      // System.out.println("Comparing randomly");
       return ArrayUtil.compareSigned(encrypter.encrypt(o1.getIP()), encrypter.encrypt(o2.getIP()));
     }
   }

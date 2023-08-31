@@ -16,8 +16,7 @@ import java.util.Comparator;
 public class UnsignedKeyComparator implements Comparator<DHTKey> {
   public static final UnsignedKeyComparator instance = new UnsignedKeyComparator();
 
-  public UnsignedKeyComparator() {
-  }
+  public UnsignedKeyComparator() {}
 
   @Override
   public int compare(DHTKey k1, DHTKey k2) {

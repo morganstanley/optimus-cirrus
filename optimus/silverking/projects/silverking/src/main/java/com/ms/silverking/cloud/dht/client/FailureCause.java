@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.client;
 
-/**
- * Enumeration of failure causes.
- */
+/** Enumeration of failure causes. */
 public enum FailureCause {
   ERROR,
 
@@ -21,7 +19,8 @@ public enum FailureCause {
 
   MUTATION,
 
-  // Multiple OpResults for keys in a batch (e.g. 1 Succeed, 1 Error). This is seen as a Failure for the whole batch
+  // Multiple OpResults for keys in a batch (e.g. 1 Succeed, 1 Error). This is seen as a Failure for
+  // the whole batch
   MULTIPLE,
 
   INVALID_VERSION,

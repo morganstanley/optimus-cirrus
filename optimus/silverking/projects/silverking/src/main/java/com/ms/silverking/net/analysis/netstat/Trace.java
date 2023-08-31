@@ -40,7 +40,8 @@ public class Trace {
 
   public static Trace parse(File file) throws IOException {
     if (file.getName().endsWith(".gz")) {
-      return parse(file.getName(), StreamParser.parseGZFileLines(file, StreamParser.TrimMode.noTrim));
+      return parse(
+          file.getName(), StreamParser.parseGZFileLines(file, StreamParser.TrimMode.noTrim));
     } else {
       return parse(file.getName(), StreamParser.parseFileLines(file, StreamParser.TrimMode.noTrim));
     }
@@ -52,7 +53,7 @@ public class Trace {
     } else {
       for (int i = start; i < def.size() - 2; i++) {
         if (def.get(i).matches("^\\d*$")) {
-          //&& def.get(i).matches("")) {
+          // && def.get(i).matches("")) {
           return i;
         }
       }
@@ -71,7 +72,7 @@ public class Trace {
         int nextSample;
 
         nextSample = nextSample(def, sampleStart + 1);
-        //System.out.printf("sampleStart: %d\tnextSample: %d\n", sampleStart, nextSample);
+        // System.out.printf("sampleStart: %d\tnextSample: %d\n", sampleStart, nextSample);
         if (nextSample > sampleStart + 2) {
           samples.add(StatSample.parse(def.subList(sampleStart, nextSample)));
         }
@@ -115,11 +116,11 @@ public class Trace {
     return (int) (intervalTotal / intervalSamples);
   }
 
-  //public static int intervalMillis(Iterable<Trace> traces) {
-  //long    total;
+  // public static int intervalMillis(Iterable<Trace> traces) {
+  // long    total;
 
   //    for (Trace trace )
-  //}
+  // }
 
   @Override
   public String toString() {

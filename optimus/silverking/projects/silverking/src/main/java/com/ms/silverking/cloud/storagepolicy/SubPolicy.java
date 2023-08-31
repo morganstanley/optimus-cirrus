@@ -64,9 +64,10 @@ public class SubPolicy {
 
       memberClass = members.get(0).getNodeClassAndStoragePolicyName().getNodeClass();
       for (SubPolicyMember member : members) {
-        log.info("{}",member);
+        log.info("{}", member);
         if (member.getNodeClassAndStoragePolicyName().getNodeClass() != memberClass) {
-          log.error("{} != {}",member.getNodeClassAndStoragePolicyName().getNodeClass() , memberClass);
+          log.error(
+              "{} != {}", member.getNodeClassAndStoragePolicyName().getNodeClass(), memberClass);
           throw new RuntimeException("Inconsistent member node classes");
         }
       }
@@ -106,9 +107,10 @@ public class SubPolicy {
       NodeClassAndStoragePolicyName n;
 
       n = member.getNodeClassAndStoragePolicyName();
-      //System.out.println(n.getNodeClass() +"\t"+ nodeClass +"\t"+ (n.getNodeClass().equals(nodeClass)));
+      // System.out.println(n.getNodeClass() +"\t"+ nodeClass +"\t"+
+      // (n.getNodeClass().equals(nodeClass)));
       if (n.getNodeClass().equals(nodeClass)) {
-        //System.out.println("\t\t"+ n.getStoragePolicyName());
+        // System.out.println("\t\t"+ n.getStoragePolicyName());
         if (!member.isBound() || member.getBoundIDs().contains(child.getIDString())) {
           names.add(n.getStoragePolicyName());
         }
@@ -116,30 +118,30 @@ public class SubPolicy {
     }
     return names;
   }
-    
-    /*
-    public List<String> getNodeIDs(Topology topology, String parentNodeID) {
-        List<String>    nodeIDs;
-        
-        nodeIDs = new ArrayList<>();
-        for (PolicyMember member : members) {
-            if (member instanceof BoundPolicyMember) {
-                nodeIDs.addAll(((BoundPolicyMember)member).getNodeIDs());
-            } else {
-                Node    parent;
-                
-                // find the nodes in the topo ring
-                parent = topology.getNodeByID(parentNodeID);
-                if (!parent.getNodeClass().equals(nodeClass)) {
-                    throw new RuntimeException("nodeClass mismatch");
-                } else {
-                    nodeIDs.addAll(member.getNodeIDs());
-                }
-            }
-        }
-        return nodeIDs;
-    }
-    */
+
+  /*
+  public List<String> getNodeIDs(Topology topology, String parentNodeID) {
+      List<String>    nodeIDs;
+
+      nodeIDs = new ArrayList<>();
+      for (PolicyMember member : members) {
+          if (member instanceof BoundPolicyMember) {
+              nodeIDs.addAll(((BoundPolicyMember)member).getNodeIDs());
+          } else {
+              Node    parent;
+
+              // find the nodes in the topo ring
+              parent = topology.getNodeByID(parentNodeID);
+              if (!parent.getNodeClass().equals(nodeClass)) {
+                  throw new RuntimeException("nodeClass mismatch");
+              } else {
+                  nodeIDs.addAll(member.getNodeIDs());
+              }
+          }
+      }
+      return nodeIDs;
+  }
+  */
 
   @Override
   public String toString() {

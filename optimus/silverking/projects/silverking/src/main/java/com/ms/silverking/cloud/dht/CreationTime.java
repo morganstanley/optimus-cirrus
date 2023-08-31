@@ -16,13 +16,12 @@ import java.util.Date;
 
 import com.ms.silverking.cloud.dht.common.SystemTimeUtil;
 
-/**
- * Time that value was created.
- */
+/** Time that value was created. */
 public class CreationTime implements Comparable<CreationTime> {
   private final long creationTimeNanos;
 
-  private static final SimpleDateFormat sdf = new SimpleDateFormat("EEE MMM dd HH:mm:ss.SSS zzz yyyy");
+  private static final SimpleDateFormat sdf =
+      new SimpleDateFormat("EEE MMM dd HH:mm:ss.SSS zzz yyyy");
 
   public CreationTime(long creationTimeNanos) {
     this.creationTimeNanos = creationTimeNanos;

@@ -31,12 +31,12 @@ import org.slf4j.LoggerFactory;
 public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
   private static final long nanosPerMilli = 1000000;
   private static final long defaultTimeoutMills = 30 * 1000; // 30 seconds
-  private final static String implName = "ZooKeeper";
+  private static final String implName = "ZooKeeper";
 
   private static Logger log = LoggerFactory.getLogger(NamespaceOptionsClientZKImpl.class);
 
-  private final static String softDeletePlaceholder = "deleted";
-  private final static String versionNodeName = "versions";
+  private static final String softDeletePlaceholder = "deleted";
+  private static final String versionNodeName = "versions";
 
   private static String getZKBaseVersionPath(String nsZKBasePath) {
     return nsZKBasePath + "/" + versionNodeName;
@@ -46,7 +46,8 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
   private final MetaClientCore metaZK;
   private final ClientDHTConfiguration dhtConfig;
 
-  public NamespaceOptionsClientZKImpl(ClientDHTConfigurationProvider dhtConfigurationProvider, long relTimeoutMillis)
+  public NamespaceOptionsClientZKImpl(
+      ClientDHTConfigurationProvider dhtConfigurationProvider, long relTimeoutMillis)
       throws IOException, KeeperException {
     super(dhtConfigurationProvider);
     this.relTimeoutMillis = relTimeoutMillis;
@@ -110,7 +111,8 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
   }
 
   @Override
-  protected void deleteNamespaceProperties(long nsContext) throws NamespacePropertiesDeleteException {
+  protected void deleteNamespaceProperties(long nsContext)
+      throws NamespacePropertiesDeleteException {
     try {
       writeNewVersion(nsContext, softDeletePlaceholder);
     } catch (KeeperException ke) {
@@ -137,7 +139,9 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
       if (nsProperties.hasCreationTime()) {
         // Migrated nsProperties will have override creationTime, which inherits from __DHT_Meta__
         log.info(
-            "Retrieved a nsProperties with overrideCreationTime [ {} ] for ns: [ {} ]", nsProperties.getCreationTime() , nsProperties.getName());
+            "Retrieved a nsProperties with overrideCreationTime [ {} ] for ns: [ {} ]",
+            nsProperties.getCreationTime(),
+            nsProperties.getName());
         return nsProperties;
       } else {
         // Enrich with zk ctime
@@ -166,9 +170,12 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
     nsContext = NamespaceUtil.dirNameToContext(nsDir.getName());
     nsPropInZkOpt = Optional.ofNullable(retrieveFullNamespaceProperties(nsContext));
 
-    // If there are properties for this NS present in ZK then we want to cache them to disk in the namespace directory
-    // so that they can be consumed from there by the node. If not, we will want to consider this namespace a candidate
-    // for deletion later on so there is no need for us to bother messing with any on-disk data for the NS now.
+    // If there are properties for this NS present in ZK then we want to cache them to disk in the
+    // namespace directory
+    // so that they can be consumed from there by the node. If not, we will want to consider this
+    // namespace a candidate
+    // for deletion later on so there is no need for us to bother messing with any on-disk data for
+    // the NS now.
     if (nsPropInZkOpt.isPresent()) {
       NamespaceProperties nsPropInFile;
       NamespaceProperties nsPropInZk;
@@ -179,11 +186,12 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
         // Now get the existing namespace properties on disk, if they exist
         nsPropInFile = NamespacePropertiesIO.read(nsDir);
 
-        // If there are no properties on disk or if they are not the same as those in ZK, we want to rewrite whatever
+        // If there are no properties on disk or if they are not the same as those in ZK, we want to
+        // rewrite whatever
         // is on disk to match with what is in ZK.
         if (nsPropInFile == null || !nsPropInFile.equals(nsPropInZk)) {
           NamespacePropertiesIO.rewrite(nsDir, nsPropInZk);
-          log.info("Rewrote the old nsProperties [{}] to new one [{}]" , nsPropInFile, nsPropInZk );
+          log.info("Rewrote the old nsProperties [{}] to new one [{}]", nsPropInFile, nsPropInZk);
         }
       } catch (IOException ioe) {
         throw new NamespacePropertiesRetrievalException(ioe);
@@ -197,7 +205,8 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
     return implName;
   }
 
-  ////===== The APIs below are for admin only (not exposed in NamespaceOptionsClientCS / NamespaceOptionsClientSS)
+  //// ===== The APIs below are for admin only (not exposed in NamespaceOptionsClientCS /
+  // NamespaceOptionsClientSS)
   public void obliterateAllNsProperties() throws NamespacePropertiesDeleteException {
     try {
       String allNsBasePath;
@@ -213,7 +222,8 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
     }
   }
 
-  public Map<String, NamespaceProperties> getAllNamespaceProperties() throws NamespacePropertiesRetrievalException {
+  public Map<String, NamespaceProperties> getAllNamespaceProperties()
+      throws NamespacePropertiesRetrievalException {
     try {
       Map<String, NamespaceProperties> nsNames = new HashMap<>();
       String allNsBasePath;
@@ -225,7 +235,8 @@ public class NamespaceOptionsClientZKImpl extends NamespaceOptionsClientBase {
         for (String child : zk.getChildren(allNsBasePath)) {
           NamespaceProperties nsProperties;
 
-          nsProperties = retrieveFullNamespaceProperties(getZKBaseVersionPath(allNsBasePath + "/" + child));
+          nsProperties =
+              retrieveFullNamespaceProperties(getZKBaseVersionPath(allNsBasePath + "/" + child));
           nsNames.put(child, nsProperties);
         }
       }

@@ -112,8 +112,9 @@ public class DirectoryInMemory extends DirectoryBase {
     // copy so that the source can be garbage collected
     entries.put(name.duplicateBuffer(), entry.duplicate());
     entryBytes += entry.getLengthBytes();
-    //System.out.printf("name %s name.length() %d\n", name.toString(), name.toString().length());
-    //System.out.printf("entryBytes %d entry.getLengthBytes() %d\n", entryBytes, entry.getLengthBytes());
+    // System.out.printf("name %s name.length() %d\n", name.toString(), name.toString().length());
+    // System.out.printf("entryBytes %d entry.getLengthBytes() %d\n", entryBytes,
+    // entry.getLengthBytes());
   }
 
   /**
@@ -126,9 +127,12 @@ public class DirectoryInMemory extends DirectoryBase {
     if (debug) {
       log.debug("in update()");
     }
-    //update.display();
+    // update.display();
     if (debug) {
-      log.debug("{} {} {}", update.getNumEntries(), entries.size(),
+      log.debug(
+          "{} {} {}",
+          update.getNumEntries(),
+          entries.size(),
           ((double) update.getNumEntries() / (double) entries.size() > largeUpdateThreshold));
     }
     if ((double) update.getNumEntries() / ((double) entries.size() + 1) > largeUpdateThreshold) {
@@ -139,8 +143,8 @@ public class DirectoryInMemory extends DirectoryBase {
   }
 
   /**
-   * Update local state of this directory with the incoming update.
-   * Used when the incoming update is small with respect to this directory
+   * Update local state of this directory with the incoming update. Used when the incoming update is
+   * small with respect to this directory
    *
    * @param update
    * @return true if the update resulted in a state change; false if it is redundant
@@ -197,8 +201,8 @@ public class DirectoryInMemory extends DirectoryBase {
   }
 
   /**
-   * Update local state of this directory with the incoming update.
-   * Used when the incoming update is large with respect to this directory
+   * Update local state of this directory with the incoming update. Used when the incoming update is
+   * large with respect to this directory
    *
    * @param update
    * @return true if the update resulted in a state change; false if it is redundant
@@ -321,29 +325,33 @@ public class DirectoryInMemory extends DirectoryBase {
     entryIndex = 0;
     offset = dataOffset;
     for (Map.Entry<ByteString, DirectoryEntryInPlace> entry : entries.entrySet()) {
-      //System.out.println(entry.getKey());
-      //System.out.println("\t"+ entry.getValue());
+      // System.out.println(entry.getKey());
+      // System.out.println("\t"+ entry.getValue());
       indexOffsets[entryIndex++] = offset - dataOffset;
       offset += entry.getValue().serialize(buf, offset);
     }
     // Record index offset
     indexOffset = offset - dataOffset;
-    //System.out.printf("indexOffset/totalBytesWritten decimal: %d hex: %x\n", indexOffset, indexOffset);
+    // System.out.printf("indexOffset/totalBytesWritten decimal: %d hex: %x\n", indexOffset,
+    // indexOffset);
     totalBytesWritten = offset - dataOffset;
     if (totalBytesWritten != entryBytes) {
       throw new RuntimeException(
-          String.format("SerializationException: totalBytesWritten != entryBytes %d != %d", totalBytesWritten,
-              entryBytes));
+          String.format(
+              "SerializationException: totalBytesWritten != entryBytes %d != %d",
+              totalBytesWritten, entryBytes));
     }
 
     // Write index using recorded offsets
     totalBytesWritten += writeIndex(buf, indexOffset, indexOffsets);
-    //System.out.printf("totalBytesWritten(1) %d %x\n", totalBytesWritten + headerSize, totalBytesWritten + headerSize);
+    // System.out.printf("totalBytesWritten(1) %d %x\n", totalBytesWritten + headerSize,
+    // totalBytesWritten + headerSize);
 
     // Write header
-    totalBytesWritten += writeHeader(buf, 0, totalBytesWritten /* does not include header */, indexOffset,
-        entries.size());
-    //System.out.printf("totalBytesWritten %d %x\n", totalBytesWritten, totalBytesWritten);
+    totalBytesWritten +=
+        writeHeader(
+            buf, 0, totalBytesWritten /* does not include header */, indexOffset, entries.size());
+    // System.out.printf("totalBytesWritten %d %x\n", totalBytesWritten, totalBytesWritten);
 
     return buf;
   }

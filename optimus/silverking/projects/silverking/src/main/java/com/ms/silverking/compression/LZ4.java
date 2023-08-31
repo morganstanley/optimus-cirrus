@@ -30,8 +30,7 @@ public class LZ4 implements Compressor, Decompressor {
 
   private static Logger log = LoggerFactory.getLogger(LZ4.class);
 
-  public LZ4() {
-  }
+  public LZ4() {}
 
   public byte[] compress(byte[] rawValue, int offset, int length) throws IOException {
     LZ4Compressor compressor;
@@ -51,7 +50,8 @@ public class LZ4 implements Compressor, Decompressor {
     return buf;
   }
 
-  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength) throws IOException {
+  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength)
+      throws IOException {
     LZ4FastDecompressor decompressor;
     byte[] restored;
 
@@ -61,8 +61,8 @@ public class LZ4 implements Compressor, Decompressor {
     return restored;
   }
 
-  private static final Pair<Triple<Double, Double, Double>, Pair<Integer, Integer>> compressFile(File file)
-      throws IOException {
+  private static final Pair<Triple<Double, Double, Double>, Pair<Integer, Integer>> compressFile(
+      File file) throws IOException {
     Stopwatch readingSW;
     Stopwatch compressionSW;
     Stopwatch decompressionSW;
@@ -83,12 +83,16 @@ public class LZ4 implements Compressor, Decompressor {
     uncompressed = new LZ4().decompress(compressed, 0, compressed.length, original.length);
     decompressionSW.stop();
     log.info("Decompression elapsed: {}", decompressionSW.getElapsedSeconds());
-    return new Pair<>(new Triple<>(readingSW.getElapsedSeconds(), compressionSW.getElapsedSeconds(),
-        decompressionSW.getElapsedSeconds()), new Pair<Integer, Integer>(original.length, compressed.length));
+    return new Pair<>(
+        new Triple<>(
+            readingSW.getElapsedSeconds(),
+            compressionSW.getElapsedSeconds(),
+            decompressionSW.getElapsedSeconds()),
+        new Pair<Integer, Integer>(original.length, compressed.length));
   }
 
-  private static final Pair<Triple<Double, Double, Double>, Pair<Integer, Integer>> compressFile(String fileName)
-      throws IOException {
+  private static final Pair<Triple<Double, Double, Double>, Pair<Integer, Integer>> compressFile(
+      String fileName) throws IOException {
     return compressFile(new File(fileName));
   }
 
@@ -110,7 +114,8 @@ public class LZ4 implements Compressor, Decompressor {
 
         result = compressFile(arg);
         t = result.getV1();
-        sum = new Triple<>(sum.getV1() + t.getV1(), sum.getV2() + t.getV2(), sum.getV3() + t.getV3());
+        sum =
+            new Triple<>(sum.getV1() + t.getV1(), sum.getV2() + t.getV2(), sum.getV3() + t.getV3());
         totalOriginal += result.getV2().getV1();
         totalCompressed += result.getV2().getV2();
       }
@@ -123,27 +128,26 @@ public class LZ4 implements Compressor, Decompressor {
         log.info("Compressed bytes:      {}", totalCompressed);
         log.info("Compressed / original: {}", (double) totalCompressed / (double) totalOriginal);
       }
-            /*
-            for (String arg : args) {
-                byte[]  original;
-                byte[]  compressed;
-                byte[]  uncompressed;
-                original = arg.getBytes();
-                compressed = new LZ4().compress(original, 0, original.length);
-                uncompressed = new LZ4().decompress(compressed, 0, compressed.length, original.length);
-                //print of uncompressed may be 'corrupted' by non-printable chars from MD5  
-                System.out.println(arg +"\t"+ original.length +"\t"+ compressed.length +"\t"+ new String(uncompressed));
-                System.out.println(StringUtil.byteArrayToHexString(original));
-                System.out.println(StringUtil.byteArrayToHexString(uncompressed));
-                //int len = uncompressed.length - MD5Hash.MD5_BYTES;
-                //byte[] noMd5 = new byte[len];  
-                //System.arraycopy(uncompressed, 0, noMd5, 0, len);
-                //System.out.println(StringUtil.byteArrayToHexString(noMd5));
-            }
-            */
+      /*
+      for (String arg : args) {
+          byte[]  original;
+          byte[]  compressed;
+          byte[]  uncompressed;
+          original = arg.getBytes();
+          compressed = new LZ4().compress(original, 0, original.length);
+          uncompressed = new LZ4().decompress(compressed, 0, compressed.length, original.length);
+          //print of uncompressed may be 'corrupted' by non-printable chars from MD5
+          System.out.println(arg +"\t"+ original.length +"\t"+ compressed.length +"\t"+ new String(uncompressed));
+          System.out.println(StringUtil.byteArrayToHexString(original));
+          System.out.println(StringUtil.byteArrayToHexString(uncompressed));
+          //int len = uncompressed.length - MD5Hash.MD5_BYTES;
+          //byte[] noMd5 = new byte[len];
+          //System.arraycopy(uncompressed, 0, noMd5, 0, len);
+          //System.out.println(StringUtil.byteArrayToHexString(noMd5));
+      }
+      */
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
-
 }

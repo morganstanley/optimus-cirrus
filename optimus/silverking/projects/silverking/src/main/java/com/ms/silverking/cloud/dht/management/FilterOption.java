@@ -11,4 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.management;
 
-enum FilterOption {NoFiltering, FilterExcludedServers}
+enum FilterOption {
+  NoFiltering,
+  FilterExcludedServers
+}

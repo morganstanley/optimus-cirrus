@@ -14,8 +14,7 @@ package com.ms.silverking.pssh;
 import org.kohsuke.args4j.Option;
 
 public class TwoLevelParallelSSHOptions {
-  TwoLevelParallelSSHOptions() {
-  }
+  TwoLevelParallelSSHOptions() {}
 
   private static final int defaultWorkerThreads = 20;
   private static final int defaultTimeoutSeconds = 60;

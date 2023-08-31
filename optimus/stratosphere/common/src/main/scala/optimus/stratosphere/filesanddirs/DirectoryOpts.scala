@@ -24,6 +24,7 @@ import optimus.stratosphere.config.StratoWorkspace
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 
+import java.io.FileNotFoundException
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
@@ -79,7 +80,10 @@ class DirectoryOpts(path: Path) extends PathsOpts(path: Path) {
   }
 
   def listPathsRecursively(): Seq[Path] =
-    FileUtils.listFiles(path.toFile, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.map(_.toPath).toList
+    if (exists())
+      FileUtils.listFiles(path.toFile, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.map(_.toPath).toList
+    else
+      throw new FileNotFoundException(s"Cannot list paths under: '$path' because it does not exist.")
 
   private def safeListFiles() = Option(path.toFile.listFiles()).toList.flatten
 
@@ -181,14 +185,7 @@ class DirectoryOpts(path: Path) extends PathsOpts(path: Path) {
     .drop(keep)
     .foreach(_.deleteIfExists())
 
-  private def defaultPrintError(msg: String, e: Throwable): Unit = {
-    println(s"Error: $msg")
-    e.printStackTrace()
-  }
-
-  def printAllFiles(
-      logInfo: String => Unit = println,
-      logError: (String, Throwable) => Unit = defaultPrintError): Unit =
+  def printAllFiles(logInfo: String => Unit, logError: (String, Throwable) => Unit): Unit =
     listPathsRecursively().foreach { logFile =>
       try {
         // This file can be really big on failure

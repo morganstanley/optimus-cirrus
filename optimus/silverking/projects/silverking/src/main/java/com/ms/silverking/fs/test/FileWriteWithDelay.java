@@ -46,7 +46,8 @@ public class FileWriteWithDelay {
     }
   }
 
-  public static void write(File file, long size, double rateLimitMBs, boolean randomBytes, Pair<Double, Double> delay)
+  public static void write(
+      File file, long size, double rateLimitMBs, boolean randomBytes, Pair<Double, Double> delay)
       throws IOException {
     OutputStream out;
     long totalBytesWritten;
@@ -84,7 +85,10 @@ public class FileWriteWithDelay {
         pause = targetTime - sw.getSplitSeconds();
       }
       if (displayTimer.hasExpired()) {
-        log.info("{} {}  {}", sw.getSplitSeconds(), totalBytesWritten,
+        log.info(
+            "{} {}  {}",
+            sw.getSplitSeconds(),
+            totalBytesWritten,
             ((double) totalBytesWritten / sw.getSplitSeconds() / 1000000.0));
         displayTimer.reset();
       }

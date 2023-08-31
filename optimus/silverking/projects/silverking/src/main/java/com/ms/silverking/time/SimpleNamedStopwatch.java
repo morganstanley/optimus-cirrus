@@ -13,9 +13,7 @@ package com.ms.silverking.time;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * Extends SimpleStopwatch with support for naming this Stopwatch.
- */
+/** Extends SimpleStopwatch with support for naming this Stopwatch. */
 public class SimpleNamedStopwatch extends SimpleStopwatch {
   private final String name;
 

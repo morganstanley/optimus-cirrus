@@ -25,7 +25,9 @@ public class SimpleKey implements DHTKey, Comparable<DHTKey> {
   }
 
   public SimpleKey(byte[] bytes) {
-    this(NumConversion.bytesToLong(bytes, 0), NumConversion.bytesToLong(bytes, NumConversion.BYTES_PER_LONG));
+    this(
+        NumConversion.bytesToLong(bytes, 0),
+        NumConversion.bytesToLong(bytes, NumConversion.BYTES_PER_LONG));
   }
 
   protected SimpleKey(DHTKey key) {
@@ -35,12 +37,14 @@ public class SimpleKey implements DHTKey, Comparable<DHTKey> {
 
   public static SimpleKey mapToSimpleKey(byte[] bytes) {
     assert bytes.length < NumConversion.BYTES_PER_LONG * 2;
-    return new SimpleKey(NumConversion.bytesToLong(bytes, 0),
+    return new SimpleKey(
+        NumConversion.bytesToLong(bytes, 0),
         NumConversion.bytesToLong(bytes, NumConversion.BYTES_PER_LONG));
   }
 
   public static SimpleKey randomKey() {
-    return new SimpleKey(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong());
+    return new SimpleKey(
+        ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong());
   }
 
   public static SimpleKey of(DHTKey key) {

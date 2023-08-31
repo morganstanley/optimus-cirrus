@@ -14,7 +14,8 @@ package com.ms.silverking.cloud.dht.client;
 import com.ms.silverking.cloud.dht.SessionOptions;
 import com.ms.silverking.text.ObjectDefParser2;
 
-public class SimpleSessionEstablishmentTimeoutController implements SessionEstablishmentTimeoutController {
+public class SimpleSessionEstablishmentTimeoutController
+    implements SessionEstablishmentTimeoutController {
   private final int maxAttempts;
   private final int attemptRelativeTimeoutMillis;
   private final int maxRelativeTimeoutMillis;
@@ -25,28 +26,30 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
 
   private static final SimpleSessionEstablishmentTimeoutController template =
       new SimpleSessionEstablishmentTimeoutController(
-      defaultMaxAttempts, defaultAttemptRelativeTimeoutMillis, defaultMaxRelativeTimeoutMillis);
+          defaultMaxAttempts, defaultAttemptRelativeTimeoutMillis, defaultMaxRelativeTimeoutMillis);
 
   static {
     ObjectDefParser2.addParser(template);
   }
 
-  public SimpleSessionEstablishmentTimeoutController(int maxAttempts, int attemptRelativeTimeoutMillis,
-      int maxRelativeTimeoutMillis) {
+  public SimpleSessionEstablishmentTimeoutController(
+      int maxAttempts, int attemptRelativeTimeoutMillis, int maxRelativeTimeoutMillis) {
     this.maxAttempts = maxAttempts;
     this.attemptRelativeTimeoutMillis = attemptRelativeTimeoutMillis;
     this.maxRelativeTimeoutMillis = maxRelativeTimeoutMillis;
   }
 
   /**
-   * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts.
+   * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
+   * maxAttempts.
    *
    * @param maxAttempts TODO (OPTIMUS-0000): describe
-   * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts
+   * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
+   *     maxAttempts
    */
   public SimpleSessionEstablishmentTimeoutController maxAttempts(int maxAttempts) {
-    return new SimpleSessionEstablishmentTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+    return new SimpleSessionEstablishmentTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   /**
@@ -55,11 +58,12 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
    *
    * @param attemptRelativeTimeoutMillis TODO (OPTIMUS-0000): describe
    * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
-   * attemptRelativeTimeoutMillis
+   *     attemptRelativeTimeoutMillis
    */
-  public SimpleSessionEstablishmentTimeoutController attemptRelativeTimeoutMillis(int attemptRelativeTimeoutMillis) {
-    return new SimpleSessionEstablishmentTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+  public SimpleSessionEstablishmentTimeoutController attemptRelativeTimeoutMillis(
+      int attemptRelativeTimeoutMillis) {
+    return new SimpleSessionEstablishmentTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   /**
@@ -68,9 +72,10 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
    * @param maxRelativeTimeoutMillis TODO (OPTIMUS-0000): describe
    * @return a SimpleTimeoutController like this instance, but with a new maxRelativeTimeoutMillis
    */
-  public SimpleSessionEstablishmentTimeoutController maxRelativeTimeoutMillis(int maxRelativeTimeoutMillis) {
-    return new SimpleSessionEstablishmentTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+  public SimpleSessionEstablishmentTimeoutController maxRelativeTimeoutMillis(
+      int maxRelativeTimeoutMillis) {
+    return new SimpleSessionEstablishmentTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   @Override
@@ -98,7 +103,9 @@ public class SimpleSessionEstablishmentTimeoutController implements SessionEstab
     SimpleSessionEstablishmentTimeoutController o;
 
     o = (SimpleSessionEstablishmentTimeoutController) other;
-    return maxAttempts == o.maxAttempts && attemptRelativeTimeoutMillis == o.attemptRelativeTimeoutMillis && maxRelativeTimeoutMillis == o.maxRelativeTimeoutMillis;
+    return maxAttempts == o.maxAttempts
+        && attemptRelativeTimeoutMillis == o.attemptRelativeTimeoutMillis
+        && maxRelativeTimeoutMillis == o.maxRelativeTimeoutMillis;
   }
 
   @Override

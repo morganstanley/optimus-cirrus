@@ -28,8 +28,8 @@ public class NamespacePropertiesDeleteException extends NamespacePropertiesOpera
     super(message, cause);
   }
 
-  public NamespacePropertiesDeleteException(String message, Throwable cause, boolean enableSuppression,
-      boolean writableStackTrace) {
+  public NamespacePropertiesDeleteException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
   }
 }

@@ -14,46 +14,43 @@ package com.ms.silverking.time;
 import java.math.BigDecimal;
 
 /**
- * <p>Stopwatch functionality interface. Using this interface is preferred over using
- * concrete implementations, though there is a very small performance penalty involved.</p>
+ * Stopwatch functionality interface. Using this interface is preferred over using concrete
+ * implementations, though there is a very small performance penalty involved.
  *
- * <p>Applications that require extreme performance may consider using a
- * concrete implementation directly.</p>
+ * <p>Applications that require extreme performance may consider using a concrete implementation
+ * directly.
  *
- * <p>By convention, concrete insantiations of this class are running upon creation
- * with a start time equal to the instantiation time.</p>
+ * <p>By convention, concrete insantiations of this class are running upon creation with a start
+ * time equal to the instantiation time.
  *
- * <p>Elapsed time is defined as elapsed time = stop time - start time.
- * This is only defined when the state is stopped.</p>
+ * <p>Elapsed time is defined as elapsed time = stop time - start time. This is only defined when
+ * the state is stopped.
  *
- * <p>Split time is defined as split time = current time - start time.</p>
+ * <p>Split time is defined as split time = current time - start time.
  */
 public interface Stopwatch {
-  /**
-   * The state of a stopwatch
-   */
-  public enum State {running, stopped}
-
-  ;
-
+  /** The state of a stopwatch */
+  public enum State {
+    running,
+    stopped
+  };
 
   /* control methods */
 
   /**
-   * Set the start time to the current time, and start running. Must be stopped when calling this method.
+   * Set the start time to the current time, and start running. Must be stopped when calling this
+   * method.
    */
   public void start();
 
   /**
-   * Set the stop time to the current time, and stop running. Must be running when calling this method.
+   * Set the stop time to the current time, and stop running. Must be running when calling this
+   * method.
    */
   public void stop();
 
-  /**
-   * Set the start time to the current time.
-   */
+  /** Set the start time to the current time. */
   public void reset();
-
 
   /* elapsed time methods */
 
@@ -65,7 +62,8 @@ public interface Stopwatch {
   public long getElapsedNanos();
 
   /**
-   * Get the elapsed StopWatch time in milliseconds (as a long.) Must be stopped when calling this method.
+   * Get the elapsed StopWatch time in milliseconds (as a long.) Must be stopped when calling this
+   * method.
    *
    * @return the elapsed StopWatch time in milliseconds (as a long)
    */
@@ -86,7 +84,8 @@ public interface Stopwatch {
   public double getElapsedSeconds();
 
   /**
-   * Get the elapsed StopWatch time in seconds (as a BigDecimal.) Must be stopped when calling this method.
+   * Get the elapsed StopWatch time in seconds (as a BigDecimal.) Must be stopped when calling this
+   * method.
    *
    * @return the elapsed StopWatch time in seconds (as a BigDecimal)
    */
@@ -129,7 +128,6 @@ public interface Stopwatch {
    */
   public BigDecimal getSplitSecondsBD();
 
-
   /* misc. methods */
 
   /**
@@ -161,8 +159,8 @@ public interface Stopwatch {
   public boolean isStopped();
 
   /**
-   * Get a string representation of this StopWatch including the elapsed time.
-   * Must be stopped when calling this method.
+   * Get a string representation of this StopWatch including the elapsed time. Must be stopped when
+   * calling this method.
    *
    * @return a string representation of this StopWatch including the elapsed time
    */

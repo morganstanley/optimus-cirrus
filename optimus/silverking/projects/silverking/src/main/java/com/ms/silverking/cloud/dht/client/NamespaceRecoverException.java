@@ -15,8 +15,7 @@ import com.ms.silverking.cloud.dht.client.gen.NonVirtual;
 
 @NonVirtual
 public class NamespaceRecoverException extends ClientException {
-  public NamespaceRecoverException() {
-  }
+  public NamespaceRecoverException() {}
 
   public NamespaceRecoverException(String arg0) {
     super(arg0);

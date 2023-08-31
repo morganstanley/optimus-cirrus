@@ -34,25 +34,16 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Extension of IncomingData for MessageGroups.
- * <p>
- * This class is designed to receive data organized into ByteBuffers.
- * It first receives metadata regarding the buffers to be received,
- * after which it receives the buffers themselves.
- * <p>
- * Header format <fieldName> (<number of bytes>):
- * numberOfBuffers    (4)
- * messageType (1)
- * options        (3)
- * uuid        (16)
- * context     (8)
- * <p>
- * bufferLength[0]    (4)
- * ...
- * bufferLength[numberOfBuffers - 1] (4)
- * <p>
- * buffer[0]
- * buffer[1]
- * ...
+ *
+ * <p>This class is designed to receive data organized into ByteBuffers. It first receives metadata
+ * regarding the buffers to be received, after which it receives the buffers themselves.
+ *
+ * <p>Header format <fieldName> (<number of bytes>): numberOfBuffers (4) messageType (1) options (3)
+ * uuid (16) context (8)
+ *
+ * <p>bufferLength[0] (4) ... bufferLength[numberOfBuffers - 1] (4)
+ *
+ * <p>buffer[0] buffer[1] ...
  */
 public final class IncomingMessageGroup implements IncomingData {
   private final ByteBuffer leadingBuffer;
@@ -74,7 +65,13 @@ public final class IncomingMessageGroup implements IncomingData {
   private static Logger log = LoggerFactory.getLogger(IncomingMessageGroup.class);
 
   private enum ReadState {
-    INIT_PREAMBLE_SEARCH, PREAMBLE_SEARCH, HEADER_LENGTH, BUFFER_LENGTHS, BUFFERS, DONE, CHANNEL_CLOSED
+    INIT_PREAMBLE_SEARCH,
+    PREAMBLE_SEARCH,
+    HEADER_LENGTH,
+    BUFFER_LENGTHS,
+    BUFFERS,
+    DONE,
+    CHANNEL_CLOSED
   }
 
   private static final int maxBufferSize = Integer.MAX_VALUE;
@@ -87,10 +84,10 @@ public final class IncomingMessageGroup implements IncomingData {
 
   public IncomingMessageGroup(boolean debug) {
     // FUTURE - think about allocate direct here
-    //leadingBuffer = ByteBuffer.allocateDirect(MessageFormat.leadingBufferSize);
+    // leadingBuffer = ByteBuffer.allocateDirect(MessageFormat.leadingBufferSize);
     leadingBuffer = ByteBuffer.allocate(MessageFormat.leadingBufferSize);
     readState = ReadState.INIT_PREAMBLE_SEARCH;
-    //this.debug = debug;
+    // this.debug = debug;
   }
 
   public MessageType getMessageType() {
@@ -128,7 +125,8 @@ public final class IncomingMessageGroup implements IncomingData {
     for (ByteBuffer buffer : buffers) {
       buffer.flip();
     }
-    return new MessageGroup(messageType, options, uuid, context, buffers, originator, deadlineRelativeMillis, forward);
+    return new MessageGroup(
+        messageType, options, uuid, context, buffers, originator, deadlineRelativeMillis, forward);
   }
 
   public int getLastNumRead() {
@@ -151,139 +149,148 @@ public final class IncomingMessageGroup implements IncomingData {
     do {
       try {
         switch (readState) {
-        case INIT_PREAMBLE_SEARCH:
-          leadingBuffer.clear();
-          readState = ReadState.PREAMBLE_SEARCH;
-          //break; fall through to PREAMBLE_SEARCH
-        case PREAMBLE_SEARCH:
-          numRead = channel.read(leadingBuffer);
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          }
-          lastNumRead += numRead;
-          if (leadingBuffer.hasRemaining()) {
-            return ReadResult.INCOMPLETE;
-          } else {
-            byte[] candidatePreamble;
-            // we have a full preamble buffer, see if we match
-            //candidatePreamble = preambleAndHeaderLengthBuffer.array();
-            //if (Arrays.matchesStart(preamble, candidatePreamble)) {
-            if (matchesStart(MessageGroupGlobals.preamble, leadingBuffer)) {
-              long uuidMSL;
-              long uuidLSL;
-
-              readState = ReadState.HEADER_LENGTH;
-              if (leadingBuffer.get(MessageFormat.protocolVersionOffset) != MessageGroupGlobals.protocolVersion) {
-                throw new RuntimeException("Unexpected protocolVersion: " + MessageGroupGlobals.protocolVersion);
-              }
-              allocateBufferLengthsBuffer(leadingBuffer.getInt(MessageFormat.lengthOffset));
-              // TODO (OPTIMUS-40461): Consider adding a safe msgType deserialization, and server shall return
-              //  "UnsupportedMessageErrorResult" back to client if it cannot handle the message type
-              messageType = EnumValues.messageType[leadingBuffer.get(MessageFormat.typeOffset)];
-              options = leadingBuffer.get(
-                  MessageFormat.optionsOffset); // only support one byte of options presently; ignore the other 2
-              uuidMSL = leadingBuffer.getLong(MessageFormat.uuidMSLOffset);
-              uuidLSL = leadingBuffer.getLong(MessageFormat.uuidLSLOffset);
-              uuid = new UUIDBase(uuidMSL, uuidLSL);
-              context = leadingBuffer.getLong(MessageFormat.contextOffset);
-              originator = new byte[ValueCreator.BYTES];
-              leadingBuffer.position(MessageFormat.originatorOffset);
-              leadingBuffer.get(originator);
-              deadlineRelativeMillis = leadingBuffer.getInt(MessageFormat.deadlineRelativeMillisOffset);
-              // For debugging
-              //System.out.printf("%x:%x %s deadlineRelativeMillis %d\n",
-              //        uuidMSL, uuidLSL,
-              //        IPAddrUtil.addrAndPortToString(originator), deadlineRelativeMillis);
-              forward = EnumValues.forwardingMode[leadingBuffer.get(MessageFormat.forwardOffset)];
-              readState = ReadState.BUFFER_LENGTHS;
-              // TODO (OPTIMUS-0000): ADD FALLTHROUGH FOR THIS CASE
-            } else {
-              //if (debug) {
-              log.warn("*** No preamble match from channel {}***", channel);
-              //}
-              log.warn("{}", leadingBuffer);
-              log.warn("{}", StringUtil.byteBufferToHexString(leadingBuffer.duplicate().position(0)));
-                            /*
-                            // mismatch - search for real preamble
-                            leadingBuffer.clear();
-                            //if (candidatePreamble[1] == preamble[0]) {
-                            if (leadingBuffer.get(1) == MessageGroupGlobals.preamble[0]) {
-                                leadingBuffer.put(MessageGroupGlobals.preamble[0]);
-                            }
-                            */
-              if (TracerFactory.isInitialized()) {
-                TracerFactory.getTracer().onPreambleMismatch(channel);
-              }
-              return ReadResult.ERROR;
+          case INIT_PREAMBLE_SEARCH:
+            leadingBuffer.clear();
+            readState = ReadState.PREAMBLE_SEARCH;
+            // break; fall through to PREAMBLE_SEARCH
+          case PREAMBLE_SEARCH:
+            numRead = channel.read(leadingBuffer);
+            if (numRead < 0) {
+              return ReadResult.CHANNEL_CLOSED;
             }
-          }
-          break;
-        case BUFFER_LENGTHS:
-          if (bufferLengthsBuffer.remaining() <= 0) {
-            throw new IOException("bufferLengthsBuffer.remaining() <= 0");
-          }
-          numRead = channel.read(bufferLengthsBuffer);
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          } else if (numRead == 0) {
-            return ReadResult.INCOMPLETE;
-          } else {
             lastNumRead += numRead;
-            if (bufferLengthsBuffer.remaining() == 0) {
-              allocateBuffers();
-              readState = ReadState.BUFFERS;
-            }
-            break;
-          }
-        case BUFFERS:
-          ByteBuffer curBuffer;
-
-          // TODO (OPTIMUS-0000): MERGE THESE READS EVENTUALLY
-          curBuffer = buffers[curBufferIndex];
-          //if (curBuffer.remaining() <= 0) {
-          //    throw new IOException("curBuffer.remaining() <= 0");
-          //}
-          if (curBuffer.remaining() > 0) {
-            numRead = channel.read(curBuffer);
-          } else {
-            numRead = 0;
-          }
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          } else if (numRead == 0) {
-            if (curBuffer.remaining() > 0) {
+            if (leadingBuffer.hasRemaining()) {
               return ReadResult.INCOMPLETE;
             } else {
-              curBufferIndex++;
-              assert curBufferIndex <= buffers.length;
-              if (curBufferIndex == buffers.length) {
-                readState = ReadState.DONE;
-                return ReadResult.COMPLETE;
+              byte[] candidatePreamble;
+              // we have a full preamble buffer, see if we match
+              // candidatePreamble = preambleAndHeaderLengthBuffer.array();
+              // if (Arrays.matchesStart(preamble, candidatePreamble)) {
+              if (matchesStart(MessageGroupGlobals.preamble, leadingBuffer)) {
+                long uuidMSL;
+                long uuidLSL;
+
+                readState = ReadState.HEADER_LENGTH;
+                if (leadingBuffer.get(MessageFormat.protocolVersionOffset)
+                    != MessageGroupGlobals.protocolVersion) {
+                  throw new RuntimeException(
+                      "Unexpected protocolVersion: " + MessageGroupGlobals.protocolVersion);
+                }
+                allocateBufferLengthsBuffer(leadingBuffer.getInt(MessageFormat.lengthOffset));
+                // TODO (OPTIMUS-40461): Consider adding a safe msgType deserialization, and server
+                // shall return
+                //  "UnsupportedMessageErrorResult" back to client if it cannot handle the message
+                // type
+                messageType = EnumValues.messageType[leadingBuffer.get(MessageFormat.typeOffset)];
+                options =
+                    leadingBuffer.get(
+                        MessageFormat
+                            .optionsOffset); // only support one byte of options presently; ignore
+                // the other 2
+                uuidMSL = leadingBuffer.getLong(MessageFormat.uuidMSLOffset);
+                uuidLSL = leadingBuffer.getLong(MessageFormat.uuidLSLOffset);
+                uuid = new UUIDBase(uuidMSL, uuidLSL);
+                context = leadingBuffer.getLong(MessageFormat.contextOffset);
+                originator = new byte[ValueCreator.BYTES];
+                leadingBuffer.position(MessageFormat.originatorOffset);
+                leadingBuffer.get(originator);
+                deadlineRelativeMillis =
+                    leadingBuffer.getInt(MessageFormat.deadlineRelativeMillisOffset);
+                // For debugging
+                // System.out.printf("%x:%x %s deadlineRelativeMillis %d\n",
+                //        uuidMSL, uuidLSL,
+                //        IPAddrUtil.addrAndPortToString(originator), deadlineRelativeMillis);
+                forward = EnumValues.forwardingMode[leadingBuffer.get(MessageFormat.forwardOffset)];
+                readState = ReadState.BUFFER_LENGTHS;
+                // TODO (OPTIMUS-0000): ADD FALLTHROUGH FOR THIS CASE
               } else {
-                break;
+                // if (debug) {
+                log.warn("*** No preamble match from channel {}***", channel);
+                // }
+                log.warn("{}", leadingBuffer);
+                log.warn(
+                    "{}", StringUtil.byteBufferToHexString(leadingBuffer.duplicate().position(0)));
+                /*
+                // mismatch - search for real preamble
+                leadingBuffer.clear();
+                //if (candidatePreamble[1] == preamble[0]) {
+                if (leadingBuffer.get(1) == MessageGroupGlobals.preamble[0]) {
+                    leadingBuffer.put(MessageGroupGlobals.preamble[0]);
+                }
+                */
+                if (TracerFactory.isInitialized()) {
+                  TracerFactory.getTracer().onPreambleMismatch(channel);
+                }
+                return ReadResult.ERROR;
               }
             }
-          } else {
-            lastNumRead += numRead;
-            if (curBuffer.remaining() == 0) {
-              curBufferIndex++;
-              assert curBufferIndex <= buffers.length;
-              if (curBufferIndex == buffers.length) {
-                readState = ReadState.DONE;
-                return ReadResult.COMPLETE;
-              } else {
-                break;
-              }
+            break;
+          case BUFFER_LENGTHS:
+            if (bufferLengthsBuffer.remaining() <= 0) {
+              throw new IOException("bufferLengthsBuffer.remaining() <= 0");
+            }
+            numRead = channel.read(bufferLengthsBuffer);
+            if (numRead < 0) {
+              return ReadResult.CHANNEL_CLOSED;
+            } else if (numRead == 0) {
+              return ReadResult.INCOMPLETE;
             } else {
+              lastNumRead += numRead;
+              if (bufferLengthsBuffer.remaining() == 0) {
+                allocateBuffers();
+                readState = ReadState.BUFFERS;
+              }
               break;
             }
-          }
-        case DONE:
-          return ReadResult.COMPLETE;
-        case CHANNEL_CLOSED:
-          throw new IOException("Channel closed");
-        default:
-          throw new RuntimeException("panic");
+          case BUFFERS:
+            ByteBuffer curBuffer;
+
+            // TODO (OPTIMUS-0000): MERGE THESE READS EVENTUALLY
+            curBuffer = buffers[curBufferIndex];
+            // if (curBuffer.remaining() <= 0) {
+            //    throw new IOException("curBuffer.remaining() <= 0");
+            // }
+            if (curBuffer.remaining() > 0) {
+              numRead = channel.read(curBuffer);
+            } else {
+              numRead = 0;
+            }
+            if (numRead < 0) {
+              return ReadResult.CHANNEL_CLOSED;
+            } else if (numRead == 0) {
+              if (curBuffer.remaining() > 0) {
+                return ReadResult.INCOMPLETE;
+              } else {
+                curBufferIndex++;
+                assert curBufferIndex <= buffers.length;
+                if (curBufferIndex == buffers.length) {
+                  readState = ReadState.DONE;
+                  return ReadResult.COMPLETE;
+                } else {
+                  break;
+                }
+              }
+            } else {
+              lastNumRead += numRead;
+              if (curBuffer.remaining() == 0) {
+                curBufferIndex++;
+                assert curBufferIndex <= buffers.length;
+                if (curBufferIndex == buffers.length) {
+                  readState = ReadState.DONE;
+                  return ReadResult.COMPLETE;
+                } else {
+                  break;
+                }
+              } else {
+                break;
+              }
+            }
+          case DONE:
+            return ReadResult.COMPLETE;
+          case CHANNEL_CLOSED:
+            throw new IOException("Channel closed");
+          default:
+            throw new RuntimeException("panic");
         }
       } catch (IOException ioe) {
         if (ioe.getMessage().startsWith("Connection reset")) {
@@ -323,7 +330,7 @@ public final class IncomingMessageGroup implements IncomingData {
       }
       try {
         buffers[i] = ByteBuffer.allocate(size);
-        //buffers[i] = ByteBuffer.allocateDirect(size);
+        // buffers[i] = ByteBuffer.allocateDirect(size);
       } catch (OutOfMemoryError oome) {
         log.info("OutOfMemoryError caught in buffer allocation");
         throw new IOException("OutOfMemoryError caught in buffer allocation");

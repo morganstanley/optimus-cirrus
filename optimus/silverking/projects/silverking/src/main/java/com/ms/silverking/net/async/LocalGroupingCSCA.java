@@ -23,10 +23,11 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 /**
- * Reserve a single SelectorController for all local connections. Spread others over selector controllers
- * grouped by address.
+ * Reserve a single SelectorController for all local connections. Spread others over selector
+ * controllers grouped by address.
  */
-public class LocalGroupingCSCA<T extends Connection> implements ChannelSelectorControllerAssigner<T> {
+public class LocalGroupingCSCA<T extends Connection>
+    implements ChannelSelectorControllerAssigner<T> {
   private final int numLocalSelectors;
   private final AtomicInteger nextLocalIndex;
   private final AtomicInteger nextNonLocalIndex;
@@ -50,10 +51,11 @@ public class LocalGroupingCSCA<T extends Connection> implements ChannelSelectorC
 
   @Override
   /**
-   * Assigns, the given channel to a SelectorController chosen from the list.
-   * Does *not* add the channel to the SelectorController.
-   */ public SelectorController<T> assignChannelToSelectorController(SelectableChannel channel,
-                                                                     List<SelectorController<T>> selectorControllers) {
+   * Assigns, the given channel to a SelectorController chosen from the list. Does *not* add the
+   * channel to the SelectorController.
+   */
+  public SelectorController<T> assignChannelToSelectorController(
+      SelectableChannel channel, List<SelectorController<T>> selectorControllers) {
     boolean isLocal;
     int index;
 
@@ -64,7 +66,7 @@ public class LocalGroupingCSCA<T extends Connection> implements ChannelSelectorC
       isLocal = false;
     } else {
       if (channel instanceof ServerSocketChannel) {
-        //index = localIndex;
+        // index = localIndex;
         isLocal = true;
       } else {
         SocketChannel socketChannel;
@@ -73,10 +75,11 @@ public class LocalGroupingCSCA<T extends Connection> implements ChannelSelectorC
         socketChannel = (SocketChannel) channel;
         socketAddress = (InetSocketAddress) socketChannel.socket().getRemoteSocketAddress();
         if (InetAddressUtil.isLocalHostIP(socketAddress.getAddress())) {
-          //index = localIndex;
+          // index = localIndex;
           isLocal = true;
         } else {
-          //index = socketAddress.hashCode() % (selectorControllers.size() - numLocalSelectors) + numLocalSelectors;
+          // index = socketAddress.hashCode() % (selectorControllers.size() - numLocalSelectors) +
+          // numLocalSelectors;
           isLocal = false;
         }
       }
@@ -88,7 +91,9 @@ public class LocalGroupingCSCA<T extends Connection> implements ChannelSelectorC
 
       numNonLocalSelectorControllers = selectorControllers.size() - numLocalSelectors;
       assert numNonLocalSelectorControllers > 0;
-      index = numLocalSelectors + (nextNonLocalIndex.getAndIncrement() % numNonLocalSelectorControllers);
+      index =
+          numLocalSelectors
+              + (nextNonLocalIndex.getAndIncrement() % numNonLocalSelectorControllers);
     }
     return selectorControllers.get(index);
   }

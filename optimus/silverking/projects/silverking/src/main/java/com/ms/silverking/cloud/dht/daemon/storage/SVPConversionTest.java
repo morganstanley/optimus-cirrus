@@ -54,12 +54,23 @@ public class SVPConversionTest {
     return mbb;
   }
 
-  private StorageValueAndParameters convertToMappedSVP(StorageValueAndParameters svp) throws IOException {
+  private StorageValueAndParameters convertToMappedSVP(StorageValueAndParameters svp)
+      throws IOException {
     StorageValueAndParameters msvp;
 
-    msvp = new StorageValueAndParameters(svp.getKey(), convertToMappedBuffer(svp.getValue()), svp.getVersion(),
-        svp.getUncompressedSize(), svp.getCompressedSize(), svp.getCCSS(), svp.getChecksum(), svp.getValueCreator(),
-        svp.getCreationTime(), svp.getRequiredPreviousVersion(), svp.getLockSeconds());
+    msvp =
+        new StorageValueAndParameters(
+            svp.getKey(),
+            convertToMappedBuffer(svp.getValue()),
+            svp.getVersion(),
+            svp.getUncompressedSize(),
+            svp.getCompressedSize(),
+            svp.getCCSS(),
+            svp.getChecksum(),
+            svp.getValueCreator(),
+            svp.getCreationTime(),
+            svp.getRequiredPreviousVersion(),
+            svp.getLockSeconds());
     return msvp;
   }
 
@@ -88,8 +99,18 @@ public class SVPConversionTest {
   }
 
   public StorageValueAndParameters createSVP(int valueSize) {
-    return new StorageValueAndParameters(new SimpleKey(1, 2), ByteBuffer.allocate(valueSize), 10, valueSize, valueSize,
-        (short) 0, new byte[4], new byte[ValueCreator.BYTES], System.currentTimeMillis(), 0, (short) 0);
+    return new StorageValueAndParameters(
+        new SimpleKey(1, 2),
+        ByteBuffer.allocate(valueSize),
+        10,
+        valueSize,
+        valueSize,
+        (short) 0,
+        new byte[4],
+        new byte[ValueCreator.BYTES],
+        System.currentTimeMillis(),
+        0,
+        (short) 0);
   }
 
   public void runTest(int valueSize, int numValues) throws IOException {

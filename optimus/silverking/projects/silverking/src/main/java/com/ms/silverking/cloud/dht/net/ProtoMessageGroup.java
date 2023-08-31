@@ -23,9 +23,7 @@ import com.ms.silverking.io.util.BufferUtil;
 import com.ms.silverking.text.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-/**
- * ProtoMessageGroup and its descendants are used to create actual MessageGroup instances.
- */
+/** ProtoMessageGroup and its descendants are used to create actual MessageGroup instances. */
 public abstract class ProtoMessageGroup {
   private final MessageType type;
   private final int options;
@@ -42,7 +40,12 @@ public abstract class ProtoMessageGroup {
 
   private static final int bufferListInitialSize = 4;
 
-  public ProtoMessageGroup(MessageType type, UUIDBase uuid, long context, byte[] originator, int deadlineRelativeMillis,
+  public ProtoMessageGroup(
+      MessageType type,
+      UUIDBase uuid,
+      long context,
+      byte[] originator,
+      int deadlineRelativeMillis,
       ForwardingMode forward) {
     this.type = type;
     this.options = 0; // options are currently only used between peers; set to zero here
@@ -73,11 +76,19 @@ public abstract class ProtoMessageGroup {
     MessageGroup mg;
 
     if (debug) {
-      log.debug("toMessageGroup: {}" , flip);
+      log.debug("toMessageGroup: {}", flip);
       displayForDebug();
     }
-    mg = new MessageGroup(type, options, uuid, context, flip ? BufferUtil.flip(getBufferList()) : getBufferList(),
-        originator, deadlineRelativeMillis, forward);
+    mg =
+        new MessageGroup(
+            type,
+            options,
+            uuid,
+            context,
+            flip ? BufferUtil.flip(getBufferList()) : getBufferList(),
+            originator,
+            deadlineRelativeMillis,
+            forward);
     if (debug) {
       mg.displayForDebug();
     }
@@ -86,9 +97,11 @@ public abstract class ProtoMessageGroup {
 
   protected void displayForDebug() {
     for (int i = 0; i < bufferList.size(); i++) {
-      log.debug("{} {}",i ,bufferList.get(i));
+      log.debug("{} {}", i, bufferList.get(i));
       if (bufferList.get(i).limit() < 128) {
-        System.out.println(StringUtil.byteBufferToHexString((ByteBuffer) bufferList.get(i).duplicate().position(0)));
+        System.out.println(
+            StringUtil.byteBufferToHexString(
+                (ByteBuffer) bufferList.get(i).duplicate().position(0)));
       } else {
         log.info("");
       }

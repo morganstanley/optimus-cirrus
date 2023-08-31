@@ -22,9 +22,11 @@ public class StatSample {
   private final long absTimeMillis;
   private final List<Segment> segments;
 
-  private enum DateFormat {DATE, SECONDS}
+  private enum DateFormat {
+    DATE,
+    SECONDS
+  };
 
-  ;
   private static final DateFormat dateFormat;
   private static String DateFormatProperty = "DateFormat";
 
@@ -39,7 +41,7 @@ public class StatSample {
     } else {
       dateFormat = DateFormat.DATE;
     }
-    //System.out.println(dateFormat);
+    // System.out.println(dateFormat);
   }
 
   public StatSample(int sampleIndex, long absTimeMillis, List<Segment> segments) {
@@ -80,16 +82,16 @@ public class StatSample {
     line = 0;
     try {
       switch (dateFormat) {
-      case DATE:
-        sampleIndex = Integer.parseInt(def.get(line++));
-        absTimeMillis = unixDateToAbsTimeMillis(def.get(line++));
-        break;
-      case SECONDS:
-        sampleIndex = _sampleIndex++;
-        absTimeMillis = unixSecondsToAbsTimeMillis(def.get(line++));
-        break;
-      default:
-        throw new RuntimeException("panic");
+        case DATE:
+          sampleIndex = Integer.parseInt(def.get(line++));
+          absTimeMillis = unixDateToAbsTimeMillis(def.get(line++));
+          break;
+        case SECONDS:
+          sampleIndex = _sampleIndex++;
+          absTimeMillis = unixSecondsToAbsTimeMillis(def.get(line++));
+          break;
+        default:
+          throw new RuntimeException("panic");
       }
     } catch (ParseException pe) {
       throw new RuntimeException(pe);

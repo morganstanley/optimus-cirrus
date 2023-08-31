@@ -125,13 +125,6 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def rebase(commit: String): String = runGit("rebase", "--autostash", commit)
 
-  def stash(includeUntracked: Boolean, pop: Boolean = false): String = {
-    val popFlag = if (pop) Seq("pop") else Seq()
-    val flags = if (popFlag.isEmpty && includeUntracked) popFlag ++ Seq("--include-untracked") else popFlag
-    val cmd = Seq("stash") ++ flags
-    runGit(cmd: _*)
-  }
-
   def relativeAge(commit: String): String =
     runGit("log", "-1", "--format=%ar", commit).replaceAll("\r?\n", "")
 
@@ -201,7 +194,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     Source.fromString(result).getLines().to(Seq)
   }
 
-  def merge(revisionOrBranch: String): String = runGit("merge", revisionOrBranch)
+  def merge(revisionOrBranch: String): String = runGit("merge", "--autostash", revisionOrBranch)
 
   def setUpstream(remoteName: String, remoteBranch: String, localBranch: String): String =
     runGit("branch", s"--set-upstream-to=$remoteName/$remoteBranch", localBranch)

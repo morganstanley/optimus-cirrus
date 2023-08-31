@@ -82,10 +82,11 @@ public class MetaPaths extends MetaPathsBase {
     instanceDaemonStatePath = instancePath + "/" + daemonStateNodeName;
     listBuilder.add(instanceDaemonStatePath);
 
-    if (dhtConfig.getDHTConfig() != null &&
-        dhtConfig.getDHTConfig().getPassiveNodeHostGroups() != null &&
-        dhtConfig.getDHTConfig().getPassiveNodeHostGroups().trim().length() > 0) {
-      passiveNodesPath = passiveNodesBase + "/" + dhtConfig.getDHTConfig().getPassiveNodeHostGroups();
+    if (dhtConfig.getDHTConfig() != null
+        && dhtConfig.getDHTConfig().getPassiveNodeHostGroups() != null
+        && dhtConfig.getDHTConfig().getPassiveNodeHostGroups().trim().length() > 0) {
+      passiveNodesPath =
+          passiveNodesBase + "/" + dhtConfig.getDHTConfig().getPassiveNodeHostGroups();
       listBuilder.add(passiveNodesPath);
     } else {
       passiveNodesPath = null;

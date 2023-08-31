@@ -50,7 +50,13 @@ public class Measurement {
 
   @Override
   public String toString() {
-    return id + "\t" + timeInterval + "\t" + formatBytes(bytes) + "\t" + formatBitsPerSecond(bitsPerSecond);
+    return id
+        + "\t"
+        + timeInterval
+        + "\t"
+        + formatBytes(bytes)
+        + "\t"
+        + formatBitsPerSecond(bitsPerSecond);
   }
 
   public String toIDBandwidthString() {
@@ -61,7 +67,8 @@ public class Measurement {
     String[] defs;
 
     defs = splitDef(s);
-    return new Measurement(parseID(defs[0]), TimeInterval.parse(defs[1]), parseValue(defs[2]), parseValue(defs[3]));
+    return new Measurement(
+        parseID(defs[0]), TimeInterval.parse(defs[1]), parseValue(defs[2]), parseValue(defs[3]));
   }
 
   private static String[] splitDef(String s) {
@@ -95,14 +102,14 @@ public class Measurement {
 
     unit = units.charAt(0);
     switch (unit) {
-    case 'K':
-      return 1000;
-    case 'M':
-      return 1000000;
-    case 'G':
-      return 1000000000;
-    default:
-      throw new RuntimeException("Unknown unit: " + unit);
+      case 'K':
+        return 1000;
+      case 'M':
+        return 1000000;
+      case 'G':
+        return 1000000000;
+      default:
+        throw new RuntimeException("Unknown unit: " + unit);
     }
   }
 

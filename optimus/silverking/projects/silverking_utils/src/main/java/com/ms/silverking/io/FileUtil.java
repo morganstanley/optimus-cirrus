@@ -112,7 +112,8 @@ public class FileUtil {
   }
 
   public static void writeToFile(File file, Collection lines) throws IOException {
-    try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file)))) {
+    try (BufferedWriter out =
+        new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file)))) {
       for (Object line : lines) {
         out.write(line.toString() + "\n");
       }
@@ -244,31 +245,43 @@ public class FileUtil {
     return fileNumbers;
   }
 
-  public enum FileMapMode {PrivateMap, FileBackedMap_Writable, FileBackedMap_ReadOnly}
-
-  public static MappedByteBuffer mapFile(File file, FileMapMode fileMapMode) throws IOException {
-    return mapFile(new RandomAccessFile(file, fileMapMode == FileMapMode.FileBackedMap_Writable ? "rw" : "r"),
-        fileMapMode, 0, file.length());
+  public enum FileMapMode {
+    PrivateMap,
+    FileBackedMap_Writable,
+    FileBackedMap_ReadOnly
   }
 
-  public static MappedByteBuffer mapFile(RandomAccessFile rf, FileMapMode fileMapMode, long position, long size)
-      throws IOException {
+  public static MappedByteBuffer mapFile(File file, FileMapMode fileMapMode) throws IOException {
+    return mapFile(
+        new RandomAccessFile(file, fileMapMode == FileMapMode.FileBackedMap_Writable ? "rw" : "r"),
+        fileMapMode,
+        0,
+        file.length());
+  }
+
+  public static MappedByteBuffer mapFile(
+      RandomAccessFile rf, FileMapMode fileMapMode, long position, long size) throws IOException {
     try {
       MappedByteBuffer mbb;
       FileChannel fc;
 
       fc = rf.getChannel();
       switch (fileMapMode) {
-      case PrivateMap:
-        mbb = fc.map(MapMode.PRIVATE, position, size);
-        break;
-      case FileBackedMap_Writable: // fall through
-      case FileBackedMap_ReadOnly:
-        mbb = fc.map(fileMapMode == FileMapMode.FileBackedMap_Writable ? MapMode.READ_WRITE : MapMode.READ_ONLY,
-            position, size);
-        break;
-      default:
-        throw new RuntimeException("panic");
+        case PrivateMap:
+          mbb = fc.map(MapMode.PRIVATE, position, size);
+          break;
+        case FileBackedMap_Writable: // fall through
+        case FileBackedMap_ReadOnly:
+          mbb =
+              fc.map(
+                  fileMapMode == FileMapMode.FileBackedMap_Writable
+                      ? MapMode.READ_WRITE
+                      : MapMode.READ_ONLY,
+                  position,
+                  size);
+          break;
+        default:
+          throw new RuntimeException("panic");
       }
       return mbb;
     } finally {

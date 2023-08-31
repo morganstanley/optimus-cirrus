@@ -74,7 +74,9 @@ public class DaemonStateZK implements Watcher {
     if (!monitorOnly) {
       setState(DaemonState.INITIAL);
       stateCheckerTask = new SafeTimerTask(new StateChecker());
-      timer.scheduleAtFixedRate(stateCheckerTask, ThreadLocalRandom.current().nextInt(stateCheckPeriodMillis),
+      timer.scheduleAtFixedRate(
+          stateCheckerTask,
+          ThreadLocalRandom.current().nextInt(stateCheckPeriodMillis),
           stateCheckPeriodMillis);
     }
     lock = new ReentrantLock();
@@ -102,7 +104,7 @@ public class DaemonStateZK implements Watcher {
       throw new RuntimeException("Can't setState using monitorOnly DaemonStateZK");
     }
     if (verbose) {
-      log.info("Local DHTNode state: {}" , state);
+      log.info("Local DHTNode state: {}", state);
     }
     // Sadly, this console print is depended upon by test infrastructure
     System.out.println("Local DHTNode state: " + state);
@@ -117,32 +119,32 @@ public class DaemonStateZK implements Watcher {
     try {
       mc.getZooKeeper().setEphemeralInteger(getMemberDaemonStatePath(myIPAndPort), state.ordinal());
     } catch (KeeperException ke) {
-      log.error("",ke);
+      log.error("", ke);
     }
   }
 
   @Override
   public void process(WatchedEvent event) {
-    log.debug("{}",event);
+    log.debug("{}", event);
     switch (event.getType()) {
-    case None:
-      if (event.getState() == KeeperState.SyncConnected) {
-        ensureStateSet();
-      }
-      break;
-    case NodeCreated:
-      checkForSignal();
-      break;
-    case NodeDeleted:
-      break;
-    case NodeDataChanged:
-      checkForSignal();
-      break;
-    case NodeChildrenChanged:
-      checkForSignal();
-      break;
-    default:
-      log.info("Unknown event type: {}", event.getType());
+      case None:
+        if (event.getState() == KeeperState.SyncConnected) {
+          ensureStateSet();
+        }
+        break;
+      case NodeCreated:
+        checkForSignal();
+        break;
+      case NodeDeleted:
+        break;
+      case NodeDataChanged:
+        checkForSignal();
+        break;
+      case NodeChildrenChanged:
+        checkForSignal();
+        break;
+      default:
+        log.info("Unknown event type: {}", event.getType());
     }
   }
 
@@ -161,7 +163,8 @@ public class DaemonStateZK implements Watcher {
     return ImmutableSet.copyOf(IPAndPort.list(_zk.getChildren(basePath, this)));
   }
 
-  private Map<IPAndPort, DaemonState> _getQuorumState(Set<IPAndPort> members) throws KeeperException {
+  private Map<IPAndPort, DaemonState> _getQuorumState(Set<IPAndPort> members)
+      throws KeeperException {
     SilverKingZooKeeperClient zk;
     Set<String> daemonStatePaths;
     Map<String, Integer> daemonStates;
@@ -196,7 +199,8 @@ public class DaemonStateZK implements Watcher {
       data = mc.getZooKeeper().getByteArray(getMemberDaemonStatePath(member), this);
       return DaemonState.values()[NumConversion.bytesToInt(data)];
     } catch (KeeperException ke) {
-      if (ke.getCause() != null && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
+      if (ke.getCause() != null
+          && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
         return null;
       } else {
         throw ke;
@@ -212,18 +216,19 @@ public class DaemonStateZK implements Watcher {
     }
   }
 
-  public Pair<Boolean, Map<IPAndPort, DaemonState>> getQuorumState(Set<IPAndPort> members, DaemonState targetState)
-      throws KeeperException {
+  public Pair<Boolean, Map<IPAndPort, DaemonState>> getQuorumState(
+      Set<IPAndPort> members, DaemonState targetState) throws KeeperException {
     return getQuorumState(members, targetState, maxIncompletePerFetch);
   }
 
-  public Pair<Boolean, Map<IPAndPort, DaemonState>> getAllQuorumState(Set<IPAndPort> members, DaemonState targetState)
-      throws KeeperException {
+  public Pair<Boolean, Map<IPAndPort, DaemonState>> getAllQuorumState(
+      Set<IPAndPort> members, DaemonState targetState) throws KeeperException {
     return getQuorumState(members, targetState, Integer.MAX_VALUE);
   }
 
-  private Pair<Boolean, Map<IPAndPort, DaemonState>> getQuorumState(Set<IPAndPort> members, DaemonState targetState,
-      int _maxIncompletePerFetch) throws KeeperException {
+  private Pair<Boolean, Map<IPAndPort, DaemonState>> getQuorumState(
+      Set<IPAndPort> members, DaemonState targetState, int _maxIncompletePerFetch)
+      throws KeeperException {
     Map<IPAndPort, DaemonState> quorumState;
     boolean allRead;
     int incomplete;
@@ -248,11 +253,14 @@ public class DaemonStateZK implements Watcher {
     return new Pair<>(allRead, quorumState);
   }
 
-  public boolean waitForQuorumState(Set<IPAndPort> members, DaemonState targetState, int inactiveNodeTimeoutSeconds) {
+  public boolean waitForQuorumState(
+      Set<IPAndPort> members, DaemonState targetState, int inactiveNodeTimeoutSeconds) {
     return waitForQuorumState(members, targetState, inactiveNodeTimeoutSeconds, false).isEmpty();
   }
 
-  private void fillStateMapWithComplete(Map<IPAndPort, DaemonState> stateMap, Set<IPAndPort> completeMembers,
+  private void fillStateMapWithComplete(
+      Map<IPAndPort, DaemonState> stateMap,
+      Set<IPAndPort> completeMembers,
       DaemonState targetState) {
     for (IPAndPort cm : completeMembers) {
       stateMap.put(cm, targetState);
@@ -264,8 +272,11 @@ public class DaemonStateZK implements Watcher {
     return exclusionZK.readLatestFromZK();
   }
 
-  public Map<IPAndPort, DaemonState> waitForQuorumState(Set<IPAndPort> members, DaemonState targetState,
-      int inactiveNodeTimeoutSeconds, boolean exitOnTimeout) {
+  public Map<IPAndPort, DaemonState> waitForQuorumState(
+      Set<IPAndPort> members,
+      DaemonState targetState,
+      int inactiveNodeTimeoutSeconds,
+      boolean exitOnTimeout) {
     boolean targetReached;
     int lastNotReadyCount;
     int notReadyCount;
@@ -316,7 +327,8 @@ public class DaemonStateZK implements Watcher {
           memberState = quorumState.get(incompleteMember);
 
           if (excluded) {
-            log.info("Member {} has been excluded; quorum will ignore this node!", incompleteMember);
+            log.info(
+                "Member {} has been excluded; quorum will ignore this node!", incompleteMember);
             newlyCompleteMembers.add(incompleteMember);
           }
 
@@ -332,13 +344,17 @@ public class DaemonStateZK implements Watcher {
                   ++notReadyCount;
                   targetReached = false;
                 } else {
-                  sb.append(String.format("%s\t%s\tinactive node timed out\n", incompleteMember, memberState));
+                  sb.append(
+                      String.format(
+                          "%s\t%s\tinactive node timed out\n", incompleteMember, memberState));
                   if (exitOnTimeout) {
                     Map<IPAndPort, DaemonState> stateMap;
 
-                    log.info("{}",sb);
+                    log.info("{}", sb);
                     log.info("Timeout: {}", incompleteMember);
-                    stateMap = fetchAndDisplayIncompleteState(incompleteMembers, targetState, currentExclusion);
+                    stateMap =
+                        fetchAndDisplayIncompleteState(
+                            incompleteMembers, targetState, currentExclusion);
                     fillStateMapWithComplete(stateMap, completeMembers, targetState);
                     return stateMap;
                   }
@@ -359,7 +375,7 @@ public class DaemonStateZK implements Watcher {
         if (verbose) {
           if (allRead) {
             if (notReadyCount != lastNotReadyCount) {
-              log.info("{}",sb);
+              log.info("{}", sb);
             } else {
               log.info("Waiting for {} nodes", notReadyCount);
             }
@@ -369,7 +385,7 @@ public class DaemonStateZK implements Watcher {
         }
         lastNotReadyCount = notReadyCount;
       } catch (KeeperException ke) {
-        log.error("",ke);
+        log.error("", ke);
       }
       if (!targetReached) {
         int maxSleepMillis;
@@ -380,7 +396,8 @@ public class DaemonStateZK implements Watcher {
 
             log.info("Timeout in targetState: {}", targetState);
             try {
-              stateMap = fetchAndDisplayIncompleteState(incompleteMembers, targetState, currentExclusion);
+              stateMap =
+                  fetchAndDisplayIncompleteState(incompleteMembers, targetState, currentExclusion);
             } catch (KeeperException e) {
               e.printStackTrace();
               stateMap = ImmutableMap.of();
@@ -390,9 +407,13 @@ public class DaemonStateZK implements Watcher {
           }
         }
 
-        maxSleepMillis = (int) Math.max(
-            (double) maxQuorumStatePollIntervalMillis * ((double) incompleteMembers.size() / (double) maxQuorumStatePollThreshold),
-            minQuorumStatePollIntervalMillis);
+        maxSleepMillis =
+            (int)
+                Math.max(
+                    (double) maxQuorumStatePollIntervalMillis
+                        * ((double) incompleteMembers.size()
+                            / (double) maxQuorumStatePollThreshold),
+                    minQuorumStatePollIntervalMillis);
         maxSleepMillis = Math.min(maxSleepMillis, maxQuorumStatePollIntervalMillis);
         log.debug("waitForQuorumState maxSleepMillis: {}", maxSleepMillis);
         expectedSignals = incompleteMembers.size();
@@ -401,15 +422,18 @@ public class DaemonStateZK implements Watcher {
       }
     }
     if (verbose) {
-      String maybeExclusionTag = currentExclusion.getServers().isEmpty() ? "" : String.format("\t[%d Exclusion(s)]",
-          currentExclusion.getServers().size());
+      String maybeExclusionTag =
+          currentExclusion.getServers().isEmpty()
+              ? ""
+              : String.format("\t[%d Exclusion(s)]", currentExclusion.getServers().size());
       log.info("Quorum state reached: {} {}", targetState, maybeExclusionTag);
     }
     return ImmutableMap.of();
   }
 
-  private Map<IPAndPort, DaemonState> fetchAndDisplayIncompleteState(Set<IPAndPort> members, DaemonState targetState,
-      ExclusionSet exclusions) throws KeeperException {
+  private Map<IPAndPort, DaemonState> fetchAndDisplayIncompleteState(
+      Set<IPAndPort> members, DaemonState targetState, ExclusionSet exclusions)
+      throws KeeperException {
     Pair<Boolean, Map<IPAndPort, DaemonState>> sp;
     Map<IPAndPort, DaemonState> qs;
 
@@ -447,8 +471,7 @@ public class DaemonStateZK implements Watcher {
   }
 
   class StateChecker extends TimerTask {
-    StateChecker() {
-    }
+    StateChecker() {}
 
     @Override
     public void run() {

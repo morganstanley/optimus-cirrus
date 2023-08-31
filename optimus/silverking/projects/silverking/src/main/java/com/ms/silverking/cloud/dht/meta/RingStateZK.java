@@ -18,9 +18,7 @@ import com.ms.silverking.collection.Pair;
 import com.ms.silverking.net.IPAndPort;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 
-/**
- * Write/Reads state for a particular instance of a particular ring for a particular DHT.
- */
+/** Write/Reads state for a particular instance of a particular ring for a particular DHT. */
 public class RingStateZK {
   private final MetaClient mc;
   private final DHTConfiguration dhtConfig;
@@ -32,7 +30,8 @@ public class RingStateZK {
    * <DHTPath>/ringState/<RingName>/<RingConfigVersion>/<ConfigInstanceVersion>/<NodeID>
    */
 
-  public RingStateZK(MetaClient mc, DHTConfiguration dhtConfig, long ringConfigVersion, long configInstanceVersion)
+  public RingStateZK(
+      MetaClient mc, DHTConfiguration dhtConfig, long ringConfigVersion, long configInstanceVersion)
       throws KeeperException {
     this.mc = mc;
     this.dhtConfig = dhtConfig;
@@ -66,7 +65,9 @@ public class RingStateZK {
   }
 
   public String getRingInstanceStatePath() {
-    return getRingConfigVersionPath() + "/" + SilverKingZooKeeperClient.padVersion(configInstanceVersion);
+    return getRingConfigVersionPath()
+        + "/"
+        + SilverKingZooKeeperClient.padVersion(configInstanceVersion);
   }
 
   private String getRingStatePath(IPAndPort node) {
@@ -88,7 +89,8 @@ public class RingStateZK {
     try {
       return RingState.valueOf(mc.getZooKeeper().getString(getRingStatePath(node)));
     } catch (KeeperException ke) {
-      if (ke.getCause() != null && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
+      if (ke.getCause() != null
+          && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
         return null;
       } else {
         throw ke;

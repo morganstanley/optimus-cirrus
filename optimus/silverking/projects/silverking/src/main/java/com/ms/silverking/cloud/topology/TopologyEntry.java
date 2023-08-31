@@ -17,9 +17,7 @@ import java.util.List;
 
 import com.ms.silverking.text.StringUtil;
 
-/**
- * Used by parser to store information about a topology entry that is being parsed.
- */
+/** Used by parser to store information about a topology entry that is being parsed. */
 class TopologyEntry {
   private final String def;
   private List<TopologyEntry> children;

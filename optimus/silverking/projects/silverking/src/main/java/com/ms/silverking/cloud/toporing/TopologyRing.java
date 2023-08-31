@@ -25,9 +25,7 @@ import com.ms.silverking.cloud.topology.NodeClass;
 import com.ms.silverking.cloud.toporing.meta.WeightSpecifications;
 import com.ms.silverking.util.Mutability;
 
-/**
- * A ring with regions owned by RingEntries.
- */
+/** A ring with regions owned by RingEntries. */
 public interface TopologyRing extends Ring<Long, RingEntry>, VersionedDefinition {
   public TopologyRing clone(Mutability mutability);
 
@@ -41,10 +39,11 @@ public interface TopologyRing extends Ring<Long, RingEntry>, VersionedDefinition
 
   public Collection<RingRegion> getNodeRegions(Node node, OwnerQueryMode oqm);
 
-  public Collection<RingRegion> getNodeRegionsFiltered(Node node, Node filterNode, OwnerQueryMode oqm);
+  public Collection<RingRegion> getNodeRegionsFiltered(
+      Node node, Node filterNode, OwnerQueryMode oqm);
 
-  public List<RingRegion> getNodeRegionsSorted(Node node, Comparator<RingRegion> comparator, Node filterNode,
-      OwnerQueryMode oqm);
+  public List<RingRegion> getNodeRegionsSorted(
+      Node node, Comparator<RingRegion> comparator, Node filterNode, OwnerQueryMode oqm);
 
   public TopologyRing simplify();
 
@@ -66,8 +65,8 @@ public interface TopologyRing extends Ring<Long, RingEntry>, VersionedDefinition
 
   public String getStoragePolicyName();
 
-  //public String getPrimaryStoragePolicy(String nodeID);
-  //public String getSecondaryStoragePolicy(String nodeID);
+  // public String getPrimaryStoragePolicy(String nodeID);
+  // public String getSecondaryStoragePolicy(String nodeID);
   public NodeClass getNodeClass();
 
   public void removeEntry(RingEntry oEntry);

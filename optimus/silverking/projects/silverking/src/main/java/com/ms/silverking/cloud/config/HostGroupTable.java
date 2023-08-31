@@ -54,7 +54,8 @@ public class HostGroupTable implements VersionedDefinition, Serializable {
     return new HostGroupTable(map, version);
   }
 
-  private static HashedSetMap<InetAddress, String> createServerToGroupMap(HashedSetMap<String, InetAddress> groupToServerMap) {
+  private static HashedSetMap<InetAddress, String> createServerToGroupMap(
+      HashedSetMap<String, InetAddress> groupToServerMap) {
     HashedSetMap<InetAddress, String> serverToGroupMap = new HashedSetMap<>();
     for (String group : groupToServerMap.getKeys()) {
       for (InetAddress server : groupToServerMap.getSet(group)) {
@@ -64,7 +65,8 @@ public class HostGroupTable implements VersionedDefinition, Serializable {
     return serverToGroupMap;
   }
 
-  private static HashedSetMap<String, String> createGroupToServerAddressMap(HashedSetMap<String, InetAddress> groupToServerMap) {
+  private static HashedSetMap<String, String> createGroupToServerAddressMap(
+      HashedSetMap<String, InetAddress> groupToServerMap) {
     HashedSetMap<String, String> groupToServerAddressMap = new HashedSetMap<>();
     for (String group : groupToServerMap.getKeys()) {
       for (InetAddress server : groupToServerMap.getSet(group)) {
@@ -205,5 +207,4 @@ public class HostGroupTable implements VersionedDefinition, Serializable {
     }
     return sb.toString();
   }
-
 }

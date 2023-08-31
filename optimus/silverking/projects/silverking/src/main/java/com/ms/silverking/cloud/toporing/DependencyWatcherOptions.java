@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.toporing;
 import org.kohsuke.args4j.Option;
 
 public class DependencyWatcherOptions {
-  DependencyWatcherOptions() {
-  }
+  DependencyWatcherOptions() {}
 
   @Option(name = "-g", usage = "gridConfig", required = true)
   String gridConfig;

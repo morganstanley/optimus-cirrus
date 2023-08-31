@@ -18,9 +18,7 @@ import com.ms.silverking.cloud.dht.common.SimpleKey;
 import com.ms.silverking.numeric.NumConversion;
 import com.ms.silverking.text.StringUtil;
 
-/**
- * Key and value checksum pair for use in convergence.
- */
+/** Key and value checksum pair for use in convergence. */
 public class KeyValueChecksum {
   private final DHTKey key;
   private final byte[] valueChecksum;
@@ -40,7 +38,9 @@ public class KeyValueChecksum {
 
   @Override
   public int hashCode() {
-    return key.hashCode() ^ NumConversion.bytesToInt(valueChecksum, valueChecksum.length - NumConversion.BYTES_PER_INT);
+    return key.hashCode()
+        ^ NumConversion.bytesToInt(
+            valueChecksum, valueChecksum.length - NumConversion.BYTES_PER_INT);
   }
 
   @Override

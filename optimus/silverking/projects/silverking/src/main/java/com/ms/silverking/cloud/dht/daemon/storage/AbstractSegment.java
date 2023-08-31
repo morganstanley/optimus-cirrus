@@ -36,7 +36,8 @@ abstract class AbstractSegment implements ReadableSegment {
 
   protected static Logger log = LoggerFactory.getLogger(AbstractSegment.class);
 
-  AbstractSegment(ByteBuffer dataBuf, OffsetListStore offsetListStore, Set<Integer> invalidatedOffsets) {
+  AbstractSegment(
+      ByteBuffer dataBuf, OffsetListStore offsetListStore, Set<Integer> invalidatedOffsets) {
     this.dataBuf = dataBuf;
     this.offsetListStore = offsetListStore;
     this.invalidatedOffsets = invalidatedOffsets;
@@ -53,9 +54,7 @@ abstract class AbstractSegment implements ReadableSegment {
     return MetaDataUtil.getChecksum(dataBuf, offset + DHTKey.BYTES_PER_KEY);
   }
 
-  /**
-   * Returns whether the operation at the particular offset is an invalidation
-   */
+  /** Returns whether the operation at the particular offset is an invalidation */
   boolean isInvalidation(int offset) {
     if (invalidatedOffsets != null) {
       return invalidatedOffsets.contains(offset);
@@ -123,7 +122,8 @@ abstract class AbstractSegment implements ReadableSegment {
     return returnBuffer;
   }
 
-  private ByteBuffer retrieve(DHTKey key, InternalRetrievalOptions options, int offset, boolean verifySS) {
+  private ByteBuffer retrieve(
+      DHTKey key, InternalRetrievalOptions options, int offset, boolean verifySS) {
     // FUTURE - think about getResolvedOffset and doubleCheckVersion
     // Currently can't use getResolvedOffset due to the doubleCheckVersion
     // code. Need to determine if that code is required.
@@ -164,7 +164,8 @@ abstract class AbstractSegment implements ReadableSegment {
         if (offset < 0) {
           offset = noSuchKey; // FUTURE - think about this
           if (debugRetrieve) {
-            log.info("Couldn't find key in offset list. options: {}", options.getVersionConstraint());
+            log.info(
+                "Couldn't find key in offset list. options: {}", options.getVersionConstraint());
           }
         }
         if (debugRetrieve || log.isDebugEnabled()) {
@@ -182,30 +183,32 @@ abstract class AbstractSegment implements ReadableSegment {
       } else {
         offset += DHTKey.BYTES_PER_KEY;
         switch (options.getRetrievalType()) {
-        case VALUE:
-        case VALUE_AND_META_DATA:
-          // FUTURE - consider creating a new buffer type to allow creation in one operation
-          storedLength = MetaDataUtil.getStoredLength(dataBuf, offset); // FUTURE - think about this
-          buffer = dataBuf.asReadOnlyBuffer();
-          buffer.position(offset);
-          buffer.limit(offset + storedLength);
-          break;
-        case EXISTENCE: // fall through
-        case META_DATA:
-          buffer = dataBuf.asReadOnlyBuffer();
-          buffer.position(offset);
-          buffer.limit(offset + MetaDataUtil.getMetaDataLength(dataBuf, offset));
-          if (MetaDataUtil.isSegmented(buffer.slice())) {
-            // FUTURE THIS CODE IS COPIED FROM VALUE CASES, ELIM THE DUPLICATE CODE
-            storedLength = MetaDataUtil.getStoredLength(dataBuf,
-                offset); // FUTURE & verify that segmented metadatautil works
+          case VALUE:
+          case VALUE_AND_META_DATA:
+            // FUTURE - consider creating a new buffer type to allow creation in one operation
+            storedLength =
+                MetaDataUtil.getStoredLength(dataBuf, offset); // FUTURE - think about this
             buffer = dataBuf.asReadOnlyBuffer();
             buffer.position(offset);
             buffer.limit(offset + storedLength);
-          }
-          break;
-        default:
-          throw new RuntimeException();
+            break;
+          case EXISTENCE: // fall through
+          case META_DATA:
+            buffer = dataBuf.asReadOnlyBuffer();
+            buffer.position(offset);
+            buffer.limit(offset + MetaDataUtil.getMetaDataLength(dataBuf, offset));
+            if (MetaDataUtil.isSegmented(buffer.slice())) {
+              // FUTURE THIS CODE IS COPIED FROM VALUE CASES, ELIM THE DUPLICATE CODE
+              storedLength =
+                  MetaDataUtil.getStoredLength(
+                      dataBuf, offset); // FUTURE & verify that segmented metadatautil works
+              buffer = dataBuf.asReadOnlyBuffer();
+              buffer.position(offset);
+              buffer.limit(offset + storedLength);
+            }
+            break;
+          default:
+            throw new RuntimeException();
         }
         returnBuffer = buffer.slice();
         if (doubleCheckVersion) {
@@ -225,26 +228,32 @@ abstract class AbstractSegment implements ReadableSegment {
             d = vc.getMaxCreationTime() < MetaDataUtil.getCreationTime(returnBuffer, 0);
             log.info("doubleCheckVersion 1: {} {}", a && b, c && d);
             log.info("doubleCheckVersion 2: {} {} {} {}", a, b, c, d);
-            log.info("MetaDataUtil.getCreationTime(returnBuffer, 0): {}",
+            log.info(
+                "MetaDataUtil.getCreationTime(returnBuffer, 0): {}",
                 MetaDataUtil.getCreationTime(returnBuffer, 0));
             if (c && d) {
-              log.info("{} {}", vc.getMaxCreationTime(), MetaDataUtil.getCreationTime(returnBuffer, 0));
-              log.info("{} {}", new Date(vc.getMaxCreationTime()),
+              log.info(
+                  "{} {}", vc.getMaxCreationTime(), MetaDataUtil.getCreationTime(returnBuffer, 0));
+              log.info(
+                  "{} {}",
+                  new Date(vc.getMaxCreationTime()),
                   new Date(MetaDataUtil.getCreationTime(returnBuffer, 0)));
             }
           }
 
           // we include some extra checks below to avoid touching the returnBuffer unnecessarily
-          if ((!vc.equals(VersionConstraint.greatest) && !vc.matches(MetaDataUtil.getVersion(returnBuffer,
-              0))) || (vc.getMaxCreationTime() < Long.MAX_VALUE && vc.getMaxCreationTime() < MetaDataUtil.getCreationTime(
-              returnBuffer, 0))) {
+          if ((!vc.equals(VersionConstraint.greatest)
+                  && !vc.matches(MetaDataUtil.getVersion(returnBuffer, 0)))
+              || (vc.getMaxCreationTime() < Long.MAX_VALUE
+                  && vc.getMaxCreationTime() < MetaDataUtil.getCreationTime(returnBuffer, 0))) {
             returnBuffer = null;
           }
         }
         if (debugRetrieve) {
           if (returnBuffer != null) {
             System.out.println(
-                "MetaDataUtil.getCompressedLength: " + MetaDataUtil.getCompressedLength(returnBuffer, 0));
+                "MetaDataUtil.getCompressedLength: "
+                    + MetaDataUtil.getCompressedLength(returnBuffer, 0));
           }
           log.info("returnBuffer: {}", returnBuffer);
         }

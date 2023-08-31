@@ -14,8 +14,7 @@ package com.ms.silverking.compression;
 import java.io.IOException;
 
 public class NullCodec implements Compressor, Decompressor {
-  public NullCodec() {
-  }
+  public NullCodec() {}
 
   public byte[] compress(byte[] rawValue, int offset, int length) throws IOException {
     byte[] b;
@@ -25,7 +24,8 @@ public class NullCodec implements Compressor, Decompressor {
     return b;
   }
 
-  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength) throws IOException {
+  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength)
+      throws IOException {
     byte[] b;
 
     if (length != uncompressedLength) {

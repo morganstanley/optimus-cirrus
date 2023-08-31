@@ -19,7 +19,7 @@ import com.typesafe.config.ConfigFactory;
 /* Read log messages from config, falling back to a reasonable default.
  */
 public class Messages {
-  private static String baseMessage = "[ERROR] Starting stratosphere failed.";
+  private static String baseMessage = "Starting stratosphere failed.";
   private static String existenceMessagePrefix =
       "Version of stratosphere used in this workspace no longer exists at: ";
   private static String existenceMessageSuffix = ".";

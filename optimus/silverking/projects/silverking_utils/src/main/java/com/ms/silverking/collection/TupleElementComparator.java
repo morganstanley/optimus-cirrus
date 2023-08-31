@@ -24,16 +24,11 @@ public class TupleElementComparator implements Comparator<TupleBase> {
     this.elementComparator = elementComparator;
 
     this.elementIndex = elementIndex;
-
   }
 
   @Override
-
   public int compare(TupleBase o1, TupleBase o2) {
 
     return elementComparator.compare(o1.getElement(elementIndex), o2.getElement(elementIndex));
-
   }
-
 }
-

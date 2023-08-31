@@ -39,7 +39,8 @@ public class ConvergenceException extends Exception {
     abandoned = false;
   }
 
-  public ConvergenceException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+  public ConvergenceException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
     abandoned = false;
   }

@@ -18,7 +18,7 @@ public class SummaryStat {
   private final long max;
   private final long min;
 
-  public static String[] stats = { "total", "mean", "median", "max", "min" };
+  public static String[] stats = {"total", "mean", "median", "max", "min"};
 
   public SummaryStat(long total, long mean, long median, long max, long min) {
     this.total = total;
@@ -30,18 +30,18 @@ public class SummaryStat {
 
   public long getStat(String stat) {
     switch (stat) {
-    case "total":
-      return getTotal();
-    case "mean":
-      return getMean();
-    case "median":
-      return getMedian();
-    case "max":
-      return getMax();
-    case "min":
-      return getMin();
-    default:
-      throw new RuntimeException("Unknown stat: " + stat);
+      case "total":
+        return getTotal();
+      case "mean":
+        return getMean();
+      case "median":
+        return getMedian();
+      case "max":
+        return getMax();
+      case "min":
+        return getMin();
+      default:
+        throw new RuntimeException("Unknown stat: " + stat);
     }
   }
 

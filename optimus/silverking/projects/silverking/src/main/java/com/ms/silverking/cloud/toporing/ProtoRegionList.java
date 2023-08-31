@@ -29,15 +29,14 @@ import com.ms.silverking.cloud.toporing.meta.WeightSpecifications;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * List of ProtoRegions with convenience functions for creation and manipulation.
- */
+/** List of ProtoRegions with convenience functions for creation and manipulation. */
 class ProtoRegionList {
   private final List<ProtoRegion> protoRegions;
 
   private static Logger log = LoggerFactory.getLogger(ProtoRegionList.class);
 
-  private static final int minPrimaryUnderFailure = 1; // TODO (OPTIMUS-0000): temporarily hardcoded until minPrimaryUnderFailure
+  private static final int minPrimaryUnderFailure =
+      1; // TODO (OPTIMUS-0000): temporarily hardcoded until minPrimaryUnderFailure
   // code is complete
 
   private static final boolean debug = true;
@@ -129,8 +128,7 @@ class ProtoRegionList {
   }
 
   /**
-   * Create a ProtoRegionList from the given nodes weighted according to the
-   * weightSpecs
+   * Create a ProtoRegionList from the given nodes weighted according to the weightSpecs
    *
    * @param nodes
    * @param weightSpecs
@@ -148,9 +146,9 @@ class ProtoRegionList {
     return new ProtoRegionList(protoRegions);
   }
 
-  //static ProtoRegionList create(Collection<Node> nodes, WeightSpecifications weightSpecs) {
+  // static ProtoRegionList create(Collection<Node> nodes, WeightSpecifications weightSpecs) {
   //    return create(ImmutableList.copyOf(nodes), weightSpecs);
-  //}
+  // }
 
   /**
    * Find next region that does not contain the given node
@@ -166,8 +164,9 @@ class ProtoRegionList {
     int regionsExamined;
 
     if (debug) {
-      System.out.printf("nextRegion. startIndex %d node %s replicaIndex %d rType %s\n", startIndex, node.getIDString(),
-          replicaIndex, rType);
+      System.out.printf(
+          "nextRegion. startIndex %d node %s replicaIndex %d rType %s\n",
+          startIndex, node.getIDString(), replicaIndex, rType);
     }
     assert startIndex >= 0;
     assert replicaIndex >= 0;
@@ -175,15 +174,17 @@ class ProtoRegionList {
     assert rType != null;
     regionsExamined = 0;
     index = startIndex;
-    while (regionsExamined < protoRegions.size() && (protoRegions.get(index).contains(node) || protoRegions.get(
-        index).totalOwners(rType) > replicaIndex)) {
+    while (regionsExamined < protoRegions.size()
+        && (protoRegions.get(index).contains(node)
+            || protoRegions.get(index).totalOwners(rType) > replicaIndex)) {
       if (debug) {
-        log.debug("{} {}",index , protoRegions.get(index));
+        log.debug("{} {}", index, protoRegions.get(index));
       }
       index = (index + 1) % protoRegions.size();
       regionsExamined++;
     }
-    if (!protoRegions.get(index).contains(node) && protoRegions.get(index).totalOwners(rType) <= replicaIndex) {
+    if (!protoRegions.get(index).contains(node)
+        && protoRegions.get(index).totalOwners(rType) <= replicaIndex) {
       if (debug) {
         log.debug("nextRegion. index {}", index);
       }
@@ -210,7 +211,8 @@ class ProtoRegionList {
     int regionsExamined;
 
     if (debug) {
-      log.debug("nextRegion. startIndex {} node {} rType {}", startIndex, node.getIDString(), rType);
+      log.debug(
+          "nextRegion. startIndex {} node {} rType {}", startIndex, node.getIDString(), rType);
     }
     assert startIndex >= 0;
     assert maxOwners > 0;
@@ -218,15 +220,17 @@ class ProtoRegionList {
     assert rType != null;
     regionsExamined = 0;
     index = startIndex;
-    while (regionsExamined < protoRegions.size() && (protoRegions.get(index).contains(node) || protoRegions.get(
-        index).totalOwners(rType) >= maxOwners)) {
+    while (regionsExamined < protoRegions.size()
+        && (protoRegions.get(index).contains(node)
+            || protoRegions.get(index).totalOwners(rType) >= maxOwners)) {
       if (debug) {
-        log.debug("{} {}",index , protoRegions.get(index));
+        log.debug("{} {}", index, protoRegions.get(index));
       }
       index = (index + 1) % protoRegions.size();
       regionsExamined++;
     }
-    if (!protoRegions.get(index).contains(node) && protoRegions.get(index).totalOwners(rType) < maxOwners) {
+    if (!protoRegions.get(index).contains(node)
+        && protoRegions.get(index).totalOwners(rType) < maxOwners) {
       if (debug) {
         log.debug("nextRegion. index {}", index);
       }
@@ -259,14 +263,17 @@ class ProtoRegionList {
         } else {
           if (protoRegions.size() <= 1) {
             // Can't have a single small region
-            throw new RuntimeException("mergeResidualRegions() called on an incomplete region list");
+            throw new RuntimeException(
+                "mergeResidualRegions() called on an incomplete region list");
           } else {
             r1 = protoRegions.remove(1);
             insertionIndex = 0;
             protoRegions.remove(0);
           }
         }
-        merged = new ProtoRegion(r0.getRegion().merge(r1.getRegion()), r1.getOwners(), minPrimaryUnderFailure);
+        merged =
+            new ProtoRegion(
+                r0.getRegion().merge(r1.getRegion()), r1.getOwners(), minPrimaryUnderFailure);
         protoRegions.add(insertionIndex, merged);
       }
       i--;
@@ -292,10 +299,14 @@ class ProtoRegionList {
         oldProtoRegion = protoRegions.get(index);
         splitRegions = oldProtoRegion.getRegion().split(splitSize);
         protoRegions.remove(index);
-        protoRegions.add(index,
-            new ProtoRegion(splitRegions[0], oldProtoRegion.getOwners().duplicate(), minPrimaryUnderFailure));
-        protoRegions.add(index + 1,
-            new ProtoRegion(splitRegions[1], oldProtoRegion.getOwners().duplicate(), minPrimaryUnderFailure));
+        protoRegions.add(
+            index,
+            new ProtoRegion(
+                splitRegions[0], oldProtoRegion.getOwners().duplicate(), minPrimaryUnderFailure));
+        protoRegions.add(
+            index + 1,
+            new ProtoRegion(
+                splitRegions[1], oldProtoRegion.getOwners().duplicate(), minPrimaryUnderFailure));
       }
     }
   }
@@ -320,8 +331,8 @@ class ProtoRegionList {
 
   static ProtoRegionList merge(ProtoRegionList l0, ProtoRegionList l1) {
     log.info("merge");
-    log.info("{}",l0);
-    log.info("{}",l1);
+    log.info("{}", l0);
+    log.info("{}", l1);
     if (l0 == null) {
       return l1;
     } else if (l1 == null) {
@@ -373,10 +384,19 @@ class ProtoRegionList {
   public SingleRing toSingleRing(NodeClass nodeClass, RingTreeRecipe recipe) {
     SingleRing ring;
 
-    ring = new SingleRing(nodeClass, 0, recipe.storagePolicy.getName()); // TODO (OPTIMUS-0000): version of zero here
+    ring =
+        new SingleRing(
+            nodeClass,
+            0,
+            recipe.storagePolicy.getName()); // TODO (OPTIMUS-0000): version of zero here
     for (ProtoRegion pr : getRegionList()) {
-      ring.put(pr.getRegion().getEnd(),
-          new RingEntry(pr.getPrimaryOwners(), pr.getSecondaryOwners(), pr.getRegion(), minPrimaryUnderFailure));
+      ring.put(
+          pr.getRegion().getEnd(),
+          new RingEntry(
+              pr.getPrimaryOwners(),
+              pr.getSecondaryOwners(),
+              pr.getRegion(),
+              minPrimaryUnderFailure));
     }
     ring.freeze(recipe.weightSpecs);
     RingEntry.ensureEntryRegionsDisjoint(ring.getMembers());

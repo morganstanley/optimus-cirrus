@@ -25,13 +25,13 @@ public class LegacySkTraceIdSerializer {
     switch (gpbstate) {
       case NOT_FORWARDED:
         return SkForwardState.NotForwarded;
-      // break;
+        // break;
       case LOCAL_FORWARDED:
         return SkForwardState.LocalForwarded;
-      // break;
+        // break;
       case REMOTE_FORWARDED:
         return SkForwardState.RemoteForwarded;
-      // break;
+        // break;
     }
     return null;
   }
@@ -41,29 +41,33 @@ public class LegacySkTraceIdSerializer {
     switch (state) {
       case NotForwarded:
         return SilverKingTraceIdProto.ForwardState.NOT_FORWARDED;
-      // break;
+        // break;
       case LocalForwarded:
         return SilverKingTraceIdProto.ForwardState.LOCAL_FORWARDED;
-      // break;
+        // break;
       case RemoteForwarded:
         return SilverKingTraceIdProto.ForwardState.REMOTE_FORWARDED;
-      // break;
+        // break;
     }
     return null;
   }
 
   public SilverKingTraceIdProto serialize(SkTraceId skTraceId) {
 
-    return SilverKingTraceIdProto.newBuilder().setType(SilverKingTraceIdProto.Type.TRACE_ID).setForwardState(toProto(
-        skTraceId.getForwardState())).setRequestUuid(skTraceId.getTraceId().requestId()).setChainedId(
-        legacyChainedIdSerializer.serialize(skTraceId.getTraceId().chainedId())).build();
+    return SilverKingTraceIdProto.newBuilder()
+        .setType(SilverKingTraceIdProto.Type.TRACE_ID)
+        .setForwardState(toProto(skTraceId.getForwardState()))
+        .setRequestUuid(skTraceId.getTraceId().requestId())
+        .setChainedId(legacyChainedIdSerializer.serialize(skTraceId.getTraceId().chainedId()))
+        .build();
   }
 
   public SkTraceId deserialize(SilverKingTraceIdProto proto) {
 
     if (proto != null) {
       return new SkTraceId(
-          new TraceId(proto.getRequestUuid(), legacyChainedIdSerializer.deserialize(proto.getChainedId())),
+          new TraceId(
+              proto.getRequestUuid(), legacyChainedIdSerializer.deserialize(proto.getChainedId())),
           fromProto(proto.getForwardState()));
     }
     return null;

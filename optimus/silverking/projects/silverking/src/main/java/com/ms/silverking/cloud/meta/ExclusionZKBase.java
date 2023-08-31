@@ -24,18 +24,18 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Base functionality for both cloud-level, and dht instance specific ExclusionSets
- */
-public abstract class ExclusionZKBase<M extends MetaPathsBase> extends ServerSetExtensionZKBase<ExclusionSet, M> {
+/** Base functionality for both cloud-level, and dht instance specific ExclusionSets */
+public abstract class ExclusionZKBase<M extends MetaPathsBase>
+    extends ServerSetExtensionZKBase<ExclusionSet, M> {
   public static final int noRetainedVersionsLimit = 0;
   private static final int retainedVersions;
 
   private static Logger log = LoggerFactory.getLogger(ExclusionZKBase.class);
 
   static {
-    retainedVersions = PropertiesHelper.systemHelper.getInt(DHTConstants.exclusionSetRetainedVersionsProperty,
-        noRetainedVersionsLimit);
+    retainedVersions =
+        PropertiesHelper.systemHelper.getInt(
+            DHTConstants.exclusionSetRetainedVersionsProperty, noRetainedVersionsLimit);
     log.info("{}  {}", DHTConstants.exclusionSetRetainedVersionsProperty, retainedVersions);
   }
 
@@ -52,7 +52,7 @@ public abstract class ExclusionZKBase<M extends MetaPathsBase> extends ServerSet
   @Override
   public ExclusionSet readFromZK(long version, MetaToolOptions options) throws KeeperException {
     String vBase;
-    //List<String>    nodes;
+    // List<String>    nodes;
     String[] nodes;
     Stat stat;
     SilverKingZooKeeperClient _zk;
@@ -62,7 +62,7 @@ public abstract class ExclusionZKBase<M extends MetaPathsBase> extends ServerSet
       version = _zk.getLatestVersion(base);
     }
     vBase = getVBase(version);
-    //nodes = zk.getChildren(vBase);
+    // nodes = zk.getChildren(vBase);
     stat = new Stat();
     nodes = _zk.getString(vBase, null, stat).split("\n");
     return new ExclusionSet(ImmutableSet.copyOf(nodes), version, stat.getMzxid());
@@ -92,7 +92,8 @@ public abstract class ExclusionZKBase<M extends MetaPathsBase> extends ServerSet
   }
 
   @Override
-  public String writeToZK(ExclusionSet exclusionSet, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(ExclusionSet exclusionSet, MetaToolOptions options)
+      throws IOException, KeeperException {
     String rVal;
 
     rVal = super.writeToZK(exclusionSet, options);

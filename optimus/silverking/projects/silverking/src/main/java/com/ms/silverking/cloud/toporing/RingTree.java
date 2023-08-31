@@ -39,22 +39,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Tree of TopologyRings for a topology. Every parent in the topology
- * has an associated TopologyRing for its children.
- * <p>
- * Each of these TopologyRings is retrieved using the id of the
- * ring which is the path to the ring.
- * <p>
- * StorageNodes may be retrieved for any ring. Rings that
- * are at higher levels are composed with the lower-level
- * rings to compute the storage nodes.
+ * Tree of TopologyRings for a topology. Every parent in the topology has an associated TopologyRing
+ * for its children.
+ *
+ * <p>Each of these TopologyRings is retrieved using the id of the ring which is the path to the
+ * ring.
+ *
+ * <p>StorageNodes may be retrieved for any ring. Rings that are at higher levels are composed with
+ * the lower-level rings to compute the storage nodes.
  */
 public class RingTree {
   private final Topology topology;
-  //private final Map<Pair<String,String>,TopologyRing>    maps;
+  // private final Map<Pair<String,String>,TopologyRing>    maps;
   private final Map<String, TopologyRing> maps;
   private final long ringConfigVersion;
-  // Note that we don't store instance version information as that isn't known for trees that haven't been written to
+  // Note that we don't store instance version information as that isn't known for trees that
+  // haven't been written to
   // zookeeper
   // InstantiatedRingTree contains this information for trees that have been written to zookeeper.
   private final long ringCreationTime;
@@ -66,7 +66,11 @@ public class RingTree {
 
   private boolean debug = true;
 
-  public RingTree(Topology topology, Map<String, TopologyRing> maps, long ringConfigVersion, long ringCreationTime) {
+  public RingTree(
+      Topology topology,
+      Map<String, TopologyRing> maps,
+      long ringConfigVersion,
+      long ringCreationTime) {
     this.topology = topology;
     this.maps = maps;
     this.ringConfigVersion = ringConfigVersion;
@@ -89,13 +93,13 @@ public class RingTree {
     return ringCreationTime;
   }
 
-  //public TopologyRing getMap(String parentID, String storagePolicyName) {
+  // public TopologyRing getMap(String parentID, String storagePolicyName) {
   //    System.out.println("getMap: "+ parentID +" "+ storagePolicyName);
   //    return maps.get(new Pair<>(parentID, storagePolicyName));
-  //}
+  // }
   public TopologyRing getMap(String parentID) {
     if (debug) {
-      log.debug("getMap: {}" , parentID);
+      log.debug("getMap: {}", parentID);
     }
     return maps.get(parentID);
   }
@@ -109,12 +113,12 @@ public class RingTree {
     }
     nodes = getStorageNodes(coordinate);
     if (debug) {
-      log.debug("nodes.size() {}" , nodes.size());
+      log.debug("nodes.size() {}", nodes.size());
     }
     replicas = new HashSet<>();
     for (Node node : nodes) {
       if (debug) {
-        log.debug("{}",node);
+        log.debug("{}", node);
       }
       replicas.add(new IPAndPort(node.getIDString() + ":" + DHTNodePort.getDhtPort()));
     }
@@ -150,7 +154,8 @@ public class RingTree {
 
     ring = getNodeRing(parent);
     ringEntry = ring.getOwner(coordinate);
-    normalizedCoordinate = LongRingspace.mapRegionPointToRingspace(ringEntry.getRegion(), coordinate);
+    normalizedCoordinate =
+        LongRingspace.mapRegionPointToRingspace(ringEntry.getRegion(), coordinate);
     children = ringEntry.getPrimaryOwnersSet();
     storageNodes = new HashSet<>();
     for (Node child : children) {
@@ -169,7 +174,8 @@ public class RingTree {
 
   /////////////////////////////////
 
-  public ResolvedReplicaMap getResolvedMap(String ringParentName, ReplicaPrioritizer replicaPrioritizer) {
+  public ResolvedReplicaMap getResolvedMap(
+      String ringParentName, ReplicaPrioritizer replicaPrioritizer) {
     try {
       ResolvedReplicaMap resolvedMap;
       List<RingEntry> entryList;
@@ -180,7 +186,7 @@ public class RingTree {
       sw = new SimpleStopwatch();
       resolvedMap = new ResolvedReplicaMap(replicaPrioritizer);
       if (debug) {
-        log.debug("getResolvedMap: {}" , topology.getRoot());
+        log.debug("getResolvedMap: {}", topology.getRoot());
       }
       node = topology.getNodeByID(ringParentName);
       if (node == null) {
@@ -207,7 +213,7 @@ public class RingTree {
     List<RingEntry> nonOverlappedEntryList;
 
     if (debug) {
-      log.debug("project {} {}" , node , parentRegion);
+      log.debug("project {} {}", node, parentRegion);
     }
     if (node.childNodeClassMatches(NodeClass.server)) {
       entryList = getRawEntryList(node);
@@ -242,10 +248,10 @@ public class RingTree {
 
               childList = project(childNode, entry.getRegion());
               if (debug) {
-                log.debug("back to {} from {}" ,node , childNode);
+                log.debug("back to {} from {}", node, childNode);
               }
               allChildList.addAll(childList);
-              //merge(entryList, childList);
+              // merge(entryList, childList);
             }
 
             if (debug) {
@@ -256,10 +262,10 @@ public class RingTree {
 
               childList = convertPrimaryToSecondary(project(childNode, entry.getRegion()));
               if (debug) {
-                log.debug("back to {} from {}"  , node ,childNode);
+                log.debug("back to {} from {}", node, childNode);
               }
               allChildList.addAll(childList);
-              //merge(entryList, childList);
+              // merge(entryList, childList);
             }
           }
           merge(entryList, allChildList);
@@ -323,71 +329,71 @@ public class RingTree {
     }
   }
 
-    /*
-    private List<RingEntry> project(Node node, RingRegion parentRegion) {
-        List<RingEntry> entryList;
-        List<RingEntry> projectedEntryList;
-        List<RingEntry> cleanedEntryList;
-        
-        if (debug) {
-            System.out.println("project "+ node +" "+ parentRegion);
-        }
-        if (node.childNodeClassMatches(NodeClass.server)) {
-            entryList = getRawEntryList(node);
-        } else {
-            if (!node.hasChildren()) {
-                return new ArrayList<>();
-            } else {
-                TopologyRing    ring;
-                StoragePolicy   storagePolicy;
-                
-                entryList = new ArrayList<>();
-                ring = getNodeRing(node);
-                if (ring == null) {
-                    throw new RuntimeException("Can't find ring for node: "+ node);
-                } else {
-                    for (RingEntry entry : ring.getMembers()) {
-                        // For all entries, go through all nodes and project
-                        // all subentries to this entry
-                        if (debug) {
-                            System.out.println("primary");
-                        }
-                        for (Node childNode : entry.getPrimaryOwnersList()) {
-                            List<RingEntry> childList;
-                            
-                            childList = project(childNode, entry.getRegion());
-                            if (debug) {
-                                System.out.println("back to "+ node +" from "+ childNode);
-                            }
-                            merge(entryList, childList);
-                        }
-                        
-                        
-                        if (debug) {
-                            System.out.println("secondary");
-                        }
-                        for (Node childNode : entry.getSecondaryOwnersList()) {
-                            List<RingEntry> childList;
-                            
-                            childList = convertPrimaryToSecondary(project(childNode, entry.getRegion()));
-                            if (debug) {
-                                System.out.println("back to "+ node +" from "+ childNode);
-                            }
-                            merge(entryList, childList);
-                        }
-                    }
-                }
-            }
-        }
-        displayForDebug(entryList, "entryList");
-        RingEntry.ensureEntryRegionsDisjoint(entryList);
-        projectedEntryList = projectEntryList(entryList, parentRegion);
-        displayForDebug(projectedEntryList, "projectedEntryList");
-        cleanedEntryList = cleanupList(parentRegion, projectedEntryList);
-        displayForDebug(cleanedEntryList, "cleanedEntryList");
-        return cleanedEntryList;
-    }
-    */
+  /*
+  private List<RingEntry> project(Node node, RingRegion parentRegion) {
+      List<RingEntry> entryList;
+      List<RingEntry> projectedEntryList;
+      List<RingEntry> cleanedEntryList;
+
+      if (debug) {
+          System.out.println("project "+ node +" "+ parentRegion);
+      }
+      if (node.childNodeClassMatches(NodeClass.server)) {
+          entryList = getRawEntryList(node);
+      } else {
+          if (!node.hasChildren()) {
+              return new ArrayList<>();
+          } else {
+              TopologyRing    ring;
+              StoragePolicy   storagePolicy;
+
+              entryList = new ArrayList<>();
+              ring = getNodeRing(node);
+              if (ring == null) {
+                  throw new RuntimeException("Can't find ring for node: "+ node);
+              } else {
+                  for (RingEntry entry : ring.getMembers()) {
+                      // For all entries, go through all nodes and project
+                      // all subentries to this entry
+                      if (debug) {
+                          System.out.println("primary");
+                      }
+                      for (Node childNode : entry.getPrimaryOwnersList()) {
+                          List<RingEntry> childList;
+
+                          childList = project(childNode, entry.getRegion());
+                          if (debug) {
+                              System.out.println("back to "+ node +" from "+ childNode);
+                          }
+                          merge(entryList, childList);
+                      }
+
+
+                      if (debug) {
+                          System.out.println("secondary");
+                      }
+                      for (Node childNode : entry.getSecondaryOwnersList()) {
+                          List<RingEntry> childList;
+
+                          childList = convertPrimaryToSecondary(project(childNode, entry.getRegion()));
+                          if (debug) {
+                              System.out.println("back to "+ node +" from "+ childNode);
+                          }
+                          merge(entryList, childList);
+                      }
+                  }
+              }
+          }
+      }
+      displayForDebug(entryList, "entryList");
+      RingEntry.ensureEntryRegionsDisjoint(entryList);
+      projectedEntryList = projectEntryList(entryList, parentRegion);
+      displayForDebug(projectedEntryList, "projectedEntryList");
+      cleanedEntryList = cleanupList(parentRegion, projectedEntryList);
+      displayForDebug(cleanedEntryList, "cleanedEntryList");
+      return cleanedEntryList;
+  }
+  */
 
   private void displayForDebug(List<RingEntry> list, String name) {
     if (debug) {
@@ -417,13 +423,13 @@ public class RingTree {
     }
     if (debug) {
       log.debug("merge: ************************");
-      log.debug("{}" , RingEntry.toString(destList, "\n"));
+      log.debug("{}", RingEntry.toString(destList, "\n"));
       log.debug("...................................");
-      log.debug("{}" , RingEntry.toString(_sourceList, "\n"));
+      log.debug("{}", RingEntry.toString(_sourceList, "\n"));
       log.debug("===================================");
     }
     RingEntry.ensureEntryRegionsDisjoint(destList);
-    //RingEntry.ensureEntryRegionsDisjoint(_sourceList); // c/o since we support non-disjoint now
+    // RingEntry.ensureEntryRegionsDisjoint(_sourceList); // c/o since we support non-disjoint now
     sourceList = new ArrayList<>(_sourceList);
     while (sourceList.size() > 0) {
       RingEntry oldSourceEntry;
@@ -437,7 +443,8 @@ public class RingTree {
       oldSourceEntry = sourceList.remove(0);
       oldSourceRegion = oldSourceEntry.getRegion();
 
-      searchResult = Collections.binarySearch(destList, oldSourceEntry, RingEntryPositionComparator.instance);
+      searchResult =
+          Collections.binarySearch(destList, oldSourceEntry, RingEntryPositionComparator.instance);
       if (searchResult < 0) {
         // no exact match for this position was found
         // we can look at the two entries next to us to figure out what's up
@@ -459,7 +466,8 @@ public class RingTree {
       // For simplicity, we perform a naive loop through all dests even though
       // it would be possible to avoid this loop.
       destScanActive = true;
-      for (int destIndex = startIndex; destScanActive && destIndex <= endIndex && destIndex < destList.size(); ) {
+      for (int destIndex = startIndex;
+          destScanActive && destIndex <= endIndex && destIndex < destList.size(); ) {
         RingEntry oldDestEntry;
         RingRegion oldDestRegion;
         IntersectionResult iResult;
@@ -472,91 +480,113 @@ public class RingTree {
         // we want the new entries to end up so that we can use destIndex for all
         // and avoid computing how many are added by each step
         switch (iResult.getIntersectionType()) {
-        case disjoint:
-          destIndex++;
-          break;
-        case isomorphic:
-          destList.remove(destIndex);
-          destList.add(destIndex, oldDestEntry.addOwners(oldSourceEntry));
-          destScanActive = false; // go on to next source entry
-          break;
-        case abPartial:
-          destList.remove(destIndex);
-          destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-          destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
-          sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
-          destScanActive = false; // go on to next source entry
-          break;
-        case baPartial:
-          destList.remove(destIndex);
-          destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
-          destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-          sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
-          destScanActive = false; // go on to next source entry
-          break;
-        case aSubsumesB: // fall through
-          destList.remove(destIndex);
-          if (iResult.getANonOverlapping().size() == 1) {
-            if (oldDestEntry.getRegion().getStart() == oldSourceEntry.getRegion().getStart()) {
-              destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
-              destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-            } else if (oldDestEntry.getRegion().getEnd() == oldSourceEntry.getRegion().getEnd()) {
-              destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-              destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+          case disjoint:
+            destIndex++;
+            break;
+          case isomorphic:
+            destList.remove(destIndex);
+            destList.add(destIndex, oldDestEntry.addOwners(oldSourceEntry));
+            destScanActive = false; // go on to next source entry
+            break;
+          case abPartial:
+            destList.remove(destIndex);
+            destList.add(
+                destIndex,
+                oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+            sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
+            destScanActive = false; // go on to next source entry
+            break;
+          case baPartial:
+            destList.remove(destIndex);
+            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+            destList.add(
+                destIndex,
+                oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+            sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
+            destScanActive = false; // go on to next source entry
+            break;
+          case aSubsumesB: // fall through
+            destList.remove(destIndex);
+            if (iResult.getANonOverlapping().size() == 1) {
+              if (oldDestEntry.getRegion().getStart() == oldSourceEntry.getRegion().getStart()) {
+                destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+                destList.add(
+                    destIndex,
+                    oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+              } else if (oldDestEntry.getRegion().getEnd() == oldSourceEntry.getRegion().getEnd()) {
+                destList.add(
+                    destIndex,
+                    oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+                destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+              } else {
+                throw new RuntimeException("panic");
+              }
+            } else if (iResult.getANonOverlapping().size() == 2) {
+              destList.add(
+                  destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping().get(1)));
+              destList.add(
+                  destIndex,
+                  oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+              destList.add(
+                  destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping().get(0)));
             } else {
               throw new RuntimeException("panic");
             }
-          } else if (iResult.getANonOverlapping().size() == 2) {
-            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping().get(1)));
-            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping().get(0)));
-          } else {
-            throw new RuntimeException("panic");
-          }
-          destScanActive = false; // go on to next source entry
-          break;
-        case bSubsumesA: // fall through
-          destList.remove(destIndex);
-          if (iResult.getBNonOverlapping().size() == 1) {
+            destScanActive = false; // go on to next source entry
+            break;
+          case bSubsumesA: // fall through
+            destList.remove(destIndex);
+            if (iResult.getBNonOverlapping().size() == 1) {
+              sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
+              destList.add(
+                  destIndex,
+                  oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+            } else if (iResult.getBNonOverlapping().size() == 2) {
+              sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping().get(1)));
+              destList.add(
+                  destIndex,
+                  oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
+              sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping().get(0)));
+            } else {
+              throw new RuntimeException("panic");
+            }
+            destScanActive = false; // go on to next source entry
+            break;
+          case wrappedPartial:
+            // below is from abPartial
+            destList.remove(destIndex);
+            destList.add(
+                destIndex,
+                oldDestEntry
+                    .replaceRegion(iResult.getOverlapping().get(1))
+                    .addOwners(oldSourceEntry));
+            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
+            destList.add(
+                destIndex,
+                oldDestEntry
+                    .replaceRegion(iResult.getOverlapping().get(0))
+                    .addOwners(oldSourceEntry));
             sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
-            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-          } else if (iResult.getBNonOverlapping().size() == 2) {
-            sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping().get(1)));
-            destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getOverlapping()).addOwners(oldSourceEntry));
-            sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping().get(0)));
-          } else {
+            destScanActive = false; // go on to next source entry
+            break;
+          case nonIdenticalAllRingspace:
+            // This case is prevented by the fact RingRegion normalizes all all-ringspace regions
             throw new RuntimeException("panic");
-          }
-          destScanActive = false; // go on to next source entry
-          break;
-        case wrappedPartial:
-          // below is from abPartial
-          destList.remove(destIndex);
-          destList.add(destIndex,
-              oldDestEntry.replaceRegion(iResult.getOverlapping().get(1)).addOwners(oldSourceEntry));
-          destList.add(destIndex, oldDestEntry.replaceRegion(iResult.getANonOverlapping()));
-          destList.add(destIndex,
-              oldDestEntry.replaceRegion(iResult.getOverlapping().get(0)).addOwners(oldSourceEntry));
-          sourceList.add(0, oldSourceEntry.replaceRegion(iResult.getBNonOverlapping()));
-          destScanActive = false; // go on to next source entry
-          break;
-        case nonIdenticalAllRingspace:
-          // This case is prevented by the fact RingRegion normalizes all all-ringspace regions
-          throw new RuntimeException("panic");
-        default:
-          throw new RuntimeException("panic");
+          default:
+            throw new RuntimeException("panic");
         }
       }
       if (destScanActive) { // if we didn't add it, then add here
         destList.add(insertionIndex, oldSourceEntry);
-        //destList.add(oldSourceEntry);
-        //Collections.sort(destList, RingEntryPositionComparator.instance);
+        // destList.add(oldSourceEntry);
+        // Collections.sort(destList, RingEntryPositionComparator.instance);
       }
     }
     RingEntry.ensureEntryRegionsDisjoint(destList);
     if (debug) {
       log.debug("merge complete: **************");
-      log.debug("{}" , RingEntry.toString(destList));
+      log.debug("{}", RingEntry.toString(destList));
       log.debug("======================================");
       log.debug("");
     }
@@ -587,17 +617,19 @@ public class RingTree {
     List<RingEntry> projectedList;
 
     if (debug) {
-      log.debug("projectEntryList " , parent);
+      log.debug("projectEntryList ", parent);
       log.debug(RingEntry.toString(entryList));
       log.debug("");
     }
     projectedList = new ArrayList<>();
     for (RingEntry entry : entryList) {
-      projectedRegion = LongRingspace.mapChildRegionToParentRegion(RingRegion.allRingspace, entry.getRegion(), parent);
+      projectedRegion =
+          LongRingspace.mapChildRegionToParentRegion(
+              RingRegion.allRingspace, entry.getRegion(), parent);
       projectedList.add(entry.replaceRegion(projectedRegion));
     }
     if (debug) {
-      log.debug("out projectEntryList " , parent);
+      log.debug("out projectEntryList ", parent);
       log.debug(RingEntry.toString(projectedList));
       log.debug("");
     }
@@ -605,12 +637,14 @@ public class RingTree {
   }
 
   private List<RingEntry> cleanupList(RingRegion ringspace, List<RingEntry> dirty) {
-    if (Math.abs(RingRegion.getTotalSize(RingEntry.getRegions(dirty)) - ringspace.getSize()) > allowedError) {
+    if (Math.abs(RingRegion.getTotalSize(RingEntry.getRegions(dirty)) - ringspace.getSize())
+        > allowedError) {
       log.error("ringspace");
-      log.error("{}",ringspace);
+      log.error("{}", ringspace);
       log.error("RingEntry.toString(dirty)");
       log.error(RingEntry.toString(dirty));
-      log.error("RingRegion.getTotalSize(RingEntry.getRegions(dirty)) {}",
+      log.error(
+          "RingRegion.getTotalSize(RingEntry.getRegions(dirty)) {}",
           RingRegion.getTotalSize(RingEntry.getRegions(dirty)));
       log.error("ringspace.getSize() {}", ringspace.getSize());
       throw new RuntimeException("Size error exceeds allowed limit");
@@ -635,21 +669,24 @@ public class RingTree {
           error = Math.abs(LongRingspace.nextPoint(r1.getEnd()) - r2.getStart());
           if (error != 0) {
             if (error > allowedContiquityError) {
-              log.error("{}",r1);
-              log.error("{}",r2);
+              log.error("{}", r1);
+              log.error("{}", r2);
               throw new RuntimeException("Contiguity error exceeds allowed limit");
             } else {
               clean.add(
-                  dirty.get(i).replaceRegion(new RingRegion(r1.getStart(), LongRingspace.prevPoint(r2.getStart()))));
-                            /*
-                            if (r1.getSize() >= r2.getSize()) {
-                                clean.add(dirty.get(i).replaceRegion(new RingRegion(r1.getStart(), LongRingspace
-                                .prevPoint(r2.getStart()))));
-                            } else {
-                                //clean.add(dirty.get(j).replaceRegion(new RingRegion(LongRingspace.nextPoint(r1
-                                .getEnd()), r2.getEnd())));
-                            }
-                            */
+                  dirty
+                      .get(i)
+                      .replaceRegion(
+                          new RingRegion(r1.getStart(), LongRingspace.prevPoint(r2.getStart()))));
+              /*
+              if (r1.getSize() >= r2.getSize()) {
+                  clean.add(dirty.get(i).replaceRegion(new RingRegion(r1.getStart(), LongRingspace
+                  .prevPoint(r2.getStart()))));
+              } else {
+                  //clean.add(dirty.get(j).replaceRegion(new RingRegion(LongRingspace.nextPoint(r1
+                  .getEnd()), r2.getEnd())));
+              }
+              */
             }
           } else {
             clean.add(dirty.get(i));
@@ -713,13 +750,13 @@ public class RingTree {
   }
 
   public void testDistance(String id1, String id2) {
-    log.info("{} {} {}",id1 , id2,topology.getDistanceByID(id1, id2));
+    log.info("{} {} {}", id1, id2, topology.getDistanceByID(id1, id2));
   }
 
   public void testCoordinate(long coordinate, String pov) {
-    log.info("{}",coordinate);
+    log.info("{}", coordinate);
     for (Node node : getStorageNodesOrdered(coordinate, pov)) {
-      log.info("{} ",node);
+      log.info("{} ", node);
     }
     log.info("");
   }

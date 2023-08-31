@@ -34,5 +34,4 @@ public class NoopAuthorizerImpl extends Authorizer {
       return Authorizer.createAuthFailedResult(AuthorizationFailedAction.GO_WITHOUT_AUTH, null);
     }
   }
-
 }

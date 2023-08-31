@@ -57,6 +57,7 @@ public interface AsyncKeyedOperation<K> extends AsyncOperation {
    * @return the OperationState for all keys in this operation
    */
   public Map<K, OperationState> getOperationStateMap();
+
   public Map<K, OpResult> getOpResultMap();
 
   // NOTE: must not return null

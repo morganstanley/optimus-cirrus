@@ -17,8 +17,8 @@ import com.ms.silverking.cloud.dht.RetrievalOptions;
 import com.ms.silverking.cloud.dht.client.OpTimeoutController;
 
 /**
- * Represents a retrieval of some type of data or metadata from the DHT.
- * Semantics depend on the type of retrieval and the RetrievalOptions.
+ * Represents a retrieval of some type of data or metadata from the DHT. Semantics depend on the
+ * type of retrieval and the RetrievalOptions.
  */
 class RetrievalOperation<K> extends KeyedNamespaceOperation<K> {
   /**
@@ -28,7 +28,8 @@ class RetrievalOperation<K> extends KeyedNamespaceOperation<K> {
    * @param retrievalType
    * @param retrievalOptions
    */
-  RetrievalOperation(ClientNamespace namespace, Collection<K> keys, RetrievalOptions retrievalOptions) {
+  RetrievalOperation(
+      ClientNamespace namespace, Collection<K> keys, RetrievalOptions retrievalOptions) {
     super(ClientOpType.RETRIEVE, namespace, keys, retrievalOptions);
   }
 

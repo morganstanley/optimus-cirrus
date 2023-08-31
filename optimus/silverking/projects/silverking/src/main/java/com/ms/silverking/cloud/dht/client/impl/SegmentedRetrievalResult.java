@@ -27,8 +27,11 @@ class SegmentedRetrievalResult<V> extends RetrievalResultBase<V> {
   private final ByteBuffer[] buffers;
   private final OpResult opResult;
 
-  public SegmentedRetrievalResult(MetaData metaData, BufferSourceDeserializer<V> valueDeserializer,
-      ByteBuffer[] buffers, OpResult opResult) {
+  public SegmentedRetrievalResult(
+      MetaData metaData,
+      BufferSourceDeserializer<V> valueDeserializer,
+      ByteBuffer[] buffers,
+      OpResult opResult) {
     super(valueDeserializer);
     this.metaData = metaData;
     this.buffers = buffers;
@@ -45,10 +48,11 @@ class SegmentedRetrievalResult<V> extends RetrievalResultBase<V> {
     if (value == valueNotSet) {
       // FUTURE - have an option to perform an eager deserialization
       if (buffers != null && buffers.length != 0) {
-        //System.out.println("getValue()");
-        //for (ByteBuffer buffer : buffers) {
-        //    System.out.println(buffer +"\t"+ StringUtil.byteArrayToHexString(buffer.array(), 0, buffer.limit()));
-        //}
+        // System.out.println("getValue()");
+        // for (ByteBuffer buffer : buffers) {
+        //    System.out.println(buffer +"\t"+ StringUtil.byteArrayToHexString(buffer.array(), 0,
+        // buffer.limit()));
+        // }
         value = valueDeserializer.deserialize(buffers);
       } else {
         value = null;

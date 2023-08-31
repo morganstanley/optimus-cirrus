@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Functionality common to all Cuckoo hash table implementations.
  *
- * FUTURE: complete refactoring to leverage CuckooBase
+ * <p>FUTURE: complete refactoring to leverage CuckooBase
  */
 public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
   // config
@@ -39,7 +39,7 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
 
   protected static final int offsetIndexShift = 32;
 
-  private static final int[] base2Masks = { 0, 0x0, 0x1, 0, 0x3, 0, 0, 0, 0x7 };
+  private static final int[] base2Masks = {0, 0x0, 0x1, 0, 0x3, 0, 0, 0, 0x7};
 
   protected static final boolean debugCycle = false;
   protected static final boolean quickCheck = true;
@@ -62,7 +62,7 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
     this.entriesPerBucket = cuckooConfig.getEntriesPerBucket();
     this.cuckooLimit = cuckooConfig.getCuckooLimit();
     subTableBuckets = cuckooConfig.getNumSubTableBuckets();
-    //subTables = new SubTableBase[numSubTables];
+    // subTables = new SubTableBase[numSubTables];
     subTablesMask = base2Masks[numSubTables];
     entriesMask = base2Masks[entriesPerBucket];
   }
@@ -123,16 +123,13 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
   }
 
   public void displaySizes() {
-    log.info("totalEntries: {}" , totalEntries);
+    log.info("totalEntries: {}", totalEntries);
     for (int i = 0; i < subTables.length; i++) {
-      log.info("{} {}",i , subTables[i].size());
+      log.info("{} {}", i, subTables[i].size());
     }
   }
 
-  /**
-   * CuckooBase SubTable. Each SubTable maintains a bucketed
-   * hash table.
-   */
+  /** CuckooBase SubTable. Each SubTable maintains a bucketed hash table. */
   abstract class SubTableBase {
     protected final int singleEntrySize;
     protected final int bufferSizeLongs;
@@ -145,7 +142,8 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
 
     SubTableBase(int numBuckets, int entriesPerBucket, int singleEntrySize) {
       if (Integer.bitCount(numBuckets) != 1) {
-        throw new RuntimeException("Supplied numBuckets must be a perfect power of 2: " + numBuckets);
+        throw new RuntimeException(
+            "Supplied numBuckets must be a perfect power of 2: " + numBuckets);
       }
       this.singleEntrySize = singleEntrySize;
       this.entriesPerBucket = entriesPerBucket;
@@ -177,8 +175,8 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
     }
 
     /**
-     * Given a bucketIndex and a bucketEntryIndex compute the
-     * hash table index in the hash table array
+     * Given a bucketIndex and a bucketEntryIndex compute the hash table index in the hash table
+     * array
      *
      * @param bucketIndex
      * @param bucketEntryIndex
@@ -186,7 +184,7 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
      */
     protected int getHTEntryIndex(int bucketIndex, int bucketEntryIndex) {
       return bucketSizeLongs * bucketIndex + entrySizeLongs * bucketEntryIndex;
-      //return (index << 2) + bucketIndex; // saves about 1 ns
+      // return (index << 2) + bucketIndex; // saves about 1 ns
     }
 
     abstract boolean remove(long msl, long lsl);
@@ -207,18 +205,14 @@ public abstract class DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
       moveToNonEmpty();
     }
 
-    /**
-     * true if the current entry is empty
-     */
+    /** true if the current entry is empty */
     abstract boolean curIsEmpty();
 
     public boolean hasNext() {
       return !done;
     }
 
-    /**
-     * Move to a non-empty hash entry. Assert done if no such entry can be found.
-     */
+    /** Move to a non-empty hash entry. Assert done if no such entry can be found. */
     void moveToNonEmpty() {
       if (debugIterator) {
         System.out.println("in moveToNonEmpty");

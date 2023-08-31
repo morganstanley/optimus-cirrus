@@ -15,7 +15,8 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.OpResult;
 
 class FragmentedPutValue extends FragmentedValue<OpResult> {
-  FragmentedPutValue(DHTKey[] keys, DHTKey relayKey, ActiveKeyedOperationResultListener<OpResult> parent) {
+  FragmentedPutValue(
+      DHTKey[] keys, DHTKey relayKey, ActiveKeyedOperationResultListener<OpResult> parent) {
     super(keys, relayKey, parent, true);
   }
 

@@ -21,9 +21,7 @@ import java.util.TreeMap;
 
 import com.ms.silverking.util.Mutability;
 
-/**
- * Basic navigable ring. Mutable during creation; immutable afterwards.
- */
+/** Basic navigable ring. Mutable during creation; immutable afterwards. */
 public class LongNavigableMapRing<T> implements Ring<Long, T> {
   private final NavigableMap<Long, T> ringMap;
   private Mutability mutability;
@@ -112,48 +110,48 @@ public class LongNavigableMapRing<T> implements Ring<Long, T> {
     ringMap.remove(entry.getKey());
     return entry.getValue();
   }
-    
-    /*
-    public enum Mode {SUBSEQUENT, ROTATE};
-    @Override
-    public List<T> get(Long key, int numMembers) {
-        Map.Entry<Long, T> entry;
-        List<T>    members;
-        
-        if (numMembers < 1) {
-            throw new RuntimeException("numMembers < 1");
-        }
-        members = new ArrayList<T>(numMembers);
-        entry = getEntry(key);
-        members.add(entry.getValue());
-        switch (mode) {
-        case SUBSEQUENT: addSubsequent(members, entry, numMembers - 1); break;
-        case ROTATE: addRotated(members, entry, numMembers - 1); break;
-        default: throw new RuntimeException("panic");
-        }
-        return members;
-    }
-    
-    private void addSubsequent(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
-        for (int i = 0; i < numSubsequent; i++) {
-            entry = ringMap.higherEntry(entry.getKey());
-            if (entry == null) {
-                entry = ringMap.firstEntry();
-            }
-            members.add(entry.getValue());
-        }
-    }
-    
-    private void addRotated(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
-        for (int i = 0; i < numSubsequent; i++) {
-            Long    rotated;
-            
-            rotated = Long.rotateRight(entry.getKey(), 1);
-            entry = getEntry(rotated);
-            members.add(entry.getValue());
-        }
-    }
-    */
+
+  /*
+  public enum Mode {SUBSEQUENT, ROTATE};
+  @Override
+  public List<T> get(Long key, int numMembers) {
+      Map.Entry<Long, T> entry;
+      List<T>    members;
+
+      if (numMembers < 1) {
+          throw new RuntimeException("numMembers < 1");
+      }
+      members = new ArrayList<T>(numMembers);
+      entry = getEntry(key);
+      members.add(entry.getValue());
+      switch (mode) {
+      case SUBSEQUENT: addSubsequent(members, entry, numMembers - 1); break;
+      case ROTATE: addRotated(members, entry, numMembers - 1); break;
+      default: throw new RuntimeException("panic");
+      }
+      return members;
+  }
+
+  private void addSubsequent(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
+      for (int i = 0; i < numSubsequent; i++) {
+          entry = ringMap.higherEntry(entry.getKey());
+          if (entry == null) {
+              entry = ringMap.firstEntry();
+          }
+          members.add(entry.getValue());
+      }
+  }
+
+  private void addRotated(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
+      for (int i = 0; i < numSubsequent; i++) {
+          Long    rotated;
+
+          rotated = Long.rotateRight(entry.getKey(), 1);
+          entry = getEntry(rotated);
+          members.add(entry.getValue());
+      }
+  }
+  */
 
   @Override
   public Collection<T> getMembers() {

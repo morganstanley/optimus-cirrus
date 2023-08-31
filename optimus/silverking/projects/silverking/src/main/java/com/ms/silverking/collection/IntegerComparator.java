@@ -16,8 +16,7 @@ import java.util.Comparator;
 public class IntegerComparator implements Comparator<Integer> {
   public static final IntegerComparator instance = new IntegerComparator();
 
-  public IntegerComparator() {
-  }
+  public IntegerComparator() {}
 
   @Override
   public int compare(Integer o1, Integer o2) {

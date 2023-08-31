@@ -40,8 +40,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Simplifies creation of a static ring. Intended for use by simplistic DHT instances
- * (e.g. singleton instances or static DHTs.)
+ * Simplifies creation of a static ring. Intended for use by simplistic DHT instances (e.g.
+ * singleton instances or static DHTs.)
  */
 public class StaticRingCreator {
   private static final String hostGroupName = "SimpleHostGroup";
@@ -54,7 +54,10 @@ public class StaticRingCreator {
     public final HostGroupTable hostGroupTable;
     public final String hostGroupName;
 
-    RingCreationResults(String exclusionSpecsName, String hostGroupTableName, HostGroupTable hostGroupTable,
+    RingCreationResults(
+        String exclusionSpecsName,
+        String hostGroupTableName,
+        HostGroupTable hostGroupTable,
         String hostGroupName) {
       this.exclusionSpecsName = exclusionSpecsName;
       this.hostGroupTableName = hostGroupTableName;
@@ -66,16 +69,20 @@ public class StaticRingCreator {
   /**
    * Create a static ring with primary replication only
    *
-   * @param servers     set of servers
+   * @param servers set of servers
    * @param replication primary replication factor
    */
-  public static RingCreationResults createStaticRing(String ringName, ZooKeeperConfig zkConfig, Set<String> servers,
-      int replication) {
+  public static RingCreationResults createStaticRing(
+      String ringName, ZooKeeperConfig zkConfig, Set<String> servers, int replication) {
     return createStaticRing(ringName, zkConfig, servers, replication, new UUIDBase(false));
   }
 
-  public static RingCreationResults createStaticRing(String ringName, ZooKeeperConfig zkConfig, Set<String> servers,
-      int replication, UUIDBase myID) {
+  public static RingCreationResults createStaticRing(
+      String ringName,
+      ZooKeeperConfig zkConfig,
+      Set<String> servers,
+      int replication,
+      UUIDBase myID) {
     try {
       MetaClient mc;
       com.ms.silverking.cloud.meta.MetaClient cloudMC;
@@ -96,19 +103,26 @@ public class StaticRingCreator {
       topology = StaticTopologyCreator.createTopology("topology." + myID, servers);
       exclusionSpecsName = "exclusionSpecs." + myID;
       hostGroupTableName = "hostGroupTable." + myID;
-      cloudConfig = new CloudConfiguration(topology.getName(), exclusionSpecsName, hostGroupTableName);
+      cloudConfig =
+          new CloudConfiguration(topology.getName(), exclusionSpecsName, hostGroupTableName);
       cloudMC = new com.ms.silverking.cloud.meta.MetaClient(cloudConfig, zkConfig);
       new TopologyZK(cloudMC).writeToZK(topology, null);
       new ExclusionZK(cloudMC).writeToZK(ExclusionSet.emptyExclusionSet(0));
 
       mc = new MetaClient(NamedRingConfiguration.emptyTemplate.ringName(ringName), zkConfig);
-      ringConfig = new RingConfiguration(cloudConfig, "weightSpecsName", StaticTopologyCreator.parentID,
-          SimpleStoragePolicyCreator.storagePolicyGroupName, SimpleStoragePolicyCreator.storagePolicyName, null);
+      ringConfig =
+          new RingConfiguration(
+              cloudConfig,
+              "weightSpecsName",
+              StaticTopologyCreator.parentID,
+              SimpleStoragePolicyCreator.storagePolicyGroupName,
+              SimpleStoragePolicyCreator.storagePolicyName,
+              null);
       new RingConfigurationZK(mc).writeToZK(ringConfig, null);
 
       namedRingConfig = new NamedRingConfiguration(ringName, ringConfig);
       mc = new MetaClient(namedRingConfig, zkConfig);
-      log.info("{}",zkConfig);
+      log.info("{}", zkConfig);
 
       ringConfigVersion = 0;
       weightSpecs = new WeightSpecifications(0);
@@ -120,10 +134,19 @@ public class StaticRingCreator {
       hostGroupTable = HostGroupTable.createHostGroupTable(servers, hostGroupName);
       new HostGroupTableZK(cloudMC).writeToZK(hostGroupTable, null);
 
-      recipe = new RingTreeRecipe(topology, StaticTopologyCreator.parentID, weightSpecs, exclusionSet,
-          storagePolicyGroup, SimpleStoragePolicyCreator.storagePolicyName, hostGroupTable,
-          ImmutableSet.of(hostGroupName), ringConfigVersion, DHTUtil.currentTimeMillis());
-      log.info("Recipe.ringParent: {}" , recipe.ringParent);
+      recipe =
+          new RingTreeRecipe(
+              topology,
+              StaticTopologyCreator.parentID,
+              weightSpecs,
+              exclusionSet,
+              storagePolicyGroup,
+              SimpleStoragePolicyCreator.storagePolicyName,
+              hostGroupTable,
+              ImmutableSet.of(hostGroupName),
+              ringConfigVersion,
+              DHTUtil.currentTimeMillis());
+      log.info("Recipe.ringParent: {}", recipe.ringParent);
 
       RingTree ringTree;
       String newInstancePath;
@@ -133,18 +156,18 @@ public class StaticRingCreator {
       SingleRingZK.writeTree(mc, topology, newInstancePath, ringTree);
 
       if (TopoRingConstants.verbose) {
-        log.info("{}",ringTree);
+        log.info("{}", ringTree);
         log.info("Building complete");
       }
-      return new RingCreationResults(exclusionSpecsName, hostGroupTableName, hostGroupTable, hostGroupName);
+      return new RingCreationResults(
+          exclusionSpecsName, hostGroupTableName, hostGroupTable, hostGroupName);
     } catch (IOException ioe) {
-      log.error("",ioe);
+      log.error("", ioe);
       return null;
     } catch (KeeperException ke) {
-      log.error("",ke);
+      log.error("", ke);
       return null;
     }
-
   }
 
   public static void main(String[] args) {

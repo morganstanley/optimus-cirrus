@@ -12,15 +12,14 @@
 package com.ms.silverking.cloud.dht.client;
 
 /**
- * <p>Represents data returned from a retrieval operation. Depending on the type of
- * retrieval, this object may contain an actual value and/or meta data for the stored value.
- * For EXISTENCE retrievals, a non-null object with no value and potentially no meta-data
- * will be returned.</p>
+ * Represents data returned from a retrieval operation. Depending on the type of retrieval, this
+ * object may contain an actual value and/or meta data for the stored value. For EXISTENCE
+ * retrievals, a non-null object with no value and potentially no meta-data will be returned.
  *
- * <p>This class extends StoredValueBase with convenience forms of meta data methods.</p>
+ * <p>This class extends StoredValueBase with convenience forms of meta data methods.
  *
  * <p>This class also adds a guarantee that meta data retrieved is stored distinctly from the value.
- * Thus values may be garbage collected independently from the meta data.</p>
+ * Thus values may be garbage collected independently from the meta data.
  *
  * @param <V> value type
  */

@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht;
 
-/**
- * Options for Delete operations.
- */
+/** Options for Delete operations. */
 public class DeletionOptions {
   private final long version;
 

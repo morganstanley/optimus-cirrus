@@ -51,7 +51,8 @@ public class IpAliasConfigurationZk extends MetaToolModuleBase<IpAliasConfigurat
   }
 
   @Override
-  public IpAliasConfiguration readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public IpAliasConfiguration readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     String base;
     String vBase;
 
@@ -70,9 +71,11 @@ public class IpAliasConfigurationZk extends MetaToolModuleBase<IpAliasConfigurat
   }
 
   @Override
-  public String writeToZK(IpAliasConfiguration instance, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(IpAliasConfiguration instance, MetaToolOptions options)
+      throws IOException, KeeperException {
     verifyOptions(options);
     zk.ensureCreated(base + "/" + options.name);
-    return zk.createString(base + "/" + options.name + "/", instance.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
+    return zk.createString(
+        base + "/" + options.name + "/", instance.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
   }
 }

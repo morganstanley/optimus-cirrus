@@ -81,7 +81,7 @@ public class DirReader {
     byte[] d;
     d = dirInMem.serialize();
     log.info("{}", StringUtil.byteArrayToHexString(rawDir));
-    //System.out.printf("%s\n", StringUtil.byteArrayToHexString(d));
+    // System.out.printf("%s\n", StringUtil.byteArrayToHexString(d));
     log.info("serialization complete");
     dir = new DirectoryInPlace(d, 0, d.length);
     for (int i = 0; i < dir.getNumEntries(); i++) {

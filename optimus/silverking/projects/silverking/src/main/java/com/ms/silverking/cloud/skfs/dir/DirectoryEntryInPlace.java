@@ -34,7 +34,8 @@ public class DirectoryEntryInPlace extends DirectoryEntryBase {
     if (nameLength < 0) {
       log.info("{}={}+{}", offset + sizeOffset, offset, sizeOffset);
       log.info("{}", StringUtil.byteArrayToHexString(buf));
-      log.info("{}",
+      log.info(
+          "{}",
           StringUtil.byteArrayToHexString(buf, offset + sizeOffset, NumConversion.BYTES_PER_SHORT));
     }
   }
@@ -106,7 +107,7 @@ public class DirectoryEntryInPlace extends DirectoryEntryBase {
 
   public ByteString getNameAsByteString() {
     return new ByteString(buf, getNameOffset(), getNameLength());
-    //return ByteString.copy(getNameAsBytes());
+    // return ByteString.copy(getNameAsBytes());
   }
 
   @Override
@@ -136,10 +137,10 @@ public class DirectoryEntryInPlace extends DirectoryEntryBase {
     if (updateVersion > getVersion()) {
       setVersion(updateVersion);
       setStatus(update.getStatus());
-      //System.out.printf("fresh update\n");
+      // System.out.printf("fresh update\n");
       return true;
     } else {
-      //System.out.printf("stale update\n");
+      // System.out.printf("stale update\n");
       // Stale update; ignore
       return false;
     }
@@ -149,9 +150,9 @@ public class DirectoryEntryInPlace extends DirectoryEntryBase {
     int length;
 
     length = getLengthBytes();
-    //System.out.printf("%d\n", length);
-    //System.out.printf("%d %d\n", offset, buf.length);
-    //System.out.printf("%d %d\n", destOffset, destBuf.length);
+    // System.out.printf("%d\n", length);
+    // System.out.printf("%d %d\n", offset, buf.length);
+    // System.out.printf("%d %d\n", destOffset, destBuf.length);
     System.arraycopy(buf, offset, destBuf, destOffset, length);
     return length;
   }

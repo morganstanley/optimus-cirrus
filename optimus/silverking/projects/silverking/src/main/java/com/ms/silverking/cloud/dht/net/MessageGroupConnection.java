@@ -22,18 +22,26 @@ import com.ms.silverking.net.async.QueueingConnection;
 import com.ms.silverking.net.async.QueueingConnectionLimitListener;
 import com.ms.silverking.net.async.SelectorController;
 
-public class MessageGroupConnection extends QueueingConnection<OutgoingMessageGroup, IncomingMessageGroup> {
+public class MessageGroupConnection
+    extends QueueingConnection<OutgoingMessageGroup, IncomingMessageGroup> {
   private final MessageGroupReceiver receiver;
 
-  public MessageGroupConnection(SocketChannel channel, SelectorController<MessageGroupConnection> selectorController,
-      ConnectionListener connectionListener, MessageGroupReceiver receiver,
-      QueueingConnectionLimitListener limitListener, int queueLimit) {
+  public MessageGroupConnection(
+      SocketChannel channel,
+      SelectorController<MessageGroupConnection> selectorController,
+      ConnectionListener connectionListener,
+      MessageGroupReceiver receiver,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit) {
     super(channel, selectorController, connectionListener, true, false, limitListener, queueLimit);
     this.receiver = receiver;
   }
 
-  public MessageGroupConnection(SocketChannel channel, SelectorController<MessageGroupConnection> selectorController,
-      ConnectionListener connectionListener, MessageGroupReceiver receiver) {
+  public MessageGroupConnection(
+      SocketChannel channel,
+      SelectorController<MessageGroupConnection> selectorController,
+      ConnectionListener connectionListener,
+      MessageGroupReceiver receiver) {
     this(channel, selectorController, connectionListener, receiver, null, Integer.MAX_VALUE);
   }
 
@@ -43,9 +51,11 @@ public class MessageGroupConnection extends QueueingConnection<OutgoingMessageGr
   }
 
   @Override
-  protected OutgoingMessageGroup wrapForSend(Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline) throws IOException {
-    return new OutgoingMessageGroup((MessageGroup) data, sendUUID, asyncSendListener, deadline, Priority.NORMAL);
+  protected OutgoingMessageGroup wrapForSend(
+      Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline)
+      throws IOException {
+    return new OutgoingMessageGroup(
+        (MessageGroup) data, sendUUID, asyncSendListener, deadline, Priority.NORMAL);
   }
 
   protected void readComplete(IncomingMessageGroup incomingMessageGroup) throws IOException {

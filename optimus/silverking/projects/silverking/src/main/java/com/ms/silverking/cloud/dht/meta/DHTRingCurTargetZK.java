@@ -23,8 +23,11 @@ import org.slf4j.LoggerFactory;
 public class DHTRingCurTargetZK {
   private final MetaClient mc;
 
-
-  public enum NodeType {Current, Target, Manager}
+  public enum NodeType {
+    Current,
+    Target,
+    Manager
+  }
 
   private static final int retries = 4;
   private static final int retrySleepMS = 2 * 1000;
@@ -49,47 +52,54 @@ public class DHTRingCurTargetZK {
   }
 
   private void ensureDataNodesExist() throws KeeperException {
-    mc.getZooKeeper().ensureCreated(MetaPaths.getInstanceCurRingAndVersionPairPath(mc.getDHTName()));
-    mc.getZooKeeper().ensureCreated(MetaPaths.getInstanceTargetRingAndVersionPairPath(mc.getDHTName()));
+    mc.getZooKeeper()
+        .ensureCreated(MetaPaths.getInstanceCurRingAndVersionPairPath(mc.getDHTName()));
+    mc.getZooKeeper()
+        .ensureCreated(MetaPaths.getInstanceTargetRingAndVersionPairPath(mc.getDHTName()));
   }
 
   public void setRingAndVersionPair(NodeType nodeType, String ringName, Pair<Long, Long> version)
       throws KeeperException {
     switch (nodeType) {
-    case Current:
-      setCurRingAndVersionPair(ringName, version);
-      break;
-    case Target:
-      setTargetRingAndVersionPair(ringName, version);
-      break;
-    case Manager:
-      setManagerRingAndVersionPair(ringName, version);
-      break;
-    default:
-      throw new RuntimeException("Panic");
+      case Current:
+        setCurRingAndVersionPair(ringName, version);
+        break;
+      case Target:
+        setTargetRingAndVersionPair(ringName, version);
+        break;
+      case Manager:
+        setManagerRingAndVersionPair(ringName, version);
+        break;
+      default:
+        throw new RuntimeException("Panic");
     }
   }
 
-  public Triple<String, Long, Long> getRingAndVersionPair(NodeType nodeType) throws KeeperException {
+  public Triple<String, Long, Long> getRingAndVersionPair(NodeType nodeType)
+      throws KeeperException {
     switch (nodeType) {
-    case Current:
-      return getCurRingAndVersionPair();
-    case Target:
-      return getTargetRingAndVersionPair();
-    case Manager:
-      return getManagerRingAndVersionPair();
-    default:
-      throw new RuntimeException("Panic");
+      case Current:
+        return getCurRingAndVersionPair();
+      case Target:
+        return getTargetRingAndVersionPair();
+      case Manager:
+        return getManagerRingAndVersionPair();
+      default:
+        throw new RuntimeException("Panic");
     }
   }
 
-  public void setCurRingAndVersionPair(String ringName, Pair<Long, Long> version) throws KeeperException {
+  public void setCurRingAndVersionPair(String ringName, Pair<Long, Long> version)
+      throws KeeperException {
     setCurRingAndVersionPair(ringName, version.getV1(), version.getV2());
   }
 
-  public void setCurRingAndVersionPair(String ringName, long ringConfigVersion, long configInstanceVersion)
-      throws KeeperException {
-    setRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion,
+  public void setCurRingAndVersionPair(
+      String ringName, long ringConfigVersion, long configInstanceVersion) throws KeeperException {
+    setRingAndVersionPair(
+        ringName,
+        ringConfigVersion,
+        configInstanceVersion,
         MetaPaths.getInstanceCurRingAndVersionPairPath(mc.getDHTName()));
   }
 
@@ -101,13 +111,17 @@ public class DHTRingCurTargetZK {
     return getRingAndVersion(MetaPaths.getInstanceCurRingAndVersionPairPath(mc.getDHTName()));
   }
 
-  public void setTargetRingAndVersionPair(String ringName, Pair<Long, Long> version) throws KeeperException {
+  public void setTargetRingAndVersionPair(String ringName, Pair<Long, Long> version)
+      throws KeeperException {
     setTargetRingAndVersionPair(ringName, version.getV1(), version.getV2());
   }
 
-  public void setTargetRingAndVersionPair(String ringName, long ringConfigVersion, long configInstanceVersion)
-      throws KeeperException {
-    setRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion,
+  public void setTargetRingAndVersionPair(
+      String ringName, long ringConfigVersion, long configInstanceVersion) throws KeeperException {
+    setRingAndVersionPair(
+        ringName,
+        ringConfigVersion,
+        configInstanceVersion,
         MetaPaths.getInstanceTargetRingAndVersionPairPath(mc.getDHTName()));
   }
 
@@ -115,13 +129,17 @@ public class DHTRingCurTargetZK {
     return getRingAndVersion(MetaPaths.getInstanceTargetRingAndVersionPairPath(mc.getDHTName()));
   }
 
-  public void setManagerRingAndVersionPair(String ringName, Pair<Long, Long> version) throws KeeperException {
+  public void setManagerRingAndVersionPair(String ringName, Pair<Long, Long> version)
+      throws KeeperException {
     setManagerRingAndVersionPair(ringName, version.getV1(), version.getV2());
   }
 
-  public void setManagerRingAndVersionPair(String ringName, long ringConfigVersion, long configInstanceVersion)
-      throws KeeperException {
-    setRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion,
+  public void setManagerRingAndVersionPair(
+      String ringName, long ringConfigVersion, long configInstanceVersion) throws KeeperException {
+    setRingAndVersionPair(
+        ringName,
+        ringConfigVersion,
+        configInstanceVersion,
         MetaPaths.getInstanceManagerRingAndVersionPairPath(mc.getDHTName()));
   }
 
@@ -129,7 +147,8 @@ public class DHTRingCurTargetZK {
     return getRingAndVersion(MetaPaths.getInstanceManagerRingAndVersionPairPath(mc.getDHTName()));
   }
 
-  private void setRingAndVersionPair(String ringName, long ringConfigVersion, long configInstanceVersion, String path)
+  private void setRingAndVersionPair(
+      String ringName, long ringConfigVersion, long configInstanceVersion, String path)
       throws KeeperException {
     int attemptIndex;
     boolean complete;
@@ -143,14 +162,19 @@ public class DHTRingCurTargetZK {
         if (!mc.getZooKeeper().exists(path)) {
           mc.getZooKeeper().create(path);
         }
-        stat = mc.getZooKeeper().set(path, nameAndVersionToBytes(ringName, ringConfigVersion, configInstanceVersion));
+        stat =
+            mc.getZooKeeper()
+                .set(
+                    path,
+                    nameAndVersionToBytes(ringName, ringConfigVersion, configInstanceVersion));
         if (debug) {
-          log.info("{}",path);
-          log.info("{}",stat);
+          log.info("{}", path);
+          log.info("{}", stat);
         }
         complete = true;
       } catch (KeeperException ke) {
-        log.error("Exception in DHTRingCurTargetZK.setRingAndVersion(). Attempt: {}" , attemptIndex,ke);
+        log.error(
+            "Exception in DHTRingCurTargetZK.setRingAndVersion(). Attempt: {}", attemptIndex, ke);
         if (attemptIndex >= retries) {
           throw ke;
         } else {
@@ -165,7 +189,8 @@ public class DHTRingCurTargetZK {
     return getRingAndVersion(path, null);
   }
 
-  private Triple<String, Long, Long> getRingAndVersion(String path, Stat stat) throws KeeperException {
+  private Triple<String, Long, Long> getRingAndVersion(String path, Stat stat)
+      throws KeeperException {
     if (!mc.getZooKeeper().exists(path)) {
       return null;
     } else {
@@ -180,7 +205,8 @@ public class DHTRingCurTargetZK {
     }
   }
 
-  public static byte[] nameAndVersionToBytes(String ringName, long ringConfigVersion, long configInstanceVersion) {
+  public static byte[] nameAndVersionToBytes(
+      String ringName, long ringConfigVersion, long configInstanceVersion) {
     byte[] nb;
     byte[] b;
 

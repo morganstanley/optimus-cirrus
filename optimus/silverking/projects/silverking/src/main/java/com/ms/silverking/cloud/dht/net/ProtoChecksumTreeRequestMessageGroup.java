@@ -27,26 +27,44 @@ public class ProtoChecksumTreeRequestMessageGroup extends ProtoMessageGroup {
   private static final int dataBufferIndex = 0;
   // room for UUID + targetCP + sourceCP + region start + region end + replica + localFlag
   private static final int dataBufferSize =
-      4 * NumConversion.BYTES_PER_LONG + 2 * ConvergencePoint.serializedSizeBytes + IPAndPort.SIZE_BYTES + 1;
+      4 * NumConversion.BYTES_PER_LONG
+          + 2 * ConvergencePoint.serializedSizeBytes
+          + IPAndPort.SIZE_BYTES
+          + 1;
   private static final int uuidMSLOffset = 0;
   private static final int uuidLSLOffset = uuidMSLOffset + NumConversion.BYTES_PER_LONG;
 
   private static final int targetCPOffset = uuidLSLOffset + NumConversion.BYTES_PER_LONG;
   private static final int sourceCPOffset = targetCPOffset + ConvergencePoint.serializedSizeBytes;
 
-  private static final int regionStartOffset = sourceCPOffset + ConvergencePoint.serializedSizeBytes;
+  private static final int regionStartOffset =
+      sourceCPOffset + ConvergencePoint.serializedSizeBytes;
   private static final int regionEndOffset = regionStartOffset + NumConversion.BYTES_PER_LONG;
 
   private static final int replicaOffset = regionEndOffset + NumConversion.BYTES_PER_LONG;
 
   private static final int localFlagOffset = replicaOffset + IPAndPort.SIZE_BYTES;
 
-  private static final int deadlineRelativeMillis = 25 * 60 * 1000; // For now, interpreted as a progress deadline,
+  private static final int deadlineRelativeMillis =
+      25 * 60 * 1000; // For now, interpreted as a progress deadline,
   // not at absolute op deadline
 
-  public ProtoChecksumTreeRequestMessageGroup(UUIDBase uuid, long context, ConvergencePoint targetCP,
-      ConvergencePoint curCP, byte[] originator, RingRegion ringRegion, IPAndPort replica, boolean localFlag) {
-    super(MessageType.CHECKSUM_TREE_REQUEST, uuid, context, originator, deadlineRelativeMillis, ForwardingMode.FORWARD);
+  public ProtoChecksumTreeRequestMessageGroup(
+      UUIDBase uuid,
+      long context,
+      ConvergencePoint targetCP,
+      ConvergencePoint curCP,
+      byte[] originator,
+      RingRegion ringRegion,
+      IPAndPort replica,
+      boolean localFlag) {
+    super(
+        MessageType.CHECKSUM_TREE_REQUEST,
+        uuid,
+        context,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD);
     dataByteBuffer = ByteBuffer.allocate(dataBufferSize);
     bufferList.add(dataByteBuffer);
     dataByteBuffer.putLong(uuid.getMostSignificantBits());
@@ -63,9 +81,23 @@ public class ProtoChecksumTreeRequestMessageGroup extends ProtoMessageGroup {
     dataByteBuffer.put(localFlag ? (byte) 1 : (byte) 0);
   }
 
-  public ProtoChecksumTreeRequestMessageGroup(UUIDBase uuid, long context, ConvergencePoint targetCP,
-      ConvergencePoint curCP, byte[] originator, RingRegion ringRegion, boolean localFlag) {
-    this(uuid, context, targetCP, curCP, originator, ringRegion, IPAndPort.emptyIPAndPort, localFlag);
+  public ProtoChecksumTreeRequestMessageGroup(
+      UUIDBase uuid,
+      long context,
+      ConvergencePoint targetCP,
+      ConvergencePoint curCP,
+      byte[] originator,
+      RingRegion ringRegion,
+      boolean localFlag) {
+    this(
+        uuid,
+        context,
+        targetCP,
+        curCP,
+        originator,
+        ringRegion,
+        IPAndPort.emptyIPAndPort,
+        localFlag);
   }
 
   @Override

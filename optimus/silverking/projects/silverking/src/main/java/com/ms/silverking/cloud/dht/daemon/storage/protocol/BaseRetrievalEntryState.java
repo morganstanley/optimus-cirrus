@@ -20,9 +20,8 @@ public abstract class BaseRetrievalEntryState {
   protected static AbsMillisTimeSource absMillisTimeSource;
 
   private long nextTimeoutAbsMillis;
-  private static final int relTimeoutMillis = PropertiesHelper.systemHelper.getInt(
-      DHTConstants.internalRelTimeoutMillisProp,
-      100);
+  private static final int relTimeoutMillis =
+      PropertiesHelper.systemHelper.getInt(DHTConstants.internalRelTimeoutMillisProp, 100);
   static final int minRelTimeoutMillis = relTimeoutMillis;
 
   public static void setAbsMillisTimeSource(AbsMillisTimeSource _absMillisTimeSource) {
@@ -44,12 +43,13 @@ public abstract class BaseRetrievalEntryState {
   public abstract boolean prevReplicaSameAsCurrent();
 
   protected void computeNextReplicaTimeout() {
-    nextTimeoutAbsMillis = relTimeoutMillis >= 0
-                           ? absMillisTimeSource.absTimeMillis() + relTimeoutMillis
-                           : Long.MAX_VALUE;
+    nextTimeoutAbsMillis =
+        relTimeoutMillis >= 0
+            ? absMillisTimeSource.absTimeMillis() + relTimeoutMillis
+            : Long.MAX_VALUE;
   }
 
-  //timeout
+  // timeout
   public boolean hasTimedOut(long curTimeMillis) {
     return !isComplete() && curTimeMillis > nextTimeoutAbsMillis;
   }

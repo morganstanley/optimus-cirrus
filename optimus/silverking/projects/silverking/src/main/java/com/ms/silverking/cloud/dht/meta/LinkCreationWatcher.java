@@ -26,7 +26,8 @@ public class LinkCreationWatcher implements NodeCreationListener {
 
   private static Logger log = LoggerFactory.getLogger(LinkCreationWatcher.class);
 
-  public LinkCreationWatcher(SilverKingZooKeeperClient zk, String basePath, long child, LinkCreationListener listener) {
+  public LinkCreationWatcher(
+      SilverKingZooKeeperClient zk, String basePath, long child, LinkCreationListener listener) {
     this.zk = zk;
     path = basePath + "/" + Long.toHexString(child);
     this.child = child;
@@ -48,7 +49,7 @@ public class LinkCreationWatcher implements NodeCreationListener {
       }
       listener.linkCreated(child, parent);
     } else {
-      log.info("Bogus LinkCreationWathcer.nodeCreated() path: {}" , path);
+      log.info("Bogus LinkCreationWathcer.nodeCreated() path: {}", path);
     }
   }
 }

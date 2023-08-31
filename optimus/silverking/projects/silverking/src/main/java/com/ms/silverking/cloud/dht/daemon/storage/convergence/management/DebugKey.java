@@ -56,15 +56,18 @@ public class DebugKey {
 
   private static Logger log = LoggerFactory.getLogger(DebugKey.class);
 
-
-  public DebugKey(SKGridConfiguration gc, String namespace) throws IOException, KeeperException, ClientException {
+  public DebugKey(SKGridConfiguration gc, String namespace)
+      throws IOException, KeeperException, ClientException {
     this.gc = gc;
     this.namespace = namespace;
     keyCreator = new StringMD5KeyCreator();
     this.out = System.out;
 
-    metaUtil = new MetaUtil(gc.getClientDHTConfiguration().getName(), gc.getClientDHTConfiguration().getZKConfig(),
-        MetaUtilOptions.dhtVersionUnspecified);
+    metaUtil =
+        new MetaUtil(
+            gc.getClientDHTConfiguration().getName(),
+            gc.getClientDHTConfiguration().getZKConfig(),
+            MetaUtilOptions.dhtVersionUnspecified);
     dhtMC = metaUtil.getDHTMC();
     ringParentName = metaUtil.getRingConfiguration().getRingParentName();
 
@@ -79,7 +82,8 @@ public class DebugKey {
     debugConvergence(key, Triple.of(ringName, sourceRing), Triple.of(ringName, targetRing));
   }
 
-  public void debugConvergence(String key, Triple<String, Long, Long> sourceRing, Triple<String, Long, Long> targetRing)
+  public void debugConvergence(
+      String key, Triple<String, Long, Long> sourceRing, Triple<String, Long, Long> targetRing)
       throws IOException, KeeperException, ClientException {
     ResolvedReplicaMap sMap;
     ResolvedReplicaMap tMap;
@@ -101,7 +105,8 @@ public class DebugKey {
     searchForKey(key, dhtKey, tMap);
   }
 
-  private void searchForKey(String key, DHTKey dhtKey, ResolvedReplicaMap map) throws ClientException {
+  private void searchForKey(String key, DHTKey dhtKey, ResolvedReplicaMap map)
+      throws ClientException {
     PrimarySecondaryIPListPair psIPLists;
 
     log.info("{}", map.getRegion(dhtKey));
@@ -135,7 +140,7 @@ public class DebugKey {
     if (storedValue == null) {
       return false;
     } else {
-      //out.println(storedValue.getMetaData());
+      // out.println(storedValue.getMetaData());
       return true;
     }
   }
@@ -147,11 +152,13 @@ public class DebugKey {
     log.info("{}", psIPLists);
   }
 
-  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     return readTree(ring).getResolvedMap(ringParentName, new ReplicaNaiveIPPrioritizer());
   }
 
-  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     MetaClient ringMC;
     long ringConfigVersion;
     long configInstanceVersion;

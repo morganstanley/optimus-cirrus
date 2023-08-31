@@ -26,9 +26,7 @@ import java.nio.file.Paths;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -157,9 +155,69 @@ public class ClassMonitorInjector implements ClassFileTransformer {
           "optimus/deps/ResourceAccessType",
           "optimus/deps/ResourceDependency",
           "optimus/deps/VisitContext",
-          "optimus/dtc/DtcResourceDependency",
-          "optimus/dtc/DtcCollectedDependencies",
-          "optimus/dtc/DtcCollectedDependencies$",
+          "optimus/dtc/DependencyCleanUpEffect",
+          "optimus/dtc/DependenciesCollator$",
+          "optimus/dtc/DependenciesCollector",
+          "optimus/dtc/DependenciesCollector$",
+          "optimus/dtc/DependenciesNarrator",
+          "optimus/dtc/DependenciesNormalizer",
+          "optimus/dtc/DependenciesSanitizer",
+          "optimus/dtc/DtcContextualizedArgument",
+          "optimus/dtc/DtcContextualizedDependencies",
+          "optimus/dtc/DtcContextualizedJar",
+          "optimus/dtc/DtcContextualizedResource",
+          "optimus/dtc/DtcContextualizedValue",
+          "optimus/dtc/DtcMarker$",
+          "optimus/dtc/DtcNormalizedArgument",
+          "optimus/dtc/DtcNormalizedDependencies",
+          "optimus/dtc/DtcNormalizedDependencies$",
+          "optimus/dtc/DtcNormalizedEnvironmentalDependencies",
+          "optimus/dtc/DtcNormalizedResource",
+          "optimus/dtc/DtcNormalizedResource$",
+          "optimus/dtc/Hasher",
+          "optimus/dtc/cache/CachedRunsManager",
+          "optimus/dtc/cache/CachedRunsManager$",
+          "optimus/dtc/cache/CachedRunsManagerDhtClient",
+          "optimus/dtc/cache/CachedRunsManagerDhtClient$",
+          "optimus/dtc/cache/CachedRunsLookupError",
+          "optimus/dtc/comparison/CacheVsLocalComparator",
+          "optimus/dtc/comparison/CacheVsLocalComparator$",
+          "optimus/dtc/dht/DhtRegion$",
+          "optimus/dtc/model/ApplicationArgumentsHelper$",
+          "optimus/dtc/model/Argument",
+          "optimus/dtc/model/ArgumentDependency",
+          "optimus/dtc/model/ArgumentDependency$",
+          "optimus/dtc/model/Classpath$",
+          "optimus/dtc/model/ClasspathDependency",
+          "optimus/dtc/model/ClasspathDependency$",
+          "optimus/dtc/model/Dependency",
+          "optimus/dtc/model/DtcCollectedHashedDependencies",
+          "optimus/dtc/model/EnvironmentVariableDependency",
+          "optimus/dtc/model/EnvironmentVariableDependency$",
+          "optimus/dtc/model/EnvironmentVariablesHelper",
+          "optimus/dtc/model/HashedDependency",
+          "optimus/dtc/model/GenericArgumentsHelper$",
+          "optimus/dtc/model/NamedDependency",
+          "optimus/dtc/model/OptimusCachedRun",
+          "optimus/dtc/model/OptimusCachedRun$",
+          "optimus/dtc/model/OptimusCachedRunPruner",
+          "optimus/dtc/model/OptimusCachedRunPruner$",
+          "optimus/dtc/model/PathAndValueNormalizationHelper",
+          "optimus/dtc/model/PathAndValueNormalizationHelper$",
+          "optimus/dtc/model/PathSubstitution",
+          "optimus/dtc/model/ResourceDependency",
+          "optimus/dtc/model/ResourceDependency$",
+          "optimus/dtc/model/RunDependencies",
+          "optimus/dtc/model/Substitution",
+          "optimus/dtc/model/SystemPropertyDependency",
+          "optimus/dtc/model/SystemPropertyDependency$",
+          "optimus/dtc/model/SystemPropertiesHelper",
+          "optimus/dtc/model/ValueSubstitution",
+          "optimus/dtc/utils/CmiEventsDescription",
+          "optimus/dtc/utils/CmiEventsHelper$",
+          "optimus/dtc/utils/DTCConstants$",
+          "optimus/dtc/utils/DTCRuntimeContext$",
+          "optimus/dtc/utils/RunDependenciesUtils$",
           "optimus/utils/Explanation",
           "optimus/utils/Explanation$",
           "optimus/utils/ExplanationState",
@@ -181,13 +239,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   // internal error/warning tracking--can't use logback or console
   // -- populated during transformation and execution
   private static final List<String> internalEvents = new CopyOnWriteArrayList<>();
-
-  // capturing the system property and environment variables on startup of JVM
-  public static volatile Map<String, String> systemProperties = getSystemProperties();
-  public static volatile Map<String, String> environmentVariableMap = getEnvironmentVariableMap();
-
-  public static final String FILE_PREFIX = "file|";
-  public static final String NETWORK_PREFIX = "network|";
 
   public static final String CMI_ERROR = "[CMI:error]";
   public static final String CMI_WARN = "[CMI:warn]";
@@ -242,16 +293,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
     // null otherwise as we can do the check using manifest values
     return null;
-  }
-
-  public static Map<String, String> getSystemProperties() {
-    HashMap<String, String> p = new HashMap<>();
-    System.getProperties().forEach((key, value) -> p.put(key.toString(), value.toString()));
-    return Collections.unmodifiableMap(p);
-  }
-
-  public static Map<String, String> getEnvironmentVariableMap() {
-    return Collections.unmodifiableMap(System.getenv());
   }
 
   // When a class is loaded, it means it was truly needed.
@@ -571,8 +612,6 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         allClassDependencies,
         allResourceDependencies,
         internalEventsCopy,
-        systemProperties,
-        environmentVariableMap,
         new CmiCollectionStateSnapshot(
             classDependencies.size(),
             classDependencies.getDependenciesCount(),
@@ -715,7 +754,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       // However, the Optimus Test Runner (OTR) does unpack some jars given some suites expect to
       // find files from filesystem
       // (i.e. do not use Class.getResource...), so they happen to be effectively from Optimus
-      if (!resourceUrl.toString().endsWith("/classes/" + resourcePath)) {
+      boolean looksUnpacked = resourceUrl.toString().contains("/classes/");
+      if (!looksUnpacked) {
         // It does not look like it is related to Optimus Test Runner (OTR)
         recordInternalEvent(
             String.format(

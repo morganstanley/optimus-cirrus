@@ -45,8 +45,7 @@ public abstract class AbstractChecksumNode implements ChecksumNode {
   }
 
   /**
-   * Precondition - each node has a valid min/max which
-   * implies that any children are in order
+   * Precondition - each node has a valid min/max which implies that any children are in order
    *
    * @param nodes
    */
@@ -57,12 +56,17 @@ public abstract class AbstractChecksumNode implements ChecksumNode {
 
       n0 = nodes.get(i);
       n1 = nodes.get(i + 1);
-      //if (n0.maxKey().compareTo(n1.minKey()) >= 0) {
+      // if (n0.maxKey().compareTo(n1.minKey()) >= 0) {
       if (n0.getRegion().getEnd() >= n1.getRegion().getStart()) {
         log.info("{}", n0);
         log.info("{}", n1);
-        log.error("{} {}", Long.toString(n0.getRegion().getEnd()), Long.toString(n1.getRegion().getStart()));
-        log.error("{} {}", Long.toHexString(n0.getRegion().getEnd()),
+        log.error(
+            "{} {}",
+            Long.toString(n0.getRegion().getEnd()),
+            Long.toString(n1.getRegion().getStart()));
+        log.error(
+            "{} {}",
+            Long.toHexString(n0.getRegion().getEnd()),
             Long.toHexString(n1.getRegion().getStart()));
         throw new RuntimeException("Children out of order");
       }

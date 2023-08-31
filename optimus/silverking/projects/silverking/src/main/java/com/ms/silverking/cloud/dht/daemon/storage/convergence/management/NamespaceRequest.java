@@ -28,9 +28,7 @@ import com.ms.silverking.time.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Tracks outstanding requests for namespaces from peers.
- */
+/** Tracks outstanding requests for namespaces from peers. */
 class NamespaceRequest {
   private final MessageGroupBase mgBase;
   private final Set<IPAndPort> incompletePeers;
@@ -41,7 +39,8 @@ class NamespaceRequest {
 
   private static Logger log = LoggerFactory.getLogger(NamespaceRequest.class);
 
-  NamespaceRequest(MessageGroupBase mgBase, Set<IPAndPort> peers, Map<UUIDBase, NamespaceRequest> nsRequests) {
+  NamespaceRequest(
+      MessageGroupBase mgBase, Set<IPAndPort> peers, Map<UUIDBase, NamespaceRequest> nsRequests) {
     this.mgBase = mgBase;
     this.incompletePeers = new HashSet<>(peers);
     this.nsRequests = nsRequests;

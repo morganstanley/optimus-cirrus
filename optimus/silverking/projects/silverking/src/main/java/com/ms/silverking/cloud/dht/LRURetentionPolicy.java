@@ -17,9 +17,7 @@ import com.google.common.collect.Sets;
 import com.ms.silverking.cloud.dht.client.gen.OmitGeneration;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Simple LRU value retention policy. LRU is per key.
- */
+/** Simple LRU value retention policy. LRU is per key. */
 public class LRURetentionPolicy extends CapacityBasedRetentionPolicy {
   private static final LRURetentionPolicy template;
   private static final Set<String> optionalFields;
@@ -65,7 +63,8 @@ public class LRURetentionPolicy extends CapacityBasedRetentionPolicy {
     LRURetentionPolicy other;
 
     other = (LRURetentionPolicy) o;
-    return other.capacityBytes == capacityBytes && other.persistenceIntervalSecs == persistenceIntervalSecs;
+    return other.capacityBytes == capacityBytes
+        && other.persistenceIntervalSecs == persistenceIntervalSecs;
   }
 
   public static LRURetentionPolicy parse(String def) {

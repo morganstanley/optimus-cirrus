@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client;
 
 import com.ms.silverking.cloud.dht.client.gen.NonVirtual;
 
-/**
- * Thrown when namespace modification fails.
- */
+/** Thrown when namespace modification fails. */
 @NonVirtual
 public class NamespaceModificationException extends OperationException {
 

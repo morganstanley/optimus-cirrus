@@ -49,37 +49,39 @@ public class MessageGroupBase {
 
   private static Logger log = LoggerFactory.getLogger(MessageGroupBase.class);
 
-  private MessageGroupBase(int interfacePort,
-                           IPAndPort myIPAndPort,
-                           MessageGroupReceiver messageGroupReceiver,
-                           AbsMillisTimeSource deadlineTimeSource,
-                           NewConnectionTimeoutController newConnectionTimeoutController,
-                           QueueingConnectionLimitListener limitListener,
-                           int queueLimit,
-                           int numSelectorControllers,
-                           String controllerClass,
-                           MultipleConnectionQueueLengthListener mqListener,
-                           UUIDBase mqUUID,
-                           IPAliasMap aliasMap,
-                           boolean isClient,
-                           SessionPolicyOnDisconnect onDisconnect) throws IOException {
+  private MessageGroupBase(
+      int interfacePort,
+      IPAndPort myIPAndPort,
+      MessageGroupReceiver messageGroupReceiver,
+      AbsMillisTimeSource deadlineTimeSource,
+      NewConnectionTimeoutController newConnectionTimeoutController,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit,
+      int numSelectorControllers,
+      String controllerClass,
+      MultipleConnectionQueueLengthListener mqListener,
+      UUIDBase mqUUID,
+      IPAliasMap aliasMap,
+      boolean isClient,
+      SessionPolicyOnDisconnect onDisconnect)
+      throws IOException {
     this.myIPAndPort = myIPAndPort;
-    this.deadlineTimeSource = deadlineTimeSource != null
-                              ? deadlineTimeSource
-                              : SystemTimeUtil.timerDrivenTimeSource;
-    MessageGroupConnectionCreator connectionCreator = new MessageGroupConnectionCreator(messageGroupReceiver,
-                                                                                        limitListener,
-                                                                                        queueLimit);
-    paServer = new PersistentAsyncServer(interfacePort,
-                                         connectionCreator,
-                                         newConnectionTimeoutController,
-                                         numSelectorControllers,
-                                         controllerClass,
-                                         mqListener,
-                                         mqUUID,
-                                         SelectorController.defaultSelectionThreadWorkLimit,
-                                         isClient,
-                                         onDisconnect);
+    this.deadlineTimeSource =
+        deadlineTimeSource != null ? deadlineTimeSource : SystemTimeUtil.timerDrivenTimeSource;
+    MessageGroupConnectionCreator connectionCreator =
+        new MessageGroupConnectionCreator(messageGroupReceiver, limitListener, queueLimit);
+    paServer =
+        new PersistentAsyncServer(
+            interfacePort,
+            connectionCreator,
+            newConnectionTimeoutController,
+            numSelectorControllers,
+            controllerClass,
+            mqListener,
+            mqUUID,
+            SelectorController.defaultSelectionThreadWorkLimit,
+            isClient,
+            onDisconnect);
     myID = SimpleValueCreator.forLocalProcess();
     this.messageGroupReceiver = messageGroupReceiver;
     if (aliasMap != null) {
@@ -90,86 +92,97 @@ public class MessageGroupBase {
     this.isClient = isClient;
   }
 
-  public static MessageGroupBase newClientMessageGroupBase(int interfacePort,
-                                                           MessageGroupReceiver messageGroupReceiver,
-                                                           AbsMillisTimeSource deadlineTimeSource,
-                                                           NewConnectionTimeoutController newConnectionTimeoutController,
-                                                           QueueingConnectionLimitListener limitListener,
-                                                           int queueLimit,
-                                                           int numSelectorControllers,
-                                                           String controllerClass,
-                                                           IPAliasMap aliasMap) throws IOException {
-    return newClientMessageGroupBase(interfacePort,
-                                     messageGroupReceiver,
-                                     deadlineTimeSource,
-                                     newConnectionTimeoutController,
-                                     limitListener,
-                                     queueLimit,
-                                     numSelectorControllers,
-                                     controllerClass,
-                                     aliasMap,
-                                     SessionPolicyOnDisconnect.DoNothing);
+  public static MessageGroupBase newClientMessageGroupBase(
+      int interfacePort,
+      MessageGroupReceiver messageGroupReceiver,
+      AbsMillisTimeSource deadlineTimeSource,
+      NewConnectionTimeoutController newConnectionTimeoutController,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit,
+      int numSelectorControllers,
+      String controllerClass,
+      IPAliasMap aliasMap)
+      throws IOException {
+    return newClientMessageGroupBase(
+        interfacePort,
+        messageGroupReceiver,
+        deadlineTimeSource,
+        newConnectionTimeoutController,
+        limitListener,
+        queueLimit,
+        numSelectorControllers,
+        controllerClass,
+        aliasMap,
+        SessionPolicyOnDisconnect.DoNothing);
   }
 
-  public static MessageGroupBase newClientMessageGroupBase(int interfacePort,
-                                                           MessageGroupReceiver messageGroupReceiver,
-                                                           AbsMillisTimeSource deadlineTimeSource,
-                                                           NewConnectionTimeoutController newConnectionTimeoutController,
-                                                           QueueingConnectionLimitListener limitListener,
-                                                           int queueLimit,
-                                                           int numSelectorControllers,
-                                                           String controllerClass,
-                                                           IPAliasMap aliasMap,
-                                                           SessionPolicyOnDisconnect onDisconnect) throws IOException {
-    return new MessageGroupBase(interfacePort,
-                                new IPAndPort(IPAddrUtil.localIP(), interfacePort),
-                                messageGroupReceiver,
-                                deadlineTimeSource,
-                                newConnectionTimeoutController,
-                                limitListener,
-                                queueLimit,
-                                numSelectorControllers,
-                                controllerClass,
-                                null,
-                                null,
-                                aliasMap,
-                                true,
-                                onDisconnect);
+  public static MessageGroupBase newClientMessageGroupBase(
+      int interfacePort,
+      MessageGroupReceiver messageGroupReceiver,
+      AbsMillisTimeSource deadlineTimeSource,
+      NewConnectionTimeoutController newConnectionTimeoutController,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit,
+      int numSelectorControllers,
+      String controllerClass,
+      IPAliasMap aliasMap,
+      SessionPolicyOnDisconnect onDisconnect)
+      throws IOException {
+    return new MessageGroupBase(
+        interfacePort,
+        new IPAndPort(IPAddrUtil.localIP(), interfacePort),
+        messageGroupReceiver,
+        deadlineTimeSource,
+        newConnectionTimeoutController,
+        limitListener,
+        queueLimit,
+        numSelectorControllers,
+        controllerClass,
+        null,
+        null,
+        aliasMap,
+        true,
+        onDisconnect);
   }
 
-  public static MessageGroupBase newServerMessageGroupBase(int interfacePort,
-                                                           IPAndPort myIPAndPort,
-                                                           MessageGroupReceiver messageGroupReceiver,
-                                                           AbsMillisTimeSource deadlineTimeSource,
-                                                           NewConnectionTimeoutController newConnectionTimeoutController,
-                                                           QueueingConnectionLimitListener limitListener,
-                                                           int queueLimit,
-                                                           int numSelectorControllers,
-                                                           String controllerClass,
-                                                           MultipleConnectionQueueLengthListener mqListener,
-                                                           UUIDBase mqUUID,
-                                                           IPAliasMap aliasMap) throws IOException {
-    return new MessageGroupBase(interfacePort,
-                                myIPAndPort,
-                                messageGroupReceiver,
-                                deadlineTimeSource,
-                                newConnectionTimeoutController,
-                                limitListener,
-                                queueLimit,
-                                numSelectorControllers,
-                                controllerClass,
-                                mqListener,
-                                mqUUID,
-                                aliasMap,
-                                false,
-                                SessionPolicyOnDisconnect.DoNothing);
+  public static MessageGroupBase newServerMessageGroupBase(
+      int interfacePort,
+      IPAndPort myIPAndPort,
+      MessageGroupReceiver messageGroupReceiver,
+      AbsMillisTimeSource deadlineTimeSource,
+      NewConnectionTimeoutController newConnectionTimeoutController,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit,
+      int numSelectorControllers,
+      String controllerClass,
+      MultipleConnectionQueueLengthListener mqListener,
+      UUIDBase mqUUID,
+      IPAliasMap aliasMap)
+      throws IOException {
+    return new MessageGroupBase(
+        interfacePort,
+        myIPAndPort,
+        messageGroupReceiver,
+        deadlineTimeSource,
+        newConnectionTimeoutController,
+        limitListener,
+        queueLimit,
+        numSelectorControllers,
+        controllerClass,
+        mqListener,
+        mqUUID,
+        aliasMap,
+        false,
+        SessionPolicyOnDisconnect.DoNothing);
   }
 
   public void enable() {
     paServer.enable();
   }
 
-  public boolean isClient() { return this.isClient; }
+  public boolean isClient() {
+    return this.isClient;
+  }
 
   public boolean isRunning() {
     return paServer.isRunning();
@@ -207,11 +220,12 @@ public class MessageGroupBase {
       messageGroupReceiver.receive(MessageGroup.clone(mg), null);
     } else {
       try {
-        paServer.sendAsynchronous(aliasMap.daemonToInterface(dest),
-                                  mg,
-                                  null,
-                                  null,
-                                  mg.getDeadlineAbsMillis(deadlineTimeSource));
+        paServer.sendAsynchronous(
+            aliasMap.daemonToInterface(dest),
+            mg,
+            null,
+            null,
+            mg.getDeadlineAbsMillis(deadlineTimeSource));
       } catch (UnknownHostException exception) {
         throw new RuntimeException(exception);
       }
@@ -224,7 +238,8 @@ public class MessageGroupBase {
 
   public MessageGroupConnection getConnection(AddrAndPort dest, long deadline)
       throws ConnectException, AuthFailedException {
-    return (MessageGroupConnection) paServer.getConnection(aliasMap.daemonToInterface(dest), deadline);
+    return (MessageGroupConnection)
+        paServer.getConnection(aliasMap.daemonToInterface(dest), deadline);
   }
 
   @Override

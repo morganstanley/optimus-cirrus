@@ -24,9 +24,7 @@ import com.ms.silverking.net.AddrAndPort;
 import com.ms.silverking.text.FieldsRequirement;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Client configuration settings for a single DHT.
- */
+/** Client configuration settings for a single DHT. */
 public class ClientDHTConfiguration implements ClientDHTConfigurationProvider {
   private final String name;
   private final int port;
@@ -41,10 +39,11 @@ public class ClientDHTConfiguration implements ClientDHTConfigurationProvider {
 
   private static final Set<String> optionalFields;
 
-  public static final ClientDHTConfiguration emptyTemplate = new ClientDHTConfiguration("__sample_name__", 1,
-      "localhost:0");
-  private static final Class[] constructorFieldClasses = new Class[] { String.class, int.class, String.class };
-  private static final String[] constructorFieldNames = new String[] { "name", "port", "zkLocs" };
+  public static final ClientDHTConfiguration emptyTemplate =
+      new ClientDHTConfiguration("__sample_name__", 1, "localhost:0");
+  private static final Class[] constructorFieldClasses =
+      new Class[] {String.class, int.class, String.class};
+  private static final String[] constructorFieldNames = new String[] {"name", "port", "zkLocs"};
 
   static {
     ImmutableSet.Builder<String> builder;
@@ -52,13 +51,18 @@ public class ClientDHTConfiguration implements ClientDHTConfigurationProvider {
     builder = ImmutableSet.builder();
     optionalFields = builder.build();
 
-    ObjectDefParser2.addParser(emptyTemplate, FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS, optionalFields,
-        constructorFieldClasses, constructorFieldNames);
+    ObjectDefParser2.addParser(
+        emptyTemplate,
+        FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS,
+        optionalFields,
+        constructorFieldClasses,
+        constructorFieldNames);
   }
 
   public ClientDHTConfiguration(String dhtName, int dhtPort, ZooKeeperConfig zkConfig) {
     Preconditions.checkNotNull(dhtName, "dhtName must be non-null");
-    Preconditions.checkArgument(dhtPort > 0 || dhtPort == portInZKOnly, "dhtPort must be > 0. Found: ", dhtPort);
+    Preconditions.checkArgument(
+        dhtPort > 0 || dhtPort == portInZKOnly, "dhtPort must be > 0. Found: ", dhtPort);
     Preconditions.checkNotNull(zkConfig, "zkConfig must be non-null");
     this.name = dhtName;
     this.port = dhtPort;
@@ -80,7 +84,8 @@ public class ClientDHTConfiguration implements ClientDHTConfigurationProvider {
 
   @OmitGeneration
   public static ClientDHTConfiguration create(Map<String, String> envMap) {
-    return new ClientDHTConfiguration(envMap.get(nameVar),
+    return new ClientDHTConfiguration(
+        envMap.get(nameVar),
         envMap.get(portVar) == null ? portInZKOnly : Integer.parseInt(envMap.get(portVar)),
         new ZooKeeperConfig(envMap.get(zkLocVar)));
   }

@@ -54,16 +54,25 @@ class ClassParser<T> {
   static final char typeNameDelimiterStart = '<';
   static final char typeNameDelimiterEnd = '>';
 
-  ClassParser(Class _class, T template, FieldsRequirement fieldsRequirement,
-      NonFatalExceptionResponse nonFatalExceptionResponse, String fieldDefDelimiter, String nameValueDelimiter,
-      Set<String> optionalFields, Set<String> exclusionFields, Class[] constructorFieldClasses,
+  ClassParser(
+      Class _class,
+      T template,
+      FieldsRequirement fieldsRequirement,
+      NonFatalExceptionResponse nonFatalExceptionResponse,
+      String fieldDefDelimiter,
+      String nameValueDelimiter,
+      Set<String> optionalFields,
+      Set<String> exclusionFields,
+      Class[] constructorFieldClasses,
       String[] constructorFieldNames) {
     Field[] _fields;
 
     if ((constructorFieldClasses == null) != (constructorFieldNames == null)) {
-      throw new RuntimeException("(constructorFieldClasses == null) != (constructorFieldNames == null)");
+      throw new RuntimeException(
+          "(constructorFieldClasses == null) != (constructorFieldNames == null)");
     }
-    if (constructorFieldClasses != null && (constructorFieldClasses.length != constructorFieldNames.length)) {
+    if (constructorFieldClasses != null
+        && (constructorFieldClasses.length != constructorFieldNames.length)) {
       throw new RuntimeException("constructorFieldClasses.length != constructorFieldNames.length");
     }
     this.constructorFieldClasses = constructorFieldClasses;
@@ -85,7 +94,8 @@ class ClassParser<T> {
       }
       if (optionalFields != null) {
         if (fieldsRequirement == FieldsRequirement.REQUIRE_ALL_FIELDS) {
-          throw new RuntimeException("Optional fields incompatible with FieldsRequirement.REQUIRE_ALL_FIELDS");
+          throw new RuntimeException(
+              "Optional fields incompatible with FieldsRequirement.REQUIRE_ALL_FIELDS");
         }
         this.optionalFields = optionalFields;
       } else {
@@ -97,10 +107,11 @@ class ClassParser<T> {
         this.exclusionFields = ImmutableSet.of();
       }
       this._class = _class;
-      //fields = filterStaticFields(_class.getDeclaredFields());
-      fields = CPUtils.filterFields(CPUtils.filterStaticFields(CPUtils.getDeclaredFields(_class)),
-          this.exclusionFields);
-      //constructor = _class.getConstructor(getFieldClasses(fields));
+      // fields = filterStaticFields(_class.getDeclaredFields());
+      fields =
+          CPUtils.filterFields(
+              CPUtils.filterStaticFields(CPUtils.getDeclaredFields(_class)), this.exclusionFields);
+      // constructor = _class.getConstructor(getFieldClasses(fields));
       _fields = fields;
       if (Modifier.isAbstract(_class.getModifiers())) {
         constructor = null;
@@ -118,30 +129,72 @@ class ClassParser<T> {
         log.info(ArrayUtil.toString(CPUtils.getFieldClasses(_fields)));
       }
       throw new ObjectDefParseException(
-          "Can't find constructor to initialize all fields for " + _class.getName() + ". " + "Remember order must " + "match",
+          "Can't find constructor to initialize all fields for "
+              + _class.getName()
+              + ". "
+              + "Remember order must "
+              + "match",
           nsme);
     } catch (Exception e) {
       throw new ObjectDefParseException("Error creating template " + _class.getName(), e);
     }
   }
 
-  ClassParser(Class _class, T template, FieldsRequirement fieldsRequirement,
-      NonFatalExceptionResponse nonFatalExceptionResponse, String fieldDefDelimiter, String nameValueDelimiter,
-      Set<String> optionalFields, Set<String> exclusionFields) {
-    this(_class, template, fieldsRequirement, nonFatalExceptionResponse, fieldDefDelimiter, nameValueDelimiter,
-        optionalFields, exclusionFields, null, null);
+  ClassParser(
+      Class _class,
+      T template,
+      FieldsRequirement fieldsRequirement,
+      NonFatalExceptionResponse nonFatalExceptionResponse,
+      String fieldDefDelimiter,
+      String nameValueDelimiter,
+      Set<String> optionalFields,
+      Set<String> exclusionFields) {
+    this(
+        _class,
+        template,
+        fieldsRequirement,
+        nonFatalExceptionResponse,
+        fieldDefDelimiter,
+        nameValueDelimiter,
+        optionalFields,
+        exclusionFields,
+        null,
+        null);
   }
 
-  ClassParser(T template, FieldsRequirement fieldsRequirement, NonFatalExceptionResponse nonFatalExceptionResponse,
-      String fieldDefDelimiter, String nameValueDelimiter, Set<String> optionalFields, Set<String> exclusionFields) {
-    this(template.getClass(), template, fieldsRequirement, nonFatalExceptionResponse, fieldDefDelimiter,
-        nameValueDelimiter, optionalFields, exclusionFields);
+  ClassParser(
+      T template,
+      FieldsRequirement fieldsRequirement,
+      NonFatalExceptionResponse nonFatalExceptionResponse,
+      String fieldDefDelimiter,
+      String nameValueDelimiter,
+      Set<String> optionalFields,
+      Set<String> exclusionFields) {
+    this(
+        template.getClass(),
+        template,
+        fieldsRequirement,
+        nonFatalExceptionResponse,
+        fieldDefDelimiter,
+        nameValueDelimiter,
+        optionalFields,
+        exclusionFields);
   }
 
-  ClassParser(T template, FieldsRequirement fieldsRequirement, NonFatalExceptionResponse nonFatalExceptionResponse,
-      Set<String> optionalFields, Set<String> exclusionFields) {
-    this(template, fieldsRequirement, nonFatalExceptionResponse, Character.toString(defaultFieldDefDelimiter),
-        Character.toString(defaultNameValueDelimiter), optionalFields, exclusionFields);
+  ClassParser(
+      T template,
+      FieldsRequirement fieldsRequirement,
+      NonFatalExceptionResponse nonFatalExceptionResponse,
+      Set<String> optionalFields,
+      Set<String> exclusionFields) {
+    this(
+        template,
+        fieldsRequirement,
+        nonFatalExceptionResponse,
+        Character.toString(defaultFieldDefDelimiter),
+        Character.toString(defaultNameValueDelimiter),
+        optionalFields,
+        exclusionFields);
   }
 
   private Object[] createConstructorArgsFromParams(Map<String, String> defMap) {
@@ -163,14 +216,15 @@ class ClassParser<T> {
           args[i] = valueForDef(cParams[i].getType(), value, name);
         } catch (ObjectDefParseException e) {
           if (nonFatalExceptionResponse == NonFatalExceptionResponse.LOG_EXCEPTIONS) {
-            log.error("Logging and ignoring",e);
+            log.error("Logging and ignoring", e);
           }
           if (nonFatalExceptionResponse != NonFatalExceptionResponse.THROW_EXCEPTIONS) {
             try {
               fields[i].setAccessible(true);
               args[i] = fields[i].get(template);
             } catch (Exception e2) {
-              throw new ObjectDefParseException("Unable to set field value from template in " + _class.getName(), e2);
+              throw new ObjectDefParseException(
+                  "Unable to set field value from template in " + _class.getName(), e2);
             }
           } else {
             throw e;
@@ -192,16 +246,19 @@ class ClassParser<T> {
       value = defMap.get(name);
       if (value == null) {
         if (fieldRequirement == FieldsRequirement.REQUIRE_ALL_FIELDS) {
-          throw new ObjectDefParseException("Missing required field: " + name + " in " + _class.getName());
-        } else if (fieldRequirement == FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS && !optionalFields.contains(
-            name)) {
-          throw new ObjectDefParseException("Missing required field: " + name + " in " + _class.getName());
+          throw new ObjectDefParseException(
+              "Missing required field: " + name + " in " + _class.getName());
+        } else if (fieldRequirement == FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS
+            && !optionalFields.contains(name)) {
+          throw new ObjectDefParseException(
+              "Missing required field: " + name + " in " + _class.getName());
         } else {
           try {
             fields[i].setAccessible(true);
             args[i] = fields[i].get(template);
           } catch (Exception e) {
-            throw new ObjectDefParseException("Unable to set field value from template in " + _class.getName(), e);
+            throw new ObjectDefParseException(
+                "Unable to set field value from template in " + _class.getName(), e);
           }
         }
       } else {
@@ -209,14 +266,15 @@ class ClassParser<T> {
           args[i] = valueForDef(fields[i], value);
         } catch (ObjectDefParseException e) {
           if (nonFatalExceptionResponse == NonFatalExceptionResponse.LOG_EXCEPTIONS) {
-            log.error("Logging and ignoring",e);
+            log.error("Logging and ignoring", e);
           }
           if (nonFatalExceptionResponse != NonFatalExceptionResponse.THROW_EXCEPTIONS) {
             try {
               fields[i].setAccessible(true);
               args[i] = fields[i].get(template);
             } catch (Exception e2) {
-              throw new ObjectDefParseException("Unable to set field value from template in " + _class.getName(), e2);
+              throw new ObjectDefParseException(
+                  "Unable to set field value from template in " + _class.getName(), e2);
             }
           } else {
             throw e;
@@ -271,12 +329,12 @@ class ClassParser<T> {
 
           typeNameEnd = def.indexOf(typeNameDelimiterEnd);
           if (typeNameEnd < 0) {
-            log.info("type: {}" , type);
-            log.info("def: {}" , def);
+            log.info("type: {}", type);
+            log.info("def: {}", def);
             throw new ObjectDefParseException("\n" + type + " Missing typeNameDelimiterEnd " + def);
           } else if (typeNameEnd >= def.length() - 1) {
-            log.info("type: {}" , type);
-            log.info("def: {}" , def);
+            log.info("type: {}", type);
+            log.info("def: {}", def);
             throw new ObjectDefParseException("\n" + type + " Found type, missing def " + def);
           } else {
             String typeName;
@@ -294,33 +352,34 @@ class ClassParser<T> {
           }
         }
 
-        if (def.startsWith(Character.toString(recursiveDefDelimiterStart)) && def.endsWith(
-            Character.toString(recursiveDefDelimiterEnd))) {
+        if (def.startsWith(Character.toString(recursiveDefDelimiterStart))
+            && def.endsWith(Character.toString(recursiveDefDelimiterEnd))) {
           Object value;
 
           def = def.substring(1, def.length() - 1);
-          //System.out.println("\n\n"+ def);
-          //value = new ObjectDefParser(subTemplateAndOptions.getObj(), fieldRequirement, nonFatalExceptionResponse,
+          // System.out.println("\n\n"+ def);
+          // value = new ObjectDefParser(subTemplateAndOptions.getObj(), fieldRequirement,
+          // nonFatalExceptionResponse,
           //            def, def, subTemplateAndOptions.getOptionalFields()).parse(def);
-                    
-                    /*
-                    Method  parseMethod;
-                    
-                    try {
-                        parseMethod = subTemplateAndOptions.getObj().getClass().getMethod("parse", String.class);
-                        value = parseMethod.invoke(subTemplateAndOptions, def);
-                    } catch (NoSuchMethodException e) {
-                        throw new RuntimeException(e);
-                    } catch (SecurityException e) {
-                        throw new RuntimeException(e);
-                    } catch (IllegalAccessException e) {
-                        throw new RuntimeException(e);
-                    } catch (IllegalArgumentException e) {
-                        throw new RuntimeException(e);
-                    } catch (InvocationTargetException e) {
-                        throw new RuntimeException(e);
-                    }
-                    */
+
+          /*
+          Method  parseMethod;
+
+          try {
+              parseMethod = subTemplateAndOptions.getObj().getClass().getMethod("parse", String.class);
+              value = parseMethod.invoke(subTemplateAndOptions, def);
+          } catch (NoSuchMethodException e) {
+              throw new RuntimeException(e);
+          } catch (SecurityException e) {
+              throw new RuntimeException(e);
+          } catch (IllegalAccessException e) {
+              throw new RuntimeException(e);
+          } catch (IllegalArgumentException e) {
+              throw new RuntimeException(e);
+          } catch (InvocationTargetException e) {
+              throw new RuntimeException(e);
+          }
+          */
           value = ObjectDefParser2.parse(type, def);
 
           return value;
@@ -351,7 +410,7 @@ class ClassParser<T> {
         valueDef = nameAndValue[1];
         defMap.put(fieldName, valueDef);
       } else {
-        log.info("Ignoring empty field def in {}" , _class);
+        log.info("Ignoring empty field def in {}", _class);
       }
     }
     try {
@@ -373,7 +432,8 @@ class ClassParser<T> {
   private String stripExtraDelimiters(String def) {
     while (def.length() > 0) {
       def = def.trim();
-      if (def.charAt(0) == recursiveDefDelimiterStart && def.charAt(def.length() - 1) == recursiveDefDelimiterEnd) {
+      if (def.charAt(0) == recursiveDefDelimiterStart
+          && def.charAt(def.length() - 1) == recursiveDefDelimiterEnd) {
         def = def.substring(1, def.length() - 1);
       } else {
         return def;
@@ -399,7 +459,7 @@ class ClassParser<T> {
   }
 
   private String[] splitFieldDefs(String fieldDefs) {
-    //return fieldDefs.split(fieldDefDelimiter);
+    // return fieldDefs.split(fieldDefDelimiter);
     List<String> defs;
     int depth;
     int last;
@@ -409,18 +469,18 @@ class ClassParser<T> {
     defs = new ArrayList<>();
     for (int i = 0; i < fieldDefs.length(); i++) {
       switch (fieldDefs.charAt(i)) {
-      case defaultFieldDefDelimiter:
-        if (depth == 0) {
-          defs.add(fieldDefs.substring(last, i));
-          last = i + 1;
-        }
-        break;
-      case recursiveDefDelimiterStart:
-        depth++;
-        break;
-      case recursiveDefDelimiterEnd:
-        depth--;
-        break;
+        case defaultFieldDefDelimiter:
+          if (depth == 0) {
+            defs.add(fieldDefs.substring(last, i));
+            last = i + 1;
+          }
+          break;
+        case recursiveDefDelimiterStart:
+          depth++;
+          break;
+        case recursiveDefDelimiterEnd:
+          depth--;
+          break;
       }
     }
     if (last < fieldDefs.length()) {
@@ -452,7 +512,9 @@ class ClassParser<T> {
     if (overrideExclusionFields == null) {
       overrideExclusionFields = exclusionFields;
     }
-    fields = CPUtils.filterFields(CPUtils.filterStaticFields(_class.getDeclaredFields()), overrideExclusionFields);
+    fields =
+        CPUtils.filterFields(
+            CPUtils.filterStaticFields(_class.getDeclaredFields()), overrideExclusionFields);
     for (int i = 0; i < fields.length; i++) {
       Field field;
       boolean recursive;
@@ -466,10 +528,10 @@ class ClassParser<T> {
         field.setAccessible(true);
         try {
           if (field.get(obj) == null) {
-            //valueString = "<error null>";
+            // valueString = "<error null>";
             valueString = null;
           } else {
-            //valueString = CollectionUtil.toString((Set)field.get(obj), ',');
+            // valueString = CollectionUtil.toString((Set)field.get(obj), ',');
             valueString = setToString((Set) field.get(obj));
           }
         } catch (IllegalArgumentException | IllegalAccessException e) {
@@ -513,7 +575,7 @@ class ClassParser<T> {
           Object value;
 
           value = field.get(obj);
-          //if (value != null || !optionalFields.contains(field.getName())) {
+          // if (value != null || !optionalFields.contains(field.getName())) {
           if (value != null) {
             valueString = value.toString();
           }
@@ -603,7 +665,7 @@ class ClassParser<T> {
     String originalDef;
 
     originalDef = def;
-    //try {
+    // try {
     def = def.trim();
     if (!def.startsWith("" + recursiveDefDelimiterStart)) {
       throw new RuntimeException("Bad map def: " + def);
@@ -613,7 +675,7 @@ class ClassParser<T> {
     }
     def = def.substring(1, def.length() - 1).trim(); // remove delimiters
     delimitedEntries = def.startsWith("" + recursiveDefDelimiterStart);
-    //return StreamParser.parseSet(new ByteArrayInputStream(def.getBytes()));
+    // return StreamParser.parseSet(new ByteArrayInputStream(def.getBytes()));
     ImmutableSet.Builder<String> builder;
 
     builder = ImmutableSet.builder();
@@ -645,9 +707,9 @@ class ClassParser<T> {
           nextEntryStart = entryEnd + 1;
         }
       }
-      //System.out.println(originalDef);
-      //System.out.println(def);
-      //System.out.println(entryStart +" "+ entryEnd);
+      // System.out.println(originalDef);
+      // System.out.println(def);
+      // System.out.println(entryStart +" "+ entryEnd);
       entry = def.substring(entryStart, entryEnd);
       builder.add(entry);
       if (nextEntryStart < 0) {
@@ -657,8 +719,8 @@ class ClassParser<T> {
       }
     }
     return builder.build();
-    //} catch (IOException ioe) {
+    // } catch (IOException ioe) {
     //    throw new RuntimeException(ioe);
-    //}
+    // }
   }
 }

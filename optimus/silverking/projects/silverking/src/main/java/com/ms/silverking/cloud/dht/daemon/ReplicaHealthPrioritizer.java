@@ -43,24 +43,24 @@ public class ReplicaHealthPrioritizer implements ReplicaPrioritizer {
 
   private int compareLastErrorTimes(IPAndPort r1, IPAndPort r2) {
     return 0; // use of weak errors deprecated for now
-  /*
-    long t1;
-    long t2;
+    /*
+     long t1;
+     long t2;
 
-    // Note that peer health monitor will timeout errors so that nodes
-    // without recent errors come back as Long.MAX_VALUE here
-    t1 = peerHealthMonitor.getLastWeakErrorTime(r1);
-    t2 = peerHealthMonitor.getLastWeakErrorTime(r2);
-    if (t1 < t2) {
-      return -1;
-    } else {
-      if (t1 > t2) {
-        return 1;
-      } else {
-        return 0;
-      }
-    }
-   */
+     // Note that peer health monitor will timeout errors so that nodes
+     // without recent errors come back as Long.MAX_VALUE here
+     t1 = peerHealthMonitor.getLastWeakErrorTime(r1);
+     t2 = peerHealthMonitor.getLastWeakErrorTime(r2);
+     if (t1 < t2) {
+       return -1;
+     } else {
+       if (t1 > t2) {
+         return 1;
+       } else {
+         return 0;
+       }
+     }
+    */
   }
 
   public static void main(String[] args) {
@@ -69,8 +69,12 @@ public class ReplicaHealthPrioritizer implements ReplicaPrioritizer {
       IPAndPort[] suspects;
       IPAndPort[] replicas;
 
-      replicas = IPAndPort.list(ImmutableList.copyOf(StringUtil.splitAndTrim(args[0], ","))).toArray(new IPAndPort[0]);
-      suspects = IPAndPort.list(ImmutableList.copyOf(StringUtil.splitAndTrim(args[1], ","))).toArray(new IPAndPort[0]);
+      replicas =
+          IPAndPort.list(ImmutableList.copyOf(StringUtil.splitAndTrim(args[0], ",")))
+              .toArray(new IPAndPort[0]);
+      suspects =
+          IPAndPort.list(ImmutableList.copyOf(StringUtil.splitAndTrim(args[1], ",")))
+              .toArray(new IPAndPort[0]);
       p = new PeerHealthMonitor(null, null, null);
       for (IPAndPort suspect : suspects) {
         p.addSuspect(suspect, PeerHealthIssue.OpTimeout);

@@ -52,7 +52,10 @@ public class FSStress implements Runnable {
   }
 
   public FSStress(File dir, int durationSeconds, boolean recursive) {
-    this(recursive ? ImmutableList.copyOf(FileUtil.listFilesRecursively(dir)) : ImmutableList.copyOf(dir.listFiles()),
+    this(
+        recursive
+            ? ImmutableList.copyOf(FileUtil.listFilesRecursively(dir))
+            : ImmutableList.copyOf(dir.listFiles()),
         durationSeconds);
   }
 
@@ -105,8 +108,13 @@ public class FSStress implements Runnable {
     long bytes;
 
     bytes = totalBytes.get();
-    out.printf("Elapsed %f\tf %d\tb %d\tGB %d\tMB/s %f %f\n", elapsedSeconds, totalFiles.get(), bytes,
-        bytes / 1000000000, NetUtil.calcMBps(bytes, elapsedSeconds),
+    out.printf(
+        "Elapsed %f\tf %d\tb %d\tGB %d\tMB/s %f %f\n",
+        elapsedSeconds,
+        totalFiles.get(),
+        bytes,
+        bytes / 1000000000,
+        NetUtil.calcMBps(bytes, elapsedSeconds),
         NetUtil.calcMBps(bytes - lastBytes, elapsedSeconds - lastElapsedSeconds));
     lastBytes = bytes;
     lastElapsedSeconds = elapsedSeconds;
@@ -134,8 +142,14 @@ public class FSStress implements Runnable {
         long bytes;
 
         bytes = bytesRead;
-        out.printf("id %d\tduration %f\tfiles %d\tbytes %d\tGB %d\tMB/s %f %f\n", id, runTimer.getSplitSeconds(),
-            filesRead, bytes, bytes / 1000000000, NetUtil.calcMBps(bytes, runTimer.getSplitSeconds()),
+        out.printf(
+            "id %d\tduration %f\tfiles %d\tbytes %d\tGB %d\tMB/s %f %f\n",
+            id,
+            runTimer.getSplitSeconds(),
+            filesRead,
+            bytes,
+            bytes / 1000000000,
+            NetUtil.calcMBps(bytes, runTimer.getSplitSeconds()),
             NetUtil.calcMBps(bytes, displayIntervalSeconds));
         displayTimer.reset();
       }

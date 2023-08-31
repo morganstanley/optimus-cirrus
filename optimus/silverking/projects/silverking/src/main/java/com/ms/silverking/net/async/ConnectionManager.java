@@ -30,8 +30,8 @@ class ConnectionManager<T extends Connection> implements ConnectionController {
 
   private static Logger log = LoggerFactory.getLogger(ConnectionManager.class);
 
-  private static final Set<ConnectionManager> activeManagers = Collections.newSetFromMap(
-      new WeakHashMap<ConnectionManager, Boolean>());
+  private static final Set<ConnectionManager> activeManagers =
+      Collections.newSetFromMap(new WeakHashMap<ConnectionManager, Boolean>());
 
   static void addManager(ConnectionManager manager) {
     activeManagers.add(manager);
@@ -39,19 +39,20 @@ class ConnectionManager<T extends Connection> implements ConnectionController {
   }
 
   /**
-   * this will check if a connection is local to VM or not
-   * this can happen if a client is created within server e.g. we do that in NamespaceMetaStore
-   * when this internal client connects to server in the same VM, that connection will be
-   * recognized by this call. The way it does that is by going through other ConnectionManager
-   * objects created in the same VM and check if thay hold the other end of a given conection,
+   * this will check if a connection is local to VM or not this can happen if a client is created
+   * within server e.g. we do that in NamespaceMetaStore when this internal client connects to
+   * server in the same VM, that connection will be recognized by this call. The way it does that is
+   * by going through other ConnectionManager objects created in the same VM and check if thay hold
+   * the other end of a given conection,
    *
    * @param serverSideEndpoints
    * @param serverSideManager
    * @return
    */
-  private static final boolean isLocalToVM(Pair<IPAndPort, IPAndPort> serverSideEndpoints,
-      ConnectionManager serverSideManager) {
-    Pair<IPAndPort, IPAndPort> clientSideEndPoints = Pair.of(serverSideEndpoints.getV2(), serverSideEndpoints.getV1());
+  private static final boolean isLocalToVM(
+      Pair<IPAndPort, IPAndPort> serverSideEndpoints, ConnectionManager serverSideManager) {
+    Pair<IPAndPort, IPAndPort> clientSideEndPoints =
+        Pair.of(serverSideEndpoints.getV2(), serverSideEndpoints.getV1());
     for (ConnectionManager manager : activeManagers) {
       if (manager != serverSideManager) {
         if (manager.connectionMap.containsKey(clientSideEndPoints)) {
@@ -62,10 +63,9 @@ class ConnectionManager<T extends Connection> implements ConnectionController {
     return false;
   }
 
-  /**
-   * Map of Connections where Key is a pair of local and remote IPAndPort in that order
-   */
-  private final ConcurrentMap<Pair<IPAndPort, IPAndPort>, T> connectionMap = new ConcurrentHashMap<>();
+  /** Map of Connections where Key is a pair of local and remote IPAndPort in that order */
+  private final ConcurrentMap<Pair<IPAndPort, IPAndPort>, T> connectionMap =
+      new ConcurrentHashMap<>();
 
   @Override
   public int disconnectAll(String reason) {
@@ -79,7 +79,10 @@ class ConnectionManager<T extends Connection> implements ConnectionController {
         disconnected = disconnected + 1;
       }
     }
-    log.info("{} ConnectionManager disconnected {} and found {} localToVM connections", reason, disconnected,
+    log.info(
+        "{} ConnectionManager disconnected {} and found {} localToVM connections",
+        reason,
+        disconnected,
         localToVM);
     return disconnected;
   }
@@ -102,6 +105,6 @@ class ConnectionManager<T extends Connection> implements ConnectionController {
     Pair<IPAndPort, IPAndPort> endPoints = Pair.of(local, remote);
     connectionMap.remove(endPoints);
     c.disconnect();
-    log.info("ConnectionManager disconnect: {} {}", c , reason);
+    log.info("ConnectionManager disconnect: {} {}", c, reason);
   }
 }

@@ -56,14 +56,15 @@ public class KeyUtil {
 
     _bytes = _key.toByteArray();
     bytes = new byte[DHTKey.BYTES_PER_KEY];
-    //System.out.println(StringUtil.byteArrayToHexString(_key.toByteArray()));
-    //System.out.println(bytes.length +" "+ _bytes.length);
+    // System.out.println(StringUtil.byteArrayToHexString(_key.toByteArray()));
+    // System.out.println(bytes.length +" "+ _bytes.length);
     if (_bytes.length > DHTKey.BYTES_PER_KEY) {
       start = _bytes.length - DHTKey.BYTES_PER_KEY;
     } else {
       start = 0;
     }
-    System.arraycopy(_bytes, start, bytes, bytes.length - _bytes.length + start, _bytes.length - start);
+    System.arraycopy(
+        _bytes, start, bytes, bytes.length - _bytes.length + start, _bytes.length - start);
     return new SimpleKey(bytes);
   }
 
@@ -79,7 +80,7 @@ public class KeyUtil {
       key1 = new SimpleKey(random.nextLong(), random.nextLong());
       _key1 = keyToBigInteger(key1);
       key2 = bigIntegerToKey(_key1);
-      //System.out.println(key1 +"\t"+ key2);
+      // System.out.println(key1 +"\t"+ key2);
       if (!key1.equals(key2)) {
         throw new RuntimeException("key mismatch");
       }
@@ -142,4 +143,4 @@ public class KeyUtil {
   /**
    * @param args
    */
- }
+}

@@ -95,37 +95,65 @@ object LoggingInfo {
   lazy val getUser: String = System.getProperty("user.name", "unknown")
   lazy val pid: Long = Pid.pidOrZero()
   lazy val gsfControllerId: Option[String] = Option(System.getenv("GSF_CONTROLLER_ID"))
+
+  lazy val appName = Option(System.getProperty("optimus.ui.appname", System.getProperty("APP_NAME")))
+  lazy val appVersion = Option(System.getProperty("optimus.ui.appver")).getOrElse("")
+  lazy val os = Option(System.getProperty("os.name")).getOrElse("")
+  lazy val tmId = sys.env.getOrElse("TREADMILL_INSTANCEID", "")
 }
 
 object HardwareInfo {
-  private val MapRe = """(\S.*\S)\s*\:\s*(.*\S)\s*""".r
   private var id = -1
   lazy val allCpuInfo: Try[Map[Int, Map[String, String]]] = Try {
-      val cpus = mutable.HashMap.empty[Int, mutable.HashMap[String, String]]
-      Source.fromFile("/proc/cpuinfo").getLines().foreach {
-        case MapRe("processor", sid) =>
-          id = sid.toInt
-          cpus += id -> mutable.HashMap.empty
-        case MapRe(k, v) if id >= 0 =>
-          cpus(id) += k.replaceAllLiterally(" ", "_") -> v
-        case _ =>
-      }
-      cpus.toMap.mapValuesNow(_.toMap)
+    val cpus = mutable.HashMap.empty[Int, mutable.HashMap[String, String]]
+    readInfo("/proc/cpuinfo") { (k, v) =>
+      if (k == "processor") {
+        id = v.toInt
+        cpus += id -> mutable.HashMap.empty[String, String]
+      } else cpus(id) += k.replaceAllLiterally(" ", "_") -> v
+    }
+    cpus.toMap.mapValuesNow(_.toMap)
   }
 
   // TODO (OPTIMUS-51948): Consider making extracted info part of DTC key
-  lazy val cpuInfo: Map[String, String] = if(Properties.isWin) Map("exception" -> "windows") else
-    allCpuInfo.flatMap(infos => Try(infos(0) + ("processors" -> (id+1).toString))) match {
-      case Success(map) => map
-      case Failure(t) => Map("exception" -> t.toString)
+  lazy val cpuInfo: Map[String, String] =
+    if (Properties.isWin) Map("exception" -> "windows")
+    else
+      allCpuInfo.flatMap(infos => Try(infos(0) + ("processors" -> (id + 1).toString))) match {
+        case Success(map) => map
+        case Failure(t)   => Map("exception" -> t.toString)
+      }
+  lazy val memInfo: Map[String, String] =
+    if (Properties.isWin) Map("exception" -> "windows")
+    else
+      Try {
+        val memInfos = mutable.HashMap.empty[String, String]
+        readInfo("/proc/meminfo") { (k, v) => memInfos.put(k, v) }
+        memInfos.toMap
+      } match {
+        case Success(map) => map
+        case Failure(t)   => Map("exception" -> t.toString)
+      }
+
+  private def readInfo(file: String)(f: (String, String) => Unit): Unit = {
+    val source = Source.fromFile(file)
+    val it = source.getLines()
+    while (it.hasNext) {
+      val line = it.next()
+      // if it's a key-value pair, parse it
+      if (line.contains(":")) {
+        val (k0, v0) = keyValue(line)
+        f(k0, v0)
+      }
     }
-  lazy val memInfo: Map[String, String] = if(Properties.isWin) Map("exception" -> "windows") else Try {
-    Source.fromFile("/proc/meminfo").getLines.collect {
-      case MapRe(k, v) => k -> v
-    }.toMap
-  } match {
-    case Success(map) => map
-    case Failure(t) => Map("exception" -> t.toString)
+    source.close()
+  }
+
+  // parse : separated pairs in cpuinfo and meminfo files
+  private def keyValue(line: String): (String, String) = {
+    val colonIndex = line.indexOf(":")
+    val k = line.take(colonIndex).trim
+    val v = line.takeRight(line.length - colonIndex - 1).trim
+    (k, v)
   }
 }
-

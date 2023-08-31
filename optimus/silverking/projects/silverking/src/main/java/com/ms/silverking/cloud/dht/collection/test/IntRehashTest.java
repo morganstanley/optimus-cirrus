@@ -29,7 +29,9 @@ public class IntRehashTest {
   public static void rehashTest(int size) {
     IntArrayDHTKeyCuckoo map;
 
-    map = new IntArrayDHTKeyCuckoo(new WritableCuckooConfig(totalEntries, numSubTables, entriesPerBucket, cuckooLimit));
+    map =
+        new IntArrayDHTKeyCuckoo(
+            new WritableCuckooConfig(totalEntries, numSubTables, entriesPerBucket, cuckooLimit));
     for (int i = 0; i < size; i++) {
       try {
         map.put(new SimpleKey(0, i), i);

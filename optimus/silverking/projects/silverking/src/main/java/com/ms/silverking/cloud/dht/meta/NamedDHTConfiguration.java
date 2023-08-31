@@ -18,8 +18,8 @@ public class NamedDHTConfiguration {
   private final String dhtName;
   private final DHTConfiguration dhtConfig;
 
-  public static final NamedDHTConfiguration emptyTemplate = new NamedDHTConfiguration(null,
-      DHTConfiguration.emptyTemplate);
+  public static final NamedDHTConfiguration emptyTemplate =
+      new NamedDHTConfiguration(null, DHTConfiguration.emptyTemplate);
 
   static {
     ObjectDefParser2.addParser(emptyTemplate, FieldsRequirement.REQUIRE_ALL_FIELDS);
@@ -37,24 +37,24 @@ public class NamedDHTConfiguration {
   public DHTConfiguration getDHTConfig() {
     return dhtConfig;
   }
-    
-    /*
-    public static NamedDHTConfiguration parse(String def, long version) {
-        DHTConfiguration    dhtConfig;
-        String              dhtName;
-        int                 index;
-        
-        index = def.indexOf(delimiter);
-        if (index < 0) {
-            dhtName = def;
-            dhtConfig = null;
-        } else {
-            dhtName = def.substring(0, index);
-            dhtConfig = DHTConfiguration.parse(def.substring(index + 1), version);
-        }
-        return new NamedDHTConfiguration(dhtName, dhtConfig);
-    }    
-    */
+
+  /*
+  public static NamedDHTConfiguration parse(String def, long version) {
+      DHTConfiguration    dhtConfig;
+      String              dhtName;
+      int                 index;
+
+      index = def.indexOf(delimiter);
+      if (index < 0) {
+          dhtName = def;
+          dhtConfig = null;
+      } else {
+          dhtName = def.substring(0, index);
+          dhtConfig = DHTConfiguration.parse(def.substring(index + 1), version);
+      }
+      return new NamedDHTConfiguration(dhtName, dhtConfig);
+  }
+  */
 
   public static NamedDHTConfiguration parse(String def) {
     return ObjectDefParser2.parse(NamedDHTConfiguration.class, def);

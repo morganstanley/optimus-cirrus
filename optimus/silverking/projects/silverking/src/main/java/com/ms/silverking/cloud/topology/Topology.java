@@ -22,8 +22,8 @@ import com.ms.silverking.cloud.meta.VersionedDefinition;
 import com.ms.silverking.collection.HashedSetMap;
 
 /**
- * A hierarchical representation of a relationship between entities such as
- * servers, racks, datacenters, etc.
+ * A hierarchical representation of a relationship between entities such as servers, racks,
+ * datacenters, etc.
  */
 public class Topology implements VersionedDefinition {
   private final String name;
@@ -48,7 +48,7 @@ public class Topology implements VersionedDefinition {
   }
 
   public static void computeNodeClasses(Node node, Map<String, NodeClass> nodeClasses) {
-    //nodeClasses.put(node.getNodeClass(), )
+    // nodeClasses.put(node.getNodeClass(), )
     for (Node child : node.getChildren()) {
       computeNodeClasses(child, nodeClasses);
     }

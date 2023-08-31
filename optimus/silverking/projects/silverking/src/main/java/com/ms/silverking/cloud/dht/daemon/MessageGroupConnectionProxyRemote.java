@@ -27,12 +27,14 @@ class MessageGroupConnectionProxyRemote implements MessageGroupConnectionProxy {
 
   @Override
   public void sendAsynchronous(Object data, long deadline) throws IOException {
-    //Log.info("MessageGroupConnectionProxyRemote sending to ", connection.getRemoteIPAndPort());
+    // Log.info("MessageGroupConnectionProxyRemote sending to ", connection.getRemoteIPAndPort());
     connection.sendAsynchronous(data, deadline);
   }
 
   @Override
-  public void sendAsynchronousWithTrace(Object data, long deadline, UUIDBase sendID, AsyncSendListener asyncSendListener) throws IOException {
+  public void sendAsynchronousWithTrace(
+      Object data, long deadline, UUIDBase sendID, AsyncSendListener asyncSendListener)
+      throws IOException {
     connection.sendAsynchronous(data, sendID, asyncSendListener, deadline);
   }
 
@@ -49,5 +51,4 @@ class MessageGroupConnectionProxyRemote implements MessageGroupConnectionProxy {
   public Optional<String> getAuthenticatedUser() {
     return connection.getAuthenticatedUser();
   }
-
 }

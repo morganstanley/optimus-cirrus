@@ -39,11 +39,11 @@ public class DebugMessageDump {
     MessageGroup mg;
 
     mg = parse(dumpFile);
-    //System.out.println(mg);
-    //mg.displayForDebug(true);
+    // System.out.println(mg);
+    // mg.displayForDebug(true);
 
     for (MessageGroupKVEntry entry : mg.getPutValueKeyIterator(ChecksumType.MD5)) {
-      log.debug("Entry: {}" , entry);
+      log.debug("Entry: {}", entry);
     }
   }
 
@@ -55,9 +55,13 @@ public class DebugMessageDump {
     List<ByteBuffer> buffers;
 
     buffers = getBuffers(lines);
-    return new MessageGroup(messageType, 0, // options
-        new UUIDBase(0, 0), 0L, // context
-        buffers.toArray(new ByteBuffer[0]), new byte[6], // originator
+    return new MessageGroup(
+        messageType,
+        0, // options
+        new UUIDBase(0, 0),
+        0L, // context
+        buffers.toArray(new ByteBuffer[0]),
+        new byte[6], // originator
         0, // deadlineRelativeMillis
         ForwardingMode.DO_NOT_FORWARD); // forward
   }
@@ -74,7 +78,7 @@ public class DebugMessageDump {
 
       bufferInfo = new BufferInfo(lines.get(i));
       buf = StringUtil.hexStringToByteBuffer(lines.get(i + 1));
-      //System.out.println(bufferInfo +"\t"+ buf);
+      // System.out.println(bufferInfo +"\t"+ buf);
       buffers.add(buf);
       i += 2;
     }
@@ -87,7 +91,7 @@ public class DebugMessageDump {
     final int lim;
     final int cap;
 
-    //0       java.nio.HeapByteBuffer[pos=0 lim=1794 cap=1794]
+    // 0       java.nio.HeapByteBuffer[pos=0 lim=1794 cap=1794]
     BufferInfo(String s) {
       int i;
 

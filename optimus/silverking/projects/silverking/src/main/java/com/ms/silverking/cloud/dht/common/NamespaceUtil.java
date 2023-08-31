@@ -34,38 +34,51 @@ import com.ms.silverking.numeric.NumConversion;
 public class NamespaceUtil {
   private static final NamespaceCreator creator = new SimpleNamespaceCreator();
 
-  public static final String reservedNamespacePrefix = "__"; // All reserved namespaces must start with this. Users
+  public static final String reservedNamespacePrefix =
+      "__"; // All reserved namespaces must start with this. Users
   // may not use namespaces that begin with this
-  public static final String metaInfoNamespaceName = "__DHT_Meta__"; // Current dir name 273d6df499e32426
+  public static final String metaInfoNamespaceName =
+      "__DHT_Meta__"; // Current dir name 273d6df499e32426
   public static final Namespace metaInfoNamespace = creator.createNamespace(metaInfoNamespaceName);
-  public static final GetOptions metaNSDefaultGetOptions = DHTConstants.standardGetOptions.forwardingMode(ForwardingMode.ALL); // Required to bootstrap lost replicas
-  public static final PutOptions metaNSDefaultPutOptions = new PutOptions(DHTConstants.standardTimeoutController,
-                                                                          DHTConstants.noSecondaryTargets,
-                                                                          Compression.NONE,
-                                                                          ChecksumType.MD5,
-                                                                          false,
-                                                                          PutOptions.defaultVersion,
-                                                                          PutOptions.noVersionRequired,
-                                                                          PutOptions.noLock,
-                                                                          DHTConstants.defaultFragmentationThreshold,
-                                                                          null,
-                                                                          PutOptions.noAuthorizationUser);
-  public static final InvalidationOptions metaNSDefaultInvalidationOptions = OptionsHelper.newInvalidationOptions(
-      DHTConstants.standardTimeoutController, PutOptions.defaultVersion, PutOptions.noVersionRequired,
-      PutOptions.noLock, DHTConstants.noSecondaryTargets);
-  public static final NamespaceOptions metaInfoNamespaceOptions = OptionsHelper.newNamespaceOptions(StorageType.FILE,
-                                                                                                    ConsistencyProtocol.TWO_PHASE_COMMIT,
-                                                                                                    NamespaceVersionMode.SINGLE_VERSION,
-                                                                                                    metaNSDefaultPutOptions,
-                                                                                                    metaNSDefaultInvalidationOptions,
-                                                                                                    metaNSDefaultGetOptions,
-                                                                                                    DHTConstants.standardWaitOptions)
-                                                                               .asWriteOnce();
+  public static final GetOptions metaNSDefaultGetOptions =
+      DHTConstants.standardGetOptions.forwardingMode(
+          ForwardingMode.ALL); // Required to bootstrap lost replicas
+  public static final PutOptions metaNSDefaultPutOptions =
+      new PutOptions(
+          DHTConstants.standardTimeoutController,
+          DHTConstants.noSecondaryTargets,
+          Compression.NONE,
+          ChecksumType.MD5,
+          false,
+          PutOptions.defaultVersion,
+          PutOptions.noVersionRequired,
+          PutOptions.noLock,
+          DHTConstants.defaultFragmentationThreshold,
+          null,
+          PutOptions.noAuthorizationUser);
+  public static final InvalidationOptions metaNSDefaultInvalidationOptions =
+      OptionsHelper.newInvalidationOptions(
+          DHTConstants.standardTimeoutController,
+          PutOptions.defaultVersion,
+          PutOptions.noVersionRequired,
+          PutOptions.noLock,
+          DHTConstants.noSecondaryTargets);
+  public static final NamespaceOptions metaInfoNamespaceOptions =
+      OptionsHelper.newNamespaceOptions(
+              StorageType.FILE,
+              ConsistencyProtocol.TWO_PHASE_COMMIT,
+              NamespaceVersionMode.SINGLE_VERSION,
+              metaNSDefaultPutOptions,
+              metaNSDefaultInvalidationOptions,
+              metaNSDefaultGetOptions,
+              DHTConstants.standardWaitOptions)
+          .asWriteOnce();
   // meta info ns must be write once currently because convergence only supports
   // SINGLE_VERSION currently
   // This implies that namespace options of a namespace can never change.
   // That's probably a sensible invariant to require anyway.
-  public static final NamespaceProperties metaInfoNamespaceProperties = new NamespaceProperties(metaInfoNamespaceOptions);
+  public static final NamespaceProperties metaInfoNamespaceProperties =
+      new NamespaceProperties(metaInfoNamespaceOptions);
   public static final Map<Long, NamespaceProperties> systemNamespaceProperties;
 
   static {
@@ -73,19 +86,34 @@ public class NamespaceUtil {
 
     nsCreator = new SimpleNamespaceCreator();
     systemNamespaceProperties = new HashMap<>();
-    systemNamespaceProperties.put(nsCreator.createNamespace(com.ms.silverking.cloud.dht.client.Namespace.systemName).contextAsLong(),
-                                  new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
-    systemNamespaceProperties.put(nsCreator.createNamespace(com.ms.silverking.cloud.dht.client.Namespace.nodeName).contextAsLong(),
-                                  new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
-    systemNamespaceProperties.put(nsCreator.createNamespace(com.ms.silverking.cloud.dht.client.Namespace.replicasName).contextAsLong(),
-                                  new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
+    systemNamespaceProperties.put(
+        nsCreator
+            .createNamespace(com.ms.silverking.cloud.dht.client.Namespace.systemName)
+            .contextAsLong(),
+        new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
+    systemNamespaceProperties.put(
+        nsCreator
+            .createNamespace(com.ms.silverking.cloud.dht.client.Namespace.nodeName)
+            .contextAsLong(),
+        new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
+    systemNamespaceProperties.put(
+        nsCreator
+            .createNamespace(com.ms.silverking.cloud.dht.client.Namespace.replicasName)
+            .contextAsLong(),
+        new NamespaceProperties(DHTConstants.dynamicNamespaceOptions));
   }
 
-  public static final NamespacePerspectiveOptions<String, String> metaNSPOptions = new NamespacePerspectiveOptions<>(
-      String.class, String.class, KeyDigestType.MD5, metaInfoNamespaceOptions.getDefaultPutOptions(),
-      metaInfoNamespaceOptions.getDefaultInvalidationOptions(), metaInfoNamespaceOptions.getDefaultGetOptions(),
-      metaInfoNamespaceOptions.getDefaultWaitOptions(), new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource),
-      null);
+  public static final NamespacePerspectiveOptions<String, String> metaNSPOptions =
+      new NamespacePerspectiveOptions<>(
+          String.class,
+          String.class,
+          KeyDigestType.MD5,
+          metaInfoNamespaceOptions.getDefaultPutOptions(),
+          metaInfoNamespaceOptions.getDefaultInvalidationOptions(),
+          metaInfoNamespaceOptions.getDefaultGetOptions(),
+          metaInfoNamespaceOptions.getDefaultWaitOptions(),
+          new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource),
+          null);
 
   public static long nameToContext(String name) {
     return new SimpleNamespaceCreator().createNamespace(name).contextAsLong();
@@ -119,12 +147,12 @@ public class NamespaceUtil {
      */
 
     // The following fields are immutable, so we still need to check its equality
-    return oldOpts.getStorageType() == newOpts.getStorageType() &&
-           oldOpts.getConsistencyProtocol() == newOpts.getConsistencyProtocol() &&
-           oldOpts.getVersionMode() == newOpts.getVersionMode() &&
-           oldOpts.getRevisionMode() == newOpts.getRevisionMode() &&
-           oldOpts.getSegmentSize() == newOpts.getSegmentSize() &&
-           oldOpts.getMaxValueSize() == newOpts.getMaxValueSize() &&
-           oldOpts.getAllowLinks() == newOpts.getAllowLinks();
+    return oldOpts.getStorageType() == newOpts.getStorageType()
+        && oldOpts.getConsistencyProtocol() == newOpts.getConsistencyProtocol()
+        && oldOpts.getVersionMode() == newOpts.getVersionMode()
+        && oldOpts.getRevisionMode() == newOpts.getRevisionMode()
+        && oldOpts.getSegmentSize() == newOpts.getSegmentSize()
+        && oldOpts.getMaxValueSize() == newOpts.getMaxValueSize()
+        && oldOpts.getAllowLinks() == newOpts.getAllowLinks();
   }
 }

@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client.impl;
 
 import com.ms.silverking.cloud.dht.common.DHTKey;
 
-/**
- * Computes a DHTKey from a byte array.
- */
+/** Computes a DHTKey from a byte array. */
 public interface KeyDigest {
   public DHTKey computeKey(byte[] bytes);
 

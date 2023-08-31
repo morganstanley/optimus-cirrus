@@ -15,7 +15,8 @@ import java.util.Optional;
 
 public class AuthenticationResult {
   private String authenticatedId;
-  // We encapsulate AuthFailedAction in AuthResult so that Authenticator can define different actions for different
+  // We encapsulate AuthFailedAction in AuthResult so that Authenticator can define different
+  // actions for different
   // authentication situation
   // this action currently is only used if <i>isFailed()</i> returns true
   private AuthenticationFailedAction failedAction;

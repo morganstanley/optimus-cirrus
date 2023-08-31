@@ -20,12 +20,12 @@ import com.google.caliper.Param;
 import com.google.caliper.runner.CaliperMain;
 
 public class SimpleMapTest {
-  //@Param({"10", "25", "50"})
-  @Param({ "25" })
+  // @Param({"10", "25", "50"})
+  @Param({"25"})
   int writePercentage;
 
-  //@Param({"10", "100", "1000"})
-  @Param({ "100" })
+  // @Param({"10", "100", "1000"})
+  @Param({"100"})
   int keyRange;
 
   private static final int randomSize = 32768;
@@ -75,16 +75,16 @@ public class SimpleMapTest {
   public void timeHashMap(int reps) {
     doMap(reps, new HashMap<Integer, Integer>());
   }
-    
-    /*
-    public void timeConcurrentHashMap(int reps) {
-        doMap(reps, new ConcurrentHashMap<Integer, Integer>());
-    }
-    
-    public void timeConcurrentSkipListMap(int reps) {
-        doMap(reps, new ConcurrentSkipListMap<Integer, Integer>());
-    }
-    */
+
+  /*
+  public void timeConcurrentHashMap(int reps) {
+      doMap(reps, new ConcurrentHashMap<Integer, Integer>());
+  }
+
+  public void timeConcurrentSkipListMap(int reps) {
+      doMap(reps, new ConcurrentSkipListMap<Integer, Integer>());
+  }
+  */
 
   @Benchmark
   public void timeSimpleHashMap(int reps) {

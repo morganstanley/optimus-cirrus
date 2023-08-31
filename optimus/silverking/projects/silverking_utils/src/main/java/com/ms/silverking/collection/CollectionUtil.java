@@ -39,10 +39,9 @@ public class CollectionUtil {
     return toString(c, defaultStartBrace, defaultEndBrace, separator, defaultEmptyDef);
   }
 
-  public static <K> String toString(Collection<K> c, String startBrace, String endBrace, char separator,
-      String emptyDef) {
-    if (c.isEmpty())
-      return emptyDef;
+  public static <K> String toString(
+      Collection<K> c, String startBrace, String endBrace, char separator, String emptyDef) {
+    if (c.isEmpty()) return emptyDef;
 
     StringBuilder sb = new StringBuilder();
     sb.append(startBrace);
@@ -69,14 +68,23 @@ public class CollectionUtil {
   }
 
   public static <K, V> String mapToString(Map<K, V> map) {
-    return mapToString(map, defaultStartBrace, defaultEndBrace, defaultMapString, defaultMapEntrySeparator,
+    return mapToString(
+        map,
+        defaultStartBrace,
+        defaultEndBrace,
+        defaultMapString,
+        defaultMapEntrySeparator,
         defaultEmptyDef);
   }
 
-  public static <K, V> String mapToString(Map<K, V> map, String startBrace, String endBrace, String mapString,
-      String separator, String emptyDef) {
-    if (map.isEmpty())
-      return emptyDef;
+  public static <K, V> String mapToString(
+      Map<K, V> map,
+      String startBrace,
+      String endBrace,
+      String mapString,
+      String separator,
+      String emptyDef) {
+    if (map.isEmpty()) return emptyDef;
 
     StringBuilder sb = new StringBuilder();
     sb.append(startBrace);
@@ -141,8 +149,8 @@ public class CollectionUtil {
     return numberSetToHexString(set, defaultStartBrace, defaultEndBrace, defaultSeparator);
   }
 
-  public static <T extends Number> String numberSetToHexString(Set<T> set, String startBrace, String endBrace,
-      char separator) {
+  public static <T extends Number> String numberSetToHexString(
+      Set<T> set, String startBrace, String endBrace, char separator) {
     StringBuffer sb;
     boolean initial;
 

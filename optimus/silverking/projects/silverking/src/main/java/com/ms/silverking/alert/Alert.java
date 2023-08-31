@@ -53,18 +53,22 @@ public class Alert {
 
   @Override
   public int hashCode() {
-    return context.hashCode() ^ Integer.hashCode(level) ^ key.hashCode() ^ message.hashCode() ^ data.hashCode();
+    return context.hashCode()
+        ^ Integer.hashCode(level)
+        ^ key.hashCode()
+        ^ message.hashCode()
+        ^ data.hashCode();
   }
 
   // if .equals() is called with an object that is not `Alert`, ClassCastException will be thrown
   @Override
   public boolean equals(Object obj) {
     Alert alert = (Alert) obj;
-    return context.equals(alert.context) &&
-           level == alert.level &&
-           key.equals(alert.key) &&
-           message.equals(alert.message) &&
-           data.equals(alert.data);
+    return context.equals(alert.context)
+        && level == alert.level
+        && key.equals(alert.key)
+        && message.equals(alert.message)
+        && data.equals(alert.data);
   }
 
   @Override

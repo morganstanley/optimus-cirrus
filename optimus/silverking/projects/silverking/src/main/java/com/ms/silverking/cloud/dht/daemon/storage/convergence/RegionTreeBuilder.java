@@ -23,9 +23,7 @@ import com.ms.silverking.numeric.NumUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Builds a checksum tree for a single region.
- */
+/** Builds a checksum tree for a single region. */
 public class RegionTreeBuilder {
   private final RingRegion region;
   private ChecksumNode root;
@@ -54,24 +52,29 @@ public class RegionTreeBuilder {
     if (estimatedKeys == 0) {
       height = 1;
     } else {
-      height = Math.max((int) Math.ceil(NumUtil.log((double) entriesPerNode, (double) estimatedKeys)), 1);
+      height =
+          Math.max(
+              (int) Math.ceil(NumUtil.log((double) entriesPerNode, (double) estimatedKeys)), 1);
     }
     leaves = createLeaves(region, numLeaves);
     if (debug) {
-      log.debug("{}",height);
-      log.debug("Leaves: {}" , leavesToString());
+      log.debug("{}", height);
+      log.debug("Leaves: {}", leavesToString());
     }
     root = createInternalNodes(leaves, height, entriesPerNode, estimatedKeys);
     if (debug) {
-      log.debug("{}",root.getRegion());
-      log.debug("{}",region);
+      log.debug("{}", root.getRegion());
+      log.debug("{}", region);
       log.debug("");
-      log.debug("{}",root);
+      log.debug("{}", root);
     }
     assert root.getRegion().equals(region);
   }
 
-  public static ChecksumNode build(RingRegion region, int entriesPerNode, int estimatedKeys,
+  public static ChecksumNode build(
+      RingRegion region,
+      int entriesPerNode,
+      int estimatedKeys,
       Iterable<KeyAndVersionChecksum> kvcIterable) {
     RegionTreeBuilder rtb;
     ChecksumNode root;
@@ -80,7 +83,7 @@ public class RegionTreeBuilder {
     rtb.addChecksums(kvcIterable);
     root = rtb.getRoot();
     rtb.freezeLeaves();
-    //root.freeze();
+    // root.freeze();
     return root;
   }
 
@@ -110,8 +113,8 @@ public class RegionTreeBuilder {
     return leaves;
   }
 
-  private static ChecksumNode createInternalNodes(LeafChecksumNode[] leaves, int height, int entriesPerNode,
-      int estimatedKeys) {
+  private static ChecksumNode createInternalNodes(
+      LeafChecksumNode[] leaves, int height, int entriesPerNode, int estimatedKeys) {
     ChecksumNode[][] nodes;
 
     nodes = new ChecksumNode[height][];
@@ -130,7 +133,7 @@ public class RegionTreeBuilder {
 
     nextRowChildren = estimatedKeys;
     for (int i = height - 1; i >= 0; i--) {
-      //System.out.printf("\n%d **********************************\n", i);
+      // System.out.printf("\n%d **********************************\n", i);
       if (i < height - 1) {
         int rowSize;
         int childrenPerNode;
@@ -138,7 +141,7 @@ public class RegionTreeBuilder {
         assert nextRowChildren > 0;
         rowSize = (nextRowChildren - 1) / entriesPerNode + 1;
         nodes[i] = new NonLeafChecksumNode[rowSize];
-        //childrenPerNode = Math.round(nextRowChildren / rowSize);
+        // childrenPerNode = Math.round(nextRowChildren / rowSize);
         childrenPerNode = entriesPerNode;
         for (int j = 0; j < nodes[i].length; j++) {
           RingRegion region;
@@ -149,8 +152,10 @@ public class RegionTreeBuilder {
           i0 = j * childrenPerNode;
           i1 = Math.min(i0 + childrenPerNode, nextRowChildren);
           children = ImmutableList.copyOf(Arrays.copyOfRange(nodes[i + 1], i0, i1));
-          region = new RingRegion(children.get(0).getRegion().getStart(), children.get(
-              children.size() - 1).getRegion().getEnd());
+          region =
+              new RingRegion(
+                  children.get(0).getRegion().getStart(),
+                  children.get(children.size() - 1).getRegion().getEnd());
           nodes[i][j] = new NonLeafChecksumNode(region, children);
           if (debug) {
             log.debug("{} {} {} {} {}", i, j, i0, i1, nodes[i][j].getRegion());
@@ -251,7 +256,7 @@ public class RegionTreeBuilder {
       for (int i = 0; i < numKeys; i++) {
         rtb.addChecksum(new KeyAndVersionChecksum(KeyUtil.randomRegionKey(region), i, 0));
       }
-     log.info("{}",rtb);
+      log.info("{}", rtb);
     }
   }
 }

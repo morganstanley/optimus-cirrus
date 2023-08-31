@@ -34,7 +34,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Provides NamespaceOptions for the StorageModule. Internally uses NamespaceOptionsClientBase to retrieve options.
+ * Provides NamespaceOptions for the StorageModule. Internally uses NamespaceOptionsClientBase to
+ * retrieve options.
  */
 public class NamespaceMetaStore {
   private final DHTSession session;
@@ -46,12 +47,12 @@ public class NamespaceMetaStore {
   private static Logger log = LoggerFactory.getLogger(NamespaceMetaStore.class);
 
   private static final long nsOptionsFetchTimeoutMillis =
-      SessionOptions.getDefaultTimeoutController().getMaxRelativeTimeoutMillis(
-      null);
+      SessionOptions.getDefaultTimeoutController().getMaxRelativeTimeoutMillis(null);
 
-  public enum NamespaceOptionsRetrievalMode {FetchRemotely, LocalCheckOnly}
-
-  ;
+  public enum NamespaceOptionsRetrievalMode {
+    FetchRemotely,
+    LocalCheckOnly
+  };
 
   private static final boolean debug = true;
 
@@ -62,17 +63,19 @@ public class NamespaceMetaStore {
       ClientDHTConfiguration dhtConfig;
 
       ActiveClientOperationTable.disableFinalization();
-      nsOptionsMode = new MetaClient(
-          dhtConfigProvider.getClientDHTConfiguration()).getDHTConfiguration().getNamespaceOptionsMode();
+      nsOptionsMode =
+          new MetaClient(dhtConfigProvider.getClientDHTConfiguration())
+              .getDHTConfiguration()
+              .getNamespaceOptionsMode();
       switch (nsOptionsMode) {
-      case ZooKeeper:
-        nsOptionsClient = new NamespaceOptionsClientZKImpl(dhtConfigProvider);
-        break;
-      case MetaNamespace:
-        nsOptionsClient = new NamespaceOptionsClientNSPImpl(session, dhtConfigProvider);
-        break;
-      default:
-        throw new RuntimeException("Unhandled nsOptionsMode: " + nsOptionsMode);
+        case ZooKeeper:
+          nsOptionsClient = new NamespaceOptionsClientZKImpl(dhtConfigProvider);
+          break;
+        case MetaNamespace:
+          nsOptionsClient = new NamespaceOptionsClientNSPImpl(session, dhtConfigProvider);
+          break;
+        default:
+          throw new RuntimeException("Unhandled nsOptionsMode: " + nsOptionsMode);
       }
       nsPropertiesMap = new ConcurrentHashMap<>();
       dhtConfig = dhtConfigProvider.getClientDHTConfiguration();
@@ -88,7 +91,8 @@ public class NamespaceMetaStore {
 
   public static NamespaceMetaStore create(ClientDHTConfigurationProvider dhtConfigProvider) {
     try {
-      return new NamespaceMetaStore(new DHTClient().openSession(dhtConfigProvider), dhtConfigProvider);
+      return new NamespaceMetaStore(
+          new DHTClient().openSession(dhtConfigProvider), dhtConfigProvider);
     } catch (Exception e) {
       throw new RuntimeException("Unexpected exception", e);
     }
@@ -108,7 +112,8 @@ public class NamespaceMetaStore {
          */
         return nsOptionsClient.getNsPropertiesForRecovery(nsDir);
       } catch (NamespacePropertiesRetrievalException re) {
-        throw new IOException("Cannot get nsProperties to recover the existing ns [" + nsDir + "]", re);
+        throw new IOException(
+            "Cannot get nsProperties to recover the existing ns [" + nsDir + "]", re);
       }
     }
   }
@@ -125,7 +130,8 @@ public class NamespaceMetaStore {
   // FUTURE - THINK ABOUT COMPLETELY REMOVING ANY READS/WRITES TO META NS FROM THE SERVER SIDE
   // clients can probably do it all
 
-  public NamespaceProperties getNamespaceProperties(long namespace, NamespaceOptionsRetrievalMode retrievalMode) {
+  public NamespaceProperties getNamespaceProperties(
+      long namespace, NamespaceOptionsRetrievalMode retrievalMode) {
     try {
       NamespaceProperties nsProperties;
 
@@ -134,30 +140,32 @@ public class NamespaceMetaStore {
         return nsProperties;
       } else {
         switch (retrievalMode) {
-        case LocalCheckOnly:
-          return null;
-        case FetchRemotely:
-          nsProperties = nsOptionsClient.getNamespacePropertiesWithTimeout(namespace, nsOptionsFetchTimeoutMillis);
-          if (nsProperties != null) {
-            nsPropertiesMap.put(namespace, nsProperties);
-            return nsProperties;
-          } else {
-            log.info("Namespace not found {}", namespace);
-            log.info("{}",getNamespaceMetaDataReplicas(namespace));
-            throw new NamespaceNotCreatedException(Long.toHexString(namespace));
-          }
-        default:
-          throw new RuntimeException("Panic");
+          case LocalCheckOnly:
+            return null;
+          case FetchRemotely:
+            nsProperties =
+                nsOptionsClient.getNamespacePropertiesWithTimeout(
+                    namespace, nsOptionsFetchTimeoutMillis);
+            if (nsProperties != null) {
+              nsPropertiesMap.put(namespace, nsProperties);
+              return nsProperties;
+            } else {
+              log.info("Namespace not found {}", namespace);
+              log.info("{}", getNamespaceMetaDataReplicas(namespace));
+              throw new NamespaceNotCreatedException(Long.toHexString(namespace));
+            }
+          default:
+            throw new RuntimeException("Panic");
         }
       }
     } catch (TimeoutException te) {
-      log.info("Failed to retrieve namespace due to timeout {}" , String.format("{}", namespace));
-      log.info("{}",getNamespaceMetaDataReplicas(namespace));
+      log.info("Failed to retrieve namespace due to timeout {}", String.format("{}", namespace));
+      log.info("{}", getNamespaceMetaDataReplicas(namespace));
       throw new NamespaceNotCreatedException(Long.toHexString(namespace), te);
     } catch (NamespacePropertiesRetrievalException re) {
-      log.info("Failed to retrieve namespace {}" , String.format("{}", namespace));
-      log.info("{}",getNamespaceMetaDataReplicas(namespace));
-      log.info("{}",re);
+      log.info("Failed to retrieve namespace {}", String.format("{}", namespace));
+      log.info("{}", getNamespaceMetaDataReplicas(namespace));
+      log.info("{}", re);
       throw new NamespaceNotCreatedException(Long.toHexString(namespace), re);
     }
   }
@@ -166,13 +174,18 @@ public class NamespaceMetaStore {
     SynchronousNamespacePerspective<String, String> syncNSP;
     String locations;
 
-    syncNSP = session.getNamespace(Namespace.replicasName).openSyncPerspective(String.class, String.class);
+    syncNSP =
+        session
+            .getNamespace(Namespace.replicasName)
+            .openSyncPerspective(String.class, String.class);
     try {
       locations = syncNSP.get(Long.toString(ns));
       return locations;
     } catch (RetrievalException re2) {
-      log.info("{}",re2.getDetailedFailureMessage());
-      log.info("Unexpected failure attempting to find replica locations " + "during failed ns retrieval processing");
+      log.info("{}", re2.getDetailedFailureMessage());
+      log.info(
+          "Unexpected failure attempting to find replica locations "
+              + "during failed ns retrieval processing");
       return "Error";
     }
   }

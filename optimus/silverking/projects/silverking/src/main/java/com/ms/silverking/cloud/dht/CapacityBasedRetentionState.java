@@ -17,8 +17,7 @@ class CapacityBasedRetentionState implements ValueRetentionState {
   private long bytesRetained;
 
   @OmitGeneration
-  public CapacityBasedRetentionState() {
-  }
+  public CapacityBasedRetentionState() {}
 
   public void addBytesRetained(long bytes) {
     bytesRetained += bytes;

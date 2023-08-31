@@ -12,8 +12,7 @@
 package com.ms.silverking.cloud.dht.common;
 
 public class TimeoutException extends Exception {
-  public TimeoutException() {
-  }
+  public TimeoutException() {}
 
   public TimeoutException(String message) {
     super(message);
@@ -27,7 +26,8 @@ public class TimeoutException extends Exception {
     super(message, cause);
   }
 
-  public TimeoutException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+  public TimeoutException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
   }
 }

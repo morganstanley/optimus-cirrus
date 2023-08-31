@@ -22,8 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PolicyParser {
-  public PolicyParser() {
-  }
+  public PolicyParser() {}
 
   private static Logger log = LoggerFactory.getLogger(PolicyParser.class);
 
@@ -32,7 +31,8 @@ public class PolicyParser {
   private static final String rootLabelStart = "StoragePolicyGroup";
   private static final String rootToken = "root";
 
-  public StoragePolicyGroup parsePolicyGroup(File policyFile, long version) throws PolicyParseException {
+  public StoragePolicyGroup parsePolicyGroup(File policyFile, long version)
+      throws PolicyParseException {
     try {
       return parsePolicyGroup(FileUtil.readFileAsString(policyFile), version);
     } catch (IOException ioe) {
@@ -94,12 +94,12 @@ public class PolicyParser {
   }
 
   public StoragePolicy parsePolicy(LabeledBlock policyBlock) throws PolicyParseException {
-    //LabeledBlock    policyBlock;
+    // LabeledBlock    policyBlock;
     List<SubPolicy> subPolicies;
     SubPolicy primarySubPolicy;
     SubPolicy secondarySubPolicy;
 
-    //policyBlock = parseLabeledBlock(def);
+    // policyBlock = parseLabeledBlock(def);
 
     subPolicies = new ArrayList<>();
     for (LabeledBlock subPolicyBlock : parseMultipleLabeledBlocks(policyBlock.block)) {
@@ -110,7 +110,8 @@ public class PolicyParser {
       throw new PolicyParseException("No primary policy specified");
     }
     secondarySubPolicy = findSubPolicy(subPolicies, ReplicationType.Secondary);
-    return new StoragePolicy(NodeClassAndName.parse(policyBlock.label), primarySubPolicy, secondarySubPolicy);
+    return new StoragePolicy(
+        NodeClassAndName.parse(policyBlock.label), primarySubPolicy, secondarySubPolicy);
   }
 
   private SubPolicy findSubPolicy(List<SubPolicy> subPolicies, ReplicationType type) {
@@ -123,7 +124,8 @@ public class PolicyParser {
   }
 
   private SubPolicy parseSubPolicy(LabeledBlock block) throws PolicyParseException {
-    return new SubPolicy(parseReplicationType(block.getLabel()), SubPolicyMember.parseMultiple(block.getBlock()));
+    return new SubPolicy(
+        parseReplicationType(block.getLabel()), SubPolicyMember.parseMultiple(block.getBlock()));
   }
 
   private ReplicationType parseReplicationType(String def) throws PolicyParseException {
@@ -148,7 +150,7 @@ public class PolicyParser {
 
         defAndBlock[0] = def;
         removeNextBlock(defAndBlock);
-        //System.out.println(defAndBlock[0] +"\t::\t"+ defAndBlock[1]);
+        // System.out.println(defAndBlock[0] +"\t::\t"+ defAndBlock[1]);
         def = defAndBlock[0];
         block = defAndBlock[1];
         blocks.add(parseLabeledBlock(def));
@@ -172,12 +174,12 @@ public class PolicyParser {
         throw new PolicyParseException("Bad multiple block def: " + def);
       }
       switch (def.charAt(i)) {
-      case OPEN_BRACE:
-        depth++;
-        break;
-      case CLOSE_BRACE:
-        depth--;
-        break;
+        case OPEN_BRACE:
+          depth++;
+          break;
+        case CLOSE_BRACE:
+          depth--;
+          break;
       }
     }
     defAndBlock[0] = def.substring(0, i + 1).trim();
@@ -201,9 +203,10 @@ public class PolicyParser {
     return new LabeledBlock(label, block);
   }
 
-  private enum IndexType {first, last}
-
-  ;
+  private enum IndexType {
+    first,
+    last
+  };
 
   private int getIndex(char token, String s, IndexType indexType) throws PolicyParseException {
     int i;
@@ -216,7 +219,7 @@ public class PolicyParser {
     if (i < 0) {
       throw new PolicyParseException("Can't find " + token + " in " + s);
     }
-    //System.out.println(token +" "+ s +" "+ indexType +" "+ i);
+    // System.out.println(token +" "+ s +" "+ indexType +" "+ i);
     return i;
   }
 
@@ -250,8 +253,9 @@ public class PolicyParser {
         StoragePolicyGroup storagePolicyGroup;
 
         policyFile = new File(args[0]);
-        storagePolicyGroup = new PolicyParser().parsePolicyGroup(policyFile, VersionedDefinition.NO_VERSION);
-        log.info("{}",storagePolicyGroup);
+        storagePolicyGroup =
+            new PolicyParser().parsePolicyGroup(policyFile, VersionedDefinition.NO_VERSION);
+        log.info("{}", storagePolicyGroup);
       }
     } catch (Exception e) {
       e.printStackTrace();

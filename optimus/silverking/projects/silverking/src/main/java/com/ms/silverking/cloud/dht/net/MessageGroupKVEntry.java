@@ -19,9 +19,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Parent used by both MessageGroupPutEntry and MessageGroupRetrievalResponseEntry.
- * This code avoids copying the data from the generating message by
- * creating new ByteBuffers that are views into the original buffers.
+ * Parent used by both MessageGroupPutEntry and MessageGroupRetrievalResponseEntry. This code avoids
+ * copying the data from the generating message by creating new ByteBuffers that are views into the
+ * original buffers.
  */
 public abstract class MessageGroupKVEntry extends MessageGroupKeyEntry {
   private final int bufferIndex;
@@ -47,25 +47,32 @@ public abstract class MessageGroupKVEntry extends MessageGroupKeyEntry {
           int length;
 
           length = storedLength;
-          valBuffer = (ByteBuffer) ((ByteBuffer) buffers[bufferIndex].duplicate().position(bufferOffset)).slice().limit(
-              length);
+          valBuffer =
+              (ByteBuffer)
+                  ((ByteBuffer) buffers[bufferIndex].duplicate().position(bufferOffset))
+                      .slice()
+                      .limit(length);
         } else {
           byte[] array;
           int length;
 
           array = buffers[bufferIndex].array();
           length = storedLength;
-          valBuffer = ByteBuffer.wrap(array, // FUTURE - this is using array, consider buffer
-              bufferOffset, length);
-          //Math.min(array.length, length));
+          valBuffer =
+              ByteBuffer.wrap(
+                  array, // FUTURE - this is using array, consider buffer
+                  bufferOffset,
+                  length);
+          // Math.min(array.length, length));
         }
       } catch (RuntimeException re) {
         System.out.println(re);
         re.printStackTrace();
         re.printStackTrace(System.out);
         System.out.println(super.toString());
-        System.out.printf("bufferIndex %d  bufferOffset %d  storedLength %d\n", bufferIndex, bufferOffset,
-            storedLength);
+        System.out.printf(
+            "bufferIndex %d  bufferOffset %d  storedLength %d\n",
+            bufferIndex, bufferOffset, storedLength);
         System.out.println(buffers.length);
         System.out.println(buffers[bufferIndex]);
         System.out.println(buffers[bufferIndex].array().length);

@@ -51,9 +51,7 @@ import org.kohsuke.args4j.CmdLineParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches ring dependencies and builds a new ring if any changes are detected.
- */
+/** Watches ring dependencies and builds a new ring if any changes are detected. */
 public class DependencyWatcher implements VersionListener {
   private final DependencyWatcherOptions options;
   private final MetaClient mc;
@@ -92,9 +90,11 @@ public class DependencyWatcher implements VersionListener {
     this.ignoreSource = options.ignoreSource;
     dhtMC = new com.ms.silverking.cloud.dht.meta.MetaClient(gridConfig);
     zkConfig = dhtMC.getZooKeeper().getZKConfig();
-    consecutiveUpdateGuardSeconds = options.exitAfterBuild ? 0 : options.consecutiveUpdateGuardSeconds;
+    consecutiveUpdateGuardSeconds =
+        options.exitAfterBuild ? 0 : options.consecutiveUpdateGuardSeconds;
 
-    _requiredInitialUpdates = options.ignoreInstanceExclusions ? requiredInitialUpdates - 1 : requiredInitialUpdates;
+    _requiredInitialUpdates =
+        options.ignoreInstanceExclusions ? requiredInitialUpdates - 1 : requiredInitialUpdates;
 
     lastBuild = new HashMap<>();
     buildQueue = new LinkedBlockingQueue<>();
@@ -117,14 +117,15 @@ public class DependencyWatcher implements VersionListener {
     new VersionWatcher(mc, mp.getStoragePolicyGroupPath(), this, intervalMillis);
     new VersionWatcher(mc, mp.getConfigPath(), this, intervalMillis);
     if (!options.ignoreInstanceExclusions) {
-      new VersionWatcher(mc, dhtMC.getMetaPaths().getInstanceExclusionsPath(), this, intervalMillis);
+      new VersionWatcher(
+          mc, dhtMC.getMetaPaths().getInstanceExclusionsPath(), this, intervalMillis);
     }
   }
 
   @Override
   public void newVersion(String basePath, long version) {
     if (TopoRingConstants.verbose) {
-     log.info("newVersion {} {}" , basePath , version);
+      log.info("newVersion {} {}", basePath, version);
     }
     updatesReceived.add(basePath);
     if (updatesReceived.size() == _requiredInitialUpdates) {
@@ -139,7 +140,7 @@ public class DependencyWatcher implements VersionListener {
       zk = mc.getZooKeeper();
       buildQueue.put(createBuildMap(zk));
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
 
@@ -184,15 +185,18 @@ public class DependencyWatcher implements VersionListener {
         topology = new TopologyZK(cloudMC).readFromZK(topologyVersion, null);
         weightSpecs = new WeightsZK(mc).readFromZK(weightsVersion, null);
 
-        exclusionSet = new ExclusionSet(
-            new ServerSetExtensionZK(mc, mc.getMetaPaths().getExclusionsPath()).readFromZK(exclusionVersion, null));
+        exclusionSet =
+            new ExclusionSet(
+                new ServerSetExtensionZK(mc, mc.getMetaPaths().getExclusionsPath())
+                    .readFromZK(exclusionVersion, null));
         if (options.ignoreInstanceExclusions) {
           instanceExclusionSet = ExclusionSet.emptyExclusionSet(0);
         } else {
           try {
-            instanceExclusionSet = new ExclusionSet(
-                new ServerSetExtensionZK(mc, dhtMC.getMetaPaths().getInstanceExclusionsPath()).readFromZK(
-                    instanceExclusionVersion, null));
+            instanceExclusionSet =
+                new ExclusionSet(
+                    new ServerSetExtensionZK(mc, dhtMC.getMetaPaths().getInstanceExclusionsPath())
+                        .readFromZK(instanceExclusionVersion, null));
           } catch (Exception e) {
             log.info("No instance ExclusionSet found");
             instanceExclusionSet = ExclusionSet.emptyExclusionSet(0);
@@ -200,7 +204,8 @@ public class DependencyWatcher implements VersionListener {
         }
         mergedExclusionSet = ExclusionSet.union(exclusionSet, instanceExclusionSet);
 
-        storagePolicyGroup = new StoragePolicyGroupZK(mc).readFromZK(storagePolicyGroupVersion, null);
+        storagePolicyGroup =
+            new StoragePolicyGroupZK(mc).readFromZK(storagePolicyGroupVersion, null);
         ringConfig = new RingConfigurationZK(mc).readFromZK(ringConfigVersion, null);
 
         log.info("ringConfiguration {}", ringConfig);
@@ -209,14 +214,23 @@ public class DependencyWatcher implements VersionListener {
         hostGroupTable = new HostGroupTableZK(cloudMC).readFromZK(hostGroupTableVersion, null);
 
         try {
-          recipe = new RingTreeRecipe(topology, ringConfig.getRingParentName(), weightSpecs, mergedExclusionSet,
-              storagePolicyGroup, ringConfig.getStoragePolicyName(), hostGroupTable, ringConfig.getHostGroups(),
-              ringConfigVersion, DHTUtil.currentTimeMillis());
-          log.info("Recipe.ringParent: {}" , recipe.ringParent);
+          recipe =
+              new RingTreeRecipe(
+                  topology,
+                  ringConfig.getRingParentName(),
+                  weightSpecs,
+                  mergedExclusionSet,
+                  storagePolicyGroup,
+                  ringConfig.getStoragePolicyName(),
+                  hostGroupTable,
+                  ringConfig.getHostGroups(),
+                  ringConfigVersion,
+                  DHTUtil.currentTimeMillis());
+          log.info("Recipe.ringParent: {}", recipe.ringParent);
         } catch (RuntimeException re) {
           re.printStackTrace(System.out);
-          log.info("ringConfig: {}", ringConfig , re);
-          log.error("",re);
+          log.info("ringConfig: {}", ringConfig, re);
+          log.error("", re);
           throw re;
         }
 
@@ -231,32 +245,40 @@ public class DependencyWatcher implements VersionListener {
         } else {
           prevRingTree = null;
         }
-        if (prevRingTree == null || ignoreFeasibility || RingTreeBuilder.convergenceFeasible(prevRingTree,
-            storagePolicyGroup, ringConfig.getStoragePolicyName(), ringConfig.getRingParentName(), exclusionSet)) {
+        if (prevRingTree == null
+            || ignoreFeasibility
+            || RingTreeBuilder.convergenceFeasible(
+                prevRingTree,
+                storagePolicyGroup,
+                ringConfig.getStoragePolicyName(),
+                ringConfig.getRingParentName(),
+                exclusionSet)) {
           ringTree = RingTreeBuilder.create(recipe, prevRingTree);
-          //ringTree = RingTreeBuilder.create(recipe, null); // for testing without movement reduction
+          // ringTree = RingTreeBuilder.create(recipe, null); // for testing without movement
+          // reduction
           newInstancePath = mc.createConfigInstancePath(ringConfigVersion);
           SingleRingZK.writeTree(mc, topologyVersion, newInstancePath, ringTree);
 
           if (TopoRingConstants.verbose) {
             log.info(".............................");
             log.info(".............................");
-            log.info("{}",ringTree);
+            log.info("{}", ringTree);
             log.info(".............................");
-            log.info("{}",ringConfigVersion);
-            log.info("{}",configInstanceVersion);
-            log.info("{}",topologyVersion);
+            log.info("{}", ringConfigVersion);
+            log.info("{}", configInstanceVersion);
+            log.info("{}", topologyVersion);
             log.info(newInstancePath);
             log.info("Building complete");
           }
           buildOK = true;
         } else {
-          log.info("Convergence is infeasible. A region in prevTree does not have a viable server.");
+          log.info(
+              "Convergence is infeasible. A region in prevTree does not have a viable server.");
         }
       } catch (IOException ioe) {
-        log.error("",ioe);
+        log.error("", ioe);
       } catch (KeeperException ke) {
-        log.error("",ke);
+        log.error("", ke);
       }
       if (exitAfterBuild) {
         if (buildOK) {
@@ -266,7 +288,7 @@ public class DependencyWatcher implements VersionListener {
             }
             setRing(ringConfigVersion);
           } catch (KeeperException ke) {
-            log.error("",ke);
+            log.error("", ke);
             buildOK = false;
           }
         }
@@ -291,7 +313,8 @@ public class DependencyWatcher implements VersionListener {
     topologyVersion = zk.getLatestVersion(mp.getTopologyPath());
     weightsVersion = zk.getLatestVersion(mp.getWeightsPath());
     exclusionVersion = zk.getLatestVersion(mp.getExclusionsPath());
-    instanceExclusionVersion = zk.getLatestVersion(dhtMC.getMetaPaths().getInstanceExclusionsPath());
+    instanceExclusionVersion =
+        zk.getLatestVersion(dhtMC.getMetaPaths().getInstanceExclusionsPath());
     storagePolicyGroupVersion = zk.getLatestVersion(mp.getStoragePolicyGroupPath());
     ringConfigVersion = zk.getLatestVersion(mp.getConfigPath());
 
@@ -316,14 +339,15 @@ public class DependencyWatcher implements VersionListener {
     dhtRingCurTargetZK = new DHTRingCurTargetZK(dhtMC, dhtMC.getDHTConfiguration());
     ringName = dhtMC.getDHTConfiguration().getRingName();
     dhtRingCurTargetZK.setCurRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion);
-    dhtRingCurTargetZK.setTargetRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion);
-    dhtRingCurTargetZK.setManagerRingAndVersionPair(ringName, ringConfigVersion, configInstanceVersion);
+    dhtRingCurTargetZK.setTargetRingAndVersionPair(
+        ringName, ringConfigVersion, configInstanceVersion);
+    dhtRingCurTargetZK.setManagerRingAndVersionPair(
+        ringName, ringConfigVersion, configInstanceVersion);
     log.info("Ring {} config {} instance {}", ringName, ringConfigVersion, configInstanceVersion);
   }
 
   private class Builder implements Runnable {
-    Builder() {
-    }
+    Builder() {}
 
     @Override
     public void run() {
@@ -347,7 +371,7 @@ public class DependencyWatcher implements VersionListener {
             lastBuild = curBuild;
           }
         } catch (Exception e) {
-          log.error("",e);
+          log.error("", e);
           ThreadUtil.pauseAfterException();
         }
       }

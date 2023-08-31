@@ -16,9 +16,7 @@ import java.util.List;
 
 import com.ms.silverking.cloud.dht.daemon.storage.KeyAndVersionChecksum;
 
-/**
- * Results of a checksum tree comparison.
- */
+/** Results of a checksum tree comparison. */
 public class MatchResult {
   private final List<KeyAndVersionChecksum> sourceNotInDest;
   private final List<KeyAndVersionChecksum> destNotInSource;
@@ -65,12 +63,15 @@ public class MatchResult {
   }
 
   public boolean perfectMatch() {
-    return sourceNotInDest.size() == 0 && destNotInSource.size() == 0 && checksumMismatch.size() == 0;
+    return sourceNotInDest.size() == 0
+        && destNotInSource.size() == 0
+        && checksumMismatch.size() == 0;
   }
 
   public String toSummaryString() {
-    return String.format("sourceNotInDest %d destNotInSource %d checksumMismatch %d", sourceNotInDest.size(),
-        destNotInSource.size(), checksumMismatch.size());
+    return String.format(
+        "sourceNotInDest %d destNotInSource %d checksumMismatch %d",
+        sourceNotInDest.size(), destNotInSource.size(), checksumMismatch.size());
   }
 
   @Override
@@ -90,7 +91,7 @@ public class MatchResult {
 
   private void addList(StringBuilder sb, List<KeyAndVersionChecksum> list, String listName) {
     if (list.size() == 0) {
-      //sb.append("\t<empty>\n");
+      // sb.append("\t<empty>\n");
     } else {
       sb.append(listName);
       sb.append('\n');

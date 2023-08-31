@@ -14,8 +14,8 @@ package com.ms.silverking.cloud.dht;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * Constraints on a retrieval operation. These constraints define which value should
- * be retrieved in the context of a multi-versioned namespace.
+ * Constraints on a retrieval operation. These constraints define which value should be retrieved in
+ * the context of a multi-versioned namespace.
  */
 public class VersionConstraint {
   private final long min;
@@ -23,26 +23,20 @@ public class VersionConstraint {
   private final Mode mode;
   private final long maxCreationTime;
 
-  /**
-   * When multiple versions match this constraint, the Mode determines which version to return
-   */
-  public enum Mode {LEAST, GREATEST}
+  /** When multiple versions match this constraint, the Mode determines which version to return */
+  public enum Mode {
+    LEAST,
+    GREATEST
+  }
 
-  /**
-   * Greatest of all existent versions
-   */
+  /** Greatest of all existent versions */
   public static final VersionConstraint greatest = new VersionConstraint();
-  /**
-   * Least of all existent versions
-   */
-  public static final VersionConstraint least = new VersionConstraint(Long.MIN_VALUE, Long.MAX_VALUE, Mode.LEAST);
-  /**
-   * By default, return the greatest of all existent versions
-   */
+  /** Least of all existent versions */
+  public static final VersionConstraint least =
+      new VersionConstraint(Long.MIN_VALUE, Long.MAX_VALUE, Mode.LEAST);
+  /** By default, return the greatest of all existent versions */
   public static final VersionConstraint defaultConstraint = greatest;
-  /**
-   * No limit on time of creation
-   */
+  /** No limit on time of creation */
   public static final long noCreationTimeLimit = Long.MAX_VALUE;
 
   private static final int maxSpecialValues = 10;
@@ -68,17 +62,17 @@ public class VersionConstraint {
   /**
    * Construct a fully-specified VersionConstraint
    *
-   * @param min             minimum version to match inclusive
-   * @param max             maximum version to match inclusive
-   * @param mode            if multiple versions match, mode specifies which to return
+   * @param min minimum version to match inclusive
+   * @param max maximum version to match inclusive
+   * @param mode if multiple versions match, mode specifies which to return
    * @param maxCreationTime the maximum storage time that may match inclusive
    */
   public VersionConstraint(long min, long max, Mode mode, long maxCreationTime) {
     this.min = min;
-    if (min != max &&
-        this.min != Long.MIN_VALUE &&
-        this.min > Long.MIN_VALUE + maxSpecialValues &&
-        mode != Mode.LEAST) {
+    if (min != max
+        && this.min != Long.MIN_VALUE
+        && this.min > Long.MIN_VALUE + maxSpecialValues
+        && mode != Mode.LEAST) {
       throw new RuntimeException("nonmin not yet supported: " + this.min);
     }
     this.max = max;
@@ -88,16 +82,16 @@ public class VersionConstraint {
     // TODO (OPTIMUS-0000): oldest used internally, think about whether the support
     // is sufficient for user usage. if not, we need to enforce restriction in client
     // api and not here any more
-    //if (mode == Mode.OLDEST) {
+    // if (mode == Mode.OLDEST) {
     //    throw new RuntimeException("OLDEST not yet supported");
-    //}
+    // }
   }
 
   /**
    * Construct a VersionConstraint with no creation time restriction
    *
-   * @param min  minimum version to match inclusive
-   * @param max  maximum version to match inclusive
+   * @param min minimum version to match inclusive
+   * @param max maximum version to match inclusive
    * @param mode if multiple versions match, mode specifies which to return
    */
   public VersionConstraint(long min, long max, Mode mode) {
@@ -105,8 +99,8 @@ public class VersionConstraint {
   }
 
   /**
-   * Create a VersionConstraint that matches the least version above or equal to a given version threshold
-   * and no creation time restriction.
+   * Create a VersionConstraint that matches the least version above or equal to a given version
+   * threshold and no creation time restriction.
    *
    * @param threshold the version threshold
    * @return the new VersionConstraint
@@ -116,8 +110,8 @@ public class VersionConstraint {
   }
 
   /**
-   * Create a VersionConstraint that matches the greatest version above or equal to a given version threshold
-   * and no creation time restriction.
+   * Create a VersionConstraint that matches the greatest version above or equal to a given version
+   * threshold and no creation time restriction.
    *
    * @param threshold the version threshold
    * @return the new VersionConstraint
@@ -127,8 +121,8 @@ public class VersionConstraint {
   }
 
   /**
-   * Create a VersionConstraint that matches the greatest version below or equal to a given version threshold
-   * and no creation time restriction.
+   * Create a VersionConstraint that matches the greatest version below or equal to a given version
+   * threshold and no creation time restriction.
    *
    * @param threshold the version threshold
    * @return the new VersionConstraint
@@ -141,7 +135,8 @@ public class VersionConstraint {
    * true if this VersionConstraint's version bounds match the given version, false otherwise.
    *
    * @param version version to test
-   * @return True if this VersionConstraint's version bounds match the given version, false otherwise.
+   * @return True if this VersionConstraint's version bounds match the given version, false
+   *     otherwise.
    */
   public boolean matches(long version) {
     return version >= min && version <= max;
@@ -233,10 +228,10 @@ public class VersionConstraint {
     VersionConstraint oVC;
 
     oVC = (VersionConstraint) other;
-    return this.min == oVC.min &&
-           this.max == oVC.max &&
-           this.mode == oVC.mode &&
-           this.maxCreationTime == oVC.maxCreationTime;
+    return this.min == oVC.min
+        && this.max == oVC.max
+        && this.mode == oVC.mode
+        && this.maxCreationTime == oVC.maxCreationTime;
   }
 
   @Override
@@ -245,11 +240,12 @@ public class VersionConstraint {
   }
 
   /**
-   * true if the version bounds of this VersionConstraint overlap the bounds of the given constraint; false otherwise
+   * true if the version bounds of this VersionConstraint overlap the bounds of the given
+   * constraint; false otherwise
    *
    * @param other the VersionConstraint to test against this constraint
-   * @return true if the version bounds of this VersionConstraint overlap the bounds of the given constraint;
-   * false otherwise
+   * @return true if the version bounds of this VersionConstraint overlap the bounds of the given
+   *     constraint; false otherwise
    */
   public boolean overlaps(VersionConstraint other) {
     if (other.max < this.min) {

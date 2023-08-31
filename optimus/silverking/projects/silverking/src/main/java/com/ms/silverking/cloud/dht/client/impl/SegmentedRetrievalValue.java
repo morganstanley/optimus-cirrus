@@ -27,8 +27,12 @@ class SegmentedRetrievalValue<K, V> extends FragmentedValue<MessageGroupRetrieva
   private final MetaData metaData;
   private final AsyncRetrievalOperationImpl<K, V> parent;
 
-  SegmentedRetrievalValue(DHTKey[] keys, DHTKey relayKey, AsyncRetrievalOperationImpl<K, V> parent,
-      BufferSourceDeserializer<V> deserializer, MetaData metaData) {
+  SegmentedRetrievalValue(
+      DHTKey[] keys,
+      DHTKey relayKey,
+      AsyncRetrievalOperationImpl<K, V> parent,
+      BufferSourceDeserializer<V> deserializer,
+      MetaData metaData) {
     super(keys, relayKey, parent, false);
     this.deserializer = deserializer;
     this.metaData = metaData;
@@ -39,7 +43,8 @@ class SegmentedRetrievalValue<K, V> extends FragmentedValue<MessageGroupRetrieva
     MessageGroupRetrievalResponseEntry response;
 
     response = results.get(key);
-    //System.out.printf("getResult(%s):\t%s\t%s\n", key, response, response == null ? OpResult.INCOMPLETE : response
+    // System.out.printf("getResult(%s):\t%s\t%s\n", key, response, response == null ?
+    // OpResult.INCOMPLETE : response
     // .getOpResult());
     return response == null ? OpResult.INCOMPLETE : response.getOpResult();
   }
@@ -53,16 +58,16 @@ class SegmentedRetrievalValue<K, V> extends FragmentedValue<MessageGroupRetrieva
     for (DHTKey key : keys) {
       if (getResult(key) != OpResult.SUCCEEDED) {
         result = getResult(key);
-        //System.out.println("Incomplete: "+ key);
+        // System.out.println("Incomplete: "+ key);
       }
     }
     if (result == OpResult.SUCCEEDED) {
-      //System.out.println("SegmentedRetrievalValue complete");
-      parent.reassembledResultReceived(relayKey,
-          new SegmentedRetrievalResult<>(metaData, deserializer, getBuffers(), result));
+      // System.out.println("SegmentedRetrievalValue complete");
+      parent.reassembledResultReceived(
+          relayKey, new SegmentedRetrievalResult<>(metaData, deserializer, getBuffers(), result));
     } else {
-      //System.out.println("SegmentedRetrievalValue incomplete");
-      //parent.resultReceived(relayKey, MessageGroupRetrievalResponseEntry);
+      // System.out.println("SegmentedRetrievalValue incomplete");
+      // parent.resultReceived(relayKey, MessageGroupRetrievalResponseEntry);
     }
   }
 
@@ -71,7 +76,7 @@ class SegmentedRetrievalValue<K, V> extends FragmentedValue<MessageGroupRetrieva
 
     buffers = new ByteBuffer[keys.length];
     for (int i = 0; i < keys.length; i++) {
-      //buffers[i] = translateRawResult(results.get(keys[i]).getValue()); // deprecated
+      // buffers[i] = translateRawResult(results.get(keys[i]).getValue()); // deprecated
       buffers[i] = results.get(keys[i]).getValue();
     }
     return buffers;
@@ -85,16 +90,16 @@ class SegmentedRetrievalValue<K, V> extends FragmentedValue<MessageGroupRetrieva
     rawResult.setStoredValue_direct(rawValue);
     return rawResult.getValue();
   }
-    
-    /*
-    private V deserialize() {
-        ByteBuffer[]    buffers;
-        
-        buffers = new ByteBuffer[keys.length];
-        for (int i = 0; i < keys.length; i++) {
-            buffers[i] = results.get(keys[i]).getValue();
-        }
-        return deserializer.deserialize(buffers);
-    }
-    */
+
+  /*
+  private V deserialize() {
+      ByteBuffer[]    buffers;
+
+      buffers = new ByteBuffer[keys.length];
+      for (int i = 0; i < keys.length; i++) {
+          buffers[i] = results.get(keys[i]).getValue();
+      }
+      return deserializer.deserialize(buffers);
+  }
+  */
 }

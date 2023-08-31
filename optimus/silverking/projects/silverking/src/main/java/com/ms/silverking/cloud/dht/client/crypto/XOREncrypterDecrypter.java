@@ -17,9 +17,7 @@ import java.util.Arrays;
 
 import com.ms.silverking.io.FileUtil;
 
-/**
- * Trivial EncrypterDecrypter. This implementation provides basic obfuscation only.
- */
+/** Trivial EncrypterDecrypter. This implementation provides basic obfuscation only. */
 public class XOREncrypterDecrypter implements EncrypterDecrypter {
   private final byte[] key;
 

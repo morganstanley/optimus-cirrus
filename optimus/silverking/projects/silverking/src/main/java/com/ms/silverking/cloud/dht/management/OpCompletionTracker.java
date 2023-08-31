@@ -41,7 +41,8 @@ public class OpCompletionTracker {
     return result.getV1().size() == 0 && result.getV2().size() == 0;
   }
 
-  public Pair<Set<UUIDBase>, Set<UUIDBase>> waitForCompletion(Set<UUIDBase> uuids, int time, TimeUnit unit) {
+  public Pair<Set<UUIDBase>, Set<UUIDBase>> waitForCompletion(
+      Set<UUIDBase> uuids, int time, TimeUnit unit) {
     Timer waitTimer;
     Set<UUIDBase> incompleteOps;
     Set<UUIDBase> failedOps;
@@ -58,7 +59,9 @@ public class OpCompletionTracker {
         boolean complete;
 
         opCompletionState = completionState.get(uuid);
-        complete = opCompletionState.waitForCompletion(waitTimer.getRemainingMillis(), TimeUnit.MILLISECONDS);
+        complete =
+            opCompletionState.waitForCompletion(
+                waitTimer.getRemainingMillis(), TimeUnit.MILLISECONDS);
         if (!complete) {
           incompleteOps.add(uuid);
         }

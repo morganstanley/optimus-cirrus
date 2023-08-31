@@ -31,7 +31,8 @@ public class NodeCreationWatcher implements Watcher {
 
   private static final boolean debug = false;
 
-  public NodeCreationWatcher(SilverKingZooKeeperClient zk, String path, NodeCreationListener listener) {
+  public NodeCreationWatcher(
+      SilverKingZooKeeperClient zk, String path, NodeCreationListener listener) {
     this.zk = zk;
     this.path = path;
     this.listener = listener;
@@ -48,12 +49,12 @@ public class NodeCreationWatcher implements Watcher {
     while (!set) {
       try {
         if (debug) {
-          log.info("Setting watch on: {}" , parent);
+          log.info("Setting watch on: {}", parent);
         }
         zk.getChildren(parent, this);
         set = true;
       } catch (Exception e) {
-        log.error("",e);
+        log.error("", e);
       }
       if (!set) {
         log.info("Sleeping for retry...");
@@ -69,26 +70,26 @@ public class NodeCreationWatcher implements Watcher {
     boolean exists;
 
     if (debug) {
-      log.info("{}",event);
+      log.info("{}", event);
     }
     switch (event.getState()) {
-    case SaslAuthenticated:
-    case SyncConnected:
-      connected = true;
-      break;
-    default:
-      connected = false;
+      case SaslAuthenticated:
+      case SyncConnected:
+        connected = true;
+        break;
+      default:
+        connected = false;
     }
     if (connected) {
       switch (event.getType()) {
-      case NodeChildrenChanged:
-        exists = checkForExistence();
-        if (!exists) {
-          setWatch();
-        }
-        break;
-      default:
-        break;
+        case NodeChildrenChanged:
+          exists = checkForExistence();
+          if (!exists) {
+            setWatch();
+          }
+          break;
+        default:
+          break;
       }
     } else {
       setWatch();
@@ -104,7 +105,7 @@ public class NodeCreationWatcher implements Watcher {
         return false;
       }
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
       return false;
     }
   }

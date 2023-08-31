@@ -29,14 +29,16 @@ import org.slf4j.LoggerFactory;
 
 public class MetaClientCore {
   protected final ZooKeeperConfig zkConfig;
-  private SilverKingZooKeeperClient zk; //only used if not shareZK
+  private SilverKingZooKeeperClient zk; // only used if not shareZK
 
   private static Logger log = LoggerFactory.getLogger(MetaClientCore.class);
 
   private static final int sessionTimeout;
 
   static {
-    sessionTimeout = PropertiesHelper.systemHelper.getInt(DHTConstants.zookeeperSessionTimeoutProperty, 4 * 60 * 1000);
+    sessionTimeout =
+        PropertiesHelper.systemHelper.getInt(
+            DHTConstants.zookeeperSessionTimeoutProperty, 4 * 60 * 1000);
     log.info("{}  {}", DHTConstants.zookeeperSessionTimeoutProperty, sessionTimeout);
   }
 
@@ -95,7 +97,9 @@ public class MetaClientCore {
       }
       if (_zk == null) {
         log.debug("Getting SilverKingZooKeeperClient for {}", zkConfig);
-        zk = SilverKingZooKeeperClient.getZooKeeperWithRetries(zkConfig, sessionTimeout, connectAttempts);
+        zk =
+            SilverKingZooKeeperClient.getZooKeeperWithRetries(
+                zkConfig, sessionTimeout, connectAttempts);
         log.debug("Done getting SilverKingZooKeeperClient for {}", zkConfig);
         if (shareZK) {
           zkMap.putIfAbsent(zkConfig, zk);
@@ -121,7 +125,8 @@ public class MetaClientCore {
     }
   }
 
-  public SilverKingZooKeeperClient getZooKeeper(int getZKMaxAttempts, int getZKSleepUnit) throws KeeperException {
+  public SilverKingZooKeeperClient getZooKeeper(int getZKMaxAttempts, int getZKSleepUnit)
+      throws KeeperException {
     SilverKingZooKeeperClient _zk;
     int attemptIndex;
 
@@ -136,7 +141,7 @@ public class MetaClientCore {
           ThreadUtil.randomSleep(getZKSleepUnit << attemptIndex);
           ++attemptIndex;
         } else {
-          log.info("getZooKeeper() failed after {} attempts",(attemptIndex + 1) );
+          log.info("getZooKeeper() failed after {} attempts", (attemptIndex + 1));
           throw KeeperException.forMethod("getZooKeeper", new OperationTimeoutException());
         }
       }
@@ -160,6 +165,6 @@ public class MetaClientCore {
   }
 
   public void close() {
-    //zk.close(); // TODO (OPTIMUS-0000): to be completed
+    // zk.close(); // TODO (OPTIMUS-0000): to be completed
   }
 }

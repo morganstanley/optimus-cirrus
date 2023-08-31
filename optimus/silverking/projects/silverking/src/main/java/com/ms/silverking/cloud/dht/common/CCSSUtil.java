@@ -16,11 +16,8 @@ import com.ms.silverking.cloud.dht.client.Compression;
 
 /**
  * Compression type, Checksum type, and StorageState
- * <p>
- * ccss format in bits:
- * compression     4
- * checksum        4
- * storageState    8
+ *
+ * <p>ccss format in bits: compression 4 checksum 4 storageState 8
  */
 public class CCSSUtil {
   public static byte getCompression(short ccss) {
@@ -28,7 +25,7 @@ public class CCSSUtil {
   }
 
   public static ChecksumType getChecksumType(short ccss) {
-    //System.out.printf("ccss %x\n", ccss);
+    // System.out.printf("ccss %x\n", ccss);
     return EnumValues.checksumType[(ccss >> 8) & 0x0f];
   }
 
@@ -40,8 +37,10 @@ public class CCSSUtil {
     return (short) ((oldCCSS & (short) 0xff00) | (storageState & 0xff));
   }
 
-  public static short createCCSS(Compression compression, ChecksumType checksumType, int storageState) {
-    return (short) ((compression.ordinal() << 12) | (checksumType.ordinal() << 8) | (storageState & 0xff));
+  public static short createCCSS(
+      Compression compression, ChecksumType checksumType, int storageState) {
+    return (short)
+        ((compression.ordinal() << 12) | (checksumType.ordinal() << 8) | (storageState & 0xff));
   }
 
   public static short createCCSS(Compression compression, ChecksumType checksumType) {

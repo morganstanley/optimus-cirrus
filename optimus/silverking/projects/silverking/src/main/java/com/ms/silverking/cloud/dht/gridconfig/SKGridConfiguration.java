@@ -21,10 +21,9 @@ import com.ms.silverking.cloud.dht.client.ClientDHTConfigurationProvider;
 import com.ms.silverking.cloud.dht.client.gen.OmitGeneration;
 import com.ms.silverking.cloud.gridconfig.GridConfiguration;
 
-/**
- * Provides coherent, centralized configuration for SilverKing settings.
- */
-public class SKGridConfiguration extends GridConfiguration implements Serializable, ClientDHTConfigurationProvider {
+/** Provides coherent, centralized configuration for SilverKing settings. */
+public class SKGridConfiguration extends GridConfiguration
+    implements Serializable, ClientDHTConfigurationProvider {
   private final ClientDHTConfiguration dhtConfig;
   private final String skfsConfigName;
 

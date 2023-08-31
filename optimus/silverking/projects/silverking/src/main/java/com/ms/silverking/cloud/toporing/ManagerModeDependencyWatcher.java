@@ -46,8 +46,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Watches ring dependencies and builds a new ring if any changes are detected.
- * Always builds with respect to a "manager" ring.
+ * Watches ring dependencies and builds a new ring if any changes are detected. Always builds with
+ * respect to a "manager" ring.
  */
 public class ManagerModeDependencyWatcher implements VersionListener {
   private final MetaClient mc;
@@ -72,7 +72,8 @@ public class ManagerModeDependencyWatcher implements VersionListener {
 
   private static final int requiredInitialUpdates = 2;
 
-  public ManagerModeDependencyWatcher(SKGridConfiguration gridConfig, ManagerModeDependencyWatcherOptions options)
+  public ManagerModeDependencyWatcher(
+      SKGridConfiguration gridConfig, ManagerModeDependencyWatcherOptions options)
       throws IOException, KeeperException {
     ZooKeeperConfig zkConfig;
     long intervalMillis;
@@ -88,9 +89,8 @@ public class ManagerModeDependencyWatcher implements VersionListener {
     mc = new MetaClient(ringConfig, zkConfig);
     mp = mc.getMetaPaths();
 
-    _requiredInitialUpdates = options.ignoreInstanceExclusions
-                              ? requiredInitialUpdates - 1
-                              : requiredInitialUpdates;
+    _requiredInitialUpdates =
+        options.ignoreInstanceExclusions ? requiredInitialUpdates - 1 : requiredInitialUpdates;
 
     consecutiveUpdateGuardSeconds = options.consecutiveUpdateGuardSeconds;
     buildQueue = new LinkedBlockingQueue<>();
@@ -104,10 +104,12 @@ public class ManagerModeDependencyWatcher implements VersionListener {
     topologyVersion = dhtMC.getZooKeeper().getLatestVersion(mp.getTopologyPath());
     topology = new TopologyZK(mc.createCloudMC()).readFromZK(topologyVersion, null);
 
-    configInstanceVersion = dhtMC.getZooKeeper().getLatestVersion(mp.getConfigInstancePath(ringConfigVersion));
+    configInstanceVersion =
+        dhtMC.getZooKeeper().getLatestVersion(mp.getConfigInstancePath(ringConfigVersion));
     existingTree = SingleRingZK.readTree(mc, ringConfigVersion, configInstanceVersion);
-    existingReplicaMap = existingTree.getResolvedMap(ringConfig.getRingConfiguration().getRingParentName(),
-                                                     new ReplicaNaiveIPPrioritizer());
+    existingReplicaMap =
+        existingTree.getResolvedMap(
+            ringConfig.getRingConfiguration().getRingParentName(), new ReplicaNaiveIPPrioritizer());
 
     /*
      * updatesReceived is used to ensure that we have an update from every version before we trigger a build
@@ -117,13 +119,14 @@ public class ManagerModeDependencyWatcher implements VersionListener {
     intervalMillis = options.watchIntervalSeconds * 1000;
     // We don't need to watch everything that a full DependencyWatcher needs to watch
     new VersionWatcher(mc, mp.getExclusionsPath(), this, intervalMillis);
-    new VersionWatcher(dhtMC, dhtMC.getMetaPaths().getInstanceExclusionsPath(), this, intervalMillis);
+    new VersionWatcher(
+        dhtMC, dhtMC.getMetaPaths().getInstanceExclusionsPath(), this, intervalMillis);
 
     new Builder();
   }
 
-  private Pair<RingTree, Triple<String, Long, Long>> readManagerRingTree(com.ms.silverking.cloud.dht.meta.MetaClient dhtMC,
-                                                                         DHTConfiguration dhtConfig)
+  private Pair<RingTree, Triple<String, Long, Long>> readManagerRingTree(
+      com.ms.silverking.cloud.dht.meta.MetaClient dhtMC, DHTConfiguration dhtConfig)
       throws KeeperException, IOException {
     DHTRingCurTargetZK dhtRingCurTargetZK;
     Triple<String, Long, Long> managerRingAndVersionPair;
@@ -134,7 +137,9 @@ public class ManagerModeDependencyWatcher implements VersionListener {
     if (managerRingAndVersionPair == null) {
       throw new RuntimeException("Can't find manager ring");
     } else {
-      ringTree = SingleRingZK.readTree(mc, managerRingAndVersionPair.getV2(), managerRingAndVersionPair.getV3());
+      ringTree =
+          SingleRingZK.readTree(
+              mc, managerRingAndVersionPair.getV2(), managerRingAndVersionPair.getV3());
       return new Pair<>(ringTree, managerRingAndVersionPair);
     }
   }
@@ -167,7 +172,8 @@ public class ManagerModeDependencyWatcher implements VersionListener {
     long instanceExclusionVersion;
 
     exclusionVersion = zk.getLatestVersion(mp.getExclusionsPath());
-    instanceExclusionVersion = zk.getLatestVersion(dhtMC.getMetaPaths().getInstanceExclusionsPath());
+    instanceExclusionVersion =
+        zk.getLatestVersion(dhtMC.getMetaPaths().getInstanceExclusionsPath());
 
     b = new HashMap<>();
     b.put(mp.getExclusionsPath(), exclusionVersion);
@@ -196,13 +202,15 @@ public class ManagerModeDependencyWatcher implements VersionListener {
       exclusionVersion = curBuild.get(mp.getExclusionsPath());
       instanceExclusionVersion = curBuild.get(dhtMC.getMetaPaths().getInstanceExclusionsPath());
 
-      exclusionSet = new ExclusionSet(new ServerSetExtensionZK(mc, mc.getMetaPaths().getExclusionsPath()).readFromZK(exclusionVersion,
-                                                                                                                     null));
+      exclusionSet =
+          new ExclusionSet(
+              new ServerSetExtensionZK(mc, mc.getMetaPaths().getExclusionsPath())
+                  .readFromZK(exclusionVersion, null));
       try {
-        instanceExclusionSet = new ExclusionSet(new ServerSetExtensionZK(mc,
-                                                                         dhtMC.getMetaPaths()
-                                                                              .getInstanceExclusionsPath()).readFromZK(instanceExclusionVersion,
-                                                                                                                       null));
+        instanceExclusionSet =
+            new ExclusionSet(
+                new ServerSetExtensionZK(mc, dhtMC.getMetaPaths().getInstanceExclusionsPath())
+                    .readFromZK(instanceExclusionVersion, null));
       } catch (Exception e) {
         log.info("No instance ExclusionSet found");
         instanceExclusionSet = ExclusionSet.emptyExclusionSet(0);
@@ -210,8 +218,10 @@ public class ManagerModeDependencyWatcher implements VersionListener {
       mergedExclusionSet = ExclusionSet.union(exclusionSet, instanceExclusionSet);
       newRingTree = RingTreeBuilder.removeExcludedNodes(managerRingTree, mergedExclusionSet);
 
-      newReplicaMap = newRingTree.getResolvedMap(ringConfig.getRingConfiguration().getRingParentName(),
-                                                 new ReplicaNaiveIPPrioritizer());
+      newReplicaMap =
+          newRingTree.getResolvedMap(
+              ringConfig.getRingConfiguration().getRingParentName(),
+              new ReplicaNaiveIPPrioritizer());
       if (!existingReplicaMap.equals(newReplicaMap)) {
         newInstancePath = mc.createConfigInstancePath(ringConfigVersion);
         SingleRingZK.writeTree(mc, topology, newInstancePath, newRingTree);

@@ -24,8 +24,8 @@ public interface Authenticable {
   /**
    * Get authentication result for current Authenticable object
    *
-   * @return a <b>present authentication result</b> if current object has been authenticated; <b>Optional.empty</b>
-   * if haven't been authenticated
+   * @return a <b>present authentication result</b> if current object has been authenticated;
+   *     <b>Optional.empty</b> if haven't been authenticated
    */
   Optional<AuthenticationResult> getAuthenticationResult();
 

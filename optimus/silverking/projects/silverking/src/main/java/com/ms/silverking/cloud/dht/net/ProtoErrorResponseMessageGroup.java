@@ -27,9 +27,15 @@ public class ProtoErrorResponseMessageGroup extends ProtoMessageGroup {
   private static final int responseBufferSize = 1;
   private static final int resultIndex = 0;
 
-  public ProtoErrorResponseMessageGroup(UUIDBase uuid, long context, OpResult result, byte[] originator,
-      int deadlineRelativeMillis) {
-    super(MessageType.ERROR_RESPONSE, uuid, context, originator, deadlineRelativeMillis, ForwardingMode.FORWARD);
+  public ProtoErrorResponseMessageGroup(
+      UUIDBase uuid, long context, OpResult result, byte[] originator, int deadlineRelativeMillis) {
+    super(
+        MessageType.ERROR_RESPONSE,
+        uuid,
+        context,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD);
 
     reponseByteBuffer = ByteBuffer.allocate(responseBufferSize);
     bufferList.add(reponseByteBuffer);

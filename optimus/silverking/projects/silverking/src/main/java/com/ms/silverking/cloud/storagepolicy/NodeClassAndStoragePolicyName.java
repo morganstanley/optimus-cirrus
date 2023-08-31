@@ -28,12 +28,12 @@ public class NodeClassAndStoragePolicyName extends NodeClassAndName {
     n = NodeClassAndName.parse(s);
     if (n.getName() != null) {
       if (n.getNodeClass() == NodeClass.server) {
-        log.error("parsing: {}" , s);
+        log.error("parsing: {}", s);
         throw new PolicyParseException("name not allowed for class " + n.getNodeClass());
       }
     } else {
       if (n.getNodeClass() != NodeClass.server) {
-        log.error("parsing: {}" , s);
+        log.error("parsing: {}", s);
         throw new PolicyParseException("name required for class " + n.getNodeClass());
       }
     }

@@ -35,15 +35,18 @@ public class Quintuple<T1, T2, T3, T4, T5> extends TupleBase {
     this.v5 = v5;
   }
 
-  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(T1 v1, T2 v2, T3 v3, T4 v4, T5 v5) {
+  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(
+      T1 v1, T2 v2, T3 v3, T4 v4, T5 v5) {
     return new Quintuple<>(v1, v2, v3, v4, v5);
   }
 
-  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(T1 v1, Quadruple<T2, T3, T4, T5> t1) {
+  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(
+      T1 v1, Quadruple<T2, T3, T4, T5> t1) {
     return new Quintuple<>(v1, t1.getV1(), t1.getV2(), t1.getV3(), t1.getV4());
   }
 
-  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(Quadruple<T1, T2, T3, T4> t1, T5 v5) {
+  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> of(
+      Quadruple<T1, T2, T3, T4> t1, T5 v5) {
     return new Quintuple<>(t1.getV1(), t1.getV2(), t1.getV3(), t1.getV4(), v5);
   }
 
@@ -146,11 +149,19 @@ public class Quintuple<T1, T2, T3, T4, T5> extends TupleBase {
 
   @Override
   public String toString() {
-    return StringUtil.nullSafeToString(v1) + ":" + StringUtil.nullSafeToString(v2) + ":" + StringUtil.nullSafeToString(
-        v3) + ":" + StringUtil.nullSafeToString(v4) + ":" + StringUtil.nullSafeToString(v5);
+    return StringUtil.nullSafeToString(v1)
+        + ":"
+        + StringUtil.nullSafeToString(v2)
+        + ":"
+        + StringUtil.nullSafeToString(v3)
+        + ":"
+        + StringUtil.nullSafeToString(v4)
+        + ":"
+        + StringUtil.nullSafeToString(v5);
   }
 
-  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> parse(String def, String pattern, String... typeNames) {
+  public static <T1, T2, T3, T4, T5> Quintuple<T1, T2, T3, T4, T5> parse(
+      String def, String pattern, String... typeNames) {
     List<Object> l;
 
     l = TupleUtil.parse(def, pattern, SIZE, typeNames);

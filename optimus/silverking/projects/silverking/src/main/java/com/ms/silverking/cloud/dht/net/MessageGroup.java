@@ -31,13 +31,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Message which groups single type of sub-messages.
- * These sub-messages are stored in serialized ByteBuffer
- * form.
- * <p>
- * MessageGroups are created using specific subclasses of ProtoMessageGroup.
- * The components of a MessageGroup are available via iterators
- * that create instances of MessageGroupKeyEntry and descendants.
+ * Message which groups single type of sub-messages. These sub-messages are stored in serialized
+ * ByteBuffer form.
+ *
+ * <p>MessageGroups are created using specific subclasses of ProtoMessageGroup. The components of a
+ * MessageGroup are available via iterators that create instances of MessageGroupKeyEntry and
+ * descendants.
  */
 public class MessageGroup {
 
@@ -64,8 +63,15 @@ public class MessageGroup {
 
   private static final int MG_O_peer = 1;
 
-  public MessageGroup(MessageType messageType, int options, UUIDBase uuid, long context, ByteBuffer[] buffers,
-      byte[] originator, int deadlineRelativeMillis, ForwardingMode forward) {
+  public MessageGroup(
+      MessageType messageType,
+      int options,
+      UUIDBase uuid,
+      long context,
+      ByteBuffer[] buffers,
+      byte[] originator,
+      int deadlineRelativeMillis,
+      ForwardingMode forward) {
     this.messageType = messageType;
     this.options = options;
     this.uuid = uuid;
@@ -74,7 +80,9 @@ public class MessageGroup {
     assert originator.length == ValueCreator.BYTES;
     this.originator = originator;
     if (deadlineRelativeMillis < minDeadlineRelativeMillis) {
-      log.info("deadlineRelativeMillis < minDeadlineRelativeMillis; {} < {}", deadlineRelativeMillis,
+      log.info(
+          "deadlineRelativeMillis < minDeadlineRelativeMillis; {} < {}",
+          deadlineRelativeMillis,
           minDeadlineRelativeMillis);
       Thread.dumpStack();
       deadlineRelativeMillis = minDeadlineRelativeMillis;
@@ -83,62 +91,76 @@ public class MessageGroup {
     this.forward = forward;
 
     switch (messageType) {
-      // TODO (OPTIMUS-43373): Remove this legacy put and put_trace
-    case LEGACY_PUT:
-    case LEGACY_PUT_TRACE:
-    case PUT:
-    case PUT_TRACE:
-    case RETRIEVE:
-    case RETRIEVE_TRACE:
-    case RETRIEVE_RESPONSE:
-    case RETRIEVE_RESPONSE_TRACE:
-    case PUT_UPDATE:
-    case PUT_UPDATE_TRACE:
-      bytesPerKeyEntry = buffers[keyBufferIndex].getShort(0);
-      assert bytesPerKeyEntry > 0;
-      break;
-    case PUT_RESPONSE:
-    case PUT_RESPONSE_TRACE:
-      bytesPerKeyEntry = buffers[keyBufferIndex].getShort(0);
-      break;
-    case SNAPSHOT:
-    case SYNC_REQUEST:
-    case CHECKSUM_TREE:
-    case CHECKSUM_TREE_REQUEST:
-    case OP_RESPONSE:
-    case ERROR_RESPONSE:
-    case NAMESPACE_REQUEST:
-    case NAMESPACE_RESPONSE:
-    case OP_NOP:
-    case OP_PING:
-    case OP_PING_ACK:
-    case SET_CONVERGENCE_STATE:
-      bytesPerKeyEntry = 0;
-      break;
-    default:
-      throw new RuntimeException("Unsupported message type: " + messageType);
+        // TODO (OPTIMUS-43373): Remove this legacy put and put_trace
+      case LEGACY_PUT:
+      case LEGACY_PUT_TRACE:
+      case PUT:
+      case PUT_TRACE:
+      case RETRIEVE:
+      case RETRIEVE_TRACE:
+      case RETRIEVE_RESPONSE:
+      case RETRIEVE_RESPONSE_TRACE:
+      case PUT_UPDATE:
+      case PUT_UPDATE_TRACE:
+        bytesPerKeyEntry = buffers[keyBufferIndex].getShort(0);
+        assert bytesPerKeyEntry > 0;
+        break;
+      case PUT_RESPONSE:
+      case PUT_RESPONSE_TRACE:
+        bytesPerKeyEntry = buffers[keyBufferIndex].getShort(0);
+        break;
+      case SNAPSHOT:
+      case SYNC_REQUEST:
+      case CHECKSUM_TREE:
+      case CHECKSUM_TREE_REQUEST:
+      case OP_RESPONSE:
+      case ERROR_RESPONSE:
+      case NAMESPACE_REQUEST:
+      case NAMESPACE_RESPONSE:
+      case OP_NOP:
+      case OP_PING:
+      case OP_PING_ACK:
+      case SET_CONVERGENCE_STATE:
+        bytesPerKeyEntry = 0;
+        break;
+      default:
+        throw new RuntimeException("Unsupported message type: " + messageType);
     }
     if (debugShortTimeout) {
       if (deadlineRelativeMillis < shortTimeoutLimit) {
-        log.info("short deadlineRelativeMillis: {}" , deadlineRelativeMillis);
+        log.info("short deadlineRelativeMillis: {}", deadlineRelativeMillis);
         log.info(toString());
         Thread.dumpStack();
       }
     }
   }
 
-  public MessageGroup(MessageType messageType, int options, UUIDBase uuid, long context, List<ByteBuffer> buffers,
-      byte[] originator, int deadlineRelativeMillis, ForwardingMode forward) {
-    this(messageType, options, uuid, context, buffers.toArray(new ByteBuffer[0]), originator, deadlineRelativeMillis,
+  public MessageGroup(
+      MessageType messageType,
+      int options,
+      UUIDBase uuid,
+      long context,
+      List<ByteBuffer> buffers,
+      byte[] originator,
+      int deadlineRelativeMillis,
+      ForwardingMode forward) {
+    this(
+        messageType,
+        options,
+        uuid,
+        context,
+        buffers.toArray(new ByteBuffer[0]),
+        originator,
+        deadlineRelativeMillis,
         forward);
-        /*
-         // For debugging only
-        if (this.buffers.length >= 3 && this.buffers[2].isDirect() && this.buffers[2].remaining() == 0) {
-            displayForDebug(true);
-            Thread.dumpStack();
-            throw new RuntimeException("panic");
-        }
-        */
+    /*
+     // For debugging only
+    if (this.buffers.length >= 3 && this.buffers[2].isDirect() && this.buffers[2].remaining() == 0) {
+        displayForDebug(true);
+        Thread.dumpStack();
+        throw new RuntimeException("panic");
+    }
+    */
   }
 
   public void setPeer(boolean peer) {
@@ -160,7 +182,8 @@ public class MessageGroup {
     for (int i = 0; i < buffers.length; i++) {
       _buffers[i] = buffers[i].duplicate();
     }
-    return new MessageGroup(messageType, options, uuid, context, _buffers, originator, deadlineRelativeMillis, forward);
+    return new MessageGroup(
+        messageType, options, uuid, context, _buffers, originator, deadlineRelativeMillis, forward);
   }
 
   public MessageGroup ensureArrayBacked() {
@@ -182,7 +205,14 @@ public class MessageGroup {
       for (int i = 0; i < buffers.length; i++) {
         _buffers[i] = BufferUtil.ensureArrayBacked(buffers[i]);
       }
-      return new MessageGroup(messageType, options, uuid, context, _buffers, originator, deadlineRelativeMillis,
+      return new MessageGroup(
+          messageType,
+          options,
+          uuid,
+          context,
+          _buffers,
+          originator,
+          deadlineRelativeMillis,
           forward);
     }
   }
@@ -239,11 +269,11 @@ public class MessageGroup {
    * @return
    */
   public int estimatedKeys() {
-        /*
-        System.out.printf("buffers[keyBufferIndex].limit() - keyBufferMetaDataLength) %d\tbytesPerKeyEntry %d\t%s\n", 
-                buffers[keyBufferIndex].limit() - keyBufferMetaDataLength, bytesPerKeyEntry,
-                messageType);
-                */
+    /*
+    System.out.printf("buffers[keyBufferIndex].limit() - keyBufferMetaDataLength) %d\tbytesPerKeyEntry %d\t%s\n",
+            buffers[keyBufferIndex].limit() - keyBufferMetaDataLength, bytesPerKeyEntry,
+            messageType);
+            */
     return (buffers[keyBufferIndex].limit() - keyBufferMetaDataLength) / bytesPerKeyEntry;
   }
 
@@ -252,15 +282,15 @@ public class MessageGroup {
   }
 
   public void displayForDebug(boolean displayContent) {
-    log.info("{}",messageType);
-    log.info("buffers.size()  {}" , buffers.length);
+    log.info("{}", messageType);
+    log.info("buffers.size()  {}", buffers.length);
     for (ByteBuffer buffer : buffers) {
-      log.info("  {}" , buffer);
+      log.info("  {}", buffer);
       if (displayContent) {
         log.info(StringUtil.byteBufferToHexString(buffer));
       }
-      //Log.info("buffer.remaining()\t", buffer.remaining());
-      //Log.fine(StringUtil.byteArrayToHexString(buffer.array()));
+      // Log.info("buffer.remaining()\t", buffer.remaining());
+      // Log.fine(StringUtil.byteArrayToHexString(buffer.array()));
     }
   }
 
@@ -285,14 +315,15 @@ public class MessageGroup {
 
     @Override
     public boolean hasNext() {
-      return keyBufferMetaDataLength + curKey * MessageGroupKeyEntry.bytesPerEntry < keyBuffer.limit();
+      return keyBufferMetaDataLength + curKey * MessageGroupKeyEntry.bytesPerEntry
+          < keyBuffer.limit();
     }
 
     @Override
     public MessageGroupKeyEntry next() {
       if (hasNext()) {
-        return new MessageGroupKeyEntry(keyBuffer,
-            keyBufferMetaDataLength + curKey++ * MessageGroupKeyEntry.bytesPerEntry);
+        return new MessageGroupKeyEntry(
+            keyBuffer, keyBufferMetaDataLength + curKey++ * MessageGroupKeyEntry.bytesPerEntry);
       } else {
         return null;
       }
@@ -307,7 +338,8 @@ public class MessageGroup {
   ////////////////
 
   public ByteBuffer wrapEntry(MessageGroupKVEntry entry) {
-    return ByteBuffer.wrap(buffers[entry.getBufferIndex()].array(), entry.getBufferOffset(), entry.getStoredLength());
+    return ByteBuffer.wrap(
+        buffers[entry.getBufferIndex()].array(), entry.getBufferOffset(), entry.getStoredLength());
   }
 
   public Iterable<MessageGroupRetrievalResponseEntry> getRetrievalResponseValueKeyIterator() {
@@ -332,7 +364,8 @@ public class MessageGroup {
     }
   }
 
-  class RetrievalResponseKeyValueIterator extends KeyValueIterator<MessageGroupRetrievalResponseEntry> {
+  class RetrievalResponseKeyValueIterator
+      extends KeyValueIterator<MessageGroupRetrievalResponseEntry> {
     RetrievalResponseKeyValueIterator() {
       super();
     }
@@ -343,7 +376,8 @@ public class MessageGroup {
     }
   }
 
-  abstract class KeyValueIterator<T extends MessageGroupKVEntry> implements Iterator<T>, Iterable<T> {
+  abstract class KeyValueIterator<T extends MessageGroupKVEntry>
+      implements Iterator<T>, Iterable<T> {
     protected final ByteBuffer keyBuffer;
     private int curOffset;
 
@@ -372,8 +406,8 @@ public class MessageGroup {
         if (hasNext()) {
           T next;
 
-          //System.out.println(keyBufferIndex +" "+ curOffset);
-          //next = new MessageGroupKVEntry(keyBuffer, curOffset, buffers);
+          // System.out.println(keyBufferIndex +" "+ curOffset);
+          // next = new MessageGroupKVEntry(keyBuffer, curOffset, buffers);
           next = createEntry(curOffset, buffers);
           oldOffset = curOffset;
           curOffset += next.entryLength();
@@ -396,10 +430,14 @@ public class MessageGroup {
   }
 
   public void copyEntry(MessageGroupKVEntry entry, byte[] dest, int destOffset) {
-    //System.out.println(entry);
-    //System.out.println(buffers[entry.getBufferIndex()].array().length);
-    //System.out.println(entry.getBufferOffset());
-    System.arraycopy(buffers[entry.getBufferIndex()].array(), entry.getBufferOffset(), dest, destOffset,
+    // System.out.println(entry);
+    // System.out.println(buffers[entry.getBufferIndex()].array().length);
+    // System.out.println(entry.getBufferOffset());
+    System.arraycopy(
+        buffers[entry.getBufferIndex()].array(),
+        entry.getBufferOffset(),
+        dest,
+        destOffset,
         entry.getStoredLength());
   }
 
@@ -413,7 +451,8 @@ public class MessageGroup {
     return ProtoPutResponseMessageGroup.getKeyBufferIndex(this);
   }
 
-  class KeyOrdinalIterator implements Iterator<MessageGroupKeyOrdinalEntry>, Iterable<MessageGroupKeyOrdinalEntry> {
+  class KeyOrdinalIterator
+      implements Iterator<MessageGroupKeyOrdinalEntry>, Iterable<MessageGroupKeyOrdinalEntry> {
     private final ByteBuffer putResponseKeyBuffer;
     private int curKey;
 
@@ -428,15 +467,19 @@ public class MessageGroup {
 
     @Override
     public boolean hasNext() {
-      //Log.info("a: curKey "+ curKey +"\tputResponseKeyBuffer.limit() "+ putResponseKeyBuffer.limit());
-      return keyBufferMetaDataLength + curKey * MessageGroupKeyOrdinalEntry.bytesPerEntry < putResponseKeyBuffer.limit();
+      // Log.info("a: curKey "+ curKey +"\tputResponseKeyBuffer.limit() "+
+      // putResponseKeyBuffer.limit());
+      return keyBufferMetaDataLength + curKey * MessageGroupKeyOrdinalEntry.bytesPerEntry
+          < putResponseKeyBuffer.limit();
     }
 
     @Override
     public MessageGroupKeyOrdinalEntry next() {
-      //Log.info("b: curKey "+ curKey +"\tputResponseKeyBuffer.limit() "+ putResponseKeyBuffer.limit());
+      // Log.info("b: curKey "+ curKey +"\tputResponseKeyBuffer.limit() "+
+      // putResponseKeyBuffer.limit());
       if (hasNext()) {
-        return new MessageGroupKeyOrdinalEntry(putResponseKeyBuffer,
+        return new MessageGroupKeyOrdinalEntry(
+            putResponseKeyBuffer,
             keyBufferMetaDataLength + curKey++ * MessageGroupKeyOrdinalEntry.bytesPerEntry);
       } else {
         return null;
@@ -451,7 +494,13 @@ public class MessageGroup {
 
   @Override
   public String toString() {
-    return String.format("%s:%s:%x:%s:%s:s", messageType, uuid, context, new SimpleValueCreator(originator), forward,
+    return String.format(
+        "%s:%s:%x:%s:%s:s",
+        messageType,
+        uuid,
+        context,
+        new SimpleValueCreator(originator),
+        forward,
         getBufferLengthsString());
   }
 
@@ -473,8 +522,15 @@ public class MessageGroup {
   }
 
   public static MessageGroup clone(MessageGroup mg) {
-    return new MessageGroup(mg.messageType, mg.options, mg.uuid, mg.context, cloneBuffers(mg), mg.originator,
-        mg.deadlineRelativeMillis, mg.forward);
+    return new MessageGroup(
+        mg.messageType,
+        mg.options,
+        mg.uuid,
+        mg.context,
+        cloneBuffers(mg),
+        mg.originator,
+        mg.deadlineRelativeMillis,
+        mg.forward);
   }
 
   private static ByteBuffer[] cloneBuffers(MessageGroup mg) {

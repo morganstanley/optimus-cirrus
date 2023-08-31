@@ -39,7 +39,8 @@ public class SKFSNamespaceCreator {
     session = client.openSession(new SessionOptions(dhtConfig, preferredServer));
   }
 
-  public void createNamespaces(Set<String> namespaces, NamespaceOptions nsOptions) throws NamespaceCreationException {
+  public void createNamespaces(Set<String> namespaces, NamespaceOptions nsOptions)
+      throws NamespaceCreationException {
     log.info("Creating: {}", CollectionUtil.toString(namespaces));
     log.info("nsOptions: {}", nsOptions);
     for (String namespace : namespaces) {
@@ -47,12 +48,13 @@ public class SKFSNamespaceCreator {
     }
   }
 
-  public void createNamespace(String namespace, NamespaceOptions nsOptions) throws NamespaceCreationException {
+  public void createNamespace(String namespace, NamespaceOptions nsOptions)
+      throws NamespaceCreationException {
     Stopwatch sw;
 
     sw = new SimpleStopwatch();
     session.createNamespace(namespace, nsOptions);
-    log.info("Created namespace: {}   Elapsed: {}" , namespace , sw.getElapsedSeconds());
+    log.info("Created namespace: {}   Elapsed: {}", namespace, sw.getElapsedSeconds());
   }
 
   public void close() {

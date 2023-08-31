@@ -19,10 +19,13 @@ public class ValidOrTimeAndVersionRetentionPolicy implements ValueRetentionPolic
   private final int minVersions;
   private final long timeSpanSeconds;
 
-  public enum Mode {wallClock, mostRecentValue}
+  public enum Mode {
+    wallClock,
+    mostRecentValue
+  }
 
-  static final ValidOrTimeAndVersionRetentionPolicy template = new ValidOrTimeAndVersionRetentionPolicy(Mode.wallClock,
-      1, 86400);
+  static final ValidOrTimeAndVersionRetentionPolicy template =
+      new ValidOrTimeAndVersionRetentionPolicy(Mode.wallClock, 1, 86400);
 
   static {
     ObjectDefParser2.addParser(template);
@@ -78,7 +81,9 @@ public class ValidOrTimeAndVersionRetentionPolicy implements ValueRetentionPolic
     ValidOrTimeAndVersionRetentionPolicy other;
 
     other = (ValidOrTimeAndVersionRetentionPolicy) o;
-    return mode == other.mode && minVersions == other.minVersions && timeSpanSeconds == other.timeSpanSeconds;
+    return mode == other.mode
+        && minVersions == other.minVersions
+        && timeSpanSeconds == other.timeSpanSeconds;
   }
 
   /**

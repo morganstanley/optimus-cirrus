@@ -13,18 +13,18 @@ package com.ms.silverking.net.async;
 
 import java.nio.channels.SelectableChannel;
 
-/**
- * Request sent to Selector
- */
+/** Request sent to Selector */
 public final class NewKeyChangeRequest extends KeyChangeRequest {
   private final ChannelRegistrationWorker crWorker;
 
-  public NewKeyChangeRequest(SelectableChannel channel, Type type, int newOps, ChannelRegistrationWorker crWorker) {
+  public NewKeyChangeRequest(
+      SelectableChannel channel, Type type, int newOps, ChannelRegistrationWorker crWorker) {
     super(channel, type, newOps);
     this.crWorker = crWorker;
   }
 
-  public NewKeyChangeRequest(SelectableChannel channel, Type type, ChannelRegistrationWorker crWorker) {
+  public NewKeyChangeRequest(
+      SelectableChannel channel, Type type, ChannelRegistrationWorker crWorker) {
     this(channel, type, 0, crWorker);
   }
 

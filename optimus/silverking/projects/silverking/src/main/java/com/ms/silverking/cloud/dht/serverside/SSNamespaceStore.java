@@ -32,10 +32,17 @@ public interface SSNamespaceStore {
 
   public NamespaceOptions getNamespaceOptions();
 
-  public OpResult put(DHTKey key, ByteBuffer value, SSStorageParametersAndRequirements storageParams, byte[] userData,
+  public OpResult put(
+      DHTKey key,
+      ByteBuffer value,
+      SSStorageParametersAndRequirements storageParams,
+      byte[] userData,
       NamespaceVersionMode nsVersionMode);
 
-  public default OpResult invalidate(DHTKey key, SSInvalidationParametersImpl invalidateParams, byte[] userData,
+  public default OpResult invalidate(
+      DHTKey key,
+      SSInvalidationParametersImpl invalidateParams,
+      byte[] userData,
       NamespaceVersionMode nsVersionMode) {
     return put(key, DHTConstants.emptyByteBuffer, invalidateParams, userData, nsVersionMode);
   }

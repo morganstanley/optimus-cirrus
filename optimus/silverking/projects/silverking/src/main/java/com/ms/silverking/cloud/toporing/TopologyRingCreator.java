@@ -52,8 +52,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Creates a one or more TopologyRings from a Topology and a Set of NodeClasses
- * for which to create the Topologies
+ * Creates a one or more TopologyRings from a Topology and a Set of NodeClasses for which to create
+ * the Topologies
  */
 public class TopologyRingCreator {
   private final long magnitudeTolerance;
@@ -64,17 +64,21 @@ public class TopologyRingCreator {
 
   private static final boolean debug = false;
 
-  private static final String magnitudeToleranceFactorProperty = TopologyRingCreator.class.getName() +
-      ".MagnitudeToleranceFactor";
+  private static final String magnitudeToleranceFactorProperty =
+      TopologyRingCreator.class.getName() + ".MagnitudeToleranceFactor";
   private static final int defaultMagnitudeToleranceFactor = 1;
   private static final int magnitudeToleranceFactor;
 
   static {
-    magnitudeToleranceFactor = PropertiesHelper.systemHelper.getInt(magnitudeToleranceFactorProperty,
-        defaultMagnitudeToleranceFactor, ParseExceptionAction.RethrowParseException);
+    magnitudeToleranceFactor =
+        PropertiesHelper.systemHelper.getInt(
+            magnitudeToleranceFactorProperty,
+            defaultMagnitudeToleranceFactor,
+            ParseExceptionAction.RethrowParseException);
   }
 
-  static final long defaultMagnitudeTolerance = LongRingspace.halfRingspaceErrorRoom * magnitudeToleranceFactor;
+  static final long defaultMagnitudeTolerance =
+      LongRingspace.halfRingspaceErrorRoom * magnitudeToleranceFactor;
 
   private static final int maxShuffleAttempts = 20;
 
@@ -108,10 +112,13 @@ public class TopologyRingCreator {
       TopologyRing _ring;
 
       if (debug) {
-        log.debug("Create for node: {}" , node);
+        log.debug("Create for node: {}", node);
       }
-      sourceRing = SingleRing.emptyRing(recipe.topology.getNodeByID(nodeID).getChildNodeClass(), 0,
-          recipe.storagePolicy.getName());
+      sourceRing =
+          SingleRing.emptyRing(
+              recipe.topology.getNodeByID(nodeID).getChildNodeClass(),
+              0,
+              recipe.storagePolicy.getName());
       sourceRing.freeze(recipe.weightSpecs);
       if (debug) {
         log.debug("empty source {}", sourceRing);
@@ -122,7 +129,7 @@ public class TopologyRingCreator {
       return _ring;
     } else {
       if (debug) {
-        log.debug("Couldn't find nodeID: " , nodeID);
+        log.debug("Couldn't find nodeID: ", nodeID);
       }
       return null;
     }
@@ -137,7 +144,7 @@ public class TopologyRingCreator {
       TopologyRing _ring;
 
       if (debug) {
-        log.debug("Create w/ source for node: {}" , node);
+        log.debug("Create w/ source for node: {}", node);
       }
       _ring = _create2(sourceRing, recipe, nodeID);
       _ring = _ring.simplify();
@@ -145,21 +152,21 @@ public class TopologyRingCreator {
       return _ring;
     } else {
       if (debug) {
-        log.debug("Couldn't find nodeID: {}" , nodeID);
+        log.debug("Couldn't find nodeID: {}", nodeID);
       }
       return null;
     }
   }
 
   /**
-   * Create a new ring that is as similar as possible to the ring passed in so
-   * that we minimize the movement of data.
+   * Create a new ring that is as similar as possible to the ring passed in so that we minimize the
+   * movement of data.
    *
-   * @param sourceRing an immutable SingleRing that may or may not meet the
-   *                   requirements of the recipe
+   * @param sourceRing an immutable SingleRing that may or may not meet the requirements of the
+   *     recipe
    * @param recipe
-   * @return an immutable SingleRing (returned as a TopologyRing) that meets
-   * the requirements of the recipe
+   * @return an immutable SingleRing (returned as a TopologyRing) that meets the requirements of the
+   *     recipe
    */
   private TopologyRing _create2(SingleRing sourceRing, RingTreeRecipe recipe, String ringParentID) {
     /*
@@ -192,31 +199,36 @@ public class TopologyRingCreator {
     }
 
     log.info("*********************");
-    log.info("{}",prList);
+    log.info("{}", prList);
 
     return prList.toSingleRing(nodeClass, recipe);
   }
 
-  private void allocateSubPolicy2(SingleRing sourceRing, ProtoRegionList prList, SubPolicy subPolicy,
-      String ringParentID, RingTreeRecipe recipe) {
+  private void allocateSubPolicy2(
+      SingleRing sourceRing,
+      ProtoRegionList prList,
+      SubPolicy subPolicy,
+      String ringParentID,
+      RingTreeRecipe recipe) {
     Node parent;
 
     if (debug) {
       log.debug("TopologyRingCreator.allocateSubPolicy2()");
-      log.debug("subPolicy: {}" , subPolicy);
+      log.debug("subPolicy: {}", subPolicy);
       System.out.flush();
     }
     parent = recipe.topology.getNodeByID(ringParentID);
     for (SubPolicyMember member : subPolicy.getMembers()) {
-      allocateSubPolicyMember2(sourceRing, prList, member, recipe, parent, subPolicy.getReplicationType());
+      allocateSubPolicyMember2(
+          sourceRing, prList, member, recipe, parent, subPolicy.getReplicationType());
     }
   }
 
   private enum RegionAllocationMode {
-    Primary, Secondary, Any
-  }
-
-  ;
+    Primary,
+    Secondary,
+    Any
+  };
 
   /*
    * private int nextRegion(ProtoRegionList prList, RegionAllocationMode
@@ -271,13 +283,21 @@ public class TopologyRingCreator {
 
   private static int lastCandidateValue = 0;
 
-  private int nextRegion(ProtoRegionList prList, RegionAllocationMode regionAllocationMode, SingleRing sourceRing,
-      int regionIndex, Node node, int maxOwners, ReplicationType rType, Set<Node> remainingNodes) {
+  private int nextRegion(
+      ProtoRegionList prList,
+      RegionAllocationMode regionAllocationMode,
+      SingleRing sourceRing,
+      int regionIndex,
+      Node node,
+      int maxOwners,
+      ReplicationType rType,
+      Set<Node> remainingNodes) {
     int minPotentialOwners;
     int bestCandidateIndex;
 
     if (debug) {
-      log.debug("TopologyRingCreator.nextRegion regionIndex {} maxOwners {}", regionIndex, maxOwners);
+      log.debug(
+          "TopologyRingCreator.nextRegion regionIndex {} maxOwners {}", regionIndex, maxOwners);
       log.debug("regionAllocationMode {}", regionAllocationMode);
     }
     minPotentialOwners = Integer.MAX_VALUE;
@@ -292,7 +312,8 @@ public class TopologyRingCreator {
 
       // Find a region not containing this node
       if (debug) {
-        log.debug("TopologyRingCreator.nextRegion loop candidateRegionIndex {}", candidateRegionIndex);
+        log.debug(
+            "TopologyRingCreator.nextRegion loop candidateRegionIndex {}", candidateRegionIndex);
       }
 
       // Now check to see if this region meets the ownership requirements
@@ -303,17 +324,21 @@ public class TopologyRingCreator {
           log.debug("candidateRegion {}", candidateRegion);
         }
         switch (regionAllocationMode) {
-        case Primary:
-          valid = sourceRing.pointOwnedByNode(candidateRegion.getRegion().getStart(), node, OwnerQueryMode.Primary);
-          break;
-        case Secondary:
-          valid = sourceRing.pointOwnedByNode(candidateRegion.getRegion().getStart(), node, OwnerQueryMode.Secondary);
-          break;
-        case Any:
-          valid = true;
-          break;
-        default:
-          throw new RuntimeException("panic");
+          case Primary:
+            valid =
+                sourceRing.pointOwnedByNode(
+                    candidateRegion.getRegion().getStart(), node, OwnerQueryMode.Primary);
+            break;
+          case Secondary:
+            valid =
+                sourceRing.pointOwnedByNode(
+                    candidateRegion.getRegion().getStart(), node, OwnerQueryMode.Secondary);
+            break;
+          case Any:
+            valid = true;
+            break;
+          default:
+            throw new RuntimeException("panic");
         }
         if (valid) {
           // return candidateRegionIndex;
@@ -348,21 +373,26 @@ public class TopologyRingCreator {
     }
   }
 
-  private SwapResult swap(ProtoRegionList prList, Node newNode, int ownedIndex, int nonownedIndex, long maxAllocation) {
+  private SwapResult swap(
+      ProtoRegionList prList, Node newNode, int ownedIndex, int nonownedIndex, long maxAllocation) {
     Node existingNode;
     ProtoRegion ownedRegion;
     ProtoRegion nonownedRegion;
 
     if (debug) {
-      log.debug("in swap {} ownedIndex {} nonownedIndex {} maxAllocation {}", newNode, ownedIndex,
-          nonownedIndex, maxAllocation);
+      log.debug(
+          "in swap {} ownedIndex {} nonownedIndex {} maxAllocation {}",
+          newNode,
+          ownedIndex,
+          nonownedIndex,
+          maxAllocation);
       System.out.flush();
     }
     // First make sure that ownedRegion size <= maxAllocation
     ownedRegion = prList.get(ownedIndex);
     if (maxAllocation < ownedRegion.getRegionSize()) {
       if (debug) {
-        log.debug("reducing to max allocation: {}" , ownedRegion);
+        log.debug("reducing to max allocation: {}", ownedRegion);
       }
       prList.splitProtoRegion(ownedIndex, maxAllocation);
       if (nonownedIndex > ownedIndex) {
@@ -426,13 +456,13 @@ public class TopologyRingCreator {
   }
 
   /**
-   * Called when a region couldn't be found. This method moves allocations
-   * around so that a region can be given to the node specified.
+   * Called when a region couldn't be found. This method moves allocations around so that a region
+   * can be given to the node specified.
    *
    * @return
    */
-  private int createNextRegion(ProtoRegionList prList, Node node, ReplicationType rType, int maxOwners,
-      long swapRemaining) {
+  private int createNextRegion(
+      ProtoRegionList prList, Node node, ReplicationType rType, int maxOwners, long swapRemaining) {
     // FUTURE - refactor this after concept is proven
     long swapped;
     int ownedRegion;
@@ -443,10 +473,12 @@ public class TopologyRingCreator {
     ownedRegion = -1;
     nonownedRegion = -1;
     firstSwappedRegion = -1;
-    //while (swapped < swapRemaining) {
+    // while (swapped < swapRemaining) {
     // Find a non-full region that this node owns
     if (ownedRegion == -1) {
-      for (int candidateRegionIndex = prList.size() - 1; candidateRegionIndex >= 0; candidateRegionIndex--) {
+      for (int candidateRegionIndex = prList.size() - 1;
+          candidateRegionIndex >= 0;
+          candidateRegionIndex--) {
         ProtoRegion candidateRegion;
 
         candidateRegion = prList.get(candidateRegionIndex);
@@ -456,12 +488,14 @@ public class TopologyRingCreator {
       }
     }
     if (ownedRegion < 0) {
-      log.info("Couldn't find ownedRegion {} {}" , node , prList.toString());
+      log.info("Couldn't find ownedRegion {} {}", node, prList.toString());
     }
 
     // Find a region that this node doesn't own (preconditions guarantee such a region is full)
     if (nonownedRegion == -1) {
-      for (int candidateRegionIndex = prList.size() - 1; candidateRegionIndex >= 0; candidateRegionIndex--) {
+      for (int candidateRegionIndex = prList.size() - 1;
+          candidateRegionIndex >= 0;
+          candidateRegionIndex--) {
         ProtoRegion candidateRegion;
 
         candidateRegion = prList.get(candidateRegionIndex);
@@ -476,7 +510,7 @@ public class TopologyRingCreator {
       }
     }
     if (nonownedRegion < 0) {
-      log.info("Couldn't find nonownedRegion {} {}" , node , prList.toString());
+      log.info("Couldn't find nonownedRegion {} {}", node, prList.toString());
     }
 
     // Swap ownership
@@ -485,7 +519,7 @@ public class TopologyRingCreator {
     try {
       swapResult = swap(prList, node, ownedRegion, nonownedRegion, swapRemaining);
     } catch (RuntimeException re) {
-      log.info("{}",prList);
+      log.info("{}", prList);
       throw re;
     }
     ownedRegion = swapResult.ownedIndex;
@@ -495,7 +529,7 @@ public class TopologyRingCreator {
     }
     ownedRegion = -1;
     nonownedRegion = -1;
-    //}
+    // }
     if (firstSwappedRegion < 0) {
       log.info(prList.toString());
       throw new RuntimeException("createNextRegion failed");
@@ -505,8 +539,7 @@ public class TopologyRingCreator {
   }
 
   static class NASAvailableRingspaceComparator implements Comparator<NodeAllocationState> {
-    NASAvailableRingspaceComparator() {
-    }
+    NASAvailableRingspaceComparator() {}
 
     @Override
     public int compare(NodeAllocationState nas0, NodeAllocationState nas1) {
@@ -544,7 +577,14 @@ public class TopologyRingCreator {
       allocation = region.getSize();
       if (allocated[replica] + allocation > NumUtil.addWithClamp(toAllocate, magnitudeTolerance)) {
         throw new RuntimeException(
-            "Excessive allocation: " + node + " " + replica + " " + allocated[replica] + "\t" + toAllocate);
+            "Excessive allocation: "
+                + node
+                + " "
+                + replica
+                + " "
+                + allocated[replica]
+                + "\t"
+                + toAllocate);
       }
       allocated[replica] += allocation;
       allocatedRegions[replica].add(region);
@@ -556,8 +596,22 @@ public class TopologyRingCreator {
       allocation = RingRegion.getTotalSize(regions);
       if (allocated[replica] + allocation > NumUtil.addWithClamp(toAllocate, magnitudeTolerance)) {
         throw new RuntimeException(
-            "Excessive allocation: " + node + " " + replica + " allocation: " + allocation + " allocated[replica]: " + allocated[replica] + "\ttoAllocate: " + toAllocate + "\t allocated+allocation: " + (allocated[replica] + allocation) + "\t toAllocate+magnitudeTolerance " + (toAllocate + magnitudeTolerance) + "\t NumUtil.addWithClamp(toAllocate, magnitudeTolerance) " + NumUtil.addWithClamp(
-                toAllocate, magnitudeTolerance));
+            "Excessive allocation: "
+                + node
+                + " "
+                + replica
+                + " allocation: "
+                + allocation
+                + " allocated[replica]: "
+                + allocated[replica]
+                + "\ttoAllocate: "
+                + toAllocate
+                + "\t allocated+allocation: "
+                + (allocated[replica] + allocation)
+                + "\t toAllocate+magnitudeTolerance "
+                + (toAllocate + magnitudeTolerance)
+                + "\t NumUtil.addWithClamp(toAllocate, magnitudeTolerance) "
+                + NumUtil.addWithClamp(toAllocate, magnitudeTolerance));
       }
       allocated[replica] += allocation;
       allocatedRegions[replica].addAll(regions);
@@ -581,8 +635,10 @@ public class TopologyRingCreator {
       // for (RingRegion r : RingRegion.union(allocatedRegions)) {
       // System.out.printf("%s\n", r.toString());
       // }
-      rVal = LongRingspace.size - RingRegion.getTotalSize(RingRegion.union(allocatedRegions, fullRegions));
-      //rVal = LongRingspace.size
+      rVal =
+          LongRingspace.size
+              - RingRegion.getTotalSize(RingRegion.union(allocatedRegions, fullRegions));
+      // rVal = LongRingspace.size
       //        - RingRegion.getTotalSize(RingRegion.union(
       //              RingRegion.union(allocatedRegions), fullRegions));
       // System.out.printf("RingRegion.getTotalSize %d\n",
@@ -605,8 +661,8 @@ public class TopologyRingCreator {
     }
   }
 
-  private List<NodeAllocationState> createNodeAllocationStates(SubPolicyMember member, RingTreeRecipe recipe,
-      Node parent, int replicas) {
+  private List<NodeAllocationState> createNodeAllocationStates(
+      SubPolicyMember member, RingTreeRecipe recipe, Node parent, int replicas) {
     List<NodeAllocationState> nodeAllocationStates;
     List<Node> nodes;
     NodeClass nodeClass;
@@ -614,39 +670,44 @@ public class TopologyRingCreator {
 
     nodeClass = parent.getChildNodeClass();
     if (nodeClass == null) {
-      log.debug("parent.getChildren().size(): {}" , parent.getChildren().size());
+      log.debug("parent.getChildren().size(): {}", parent.getChildren().size());
       throw new RuntimeException("No nodes for parent " + parent);
     }
     nodes = member.getNodesList(parent, recipe);
     if (debug) {
-      log.debug("nodes.size() " , nodes.size());
+      log.debug("nodes.size() ", nodes.size());
     }
-    nodeRegionSizes = RingRegion.allRingspace.dividedRegionSizes(recipe.weightSpecs.getWeights(nodes));
+    nodeRegionSizes =
+        RingRegion.allRingspace.dividedRegionSizes(recipe.weightSpecs.getWeights(nodes));
     if (debug) {
       log.debug(CollectionUtil.toString(nodeRegionSizes, '\n'));
     }
 
     nodeAllocationStates = new ArrayList<>(nodes.size());
     for (int i = 0; i < nodes.size(); i++) {
-      nodeAllocationStates.add(new NodeAllocationState(nodes.get(i), replicas, nodeRegionSizes.get(i)));
+      nodeAllocationStates.add(
+          new NodeAllocationState(nodes.get(i), replicas, nodeRegionSizes.get(i)));
     }
     return nodeAllocationStates;
   }
 
-  private List<NodeAllocationState> getInitialAllocationStates(List<NodeAllocationState> nodeAllocationStates_final,
-      SingleRing sourceRing, ReplicationType rType, int replicas) {
+  private List<NodeAllocationState> getInitialAllocationStates(
+      List<NodeAllocationState> nodeAllocationStates_final,
+      SingleRing sourceRing,
+      ReplicationType rType,
+      int replicas) {
     List<NodeAllocationState> nodeAllocationStates_initial;
     OwnerQueryMode oqm;
 
     switch (rType) {
-    case Primary:
-      oqm = OwnerQueryMode.Primary;
-      break;
-    case Secondary:
-      oqm = OwnerQueryMode.Secondary;
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case Primary:
+        oqm = OwnerQueryMode.Primary;
+        break;
+      case Secondary:
+        oqm = OwnerQueryMode.Secondary;
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
 
     nodeAllocationStates_initial = new ArrayList<>(nodeAllocationStates_final.size());
@@ -654,19 +715,29 @@ public class TopologyRingCreator {
       long oldAllocation;
       long allocationLimit;
 
-      oldAllocation = sourceRing.getOwnedRingspace(nodeAllocationStates_final.get(i).getNode(), oqm);
+      oldAllocation =
+          sourceRing.getOwnedRingspace(nodeAllocationStates_final.get(i).getNode(), oqm);
       allocationLimit = oldAllocation / replicas;
       if (debug) {
-        log.debug("node {}  oldAllocation {}  allocationLimit {}",
-            nodeAllocationStates_final.get(i).getNode(), oldAllocation, allocationLimit);
+        log.debug(
+            "node {}  oldAllocation {}  allocationLimit {}",
+            nodeAllocationStates_final.get(i).getNode(),
+            oldAllocation,
+            allocationLimit);
       }
-      nodeAllocationStates_initial.add(nodeAllocationStates_final.get(i).limitAllocation(allocationLimit));
+      nodeAllocationStates_initial.add(
+          nodeAllocationStates_final.get(i).limitAllocation(allocationLimit));
     }
     return nodeAllocationStates_initial;
   }
 
-  private void allocateSubPolicyMember2(SingleRing sourceRing, ProtoRegionList prList, SubPolicyMember member,
-      RingTreeRecipe recipe, Node parent, ReplicationType rType) {
+  private void allocateSubPolicyMember2(
+      SingleRing sourceRing,
+      ProtoRegionList prList,
+      SubPolicyMember member,
+      RingTreeRecipe recipe,
+      Node parent,
+      ReplicationType rType) {
     int replicas;
     boolean allReplicasTag;
     List<NodeAllocationState> nodeAllocationStates_initial;
@@ -682,7 +753,8 @@ public class TopologyRingCreator {
       replicas = member.getNodesList(parent, recipe).size();
     }
     nodeAllocationStates_final = createNodeAllocationStates(member, recipe, parent, replicas);
-    nodeAllocationStates_initial = getInitialAllocationStates(nodeAllocationStates_final, sourceRing, rType, replicas);
+    nodeAllocationStates_initial =
+        getInitialAllocationStates(nodeAllocationStates_final, sourceRing, rType, replicas);
     doAllocation(sourceRing, prList, rType, replicas, allReplicasTag, nodeAllocationStates_initial);
     for (ProtoRegion pr : prList.getRegionList()) {
       if (pr.totalOwners() >= replicas) {
@@ -691,14 +763,21 @@ public class TopologyRingCreator {
     }
     for (int i = 0; i < nodeAllocationStates_final.size(); i++) {
       for (int j = 0; j < replicas; j++) {
-        nodeAllocationStates_final.get(i).addAllocation(j, nodeAllocationStates_initial.get(i).getAllocatedRegions(j));
+        nodeAllocationStates_final
+            .get(i)
+            .addAllocation(j, nodeAllocationStates_initial.get(i).getAllocatedRegions(j));
       }
     }
     doAllocation(sourceRing, prList, rType, replicas, allReplicasTag, nodeAllocationStates_final);
   }
 
-  private void doAllocation(SingleRing sourceRing, ProtoRegionList prList, ReplicationType rType, int replicas,
-      boolean allReplicasTag, List<NodeAllocationState> nodeAllocationStates) {
+  private void doAllocation(
+      SingleRing sourceRing,
+      ProtoRegionList prList,
+      ReplicationType rType,
+      int replicas,
+      boolean allReplicasTag,
+      List<NodeAllocationState> nodeAllocationStates) {
     if (debug) {
       log.debug("doAllocation()");
     }
@@ -726,7 +805,7 @@ public class TopologyRingCreator {
           long ringspaceAllocated;
           boolean nodeSearchValid;
 
-          //Collections.sort(unallocated,
+          // Collections.sort(unallocated,
           //        nasAvailableRingspaceComparator);
           // nas = nodeAllocationStates.get(nodeIndex);
           nas = unallocated.remove(0);
@@ -736,7 +815,11 @@ public class TopologyRingCreator {
           if (debug) {
             log.debug(
                 "regionAllocationMode {} replicaIndex {} nodeIndex {} node {} availableRingspace {}",
-                regionAllocationMode, replicaIndex, nodeIndex, node, nas.availableRingspace());
+                regionAllocationMode,
+                replicaIndex,
+                nodeIndex,
+                node,
+                nas.availableRingspace());
           }
 
           if (allReplicasTag) {
@@ -746,18 +829,30 @@ public class TopologyRingCreator {
           }
 
           nodeSearchValid = true;
-          while (nodeSearchValid && nas.allocationRemaining(replicaIndex) - magnitudeTolerance > 0) {
+          while (nodeSearchValid
+              && nas.allocationRemaining(replicaIndex) - magnitudeTolerance > 0) {
             ProtoRegion protoRegion;
 
             if (debug) {
-              log.debug(" ringspaceAllocated {} ringspaceToAllocate {}  remaining {}", ringspaceAllocated,
-                  nas.ringspaceToAllocate(), nas.allocationRemaining(replicaIndex));
+              log.debug(
+                  " ringspaceAllocated {} ringspaceToAllocate {}  remaining {}",
+                  ringspaceAllocated,
+                  nas.ringspaceToAllocate(),
+                  nas.allocationRemaining(replicaIndex));
               log.debug("regionIndex {}", regionIndex);
             }
             // Find an available region
             if (!allReplicasTag) {
-              regionIndex = nextRegion(prList, regionAllocationMode, sourceRing, regionIndex, node, replicas, rType,
-                  remainingNodes);
+              regionIndex =
+                  nextRegion(
+                      prList,
+                      regionAllocationMode,
+                      sourceRing,
+                      regionIndex,
+                      node,
+                      replicas,
+                      rType,
+                      remainingNodes);
             } else {
               regionIndex = prList.nextRegion(regionIndex, node, replicaIndex, rType);
             }
@@ -769,16 +864,18 @@ public class TopologyRingCreator {
                 break;
               } else {
                 switch (regionAllocationMode) {
-                case Primary:
-                case Secondary:
-                  regionIndex = 0;
-                  nodeSearchValid = false;
-                  continue;
-                case Any:
-                  regionIndex = createNextRegion(prList, node, rType, replicas, nas.allocationRemaining(replicaIndex));
-                  break;
-                default:
-                  throw new RuntimeException("panic");
+                  case Primary:
+                  case Secondary:
+                    regionIndex = 0;
+                    nodeSearchValid = false;
+                    continue;
+                  case Any:
+                    regionIndex =
+                        createNextRegion(
+                            prList, node, rType, replicas, nas.allocationRemaining(replicaIndex));
+                    break;
+                  default:
+                    throw new RuntimeException("panic");
                 }
               }
             }
@@ -786,14 +883,20 @@ public class TopologyRingCreator {
             // Now add this node to the region found
             protoRegion = prList.get(regionIndex);
             if (debug) {
-              log.debug("{}",protoRegion.getRegion());
-              log.debug("{} {}", protoRegion.getRegion().getSize(),
+              log.debug("{}", protoRegion.getRegion());
+              log.debug(
+                  "{} {}",
+                  protoRegion.getRegion().getSize(),
                   nas.ringspaceToAllocate() - magnitudeTolerance);
-              log.debug("A nodeAllocated {} node {} ringspaceAllocated {}", nas.getAllocated(replicaIndex),
-                  node, ringspaceAllocated);
+              log.debug(
+                  "A nodeAllocated {} node {} ringspaceAllocated {}",
+                  nas.getAllocated(replicaIndex),
+                  node,
+                  ringspaceAllocated);
             }
-            if (protoRegion.getRegion().getSize() <= NumUtil.addWithClamp(nas.allocationRemaining(replicaIndex),
-                magnitudeTolerance)) {
+            if (protoRegion.getRegion().getSize()
+                <= NumUtil.addWithClamp(
+                    nas.allocationRemaining(replicaIndex), magnitudeTolerance)) {
               // The candidate region size is <=
               // ringspaceToAllocate, so we add the entire region
             } else {
@@ -833,8 +936,11 @@ public class TopologyRingCreator {
               regionIndex = (regionIndex + 1) % prList.size();
             }
             if (debug) {
-              log.debug("B nodeAllocated {} node {} ringspaceAllocated {}", nas.getAllocated(replicaIndex),
-                  node, ringspaceAllocated);
+              log.debug(
+                  "B nodeAllocated {} node {} ringspaceAllocated {}",
+                  nas.getAllocated(replicaIndex),
+                  node,
+                  ringspaceAllocated);
               log.debug("after regionIndex {}", regionIndex);
             }
           }
@@ -845,14 +951,14 @@ public class TopologyRingCreator {
   }
 
   /**
-   * Create a new ring that is as similar as possible to the ring passed in so
-   * that we minimize the movement of data.
+   * Create a new ring that is as similar as possible to the ring passed in so that we minimize the
+   * movement of data.
    *
-   * @param sourceRing an immutable SingleRing that may or may not meet the
-   *                   requirements of the recipe
+   * @param sourceRing an immutable SingleRing that may or may not meet the requirements of the
+   *     recipe
    * @param recipe
-   * @return an immutable SingleRing (returned as a TopologyRing) that meets
-   * the requirements of the recipe
+   * @return an immutable SingleRing (returned as a TopologyRing) that meets the requirements of the
+   *     recipe
    */
   private TopologyRing _create(SingleRing sourceRing, RingTreeRecipe recipe, String ringParentID) {
     // This version ignores the source ring, _create2 takes the source into
@@ -883,7 +989,7 @@ public class TopologyRingCreator {
     }
 
     log.info("*********************");
-    log.info("{}",prList);
+    log.info("{}", prList);
 
     return prList.toSingleRing(nodeClass, recipe);
   }
@@ -898,23 +1004,28 @@ public class TopologyRingCreator {
    * newRing; }
    */
 
-  private ProtoRegionList allocateSubPolicy(ProtoRegionList prList, SubPolicy subPolicy, String ringParentID,
-      RingTreeRecipe recipe) {
+  private ProtoRegionList allocateSubPolicy(
+      ProtoRegionList prList, SubPolicy subPolicy, String ringParentID, RingTreeRecipe recipe) {
     Node parent;
 
     if (debug) {
-      log.debug("subPolicy: {}" , subPolicy);
+      log.debug("subPolicy: {}", subPolicy);
       System.out.flush();
     }
     parent = recipe.topology.getNodeByID(ringParentID);
     for (SubPolicyMember member : subPolicy.getMembers()) {
-      prList = allocateSubPolicyMember(prList, member, recipe, parent, subPolicy.getReplicationType());
+      prList =
+          allocateSubPolicyMember(prList, member, recipe, parent, subPolicy.getReplicationType());
     }
     return prList;
   }
 
-  private ProtoRegionList allocateSubPolicyMember(ProtoRegionList prList, SubPolicyMember member, RingTreeRecipe recipe,
-      Node parent, ReplicationType rType) {
+  private ProtoRegionList allocateSubPolicyMember(
+      ProtoRegionList prList,
+      SubPolicyMember member,
+      RingTreeRecipe recipe,
+      Node parent,
+      ReplicationType rType) {
     List<Node> nodes;
     int replicas;
     NodeClass nodeClass;
@@ -932,13 +1043,13 @@ public class TopologyRingCreator {
 
     nodeClass = parent.getChildNodeClass();
     if (nodeClass == null) {
-      log.error("parent.getChildren().size(): {}"  ,parent.getChildren().size());
+      log.error("parent.getChildren().size(): {}", parent.getChildren().size());
       throw new RuntimeException("No nodes for parent " + parent);
     }
     // System.out.printf("parent %s\n", parent.getIDString());
     nodes = member.getNodesList(parent, recipe);
     if (debug) {
-      log.debug("nodes.size() " , nodes.size());
+      log.debug("nodes.size() ", nodes.size());
     }
 
     replicas = member.getQuantity();
@@ -950,7 +1061,8 @@ public class TopologyRingCreator {
     if (replicas == nodes.size()) {
       addNodesToBlankProtoRegionList(prList, nodes);
     } else {
-      nodeRegionSizes = RingRegion.allRingspace.dividedRegionSizes(recipe.weightSpecs.getWeights(nodes));
+      nodeRegionSizes =
+          RingRegion.allRingspace.dividedRegionSizes(recipe.weightSpecs.getWeights(nodes));
       if (debug) {
         log.debug("nodeRegionSizes");
         log.debug(CollectionUtil.toString(nodeRegionSizes, '\n'));
@@ -983,8 +1095,12 @@ public class TopologyRingCreator {
 
               nodeIndex = shuffle.get(_nodeIndex);
               if (debug) {
-                log.debug("replicaIndex {} nodeIndex {} _nodeIndex {} attemptIndex {}", replicaIndex,
-                    nodeIndex, _nodeIndex, attemptIndex);
+                log.debug(
+                    "replicaIndex {} nodeIndex {} _nodeIndex {} attemptIndex {}",
+                    replicaIndex,
+                    nodeIndex,
+                    _nodeIndex,
+                    attemptIndex);
                 System.out.flush();
               }
 
@@ -992,18 +1108,27 @@ public class TopologyRingCreator {
               node = nodes.get(nodeIndex);
               ringspaceToAllocate = nodeRegionSizes.get(nodeIndex);
               ringspaceAllocated = 0;
-              quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                  ringspaceToAllocate - ringspaceAllocated, shuffle);
+              quickCheckAllocations(
+                  prList,
+                  nodes,
+                  nodeRegionSizes,
+                  replicaIndex,
+                  nodeIndex,
+                  ringspaceToAllocate - ringspaceAllocated,
+                  shuffle);
 
-              //regionIndex = _nodeIndex;
+              // regionIndex = _nodeIndex;
               regionIndex = 0;
 
               while (ringspaceAllocated < ringspaceToAllocate - magnitudeTolerance) {
                 ProtoRegion protoRegion;
 
                 if (debug) {
-                  log.debug(" ringspaceAllocated {} ringspaceToAllocate {} remaining {}",
-                      ringspaceAllocated, ringspaceToAllocate, ringspaceToAllocate - ringspaceAllocated);
+                  log.debug(
+                      " ringspaceAllocated {} ringspaceToAllocate {} remaining {}",
+                      ringspaceAllocated,
+                      ringspaceToAllocate,
+                      ringspaceToAllocate - ringspaceAllocated);
                   log.debug("regionIndex {}", regionIndex);
                 }
                 // Find an available region
@@ -1012,8 +1137,14 @@ public class TopologyRingCreator {
                   log.debug("allocateSubPolicyMember() next regionIndex {}", regionIndex);
                 }
                 if (debug) {
-                  quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                      ringspaceToAllocate - ringspaceAllocated, shuffle);
+                  quickCheckAllocations(
+                      prList,
+                      nodes,
+                      nodeRegionSizes,
+                      replicaIndex,
+                      nodeIndex,
+                      ringspaceToAllocate - ringspaceAllocated,
+                      shuffle);
                 }
                 if (regionIndex < 0) {
                   if (allReplicasTag) {
@@ -1029,7 +1160,11 @@ public class TopologyRingCreator {
                       n = nodes.get(i);
                       regionSize = nodeRegionSizes.get(i);
                       allocation = allocations.get(n.getIDString());
-                      log.debug("{} {}  {}  {} ", n.getIDString(), regionSize, allocation,
+                      log.debug(
+                          "{} {}  {}  {} ",
+                          n.getIDString(),
+                          regionSize,
+                          allocation,
                           regionSize * (replicaIndex + 1) - allocation);
                     }
                     throw new RuntimeException("Couldn't find a free region");
@@ -1037,25 +1172,40 @@ public class TopologyRingCreator {
                 }
 
                 if (debug) {
-                  quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                      ringspaceToAllocate - ringspaceAllocated, shuffle);
+                  quickCheckAllocations(
+                      prList,
+                      nodes,
+                      nodeRegionSizes,
+                      replicaIndex,
+                      nodeIndex,
+                      ringspaceToAllocate - ringspaceAllocated,
+                      shuffle);
                 }
                 // Now add this node to the region found
                 protoRegion = prList.get(regionIndex);
                 if (debug) {
-                  log.debug("{}",protoRegion.getRegion());
-                  log.debug("{} {}", protoRegion.getRegion().getSize(),
+                  log.debug("{}", protoRegion.getRegion());
+                  log.debug(
+                      "{} {}",
+                      protoRegion.getRegion().getSize(),
                       ringspaceToAllocate - magnitudeTolerance);
                 }
-                if (protoRegion.getRegion().getSize() <= NumUtil.addWithClamp(ringspaceToAllocate - ringspaceAllocated,
-                    magnitudeTolerance)) {
+                if (protoRegion.getRegion().getSize()
+                    <= NumUtil.addWithClamp(
+                        ringspaceToAllocate - ringspaceAllocated, magnitudeTolerance)) {
                   // The candidate region size is <= ringspaceToAllocate,
                   // so we add the entire region
                   ringspaceAllocated += protoRegion.getRegion().getSize();
                   protoRegion.addOwner(rType, node);
                   if (debug)
-                    quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                        ringspaceToAllocate - ringspaceAllocated, shuffle);
+                    quickCheckAllocations(
+                        prList,
+                        nodes,
+                        nodeRegionSizes,
+                        replicaIndex,
+                        nodeIndex,
+                        ringspaceToAllocate - ringspaceAllocated,
+                        shuffle);
                 } else {
                   // The candidate region size is > ringspaceToAllocate.
                   // Split the region and add this node to the appropriate
@@ -1064,16 +1214,29 @@ public class TopologyRingCreator {
                     log.debug("***splitProtoRegion***");
                   }
                   if (debug)
-                    quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                        ringspaceToAllocate - ringspaceAllocated, shuffle);
+                    quickCheckAllocations(
+                        prList,
+                        nodes,
+                        nodeRegionSizes,
+                        replicaIndex,
+                        nodeIndex,
+                        ringspaceToAllocate - ringspaceAllocated,
+                        shuffle);
                   prList.splitProtoRegion(regionIndex, ringspaceToAllocate - ringspaceAllocated);
                   if (debug)
-                    quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                        ringspaceToAllocate - ringspaceAllocated, shuffle);
+                    quickCheckAllocations(
+                        prList,
+                        nodes,
+                        nodeRegionSizes,
+                        replicaIndex,
+                        nodeIndex,
+                        ringspaceToAllocate - ringspaceAllocated,
+                        shuffle);
                   // Need to get protoRegion from list again since the
                   // previous region was split
                   protoRegion = prList.get(regionIndex);
-                  if (protoRegion.getRegion().getSize() != ringspaceToAllocate - ringspaceAllocated) {
+                  if (protoRegion.getRegion().getSize()
+                      != ringspaceToAllocate - ringspaceAllocated) {
                     throw new RuntimeException("panic");
                   }
                   if (debug) {
@@ -1084,13 +1247,25 @@ public class TopologyRingCreator {
                   ringspaceAllocated += protoRegion.getRegion().getSize();
                   protoRegion.addOwner(rType, node);
                   if (debug)
-                    quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                        ringspaceToAllocate - ringspaceAllocated, shuffle);
+                    quickCheckAllocations(
+                        prList,
+                        nodes,
+                        nodeRegionSizes,
+                        replicaIndex,
+                        nodeIndex,
+                        ringspaceToAllocate - ringspaceAllocated,
+                        shuffle);
                 }
 
                 if (debug)
-                  quickCheckAllocations(prList, nodes, nodeRegionSizes, replicaIndex, nodeIndex,
-                      ringspaceToAllocate - ringspaceAllocated, shuffle);
+                  quickCheckAllocations(
+                      prList,
+                      nodes,
+                      nodeRegionSizes,
+                      replicaIndex,
+                      nodeIndex,
+                      ringspaceToAllocate - ringspaceAllocated,
+                      shuffle);
                 if (ringspaceAllocated < ringspaceToAllocate - magnitudeTolerance) {
                   if (debug) {
                     log.debug("incrementing regionIndex {}", regionIndex);
@@ -1132,8 +1307,14 @@ public class TopologyRingCreator {
     }
   }
 
-  private void quickCheckAllocations(ProtoRegionList prList, List<Node> nodes, List<Long> nodeRegionSizes,
-                                     int replicaIndex, int nodeIndex, long ringspaceToAllocate, List<Integer> shuffle) {
+  private void quickCheckAllocations(
+      ProtoRegionList prList,
+      List<Node> nodes,
+      List<Long> nodeRegionSizes,
+      int replicaIndex,
+      int nodeIndex,
+      long ringspaceToAllocate,
+      List<Integer> shuffle) {
     Map<String, Long> allocations;
 
     allocations = prList.getAllocations();
@@ -1151,49 +1332,55 @@ public class TopologyRingCreator {
       if (allocation == null) {
         allocation = new Long(0);
       }
-      log.debug("{} {}  {}  {}  {}  {}***FAILED1\n", n.getIDString(), regionSize,
-          regionSize * (replicaIndex + 1), allocation, regionSize * (replicaIndex + 1) - allocation,
+      log.debug(
+          "{} {}  {}  {}  {}  {}***FAILED1\n",
+          n.getIDString(),
+          regionSize,
+          regionSize * (replicaIndex + 1),
+          allocation,
+          regionSize * (replicaIndex + 1) - allocation,
           ringspaceToAllocate);
-      //throw new RuntimeException("Fatal: quickCheckAllocations failed@1");
+      // throw new RuntimeException("Fatal: quickCheckAllocations failed@1");
       System.exit(-1);
     }
 
-        /*
-        for (int _i = 0; _i < nodes.size(); _i++) {
-            long    regionSize;
-            Node    n;
-            Long    allocation;
-            int        i;
+    /*
+    for (int _i = 0; _i < nodes.size(); _i++) {
+        long    regionSize;
+        Node    n;
+        Long    allocation;
+        int        i;
 
-            i = shuffle.get(_i);
-            n = nodes.get(i);
-            regionSize = nodeRegionSizes.get(i);
-            allocation = allocations.get(n.getIDString());
+        i = shuffle.get(_i);
+        n = nodes.get(i);
+        regionSize = nodeRegionSizes.get(i);
+        allocation = allocations.get(n.getIDString());
 
-            System.out.printf("sc:\t%s\t%d\t%d\n", n.getIDString(), regionSize, allocation);
+        System.out.printf("sc:\t%s\t%d\t%d\n", n.getIDString(), regionSize, allocation);
 
-            if (allocation != null) {
-                long    _ringspaceToAllocate;
+        if (allocation != null) {
+            long    _ringspaceToAllocate;
 
-                _ringspaceToAllocate = i == nodeIndex ? ringspaceToAllocate : 0;
-                //System.out.printf("%s\t%d\t%d\t%d\t%d\t%d\n", n.getIDString(), regionSize, regionSize *
-                (replicaIndex + 1), allocation, regionSize * (replicaIndex + 1) - allocation, _ringspaceToAllocate);
-                if (_ringspaceToAllocate + allocation > regionSize * (replicaIndex + 1) + magnitudeTolerance) {
-                    System.out.printf("%d\t%d\t%d\n", i, nodeIndex, replicaIndex);
-                    System.out.printf("%s\t%d\t%d\t%d\t%d\t%d\t***FAILED\n", n.getIDString(), regionSize, regionSize
-                    * (replicaIndex + 1), allocation, regionSize * (replicaIndex + 1) - allocation,
-                    _ringspaceToAllocate);
-                    //throw new RuntimeException("Fatal: quickCheckAllocations failed");
-                    System.exit(-1);
-                }
+            _ringspaceToAllocate = i == nodeIndex ? ringspaceToAllocate : 0;
+            //System.out.printf("%s\t%d\t%d\t%d\t%d\t%d\n", n.getIDString(), regionSize, regionSize *
+            (replicaIndex + 1), allocation, regionSize * (replicaIndex + 1) - allocation, _ringspaceToAllocate);
+            if (_ringspaceToAllocate + allocation > regionSize * (replicaIndex + 1) + magnitudeTolerance) {
+                System.out.printf("%d\t%d\t%d\n", i, nodeIndex, replicaIndex);
+                System.out.printf("%s\t%d\t%d\t%d\t%d\t%d\t***FAILED\n", n.getIDString(), regionSize, regionSize
+                * (replicaIndex + 1), allocation, regionSize * (replicaIndex + 1) - allocation,
+                _ringspaceToAllocate);
+                //throw new RuntimeException("Fatal: quickCheckAllocations failed");
+                System.exit(-1);
             }
         }
-        */
+    }
+    */
   }
 
   // ///////////////////////////////////////////////////////////
 
-  public TopologyRing reduceDataMovement(TopologyRing oldRing, TopologyRing newRing, RingTreeRecipe recipe) {
+  public TopologyRing reduceDataMovement(
+      TopologyRing oldRing, TopologyRing newRing, RingTreeRecipe recipe) {
     SingleRing _old;
     SingleRing _new;
     SingleRing _ring;
@@ -1212,55 +1399,61 @@ public class TopologyRingCreator {
       shifted_nEntry = nEntry.shiftTo(oEntry.getRegion().getStart());
       ir = RingRegion.intersect(oEntry.getRegion(), shifted_nEntry.getRegion());
       switch (ir.getIntersectionType()) {
-      case isomorphic:
-        _ring.addEntry(shifted_nEntry);
-        _old.removeEntry(oEntry);
-        _new.removeEntry(nEntry);
-        break;
-      case aSubsumesB:
-        // only one sub-case possible here
-        // r1 r2 (r1 ignored in this case)
-        // aaaaaa (oEntry)
-        // bbbb (shifted_nEntry)
-      {
-        RingEntry oEntry_2;
-        RingRegion r2;
+        case isomorphic:
+          _ring.addEntry(shifted_nEntry);
+          _old.removeEntry(oEntry);
+          _new.removeEntry(nEntry);
+          break;
+        case aSubsumesB:
+          // only one sub-case possible here
+          // r1 r2 (r1 ignored in this case)
+          // aaaaaa (oEntry)
+          // bbbb (shifted_nEntry)
+          {
+            RingEntry oEntry_2;
+            RingRegion r2;
 
-        r2 = new RingRegion(LongRingspace.nextPoint(shifted_nEntry.getRegion().getEnd()), oEntry.getRegion().getEnd());
-        oEntry_2 = oEntry.replaceRegion(r2);
-        _ring.addEntry(shifted_nEntry);
-        _old.removeEntry(oEntry);
-        _new.removeEntry(nEntry);
-        _old.addEntry(oEntry_2);
-      }
-      break;
-      case bSubsumesA:
-        // only one sub-case possible here
-        // aaaa (oEntry)
-        // bbbbbb (shifted_nEntry)
-        // r1 r2
-      {
-        RingEntry shifted_nEntry_1;
-        RingEntry shifted_nEntry_2;
-        RingRegion r1;
-        RingRegion r2;
+            r2 =
+                new RingRegion(
+                    LongRingspace.nextPoint(shifted_nEntry.getRegion().getEnd()),
+                    oEntry.getRegion().getEnd());
+            oEntry_2 = oEntry.replaceRegion(r2);
+            _ring.addEntry(shifted_nEntry);
+            _old.removeEntry(oEntry);
+            _new.removeEntry(nEntry);
+            _old.addEntry(oEntry_2);
+          }
+          break;
+        case bSubsumesA:
+          // only one sub-case possible here
+          // aaaa (oEntry)
+          // bbbbbb (shifted_nEntry)
+          // r1 r2
+          {
+            RingEntry shifted_nEntry_1;
+            RingEntry shifted_nEntry_2;
+            RingRegion r1;
+            RingRegion r2;
 
-        r1 = oEntry.getRegion();
-        r2 = new RingRegion(LongRingspace.nextPoint(oEntry.getRegion().getEnd()), shifted_nEntry.getRegion().getEnd());
-        shifted_nEntry_1 = shifted_nEntry.replaceRegion(r1);
-        shifted_nEntry_2 = shifted_nEntry.replaceRegion(r2);
-        _ring.addEntry(shifted_nEntry_1);
-        _old.removeEntry(oEntry);
-        _new.removeEntry(nEntry);
-        _new.addEntry(shifted_nEntry_2);
-      }
-      break;
-      case disjoint:
-      case abPartial:
-      case baPartial:
-        throw new RuntimeException("shift makes these cases impossible");
-      default:
-        throw new RuntimeException("panic");
+            r1 = oEntry.getRegion();
+            r2 =
+                new RingRegion(
+                    LongRingspace.nextPoint(oEntry.getRegion().getEnd()),
+                    shifted_nEntry.getRegion().getEnd());
+            shifted_nEntry_1 = shifted_nEntry.replaceRegion(r1);
+            shifted_nEntry_2 = shifted_nEntry.replaceRegion(r2);
+            _ring.addEntry(shifted_nEntry_1);
+            _old.removeEntry(oEntry);
+            _new.removeEntry(nEntry);
+            _new.addEntry(shifted_nEntry_2);
+          }
+          break;
+        case disjoint:
+        case abPartial:
+        case baPartial:
+          throw new RuntimeException("shift makes these cases impossible");
+        default:
+          throw new RuntimeException("panic");
       }
     }
     _ring.freeze(recipe.weightSpecs);
@@ -1272,7 +1465,7 @@ public class TopologyRingCreator {
   /**
    * Find the best RingEntry in a TopologyRing for a given RingEntry
    *
-   * @param _old   the TopologyRing in which to look
+   * @param _old the TopologyRing in which to look
    * @param nEntry the entry for which to find a match
    * @return the best matching RingEntry in _old for nEntry
    */
@@ -1298,7 +1491,8 @@ public class TopologyRingCreator {
         if (curSizeDiff < bestSizeDiff) {
           bestEntry = oEntry;
         } else if (curSizeDiff == bestSizeDiff) {
-          if (bestEntry.getRegion().getStart() != nEntry.getRegion().getStart() && oEntry.getRegion().getStart() == nEntry.getRegion().getStart()) {
+          if (bestEntry.getRegion().getStart() != nEntry.getRegion().getStart()
+              && oEntry.getRegion().getStart() == nEntry.getRegion().getStart()) {
             bestEntry = oEntry;
           }
         }
@@ -1357,8 +1551,8 @@ public class TopologyRingCreator {
     try {
       if (args.length != 8) {
         log.debug(
-            "<topologyFile> <weightSpecsFile> <exclusionList> <nodeID> <storagePolicyGroup> <policyID> " +
-                "<HostGroupTableFile> <HostGroup,...>");
+            "<topologyFile> <weightSpecsFile> <exclusionList> <nodeID> <storagePolicyGroup> <policyID> "
+                + "<HostGroupTableFile> <HostGroup,...>");
       } else {
         TopologyRingCreator topologyRingCreator;
         Topology topology;
@@ -1383,31 +1577,40 @@ public class TopologyRingCreator {
         nodeID = args[3];
         storagePolicyGroupFile = new File(args[4]);
         policyID = args[5];
-        storagePolicyGroup = new PolicyParser().parsePolicyGroup(storagePolicyGroupFile,
-            VersionedDefinition.NO_VERSION);
+        storagePolicyGroup =
+            new PolicyParser()
+                .parsePolicyGroup(storagePolicyGroupFile, VersionedDefinition.NO_VERSION);
         topology = TopologyParser.parse(topologyFile);
         topologyRingCreator = new TopologyRingCreator();
 
         hostGroupTable = HostGroupTable.parse(args[6], VersionedDefinition.NO_VERSION);
         hostGroups = ImmutableSet.copyOf(args[7].split(","));
 
-        recipe = new RingTreeRecipe(topology, topology.getNodeByID(nodeID),
-            new WeightSpecifications(VersionedDefinition.NO_VERSION).parse(weightSpecsFile),
-            ExclusionSet.parse(exclusionFile), storagePolicyGroup, policyID, hostGroupTable, hostGroups, 0L,
-            // version not
-            // used for
-            // this tree
-            DHTUtil.currentTimeMillis());
+        recipe =
+            new RingTreeRecipe(
+                topology,
+                topology.getNodeByID(nodeID),
+                new WeightSpecifications(VersionedDefinition.NO_VERSION).parse(weightSpecsFile),
+                ExclusionSet.parse(exclusionFile),
+                storagePolicyGroup,
+                policyID,
+                hostGroupTable,
+                hostGroups,
+                0L,
+                // version not
+                // used for
+                // this tree
+                DHTUtil.currentTimeMillis());
         log.debug("RingTreeRecipe: " + recipe);
         topologyRing = topologyRingCreator.create(recipe, nodeID);
         log.debug("\n\nTopologyRing:\n");
-        log.debug("{}",topologyRing);
+        log.debug("{}", topologyRing);
         log.debug("");
         topologyRing = topologyRingCreator.reduceDataMovement(topologyRing, topologyRing, recipe);
-        log.debug("{}",topologyRing);
+        log.debug("{}", topologyRing);
       }
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
 }

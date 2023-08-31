@@ -33,7 +33,8 @@ public class NamespaceLinksZK extends MetaToolModuleBase<Map<String, String>, Me
   }
 
   @Override
-  public Map<String, String> readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public Map<String, String> readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     return readFromZK();
   }
 
@@ -43,7 +44,8 @@ public class NamespaceLinksZK extends MetaToolModuleBase<Map<String, String>, Me
   }
 
   @Override
-  public String writeToZK(Map<String, String> nsLinks, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(Map<String, String> nsLinks, MetaToolOptions options)
+      throws IOException, KeeperException {
     throw new RuntimeException("writeToZK not implemented");
   }
 
@@ -73,7 +75,8 @@ public class NamespaceLinksZK extends MetaToolModuleBase<Map<String, String>, Me
     zk.createString(basePath + "/" + child, parent);
     childContext = new SimpleNamespaceCreator().createNamespace(child).contextAsLong();
     parentContext = new SimpleNamespaceCreator().createNamespace(parent).contextAsLong();
-    zk.createString(basePath + "/" + Long.toHexString(childContext), Long.toHexString(parentContext));
+    zk.createString(
+        basePath + "/" + Long.toHexString(childContext), Long.toHexString(parentContext));
   }
 
   public void clearAllZK() throws IOException, KeeperException {

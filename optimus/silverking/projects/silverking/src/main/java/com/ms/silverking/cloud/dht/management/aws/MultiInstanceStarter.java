@@ -60,8 +60,7 @@ public class MultiInstanceStarter {
     printNoDot("Starting Instances");
 
     List<String> ips = getIps(instances);
-    for (String ip : ips)
-      log.info("{}" , ip);
+    for (String ip : ips) log.info("{}", ip);
     StartInstancesRequest startInstancesRequest = new StartInstancesRequest();
     startInstancesRequest.withInstanceIds(getInstanceIds(instances));
 
@@ -74,9 +73,10 @@ public class MultiInstanceStarter {
 
   public static void main(String[] args) {
     String launchHostIp = getMyIp();
-    log.info("Attempting to start all instances with keypair: {}" , getUniqueKeyPairName(launchHostIp));
-    MultiInstanceStarter starter = new MultiInstanceStarter(AmazonEC2ClientBuilder.defaultClient(), launchHostIp);
+    log.info(
+        "Attempting to start all instances with keypair: {}", getUniqueKeyPairName(launchHostIp));
+    MultiInstanceStarter starter =
+        new MultiInstanceStarter(AmazonEC2ClientBuilder.defaultClient(), launchHostIp);
     starter.run();
   }
-
 }

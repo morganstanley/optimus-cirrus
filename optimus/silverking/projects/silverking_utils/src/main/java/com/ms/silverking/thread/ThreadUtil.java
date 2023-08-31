@@ -158,10 +158,11 @@ public class ThreadUtil {
 
   public static void printStackTraces() {
     for (Map.Entry<Thread, StackTraceElement[]> entry : Thread.getAllStackTraces().entrySet()) {
-      if (entry.getValue().length == 0 || entry.getValue()[0].toString().indexOf("sun.misc.Unsafe.park") < 0) {
-        log.info("{}",entry.getKey().getName());
+      if (entry.getValue().length == 0
+          || entry.getValue()[0].toString().indexOf("sun.misc.Unsafe.park") < 0) {
+        log.info("{}", entry.getKey().getName());
         for (StackTraceElement e : entry.getValue()) {
-          log.info("  {}",e.toString());
+          log.info("  {}", e.toString());
         }
       }
     }

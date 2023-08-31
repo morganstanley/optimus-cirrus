@@ -17,8 +17,8 @@ import java.util.TreeMap;
 import com.ms.silverking.cloud.dht.common.Version;
 
 /**
- * Contains version-->segment mapping. This is a placeholder implementation.
- * Future will use a disk-based tree.
+ * Contains version-->segment mapping. This is a placeholder implementation. Future will use a
+ * disk-based tree.
  */
 class KeyMeta {
   private NavigableMap<Version, ReadableWritableSegment> segments;

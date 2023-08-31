@@ -33,7 +33,7 @@ public class StringUtil {
 
   private static Logger log = LoggerFactory.getLogger(StringUtil.class);
 
-  private static final char[] quoteChars = { '"', '\'' };
+  private static final char[] quoteChars = {'"', '\''};
 
   private static final String[] digits = CoreStringUtil.digits;
 
@@ -77,19 +77,18 @@ public class StringUtil {
     return CoreStringUtil.byteArrayToHexString(inBytes, offset, length);
   }
 
-  public static String byteArrayToHexString(byte[] inBytes,
-                                            int offset,
-                                            int length,
-                                            int minorGroupSize,
-                                            int majorGroupSize) {
-    return CoreStringUtil.byteArrayToHexString(inBytes, offset, length, minorGroupSize, majorGroupSize);
+  public static String byteArrayToHexString(
+      byte[] inBytes, int offset, int length, int minorGroupSize, int majorGroupSize) {
+    return CoreStringUtil.byteArrayToHexString(
+        inBytes, offset, length, minorGroupSize, majorGroupSize);
   }
 
   public static String byteBufferToHexString(ByteBuffer buf) {
     return byteBufferToHexString(buf, defaultHexMinorGroupSize, defaultHexMajorGroupSize);
   }
 
-  public static String byteBufferToHexString(ByteBuffer buf, int minorGroupSize, int majorGroupSize) {
+  public static String byteBufferToHexString(
+      ByteBuffer buf, int minorGroupSize, int majorGroupSize) {
     if (buf == null) {
       return "<null>";
     } else {
@@ -198,15 +197,15 @@ public class StringUtil {
   }
 
   public static void display(List<String> list) {
-    log.info("{}",listToString(list));
+    log.info("{}", listToString(list));
   }
 
   public static void display(List<String> list, char delim) {
-    log.info("{}",listToString(list, delim));
+    log.info("{}", listToString(list, delim));
   }
 
   public static void display(String[] sArray) {
-    log.info("{}",arrayToString(sArray));
+    log.info("{}", arrayToString(sArray));
   }
 
   public static String arrayToString(String[][] sArray) {
@@ -325,7 +324,8 @@ public class StringUtil {
     return tokens.toArray(new String[0]);
   }
 
-  public static List<String> projectColumn(List<String> src, int column, String regex, boolean filterNonexistent) {
+  public static List<String> projectColumn(
+      List<String> src, int column, String regex, boolean filterNonexistent) {
     List<String> projection;
 
     projection = new ArrayList<String>();

@@ -22,7 +22,7 @@ public class UUIDBase implements Comparable<UUIDBase>, Serializable {
   private static final ThreadLocal<ThreadUUIDState> tlThreadUUIDState;
   private static final boolean useIDThread = false;
 
-  //private static final ThreadUUIDState commonUUIDState = new ThreadUUIDState();
+  // private static final ThreadUUIDState commonUUIDState = new ThreadUUIDState();
 
   static {
     tlThreadUUIDState = new ThreadLocal<>();
@@ -40,7 +40,7 @@ public class UUIDBase implements Comparable<UUIDBase>, Serializable {
   }
 
   public UUIDBase() {
-    //this.uuid = UUID.randomUUID();
+    // this.uuid = UUID.randomUUID();
     // Below is ~100x faster than above.
     // Also above grabs a global lock which is trouble when we have lots
     // of threads generating uuids.
@@ -52,7 +52,7 @@ public class UUIDBase implements Comparable<UUIDBase>, Serializable {
       state = getThreadUUIDState();
     }
     this.uuid = new UUID(state.longMSB, state.getNextLongLSB());
-    //this.uuid = new UUID(commonUUIDState.longMSB, commonUUIDState.getNextLongLSB());
+    // this.uuid = new UUID(commonUUIDState.longMSB, commonUUIDState.getNextLongLSB());
   }
 
   public UUIDBase(boolean random) {

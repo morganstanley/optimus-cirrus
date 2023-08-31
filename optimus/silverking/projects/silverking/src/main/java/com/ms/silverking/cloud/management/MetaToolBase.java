@@ -23,12 +23,12 @@ public abstract class MetaToolBase {
   // FUTURE - all silverking meta data tooling really needs a redesign as the tooling has
   // moved well beyond the original design
 
-  public MetaToolBase() {
-  }
+  public MetaToolBase() {}
 
   protected abstract void doWork(MetaToolOptions options) throws IOException, KeeperException;
 
-  public static <T> void doWork(MetaToolOptions options, MetaToolWorker<T> worker) throws IOException, KeeperException {
+  public static <T> void doWork(MetaToolOptions options, MetaToolWorker<T> worker)
+      throws IOException, KeeperException {
     long version;
 
     version = Long.parseLong(options.version);
@@ -47,42 +47,43 @@ public abstract class MetaToolBase {
 
       source = MetaToolSource.valueOf(options.source);
       switch (source) {
-      case FILE:
-        return module.readFromFile(new File(options.file), version);
-      case ZOOKEEPER:
-        try {
-          if (version < 0) {
-            version = module.getLatestVersion();
+        case FILE:
+          return module.readFromFile(new File(options.file), version);
+        case ZOOKEEPER:
+          try {
+            if (version < 0) {
+              version = module.getLatestVersion();
+            }
+            return module.readFromZK(version, options);
+          } catch (Exception ex) {
+            throw KeeperException.forMethod("MetaToolModule::readFromZK", ex);
           }
-          return module.readFromZK(version, options);
-        } catch (Exception ex) {
-          throw KeeperException.forMethod("MetaToolModule::readFromZK", ex);
-        }
-      default:
-        throw new RuntimeException("panic");
+        default:
+          throw new RuntimeException("panic");
       }
     }
 
-    private void write(MetaToolOptions options, long version, T instance) throws IOException, KeeperException {
+    private void write(MetaToolOptions options, long version, T instance)
+        throws IOException, KeeperException {
       MetaToolDest dest;
 
       dest = MetaToolDest.valueOf(options.dest);
       switch (dest) {
-      case FILE:
-        module.writeToFile(new File(options.file), instance);
-        break;
-      case ZOOKEEPER:
-        try {
-          module.writeToZK(instance, options);
-        } catch (Exception ex) {
-          throw KeeperException.forMethod("MetaToolModule::writeToZK", ex);
-        }
-        break;
-      case STDOUT:
-        System.out.println(instance);
-        break;
-      default:
-        throw new RuntimeException("panic");
+        case FILE:
+          module.writeToFile(new File(options.file), instance);
+          break;
+        case ZOOKEEPER:
+          try {
+            module.writeToZK(instance, options);
+          } catch (Exception ex) {
+            throw KeeperException.forMethod("MetaToolModule::writeToZK", ex);
+          }
+          break;
+        case STDOUT:
+          System.out.println(instance);
+          break;
+        default:
+          throw new RuntimeException("panic");
       }
     }
   }
@@ -113,7 +114,7 @@ public abstract class MetaToolBase {
   }
 
   // concrete MetaTool main should look like:
-  //public static void main(String[] args) {
+  // public static void main(String[] args) {
   //    new MetaTool().runTool(args);
-  //}
+  // }
 }

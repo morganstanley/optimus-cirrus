@@ -15,9 +15,7 @@ import java.util.Comparator;
 
 import com.ms.silverking.cloud.dht.VersionConstraint;
 
-/**
- * Impose an ordering so that compatible retrievals may be grouped together.
- */
+/** Impose an ordering so that compatible retrievals may be grouped together. */
 class VersionConstraintComparator implements Comparator<VersionConstraint> {
   public static final VersionConstraintComparator instance = new VersionConstraintComparator();
 

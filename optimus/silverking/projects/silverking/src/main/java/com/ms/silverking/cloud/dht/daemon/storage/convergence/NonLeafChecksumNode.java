@@ -106,7 +106,6 @@ public class NonLeafChecksumNode extends AbstractChecksumNode {
     public void remove() {
       throw new UnsupportedOperationException();
     }
-
   }
 
   @Override
@@ -137,7 +136,7 @@ public class NonLeafChecksumNode extends AbstractChecksumNode {
         return mid; // key found
       }
     }
-    return -(low + 1);  // key not found
+    return -(low + 1); // key not found
   }
 
   @Override

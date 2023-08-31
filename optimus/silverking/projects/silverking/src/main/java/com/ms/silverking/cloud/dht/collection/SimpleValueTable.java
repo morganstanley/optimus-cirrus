@@ -62,7 +62,7 @@ final class SimpleValueTable implements ValueTable {
     keys[baseOffset + mslOffset] = msl;
     keys[baseOffset + lslOffset] = lsl;
     values[index] = value;
-    //System.out.printf("store values[%d]\t%d\n", index, values[index]);
+    // System.out.printf("store values[%d]\t%d\n", index, values[index]);
   }
 
   @Override
@@ -95,7 +95,7 @@ final class SimpleValueTable implements ValueTable {
 
   @Override
   public int getValue(int index) {
-    //System.out.printf("getValue values[%d]\t%d\n", index, values[index]);
+    // System.out.printf("getValue values[%d]\t%d\n", index, values[index]);
     return values[index];
   }
 

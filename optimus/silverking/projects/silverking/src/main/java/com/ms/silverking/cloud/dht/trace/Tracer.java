@@ -41,7 +41,10 @@ public interface Tracer extends HasTracerContext {
   void onAuthorizationFailure(SkTraceId traceID);
 
   // Phase 1: if proxy is going to forward message
-  SkTraceId issueForwardTraceID(SkTraceId maybeTraceID, IPAndPort replica, MessageType msgType,
+  SkTraceId issueForwardTraceID(
+      SkTraceId maybeTraceID,
+      IPAndPort replica,
+      MessageType msgType,
       byte[] originator); // Tracer will issue a new traceID for final replica
 
   // Phase 2: get value from storage and put them in queue
@@ -54,10 +57,12 @@ public interface Tracer extends HasTracerContext {
   void onBothDequeueAndAsyncSendRetrievalResult(SkTraceId traceID, List<RetrievalResult> results);
 
   // Phase 4: Proxy handles response messages
-  void onProxyHandleRetrievalResponse(SkTraceId traceID, Map<DHTKey, OpResult> results, OpResult responseState);
+  void onProxyHandleRetrievalResponse(
+      SkTraceId traceID, Map<DHTKey, OpResult> results, OpResult responseState);
 
   // Phase 5: Proxy check the complete status of result
-  // Note here the result is a decision that encompasses >1 OpResult covered in onProxyHandleRetrievalResponse
+  // Note here the result is a decision that encompasses >1 OpResult covered in
+  // onProxyHandleRetrievalResponse
   void onProxyHandleRetrievalResultComplete(SkTraceId traceID);
 
   void onProxyHandleRetrievalResultIncomplete(SkTraceId traceID);
@@ -84,5 +89,13 @@ public interface Tracer extends HasTracerContext {
 
   String getStringTraceId(SkTraceId traceBytes);
 
-  default void onAsyncSendTimeout(UUIDBase sendUuid, String traceIdStr, long lastPollTime, long currPollTime, int currQueueSize, long creationTime, long deadline, long currTime) {}
+  default void onAsyncSendTimeout(
+      UUIDBase sendUuid,
+      String traceIdStr,
+      long lastPollTime,
+      long currPollTime,
+      int currQueueSize,
+      long creationTime,
+      long deadline,
+      long currTime) {}
 }

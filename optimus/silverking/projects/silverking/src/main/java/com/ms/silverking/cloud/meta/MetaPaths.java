@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.meta;
 
 import com.google.common.collect.ImmutableList;
 
-/**
- * Global and configuration specific cloud meta paths.
- */
+/** Global and configuration specific cloud meta paths. */
 public class MetaPaths extends MetaPathsBase {
   // instance paths
   private final String topologyPath;

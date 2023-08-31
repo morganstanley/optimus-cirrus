@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client;
 
 import com.ms.silverking.cloud.dht.client.gen.NonVirtual;
 
-/**
- * Base DHT client exception class.
- */
+/** Base DHT client exception class. */
 @NonVirtual
 public class ClientException extends Exception {
   public ClientException() {

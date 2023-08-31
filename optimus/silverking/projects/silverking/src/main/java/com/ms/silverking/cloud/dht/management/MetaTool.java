@@ -26,39 +26,41 @@ import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperExcepti
 import com.ms.silverking.cloud.zookeeper.ZooKeeperConfig;
 
 public class MetaTool extends MetaToolBase {
-  private enum Tool {DHTConfiguration, PassiveNodes, ClassVars}
+  private enum Tool {
+    DHTConfiguration,
+    PassiveNodes,
+    ClassVars
+  };
 
-  ;
-
-  public MetaTool() {
-  }
+  public MetaTool() {}
 
   private static MetaToolModule getModule(Tool tool, MetaClient metaClient) throws KeeperException {
     switch (tool) {
-    case DHTConfiguration:
-      return new DHTConfigurationZK(metaClient);
-    case PassiveNodes:
-      return new ServerSetExtensionZK(metaClient, metaClient.getMetaPaths().getPassiveNodesPath());
-    case ClassVars:
-      return new ClassVarsZK(metaClient);
-    default:
-      throw new RuntimeException("panic");
+      case DHTConfiguration:
+        return new DHTConfigurationZK(metaClient);
+      case PassiveNodes:
+        return new ServerSetExtensionZK(
+            metaClient, metaClient.getMetaPaths().getPassiveNodesPath());
+      case ClassVars:
+        return new ClassVarsZK(metaClient);
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private static NamedDHTConfiguration namedDHTConfigurationFor(Tool tool, String name) {
     switch (tool) {
-    case DHTConfiguration:
-      return new NamedDHTConfiguration(name, null);
-    case PassiveNodes:
-      DHTConfiguration dhtConfig;
+      case DHTConfiguration:
+        return new NamedDHTConfiguration(name, null);
+      case PassiveNodes:
+        DHTConfiguration dhtConfig;
 
-      dhtConfig = DHTConfiguration.forPassiveNodes(name);
-      return new NamedDHTConfiguration(null, dhtConfig);
-    case ClassVars:
-      return new NamedDHTConfiguration(null, DHTConfiguration.emptyTemplate);
-    default:
-      throw new RuntimeException("panic");
+        dhtConfig = DHTConfiguration.forPassiveNodes(name);
+        return new NamedDHTConfiguration(null, dhtConfig);
+      case ClassVars:
+        return new NamedDHTConfiguration(null, DHTConfiguration.emptyTemplate);
+      default:
+        throw new RuntimeException("panic");
     }
   }
 

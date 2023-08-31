@@ -21,9 +21,11 @@ import com.ms.silverking.cloud.dht.common.TimeoutException;
 
 public interface NamespaceOptionsClientCS {
   ////// ====== client side namespace admin API (take human-readable namespace name as arg) ======
-  void createNamespace(String nsName, NamespaceProperties nsProperties) throws NamespaceCreationException;
+  void createNamespace(String nsName, NamespaceProperties nsProperties)
+      throws NamespaceCreationException;
 
-  void modifyNamespace(String nsName, NamespaceProperties nsProperties) throws NamespaceModificationException;
+  void modifyNamespace(String nsName, NamespaceProperties nsProperties)
+      throws NamespaceModificationException;
 
   void deleteNamespace(String nsName) throws NamespacePropertiesDeleteException;
 

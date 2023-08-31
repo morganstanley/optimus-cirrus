@@ -21,9 +21,7 @@ import com.ms.silverking.collection.LightLinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Concrete LWTPool implementation
- */
+/** Concrete LWTPool implementation */
 public class LWTPoolImpl<WorkItemType> implements LWTPool {
   private final String name;
   private final int targetSize;
@@ -42,13 +40,12 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
 
   private static Logger log = LoggerFactory.getLogger(LWTPoolImpl.class);
 
-  //private static int    maxTotalThreads = LWTConstants.numProcessors * 10;
+  // private static int    maxTotalThreads = LWTConstants.numProcessors * 10;
 
   private static final long spinsBeforeParking;
   private static final long defaultSpinsBeforeParking = 1000000;
-  private static final String spinsBeforeParkingProperty = LWTConstants.propertyBase +
-                                                           ".LWTThreadPool" +
-                                                           ".SpinsBeforeParking";
+  private static final String spinsBeforeParkingProperty =
+      LWTConstants.propertyBase + ".LWTThreadPool" + ".SpinsBeforeParking";
 
   public static final int defaultPriority = 0;
 
@@ -72,10 +69,9 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
    * @param targetSize target number of non-blocked threads.
    * @param maxSize
    */
-
   public LWTPoolImpl(LWTPoolParameters lwtPoolParameters) {
     this.name = lwtPoolParameters.getName();
-    //System.out.println("targetSize: "+ targetSize);
+    // System.out.println("targetSize: "+ targetSize);
     this.targetSize = lwtPoolParameters.getTargetSize();
     this.maxSize = lwtPoolParameters.getMaxSize();
     if (LWTConstants.verbose) {
@@ -115,7 +111,7 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
     thread = new LWTThread(name + "." + activeThreads.size(), commonQueue, this, workUnit);
     activeThreads.add(thread);
     thread.start();
-    //System.out.println("Added: "+ thread);
+    // System.out.println("Added: "+ thread);
   }
 
   private void removeThread(int index) {
@@ -123,7 +119,7 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
 
     thread = activeThreads.remove(index);
     thread.lwtStop();
-    //System.out.println("Stopped: "+ thread);
+    // System.out.println("Stopped: "+ thread);
   }
 
   private void deactivateThread() {
@@ -179,7 +175,7 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
     lock.lock();
     try {
       while (numActiveThreads() > targetSize) {
-        //removeThread(activeThreads.size() - 1); // TODO (OPTIMUS-0000): to be completed
+        // removeThread(activeThreads.size() - 1); // TODO (OPTIMUS-0000): to be completed
         deactivateThread();
       }
     } finally {
@@ -221,15 +217,13 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
   }
 
   /**
-   * Add work to be done and the worker that is to perform this work to
-   * this pool.
-   * <p>
-   * Direct call optimizations must have been performed prior to this
-   * call as this call always results in queueing.
-   * <p>
-   * If a common queue is in place, simply add. Otherwise, make an
-   * attempt to find an idle thread, or - failing that - a thread
-   * with a small queue.
+   * Add work to be done and the worker that is to perform this work to this pool.
+   *
+   * <p>Direct call optimizations must have been performed prior to this call as this call always
+   * results in queueing.
+   *
+   * <p>If a common queue is in place, simply add. Otherwise, make an attempt to find an idle
+   * thread, or - failing that - a thread with a small queue.
    *
    * @param worker
    * @param item
@@ -243,15 +237,13 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
   }
 
   /**
-   * Add work to be done and the worker that is to perform this work to
-   * this pool.
-   * <p>
-   * Direct call optimizations must have been performed prior to this
-   * call as this call always results in queueing.
-   * <p>
-   * If a common queue is in place, simply add. Otherwise, make an
-   * attempt to find an idle thread, or - failing that - a thread
-   * with a small queue.
+   * Add work to be done and the worker that is to perform this work to this pool.
+   *
+   * <p>Direct call optimizations must have been performed prior to this call as this call always
+   * results in queueing.
+   *
+   * <p>If a common queue is in place, simply add. Otherwise, make an attempt to find an idle
+   * thread, or - failing that - a thread with a small queue.
    *
    * @param worker
    * @param item
@@ -269,53 +261,53 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
 
       index = Math.abs(nextThread.getAndIncrement() % activeThreads.size());
       thread = activeThreads.get(index);
-      //thread.addWork(worker, item);
+      // thread.addWork(worker, item);
 
-      //throw new RuntimeException("deprecated");
+      // throw new RuntimeException("deprecated");
       // we would need to make thread list threadsafe
       // if we wanted to get this
-            /*
-            int        minQueueLength;
-            int        minIndex;
-            int        startIndex;
-            int        index;
-            boolean    added;
-            
-            // Concurrent needs work to win over
-            // a shared queue
-            
-            // Heuristic to try to select a good worker.
-            // FUTURE - think about making this have stronger
-            // guarantees about picking a good queue; it would
-            // need to outweigh the cost of providing the 
-            // guarantee.
-            minIndex = -1;
-            minQueueLength = Integer.MAX_VALUE;
-            startIndex = Math.abs(nextThread.get() % targetSize);
-            added = false;
-            do {
-                LWTThread    thread;
-                
-                index = Math.abs(nextThread.getAndIncrement() % threads.size());
-                thread = threads.get(index);
-                if (thread.isIdle()) {
-                    thread.addWork(worker, item);
-                    added = true;
-                    break;
-                } else {
-                    int            queueLength;
-                    
-                    queueLength = thread.queueLength();
-                    if (queueLength < minQueueLength) {
-                        minQueueLength = queueLength;
-                        minIndex = index;
-                    }
-                }
-            } while (index != startIndex);
-            if (!added) {
-                threads.get(minIndex).addWork(worker, item);
-            }
-        */
+      /*
+          int        minQueueLength;
+          int        minIndex;
+          int        startIndex;
+          int        index;
+          boolean    added;
+
+          // Concurrent needs work to win over
+          // a shared queue
+
+          // Heuristic to try to select a good worker.
+          // FUTURE - think about making this have stronger
+          // guarantees about picking a good queue; it would
+          // need to outweigh the cost of providing the
+          // guarantee.
+          minIndex = -1;
+          minQueueLength = Integer.MAX_VALUE;
+          startIndex = Math.abs(nextThread.get() % targetSize);
+          added = false;
+          do {
+              LWTThread    thread;
+
+              index = Math.abs(nextThread.getAndIncrement() % threads.size());
+              thread = threads.get(index);
+              if (thread.isIdle()) {
+                  thread.addWork(worker, item);
+                  added = true;
+                  break;
+              } else {
+                  int            queueLength;
+
+                  queueLength = thread.queueLength();
+                  if (queueLength < minQueueLength) {
+                      minQueueLength = queueLength;
+                      minIndex = index;
+                  }
+              }
+          } while (index != startIndex);
+          if (!added) {
+              threads.get(minIndex).addWork(worker, item);
+          }
+      */
     }
   }
 
@@ -413,7 +405,6 @@ public class LWTPoolImpl<WorkItemType> implements LWTPool {
 
     @Override
     public void doWork() {}
-
   }
 
   private static class NoopWorker extends BaseWorker<Object> {

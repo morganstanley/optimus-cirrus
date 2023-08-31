@@ -21,16 +21,12 @@ import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * <p>Options for WaitFor operations. Specifies how long to wait, what percentage of
- * values to wait for before returning (default 100), and whether or not
- * to generate an exception if a timeout occurs.</p>
- * <p>
- * Note that for waitFor operations, OpTimeoutController controls the *internal* retries.
- * The timeoutSeconds controls the user-visible timeout.
- * Care should be take so that a retries continue indefinitely.
- * Most users should not override the OpTimeoutController
- * for this case.
- * </p>
+ * Options for WaitFor operations. Specifies how long to wait, what percentage of values to wait for
+ * before returning (default 100), and whether or not to generate an exception if a timeout occurs.
+ *
+ * <p>Note that for waitFor operations, OpTimeoutController controls the *internal* retries. The
+ * timeoutSeconds controls the user-visible timeout. Care should be take so that a retries continue
+ * indefinitely. Most users should not override the OpTimeoutController for this case.
  */
 public final class WaitOptions extends RetrievalOptions {
   private final int timeoutSeconds;
@@ -71,37 +67,41 @@ public final class WaitOptions extends RetrievalOptions {
 
   ///
   /// TODO (OPTIMUS-0000): this is C++ only.
-  /// This should be removed once C++ SKWaitOptions.cpp is using the other constructor below properly.
+  /// This should be removed once C++ SKWaitOptions.cpp is using the other constructor below
+  // properly.
   ///
 
   /**
-   * Construct fully-specified WaitOptions
-   * Usage should be avoided; an instance should be obtained and modified from an enclosing environment.
+   * Construct fully-specified WaitOptions Usage should be avoided; an instance should be obtained
+   * and modified from an enclosing environment.
    *
-   * @param opTimeoutController     opTimeoutController to use for *internal* retries. See class notes.
-   *                                of the requested values could be retrieved
-   * @param secondaryTargets        constrains queried secondary replicas
-   * @param retrievalType           what to retrieve (data, meta data, etc.)
-   * @param versionConstraint       filter on the allowed versions
-   * @param nonExistenceResponse    TODO (OPTIMUS-0000): describe
-   * @param verifyChecksums         TODO (OPTIMUS-0000): describe
-   * @param returnInvalidations     TODO (OPTIMUS-0000): describe
-   * @param updateSecondariesOnMiss when true, secondary replicas queried in this operation will be updated on a miss
-   * @param timeoutSeconds          return after timeoutSeconds if the values cannot be retrieved
-   * @param threshold               return after a percentage of requested values are available
-   * @param timeoutResponse         specifies whether or not to throw an exception when a timeout occurs before all
+   * @param opTimeoutController opTimeoutController to use for *internal* retries. See class notes.
+   *     of the requested values could be retrieved
+   * @param secondaryTargets constrains queried secondary replicas
+   * @param retrievalType what to retrieve (data, meta data, etc.)
+   * @param versionConstraint filter on the allowed versions
+   * @param nonExistenceResponse TODO (OPTIMUS-0000): describe
+   * @param verifyChecksums TODO (OPTIMUS-0000): describe
+   * @param returnInvalidations TODO (OPTIMUS-0000): describe
+   * @param updateSecondariesOnMiss when true, secondary replicas queried in this operation will be
+   *     updated on a miss
+   * @param timeoutSeconds return after timeoutSeconds if the values cannot be retrieved
+   * @param threshold return after a percentage of requested values are available
+   * @param timeoutResponse specifies whether or not to throw an exception when a timeout occurs
+   *     before all
    */
-  public WaitOptions(OpTimeoutController opTimeoutController,
-                     Set<SecondaryTarget> secondaryTargets,
-                     RetrievalType retrievalType,
-                     VersionConstraint versionConstraint,
-                     NonExistenceResponse nonExistenceResponse,
-                     boolean verifyChecksums,
-                     boolean returnInvalidations,
-                     boolean updateSecondariesOnMiss,
-                     int timeoutSeconds,
-                     int threshold,
-                     TimeoutResponse timeoutResponse) {
+  public WaitOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      boolean updateSecondariesOnMiss,
+      int timeoutSeconds,
+      int threshold,
+      TimeoutResponse timeoutResponse) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -122,18 +122,21 @@ public final class WaitOptions extends RetrievalOptions {
     this.timeoutResponse = timeoutResponse;
   }
 
-  public WaitOptions(OpTimeoutController opTimeoutController,
-                     Set<SecondaryTarget> secondaryTargets,
-                     RetrievalType retrievalType,
-                     VersionConstraint versionConstraint,
-                     NonExistenceResponse nonExistenceResponse,
-                     boolean verifyChecksums,
-                     boolean returnInvalidations,
-                     boolean updateSecondariesOnMiss,
-                     byte[] userOptions, byte[] authorizationUser, String zoneId,
-                     int timeoutSeconds,
-                     int threshold,
-                     TimeoutResponse timeoutResponse) {
+  public WaitOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      String zoneId,
+      int timeoutSeconds,
+      int threshold,
+      TimeoutResponse timeoutResponse) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -145,45 +148,52 @@ public final class WaitOptions extends RetrievalOptions {
         verifyChecksums,
         returnInvalidations,
         updateSecondariesOnMiss,
-        userOptions, authorizationUser, zoneId,
+        userOptions,
+        authorizationUser,
+        zoneId,
         timeoutSeconds,
         threshold,
         timeoutResponse);
   }
 
   /**
-   * Construct fully-specified WaitOptions (for reflection)
-   * Usage should be avoided; an instance should be obtained and modified from an enclosing environment.
+   * Construct fully-specified WaitOptions (for reflection) Usage should be avoided; an instance
+   * should be obtained and modified from an enclosing environment.
    *
-   * @param opTimeoutController         opTimeoutController to use for *internal* retries. See class notes.
-   *                                    of the requested values could be retrieved
-   * @param secondaryTargets            constrains queried secondary replicas
-   * @param traceIDProvider             trace provider for message group
+   * @param opTimeoutController opTimeoutController to use for *internal* retries. See class notes.
+   *     of the requested values could be retrieved
+   * @param secondaryTargets constrains queried secondary replicas
+   * @param traceIDProvider trace provider for message group
    * @param allReplicasExcludedResponse TODO (OPTIMUS-0000): describe
-   * @param retrievalType               what to retrieve (data, meta data, etc.)
-   * @param versionConstraint           filter on the allowed versions
+   * @param retrievalType what to retrieve (data, meta data, etc.)
+   * @param versionConstraint filter on the allowed versions
    * @param verifyChecksums
-   * @param updateSecondariesOnMiss     when true, secondary replicas queried in this operation will be updated on a miss
-   * @param userOptions                 specifies additional custom options from user
-   * @param authorizationUser           specifies a user to be used for authorization plugins
-   * @param timeoutSeconds              return after timeoutSeconds if the values cannot be retrieved
-   * @param threshold                   return after a percentage of requested values are available
-   * @param timeoutResponse             specifies whether or not to throw an exception when a timeout occurs before all
+   * @param updateSecondariesOnMiss when true, secondary replicas queried in this operation will be
+   *     updated on a miss
+   * @param userOptions specifies additional custom options from user
+   * @param authorizationUser specifies a user to be used for authorization plugins
+   * @param timeoutSeconds return after timeoutSeconds if the values cannot be retrieved
+   * @param threshold return after a percentage of requested values are available
+   * @param timeoutResponse specifies whether or not to throw an exception when a timeout occurs
+   *     before all
    */
-  public WaitOptions(OpTimeoutController opTimeoutController,
-                     Set<SecondaryTarget> secondaryTargets,
-                     TraceIDProvider traceIDProvider,
-                     AllReplicasExcludedResponse allReplicasExcludedResponse,
-                     RetrievalType retrievalType,
-                     VersionConstraint versionConstraint,
-                     NonExistenceResponse nonExistenceResponse,
-                     boolean verifyChecksums,
-                     boolean returnInvalidations,
-                     boolean updateSecondariesOnMiss,
-                     byte[] userOptions, byte[] authorizationUser, String zoneId,
-                     int timeoutSeconds,
-                     int threshold,
-                     TimeoutResponse timeoutResponse) {
+  public WaitOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      String zoneId,
+      int timeoutSeconds,
+      int threshold,
+      TimeoutResponse timeoutResponse) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -196,7 +206,10 @@ public final class WaitOptions extends RetrievalOptions {
         verifyChecksums,
         returnInvalidations,
         ForwardingMode.FORWARD,
-        updateSecondariesOnMiss, userOptions, authorizationUser, zoneId);
+        updateSecondariesOnMiss,
+        userOptions,
+        authorizationUser,
+        zoneId);
     Preconditions.checkArgument(timeoutSeconds >= 0);
     Preconditions.checkArgument(threshold >= 0);
     this.timeoutSeconds = timeoutSeconds;
@@ -205,12 +218,10 @@ public final class WaitOptions extends RetrievalOptions {
   }
 
   /**
-   * Return a WaitOptions instance like this instance, but with a new OpTimeoutController.
-   * For waitFor operations, OpTimeoutController controls the *internal* retries.
-   * The timeoutSeconds controls the user-visible timeout.
-   * Care should be take so that a retries continue indefinitely.
-   * Most users should not override the OpTimeoutController
-   * for this case.
+   * Return a WaitOptions instance like this instance, but with a new OpTimeoutController. For
+   * waitFor operations, OpTimeoutController controls the *internal* retries. The timeoutSeconds
+   * controls the user-visible timeout. Care should be take so that a retries continue indefinitely.
+   * Most users should not override the OpTimeoutController for this case.
    *
    * @param opTimeoutController the new field value
    * @return the modified WaitOptions
@@ -227,7 +238,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -251,7 +264,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -276,7 +291,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -301,7 +318,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -325,7 +344,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -349,7 +370,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -373,7 +396,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -397,7 +422,9 @@ public final class WaitOptions extends RetrievalOptions {
         verifyChecksums,
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -421,7 +448,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         returnInvalidations,
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -445,7 +474,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         updateSecondariesOnMiss,
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -469,7 +500,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -493,7 +526,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -511,13 +546,16 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), authorizationUser, getZoneId(),
+        getUserOptions(),
+        authorizationUser,
+        getZoneId(),
         timeoutSeconds,
         threshold,
         getTimeoutResponse());
   }
 
-  public WaitOptions allReplicasExcludedResponse(AllReplicasExcludedResponse allReplicasExcludedResponse) {
+  public WaitOptions allReplicasExcludedResponse(
+      AllReplicasExcludedResponse allReplicasExcludedResponse) {
     return new WaitOptions(
         getOpTimeoutController(),
         getSecondaryTargets(),
@@ -529,7 +567,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         getTimeoutResponse());
@@ -553,7 +593,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        getUserOptions(), getAuthorizationUser(), getZoneId(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         timeoutResponse);
@@ -571,7 +613,9 @@ public final class WaitOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getUpdateSecondariesOnMiss(),
-        userOptions, getAuthorizationUser(), getZoneId(),
+        userOptions,
+        getAuthorizationUser(),
+        getZoneId(),
         timeoutSeconds,
         threshold,
         getTimeoutResponse());
@@ -662,9 +706,9 @@ public final class WaitOptions extends RetrievalOptions {
         WaitOptions oOptions;
 
         oOptions = (WaitOptions) other;
-        return timeoutSeconds == oOptions.timeoutSeconds &&
-               threshold == oOptions.threshold &&
-               timeoutResponse == oOptions.timeoutResponse;
+        return timeoutSeconds == oOptions.timeoutSeconds
+            && threshold == oOptions.threshold
+            && timeoutResponse == oOptions.timeoutResponse;
       } else {
         return false;
       }

@@ -43,21 +43,24 @@ public class KeyToIntegerMapElement extends LTVElement {
 
     rawHTBuf = getValueBuffer();
 
-    // FUTURE - cache the below number or does the segment cache do this well enough? (also cache the
+    // FUTURE - cache the below number or does the segment cache do this well enough? (also cache
+    // the
     // segmentCuckooConfig...)
     htBufSize = rawHTBuf.getInt(0);
     try {
       htBuf = BufferUtil.sliceAt(rawHTBuf, NumConversion.BYTES_PER_INT + CuckooConfig.BYTES);
     } catch (RuntimeException re) {
-      log.info("{}",rawHTBuf);
+      log.info("{}", rawHTBuf);
       throw re;
     }
 
     rawHTBuf = rawHTBuf.order(ByteOrder.nativeOrder());
 
     htTotalEntries = htBufSize / (NumConversion.BYTES_PER_LONG * 2 + NumConversion.BYTES_PER_INT);
-    segmentCuckooConfig = new WritableCuckooConfig(CuckooConfig.read(rawHTBuf, NumConversion.BYTES_PER_INT),
-        -1); // TODO (OPTIMUS-0000): verify -1
+    segmentCuckooConfig =
+        new WritableCuckooConfig(
+            CuckooConfig.read(rawHTBuf, NumConversion.BYTES_PER_INT),
+            -1); // TODO (OPTIMUS-0000): verify -1
     segmentCuckooConfig = segmentCuckooConfig.newTotalEntries(htTotalEntries);
 
     keyToOffset = new IntBufferDHTKeyCuckoo(segmentCuckooConfig, htBuf);
@@ -86,8 +89,9 @@ public class KeyToIntegerMapElement extends LTVElement {
 
     // TODO (OPTIMUS-0000): to be completed
     legacyPersistedSize = NumConversion.BYTES_PER_INT + CuckooConfig.BYTES + mapSize;
-    elementSize = NumConversion.BYTES_PER_INT * 2   // length + type
-        + legacyPersistedSize;
+    elementSize =
+        NumConversion.BYTES_PER_INT * 2 // length + type
+            + legacyPersistedSize;
     headerSize = elementSize - mapSize;
 
     elementArray = ((IntArrayDHTKeyCuckoo) keyToOffset).getAsBytesWithHeader(headerSize);

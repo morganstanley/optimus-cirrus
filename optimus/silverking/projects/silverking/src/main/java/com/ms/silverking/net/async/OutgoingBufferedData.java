@@ -21,8 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * OutgoingData used by QueueingConnection. Stores a list of ByteBuffers to
- * be written to the Connection.
+ * OutgoingData used by QueueingConnection. Stores a list of ByteBuffers to be written to the
+ * Connection.
  */
 public class OutgoingBufferedData extends OutgoingData {
   private static final int maxLoggingBuffers = 15;
@@ -36,8 +36,12 @@ public class OutgoingBufferedData extends OutgoingData {
 
   private static final boolean displayContentsForDebug = false;
 
-  public OutgoingBufferedData(ByteBuffer[] buffers, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline, Priority priority) {
+  public OutgoingBufferedData(
+      ByteBuffer[] buffers,
+      UUIDBase sendUUID,
+      AsyncSendListener asyncSendListener,
+      long deadline,
+      Priority priority) {
     super(sendUUID, asyncSendListener, deadline, priority);
     this.buffers = buffers;
     for (ByteBuffer buffer : buffers) {
@@ -49,8 +53,8 @@ public class OutgoingBufferedData extends OutgoingData {
     }
   }
 
-  public OutgoingBufferedData(ByteBuffer[] buffers, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline) {
+  public OutgoingBufferedData(
+      ByteBuffer[] buffers, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline) {
     this(buffers, sendUUID, asyncSendListener, deadline, Priority.NORMAL);
   }
 
@@ -81,7 +85,7 @@ public class OutgoingBufferedData extends OutgoingData {
     }
     bytesWritten += channel.write(buffers);
     if (AsyncGlobals.debug && log.isInfoEnabled()) {
-      log.info("writeToChannel bytesWritten / totalbytes {} / {}" , bytesWritten , totalBytes);
+      log.info("writeToChannel bytesWritten / totalbytes {} / {}", bytesWritten, totalBytes);
     }
     assert bytesWritten <= totalBytes;
     return bytesWritten == totalBytes;

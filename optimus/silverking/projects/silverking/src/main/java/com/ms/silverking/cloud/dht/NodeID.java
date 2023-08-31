@@ -15,9 +15,7 @@ import com.ms.silverking.net.IPAndPort;
 
 // Consider deprecating
 
-/**
- * Unique identifier of a DHT node (server/daemon).
- */
+/** Unique identifier of a DHT node (server/daemon). */
 public class NodeID implements Comparable<NodeID> {
   private final IPAndPort ipAndPort;
 

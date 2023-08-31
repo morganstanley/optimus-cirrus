@@ -14,9 +14,7 @@ package com.ms.silverking.net.async;
 import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 
-/**
- * Creates DefaultConnections.
- */
+/** Creates DefaultConnections. */
 public class DefaultConnectionCreator implements ConnectionCreator<DefaultConnection> {
   private final ReceiverProvider receiverProvider;
   private final Receiver defaultReceiver;
@@ -53,8 +51,12 @@ public class DefaultConnectionCreator implements ConnectionCreator<DefaultConnec
   //////////////////////////////////////////////////////////////////////
 
   @Override
-  public DefaultConnection createConnection(SocketChannel channel,
-      SelectorController<DefaultConnection> selectorController, ConnectionListener connectionListener, boolean debug) {
-    return new DefaultConnection(channel, selectorController, connectionListener, getReceiver(channel));
+  public DefaultConnection createConnection(
+      SocketChannel channel,
+      SelectorController<DefaultConnection> selectorController,
+      ConnectionListener connectionListener,
+      boolean debug) {
+    return new DefaultConnection(
+        channel, selectorController, connectionListener, getReceiver(channel));
   }
 }

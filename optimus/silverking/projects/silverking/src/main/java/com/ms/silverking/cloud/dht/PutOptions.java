@@ -25,9 +25,7 @@ import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.text.FieldsRequirement;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Options for Put operations.
- */
+/** Options for Put operations. */
 public class PutOptions extends OperationOptions {
   private final Compression compression;
   private final ChecksumType checksumType;
@@ -40,32 +38,27 @@ public class PutOptions extends OperationOptions {
   private final byte[] authorizationUser;
 
   public static final byte[] noAuthorizationUser = null;
-  /**
-   * Use the default version of the NamespacePerspective
-   */
+  /** Use the default version of the NamespacePerspective */
   public static final long defaultVersion = DHTConstants.unspecifiedVersion;
-  /**
-   * Specify that no requiredPreviousVersion is needed
-   */
+  /** Specify that no requiredPreviousVersion is needed */
   public static final long noVersionRequired = DHTConstants.unspecifiedVersion;
   /**
-   * Value for requiredPreviousVersion that specifies that this must be the first version/value associated with the key
+   * Value for requiredPreviousVersion that specifies that this must be the first version/value
+   * associated with the key
    */
   public static final long previousVersionNonexistent = -1;
   /**
-   * Value for requiredPreviousVersion that specifies that either this must be the first version/value associated
-   * with the key,
-   * or the previous version must be an invalidation
+   * Value for requiredPreviousVersion that specifies that either this must be the first
+   * version/value associated with the key, or the previous version must be an invalidation
    */
   public static final long previousVersionNonexistentOrInvalid = -2;
-  /**
-   * Value for lockSeconds specifying no lock
-   */
+  /** Value for lockSeconds specifying no lock */
   public static final short noLock = 0;
 
   // begin temp replicated from DHTConstants
   // FUTURE - A limitation in the parser seems to require replication until we have a proper fix
-  private static final OpTimeoutController standardTimeoutController = new OpSizeBasedTimeoutController();
+  private static final OpTimeoutController standardTimeoutController =
+      new OpSizeBasedTimeoutController();
   private static final PutOptions template = new PutOptions();
   // end temp replicated from DHTConstants
 
@@ -74,17 +67,18 @@ public class PutOptions extends OperationOptions {
     ObjectDefParser2.addSetType(PutOptions.class, "secondaryTargets", SecondaryTarget.class);
   }
 
-  public PutOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    Compression compression,
-                    ChecksumType checksumType,
-                    boolean checksumCompressedValues,
-                    long version,
-                    long requiredPreviousVersion,
-                    short lockSeconds,
-                    int fragmentationThreshold,
-                    byte[] userData,
-                    byte[] authorizationUser) {
+  public PutOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData,
+      byte[] authorizationUser) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -100,18 +94,19 @@ public class PutOptions extends OperationOptions {
         authorizationUser);
   }
 
-  public PutOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    TraceIDProvider traceIDProvider,
-                    Compression compression,
-                    ChecksumType checksumType,
-                    boolean checksumCompressedValues,
-                    long version,
-                    long requiredPreviousVersion,
-                    short lockSeconds,
-                    int fragmentationThreshold,
-                    byte[] userData,
-                    byte[] authorizationUser) {
+  public PutOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData,
+      byte[] authorizationUser) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -146,39 +141,40 @@ public class PutOptions extends OperationOptions {
   }
 
   /**
-   * Construct PutOptions from the given arguments. Usage is generally not recommended.
-   * Instead of using this constructor, applications should obtain an instance
-   * from a valid source such as the Session, the Namespace, or the NamespacePerspective.
+   * Construct PutOptions from the given arguments. Usage is generally not recommended. Instead of
+   * using this constructor, applications should obtain an instance from a valid source such as the
+   * Session, the Namespace, or the NamespacePerspective.
    *
-   * @param opTimeoutController      opTimeoutController for the operation
-   * @param secondaryTargets         constrains queried secondary replicas
-   *                                 to operation solely on the node that receives this operation
-   * @param traceIDProvider          trace provider for message group
-   * @param compression              type of compression to use
-   * @param checksumType             checksum to use for value
+   * @param opTimeoutController opTimeoutController for the operation
+   * @param secondaryTargets constrains queried secondary replicas to operation solely on the node
+   *     that receives this operation
+   * @param traceIDProvider trace provider for message group
+   * @param compression type of compression to use
+   * @param checksumType checksum to use for value
    * @param checksumCompressedValues controls whether or not compressed values are checksummed
-   * @param version                  version to use for a Put operation. Using defaultVersion will allow the
-   *                                 version mode
-   *                                 to set this automatically.
-   * @param requiredPreviousVersion  latest version must match this value for put to succeed
-   * @param lockSeconds              seconds to lock this key
-   * @param fragmentationThreshold   values longer than this threshold will be fragmented
-   * @param userData                 out of band data to store with value. May not exceed 255.
-   * @param authorizationUser        a username which may be required by an authorization plugin on the server
+   * @param version version to use for a Put operation. Using defaultVersion will allow the version
+   *     mode to set this automatically.
+   * @param requiredPreviousVersion latest version must match this value for put to succeed
+   * @param lockSeconds seconds to lock this key
+   * @param fragmentationThreshold values longer than this threshold will be fragmented
+   * @param userData out of band data to store with value. May not exceed 255.
+   * @param authorizationUser a username which may be required by an authorization plugin on the
+   *     server
    */
-  public PutOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    TraceIDProvider traceIDProvider,
-                    AllReplicasExcludedResponse allReplicasExcludedResponse,
-                    Compression compression,
-                    ChecksumType checksumType,
-                    boolean checksumCompressedValues,
-                    long version,
-                    long requiredPreviousVersion,
-                    short lockSeconds,
-                    int fragmentationThreshold,
-                    byte[] userData,
-                    byte[] authorizationUser) {
+  public PutOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData,
+      byte[] authorizationUser) {
     super(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
     Preconditions.checkNotNull(compression);
     Preconditions.checkNotNull(checksumType);
@@ -191,7 +187,8 @@ public class PutOptions extends OperationOptions {
       throw new IllegalArgumentException("lockSeconds < 0");
     }
     if (fragmentationThreshold < DHTConstants.minFragmentationThreshold) {
-      throw new IllegalArgumentException("fragmentationThreshold < DHTConstants.minFragmentationThreshold");
+      throw new IllegalArgumentException(
+          "fragmentationThreshold < DHTConstants.minFragmentationThreshold");
     }
     this.compression = compression;
     this.version = version;
@@ -575,9 +572,15 @@ public class PutOptions extends OperationOptions {
 
   @Override
   public int hashCode() {
-    return super.hashCode() ^ compression.hashCode() ^ checksumType.hashCode() ^ Boolean.hashCode(
-        checksumCompressedValues) ^ Long.hashCode(version) ^ Long.hashCode(requiredPreviousVersion) ^ Short.hashCode(
-        lockSeconds) ^ Integer.hashCode(fragmentationThreshold) ^ Arrays.hashCode(userData);
+    return super.hashCode()
+        ^ compression.hashCode()
+        ^ checksumType.hashCode()
+        ^ Boolean.hashCode(checksumCompressedValues)
+        ^ Long.hashCode(version)
+        ^ Long.hashCode(requiredPreviousVersion)
+        ^ Short.hashCode(lockSeconds)
+        ^ Integer.hashCode(fragmentationThreshold)
+        ^ Arrays.hashCode(userData);
   }
 
   @Override
@@ -605,14 +608,14 @@ public class PutOptions extends OperationOptions {
         }
       }
 
-      return this.compression == oPutOptions.compression &&
-             this.checksumType == oPutOptions.checksumType &&
-             this.checksumCompressedValues == oPutOptions.checksumCompressedValues &&
-             this.version == oPutOptions.version &&
-             this.requiredPreviousVersion == oPutOptions.requiredPreviousVersion &&
-             this.lockSeconds == oPutOptions.lockSeconds &&
-             this.fragmentationThreshold == oPutOptions.fragmentationThreshold &&
-             Arrays.equals(authorizationUser, oPutOptions.authorizationUser);
+      return this.compression == oPutOptions.compression
+          && this.checksumType == oPutOptions.checksumType
+          && this.checksumCompressedValues == oPutOptions.checksumCompressedValues
+          && this.version == oPutOptions.version
+          && this.requiredPreviousVersion == oPutOptions.requiredPreviousVersion
+          && this.lockSeconds == oPutOptions.lockSeconds
+          && this.fragmentationThreshold == oPutOptions.fragmentationThreshold
+          && Arrays.equals(authorizationUser, oPutOptions.authorizationUser);
     }
   }
 

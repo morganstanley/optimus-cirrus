@@ -15,9 +15,7 @@ import com.ms.silverking.numeric.NumConversion;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-/**
- * Functionality common to all Cuckoo hash table implementations.
- */
+/** Functionality common to all Cuckoo hash table implementations. */
 public abstract class CuckooBase<T> {
   // config
   private final WritableCuckooConfig config;
@@ -35,7 +33,7 @@ public abstract class CuckooBase<T> {
 
   protected static final int offsetIndexShift = 32;
 
-  private static final int[] base2Masks = { 0, 0x0, 0x1, 0, 0x3, 0, 0, 0, 0x7 };
+  private static final int[] base2Masks = {0, 0x0, 0x1, 0, 0x3, 0, 0, 0, 0x7};
 
   protected static final boolean debug = false;
   protected static final boolean debugCycle = false;
@@ -51,7 +49,7 @@ public abstract class CuckooBase<T> {
 
   protected CuckooBase(WritableCuckooConfig cuckooConfig) {
     if (debug) {
-      log.debug("{}",cuckooConfig);
+      log.debug("{}", cuckooConfig);
     }
     if (cuckooConfig.getNumSubTables() < 2) {
       throw new RuntimeException("numSubTables must be >= 2");
@@ -63,9 +61,9 @@ public abstract class CuckooBase<T> {
     this.cuckooLimit = cuckooConfig.getCuckooLimit();
     subTableBuckets = cuckooConfig.getNumSubTableBuckets();
     if (debug) {
-      log.info("totalEntries: {}" , totalEntries);
+      log.info("totalEntries: {}", totalEntries);
     }
-    //subTables = new SubTableBase[numSubTables];
+    // subTables = new SubTableBase[numSubTables];
     subTablesMask = base2Masks[numSubTables];
     entriesMask = base2Masks[entriesPerBucket];
   }
@@ -122,14 +120,14 @@ public abstract class CuckooBase<T> {
   }
 
   public void displaySizes() {
-    log.info("totalEntries: {}" , totalEntries);
+    log.info("totalEntries: {}", totalEntries);
     for (int i = 0; i < subTables.length; i++) {
-      log.info("{} {}",i , subTables[i].size());
+      log.info("{} {}", i, subTables[i].size());
     }
   }
 
   public void displayOccupancy() {
-    log.info("totalEntries: {}" , totalEntries);
+    log.info("totalEntries: {}", totalEntries);
     for (int i = 0; i < subTables.length; i++) {
       log.info("subTable {}", i);
       subTables[i].displayOccupancy();
@@ -140,10 +138,7 @@ public abstract class CuckooBase<T> {
     log.info("display() not implemented for this type");
   }
 
-  /**
-   * CuckooBase SubTable. Each SubTable maintains a bucketed
-   * hash table.
-   */
+  /** CuckooBase SubTable. Each SubTable maintains a bucketed hash table. */
   public abstract class SubTableBase {
     protected final int singleEntrySize;
     protected final int bufferSizeAtoms;
@@ -156,10 +151,11 @@ public abstract class CuckooBase<T> {
 
     public SubTableBase(int numBuckets, int entriesPerBucket, int singleEntrySize) {
       if (debug) {
-        log.info("numEntries: {} entriesPerBucket: {} " ,numBuckets , entriesPerBucket);
+        log.info("numEntries: {} entriesPerBucket: {} ", numBuckets, entriesPerBucket);
       }
       if (Integer.bitCount(numBuckets) != 1) {
-        throw new RuntimeException("Supplied numBuckets must be a perfect power of 2: " + numBuckets);
+        throw new RuntimeException(
+            "Supplied numBuckets must be a perfect power of 2: " + numBuckets);
       }
       this.singleEntrySize = singleEntrySize;
       this.entriesPerBucket = entriesPerBucket;
@@ -191,8 +187,8 @@ public abstract class CuckooBase<T> {
     }
 
     /**
-     * Given a bucketIndex and a bucketEntryIndex compute the
-     * hash table index in the hash table array
+     * Given a bucketIndex and a bucketEntryIndex compute the hash table index in the hash table
+     * array
      *
      * @param bucketIndex
      * @param bucketEntryIndex
@@ -200,7 +196,7 @@ public abstract class CuckooBase<T> {
      */
     protected int getHTEntryIndex(int bucketIndex, int bucketEntryIndex) {
       return bucketSizeAtoms * bucketIndex + entrySizeAtoms * bucketEntryIndex;
-      //return (index << 2) + bucketIndex; // saves about 1 ns
+      // return (index << 2) + bucketIndex; // saves about 1 ns
     }
 
     abstract boolean remove(T key);
@@ -209,12 +205,12 @@ public abstract class CuckooBase<T> {
       int size;
 
       size = 0;
-      //System.out.println("a");
+      // System.out.println("a");
       for (int i = 0; i < numBuckets(); i++) {
         log.info("%4d ", i);
-        //System.out.println("b");
+        // System.out.println("b");
         for (int j = 0; j < entriesPerBucket; j++) {
-          //System.out.println("c");
+          // System.out.println("c");
           size += isEmpty(i, j) ? 0 : 1;
           log.info("%c", isEmpty(i, j) ? '.' : 'X');
         }
@@ -239,18 +235,14 @@ public abstract class CuckooBase<T> {
       moveToNonEmpty();
     }
 
-    /**
-     * true if the current entry is empty
-     */
+    /** true if the current entry is empty */
     abstract boolean curIsEmpty();
 
     public boolean hasNext() {
       return !done;
     }
 
-    /**
-     * Move to a non-empty hash entry. Assert done if no such entry can be found.
-     */
+    /** Move to a non-empty hash entry. Assert done if no such entry can be found. */
     void moveToNonEmpty() {
       if (debugIterator) {
         log.info("in moveToNonEmpty");

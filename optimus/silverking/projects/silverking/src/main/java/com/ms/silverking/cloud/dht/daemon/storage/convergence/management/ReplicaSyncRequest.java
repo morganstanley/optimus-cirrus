@@ -25,7 +25,12 @@ class ReplicaSyncRequest extends Action {
   private final long oldOwner;
   private long sendTimeMillis;
 
-  private ReplicaSyncRequest(UUIDBase uuid, long ns, RingRegion region, IPAndPort newOwner, IPAndPort oldOwner,
+  private ReplicaSyncRequest(
+      UUIDBase uuid,
+      long ns,
+      RingRegion region,
+      IPAndPort newOwner,
+      IPAndPort oldOwner,
       Action[] upstreamDependencies) {
     super(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits(), upstreamDependencies);
     this.uuidMSL = uuid.getMostSignificantBits();
@@ -37,7 +42,11 @@ class ReplicaSyncRequest extends Action {
     this.oldOwner = oldOwner.toLong();
   }
 
-  public static ReplicaSyncRequest of(long ns, RingRegion region, IPAndPort newOwner, IPAndPort oldOwner,
+  public static ReplicaSyncRequest of(
+      long ns,
+      RingRegion region,
+      IPAndPort newOwner,
+      IPAndPort oldOwner,
       Action upstreamDependency) {
     Action[] upstreamDependencies;
     UUIDBase uuid;
@@ -52,7 +61,8 @@ class ReplicaSyncRequest extends Action {
     return new ReplicaSyncRequest(uuid, ns, region, newOwner, oldOwner, upstreamDependencies);
   }
 
-  public static ReplicaSyncRequest of(long ns, RingRegion region, IPAndPort newOwner, IPAndPort oldOwner) {
+  public static ReplicaSyncRequest of(
+      long ns, RingRegion region, IPAndPort newOwner, IPAndPort oldOwner) {
     return of(ns, region, newOwner, oldOwner, null);
   }
 
@@ -93,25 +103,31 @@ class ReplicaSyncRequest extends Action {
   @Override
   public int hashCode() {
     return (int) uuidLSL;
-    //return super.hashCode();
+    // return super.hashCode();
   }
 
   @Override
   public boolean equals(Object obj) {
     return this == obj;
-    //return super.equals(obj);
-        /*
-        ReplicaSyncRequest    o;
-        
-        o = (ReplicaSyncRequest)obj;
-        return this.ns == o.ns && this.region.equals(o.region) && this.newOwner.equals(o.newOwner) && this.oldOwner
-        .equals(o.oldOwner);
-        */
+    // return super.equals(obj);
+    /*
+    ReplicaSyncRequest    o;
+
+    o = (ReplicaSyncRequest)obj;
+    return this.ns == o.ns && this.region.equals(o.region) && this.newOwner.equals(o.newOwner) && this.oldOwner
+    .equals(o.oldOwner);
+    */
   }
 
   @Override
   public String toString() {
-    return String.format("%s:%d:%s:%s<=%s:%d", getUUID(), ns, getRegion(), IPAndPort.fromLong(newOwner),
-        IPAndPort.fromLong(oldOwner), sendTimeMillis);
+    return String.format(
+        "%s:%d:%s:%s<=%s:%d",
+        getUUID(),
+        ns,
+        getRegion(),
+        IPAndPort.fromLong(newOwner),
+        IPAndPort.fromLong(oldOwner),
+        sendTimeMillis);
   }
 }

@@ -108,7 +108,7 @@ public class Arrays {
 
   /**
    * @param min
-   * @param max    max exclusive
+   * @param max max exclusive
    * @param random
    * @return
    */
@@ -157,7 +157,5 @@ public class Arrays {
         throw new NoSuchElementException();
       }
     }
-
   }
 }
-

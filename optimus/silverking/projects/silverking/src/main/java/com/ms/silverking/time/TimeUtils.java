@@ -16,11 +16,7 @@ import java.math.MathContext;
 import java.util.Calendar;
 import java.util.Date;
 
-/**
- * <p>
- * Time constants and utilities
- * </p>
- */
+/** Time constants and utilities */
 public class TimeUtils {
   public static final int MILLIS_PER_SECOND = 1000;
   public static final int MICROS_PER_MILLI = 1000;
@@ -68,7 +64,7 @@ public class TimeUtils {
   }
 
   public static BigDecimal nanos2secondsBD(long nanos) {
-    return new BigDecimal(nanos).divide(StopwatchInternalConstants.nanosPerSecondBD, MathContext.DECIMAL128);
+    return new BigDecimal(nanos)
+        .divide(StopwatchInternalConstants.nanosPerSecondBD, MathContext.DECIMAL128);
   }
 }
-

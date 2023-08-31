@@ -19,8 +19,7 @@ import com.ms.silverking.numeric.NumConversion;
 public class SVTReaderWriter implements ValueTableReaderWriter {
   public static final int overheadBytes = NumConversion.BYTES_PER_INT;
 
-  public SVTReaderWriter() {
-  }
+  public SVTReaderWriter() {}
 
   @Override
   public int getSerializedSizeBytes(ValueTable vt) {

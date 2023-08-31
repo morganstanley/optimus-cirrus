@@ -21,9 +21,7 @@ import org.apache.zookeeper.WatchedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches a single versioned ZooKeeper path for new versions.
- */
+/** Watches a single versioned ZooKeeper path for new versions. */
 public class VersionWatcher extends WatcherBase {
   private final VersionListener listener;
   private long lastNotifiedVersion;
@@ -32,14 +30,22 @@ public class VersionWatcher extends WatcherBase {
 
   private static final boolean verbose = false;
 
-  public VersionWatcher(MetaClientCore metaClientCore, String basePath, VersionListener listener, long intervalMillis,
+  public VersionWatcher(
+      MetaClientCore metaClientCore,
+      String basePath,
+      VersionListener listener,
+      long intervalMillis,
       long maxInitialSleep) {
     super(metaClientCore, basePath, intervalMillis, maxInitialSleep);
     this.listener = listener;
     lastNotifiedVersion = Long.MIN_VALUE;
   }
 
-  public VersionWatcher(MetaClientCore metaClientCore, String basePath, VersionListener listener, long intervalMillis) {
+  public VersionWatcher(
+      MetaClientCore metaClientCore,
+      String basePath,
+      VersionListener listener,
+      long intervalMillis) {
     this(metaClientCore, basePath, listener, intervalMillis, intervalMillis);
   }
 
@@ -74,7 +80,7 @@ public class VersionWatcher extends WatcherBase {
         log.info("VersionCheck complete: {}", basePath);
       }
     } catch (KeeperException ke) {
-      log.info("*** ZooKeeper state: {}" , metaClientCore.getZooKeeper().getState());
+      log.info("*** ZooKeeper state: {}", metaClientCore.getZooKeeper().getState());
       throw ke;
     }
   }

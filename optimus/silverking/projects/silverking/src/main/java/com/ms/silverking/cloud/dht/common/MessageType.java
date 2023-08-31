@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.common;
 
-/**
- * Type of client operation.
- */
+/** Type of client operation. */
 public enum MessageType {
   // The order matters (since SK serde the type by its ordinal)
   LEGACY_PUT(0), // TODO (OPTIMUS-43373): Remove this legacy put and put_trace
@@ -33,7 +31,8 @@ public enum MessageType {
   NAMESPACE_REQUEST(14),
   NAMESPACE_RESPONSE(15),
   SET_CONVERGENCE_STATE(16),
-  // TODO (OPTIMUS-40641): remove the deprecated REAP MessageType and adjust deserialization logic in
+  // TODO (OPTIMUS-40641): remove the deprecated REAP MessageType and adjust deserialization logic
+  // in
   // EnumValues.messageType and related code in IncomingMessageGroup.readFromChannel
   DO_NOT_USE_REAP(17),
   GLOBAL_COMMAND_NEW(18),

@@ -49,7 +49,8 @@ public class HostGroupTableZK extends MetaToolModuleBase<HostGroupTable, MetaPat
   }
 
   @Override
-  public String writeToZK(HostGroupTable hostGroupTable, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(HostGroupTable hostGroupTable, MetaToolOptions options)
+      throws IOException, KeeperException {
     String path;
 
     path = zk.createString(base + "/", hostGroupTable.toString(), CreateMode.PERSISTENT_SEQUENTIAL);

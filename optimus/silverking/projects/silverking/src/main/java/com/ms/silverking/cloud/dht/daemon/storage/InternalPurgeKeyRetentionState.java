@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.daemon.storage;
 
 import com.ms.silverking.cloud.dht.ValueRetentionState;
 
-/**
- * Only used in server side (within package scope)
- */
+/** Only used in server side (within package scope) */
 class InternalPurgeKeyRetentionState implements ValueRetentionState {
   private long count;
   private long latestCreationTimeNanos;
@@ -48,7 +46,8 @@ class InternalPurgeKeyRetentionState implements ValueRetentionState {
   /**
    * Caller shall be careful about its return value
    *
-   * @return latest creationTimeNanos of all purged versions; Or negative long if nothing purged (getCount() == 0)
+   * @return latest creationTimeNanos of all purged versions; Or negative long if nothing purged
+   *     (getCount() == 0)
    */
   long getLatestCreationTimeNanos() {
     return latestCreationTimeNanos;
@@ -57,7 +56,8 @@ class InternalPurgeKeyRetentionState implements ValueRetentionState {
   /**
    * Caller shall be careful about its return value
    *
-   * @return latest version of all purged versions; Or negative long if nothing purged (getCount() == 0)
+   * @return latest version of all purged versions; Or negative long if nothing purged (getCount()
+   *     == 0)
    */
   long getLatestVersion() {
     return latestVersion;

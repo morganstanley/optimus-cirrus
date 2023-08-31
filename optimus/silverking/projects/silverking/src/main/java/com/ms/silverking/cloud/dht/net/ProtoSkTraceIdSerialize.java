@@ -35,14 +35,17 @@ public class ProtoSkTraceIdSerialize {
 
   public static ByteBuffer serializeSkTraceId(SkTraceId skTraceId) {
 
-    byte[] forwardStateBytes = skTraceId.getForwardState().toString().getBytes(StandardCharsets.UTF_8);
+    byte[] forwardStateBytes =
+        skTraceId.getForwardState().toString().getBytes(StandardCharsets.UTF_8);
     byte[] requestUuIdBytes = skTraceId.getTraceId().requestId().getBytes(StandardCharsets.UTF_8);
-    byte[] chainedIdBytes = ChainedIdSerialization.serializeChainId(skTraceId.getTraceId().chainedId()).array();
+    byte[] chainedIdBytes =
+        ChainedIdSerialization.serializeChainId(skTraceId.getTraceId().chainedId()).array();
 
-    int totalEncodeLength = (forwardStateBytes.length +
-                             requestUuIdBytes.length +
-                             chainedIdBytes.length +
-                             NumConversion.BYTES_PER_INT * 4);
+    int totalEncodeLength =
+        (forwardStateBytes.length
+            + requestUuIdBytes.length
+            + chainedIdBytes.length
+            + NumConversion.BYTES_PER_INT * 4);
     ByteBuffer traceBuffer = ByteBuffer.allocate(totalEncodeLength);
 
     traceBuffer.putInt(NumConversion.BYTES_PER_INT);
@@ -131,4 +134,3 @@ public class ProtoSkTraceIdSerialize {
     return null;
   }
 }
-

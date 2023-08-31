@@ -14,10 +14,10 @@ package com.ms.silverking.cloud.dht.common;
 import com.ms.silverking.numeric.NumConversion;
 
 /**
- * Internal DHT key representation derived from a hash of the user key
- * DHTKey is created by hashing the key using MD5, which results in 128 bits
- * The 128 bits is represented using 2 longs: MSL (Most significant long) and LSL (Least significant long)
- * We're using longs to represent it because a long in Java is 64 bits (8 bytes)
+ * Internal DHT key representation derived from a hash of the user key DHTKey is created by hashing
+ * the key using MD5, which results in 128 bits The 128 bits is represented using 2 longs: MSL (Most
+ * significant long) and LSL (Least significant long) We're using longs to represent it because a
+ * long in Java is 64 bits (8 bytes)
  */
 public interface DHTKey {
 

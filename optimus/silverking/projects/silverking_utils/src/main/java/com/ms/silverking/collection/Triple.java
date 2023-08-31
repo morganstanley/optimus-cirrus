@@ -102,15 +102,19 @@ public class Triple<T1, T2, T3> extends TupleBase {
 
   @Override
   public String toString() {
-    return CoreStringUtil.nullSafeToString(v1) + ":" + CoreStringUtil.nullSafeToString(v2) + ":" + CoreStringUtil.nullSafeToString(
-        v3);
+    return CoreStringUtil.nullSafeToString(v1)
+        + ":"
+        + CoreStringUtil.nullSafeToString(v2)
+        + ":"
+        + CoreStringUtil.nullSafeToString(v3);
   }
 
   public static <T1, T2, T3> Triple<T1, T2, T3> parseDefault(String def, String... typeNames) {
     return parse(def, TupleBase.defaultTupleParsePattern, typeNames);
   }
 
-  public static <T1, T2, T3> Triple<T1, T2, T3> parse(String def, String pattern, String... typeNames) {
+  public static <T1, T2, T3> Triple<T1, T2, T3> parse(
+      String def, String pattern, String... typeNames) {
     List<Object> l;
 
     l = TupleUtil.parse(def, pattern, SIZE, typeNames);

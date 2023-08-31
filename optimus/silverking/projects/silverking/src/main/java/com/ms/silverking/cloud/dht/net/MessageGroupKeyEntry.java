@@ -18,14 +18,13 @@ import com.ms.silverking.cloud.dht.common.DHTKeyComparator;
 import com.ms.silverking.cloud.dht.net.protocol.KeyedMessageFormat;
 
 /**
- * Base of all MessageGroup*Entry classes. These classes represent components
- * of MessageGroups. Instances are generated during iteration over the
- * contents of a MessageGroup.
- * <p>
- * (Instances of these classes are *not* used to create MessageGroups.
- * See ProtoMessageGroup for the creation of MessageGroups.)
- * <p>
- * Unlike values, keys are copied out of the generating message and stored locally.
+ * Base of all MessageGroup*Entry classes. These classes represent components of MessageGroups.
+ * Instances are generated during iteration over the contents of a MessageGroup.
+ *
+ * <p>(Instances of these classes are *not* used to create MessageGroups. See ProtoMessageGroup for
+ * the creation of MessageGroups.)
+ *
+ * <p>Unlike values, keys are copied out of the generating message and stored locally.
  */
 public class MessageGroupKeyEntry implements DHTKey, Comparable<DHTKey> {
   private final long msl;

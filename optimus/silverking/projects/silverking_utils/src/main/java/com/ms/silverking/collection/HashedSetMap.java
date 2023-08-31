@@ -96,8 +96,7 @@ public final class HashedSetMap<K, V> implements Serializable {
       int rndIndex = ThreadLocalRandom.current().nextInt(set.size());
       int i = 0;
       for (V item : set) {
-        if (i++ == rndIndex)
-          return item;
+        if (i++ == rndIndex) return item;
       }
       throw new RuntimeException("panic");
     }
@@ -115,7 +114,8 @@ public final class HashedSetMap<K, V> implements Serializable {
     return sets;
   }
 
-  public List<K> getKeys() {List<K> keys = new ArrayList<K>();
+  public List<K> getKeys() {
+    List<K> keys = new ArrayList<K>();
     for (Map.Entry<K, Set<V>> kSetEntry : map.entrySet()) {
       keys.add(kSetEntry.getKey());
     }

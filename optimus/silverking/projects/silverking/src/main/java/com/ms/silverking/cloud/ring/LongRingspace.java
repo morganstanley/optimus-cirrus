@@ -17,14 +17,13 @@ import java.math.MathContext;
 import com.google.common.base.Preconditions;
 
 /**
- * Provides methods for manipulating the portion of the Long value space
- * that we use as ring space. There is a difference due to the need
- * to be able to manipulate longs without problems such as overflow.
- * <p>
- * Note that we don't use the entire key space as our ringspace as we
- * have sufficient randomness in a much smaller space. This means
- * that many (logical) keys will map to the same coordinate even when
- * the keys themselves are distinct.
+ * Provides methods for manipulating the portion of the Long value space that we use as ring space.
+ * There is a difference due to the need to be able to manipulate longs without problems such as
+ * overflow.
+ *
+ * <p>Note that we don't use the entire key space as our ringspace as we have sufficient randomness
+ * in a much smaller space. This means that many (logical) keys will map to the same coordinate even
+ * when the keys themselves are distinct.
  */
 public class LongRingspace {
   public static final MathContext mathContext = MathContext.DECIMAL128;
@@ -60,7 +59,7 @@ public class LongRingspace {
   public static long fractionToLong(double fraction) {
     assert fraction >= 0.0 && fraction <= 1.0;
 
-    //return (long)((double)size * fraction);
+    // return (long)((double)size * fraction);
     return bdSize.multiply(newBD(fraction)).longValue();
   }
 
@@ -159,25 +158,35 @@ public class LongRingspace {
     long mp;
 
     assert region.contains(p);
-    mp = newBD(p - region.getStart()).multiply(bdSize).divide(region.getSizeBD(), mathContext).add(bdStart).longValue();
+    mp =
+        newBD(p - region.getStart())
+            .multiply(bdSize)
+            .divide(region.getSizeBD(), mathContext)
+            .add(bdStart)
+            .longValue();
     return longToRingspace(mp);
   }
 
-  public static long mapChildRegionspacePointToParentRegion(RingRegion childRegionspace, long p,
-      RingRegion parentRegion) {
+  public static long mapChildRegionspacePointToParentRegion(
+      RingRegion childRegionspace, long p, RingRegion parentRegion) {
     long mp;
 
-    mp = newBD(p - childRegionspace.getStart()).multiply(parentRegion.getSizeBD()).divide(childRegionspace.getSizeBD(),
-        mathContext).add(newBD(parentRegion.getStart())).longValue();
+    mp =
+        newBD(p - childRegionspace.getStart())
+            .multiply(parentRegion.getSizeBD())
+            .divide(childRegionspace.getSizeBD(), mathContext)
+            .add(newBD(parentRegion.getStart()))
+            .longValue();
     return mp;
   }
 
-  public static RingRegion mapChildRegionToParentRegion(RingRegion childRegionspace, RingRegion childRegion,
-      RingRegion parent) {
+  public static RingRegion mapChildRegionToParentRegion(
+      RingRegion childRegionspace, RingRegion childRegion, RingRegion parent) {
     long mStart;
     long mEnd;
 
-    mStart = mapChildRegionspacePointToParentRegion(childRegionspace, childRegion.getStart(), parent);
+    mStart =
+        mapChildRegionspacePointToParentRegion(childRegionspace, childRegion.getStart(), parent);
     mEnd = mapChildRegionspacePointToParentRegion(childRegionspace, childRegion.getEnd(), parent);
     return new RingRegion(mStart, mEnd);
   }
@@ -206,9 +215,12 @@ public class LongRingspace {
       System.out.println(fractionToLong(1, 3) * 3 - size);
       System.out.println();
 
-      System.out.println(mapChildRegionspacePointToParentRegion(new RingRegion(0, 100), 50, new RingRegion(0, 200)));
       System.out.println(
-          mapChildRegionToParentRegion(new RingRegion(0, 100), new RingRegion(0, 49), new RingRegion(0, 49)));
+          mapChildRegionspacePointToParentRegion(
+              new RingRegion(0, 100), 50, new RingRegion(0, 200)));
+      System.out.println(
+          mapChildRegionToParentRegion(
+              new RingRegion(0, 100), new RingRegion(0, 49), new RingRegion(0, 49)));
     } catch (Exception e) {
       e.printStackTrace();
     }

@@ -16,9 +16,7 @@ import java.util.List;
 import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.net.IPAndPort;
 
-/**
- * Provides external non-protocol specific functionality that is required by Operations.
- */
+/** Provides external non-protocol specific functionality that is required by Operations. */
 public interface OperationContainer {
   public IPAndPort localIPAndPort();
 

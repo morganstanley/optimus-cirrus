@@ -71,7 +71,7 @@ public class SecondaryTargetSerializer {
       }
       return specs.build();
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
       return ImmutableSet.of();
     }
   }

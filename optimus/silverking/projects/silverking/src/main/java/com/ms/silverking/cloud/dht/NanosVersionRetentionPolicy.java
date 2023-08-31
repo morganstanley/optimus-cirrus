@@ -27,7 +27,8 @@ public class NanosVersionRetentionPolicy implements ValueRetentionPolicy {
   }
 
   @OmitGeneration
-  public NanosVersionRetentionPolicy(long invalidatedRetentionIntervalSeconds, long maxRetentionIntervalSeconds) {
+  public NanosVersionRetentionPolicy(
+      long invalidatedRetentionIntervalSeconds, long maxRetentionIntervalSeconds) {
     this.invalidatedRetentionIntervalSeconds = invalidatedRetentionIntervalSeconds;
     this.maxRetentionIntervalSeconds = maxRetentionIntervalSeconds;
   }
@@ -47,7 +48,8 @@ public class NanosVersionRetentionPolicy implements ValueRetentionPolicy {
 
   @Override
   public int hashCode() {
-    return Long.hashCode(invalidatedRetentionIntervalSeconds) ^ Long.hashCode(maxRetentionIntervalSeconds);
+    return Long.hashCode(invalidatedRetentionIntervalSeconds)
+        ^ Long.hashCode(maxRetentionIntervalSeconds);
   }
 
   @Override
@@ -63,7 +65,8 @@ public class NanosVersionRetentionPolicy implements ValueRetentionPolicy {
     NanosVersionRetentionPolicy other;
 
     other = (NanosVersionRetentionPolicy) o;
-    return invalidatedRetentionIntervalSeconds == other.invalidatedRetentionIntervalSeconds && maxRetentionIntervalSeconds == other.maxRetentionIntervalSeconds;
+    return invalidatedRetentionIntervalSeconds == other.invalidatedRetentionIntervalSeconds
+        && maxRetentionIntervalSeconds == other.maxRetentionIntervalSeconds;
   }
 
   @Override

@@ -49,7 +49,8 @@ import com.ms.silverking.net.IPAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CentralConvergenceController extends ConvergenceControllerBase implements RequestController {
+public class CentralConvergenceController extends ConvergenceControllerBase
+    implements RequestController {
   private final String curRingName;
   private final DHTMetaUpdate curRing;
   private final ConvergencePoint curCP;
@@ -68,24 +69,29 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
   private static Logger log = LoggerFactory.getLogger(CentralConvergenceController.class);
 
   public enum SyncTargets {
-    Primary, Secondary, All;
+    Primary,
+    Secondary,
+    All;
 
     public OwnerQueryMode getOwnerQueryMode() {
       switch (this) {
-      case Primary:
-        return OwnerQueryMode.Primary;
-      case Secondary:
-        return OwnerQueryMode.Secondary;
-      case All:
-        return OwnerQueryMode.All;
-      default:
-        throw new RuntimeException("Panic");
+        case Primary:
+          return OwnerQueryMode.Primary;
+        case Secondary:
+          return OwnerQueryMode.Secondary;
+        case All:
+          return OwnerQueryMode.All;
+        default:
+          throw new RuntimeException("Panic");
       }
     }
   }
 
   public enum RequestedSyncMode {
-    SyncAndSetState, SyncAndSetStateUnlessSubset, SetStateOnly, SyncOnly;
+    SyncAndSetState,
+    SyncAndSetStateUnlessSubset,
+    SetStateOnly,
+    SyncOnly;
 
     public SyncMode getSyncMode() {
       switch (this) {
@@ -101,12 +107,12 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
           throw new RuntimeException("panic");
       }
     }
-  }
-
-  ;
+  };
 
   private enum SyncMode {
-    SyncAndSetState, SetStateOnly, SyncOnly;
+    SyncAndSetState,
+    SetStateOnly,
+    SyncOnly;
 
     public boolean setsState() {
       switch (this) {
@@ -164,16 +170,18 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
    *  state->complete
    */
 
-  public CentralConvergenceController(UUIDBase uuid,
-                                      DHTMetaReader dhtMetaReader,
-                                      ConvergencePoint curCP,
-                                      ConvergencePoint targetCP,
-                                      ExclusionSet exclusionSet,
-                                      MessageGroupBase mgBase,
-                                      boolean syncUnchangedOwners,
-                                      RequestedSyncMode requestedSyncMode,
-                                      PassiveConvergenceMode passiveConvergenceMode,
-                                      Set<Long> ignoredNamespaces) throws KeeperException, IOException {
+  public CentralConvergenceController(
+      UUIDBase uuid,
+      DHTMetaReader dhtMetaReader,
+      ConvergencePoint curCP,
+      ConvergencePoint targetCP,
+      ExclusionSet exclusionSet,
+      MessageGroupBase mgBase,
+      boolean syncUnchangedOwners,
+      RequestedSyncMode requestedSyncMode,
+      PassiveConvergenceMode passiveConvergenceMode,
+      Set<Long> ignoredNamespaces)
+      throws KeeperException, IOException {
     super(uuid, dhtMetaReader, targetCP, exclusionSet, mgBase, ignoredNamespaces);
     assert curCP != null;
     assert curCP.getRingIDAndVersionPair() != null;
@@ -181,7 +189,8 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
     this.syncUnchangedOwners = syncUnchangedOwners;
     this.passiveConvergenceMode = passiveConvergenceMode;
     curRingName = getRingNameFromCP(curCP);
-    curRing = dhtMetaReader.readRing(curRingName, curCP.getRingIDAndVersionPair().getRingVersionPair());
+    curRing =
+        dhtMetaReader.readRing(curRingName, curCP.getRingIDAndVersionPair().getRingVersionPair());
 
     log.info("Using exclusions:\n{}", exclusionSet);
 
@@ -191,7 +200,9 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
 
     ringConfigZK = new RingConfigurationZK(ringMC);
     log.info("Reading ring configuration: {}", curRing.getRingIDAndVersionPair());
-    currentRingConfig = ringConfigZK.readFromZK(curRing.getRingIDAndVersionPair().getRingVersionPair().getV1(), null);
+    currentRingConfig =
+        ringConfigZK.readFromZK(
+            curRing.getRingIDAndVersionPair().getRingVersionPair().getV1(), null);
     log.info("Current ring configuration: {}", currentRingConfig);
 
     curMap = getResolvedReplicaMap(curRing, currentRingConfig);
@@ -205,13 +216,13 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
     } else {
       mode = requestedSyncMode.getSyncMode();
     }
-        
-        /*
-        Log.infoAsync("*****************************");
-        Log.infoAsync("Current map");
-        curMap.display();
-        Log.infoAsync("*****************************");
-        */
+
+    /*
+    Log.infoAsync("*****************************");
+    Log.infoAsync("Current map");
+    curMap.display();
+    Log.infoAsync("*****************************");
+    */
   }
 
   //////////////////////////////////////////////////////////////////
@@ -220,18 +231,20 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
 
   // FUTURE - Some code is replicated in SKAdmin. Deduplicate this code.
 
-  private static HostGroupTable getHostGroupTable(String hostGroupTableName, ZooKeeperConfig zkConfig)
-      throws KeeperException, IOException {
+  private static HostGroupTable getHostGroupTable(
+      String hostGroupTableName, ZooKeeperConfig zkConfig) throws KeeperException, IOException {
     HostGroupTableZK hostGroupTableZK;
     com.ms.silverking.cloud.meta.MetaClient cloudMC;
 
-    cloudMC = new com.ms.silverking.cloud.meta.MetaClient(CloudConfiguration.emptyTemplate.hostGroupTableName(
-        hostGroupTableName), zkConfig);
+    cloudMC =
+        new com.ms.silverking.cloud.meta.MetaClient(
+            CloudConfiguration.emptyTemplate.hostGroupTableName(hostGroupTableName), zkConfig);
     hostGroupTableZK = new HostGroupTableZK(cloudMC);
     return hostGroupTableZK.readFromZK(-1, null);
   }
 
-  private Set<IPAndPort> findValidPassiveServers(Set<String> passiveNodeHostGroupNames, HostGroupTable hostGroupTable) {
+  private Set<IPAndPort> findValidPassiveServers(
+      Set<String> passiveNodeHostGroupNames, HostGroupTable hostGroupTable) {
     ImmutableSet.Builder<String> validServers;
 
     validServers = ImmutableSet.builder();
@@ -270,7 +283,8 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
       currentButNonTargetReplicas = new HashSet<>(currentReplicas);
       currentButNonTargetReplicas.removeAll(targetReplicas);
 
-      validPassiveServers = new HashSet<>(findValidPassiveServers(passiveNodeHostGroupNames, hostGroupTable));
+      validPassiveServers =
+          new HashSet<>(findValidPassiveServers(passiveNodeHostGroupNames, hostGroupTable));
       validPassiveServers.addAll(currentButNonTargetReplicas);
       validPassiveServers.removeAll(IPAndPort.set(exclusionSet.getServers(), dhtConfig.getPort()));
       validPassiveServers.removeAll(targetReplicas);
@@ -282,7 +296,8 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
     }
   }
 
-  private void displayErrors(Map<UUIDBase, IPAndPort> replicaMap, Set<UUIDBase> failed, String label) {
+  private void displayErrors(
+      Map<UUIDBase, IPAndPort> replicaMap, Set<UUIDBase> failed, String label) {
     for (UUIDBase uuid : failed) {
       IPAndPort replica;
 
@@ -354,7 +369,9 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
       replicaMap.put(uuid, passiveNode);
     }
 
-    result = opCompletionTracker.waitForCompletion(msgUUIDs, setStateDeadlineRelativeMillis, TimeUnit.MILLISECONDS);
+    result =
+        opCompletionTracker.waitForCompletion(
+            msgUUIDs, setStateDeadlineRelativeMillis, TimeUnit.MILLISECONDS);
     opUUIDs.removeAll(msgUUIDs);
     incompleteUUIDs = result.getV1();
     failedUUIDs = result.getV2();
@@ -376,29 +393,30 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
 
   private UUIDBase sendSetState(UUIDBase uuid, IPAndPort replica, RingState ringState) {
     MessageGroup mg;
-    mg = new ProtoSetConvergenceStateMessageGroup(uuid,
-                                                  mgBase.getMyID(),
-                                                  setStateDeadlineRelativeMillis,
-                                                  curCP,
-                                                  targetCP,
-                                                  ringState).toMessageGroup();
+    mg =
+        new ProtoSetConvergenceStateMessageGroup(
+                uuid, mgBase.getMyID(), setStateDeadlineRelativeMillis, curCP, targetCP, ringState)
+            .toMessageGroup();
     mgBase.send(mg, replica);
     return uuid;
   }
 
   //////////////////////////////////////////////////////////////////
 
-  private void syncRegion(long ns,
-                          RingEntry targetEntry,
-                          SyncTargets syncTargets,
-                          Action upstreamDependency,
-                          List<ReplicaSyncRequest> srList) throws ConvergenceException {
+  private void syncRegion(
+      long ns,
+      RingEntry targetEntry,
+      SyncTargets syncTargets,
+      Action upstreamDependency,
+      List<ReplicaSyncRequest> srList)
+      throws ConvergenceException {
     List<RingEntry> sourceEntries;
 
-    //Log.infoAsyncf("syncRegion %x %s", ns, targetEntry);
+    // Log.infoAsyncf("syncRegion %x %s", ns, targetEntry);
     sourceEntries = curMap.getEntries(targetEntry.getRegion());
     if (!sourceEntries.isEmpty()) {
-      //Log.infoAsyncf("%x target %s\towners %s\n", ns, targetEntry.getRegion(), CollectionUtil.toString
+      // Log.infoAsyncf("%x target %s\towners %s\n", ns, targetEntry.getRegion(),
+      // CollectionUtil.toString
       // (sourceEntries));
       for (RingEntry sourceEntry : sourceEntries) {
         List<IPAndPort> sourceOwners;
@@ -422,14 +440,16 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
         IntersectionResult iResult;
 
         // We don't want to request the entire source region.
-        // We're only interested in the portion(s) of the source region that cover(s) the target region.
-        //Log.infoAsyncf("Intersection %s %s", sourceEntry.getRegion(), targetEntry.getRegion());
+        // We're only interested in the portion(s) of the source region that cover(s) the target
+        // region.
+        // Log.infoAsyncf("Intersection %s %s", sourceEntry.getRegion(), targetEntry.getRegion());
         iResult = RingRegion.intersect(sourceEntry.getRegion(), targetEntry.getRegion());
         for (RingRegion commonSubRegion : iResult.getOverlapping()) {
           List<IPAndPort> targetOwners;
           List<IPAndPort> nonExcludedTargetOwners;
 
-          targetOwners = new ArrayList<>(targetEntry.getOwnersIPList(syncTargets.getOwnerQueryMode()));
+          targetOwners =
+              new ArrayList<>(targetEntry.getOwnersIPList(syncTargets.getOwnerQueryMode()));
           nonExcludedTargetOwners = exclusionSet.filterByIP(targetOwners);
 
           for (IPAndPort newOwner : nonExcludedTargetOwners) {
@@ -440,12 +460,14 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
 
               prev = upstreamDependency;
               for (IPAndPort sourceOwner : nonExcludedSourceOwners) {
-                prev = syncReplica(ns,
-                                   commonSubRegion,
-                                   newOwner.port(dhtConfig.getPort()),
-                                   sourceOwner.port(dhtConfig.getPort()),
-                                   prev,
-                                   srList);
+                prev =
+                    syncReplica(
+                        ns,
+                        commonSubRegion,
+                        newOwner.port(dhtConfig.getPort()),
+                        sourceOwner.port(dhtConfig.getPort()),
+                        prev,
+                        srList);
               }
             }
           }
@@ -455,10 +477,11 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
       // This should actually never occur as the getEntries() call above
       // has no notion of local/non-local. It just returns the owners, and there
       // should always be owners.
-      log.info("Primary convergence {}. No previous non-local owners for entry: {}", ns, targetEntry);
+      log.info(
+          "Primary convergence {}. No previous non-local owners for entry: {}", ns, targetEntry);
       throw new ConvergenceException("Unexpected no previous non-local owners for entry");
     }
-    //Log.infoAsyncf("Done syncRegion %x %s", ns, targetEntry);
+    // Log.infoAsyncf("Done syncRegion %x %s", ns, targetEntry);
   }
 
   private Action syncNamespace(long ns, SyncTargets syncTargets, Action upstreamDependency)
@@ -498,7 +521,8 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
     syncController.freeze();
 
     log.info(" *** Sending requests");
-    syncController.waitForCompletion(1, TimeUnit.DAYS); // FUTURE - improve this from a failsafe to a real limit
+    syncController.waitForCompletion(
+        1, TimeUnit.DAYS); // FUTURE - improve this from a failsafe to a real limit
     log.info(" *** Requests complete");
   }
 
@@ -565,11 +589,13 @@ public class CentralConvergenceController extends ConvergenceControllerBase impl
       if (ringState != null) {
         switch (ringState) {
           case READY_FOR_CONVERGENCE_2:
-            return new SimpleRequestStatus(getRequestState(),
-                                           String.format("%s:%.0f:%s",
-                                                         ringState.toString(),
-                                                         syncController.elapsedSeconds(),
-                                                         syncController.getStatus()));
+            return new SimpleRequestStatus(
+                getRequestState(),
+                String.format(
+                    "%s:%.0f:%s",
+                    ringState.toString(),
+                    syncController.elapsedSeconds(),
+                    syncController.getStatus()));
           default:
             return new SimpleRequestStatus(getRequestState(), ringState.toString());
         }

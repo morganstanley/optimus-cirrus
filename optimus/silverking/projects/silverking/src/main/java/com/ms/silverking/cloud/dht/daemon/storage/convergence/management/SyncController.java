@@ -84,27 +84,36 @@ class SyncController {
   private static final boolean debug = false;
 
   // Care should be taken when adjusting the maximum convergence concurrency
-  private static final int defaultMaxConcurrentNewOwnerRequests = 16; // generally should be < StorageModule
+  private static final int defaultMaxConcurrentNewOwnerRequests =
+      16; // generally should be < StorageModule
   // .methodCallBlockingPoolMaxSize
-  private static final int defaultMaxConcurrentOldOwnerRequests = 1; // tuned for a spinning disk; avoid sending the
+  private static final int defaultMaxConcurrentOldOwnerRequests =
+      1; // tuned for a spinning disk; avoid sending the
   // head all over
-  private static final String maxConcurrentNewOwnerRequestsEnvVar = "SK_MAX_CONCURRENT_NEW_OWNER_REQUESTS";
-  private static final String maxConcurrentOldOwnerRequestsEnvVar = "SK_MAX_CONCURRENT_OLD_OWNER_REQUESTS";
+  private static final String maxConcurrentNewOwnerRequestsEnvVar =
+      "SK_MAX_CONCURRENT_NEW_OWNER_REQUESTS";
+  private static final String maxConcurrentOldOwnerRequestsEnvVar =
+      "SK_MAX_CONCURRENT_OLD_OWNER_REQUESTS";
   private static final int maxConcurrentNewOwnerRequests;
   private static final int maxConcurrentOldOwnerRequests;
 
   private static Logger log = LoggerFactory.getLogger(SyncController.class);
 
   static {
-    maxConcurrentNewOwnerRequests = PropertiesHelper.envHelper.getInt(maxConcurrentNewOwnerRequestsEnvVar,
-        defaultMaxConcurrentNewOwnerRequests);
-    maxConcurrentOldOwnerRequests = PropertiesHelper.envHelper.getInt(maxConcurrentOldOwnerRequestsEnvVar,
-        defaultMaxConcurrentOldOwnerRequests);
+    maxConcurrentNewOwnerRequests =
+        PropertiesHelper.envHelper.getInt(
+            maxConcurrentNewOwnerRequestsEnvVar, defaultMaxConcurrentNewOwnerRequests);
+    maxConcurrentOldOwnerRequests =
+        PropertiesHelper.envHelper.getInt(
+            maxConcurrentOldOwnerRequestsEnvVar, defaultMaxConcurrentOldOwnerRequests);
     log.info("maxConcurrentNewOwnerRequests: {}", maxConcurrentNewOwnerRequests);
     log.info("maxConcurrentOldOwnerRequests: {}", maxConcurrentOldOwnerRequests);
   }
 
-  SyncController(MessageGroupBase mgBase, ConvergencePoint curCP, ConvergencePoint targetCP,
+  SyncController(
+      MessageGroupBase mgBase,
+      ConvergencePoint curCP,
+      ConvergencePoint targetCP,
       AbsMillisTimeSource absMillisTimeSource) {
     this.mgBase = mgBase;
     this.curCP = curCP;
@@ -305,39 +314,38 @@ class SyncController {
     ReplicaSyncRequest r;
 
     r = activeSyncs.get(uuid);
-    if (r != null) {
-    }
+    if (r != null) {}
   }
   // end incomplete implementation of updates
 
   void requestComplete(UUIDBase uuid, OpResult opResult) {
     recentCompletions.incrementAndGet();
     _requestComplete(uuid, opResult);
-        /*
-        try {
-            completionQueue.put(new Pair<>(uuid, opResult));
-        } catch (InterruptedException e) {
-            throw new RuntimeException("Unexpected interruption");
-        }
-        */
+    /*
+    try {
+        completionQueue.put(new Pair<>(uuid, opResult));
+    } catch (InterruptedException e) {
+        throw new RuntimeException("Unexpected interruption");
+    }
+    */
   }
 
   boolean serviceCompletionQueue(long timeout, TimeUnit unit) {
-        /*
-        int    numCompletions;
-        Set<Pair<UUIDBase,OpResult>>    completions;
-        
-        completions = new HashSet<>();
-        numCompletions = completionQueue.drainTo(completions);
-        if (numCompletions > 0) {
-            for (Pair<UUIDBase,OpResult> completion : completions) {
-                _requestComplete(completion.getV1(), completion.getV2());
-            }
-            return true;
-        } else {
-            return false;
+    /*
+    int    numCompletions;
+    Set<Pair<UUIDBase,OpResult>>    completions;
+
+    completions = new HashSet<>();
+    numCompletions = completionQueue.drainTo(completions);
+    if (numCompletions > 0) {
+        for (Pair<UUIDBase,OpResult> completion : completions) {
+            _requestComplete(completion.getV1(), completion.getV2());
         }
-        */
+        return true;
+    } else {
+        return false;
+    }
+    */
     return recentCompletions.getAndSet(0) != 0;
   }
 
@@ -383,8 +391,8 @@ class SyncController {
 
     syncsToSend = new ArrayList<>(syncsToSendInitialSize);
     for (ReplicaSyncRequest r : eligibleSyncs) {
-      if (!activeRequestsAboveLimit(r.getNewOwner(), maxConcurrentNewOwnerRequests) && !activeRequestsAboveLimit(
-          r.getOldOwner(), maxConcurrentOldOwnerRequests)) {
+      if (!activeRequestsAboveLimit(r.getNewOwner(), maxConcurrentNewOwnerRequests)
+          && !activeRequestsAboveLimit(r.getOldOwner(), maxConcurrentOldOwnerRequests)) {
         syncsToSend.add(r);
         setActive(r);
         sendReplicaSyncRequest(r);
@@ -395,9 +403,15 @@ class SyncController {
 
   void checkForResends() {
     for (ReplicaSyncRequest r : activeSyncs.values()) {
-      if (r.getSendTime() > 0 && (absMillisTimeSource.absTimeMillis() - r.getSendTime() > (long) (resendIntervalSeconds * 1000.0))) {
+      if (r.getSendTime() > 0
+          && (absMillisTimeSource.absTimeMillis() - r.getSendTime()
+              > (long) (resendIntervalSeconds * 1000.0))) {
         if (verbose || debug) {
-          log.info("{} resending: {} {}", r.getNS(), r, absMillisTimeSource.absTimeMillis() - r.getSendTime());
+          log.info(
+              "{} resending: {} {}",
+              r.getNS(),
+              r,
+              absMillisTimeSource.absTimeMillis() - r.getSendTime());
         }
         sendReplicaSyncRequest(r);
       }
@@ -408,8 +422,17 @@ class SyncController {
     MessageGroup mg;
 
     ensureFrozen();
-    mg = new ProtoChecksumTreeRequestMessageGroup(r.getUUID(), r.getNS(), targetCP, curCP, mgBase.getMyID(),
-        r.getRegion(), r.getOldOwner(), true).toMessageGroup();
+    mg =
+        new ProtoChecksumTreeRequestMessageGroup(
+                r.getUUID(),
+                r.getNS(),
+                targetCP,
+                curCP,
+                mgBase.getMyID(),
+                r.getRegion(),
+                r.getOldOwner(),
+                true)
+            .toMessageGroup();
     if (verbose || log.isInfoEnabled()) {
       log.info("{} requestChecksumTree: {}", r.getNS(), r);
     }
@@ -450,12 +473,14 @@ class SyncController {
           statusTimer.reset();
         }
         sendNonConflictingRequests();
-        nonZeroCompletions = serviceCompletionQueue(timer.getRemainingMillisLong(), TimeUnit.MILLISECONDS);
+        nonZeroCompletions =
+            serviceCompletionQueue(timer.getRemainingMillisLong(), TimeUnit.MILLISECONDS);
         if (nonZeroCompletions) {
           incompleteDisplayed = false;
           alertSW.reset();
         } else {
-          if (alertSW.getSplitSeconds() > nonCompletionAlertThresholdSeconds && !incompleteDisplayed) {
+          if (alertSW.getSplitSeconds() > nonCompletionAlertThresholdSeconds
+              && !incompleteDisplayed) {
             incompleteDisplayed = true;
             displayIncomplete();
           }
@@ -518,8 +543,13 @@ class SyncController {
   }
 
   public String getStatus() {
-    return String.format("%s:%s:%s:%s:%s", ineligibleActionsSize, eligibleSyncsSize, activeSyncsSize,
-        totalOutstandingSyncRetrievalRequests, ineligibleActionsSize + eligibleSyncsSize);
+    return String.format(
+        "%s:%s:%s:%s:%s",
+        ineligibleActionsSize,
+        eligibleSyncsSize,
+        activeSyncsSize,
+        totalOutstandingSyncRetrievalRequests,
+        ineligibleActionsSize + eligibleSyncsSize);
   }
 
   public void updateProgress(UUIDBase uuid, Pair<Long, Long> progress) {

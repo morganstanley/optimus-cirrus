@@ -21,7 +21,8 @@ import com.ms.silverking.cloud.dht.client.Compression;
 import com.ms.silverking.cloud.dht.ForwardingMode;
 
 public class EnumValues {
-  public static final VersionConstraint.Mode[] versionConstraint_Mode = VersionConstraint.Mode.values();
+  public static final VersionConstraint.Mode[] versionConstraint_Mode =
+      VersionConstraint.Mode.values();
   public static final ChecksumType[] checksumType = ChecksumType.values();
   public static final Compression[] compression = Compression.values();
   public static final MessageType[] messageType = MessageType.values();

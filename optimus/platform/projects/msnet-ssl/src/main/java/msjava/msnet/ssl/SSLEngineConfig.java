@@ -30,7 +30,9 @@ public class SSLEngineConfig {
 
   public static final String TLS_PROTOCOL_VERSION = "TLSv1.2";
 
+  public static final String KEY_STORE_TYPE_PARAMETER = "msjava.msnet.ssl.keystore_type";
   public static final String KEY_STORE_PATH_PARAMETER = "msjava.msnet.ssl.keystore";
+  public static final String TRUST_STORE_TYPE_PARAMETER = "msjava.msnet.ssl.truststore_type";
   public static final String TRUST_STORE_PATH_PARAMETER = "msjava.msnet.ssl.truststore";
   public static final String KEY_STORE_PASSWORD_PARAMETER = "msjava.msnet.ssl.keystore_password";
   public static final String KEY_PASSWORD_PARAMETER = "msjava.msnet.ssl.key_password";
@@ -38,6 +40,8 @@ public class SSLEngineConfig {
       "msjava.msnet.ssl.truststore_password";
   public static final String ENABLED_CLIENT_AUTH_PARAMETER = "msjava.msnet.ssl.enabled_client_auth";
 
+  public SSLStoreType keystoreType = SSLStoreType.valueOf(getProperty(KEY_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
+  public SSLStoreType truststoreType = SSLStoreType.valueOf(getProperty(TRUST_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
   public String keystorePassword = getProperty(KEY_STORE_PASSWORD_PARAMETER, LOGGER);
   public String keyPassword = getProperty(KEY_PASSWORD_PARAMETER, LOGGER);
   public String truststorePassword = getProperty(TRUST_STORE_PASSWORD_PARAMETER, LOGGER);
@@ -46,6 +50,26 @@ public class SSLEngineConfig {
   public String truststorePath = getProperty(TRUST_STORE_PATH_PARAMETER, LOGGER);
 
   boolean enabledClientAuthSSL = getBoolean(ENABLED_CLIENT_AUTH_PARAMETER, true, LOGGER);
+
+  /**
+   * Overrides value obtained from vm arg: msjava.msnet.ssl.keystore_type
+   *
+   * @param keystoreType
+   */
+  public SSLEngineConfig withKeystoreType(SSLStoreType keystoreType) {
+    this.keystoreType = keystoreType;
+    return this;
+  }
+
+  /**
+   * Overrides value obtained from vm arg: msjava.msnet.ssl.truststore_type
+   *
+   * @param truststoreType
+   */
+  public SSLEngineConfig withTruststoreType(SSLStoreType truststoreType) {
+    this.truststoreType = truststoreType;
+    return this;
+  }
 
   /**
    * Overrides value obtained from vm arg: msjava.msnet.ssl.keystore_password

@@ -46,7 +46,8 @@ public class TestTopoRingCreator {
 
   private static Logger log = LoggerFactory.getLogger(TestTopoRingCreator.class);
 
-  private static StoragePolicyGroup[] parseStoragePolicyGroups(String fileDef) throws PolicyParseException {
+  private static StoragePolicyGroup[] parseStoragePolicyGroups(String fileDef)
+      throws PolicyParseException {
     StoragePolicyGroup[] spGroups;
     File[] files;
 
@@ -62,8 +63,8 @@ public class TestTopoRingCreator {
     try {
       if (args.length != 8) {
         System.out.println(
-            "<topologyFile> <weightSpecsFile> <exclusionList> <nodeID> <storagePolicyGroup1,...> <policyID> " +
-                "<HostGroupTableFile> <HostGroup,...>");
+            "<topologyFile> <weightSpecsFile> <exclusionList> <nodeID> <storagePolicyGroup1,...> <policyID> "
+                + "<HostGroupTableFile> <HostGroup,...>");
       } else {
         TopologyRingCreator topologyRingCreator;
         Topology topology;
@@ -72,13 +73,13 @@ public class TestTopoRingCreator {
         File exclusionFile;
         String nodeID;
         String policyID;
-        //Replication         replication;
+        // Replication         replication;
         StoragePolicyGroup[] storagePolicyGroups;
         TopologyRing lastRing;
         HostGroupTable hostGroupTable;
         Set<String> hostGroups;
 
-        //Log.setLevelAll();
+        // Log.setLevelAll();
         topologyFile = new File(args[0]);
         weightSpecsFile = new File(args[1]);
         exclusionFile = new File(args[2]);
@@ -97,10 +98,18 @@ public class TestTopoRingCreator {
           RingTreeRecipe recipe;
           TopologyRing topologyRing;
 
-          recipe = new RingTreeRecipe(topology, topology.getNodeByID(nodeID),
-              new WeightSpecifications(VersionedDefinition.NO_VERSION).parse(weightSpecsFile),
-              ExclusionSet.parse(exclusionFile), spGroup, policyID, hostGroupTable, hostGroups, 0L,
-              DHTUtil.currentTimeMillis());
+          recipe =
+              new RingTreeRecipe(
+                  topology,
+                  topology.getNodeByID(nodeID),
+                  new WeightSpecifications(VersionedDefinition.NO_VERSION).parse(weightSpecsFile),
+                  ExclusionSet.parse(exclusionFile),
+                  spGroup,
+                  policyID,
+                  hostGroupTable,
+                  hostGroups,
+                  0L,
+                  DHTUtil.currentTimeMillis());
           System.out.println("********************************");
           System.out.println("RingTreeRecipe: " + recipe);
           topologyRing = topologyRingCreator.create(recipe, nodeID);
@@ -115,8 +124,7 @@ public class TestTopoRingCreator {
         }
       }
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
-
 }

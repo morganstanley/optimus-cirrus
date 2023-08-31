@@ -40,7 +40,7 @@ import org.slf4j.LoggerFactory;
 
 // FUTURE - think about this class
 
-// MAKE THIS CLASS USE A SINGLE ZNODE 
+// MAKE THIS CLASS USE A SINGLE ZNODE
 
 // Note that it is possible to always compute maps when needed rather than store.
 // We store maps rather than always compute since:
@@ -62,8 +62,12 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
   private static final int validCheckIntervalMillis = 2 * 1000;
   private static final int mapNamesRetryIntervalSeconds = 10;
 
-
-  public SingleRingZK(MetaClient mc, NodeClass nodeClass, Topology topology, String configInstancePath, String parentID)
+  public SingleRingZK(
+      MetaClient mc,
+      NodeClass nodeClass,
+      Topology topology,
+      String configInstancePath,
+      String parentID)
       throws KeeperException, IOException {
     super(mc, getBase(configInstancePath, parentID));
     this.nodeClass = nodeClass;
@@ -71,11 +75,21 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     this.topology = topology;
   }
 
-  public SingleRingZK(MetaClient mc, NodeClass nodeClass, long topologyVersion, String configInstancePath,
-      String parentID) throws KeeperException, IOException {
-    this(mc, nodeClass, topologyVersion != VersionedDefinition.NO_VERSION ?
-        new TopologyZK(mc.createCloudMC()).readFromZK(topologyVersion, null) :
-        null, configInstancePath, parentID);
+  public SingleRingZK(
+      MetaClient mc,
+      NodeClass nodeClass,
+      long topologyVersion,
+      String configInstancePath,
+      String parentID)
+      throws KeeperException, IOException {
+    this(
+        mc,
+        nodeClass,
+        topologyVersion != VersionedDefinition.NO_VERSION
+            ? new TopologyZK(mc.createCloudMC()).readFromZK(topologyVersion, null)
+            : null,
+        configInstancePath,
+        parentID);
   }
 
   // For use in static ring creation
@@ -88,7 +102,8 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     RingRegion region;
 
     region = ringEntry.getRegion();
-    zk.createString(path + "/" + region.toZKString(),
+    zk.createString(
+        path + "/" + region.toZKString(),
         ringEntry.getPrimaryOwnersZKString() + "::" + ringEntry.getSecondaryOwnersZKString());
   }
 
@@ -99,9 +114,9 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
 
   // FUTURE - Deprecate?
   // in general the write/read/unresolved code differences are a bit unclean
-  //public void setWeightSpecs(WeightSpecifications weightSpecs) {
+  // public void setWeightSpecs(WeightSpecifications weightSpecs) {
   //    this.weightSpecs = weightSpecs;
-  //}
+  // }
 
   private void waitUntilValid() throws KeeperException {
     while (!isValidConfigInstancePath()) {
@@ -148,8 +163,8 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
 
       def = defs.get(base + "/" + node);
       if (TopoRingConstants.verbose) {
-        log.info("base: {}" , base);
-        log.info("def: {}" , def);
+        log.info("base: {}", base);
+        log.info("def: {}", def);
       }
       entry = RingEntry.parseZKDefs(topology, node, def);
       singleRing.addEntry(entry);
@@ -167,7 +182,8 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
   }
 
   @Override
-  public String writeToZK(TopologyRing ring, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(TopologyRing ring, MetaToolOptions options)
+      throws IOException, KeeperException {
     zk.createAllParentNodes(base);
     zk.create(base);
     zk.createString(base + "/" + storagePolicyNameNode, ring.getStoragePolicyName());
@@ -185,7 +201,8 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
   }
 
   // For static ring creation
-  public static void writeTree(MetaClient mc, Topology topology, String configInstancePath, RingTree ringTree)
+  public static void writeTree(
+      MetaClient mc, Topology topology, String configInstancePath, RingTree ringTree)
       throws KeeperException, IOException {
     SingleRingZK singleRingZK;
 
@@ -199,13 +216,15 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     }
   }
 
-  public static void writeTree(MetaClient mc, long topologyVersion, String configInstancePath, RingTree ringTree)
+  public static void writeTree(
+      MetaClient mc, long topologyVersion, String configInstancePath, RingTree ringTree)
       throws KeeperException, IOException {
     SingleRingZK singleRingZK;
 
     singleRingZK = null;
     for (Map.Entry<String, TopologyRing> entry : ringTree.getMaps().entrySet()) {
-      singleRingZK = new SingleRingZK(mc, null, topologyVersion, configInstancePath, entry.getKey());
+      singleRingZK =
+          new SingleRingZK(mc, null, topologyVersion, configInstancePath, entry.getKey());
       singleRingZK.writeToZK(entry.getValue(), null);
     }
     if (singleRingZK != null) {
@@ -213,14 +232,20 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     }
   }
 
-  public static void writeTree(MetaClient mc, long topologyVersion, String configInstancePath, RingTree ringTree,
-      Node parent) throws KeeperException, IOException {
+  public static void writeTree(
+      MetaClient mc,
+      long topologyVersion,
+      String configInstancePath,
+      RingTree ringTree,
+      Node parent)
+      throws KeeperException, IOException {
     assert configInstancePath != null;
     if (parent.hasChildren()) {
       SingleRingZK singleRingZK;
 
-      singleRingZK = new SingleRingZK(mc, parent.getNodeClass(), topologyVersion, configInstancePath,
-          parent.getIDString());
+      singleRingZK =
+          new SingleRingZK(
+              mc, parent.getNodeClass(), topologyVersion, configInstancePath, parent.getIDString());
       singleRingZK.writeToZK(ringTree.getMap(parent.getIDString()), null);
       for (Node child : parent.getChildren()) {
         writeTree(mc, topologyVersion, configInstancePath, ringTree, child);
@@ -249,19 +274,22 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
     return readTree(mc, ringVersion.getV1(), ringVersion.getV2());
   }
 
-  public static boolean treeIsValid(MetaClient mc, Pair<Long, Long> ringVersion) throws KeeperException {
+  public static boolean treeIsValid(MetaClient mc, Pair<Long, Long> ringVersion)
+      throws KeeperException {
     return treeIsValid(mc, ringVersion.getV1(), ringVersion.getV2());
   }
 
-  public static boolean treeIsValid(MetaClient mc, long ringConfigVersion, long configInstanceVersion)
-      throws KeeperException {
+  public static boolean treeIsValid(
+      MetaClient mc, long ringConfigVersion, long configInstanceVersion) throws KeeperException {
     String ringInstancePath;
 
-    ringInstancePath = mc.getMetaPaths().getRingInstancePath(ringConfigVersion, configInstanceVersion);
+    ringInstancePath =
+        mc.getMetaPaths().getRingInstancePath(ringConfigVersion, configInstanceVersion);
     return mc.getZooKeeper().getString(ringInstancePath).equals(validString);
   }
 
-  public static InstantiatedRingTree readTree(MetaClient mc, long ringConfigVersion, long configInstanceVersion)
+  public static InstantiatedRingTree readTree(
+      MetaClient mc, long ringConfigVersion, long configInstanceVersion)
       throws KeeperException, IOException {
     SilverKingZooKeeperClient zk;
     List<String> mapNames;
@@ -274,13 +302,15 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
 
     zk = mc.getZooKeeper();
     cloudMC = mc.createCloudMC();
-    ringInstancePath = mc.getMetaPaths().getRingInstancePath(ringConfigVersion, configInstanceVersion);
+    ringInstancePath =
+        mc.getMetaPaths().getRingInstancePath(ringConfigVersion, configInstanceVersion);
     ringCreationTime = zk.getStat(ringInstancePath).getCtime();
     mapNames = zk.getChildren(ringInstancePath);
     while (mapNames.size() == 0) {
       log.info(String.format("No maps for: %s; waiting.", ringInstancePath));
       ThreadUtil.sleepSeconds(
-          mapNamesRetryIntervalSeconds); // FUTURE - move this retry loop out to common, primarily non-polling function
+          mapNamesRetryIntervalSeconds); // FUTURE - move this retry loop out to common, primarily
+      // non-polling function
       mapNames = zk.getChildren(ringInstancePath);
     }
     if (DHTConstants.isDaemon || log.isInfoEnabled()) {
@@ -309,21 +339,22 @@ public class SingleRingZK extends MetaToolModuleBase<TopologyRing, MetaPaths> {
       SingleRingZK singleRingZK;
       TopologyRing topologyRing;
 
-      singleRingZK = new SingleRingZK(mc, null/*parent.getNodeClass()*/, topologyVersion, ringInstancePath, mapName);
+      singleRingZK =
+          new SingleRingZK(
+              mc, null /*parent.getNodeClass()*/, topologyVersion, ringInstancePath, mapName);
       if (TopoRingConstants.verbose) {
-        log.info("Waiting for valid ring: {}  {}", ringInstancePath , mapName);
+        log.info("Waiting for valid ring: {}  {}", ringInstancePath, mapName);
       }
       singleRingZK.waitUntilValid();
       if (TopoRingConstants.verbose) {
-        log.info("Valid: {} {}", ringInstancePath , mapName);
+        log.info("Valid: {} {}", ringInstancePath, mapName);
       }
       // TODO (OPTIMUS-0000): version in single ring is unused
       // verify that we can remove version in SingleRing
       topologyRing = singleRingZK.readFromZK(0L, null);
       maps.put(mapName, topologyRing);
     }
-    return new InstantiatedRingTree(topology, maps, new Pair<>(ringConfigVersion, configInstanceVersion),
-        ringCreationTime);
+    return new InstantiatedRingTree(
+        topology, maps, new Pair<>(ringConfigVersion, configInstanceVersion), ringCreationTime);
   }
 }
- 

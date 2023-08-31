@@ -64,11 +64,13 @@ public class ExclusionSet extends ServerSetExtension {
 
   public static ExclusionSet parse(String def) {
     return new ExclusionSet(
-        new ServerSet(CollectionUtil.parseSet(def, singleLineDelimiter), VersionedDefinition.NO_VERSION));
+        new ServerSet(
+            CollectionUtil.parseSet(def, singleLineDelimiter), VersionedDefinition.NO_VERSION));
   }
 
   public static ExclusionSet parse(File file) throws IOException {
-    return new ExclusionSet(ServerSet.parse(new FileInputStream(file), VersionedDefinition.NO_VERSION));
+    return new ExclusionSet(
+        ServerSet.parse(new FileInputStream(file), VersionedDefinition.NO_VERSION));
   }
 
   public static ExclusionSet union(ExclusionSet s1, ExclusionSet s2) {
@@ -79,7 +81,7 @@ public class ExclusionSet extends ServerSetExtension {
     u = u.add(s2.getServers());
     return u;
   }
-  
+
   public static ExclusionSet difference(ExclusionSet s1, ExclusionSet s2) {
     Set<String> s;
 

@@ -15,7 +15,8 @@ import java.io.IOException;
 import java.io.InputStream;
 
 public class CoreStreamUtil {
-  public static void readBytes(byte[] b, int offset, int length, InputStream in) throws IOException {
+  public static void readBytes(byte[] b, int offset, int length, InputStream in)
+      throws IOException {
     int totalRead;
     int numRead;
 

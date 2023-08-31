@@ -16,8 +16,8 @@ import java.util.Map;
 import com.ms.silverking.cloud.dht.RetrievalOptions;
 
 /**
- * An asynchronous retrieval. May be polled for partial results. Results are
- * returned as StoredValues.
+ * An asynchronous retrieval. May be polled for partial results. Results are returned as
+ * StoredValues.
  *
  * @param <K> key type
  * @param <V> value type
@@ -55,16 +55,15 @@ public interface AsyncRetrieval<K, V> extends AsyncKeyedOperation<K> {
   public StoredValue<V> getStoredValue(K key) throws RetrievalException;
 
   /**
-   * Returns StoredValues for all successfully complete retrievals that
-   * have completed since the last call to this method or AsyncValueRetrieval.getLatestStoredValues().
-   * Each successfully retrieved value will be reported exactly once by this
-   * method and AsyncValueRetrieval.getLatestStoredValues().
-   * This method is unaffected by calls to getStoredValues().
-   * Concurrent execution is permitted, but the precise values returned are
+   * Returns StoredValues for all successfully complete retrievals that have completed since the
+   * last call to this method or AsyncValueRetrieval.getLatestStoredValues(). Each successfully
+   * retrieved value will be reported exactly once by this method and
+   * AsyncValueRetrieval.getLatestStoredValues(). This method is unaffected by calls to
+   * getStoredValues(). Concurrent execution is permitted, but the precise values returned are
    * undefined.
    *
-   * @return StoredValues for all successfully complete retrievals that
-   * have completed since the last call to this method or AsyncValueRetrieval.getLatestStoredValues().
+   * @return StoredValues for all successfully complete retrievals that have completed since the
+   *     last call to this method or AsyncValueRetrieval.getLatestStoredValues().
    * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, ? extends StoredValue<V>> getLatestStoredValues() throws RetrievalException;

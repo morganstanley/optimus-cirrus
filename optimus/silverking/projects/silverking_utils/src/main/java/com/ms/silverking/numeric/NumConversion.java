@@ -88,7 +88,11 @@ public class NumConversion {
   public static int bytesToInt(byte b0, byte b1, byte b2, byte b3) {
     int value;
 
-    value = ((b0 << 24) & 0xff000000) | ((b1 << 16) & 0x00ff0000) | ((b2 << 8) & 0x0000ff00) | ((b3) & 0x000000ff);
+    value =
+        ((b0 << 24) & 0xff000000)
+            | ((b1 << 16) & 0x00ff0000)
+            | ((b2 << 8) & 0x0000ff00)
+            | ((b3) & 0x000000ff);
     return value;
   }
 
@@ -134,9 +138,7 @@ public class NumConversion {
     return b;
   }
 
-  /**
-   * Return a byte to an integer in the range [0, 255]
-   */
+  /** Return a byte to an integer in the range [0, 255] */
   public static int byteToPositiveInt(byte b) {
     return ((int) b) & 0xff;
   }
@@ -152,17 +154,19 @@ public class NumConversion {
   ////////
   // long
 
-  public static long bytesToLong(byte b0, byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7) {
+  public static long bytesToLong(
+      byte b0, byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7) {
     long value;
 
-    value = (((long) b0 << 56) & 0xff00000000000000L) |
-            (((long) b1 << 48) & 0x00ff000000000000L) |
-            (((long) b2 << 40) & 0x0000ff0000000000L) |
-            (((long) b3 << 32) & 0x000000ff00000000L) |
-            (((long) b4 << 24) & 0x00000000ff000000L) |
-            (((long) b5 << 16) & 0x0000000000ff0000L) |
-            (((long) b6 << 8) & 0x000000000000ff00L) |
-            (((long) b7) & 0x00000000000000ffL);
+    value =
+        (((long) b0 << 56) & 0xff00000000000000L)
+            | (((long) b1 << 48) & 0x00ff000000000000L)
+            | (((long) b2 << 40) & 0x0000ff0000000000L)
+            | (((long) b3 << 32) & 0x000000ff00000000L)
+            | (((long) b4 << 24) & 0x00000000ff000000L)
+            | (((long) b5 << 16) & 0x0000000000ff0000L)
+            | (((long) b6 << 8) & 0x000000000000ff00L)
+            | (((long) b7) & 0x00000000000000ffL);
     return value;
   }
 

@@ -24,8 +24,8 @@ import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * Options for RetrievalOperations. Specifies what to retrieve, how to respond to non-existent entries, and
- * whether or not to validate value checksums.
+ * Options for RetrievalOperations. Specifies what to retrieve, how to respond to non-existent
+ * entries, and whether or not to validate value checksums.
  */
 public class RetrievalOptions extends OperationOptions {
   private final RetrievalType retrievalType;
@@ -43,8 +43,8 @@ public class RetrievalOptions extends OperationOptions {
   public static final byte[] noUserOptions = null;
 
   // for parsing only
-  private static final RetrievalOptions templateOptions = OptionsHelper.newRetrievalOptions(RetrievalType.VALUE,
-                                                                                            WaitMode.GET);
+  private static final RetrievalOptions templateOptions =
+      OptionsHelper.newRetrievalOptions(RetrievalType.VALUE, WaitMode.GET);
 
   static {
     ObjectDefParser2.addParser(templateOptions);
@@ -53,18 +53,20 @@ public class RetrievalOptions extends OperationOptions {
 
   ///
   /// TODO (OPTIMUS-0000): this is C++ only.
-  /// This should be removed once C++ SKRetrievalOptions.cpp is using the other constructor below properly.
+  /// This should be removed once C++ SKRetrievalOptions.cpp is using the other constructor below
+  // properly.
   ///
-  public RetrievalOptions(OpTimeoutController opTimeoutController,
-                          Set<SecondaryTarget> secondaryTargets,
-                          RetrievalType retrievalType,
-                          WaitMode waitMode,
-                          VersionConstraint versionConstraint,
-                          NonExistenceResponse nonExistenceResponse,
-                          boolean verifyChecksums,
-                          boolean returnInvalidations,
-                          ForwardingMode forwardingMode,
-                          boolean updateSecondariesOnMiss) {
+  public RetrievalOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      WaitMode waitMode,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -80,18 +82,19 @@ public class RetrievalOptions extends OperationOptions {
         RetrievalOptions.noAuthorizationUser);
   }
 
-  public RetrievalOptions(OpTimeoutController opTimeoutController,
-                          Set<SecondaryTarget> secondaryTargets,
-                          RetrievalType retrievalType,
-                          WaitMode waitMode,
-                          VersionConstraint versionConstraint,
-                          NonExistenceResponse nonExistenceResponse,
-                          boolean verifyChecksums,
-                          boolean returnInvalidations,
-                          ForwardingMode forwardingMode,
-                          boolean updateSecondariesOnMiss,
-                          byte[] userOptions,
-                          byte[] authorizationUser) {
+  public RetrievalOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      WaitMode waitMode,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -109,18 +112,20 @@ public class RetrievalOptions extends OperationOptions {
         authorizationUser);
   }
 
-  public RetrievalOptions(OpTimeoutController opTimeoutController,
-                          Set<SecondaryTarget> secondaryTargets,
-                          RetrievalType retrievalType,
-                          WaitMode waitMode,
-                          VersionConstraint versionConstraint,
-                          NonExistenceResponse nonExistenceResponse,
-                          boolean verifyChecksums,
-                          boolean returnInvalidations,
-                          ForwardingMode forwardingMode,
-                          boolean updateSecondariesOnMiss,
-                          byte[] userOptions,
-                          byte[] authorizationUser, String zoneId) {
+  public RetrievalOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      WaitMode waitMode,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      String zoneId) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -140,42 +145,45 @@ public class RetrievalOptions extends OperationOptions {
   }
 
   /**
-   * Construct a fully-specified RetrievalOptions.
-   * Usage should be avoided; an instance should be obtained and modified from an enclosing environment.
+   * Construct a fully-specified RetrievalOptions. Usage should be avoided; an instance should be
+   * obtained and modified from an enclosing environment.
    *
-   * @param opTimeoutController     opTimeoutController for the operation
-   * @param secondaryTargets        constrains queried secondary replicas
-   *                                to operation solely on the node that receives this operation
-   * @param traceIDProvider         trace provider for message group
-   * @param retrievalType           type of retrieval
-   * @param waitMode                whether to perform a WaitFor or a Get
-   * @param versionConstraint       specify the version
-   * @param nonExistenceResponse    action to perform for non-existent keys
-   * @param verifyChecksums         whether or not to verify checksums
-   * @param returnInvalidations     normally false, true causes invalidated values to be returned.
-   *                                only valid for META_DATA retrievals
-   * @param forwardingMode          FORWARD is for normal operation. DO_NOT_FORWARD restricts the retrieval
-   *                                to the receiving node
+   * @param opTimeoutController opTimeoutController for the operation
+   * @param secondaryTargets constrains queried secondary replicas to operation solely on the node
+   *     that receives this operation
+   * @param traceIDProvider trace provider for message group
+   * @param retrievalType type of retrieval
+   * @param waitMode whether to perform a WaitFor or a Get
+   * @param versionConstraint specify the version
+   * @param nonExistenceResponse action to perform for non-existent keys
+   * @param verifyChecksums whether or not to verify checksums
+   * @param returnInvalidations normally false, true causes invalidated values to be returned. only
+   *     valid for META_DATA retrievals
+   * @param forwardingMode FORWARD is for normal operation. DO_NOT_FORWARD restricts the retrieval
+   *     to the receiving node
    * @param updateSecondariesOnMiss update secondary replicas when a value is not found at the
-   *                                replica, but is found at the primary
-   * @param userOptions             additional space for user defined options which may be required by custom handlers
-   * @param authorizationUser       a username which may be required by an authorization plugin on the server
+   *     replica, but is found at the primary
+   * @param userOptions additional space for user defined options which may be required by custom
+   *     handlers
+   * @param authorizationUser a username which may be required by an authorization plugin on the
+   *     server
    */
-  public RetrievalOptions(OpTimeoutController opTimeoutController,
-                          Set<SecondaryTarget> secondaryTargets,
-                          TraceIDProvider traceIDProvider,
-                          AllReplicasExcludedResponse allReplicasExcludedResponse,
-                          RetrievalType retrievalType,
-                          WaitMode waitMode,
-                          VersionConstraint versionConstraint,
-                          NonExistenceResponse nonExistenceResponse,
-                          boolean verifyChecksums,
-                          boolean returnInvalidations,
-                          ForwardingMode forwardingMode,
-                          boolean updateSecondariesOnMiss,
-                          byte[] userOptions,
-                          byte[] authorizationUser,
-                          String zoneId) {
+  public RetrievalOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      RetrievalType retrievalType,
+      WaitMode waitMode,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      String zoneId) {
     super(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
     if (waitMode == WaitMode.WAIT_FOR) {
       if (!(opTimeoutController instanceof WaitForTimeoutController)) {
@@ -193,8 +201,10 @@ public class RetrievalOptions extends OperationOptions {
     this.nonExistenceResponse = nonExistenceResponse;
     this.verifyChecksums = verifyChecksums;
     this.returnInvalidations = returnInvalidations;
-    if (returnInvalidations && (retrievalType != RetrievalType.META_DATA && retrievalType != RetrievalType.EXISTENCE)) {
-      throw new IllegalArgumentException("returnInvalidations is incompatible with " + retrievalType);
+    if (returnInvalidations
+        && (retrievalType != RetrievalType.META_DATA && retrievalType != RetrievalType.EXISTENCE)) {
+      throw new IllegalArgumentException(
+          "returnInvalidations is incompatible with " + retrievalType);
     }
     this.forwardingMode = forwardingMode;
     this.updateSecondariesOnMiss = updateSecondariesOnMiss;
@@ -203,20 +213,21 @@ public class RetrievalOptions extends OperationOptions {
     this.zoneId = zoneId;
   }
 
-  public RetrievalOptions(OpTimeoutController opTimeoutController,
-                          Set<SecondaryTarget> secondaryTargets,
-                          TraceIDProvider traceIDProvider,
-                          AllReplicasExcludedResponse allReplicasExcludedResponse,
-                          RetrievalType retrievalType,
-                          WaitMode waitMode,
-                          VersionConstraint versionConstraint,
-                          NonExistenceResponse nonExistenceResponse,
-                          boolean verifyChecksums,
-                          boolean returnInvalidations,
-                          ForwardingMode forwardingMode,
-                          boolean updateSecondariesOnMiss,
-                          byte[] userOptions,
-                          byte[] authorizationUser) {
+  public RetrievalOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      RetrievalType retrievalType,
+      WaitMode waitMode,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -588,21 +599,22 @@ public class RetrievalOptions extends OperationOptions {
   }
 
   public RetrievalOptions zoneId(String zoneId) {
-    return new RetrievalOptions(getOpTimeoutController(),
-                                getSecondaryTargets(),
-                                getTraceIDProvider(),
-                                getAllReplicasExcludedResponse(),
-                                retrievalType,
-                                waitMode,
-                                versionConstraint,
-                                nonExistenceResponse,
-                                verifyChecksums,
-                                returnInvalidations,
-                                forwardingMode,
-                                updateSecondariesOnMiss,
-                                userOptions,
-                                authorizationUser,
-                                zoneId);
+    return new RetrievalOptions(
+        getOpTimeoutController(),
+        getSecondaryTargets(),
+        getTraceIDProvider(),
+        getAllReplicasExcludedResponse(),
+        retrievalType,
+        waitMode,
+        versionConstraint,
+        nonExistenceResponse,
+        verifyChecksums,
+        returnInvalidations,
+        forwardingMode,
+        updateSecondariesOnMiss,
+        userOptions,
+        authorizationUser,
+        zoneId);
   }
 
   /**
@@ -701,17 +713,17 @@ public class RetrievalOptions extends OperationOptions {
 
   @Override
   public int hashCode() {
-    return super.hashCode() ^
-           retrievalType.hashCode() ^
-           waitMode.hashCode() ^
-           versionConstraint.hashCode() ^
-           nonExistenceResponse.hashCode() ^
-           Boolean.hashCode(verifyChecksums) ^
-           Boolean.hashCode(returnInvalidations) ^
-           forwardingMode.hashCode() ^
-           Boolean.hashCode(updateSecondariesOnMiss) ^
-           Arrays.hashCode(userOptions) ^
-           Arrays.hashCode(authorizationUser);
+    return super.hashCode()
+        ^ retrievalType.hashCode()
+        ^ waitMode.hashCode()
+        ^ versionConstraint.hashCode()
+        ^ nonExistenceResponse.hashCode()
+        ^ Boolean.hashCode(verifyChecksums)
+        ^ Boolean.hashCode(returnInvalidations)
+        ^ forwardingMode.hashCode()
+        ^ Boolean.hashCode(updateSecondariesOnMiss)
+        ^ Arrays.hashCode(userOptions)
+        ^ Arrays.hashCode(authorizationUser);
   }
 
   @Override
@@ -722,17 +734,17 @@ public class RetrievalOptions extends OperationOptions {
       RetrievalOptions oRetrievalOptions;
 
       oRetrievalOptions = (RetrievalOptions) other;
-      return this.retrievalType == oRetrievalOptions.retrievalType &&
-             this.waitMode == oRetrievalOptions.waitMode &&
-             this.versionConstraint.equals(oRetrievalOptions.versionConstraint) &&
-             this.nonExistenceResponse == oRetrievalOptions.nonExistenceResponse &&
-             this.verifyChecksums == oRetrievalOptions.verifyChecksums &&
-             this.returnInvalidations == oRetrievalOptions.returnInvalidations &&
-             this.forwardingMode == oRetrievalOptions.forwardingMode &&
-             this.updateSecondariesOnMiss == oRetrievalOptions.updateSecondariesOnMiss &&
-             Arrays.equals(this.userOptions, oRetrievalOptions.userOptions) &&
-             Arrays.equals(this.authorizationUser, oRetrievalOptions.authorizationUser) &&
-             super.equals(other);
+      return this.retrievalType == oRetrievalOptions.retrievalType
+          && this.waitMode == oRetrievalOptions.waitMode
+          && this.versionConstraint.equals(oRetrievalOptions.versionConstraint)
+          && this.nonExistenceResponse == oRetrievalOptions.nonExistenceResponse
+          && this.verifyChecksums == oRetrievalOptions.verifyChecksums
+          && this.returnInvalidations == oRetrievalOptions.returnInvalidations
+          && this.forwardingMode == oRetrievalOptions.forwardingMode
+          && this.updateSecondariesOnMiss == oRetrievalOptions.updateSecondariesOnMiss
+          && Arrays.equals(this.userOptions, oRetrievalOptions.userOptions)
+          && Arrays.equals(this.authorizationUser, oRetrievalOptions.authorizationUser)
+          && super.equals(other);
     }
   }
 

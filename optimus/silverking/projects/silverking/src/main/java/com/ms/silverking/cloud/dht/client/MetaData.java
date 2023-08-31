@@ -14,9 +14,7 @@ package com.ms.silverking.cloud.dht.client;
 import com.ms.silverking.cloud.dht.CreationTime;
 import com.ms.silverking.cloud.dht.ValueCreator;
 
-/**
- * Meta data associated with a stored value.
- */
+/** Meta data associated with a stored value. */
 public interface MetaData {
   /**
    * Length in bytes of the stored value. This length includes metadata.
@@ -86,7 +84,7 @@ public interface MetaData {
    *
    * @return user data associated with a value
    */
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   public byte[] getUserData();
 
   /**

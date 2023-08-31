@@ -11,18 +11,13 @@
  */
 package optimus.breadcrumbs
 
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.{ArrayList => jArrayList}
-import java.util.{List => jList}
-import java.util.{Map => jMap}
 import com.google.common.cache.CacheBuilder
 import msjava.base.util.internal.SystemPropertyUtils
+import msjava.zkapi.ZkaAttr
+import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.BreadcrumbLevel.Level
 import optimus.breadcrumbs.Breadcrumbs.SetupFlags
-import optimus.cloud.CloudUtil
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.filter._
@@ -31,6 +26,7 @@ import optimus.breadcrumbs.kafka.BreadcrumbsKafkaTopicMapperT
 import optimus.breadcrumbs.kafka.KafkaTopicMapping
 import optimus.breadcrumbs.routing.CrumbRoutingRule
 import optimus.breadcrumbs.zookeeper.BreadcrumbsPropertyConfigurer
+import optimus.cloud.CloudUtil
 import optimus.logging.ThrottledWarnOrDebug
 import optimus.utils.PropertyUtils
 import org.apache.kafka.clients.producer.Callback
@@ -40,8 +36,14 @@ import org.apache.kafka.clients.producer.RecordMetadata
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
-import scala.jdk.CollectionConverters._
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.{ArrayList => jArrayList}
+import java.util.{List => jList}
+import java.util.{Map => jMap}
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 object BreadcrumbConsts {
@@ -334,6 +336,13 @@ object Breadcrumbs {
       setImpl(newImpl)
   }
 
+  private[optimus] def minimalInit(env: String, zkEnv: String): Unit = {
+    setImpl(new DeferredConfigurationBreadcrumbsPublisher)
+    customizedInit(
+      Map("breadcrumb.config" -> env),
+      new ZkaContext(ZkaConfig.fromURI(s"zpm://$zkEnv.na/optimus").attr(ZkaAttr.KERBEROS, false)))
+  }
+
   // Load a new publisher based on the resource string.
   // Re-run customized init if necessary.
   def reload(): Unit = reload(PropertyUtils.get(resourceName) getOrElse defaultResources)
@@ -554,8 +563,8 @@ private[optimus] class BreadcrumbsRouter(
     val rules: Seq[CrumbRoutingRule],
     private[breadcrumbs] val defaultPublisher: BreadcrumbsPublisher)
     extends BreadcrumbsPublisher {
-  import BreadcrumbsRouter.log
   import Breadcrumbs.runProtected
+  import BreadcrumbsRouter.log
 
   require(rules != null, "Rules cannot be null")
   require(defaultPublisher != null, "Default publisher cannot be null")

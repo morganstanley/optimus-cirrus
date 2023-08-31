@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.trace;
 
 import com.ms.silverking.cloud.dht.common.MessageType;
 
-/**
- * Provide customizable trace information for each MessageGroup
- */
+/** Provide customizable trace information for each MessageGroup */
 public interface TraceIDProvider {
   SkTraceId noTraceID = null;
   SkTraceId emptyTraceID = null;
@@ -36,15 +34,15 @@ public interface TraceIDProvider {
   static boolean hasTraceID(MessageType msgType) {
     // TODO (OPTIMUS-43373): Remove legacy put_trace
     switch (msgType) {
-    case PUT_TRACE:
-    case LEGACY_PUT_TRACE:
-    case RETRIEVE_TRACE:
-    case PUT_RESPONSE_TRACE:
-    case PUT_UPDATE_TRACE:
-    case RETRIEVE_RESPONSE_TRACE:
-      return true;
-    default:
-      return false;
+      case PUT_TRACE:
+      case LEGACY_PUT_TRACE:
+      case RETRIEVE_TRACE:
+      case PUT_RESPONSE_TRACE:
+      case PUT_UPDATE_TRACE:
+      case RETRIEVE_RESPONSE_TRACE:
+        return true;
+      default:
+        return false;
     }
   }
 }

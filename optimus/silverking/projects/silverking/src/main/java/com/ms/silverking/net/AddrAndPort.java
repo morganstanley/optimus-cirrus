@@ -14,9 +14,7 @@ package com.ms.silverking.net;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 
-/**
- * Bundles a network address and port.
- */
+/** Bundles a network address and port. */
 public interface AddrAndPort {
   String multipleDefDelimiter = ",";
 

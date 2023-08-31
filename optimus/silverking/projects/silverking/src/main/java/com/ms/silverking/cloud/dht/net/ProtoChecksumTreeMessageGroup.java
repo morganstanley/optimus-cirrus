@@ -42,18 +42,27 @@ public class ProtoChecksumTreeMessageGroup extends ProtoMessageGroup {
   private static final int dhtConfigVersionOffset = uuidLSLOffset + NumConversion.BYTES_PER_LONG;
   private static final int ringIDOffset = dhtConfigVersionOffset + NumConversion.BYTES_PER_LONG;
   private static final int ringConfigVersionOffset = ringIDOffset + RingID.BYTES;
-  private static final int configInstanceVersionOffset = ringConfigVersionOffset + NumConversion.BYTES_PER_LONG;
-  private static final int versionOffset = configInstanceVersionOffset + NumConversion.BYTES_PER_LONG;
+  private static final int configInstanceVersionOffset =
+      ringConfigVersionOffset + NumConversion.BYTES_PER_LONG;
+  private static final int versionOffset =
+      configInstanceVersionOffset + NumConversion.BYTES_PER_LONG;
 
   private static final int deadlineRelativeMillis = 10 * 60 * 1000;
 
-  public ProtoChecksumTreeMessageGroup(UUIDBase uuid,
-                                       long context,
-                                       ConvergencePoint cp,
-                                       byte[] originator,
-                                       ChecksumNode root,
-                                       int bufferSize) {
-    super(MessageType.CHECKSUM_TREE, uuid, context, originator, deadlineRelativeMillis, ForwardingMode.FORWARD);
+  public ProtoChecksumTreeMessageGroup(
+      UUIDBase uuid,
+      long context,
+      ConvergencePoint cp,
+      byte[] originator,
+      ChecksumNode root,
+      int bufferSize) {
+    super(
+        MessageType.CHECKSUM_TREE,
+        uuid,
+        context,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD);
 
     dataByteBuffer = ByteBuffer.allocate(dataBufferSize + bufferSize);
     bufferList.add(dataByteBuffer);
@@ -81,8 +90,9 @@ public class ProtoChecksumTreeMessageGroup extends ProtoMessageGroup {
   }
 
   private static Pair<Long, Long> getRingVersionPair(MessageGroup messageGroup) {
-    return new Pair(messageGroup.getBuffers()[dataBufferIndex].getLong(ringConfigVersionOffset),
-                    messageGroup.getBuffers()[dataBufferIndex].getLong(configInstanceVersionOffset));
+    return new Pair(
+        messageGroup.getBuffers()[dataBufferIndex].getLong(ringConfigVersionOffset),
+        messageGroup.getBuffers()[dataBufferIndex].getLong(configInstanceVersionOffset));
   }
 
   private static RingIDAndVersionPair getRingIDAndVersion(MessageGroup messageGroup) {
@@ -102,7 +112,11 @@ public class ProtoChecksumTreeMessageGroup extends ProtoMessageGroup {
 
   // Serialization
 
-  enum NodeType {NON_LEAF, LEAF, NULL}
+  enum NodeType {
+    NON_LEAF,
+    LEAF,
+    NULL
+  }
 
   public static void serialize(ByteBuffer buffer, ChecksumNode node) {
     if (node == null) {
@@ -191,7 +205,8 @@ public class ProtoChecksumTreeMessageGroup extends ProtoMessageGroup {
         root = new NonLeafChecksumNode(region, children);
         break;
       case LEAF:
-        List<KeyAndVersionChecksum> keyAndVersionChecksums = deserializeKeyAndVersionChecksums(buffer);
+        List<KeyAndVersionChecksum> keyAndVersionChecksums =
+            deserializeKeyAndVersionChecksums(buffer);
         root = new LeafChecksumNode(region, keyAndVersionChecksums);
         break;
       case NULL:
