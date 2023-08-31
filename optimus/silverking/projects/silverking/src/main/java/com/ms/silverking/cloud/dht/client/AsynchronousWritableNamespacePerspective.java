@@ -23,11 +23,12 @@ import com.ms.silverking.cloud.dht.PutOptions;
  * @param <K> key type
  * @param <V> value type
  */
-public interface AsynchronousWritableNamespacePerspective<K, V> extends BaseNamespacePerspective<K, V> {
+public interface AsynchronousWritableNamespacePerspective<K, V>
+    extends BaseNamespacePerspective<K, V> {
   /**
    * Multi-value Put operation
    *
-   * @param values     map of key-value pairs to store
+   * @param values map of key-value pairs to store
    * @param putOptions options for the Put operation
    * @return an AsyncPut object representing this operation
    */
@@ -39,15 +40,15 @@ public interface AsynchronousWritableNamespacePerspective<K, V> extends BaseName
    * @param values map of key-value pairs to store
    * @return an AsyncPut object representing this operation
    */
-  default public AsyncPut<K> put(Map<? extends K, ? extends V> values) {
+  public default AsyncPut<K> put(Map<? extends K, ? extends V> values) {
     return put(values, getOptions().getDefaultPutOptions());
   }
 
   /**
    * Single-value Put operation.
    *
-   * @param key        key to associate the value with
-   * @param value      value to store
+   * @param key key to associate the value with
+   * @param value value to store
    * @param putOptions options for the Put operation
    * @return an AsyncPut object representing this operation
    */
@@ -56,22 +57,23 @@ public interface AsynchronousWritableNamespacePerspective<K, V> extends BaseName
   /**
    * Single-value Put operation using default PutOptions.
    *
-   * @param key   key to associate the value with
+   * @param key key to associate the value with
    * @param value value to store
    * @return an AsyncPut object representing this operation
    */
-  default public AsyncPut<K> put(K key, V value) {
+  public default AsyncPut<K> put(K key, V value) {
     return put(key, value, getOptions().getDefaultPutOptions());
   }
 
   /**
    * Multi-value Invalidation operation
    *
-   * @param keys                keys to invalidate
+   * @param keys keys to invalidate
    * @param invalidationOptions options for the Invalidation operation
    * @return an AsyncInvalidation object representing this operation
    */
-  public AsyncInvalidation<K> invalidate(Set<? extends K> keys, InvalidationOptions invalidationOptions);
+  public AsyncInvalidation<K> invalidate(
+      Set<? extends K> keys, InvalidationOptions invalidationOptions);
 
   /**
    * Multi-value Invalidation operation using default InvalidationOptions.
@@ -79,14 +81,14 @@ public interface AsynchronousWritableNamespacePerspective<K, V> extends BaseName
    * @param keys keys to invalidate
    * @return an AsyncInvalidation object representing this operation
    */
-  default public AsyncInvalidation<K> invalidate(Set<? extends K> keys) {
+  public default AsyncInvalidation<K> invalidate(Set<? extends K> keys) {
     return invalidate(keys, getOptions().getDefaultInvalidationOptions());
   }
 
   /**
    * Single-value Invalidation operation.
    *
-   * @param key                 key to invalidate
+   * @param key key to invalidate
    * @param invalidationOptions options for the Invalidation operation
    * @return an AsyncInvalidation object representing this operation
    */
@@ -98,17 +100,17 @@ public interface AsynchronousWritableNamespacePerspective<K, V> extends BaseName
    * @param key key to invalidate
    * @return an AsyncInvalidation object representing this operation
    */
-  default public AsyncInvalidation<K> invalidate(K key) {
+  public default AsyncInvalidation<K> invalidate(K key) {
     return invalidate(key, getOptions().getDefaultInvalidationOptions());
   }
-    
-    /*
-    public AsyncSnapshot snapshot(long version);
-    public AsyncSnapshot snapshot();
-    */
-    
-    /*
-    public AsyncSyncRequest syncRequest(long version);
-    public AsyncSyncRequest syncRequest();
-    */
+
+  /*
+  public AsyncSnapshot snapshot(long version);
+  public AsyncSnapshot snapshot();
+  */
+
+  /*
+  public AsyncSyncRequest syncRequest(long version);
+  public AsyncSyncRequest syncRequest();
+  */
 }

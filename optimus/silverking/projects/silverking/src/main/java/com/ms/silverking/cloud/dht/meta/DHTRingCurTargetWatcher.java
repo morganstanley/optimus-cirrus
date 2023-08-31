@@ -31,19 +31,32 @@ public class DHTRingCurTargetWatcher implements ValueListener {
   private static final int checkIntervalMillis = 1 * 60 * 1000;
   private static final boolean debug = true;
 
-  public DHTRingCurTargetWatcher(MetaClient mc, String dhtName, DHTConfiguration dhtConfig,
+  public DHTRingCurTargetWatcher(
+      MetaClient mc,
+      String dhtName,
+      DHTConfiguration dhtConfig,
       DHTRingCurTargetListener listener) {
     this.dhtName = dhtName;
     this.dhtConfig = dhtConfig;
     this.mc = mc;
-    curRingWatcher = new ValueWatcher(mc, MetaPaths.getInstanceCurRingAndVersionPairPath(dhtName), this,
-        checkIntervalMillis, initialIntervalMillis);
+    curRingWatcher =
+        new ValueWatcher(
+            mc,
+            MetaPaths.getInstanceCurRingAndVersionPairPath(dhtName),
+            this,
+            checkIntervalMillis,
+            initialIntervalMillis);
     this.listener = listener;
   }
 
   public void startTargetRingWatcher() {
-    targetRingWatcher = new ValueWatcher(mc, MetaPaths.getInstanceTargetRingAndVersionPairPath(dhtName), this,
-        checkIntervalMillis, initialIntervalMillis);
+    targetRingWatcher =
+        new ValueWatcher(
+            mc,
+            MetaPaths.getInstanceTargetRingAndVersionPairPath(dhtName),
+            this,
+            checkIntervalMillis,
+            initialIntervalMillis);
   }
 
   @Override
@@ -52,7 +65,7 @@ public class DHTRingCurTargetWatcher implements ValueListener {
       log.info("DHTRingCurTargetWatcher.newValue: {}", basePath);
     }
     if (value.length < DHTRingCurTargetZK.minValueLength) {
-      log.info("Value length too small. {} {}", basePath , value.length);
+      log.info("Value length too small. {} {}", basePath, value.length);
     } else {
       if (basePath.equals(MetaPaths.getInstanceCurRingAndVersionPairPath(dhtName))) {
         if (debug) {
@@ -66,8 +79,8 @@ public class DHTRingCurTargetWatcher implements ValueListener {
         listener.newTargetRingAndVersion(DHTRingCurTargetZK.bytesToNameAndVersion(value));
       } else {
         log.info("Unexpected value update in DHTRingCurTargetWatcher: {}", basePath);
-        log.info("{}",MetaPaths.getInstanceCurRingAndVersionPairPath(dhtName));
-        log.info("{}",MetaPaths.getInstanceTargetRingAndVersionPairPath(dhtName));
+        log.info("{}", MetaPaths.getInstanceCurRingAndVersionPairPath(dhtName));
+        log.info("{}", MetaPaths.getInstanceTargetRingAndVersionPairPath(dhtName));
       }
     }
   }

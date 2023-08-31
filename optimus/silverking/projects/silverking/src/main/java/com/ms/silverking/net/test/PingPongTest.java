@@ -44,17 +44,19 @@ public class PingPongTest implements BufferedDataReceiver {
 
   private static Logger log = LoggerFactory.getLogger(PingPongTest.class);
 
-  public enum Test {BufferedDataConnection}
+  public enum Test {
+    BufferedDataConnection
+  };
 
-  ;
+  public enum Mode {
+    client,
+    server
+  };
 
-  public enum Mode {client, server}
-
-  ;
-
-  public enum BatchMode {PingPong, BatchPingPong}
-
-  ;
+  public enum BatchMode {
+    PingPong,
+    BatchPingPong
+  };
 
   private static final int testServerPort = 7627;
   private static final int numSelectorControllers = 8;
@@ -62,7 +64,7 @@ public class PingPongTest implements BufferedDataReceiver {
   private static final int iterations = 1;
   private static final double displayIntervalSeconds = 10.0;
 
-  //private static final int   payloadSize = 100;
+  // private static final int   payloadSize = 100;
   private static final int payloadSize = 100 * 1000;
 
   private static final double extraSeconds = 60.0;
@@ -78,19 +80,27 @@ public class PingPongTest implements BufferedDataReceiver {
     messagesReceived = new AtomicInteger();
     this.mode = mode;
     switch (mode) {
-    case client:
-      serverAddr = new InetSocketAddress(serverHost, testServerPort);
-      paServer = new PersistentAsyncServer<>(0, new BufferedDataConnectionCreator(this), numSelectorControllers,
-          selectorControllerClass);
-      clientPort = paServer.getPort();
-      break;
-    case server:
-      serverAddr = null;
-      paServer = new PersistentAsyncServer<>(testServerPort, new BufferedDataConnectionCreator(this),
-          numSelectorControllers, selectorControllerClass);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case client:
+        serverAddr = new InetSocketAddress(serverHost, testServerPort);
+        paServer =
+            new PersistentAsyncServer<>(
+                0,
+                new BufferedDataConnectionCreator(this),
+                numSelectorControllers,
+                selectorControllerClass);
+        clientPort = paServer.getPort();
+        break;
+      case server:
+        serverAddr = null;
+        paServer =
+            new PersistentAsyncServer<>(
+                testServerPort,
+                new BufferedDataConnectionCreator(this),
+                numSelectorControllers,
+                selectorControllerClass);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
     payloadBuffer = new byte[payloadSize];
     paServer.enable();
@@ -98,24 +108,24 @@ public class PingPongTest implements BufferedDataReceiver {
 
   public void runTest(Test test, double durationSeconds, int index) throws IOException {
     switch (test) {
-    case BufferedDataConnection:
-      runBufferedDataConnectionTest(durationSeconds, index);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case BufferedDataConnection:
+        runBufferedDataConnectionTest(durationSeconds, index);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private void runBufferedDataConnectionTest(double durationSeconds, int index) throws IOException {
     switch (mode) {
-    case client:
-      runQueueingConnectionTestClient(durationSeconds, index);
-      break;
-    case server:
-      runQueueingConnectionTestServer(durationSeconds);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case client:
+        runQueueingConnectionTestClient(durationSeconds, index);
+        break;
+      case server:
+        runQueueingConnectionTestServer(durationSeconds);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -123,21 +133,22 @@ public class PingPongTest implements BufferedDataReceiver {
     ThreadUtil.sleepSeconds(durationSeconds + extraSeconds);
   }
 
-  private void runQueueingConnectionTestClient(double durationSeconds, int index) throws IOException {
+  private void runQueueingConnectionTestClient(double durationSeconds, int index)
+      throws IOException {
     ByteBuffer[] msg;
     Stopwatch sw;
     Stopwatch displaySW;
     Semaphore semaphore;
 
     semaphore = semaphores[index];
-    //msg = createMessage(NumConversion.intToBytes(index));
+    // msg = createMessage(NumConversion.intToBytes(index));
     sw = new SimpleStopwatch();
     displaySW = new SimpleStopwatch();
     do {
-      //msg = createMessage(NumConversion.intToBytes(clientPort));
+      // msg = createMessage(NumConversion.intToBytes(clientPort));
       NumConversion.intToBytes(clientPort, payloadBuffer);
       msg = createMessage(payloadBuffer);
-      //System.out.println("Sending");
+      // System.out.println("Sending");
       messagesSent.incrementAndGet();
       paServer.send(serverAddr, msg, false, Long.MAX_VALUE);
       if (batchMode == BatchMode.PingPong) {
@@ -146,8 +157,8 @@ public class PingPongTest implements BufferedDataReceiver {
         } catch (InterruptedException ie) {
         }
       }
-      //System.out.println("past semaphore");
-      //rewindBuffers(msg);
+      // System.out.println("past semaphore");
+      // rewindBuffers(msg);
       if (displaySW.getSplitSeconds() > displayIntervalSeconds) {
         displayStats(sw.getSplitSeconds());
         displaySW.reset();
@@ -167,7 +178,7 @@ public class PingPongTest implements BufferedDataReceiver {
     log.info("messagesReceived: {}  duration {}", messagesReceived.get(), time);
     log.info("messagesSent: {}  duration {}", messagesReceived.get(), time);
     log.info("messageRate (msgs/s): {}", (double) messagesReceived.get() / time);
-   log.info("messageLatency (s):  {}", (double) time / (double) messagesReceived.get());
+    log.info("messageLatency (s):  {}", (double) time / (double) messagesReceived.get());
   }
 
   private void rewindBuffers(ByteBuffer[] buffers) {
@@ -180,12 +191,12 @@ public class PingPongTest implements BufferedDataReceiver {
     ByteBuffer[] msg;
 
     msg = new ByteBuffer[4];
-        /*
-        msg[0] = ByteBuffer.wrap(NewIncomingBufferedData.preamble);
-        msg[1] = ByteBuffer.wrap(NumConversion.intToBytes(1));
-        msg[2] = ByteBuffer.wrap(NumConversion.intToBytes(payload.length));
-        msg[3] = ByteBuffer.wrap(payload);
-        */
+    /*
+    msg[0] = ByteBuffer.wrap(NewIncomingBufferedData.preamble);
+    msg[1] = ByteBuffer.wrap(NumConversion.intToBytes(1));
+    msg[2] = ByteBuffer.wrap(NumConversion.intToBytes(payload.length));
+    msg[3] = ByteBuffer.wrap(payload);
+    */
     /**/
     msg[0] = wrapInDirect(NewIncomingBufferedData.preamble);
     msg[1] = wrapInDirect(NumConversion.intToBytes(1));
@@ -209,46 +220,46 @@ public class PingPongTest implements BufferedDataReceiver {
     IntBuffer intBuffer;
     int id;
 
-    //System.out.println(bufferedData[0].capacity() +" "+ bufferedData[0]);
+    // System.out.println(bufferedData[0].capacity() +" "+ bufferedData[0]);
     bufferedData[0].rewind();
     intBuffer = bufferedData[0].asIntBuffer();
     id = intBuffer.get();
-    //System.out.printf("Received message %x with id %d\n", id, id);
-    //System.out.println("Received data");
-    //System.out.flush();
+    // System.out.printf("Received message %x with id %d\n", id, id);
+    // System.out.println("Received data");
+    // System.out.flush();
     switch (mode) {
-    case client:
-            /*
-            int semaphoreIndex;
-            
-            synchronized (this) {
-                semaphoreIndex = nextSemaphore.getValue();
-                nextSemaphore.inc();
-            }
-            */
-      //System.out.println("release semaphoreIndex: "+ id);
-      semaphores[0].release();
-      messagesReceived.incrementAndGet();
-      break;
-    case server:
-      try {
-        InetSocketAddress other;
-        ByteBuffer[] msg;
-        byte[] b;
-        byte[] b2;
+      case client:
+        /*
+        int semaphoreIndex;
 
-        other = new InetSocketAddress(connection.getRemoteSocketAddress().getHostName(), id);
-        //msg = createMessage(NumConversion.intToBytes(id));
-        NumConversion.intToBytes(id, payloadBuffer);
-        msg = createMessage(payloadBuffer);
-        paServer.send(other, msg, false, Long.MAX_VALUE);
-        //connection.sendAsynchronous(bufferedData, Long.MAX_VALUE);
-      } catch (IOException ioe) {
-        ioe.printStackTrace();
-      }
-      break;
-    default:
-      throw new RuntimeException("panic");
+        synchronized (this) {
+            semaphoreIndex = nextSemaphore.getValue();
+            nextSemaphore.inc();
+        }
+        */
+        // System.out.println("release semaphoreIndex: "+ id);
+        semaphores[0].release();
+        messagesReceived.incrementAndGet();
+        break;
+      case server:
+        try {
+          InetSocketAddress other;
+          ByteBuffer[] msg;
+          byte[] b;
+          byte[] b2;
+
+          other = new InetSocketAddress(connection.getRemoteSocketAddress().getHostName(), id);
+          // msg = createMessage(NumConversion.intToBytes(id));
+          NumConversion.intToBytes(id, payloadBuffer);
+          msg = createMessage(payloadBuffer);
+          paServer.send(other, msg, false, Long.MAX_VALUE);
+          // connection.sendAsynchronous(bufferedData, Long.MAX_VALUE);
+        } catch (IOException ioe) {
+          ioe.printStackTrace();
+        }
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -304,23 +315,23 @@ public class PingPongTest implements BufferedDataReceiver {
         mode = Mode.valueOf(args[0]);
         test = Test.valueOf(args[1]);
         durationSeconds = Double.parseDouble(args[2]);
-        //Log.setLevelAll();
+        // Log.setLevelAll();
         switch (mode) {
-        case server:
-          pingPongTest = new PingPongTest(mode, null);
-          pingPongTest.runTest(test, durationSeconds, 0);
-          break;
-        case client:
-          String serverHost;
-          int threads;
+          case server:
+            pingPongTest = new PingPongTest(mode, null);
+            pingPongTest.runTest(test, durationSeconds, 0);
+            break;
+          case client:
+            String serverHost;
+            int threads;
 
-          serverHost = args[4];
-          pingPongTest = new PingPongTest(mode, serverHost);
-          threads = Integer.parseInt(args[3]);
-          pingPongTest.threadedTest(test, durationSeconds, threads);
-          break;
-        default:
-          throw new RuntimeException("panic");
+            serverHost = args[4];
+            pingPongTest = new PingPongTest(mode, serverHost);
+            threads = Integer.parseInt(args[3]);
+            pingPongTest.threadedTest(test, durationSeconds, threads);
+            break;
+          default:
+            throw new RuntimeException("panic");
         }
       }
     } catch (Exception e) {

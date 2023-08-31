@@ -28,9 +28,7 @@ import com.ms.silverking.thread.ThreadUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches a ring configuration for changes. Notifies listeners when changes occur.
- */
+/** Watches a ring configuration for changes. Notifies listeners when changes occur. */
 public class RingConfigWatcher implements VersionListener {
   private final String ringName;
   private final long intervalMillis;
@@ -44,8 +42,13 @@ public class RingConfigWatcher implements VersionListener {
   private static final int zkReadAttempts = 300;
   private static final int zkReadRetryIntervalMillis = 2 * 1000;
 
-  public RingConfigWatcher(ZooKeeperConfig zkConfig, String ringName, long intervalMillis, boolean enableLogging,
-      RingChangeListener initialListener) throws IOException, KeeperException {
+  public RingConfigWatcher(
+      ZooKeeperConfig zkConfig,
+      String ringName,
+      long intervalMillis,
+      boolean enableLogging,
+      RingChangeListener initialListener)
+      throws IOException, KeeperException {
     listeners = Collections.synchronizedList(new ArrayList<RingChangeListener>());
     if (initialListener != null) {
       addListener(initialListener);
@@ -53,7 +56,8 @@ public class RingConfigWatcher implements VersionListener {
     this.ringName = ringName;
     this.intervalMillis = intervalMillis;
     mc = new MetaClientCore(zkConfig);
-    configVersionWatcher = new VersionWatcher(mc, MetaPaths.getRingConfigPath(ringName), this, intervalMillis, 0);
+    configVersionWatcher =
+        new VersionWatcher(mc, MetaPaths.getRingConfigPath(ringName), this, intervalMillis, 0);
     this.enableLogging = enableLogging;
   }
 
@@ -73,7 +77,7 @@ public class RingConfigWatcher implements VersionListener {
   @Override
   public void newVersion(String basePath, long version) {
     if (enableLogging) {
-      log.info("RingConfigWatcher.newVersion() {} {}" , basePath ,version);
+      log.info("RingConfigWatcher.newVersion() {} {}", basePath, version);
     }
     /*
      * We can reach here for two reasons:
@@ -83,7 +87,7 @@ public class RingConfigWatcher implements VersionListener {
     if (basePath.equals(MetaPaths.getRingConfigPath(ringName))) {
       // We have a new ring configuration
       if (enableLogging) {
-        log.info("New config path for ring: {}" , ringName);
+        log.info("New config path for ring: {}", ringName);
       }
       startConfigurationWatch(version);
     } else {
@@ -97,7 +101,7 @@ public class RingConfigWatcher implements VersionListener {
       ringConfigVersion = getRingConfigVersionFromPath(basePath);
       versionPair = new Pair<>(ringConfigVersion, version);
       if (enableLogging) {
-        log.info("New ring instance: {} {}" , ringName , versionPair);
+        log.info("New ring instance: {} {}", ringName, versionPair);
       }
 
       ringIsValid = false;
@@ -106,10 +110,12 @@ public class RingConfigWatcher implements VersionListener {
         try {
           MetaClient _mc;
 
-          _mc = MetaClient.createMetaClient(ringName, ringConfigVersion, mc.getZooKeeper().getZKConfig());
+          _mc =
+              MetaClient.createMetaClient(
+                  ringName, ringConfigVersion, mc.getZooKeeper().getZKConfig());
           ringIsValid = SingleRingZK.treeIsValid(_mc, versionPair);
         } catch (KeeperException | IOException e) {
-          log.error("",e);
+          log.error("", e);
         }
         if (!ringIsValid) {
           ThreadUtil.sleep(zkReadRetryIntervalMillis);
@@ -117,7 +123,7 @@ public class RingConfigWatcher implements VersionListener {
         ++attemptIndex;
       } while (!ringIsValid && attemptIndex < zkReadAttempts);
       if (!ringIsValid) {
-        log.info("Validity verification timed out: {} {}" , ringName, versionPair);
+        log.info("Validity verification timed out: {} {}", ringName, versionPair);
         return;
       }
 
@@ -125,9 +131,11 @@ public class RingConfigWatcher implements VersionListener {
       attemptIndex = 0;
       do {
         try {
-          creationTime = mc.getZooKeeper().getCreationTime(SilverKingZooKeeperClient.padVersionPath(basePath, version));
+          creationTime =
+              mc.getZooKeeper()
+                  .getCreationTime(SilverKingZooKeeperClient.padVersionPath(basePath, version));
         } catch (KeeperException e) {
-          log.error("",e);
+          log.error("", e);
         }
         if (creationTime < 0) {
           ThreadUtil.sleep(zkReadRetryIntervalMillis);
@@ -135,7 +143,7 @@ public class RingConfigWatcher implements VersionListener {
         ++attemptIndex;
       } while (creationTime < 0 && attemptIndex < zkReadAttempts);
       if (creationTime < 0) {
-        log.info("Ignoring ring due to zk exceptions: {} {}" , ringName ,versionPair);
+        log.info("Ignoring ring due to zk exceptions: {} {}", ringName, versionPair);
         return;
       }
 
@@ -169,8 +177,9 @@ public class RingConfigWatcher implements VersionListener {
       if (configVersionWatcher != null) {
         configVersionWatcher.stop();
       }
-      configVersionWatcher = new VersionWatcher(mc, MetaPaths.getRingConfigInstancePath(ringName, version), this,
-          intervalMillis);
+      configVersionWatcher =
+          new VersionWatcher(
+              mc, MetaPaths.getRingConfigInstancePath(ringName, version), this, intervalMillis);
     }
   }
 

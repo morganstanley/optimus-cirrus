@@ -72,7 +72,8 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
   private int workerTimeoutSeconds;
   private boolean terminateUponCompletion;
 
-  private static final HostAndCommand DONE_MARKER = new HostAndCommand("DONE_MARKER", new String[0]);
+  private static final HostAndCommand DONE_MARKER =
+      new HostAndCommand("DONE_MARKER", new String[0]);
 
   private static final String registryName = "SSHManager";
   private static final int registryStartPort = 1097;
@@ -91,15 +92,22 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
 
   static {
     terminated = new AtomicBoolean(false);
-    javaCmd = PropertiesHelper.envHelper.getString(SKConstants.javaHomeEnv,
-        System.getProperty(DHTConstants.javaHomeProperty)) + "/bin/java";
+    javaCmd =
+        PropertiesHelper.envHelper.getString(
+                SKConstants.javaHomeEnv, System.getProperty(DHTConstants.javaHomeProperty))
+            + "/bin/java";
   }
 
-  public TwoLevelParallelSSHManager() throws RemoteException {
-  }
+  public TwoLevelParallelSSHManager() throws RemoteException {}
 
-  public TwoLevelParallelSSHManager(List<HostAndCommand> hostCommands, List<String> workerCandidateHosts,
-                                    int numWorkerThreads, int timeoutSeconds, int maxAttempts, boolean terminateUponCompletion) throws IOException {
+  public TwoLevelParallelSSHManager(
+      List<HostAndCommand> hostCommands,
+      List<String> workerCandidateHosts,
+      int numWorkerThreads,
+      int timeoutSeconds,
+      int maxAttempts,
+      boolean terminateUponCompletion)
+      throws IOException {
     Registry registry;
     int registryPort;
     String envCmd;
@@ -122,7 +130,8 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
 
     this.timeoutSeconds = timeoutSeconds;
 
-    workerTimeoutSeconds = (int) Math.max(workerTimeoutMinSeconds, (double) hosts.size() * workerSecondsPerHost);
+    workerTimeoutSeconds =
+        (int) Math.max(workerTimeoutMinSeconds, (double) hosts.size() * workerSecondsPerHost);
     log.info("workerTimeoutSeconds: {}", workerTimeoutSeconds);
     log.info("hosts.size(): {}", hosts.size());
     if (hosts.size() == 0) {
@@ -153,19 +162,46 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
       throw new RuntimeException("Unable to find a port for registry");
     }
     registry.rebind(registryName, this);
-    url = "rmi://" + InetAddress.getLocalHost().getCanonicalHostName() + ":" + registryPort + "/" + registryName;
+    url =
+        "rmi://"
+            + InetAddress.getLocalHost().getCanonicalHostName()
+            + ":"
+            + registryPort
+            + "/"
+            + registryName;
 
     workerCommand = new String[1];
     workerCommand[0] =
-        javaCmd + " -cp " + classpath + " com.ms.silverking.pssh.TwoLevelParallelSSHWorker rmi://" + InetAddress.getLocalHost().getCanonicalHostName() + ":" + registryPort + "/SSHManager " + numWorkerThreads + " " + timeoutSeconds;
+        javaCmd
+            + " -cp "
+            + classpath
+            + " com.ms.silverking.pssh.TwoLevelParallelSSHWorker rmi://"
+            + InetAddress.getLocalHost().getCanonicalHostName()
+            + ":"
+            + registryPort
+            + "/SSHManager "
+            + numWorkerThreads
+            + " "
+            + timeoutSeconds;
     log.info(workerCommand[0]);
 
-    log.info("Manager URL: {}" , url );
+    log.info("Manager URL: {}", url);
   }
 
-  public TwoLevelParallelSSHManager(Map<String, String[]> hostCommandsMap, List<String> workerCandidateHosts,
-                                    int numWorkerThreads, int timeoutSeconds, int maxAttempts, boolean terminateUponCompletion) throws IOException {
-    this(createHostCommands(hostCommandsMap), workerCandidateHosts, numWorkerThreads, timeoutSeconds, maxAttempts,
+  public TwoLevelParallelSSHManager(
+      Map<String, String[]> hostCommandsMap,
+      List<String> workerCandidateHosts,
+      int numWorkerThreads,
+      int timeoutSeconds,
+      int maxAttempts,
+      boolean terminateUponCompletion)
+      throws IOException {
+    this(
+        createHostCommands(hostCommandsMap),
+        workerCandidateHosts,
+        numWorkerThreads,
+        timeoutSeconds,
+        maxAttempts,
         terminateUponCompletion);
   }
 
@@ -204,12 +240,14 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
   }
 
   private void startWorkers(Set<String> workers, int numWorkers, HostGroupTable hostGroups) {
-    workerSSH = new ParallelSSH(workers, workerCommand, numWorkers, workerTimeoutSeconds, hostGroups);
+    workerSSH =
+        new ParallelSSH(workers, workerCommand, numWorkers, workerTimeoutSeconds, hostGroups);
   }
 
   public boolean waitForWorkerCompletion() {
     while (true) {
-      log.info("workerSSH.numCompleted(): {}    numWorkers: {}" , workerSSH.numCompleted() , numWorkers);
+      log.info(
+          "workerSSH.numCompleted(): {}    numWorkers: {}", workerSSH.numCompleted(), numWorkers);
       if (workerSSH.numCompleted() == numWorkers) {
         return workerSSH.getFailed().size() == 0;
       }
@@ -293,7 +331,7 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
       }
     }
     try {
-      log.info("Sending {}   to worker: {}" , hostAndCommand , getClientHost());
+      log.info("Sending {}   to worker: {}", hostAndCommand, getClientHost());
     } catch (ServerNotActiveException snae) {
       snae.printStackTrace();
     }
@@ -303,13 +341,17 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
 
   private void logState() {
     log.info(
-        "Complete: {} Incomplete: {}  Active: {}  Pending: {}" ,completeHostCommands.size(), incompleteHostCommands.size(), activeHostCommands.size(),  pendingHostCommands.size());
+        "Complete: {} Incomplete: {}  Active: {}  Pending: {}",
+        completeHostCommands.size(),
+        incompleteHostCommands.size(),
+        activeHostCommands.size(),
+        pendingHostCommands.size());
   }
 
   @Override
   public void setHostResult(HostAndCommand hostAndCommand, HostResult result) {
     try {
-      log.info("set host result {} from {}", hostAndCommand ,getClientHost());
+      log.info("set host result {} from {}", hostAndCommand, getClientHost());
     } catch (ServerNotActiveException snae) {
       snae.printStackTrace();
     }
@@ -335,7 +377,7 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
   @Override
   public void workerComplete() throws RemoteException {
     try {
-      log.info("worker complete  from " , getClientHost());
+      log.info("worker complete  from ", getClientHost());
     } catch (ServerNotActiveException snae) {
       snae.printStackTrace();
     }
@@ -347,7 +389,7 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
 
   public void displayIncomplete() {
     for (HostAndCommand hostAndCommand : incompleteHostCommands) {
-      log.info("Incomplete: {}" , hostAndCommand);
+      log.info("Incomplete: {}", hostAndCommand);
     }
   }
 
@@ -359,39 +401,39 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
     return false;
   }
 
-  public static List<String> readHostsFile(String hostsFile, String description, List<String> exclusionHosts)
-      throws IOException {
+  public static List<String> readHostsFile(
+      String hostsFile, String description, List<String> exclusionHosts) throws IOException {
     List<String> hostList;
 
     if (hostsFile != null) {
       hostList = StreamParser.parseFileLines(hostsFile);
     } else {
-      log.info("No {} file specified",description );
+      log.info("No {} file specified", description);
       hostList = ImmutableList.of();
     }
     if (exclusionHosts != null) {
       hostList.removeAll(exclusionHosts);
-      log.info( "{}  [after exclusions]: {}",description , hostList.size());
+      log.info("{}  [after exclusions]: {}", description, hostList.size());
     } else {
-      log.info("{}: {}",description , hostList.size());
+      log.info("{}: {}", description, hostList.size());
     }
     log.info(CollectionUtil.toString(hostList));
     return hostList;
   }
 
-  public static List<String> readHostsFileSelectHostgroup(String vaDhtFile, String hostGroup) throws IOException {
+  public static List<String> readHostsFileSelectHostgroup(String vaDhtFile, String hostGroup)
+      throws IOException {
     List<String> hostList;
-    List<String> fileLines; //store lines extracted from files
+    List<String> fileLines; // store lines extracted from files
 
     hostList = new ArrayList<>();
     fileLines = StreamParser.parseFileLines(vaDhtFile);
     for (String aLine : fileLines) {
-      String[] lineFields = aLine.split("\t");  //store split elements of a line
+      String[] lineFields = aLine.split("\t"); // store split elements of a line
       for (int i = 1; i < lineFields.length; i++) {
         if (hostGroup.equals(lineFields[i])) {
           hostList.add(lineFields[0]);
           break;
-
         }
       }
     }
@@ -424,7 +466,7 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
       result = UnicastRemoteObject.unexportObject(this, true);
       log.info("TwoLevelParallelSSHManager terminated:{}", result);
     } catch (NoSuchObjectException e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
 
@@ -460,9 +502,9 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
       String[] fields = options.hostsFile_optionalGroup.split(":");
       if (fields.length > 1) {
         hosts = readHostsFileSelectHostgroup(fields[0], fields[1]);
-        //hosts.removeAll(excludedHosts);
+        // hosts.removeAll(excludedHosts);
       } else {
-        //hosts = readHostsFile(options.hostsFile_optionalGroup, "Hosts", excludedHosts);
+        // hosts = readHostsFile(options.hostsFile_optionalGroup, "Hosts", excludedHosts);
         hosts = readHostsFile(options.hostsFile_optionalGroup, "Hosts", null);
       }
 
@@ -470,7 +512,8 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
       // Containing script filters hosts externally.
       // FUTURE - Could add an option to push that into here.
 
-      workerCandidateHosts = readHostsFile(options.workerCandidatesFile, "Worker Candidates", excludedHosts);
+      workerCandidateHosts =
+          readHostsFile(options.workerCandidatesFile, "Worker Candidates", excludedHosts);
 
       cmd = options.command.split("\\s+");
 
@@ -479,8 +522,14 @@ public class TwoLevelParallelSSHManager extends UnicastRemoteObject implements S
         hostCommands.add(new HostAndCommand(host, cmd));
       }
 
-      parallelSSH = new TwoLevelParallelSSHManager(hostCommands, workerCandidateHosts, options.numWorkerThreads,
-                                                   options.timeoutSeconds, options.maxAttempts, true);
+      parallelSSH =
+          new TwoLevelParallelSSHManager(
+              hostCommands,
+              workerCandidateHosts,
+              options.numWorkerThreads,
+              options.timeoutSeconds,
+              options.maxAttempts,
+              true);
       parallelSSH.doSSH();
     } catch (Exception e) {
       e.printStackTrace();

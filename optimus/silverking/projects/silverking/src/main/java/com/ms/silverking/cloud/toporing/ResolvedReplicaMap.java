@@ -111,7 +111,9 @@ public class ResolvedReplicaMap {
     }
   }
 
-  private void addReplicaEntries(HashedListMap<IPAndPort, RingEntry> replicaEntries, RingEntry entry,
+  private void addReplicaEntries(
+      HashedListMap<IPAndPort, RingEntry> replicaEntries,
+      RingEntry entry,
       Collection<IPAndPort> replicas) {
     for (IPAndPort replica : replicas) {
       replicaEntries.addValue(replica, entry);
@@ -159,8 +161,8 @@ public class ResolvedReplicaMap {
   }
 
   /**
-   * Return entries in the range. The returned entries may cover more than the range specified,
-   * but will at least cover the range specified.
+   * Return entries in the range. The returned entries may cover more than the range specified, but
+   * will at least cover the range specified.
    *
    * @param minCoordinate
    * @param maxCoordinate
@@ -196,7 +198,8 @@ public class ResolvedReplicaMap {
     for (int i = 0; i < replicas.length; i++) {
       replicas[i] = new IPAndPort(replicaNodes.get(i).getIDString(), dhtPort);
       if (log.isDebugEnabled()) {
-        log.debug("*** {} {} {}", replicaNodes.get(i), replicaNodes.get(i).getIDString(), replicas[i]);
+        log.debug(
+            "*** {} {} {}", replicaNodes.get(i), replicaNodes.get(i).getIDString(), replicas[i]);
       }
     }
     return replicas;
@@ -256,12 +259,14 @@ public class ResolvedReplicaMap {
         Arrays.sort(secondaryReplicas, replicaPrioritizer);
       }
 
-      ipListPair = new PrimarySecondaryIPListPair(ImmutableList.copyOf(primaryReplicas),
-          ImmutableList.copyOf(secondaryReplicas));
+      ipListPair =
+          new PrimarySecondaryIPListPair(
+              ImmutableList.copyOf(primaryReplicas), ImmutableList.copyOf(secondaryReplicas));
 
       allReplicas = new IPAndPort[primaryReplicas.length + secondaryReplicas.length];
       System.arraycopy(primaryReplicas, 0, allReplicas, 0, primaryReplicas.length);
-      System.arraycopy(secondaryReplicas, 0, allReplicas, primaryReplicas.length, secondaryReplicas.length);
+      System.arraycopy(
+          secondaryReplicas, 0, allReplicas, primaryReplicas.length, secondaryReplicas.length);
 
       replicas = new IPAndPort[EnumValues.ownerQueryMode.length][];
       replicas[OwnerQueryMode.Primary.ordinal()] = primaryReplicas;
@@ -297,9 +302,11 @@ public class ResolvedReplicaMap {
     }
 
     public String toString() {
-      return "P[" + IPAndPort.arrayToString(
-          replicas[OwnerQueryMode.Primary.ordinal()]) + "] S[" + IPAndPort.arrayToString(
-          replicas[OwnerQueryMode.Secondary.ordinal()]) + "]";
+      return "P["
+          + IPAndPort.arrayToString(replicas[OwnerQueryMode.Primary.ordinal()])
+          + "] S["
+          + IPAndPort.arrayToString(replicas[OwnerQueryMode.Secondary.ordinal()])
+          + "]";
     }
   }
 
@@ -356,14 +363,14 @@ public class ResolvedReplicaMap {
   public List<Set<IPAndPort>> getExcludedReplicaSets(Set<IPAndPort> exclusionSet) {
     List<Set<IPAndPort>> excludedReplicaSets;
 
-    //System.out.printf("exclusionSet %s\n", exclusionSet);
+    // System.out.printf("exclusionSet %s\n", exclusionSet);
     excludedReplicaSets = new ArrayList<>();
     for (MapEntry entry : replicaMap.values()) {
       Set<IPAndPort> replicaSet;
       Set<IPAndPort> _replicaSet;
 
       replicaSet = entry.getReplicaSet(OwnerQueryMode.Primary);
-      //System.out.printf("replicaSet %s\n", replicaSet);
+      // System.out.printf("replicaSet %s\n", replicaSet);
       _replicaSet = new HashSet<>(replicaSet);
       _replicaSet.removeAll(exclusionSet);
       if (_replicaSet.size() == 0) {

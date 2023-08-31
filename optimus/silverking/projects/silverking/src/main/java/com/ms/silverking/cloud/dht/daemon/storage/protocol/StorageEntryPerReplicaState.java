@@ -17,8 +17,8 @@ import java.util.Map;
 import com.ms.silverking.net.IPAndPort;
 
 /**
- * For a given storage message entry, the state of a StorageOperation.
- * Tracks the state at each replica.
+ * For a given storage message entry, the state of a StorageOperation. Tracks the state at each
+ * replica.
  */
 class StorageEntryPerReplicaState<K> {
   private final Map<IPAndPort, K> replicaState;

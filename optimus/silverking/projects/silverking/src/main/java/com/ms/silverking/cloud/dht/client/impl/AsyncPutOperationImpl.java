@@ -55,7 +55,10 @@ import org.slf4j.Logger;
  * @param <V> value type
  */
 class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
-    implements AsyncPut<K>, OpResultListener, ActiveKeyedOperationResultListener<OpResult>, AsyncInvalidation<K> {
+    implements AsyncPut<K>,
+        OpResultListener,
+        ActiveKeyedOperationResultListener<OpResult>,
+        AsyncInvalidation<K> {
   private final PutOperation<K, V> putOperation;
   private final long version;
   private final AtomicLong resolvedVersion;
@@ -72,12 +75,13 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
 
   private static final boolean verboseToString = true;
 
-  AsyncPutOperationImpl(PutOperation<K, V> putOperation,
-                        ClientNamespace namespace,
-                        NamespacePerspectiveOptionsImpl<K, V> nspoImpl,
-                        long curTimeMillis,
-                        byte[] originator,
-                        VersionProvider versionProvider) {
+  AsyncPutOperationImpl(
+      PutOperation<K, V> putOperation,
+      ClientNamespace namespace,
+      NamespacePerspectiveOptionsImpl<K, V> nspoImpl,
+      long curTimeMillis,
+      byte[] originator,
+      VersionProvider versionProvider) {
     super(putOperation, namespace, nspoImpl, curTimeMillis, originator);
     this.putOperation = putOperation;
     if (putOperation.size() == 0) {
@@ -114,9 +118,7 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
     return resolvedVersion.get();
   }
 
-  /**
-   * We delay resolving the version to improve the accuracy for fine-grained version providers.
-   */
+  /** We delay resolving the version to improve the accuracy for fine-grained version providers. */
   private void resolveVersion() {
     if (resolvedVersion.get() == DHTConstants.noSuchVersion) {
       long version = putOperation.putOptions().getVersion();
@@ -145,19 +147,21 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
     long resolvedVersion = getResolvedVersion();
     OperationUUID opUUID = activePutListeners.newOpUUIDAndMap();
     SkTraceId maybeTraceID = putOptions().getTraceIDProvider().traceID();
-    return new ProtoPutMessageGroup(opUUID,
-                                    context.contextAsLong(),
-                                    estimate.getNumKeys(),
-                                    resolvedVersion,
-                                    nspoImpl.getValueSerializer(),
-                                    putOperation.putOptions().version(resolvedVersion),
-                                    putOperation.putOptions().getChecksumType(),
-                                    originator,
-                                    creator,
-                                    operation.getTimeoutController().getMaxRelativeTimeoutMillis(this),
-                                    nspoImpl.getNSPOptions().getEncrypterDecrypter(),
-                                    maybeTraceID);
-    // FUTURE - trim the above timeout according to the amount of time that has elapsed since the start
+    return new ProtoPutMessageGroup(
+        opUUID,
+        context.contextAsLong(),
+        estimate.getNumKeys(),
+        resolvedVersion,
+        nspoImpl.getValueSerializer(),
+        putOperation.putOptions().version(resolvedVersion),
+        putOperation.putOptions().getChecksumType(),
+        originator,
+        creator,
+        operation.getTimeoutController().getMaxRelativeTimeoutMillis(this),
+        nspoImpl.getNSPOptions().getEncrypterDecrypter(),
+        maybeTraceID);
+    // FUTURE - trim the above timeout according to the amount of time that has elapsed since the
+    // start
   }
 
   @Override
@@ -174,15 +178,16 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
   }
 
   @Override
-  ProtoMessageGroup createMessagesForIncomplete(ProtoMessageGroup protoMG,
-                                                List<MessageGroup> messageGroups,
-                                                MessageEstimate estimate) {
-    return createMessagesForIncomplete((ProtoPutMessageGroup<V>) protoMG, messageGroups, (PutMessageEstimate) estimate);
+  ProtoMessageGroup createMessagesForIncomplete(
+      ProtoMessageGroup protoMG, List<MessageGroup> messageGroups, MessageEstimate estimate) {
+    return createMessagesForIncomplete(
+        (ProtoPutMessageGroup<V>) protoMG, messageGroups, (PutMessageEstimate) estimate);
   }
 
-  private ProtoPutMessageGroup<V> createMessagesForIncomplete(ProtoPutMessageGroup<V> protoPutMG,
-                                                              List<MessageGroup> messageGroups,
-                                                              PutMessageEstimate estimate) {
+  private ProtoPutMessageGroup<V> createMessagesForIncomplete(
+      ProtoPutMessageGroup<V> protoPutMG,
+      List<MessageGroup> messageGroups,
+      PutMessageEstimate estimate) {
     // FUTURE - we would like to iterate on DHTKeys to avoid the keyToDHTKey lookup
     // except that we need to retrieve values by the user key.
 
@@ -195,7 +200,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
         DHTKey dhtKey = keyToDHTKey.get(key);
         V value = putOperation.getValue(key);
         ValueAdditionResult additionResult;
-        boolean listenerInserted = activePutListeners.addListener(protoPutMG.getUUID(), dhtKey, this);
+        boolean listenerInserted =
+            activePutListeners.addListener(protoPutMG.getUUID(), dhtKey, this);
 
         if (listenerInserted) {
           additionResult = protoPutMG.addValue(dhtKey, value);
@@ -212,7 +218,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
             if (!listenerInserted) {
               throw new RuntimeException("Can't insert listener to new protoPutMG");
             }
-            opUUIDs.add((OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
+            opUUIDs.add(
+                (OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
             additionResult = protoPutMG.addValue(dhtKey, value);
             if (additionResult != ValueAdditionResult.Added) {
               throw new RuntimeException("Can't add to new protoPutMG");
@@ -230,7 +237,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
           assert estimate.getNumKeys() != 0;
           protoPutMG.addToMessageGroupList(messageGroups);
           protoPutMG = createProtoPutMG(estimate, DHTClient.getValueCreator().getBytes());
-          opUUIDs.add((OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
+          opUUIDs.add(
+              (OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
           listenerInserted = activePutListeners.addListener(protoPutMG.getUUID(), dhtKey, this);
           if (!listenerInserted) {
             throw new RuntimeException("Can't insert listener to new protoPutMG");
@@ -240,7 +248,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
             throw new RuntimeException("Can't add to new protoPutMG");
           }
         }
-        opUUIDs.add((OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
+        opUUIDs.add(
+            (OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
       }
     }
     setSent();
@@ -311,10 +320,13 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
     // For now, assume only one segment per message
     for (int i = 0; i < numFragments; i++) {
       protoPutMG = createProtoPutMG(new PutMessageEstimate(1, subBufs[i].limit()));
-      opUUIDs.add((OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
-      listenerInserted = activePutListeners.addListener(protoPutMG.getUUID(), subKeys[i], fragmentedPutValue);
+      opUUIDs.add(
+          (OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
+      listenerInserted =
+          activePutListeners.addListener(protoPutMG.getUUID(), subKeys[i], fragmentedPutValue);
       if (!listenerInserted) {
-        throw new RuntimeException("Panic: Unable to insert listener into dedicated segment protoPutMG");
+        throw new RuntimeException(
+            "Panic: Unable to insert listener into dedicated segment protoPutMG");
       }
       if (debugFragmentation) {
         log.info("segmentation listener: {} {} {}", protoPutMG.getUUID(), subKeys[i], subBufs[i]);
@@ -328,22 +340,24 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
 
     // Now add the index key/value
     // indicate segmentation by storing segmentationBytes in the creator field
-    protoPutMG = createProtoPutMG(new PutMessageEstimate(1, SegmentationUtil.segmentedValueBufferLength),
-                                  MetaDataConstants.segmentationBytes);
+    protoPutMG =
+        createProtoPutMG(
+            new PutMessageEstimate(1, SegmentationUtil.segmentedValueBufferLength),
+            MetaDataConstants.segmentationBytes);
     opUUIDs.add((OperationUUID) protoPutMG.getUUID()); // hold a reference to the uuid to prevent GC
-    listenerInserted = activePutListeners.addListener(protoPutMG.getUUID(), dhtKey, fragmentedPutValue);
+    listenerInserted =
+        activePutListeners.addListener(protoPutMG.getUUID(), dhtKey, fragmentedPutValue);
     if (!listenerInserted) {
       throw new RuntimeException("Panic: Unable to add index key/value into dedicated protoPutMG");
     }
-    ByteBuffer segmentMetaDataBuffer = SegmentationUtil.createSegmentMetaDataBuffer(DHTClient.getValueCreator()
-                                                                                             .getBytes(),
-                                                                                    storedLength,
-                                                                                    uncompressedLength,
-                                                                                    putOperation.putOptions()
-                                                                                                .getFragmentationThreshold(),
-                                                                                    putOperation.putOptions()
-                                                                                                .getChecksumType(),
-                                                                                    checksum);
+    ByteBuffer segmentMetaDataBuffer =
+        SegmentationUtil.createSegmentMetaDataBuffer(
+            DHTClient.getValueCreator().getBytes(),
+            storedLength,
+            uncompressedLength,
+            putOperation.putOptions().getFragmentationThreshold(),
+            putOperation.putOptions().getChecksumType(),
+            checksum);
     protoPutMG.addValueDedicated(dhtKey, segmentMetaDataBuffer);
     protoPutMG.addToMessageGroupList(messageGroups);
   }
@@ -397,15 +411,14 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
   @Override
   public OperationState getOperationState(K key) {
     OpResult result = opResults.get(keyToDHTKey.get(key));
-    return result == null
-           ? OperationState.INCOMPLETE
-           : result.toOperationState();
+    return result == null ? OperationState.INCOMPLETE : result.toOperationState();
   }
 
   @Override
   protected void throwFailedException() throws OperationException {
-    throw new PutExceptionImpl((Map<Object, OperationState>) getOperationStateMap(),
-                               (Map<Object, FailureCause>) getFailureCauses());
+    throw new PutExceptionImpl(
+        (Map<Object, OperationState>) getOperationStateMap(),
+        (Map<Object, FailureCause>) getFailureCauses());
   }
 
   @Override
@@ -451,8 +464,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
   public boolean canBeGroupedWith(AsyncOperationImpl asyncOperationImpl) {
     if (asyncOperationImpl instanceof AsyncPutOperationImpl) {
       AsyncPutOperationImpl other = (AsyncPutOperationImpl) asyncOperationImpl;
-      return getResolvedVersion() == other.getResolvedVersion() &&
-             putOperation.putOptions().equals(other.putOperation.putOptions());
+      return getResolvedVersion() == other.getResolvedVersion()
+          && putOperation.putOptions().equals(other.putOperation.putOptions());
     } else {
       return false;
     }
@@ -465,7 +478,8 @@ class AsyncPutOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
       stringBuilder.append(super.toString());
       stringBuilder.append('\n');
       for (K key : putOperation.getKeys()) {
-        stringBuilder.append(String.format("%s\t%s\t%s\n", key, keyToDHTKey.get(key), getOperationState(key)));
+        stringBuilder.append(
+            String.format("%s\t%s\t%s\n", key, keyToDHTKey.get(key), getOperationState(key)));
       }
       return stringBuilder.toString();
     } else {

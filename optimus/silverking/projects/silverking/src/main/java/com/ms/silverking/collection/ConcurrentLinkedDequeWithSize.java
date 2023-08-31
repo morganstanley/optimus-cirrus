@@ -15,11 +15,11 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * A subset of ConcurrentLinkedDeque functionality with a constant time size function.
- * Note that size is only loosely consistent with the actual size at any given moment.
- * <p>
- * Exceptions in the underlying deque may cause the reported size to diverge from reality.
- * This class is intended for the case where such as exception will either not occur, or be fatal.
+ * A subset of ConcurrentLinkedDeque functionality with a constant time size function. Note that
+ * size is only loosely consistent with the actual size at any given moment.
+ *
+ * <p>Exceptions in the underlying deque may cause the reported size to diverge from reality. This
+ * class is intended for the case where such as exception will either not occur, or be fatal.
  */
 public class ConcurrentLinkedDequeWithSize<E> {
   private final ConcurrentLinkedDeque<E> dq;

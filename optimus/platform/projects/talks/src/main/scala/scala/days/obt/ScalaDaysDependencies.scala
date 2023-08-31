@@ -57,18 +57,18 @@ trait DisplayString { self: BuildResult =>
 // helper to introduce delays to signature and class compile times based on scope id
 @entity trait Timings { self: ScopeConfiguration =>
   // simulate time taken for signatures to compile
-  val signatureTime: Int = self.id.module match {
-    case "infra" => 1
-    case "data" => 1
+  val signatureTime: Int = self.id.name match {
+    case "utils" => 1
+    case "data"  => 1
     case "model" => 1
-    case "app" => 2
+    case "app"   => 2
   }
 
   // time taken for classes to compile
-  val classesTime: Int = self.id.module match {
-    case "infra" => 1
-    case "data" => 2
+  val classesTime: Int = self.id.name match {
+    case "utils" => 1
+    case "data"  => 2
     case "model" => 3
-    case "app" => 4
+    case "app"   => 4
   }
 }

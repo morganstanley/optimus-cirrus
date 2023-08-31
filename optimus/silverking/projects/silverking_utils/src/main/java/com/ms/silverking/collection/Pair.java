@@ -72,6 +72,4 @@ public class Pair<T1, T2> extends TupleBase {
   public String toString() {
     return CoreStringUtil.nullSafeToString(v1) + ":" + CoreStringUtil.nullSafeToString(v2);
   }
-
-
 }

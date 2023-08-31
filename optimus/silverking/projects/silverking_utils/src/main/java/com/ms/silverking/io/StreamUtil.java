@@ -36,7 +36,8 @@ public final class StreamUtil {
     readFully(in, buf, 0, buf.length);
   }
 
-  public static void readFully(InputStream in, byte[] buf, int offset, int length) throws IOException {
+  public static void readFully(InputStream in, byte[] buf, int offset, int length)
+      throws IOException {
     int totalBytesRead;
 
     totalBytesRead = 0;
@@ -47,7 +48,7 @@ public final class StreamUtil {
       if (bytesRead >= 0) {
         totalBytesRead += bytesRead;
       } else {
-        log.debug("{} {} {} {} {}",buf.length , offset,  length, totalBytesRead ,bytesRead);
+        log.debug("{} {} {} {} {}", buf.length, offset, length, totalBytesRead, bytesRead);
         throw new EOFException();
       }
     }
@@ -113,7 +114,8 @@ public final class StreamUtil {
     }
   }
 
-  public static void readBytes(byte[] b, int offset, int length, InputStream in) throws IOException {
+  public static void readBytes(byte[] b, int offset, int length, InputStream in)
+      throws IOException {
     CoreStreamUtil.readBytes(b, offset, length, in);
   }
 
@@ -121,7 +123,8 @@ public final class StreamUtil {
     readBytes(b, 0, b.length, in);
   }
 
-  public static long limitedStream(InputStream in, OutputStream out, boolean close, long limit) throws IOException {
+  public static long limitedStream(InputStream in, OutputStream out, boolean close, long limit)
+      throws IOException {
     byte[] buf;
 
     buf = new byte[DEF_BUF_SIZE];
@@ -159,8 +162,8 @@ public final class StreamUtil {
 
   ////////////////////////////////////////////////////////////
 
-  public static long limitedStream(InputStream in, OutputStream out, boolean close, byte[] buf, long limit)
-      throws IOException {
+  public static long limitedStream(
+      InputStream in, OutputStream out, boolean close, byte[] buf, long limit) throws IOException {
     long numWritten;
 
     numWritten = 0;
@@ -205,7 +208,8 @@ public final class StreamUtil {
     return numWritten;
   }
 
-  public static long stream(InputStream in, OutputStream out, boolean close, byte[] buf) throws IOException {
+  public static long stream(InputStream in, OutputStream out, boolean close, byte[] buf)
+      throws IOException {
     long numWritten;
 
     numWritten = 0;
@@ -245,11 +249,13 @@ public final class StreamUtil {
     return stream(in, new FileOutputStream(outFile), close);
   }
 
-  public static long streamToFile(InputStream in, File outFile, boolean close, byte[] buf) throws IOException {
+  public static long streamToFile(InputStream in, File outFile, boolean close, byte[] buf)
+      throws IOException {
     return stream(in, new FileOutputStream(outFile), close, buf);
   }
 
-  public static long streamToFile(InputStream in, String outFileName, boolean close) throws IOException {
+  public static long streamToFile(InputStream in, String outFileName, boolean close)
+      throws IOException {
     return streamToFile(in, new File(outFileName), close);
   }
 

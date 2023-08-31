@@ -14,9 +14,8 @@ package com.ms.silverking.thread.lwt;
 import java.util.Collection;
 
 /**
- * Collection of workers that accepts group work operations such as
- * broadcasting a work item to all members of the group, scattering
- * a collection of work items among the group, etc.
+ * Collection of workers that accepts group work operations such as broadcasting a work item to all
+ * members of the group, scattering a collection of work items among the group, etc.
  *
  * @param <I>
  */

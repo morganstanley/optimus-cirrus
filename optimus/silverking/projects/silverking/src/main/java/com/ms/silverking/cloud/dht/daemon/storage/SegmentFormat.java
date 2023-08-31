@@ -14,18 +14,10 @@ package com.ms.silverking.cloud.dht.daemon.storage;
 import com.ms.silverking.numeric.NumConversion;
 
 /**
- * File format:
- * [header]
- * [data]
- * [index]
- * <p>
- * Header format:
- * <Field>          <size in bytes>
- * format version   2
- * segment type     2
- * segment number   4
- * index offset     4
- * data offset      4
+ * File format: [header] [data] [index]
+ *
+ * <p>Header format: <Field> <size in bytes> format version 2 segment type 2 segment number 4 index
+ * offset 4 data offset 4
  */
 class SegmentFormat {
   /////////////////
@@ -48,10 +40,8 @@ class SegmentFormat {
   static final int dataOffsetOffset = indexOffsetOffset + NumConversion.BYTES_PER_INT;
   // values
 
-  /**
-   * Currently the indexOffset and dataOffset are fixed.
-   */
-  //static final int    dataOffset = headerSize;
+  /** Currently the indexOffset and dataOffset are fixed. */
+  // static final int    dataOffset = headerSize;
 
   static {
     fixedHeader = new byte[fixedHeaderSize];

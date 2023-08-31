@@ -28,8 +28,8 @@ public class NamespacePropertiesOperationException extends Exception {
     super(message, cause);
   }
 
-  public NamespacePropertiesOperationException(String message, Throwable cause, boolean enableSuppression,
-      boolean writableStackTrace) {
+  public NamespacePropertiesOperationException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
   }
 }

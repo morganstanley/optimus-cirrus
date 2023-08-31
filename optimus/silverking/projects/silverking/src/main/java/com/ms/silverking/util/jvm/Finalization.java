@@ -45,8 +45,10 @@ public class Finalization {
       curTimeMillis = absMillisTimeSource.absTimeMillis(); // ignore lock acquisition time
       lock.lock();
       try {
-        // minFinalizationIntervalMillis == 0 => ignore lastFinalizationMillis and force a finalization
-        if ((curTimeMillis - lastFinalizationMillis > minFinalizationIntervalMillis) || (minFinalizationIntervalMillis == 0)) {
+        // minFinalizationIntervalMillis == 0 => ignore lastFinalizationMillis and force a
+        // finalization
+        if ((curTimeMillis - lastFinalizationMillis > minFinalizationIntervalMillis)
+            || (minFinalizationIntervalMillis == 0)) {
           Stopwatch sw;
 
           lastFinalizationMillis = curTimeMillis;

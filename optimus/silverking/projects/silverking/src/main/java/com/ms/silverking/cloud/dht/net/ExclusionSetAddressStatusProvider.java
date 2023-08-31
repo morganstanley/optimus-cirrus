@@ -22,7 +22,8 @@ public class ExclusionSetAddressStatusProvider implements AddressStatusProvider 
   private final IPAliasMap aliasMap;
   private volatile ExclusionSet exclusionSet;
 
-  public ExclusionSetAddressStatusProvider(String addressStatusProviderThreadName, IPAliasMap aliasMap) {
+  public ExclusionSetAddressStatusProvider(
+      String addressStatusProviderThreadName, IPAliasMap aliasMap) {
     this.addressStatusProviderThreadName = addressStatusProviderThreadName;
     this.aliasMap = aliasMap;
     exclusionSet = ExclusionSet.emptyExclusionSet(0);
@@ -42,7 +43,8 @@ public class ExclusionSetAddressStatusProvider implements AddressStatusProvider 
 
   @Override
   public boolean isAddressStatusProviderThread(String context) {
-    return addressStatusProviderThreadName.equals(context != null ? context : Thread.currentThread().getName());
+    return addressStatusProviderThreadName.equals(
+        context != null ? context : Thread.currentThread().getName());
   }
 
   @Override

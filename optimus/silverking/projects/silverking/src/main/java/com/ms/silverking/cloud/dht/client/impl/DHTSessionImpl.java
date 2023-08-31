@@ -76,10 +76,9 @@ import com.ms.silverking.util.SafeTimerTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Concrete implementation of DHTSession.
- */
-public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, QueueingConnectionLimitListener {
+/** Concrete implementation of DHTSession. */
+public class DHTSessionImpl
+    implements DHTSession, MessageGroupReceiver, QueueingConnectionLimitListener {
   protected final MessageGroupBase mgBase;
   private final ClientDHTConfiguration dhtConfig;
   private final ConcurrentMap<Long, ClientNamespace> clientNamespaces;
@@ -99,7 +98,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   private SafeTimerTask timeoutCheckTask;
   private AsynchronousNamespacePerspective<String, String> systemNSP;
   private ExclusionSet exclusionSet;
-  volatile private boolean closed = false;
+  private volatile boolean closed = false;
 
   /*
    * FUTURE - This class can be improved significantly. It contains remnants of the ActiveOperation* implementation.
@@ -110,10 +109,10 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   // FUTURE - server selection currently pinned to preferredServer only; allow for others
   private AddrAndPort server;
 
-  //private final Map<OperationUUID,ActiveOperation>    activeOps;
+  // private final Map<OperationUUID,ActiveOperation>    activeOps;
 
   // new implementation
-  //private final ActiveOperationTable   activeOpTable;
+  // private final ActiveOperationTable   activeOpTable;
   // FUTURE - THINK IF WE WANT OPERATION TABLE ANY MORE
 
   // retrieve
@@ -137,10 +136,17 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   private static final int numSelectorControllers = 1;
   private static final String selectorControllerClass = "DHTSessionImpl";
 
-  public DHTSessionImpl(ClientDHTConfiguration dhtConfig, AddrAndPort server, AbsMillisTimeSource absMillisTimeSource,
-      SerializationRegistry serializationRegistry, SessionEstablishmentTimeoutController timeoutController,
-      NamespaceOptionsMode nsOptionsMode, boolean enableMsgGroupTrace, IPAliasMap aliasMap,
-      SessionPolicyOnDisconnect onDisconnect) throws IOException, AuthFailedException {
+  public DHTSessionImpl(
+      ClientDHTConfiguration dhtConfig,
+      AddrAndPort server,
+      AbsMillisTimeSource absMillisTimeSource,
+      SerializationRegistry serializationRegistry,
+      SessionEstablishmentTimeoutController timeoutController,
+      NamespaceOptionsMode nsOptionsMode,
+      boolean enableMsgGroupTrace,
+      IPAliasMap aliasMap,
+      SessionPolicyOnDisconnect onDisconnect)
+      throws IOException, AuthFailedException {
 
     this.dhtConfig = dhtConfig;
     this.absMillisTimeSource = absMillisTimeSource;
@@ -160,29 +166,32 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
     log.debug("Session IP:Port {}", IPAddrUtil.addrAndPortToString(myIPAndPort));
 
     if (!isDaemon()) {
-      // Eagerly create the connection so that failures occur here, rather than after the session object is returned
+      // Eagerly create the connection so that failures occur here, rather than after the session
+      // object is returned
       eagerConnect();
     }
 
     switch (nsOptionsMode) {
-    case ZooKeeper:
-      try {
-        nsOptionsClient = new NamespaceOptionsClientZKImpl(dhtConfig);
-      } catch (KeeperException ke) {
-        throw new IOException("Cannot create NamespaceOptionsClientZKImpl", ke);
-      }
-      break;
-    case MetaNamespace:
-      nsOptionsClient = new NamespaceOptionsClientNSPImpl(this, dhtConfig, timeoutController);
-      break;
-    default:
-      throw new RuntimeException("Unhandled nsOptionsMode: " + nsOptionsMode);
+      case ZooKeeper:
+        try {
+          nsOptionsClient = new NamespaceOptionsClientZKImpl(dhtConfig);
+        } catch (KeeperException ke) {
+          throw new IOException("Cannot create NamespaceOptionsClientZKImpl", ke);
+        }
+        break;
+      case MetaNamespace:
+        nsOptionsClient = new NamespaceOptionsClientNSPImpl(this, dhtConfig, timeoutController);
+        break;
+      default:
+        throw new RuntimeException("Unhandled nsOptionsMode: " + nsOptionsMode);
     }
 
     // Post-construction task: make sure this scheduled task is lastly called
     worker = new Worker();
     timeoutCheckTask = new SafeTimerTask(new TimeoutCheckTask());
-    DHTUtil.timer().scheduleAtFixedRate(timeoutCheckTask, timeoutCheckIntervalMillis, timeoutCheckIntervalMillis);
+    DHTUtil.timer()
+        .scheduleAtFixedRate(
+            timeoutCheckTask, timeoutCheckIntervalMillis, timeoutCheckIntervalMillis);
   }
 
   public boolean isDaemon() {
@@ -203,11 +212,22 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
     }
   }
 
-  protected MessageGroupBase buildMessageGroupBase(SessionEstablishmentTimeoutController timeoutController,
-      IPAliasMap aliasMap, SessionPolicyOnDisconnect onDisconnect) throws IOException {
-    return MessageGroupBase.newClientMessageGroupBase(0, this, absMillisTimeSource,
-        new NewConnectionTimeoutControllerWrapper(timeoutController), this, connectionQueueLimit,
-        numSelectorControllers, selectorControllerClass, aliasMap, onDisconnect);
+  protected MessageGroupBase buildMessageGroupBase(
+      SessionEstablishmentTimeoutController timeoutController,
+      IPAliasMap aliasMap,
+      SessionPolicyOnDisconnect onDisconnect)
+      throws IOException {
+    return MessageGroupBase.newClientMessageGroupBase(
+        0,
+        this,
+        absMillisTimeSource,
+        new NewConnectionTimeoutControllerWrapper(timeoutController),
+        this,
+        connectionQueueLimit,
+        numSelectorControllers,
+        selectorControllerClass,
+        aliasMap,
+        onDisconnect);
   }
 
   MessageGroupBase getMessageGroupBase() {
@@ -292,26 +312,37 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
       try {
         return nsOptionsClient.getNamespacePropertiesAndTryAutoCreate(namespace);
       } catch (TimeoutException te) {
-        throw new RuntimeException("Timeout retrieving namespace meta information " + Long.toHexString(
-            NamespaceUtil.nameToContext(namespace)) + " " + namespace + ", session closed: " + closed, te);
+        throw new RuntimeException(
+            "Timeout retrieving namespace meta information "
+                + Long.toHexString(NamespaceUtil.nameToContext(namespace))
+                + " "
+                + namespace
+                + ", session closed: "
+                + closed,
+            te);
       } catch (NamespacePropertiesRetrievalException re) {
         SynchronousNamespacePerspective<Long, String> syncNSP;
         String locations;
         long ns;
 
         ns = NamespaceUtil.nameToContext(namespace);
-        syncNSP = getNamespace(Namespace.replicasName).openSyncPerspective(Long.class, String.class);
+        syncNSP =
+            getNamespace(Namespace.replicasName).openSyncPerspective(Long.class, String.class);
         try {
           locations = syncNSP.get(ns);
-          log.info("Failed to retrieve namespace {}" , String.format("%x", ns));
-          log.info("{}",locations);
+          log.info("Failed to retrieve namespace {}", String.format("%x", ns));
+          log.info("{}", locations);
         } catch (RetrievalException re2) {
-          log.info("{}",re2.getDetailedFailureMessage());
-          log.info("Unexpected failure attempting to find key locations  during failed ns retrieval processing");
+          log.info("{}", re2.getDetailedFailureMessage());
+          log.info(
+              "Unexpected failure attempting to find key locations  during failed ns retrieval processing");
         }
-        log.info("",re);
+        log.info("", re);
         throw new RuntimeException(
-            "Unable to retrieve namespace meta information " + Long.toHexString(ns) + ", session closed: " + closed,
+            "Unable to retrieve namespace meta information "
+                + Long.toHexString(ns)
+                + ", session closed: "
+                + closed,
             re);
       }
     }
@@ -342,18 +373,27 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
       } else {
         parent = null;
       }
-      if (nsOptions.getAllowLinks() && nsOptions.getVersionMode() == NamespaceVersionMode.SINGLE_VERSION) {
+      if (nsOptions.getAllowLinks()
+          && nsOptions.getVersionMode() == NamespaceVersionMode.SINGLE_VERSION) {
         nsLinkMeta = getNSLinkMeta();
       } else {
         nsLinkMeta = null;
       }
-      clientNamespace = new ClientNamespace(this, namespace, nsOptions, serializationRegistry, absMillisTimeSource,
-          server, parent, nsLinkMeta);
+      clientNamespace =
+          new ClientNamespace(
+              this,
+              namespace,
+              nsOptions,
+              serializationRegistry,
+              absMillisTimeSource,
+              server,
+              parent,
+              nsLinkMeta);
       previous = clientNamespaces.putIfAbsent(context.contextAsLong(), clientNamespace);
       if (previous != null) {
         clientNamespace = previous;
       } else {
-        log.debug("Created client namespace: {}   {}" , namespace ,context);
+        log.debug("Created client namespace: {}   {}", namespace, context);
         clientNamespaceList.add(clientNamespace);
       }
     }
@@ -366,33 +406,40 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   }
 
   @Override
-  public Namespace createNamespace(String namespace, NamespaceOptions nsOptions) throws NamespaceCreationException {
+  public Namespace createNamespace(String namespace, NamespaceOptions nsOptions)
+      throws NamespaceCreationException {
     if (nsOptions == null) {
       nsOptions = getNamespaceCreationOptions().getDefaultNamespaceOptions();
     }
     return createNamespace(namespace, new NamespaceProperties(nsOptions).name(namespace));
   }
 
-  Namespace modifyNamespace(String namespace, NamespaceOptions nsOptions) throws NamespaceModificationException {
+  Namespace modifyNamespace(String namespace, NamespaceOptions nsOptions)
+      throws NamespaceModificationException {
     if (nsOptions == null) {
       nsOptions = getNamespaceCreationOptions().getDefaultNamespaceOptions();
     }
     return modifyNamespace(namespace, new NamespaceProperties(nsOptions));
   }
 
-  Namespace createNamespace(String namespace, NamespaceProperties nsProperties) throws NamespaceCreationException {
+  Namespace createNamespace(String namespace, NamespaceProperties nsProperties)
+      throws NamespaceCreationException {
     if (Namespace.isReservedNamespace(namespace)) {
       throw new NamespaceCreationException("Reserved name: " + namespace);
     } else {
       // New version of code will always enrich nsProperties with name
-      Preconditions.checkArgument(nsProperties.hasName(),
-          "nsProperties is not enriched to create namespace (wrong call path or wrong Silverking version is used); " + "ns: " + nsProperties);
+      Preconditions.checkArgument(
+          nsProperties.hasName(),
+          "nsProperties is not enriched to create namespace (wrong call path or wrong Silverking version is used); "
+              + "ns: "
+              + nsProperties);
       nsOptionsClient.createNamespace(namespace, nsProperties);
       return getClientNamespace(namespace);
     }
   }
 
-  Namespace modifyNamespace(String namespace, NamespaceProperties nsProperties) throws NamespaceModificationException {
+  Namespace modifyNamespace(String namespace, NamespaceProperties nsProperties)
+      throws NamespaceModificationException {
     if (Namespace.isReservedNamespace(namespace)) {
       throw new NamespaceModificationException("Reserved name: " + namespace);
     } else {
@@ -410,22 +457,28 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
     }
   }
 
-  /**
-   * Support metrics namespaces by translating the name to the hash for the ns
-   */
+  /** Support metrics namespaces by translating the name to the hash for the ns */
   private String translateNamespace(String namespace) {
     if (namespace.startsWith(Namespace.namespaceMetricsBaseName)) {
       String targetNS;
 
       targetNS = namespace.substring(Namespace.namespaceMetricsBaseName.length());
       if (log.isDebugEnabled()) {
-        log.debug("{}   {}", Namespace.namespaceMetricsBaseName ,
+        log.debug(
+            "{}   {}",
+            Namespace.namespaceMetricsBaseName,
             namespaceCreator.createNamespace(targetNS).contextAsLong());
-        log.debug("{}", namespaceCreator.createNamespace(Namespace.namespaceMetricsBaseName + String.format("%x",
-            namespaceCreator.createNamespace(targetNS).contextAsLong())).contextAsLong());
+        log.debug(
+            "{}",
+            namespaceCreator
+                .createNamespace(
+                    Namespace.namespaceMetricsBaseName
+                        + String.format(
+                            "%x", namespaceCreator.createNamespace(targetNS).contextAsLong()))
+                .contextAsLong());
       }
-      return Namespace.namespaceMetricsBaseName + String.format("%x",
-          namespaceCreator.createNamespace(targetNS).contextAsLong());
+      return Namespace.namespaceMetricsBaseName
+          + String.format("%x", namespaceCreator.createNamespace(targetNS).contextAsLong());
     } else {
       return namespace;
     }
@@ -439,25 +492,26 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   @Override
   public void deleteNamespace(String namespace) throws NamespaceDeletionException {
     // Placeholder for future implementation
-        /*
-        try {
-            //GlobalCommandZK zk;
-            //MetaClient      mc;
-            
-            //mc = new MetaClient(dhtConfig.getName(), new ZooKeeperConfig(dhtConfig.getZkLocs()));        
-            //zk = new GlobalCommandZK(mc);
-            // FUTURE - we don't want this here, we need another class to execute the command
-            // and track its completion
-        } catch (IOException | KeeperException e) {
-            throw new NamespaceDeletionException(e);
-        }
-        */
+    /*
+    try {
+        //GlobalCommandZK zk;
+        //MetaClient      mc;
+
+        //mc = new MetaClient(dhtConfig.getName(), new ZooKeeperConfig(dhtConfig.getZkLocs()));
+        //zk = new GlobalCommandZK(mc);
+        // FUTURE - we don't want this here, we need another class to execute the command
+        // and track its completion
+    } catch (IOException | KeeperException e) {
+        throw new NamespaceDeletionException(e);
+    }
+    */
 
     /* We let this early failure here, since for now only ZK impl supports deletion
      * (Without this check, the deletion request will still fail at low-level SNPImpl client)
      */
     if (nsOptionsMode != NamespaceOptionsMode.ZooKeeper) {
-      throw new NamespaceDeletionException("For now only NamespaceOptions ZooKeeper mode supports namespace deletion");
+      throw new NamespaceDeletionException(
+          "For now only NamespaceOptions ZooKeeper mode supports namespace deletion");
     }
 
     /*
@@ -476,51 +530,66 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
 
   @Override
   public void recoverNamespace(String namespace) throws NamespaceRecoverException {
-    throw new NamespaceRecoverException("recoverNamespace functionality is currently not available");
+    throw new NamespaceRecoverException(
+        "recoverNamespace functionality is currently not available");
   }
 
   @Override
-  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncNamespacePerspective(String namespace,
-      NamespacePerspectiveOptions<K, V> nspOptions) {
-    return new AsynchronousNamespacePerspectiveImpl<K, V>(getClientNamespace(namespace), namespace,
+  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncNamespacePerspective(
+      String namespace, NamespacePerspectiveOptions<K, V> nspOptions) {
+    return new AsynchronousNamespacePerspectiveImpl<K, V>(
+        getClientNamespace(namespace),
+        namespace,
         new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
   }
 
   @Override
-  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncNamespacePerspective(String namespace,
-      Class<K> keyClass, Class<V> valueClass) {
+  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncNamespacePerspective(
+      String namespace, Class<K> keyClass, Class<V> valueClass) {
     ClientNamespace ns;
 
     ns = getClientNamespace(namespace);
-    return new AsynchronousNamespacePerspectiveImpl<K, V>(ns, namespace,
-        new NamespacePerspectiveOptionsImpl<>(ns.getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
+    return new AsynchronousNamespacePerspectiveImpl<K, V>(
+        ns,
+        namespace,
+        new NamespacePerspectiveOptionsImpl<>(
+            ns.getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
   }
 
   @Override
-  public AsynchronousNamespacePerspective<String, byte[]> openAsyncNamespacePerspective(String namespace) {
-    return openAsyncNamespacePerspective(namespace, DHTConstants.defaultKeyClass, DHTConstants.defaultValueClass);
+  public AsynchronousNamespacePerspective<String, byte[]> openAsyncNamespacePerspective(
+      String namespace) {
+    return openAsyncNamespacePerspective(
+        namespace, DHTConstants.defaultKeyClass, DHTConstants.defaultValueClass);
   }
 
   @Override
-  public <K, V> SynchronousNamespacePerspective<K, V> openSyncNamespacePerspective(String namespace,
-      NamespacePerspectiveOptions<K, V> nspOptions) {
-    return new SynchronousNamespacePerspectiveImpl<K, V>(getClientNamespace(namespace), namespace,
+  public <K, V> SynchronousNamespacePerspective<K, V> openSyncNamespacePerspective(
+      String namespace, NamespacePerspectiveOptions<K, V> nspOptions) {
+    return new SynchronousNamespacePerspectiveImpl<K, V>(
+        getClientNamespace(namespace),
+        namespace,
         new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
   }
 
   @Override
-  public <K, V> SynchronousNamespacePerspective<K, V> openSyncNamespacePerspective(String namespace, Class<K> keyClass,
-      Class<V> valueClass) {
+  public <K, V> SynchronousNamespacePerspective<K, V> openSyncNamespacePerspective(
+      String namespace, Class<K> keyClass, Class<V> valueClass) {
     ClientNamespace ns;
 
     ns = getClientNamespace(namespace);
-    return new SynchronousNamespacePerspectiveImpl<K, V>(ns, namespace,
-        new NamespacePerspectiveOptionsImpl<>(ns.getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
+    return new SynchronousNamespacePerspectiveImpl<K, V>(
+        ns,
+        namespace,
+        new NamespacePerspectiveOptionsImpl<>(
+            ns.getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
   }
 
   @Override
-  public SynchronousNamespacePerspective<String, byte[]> openSyncNamespacePerspective(String namespace) {
-    return openSyncNamespacePerspective(namespace, DHTConstants.defaultKeyClass, DHTConstants.defaultValueClass);
+  public SynchronousNamespacePerspective<String, byte[]> openSyncNamespacePerspective(
+      String namespace) {
+    return openSyncNamespacePerspective(
+        namespace, DHTConstants.defaultKeyClass, DHTConstants.defaultValueClass);
   }
 
   @Override
@@ -544,8 +613,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   }
 
   class Worker extends BaseWorker<MessageAndConnection> {
-    Worker() {
-    }
+    Worker() {}
 
     @Override
     public void doWork(MessageAndConnection mac) {
@@ -556,7 +624,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   @Override
   public void receive(MessageGroup message, MessageGroupConnection connection) {
     _receive(message, connection);
-    //worker.addWork(new MessageAndConnection(message, connection));
+    // worker.addWork(new MessageAndConnection(message, connection));
     // FUTURE - add intelligence about when to do work directly and when to use a worker
   }
 
@@ -579,7 +647,9 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
       ExclusionSet newExclusionSet;
 
       if (systemNSP == null) {
-        systemNSP = getClientNamespace(Namespace.systemName).openAsyncPerspective(String.class, String.class);
+        systemNSP =
+            getClientNamespace(Namespace.systemName)
+                .openAsyncPerspective(String.class, String.class);
       }
       newExclusionSet = getCurrentExclusionSet();
       if (newExclusionSet != null) {
@@ -589,7 +659,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
         setExclusionSet(ExclusionSet.emptyExclusionSet(ExclusionSet.NO_VERSION));
       }
     } catch (Exception e) {
-      log.error("initializeExclusionSet() failed",e);
+      log.error("initializeExclusionSet() failed", e);
     }
   }
 
@@ -613,7 +683,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
       }
 
     } catch (Exception e) {
-      log.error("getCurrentExclusionSet() failed",e);
+      log.error("getCurrentExclusionSet() failed", e);
       return null;
     }
   }
@@ -653,7 +723,9 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
   void cancelAllActiveOps() {
     for (ClientNamespace namespace : clientNamespaceList) {
       List<AsyncOperationImpl> asyncOps = namespace.getActiveAsyncOperations();
-      log.info("trying to complete {} async operations on namespace {} with SESSION_CLOSED", asyncOps.size(),
+      log.info(
+          "trying to complete {} async operations on namespace {} with SESSION_CLOSED",
+          asyncOps.size(),
           namespace.getName());
       for (AsyncOperationImpl op : asyncOps) {
         op.setResult(SESSION_CLOSED);
@@ -666,7 +738,7 @@ public class DHTSessionImpl implements DHTSession, MessageGroupReceiver, Queuein
       try {
         checkForTimeouts();
       } catch (Exception e) {
-        log.error("",e);
+        log.error("", e);
       }
     }
   }

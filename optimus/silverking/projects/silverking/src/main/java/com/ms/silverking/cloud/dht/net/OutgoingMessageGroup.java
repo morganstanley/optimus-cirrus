@@ -50,8 +50,12 @@ public class OutgoingMessageGroup extends OutgoingData {
   private static final boolean displayContentsForDebug = false;
 
   // alternating
-  public OutgoingMessageGroup(MessageGroup messageGroup, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline, Priority priority) {
+  public OutgoingMessageGroup(
+      MessageGroup messageGroup,
+      UUIDBase sendUUID,
+      AsyncSendListener asyncSendListener,
+      long deadline,
+      Priority priority) {
     super(sendUUID, asyncSendListener, deadline, priority);
     this.messageGroup = messageGroup;
     buffers = createBuffers(messageGroup);
@@ -105,14 +109,19 @@ public class OutgoingMessageGroup extends OutgoingData {
     originator = messageGroup.getOriginator();
     if (originator.length != ValueCreator.BYTES) {
       throw new RuntimeException(
-          "originator.length != ValueCreator.BYTES\t" + originator.length + " " + ValueCreator.BYTES);
+          "originator.length != ValueCreator.BYTES\t"
+              + originator.length
+              + " "
+              + ValueCreator.BYTES);
     }
     leadingBuffer.put(originator);
     // For debugging
-    //Thread.dumpStack();
-    //System.out.printf("%x:%x %s messageGroup.getDeadlineRelativeMillis() %d\n",
-    //        messageGroup.getUUID().getMostSignificantBits(), messageGroup.getUUID().getLeastSignificantBits(),
-    //        IPAddrUtil.addrAndPortToString(messageGroup.getOriginator()), messageGroup.getDeadlineRelativeMillis());
+    // Thread.dumpStack();
+    // System.out.printf("%x:%x %s messageGroup.getDeadlineRelativeMillis() %d\n",
+    //        messageGroup.getUUID().getMostSignificantBits(),
+    // messageGroup.getUUID().getLeastSignificantBits(),
+    //        IPAddrUtil.addrAndPortToString(messageGroup.getOriginator()),
+    // messageGroup.getDeadlineRelativeMillis());
     leadingBuffer.putInt(messageGroup.getDeadlineRelativeMillis());
     leadingBuffer.put((byte) messageGroup.getForwardingMode().ordinal());
     leadingBuffer.position(0);
@@ -122,14 +131,15 @@ public class OutgoingMessageGroup extends OutgoingData {
     bufferLengthsArray = new byte[mgBuffers.length * NumConversion.BYTES_PER_INT];
     msg[bufferLengthsBufferIndex] = ByteBuffer.wrap(bufferLengthsArray);
     for (int i = 0; i < mgBuffers.length; i++) {
-      NumConversion.intToBytes(mgBuffers[i].remaining(), bufferLengthsArray, i * NumConversion.BYTES_PER_INT);
+      NumConversion.intToBytes(
+          mgBuffers[i].remaining(), bufferLengthsArray, i * NumConversion.BYTES_PER_INT);
       msg[numHeaderBuffers + i] = mgBuffers[i];
     }
     // FUTURE - think about whether to create buffers here to pipeline more...
     return msg;
   }
 
-  //private final long          creationTime = System.currentTimeMillis();
+  // private final long          creationTime = System.currentTimeMillis();
   private final int myID = nextID.getAndIncrement();
   private final AtomicInteger writes = new AtomicInteger();
   private static final AtomicInteger nextID = new AtomicInteger();
@@ -141,12 +151,12 @@ public class OutgoingMessageGroup extends OutgoingData {
       log.debug("writes: {}", writes.getAndIncrement());
       log.debug("myID: {}", myID);
       log.debug("this: {}", this);
-      //Log.fine("creationTime: ", creationTime);
+      // Log.fine("creationTime: ", creationTime);
       log.debug("time: {}", System.currentTimeMillis());
       Thread.dumpStack();
       displayForDebug();
     }
-    //bytesWritten += channel.write(buffers);
+    // bytesWritten += channel.write(buffers);
     bytesWritten += ChannelUtil.writeBuffersBatched(buffers, channel);
     if (AsyncGlobals.debug && log.isDebugEnabled()) {
       log.debug("writeToChannel bytesWritten / totalbytes   {}/{}", bytesWritten, totalBytes);
@@ -160,7 +170,9 @@ public class OutgoingMessageGroup extends OutgoingData {
 
   @Override
   public String toString() {
-    return String.format("OutgoingMessageGroup(sendUuid=%s,buffers.size=%d,content=[%s])", getSendUUID().toString(), messageGroup.getBuffers().length, getContentString());
+    return String.format(
+        "OutgoingMessageGroup(sendUuid=%s,buffers.size=%d,content=[%s])",
+        getSendUUID().toString(), messageGroup.getBuffers().length, getContentString());
   }
 
   private String getContentString() {

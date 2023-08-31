@@ -40,11 +40,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Utility to compute two things:
- * 1) The probability that a given ring will lose data with a given number of randomly failed servers
- * (with permanently lost data on those servers).
- * 2) Whether or not the permanent loss of data on a specific set of servers will cause data
- * loss for a specific ring.
+ * Utility to compute two things: 1) The probability that a given ring will lose data with a given
+ * number of randomly failed servers (with permanently lost data on those servers). 2) Whether or
+ * not the permanent loss of data on a specific set of servers will cause data loss for a specific
+ * ring.
  */
 public class ComputeRingStats {
   private final SKGridConfiguration gc;
@@ -55,7 +54,6 @@ public class ComputeRingStats {
 
   private static Logger log = LoggerFactory.getLogger(ComputeRingStats.class);
 
-
   private final ResolvedReplicaMap sMap;
   private final List<IPAndPort> replicas;
 
@@ -64,8 +62,11 @@ public class ComputeRingStats {
     this.gc = gc;
     this.out = System.out;
 
-    metaUtil = new MetaUtil(gc.getClientDHTConfiguration().getName(), gc.getClientDHTConfiguration().getZKConfig(),
-        MetaUtilOptions.dhtVersionUnspecified);
+    metaUtil =
+        new MetaUtil(
+            gc.getClientDHTConfiguration().getName(),
+            gc.getClientDHTConfiguration().getZKConfig(),
+            MetaUtilOptions.dhtVersionUnspecified);
     dhtMC = metaUtil.getDHTMC();
     ringParentName = metaUtil.getRingConfiguration().getRingParentName();
 
@@ -74,11 +75,13 @@ public class ComputeRingStats {
     replicas = ImmutableList.copyOf(sMap.allReplicas());
   }
 
-  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     return readTree(ring).getResolvedMap(ringParentName, new ReplicaNaiveIPPrioritizer());
   }
 
-  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     MetaClient ringMC;
     long ringConfigVersion;
     long configInstanceVersion;
@@ -197,7 +200,7 @@ public class ComputeRingStats {
       if (line != null) {
         line = line.trim();
         if (line.length() > 0) {
-          lostServers.add(new IPAndPort(line, 0/*gc.getClientDHTConfiguration().getPort()*/));
+          lostServers.add(new IPAndPort(line, 0 /*gc.getClientDHTConfiguration().getPort()*/));
         }
       }
     } while (line != null);
@@ -205,14 +208,14 @@ public class ComputeRingStats {
   }
 
   public boolean lostData(Set<IPAndPort> lostServers) {
-    //out.println(lostServers);
+    // out.println(lostServers);
     for (Set<IPAndPort> replicaSet : this.sMap.getReplicaSets()) {
       boolean lost;
 
       lost = true;
-      //out.println(replicaSet);
+      // out.println(replicaSet);
       for (IPAndPort replica : replicaSet) {
-        //out.println(replica);
+        // out.println(replica);
         if (!lostServers.contains(replica)) {
           lost = false;
           break;

@@ -67,7 +67,8 @@ public class TraceToCSV {
     data.add(sampleData);
   }
 
-  private void generateStats(StatSample statSample, Map<String, String> sampleData, String statDef) {
+  private void generateStats(
+      StatSample statSample, Map<String, String> sampleData, String statDef) {
     for (Stat stat : statSample.getMatchingStats(statDef)) {
       long delta;
 

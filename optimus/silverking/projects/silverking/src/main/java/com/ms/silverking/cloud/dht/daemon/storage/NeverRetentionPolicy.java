@@ -23,8 +23,7 @@ public class NeverRetentionPolicy implements ValueRetentionPolicy {
   }
 
   @OmitGeneration
-  public NeverRetentionPolicy() {
-  }
+  public NeverRetentionPolicy() {}
 
   @Override
   public String toString() {

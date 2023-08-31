@@ -25,25 +25,26 @@ public class HashFunctionChecksum implements Checksum {
   private final int bytes;
   private final byte[] emptyChecksum;
 
-  public enum Type {Murmur3_32, Murmur3_128, /*Adler32*/}
-
-  ;
+  public enum Type {
+    Murmur3_32,
+    Murmur3_128, /*Adler32*/
+  };
 
   public HashFunctionChecksum(Type type) {
     switch (type) {
-    case Murmur3_32:
-      hashFunction = Hashing.murmur3_32_fixed();
-      break;
-    case Murmur3_128:
-      hashFunction = Hashing.murmur3_128();
-      break;
-            /*
+      case Murmur3_32:
+        hashFunction = Hashing.murmur3_32_fixed();
+        break;
+      case Murmur3_128:
+        hashFunction = Hashing.murmur3_128();
+        break;
+        /*
         case Adler32:
             hashFunction = Hashing.adler32();
             break;
             */
-    default:
-      throw new RuntimeException("panic");
+      default:
+        throw new RuntimeException("panic");
     }
     bytes = hashFunction.bits() / 8;
     emptyChecksum = new byte[bytes];

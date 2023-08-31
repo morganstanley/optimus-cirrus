@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.dht.management;
 import org.kohsuke.args4j.Option;
 
 public class MetaUtilOptions {
-  MetaUtilOptions() {
-  }
+  MetaUtilOptions() {}
 
   public static final int dhtVersionUnspecified = -1;
 

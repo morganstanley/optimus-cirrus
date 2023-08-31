@@ -21,10 +21,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-/**
- * Iterates through all entries of a nested concurrent map and removes
- * entries that are empty.
- */
+/** Iterates through all entries of a nested concurrent map and removes entries that are empty. */
 public class NestedConcurrentMapCleaner<K, L, V> extends TimerTask {
   private final ConcurrentMap<K, ConcurrentMap<L, V>> map;
   private final boolean verbose;
@@ -32,15 +29,16 @@ public class NestedConcurrentMapCleaner<K, L, V> extends TimerTask {
 
   private static Logger log = LoggerFactory.getLogger(NestedConcurrentMapCleaner.class);
 
-  public NestedConcurrentMapCleaner(ConcurrentMap<K, ConcurrentMap<L, V>> map, Timer timer, long periodMillis,
-      boolean verbose) {
+  public NestedConcurrentMapCleaner(
+      ConcurrentMap<K, ConcurrentMap<L, V>> map, Timer timer, long periodMillis, boolean verbose) {
     this.map = map;
     timer.scheduleAtFixedRate(this, periodMillis, periodMillis);
     this.verbose = verbose;
     candidates = new HashSet<>();
   }
 
-  public NestedConcurrentMapCleaner(ConcurrentMap<K, ConcurrentMap<L, V>> map, Timer timer, long periodMillis) {
+  public NestedConcurrentMapCleaner(
+      ConcurrentMap<K, ConcurrentMap<L, V>> map, Timer timer, long periodMillis) {
     this(map, timer, periodMillis, false);
   }
 
@@ -48,7 +46,7 @@ public class NestedConcurrentMapCleaner<K, L, V> extends TimerTask {
     int size;
 
     if (verbose) {
-      //System.gc();
+      // System.gc();
       log.info("Cleaning: {}", map);
     }
     size = 0;
@@ -69,13 +67,12 @@ public class NestedConcurrentMapCleaner<K, L, V> extends TimerTask {
         } else {
           candidates.add(entry.getKey());
         }
-
       }
     }
     if (verbose) {
       log.info("size: {}", size);
-      //System.gc();
-      //Log.info("MB Free: "+ (Runtime.getRuntime().freeMemory() / (1024 * 1024)));
+      // System.gc();
+      // Log.info("MB Free: "+ (Runtime.getRuntime().freeMemory() / (1024 * 1024)));
     }
   }
 }

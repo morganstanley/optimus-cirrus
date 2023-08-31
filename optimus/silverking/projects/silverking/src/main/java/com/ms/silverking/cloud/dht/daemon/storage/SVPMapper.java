@@ -24,9 +24,7 @@ import com.ms.silverking.io.FileUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Convert values stored in StorageValueAndParameters to private mapped byte buffers.
- */
+/** Convert values stored in StorageValueAndParameters to private mapped byte buffers. */
 class SVPMapper {
   private final Mode mode;
   private final FileChannel privateBaseFC;
@@ -34,9 +32,11 @@ class SVPMapper {
 
   private static Logger log = LoggerFactory.getLogger(SVPMapper.class);
 
-  public enum Mode {NoMap, PrivateMap, FileBackedMap}
-
-  ;
+  public enum Mode {
+    NoMap,
+    PrivateMap,
+    FileBackedMap
+  };
 
   public static SVPMapper newPrivateModeMapper(int baseMapSize) throws IOException {
     return new SVPMapper(baseMapSize);
@@ -58,7 +58,8 @@ class SVPMapper {
     this.privateBaseFC = null;
   }
 
-  private Triple<FileChannel, RandomAccessFile, File> createFileChannel(File mapDir, int mapSize) throws IOException {
+  private Triple<FileChannel, RandomAccessFile, File> createFileChannel(File mapDir, int mapSize)
+      throws IOException {
     File f;
     RandomAccessFile rf;
     FileChannel fc;
@@ -76,37 +77,48 @@ class SVPMapper {
     MappedByteBuffer mbb;
 
     switch (mode) {
-    case PrivateMap:
-      mbb = privateBaseFC.map(MapMode.PRIVATE, 0, size);
-      break;
-    case FileBackedMap:
-      Triple<FileChannel, RandomAccessFile, File> f;
+      case PrivateMap:
+        mbb = privateBaseFC.map(MapMode.PRIVATE, 0, size);
+        break;
+      case FileBackedMap:
+        Triple<FileChannel, RandomAccessFile, File> f;
 
-      f = null;
-      try {
-
-        f = createFileChannel(fileDir, size);
-        mbb = f.getV1().map(MapMode.READ_WRITE, 0, size);
-      } finally {
+        f = null;
         try {
-          f.getV2().close();
+
+          f = createFileChannel(fileDir, size);
+          mbb = f.getV1().map(MapMode.READ_WRITE, 0, size);
         } finally {
-          f.getV3().delete();
+          try {
+            f.getV2().close();
+          } finally {
+            f.getV3().delete();
+          }
         }
-      }
-      break;
-    default:
-      throw new RuntimeException("panic");
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
     return mbb;
   }
 
-  public StorageValueAndParameters convertToMappedSVP(StorageValueAndParameters svp) throws IOException {
+  public StorageValueAndParameters convertToMappedSVP(StorageValueAndParameters svp)
+      throws IOException {
     StorageValueAndParameters msvp;
 
-    msvp = new StorageValueAndParameters(svp.getKey(), convertToMappedBuffer(svp.getValue()), svp.getVersion(),
-        svp.getUncompressedSize(), svp.getCompressedSize(), svp.getCCSS(), svp.getChecksum(), svp.getValueCreator(),
-        svp.getCreationTime(), svp.getRequiredPreviousVersion(), svp.getLockSeconds());
+    msvp =
+        new StorageValueAndParameters(
+            svp.getKey(),
+            convertToMappedBuffer(svp.getValue()),
+            svp.getVersion(),
+            svp.getUncompressedSize(),
+            svp.getCompressedSize(),
+            svp.getCCSS(),
+            svp.getChecksum(),
+            svp.getValueCreator(),
+            svp.getCreationTime(),
+            svp.getRequiredPreviousVersion(),
+            svp.getLockSeconds());
     return msvp;
   }
 
@@ -120,5 +132,4 @@ class SVPMapper {
     mb.flip();
     return mb;
   }
-
 }

@@ -19,16 +19,15 @@ import static com.ms.silverking.time.TimeUtils.nanos2secondsBD;
 import java.math.BigDecimal;
 
 /**
- * <p>Provides the core of a basic Stopwatch implementation. State stored by this
- * abstract class is restricted to start and stop times to keep memory
- * utilization to a minimum. Concrete classes can decide how much additional
- * state is desired.</p>
+ * Provides the core of a basic Stopwatch implementation. State stored by this abstract class is
+ * restricted to start and stop times to keep memory utilization to a minimum. Concrete classes can
+ * decide how much additional state is desired.
  *
- * <p><b>NOTE: quick checking in this class is minimal to keep this class lean;
- * concrete classes can add more if desired.</b></p>
+ * <p><b>NOTE: quick checking in this class is minimal to keep this class lean; concrete classes can
+ * add more if desired.</b>
  *
- * <p>This class is <b>not</b> completely threadsafe though
- * portions may safely be used by multiple threads.</p>
+ * <p>This class is <b>not</b> completely threadsafe though portions may safely be used by multiple
+ * threads.
  */
 public abstract class StopwatchBase implements Stopwatch {
   private long startTimeNanos;

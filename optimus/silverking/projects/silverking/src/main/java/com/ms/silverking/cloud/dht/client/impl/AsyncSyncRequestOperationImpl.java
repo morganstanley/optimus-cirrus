@@ -15,9 +15,13 @@ import com.ms.silverking.cloud.dht.client.AsyncSyncRequest;
 import com.ms.silverking.cloud.dht.client.OperationException;
 import com.ms.silverking.cloud.dht.common.Context;
 
-class AsyncSyncRequestOperationImpl extends AsyncVersionedBasicOperationImpl implements AsyncSyncRequest {
-  public AsyncSyncRequestOperationImpl(VersionedBasicNamespaceOperation versionedOperation, Context context,
-      long curTime, byte[] originator) {
+class AsyncSyncRequestOperationImpl extends AsyncVersionedBasicOperationImpl
+    implements AsyncSyncRequest {
+  public AsyncSyncRequestOperationImpl(
+      VersionedBasicNamespaceOperation versionedOperation,
+      Context context,
+      long curTime,
+      byte[] originator) {
     super(versionedOperation, context, curTime, originator);
   }
 

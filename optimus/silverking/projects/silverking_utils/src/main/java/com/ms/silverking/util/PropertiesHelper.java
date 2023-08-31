@@ -17,20 +17,28 @@ import java.util.Properties;
 
 import com.ms.silverking.text.CoreStringUtil;
 
-/**
- * Simplifies common interaction with java.util.Properties
- */
+/** Simplifies common interaction with java.util.Properties */
 public class PropertiesHelper {
   private final Properties prop;
 
-  public enum ParseExceptionAction {DefaultOnParseException, RethrowParseException}
-  public enum UndefinedAction {DefaultOnUndefined, ExceptionOnUndefined, ZeroOnUndefined}
+  public enum ParseExceptionAction {
+    DefaultOnParseException,
+    RethrowParseException
+  }
+
+  public enum UndefinedAction {
+    DefaultOnUndefined,
+    ExceptionOnUndefined,
+    ZeroOnUndefined
+  }
 
   public static final PropertiesHelper systemHelper;
   public static final PropertiesHelper envHelper;
 
-  private static final ParseExceptionAction standardParseExceptionAction = ParseExceptionAction.DefaultOnParseException;
-  private static final UndefinedAction standardUndefinedAction = UndefinedAction.ExceptionOnUndefined;
+  private static final ParseExceptionAction standardParseExceptionAction =
+      ParseExceptionAction.DefaultOnParseException;
+  private static final UndefinedAction standardUndefinedAction =
+      UndefinedAction.ExceptionOnUndefined;
 
   static {
     Properties envProperties;
@@ -70,7 +78,8 @@ public class PropertiesHelper {
     }
   }
 
-  private <T> T getUndefinedValue(String name, UndefinedAction undefinedAction, T zeroValue, T defaultValue) {
+  private <T> T getUndefinedValue(
+      String name, UndefinedAction undefinedAction, T zeroValue, T defaultValue) {
     switch (undefinedAction) {
       case ZeroOnUndefined:
         return zeroValue;
@@ -98,10 +107,11 @@ public class PropertiesHelper {
 
   // int
 
-  int getInt(String name,
-             int defaultValue,
-             UndefinedAction undefinedAction,
-             ParseExceptionAction parseExceptionAction) {
+  int getInt(
+      String name,
+      int defaultValue,
+      UndefinedAction undefinedAction,
+      ParseExceptionAction parseExceptionAction) {
     String def;
 
     def = prop.getProperty(name);
@@ -116,9 +126,10 @@ public class PropertiesHelper {
     }
   }
 
-  private <T> T getExceptionValue(ParseExceptionAction parseExceptionAction,
-                                  T defaultValue,
-                                  RuntimeException exceptionToThrow) {
+  private <T> T getExceptionValue(
+      ParseExceptionAction parseExceptionAction,
+      T defaultValue,
+      RuntimeException exceptionToThrow) {
     switch (parseExceptionAction) {
       case DefaultOnParseException:
         return defaultValue;
@@ -132,10 +143,15 @@ public class PropertiesHelper {
   }
 
   public int getInt(String name, int defaultValue) {
-    return getInt(name, defaultValue, UndefinedAction.DefaultOnUndefined, ParseExceptionAction.DefaultOnParseException);
+    return getInt(
+        name,
+        defaultValue,
+        UndefinedAction.DefaultOnUndefined,
+        ParseExceptionAction.DefaultOnParseException);
   }
 
-  public int getInt(String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
+  public int getInt(
+      String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
     verifyNotDefaultOnUndefined(undefinedAction);
     return getInt(name, 0, undefinedAction, parseExceptionAction);
   }
@@ -155,10 +171,11 @@ public class PropertiesHelper {
 
   // boolean
 
-  boolean getBoolean(String name,
-                     boolean defaultValue,
-                     UndefinedAction undefinedAction,
-                     ParseExceptionAction parseExceptionAction) {
+  boolean getBoolean(
+      String name,
+      boolean defaultValue,
+      UndefinedAction undefinedAction,
+      ParseExceptionAction parseExceptionAction) {
     String def;
 
     def = prop.getProperty(name);
@@ -173,11 +190,13 @@ public class PropertiesHelper {
     }
   }
 
-  public boolean getBoolean(String name, boolean defaultValue, ParseExceptionAction parseExceptionAction) {
+  public boolean getBoolean(
+      String name, boolean defaultValue, ParseExceptionAction parseExceptionAction) {
     return getBoolean(name, defaultValue, UndefinedAction.DefaultOnUndefined, parseExceptionAction);
   }
 
-  public boolean getBoolean(String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
+  public boolean getBoolean(
+      String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
     verifyNotDefaultOnUndefined(undefinedAction);
     return getBoolean(name, false, undefinedAction, parseExceptionAction);
   }
@@ -192,7 +211,8 @@ public class PropertiesHelper {
   }
 
   public boolean getBoolean(String name, boolean defaultValue) {
-    return getBoolean(name, defaultValue, UndefinedAction.DefaultOnUndefined, standardParseExceptionAction);
+    return getBoolean(
+        name, defaultValue, UndefinedAction.DefaultOnUndefined, standardParseExceptionAction);
   }
 
   public boolean getBoolean(String name) {
@@ -201,10 +221,11 @@ public class PropertiesHelper {
 
   // long
 
-  long getLong(String name,
-               long defaultValue,
-               UndefinedAction undefinedAction,
-               ParseExceptionAction parseExceptionAction) {
+  long getLong(
+      String name,
+      long defaultValue,
+      UndefinedAction undefinedAction,
+      ParseExceptionAction parseExceptionAction) {
     String def;
 
     def = prop.getProperty(name);
@@ -223,7 +244,8 @@ public class PropertiesHelper {
     return getLong(name, defaultValue, UndefinedAction.DefaultOnUndefined, parseExceptionAction);
   }
 
-  public long getLong(String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
+  public long getLong(
+      String name, UndefinedAction undefinedAction, ParseExceptionAction parseExceptionAction) {
     verifyNotDefaultOnUndefined(undefinedAction);
     return getLong(name, 0, undefinedAction, parseExceptionAction);
   }
@@ -238,10 +260,11 @@ public class PropertiesHelper {
   }
 
   public long getLong(String name, long defaultValue) {
-    return getLong(name,
-                   defaultValue,
-                   UndefinedAction.DefaultOnUndefined,
-                   ParseExceptionAction.DefaultOnParseException);
+    return getLong(
+        name,
+        defaultValue,
+        UndefinedAction.DefaultOnUndefined,
+        ParseExceptionAction.DefaultOnParseException);
   }
 
   public long getLong(String name) {
@@ -250,10 +273,11 @@ public class PropertiesHelper {
 
   // double
 
-  private double getDouble(String name,
-                   double defaultValue,
-                   UndefinedAction undefinedAction,
-                   ParseExceptionAction parseExceptionAction) {
+  private double getDouble(
+      String name,
+      double defaultValue,
+      UndefinedAction undefinedAction,
+      ParseExceptionAction parseExceptionAction) {
     String def;
 
     def = prop.getProperty(name);
@@ -269,18 +293,20 @@ public class PropertiesHelper {
   }
 
   public double getDouble(String name, double defaultValue) {
-    return getDouble(name,
-                     defaultValue,
-                     UndefinedAction.DefaultOnUndefined,
-                     ParseExceptionAction.DefaultOnParseException);
+    return getDouble(
+        name,
+        defaultValue,
+        UndefinedAction.DefaultOnUndefined,
+        ParseExceptionAction.DefaultOnParseException);
   }
 
   // Enum
 
-  public <T extends Enum> T getEnum(String name,
-                                    T defaultValue,
-                                    UndefinedAction undefinedAction,
-                                    ParseExceptionAction parseExceptionAction) {
+  public <T extends Enum> T getEnum(
+      String name,
+      T defaultValue,
+      UndefinedAction undefinedAction,
+      ParseExceptionAction parseExceptionAction) {
     if (defaultValue == null) {
       throw new RuntimeException("defaultValue cannot be null for enum");
     } else {
@@ -294,17 +320,17 @@ public class PropertiesHelper {
           return getExceptionValue(parseExceptionAction, defaultValue, iae);
         }
       } else {
-        return getUndefinedValue(name,
-                                 undefinedAction != null
-                                 ? undefinedAction
-                                 : UndefinedAction.DefaultOnUndefined,
-                                 null,
-                                 defaultValue);
+        return getUndefinedValue(
+            name,
+            undefinedAction != null ? undefinedAction : UndefinedAction.DefaultOnUndefined,
+            null,
+            defaultValue);
       }
     }
   }
 
-  public <T extends Enum> T getEnum(String name, T defaultValue, ParseExceptionAction parseExceptionAction) {
+  public <T extends Enum> T getEnum(
+      String name, T defaultValue, ParseExceptionAction parseExceptionAction) {
     return getEnum(name, defaultValue, UndefinedAction.DefaultOnUndefined, parseExceptionAction);
   }
 
@@ -314,6 +340,7 @@ public class PropertiesHelper {
   }
 
   public <T extends Enum> T getEnum(String name, T defaultValue) {
-    return getEnum(name, defaultValue, UndefinedAction.DefaultOnUndefined, standardParseExceptionAction);
+    return getEnum(
+        name, defaultValue, UndefinedAction.DefaultOnUndefined, standardParseExceptionAction);
   }
 }

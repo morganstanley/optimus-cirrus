@@ -23,7 +23,8 @@ public class RecorderFactory {
 
   // This method will be called at launch time
   public static void ensureInitialized() {
-    Preconditions.checkNotNull(singletonRecorderInstance,
+    Preconditions.checkNotNull(
+        singletonRecorderInstance,
         "Recorder hasn't been set in RecorderFactory in a server who has record feature enabled");
   }
 
@@ -38,5 +39,4 @@ public class RecorderFactory {
   public static void clear() {
     singletonRecorderInstance = null;
   }
-
 }

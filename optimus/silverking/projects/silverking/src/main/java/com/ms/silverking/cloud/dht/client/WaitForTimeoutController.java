@@ -18,11 +18,9 @@ import com.ms.silverking.cloud.dht.client.gen.OmitGeneration;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * Parent class of all OpTimeoutControllers
- * for WaitFor operations. For these operations, the only parameters that
- * may be specified are the internal retry intervals. All other
- * parameters are either implicitly or explicitly specified in
- * the WaitOptions for the operation.
+ * Parent class of all OpTimeoutControllers for WaitFor operations. For these operations, the only
+ * parameters that may be specified are the internal retry intervals. All other parameters are
+ * either implicitly or explicitly specified in the WaitOptions for the operation.
  */
 @OmitGeneration
 public class WaitForTimeoutController implements OpTimeoutController {
@@ -40,7 +38,8 @@ public class WaitForTimeoutController implements OpTimeoutController {
     ObjectDefParser2.addParser(template);
   }
 
-  public WaitForTimeoutController(int internalRetryIntervalSeconds, int internalExclusionChangeRetryIntervalSeconds) {
+  public WaitForTimeoutController(
+      int internalRetryIntervalSeconds, int internalExclusionChangeRetryIntervalSeconds) {
     this.internalRetryIntervalSeconds = internalRetryIntervalSeconds;
     this.internalExclusionChangeRetryIntervalSeconds = internalExclusionChangeRetryIntervalSeconds;
   }
@@ -64,7 +63,8 @@ public class WaitForTimeoutController implements OpTimeoutController {
   }
 
   @Override
-  public long getRelativeExclusionChangeRetryMillisForAttempt(AsyncOperation op, int curAttemptIndex) {
+  public long getRelativeExclusionChangeRetryMillisForAttempt(
+      AsyncOperation op, int curAttemptIndex) {
     return internalExclusionChangeRetryIntervalSeconds * 1000;
   }
 
@@ -84,8 +84,8 @@ public class WaitForTimeoutController implements OpTimeoutController {
 
   @Override
   public int hashCode() {
-    return Integer.hashCode(internalRetryIntervalSeconds) ^ Integer.hashCode(
-        internalExclusionChangeRetryIntervalSeconds);
+    return Integer.hashCode(internalRetryIntervalSeconds)
+        ^ Integer.hashCode(internalExclusionChangeRetryIntervalSeconds);
   }
 
   @Override
@@ -100,7 +100,9 @@ public class WaitForTimeoutController implements OpTimeoutController {
 
     WaitForTimeoutController other;
     other = (WaitForTimeoutController) o;
-    return internalRetryIntervalSeconds == other.internalRetryIntervalSeconds && this.internalExclusionChangeRetryIntervalSeconds == other.internalExclusionChangeRetryIntervalSeconds;
+    return internalRetryIntervalSeconds == other.internalRetryIntervalSeconds
+        && this.internalExclusionChangeRetryIntervalSeconds
+            == other.internalExclusionChangeRetryIntervalSeconds;
   }
 
   @Override

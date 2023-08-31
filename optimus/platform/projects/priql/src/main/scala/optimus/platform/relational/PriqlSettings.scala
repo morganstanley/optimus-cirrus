@@ -26,7 +26,8 @@ object PriqlSettings {
 
   val enableTableScanCheck = DiagnosticSettings.getBoolProperty("optimus.priql.enableTableScanCheck", true)
 
-  val preferASMCompiler = DiagnosticSettings.getBoolProperty("optimus.priql.compiler.preferASM", true)
+  val handlePropertyReadErrorForQueryDisplay =
+    DiagnosticSettings.getBoolProperty("optimus.priql.handlePropertyReadErrorForQueryDisplay", true)
 
   // WARNING : If default value is modified, please change the code DistributionUtils.scala
   val defaultEnableProjectedQueryValue = false

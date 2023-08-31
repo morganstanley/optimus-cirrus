@@ -23,9 +23,7 @@ import com.ms.silverking.util.jvm.Finalization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Monitor JVM memory.
- */
+/** Monitor JVM memory. */
 public class JVMMonitor implements Runnable {
   private boolean running;
 
@@ -57,8 +55,13 @@ public class JVMMonitor implements Runnable {
   private double maxMemoryMB;
   private double totalMemoryMB;
 
-  public JVMMonitor(int minUpdateIntervalMillis, int maxUpdateIntervalMillis, int finalizationIntervalMillis,
-      boolean display, double lowMemoryThresholdMB, Finalization finalization) {
+  public JVMMonitor(
+      int minUpdateIntervalMillis,
+      int maxUpdateIntervalMillis,
+      int finalizationIntervalMillis,
+      boolean display,
+      double lowMemoryThresholdMB,
+      Finalization finalization) {
     this.minUpdateIntervalMillis = minUpdateIntervalMillis;
     this.maxUpdateIntervalMillis = maxUpdateIntervalMillis;
     this.finalizationIntervalMillis = finalizationIntervalMillis;
@@ -78,9 +81,18 @@ public class JVMMonitor implements Runnable {
     new Thread(this, "JVMMonitor").start();
   }
 
-  public JVMMonitor(int minUpdateIntervalMillis, int maxUpdateIntervalMillis, int finalizationIntervalMillis,
+  public JVMMonitor(
+      int minUpdateIntervalMillis,
+      int maxUpdateIntervalMillis,
+      int finalizationIntervalMillis,
       boolean display) {
-    this(minUpdateIntervalMillis, maxUpdateIntervalMillis, finalizationIntervalMillis, display, 0, null);
+    this(
+        minUpdateIntervalMillis,
+        maxUpdateIntervalMillis,
+        finalizationIntervalMillis,
+        display,
+        0,
+        null);
   }
 
   public void addMemoryObserver(JVMMemoryObserver memoryObserver) {
@@ -142,7 +154,7 @@ public class JVMMonitor implements Runnable {
       totalMemoryMB = bytesToMB(totalMemory);
       currentMemoryLow = freeMemoryMB < lowMemoryThresholdMB;
       if (currentMemoryLow) {
-        log.info("Memory is low: {}" , freeMemoryMB);
+        log.info("Memory is low: {}", freeMemoryMB);
       }
     } else {
       currentMemoryLow = false;
@@ -175,8 +187,9 @@ public class JVMMonitor implements Runnable {
   }
 
   public String statusString() {
-    return String.format("JVMMonitor: %f\t%4.2f\t%4.2f\t%4.2f\t%s", sw.getSplitSeconds(), freeMemoryMB, maxMemoryMB,
-        totalMemoryMB, memoryLow);
+    return String.format(
+        "JVMMonitor: %f\t%4.2f\t%4.2f\t%4.2f\t%s",
+        sw.getSplitSeconds(), freeMemoryMB, maxMemoryMB, totalMemoryMB, memoryLow);
   }
 
   public void run() {
@@ -206,7 +219,7 @@ public class JVMMonitor implements Runnable {
         }
         ThreadUtil.sleep(minUpdateIntervalMillis);
       } catch (Exception e) {
-        log.error("JVMMonitor , run",e);
+        log.error("JVMMonitor , run", e);
         ThreadUtil.pauseAfterException();
       }
     }
@@ -218,5 +231,4 @@ public class JVMMonitor implements Runnable {
   public static void main(String[] args) {
     new JVMMonitor(1000, 20 * 1000, 20 * 1000, true);
   }
-
 }

@@ -38,7 +38,9 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
     opLWTMode = OpLWTMode.AllowUserThreadUsage;
   }
 
-  SynchronousNamespacePerspectiveImpl(ClientNamespace clientNamespace, String name,
+  SynchronousNamespacePerspectiveImpl(
+      ClientNamespace clientNamespace,
+      String name,
       NamespacePerspectiveOptionsImpl<K, V> nspoImpl) {
     super(clientNamespace, name, nspoImpl);
   }
@@ -51,8 +53,8 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
   // reads
 
   @Override
-  public Map<K, ? extends StoredValue<V>> retrieve(Set<? extends K> keys, RetrievalOptions retrievalOptions)
-      throws RetrievalException {
+  public Map<K, ? extends StoredValue<V>> retrieve(
+      Set<? extends K> keys, RetrievalOptions retrievalOptions) throws RetrievalException {
     AsyncRetrieval<K, V> asyncRetrieval;
 
     asyncRetrieval = baseRetrieve(keys, retrievalOptions, opLWTMode);
@@ -61,12 +63,14 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
   }
 
   @Override
-  public Map<K, ? extends StoredValue<V>> retrieve(Set<? extends K> keys) throws RetrievalException {
+  public Map<K, ? extends StoredValue<V>> retrieve(Set<? extends K> keys)
+      throws RetrievalException {
     return retrieve(keys, nspoImpl.getDefaultGetOptions());
   }
 
   @Override
-  public StoredValue<V> retrieve(K key, RetrievalOptions retrievalOptions) throws RetrievalException {
+  public StoredValue<V> retrieve(K key, RetrievalOptions retrievalOptions)
+      throws RetrievalException {
     Map<K, ? extends StoredValue<V>> storedValues;
 
     storedValues = retrieve(ImmutableSet.of(key), retrievalOptions);
@@ -114,7 +118,8 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
   }
 
   @Override
-  public Map<K, V> waitFor(Set<? extends K> keys, WaitOptions waitOptions) throws RetrievalException {
+  public Map<K, V> waitFor(Set<? extends K> keys, WaitOptions waitOptions)
+      throws RetrievalException {
     AsyncValueRetrieval<K, V> asyncRetrieval;
 
     asyncRetrieval = (AsyncValueRetrieval<K, V>) baseRetrieve(keys, waitOptions, opLWTMode);
@@ -166,11 +171,14 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
     put(key, value, nspoImpl.getDefaultPutOptions());
   }
 
-  public void invalidate(Set<? extends K> keys, InvalidationOptions invalidationOptions) throws InvalidationException {
+  public void invalidate(Set<? extends K> keys, InvalidationOptions invalidationOptions)
+      throws InvalidationException {
     try {
-      baseInvalidation(keys, invalidationOptions, nspoImpl.getValueSerializer(), opLWTMode).waitForCompletion();
+      baseInvalidation(keys, invalidationOptions, nspoImpl.getValueSerializer(), opLWTMode)
+          .waitForCompletion();
     } catch (PutException e) {
-      throw new InvalidationException(e.getMessage(), e.getCause(), e.getOperationState(), e.getFailureCause());
+      throw new InvalidationException(
+          e.getMessage(), e.getCause(), e.getOperationState(), e.getFailureCause());
     }
   }
 
@@ -178,45 +186,45 @@ class SynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspective
     invalidate(keys, nspoImpl.getDefaultInvalidationOptions());
   }
 
-  public void invalidate(K key, InvalidationOptions invalidationOptions) throws InvalidationException {
+  public void invalidate(K key, InvalidationOptions invalidationOptions)
+      throws InvalidationException {
     invalidate(ImmutableSet.of(key), invalidationOptions);
   }
 
   public void invalidate(K key) throws InvalidationException {
     invalidate(key, nspoImpl.getDefaultInvalidationOptions());
   }
-    
-    /*
-     * snapshots deprecated for now
-    @Override
-    public void snapshot(long version) throws SnapshotException {
-        try {
-            baseSnapshot(version, null).waitForCompletion();
-        } catch (OperationException oe) {
-            throw (SnapshotException)oe;
-        }
-    }
 
-    @Override
-    public void snapshot() throws SnapshotException {
-        snapshot(SystemTimeUtil.systemTimeSource.absTimeMillis());
-    }
-    */
-    
-    /*
-    @Override
-    public void syncRequest(long version) throws SyncRequestException {
-        try {
-            baseSyncRequest(version, null).waitForCompletion();
-        } catch (OperationException oe) {
-            throw (SyncRequestException)oe;
-        }
-    }
+  /*
+   * snapshots deprecated for now
+  @Override
+  public void snapshot(long version) throws SnapshotException {
+      try {
+          baseSnapshot(version, null).waitForCompletion();
+      } catch (OperationException oe) {
+          throw (SnapshotException)oe;
+      }
+  }
 
-    @Override
-    public void syncRequest() throws SyncRequestException {
-        syncRequest(getAbsMillisTimeSource().absTimeMillis());
-    }
-    */
+  @Override
+  public void snapshot() throws SnapshotException {
+      snapshot(SystemTimeUtil.systemTimeSource.absTimeMillis());
+  }
+  */
+
+  /*
+  @Override
+  public void syncRequest(long version) throws SyncRequestException {
+      try {
+          baseSyncRequest(version, null).waitForCompletion();
+      } catch (OperationException oe) {
+          throw (SyncRequestException)oe;
+      }
+  }
+
+  @Override
+  public void syncRequest() throws SyncRequestException {
+      syncRequest(getAbsMillisTimeSource().absTimeMillis());
+  }
+  */
 }
-

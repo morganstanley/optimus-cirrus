@@ -30,22 +30,46 @@ public class AsyncSendListenerWithTracerImpl implements AsyncSendListener {
 
   @Override
   public void sent(UUIDBase uuid) {
-    log.trace(String.format("Async request has been sent: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
+    log.trace(
+        String.format(
+            "Async request has been sent: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
   }
 
   @Override
   public void failed(UUIDBase uuid) {
-    log.warn(String.format("Async request failed: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
+    log.warn(
+        String.format(
+            "Async request failed: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
   }
 
   @Override
-  public void timeout(UUIDBase uuid, long lastPollTime, long currPollTime, int currQueueSize, long creationTime, long deadline, long currTime) {
-    log.warn(String.format("Async request timeout: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
-    tracer.onAsyncSendTimeout(uuid, traceIdStr, lastPollTime, currPollTime, currQueueSize, creationTime, deadline, currTime);
+  public void timeout(
+      UUIDBase uuid,
+      long lastPollTime,
+      long currPollTime,
+      int currQueueSize,
+      long creationTime,
+      long deadline,
+      long currTime) {
+    log.warn(
+        String.format(
+            "Async request timeout: sendId=[%s] traceId=[%s]", uuid.toString(), traceIdStr));
+    tracer.onAsyncSendTimeout(
+        uuid,
+        traceIdStr,
+        lastPollTime,
+        currPollTime,
+        currQueueSize,
+        creationTime,
+        deadline,
+        currTime);
   }
 
   @Override
   public void pushIntoOutputQueue(UUIDBase uuid, int queueSize) {
-    log.info(String.format("Async request pushIntoOutputQueue: sendId=[%s] traceId=[%s] queueSize=[%d]", uuid.toString(), traceIdStr, queueSize));
+    log.info(
+        String.format(
+            "Async request pushIntoOutputQueue: sendId=[%s] traceId=[%s] queueSize=[%d]",
+            uuid.toString(), traceIdStr, queueSize));
   }
 }

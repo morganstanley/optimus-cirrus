@@ -50,8 +50,11 @@ public class RingInfo {
     this.gc = gc;
     this.out = System.out;
 
-    metaUtil = new MetaUtil(gc.getClientDHTConfiguration().getName(), gc.getClientDHTConfiguration().getZKConfig(),
-        MetaUtilOptions.dhtVersionUnspecified);
+    metaUtil =
+        new MetaUtil(
+            gc.getClientDHTConfiguration().getName(),
+            gc.getClientDHTConfiguration().getZKConfig(),
+            MetaUtilOptions.dhtVersionUnspecified);
     dhtMC = metaUtil.getDHTMC();
     ringParentName = metaUtil.getRingConfiguration().getRingParentName();
 
@@ -59,7 +62,8 @@ public class RingInfo {
     curRingAndVersionPair = dhtRingCurTargetZK.getCurRingAndVersionPair();
   }
 
-  public void getRingInfo(Triple<String, Long, Long> ring) throws IOException, KeeperException, ClientException {
+  public void getRingInfo(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException, ClientException {
     ResolvedReplicaMap rMap;
     Map<IPAndPort, Long> aMap;
 
@@ -93,11 +97,13 @@ public class RingInfo {
     return am;
   }
 
-  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     return readTree(ring).getResolvedMap(ringParentName, new ReplicaNaiveIPPrioritizer());
   }
 
-  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     MetaClient ringMC;
     long ringConfigVersion;
     long configInstanceVersion;

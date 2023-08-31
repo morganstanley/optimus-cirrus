@@ -17,13 +17,9 @@ package com.ms.silverking.cloud.dht.client;
  * @param <K> key type
  */
 public interface AsyncPut<K> extends AsyncKeyedOperation<K> {
-  /**
-   * Block until this operation is complete.
-   */
+  /** Block until this operation is complete. */
   public void waitForCompletion() throws PutException;
 
-  /**
-   * Return the version stored
-   */
+  /** Return the version stored */
   public long getStoredVersion();
 }

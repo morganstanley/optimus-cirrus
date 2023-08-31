@@ -29,17 +29,24 @@ public class RewriteTest {
   private static final byte[][] buf = new byte[26][blockSize];
   private static final byte[] buf1 = new byte[blockSize];
   private static final byte[] buf2 = new byte[blockSize];
-  private static final byte[] buf3 = { '1', '2', '3', '4', '5', '6' };
+  private static final byte[] buf3 = {'1', '2', '3', '4', '5', '6'};
 
   private static Logger log = LoggerFactory.getLogger(RewriteTest.class);
 
-  private enum Test {Current, Past, CurrentAndPast, CurrentAndPastAndExtension, Random, Last, LastExtension}
+  private enum Test {
+    Current,
+    Past,
+    CurrentAndPast,
+    CurrentAndPastAndExtension,
+    Random,
+    Last,
+    LastExtension
+  };
 
-  ;
-
-  enum Mode {Write, Verify}
-
-  ;
+  enum Mode {
+    Write,
+    Verify
+  };
 
   static void fillBuf(byte[] buf, int offset, int length, byte b) {
     for (int i = 0; i < length; i++) {
@@ -128,8 +135,8 @@ public class RewriteTest {
     Stopwatch sw;
     long fileLength = blockSize * 100;
     int maxSize = blockSize;
-    //long    fileLength = blockSize * 2;
-    //int        maxSize = 24;
+    // long    fileLength = blockSize * 2;
+    // int        maxSize = 24;
     byte[] readBuf;
 
     readBuf = new byte[blockSize];
@@ -159,7 +166,8 @@ public class RewriteTest {
         }
         for (int j = 0; j < size; j++) {
           if (readBuf[j] != buf[i % 26][j]) {
-            //                        System.out.printf("%d\t%x != %x\n", offset + j, readBuf[j], buf[i % 26][j]);
+            //                        System.out.printf("%d\t%x != %x\n", offset + j, readBuf[j],
+            // buf[i % 26][j]);
           }
         }
       }
@@ -192,36 +200,36 @@ public class RewriteTest {
         test = Test.valueOf(args[1]);
         rt = new RewriteTest(new File(file), mode);
         switch (test) {
-        case Current:
-          rt.testCurrent();
-          break;
-        case Past:
-          rt.testPast();
-          break;
-        case CurrentAndPast:
-          rt.testCurrentAndPast();
-          break;
-        case CurrentAndPastAndExtension:
-          rt.testCurrentAndPastAndExtension();
-          break;
-        case Last:
-          rt.testLast();
-          break;
-        case LastExtension:
-          rt.testLastAndExtension();
-          break;
-        case Random:
-          if (args.length != 4) {
-            log.error("Random requires numWrites and mode");
-          } else {
-            int numWrites;
+          case Current:
+            rt.testCurrent();
+            break;
+          case Past:
+            rt.testPast();
+            break;
+          case CurrentAndPast:
+            rt.testCurrentAndPast();
+            break;
+          case CurrentAndPastAndExtension:
+            rt.testCurrentAndPastAndExtension();
+            break;
+          case Last:
+            rt.testLast();
+            break;
+          case LastExtension:
+            rt.testLastAndExtension();
+            break;
+          case Random:
+            if (args.length != 4) {
+              log.error("Random requires numWrites and mode");
+            } else {
+              int numWrites;
 
-            numWrites = Integer.parseInt(args[2]);
-            rt.testRandom(numWrites, mode);
-          }
-          break;
-        default:
-          throw new RuntimeException("panic");
+              numWrites = Integer.parseInt(args[2]);
+              rt.testRandom(numWrites, mode);
+            }
+            break;
+          default:
+            throw new RuntimeException("panic");
         }
       } catch (Exception e) {
         e.printStackTrace();

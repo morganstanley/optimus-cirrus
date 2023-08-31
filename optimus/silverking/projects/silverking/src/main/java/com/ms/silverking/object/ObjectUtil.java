@@ -23,9 +23,7 @@ import com.ms.silverking.numeric.NumConversion;
 import com.ms.silverking.time.SimpleStopwatch;
 import com.ms.silverking.time.Stopwatch;
 
-/**
- * Object serialization utilities.
- */
+/** Object serialization utilities. */
 public class ObjectUtil {
 
   public static byte[] objToBytes(Object obj) throws IOException {
@@ -64,11 +62,13 @@ public class ObjectUtil {
     return bytesToObj(data, 0, data.length);
   }
 
-  public static Object bytesToObj(byte[] data, int offset) throws IOException, ClassNotFoundException {
+  public static Object bytesToObj(byte[] data, int offset)
+      throws IOException, ClassNotFoundException {
     return bytesToObj(data, offset, data.length - offset);
   }
 
-  public static Object bytesToObj(byte[] data, int offset, int length) throws IOException, ClassNotFoundException {
+  public static Object bytesToObj(byte[] data, int offset, int length)
+      throws IOException, ClassNotFoundException {
     ByteArrayInputStream bis;
     ObjectInputStream ois;
     Object object;
@@ -81,7 +81,8 @@ public class ObjectUtil {
     return object;
   }
 
-  public static Object bytesToObjIgnoreSize(byte[] data) throws IOException, ClassNotFoundException {
+  public static Object bytesToObjIgnoreSize(byte[] data)
+      throws IOException, ClassNotFoundException {
     ByteArrayInputStream bis;
     ObjectInputStream ois;
     Object object;

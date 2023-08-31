@@ -17,8 +17,8 @@ import java.nio.ByteBuffer;
 import com.ms.silverking.object.ObjectUtil;
 
 /**
- * Native Java serializer/deserializer for generic Java objects.
- * With this serialization, interaction is limited to other Java clients.
+ * Native Java serializer/deserializer for generic Java objects. With this serialization,
+ * interaction is limited to other Java clients.
  */
 public final class ObjectSerDes implements BufferSerDes<Object> {
   @Override

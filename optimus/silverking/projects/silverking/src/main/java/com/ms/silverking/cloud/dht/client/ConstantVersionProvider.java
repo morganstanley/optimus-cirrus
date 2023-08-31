@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.client;
 
-/**
- * Provides a constant version
- */
+/** Provides a constant version */
 public class ConstantVersionProvider implements VersionProvider {
   private final long version;
 

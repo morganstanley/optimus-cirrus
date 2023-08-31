@@ -48,7 +48,7 @@ class FileDeletionWorker implements Runnable {
           }
         }
       } catch (Exception e) {
-        log.error("",e);
+        log.error("", e);
       }
     }
   }

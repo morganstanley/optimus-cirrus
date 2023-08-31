@@ -49,7 +49,8 @@ public class SkThrottlingDebt {
   }
 
   public static ByteBuffer serialize(SkThrottlingDebt skThrottlingDebt) {
-    int totalDebtBytes = NumConversion.BYTES_PER_INT * 3; // results read, cache hits & read throughs.
+    int totalDebtBytes =
+        NumConversion.BYTES_PER_INT * 3; // results read, cache hits & read throughs.
     ByteBuffer debtBuffer = ByteBuffer.allocate(totalDebtBytes);
     debtBuffer.putInt(skThrottlingDebt.getKeysRead());
     debtBuffer.putInt(skThrottlingDebt.getCacheHits());
@@ -67,5 +68,4 @@ public class SkThrottlingDebt {
         debtBuffer.getInt(cacheHitsIndex),
         debtBuffer.getInt(readThroughsIndex));
   }
-
 }

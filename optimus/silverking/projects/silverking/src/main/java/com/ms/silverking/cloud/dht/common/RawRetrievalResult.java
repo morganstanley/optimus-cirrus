@@ -83,8 +83,12 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     }
   }
 
-  public void setStoredValue(ByteBuffer storedValue, boolean verifyChecksum, boolean filterInvalidated,
-      EncrypterDecrypter encrypterDecrypter) throws CorruptValueException {
+  public void setStoredValue(
+      ByteBuffer storedValue,
+      boolean verifyChecksum,
+      boolean filterInvalidated,
+      EncrypterDecrypter encrypterDecrypter)
+      throws CorruptValueException {
     int baseOffset;
     byte[] storedData;
     byte[] dataToVerify;
@@ -100,11 +104,11 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     if (result == OpResult.SUCCEEDED) {
       baseOffset = storedValue.position();
       storedData = storedValue.array();
-      //System.out.printf("%d\t%d\n", baseOffset, storedData.length);
+      // System.out.printf("%d\t%d\n", baseOffset, storedData.length);
       compressedLength = MetaDataUtil.getCompressedLength(storedData, baseOffset);
       uncompressedLength = MetaDataUtil.getUncompressedLength(storedData, baseOffset);
       if (debugChecksum) {
-        log.info("compressedLength: {}" , compressedLength);
+        log.info("compressedLength: {}", compressedLength);
         log.info("uncompressedLength: " + uncompressedLength);
       }
       dataOffset = MetaDataUtil.getDataOffset(storedData, baseOffset);
@@ -125,7 +129,12 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
           _storedData = new byte[offset + plainText.length + tailLength];
           System.arraycopy(storedData, 0, _storedData, 0, offset);
           System.arraycopy(plainText, 0, _storedData, offset, plainText.length);
-          System.arraycopy(storedData, offset + compressedLength, _storedData, offset + plainText.length, tailLength);
+          System.arraycopy(
+              storedData,
+              offset + compressedLength,
+              _storedData,
+              offset + plainText.length,
+              tailLength);
           storedData = _storedData;
         }
         if (MetaDataUtil.isCompressed(storedData, baseOffset)) {
@@ -140,23 +149,27 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
               log.info("{}", compression);
               log.info("compressedLength: {}", compressedLength);
               log.info("uncompressedLength: {}", uncompressedLength);
-              log.info("{}", StringUtil.byteArrayToHexString(storedData, baseOffset, compressedLength));
+              log.info(
+                  "{}", StringUtil.byteArrayToHexString(storedData, baseOffset, compressedLength));
               log.info("MetaDataUtil.isCompressed() returning true for uncompressed data");
               log.info("{}", MetaDataTextUtil.toMetaDataString(storedData, baseOffset, true));
-              throw new RuntimeException("MetaDataUtil.isCompressed() returning true for uncompressed data");
+              throw new RuntimeException(
+                  "MetaDataUtil.isCompressed() returning true for uncompressed data");
             } else {
               throw new RuntimeException("Can't find compressor for: " + compression);
             }
           }
           try {
-            //System.out.println(compression +" "+ decompressor);
-            uncompressedData = decompressor.decompress(storedData, dataOffset, compressedLength, uncompressedLength);
+            // System.out.println(compression +" "+ decompressor);
+            uncompressedData =
+                decompressor.decompress(
+                    storedData, dataOffset, compressedLength, uncompressedLength);
             if (encrypterDecrypter == null) {
               dataToVerify = uncompressedData;
               verifyDataOffset = 0;
             }
           } catch (Exception e) {
-            log.error("",e);
+            log.error("", e);
             throw new CorruptValueException(e);
           }
         } else {
@@ -176,20 +189,30 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
         if (retrievalType.hasValue()) {
           if (verifyChecksum) {
             int verifyDataLength;
-            verifyDataLength = dataToVerify.length - verifyDataOffset - MetaDataUtil.getUserDataLength(storedValue, baseOffset);
-            validateChecksum(storedData, baseOffset, dataToVerify, verifyDataOffset, verifyDataLength);
+            verifyDataLength =
+                dataToVerify.length
+                    - verifyDataOffset
+                    - MetaDataUtil.getUserDataLength(storedValue, baseOffset);
+            validateChecksum(
+                storedData, baseOffset, dataToVerify, verifyDataOffset, verifyDataLength);
           }
           cookedValue = checkedWrap(dataToVerify, verifyDataOffset, uncompressedLength);
-          //cookedValue = checkedWrap(storedData, dataOffset, uncompressedLength);
+          // cookedValue = checkedWrap(storedData, dataOffset, uncompressedLength);
         }
       }
     }
   }
 
-  public void validateChecksum(byte[] storedData, int baseOffset, byte[] dataToVerify, int verifyDataOffset,
-      int verifyDataLength) throws CorruptValueException {
+  public void validateChecksum(
+      byte[] storedData,
+      int baseOffset,
+      byte[] dataToVerify,
+      int verifyDataOffset,
+      int verifyDataLength)
+      throws CorruptValueException {
     try {
-      ValueUtil.verifyChecksum(storedData, baseOffset, dataToVerify, verifyDataOffset, verifyDataLength);
+      ValueUtil.verifyChecksum(
+          storedData, baseOffset, dataToVerify, verifyDataOffset, verifyDataLength);
     } catch (CorruptValueException cve) {
       result = OpResult.CORRUPT;
       throw cve;
@@ -210,7 +233,13 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     } catch (RuntimeException re) {
       re.printStackTrace();
       System.out.println(
-          array.length + " " + offset + " " + length + " " + ((offset + length > array.length) ? "!!!!" : ""));
+          array.length
+              + " "
+              + offset
+              + " "
+              + length
+              + " "
+              + ((offset + length > array.length) ? "!!!!" : ""));
       throw re;
     }
   }
@@ -227,8 +256,8 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     compressedLength = MetaDataUtil.getCompressedLength(storedData, baseOffset);
     uncompressedLength = MetaDataUtil.getUncompressedLength(storedData, baseOffset);
     if (debugChecksum) {
-      log.info("compressedLength: {}" , compressedLength);
-      log.info("uncompressedLength: {}" , uncompressedLength);
+      log.info("compressedLength: {}", compressedLength);
+      log.info("uncompressedLength: {}", uncompressedLength);
     }
     dataOffset = MetaDataUtil.getDataOffset(storedData, baseOffset);
     try {
@@ -236,9 +265,13 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     } catch (RuntimeException re) {
       re.printStackTrace();
       System.out.println(
-          storedData.length + " " + dataOffset + " " + uncompressedLength + " " + ((dataOffset + uncompressedLength > storedData.length) ?
-              "!!!!" :
-              ""));
+          storedData.length
+              + " "
+              + dataOffset
+              + " "
+              + uncompressedLength
+              + " "
+              + ((dataOffset + uncompressedLength > storedData.length) ? "!!!!" : ""));
       throw re;
     }
   }
@@ -265,18 +298,18 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
   OpResult getResult() {
     return result;
   }
-    
-    /*
-    static RawRetrievalResult[] newArray(int size) {
-        RawRetrievalResult[]    retrievalResults;
-        
-        retrievalResults = new RawRetrievalResult[size];
-        for (int i = 0; i < retrievalResults.length; i++) {
-            retrievalResults[i] = new RawRetrievalResult();
-        }
-        return retrievalResults;
-    }
-    */
+
+  /*
+  static RawRetrievalResult[] newArray(int size) {
+      RawRetrievalResult[]    retrievalResults;
+
+      retrievalResults = new RawRetrievalResult[size];
+      for (int i = 0; i < retrievalResults.length; i++) {
+          retrievalResults[i] = new RawRetrievalResult();
+      }
+      return retrievalResults;
+  }
+  */
 
   // begin MetaData implementation
 
@@ -320,7 +353,8 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     long millisRemaining;
 
     nanosRemaining =
-        (getCreationTimeRaw() + (long) getLockSeconds() * 1_000_000_000L) - SystemTimeUtil.skSystemTimeSource.absTimeNanos();
+        (getCreationTimeRaw() + (long) getLockSeconds() * 1_000_000_000L)
+            - SystemTimeUtil.skSystemTimeSource.absTimeNanos();
     millisRemaining = nanosRemaining / 1_000_000L;
     if (millisRemaining > 0) {
       return millisRemaining;
@@ -337,7 +371,8 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
 
   @Override
   public boolean isLocked() {
-    return SystemTimeUtil.skSystemTimeSource.absTimeNanos() <= getCreationTimeRaw() + (long) getLockSeconds() * 1_000_000_000L;
+    return SystemTimeUtil.skSystemTimeSource.absTimeNanos()
+        <= getCreationTimeRaw() + (long) getLockSeconds() * 1_000_000_000L;
   }
 
   @Override
@@ -353,7 +388,7 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
     }
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   @Override
   public byte[] getUserData() {
     return MetaDataUtil.getUserData(storedValue.array(), storedValue.position());
@@ -372,8 +407,8 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
 
     sb = new StringBuilder();
     sb.append(storedValue);
-    //sb.append(':');
-    //sb.append(metaData);
+    // sb.append(':');
+    // sb.append(metaData);
     return sb.toString();
   }
 
@@ -388,7 +423,8 @@ public class RawRetrievalResult implements StoredValue<ByteBuffer> {
 
   @Override
   public Compression getCompression() {
-    return EnumValues.compression[MetaDataUtil.getCompression(storedValue.array(), storedValue.position())];
+    return EnumValues.compression[
+        MetaDataUtil.getCompression(storedValue.array(), storedValue.position())];
   }
 
   @Override

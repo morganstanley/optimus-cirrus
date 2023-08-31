@@ -22,34 +22,34 @@ public class Snappy implements Compressor, Decompressor {
 
   private static Logger log = LoggerFactory.getLogger(Snappy.class);
 
-  public Snappy() {
-  }
+  public Snappy() {}
 
   public byte[] compress(byte[] rawValue, int offset, int length) throws IOException {
-        /*
-        SnappyCompressor    sc;
-        byte[]                output;
-        
-        sc = new SnappyCompressor();
-        sc.setInput(rawValue, offset, length);
-        output = new byte[length];
-        sc.compress(output, 0, length);
-        return output;
-        */
+    /*
+    SnappyCompressor    sc;
+    byte[]                output;
+
+    sc = new SnappyCompressor();
+    sc.setInput(rawValue, offset, length);
+    output = new byte[length];
+    sc.compress(output, 0, length);
+    return output;
+    */
     return rawValue;
   }
 
-  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength) throws IOException {
-        /*
-        SnappyDecompressor    sd;
-        byte[]    output;
-        
-        sd = new SnappyDecompressor();
-        sd.setInput(value, offset, length);
-        output = new byte[length];
-        sd.decompress(output, 0, length);
-        return output;
-        */
+  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength)
+      throws IOException {
+    /*
+    SnappyDecompressor    sd;
+    byte[]    output;
+
+    sd = new SnappyDecompressor();
+    sd.setInput(value, offset, length);
+    output = new byte[length];
+    sd.decompress(output, 0, length);
+    return output;
+    */
     return value;
   }
 
@@ -65,18 +65,17 @@ public class Snappy implements Compressor, Decompressor {
         original = arg.getBytes();
         compressed = new Snappy().compress(original, 0, original.length);
         uncompressed = new Snappy().decompress(compressed, 0, compressed.length, original.length);
-        //print of uncompressed may be 'corrupted' by non-printable chars from MD5
-        log.info("{} {} {} {}",arg , original.length , compressed.length , new String(uncompressed));
+        // print of uncompressed may be 'corrupted' by non-printable chars from MD5
+        log.info("{} {} {} {}", arg, original.length, compressed.length, new String(uncompressed));
         log.info(StringUtil.byteArrayToHexString(original));
         log.info(StringUtil.byteArrayToHexString(uncompressed));
-        //int len = uncompressed.length - MD5Hash.MD5_BYTES;
-        //byte[] noMd5 = new byte[len];
-        //System.arraycopy(uncompressed, 0, noMd5, 0, len);
-        //System.out.println(StringUtil.byteArrayToHexString(noMd5));
+        // int len = uncompressed.length - MD5Hash.MD5_BYTES;
+        // byte[] noMd5 = new byte[len];
+        // System.arraycopy(uncompressed, 0, noMd5, 0, len);
+        // System.out.println(StringUtil.byteArrayToHexString(noMd5));
       }
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
-
 }

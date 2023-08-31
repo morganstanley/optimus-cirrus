@@ -17,9 +17,7 @@ import com.ms.silverking.net.async.ConnectionCreator;
 import com.ms.silverking.net.async.ConnectionListener;
 import com.ms.silverking.net.async.SelectorController;
 
-/**
- * ConnectionCreator for BufferedData.
- */
+/** ConnectionCreator for BufferedData. */
 public class BufferedDataConnectionCreator implements ConnectionCreator<BufferedDataConnection> {
   private final BufferedDataReceiver bufferedDataReceiver;
 
@@ -28,9 +26,12 @@ public class BufferedDataConnectionCreator implements ConnectionCreator<Buffered
   }
 
   @Override
-  public BufferedDataConnection createConnection(SocketChannel channel,
-      SelectorController<BufferedDataConnection> selectorController, ConnectionListener connectionListener,
+  public BufferedDataConnection createConnection(
+      SocketChannel channel,
+      SelectorController<BufferedDataConnection> selectorController,
+      ConnectionListener connectionListener,
       boolean debug) {
-    return new BufferedDataConnection(channel, selectorController, connectionListener, bufferedDataReceiver);
+    return new BufferedDataConnection(
+        channel, selectorController, connectionListener, bufferedDataReceiver);
   }
 }

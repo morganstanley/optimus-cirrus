@@ -24,9 +24,11 @@ public class NetUtil {
   }
 
   public static double calc_bps(long bytes, double seconds) {
-    return new BigDecimal(bytes, MathContext.DECIMAL128).multiply(new BigDecimal(8, MathContext.DECIMAL128)).divide(
-        new BigDecimal(seconds, MathContext.DECIMAL128), MathContext.DECIMAL128).doubleValue();
-    //return (double)(bytes * 8) / seconds;
+    return new BigDecimal(bytes, MathContext.DECIMAL128)
+        .multiply(new BigDecimal(8, MathContext.DECIMAL128))
+        .divide(new BigDecimal(seconds, MathContext.DECIMAL128), MathContext.DECIMAL128)
+        .doubleValue();
+    // return (double)(bytes * 8) / seconds;
   }
 
   public static double calcMbps(long bytes, Stopwatch sw) {

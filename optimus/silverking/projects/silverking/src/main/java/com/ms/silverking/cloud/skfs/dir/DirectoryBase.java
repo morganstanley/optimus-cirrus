@@ -32,7 +32,8 @@ public abstract class DirectoryBase implements Directory {
   protected static final int dataOffset = numEntriesOffset + numEntriesLength;
 
   protected static final int indexNumEntriesOffset = NumConversion.BYTES_PER_INT;
-  protected static final int indexFirstEntryOffset = indexNumEntriesOffset + NumConversion.BYTES_PER_INT;
+  protected static final int indexFirstEntryOffset =
+      indexNumEntriesOffset + NumConversion.BYTES_PER_INT;
 
   protected static final int OD_MAGIC = 0x00abacad;
   protected static final int DEI_MAGIC = 0xaaddaabb;
@@ -68,8 +69,8 @@ public abstract class DirectoryBase implements Directory {
 
     bytesWritten = writeIndexHeader(buf, offset + dataOffset, indexOffsets.length);
     for (int i = 0; i < indexOffsets.length; i++) {
-      NumConversion.intToBytesLittleEndian(indexOffsets[i], buf,
-          dataOffset + bytesWritten + offset + i * DEI_ENTRY_SIZE);
+      NumConversion.intToBytesLittleEndian(
+          indexOffsets[i], buf, dataOffset + bytesWritten + offset + i * DEI_ENTRY_SIZE);
     }
     bytesWritten += indexOffsets.length * DEI_ENTRY_SIZE;
     return bytesWritten;

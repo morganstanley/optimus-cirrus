@@ -16,9 +16,7 @@ import java.util.List;
 import com.google.common.collect.ImmutableList;
 import com.ms.silverking.text.StringUtil;
 
-/**
- * Result of intersecting two RingRegions
- */
+/** Result of intersecting two RingRegions */
 public class IntersectionResult {
   private final IntersectionType intersectionType;
   private final List<RingRegion> aNonOverlapping;
@@ -26,16 +24,22 @@ public class IntersectionResult {
   private final List<RingRegion> overlapping;
   ;
 
-  public IntersectionResult(IntersectionType intersectionType, List<RingRegion> aNonOverlapping,
-      List<RingRegion> bNonOverlapping, List<RingRegion> overlapping) {
+  public IntersectionResult(
+      IntersectionType intersectionType,
+      List<RingRegion> aNonOverlapping,
+      List<RingRegion> bNonOverlapping,
+      List<RingRegion> overlapping) {
     this.intersectionType = intersectionType;
     this.aNonOverlapping = aNonOverlapping;
     this.bNonOverlapping = bNonOverlapping;
     this.overlapping = overlapping;
   }
 
-  public IntersectionResult(IntersectionType intersectionType, List<RingRegion> aNonOverlapping,
-      List<RingRegion> bNonOverlapping, RingRegion overlapping) {
+  public IntersectionResult(
+      IntersectionType intersectionType,
+      List<RingRegion> aNonOverlapping,
+      List<RingRegion> bNonOverlapping,
+      RingRegion overlapping) {
     this(intersectionType, aNonOverlapping, bNonOverlapping, ImmutableList.of(overlapping));
   }
 
@@ -56,8 +60,9 @@ public class IntersectionResult {
   }
 
   private long totalRegionSize() {
-    return RingRegion.getTotalSize(aNonOverlapping) + RingRegion.getTotalSize(
-        bNonOverlapping) + RingRegion.getTotalSize(overlapping);
+    return RingRegion.getTotalSize(aNonOverlapping)
+        + RingRegion.getTotalSize(bNonOverlapping)
+        + RingRegion.getTotalSize(overlapping);
   }
 
   @Override

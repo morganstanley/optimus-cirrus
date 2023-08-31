@@ -30,13 +30,31 @@ public class ProtoPutResponseMessageGroup extends ProtoKeyedMessageGroup {
   private static final int shiftedOptionBufferIndex = 0; // on reception header is removed
   private static final int shiftedKeyBufferIndex = 1; // shifted to 1 if no traceID
 
-  public ProtoPutResponseMessageGroup(UUIDBase uuid, long context, long version, int numKeys, byte[] originator,
-      byte storageState, int deadlineRelativeMillis, SkTraceId maybeTraceID) {
-    super(TraceIDProvider.isValidTraceID(maybeTraceID) ? MessageType.PUT_RESPONSE_TRACE : MessageType.PUT_RESPONSE,
-        uuid, context, ByteBuffer.allocate(optionsBufferSize), numKeys, keyBufferAdditionalBytesPerKey, originator,
-        deadlineRelativeMillis, ForwardingMode.FORWARD, maybeTraceID);
+  public ProtoPutResponseMessageGroup(
+      UUIDBase uuid,
+      long context,
+      long version,
+      int numKeys,
+      byte[] originator,
+      byte storageState,
+      int deadlineRelativeMillis,
+      SkTraceId maybeTraceID) {
+    super(
+        TraceIDProvider.isValidTraceID(maybeTraceID)
+            ? MessageType.PUT_RESPONSE_TRACE
+            : MessageType.PUT_RESPONSE,
+        uuid,
+        context,
+        ByteBuffer.allocate(optionsBufferSize),
+        numKeys,
+        keyBufferAdditionalBytesPerKey,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD,
+        maybeTraceID);
     if (hasTraceID) {
-      // TODO (OPTIMUS-0000): This is a temp workaround to preserve parent's base offset put in bufferList (but this leads to the
+      // TODO (OPTIMUS-0000): This is a temp workaround to preserve parent's base offset put in
+      // bufferList (but this leads to the
       //  risk where SK's serde codes could be misused
       bufferList.add(optionsByteBuffer);
     } else {
@@ -45,7 +63,7 @@ public class ProtoPutResponseMessageGroup extends ProtoKeyedMessageGroup {
     }
     optionsByteBuffer.putLong(version);
     optionsByteBuffer.put(storageState);
-    //System.out.printf("optionsByteBuffer\t%s %x %x\n",
+    // System.out.printf("optionsByteBuffer\t%s %x %x\n",
     //  StringUtil.byteBufferToHexString(optionsByteBuffer), version, storageState);
   }
 

@@ -36,7 +36,7 @@ public class SkTraceId {
       return true;
     } else {
       if (obj instanceof SkTraceId) {
-        SkTraceId id = (SkTraceId)obj;
+        SkTraceId id = (SkTraceId) obj;
         return this.traceId.equals(id.traceId) && this.forwardState.equals(id.forwardState);
       } else {
         return false;

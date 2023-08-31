@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.cloud.dht.common;
 
-/**
- * Result state for non-retrieval operations.
- */
+/** Result state for non-retrieval operations. */
 public class OpResultState {
   private final OpResultListener listener;
   private volatile OpResult opResult;

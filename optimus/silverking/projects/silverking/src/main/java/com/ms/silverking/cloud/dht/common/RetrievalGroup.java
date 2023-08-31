@@ -19,34 +19,34 @@ import com.ms.silverking.cloud.dht.VersionConstraint;
 import com.ms.silverking.cloud.dht.net.MessageGroupRetrievalResponseEntry;
 
 /**
- * Retrieval group for a particular DHTKey. Namespace is known within
- * the owning context, hence we only need to specify version here.
+ * Retrieval group for a particular DHTKey. Namespace is known within the owning context, hence we
+ * only need to specify version here.
  */
 public class RetrievalGroup {
   private final ConcurrentMap<VersionConstraint, Object> retrievals;
   // TODO (OPTIMUS-0000): THINK ABOUT CONCURRENCY IN THIS CLASS
-  //private final ConcurrentNavigableMap<VersionConstraint,Retrieval> retrievals;
-    /*
-    private final List<Retrieval>   retrievals;
-    private final Lock  lock;
-    */
+  // private final ConcurrentNavigableMap<VersionConstraint,Retrieval> retrievals;
+  /*
+  private final List<Retrieval>   retrievals;
+  private final Lock  lock;
+  */
 
-  //private static final VCComparator  vcComparator;
+  // private static final VCComparator  vcComparator;
 
   // TODO (OPTIMUS-0000): PROBABLY ONLY LOOK TO COMBINE OPERATIONS IF THE VERSION MATCH IS
   // EXACT
 
-  //static {
+  // static {
   //    vcComparator = new VCComparator();
-  //}
+  // }
 
   public RetrievalGroup() {
     retrievals = new ConcurrentHashMap<>();
-    //retrievals = new ConcurrentSkipListMap<>(vcComparator);
-        /*
-        retrievals = new LinkedList<>();
-        lock = new ReentrantLock();
-        */
+    // retrievals = new ConcurrentSkipListMap<>(vcComparator);
+    /*
+    retrievals = new LinkedList<>();
+    lock = new ReentrantLock();
+    */
   }
 
   public boolean addRetrieval(Retrieval retrieval) {
@@ -81,46 +81,44 @@ public class RetrievalGroup {
       }
     }
     return false;
-        /*
-        lock.lock();
-        try {
-            boolean overlaps;
-            
-            // TODO (OPTIMUS-0000): this is a placeholder implementation
-            // (whole class implementation is)
-            // speed up once correct
-            overlaps = false;
-            if (retrieval.getVersionConstraint() != null) {
-                for (Retrieval existing : retrievals) {
-                    if (existing.getVersionConstraint() != null) {
-                        if (retrieval.getVersionConstraint().overlaps(existing.getVersionConstraint())) {
-                            overlaps = true;
-                            break;
-                        }
+    /*
+    lock.lock();
+    try {
+        boolean overlaps;
+
+        // TODO (OPTIMUS-0000): this is a placeholder implementation
+        // (whole class implementation is)
+        // speed up once correct
+        overlaps = false;
+        if (retrieval.getVersionConstraint() != null) {
+            for (Retrieval existing : retrievals) {
+                if (existing.getVersionConstraint() != null) {
+                    if (retrieval.getVersionConstraint().overlaps(existing.getVersionConstraint())) {
+                        overlaps = true;
+                        break;
                     }
                 }
             }
-            retrievals.add(retrieval);
-            return overlaps;
-        } finally {
-            lock.unlock();
         }
-        */
-        /*
-        Retrieval   existing;
-        
-        existing = retrievals.putIfAbsent(retrieval.getVersionConstraint(), retrieval);
-        if (existing != null) {
-            throw new RuntimeException("duplicates not yet supported");
-        } else {
-            // TODO (OPTIMUS-0000): to be completed
-        }
-        */
+        retrievals.add(retrieval);
+        return overlaps;
+    } finally {
+        lock.unlock();
+    }
+    */
+    /*
+    Retrieval   existing;
+
+    existing = retrievals.putIfAbsent(retrieval.getVersionConstraint(), retrieval);
+    if (existing != null) {
+        throw new RuntimeException("duplicates not yet supported");
+    } else {
+        // TODO (OPTIMUS-0000): to be completed
+    }
+    */
   }
 
-  public void removeRetrieval(Retrieval retrieval) {
-
-  }
+  public void removeRetrieval(Retrieval retrieval) {}
 
   public void receivedResponse(MessageGroupRetrievalResponseEntry entry) {
     for (Object obj : retrievals.values()) {
@@ -140,33 +138,33 @@ public class RetrievalGroup {
         }
       }
     }
-        /*
-        lock.lock();
-        try {
-            for (Retrieval retrieval : retrievals) {
-                // TODO (OPTIMUS-0000): need to look at metadata to see if this matches
-                if (true) {
-                    retrieval.addResponse(entry);
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-        */
-  }
-    
     /*
-    static class VCComparator implements Comparator<VersionConstraint> {
-        @Override
-        public int compare(VersionConstraint vc1, VersionConstraint vc2) {
-            if (vc1.getMax() < vc2.getMax()) {
-                return -1;
-            } else if (vc1.getMax() > vc2.getMax()) {
-                return 1;
-            } else {
-                return 0;
+    lock.lock();
+    try {
+        for (Retrieval retrieval : retrievals) {
+            // TODO (OPTIMUS-0000): need to look at metadata to see if this matches
+            if (true) {
+                retrieval.addResponse(entry);
             }
         }
+    } finally {
+        lock.unlock();
     }
     */
+  }
+
+  /*
+  static class VCComparator implements Comparator<VersionConstraint> {
+      @Override
+      public int compare(VersionConstraint vc1, VersionConstraint vc2) {
+          if (vc1.getMax() < vc2.getMax()) {
+              return -1;
+          } else if (vc1.getMax() > vc2.getMax()) {
+              return 1;
+          } else {
+              return 0;
+          }
+      }
+  }
+  */
 }

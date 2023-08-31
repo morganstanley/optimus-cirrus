@@ -50,9 +50,12 @@ public class ExampleTestCode {
       credentialsProvider.getCredentials();
     } catch (Exception e) {
       throw new AmazonClientException(
-          "Cannot load the credentials from the credential profiles file. " + "Please make sure that your " +
-              "credentials" + " file is at the correct " + "location (C:\\Users\\ben-pc\\.aws\\credentials), and is " +
-              "in valid format.",
+          "Cannot load the credentials from the credential profiles file. "
+              + "Please make sure that your "
+              + "credentials"
+              + " file is at the correct "
+              + "location (C:\\Users\\ben-pc\\.aws\\credentials), and is "
+              + "in valid format.",
           e);
     }
     ec2 = AmazonEC2ClientBuilder.standard().withRegion("us-west-2").build();
@@ -61,31 +64,37 @@ public class ExampleTestCode {
   public void run() {
     try {
       DescribeAvailabilityZonesResult availabilityZonesResult = ec2.describeAvailabilityZones();
-     log.info(
-          "You have access to  {}  Availability Zones.", availabilityZonesResult.getAvailabilityZones().size() );
+      log.info(
+          "You have access to  {}  Availability Zones.",
+          availabilityZonesResult.getAvailabilityZones().size());
 
       DescribeInstancesResult describeInstancesRequest = ec2.describeInstances();
       List<Reservation> reservations = describeInstancesRequest.getReservations();
       Set<Instance> instances = new HashSet<Instance>();
 
-      log.info("Reserves size: {}" , reservations.size());
+      log.info("Reserves size: {}", reservations.size());
       for (Reservation reservation : reservations) {
         instances.addAll(reservation.getInstances());
       }
 
-      log.info("You have  {}  Amazon EC2 instance(s) running.", instances.size() );
+      log.info("You have  {}  Amazon EC2 instance(s) running.", instances.size());
     } catch (AmazonServiceException ase) {
-      log.info("Caught Exception: {}" , ase.getMessage());
-      log.info("Reponse Status Code: {}" , ase.getStatusCode());
-      log.info("Error Code: {}" , ase.getErrorCode());
-      log.info("Request ID: {}" , ase.getRequestId());
+      log.info("Caught Exception: {}", ase.getMessage());
+      log.info("Reponse Status Code: {}", ase.getStatusCode());
+      log.info("Error Code: {}", ase.getErrorCode());
+      log.info("Request ID: {}", ase.getRequestId());
     }
   }
 
   public void runInstances() {
     RunInstancesRequest runInstancesRequest = new RunInstancesRequest();
-    runInstancesRequest.withImageId(amiId).withInstanceType("t2.micro").withMinCount(1).withMaxCount(1).withKeyName(
-        keyPairName).withSecurityGroups(securityGroupName);
+    runInstancesRequest
+        .withImageId(amiId)
+        .withInstanceType("t2.micro")
+        .withMinCount(1)
+        .withMaxCount(1)
+        .withKeyName(keyPairName)
+        .withSecurityGroups(securityGroupName);
 
     RunInstancesResult result = ec2.runInstances(runInstancesRequest);
   }
@@ -101,9 +110,12 @@ public class ExampleTestCode {
       for (Reservation reservation : response.getReservations()) {
         for (Instance instance : reservation.getInstances()) {
           log.info(
-                "Found instance with id {},   AMI {},  type {},  state {}  and monitoring state {}",
-              instance.getInstanceId(), instance.getImageId(), instance.getInstanceType(),
-              instance.getState().getName(), instance.getMonitoring().getState());
+              "Found instance with id {},   AMI {},  type {},  state {}  and monitoring state {}",
+              instance.getInstanceId(),
+              instance.getImageId(),
+              instance.getInstanceType(),
+              instance.getState().getName(),
+              instance.getMonitoring().getState());
         }
       }
 
@@ -125,5 +137,4 @@ public class ExampleTestCode {
     tester.test();
     //        tester.runInstances();
   }
-
 }

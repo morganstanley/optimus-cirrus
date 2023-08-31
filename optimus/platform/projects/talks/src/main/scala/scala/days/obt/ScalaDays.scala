@@ -19,12 +19,12 @@ import optimus.platform.reactive.dsl._
 import optimus.platform.util.Log
 
 // Scopes represent modules in IntelliJ: they are groupings of code compiled at the same time with the same dependencies
-final case class ScopeId(meta: String, bundle: String, module: String) {
-  override def toString: String = s"$meta.$bundle.$module"
+final case class ScopeId(org: String, name: String) {
+  override def toString: String = s"$org.$name"
 }
 
 // Defines a scope, its dependencies and its versions
-@entity class ScopeConfiguration(val id: ScopeId, val dependencies: Seq[ScopeId]) extends Timings {
+@entity class ScopeConfiguration(val id: ScopeId, val scopeDependencies: Seq[ScopeId]) extends Timings {
   // this represents the current state of the source files for this scope
   // (in real OBT this is a hash of the content of all this scope's .scala/.java source files)
   @node(tweak = true) val sourceVersion: Int = 1
@@ -54,10 +54,10 @@ final case class BuildResult(artifacts: Set[ClassFileArtifact]) extends DisplayS
   }
 
   @node private def compile(config: ScopeConfiguration): ClassFileArtifact = {
-    log.info(s"[${config.id}] Started compiling ${config.id.module} scope")
+    log.info(s"[${config.id}] Started compiling ${config.id.name} scope")
     val signatureArtifact = signatures(config)
     val classesArtifact = classes(config, signatureArtifact)
-    log.info(s"[${config.id}] Done compiling ${config.id.module} scope")
+    log.info(s"[${config.id}] Done compiling ${config.id.name} scope")
     classesArtifact
   }
 
@@ -74,7 +74,7 @@ final case class BuildResult(artifacts: Set[ClassFileArtifact]) extends DisplayS
   }
 
   @node private def dependencies(config: ScopeConfiguration): Dependencies = {
-    val dependencyConfigs = config.dependencies.map(configSource)
+    val dependencyConfigs = config.scopeDependencies.map(configSource)
     val dependencySignatures = dependencyConfigs.apar.map(signatures)
     val dependencyFingerprint = dependencySignatures.flatMap(_.fingerprint).toMap
     Dependencies(dependencySignatures, dependencyFingerprint)
@@ -86,16 +86,16 @@ final case class BuildResult(artifacts: Set[ClassFileArtifact]) extends DisplayS
       delay: Int,
       version: Int,
       dependencySignatures: Seq[SignatureArtifact]): Unit = {
-    log.info(s"[$scope] Started compile phase $phase for ${scope.module} scope (source version: $version)")
+    log.info(s"[$scope] Started compile phase $phase for ${scope.name} scope (source version: $version)")
     log.debug(s"[$scope] Dependencies: $dependencySignatures")
     Thread.sleep(delay * 1000)
-    log.info(s"[$scope] Done compile phase $phase for ${scope.module} scope (source version: $version)")
+    log.info(s"[$scope] Done compile phase $phase for ${scope.name} scope (source version: $version)")
   }
 }
 
 object ScalaDays extends OptimusApp with Log {
   // 1. define the scopes
-  private val (infra, data, model, app) = createScopes
+  private val (utils, data, model, app) = createScopes
 
   // 2. get their dependencies (usually by reading .obt files, but we'll hardcode them for the demo)
   private val configSource = dependenciesForScopes
@@ -119,22 +119,22 @@ object ScalaDays extends OptimusApp with Log {
   }
 
   private def createScopes: (ScopeId, ScopeId, ScopeId, ScopeId) = {
-    def createScope(module: String): ScopeId = ScopeId("scala", "days", module)
+    def createScope(name: String): ScopeId = ScopeId("optimus", name)
 
-    val infra = createScope("infra")
+    val utils = createScope("utils")
     val data = createScope("data")
     val model = createScope("model")
     val app = createScope("app")
-    (infra, data, model, app)
+    (utils, data, model, app)
   }
 
   private def dependenciesForScopes: Map[ScopeId, ScopeConfiguration] = {
-    val infraConfig = ScopeConfiguration(id = infra, dependencies = Nil)
-    val dataConfig = ScopeConfiguration(id = data, dependencies = Seq(infra))
-    val modelConfig = ScopeConfiguration(id = model, dependencies = Seq(infra))
-    val appConfig = ScopeConfiguration(id = app, dependencies = Seq(data, model))
+    val utilsConfig = ScopeConfiguration(id = utils, scopeDependencies = Nil)
+    val dataConfig = ScopeConfiguration(id = data, scopeDependencies = Seq(utils))
+    val modelConfig = ScopeConfiguration(id = model, scopeDependencies = Seq(utils))
+    val appConfig = ScopeConfiguration(id = app, scopeDependencies = Seq(data, model))
     Map(
-      infra -> infraConfig,
+      utils -> utilsConfig,
       data -> dataConfig,
       model -> modelConfig,
       app -> appConfig

@@ -61,7 +61,8 @@ class SynchronousNamespacePerspectiveMapView<K, V> implements Map<K, V> {
     try {
       StoredValue<V> storedValue;
 
-      storedValue = (StoredValue<V>) snp.retrieve((K) key, OptionsHelper.newGetOptions(RetrievalType.VALUE));
+      storedValue =
+          (StoredValue<V>) snp.retrieve((K) key, OptionsHelper.newGetOptions(RetrievalType.VALUE));
       return storedValue == null ? null : storedValue.getValue();
     } catch (RetrievalException re) {
       throw new RuntimeException(re);

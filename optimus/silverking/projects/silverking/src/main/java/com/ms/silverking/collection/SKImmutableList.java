@@ -19,9 +19,7 @@ import java.util.ListIterator;
 
 import com.ms.silverking.util.Arrays;
 
-/**
- * An ImmutableList that allows nulls (unlike Guava)
- */
+/** An ImmutableList that allows nulls (unlike Guava) */
 public class SKImmutableList<T> implements List<T> {
   private final T[] elements;
 
@@ -49,7 +47,7 @@ public class SKImmutableList<T> implements List<T> {
     if (length == 0) {
       return of();
     } else if (length > 0) {
-      //elements = (T[])Array.newInstance((Class<T>)a[0].getClass(), length);
+      // elements = (T[])Array.newInstance((Class<T>)a[0].getClass(), length);
       elements = (T[]) new Object[length];
       System.arraycopy(a, fromIndex, elements, 0, length);
       return new SKImmutableList<>(elements);

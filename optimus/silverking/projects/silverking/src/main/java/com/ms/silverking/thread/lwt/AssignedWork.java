@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.thread.lwt;
 
-/**
- * Associates work to be done with the worker that will do the work.
- */
+/** Associates work to be done with the worker that will do the work. */
 public class AssignedWork implements Comparable<AssignedWork> {
   private final BaseWorker worker;
   private final Object work;

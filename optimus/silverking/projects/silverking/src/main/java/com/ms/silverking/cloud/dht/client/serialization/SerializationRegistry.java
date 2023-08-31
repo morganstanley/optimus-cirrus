@@ -15,9 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Registry for all implemented serializers. Allows retrieval by type.
- */
+/** Registry for all implemented serializers. Allows retrieval by type. */
 public class SerializationRegistry {
   private final Map<Class, BufferDestSerializer> serializers;
   private final Map<Class, BufferSourceDeserializer> deserializers;
@@ -66,7 +64,7 @@ public class SerializationRegistry {
     return (BufferSourceDeserializer<T>) deserializers.get(destClass);
   }
 
-  //public <T> BufferDestSerializer<T> getBufferDestSerializer(Class<T> srcClass) {
+  // public <T> BufferDestSerializer<T> getBufferDestSerializer(Class<T> srcClass) {
   //    return (BufferDestSerializer<T>)serializers.get(srcClass);
-  //}
+  // }
 }

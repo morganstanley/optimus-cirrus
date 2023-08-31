@@ -23,10 +23,9 @@ import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient;
 import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperException;
 import org.apache.zookeeper.data.Stat;
 
-/**
- * Base functionality for both cloud-level, and dht instance specific SuspectSets
- */
-public abstract class SuspectZKBase<M extends MetaPathsBase> extends ServerSetExtensionZKBase<SuspectSet, M> {
+/** Base functionality for both cloud-level, and dht instance specific SuspectSets */
+public abstract class SuspectZKBase<M extends MetaPathsBase>
+    extends ServerSetExtensionZKBase<SuspectSet, M> {
   private static final char suspectsDelimiter = ',';
   private static final String suspectsDelimiterString = "" + suspectsDelimiter;
 
@@ -45,7 +44,7 @@ public abstract class SuspectZKBase<M extends MetaPathsBase> extends ServerSetEx
   @Override
   public SuspectSet readFromZK(long version, MetaToolOptions options) throws KeeperException {
     String vBase;
-    //List<String>    nodes;
+    // List<String>    nodes;
     String[] nodes;
     Stat stat;
     SilverKingZooKeeperClient _zk;
@@ -55,7 +54,7 @@ public abstract class SuspectZKBase<M extends MetaPathsBase> extends ServerSetEx
       version = _zk.getLatestVersion(base);
     }
     vBase = getVBase(version);
-    //nodes = zk.getChildren(vBase);
+    // nodes = zk.getChildren(vBase);
     stat = new Stat();
     nodes = _zk.getString(vBase, null, stat).split("\n");
     return new SuspectSet(ImmutableSet.copyOf(nodes), version, stat.getMzxid());

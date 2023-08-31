@@ -80,30 +80,36 @@ public class ActiveClientOperationTable {
     activeVersionedBasicOperations.receivedOpResponse(message);
   }
 
-  public void checkForTimeouts(long curTimeMillis,
-                               OpSender putSender,
-                               OpSender retrievalSender,
-                               boolean exclusionSetHasChanged) {
-    // FUTURE - think about gc and finalization, for now avoid finalization since it incurs massive lag
-    if (allowFinalization &&
-        (lwtPool.getLoad().getLoad() < finalizationLoadThreshold ||
-         finalizationStopwatch.getSplitSeconds() > finalizationForceIntervalSeconds)) {
+  public void checkForTimeouts(
+      long curTimeMillis,
+      OpSender putSender,
+      OpSender retrievalSender,
+      boolean exclusionSetHasChanged) {
+    // FUTURE - think about gc and finalization, for now avoid finalization since it incurs massive
+    // lag
+    if (allowFinalization
+        && (lwtPool.getLoad().getLoad() < finalizationLoadThreshold
+            || finalizationStopwatch.getSplitSeconds() > finalizationForceIntervalSeconds)) {
       System.gc();
-      JVMUtil.getGlobalFinalization().forceFinalization((int) (finalizationForceIntervalSeconds * 1000.0));
+      JVMUtil.getGlobalFinalization()
+          .forceFinalization((int) (finalizationForceIntervalSeconds * 1000.0));
       finalizationStopwatch.reset();
     }
 
-    Set<AsyncRetrievalOperationImpl> retrievalOperationSet = activeRetrievalListeners.currentRetrievalSet();
-    // for retrievals, proxy side exclusion detection and replica fai-lover are used instead of client-side
+    Set<AsyncRetrievalOperationImpl> retrievalOperationSet =
+        activeRetrievalListeners.currentRetrievalSet();
+    // for retrievals, proxy side exclusion detection and replica fai-lover are used instead of
+    // client-side
     checkOpsForTimeouts(curTimeMillis, retrievalOperationSet, retrievalSender, false);
     Set<AsyncPutOperationImpl> putOperationSet = activePutListeners.currentPutSet();
     checkOpsForTimeouts(curTimeMillis, putOperationSet, putSender, exclusionSetHasChanged);
   }
 
-  private void checkOpsForTimeouts(long curTimeMillis,
-                                   Set<? extends AsyncOperationImpl> ops,
-                                   OpSender opSender,
-                                   boolean exclusionSetHasChanged) {
+  private void checkOpsForTimeouts(
+      long curTimeMillis,
+      Set<? extends AsyncOperationImpl> ops,
+      OpSender opSender,
+      boolean exclusionSetHasChanged) {
     if (debugTimeouts) {
       log.info("ActiveClientOperationTable.checkOpsForTimeouts {}", ops.size());
     }
@@ -112,15 +118,17 @@ public class ActiveClientOperationTable {
     }
   }
 
-  private void checkOpForTimeouts(long curTimeMillis,
-                                  AsyncOperationImpl operation,
-                                  OpSender opSender,
-                                  boolean exclusionSetHasChanged) {
+  private void checkOpForTimeouts(
+      long curTimeMillis,
+      AsyncOperationImpl operation,
+      OpSender opSender,
+      boolean exclusionSetHasChanged) {
     boolean attemptHasTimedOut = operation.attemptHasTimedOut(curTimeMillis);
 
     // TODO (OPTIMUS-0000): rather than retrying on any exclusion, we ought to retry only if the
     //  replica to which we are communicating for a given op has been excluded
-    if (attemptHasTimedOut || (exclusionSetHasChanged && operation.retryOnExclusionChange(curTimeMillis))) {
+    if (attemptHasTimedOut
+        || (exclusionSetHasChanged && operation.retryOnExclusionChange(curTimeMillis))) {
       if (operation.getState() == OperationState.INCOMPLETE) {
         if (debugTimeouts) {
           if (attemptHasTimedOut) {

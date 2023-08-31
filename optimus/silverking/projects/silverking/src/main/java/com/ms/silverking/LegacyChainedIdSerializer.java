@@ -17,15 +17,13 @@ import com.ms.silverking.proto.*;
 import optimus.legacy.DoNotUseLegacySerializer;
 
 public class LegacyChainedIdSerializer {
-  // TODO (OPTIMUS-40255): remove this LegacyChainedIdSerializer once we have migrated to using new serialization for trace IDs
-  public Silverking.ChainedIdProto serialize(ChainedID chainedID){
-   return Silverking.ChainedIdProto
-          .newBuilder()
-          .addAllData(chainedID.asList())
-          .build();
+  // TODO (OPTIMUS-40255): remove this LegacyChainedIdSerializer once we have migrated to using new
+  // serialization for trace IDs
+  public Silverking.ChainedIdProto serialize(ChainedID chainedID) {
+    return Silverking.ChainedIdProto.newBuilder().addAllData(chainedID.asList()).build();
   }
 
-  public ChainedID deserialize(Silverking.ChainedIdProto chainedIdProto){
+  public ChainedID deserialize(Silverking.ChainedIdProto chainedIdProto) {
     return DoNotUseLegacySerializer.fromList(chainedIdProto.getDataList());
   }
 }
@@ -34,11 +32,11 @@ abstract class LegacyChainedIdSerialization {
   ChainedIdSerialization chained = new ChainedIdSerialization();
   LegacyChainedIdSerializer legacyChainedSerializer = new LegacyChainedIdSerializer();
 
-   final Silverking.ChainedIdProto toProto(ChainedID chainedID){
-     return legacyChainedSerializer.serialize(chainedID);
+  final Silverking.ChainedIdProto toProto(ChainedID chainedID) {
+    return legacyChainedSerializer.serialize(chainedID);
   }
 
-  final ChainedID fromProto(Silverking.ChainedIdProto proto){
-     return legacyChainedSerializer.deserialize(proto);
+  final ChainedID fromProto(Silverking.ChainedIdProto proto) {
+    return legacyChainedSerializer.deserialize(proto);
   }
 }

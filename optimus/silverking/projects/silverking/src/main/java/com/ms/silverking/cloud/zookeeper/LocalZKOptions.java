@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.zookeeper;
 import org.kohsuke.args4j.Option;
 
 public class LocalZKOptions {
-  LocalZKOptions() {
-  }
+  LocalZKOptions() {}
 
   @Option(name = "-d", usage = "dataDir", required = false)
   String dataDir;

@@ -23,7 +23,8 @@ public class PutMessageFormat extends PutBaseMessageFormat {
   public static final int compressedValueLengthSize = NumConversion.BYTES_PER_INT;
 
   public static final int uncompressedValueLengthOffset = KeyValueMessageFormat.size;
-  public static final int compressedValueLengthOffset = uncompressedValueLengthOffset + uncompressedValueLengthSize;
+  public static final int compressedValueLengthOffset =
+      uncompressedValueLengthOffset + uncompressedValueLengthSize;
   public static final int checksumOffset = compressedValueLengthOffset + compressedValueLengthSize;
 
   public static int size(ChecksumType checksumType) {
@@ -34,10 +35,12 @@ public class PutMessageFormat extends PutBaseMessageFormat {
 
   public static final int secondaryTargetDataOffset = valueCreatorOffset + valueCreatorSize;
 
-  private static final int optionBaseBytes = versionSize * 2 + lockSecondsSize + ccssSize + valueCreatorSize;
+  private static final int optionBaseBytes =
+      versionSize * 2 + lockSecondsSize + ccssSize + valueCreatorSize;
 
   // TODO (OPTIMUS-43373): Remove this legacy comment once client side is using new puts
-  // if messageType is LEGACY_PUT or LEGACY_PUT_TRACE, then the offset returned is the actual userdata's offset
+  // if messageType is LEGACY_PUT or LEGACY_PUT_TRACE, then the offset returned is the actual
+  // userdata's offset
   // else the userdata length's offset is returned
   public static final int userDataLengthOffset(int stLength) {
     return secondaryTargetDataOffset + stLength + NumConversion.BYTES_PER_SHORT;
@@ -45,21 +48,23 @@ public class PutMessageFormat extends PutBaseMessageFormat {
 
   public static final int getOptionsBufferLength(PutOptions putOptions) {
     // TODO (OPTIMUS-43373): Add authorizationUser into calculations
-    return optionBaseBytes +
-           NumConversion.BYTES_PER_SHORT +
-           SecondaryTargetSerializer.serializedLength(putOptions.getSecondaryTargets()) +
-           getUserDataLength(putOptions);
+    return optionBaseBytes
+        + NumConversion.BYTES_PER_SHORT
+        + SecondaryTargetSerializer.serializedLength(putOptions.getSecondaryTargets())
+        + getUserDataLength(putOptions);
   }
 
   private static final int getUserDataLength(PutOptions putOptions) {
     int userDataLength = putOptions.getUserData() == null ? 0 : putOptions.getUserData().length;
     // 1 because userDataLength occupies 1 byte
-    // TODO (OPTIMUS-43373): Add 1 when we change the format and add authorizationUser into calculations
+    // TODO (OPTIMUS-43373): Add 1 when we change the format and add authorizationUser into
+    // calculations
     return userDataLength;
   }
 
   private static final int getAuthorizationUserLength(PutOptions putOptions) {
-    int authorizationUserLength = putOptions.getAuthorizationUser() == null ? 0 : putOptions.getAuthorizationUser().length;
+    int authorizationUserLength =
+        putOptions.getAuthorizationUser() == null ? 0 : putOptions.getAuthorizationUser().length;
     // NumConversion.BYTES_PER_INT because authorizationUserLength occupies 4 bytes
     return NumConversion.BYTES_PER_INT + authorizationUserLength;
   }

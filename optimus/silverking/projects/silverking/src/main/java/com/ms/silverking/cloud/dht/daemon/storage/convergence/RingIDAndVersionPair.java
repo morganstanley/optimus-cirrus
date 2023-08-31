@@ -17,9 +17,7 @@ import com.ms.silverking.numeric.NumConversion;
 import com.ms.silverking.numeric.NumUtil;
 import com.ms.silverking.util.IncomparableException;
 
-/**
- * Groups a RingID (hash of the ring name) and version pair of the ring into a single object.
- */
+/** Groups a RingID (hash of the ring name) and version pair of the ring into a single object. */
 public class RingIDAndVersionPair implements Comparable<RingIDAndVersionPair> {
   private final RingID ringID;
   private final Pair<Long, Long> ringVersionPair;
@@ -31,8 +29,10 @@ public class RingIDAndVersionPair implements Comparable<RingIDAndVersionPair> {
     this.ringVersionPair = ringVersionPair;
   }
 
-  public static RingIDAndVersionPair fromRingNameAndVersionPair(Triple<String, Long, Long> ringNameAndVersionPair) {
-    return new RingIDAndVersionPair(RingID.nameToRingID(ringNameAndVersionPair.getV1()),
+  public static RingIDAndVersionPair fromRingNameAndVersionPair(
+      Triple<String, Long, Long> ringNameAndVersionPair) {
+    return new RingIDAndVersionPair(
+        RingID.nameToRingID(ringNameAndVersionPair.getV1()),
         new Pair<>(ringNameAndVersionPair.getV2(), ringNameAndVersionPair.getV3()));
   }
 
@@ -54,7 +54,8 @@ public class RingIDAndVersionPair implements Comparable<RingIDAndVersionPair> {
     RingIDAndVersionPair oRingIDAndVersion;
 
     oRingIDAndVersion = (RingIDAndVersionPair) other;
-    return ringID.equals(oRingIDAndVersion.ringID) && ringVersionPair.equals(oRingIDAndVersion.ringVersionPair);
+    return ringID.equals(oRingIDAndVersion.ringID)
+        && ringVersionPair.equals(oRingIDAndVersion.ringVersionPair);
   }
 
   @Override

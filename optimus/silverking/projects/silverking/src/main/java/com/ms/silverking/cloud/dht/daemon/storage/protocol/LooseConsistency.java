@@ -21,15 +21,17 @@ public class LooseConsistency implements StorageProtocol, RetrievalProtocol {
     this.storageReplicaProvider = storageNodeProvider;
   }
 
-  //@Override
-  public StorageOperation createStorageOperation(long timeout, PutOperationContainer putOperationContainer,
-      ForwardingMode forwardingMode) {
+  // @Override
+  public StorageOperation createStorageOperation(
+      long timeout, PutOperationContainer putOperationContainer, ForwardingMode forwardingMode) {
     return new LooseConsistencyWrite(putOperationContainer, forwardingMode, timeout);
   }
 
   @Override
-  public RetrievalOperation createRetrievalOperation(long timeout,
-      RetrievalOperationContainer retrievalOperationContainer, ForwardingMode forwardingMode) {
+  public RetrievalOperation createRetrievalOperation(
+      long timeout,
+      RetrievalOperationContainer retrievalOperationContainer,
+      ForwardingMode forwardingMode) {
     return new LooseConsistencyRead(timeout, retrievalOperationContainer, forwardingMode);
   }
 

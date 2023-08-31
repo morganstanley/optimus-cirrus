@@ -30,9 +30,15 @@ public class ProtoVersionedBasicOpMessageGroup extends ProtoMessageGroup {
   private static final int uuidLSLOffset = uuidMSLOffset + NumConversion.BYTES_PER_LONG;
   private static final int versionOffset = uuidLSLOffset + NumConversion.BYTES_PER_LONG;
 
-  public ProtoVersionedBasicOpMessageGroup(MessageType type, UUIDBase uuid, long context, long version,
-      byte[] originator) {
-    super(type, uuid, context, originator, defaultDeadlineRelativeMillis, ForwardingMode.DO_NOT_FORWARD);
+  public ProtoVersionedBasicOpMessageGroup(
+      MessageType type, UUIDBase uuid, long context, long version, byte[] originator) {
+    super(
+        type,
+        uuid,
+        context,
+        originator,
+        defaultDeadlineRelativeMillis,
+        ForwardingMode.DO_NOT_FORWARD);
 
     ByteBuffer buffer;
 

@@ -21,9 +21,7 @@ import com.ms.silverking.cloud.meta.MetaPaths;
 import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperException;
 import org.apache.zookeeper.CreateMode;
 
-/**
- * Writes/reads topologies to/from Zookeeper.
- */
+/** Writes/reads topologies to/from Zookeeper. */
 public class TopologyZK extends MetaToolModuleBase<Topology, MetaPaths> {
   public TopologyZK(MetaClient mc) throws KeeperException {
     super(mc, mc.getMetaPaths().getTopologyPath());
@@ -64,7 +62,8 @@ public class TopologyZK extends MetaToolModuleBase<Topology, MetaPaths> {
   }
 
   @Override
-  public String writeToZK(Topology topology, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(Topology topology, MetaToolOptions options)
+      throws IOException, KeeperException {
     zk.createString(base + "/", topology.toStructuredString(), CreateMode.PERSISTENT_SEQUENTIAL);
     return null;
   }

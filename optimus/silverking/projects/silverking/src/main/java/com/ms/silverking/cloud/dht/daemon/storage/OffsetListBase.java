@@ -23,9 +23,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * List of offsets used in cases where we have multiple values stored for a particular key.
- * Extended concretely by RAMOffsetList - used in non-persisted segments - and
- * BufferOffsetList - for persisted segments.
+ * List of offsets used in cases where we have multiple values stored for a particular key. Extended
+ * concretely by RAMOffsetList - used in non-persisted segments - and BufferOffsetList - for
+ * persisted segments.
  */
 abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
   final boolean supportsStorageTime;
@@ -46,7 +46,6 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
    * Note: Care must be taken when working with sizes and indices. There are three units that are
    * used in the appropriate places: entries, ints, and bytes.
    */
-
 
   /*
    * Persisted format:
@@ -130,9 +129,9 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
       long curVersion;
 
       // StorageTimes are increasing. Exit this loop if we have exceeded the maxStorageTime.
-      if (supportsStorageTime &&
-          vc.getMaxCreationTime() != VersionConstraint.noCreationTimeLimit &&
-          vc.getMaxCreationTime() < getStorageTime(i)) {
+      if (supportsStorageTime
+          && vc.getMaxCreationTime() != VersionConstraint.noCreationTimeLimit
+          && vc.getMaxCreationTime() < getStorageTime(i)) {
         break;
       }
 
@@ -141,14 +140,16 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
       if (vc.matches(curVersion)) {
         if (vc.getMode() == VersionConstraint.Mode.LEAST) {
           if (curVersion <= bestMatchVersion) {
-            if (validityVerifier == null || validityVerifier.isValid(getOffset(i) + DHTKey.BYTES_PER_KEY)) {
+            if (validityVerifier == null
+                || validityVerifier.isValid(getOffset(i) + DHTKey.BYTES_PER_KEY)) {
               bestMatchIndex = i;
               bestMatchVersion = curVersion;
             }
           }
         } else {
           if (curVersion >= bestMatchVersion) {
-            if (validityVerifier == null || validityVerifier.isValid(getOffset(i) + DHTKey.BYTES_PER_KEY)) {
+            if (validityVerifier == null
+                || validityVerifier.isValid(getOffset(i) + DHTKey.BYTES_PER_KEY)) {
               bestMatchIndex = i;
               bestMatchVersion = curVersion;
             }
@@ -212,7 +213,8 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
     System.out.println("*** list end ***\n");
   }
 
-  @Override @Nonnull
+  @Override
+  @Nonnull
   public Iterator<Integer> iterator() {
     return new OffsetListIterator();
   }
@@ -220,8 +222,7 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
   protected abstract class OffsetListIteratorBase<T> implements Iterator<T> {
     protected int index;
 
-    OffsetListIteratorBase() {
-    }
+    OffsetListIteratorBase() {}
 
     @Override
     public boolean hasNext() {
@@ -235,8 +236,7 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
   }
 
   private class OffsetListIterator extends OffsetListIteratorBase<Integer> {
-    OffsetListIterator() {
-    }
+    OffsetListIterator() {}
 
     @Override
     public Integer next() {
@@ -253,22 +253,21 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
     return new OffsetVersionAndStorageTimeIterator();
   }
 
-  private class OffsetVersionAndStorageTimeIterator extends OffsetListIteratorBase<Triple<Integer, Long, Long>>
+  private class OffsetVersionAndStorageTimeIterator
+      extends OffsetListIteratorBase<Triple<Integer, Long, Long>>
       implements Iterable<Triple<Integer, Long, Long>> {
-    OffsetVersionAndStorageTimeIterator() {
-    }
+    OffsetVersionAndStorageTimeIterator() {}
 
     @Override
     public Triple<Integer, Long, Long> next() {
       if (hasNext()) {
         Triple<Integer, Long, Long> t;
 
-        t = new Triple<>(
-            getOffset(index),
-            getVersion(index),
-            supportsStorageTime
-            ? getStorageTime(index)
-            : 0);
+        t =
+            new Triple<>(
+                getOffset(index),
+                getVersion(index),
+                supportsStorageTime ? getStorageTime(index) : 0);
         index++;
         return t;
       } else {
@@ -276,7 +275,8 @@ abstract class OffsetListBase implements OffsetList, Iterable<Integer> {
       }
     }
 
-    @Override @Nonnull
+    @Override
+    @Nonnull
     public Iterator<Triple<Integer, Long, Long>> iterator() {
       return this;
     }

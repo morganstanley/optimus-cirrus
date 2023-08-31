@@ -27,9 +27,19 @@ public class ProtoProgressMessageGroup extends ProtoMessageGroup {
   private static final int progressIndex0 = 0;
   private static final int progressIndex1 = progressIndex0 + Long.BYTES;
 
-  public ProtoProgressMessageGroup(UUIDBase uuid, long context, Pair<Long, Long> progress, byte[] originator,
+  public ProtoProgressMessageGroup(
+      UUIDBase uuid,
+      long context,
+      Pair<Long, Long> progress,
+      byte[] originator,
       int deadlineRelativeMillis) {
-    super(MessageType.PROGRESS, uuid, context, originator, deadlineRelativeMillis, ForwardingMode.FORWARD);
+    super(
+        MessageType.PROGRESS,
+        uuid,
+        context,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD);
 
     buffer = ByteBuffer.allocate(bufferSize);
     bufferList.add(buffer);

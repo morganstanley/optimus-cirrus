@@ -26,10 +26,10 @@ public class BufferUtil {
 
   public static List<ByteBuffer> flip(List<ByteBuffer> buffers) {
     for (ByteBuffer buffer : buffers) {
-      //System.out.println("f\t"+ buffer);
+      // System.out.println("f\t"+ buffer);
       buffer.flip();
     }
-    //System.out.println();
+    // System.out.println();
     return buffers;
   }
 
@@ -52,9 +52,9 @@ public class BufferUtil {
 
   public static boolean equals(ByteBuffer bufA, int startA, byte[] arrayB, int startB, int length) {
     // FUTURE - optimize
-    //for (int i = 0; i < length; i++) {
+    // for (int i = 0; i < length; i++) {
     //    System.out.println(bufA.get(startA + i) +"\t"+ arrayB[startB + i]);
-    //}
+    // }
     for (int i = 0; i < length; i++) {
       if (bufA.get(startA + i) != arrayB[startB + i]) {
         return false;
@@ -67,7 +67,8 @@ public class BufferUtil {
     return start + length <= buf.limit();
   }
 
-  public static boolean equals(ByteBuffer bufA, int startA, ByteBuffer bufB, int startB, int length) {
+  public static boolean equals(
+      ByteBuffer bufA, int startA, ByteBuffer bufB, int startB, int length) {
     if (!withinLimit(bufA, startA, length) || !withinLimit(bufB, startB, length)) {
       return false;
     } else {
@@ -157,6 +158,8 @@ public class BufferUtil {
   }
 
   public static ByteBuffer sliceRange(ByteBuffer buf, int newPosition, int newLimit) {
-    return ((ByteBuffer) buf.duplicate().position(newPosition).limit(newLimit)).slice().order(buf.order());
+    return ((ByteBuffer) buf.duplicate().position(newPosition).limit(newLimit))
+        .slice()
+        .order(buf.order());
   }
 }

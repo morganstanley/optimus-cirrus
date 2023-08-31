@@ -35,7 +35,8 @@ public class SubPolicyMember {
   private static final String ALL_TOKEN = "all";
   public static final int ALL = Integer.MAX_VALUE;
 
-  public SubPolicyMember(int quantity, NodeClassAndStoragePolicyName classAndPolicyName, Set<String> boundIDs) {
+  public SubPolicyMember(
+      int quantity, NodeClassAndStoragePolicyName classAndPolicyName, Set<String> boundIDs) {
     this.quantity = quantity;
     this.classAndPolicyName = classAndPolicyName;
     this.boundIDs = boundIDs;
@@ -82,11 +83,11 @@ public class SubPolicyMember {
     Set<Node> filteredChildren;
     Set<Node> nodes;
 
-    //filteredChildren = recipe.exclusionList.filter(parent.getChildren());
+    // filteredChildren = recipe.exclusionList.filter(parent.getChildren());
     filteredChildren = recipe.nonExcludedChildren(parent.getIDString());
     if (filteredChildren.size() < quantity && quantity != ALL) {
-      log.info("parent: {}" , parent);
-      log.info("filteredChildren.size(): {}   quantity: {}",  filteredChildren.size() , quantity);
+      log.info("parent: {}", parent);
+      log.info("filteredChildren.size(): {}   quantity: {}", filteredChildren.size(), quantity);
       log.info("recipe: {}", recipe);
       throw new RuntimeException("filteredChildren.size() < quantity");
     }
@@ -114,17 +115,17 @@ public class SubPolicyMember {
     return members;
   }
 
-/*
+  /*
     public List<String> getNodeIDs(Node parent) {
         List<String>    nodeIDs;
         List<Node>      children;
-        
+
         parent.getChildren();
         nodeIDs = new ArrayList<>();
         for (int i = 0; i < quantity; i++) {
         }
         return nodeIDs;
-    }    
+    }
   */
 
   public static SubPolicyMember parse(String def) throws PolicyParseException {
@@ -156,7 +157,8 @@ public class SubPolicyMember {
       secondColonIndex = tok1.lastIndexOf(':');
       tok1A = tok1.substring(0, secondColonIndex);
       tok1B = tok1.substring(secondColonIndex + 1);
-      return new SubPolicyMember(quantity, NodeClassAndStoragePolicyName.parse(tok1A), parseBoundIDs(tok1B));
+      return new SubPolicyMember(
+          quantity, NodeClassAndStoragePolicyName.parse(tok1A), parseBoundIDs(tok1B));
     } else {
       return new SubPolicyMember(quantity, NodeClassAndStoragePolicyName.parse(tok1));
     }
@@ -180,7 +182,8 @@ public class SubPolicyMember {
     }
   }
 
-  public static List<SubPolicyMember> parseMultiple(String multipleDef) throws PolicyParseException {
+  public static List<SubPolicyMember> parseMultiple(String multipleDef)
+      throws PolicyParseException {
     String[] defs;
     List<SubPolicyMember> members;
 

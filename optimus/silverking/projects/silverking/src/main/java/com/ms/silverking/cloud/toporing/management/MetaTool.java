@@ -28,46 +28,69 @@ import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperExcepti
 import com.ms.silverking.cloud.zookeeper.ZooKeeperConfig;
 
 public class MetaTool extends MetaToolBase {
-  private enum Tool {Weights, RingConfiguration, StoragePolicyGroup}
+  private enum Tool {
+    Weights,
+    RingConfiguration,
+    StoragePolicyGroup
+  };
 
-  ;
-
-  public MetaTool() {
-  }
+  public MetaTool() {}
 
   private static MetaToolModule getModule(Tool tool, MetaClient metaClient) throws KeeperException {
     switch (tool) {
-    case Weights:
-      return new WeightsZK(metaClient);
-    //case Replication: return new ReplicationZK(metaClient);
-    case RingConfiguration:
-      return new RingConfigurationZK(metaClient);
-    case StoragePolicyGroup:
-      return new StoragePolicyGroupZK(metaClient);
-    default:
-      throw new RuntimeException("panic");
+      case Weights:
+        return new WeightsZK(metaClient);
+        // case Replication: return new ReplicationZK(metaClient);
+      case RingConfiguration:
+        return new RingConfigurationZK(metaClient);
+      case StoragePolicyGroup:
+        return new StoragePolicyGroupZK(metaClient);
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private static NamedRingConfiguration namedRingConfigurationFor(Tool tool, String name) {
     switch (tool) {
-    case Weights:
-      return new NamedRingConfiguration(null,
-          new RingConfiguration(CloudConfiguration.emptyTemplate, name, null, null, null, null,
-              VersionedDefinition.NO_VERSION));
-    //case Replication: return new NamedRingConfiguration(null,
-    //        new RingConfiguration(new CloudConfiguration(null, null), null, name, null, VersionedDefinition
-    //        .NO_VERSION));
-    case RingConfiguration:
-      return new NamedRingConfiguration(name,
-          new RingConfiguration(CloudConfiguration.emptyTemplate, null, null, null, null, null,
-              VersionedDefinition.NO_VERSION));
-    case StoragePolicyGroup:
-      return new NamedRingConfiguration(null,
-          new RingConfiguration(CloudConfiguration.emptyTemplate, null, null, name, null, null,
-              VersionedDefinition.NO_VERSION));
-    default:
-      throw new RuntimeException("panic");
+      case Weights:
+        return new NamedRingConfiguration(
+            null,
+            new RingConfiguration(
+                CloudConfiguration.emptyTemplate,
+                name,
+                null,
+                null,
+                null,
+                null,
+                VersionedDefinition.NO_VERSION));
+        // case Replication: return new NamedRingConfiguration(null,
+        //        new RingConfiguration(new CloudConfiguration(null, null), null, name, null,
+        // VersionedDefinition
+        //        .NO_VERSION));
+      case RingConfiguration:
+        return new NamedRingConfiguration(
+            name,
+            new RingConfiguration(
+                CloudConfiguration.emptyTemplate,
+                null,
+                null,
+                null,
+                null,
+                null,
+                VersionedDefinition.NO_VERSION));
+      case StoragePolicyGroup:
+        return new NamedRingConfiguration(
+            null,
+            new RingConfiguration(
+                CloudConfiguration.emptyTemplate,
+                null,
+                null,
+                name,
+                null,
+                null,
+                VersionedDefinition.NO_VERSION));
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -77,7 +100,9 @@ public class MetaTool extends MetaToolBase {
     Tool tool;
 
     tool = Tool.valueOf(options.tool);
-    mc = new MetaClient(namedRingConfigurationFor(tool, options.name), new ZooKeeperConfig(options.zkConfig));
+    mc =
+        new MetaClient(
+            namedRingConfigurationFor(tool, options.name), new ZooKeeperConfig(options.zkConfig));
     doWork(options, new MetaToolWorker(getModule(tool, mc)));
   }
 

@@ -46,45 +46,45 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Extension of the raw ZooKeeper class used to simplify some interaction.
- */
+/** Extension of the raw ZooKeeper class used to simplify some interaction. */
 public class SilverKingZooKeeperClient {
-  private static final ConcurrentMap<ZooKeeperConfig, CuratorWithBasePath> curatorPool = new ConcurrentHashMap<>();
+  private static final ConcurrentMap<ZooKeeperConfig, CuratorWithBasePath> curatorPool =
+      new ConcurrentHashMap<>();
   private static final Object curatorPoolLock = new Object();
   private static final RetryPolicy defaultRetryPolicy = new ExponentialBackoffRetry(100, 10, 20000);
 
   private static Logger log = LoggerFactory.getLogger(SilverKingZooKeeperClient.class);
 
-  private static CuratorWithBasePath createAndSetCurator(ZooKeeperConfig zkConfig,
-                                                         int sessionTimeoutMs,
-                                                         ZookeeperFactory zookeeperFactory) {
+  private static CuratorWithBasePath createAndSetCurator(
+      ZooKeeperConfig zkConfig, int sessionTimeoutMs, ZookeeperFactory zookeeperFactory) {
     synchronized (curatorPoolLock) {
       CuratorFramework curator;
       CuratorWithBasePath curatorWithSubPath;
 
-      curator = CuratorFrameworkFactory.builder()
-                                       .zookeeperFactory(zookeeperFactory)
-                                       .ensembleProvider(new ImmutableEnsembleProvider(zkConfig.getConnectString()))
-                                       .retryPolicy(defaultRetryPolicy)
-                                       .dontUseContainerParents()
-                                       .sessionTimeoutMs(sessionTimeoutMs)
-                                       .build();
+      curator =
+          CuratorFrameworkFactory.builder()
+              .zookeeperFactory(zookeeperFactory)
+              .ensembleProvider(new ImmutableEnsembleProvider(zkConfig.getConnectString()))
+              .retryPolicy(defaultRetryPolicy)
+              .dontUseContainerParents()
+              .sessionTimeoutMs(sessionTimeoutMs)
+              .build();
 
       if (curator.getState() == CuratorFrameworkState.LATENT) {
         curator.start();
       }
-      curatorWithSubPath = new CuratorWithBasePath() {
-        @Override
-        public String getResolvedPath(String path) {
-          return path;
-        }
+      curatorWithSubPath =
+          new CuratorWithBasePath() {
+            @Override
+            public String getResolvedPath(String path) {
+              return path;
+            }
 
-        @Override
-        public CuratorFramework getCurator() {
-          return curator;
-        }
-      };
+            @Override
+            public CuratorFramework getCurator() {
+              return curator;
+            }
+          };
 
       curatorPool.put(zkConfig, curatorWithSubPath);
       return curatorWithSubPath;
@@ -97,16 +97,16 @@ public class SilverKingZooKeeperClient {
       String chroot, currConnStr, base;
 
       chroot = zkConfig.getChroot();
-      currConnStr = curatorWithBasePath.getCurator().getZookeeperClient().getCurrentConnectionString();
-      base = currConnStr.contains("/")
-             ? currConnStr.substring(currConnStr.indexOf('/'))
-             : "";
+      currConnStr =
+          curatorWithBasePath.getCurator().getZookeeperClient().getCurrentConnectionString();
+      base = currConnStr.contains("/") ? currConnStr.substring(currConnStr.indexOf('/')) : "";
       if (!chroot.startsWith(base)) {
-        throw new IllegalArgumentException("Given curator is using [" +
-                                           currConnStr +
-                                           "] which cannot work with chroot [" +
-                                           chroot +
-                                           "]");
+        throw new IllegalArgumentException(
+            "Given curator is using ["
+                + currConnStr
+                + "] which cannot work with chroot ["
+                + chroot
+                + "]");
       }
       curatorPool.put(zkConfig, curatorWithBasePath);
       log.info("[ {} ] is bound with curator [ {} ]", zkConfig, curatorWithBasePath);
@@ -114,8 +114,10 @@ public class SilverKingZooKeeperClient {
   }
 
   private final CuratorWithBasePath curatorWithBasePath;
-  // TODO (OPTIMUS-0000): various other classes consume this at present in order to share ZK connections where the ZK Config matches.
-  // However it would be better to remove this in future and let Curator take care of the connection state management
+  // TODO (OPTIMUS-0000): various other classes consume this at present in order to share ZK
+  // connections where the ZK Config matches.
+  // However it would be better to remove this in future and let Curator take care of the connection
+  // state management
   // for us.
   private final ZooKeeperConfig zkConfig;
 
@@ -157,7 +159,8 @@ public class SilverKingZooKeeperClient {
 
     sharedInstance = curatorPool.get(zkConfig);
     if (sharedInstance == null) {
-      this.curatorWithBasePath = createAndSetCurator(zkConfig, sessionTimeoutMs, zookeeperFactory(zkConfig));
+      this.curatorWithBasePath =
+          createAndSetCurator(zkConfig, sessionTimeoutMs, zookeeperFactory(zkConfig));
     } else {
       this.curatorWithBasePath = sharedInstance;
     }
@@ -185,11 +188,12 @@ public class SilverKingZooKeeperClient {
 
   public void setEphemeral(String path, byte[] data) throws KeeperException {
     try {
-      curatorWithBasePath.getCurator()
-                         .create()
-                         .orSetData()
-                         .withMode(CreateMode.EPHEMERAL)
-                         .forPath(curatorWithBasePath.getResolvedPath(path), data);
+      curatorWithBasePath
+          .getCurator()
+          .create()
+          .orSetData()
+          .withMode(CreateMode.EPHEMERAL)
+          .forPath(curatorWithBasePath.getResolvedPath(path), data);
     } catch (Exception ex) {
       throw KeeperException.forMethod("setEphemeral", ex);
     }
@@ -197,10 +201,11 @@ public class SilverKingZooKeeperClient {
 
   public Stat set(String path, byte[] data, int version) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator()
-                                .setData()
-                                .withVersion(version)
-                                .forPath(curatorWithBasePath.getResolvedPath(path), data);
+      return curatorWithBasePath
+          .getCurator()
+          .setData()
+          .withVersion(version)
+          .forPath(curatorWithBasePath.getResolvedPath(path), data);
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -210,7 +215,10 @@ public class SilverKingZooKeeperClient {
 
   public Stat set(String path, byte[] data) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator().setData().forPath(curatorWithBasePath.getResolvedPath(path), data);
+      return curatorWithBasePath
+          .getCurator()
+          .setData()
+          .forPath(curatorWithBasePath.getResolvedPath(path), data);
     } catch (Exception ex) {
       throw KeeperException.forMethod("set", ex);
     }
@@ -226,8 +234,11 @@ public class SilverKingZooKeeperClient {
 
   public String create(String path, byte[] data, CreateMode createMode) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator().create().withMode(createMode).forPath(curatorWithBasePath.getResolvedPath(
-          path), data);
+      return curatorWithBasePath
+          .getCurator()
+          .create()
+          .withMode(createMode)
+          .forPath(curatorWithBasePath.getResolvedPath(path), data);
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -261,7 +272,8 @@ public class SilverKingZooKeeperClient {
     }
   }
 
-  public void deleteVersionedChildren(String parent, int numVersionsToRetain) throws KeeperException {
+  public void deleteVersionedChildren(String parent, int numVersionsToRetain)
+      throws KeeperException {
     List<String> children;
 
     children = new ArrayList<>(getChildren(parent));
@@ -275,7 +287,8 @@ public class SilverKingZooKeeperClient {
     }
   }
 
-  public void waitForCompletion(List<? extends CompletableFuture> ops) throws InterruptedException, ExecutionException {
+  public void waitForCompletion(List<? extends CompletableFuture> ops)
+      throws InterruptedException, ExecutionException {
     for (CompletableFuture op : ops) {
       op.get();
     }
@@ -286,11 +299,12 @@ public class SilverKingZooKeeperClient {
 
     try {
       op = new CompletableFuture<>();
-      curatorWithBasePath.getCurator()
-                         .delete()
-                         .withVersion(ANY_VERSION)
-                         .inBackground((CuratorFramework client, CuratorEvent event) -> op.complete(null))
-                         .forPath(curatorWithBasePath.getResolvedPath(path));
+      curatorWithBasePath
+          .getCurator()
+          .delete()
+          .withVersion(ANY_VERSION)
+          .inBackground((CuratorFramework client, CuratorEvent event) -> op.complete(null))
+          .forPath(curatorWithBasePath.getResolvedPath(path));
       return op;
     } catch (Exception ex) {
       throw KeeperException.forMethod("deleteAsync", ex);
@@ -333,10 +347,12 @@ public class SilverKingZooKeeperClient {
     byte[] data;
 
     try {
-      data = curatorWithBasePath.getCurator()
-                                .getData()
-                                .usingWatcher(watcher)
-                                .forPath(curatorWithBasePath.getResolvedPath(path));
+      data =
+          curatorWithBasePath
+              .getCurator()
+              .getData()
+              .usingWatcher(watcher)
+              .forPath(curatorWithBasePath.getResolvedPath(path));
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -349,7 +365,11 @@ public class SilverKingZooKeeperClient {
   public double getDouble(String path) throws KeeperException {
     byte[] data;
     try {
-      data = curatorWithBasePath.getCurator().getData().forPath(curatorWithBasePath.getResolvedPath(path));
+      data =
+          curatorWithBasePath
+              .getCurator()
+              .getData()
+              .forPath(curatorWithBasePath.getResolvedPath(path));
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -359,7 +379,8 @@ public class SilverKingZooKeeperClient {
     return NumConversion.bytesToDouble(data);
   }
 
-  public String createString(String path, String val, CreateMode createMode) throws KeeperException {
+  public String createString(String path, String val, CreateMode createMode)
+      throws KeeperException {
     return create(path, val.getBytes(), createMode);
   }
 
@@ -375,14 +396,17 @@ public class SilverKingZooKeeperClient {
     return convertToIntData(getByteArrays(paths, watcher));
   }
 
-  private Map<String, byte[]> syncGetPathsData(Set<String> paths, Watcher watcher) throws KeeperException {
+  private Map<String, byte[]> syncGetPathsData(Set<String> paths, Watcher watcher)
+      throws KeeperException {
     Map<String, byte[]> dataMap = new HashMap<>();
     for (String path : paths) {
       try {
-        byte[] data = curatorWithBasePath.getCurator()
-                                         .getData()
-                                         .usingWatcher(watcher)
-                                         .forPath(curatorWithBasePath.getResolvedPath(path));
+        byte[] data =
+            curatorWithBasePath
+                .getCurator()
+                .getData()
+                .usingWatcher(watcher)
+                .forPath(curatorWithBasePath.getResolvedPath(path));
         if (data != null) {
           log.info("Sync zk get success: {} ", path);
           dataMap.put(path, data);
@@ -400,14 +424,14 @@ public class SilverKingZooKeeperClient {
     return syncGetPathsData(paths, null);
   }
 
-  public Map<String, byte[]> getByteArrays(Set<String> paths, Watcher watcher) throws KeeperException {
+  public Map<String, byte[]> getByteArrays(Set<String> paths, Watcher watcher)
+      throws KeeperException {
     return syncGetPathsData(paths, watcher);
   }
 
-  public Map<String, byte[]> getByteArrays(String basePath,
-                                           Set<String> children,
-                                           Watcher watcher,
-                                           CancelableObserver observer) throws KeeperException {
+  public Map<String, byte[]> getByteArrays(
+      String basePath, Set<String> children, Watcher watcher, CancelableObserver observer)
+      throws KeeperException {
     ImmutableSet.Builder<String> childrenPaths;
 
     childrenPaths = ImmutableSet.builder();
@@ -468,8 +492,12 @@ public class SilverKingZooKeeperClient {
 
   public byte[] getByteArray(String path, Watcher watcher, Stat stat) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator().getData().storingStatIn(stat).usingWatcher(watcher).forPath(
-          curatorWithBasePath.getResolvedPath(path));
+      return curatorWithBasePath
+          .getCurator()
+          .getData()
+          .storingStatIn(stat)
+          .usingWatcher(watcher)
+          .forPath(curatorWithBasePath.getResolvedPath(path));
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -500,7 +528,11 @@ public class SilverKingZooKeeperClient {
 
   public boolean exists(String path) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator().checkExists().forPath(curatorWithBasePath.getResolvedPath(path)) != null;
+      return curatorWithBasePath
+              .getCurator()
+              .checkExists()
+              .forPath(curatorWithBasePath.getResolvedPath(path))
+          != null;
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -510,10 +542,11 @@ public class SilverKingZooKeeperClient {
 
   public List<String> getChildren(String path, Watcher watcher) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator()
-                                .getChildren()
-                                .usingWatcher(watcher)
-                                .forPath(curatorWithBasePath.getResolvedPath(path));
+      return curatorWithBasePath
+          .getCurator()
+          .getChildren()
+          .usingWatcher(watcher)
+          .forPath(curatorWithBasePath.getResolvedPath(path));
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -523,7 +556,10 @@ public class SilverKingZooKeeperClient {
 
   public List<String> getChildren(String path) throws KeeperException {
     try {
-      return curatorWithBasePath.getCurator().getChildren().forPath(curatorWithBasePath.getResolvedPath(path));
+      return curatorWithBasePath
+          .getCurator()
+          .getChildren()
+          .forPath(curatorWithBasePath.getResolvedPath(path));
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
     } catch (Exception ex) {
@@ -550,7 +586,11 @@ public class SilverKingZooKeeperClient {
       Stat stat;
 
       stat = new Stat();
-      curatorWithBasePath.getCurator().getData().storingStatIn(stat).forPath(curatorWithBasePath.getResolvedPath(path));
+      curatorWithBasePath
+          .getCurator()
+          .getData()
+          .storingStatIn(stat)
+          .forPath(curatorWithBasePath.getResolvedPath(path));
       return stat;
     } catch (InterruptedException ie) {
       throw new RuntimeException("panic");
@@ -563,9 +603,8 @@ public class SilverKingZooKeeperClient {
     curatorWithBasePath.getCurator().close();
   }
 
-  public static SilverKingZooKeeperClient getZooKeeperWithRetries(ZooKeeperConfig zkConfig,
-                                                                  int sessionTimeout,
-                                                                  int connectAttempts) {
+  public static SilverKingZooKeeperClient getZooKeeperWithRetries(
+      ZooKeeperConfig zkConfig, int sessionTimeout, int connectAttempts) {
     SilverKingZooKeeperClient _zk;
     int curAttempt;
 
@@ -574,7 +613,9 @@ public class SilverKingZooKeeperClient {
     do {
       try {
         _zk = new SilverKingZooKeeperClient(zkConfig, sessionTimeout);
-        _zk.curatorWithBasePath.getCurator().blockUntilConnected(sessionTimeout, TimeUnit.MILLISECONDS);
+        _zk.curatorWithBasePath
+            .getCurator()
+            .blockUntilConnected(sessionTimeout, TimeUnit.MILLISECONDS);
         break;
       } catch (InterruptedException ie) {
         log.error("Interrupted while connecting to ZooKeeper", ie);
@@ -583,7 +624,8 @@ public class SilverKingZooKeeperClient {
           log.error("Exception while connecting to ZooKeeper, all retries exhausted", e);
           throw e;
         } else {
-          log.error("Caught exception while connecting to ZooKeeper, will retry after wait period", e);
+          log.error(
+              "Caught exception while connecting to ZooKeeper, will retry after wait period", e);
         }
       }
       curAttempt++;
@@ -615,11 +657,12 @@ public class SilverKingZooKeeperClient {
 
   public void createAllNodes(String path) throws KeeperException {
     try {
-      curatorWithBasePath.getCurator()
-                         .create()
-                         .orSetData()
-                         .creatingParentsIfNeeded()
-                         .forPath(curatorWithBasePath.getResolvedPath(path), "".getBytes());
+      curatorWithBasePath
+          .getCurator()
+          .create()
+          .orSetData()
+          .creatingParentsIfNeeded()
+          .forPath(curatorWithBasePath.getResolvedPath(path), "".getBytes());
     } catch (Exception ex) {
       throw KeeperException.forMethod("createAllNodes", ex);
     }
@@ -658,18 +701,14 @@ public class SilverKingZooKeeperClient {
     List<Long> sorted;
 
     sorted = getSortedVersions(path);
-    return sorted.isEmpty()
-           ? -1
-           : sorted.get(sorted.size() - 1);
+    return sorted.isEmpty() ? -1 : sorted.get(sorted.size() - 1);
   }
 
   public long getLeastVersion(String path) throws KeeperException {
     List<Long> sorted;
 
     sorted = getSortedVersions(path);
-    return sorted.isEmpty()
-           ? -1
-           : sorted.get(0);
+    return sorted.isEmpty() ? -1 : sorted.get(0);
   }
 
   public long getLatestVersionFromPath(String path) {

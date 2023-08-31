@@ -57,12 +57,10 @@ public class MultiInstanceTerminator {
   private void terminateInstances() {
     printNoDot("Terminating Instances");
 
-    if (instances.isEmpty())
-      return;
+    if (instances.isEmpty()) return;
 
     List<String> ips = getIps(instances);
-    for (String ip : ips)
-      log.info("{}" , ip);
+    for (String ip : ips) log.info("{}", ip);
     TerminateInstancesRequest terminateInstancesRequest = new TerminateInstancesRequest();
     terminateInstancesRequest.withInstanceIds(getInstanceIds(instances));
 
@@ -75,10 +73,11 @@ public class MultiInstanceTerminator {
 
   public static void main(String[] args) {
     String launchHostIp = getMyIp();
-    log.info("Attempting to terminate all instances with keypair: {}" , getUniqueKeyPairName(launchHostIp));
-    MultiInstanceTerminator terminator = new MultiInstanceTerminator(AmazonEC2ClientBuilder.defaultClient(),
-        launchHostIp);
+    log.info(
+        "Attempting to terminate all instances with keypair: {}",
+        getUniqueKeyPairName(launchHostIp));
+    MultiInstanceTerminator terminator =
+        new MultiInstanceTerminator(AmazonEC2ClientBuilder.defaultClient(), launchHostIp);
     terminator.run();
   }
-
 }

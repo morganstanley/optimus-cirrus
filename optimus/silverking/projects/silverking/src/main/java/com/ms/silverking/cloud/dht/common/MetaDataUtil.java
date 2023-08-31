@@ -26,57 +26,63 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Methods for dealing with metadata stored as a byte array.
- * <p>
- * When stored with data, metadata is stored at the start of the byte array
- * followed by data.
- * <p>
-
- * Utility class for parsing metadata and data stored as byte[] in SK
- * Data is stored in the following order with specific offsets (see StorageFormat.writeToBuf on how data is put in the byte[])
- * Offsets are point in the ByteBuffer that tells where data for a specific value is stored (start index)
- * i.e. versionOffset 8 means data for version is stored from index 8 (inclusive) onwards
  *
- * |   Offset | Size (bytes) |                                                                                                      |
+ * <p>When stored with data, metadata is stored at the start of the byte array followed by data.
+ *
+ * <p>Utility class for parsing metadata and data stored as byte[] in SK Data is stored in the
+ * following order with specific offsets (see StorageFormat.writeToBuf on how data is put in the
+ * byte[]) Offsets are point in the ByteBuffer that tells where data for a specific value is stored
+ * (start index) i.e. versionOffset 8 means data for version is stored from index 8 (inclusive)
+ * onwards
+ *
+ * <p>| Offset | Size (bytes) | |
  * ---------------------------------------------------------------------------------------------------------------------------------|
- * |    0     |     4       | storedLength - all bytes required to store data and metadata including checksums, userdata, etc.      |
- * |    4     |     4       | uncompressedLength - length of value data (the value in key-value that the user stores)               |
- * |    8     |     4       | versionOffset                                                                                         |
- * |   16     |     8       | creationTimeOffset                                                                                    |
- * |   24     |     8       | creatorOffset                                                                                         |
- * |   32     |     2       | lockSecondsOffset                                                                                     |
- * |   34     |     2       | ccssOffset - (compression type, checksum type, StorageState)                                          |
- * |   36     |     1       | user data length                                                                                      |
- * |   37     |     16      | checksumOffset (16 assuming it's MD5)                                                                 |
- * |   53     |    ANY      | data                                                                                                  |
- * | 53 + data|    ANY      | userdata                                                                                              |
+ * | 0 | 4 | storedLength - all bytes required to store data and metadata including checksums,
+ * userdata, etc. | | 4 | 4 | uncompressedLength - length of value data (the value in key-value that
+ * the user stores) | | 8 | 4 | versionOffset | | 16 | 8 | creationTimeOffset | | 24 | 8 |
+ * creatorOffset | | 32 | 2 | lockSecondsOffset | | 34 | 2 | ccssOffset - (compression type,
+ * checksum type, StorageState) | | 36 | 1 | user data length | | 37 | 16 | checksumOffset (16
+ * assuming it's MD5) | | 53 | ANY | data | | 53 + data| ANY | userdata |
  *
- * When data is stored (via put), it first stores a header (16 bytes) and the key (16 bytes).
+ * <p>When data is stored (via put), it first stores a header (16 bytes) and the key (16 bytes).
  * When data is retrieved, the first 32 bytes are removed and only leaves metadata
  *
- * //TODO (OPTIMUS-43326): Remove userdata. we don't want to store userdata on disk, because if user wants to store data, it should go together with the normal data
+ * <p>//TODO (OPTIMUS-43326): Remove userdata. we don't want to store userdata on disk, because if
+ * user wants to store data, it should go together with the normal data
  */
 public class MetaDataUtil {
   private static final int storedLengthOffset = 0;
-  private static final int uncompressedLengthOffset = storedLengthOffset + NumConversion.BYTES_PER_INT; //(+ INT because storedLength occupies 4 bytes)
-  private static final int versionOffset = uncompressedLengthOffset + NumConversion.BYTES_PER_INT; //(+ INT because uncompressedLength occupies 4 bytes)
-  private static final int creationTimeOffset = versionOffset + NumConversion.BYTES_PER_LONG; //(+ LONG because version occupies 8 bytes)
-  private static final int creatorOffset = creationTimeOffset + NumConversion.BYTES_PER_LONG; //(+ LONG because creationTime occupies 8 bytes)
+  private static final int uncompressedLengthOffset =
+      storedLengthOffset
+          + NumConversion.BYTES_PER_INT; // (+ INT because storedLength occupies 4 bytes)
+  private static final int versionOffset =
+      uncompressedLengthOffset
+          + NumConversion.BYTES_PER_INT; // (+ INT because uncompressedLength occupies 4 bytes)
+  private static final int creationTimeOffset =
+      versionOffset + NumConversion.BYTES_PER_LONG; // (+ LONG because version occupies 8 bytes)
+  private static final int creatorOffset =
+      creationTimeOffset
+          + NumConversion.BYTES_PER_LONG; // (+ LONG because creationTime occupies 8 bytes)
   private static final int lockSecondsOffset = creatorOffset + ValueCreator.BYTES;
-  private static final int ccss = lockSecondsOffset + NumConversion.BYTES_PER_SHORT; //(+ SHORT because lockSecond occupies 2 bytes)
-  private static final int userDataLengthOffset = ccss + NumConversion.BYTES_PER_SHORT; //(+ SHORT because ccss occupies 2 bytes)
+  private static final int ccss =
+      lockSecondsOffset
+          + NumConversion.BYTES_PER_SHORT; // (+ SHORT because lockSecond occupies 2 bytes)
+  private static final int userDataLengthOffset =
+      ccss + NumConversion.BYTES_PER_SHORT; // (+ SHORT because ccss occupies 2 bytes)
   // checksum if any is stored here
-  public static final int dataOffset = userDataLengthOffset + 1; //(+ 1 because userDataLength occupies 1 byte)
+  public static final int dataOffset =
+      userDataLengthOffset + 1; // (+ 1 because userDataLength occupies 1 byte)
 
   private static final int fixedMetaDataLength = dataOffset;
 
   private static Logger log = LoggerFactory.getLogger(MetaDataUtil.class);
 
-
   public static int getMinimumEntrySize() {
     return fixedMetaDataLength;
   }
 
-  public static int computeStoredLength(int compressedLength, int checksumLength, int userDataLength) {
+  public static int computeStoredLength(
+      int compressedLength, int checksumLength, int userDataLength) {
     return compressedLength + checksumLength + userDataLength + fixedMetaDataLength;
   }
 
@@ -98,8 +104,10 @@ public class MetaDataUtil {
 
   public static int getCompressedLength(ByteBuffer storedValue, int baseOffset) {
     int checksumLength = getChecksumLength(storedValue, baseOffset);
-    return getStoredLength(storedValue, baseOffset) - checksumLength // property of namespace
-           - getUserDataLength(storedValue, baseOffset) - fixedMetaDataLength;
+    return getStoredLength(storedValue, baseOffset)
+        - checksumLength // property of namespace
+        - getUserDataLength(storedValue, baseOffset)
+        - fixedMetaDataLength;
   }
 
   public static int getUncompressedLength(byte[] storedValue, int baseOffset) {
@@ -107,13 +115,17 @@ public class MetaDataUtil {
   }
 
   public static boolean isCompressed(byte[] storedValue, int baseOffset) {
-    return getCompressedLength(storedValue, baseOffset) < getUncompressedLength(storedValue, baseOffset);
+    return getCompressedLength(storedValue, baseOffset)
+        < getUncompressedLength(storedValue, baseOffset);
   }
 
   public static int getCompressedLength(byte[] storedValue, int baseOffset) {
     int checksumLength = getChecksumLength(storedValue, baseOffset);
     int userDataLength = getUserDataLength(storedValue, baseOffset);
-    return getStoredLength(storedValue, baseOffset) - checksumLength - userDataLength - fixedMetaDataLength;
+    return getStoredLength(storedValue, baseOffset)
+        - checksumLength
+        - userDataLength
+        - fixedMetaDataLength;
   }
 
   public static int getUncompressedLength(ByteBuffer storedValue, int baseOffset) {
@@ -209,7 +221,8 @@ public class MetaDataUtil {
 
   public static byte[] getChecksum(ByteBuffer storedValue, int baseOffset) {
     byte[] checksum = new byte[getChecksumLength(storedValue, baseOffset)];
-    ((ByteBuffer) storedValue.asReadOnlyBuffer().position(baseOffset + userDataLengthOffset + 1)).get(checksum);
+    ((ByteBuffer) storedValue.asReadOnlyBuffer().position(baseOffset + userDataLengthOffset + 1))
+        .get(checksum);
     return checksum;
   }
 
@@ -220,7 +233,8 @@ public class MetaDataUtil {
 
   public static byte[] getChecksum(byte[] storedValue, int baseOffset) {
     byte[] checksum = new byte[getChecksumLength(storedValue, baseOffset)];
-    System.arraycopy(storedValue, baseOffset + userDataLengthOffset + 1, checksum, 0, checksum.length);
+    System.arraycopy(
+        storedValue, baseOffset + userDataLengthOffset + 1, checksum, 0, checksum.length);
     return checksum;
   }
 
@@ -239,27 +253,29 @@ public class MetaDataUtil {
   }
 
   // User Data
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   public static int getUserDataLength(ByteBuffer storedValue, int baseOffset) {
     return NumConversion.unsignedByteToInt(storedValue.get(baseOffset + userDataLengthOffset));
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   public static int getUserDataLength(byte[] storedValue, int baseOffset) {
     return NumConversion.unsignedByteToInt(storedValue, baseOffset + userDataLengthOffset);
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   private static int getUserDataOffset(byte[] storedValue, int baseOffset) {
-    return dataOffset + getChecksumLength(storedValue, baseOffset) + getCompressedLength(storedValue, baseOffset);
+    return dataOffset
+        + getChecksumLength(storedValue, baseOffset)
+        + getCompressedLength(storedValue, baseOffset);
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   public static byte[] getUserData(ByteBuffer storedValue, int baseOffset) {
     return getUserData(storedValue.array(), baseOffset);
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   public static byte[] getUserData(byte[] storedValue, int baseOffset) {
     int userDataLength = getUserDataLength(storedValue, baseOffset);
     byte[] userData = new byte[userDataLength];
@@ -293,14 +309,22 @@ public class MetaDataUtil {
   }
 
   public static boolean isSegmented(byte[] storedValue, int baseOffset) {
-    return ArrayUtil.equals(storedValue, baseOffset + creatorOffset, MetaDataConstants.segmentationBytes, 0,
-                            MetaDataConstants.segmentationBytes.length);
+    return ArrayUtil.equals(
+        storedValue,
+        baseOffset + creatorOffset,
+        MetaDataConstants.segmentationBytes,
+        0,
+        MetaDataConstants.segmentationBytes.length);
   }
 
   public static boolean isSegmented(ByteBuffer buf) {
     // segmentation is indicated by segmentationBytes stored in the creator field
-    return BufferUtil.equals(buf, creatorOffset, MetaDataConstants.segmentationBytes, 0,
-                             MetaDataConstants.segmentationBytes.length);
+    return BufferUtil.equals(
+        buf,
+        creatorOffset,
+        MetaDataConstants.segmentationBytes,
+        0,
+        MetaDataConstants.segmentationBytes.length);
   }
 
   public static boolean isInvalidation(ByteBuffer storedValue, int baseOffset) {

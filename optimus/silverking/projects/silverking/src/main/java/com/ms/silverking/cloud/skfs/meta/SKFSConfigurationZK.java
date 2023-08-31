@@ -28,15 +28,19 @@ public class SKFSConfigurationZK extends MetaToolModuleBase<SKFSConfiguration, M
 
   @Override
   public SKFSConfiguration readFromFile(File file, long version) throws IOException {
-    com.ms.silverking.cloud.skfs.meta.MetaClient skfsMc = (com.ms.silverking.cloud.skfs.meta.MetaClient) (this.mc);
-    return new SKFSConfiguration(skfsMc.getSKFSConfigName(), StreamParser.parseLines(file), version, 0L);
-
+    com.ms.silverking.cloud.skfs.meta.MetaClient skfsMc =
+        (com.ms.silverking.cloud.skfs.meta.MetaClient) (this.mc);
+    return new SKFSConfiguration(
+        skfsMc.getSKFSConfigName(), StreamParser.parseLines(file), version, 0L);
   }
 
   @Override
-  public SKFSConfiguration readFromZK(long version, MetaToolOptions options) throws KeeperException {
-    com.ms.silverking.cloud.skfs.meta.MetaClient skfsMc = (com.ms.silverking.cloud.skfs.meta.MetaClient) (this.mc);
-    return SKFSConfiguration.parse(skfsMc.getSKFSConfigName(), zk.getString(getVBase(version)), version);
+  public SKFSConfiguration readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
+    com.ms.silverking.cloud.skfs.meta.MetaClient skfsMc =
+        (com.ms.silverking.cloud.skfs.meta.MetaClient) (this.mc);
+    return SKFSConfiguration.parse(
+        skfsMc.getSKFSConfigName(), zk.getString(getVBase(version)), version);
   }
 
   @Override

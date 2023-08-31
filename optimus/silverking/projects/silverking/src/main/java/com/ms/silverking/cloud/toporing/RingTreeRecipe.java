@@ -33,10 +33,7 @@ import com.ms.silverking.collection.CollectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Immutable collection of all parameters necessary to create
- * a new RingTree.
- */
+/** Immutable collection of all parameters necessary to create a new RingTree. */
 public class RingTreeRecipe {
   public final Topology topology;
   public final Node ringParent;
@@ -52,15 +49,24 @@ public class RingTreeRecipe {
 
   private static Logger log = LoggerFactory.getLogger(RingTreeRecipe.class);
 
-  public RingTreeRecipe(Topology topology, Node ringParent, WeightSpecifications weightSpecs,
-      ExclusionSet exclusionList, StoragePolicyGroup storagePolicyGroup, String storagePolicyName,
-      HostGroupTable hostGroupTable, Set<String> hostGroups, long ringConfigVersion, long ringCreationTime) {
+  public RingTreeRecipe(
+      Topology topology,
+      Node ringParent,
+      WeightSpecifications weightSpecs,
+      ExclusionSet exclusionList,
+      StoragePolicyGroup storagePolicyGroup,
+      String storagePolicyName,
+      HostGroupTable hostGroupTable,
+      Set<String> hostGroups,
+      long ringConfigVersion,
+      long ringCreationTime) {
     Preconditions.checkNotNull(topology);
     Preconditions.checkNotNull(ringParent);
     this.topology = topology;
     this.ringParent = ringParent;
-    this.weightSpecs = evenlyDistributeWeights(topology, ringParent, weightSpecs, exclusionList, hostGroupTable,
-        hostGroups);
+    this.weightSpecs =
+        evenlyDistributeWeights(
+            topology, ringParent, weightSpecs, exclusionList, hostGroupTable, hostGroups);
     this.exclusionList = exclusionList;
     this.storagePolicyGroup = storagePolicyGroup;
     this.storagePolicy = storagePolicyGroup.getPolicy(storagePolicyName);
@@ -73,18 +79,36 @@ public class RingTreeRecipe {
     this.ringCreationTime = ringCreationTime;
   }
 
-  public RingTreeRecipe(Topology topology, String ringParent, WeightSpecifications weightSpecs,
-      ExclusionSet exclusionList, StoragePolicyGroup storagePolicyGroup, String storagePolicyName,
-      HostGroupTable hostGroupTable, Set<String> hostGroups, long ringConfigVersion, long ringCreationTime) {
-    this(topology, topology.getNodeByID(ringParent), weightSpecs, exclusionList, storagePolicyGroup, storagePolicyName,
-        hostGroupTable, hostGroups, ringConfigVersion, ringCreationTime);
+  public RingTreeRecipe(
+      Topology topology,
+      String ringParent,
+      WeightSpecifications weightSpecs,
+      ExclusionSet exclusionList,
+      StoragePolicyGroup storagePolicyGroup,
+      String storagePolicyName,
+      HostGroupTable hostGroupTable,
+      Set<String> hostGroups,
+      long ringConfigVersion,
+      long ringCreationTime) {
+    this(
+        topology,
+        topology.getNodeByID(ringParent),
+        weightSpecs,
+        exclusionList,
+        storagePolicyGroup,
+        storagePolicyName,
+        hostGroupTable,
+        hostGroups,
+        ringConfigVersion,
+        ringCreationTime);
     if (topology.getNodeByID(ringParent) == null) {
       throw new RuntimeException("Can't find parent with id: " + ringParent);
     }
-    log.info("Host groups: " , CollectionUtil.toString(hostGroups));
+    log.info("Host groups: ", CollectionUtil.toString(hostGroups));
   }
 
-  private static boolean isAllowedWeightSpec(String nodeID, HostGroupTable hostGroupTable, Set<String> hostGroups) {
+  private static boolean isAllowedWeightSpec(
+      String nodeID, HostGroupTable hostGroupTable, Set<String> hostGroups) {
     try {
       InetAddress addr;
 
@@ -99,8 +123,12 @@ public class RingTreeRecipe {
     }
   }
 
-  private static WeightSpecifications evenlyDistributeWeights(Topology topology, Node ringParent,
-      WeightSpecifications weightSpecs, ExclusionSet exclusionList, HostGroupTable hostGroupTable,
+  private static WeightSpecifications evenlyDistributeWeights(
+      Topology topology,
+      Node ringParent,
+      WeightSpecifications weightSpecs,
+      ExclusionSet exclusionList,
+      HostGroupTable hostGroupTable,
       Set<String> hostGroups) {
     Map<String, Double> nodeWeights;
 
@@ -113,7 +141,8 @@ public class RingTreeRecipe {
         log.debug("   Ignoring weight {}  {} server not in host groups", e.getKey(), e.getValue());
       }
     }
-    _evenlyDistributeWeights(topology, ringParent, nodeWeights, exclusionList, hostGroupTable, hostGroups);
+    _evenlyDistributeWeights(
+        topology, ringParent, nodeWeights, exclusionList, hostGroupTable, hostGroups);
     return new WeightSpecifications(weightSpecs.getVersion(), nodeWeights);
   }
 
@@ -121,8 +150,13 @@ public class RingTreeRecipe {
     return weightSpecs.getWeight(node);
   }
 
-  private static double _evenlyDistributeWeights(Topology topology, Node node, Map<String, Double> nodeWeights,
-      ExclusionSet exclusionList, HostGroupTable hostGroupTable, Set<String> hostGroups) {
+  private static double _evenlyDistributeWeights(
+      Topology topology,
+      Node node,
+      Map<String, Double> nodeWeights,
+      ExclusionSet exclusionList,
+      HostGroupTable hostGroupTable,
+      Set<String> hostGroups) {
     Double weight;
 
     weight = nodeWeights.get(node.getIDString());
@@ -132,12 +166,15 @@ public class RingTreeRecipe {
 
         sum = 0.0;
         for (Node child : node.getChildren()) {
-          sum += _evenlyDistributeWeights(topology, child, nodeWeights, exclusionList, hostGroupTable, hostGroups);
+          sum +=
+              _evenlyDistributeWeights(
+                  topology, child, nodeWeights, exclusionList, hostGroupTable, hostGroups);
         }
         weight = sum;
       } else {
-        if (!Sets.intersection(hostGroupTable.getHostGroups(node.getIDString()),
-            hostGroups).isEmpty() && (!exclusionList.contains(node.getIDString()))) {
+        if (!Sets.intersection(hostGroupTable.getHostGroups(node.getIDString()), hostGroups)
+                .isEmpty()
+            && (!exclusionList.contains(node.getIDString()))) {
           weight = WeightSpecifications.defaultWeight;
         } else {
           weight = 0.0;
@@ -150,8 +187,17 @@ public class RingTreeRecipe {
   }
 
   public RingTreeRecipe newParentAndStoragePolicy(Node newParent, String storagePolicyName) {
-    return new RingTreeRecipe(topology, newParent, weightSpecs, exclusionList, storagePolicyGroup, storagePolicyName,
-        hostGroupTable, hostGroups, ringConfigVersion, DHTUtil.currentTimeMillis());
+    return new RingTreeRecipe(
+        topology,
+        newParent,
+        weightSpecs,
+        exclusionList,
+        storagePolicyGroup,
+        storagePolicyName,
+        hostGroupTable,
+        hostGroups,
+        ringConfigVersion,
+        DHTUtil.currentTimeMillis());
   }
 
   public Set<Node> nonExcludedChildren(String nodeID) {
@@ -185,15 +231,23 @@ public class RingTreeRecipe {
 
   @Override
   public String toString() {
-    return topology + "\n" + ringParent + "\n" + weightSpecs + "\n" + exclusionList + "\n" + storagePolicy;
+    return topology
+        + "\n"
+        + ringParent
+        + "\n"
+        + weightSpecs
+        + "\n"
+        + exclusionList
+        + "\n"
+        + storagePolicy;
   }
-    
-    /*
-    public String toVersionString() {
-        return topology.getVersion() 
-                +":"+ weightSpecs.getVersion() 
-                +":"+ exclusionList.getVersion() 
-                +":"+ storagePolicyGroup.getVersion();
-    }
-    */
+
+  /*
+  public String toVersionString() {
+      return topology.getVersion()
+              +":"+ weightSpecs.getVersion()
+              +":"+ exclusionList.getVersion()
+              +":"+ storagePolicyGroup.getVersion();
+  }
+  */
 }

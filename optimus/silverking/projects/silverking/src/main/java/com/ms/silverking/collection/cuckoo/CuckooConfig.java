@@ -26,7 +26,8 @@ public class CuckooConfig {
 
   private static final int totalEntriesOffset = 0;
   private static final int numSubTablesOffset = totalEntriesOffset + NumConversion.BYTES_PER_INT;
-  private static final int entriesPerBucketOffset = numSubTablesOffset + NumConversion.BYTES_PER_INT;
+  private static final int entriesPerBucketOffset =
+      numSubTablesOffset + NumConversion.BYTES_PER_INT;
   public static final int BYTES = entriesPerBucketOffset + NumConversion.BYTES_PER_INT;
 
   public CuckooConfig(int totalEntries, int numSubTables, int entriesPerBucket) {
@@ -37,12 +38,22 @@ public class CuckooConfig {
     this.numSubTables = numSubTables;
     this.entriesPerBucket = entriesPerBucket;
     if (totalEntries < numSubTables * entriesPerBucket) {
-      throw new RuntimeException("Invalid configuration: totalEntries < numSubTables * entriesPerBucket "
-        + totalEntries +" "+  numSubTables +" "+ entriesPerBucket);
+      throw new RuntimeException(
+          "Invalid configuration: totalEntries < numSubTables * entriesPerBucket "
+              + totalEntries
+              + " "
+              + numSubTables
+              + " "
+              + entriesPerBucket);
     }
     if (totalEntries % (numSubTables * entriesPerBucket) != 0) {
-      throw new RuntimeException("Invalid configuration: totalEntries % (numSubTables * entriesPerBucket) != 0 "
-        + totalEntries +" "+  numSubTables +" "+ entriesPerBucket);
+      throw new RuntimeException(
+          "Invalid configuration: totalEntries % (numSubTables * entriesPerBucket) != 0 "
+              + totalEntries
+              + " "
+              + numSubTables
+              + " "
+              + entriesPerBucket);
     }
     numSubTableBuckets = totalEntries / (numSubTables * entriesPerBucket);
     quickCheck();

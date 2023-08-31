@@ -54,7 +54,8 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V>
-    implements AsyncSingleValueRetrieval<K, V>, ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> {
+    implements AsyncSingleValueRetrieval<K, V>,
+        ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> {
   private final RetrievalOperation<K> retrievalOperation;
   private final VersionConstraint resolvedVC;
   private final OpSender retrievalSender; // for requesting segments or retries
@@ -63,7 +64,7 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
 
   private final List<OperationUUID> opUUIDs;
   private List<SegmentedRetrievalValue<K, V>> segmentedRetrievalValues;
-  //private final AtomicReference<Set<DHTKey>> latestStoredReturnedRef;
+  // private final AtomicReference<Set<DHTKey>> latestStoredReturnedRef;
   private final ConcurrentSkipListSet<DHTKey> latestStoredReturned;
 
   private final ConcurrentMap<K, RetrievalResultBase<V>> results;
@@ -79,8 +80,12 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
   private static final boolean debugShortTimeout = false;
   private static final int shortTimeoutLimit = 10 * 1000;
 
-  public AsyncRetrievalOperationImpl(RetrievalOperation<K> retrievalOperation, ClientNamespace namespace,
-      NamespacePerspectiveOptionsImpl<K, V> nspoImpl, long curTime, byte[] originator) {
+  public AsyncRetrievalOperationImpl(
+      RetrievalOperation<K> retrievalOperation,
+      ClientNamespace namespace,
+      NamespacePerspectiveOptionsImpl<K, V> nspoImpl,
+      long curTime,
+      byte[] originator) {
     super(retrievalOperation, namespace, nspoImpl, curTime, originator);
     this.retrievalOperation = retrievalOperation;
     this.retrievalSender = namespace.getRetrievalSender();
@@ -91,11 +96,13 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
 
     retrievalOperationSize = retrievalOperation.size();
     if (retrievalOperationSize > 1) {
-      results = new ConcurrentHashMap<>(retrievalOperationSize * capacityFactor, opConcurrencyLevel);
+      results =
+          new ConcurrentHashMap<>(retrievalOperationSize * capacityFactor, opConcurrencyLevel);
     } else {
       results = new ConcurrentSingleMap<>();
     }
-    if (retrievalOperation.retrievalOptions().getVersionConstraint() == VersionConstraint.defaultConstraint) {
+    if (retrievalOperation.retrievalOptions().getVersionConstraint()
+        == VersionConstraint.defaultConstraint) {
       resolvedVC = VersionConstraint.defaultConstraint;
     } else {
       resolvedVC = retrievalOperation.retrievalOptions().getVersionConstraint();
@@ -104,7 +111,7 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
       checkForCompletion();
     }
     opUUIDs = new LinkedList<>();
-    //latestStoredReturnedRef = new AtomicReference<>();
+    // latestStoredReturnedRef = new AtomicReference<>();
     // FUTURE - avoid eager construction?
     latestStoredReturned = new ConcurrentSkipListSet<>();
   }
@@ -133,45 +140,46 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
   @Override
   protected boolean isFailure(OpResult result) {
     switch (result) {
-    case MULTIPLE:
-      // multiple will only be called when checking completion of the entire operation
-      // others will be called key-by-key also
+      case MULTIPLE:
+        // multiple will only be called when checking completion of the entire operation
+        // others will be called key-by-key also
 
-      // filter no such value errors to allow for users to override
-      // all other failures result in a failure
-      NonExistenceResponse nonExistenceResponse;
+        // filter no such value errors to allow for users to override
+        // all other failures result in a failure
+        NonExistenceResponse nonExistenceResponse;
 
-      nonExistenceResponse = getNonExistenceResponse();
-      for (OpResult _result : allResults) {
-        if (_result.hasFailed(nonExistenceResponse)) {
-          return true;
+        nonExistenceResponse = getNonExistenceResponse();
+        for (OpResult _result : allResults) {
+          if (_result.hasFailed(nonExistenceResponse)) {
+            return true;
+          }
         }
-      }
-      return false;
-    case TIMEOUT:
-      RetrievalOptions retrievalOptions;
-
-      retrievalOptions = retrievalOperation.retrievalOptions();
-      if (retrievalOptions.getWaitMode() == WaitMode.WAIT_FOR && ((WaitOptions) retrievalOptions).getTimeoutResponse() == TimeoutResponse.IGNORE) {
         return false;
-      } else {
-        return result.hasFailed();
-      }
-    default:
-      return result.hasFailed(getNonExistenceResponse());
+      case TIMEOUT:
+        RetrievalOptions retrievalOptions;
+
+        retrievalOptions = retrievalOperation.retrievalOptions();
+        if (retrievalOptions.getWaitMode() == WaitMode.WAIT_FOR
+            && ((WaitOptions) retrievalOptions).getTimeoutResponse() == TimeoutResponse.IGNORE) {
+          return false;
+        } else {
+          return result.hasFailed();
+        }
+      default:
+        return result.hasFailed(getNonExistenceResponse());
     }
   }
 
-  //@Override
-  //protected void setResult(EnumSet<OpResult> results) {
+  // @Override
+  // protected void setResult(EnumSet<OpResult> results) {
   //    super.setResult(results);
-        /*
-        for (OpResult result : results) {
-            if (isFailure(result)) {
-            }
-        }
-        */
-  //}
+  /*
+  for (OpResult result : results) {
+      if (isFailure(result)) {
+      }
+  }
+  */
+  // }
 
   @Override
   public OperationState getOperationState(K key) {
@@ -193,13 +201,14 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
   }
 
   private RetrievalException newRetrievalException() throws RetrievalException {
-    return new RetrievalExceptionImpl((Map<Object, OperationState>) getOperationStateMap(),
-        (Map<Object, FailureCause>) getFailureCauses(), (Map<Object, StoredValue>) getPartialResults());
+    return new RetrievalExceptionImpl(
+        (Map<Object, OperationState>) getOperationStateMap(),
+        (Map<Object, FailureCause>) getFailureCauses(),
+        (Map<Object, StoredValue>) getPartialResults());
   }
 
   @Override
-  protected void cleanup() {
-  }
+  protected void cleanup() {}
 
   @Override
   void addToEstimate(MessageEstimate estimate) {
@@ -216,10 +225,13 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     return createProtoRetrievalMG(estimate, false);
   }
 
-  private ProtoRetrievalMessageGroup createProtoRetrievalMG(MessageEstimate estimate, boolean verifyIntegrity) {
+  private ProtoRetrievalMessageGroup createProtoRetrievalMG(
+      MessageEstimate estimate, boolean verifyIntegrity) {
     OperationUUID opUUID;
     SkTraceId maybeTraceID;
-    ConcurrentMap<DHTKey, List<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> newMap;
+    ConcurrentMap<
+            DHTKey, List<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+        newMap;
     KeyedMessageEstimate keyedMessageEstimate;
     int relDeadline;
 
@@ -230,26 +242,33 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     if (debugShortTimeout) {
       if (relDeadline < shortTimeoutLimit) {
         log.info("short relDeadline: {} ", relDeadline);
-        //Log.info(timeoutParameters.computeTimeout(keyedMessageEstimate.getNumKeys()));
+        // Log.info(timeoutParameters.computeTimeout(keyedMessageEstimate.getNumKeys()));
         log.info("{}", timeoutState.getCurRelTimeoutMillis());
-        //throw new RuntimeException();
+        // throw new RuntimeException();
       }
     }
-    return new ProtoRetrievalMessageGroup(opUUID, context.contextAsLong(),
-        new InternalRetrievalOptions(retrievalOperation.retrievalOptions(), verifyIntegrity), originator,
-        keyedMessageEstimate.getNumKeys(), relDeadline, retrievalOperation.retrievalOptions().getForwardingMode(),
+    return new ProtoRetrievalMessageGroup(
+        opUUID,
+        context.contextAsLong(),
+        new InternalRetrievalOptions(retrievalOperation.retrievalOptions(), verifyIntegrity),
+        originator,
+        keyedMessageEstimate.getNumKeys(),
+        relDeadline,
+        retrievalOperation.retrievalOptions().getForwardingMode(),
         maybeTraceID);
   }
 
   @Override
-  ProtoMessageGroup createMessagesForIncomplete(ProtoMessageGroup protoMG, List<MessageGroup> messageGroups,
-      MessageEstimate estimate) {
-    return createMessagesForIncomplete((ProtoRetrievalMessageGroup) protoMG, messageGroups,
-        (KeyedMessageEstimate) estimate);
+  ProtoMessageGroup createMessagesForIncomplete(
+      ProtoMessageGroup protoMG, List<MessageGroup> messageGroups, MessageEstimate estimate) {
+    return createMessagesForIncomplete(
+        (ProtoRetrievalMessageGroup) protoMG, messageGroups, (KeyedMessageEstimate) estimate);
   }
 
-  private ProtoMessageGroup createMessagesForIncomplete(ProtoRetrievalMessageGroup protoMG,
-      List<MessageGroup> messageGroups, KeyedMessageEstimate estimate) {
+  private ProtoMessageGroup createMessagesForIncomplete(
+      ProtoRetrievalMessageGroup protoMG,
+      List<MessageGroup> messageGroups,
+      KeyedMessageEstimate estimate) {
     int pmgRetrievals;
     int keysRemaining; // will be needed when we check for compatible retrievals
 
@@ -262,11 +281,13 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
         DHTKey dhtKey;
 
         dhtKey = keyToDHTKey.get(key);
-        //System.out.printf("%d\t%d %d\n", keysRemaining, pmgRetrievals, maxRetrievalsPerMessageGroup);
+        // System.out.printf("%d\t%d %d\n", keysRemaining, pmgRetrievals,
+        // maxRetrievalsPerMessageGroup);
         if (activeRetrievalListeners.addListener(protoMG.getUUID(), dhtKey, this)) {
           protoMG.addKey(dhtKey);
         }
-        opUUIDs.add((OperationUUID) protoMG.getUUID()); // hold a reference to the uuid to prevent GC
+        opUUIDs.add(
+            (OperationUUID) protoMG.getUUID()); // hold a reference to the uuid to prevent GC
 
         ++pmgRetrievals;
         --keysRemaining;
@@ -282,7 +303,7 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     // The contract of this method is to return all successfully stored values.
     // If the entire op has completed, then we can simply return the internal map.
     if (getState() == OperationState.SUCCEEDED && getResult() != OpResult.NO_SUCH_VALUE) {
-      //System.out.println("skipping build");
+      // System.out.println("skipping build");
       return results;
     } else {
       Map<K, StoredValue<V>> storedValueMap;
@@ -314,8 +335,9 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
         // For this case, we do not throw exceptions for missing values irrespective of the
         // NonExistenceResponse specified. We allow users to probe for missing values without
         // worrying about exceptions getting thrown back at them.
-        if (retrievalResult.getOpResult().hasFailed() && retrievalResult.getOpResult() != OpResult.NO_SUCH_VALUE) {
-          //System.err.println(key +"\t"+ retrievalResult.getOpResult());
+        if (retrievalResult.getOpResult().hasFailed()
+            && retrievalResult.getOpResult() != OpResult.NO_SUCH_VALUE) {
+          // System.err.println(key +"\t"+ retrievalResult.getOpResult());
           throw newRetrievalException();
         } else {
           return null;
@@ -350,18 +372,19 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     return storedValueMap;
   }
 
-  public void errorReceived(DHTKey dhtKey) {
-
-  }
+  public void errorReceived(DHTKey dhtKey) {}
 
   @Override
   public void resultReceived(DHTKey dhtKey, MessageGroupRetrievalResponseEntry entry) {
     // FUTURE - avoid the multi-step construction
-    resultReceived(new RawRetrievalResult(retrievalOperation.retrievalOptions().getRetrievalType()), dhtKey, entry);
+    resultReceived(
+        new RawRetrievalResult(retrievalOperation.retrievalOptions().getRetrievalType()),
+        dhtKey,
+        entry);
   }
 
-  public final void resultReceived(RawRetrievalResult rawResult, DHTKey dhtKey,
-      MessageGroupRetrievalResponseEntry entry) {
+  public final void resultReceived(
+      RawRetrievalResult rawResult, DHTKey dhtKey, MessageGroupRetrievalResponseEntry entry) {
     OpResult opResult;
     boolean setComplete;
     int oldSegmentsCreated;
@@ -371,30 +394,35 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     // THINK ABOUT STRUCTURE OF CODE
 
     oldSegmentsCreated = fragmentsCreated;
-    //System.out.printf("resultReceived key: %s\nentry: %s\n%s\nvalue: %s\n%s\n",
-    //        dhtKey, entry, entry.getOpResult(), StringUtil.byteBufferToHexString(entry.getValue()),
+    // System.out.printf("resultReceived key: %s\nentry: %s\n%s\nvalue: %s\n%s\n",
+    //        dhtKey, entry, entry.getOpResult(),
+    // StringUtil.byteBufferToHexString(entry.getValue()),
     //        StringUtil.byteBufferToString(entry.getValue()));
-    //System.out.printf("resultReceived key: %s\nentry: %s\n%s\nvalue buf: %s\n",
+    // System.out.printf("resultReceived key: %s\nentry: %s\n%s\nvalue buf: %s\n",
     //        dhtKey, entry, entry.getOpResult(), entry.getValue());
 
-        /*
-        if (mvLock != null) {
-            mvLock.lock();
-        }
-        try {
-        */
+    /*
+    if (mvLock != null) {
+        mvLock.lock();
+    }
+    try {
+    */
     segmented = false;
     opResult = entry == null ? OpResult.ERROR : entry.getOpResult();
     log.debug("{} opResult: {}", this, opResult);
     if (opResult == OpResult.SUCCEEDED) {
       try {
         if (testReceiveCorruption) {
-          MetaDataUtil.testCorruption(entry.getValue(), receiveCorruptionProbability,
+          MetaDataUtil.testCorruption(
+              entry.getValue(),
+              receiveCorruptionProbability,
               MetaDataUtil.getDataOffset(entry.getValue(), 0));
         }
-        //segmented = MetaDataUtil.isSegmented(entry.getValue().array(), entry.getValue().position());
+        // segmented = MetaDataUtil.isSegmented(entry.getValue().array(),
+        // entry.getValue().position());
         segmented = MetaDataUtil.isSegmented(entry.getValue());
-        rawResult.setStoredValue(entry.getValue(),
+        rawResult.setStoredValue(
+            entry.getValue(),
             !segmented && retrievalOperation.retrievalOptions().getVerifyChecksums(),
             !retrievalOperation.retrievalOptions().getReturnInvalidations(),
             nspoImpl.getNSPOptions().getEncrypterDecrypter());
@@ -405,7 +433,8 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
       }
     } else {
       if (opResult == OpResult.REPLICA_EXCLUDED
-          && retrievalOperation.retrievalOptions().getAllReplicasExcludedResponse() == AllReplicasExcludedResponse.IGNORE) {
+          && retrievalOperation.retrievalOptions().getAllReplicasExcludedResponse()
+              == AllReplicasExcludedResponse.IGNORE) {
         // All replicas excluded, but options say to ignore it
         // (I.e. wait for a replica to recover)
         log.info("Ignoring replica exclusion");
@@ -425,22 +454,26 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
         int numSegments;
 
         if (debugFragmentation) {
-          log.debug("SEGMENTED  {}  {}  {}  {}",
-              StringUtil.byteArrayToHexString(SegmentationUtil.getCreatorBytes(buf)), buf,
-              SegmentationUtil.getStoredLength(buf), SegmentationUtil.getUncompressedLength(buf));
+          log.debug(
+              "SEGMENTED  {}  {}  {}  {}",
+              StringUtil.byteArrayToHexString(SegmentationUtil.getCreatorBytes(buf)),
+              buf,
+              SegmentationUtil.getStoredLength(buf),
+              SegmentationUtil.getUncompressedLength(buf));
         }
         if (true) {
           int storedLength;
           int fragmentationThreshold;
 
-          //not using below since the internal checksum should handle this
-          //if (SegmentationUtil.checksumSegmentMetaDataBuffer(buf, nspoImpl.getNSPOptions().getChecksumType())) {
+          // not using below since the internal checksum should handle this
+          // if (SegmentationUtil.checksumSegmentMetaDataBuffer(buf,
+          // nspoImpl.getNSPOptions().getChecksumType())) {
           setComplete = false;
           storedLength = SegmentationUtil.getStoredLength(buf);
           fragmentationThreshold = SegmentationUtil.getFragmentationThreshold(buf);
           if (storedLength < 0) {
             log.error(StringUtil.byteBufferToHexString(buf));
-            log.error("{}",SegmentationUtil.getMetaData(rawResult, buf));
+            log.error("{}", SegmentationUtil.getMetaData(rawResult, buf));
             System.exit(-1);
             numSegments = 1;
           } else {
@@ -482,42 +515,44 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
       if (prev == null) {
         if (resultsReceived.incrementAndGet() >= size) {
           checkForCompletion();
-          // FUTURE - this doesn't work for multi valued since we don't know how many we are getting...
+          // FUTURE - this doesn't work for multi valued since we don't know how many we are
+          // getting...
           // For now, we ignore this since we aren't supporting multi-value yet
         }
       } else {
-                /*
-                RetrievalResultBase<V>  p;
-                boolean                    unique;
+        /*
+        RetrievalResultBase<V>  p;
+        boolean                    unique;
 
-                // FUTURE - handle mutual exclusion
-                unique = true;
-                p = prev;
-                while (p.getNext() != null) {
-                    p = p.getNext();
-                    if (p.getCreationTime().equals(newResult.getCreationTime())) {
-                        unique = false;
-                        break;
-                    }
-                }
-                if (unique) {
-                    p.setNext(newResult);
-                } else {
-                    // Ignoring duplicate result
-                }
-                */
+        // FUTURE - handle mutual exclusion
+        unique = true;
+        p = prev;
+        while (p.getNext() != null) {
+            p = p.getNext();
+            if (p.getCreationTime().equals(newResult.getCreationTime())) {
+                unique = false;
+                break;
+            }
+        }
+        if (unique) {
+            p.setNext(newResult);
+        } else {
+            // Ignoring duplicate result
+        }
+        */
       }
     }
-        /*
-        if (segmentsCreated != oldSegmentsCreated) {
-            recomputeTimeoutState();
-        }
-        // FUTURE THINK ABOUT WHETHER WE NEED THIS
-        */
+    /*
+    if (segmentsCreated != oldSegmentsCreated) {
+        recomputeTimeoutState();
+    }
+    // FUTURE THINK ABOUT WHETHER WE NEED THIS
+    */
     checkForUpdates();
   }
 
-  public void reassembledResultReceived(DHTKey dhtKey, SegmentedRetrievalResult<V> segmentedRetrievalResult) {
+  public void reassembledResultReceived(
+      DHTKey dhtKey, SegmentedRetrievalResult<V> segmentedRetrievalResult) {
     RawRetrievalResult rawResult;
 
     if (false) {
@@ -525,10 +560,10 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     }
     results.putIfAbsent(dhtKeyToKey.get(dhtKey), segmentedRetrievalResult);
     if (resultsReceived.incrementAndGet() >= size) {
-      //System.out.println("checkForCompletion");
+      // System.out.println("checkForCompletion");
       checkForCompletion();
     } else {
-      //System.out.printf("%d < %d\n", resultsReceived.incrementAndGet(), size);
+      // System.out.printf("%d < %d\n", resultsReceived.incrementAndGet(), size);
     }
   }
 
@@ -539,23 +574,27 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     if (segmentedRetrievalValues == null) {
       segmentedRetrievalValues = new ArrayList<>(segmentKeys.length);
     }
-    segmentedRetrievalValue = new SegmentedRetrievalValue<>(segmentKeys, relayKey, this,
-        nspoImpl.getValueDeserializer(), metaData);
+    segmentedRetrievalValue =
+        new SegmentedRetrievalValue<>(
+            segmentKeys, relayKey, this, nspoImpl.getValueDeserializer(), metaData);
     messageGroups = new ArrayList<>();
     for (DHTKey segmentKey : segmentKeys) {
       ProtoRetrievalMessageGroup protoRetrievalMG;
       boolean listenerInserted;
-      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> listeners;
+      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+          listeners;
 
       protoRetrievalMG = createProtoRetrievalMG(new KeyedMessageEstimate(1), false);
-      listenerInserted = activeRetrievalListeners.addListener(protoRetrievalMG.getUUID(), segmentKey,
-          segmentedRetrievalValue);
+      listenerInserted =
+          activeRetrievalListeners.addListener(
+              protoRetrievalMG.getUUID(), segmentKey, segmentedRetrievalValue);
       if (!listenerInserted) {
         throw new RuntimeException("Duplicate listener insertion");
       }
       protoRetrievalMG.addKey(segmentKey);
       protoRetrievalMG.addToMessageGroupList(messageGroups);
-      opUUIDs.add((OperationUUID) protoRetrievalMG.getUUID()); // hold a reference to the uuid to prevent GC
+      opUUIDs.add(
+          (OperationUUID) protoRetrievalMG.getUUID()); // hold a reference to the uuid to prevent GC
       segmentedRetrievalValues.add(segmentedRetrievalValue);
     }
     for (MessageGroup messageGroup : messageGroups) {
@@ -573,15 +612,15 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
     }
     return valueMap;
     // Immutable map doesn't support null entries...
-        /*
-        ImmutableMap.Builder<K, V> valueMapBuilder;
+    /*
+    ImmutableMap.Builder<K, V> valueMapBuilder;
 
-        valueMapBuilder = ImmutableMap.builder();
-        for (Map.Entry<K, RetrievalResultBase<V>> resultEntry : results.entrySet()) {
-            valueMapBuilder.put(resultEntry.getKey(), resultEntry.getValue().getValue());
-        }
-        return valueMapBuilder.build();
-        */
+    valueMapBuilder = ImmutableMap.builder();
+    for (Map.Entry<K, RetrievalResultBase<V>> resultEntry : results.entrySet()) {
+        valueMapBuilder.put(resultEntry.getKey(), resultEntry.getValue().getValue());
+    }
+    return valueMapBuilder.build();
+    */
   }
 
   @Override
@@ -649,7 +688,9 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
 
       other = (AsyncRetrievalOperationImpl) asyncOperationImpl;
       // FUTURE - consider a weaker notion of compatibility
-      return retrievalOperation.retrievalOptions().equals(other.retrievalOperation.retrievalOptions());
+      return retrievalOperation
+          .retrievalOptions()
+          .equals(other.retrievalOperation.retrievalOptions());
     } else {
       return false;
     }
@@ -669,86 +710,86 @@ public class AsyncRetrievalOperationImpl<K, V> extends AsyncKVOperationImpl<K, V
   public RetrievalOptions getRetrievalOptions() {
     return retrievalOperation.retrievalOptions();
   }
-    
-    /*
-    protected void checkForCompletion() {
-        // This method should only be called once in most cases,
-        // so a lock here is OK. If it winds up being called multiple
-        // times, then this approach is not appropriate.
-        //synchronized (this) {
-            if (retrievalOperation.size() == 0) {
-                setResult(OpResult.SUCCEEDED);
-                return;
-            } else {
-                EnumSet<OpResult> candidateResults;
 
-                candidateResults = null;
-                
-                // FUTURE - ensure that we can't have missing values
-                // think we're clean due to calling preconditions, but double check
-                for (Map.Entry<K, RetrievalResultBase<V>> resultEntry : results.entrySet()) {
-                    K           key;
-                    OpResult    keyResult;
-                    
-                    key = resultEntry.getKey();
-                    keyResult = resultEntry.getValue().getOpResult();
-                    if (!keyResult.isComplete()) {
-                        // early exit if any result is not complete
-                        return;
-                    }
-                    if (candidateResults == null) {
-                        candidateResults = EnumSet.of(keyResult);
-                    } else {
-                        candidateResults.add(keyResult);
-                    }
-                    if (isFailure(keyResult)) {
-                        getFailureCauses().put(key, keyResult.toFailureCause());
-                    }
-                    // we only arrive here if all results are complete
-                    if (candidateResults != null && candidateResults.size() > 0) {
-                        setResult(candidateResults);
-                    }
-                }
-            }
-        //}
-    }
-    */
+  /*
+  protected void checkForCompletion() {
+      // This method should only be called once in most cases,
+      // so a lock here is OK. If it winds up being called multiple
+      // times, then this approach is not appropriate.
+      //synchronized (this) {
+          if (retrievalOperation.size() == 0) {
+              setResult(OpResult.SUCCEEDED);
+              return;
+          } else {
+              EnumSet<OpResult> candidateResults;
 
-    /*
-    public void debugReferences() {
-        //System.out.println("#\t"+ objectToString());
-        for (OperationUUID opUUID : opUUIDs) {
-            ConcurrentMap<DHTKey,List<WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry
-            >>>>   map;
-            
-            //System.out.println("#\t\t"+ opUUID);
-            map = activeRetrievalListeners.get(opUUID);
-            for (Map.Entry<DHTKey,List<WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry
-            >>>> entry : map.entrySet()) {
-                //System.out.println("#\t\t\t"+ entry.getKey());
-                for (WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry>> listenerRef :
-                entry.getValue()) {
-                    ActiveOperationResultListener<MessageGroupRetrievalResponseEntry>   listener;
-                    
-                    listener = listenerRef.get();
-                    if (listener instanceof AsyncRetrievalOperationImpl) {
-                        AsyncRetrievalOperationImpl opImpl;
-                        
-                        opImpl = (AsyncRetrievalOperationImpl)listener;
-                        ////System.out.println("#\t\t\t\t"+ opImpl.getUUID());
-                        if (opImpl.opUUIDs.size() > 1) {
-                            System.out.printf("LARGE %s\n", opUUID);
-                        }
-                        for (Object _opUUID : opImpl.opUUIDs) {
-                            //System.out.println("#\t\t\t\t"+ _opUUID);
-                            if (!_opUUID.equals(opUUID)) {
-                                System.out.printf("NOT EQUAL %s %s\n", opUUID, _opUUID);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    */
+              candidateResults = null;
+
+              // FUTURE - ensure that we can't have missing values
+              // think we're clean due to calling preconditions, but double check
+              for (Map.Entry<K, RetrievalResultBase<V>> resultEntry : results.entrySet()) {
+                  K           key;
+                  OpResult    keyResult;
+
+                  key = resultEntry.getKey();
+                  keyResult = resultEntry.getValue().getOpResult();
+                  if (!keyResult.isComplete()) {
+                      // early exit if any result is not complete
+                      return;
+                  }
+                  if (candidateResults == null) {
+                      candidateResults = EnumSet.of(keyResult);
+                  } else {
+                      candidateResults.add(keyResult);
+                  }
+                  if (isFailure(keyResult)) {
+                      getFailureCauses().put(key, keyResult.toFailureCause());
+                  }
+                  // we only arrive here if all results are complete
+                  if (candidateResults != null && candidateResults.size() > 0) {
+                      setResult(candidateResults);
+                  }
+              }
+          }
+      //}
+  }
+  */
+
+  /*
+  public void debugReferences() {
+      //System.out.println("#\t"+ objectToString());
+      for (OperationUUID opUUID : opUUIDs) {
+          ConcurrentMap<DHTKey,List<WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry
+          >>>>   map;
+
+          //System.out.println("#\t\t"+ opUUID);
+          map = activeRetrievalListeners.get(opUUID);
+          for (Map.Entry<DHTKey,List<WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry
+          >>>> entry : map.entrySet()) {
+              //System.out.println("#\t\t\t"+ entry.getKey());
+              for (WeakReference<ActiveOperationResultListener<MessageGroupRetrievalResponseEntry>> listenerRef :
+              entry.getValue()) {
+                  ActiveOperationResultListener<MessageGroupRetrievalResponseEntry>   listener;
+
+                  listener = listenerRef.get();
+                  if (listener instanceof AsyncRetrievalOperationImpl) {
+                      AsyncRetrievalOperationImpl opImpl;
+
+                      opImpl = (AsyncRetrievalOperationImpl)listener;
+                      ////System.out.println("#\t\t\t\t"+ opImpl.getUUID());
+                      if (opImpl.opUUIDs.size() > 1) {
+                          System.out.printf("LARGE %s\n", opUUID);
+                      }
+                      for (Object _opUUID : opImpl.opUUIDs) {
+                          //System.out.println("#\t\t\t\t"+ _opUUID);
+                          if (!_opUUID.equals(opUUID)) {
+                              System.out.printf("NOT EQUAL %s %s\n", opUUID, _opUUID);
+                          }
+                      }
+                  }
+              }
+          }
+      }
+  }
+  */
 }

@@ -15,12 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Nearly-complete implementation of Worker. Users extend and
- * fill in the doWork() method to make it complete.
- * Despite the name, a Worker is a container for work NOT a thread which can execute the work.
- * Work can be "submitted" to the worker, which is pushed into an LWTPool. I.e. we are submitting for future execution
- * on a separate thread via some referenced pool.
- * the LWTPool has LWTThreads, which select work and execute it. The Worker describes how to execute that work
+ * Nearly-complete implementation of Worker. Users extend and fill in the doWork() method to make it
+ * complete. Despite the name, a Worker is a container for work NOT a thread which can execute the
+ * work. Work can be "submitted" to the worker, which is pushed into an LWTPool. I.e. we are
+ * submitting for future execution on a separate thread via some referenced pool. the LWTPool has
+ * LWTThreads, which select work and execute it. The Worker describes how to execute that work
+ *
  * @param <I> type of work objects
  */
 public abstract class BaseWorker<I> {
@@ -31,11 +31,15 @@ public abstract class BaseWorker<I> {
 
   private static Logger log = LoggerFactory.getLogger(BaseWorker.class);
 
-  public BaseWorker(LWTPool workPool, boolean allowsConcurrentWork, int workerMaxDirectCallDepth,
+  public BaseWorker(
+      LWTPool workPool,
+      boolean allowsConcurrentWork,
+      int workerMaxDirectCallDepth,
       int idleThreadThreshold) {
     assert workPool != null;
     if (workPool == null) {
-      if (LWTPoolProvider.defaultConcurrentWorkPool == null && LWTPoolProvider.defaultNonConcurrentWorkPool == null) {
+      if (LWTPoolProvider.defaultConcurrentWorkPool == null
+          && LWTPoolProvider.defaultNonConcurrentWorkPool == null) {
         throw new RuntimeException("WorkPools not created");
       } else {
         if (allowsConcurrentWork) {
@@ -52,16 +56,27 @@ public abstract class BaseWorker<I> {
   }
 
   public BaseWorker(LWTPool workPool, boolean allowsConcurrentWork, int workerMaxDirectCallDepth) {
-    this(workPool, allowsConcurrentWork, workerMaxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+    this(
+        workPool,
+        allowsConcurrentWork,
+        workerMaxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
   public BaseWorker(LWTPool workPool, boolean allowsConcurrentWork) {
-    this(workPool, allowsConcurrentWork, LWTConstants.defaultMaxDirectCallDepth,
+    this(
+        workPool,
+        allowsConcurrentWork,
+        LWTConstants.defaultMaxDirectCallDepth,
         LWTConstants.defaultIdleThreadThreshold);
   }
 
   public BaseWorker(boolean allowsConcurrentWork, int maxDirectCallDepth) {
-    this(LWTPoolProvider.defaultConcurrentWorkPool, true, maxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+    this(
+        LWTPoolProvider.defaultConcurrentWorkPool,
+        true,
+        maxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
   public BaseWorker(boolean allowsConcurrentWork, int maxDirectCallDepth, int idleThreadThreshold) {
@@ -70,7 +85,9 @@ public abstract class BaseWorker<I> {
 
   public BaseWorker(boolean allowsConcurrentWork) {
     this(
-        allowsConcurrentWork ? LWTPoolProvider.defaultConcurrentWorkPool : LWTPoolProvider.defaultNonConcurrentWorkPool,
+        allowsConcurrentWork
+            ? LWTPoolProvider.defaultConcurrentWorkPool
+            : LWTPoolProvider.defaultNonConcurrentWorkPool,
         allowsConcurrentWork);
   }
 
@@ -96,7 +113,8 @@ public abstract class BaseWorker<I> {
     addPrioritizedWork(item, 0, callerMaxDirectCallDepth, idleThreadThreshold, false);
   }
 
-  public final void addWork(I item, int callerMaxDirectCallDepth, int idleThreadThreshold, boolean schedulable) {
+  public final void addWork(
+      I item, int callerMaxDirectCallDepth, int idleThreadThreshold, boolean schedulable) {
     addPrioritizedWork(item, 0, callerMaxDirectCallDepth, idleThreadThreshold, schedulable);
   }
 
@@ -112,11 +130,12 @@ public abstract class BaseWorker<I> {
    * @param callerMaxDirectCallDepth
    * @param idleThreadThreshold
    */
-  private final void addPrioritizedWork(I item,
-                                        int priority,
-                                        int callerMaxDirectCallDepth,
-                                        int idleThreadThreshold,
-                                        boolean schedulable) {
+  private final void addPrioritizedWork(
+      I item,
+      int priority,
+      int callerMaxDirectCallDepth,
+      int idleThreadThreshold,
+      boolean schedulable) {
     int maxDirectCallDepth;
 
     /*
@@ -129,21 +148,35 @@ public abstract class BaseWorker<I> {
      * core does all of the work.
      */
     maxDirectCallDepth = Math.min(callerMaxDirectCallDepth, workerMaxDirectCallDepth);
-    if (schedulable || threadPool.numIdleThreads() > idleThreadThreshold || ThreadState.getDepth() >= maxDirectCallDepth) {
+    if (schedulable
+        || threadPool.numIdleThreads() > idleThreadThreshold
+        || ThreadState.getDepth() >= maxDirectCallDepth) {
       // Schedulable work is eligible for queuing as we may want to throttle it
-      // Some non-schedulable work is also eligible for queuing depending on idle threads and call depth.
+      // Some non-schedulable work is also eligible for queuing depending on idle threads and call
+      // depth.
       // We propagate the schedulable flag to the pool so, if the pool is scheduling,
-      // it can distinguish the two work types and dispatch to the scheduler or execution queue as appropriate
-      // For example, initial unforwarded requests are schedulable if msg throttling is enabled (if not, they are directly called)
-      // A request ready to be sent to a proxy is unschedulable but queueable (so we would want to dispatch to execution queue)
-      // An unthrottled request when we have idle threads or a high call depth can be dispatched to the execution queue
-      // TODO(OPTIMUS-46970): Avoid hopping a thread boundary here if possible when handling local forwards
-      // N.b. this implies we are forced to cross an extra thread boundary when msg throttling is enabled,
-      // You could throttle at the point of forward (either to local or remote), but by that point we have done some execution
-      // and it becomes harder to distinguish on the remote if we need to throttle again (without sending extra information)
-      // So there is a trade-off here to make the throttling model simple and throttle at ingestion before any execution,
-      // at the cost of one thread hop. Ideally we would not hop threads for a local forward - instead we could
-      // callDoWork on that item and have the local forward be the thing enqueued for scheduling. Remote could be similar
+      // it can distinguish the two work types and dispatch to the scheduler or execution queue as
+      // appropriate
+      // For example, initial unforwarded requests are schedulable if msg throttling is enabled (if
+      // not, they are directly called)
+      // A request ready to be sent to a proxy is unschedulable but queueable (so we would want to
+      // dispatch to execution queue)
+      // An unthrottled request when we have idle threads or a high call depth can be dispatched to
+      // the execution queue
+      // TODO(OPTIMUS-46970): Avoid hopping a thread boundary here if possible when handling local
+      // forwards
+      // N.b. this implies we are forced to cross an extra thread boundary when msg throttling is
+      // enabled,
+      // You could throttle at the point of forward (either to local or remote), but by that point
+      // we have done some execution
+      // and it becomes harder to distinguish on the remote if we need to throttle again (without
+      // sending extra information)
+      // So there is a trade-off here to make the throttling model simple and throttle at ingestion
+      // before any execution,
+      // at the cost of one thread hop. Ideally we would not hop threads for a local forward -
+      // instead we could
+      // callDoWork on that item and have the local forward be the thing enqueued for scheduling.
+      // Remote could be similar
       // though if you're going off box the cost here starts to matter much less.
       if (LWTConstants.enableLogging && log.isDebugEnabled()) {
         log.debug(" queueing {}", item);
@@ -151,8 +184,10 @@ public abstract class BaseWorker<I> {
       threadPool.addWork(this, item, schedulable);
     } else {
       // Directly call this work
-      // For example, unforwarded work when msg Throttling is disabled is called here to prepare for forwarding
-      // this is handy as we don't unnecessarily cross a thread boundary until we are ready to send to the remote
+      // For example, unforwarded work when msg Throttling is disabled is called here to prepare for
+      // forwarding
+      // this is handy as we don't unnecessarily cross a thread boundary until we are ready to send
+      // to the remote
       if (LWTConstants.enableLogging && log.isDebugEnabled()) {
         log.debug("  direct call {}", item);
       }
@@ -190,7 +225,7 @@ public abstract class BaseWorker<I> {
   }
 
   public void doWork(I[] items) {
-    //System.out.println("BaseWorker.doWork([])");
+    // System.out.println("BaseWorker.doWork([])");
     for (I item : items) {
       doWork(item);
     }
@@ -209,13 +244,13 @@ public abstract class BaseWorker<I> {
     return sb.toString();
   }
 
-  //private AtomicBoolean  foo = new AtomicBoolean(false);
+  // private AtomicBoolean  foo = new AtomicBoolean(false);
 
   public I[] newWorkArray(int size) {
-    //if (foo.compareAndSet(false, true)) {
+    // if (foo.compareAndSet(false, true)) {
     //    ThreadUtil.printStackTraces();
-    //}
-    //throw new RuntimeException(this +" doesn't support multiple work");
+    // }
+    // throw new RuntimeException(this +" doesn't support multiple work");
     return null;
   }
 

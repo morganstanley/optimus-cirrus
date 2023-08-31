@@ -92,7 +92,7 @@ public class Segment {
     List<Segment> subSegments;
     List<Stat> stats;
 
-    //System.out.printf("parse %d\n", def.size());
+    // System.out.printf("parse %d\n", def.size());
     nameDef = def.get(0);
     myDepth = depthNonEmpty(nameDef);
     ensureName(nameDef);
@@ -137,7 +137,7 @@ public class Segment {
     List<Segment> segments;
     List<String> curDef;
 
-    //System.out.printf("parseSegments %d %d\n", def.size(), line);
+    // System.out.printf("parseSegments %d %d\n", def.size(), line);
     segments = new ArrayList<>();
     curDef = new ArrayList<>();
     for (int i = line; i < def.size(); i++) {
@@ -145,7 +145,7 @@ public class Segment {
 
       s = def.get(i);
       if (s.charAt(0) != ' ') {
-        //System.out.println("segmentStart: "+ s);
+        // System.out.println("segmentStart: "+ s);
         if (curDef.size() > 0) {
           segments.add(parse(null, curDef));
           curDef = new ArrayList<>();

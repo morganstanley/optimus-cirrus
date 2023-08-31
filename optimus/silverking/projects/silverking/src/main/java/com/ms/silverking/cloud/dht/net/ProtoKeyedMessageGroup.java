@@ -27,9 +27,7 @@ import com.ms.silverking.numeric.NumConversion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * ProtoMessageGroup for keyed messages
- */
+/** ProtoMessageGroup for keyed messages */
 public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
   private final int keyBufferAdditionalBytesPerKey;
   protected ByteBuffer keyByteBuffer;
@@ -43,26 +41,27 @@ public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
   protected static final int keyByteBufferIndex = 0;
   protected static final int traceIDBufferListIndex = 1;
 
-  public ProtoKeyedMessageGroup(MessageType type,
-                                UUIDBase uuid,
-                                long context,
-                                ByteBuffer optionsByteBuffer,
-                                int numKeys,
-                                int keyBufferAdditionalBytesPerKey,
-                                byte[] originator,
-                                int deadlineRelativeMillis,
-                                ForwardingMode forward,
-                                SkTraceId maybeTraceID) {
+  public ProtoKeyedMessageGroup(
+      MessageType type,
+      UUIDBase uuid,
+      long context,
+      ByteBuffer optionsByteBuffer,
+      int numKeys,
+      int keyBufferAdditionalBytesPerKey,
+      byte[] originator,
+      int deadlineRelativeMillis,
+      ForwardingMode forward,
+      SkTraceId maybeTraceID) {
     super(type, uuid, context, originator, deadlineRelativeMillis, forward);
 
     this.keyBufferAdditionalBytesPerKey = keyBufferAdditionalBytesPerKey;
     keyByteBuffer = allocateKeyBuffer(numKeys, keyBufferAdditionalBytesPerKey);
 
-    //System.out.println("keyBufferSize: "+ keyBufferSize
+    // System.out.println("keyBufferSize: "+ keyBufferSize
     //        +"\tkeyBufferAdditionalBytesPerKey: "+ keyBufferAdditionalBytesPerKey);
 
-    //TODO (OPTIMUS-40255): switch to new serialization logic once all servers support new format
-    //commented out code
+    // TODO (OPTIMUS-40255): switch to new serialization logic once all servers support new format
+    // commented out code
     ProtoSkTraceIdSerialize protoSkTraceIdSerialize = new ProtoSkTraceIdSerialize();
     LegacySkTraceIdSerializer legacySkTraceIdSerializer = new LegacySkTraceIdSerializer();
 
@@ -74,10 +73,10 @@ public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
     final byte[] maybeTraceIdLegacyByte;
     if (TraceIDProvider.hasTraceID(type)) {
       maybeTraceIdLegacyByte = legacySkTraceIdSerializer.serialize(maybeTraceID).toByteArray();
-      //maybeTraceIdByte = protoSkTraceIdSerialize.serializeSkTraceId(maybeTraceID);
-      //tempMaybeTraceID = new byte[maybeTraceIdByte.remaining()];
-     // maybeTraceIdByte.get(tempMaybeTraceID);
-      //bufferList.add(ByteBuffer.wrap(tempMaybeTraceID)); // index 1
+      // maybeTraceIdByte = protoSkTraceIdSerialize.serializeSkTraceId(maybeTraceID);
+      // tempMaybeTraceID = new byte[maybeTraceIdByte.remaining()];
+      // maybeTraceIdByte.get(tempMaybeTraceID);
+      // bufferList.add(ByteBuffer.wrap(tempMaybeTraceID)); // index 1
       bufferList.add(ByteBuffer.wrap(maybeTraceIdLegacyByte));
     }
 
@@ -85,14 +84,12 @@ public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
   }
 
   static int getOptionsByteBufferBaseOffset(boolean hasTraceID) {
-    return hasTraceID
-           ? 2
-           : 1;
+    return hasTraceID ? 2 : 1;
   }
 
   /**
-   * NOTE: Caller of this method shall be responsible for checking return value is valid
-   * (i.e. call TraceIDProvider.isValidTraceID(byte[] maybeTraceID))
+   * NOTE: Caller of this method shall be responsible for checking return value is valid (i.e. call
+   * TraceIDProvider.isValidTraceID(byte[] maybeTraceID))
    */
   public static SkTraceId unsafeGetTraceIDCopy(MessageGroup mg) {
     if (TraceIDProvider.hasTraceID(mg.getMessageType())) {
@@ -111,9 +108,11 @@ public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
     return Optional.ofNullable(unsafeGetTraceIDCopy(mg));
   }
 
-  private static final ByteBuffer allocateKeyBuffer(int numKeys, int keyBufferAdditionalBytesPerKey) {
+  private static final ByteBuffer allocateKeyBuffer(
+      int numKeys, int keyBufferAdditionalBytesPerKey) {
     int bytesPerEntry = KeyedMessageFormat.baseBytesPerKeyEntry + keyBufferAdditionalBytesPerKey;
-    ByteBuffer keyBuffer = ByteBuffer.allocate(NumConversion.BYTES_PER_SHORT + bytesPerEntry * numKeys);
+    ByteBuffer keyBuffer =
+        ByteBuffer.allocate(NumConversion.BYTES_PER_SHORT + bytesPerEntry * numKeys);
     keyBuffer.putShort((short) bytesPerEntry);
     return keyBuffer;
   }
@@ -129,8 +128,9 @@ public abstract class ProtoKeyedMessageGroup extends ProtoMessageGroup {
       keyByteBuffer.putLong(dhtKey.getLSL());
     } catch (BufferOverflowException bfe) {
       log.debug("ProtoKeyedMessageGroup keyByteBuffer overflow. Expanding.");
-      ByteBuffer newKeyByteBuffer = allocateKeyBuffer(currentBufferKeys() + keyBufferExpansionKeys,
-                                                      keyBufferAdditionalBytesPerKey);
+      ByteBuffer newKeyByteBuffer =
+          allocateKeyBuffer(
+              currentBufferKeys() + keyBufferExpansionKeys, keyBufferAdditionalBytesPerKey);
       keyByteBuffer.flip();
       newKeyByteBuffer.put(keyByteBuffer);
       keyByteBuffer = newKeyByteBuffer;

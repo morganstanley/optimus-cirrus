@@ -35,7 +35,8 @@ public class ExclusionFileMonitor {
 
   private static final String logFileName = "ExclusionFileMonitor.out";
 
-  public ExclusionFileMonitor(SKGridConfiguration gc, int watchIntervalSeconds, String exclusionFile)
+  public ExclusionFileMonitor(
+      SKGridConfiguration gc, int watchIntervalSeconds, String exclusionFile)
       throws IOException, KeeperException {
     MetaClient mc;
     NamedRingConfiguration ringConfig;
@@ -46,8 +47,10 @@ public class ExclusionFileMonitor {
 
     ringConfig = NamedRingConfigurationUtil.fromGridConfiguration(gc);
 
-    mc = new MetaClient(ringConfig.getRingConfiguration().getCloudConfiguration(),
-        gc.getClientDHTConfiguration().getZKConfig());
+    mc =
+        new MetaClient(
+            ringConfig.getRingConfiguration().getCloudConfiguration(),
+            gc.getClientDHTConfiguration().getZKConfig());
 
     exclusionZK = new ExclusionZK(mc);
   }
@@ -58,7 +61,7 @@ public class ExclusionFileMonitor {
         updateCloudExclusionSet();
         ThreadUtil.sleepSeconds(watchIntervalSeconds);
       } catch (Exception e) {
-        log.error("",e);
+        log.error("", e);
       }
     }
   }
@@ -78,7 +81,7 @@ public class ExclusionFileMonitor {
         exclusionZK.writeToZK(newExclusionSet);
       }
     } catch (Exception e) {
-      log.error("Exception in updateCloudExclusionSet",e);
+      log.error("Exception in updateCloudExclusionSet", e);
     }
   }
 
@@ -100,7 +103,8 @@ public class ExclusionFileMonitor {
       try {
         parser.parseArgument(args);
         gc = SKGridConfiguration.parseFile(options.gridConfig);
-        exclusionFileMonitor = new ExclusionFileMonitor(gc, options.watchIntervalSeconds, options.exclusionFile);
+        exclusionFileMonitor =
+            new ExclusionFileMonitor(gc, options.watchIntervalSeconds, options.exclusionFile);
         exclusionFileMonitor.monitor();
       } catch (CmdLineException cle) {
         System.err.println(cle.getMessage());

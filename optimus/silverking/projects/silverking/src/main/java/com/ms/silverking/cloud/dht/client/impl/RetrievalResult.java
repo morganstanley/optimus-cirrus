@@ -26,7 +26,8 @@ import com.ms.silverking.cloud.dht.common.RawRetrievalResult;
 class RetrievalResult<V> extends RetrievalResultBase<V> {
   private final RawRetrievalResult rawResult;
 
-  public RetrievalResult(RawRetrievalResult rawResult, BufferSourceDeserializer<V> valueDeserializer) {
+  public RetrievalResult(
+      RawRetrievalResult rawResult, BufferSourceDeserializer<V> valueDeserializer) {
     super(valueDeserializer);
     this.rawResult = rawResult;
   }

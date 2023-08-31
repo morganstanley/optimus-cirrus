@@ -26,9 +26,12 @@ import org.slf4j.Logger;
 public class ChannelWriteTest {
   private final Random random;
 
-  public enum Test {buffer, array, direct, mixed}
-
-  ;
+  public enum Test {
+    buffer,
+    array,
+    direct,
+    mixed
+  };
 
   private static Logger log = LoggerFactory.getLogger(ChannelWriteTest.class);
 
@@ -39,7 +42,8 @@ public class ChannelWriteTest {
     random = new Random();
   }
 
-  public void runTests(String[] tests, int valueSize, int numValues, int iterations) throws IOException {
+  public void runTests(String[] tests, int valueSize, int numValues, int iterations)
+      throws IOException {
     for (String test : tests) {
       runTest(Test.valueOf(test), valueSize, numValues, iterations);
     }
@@ -65,69 +69,71 @@ public class ChannelWriteTest {
 
     sw = new SimpleStopwatch();
     switch (test) {
-    case array: {
-      byte[] msg;
+      case array:
+        {
+          byte[] msg;
 
-      for (int j = 0; j < iterations; j++) {
-        msg = new byte[totalBytes];
-        for (int i = 0; i < numValues; i++) {
-          System.arraycopy(value, 0, msg, i * entrySize, valueSize);
-          System.arraycopy(checksum, 0, msg, i * entrySize + valueSize, checksumSize);
-        }
-        valuesBuffer = ByteBuffer.wrap(msg);
-        totalWritten = 0;
-        while (totalWritten < totalBytes) {
-          long written;
+          for (int j = 0; j < iterations; j++) {
+            msg = new byte[totalBytes];
+            for (int i = 0; i < numValues; i++) {
+              System.arraycopy(value, 0, msg, i * entrySize, valueSize);
+              System.arraycopy(checksum, 0, msg, i * entrySize + valueSize, checksumSize);
+            }
+            valuesBuffer = ByteBuffer.wrap(msg);
+            totalWritten = 0;
+            while (totalWritten < totalBytes) {
+              long written;
 
-          written = outChannel.write(valuesBuffer);
-          if (written > 0) {
-            totalWritten += written;
+              written = outChannel.write(valuesBuffer);
+              if (written > 0) {
+                totalWritten += written;
+              }
+            }
+            if (totalWritten != totalBytes) {
+              throw new RuntimeException("totalWritten != totalBytes");
+            }
           }
         }
-        if (totalWritten != totalBytes) {
-          throw new RuntimeException("totalWritten != totalBytes");
+        break;
+      case buffer:
+        buffers = new ByteBuffer[numValues * 2];
+        for (int i = 0; i < numValues; i++) {
+          buffers[i * 2] = ByteBuffer.allocate(value.length);
+          buffers[i * 2 + 1] = ByteBuffer.allocate(checksum.length);
         }
-      }
-    }
-    break;
-    case buffer:
-      buffers = new ByteBuffer[numValues * 2];
-      for (int i = 0; i < numValues; i++) {
-        buffers[i * 2] = ByteBuffer.allocate(value.length);
-        buffers[i * 2 + 1] = ByteBuffer.allocate(checksum.length);
-      }
-      sw.reset();
-      sendBuffers(buffers, iterations, totalBytes, outChannel);
-      break;
-    case direct:
-      buffers = new ByteBuffer[numValues * 2];
-      for (int i = 0; i < numValues; i++) {
-        buffers[i * 2] = ByteBuffer.allocateDirect(valueSize);
-        //buffers[i * 2].put(value);
-        //buffers[i * 2].flip();
-        buffers[i * 2 + 1] = ByteBuffer.allocateDirect(checksumSize);
-        //buffers[i * 2 + 1].put(checksum);
-        //buffers[i * 2 + 1].flip();
-      }
-      sw.reset();
-      sendBuffers(buffers, iterations, totalBytes, outChannel);
-      break;
-    case mixed:
-      buffers = new ByteBuffer[numValues * 2];
-      for (int i = 0; i < numValues; i++) {
-        buffers[i * 2] = ByteBuffer.allocateDirect(valueSize);
-        //buffers[i * 2].put(value);
-        //buffers[i * 2].flip();
-        buffers[i * 2 + 1] = ByteBuffer.allocate(checksum.length);
-        //buffers[i * 2 + 1].put(checksum);
-        //buffers[i * 2 + 1].flip();
-      }
-      sw.reset();
-      sendBuffers(buffers, iterations, totalBytes, outChannel);
-      break;
+        sw.reset();
+        sendBuffers(buffers, iterations, totalBytes, outChannel);
+        break;
+      case direct:
+        buffers = new ByteBuffer[numValues * 2];
+        for (int i = 0; i < numValues; i++) {
+          buffers[i * 2] = ByteBuffer.allocateDirect(valueSize);
+          // buffers[i * 2].put(value);
+          // buffers[i * 2].flip();
+          buffers[i * 2 + 1] = ByteBuffer.allocateDirect(checksumSize);
+          // buffers[i * 2 + 1].put(checksum);
+          // buffers[i * 2 + 1].flip();
+        }
+        sw.reset();
+        sendBuffers(buffers, iterations, totalBytes, outChannel);
+        break;
+      case mixed:
+        buffers = new ByteBuffer[numValues * 2];
+        for (int i = 0; i < numValues; i++) {
+          buffers[i * 2] = ByteBuffer.allocateDirect(valueSize);
+          // buffers[i * 2].put(value);
+          // buffers[i * 2].flip();
+          buffers[i * 2 + 1] = ByteBuffer.allocate(checksum.length);
+          // buffers[i * 2 + 1].put(checksum);
+          // buffers[i * 2 + 1].flip();
+        }
+        sw.reset();
+        sendBuffers(buffers, iterations, totalBytes, outChannel);
+        break;
     }
     sw.stop();
-    log.info("{}  Time per iteration {}", test.toString(), sw.getElapsedSeconds() / (double) iterations);
+    log.info(
+        "{}  Time per iteration {}", test.toString(), sw.getElapsedSeconds() / (double) iterations);
   }
 
   private void fillBuffers(ByteBuffer[] buffers) throws IOException {
@@ -138,7 +144,8 @@ public class ChannelWriteTest {
     }
   }
 
-  private void sendBuffers(ByteBuffer[] buffers, int iterations, long totalToWrite, GatheringByteChannel outChannel)
+  private void sendBuffers(
+      ByteBuffer[] buffers, int iterations, long totalToWrite, GatheringByteChannel outChannel)
       throws IOException {
     if (false && buffers.length > bufferSendLimit) {
       int curGroupMax;

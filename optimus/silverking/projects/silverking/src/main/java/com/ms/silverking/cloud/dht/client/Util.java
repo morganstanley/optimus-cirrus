@@ -16,7 +16,8 @@ import static com.ms.silverking.cloud.dht.client.OpTimeoutController.min_maxAtte
 class Util {
   static void checkAttempts(int maxAttempts) {
     if (maxAttempts < min_maxAttempts) {
-      throw new RuntimeException("maxAttempts < min_maxAttempts; " + maxAttempts + " < " + min_maxAttempts);
+      throw new RuntimeException(
+          "maxAttempts < min_maxAttempts; " + maxAttempts + " < " + min_maxAttempts);
     }
   }
 }

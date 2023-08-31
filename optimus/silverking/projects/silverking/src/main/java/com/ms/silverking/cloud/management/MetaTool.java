@@ -22,39 +22,42 @@ import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperExcepti
 import com.ms.silverking.cloud.zookeeper.ZooKeeperConfig;
 
 public class MetaTool extends MetaToolBase {
-  private enum Tool {Topology, Exclusions, PassiveNodes, HostGroupTables}
+  private enum Tool {
+    Topology,
+    Exclusions,
+    PassiveNodes,
+    HostGroupTables
+  };
 
-  ;
-
-  public MetaTool() {
-  }
+  public MetaTool() {}
 
   private static MetaToolModule getModule(Tool tool, MetaClient metaClient) throws KeeperException {
     switch (tool) {
-    case Topology:
-      return new TopologyZK(metaClient);
-    case Exclusions:
-      return new ServerSetExtensionZK(metaClient, metaClient.getMetaPaths().getExclusionsPath());
-    //case PassiveNodes: return new ServerSetExtensionZK(metaClient, metaClient.getMetaPaths().getPassiveNodesPath());
-    case PassiveNodes:
-      return null;
-    case HostGroupTables:
-      return new HostGroupTableZK(metaClient);
-    default:
-      throw new RuntimeException("panic");
+      case Topology:
+        return new TopologyZK(metaClient);
+      case Exclusions:
+        return new ServerSetExtensionZK(metaClient, metaClient.getMetaPaths().getExclusionsPath());
+        // case PassiveNodes: return new ServerSetExtensionZK(metaClient,
+        // metaClient.getMetaPaths().getPassiveNodesPath());
+      case PassiveNodes:
+        return null;
+      case HostGroupTables:
+        return new HostGroupTableZK(metaClient);
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private static CloudConfiguration cloudConfigurationFor(Tool tool, String name) {
     switch (tool) {
-    case Topology:
-      return CloudConfiguration.emptyTemplate.topologyName(name);
-    case Exclusions:
-      return CloudConfiguration.emptyTemplate.exclusionSpecsName(name);
-    case HostGroupTables:
-      return CloudConfiguration.emptyTemplate.hostGroupTableName(name);
-    default:
-      throw new RuntimeException("panic");
+      case Topology:
+        return CloudConfiguration.emptyTemplate.topologyName(name);
+      case Exclusions:
+        return CloudConfiguration.emptyTemplate.exclusionSpecsName(name);
+      case HostGroupTables:
+        return CloudConfiguration.emptyTemplate.hostGroupTableName(name);
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -64,7 +67,9 @@ public class MetaTool extends MetaToolBase {
     Tool tool;
 
     tool = Tool.valueOf(options.tool);
-    mc = new MetaClient(cloudConfigurationFor(tool, options.name), new ZooKeeperConfig(options.zkConfig));
+    mc =
+        new MetaClient(
+            cloudConfigurationFor(tool, options.name), new ZooKeeperConfig(options.zkConfig));
     doWork(options, new MetaToolWorker(getModule(tool, mc)));
   }
 

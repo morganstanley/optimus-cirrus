@@ -55,12 +55,10 @@ public class MultiInstanceStopper {
   private void stopInstances() {
     printNoDot("Stopping Instances");
 
-    if (instances.isEmpty())
-      return;
+    if (instances.isEmpty()) return;
 
     List<String> ips = getIps(instances);
-    for (String ip : ips)
-      log.info("{}" , ip);
+    for (String ip : ips) log.info("{}", ip);
     StopInstancesRequest stopInstancesRequest = new StopInstancesRequest();
     stopInstancesRequest.withInstanceIds(getInstanceIds(instances));
 
@@ -73,9 +71,10 @@ public class MultiInstanceStopper {
 
   public static void main(String[] args) {
     String launchHostIp = getMyIp();
-    log.info("Attempting to stop all instances with keypair: {}" , getUniqueKeyPairName(launchHostIp));
-    MultiInstanceStopper stopper = new MultiInstanceStopper(AmazonEC2ClientBuilder.defaultClient(), launchHostIp);
+    log.info(
+        "Attempting to stop all instances with keypair: {}", getUniqueKeyPairName(launchHostIp));
+    MultiInstanceStopper stopper =
+        new MultiInstanceStopper(AmazonEC2ClientBuilder.defaultClient(), launchHostIp);
     stopper.run();
   }
-
 }

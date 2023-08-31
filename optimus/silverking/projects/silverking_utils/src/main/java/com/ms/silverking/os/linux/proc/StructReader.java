@@ -18,8 +18,8 @@ import java.lang.reflect.Field;
 import com.ms.silverking.io.StreamParser;
 
 /**
- * Reads a single line file from /proc (e.g. /proc/<pid>/stat) into a
- * corresponding Java class that is effectively a C-style struct.
+ * Reads a single line file from /proc (e.g. /proc/<pid>/stat) into a corresponding Java class that
+ * is effectively a C-style struct.
  */
 public class StructReader<T> {
   private final Class<T> _class;

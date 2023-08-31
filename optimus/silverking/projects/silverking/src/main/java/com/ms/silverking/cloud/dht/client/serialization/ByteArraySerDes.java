@@ -17,9 +17,7 @@ import java.util.Arrays;
 import com.ms.silverking.cloud.dht.common.DHTConstants;
 import com.ms.silverking.io.util.BufferUtil;
 
-/**
- * Serializer/deserializer for byte[].
- */
+/** Serializer/deserializer for byte[]. */
 public final class ByteArraySerDes implements BufferSerDes<byte[]> {
   @Override
   public ByteBuffer serializeToBuffer(byte[] b) {
@@ -62,7 +60,8 @@ public final class ByteArraySerDes implements BufferSerDes<byte[]> {
   @Override
   public byte[] deserialize(ByteBuffer buffer) {
     // FUTURE - remove array usage to allow for native buffering
-    return Arrays.copyOfRange(buffer.array(), buffer.position(), buffer.position() + buffer.remaining());
+    return Arrays.copyOfRange(
+        buffer.array(), buffer.position(), buffer.position() + buffer.remaining());
   }
 
   @Override

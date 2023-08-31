@@ -11,6 +11,10 @@
  */
 package optimus.stratosphere.logger
 
+import optimus.stratosphere.config.ConsoleColors
+import org.fusesource.jansi.Ansi.Color
+import org.fusesource.jansi.Ansi.ansi
+
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 
@@ -26,7 +30,14 @@ object LogLines {
   }
 }
 
-abstract class Logger {
+object Logger {
+  val ErrorMarker = "ERROR: "
+  val WarningMarker = "WARNING: "
+}
+
+abstract class Logger(colors: ConsoleColors = ConsoleColors.Disabled) {
+  import optimus.stratosphere.logger.Logger._
+
   def info(toLog: String): Unit
   def debug(toLog: String): Unit
   def handleAnswer(answer: String): Unit
@@ -46,9 +57,14 @@ abstract class Logger {
     }
   }
 
-  def warning(toLog: String): Unit = info(printWithIndent(toLog, "WARNING: "))
+  private def addColorTo(text: String, color: Color): String =
+    if (colors.enabled) ansi().fg(color).a(text).reset().toString else text
 
-  def error(toLog: String): Unit = info(printWithIndent(toLog, "ERROR: "))
+  def highlight(toLog: String): Unit = info(addColorTo(toLog, colors.highlight))
+
+  def warning(toLog: String): Unit = info(addColorTo(printWithIndent(toLog, WarningMarker), colors.warning))
+
+  def error(toLog: String): Unit = info(addColorTo(printWithIndent(toLog, ErrorMarker), colors.error))
 
   def error(msg: String, t: Throwable): Unit = {
     error(msg)

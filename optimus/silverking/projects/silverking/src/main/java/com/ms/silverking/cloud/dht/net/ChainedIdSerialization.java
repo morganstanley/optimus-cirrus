@@ -23,17 +23,24 @@ public class ChainedIdSerialization {
     byte[] vertexIdBytes = chainedID.vertexId().getBytes(StandardCharsets.UTF_8);
 
     // Claculating the total length of elements to be sent into the byteBuffer
-    int totalEncodeLength = reprBytes.length + vertexIdBytes.length + NumConversion.BYTES_PER_INT * 5;
+    int totalEncodeLength =
+        reprBytes.length + vertexIdBytes.length + NumConversion.BYTES_PER_INT * 5;
     // Allocating the size of the buffer
     ByteBuffer chainedBuffer = ByteBuffer.allocate(totalEncodeLength);
     // Putting in the elements into the byteBuffer
-    chainedBuffer.putInt(chainedID.ArrayRepVersion()); //putting in the ArrayRepVersion which is an intiger so has 4 bytes
-    chainedBuffer.putInt(reprBytes.length);  //putting in the size of the reprByte
-    chainedBuffer.put(chainedID.repr().getBytes(StandardCharsets.UTF_8)); //putting in the reprBytes
-    chainedBuffer.putInt(chainedID.depth()); //putting in the depth which is an intiger so has 4 bytes
-    chainedBuffer.putInt(chainedID.crumbLevel()); //putting in the level which is an intiger so has 4 bytes
-    chainedBuffer.putInt(vertexIdBytes.length); //putting in the size of the vertexId
-    chainedBuffer.put(chainedID.vertexId().getBytes(StandardCharsets.UTF_8)); //putting in the vertexId
+    chainedBuffer.putInt(
+        chainedID.ArrayRepVersion()); // putting in the ArrayRepVersion which is an intiger so has 4
+    // bytes
+    chainedBuffer.putInt(reprBytes.length); // putting in the size of the reprByte
+    chainedBuffer.put(
+        chainedID.repr().getBytes(StandardCharsets.UTF_8)); // putting in the reprBytes
+    chainedBuffer.putInt(
+        chainedID.depth()); // putting in the depth which is an intiger so has 4 bytes
+    chainedBuffer.putInt(
+        chainedID.crumbLevel()); // putting in the level which is an intiger so has 4 bytes
+    chainedBuffer.putInt(vertexIdBytes.length); // putting in the size of the vertexId
+    chainedBuffer.put(
+        chainedID.vertexId().getBytes(StandardCharsets.UTF_8)); // putting in the vertexId
 
     return chainedBuffer;
   }
@@ -42,13 +49,15 @@ public class ChainedIdSerialization {
 
     int arrayRepVersion, reprLength, depth, level, vertexIdLength, offset = 0;
     byte[] reprBytes, vertexIdBytes;
-    byteBuffer.position(0); //Seting default position to start reading elements from. If not set, elements might be read from other positions
+    byteBuffer.position(
+        0); // Seting default position to start reading elements from. If not set, elements might be
+    // read from other positions
 
     arrayRepVersion = byteBuffer.getInt(offset);
     offset += NumConversion.BYTES_PER_INT;
     byteBuffer.position(offset); // set postion for next element to be read from
 
-    reprLength = byteBuffer.getInt(offset); //getting next element in byteBuffer
+    reprLength = byteBuffer.getInt(offset); // getting next element in byteBuffer
     reprBytes = new byte[reprLength]; // Creating byte variable to save element in
     offset += NumConversion.BYTES_PER_INT;
     byteBuffer.position(offset); // set postion for next element to be read from
@@ -75,4 +84,3 @@ public class ChainedIdSerialization {
     return new ChainedID(repr, depth, level, vertexId);
   }
 }
-

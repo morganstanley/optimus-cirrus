@@ -208,4 +208,3 @@ public class NumUtil {
     return factorial(n).divide(factorial(n - r).multiply(factorial(r))).longValue();
   }
 }
-

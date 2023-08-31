@@ -24,24 +24,31 @@ import com.ms.silverking.net.IPAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Common RetrievalOperation functionality.
- */
-public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState> extends BaseOperation<S>
-    implements RetrievalOperation {
+/** Common RetrievalOperation functionality. */
+public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState>
+    extends BaseOperation<S> implements RetrievalOperation {
   protected final RetrievalOperationContainer retrievalOperationContainer;
 
   protected static Logger log = LoggerFactory.getLogger(BaseRetrievalOperation.class);
 
-  public BaseRetrievalOperation(long deadline, RetrievalOperationContainer retrievalOperationContainer,
+  public BaseRetrievalOperation(
+      long deadline,
+      RetrievalOperationContainer retrievalOperationContainer,
       ForwardingMode forwardingMode) {
-    super(deadline, retrievalOperationContainer, forwardingMode, BaseRetrievalEntryState.minRelTimeoutMillis,
+    super(
+        deadline,
+        retrievalOperationContainer,
+        forwardingMode,
+        BaseRetrievalEntryState.minRelTimeoutMillis,
         retrievalOperationContainer.getNumEntries());
     this.retrievalOperationContainer = retrievalOperationContainer;
   }
-  
-  protected abstract void noPrimaryReplicasForKey(DHTKey key, List<IPAndPort> primaryReplicas,
-      List<IPAndPort> secondaryReplicas, OpVirtualCommunicator<DHTKey, RetrievalResult> rvComm);
+
+  protected abstract void noPrimaryReplicasForKey(
+      DHTKey key,
+      List<IPAndPort> primaryReplicas,
+      List<IPAndPort> secondaryReplicas,
+      OpVirtualCommunicator<DHTKey, RetrievalResult> rvComm);
 
   /*
    * The below processInitialMessageGroupEntry is for a typical receive protocol
@@ -50,28 +57,31 @@ public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState> 
    * Think about moving this into a subclass that protocols pull from if they implement this behavior.
    */
   @Override
-  public void processInitialMessageGroupEntry(DHTKey key, List<IPAndPort> primaryReplicas,
-      List<IPAndPort> secondaryReplicas, OpVirtualCommunicator<DHTKey, RetrievalResult> rvComm) {
+  public void processInitialMessageGroupEntry(
+      DHTKey key,
+      List<IPAndPort> primaryReplicas,
+      List<IPAndPort> secondaryReplicas,
+      OpVirtualCommunicator<DHTKey, RetrievalResult> rvComm) {
     if (primaryReplicas.size() == 0) {
       noPrimaryReplicasForKey(key, primaryReplicas, secondaryReplicas, rvComm);
     } else {
       BaseRetrievalEntryState entryState;
-  
+
       if (debug) {
         System.out.println("forwardingMode: " + forwardingMode);
         System.out.printf("p %s s %s\n", primaryReplicas, secondaryReplicas);
       }
-  
+
       // Note that we do not handle local retrievals here - even though we could -
       // because we want to group all local retrievals so that we can
       // handle them en masse and incur only a single lock acquisition.
       // By "forwarding" them, they will be handled in bulk
-  
+
       entryState = initializeEntryState(key, primaryReplicas, secondaryReplicas);
       if (forwardingMode.forwards()) {
-        //initializeEntryState(entry, primaryReplicas, secondaryReplicas);
-        if (retrievalOperationContainer.containsLocalReplica(
-            primaryReplicas) || retrievalOperationContainer.containsLocalReplica(secondaryReplicas)) {
+        // initializeEntryState(entry, primaryReplicas, secondaryReplicas);
+        if (retrievalOperationContainer.containsLocalReplica(primaryReplicas)
+            || retrievalOperationContainer.containsLocalReplica(secondaryReplicas)) {
           if (debug) {
             System.out.println("local forward");
           }
@@ -85,20 +95,20 @@ public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState> 
         }
       } else {
         rvComm.forwardEntry(operationContainer.localIPAndPort(), key);
-              /*
-              if (retrievalOperationContainer.containsLocalReplica(primaryReplicas)) {
-                  rvComm.forwardEntry(operationContainer.localIPAndPort(), entry);
-              } else {
-                  Log.info("Unexpected non-local non-forwarded message");
-                  // should be unreachable
-              }
-              */
+        /*
+        if (retrievalOperationContainer.containsLocalReplica(primaryReplicas)) {
+            rvComm.forwardEntry(operationContainer.localIPAndPort(), entry);
+        } else {
+            Log.info("Unexpected non-local non-forwarded message");
+            // should be unreachable
+        }
+        */
       }
     }
   }
 
-  protected abstract S initializeEntryState(DHTKey entryKey, List<IPAndPort> primaryReplicas,
-      List<IPAndPort> secondaryReplicas);
+  protected abstract S initializeEntryState(
+      DHTKey entryKey, List<IPAndPort> primaryReplicas, List<IPAndPort> secondaryReplicas);
 
   protected void tryNextReplica(DHTKey key, S entryState, RetrievalVirtualCommunicator rvComm) {
     IPAndPort nextReplica;
@@ -115,7 +125,8 @@ public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState> 
     }
   }
 
-  public Set<IPAndPort> checkForInternalTimeouts(long curTimeMillis, RetrievalVirtualCommunicator rvComm) {
+  public Set<IPAndPort> checkForInternalTimeouts(
+      long curTimeMillis, RetrievalVirtualCommunicator rvComm) {
     Set<IPAndPort> timedOutReplicas;
 
     timedOutReplicas = new HashSet<>();
@@ -140,9 +151,11 @@ public abstract class BaseRetrievalOperation<S extends BaseRetrievalEntryState> 
           }
         }
       } catch (ConcurrentModificationException cme) {
-        // FUTURE - This may happen during object creation. Eliminate this possibility in the future.
+        // FUTURE - This may happen during object creation. Eliminate this possibility in the
+        // future.
         // For now, simply ignore. Next check should work.
-        log.info("Ignoring concurrent modification in BaseRetrievalOperation.checkForInternalTimeouts()");
+        log.info(
+            "Ignoring concurrent modification in BaseRetrievalOperation.checkForInternalTimeouts()");
       }
     }
     return timedOutReplicas;

@@ -19,9 +19,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 
-/**
- * AES EncrypterDecrypter
- */
+/** AES EncrypterDecrypter */
 public class AESEncrypterDecrypter implements EncrypterDecrypter {
   private final SecretKey secretKey;
   private final IvParameterSpec iv;

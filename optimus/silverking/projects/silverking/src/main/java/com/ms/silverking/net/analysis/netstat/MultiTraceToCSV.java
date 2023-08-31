@@ -73,7 +73,10 @@ public class MultiTraceToCSV {
     data.add(sampleData);
   }
 
-  private void generateStats(Map<String, Long> initialValues, StatSample statSample, Map<String, String> sampleData,
+  private void generateStats(
+      Map<String, Long> initialValues,
+      StatSample statSample,
+      Map<String, String> sampleData,
       String statDef) {
     for (Stat stat : statSample.getMatchingStats(statDef)) {
       long delta;

@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.collection.cuckoo;
 
-/**
- * Pairs the key with the value that the key maps to in the hash table.
- */
+/** Pairs the key with the value that the key maps to in the hash table. */
 class IntKeyIntEntry {
   private final int key;
   private final int value;
@@ -38,9 +36,9 @@ class IntKeyIntEntry {
 
   @Override
   public boolean equals(Object o) {
-    IntKeyIntEntry  other;
+    IntKeyIntEntry other;
 
-    other = (IntKeyIntEntry)o;
+    other = (IntKeyIntEntry) o;
     return key == other.key && value == other.value;
   }
 

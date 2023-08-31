@@ -33,7 +33,8 @@ public class DF {
    *
    */
 
-  public static Quadruple<Long, Long, Long, Integer> df(String path) throws IOException, RuntimeException {
+  public static Quadruple<Long, Long, Long, Integer> df(String path)
+      throws IOException, RuntimeException {
     return df(path, noTimeout);
   }
 
@@ -77,7 +78,7 @@ public class DF {
           freeBlocks = Long.parseLong(output[3]);
           return new Quadruple<>(totalBlocks, usedBlocks, freeBlocks, blockSize);
         } catch (RuntimeException re) {
-          log.error("",re);
+          log.error("", re);
           throw new RuntimeException("Exception parsing output: " + rawOutput, re);
         }
       }

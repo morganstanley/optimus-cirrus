@@ -12,7 +12,8 @@
 package com.ms.silverking.util;
 
 public enum Mutability {
-  Mutable, Immutable;
+  Mutable,
+  Immutable;
 
   public void ensureMutable() {
     if (this != Mutable) {

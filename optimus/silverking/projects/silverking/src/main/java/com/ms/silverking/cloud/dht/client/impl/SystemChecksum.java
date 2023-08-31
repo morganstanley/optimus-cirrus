@@ -26,8 +26,7 @@ public class SystemChecksum implements Checksum {
     invalidationChecksum = NumConversion.longToBytes(0xdeadbeef);
   }
 
-  public SystemChecksum() {
-  }
+  public SystemChecksum() {}
 
   @Override
   public void checksum(byte[] source, int position, int length, ByteBuffer dest) {
@@ -71,5 +70,4 @@ public class SystemChecksum implements Checksum {
   public static byte[] getInvalidationChecksum() {
     return invalidationChecksum;
   }
-
 }

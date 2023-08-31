@@ -36,9 +36,10 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
 
   private static Logger log = LoggerFactory.getLogger(ByteBufferNetTest.class);
 
-  private enum Mode {Server, Client}
-
-  ;
+  private enum Mode {
+    Server,
+    Client
+  };
 
   public ByteBufferNetTest(Mode mode, int port) throws IOException {
     this.mode = mode;
@@ -51,20 +52,21 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
   @Override
   public void receive(ByteBuffer[] bufferedData, BufferedDataConnection connection) {
     switch (mode) {
-    case Server:
-      serverReceive(bufferedData, connection);
-      break;
-    case Client:
-      clientReceive(bufferedData, connection);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case Server:
+        serverReceive(bufferedData, connection);
+        break;
+      case Client:
+        clientReceive(bufferedData, connection);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private void serverReceive(ByteBuffer[] bufferedData, BufferedDataConnection connection) {
     log.debug("Sending");
-    paServer.sendAsynchronous(connection.getRemoteSocketAddress(), bufferedData, uuid, this, Long.MAX_VALUE);
+    paServer.sendAsynchronous(
+        connection.getRemoteSocketAddress(), bufferedData, uuid, this, Long.MAX_VALUE);
   }
 
   private void clientReceive(ByteBuffer[] bufferedData, BufferedDataConnection connection) {
@@ -72,7 +74,7 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
     semaphore.release();
   }
 
-  private static final byte[] one = { 0x00, 0x00, 0x00, 0x01 };
+  private static final byte[] one = {0x00, 0x00, 0x00, 0x01};
 
   private ByteBuffer[] createData() {
     ByteBuffer[] data;
@@ -91,12 +93,13 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
     data = createData();
     sw = new SimpleStopwatch();
     do {
-      //UUIDBase    uuid;
+      // UUIDBase    uuid;
 
-      //uuid = new UUIDBase();
+      // uuid = new UUIDBase();
       log.debug("Sending");
       try {
-        paServer.sendAsynchronous(serverAddr.toInetSocketAddress(), data, uuid, this, Long.MAX_VALUE);
+        paServer.sendAsynchronous(
+            serverAddr.toInetSocketAddress(), data, uuid, this, Long.MAX_VALUE);
       } catch (UnknownHostException uhe) {
         throw new RuntimeException(uhe);
       }
@@ -121,7 +124,14 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
   }
 
   @Override
-  public void timeout(UUIDBase uuid, long lastPollTime, long currPollTime, int currQueueSize, long creationTime, long deadline, long currTime) {
+  public void timeout(
+      UUIDBase uuid,
+      long lastPollTime,
+      long currPollTime,
+      int currQueueSize,
+      long creationTime,
+      long deadline,
+      long currTime) {
     log.debug("Timeout: {}", uuid);
   }
 
@@ -154,32 +164,32 @@ public class ByteBufferNetTest implements BufferedDataReceiver, AsyncSendListene
         mode = Mode.valueOf(args[0]);
         durationSeconds = Double.parseDouble(args[2]);
         switch (mode) {
-        case Server:
-          if (args.length != 3) {
-            displayUsage();
-          } else {
-            ByteBufferNetTest bbnTest;
-            int port;
+          case Server:
+            if (args.length != 3) {
+              displayUsage();
+            } else {
+              ByteBufferNetTest bbnTest;
+              int port;
 
-            port = Integer.parseInt(args[1]);
-            bbnTest = new ByteBufferNetTest(mode, port);
-            ThreadUtil.sleepSeconds(durationSeconds);
-          }
-          break;
-        case Client:
-          if (args.length != 3) {
-            displayUsage();
-          } else {
-            ByteBufferNetTest bbnTest;
-            HostAndPort serverAddr;
+              port = Integer.parseInt(args[1]);
+              bbnTest = new ByteBufferNetTest(mode, port);
+              ThreadUtil.sleepSeconds(durationSeconds);
+            }
+            break;
+          case Client:
+            if (args.length != 3) {
+              displayUsage();
+            } else {
+              ByteBufferNetTest bbnTest;
+              HostAndPort serverAddr;
 
-            serverAddr = new HostAndPort(args[1]);
-            bbnTest = new ByteBufferNetTest(mode, 0);
-            bbnTest.runClient(serverAddr, durationSeconds);
-          }
-          break;
-        default:
-          throw new RuntimeException("panic");
+              serverAddr = new HostAndPort(args[1]);
+              bbnTest = new ByteBufferNetTest(mode, 0);
+              bbnTest.runClient(serverAddr, durationSeconds);
+            }
+            break;
+          default:
+            throw new RuntimeException("panic");
         }
       }
     } catch (Exception e) {

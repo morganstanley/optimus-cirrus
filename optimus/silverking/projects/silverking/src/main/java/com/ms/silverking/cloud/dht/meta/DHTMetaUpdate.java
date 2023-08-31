@@ -22,8 +22,11 @@ public class DHTMetaUpdate {
   private final InstantiatedRingTree ringTree;
   private final MetaClient metaClient;
 
-  public DHTMetaUpdate(DHTConfiguration dhtConfig, NamedRingConfiguration namedRingConfig,
-      InstantiatedRingTree ringTree, MetaClient metaClient) {
+  public DHTMetaUpdate(
+      DHTConfiguration dhtConfig,
+      NamedRingConfiguration namedRingConfig,
+      InstantiatedRingTree ringTree,
+      MetaClient metaClient) {
     this.dhtConfig = dhtConfig;
     this.namedRingConfig = namedRingConfig;
     this.ringTree = ringTree;

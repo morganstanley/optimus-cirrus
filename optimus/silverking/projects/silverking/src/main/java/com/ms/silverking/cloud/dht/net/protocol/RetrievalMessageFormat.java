@@ -37,7 +37,9 @@ public class RetrievalMessageFormat extends KeyedMessageFormat {
    * */
   public static final int getOptionsBufferLength(RetrievalOptions retrievalOptions) {
 
-    int secondaryTargetLength = NumConversion.BYTES_PER_SHORT + SecondaryTargetSerializer.serializedLength(retrievalOptions.getSecondaryTargets());
+    int secondaryTargetLength =
+        NumConversion.BYTES_PER_SHORT
+            + SecondaryTargetSerializer.serializedLength(retrievalOptions.getSecondaryTargets());
 
     int userOptionsLength = NumConversion.BYTES_PER_INT;
     if (retrievalOptions.getUserOptions() != RetrievalOptions.noUserOptions)
@@ -51,10 +53,10 @@ public class RetrievalMessageFormat extends KeyedMessageFormat {
     if (retrievalOptions.getZoneId() != null && !retrievalOptions.getZoneId().isEmpty())
       zoneIdLength += retrievalOptions.getZoneId().length();
 
-    return stDataOffset +
-           secondaryTargetLength +
-           userOptionsLength +
-           authorizationUserLength +
-           zoneIdLength;
+    return stDataOffset
+        + secondaryTargetLength
+        + userOptionsLength
+        + authorizationUserLength
+        + zoneIdLength;
   }
 }

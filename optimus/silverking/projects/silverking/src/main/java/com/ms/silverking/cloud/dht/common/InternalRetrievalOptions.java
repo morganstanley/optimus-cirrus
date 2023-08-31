@@ -24,21 +24,26 @@ import com.ms.silverking.cloud.dht.trace.SkTraceId;
 import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 
 /**
- * Adds internally useful information to RetrievalOptions that should not be exposed to
- * end users. Also removes RetrievalOptions that only apply in the client.
+ * Adds internally useful information to RetrievalOptions that should not be exposed to end users.
+ * Also removes RetrievalOptions that only apply in the client.
  */
 public class InternalRetrievalOptions implements SSRetrievalOptions {
   private final RetrievalOptions retrievalOptions;
   private final boolean verifyIntegrity;
-  private final ConsistencyProtocol cpSSToVerify; // ConsistencyProtocol to verify storage state against
+  private final ConsistencyProtocol
+      cpSSToVerify; // ConsistencyProtocol to verify storage state against
   // non-null value implies that state should be verified
   private final SkTraceId maybeTraceID;
   private final byte[] originator;
 
   public static final byte[] noOriginator = null;
 
-  public InternalRetrievalOptions(RetrievalOptions retrievalOptions, boolean verifyIntegrity,
-      ConsistencyProtocol cpSSToVerify, SkTraceId maybeTraceID, byte[] originator) {
+  public InternalRetrievalOptions(
+      RetrievalOptions retrievalOptions,
+      boolean verifyIntegrity,
+      ConsistencyProtocol cpSSToVerify,
+      SkTraceId maybeTraceID,
+      byte[] originator) {
     this.retrievalOptions = retrievalOptions;
     this.verifyIntegrity = verifyIntegrity;
     this.cpSSToVerify = cpSSToVerify;
@@ -46,14 +51,16 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
     this.originator = originator;
   }
 
-  public InternalRetrievalOptions(RetrievalOptions retrievalOptions,
-                                  boolean verifyIntegrity,
-                                  ConsistencyProtocol cpSSToVerify) {
-    this(retrievalOptions,
-         verifyIntegrity,
-         cpSSToVerify,
-         TraceIDProvider.noTraceID,
-         InternalRetrievalOptions.noOriginator);
+  public InternalRetrievalOptions(
+      RetrievalOptions retrievalOptions,
+      boolean verifyIntegrity,
+      ConsistencyProtocol cpSSToVerify) {
+    this(
+        retrievalOptions,
+        verifyIntegrity,
+        cpSSToVerify,
+        TraceIDProvider.noTraceID,
+        InternalRetrievalOptions.noOriginator);
   }
 
   public InternalRetrievalOptions(RetrievalOptions retrievalOptions, boolean verifyIntegrity) {
@@ -70,18 +77,20 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
     } else {
       RetrievalOptions retrievalOptions;
 
-      retrievalOptions = new RetrievalOptions(null,
-                                              null,
-                                              options.getRetrievalType(),
-                                              WaitMode.GET,
-                                              options.getVersionConstraint(),
-                                              null,
-                                              options.getVerifyIntegrity(),
-                                              options.getReturnInvalidations(),
-                                              null,
-                                              false,
-                                              null,
-                                              null);
+      retrievalOptions =
+          new RetrievalOptions(
+              null,
+              null,
+              options.getRetrievalType(),
+              WaitMode.GET,
+              options.getVersionConstraint(),
+              null,
+              options.getVerifyIntegrity(),
+              options.getReturnInvalidations(),
+              null,
+              false,
+              null,
+              null);
       return new InternalRetrievalOptions(retrievalOptions, options.getVerifyIntegrity());
     }
   }
@@ -174,7 +183,8 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
 
   public final InternalRetrievalOptions authorizedAs(byte[] authorizationUser) {
     RetrievalOptions opt = retrievalOptions.authorizationUser(authorizationUser);
-    return new InternalRetrievalOptions(opt, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
+    return new InternalRetrievalOptions(
+        opt, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
   }
 
   @Override
@@ -194,11 +204,12 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
    * @return
    */
   public InternalRetrievalOptions versionConstraint(VersionConstraint vc) {
-    return new InternalRetrievalOptions(retrievalOptions.versionConstraint(vc),
-                                        verifyIntegrity,
-                                        cpSSToVerify,
-                                        maybeTraceID,
-                                        originator);
+    return new InternalRetrievalOptions(
+        retrievalOptions.versionConstraint(vc),
+        verifyIntegrity,
+        cpSSToVerify,
+        maybeTraceID,
+        originator);
   }
 
   /**
@@ -208,11 +219,12 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
    * @return
    */
   public InternalRetrievalOptions waitMode(WaitMode waitMode) {
-    return new InternalRetrievalOptions(retrievalOptions.waitMode(waitMode),
-                                        verifyIntegrity,
-                                        cpSSToVerify,
-                                        maybeTraceID,
-                                        originator);
+    return new InternalRetrievalOptions(
+        retrievalOptions.waitMode(waitMode),
+        verifyIntegrity,
+        cpSSToVerify,
+        maybeTraceID,
+        originator);
   }
 
   /**
@@ -222,15 +234,18 @@ public class InternalRetrievalOptions implements SSRetrievalOptions {
    * @return
    */
   public InternalRetrievalOptions cpSSToVerify(ConsistencyProtocol cpSSToVerify) {
-    return new InternalRetrievalOptions(retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
+    return new InternalRetrievalOptions(
+        retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
   }
 
   public InternalRetrievalOptions maybeTraceID(SkTraceId maybeTraceID) {
-    return new InternalRetrievalOptions(retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
+    return new InternalRetrievalOptions(
+        retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
   }
 
   public InternalRetrievalOptions originator(byte[] originator) {
-    return new InternalRetrievalOptions(retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
+    return new InternalRetrievalOptions(
+        retrievalOptions, verifyIntegrity, cpSSToVerify, maybeTraceID, originator);
   }
 
   @Override

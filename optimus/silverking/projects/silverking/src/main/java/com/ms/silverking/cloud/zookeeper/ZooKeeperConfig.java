@@ -27,17 +27,16 @@ public class ZooKeeperConfig {
   public ZooKeeperConfig(AddrAndPort[] ensemble, String proid, String chroot) {
     Preconditions.checkNotNull(ensemble, "ensemble null");
     this.ensemble = ensemble;
-    this.proid = (proid == null
-                  ? ""
-                  : proid);
-    this.chroot = (chroot == null
-                   ? ""
-                   : chroot);
+    this.proid = (proid == null ? "" : proid);
+    this.chroot = (chroot == null ? "" : chroot);
   }
 
   @OmitGeneration
   public ZooKeeperConfig(Triple<AddrAndPort[], String, String> ensemble_proid_chroot) {
-    this(ensemble_proid_chroot.getV1(), ensemble_proid_chroot.getV2(), ensemble_proid_chroot.getV3());
+    this(
+        ensemble_proid_chroot.getV1(),
+        ensemble_proid_chroot.getV2(),
+        ensemble_proid_chroot.getV3());
   }
 
   @OmitGeneration
@@ -78,7 +77,9 @@ public class ZooKeeperConfig {
     return ensemble;
   }
 
-  public String getProid() {return proid;}
+  public String getProid() {
+    return proid;
+  }
 
   public String getChroot() {
     return chroot;
@@ -86,11 +87,7 @@ public class ZooKeeperConfig {
 
   @Override
   public String toString() {
-    return getEnsembleString() +
-           (proid.isEmpty()
-            ? ""
-            : ("@" + proid)) +
-           chroot;
+    return getEnsembleString() + (proid.isEmpty() ? "" : ("@" + proid)) + chroot;
   }
 
   public String getEnsembleString() {
@@ -108,7 +105,9 @@ public class ZooKeeperConfig {
 
   @Override
   public boolean equals(Object other) {
-    if (other == null || !(other instanceof ZooKeeperConfig)) {return false;}
+    if (other == null || !(other instanceof ZooKeeperConfig)) {
+      return false;
+    }
 
     ZooKeeperConfig otherZKC = (ZooKeeperConfig) other;
     if (ensemble.length != otherZKC.ensemble.length) {

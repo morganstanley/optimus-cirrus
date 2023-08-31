@@ -24,9 +24,7 @@ import java.util.Map;
 
 import com.ms.silverking.io.StreamParser;
 
-/**
- * Provides Linux /proc information.
- */
+/** Provides Linux /proc information. */
 public class ProcReader {
   private final StructReader<ProcessStat> reader;
 
@@ -35,26 +33,27 @@ public class ProcReader {
   private static final File procDir = new File(proc);
   private static final String memFileName = proc + "/meminfo";
 
-  public enum FilterType {INCLUSIVE, EXCLUSIVE}
+  public enum FilterType {
+    INCLUSIVE,
+    EXCLUSIVE
+  }
 
   private static final String swapFreeToken = "SwapFree:";
 
   /**
-   * Calculation of TotalFreeMem :
-   * SwapUsed = SwapTotal - SwapFree
-   * total free mem = MemFree + Cached - SwapUsed
-   * which is equivalent to:
-   * total free mem = MemFree + Cached + SwapFree - SwapTotal
+   * Calculation of TotalFreeMem : SwapUsed = SwapTotal - SwapFree total free mem = MemFree + Cached
+   * - SwapUsed which is equivalent to: total free mem = MemFree + Cached + SwapFree - SwapTotal
    * Boolean in the map represents if the value needs to be added or subtracted
    */
-  private static final Map<String, Boolean> memoryTokens = new HashMap<String, Boolean>() {
-    {
-      put("MemFree:", true);      //add to free memory total
-      put("Cached:", true);       //add to free memory total
-      put("SwapFree:", true);     //add to free memory total
-      put("SwapTotal:", false);   //subtract from free memory total
-    }
-  };
+  private static final Map<String, Boolean> memoryTokens =
+      new HashMap<String, Boolean>() {
+        {
+          put("MemFree:", true); // add to free memory total
+          put("Cached:", true); // add to free memory total
+          put("SwapFree:", true); // add to free memory total
+          put("SwapTotal:", false); // subtract from free memory total
+        }
+      };
 
   private static final String rawRAMToken = "MemFree:";
 
@@ -95,7 +94,8 @@ public class ProcReader {
     return filteredActivePIDList(activePIDList(), FilterType.EXCLUSIVE, exceptions);
   }
 
-  public List<Integer> filteredActivePIDList(List<Integer> pidList, FilterType filterType, List<String> patterns) {
+  public List<Integer> filteredActivePIDList(
+      List<Integer> pidList, FilterType filterType, List<String> patterns) {
     List<Integer> filteredPIDs;
 
     filteredPIDs = new ArrayList<>();
@@ -179,7 +179,8 @@ public class ProcReader {
         if (tokens[0].startsWith(memTok)) {
           // if a Token key in the map is associated with "false" value,
           // then we negate the parsed value:
-          freeKB = memoryTokens.get(memTok) ? Long.parseLong(tokens[1]) : -Long.parseLong(tokens[1]);
+          freeKB =
+              memoryTokens.get(memTok) ? Long.parseLong(tokens[1]) : -Long.parseLong(tokens[1]);
           break;
         }
       }
@@ -245,4 +246,3 @@ public class ProcReader {
     }
   }
 }
-

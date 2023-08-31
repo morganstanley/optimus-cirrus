@@ -42,7 +42,8 @@ public class ConvictionLimits {
     ConvictionLimits o;
 
     o = (ConvictionLimits) obj;
-    return this.totalGuiltyServers == o.totalGuiltyServers && this.guiltyServersPerHour == o.guiltyServersPerHour;
+    return this.totalGuiltyServers == o.totalGuiltyServers
+        && this.guiltyServersPerHour == o.guiltyServersPerHour;
   }
 
   @Override

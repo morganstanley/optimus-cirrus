@@ -23,8 +23,10 @@ public class MessageGroupConnectionCreator implements ConnectionCreator<MessageG
   private final QueueingConnectionLimitListener limitListener;
   private final int queueLimit;
 
-  public MessageGroupConnectionCreator(MessageGroupReceiver messageGroupReceiver,
-      QueueingConnectionLimitListener limitListener, int queueLimit) {
+  public MessageGroupConnectionCreator(
+      MessageGroupReceiver messageGroupReceiver,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit) {
     this.messageGroupReceiver = messageGroupReceiver;
     this.limitListener = limitListener;
     this.queueLimit = queueLimit;
@@ -35,10 +37,17 @@ public class MessageGroupConnectionCreator implements ConnectionCreator<MessageG
   }
 
   @Override
-  public MessageGroupConnection createConnection(SocketChannel channel,
-      SelectorController<MessageGroupConnection> selectorController, ConnectionListener connectionListener,
+  public MessageGroupConnection createConnection(
+      SocketChannel channel,
+      SelectorController<MessageGroupConnection> selectorController,
+      ConnectionListener connectionListener,
       boolean debug) {
-    return new MessageGroupConnection(channel, selectorController, connectionListener, messageGroupReceiver,
-        limitListener, queueLimit);
+    return new MessageGroupConnection(
+        channel,
+        selectorController,
+        connectionListener,
+        messageGroupReceiver,
+        limitListener,
+        queueLimit);
   }
 }

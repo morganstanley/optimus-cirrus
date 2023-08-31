@@ -11,9 +11,6 @@
  */
 package optimus.deps;
 
-import static optimus.ClassMonitorInjector.FILE_PREFIX;
-import static optimus.ClassMonitorInjector.NETWORK_PREFIX;
-
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -25,15 +22,6 @@ public class ResourceDependency implements Serializable {
     super();
     this.resourceId = resourceId;
     this.accessType = accessType;
-  }
-
-  public String getQualifiedResourceId() {
-    switch (accessType) {
-      case network:
-        return NETWORK_PREFIX + resourceId;
-      default:
-        return FILE_PREFIX + resourceId;
-    }
   }
 
   @Override

@@ -17,9 +17,9 @@ import com.ms.silverking.cloud.dht.PutOptions;
 import com.ms.silverking.util.ArrayUtil;
 
 /**
- * This class is intended to impose an ordering (indirectly) on ActivePutOperationImpl instances that are being
- * ordered for sending. We want to send earlier versions first. Other ordering is arbitrary but intended to
- * group compatible operations together.
+ * This class is intended to impose an ordering (indirectly) on ActivePutOperationImpl instances
+ * that are being ordered for sending. We want to send earlier versions first. Other ordering is
+ * arbitrary but intended to group compatible operations together.
  */
 class PutOptionsComparator implements Comparator<PutOptions> {
   public static final PutOptionsComparator instance = new PutOptionsComparator();

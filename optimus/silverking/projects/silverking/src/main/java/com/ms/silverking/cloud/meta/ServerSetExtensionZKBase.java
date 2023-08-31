@@ -27,17 +27,17 @@ import com.ms.silverking.io.IOUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.data.Stat;
 
-/**
- * Base functionality for both cloud-level, and dht instance specific Ws
- */
-public abstract class ServerSetExtensionZKBase<W extends ServerSetExtension, M extends MetaPathsBase>
+/** Base functionality for both cloud-level, and dht instance specific Ws */
+public abstract class ServerSetExtensionZKBase<
+        W extends ServerSetExtension, M extends MetaPathsBase>
     extends MetaToolModuleBase<W, M> {
   protected String worrisomesPath;
 
   private static final char delimiterChar = '\n';
   private static final String delimiterString = "" + delimiterChar;
 
-  public ServerSetExtensionZKBase(MetaClientBase<M> mc, String worrisomesPath) throws KeeperException {
+  public ServerSetExtensionZKBase(MetaClientBase<M> mc, String worrisomesPath)
+      throws KeeperException {
     super(mc, worrisomesPath);
     this.worrisomesPath = worrisomesPath;
   }
@@ -82,7 +82,8 @@ public abstract class ServerSetExtensionZKBase<W extends ServerSetExtension, M e
     writeToZK(worrisomeSet, null);
   }
 
-  public String writeToZK(W worrisomeSet, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(W worrisomeSet, MetaToolOptions options)
+      throws IOException, KeeperException {
     String vBase;
     String zkVal;
     SilverKingZooKeeperClient _zk;
@@ -90,13 +91,13 @@ public abstract class ServerSetExtensionZKBase<W extends ServerSetExtension, M e
     _zk = mc.getZooKeeper();
     zkVal = CollectionUtil.toString(worrisomeSet.getServers(), "", "", delimiterChar, "");
     vBase = _zk.createString(base + "/", zkVal, CreateMode.PERSISTENT_SEQUENTIAL);
-        /*
-        vBase = zk.createString(base +"/" , "", CreateMode.PERSISTENT_SEQUENTIAL);
-        for (String entity : worrisomeList.getServers()) {
-            //System.out.println(vBase +"/"+ entity);
-            zk.createString(vBase +"/"+ entity, entity);
-        }
-        */
+    /*
+    vBase = zk.createString(base +"/" , "", CreateMode.PERSISTENT_SEQUENTIAL);
+    for (String entity : worrisomeList.getServers()) {
+        //System.out.println(vBase +"/"+ entity);
+        zk.createString(vBase +"/"+ entity, entity);
+    }
+    */
     return null;
   }
 
@@ -126,7 +127,8 @@ public abstract class ServerSetExtensionZKBase<W extends ServerSetExtension, M e
     return esStarts;
   }
 
-  private long getStartOfCurrentWorrisome(String server, long latestWVersion, Map<String, Set<String>> worrisomeSets)
+  private long getStartOfCurrentWorrisome(
+      String server, long latestWVersion, Map<String, Set<String>> worrisomeSets)
       throws KeeperException {
     long earliestServerVersion;
     Stat stat;

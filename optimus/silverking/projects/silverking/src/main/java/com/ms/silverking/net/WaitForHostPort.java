@@ -35,7 +35,7 @@ public class WaitForHostPort {
       s.close();
       return true;
     } catch (Exception e) {
-      log.debug("",e);
+      log.debug("", e);
       return false;
     }
   }

@@ -64,21 +64,20 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
   private static Logger log = LoggerFactory.getLogger(ClientNamespace.class);
 
   protected enum OpLWTMode {
-    AllowUserThreadUsage, DisallowUserThreadUsage;
+    AllowUserThreadUsage,
+    DisallowUserThreadUsage;
 
     public int getDirectCallDepth() {
       switch (this) {
-      case AllowUserThreadUsage:
-        return Integer.MAX_VALUE;
-      case DisallowUserThreadUsage:
-        return 0;
-      default:
-        throw new RuntimeException("panic");
+        case AllowUserThreadUsage:
+          return Integer.MAX_VALUE;
+        case DisallowUserThreadUsage:
+          return 0;
+        default:
+          throw new RuntimeException("panic");
       }
     }
-  }
-
-  ;
+  };
 
   /*
    * The current implementation allows puts which are doomed to fail to continue.
@@ -93,9 +92,15 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
    * Seems like put/retrieve should use similar approach more.
    */
 
-  ClientNamespace(DHTSessionImpl session, String name, NamespaceOptions nsOptions,
-      SerializationRegistry serializationRegistry, AbsMillisTimeSource absMillisTimeSource, AddrAndPort server,
-      Namespace parent, NamespaceLinkMeta nsLinkMeta) {
+  ClientNamespace(
+      DHTSessionImpl session,
+      String name,
+      NamespaceOptions nsOptions,
+      SerializationRegistry serializationRegistry,
+      AbsMillisTimeSource absMillisTimeSource,
+      AddrAndPort server,
+      Namespace parent,
+      NamespaceLinkMeta nsLinkMeta) {
     MessageGroupBase mgBase;
 
     mgBase = session.getMessageGroupBase();
@@ -112,7 +117,8 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
     originator = mgBase.getMyID();
     this.parent = parent;
     this.nsLinkMeta = nsLinkMeta;
-    if (nsOptions.getVersionMode() != NamespaceVersionMode.SINGLE_VERSION || !nsOptions.getAllowLinks()) {
+    if (nsOptions.getVersionMode() != NamespaceVersionMode.SINGLE_VERSION
+        || !nsOptions.getAllowLinks()) {
       assert nsLinkMeta == null;
     }
   }
@@ -137,33 +143,42 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
   }
 
   @Override
-  public <K, V> NamespacePerspectiveOptions<K, V> getDefaultNSPOptions(Class<K> keyClass, Class<V> valueClass) {
+  public <K, V> NamespacePerspectiveOptions<K, V> getDefaultNSPOptions(
+      Class<K> keyClass, Class<V> valueClass) {
     VersionProvider versionProvider;
 
     // FUTURE - Currently we intercept request for NS-supplied versions and provide them here.
     // We may want to provide them on the server. Code for this is already in ActiveProxyPut.
     switch (nsOptions.getVersionMode()) {
-    case SINGLE_VERSION:
-      // SINGLE_VERSION internally expects the version number to be abs millis
-      versionProvider = new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource);
-      break;
-    case CLIENT_SPECIFIED:
-      versionProvider = new ConstantVersionProvider(SystemTimeUtil.skSystemTimeSource.absTimeMillis());
-      break;
-    case SYSTEM_TIME_MILLIS:
-      versionProvider = new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource);
-      break;
-    case SEQUENTIAL: // TODO (OPTIMUS-0000): for now treat sequential as nanos
-    case SYSTEM_TIME_NANOS:
-      versionProvider = new AbsNanosVersionProvider(SystemTimeUtil.skSystemTimeSource);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case SINGLE_VERSION:
+        // SINGLE_VERSION internally expects the version number to be abs millis
+        versionProvider = new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource);
+        break;
+      case CLIENT_SPECIFIED:
+        versionProvider =
+            new ConstantVersionProvider(SystemTimeUtil.skSystemTimeSource.absTimeMillis());
+        break;
+      case SYSTEM_TIME_MILLIS:
+        versionProvider = new AbsMillisVersionProvider(SystemTimeUtil.skSystemTimeSource);
+        break;
+      case SEQUENTIAL: // TODO (OPTIMUS-0000): for now treat sequential as nanos
+      case SYSTEM_TIME_NANOS:
+        versionProvider = new AbsNanosVersionProvider(SystemTimeUtil.skSystemTimeSource);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
 
-    return new NamespacePerspectiveOptions<K, V>(keyClass, valueClass, KeyDigestType.MD5, // FUTURE - centralize
-        nsOptions.getDefaultPutOptions(), nsOptions.getDefaultInvalidationOptions(), nsOptions.getDefaultGetOptions(),
-        nsOptions.getDefaultWaitOptions(), versionProvider, null);
+    return new NamespacePerspectiveOptions<K, V>(
+        keyClass,
+        valueClass,
+        KeyDigestType.MD5, // FUTURE - centralize
+        nsOptions.getDefaultPutOptions(),
+        nsOptions.getDefaultInvalidationOptions(),
+        nsOptions.getDefaultGetOptions(),
+        nsOptions.getDefaultWaitOptions(),
+        versionProvider,
+        null);
   }
 
   DHTSessionImpl getSession() {
@@ -208,19 +223,20 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
 
   // operation
 
-  public <K, V> void startOperation(AsyncOperationImpl opImpl, OpLWTMode opLWTMode) throws SessionClosedException {
+  public <K, V> void startOperation(AsyncOperationImpl opImpl, OpLWTMode opLWTMode)
+      throws SessionClosedException {
     session.assertOpen();
     validateOpOptions(opImpl.operation.options);
     switch (opImpl.getType()) {
-    case RETRIEVE:
-      retrievalSender.addWorkForGrouping(opImpl, opLWTMode.getDirectCallDepth());
-      break;
-    case PUT:
-      putSender.addWorkForGrouping(opImpl, opLWTMode.getDirectCallDepth());
-      break;
-    default:
-      opSender.addWorkForGrouping(opImpl, 0);
-      break; // TODO (OPTIMUS-0000): don't group
+      case RETRIEVE:
+        retrievalSender.addWorkForGrouping(opImpl, opLWTMode.getDirectCallDepth());
+        break;
+      case PUT:
+        putSender.addWorkForGrouping(opImpl, opLWTMode.getDirectCallDepth());
+        break;
+      default:
+        opSender.addWorkForGrouping(opImpl, 0);
+        break; // TODO (OPTIMUS-0000): don't group
     }
   }
 
@@ -230,40 +246,41 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
     if (log.isDebugEnabled()) {
       log.debug("  *** Received: {}", message);
       message.displayForDebug(false);
-      //message.displayForDebug(true);
+      // message.displayForDebug(true);
     }
     switch (message.getMessageType()) {
-    case PUT_RESPONSE:
-    case PUT_RESPONSE_TRACE:
-      activeOpTable.getActivePutListeners().receivedPutResponse(message);
-      break;
-    case RETRIEVE_RESPONSE:
-    case RETRIEVE_RESPONSE_TRACE:
-      //activeOpTable.receivedRetrievalResponse(message);
-      activeOpTable.getActiveRetrievalListeners().receivedRetrievalResponse(message);
-      break;
-    case OP_RESPONSE:
-      activeOpTable.getActiveVersionedBasicOperations().receivedOpResponse(message);
-      break;
-    case ERROR_RESPONSE:
-      //Check if there is any active listener for the ID
-      if (activeOpTable.getActiveRetrievalListeners().isResponsibleFor(message.getUUID())) {
-        activeOpTable.getActiveRetrievalListeners().receivedRetrievalResponse(message);
-      } else if (activeOpTable.getActivePutListeners().isResponsibleFor(message.getUUID())) {
+      case PUT_RESPONSE:
+      case PUT_RESPONSE_TRACE:
         activeOpTable.getActivePutListeners().receivedPutResponse(message);
-      }
-      break;
-    case CHECKSUM_TREE: // FUTURE - for testing, consider removing
-      activeOpTable.receivedChecksumTree(message); // FUTURE - for testing, consider removing
-      break;
-    default:
-      throw new RuntimeException("Unexpected message type: " + message.getMessageType());
+        break;
+      case RETRIEVE_RESPONSE:
+      case RETRIEVE_RESPONSE_TRACE:
+        // activeOpTable.receivedRetrievalResponse(message);
+        activeOpTable.getActiveRetrievalListeners().receivedRetrievalResponse(message);
+        break;
+      case OP_RESPONSE:
+        activeOpTable.getActiveVersionedBasicOperations().receivedOpResponse(message);
+        break;
+      case ERROR_RESPONSE:
+        // Check if there is any active listener for the ID
+        if (activeOpTable.getActiveRetrievalListeners().isResponsibleFor(message.getUUID())) {
+          activeOpTable.getActiveRetrievalListeners().receivedRetrievalResponse(message);
+        } else if (activeOpTable.getActivePutListeners().isResponsibleFor(message.getUUID())) {
+          activeOpTable.getActivePutListeners().receivedPutResponse(message);
+        }
+        break;
+      case CHECKSUM_TREE: // FUTURE - for testing, consider removing
+        activeOpTable.receivedChecksumTree(message); // FUTURE - for testing, consider removing
+        break;
+      default:
+        throw new RuntimeException("Unexpected message type: " + message.getMessageType());
     }
   }
 
   void checkForTimeouts(long curTimeMillis, boolean exclusionSetHasChanged) {
     log.debug("checkForTimeouts: {}", name);
-    activeOpTable.checkForTimeouts(curTimeMillis, putSender, retrievalSender, exclusionSetHasChanged);
+    activeOpTable.checkForTimeouts(
+        curTimeMillis, putSender, retrievalSender, exclusionSetHasChanged);
   }
 
   List<AsyncOperationImpl> getActiveAsyncOperations() {
@@ -273,14 +290,18 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
   @Override
   public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncPerspective(
       NamespacePerspectiveOptions<K, V> nspOptions) {
-    return new AsynchronousNamespacePerspectiveImpl<K, V>(this, name,
-        new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
+    return new AsynchronousNamespacePerspectiveImpl<K, V>(
+        this, name, new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
   }
 
   @Override
-  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncPerspective(Class<K> keyClass, Class<V> valueClass) {
-    return new AsynchronousNamespacePerspectiveImpl<K, V>(this, name,
-        new NamespacePerspectiveOptionsImpl<>(getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
+  public <K, V> AsynchronousNamespacePerspective<K, V> openAsyncPerspective(
+      Class<K> keyClass, Class<V> valueClass) {
+    return new AsynchronousNamespacePerspectiveImpl<K, V>(
+        this,
+        name,
+        new NamespacePerspectiveOptionsImpl<>(
+            getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
   }
 
   @Override
@@ -291,14 +312,18 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
   @Override
   public <K, V> SynchronousNamespacePerspective<K, V> openSyncPerspective(
       NamespacePerspectiveOptions<K, V> nspOptions) {
-    return new SynchronousNamespacePerspectiveImpl<K, V>(this, name,
-        new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
+    return new SynchronousNamespacePerspectiveImpl<K, V>(
+        this, name, new NamespacePerspectiveOptionsImpl<>(nspOptions, serializationRegistry));
   }
 
   @Override
-  public <K, V> SynchronousNamespacePerspective<K, V> openSyncPerspective(Class<K> keyClass, Class<V> valueClass) {
-    return new SynchronousNamespacePerspectiveImpl<K, V>(this, name,
-        new NamespacePerspectiveOptionsImpl<>(getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
+  public <K, V> SynchronousNamespacePerspective<K, V> openSyncPerspective(
+      Class<K> keyClass, Class<V> valueClass) {
+    return new SynchronousNamespacePerspectiveImpl<K, V>(
+        this,
+        name,
+        new NamespacePerspectiveOptionsImpl<>(
+            getDefaultNSPOptions(keyClass, valueClass), serializationRegistry));
   }
 
   @Override
@@ -320,32 +345,37 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
 
     creationTime = SystemTimeUtil.skSystemTimeSource.absTimeNanos();
     switch (nsOptions.getVersionMode()) {
-    case SINGLE_VERSION:
-      minVersion = 0;
-      break;
-    case CLIENT_SPECIFIED:
-      throw new RuntimeException(
-          "Namespace.clone() must be provided a version " + "for version mode of CLIENT_SPECIFIED");
-    case SEQUENTIAL:
-      throw new RuntimeException("Namespace.clone() not supported for version mode of SEQUENTIAL");
-    case SYSTEM_TIME_MILLIS:
-      minVersion = SystemTimeUtil.skSystemTimeSource.absTimeMillis();
-      break;
-    case SYSTEM_TIME_NANOS:
-      minVersion = SystemTimeUtil.skSystemTimeSource.absTimeNanos();
-      break;
-    default:
-      throw new RuntimeException("Panic");
+      case SINGLE_VERSION:
+        minVersion = 0;
+        break;
+      case CLIENT_SPECIFIED:
+        throw new RuntimeException(
+            "Namespace.clone() must be provided a version "
+                + "for version mode of CLIENT_SPECIFIED");
+      case SEQUENTIAL:
+        throw new RuntimeException(
+            "Namespace.clone() not supported for version mode of SEQUENTIAL");
+      case SYSTEM_TIME_MILLIS:
+        minVersion = SystemTimeUtil.skSystemTimeSource.absTimeMillis();
+        break;
+      case SYSTEM_TIME_NANOS:
+        minVersion = SystemTimeUtil.skSystemTimeSource.absTimeNanos();
+        break;
+      default:
+        throw new RuntimeException("Panic");
     }
-    return session.createNamespace(childName,
+    return session.createNamespace(
+        childName,
         new NamespaceProperties(nsOptions, childName, this.name, minVersion, creationTime));
   }
 
   @Override
-  public Namespace modifyNamespace(NamespaceOptions nsOptions) throws NamespaceModificationException {
+  public Namespace modifyNamespace(NamespaceOptions nsOptions)
+      throws NamespaceModificationException {
     if (parent != null) {
       // TODO (OPTIMUS-0000): for now we just disallow the modification from cloned namespace
-      throw new NamespaceModificationException("modification from cloned namespace is not currently supported");
+      throw new NamespaceModificationException(
+          "modification from cloned namespace is not currently supported");
     } else {
       return session.modifyNamespace(name, nsOptions);
     }
@@ -357,19 +387,22 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
 
     creationTime = SystemTimeUtil.skSystemTimeSource.absTimeNanos();
     switch (nsOptions.getVersionMode()) {
-    case CLIENT_SPECIFIED:
-      break;
-    case SEQUENTIAL:
-      throw new RuntimeException("Namespace.clone() not supported for version mode of SEQUENTIAL");
-    case SINGLE_VERSION:
-    case SYSTEM_TIME_MILLIS:
-    case SYSTEM_TIME_NANOS:
-      throw new RuntimeException(
-          "Namespace.clone() can only be supplied a version " + "for a version mode of CLIENT_SPECIFIED");
-    default:
-      throw new RuntimeException("Panic");
+      case CLIENT_SPECIFIED:
+        break;
+      case SEQUENTIAL:
+        throw new RuntimeException(
+            "Namespace.clone() not supported for version mode of SEQUENTIAL");
+      case SINGLE_VERSION:
+      case SYSTEM_TIME_MILLIS:
+      case SYSTEM_TIME_NANOS:
+        throw new RuntimeException(
+            "Namespace.clone() can only be supplied a version "
+                + "for a version mode of CLIENT_SPECIFIED");
+      default:
+        throw new RuntimeException("Panic");
     }
-    return session.createNamespace(childName,
+    return session.createNamespace(
+        childName,
         new NamespaceProperties(nsOptions, childName, this.name, minVersion, creationTime));
   }
 
@@ -387,32 +420,35 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
     }
 
     if (!parent.getOptions().equals(nsOptions)) {
-      throw new NamespaceLinkException("Parent and child options differ:\n" + parent.getOptions() + "\n" + nsOptions);
+      throw new NamespaceLinkException(
+          "Parent and child options differ:\n" + parent.getOptions() + "\n" + nsOptions);
     }
 
     if (nsOptions.getVersionMode() != NamespaceVersionMode.SINGLE_VERSION) {
-      throw new NamespaceLinkException("Namespace.linkTo() only supported for write-once namespaces");
+      throw new NamespaceLinkException(
+          "Namespace.linkTo() only supported for write-once namespaces");
     } else {
       nsLinkMeta.createLink(name, parentName);
     }
   }
 
   public void validateOpOptions(OperationOptions opOptions) {
-        /*  Case(1) session.isServerTraceEnabled() == true:
-                Server supports both old protocol and new trace protocol
-                => So let it pass the check
-            Case(2) session.isServerTraceEnabled() == false:
-                Server could:
-                   (2.1) supports both old protocol and new trace protocol but has trace feature disabled
-                   (2.2) only supports old protocol (run in old SK version)
-               => So we let this clientside check fail if request will use new protocol (i.e. has TraceID)
-                  as server will ignore the traceID (case-2.10) or even crash and go down (case-2.2)
-         */
+    /*  Case(1) session.isServerTraceEnabled() == true:
+           Server supports both old protocol and new trace protocol
+           => So let it pass the check
+       Case(2) session.isServerTraceEnabled() == false:
+           Server could:
+              (2.1) supports both old protocol and new trace protocol but has trace feature disabled
+              (2.2) only supports old protocol (run in old SK version)
+          => So we let this clientside check fail if request will use new protocol (i.e. has TraceID)
+             as server will ignore the traceID (case-2.10) or even crash and go down (case-2.2)
+    */
     if (opOptions.hasTraceID() && !session.isServerTraceEnabled()) {
-      throw new IllegalArgumentException(String.format(
-          "Server[%s] has trace feature disabled or running in a old version, which doesn't expect to have traceID in" +
-              " the opOptions (traceIDProvider=[%s])",
-          session.getDhtConfig().toString(), opOptions.getTraceIDProvider().toString()));
+      throw new IllegalArgumentException(
+          String.format(
+              "Server[%s] has trace feature disabled or running in a old version, which doesn't expect to have traceID in"
+                  + " the opOptions (traceIDProvider=[%s])",
+              session.getDhtConfig().toString(), opOptions.getTraceIDProvider().toString()));
     }
   }
 
@@ -420,9 +456,12 @@ public class ClientNamespace implements QueueingConnectionLimitListener, Namespa
     OptionsValidator.validatePutOptions(putOptions);
     if (nsOptions.getMaxValueSize() > nsOptions.getSegmentSize()) {
       // Values > a segment are allowed. Ensure that fragmentation is set to a sane value
-      if (putOptions.getFragmentationThreshold() > nsOptions.getSegmentSize() - DHTConstants.segmentSafetyMargin) {
+      if (putOptions.getFragmentationThreshold()
+          > nsOptions.getSegmentSize() - DHTConstants.segmentSafetyMargin) {
         throw new IllegalArgumentException(
-            "Values larger than a segment are allowed, " + "but putOptions.getFragmentationThreshold() > nsOptions" + ".getSegmentSize() - DHTConstants.segmentSafetyMargin");
+            "Values larger than a segment are allowed, "
+                + "but putOptions.getFragmentationThreshold() > nsOptions"
+                + ".getSegmentSize() - DHTConstants.segmentSafetyMargin");
       }
     } else {
       // Values can all fit in one segment

@@ -38,11 +38,11 @@ public class ServerSetExtensionZK<M extends MetaPaths> extends MetaToolModuleBas
   @Override
   public ServerSet readFromZK(long version, MetaToolOptions options) throws KeeperException {
     String vBase;
-    //List<String>    nodes;
+    // List<String>    nodes;
     String[] nodes;
 
     vBase = getVBase(version);
-    //nodes = zk.getChildren(vBase);
+    // nodes = zk.getChildren(vBase);
     nodes = zk.getString(vBase).split(delimiterString);
     return new ServerSet(ImmutableSet.copyOf(nodes), version);
   }
@@ -53,18 +53,19 @@ public class ServerSetExtensionZK<M extends MetaPaths> extends MetaToolModuleBas
   }
 
   @Override
-  public String writeToZK(ServerSet serverSet, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(ServerSet serverSet, MetaToolOptions options)
+      throws IOException, KeeperException {
     String vBase;
     String zkVal;
 
     zkVal = CollectionUtil.toString(serverSet.getServers(), "", "", delimiterChar, "");
     vBase = zk.createString(base + "/", zkVal, CreateMode.PERSISTENT_SEQUENTIAL);
-        /*
-        for (String entity : serverSet.getServers()) {
-            //System.out.println(vBase +"/"+ entity);
-            zk.createString(vBase +"/"+ entity, entity);
-        }
-        */
+    /*
+    for (String entity : serverSet.getServers()) {
+        //System.out.println(vBase +"/"+ entity);
+        zk.createString(vBase +"/"+ entity, entity);
+    }
+    */
     return null;
   }
 

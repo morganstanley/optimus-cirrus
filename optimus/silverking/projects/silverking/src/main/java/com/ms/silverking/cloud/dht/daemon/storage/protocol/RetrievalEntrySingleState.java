@@ -24,11 +24,12 @@ class RetrievalEntrySingleState extends BaseRetrievalEntryState {
   private final List<IPAndPort> primaryReplicas;
   private final List<IPAndPort> secondaryReplicas;
   private boolean complete;
-  private OpResult  presentResult;
+  private OpResult presentResult;
   private short replicaIndex;
   private short prevReplicaIndex;
   // 0...(secondaryReplicas.size() - 1) ==> secondary
-  // secondaryReplicas.size()...((secondaryReplicas.size() + (primaryReplicas.size() - 1))) ==> primary
+  // secondaryReplicas.size()...((secondaryReplicas.size() + (primaryReplicas.size() - 1))) ==>
+  // primary
 
   private static final boolean verifyReplicas = false;
 
@@ -72,7 +73,7 @@ class RetrievalEntrySingleState extends BaseRetrievalEntryState {
       return primaryReplicas.contains(replica) || secondaryReplicas.contains(replica);
     }
   }
-  
+
   private boolean currentReplicaIsSecondary() {
     return replicaIndex < secondaryReplicas.size();
   }
@@ -118,7 +119,8 @@ class RetrievalEntrySingleState extends BaseRetrievalEntryState {
 
     // Replicas with index 0...secondaryReplicas.size() - 1 are secondary replicas
     // Replicas with index
-    // secondaryReplicas.size()...primaryReplicas.size() + secondaryReplicas.size() - 1 are primary replicas
+    // secondaryReplicas.size()...primaryReplicas.size() + secondaryReplicas.size() - 1 are primary
+    // replicas
 
     prevReplicaIndex = replicaIndex;
     if (replicaIndex < 0) {
@@ -151,51 +153,54 @@ class RetrievalEntrySingleState extends BaseRetrievalEntryState {
   OpResult getPresentResult() {
     return presentResult;
   }
-  
+
   void updatePresentResult(OpResult candidatePresentResult) {
     switch (candidatePresentResult) {
-    case REPLICA_EXCLUDED:
-      if (presentResult == OpResult.INCOMPLETE) {
-        presentResult = OpResult.REPLICA_EXCLUDED;
-      }
-      break;
-    case CORRUPT:
-      if (presentResult == OpResult.INCOMPLETE || presentResult == OpResult.NO_SUCH_VALUE || presentResult == OpResult.REPLICA_EXCLUDED) {
-        presentResult = OpResult.CORRUPT;
-      }
-      break;
-    case NO_SUCH_VALUE:
-      if (presentResult == OpResult.CORRUPT) {
+      case REPLICA_EXCLUDED:
+        if (presentResult == OpResult.INCOMPLETE) {
+          presentResult = OpResult.REPLICA_EXCLUDED;
+        }
         break;
-      } else {
-        // fall through to SUCCEEDED case
-      }
-    case SUCCEEDED:
-      if (presentResult == OpResult.INCOMPLETE) {
-        presentResult = candidatePresentResult;
-      } else {
-        if (presentResult != candidatePresentResult) {
-          if (complete) {
-            log.info("Ignoring multiple completion {} != {}", presentResult, candidatePresentResult);
-          } else {
-            presentResult = candidatePresentResult;
+      case CORRUPT:
+        if (presentResult == OpResult.INCOMPLETE
+            || presentResult == OpResult.NO_SUCH_VALUE
+            || presentResult == OpResult.REPLICA_EXCLUDED) {
+          presentResult = OpResult.CORRUPT;
+        }
+        break;
+      case NO_SUCH_VALUE:
+        if (presentResult == OpResult.CORRUPT) {
+          break;
+        } else {
+          // fall through to SUCCEEDED case
+        }
+      case SUCCEEDED:
+        if (presentResult == OpResult.INCOMPLETE) {
+          presentResult = candidatePresentResult;
+        } else {
+          if (presentResult != candidatePresentResult) {
+            if (complete) {
+              log.info(
+                  "Ignoring multiple completion {} != {}", presentResult, candidatePresentResult);
+            } else {
+              presentResult = candidatePresentResult;
+            }
           }
         }
-      }
-      break;
-    default: 
-      throw new RuntimeException("Unexpected candidatePresentResult: "+ candidatePresentResult);
+        break;
+      default:
+        throw new RuntimeException("Unexpected candidatePresentResult: " + candidatePresentResult);
     }
     this.presentResult = candidatePresentResult;
   }
-  
+
   public void setComplete() {
     this.complete = true;
   }
 
   /**
-   * Return where or not this entry has a complete state.
-   * This is not an indication of whether or not the proxy or client operation is complete.
+   * Return where or not this entry has a complete state. This is not an indication of whether or
+   * not the proxy or client operation is complete.
    */
   @Override
   public boolean isComplete() {
@@ -204,6 +209,8 @@ class RetrievalEntrySingleState extends BaseRetrievalEntryState {
 
   @Override
   public String toString() {
-    return primaryReplicas.toString() + ":" + secondaryReplicas.toString();// + ":" + state.toString();
+    return primaryReplicas.toString()
+        + ":"
+        + secondaryReplicas.toString(); // + ":" + state.toString();
   }
 }

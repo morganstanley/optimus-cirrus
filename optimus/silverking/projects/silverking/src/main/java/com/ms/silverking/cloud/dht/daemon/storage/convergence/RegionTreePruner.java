@@ -22,10 +22,7 @@ import com.ms.silverking.cloud.ring.RingRegion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Prunes a complete region tree to create a new tree pertaining
- * to a sub region.
- */
+/** Prunes a complete region tree to create a new tree pertaining to a sub region. */
 public class RegionTreePruner {
 
   private static Logger log = LoggerFactory.getLogger(RegionTreePruner.class);
@@ -38,14 +35,19 @@ public class RegionTreePruner {
       log.debug("root.getRegion == pruneRegion");
       return root;
     } else {
-      if (RingRegion.intersectionType(root.getRegion(), pruneRegion) != IntersectionType.aSubsumesB) {
+      if (RingRegion.intersectionType(root.getRegion(), pruneRegion)
+          != IntersectionType.aSubsumesB) {
         throw new RuntimeException("Invalid pruneRegion");
       } else {
         ChecksumNode prunedRoot;
 
         prunedRoot = _prune(root, pruneRegion);
         if (log.isDebugEnabled()) {
-          log.debug("out prune {} {} {}", prunedRoot.getRegion(), pruneRegion, prunedRoot.estimatedKeys());
+          log.debug(
+              "out prune {} {} {}",
+              prunedRoot.getRegion(),
+              pruneRegion,
+              prunedRoot.estimatedKeys());
         }
         return prunedRoot;
       }
@@ -90,7 +92,7 @@ public class RegionTreePruner {
   private static ChecksumNode pruneLeafNode(LeafChecksumNode node, RingRegion pruneRegion) {
     IntersectionResult iResult;
     RingRegion oRegion;
-    //long[]                _kvc;
+    // long[]                _kvc;
     List<KeyAndVersionChecksum> kvcList;
     List<KeyAndVersionChecksum> prunedKVCList;
 
@@ -107,7 +109,7 @@ public class RegionTreePruner {
 
     oRegion = iResult.getOverlapping().get(0);
 
-    //_kvc = node.getKeyAndVersionChecksumsAsArray();
+    // _kvc = node.getKeyAndVersionChecksumsAsArray();
 
     // FUTURE - improve the efficiency of this approach
     // This is n log n, and each step is heavy

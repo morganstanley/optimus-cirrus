@@ -36,9 +36,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Ring implementation.
- * Structure is immutable after constructed, but may mutate during construction.
- * State may mutate
+ * Ring implementation. Structure is immutable after constructed, but may mutate during
+ * construction. State may mutate
  */
 public class SingleRing extends LongNavigableMapRing<RingEntry> implements TopologyRing {
   private final long version;
@@ -74,10 +73,10 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
     super.freeze();
   }
 
-  //private void freeze(Map<String, Double> weights) {
+  // private void freeze(Map<String, Double> weights) {
   //    this.weights = weights;
   //    super.freeze();
-  //}
+  // }
 
   @Override
   public void freeze(WeightSpecifications weightSpecs) {
@@ -91,9 +90,7 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
     super.freeze();
   }
 
-  /**
-   * Create a copy of this ring.
-   */
+  /** Create a copy of this ring. */
   @Override
   public SingleRing clone(Mutability mutability) {
     SingleRing newRing;
@@ -222,7 +219,8 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
     ensureImmutable();
     total = BigDecimal.ZERO;
     for (Node owner : getMemberNodes(OwnerQueryMode.All)) {
-      total = total.add(new BigDecimal(weights.get(owner.getIDString())), LongRingspace.mathContext);
+      total =
+          total.add(new BigDecimal(weights.get(owner.getIDString())), LongRingspace.mathContext);
     }
     return total;
   }
@@ -233,13 +231,15 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
   }
 
   @Override
-  public Collection<RingRegion> getNodeRegionsFiltered(Node node, Node filterNode, OwnerQueryMode oqm) {
+  public Collection<RingRegion> getNodeRegionsFiltered(
+      Node node, Node filterNode, OwnerQueryMode oqm) {
     Set<RingRegion> regionSet;
 
     ensureImmutable();
     regionSet = new HashSet<>();
     for (RingEntry entry : getMembers()) {
-      if (entry.containsOwner(node, oqm) && (filterNode == null || !entry.containsOwner(filterNode, oqm))) {
+      if (entry.containsOwner(node, oqm)
+          && (filterNode == null || !entry.containsOwner(filterNode, oqm))) {
         regionSet.add(entry.getRegion());
       }
     }
@@ -247,8 +247,8 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
   }
 
   @Override
-  public List<RingRegion> getNodeRegionsSorted(Node node, Comparator<RingRegion> comparator, Node filterNode,
-      OwnerQueryMode oqm) {
+  public List<RingRegion> getNodeRegionsSorted(
+      Node node, Comparator<RingRegion> comparator, Node filterNode, OwnerQueryMode oqm) {
     List<RingRegion> regionsList;
 
     ensureImmutable();
@@ -296,9 +296,9 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
       RingEntry nextEntry;
 
       nextEntry = ringEntriesList.get(index);
-      if (curEntry.getRegion().isContiguousWith(nextEntry.getRegion()) && curEntry.getPrimaryOwnersSet().equals(
-          nextEntry.getPrimaryOwnersSet()) && curEntry.getSecondaryOwnersSet().equals(
-          nextEntry.getSecondaryOwnersSet())) {
+      if (curEntry.getRegion().isContiguousWith(nextEntry.getRegion())
+          && curEntry.getPrimaryOwnersSet().equals(nextEntry.getPrimaryOwnersSet())
+          && curEntry.getSecondaryOwnersSet().equals(nextEntry.getSecondaryOwnersSet())) {
         curEntry = curEntry.merge(nextEntry);
       } else {
         simplifiedTopology.put(curEntry.getRegion().getEnd(), curEntry);
@@ -311,8 +311,8 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
   }
 
   /**
-   * Mutates this ring to move the specified region from the oldOwner to the newOwner.
-   * The specified region must be a subregion of an existing region owned by the oldOwner.
+   * Mutates this ring to move the specified region from the oldOwner to the newOwner. The specified
+   * region must be a subregion of an existing region owned by the oldOwner.
    */
   @Override
   public void releaseToNode(RingRegion region, Node oldOwner, Node newOwner) {
@@ -321,12 +321,13 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
     RingRegion oldRegion;
 
     ensureMutable();
-    log.debug("region: {}" , region);
+    log.debug("region: {}", region);
     oldEntry = removeOwner(region.getEnd());
     oldRegion = oldEntry.getRegion();
-    log.debug("oldRegion: {}" , oldRegion);
+    log.debug("oldRegion: {}", oldRegion);
     if (region.getSize() > oldRegion.getSize()) {
-      throw new RuntimeException("region.getSize() > oldRegion.getSize() " + oldRegion + " " + region);
+      throw new RuntimeException(
+          "region.getSize() > oldRegion.getSize() " + oldRegion + " " + region);
     }
     if (oldRegion.getEnd() == region.getEnd()) {
       if (oldRegion.getStart() == region.getStart()) {
@@ -336,21 +337,36 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
       } else {
         // region is the end of the old region
         log.debug("region is the end of the old region");
-        addEntry(new RingEntry(oldEntry.getOwnersSetWithReplacement(oldOwner, newOwner, OwnerQueryMode.Primary), region,
-            oldEntry.getMinPrimaryUnderFailure()));
+        addEntry(
+            new RingEntry(
+                oldEntry.getOwnersSetWithReplacement(oldOwner, newOwner, OwnerQueryMode.Primary),
+                region,
+                oldEntry.getMinPrimaryUnderFailure()));
 
-        otherRegion = new RingRegion(oldRegion.getStart(), LongRingspace.prevPoint(region.getStart()));
-        addEntry(new RingEntry(oldEntry.getPrimaryOwnersList(), otherRegion, oldEntry.getMinPrimaryUnderFailure()));
+        otherRegion =
+            new RingRegion(oldRegion.getStart(), LongRingspace.prevPoint(region.getStart()));
+        addEntry(
+            new RingEntry(
+                oldEntry.getPrimaryOwnersList(),
+                otherRegion,
+                oldEntry.getMinPrimaryUnderFailure()));
       }
     } else {
       if (oldRegion.getStart() == region.getStart()) {
         // region is the start of the old region
         log.debug("region is the start of the old region");
         otherRegion = new RingRegion(LongRingspace.nextPoint(region.getEnd()), oldRegion.getEnd());
-        addEntry(new RingEntry(oldEntry.getPrimaryOwnersList(), otherRegion, oldEntry.getMinPrimaryUnderFailure()));
+        addEntry(
+            new RingEntry(
+                oldEntry.getPrimaryOwnersList(),
+                otherRegion,
+                oldEntry.getMinPrimaryUnderFailure()));
 
-        addEntry(new RingEntry(oldEntry.getOwnersSetWithReplacement(oldOwner, newOwner, OwnerQueryMode.Primary), region,
-            oldEntry.getMinPrimaryUnderFailure()));
+        addEntry(
+            new RingEntry(
+                oldEntry.getOwnersSetWithReplacement(oldOwner, newOwner, OwnerQueryMode.Primary),
+                region,
+                oldEntry.getMinPrimaryUnderFailure()));
       } else {
         throw new RuntimeException("invalid regions: " + oldRegion + "\t" + region);
       }
@@ -376,39 +392,39 @@ public class SingleRing extends LongNavigableMapRing<RingEntry> implements Topol
     Collections.sort(regions, RingRegion.positionComparator);
     return regions;
   }
-    
-    /*
-    public void setPrimaryStoragePolicy(String nodeID, String storagePolicyName) {
-        setStoragePolicy(primaryStoragePolicyNames, nodeID, storagePolicyName);
-    }
 
-    public void setSecondaryStoragePolicy(String nodeID, String storagePolicyName) {
-        setStoragePolicy(secondaryStoragePolicyNames, nodeID, storagePolicyName);
-    }
+  /*
+  public void setPrimaryStoragePolicy(String nodeID, String storagePolicyName) {
+      setStoragePolicy(primaryStoragePolicyNames, nodeID, storagePolicyName);
+  }
 
-    private final Map<String,String>   primaryStoragePolicyNames;
-    private final Map<String,String>   secondaryStoragePolicyNames;
-    private void setStoragePolicy(Map<String,String> map, String nodeID, String storagePolicyName) {
-        String  existingPolicy;
-        
-        existingPolicy = map.get(storagePolicyName);
-        if (existingPolicy != null && !existingPolicy.equals(storagePolicyName)) {
-            throw new RuntimeException("Multiple storage policies used for nodeID: "+ existingPolicy +" "+
-            storagePolicyName);
-        }
-        map.put(nodeID, storagePolicyName);
-    }
+  public void setSecondaryStoragePolicy(String nodeID, String storagePolicyName) {
+      setStoragePolicy(secondaryStoragePolicyNames, nodeID, storagePolicyName);
+  }
 
-    @Override
-    public String getPrimaryStoragePolicy(String nodeID) {
-        return primaryStoragePolicyNames.get(nodeID);
-    }
+  private final Map<String,String>   primaryStoragePolicyNames;
+  private final Map<String,String>   secondaryStoragePolicyNames;
+  private void setStoragePolicy(Map<String,String> map, String nodeID, String storagePolicyName) {
+      String  existingPolicy;
 
-    @Override
-    public String getSecondaryStoragePolicy(String nodeID) {
-        return secondaryStoragePolicyNames.get(nodeID);
-    }
-    */
+      existingPolicy = map.get(storagePolicyName);
+      if (existingPolicy != null && !existingPolicy.equals(storagePolicyName)) {
+          throw new RuntimeException("Multiple storage policies used for nodeID: "+ existingPolicy +" "+
+          storagePolicyName);
+      }
+      map.put(nodeID, storagePolicyName);
+  }
+
+  @Override
+  public String getPrimaryStoragePolicy(String nodeID) {
+      return primaryStoragePolicyNames.get(nodeID);
+  }
+
+  @Override
+  public String getSecondaryStoragePolicy(String nodeID) {
+      return secondaryStoragePolicyNames.get(nodeID);
+  }
+  */
 
   @Override
   public String toString() {

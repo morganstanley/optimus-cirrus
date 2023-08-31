@@ -23,10 +23,9 @@ import com.ms.silverking.cloud.dht.net.MessageGroupKeyOrdinalEntry;
 import com.ms.silverking.cloud.dht.net.PutResult;
 import com.ms.silverking.net.IPAndPort;
 
-/**
- * Not thread-safe. Only to be used for a single processing pass.
- */
-public class PutCommunicator extends OpCommunicator<MessageGroupKeyEntry, PutResult> implements PutVirtualCommunicator {
+/** Not thread-safe. Only to be used for a single processing pass. */
+public class PutCommunicator extends OpCommunicator<MessageGroupKeyEntry, PutResult>
+    implements PutVirtualCommunicator {
   private Map<IPAndPort, List<MessageGroupKeyOrdinalEntry>> replicaUpdateMessageLists;
   private final PutOperationContainer putOperationContainer;
 

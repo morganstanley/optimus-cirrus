@@ -25,9 +25,7 @@ import com.google.common.collect.ImmutableSet;
 import com.ms.silverking.io.util.BufferUtil;
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Bundles an IP address and a port.
- */
+/** Bundles an IP address and a port. */
 public final class IPAndPort implements AddrAndPort, Comparable<IPAndPort> {
   private final long ipAndPort;
   private InetSocketAddress inetSocketAddress;
@@ -69,8 +67,9 @@ public final class IPAndPort implements AddrAndPort, Comparable<IPAndPort> {
     if (tokens.length != 2) {
       throw new RuntimeException("Bad IPAndPort definition: " + s);
     }
-    this.ipAndPort = ((long) IPAddrUtil.addrToInt(IPAddrUtil.stringToAddr(tokens[0])) << 32) | (long) Integer.parseInt(
-        tokens[1]);
+    this.ipAndPort =
+        ((long) IPAddrUtil.addrToInt(IPAddrUtil.stringToAddr(tokens[0])) << 32)
+            | (long) Integer.parseInt(tokens[1]);
   }
 
   public IPAndPort(String s, int port) {
@@ -93,7 +92,8 @@ public final class IPAndPort implements AddrAndPort, Comparable<IPAndPort> {
   }
 
   public static IPAndPort fromByteArray(byte[] ipAndPort, int offset) {
-    return new IPAndPort(ipAndPort, offset, NumConversion.bytesToUnsignedShort(ipAndPort, offset + 4));
+    return new IPAndPort(
+        ipAndPort, offset, NumConversion.bytesToUnsignedShort(ipAndPort, offset + 4));
   }
 
   public static IPAndPort fromByteArray(byte[] ipAndPort) {
@@ -185,7 +185,7 @@ public final class IPAndPort implements AddrAndPort, Comparable<IPAndPort> {
     IPAndPort o;
 
     o = (IPAndPort) other;
-    //System.out.println(o +" == "+ this);
+    // System.out.println(o +" == "+ this);
     return o.ipAndPort == this.ipAndPort;
   }
 

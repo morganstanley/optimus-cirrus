@@ -17,9 +17,7 @@ import java.util.Arrays;
 import com.ms.silverking.cloud.dht.common.DHTConstants;
 import com.ms.silverking.io.util.BufferUtil;
 
-/**
- * Serializer/deserializer for byte[]. No copy of source data is made for put().
- */
+/** Serializer/deserializer for byte[]. No copy of source data is made for put(). */
 public final class RawByteArraySerDes implements BufferSerDes<byte[]> {
   @Override
   public ByteBuffer serializeToBuffer(byte[] b) {
@@ -57,7 +55,8 @@ public final class RawByteArraySerDes implements BufferSerDes<byte[]> {
 
   @Override
   public byte[] deserialize(ByteBuffer buffer) {
-    return Arrays.copyOfRange(buffer.array(), buffer.position(), buffer.position() + buffer.remaining());
+    return Arrays.copyOfRange(
+        buffer.array(), buffer.position(), buffer.position() + buffer.remaining());
   }
 
   @Override

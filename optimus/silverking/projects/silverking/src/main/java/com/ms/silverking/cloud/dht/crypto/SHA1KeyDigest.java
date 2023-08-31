@@ -19,8 +19,7 @@ import com.ms.silverking.cloud.dht.common.SimpleKey;
 import com.ms.silverking.numeric.NumConversion;
 
 public class SHA1KeyDigest implements KeyDigest {
-  public SHA1KeyDigest() {
-  }
+  public SHA1KeyDigest() {}
 
   @Override
   public DHTKey computeKey(byte[] bytes) {

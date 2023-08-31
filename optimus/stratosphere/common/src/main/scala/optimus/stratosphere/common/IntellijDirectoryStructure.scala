@@ -99,8 +99,6 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val intellijWorkspaceLocation: Path = intellijWorkspaceLocationForVersion(intellijVersion)
 
-  val intellijBackups: Path = workspaceBackupsDir.resolve("intellij")
-
   // ide_workspace/<INTELLIJ_VERSION>/...
   def intellijWorkspaceLocationForVersion(version: String): Path =
     ideWorkspaceStoreDir.resolve(versionWithName(version))

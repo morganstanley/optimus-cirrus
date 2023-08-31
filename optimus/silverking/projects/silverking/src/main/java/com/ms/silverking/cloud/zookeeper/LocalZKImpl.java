@@ -43,8 +43,9 @@ public class LocalZKImpl {
   private static LocalZookeeperServerMain mainZkServer;
 
   static {
-    zkPort = PropertiesHelper.systemHelper.getInt(zkPortProperty, defaultZKPort,
-        ParseExceptionAction.RethrowParseException);
+    zkPort =
+        PropertiesHelper.systemHelper.getInt(
+            zkPortProperty, defaultZKPort, ParseExceptionAction.RethrowParseException);
     System.setProperty("zookeeper.admin.enableServer", "false");
   }
 
@@ -78,8 +79,7 @@ public class LocalZKImpl {
     return new LocalZKImpl()._startLocalZK(port, dataDir);
   }
 
-  private LocalZKImpl() {
-  }
+  private LocalZKImpl() {}
 
   private boolean _startLocalZK(int port, String dataDirName) {
     Starter starter;
@@ -158,14 +158,14 @@ public class LocalZKImpl {
     }
 
     System.out.printf("ZK started %s\n", startLocalZK(options.port, options.dataDir));
-        /*
+    /*
         org.apache.zookeeper.server.quorum.QuorumPeerMain
         if [ "x$2" != "x" ]
                 then
                     ZOOCFG=$ZOOCFGDIR/$2
                 fi
                 echo "Using config: $ZOOCFG"
-        
+
         start)
         echo  "Starting zookeeper ... "
         java  "-Dzookeeper.log.dir=${ZOO_LOG_DIR}" "-Dzookeeper.root.logger=${ZOO_LOG4J_PROP}" \

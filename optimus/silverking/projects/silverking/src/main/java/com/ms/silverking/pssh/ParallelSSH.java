@@ -32,7 +32,11 @@ public class ParallelSSH extends ParallelSSHBase implements Runnable {
 
   private static Logger log = LoggerFactory.getLogger(ParallelSSH.class);
 
-  public ParallelSSH(Set<String> hosts, String[] command, int numWorkerThreads, int timeoutSeconds,
+  public ParallelSSH(
+      Set<String> hosts,
+      String[] command,
+      int numWorkerThreads,
+      int timeoutSeconds,
       HostGroupTable hostGroups) {
     super(hostGroups);
     this.hosts = new ArrayBlockingQueue<String>(hosts.size(), false, hosts);
@@ -55,10 +59,10 @@ public class ParallelSSH extends ParallelSSHBase implements Runnable {
       } else {
         active.incrementAndGet();
         try {
-          log.info("Remaining: {}   Active: {}" , hosts.size() , active);
+          log.info("Remaining: {}   Active: {}", hosts.size(), active);
           doSSH(host, command, timeoutSeconds);
         } finally {
-          log.info("Complete: {}" , host);
+          log.info("Complete: {}", host);
           active.decrementAndGet();
         }
       }

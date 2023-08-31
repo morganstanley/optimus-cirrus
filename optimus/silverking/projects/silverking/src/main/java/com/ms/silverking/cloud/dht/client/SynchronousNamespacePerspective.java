@@ -20,10 +20,11 @@ import java.util.Map;
  * @param <V> value type
  */
 public interface SynchronousNamespacePerspective<K, V>
-    extends SynchronousWritableNamespacePerspective<K, V>, SynchronousReadableNamespacePerspective<K, V> {
+    extends SynchronousWritableNamespacePerspective<K, V>,
+        SynchronousReadableNamespacePerspective<K, V> {
   /**
-   * Create a view of this namespace perspective as a java.util.Map.
-   * Operations supported are: containsKey(), get(), put(), and putAll().
+   * Create a view of this namespace perspective as a java.util.Map. Operations supported are:
+   * containsKey(), get(), put(), and putAll().
    *
    * @return Map view of this namespace perspective.
    */

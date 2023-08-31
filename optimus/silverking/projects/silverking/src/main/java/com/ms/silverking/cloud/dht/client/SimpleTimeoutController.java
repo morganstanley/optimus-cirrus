@@ -14,8 +14,8 @@ package com.ms.silverking.cloud.dht.client;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * OpTimeoutController implementation that supports a specified maximum number of attempts
- * as well as a single relative timeout for the operation.
+ * OpTimeoutController implementation that supports a specified maximum number of attempts as well
+ * as a single relative timeout for the operation.
  */
 public class SimpleTimeoutController implements OpTimeoutController {
   private final int maxAttempts;
@@ -31,9 +31,10 @@ public class SimpleTimeoutController implements OpTimeoutController {
   }
 
   /**
-   * Construct a SingleTimeout instance with the specified number of attempts and the specified relative timeout.
+   * Construct a SingleTimeout instance with the specified number of attempts and the specified
+   * relative timeout.
    *
-   * @param maxAttempts              maximum number of attempts
+   * @param maxAttempts maximum number of attempts
    * @param maxRelativeTimeoutMillis relative timeout in milliseconds
    */
   public SimpleTimeoutController(int maxAttempts, int maxRelativeTimeoutMillis) {
@@ -66,14 +67,18 @@ public class SimpleTimeoutController implements OpTimeoutController {
     return new SimpleTimeoutController(maxAttempts, maxRelativeTimeoutMillis);
   }
 
-  public int getMaxAttempts() { return maxAttempts; }
+  public int getMaxAttempts() {
+    return maxAttempts;
+  }
 
   @Override
   public int getMaxAttempts(AsyncOperation op) {
     return maxAttempts;
   }
 
-  public int getMaxRelativeTimeoutMillis() { return maxRelativeTimeoutMillis; }
+  public int getMaxRelativeTimeoutMillis() {
+    return maxRelativeTimeoutMillis;
+  }
 
   @Override
   public int getRelativeTimeoutMillisForAttempt(AsyncOperation op, int attemptIndex) {
@@ -81,7 +86,8 @@ public class SimpleTimeoutController implements OpTimeoutController {
   }
 
   @Override
-  public long getRelativeExclusionChangeRetryMillisForAttempt(AsyncOperation op, int curAttemptIndex) {
+  public long getRelativeExclusionChangeRetryMillisForAttempt(
+      AsyncOperation op, int curAttemptIndex) {
     return maxRelativeTimeoutMillis;
   }
 
@@ -108,7 +114,8 @@ public class SimpleTimeoutController implements OpTimeoutController {
     }
 
     other = (SimpleTimeoutController) o;
-    return maxAttempts == other.maxAttempts && maxRelativeTimeoutMillis == other.maxRelativeTimeoutMillis;
+    return maxAttempts == other.maxAttempts
+        && maxRelativeTimeoutMillis == other.maxRelativeTimeoutMillis;
   }
 
   @Override

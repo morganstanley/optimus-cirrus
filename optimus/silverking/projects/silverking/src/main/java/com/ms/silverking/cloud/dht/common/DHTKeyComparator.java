@@ -16,8 +16,7 @@ import java.util.Comparator;
 public class DHTKeyComparator implements Comparator<DHTKey> {
   public static DHTKeyComparator dhtKeyComparator = new DHTKeyComparator();
 
-  public DHTKeyComparator() {
-  }
+  public DHTKeyComparator() {}
 
   @Override
   public int compare(DHTKey k1, DHTKey k2) {

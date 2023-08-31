@@ -17,7 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Wraps TimerTask instances to ensure that all executions do not break the timer due to a thrown exception
+ * Wraps TimerTask instances to ensure that all executions do not break the timer due to a thrown
+ * exception
  */
 public class SafeTimerTask extends TimerTask {
   private static Logger log = LoggerFactory.getLogger(SafeTimerTask.class);

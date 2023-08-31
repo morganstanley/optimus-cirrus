@@ -65,7 +65,7 @@ public class MetaUtil {
   private final ExclusionSet exclusions;
   private final PrintStream out;
 
-  //readRingFromZk
+  // readRingFromZk
   private final com.ms.silverking.cloud.toporing.meta.MetaClient ringMC;
   private final NamedRingConfiguration namedRingConfig;
   private final RingConfiguration ringConfig;
@@ -94,7 +94,7 @@ public class MetaUtil {
     mp = _mc.getMetaPaths();
 
     if (debug) {
-      log.debug("getting latest version: {}" , mp.getInstanceConfigPath());
+      log.debug("getting latest version: {}", mp.getInstanceConfigPath());
     }
 
     if (dhtVersion == MetaUtilOptions.dhtVersionUnspecified) {
@@ -104,7 +104,7 @@ public class MetaUtil {
     }
 
     if (debug) {
-      log.debug("MetaUtil dhtConfigVersion: {}" , dhtConfigVersion);
+      log.debug("MetaUtil dhtConfigVersion: {}", dhtConfigVersion);
     }
 
     dhtConfZk = new DHTConfigurationZK(_mc);
@@ -114,49 +114,58 @@ public class MetaUtil {
     mc = new MetaClient(namedDHTConfig, zkConfig);
 
     if (debug) {
-      log.debug("dhtConfig: {}" , dhtConfig);
+      log.debug("dhtConfig: {}", dhtConfig);
     }
 
     dhtRingName = dhtConfig.getRingName();
-    dhtVersionPath = SilverKingZooKeeperClient.padVersionPath(mc.getMetaPaths().getInstanceConfigPath(),
-        dhtConfigVersion);
+    dhtVersionPath =
+        SilverKingZooKeeperClient.padVersionPath(
+            mc.getMetaPaths().getInstanceConfigPath(), dhtConfigVersion);
     dhtConfZkId = zk.getStat(dhtVersionPath).getMzxid();
 
     if (debug) {
-      log.debug("dhtVersionPath: {} realDhtConfZkId: {}", dhtVersionPath ,dhtConfZkId);
+      log.debug("dhtVersionPath: {} realDhtConfZkId: {}", dhtVersionPath, dhtConfZkId);
     }
 
     NamedRingConfiguration _namedRingConfig;
     com.ms.silverking.cloud.toporing.meta.MetaClient _ringMC;
     _namedRingConfig = new NamedRingConfiguration(dhtRingName, RingConfiguration.emptyTemplate);
     _ringMC = new com.ms.silverking.cloud.toporing.meta.MetaClient(_namedRingConfig, zkConfig);
-    ringConfigVersion = getVersionPriorTo_floored(_ringMC.getMetaPaths().getConfigPath(), dhtConfZkId);
+    ringConfigVersion =
+        getVersionPriorTo_floored(_ringMC.getMetaPaths().getConfigPath(), dhtConfZkId);
     ringConfig = new RingConfigurationZK(_ringMC).readFromZK(ringConfigVersion, null);
 
     namedRingConfig = new NamedRingConfiguration(dhtRingName, ringConfig);
     ringMC = new com.ms.silverking.cloud.toporing.meta.MetaClient(namedRingConfig, zkConfig);
 
-    //exclusionsVersion = getVersionPriorTo_floored(ringMC.getMetaPaths().getExclusionsPath(), dhtConfZkId);
+    // exclusionsVersion = getVersionPriorTo_floored(ringMC.getMetaPaths().getExclusionsPath(),
+    // dhtConfZkId);
     exclusionsVersion = getLatestVersion(ringMC.getMetaPaths().getExclusionsPath());
     log.debug("{} {}", ringMC.getMetaPaths().getExclusionsPath(), exclusionsVersion);
-    exclusions = new ExclusionSet(
-        new ServerSetExtensionZK(ringMC, ringMC.getMetaPaths().getExclusionsPath()).readFromZK(exclusionsVersion,
-            null));
+    exclusions =
+        new ExclusionSet(
+            new ServerSetExtensionZK(ringMC, ringMC.getMetaPaths().getExclusionsPath())
+                .readFromZK(exclusionsVersion, null));
 
     log.info("Using ring version {}", ringConfigVersion);
 
-    configInstanceVersion = getVersionPriorTo_floored(ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
-        dhtConfZkId);
+    configInstanceVersion =
+        getVersionPriorTo_floored(
+            ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion), dhtConfZkId);
 
     log.info("Using cloud instance version {}", configInstanceVersion);
 
-    cloudMC = new com.ms.silverking.cloud.meta.MetaClient(ringConfig.getCloudConfiguration(), zkConfig);
-    cloudConfigVersion = getVersionPriorTo_floored(cloudMC.getMetaPaths().getTopologyPath(), dhtConfZkId);
+    cloudMC =
+        new com.ms.silverking.cloud.meta.MetaClient(ringConfig.getCloudConfiguration(), zkConfig);
+    cloudConfigVersion =
+        getVersionPriorTo_floored(cloudMC.getMetaPaths().getTopologyPath(), dhtConfZkId);
 
     if (debug) {
       log.debug(
-          "TopologyPath: {}  version: {}" , cloudMC.getMetaPaths().getTopologyPath() , cloudConfigVersion);
-      log.debug("dhtConfZkId: {}" , dhtConfZkId);
+          "TopologyPath: {}  version: {}",
+          cloudMC.getMetaPaths().getTopologyPath(),
+          cloudConfigVersion);
+      log.debug("dhtConfZkId: {}", dhtConfZkId);
     }
 
     topoConfZk = new TopologyZK(cloudMC);
@@ -169,11 +178,13 @@ public class MetaUtil {
     }
   }
 
-  public MetaUtil(String dhtName, String zkString, long dhtVersion, File target) throws KeeperException, IOException {
+  public MetaUtil(String dhtName, String zkString, long dhtVersion, File target)
+      throws KeeperException, IOException {
     this(dhtName, new ZooKeeperConfig(zkString), dhtVersion, target);
   }
 
-  public MetaUtil(String name, ZooKeeperConfig zkConfig, long dhtVersion) throws KeeperException, IOException {
+  public MetaUtil(String name, ZooKeeperConfig zkConfig, long dhtVersion)
+      throws KeeperException, IOException {
     this(name, zkConfig, dhtVersion, null);
   }
 
@@ -195,7 +206,7 @@ public class MetaUtil {
 
   private long getLatestVersion(String path) throws KeeperException {
     return mc.getZooKeeper().getLatestVersion(path);
-    //return mc.getZooKeeper().getLatestVersion(mp.getInstanceConfigPath());
+    // return mc.getZooKeeper().getLatestVersion(mp.getInstanceConfigPath());
   }
 
   private long getVersionPriorTo_floored(String path, long zkid) throws KeeperException {
@@ -206,8 +217,8 @@ public class MetaUtil {
   }
 
   public List<String> getDHTServersFromZk() throws KeeperException, IOException {
-    //System.out.println("ServerList");
-    //writeNodeAndChildren(topo.getRoot());
+    // System.out.println("ServerList");
+    // writeNodeAndChildren(topo.getRoot());
     List<Node> serverNodeList;
     List<String> serverNameList;
 
@@ -253,8 +264,12 @@ public class MetaUtil {
     }
   }
 
-  private void displayDHTHostGroupServers(Iterable<String> hostGroups, FilterOption filterOption, String workersFile,
-      String exclusionsFile) throws KeeperException, IOException {
+  private void displayDHTHostGroupServers(
+      Iterable<String> hostGroups,
+      FilterOption filterOption,
+      String workersFile,
+      String exclusionsFile)
+      throws KeeperException, IOException {
     Set<String> allowedHostAddresses;
     Set<String> workers;
 
@@ -267,7 +282,7 @@ public class MetaUtil {
           workers.add(dhtServer);
         }
       } else {
-        //System.out.println("Ignoring:\t"+ dhtServer);
+        // System.out.println("Ignoring:\t"+ dhtServer);
       }
     }
 
@@ -299,31 +314,34 @@ public class MetaUtil {
 
   public void runCommand(MetaUtilOptions options) throws KeeperException, IOException {
     switch (options.command) {
-    case GetDHTHostGroups:
-      displayDHTHostGroups();
-      break;
-    case GetDHTHostGroupServers:
-      displayDHTHostGroupServers(ImmutableList.copyOf(options.hostGroups.split(",")), options.filterOption,
-          options.workersFile, options.exclusionsFile);
-      break;
-    case GetDHTExcludedServers:
-      displayDHTExcludedServers();
-      break;
-    case ClearLinks:
-      clearLinks();
-      break;
-    case GetHostGroupToClassVarsMap:
-      displayHostGroupToClassVarsMap();
-      break;
+      case GetDHTHostGroups:
+        displayDHTHostGroups();
+        break;
+      case GetDHTHostGroupServers:
+        displayDHTHostGroupServers(
+            ImmutableList.copyOf(options.hostGroups.split(",")),
+            options.filterOption,
+            options.workersFile,
+            options.exclusionsFile);
+        break;
+      case GetDHTExcludedServers:
+        displayDHTExcludedServers();
+        break;
+      case ClearLinks:
+        clearLinks();
+        break;
+      case GetHostGroupToClassVarsMap:
+        displayHostGroupToClassVarsMap();
+        break;
 
-    default:
-      throw new RuntimeException("panic");
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private void displayForFiltering(String s) {
     log.info("{}", s);
-    //out.printf("%s%c%s\n", filterText, filterDelimiter, s);
+    // out.printf("%s%c%s\n", filterText, filterDelimiter, s);
   }
 
   /**
@@ -340,24 +358,24 @@ public class MetaUtil {
       try {
         parser.parseArgument(args);
         switch (options.command) {
-        case GetDHTHostGroups:
-          break;
-        case GetDHTHostGroupServers:
-          if (options.hostGroups == null) {
-            throw new CmdLineException("GetDHTHostGroupServers requires -h hostGroups option");
-          }
-          if (options.filterOption == null) {
-            throw new CmdLineException("GetDHTHostGroupServers requires -f filterOption option");
-          }
-          break;
-        case GetDHTExcludedServers:
-          break;
-        case ClearLinks:
-          break;
-        case GetHostGroupToClassVarsMap:
-          break;
-        default:
-          throw new RuntimeException("panic");
+          case GetDHTHostGroups:
+            break;
+          case GetDHTHostGroupServers:
+            if (options.hostGroups == null) {
+              throw new CmdLineException("GetDHTHostGroupServers requires -h hostGroups option");
+            }
+            if (options.filterOption == null) {
+              throw new CmdLineException("GetDHTHostGroupServers requires -f filterOption option");
+            }
+            break;
+          case GetDHTExcludedServers:
+            break;
+          case ClearLinks:
+            break;
+          case GetHostGroupToClassVarsMap:
+            break;
+          default:
+            throw new RuntimeException("panic");
         }
       } catch (CmdLineException cle) {
         System.err.println(cle.getMessage());
@@ -365,8 +383,12 @@ public class MetaUtil {
         System.exit(-1);
       }
 
-      mu = new MetaUtil(options.dhtName, options.zkEnsemble, options.dhtVersion,
-          options.targetFile == null ? null : new File(options.targetFile));
+      mu =
+          new MetaUtil(
+              options.dhtName,
+              options.zkEnsemble,
+              options.dhtVersion,
+              options.targetFile == null ? null : new File(options.targetFile));
       mu.runCommand(options);
     } catch (Exception e) {
       e.printStackTrace();

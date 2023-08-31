@@ -30,8 +30,13 @@ public class RandomBackoff {
 
   private static final int MAX_EXPONENTIAL_MAX_BACKOFF = 30;
 
-  public RandomBackoff(int maxBackoffNum, int initialBackoffValue, int extraBackoffValue, long hardDeadline,
-      boolean exponential, long seed) {
+  public RandomBackoff(
+      int maxBackoffNum,
+      int initialBackoffValue,
+      int extraBackoffValue,
+      long hardDeadline,
+      boolean exponential,
+      long seed) {
     if (maxBackoffNum < 0 || exponential && maxBackoffNum > MAX_EXPONENTIAL_MAX_BACKOFF) {
       throw new RuntimeException("Bad maxBackoffNum: " + maxBackoffNum);
     }
@@ -49,8 +54,14 @@ public class RandomBackoff {
     random = new Random(seed);
   }
 
-  public RandomBackoff(int maxBackoffNum, int initialBackoffValue, int extraBackoffValue, long hardDeadline) {
-    this(maxBackoffNum, initialBackoffValue, extraBackoffValue, hardDeadline, true,
+  public RandomBackoff(
+      int maxBackoffNum, int initialBackoffValue, int extraBackoffValue, long hardDeadline) {
+    this(
+        maxBackoffNum,
+        initialBackoffValue,
+        extraBackoffValue,
+        hardDeadline,
+        true,
         SystemTimeUtil.skSystemTimeSource.absTimeMillis());
   }
 
@@ -88,11 +99,14 @@ public class RandomBackoff {
 
     backoffTime = getRandomBackoff();
     curBackoffNum = Math.min(curBackoffNum + 1, maxBackoffNum);
-    //System.out.println(curBackoffNum +"\t"+ maxBackoffNum +"\t"+ backoffTime);
+    // System.out.println(curBackoffNum +"\t"+ maxBackoffNum +"\t"+ backoffTime);
     consecutiveBackoffs++;
     if (waitHere) {
       if (hardDeadline > 0) {
-        backoffTime = (int) Math.min(backoffTime, hardDeadline - SystemTimeUtil.skSystemTimeSource.absTimeMillis());
+        backoffTime =
+            (int)
+                Math.min(
+                    backoffTime, hardDeadline - SystemTimeUtil.skSystemTimeSource.absTimeMillis());
       }
       if (waitObj == null) {
         ThreadUtil.sleep(backoffTime);
@@ -126,7 +140,8 @@ public class RandomBackoff {
 
   @Override
   public String toString() {
-    return String.format("%s[curBackoffNum=%d, maxBackoffNum=%d]", this.getClass().getSimpleName(), curBackoffNum,
-        maxBackoffNum);
+    return String.format(
+        "%s[curBackoffNum=%d, maxBackoffNum=%d]",
+        this.getClass().getSimpleName(), curBackoffNum, maxBackoffNum);
   }
 }

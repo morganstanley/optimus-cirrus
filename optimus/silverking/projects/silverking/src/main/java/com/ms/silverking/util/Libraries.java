@@ -17,6 +17,7 @@ public class Libraries {
   public static final boolean useCustomGuava;
 
   static {
-    useCustomGuava = PropertiesHelper.systemHelper.getBoolean(useCustomGuavaProperty, defaultUseCustomGuava);
+    useCustomGuava =
+        PropertiesHelper.systemHelper.getBoolean(useCustomGuavaProperty, defaultUseCustomGuava);
   }
 }

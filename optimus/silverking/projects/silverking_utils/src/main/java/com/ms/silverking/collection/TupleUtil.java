@@ -29,7 +29,11 @@ public class TupleUtil {
       throw new RuntimeException("Expected typesNames.length, expected.Length");
     }
     if (rawList.size() != expectedLength) {
-      throw new RuntimeException("Incorrect values from rawList.size(),expectedLength, def. Expected value is %d != %d from %s" + rawList.size()+ expectedLength + def);
+      throw new RuntimeException(
+          "Incorrect values from rawList.size(),expectedLength, def. Expected value is %d != %d from %s"
+              + rawList.size()
+              + expectedLength
+              + def);
     }
     cookedList = new ArrayList<>(rawList.size());
     for (int i = 0; i < typeNames.length; i++) {
@@ -51,8 +55,8 @@ public class TupleUtil {
     return cookedList;
   }
 
-  public static List<? extends TupleBase> copyAndSort(List<? extends TupleBase> unsortedList, int fieldIndex,
-      Comparator elementComparator) {
+  public static List<? extends TupleBase> copyAndSort(
+      List<? extends TupleBase> unsortedList, int fieldIndex, Comparator elementComparator) {
     List<TupleBase> sortedList;
 
     sortedList = new ArrayList<>();
@@ -61,7 +65,8 @@ public class TupleUtil {
     return sortedList;
   }
 
-  public static void sort(List<? extends TupleBase> list, int elementIndex, Comparator elementComparator) {
+  public static void sort(
+      List<? extends TupleBase> list, int elementIndex, Comparator elementComparator) {
     Collections.sort(list, new TupleElementComparator(elementIndex, elementComparator));
   }
 }

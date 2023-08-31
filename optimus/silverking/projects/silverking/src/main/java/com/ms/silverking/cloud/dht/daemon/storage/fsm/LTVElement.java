@@ -74,7 +74,8 @@ public class LTVElement {
 
   @Override
   public String toString() {
-    return String.format("%d %d %s", getLength(), getType(), StringUtil.byteBufferToHexString(getValueBuffer()));
+    return String.format(
+        "%d %d %s", getLength(), getType(), StringUtil.byteBufferToHexString(getValueBuffer()));
   }
 
   /////////////////////
@@ -85,13 +86,13 @@ public class LTVElement {
 
     try {
       length = buf.getInt(offset + lengthOffset);
-      //System.out.printf("length %d\n", length);
-      //elementBuf = BufferUtil.get(buf, offset, length);
+      // System.out.printf("length %d\n", length);
+      // elementBuf = BufferUtil.get(buf, offset, length);
       elementBuf = BufferUtil.sliceRange(buf, offset, offset + length);
     } catch (RuntimeException re) {
       log.info("{} {}", offset, lengthOffset);
       log.info("{}", buf);
-      //System.out.printf("%s\n", StringUtil.byteBufferToHexString(buf));
+      // System.out.printf("%s\n", StringUtil.byteBufferToHexString(buf));
       throw re;
     }
     return elementBuf;

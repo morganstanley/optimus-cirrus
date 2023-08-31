@@ -37,8 +37,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Base class for implementing an asynchronous TCP/IP server.
- * Maintains persistent connections with peers.
+ * Base class for implementing an asynchronous TCP/IP server. Maintains persistent connections with
+ * peers.
  */
 public abstract class AsyncBase<T extends Connection> {
   private final List<SelectorController<T>> selectorControllers;
@@ -50,7 +50,8 @@ public abstract class AsyncBase<T extends Connection> {
   private static final int _defReceiveBufferSize = 1024 * 1024;
   private static final int _defSendBufferSize = 1024 * 1024;
 
-  // FUTURE - link below to default op timeouts so that we at least try one additional connection in each op
+  // FUTURE - link below to default op timeouts so that we at least try one additional connection in
+  // each op
   private static final int _defSocketReadTimeout = 5 * 60 * 1000 - 10 * 1000;
   private static final int _defSocketConnectTimeout = 25 * 1000;
   private static final int _defaultAuthenticationTimeoutInMillisecond = 30 * 1000;
@@ -65,7 +66,8 @@ public abstract class AsyncBase<T extends Connection> {
   private static final String defReceiveBufferSizeProperty = propertyBase + "ReceiveBufferSize";
   private static final String defSendBufferSizeProperty = propertyBase + "SendBufferSize";
   private static final String defSocketReadTimeoutProperty = propertyBase + "SocketReadTimeout";
-  private static final String defSocketConnectTimeoutProperty = propertyBase + "SocketConnectTimeoutProperty";
+  private static final String defSocketConnectTimeoutProperty =
+      propertyBase + "SocketConnectTimeoutProperty";
   private static final String defAuthenticationTimeoutProperty = propertyBase + "TimeoutMs";
 
   private final ChannelSelectorControllerAssigner<T> cscAssigner;
@@ -91,29 +93,33 @@ public abstract class AsyncBase<T extends Connection> {
     defReceiveBufferSize = setProperty(defReceiveBufferSizeProperty, _defReceiveBufferSize);
     defSendBufferSize = setProperty(defSendBufferSizeProperty, _defSendBufferSize);
     defSocketReadTimeout = setProperty(defSocketReadTimeoutProperty, _defSocketReadTimeout);
-    defSocketConnectTimeout = setProperty(defSocketConnectTimeoutProperty, _defSocketConnectTimeout);
-    defAuthenticationTimeoutInMillisecond = setProperty(defAuthenticationTimeoutProperty,
-        _defaultAuthenticationTimeoutInMillisecond);
+    defSocketConnectTimeout =
+        setProperty(defSocketConnectTimeoutProperty, _defSocketConnectTimeout);
+    defAuthenticationTimeoutInMillisecond =
+        setProperty(defAuthenticationTimeoutProperty, _defaultAuthenticationTimeoutInMillisecond);
 
     _defAuthenticator = Authenticator.getAuthenticator();
     if (_defAuthenticator instanceof NoopAuthenticatorImpl) {
       log.debug(
-          "Authenticator: No authentication operation will be performed; Back-ended by [ {} ]" , _defAuthenticator.getName());
+          "Authenticator: No authentication operation will be performed; Back-ended by [ {} ]",
+          _defAuthenticator.getName());
     } else {
-      log.debug("Authenticator: A customized authenticator is in use [{}}" , _defAuthenticator.getName() );
+      log.debug(
+          "Authenticator: A customized authenticator is in use [{}}", _defAuthenticator.getName());
     }
-    defAuthenticatorThreadLocal = new ThreadLocal<Authenticator>() {
-      @Override
-      protected Authenticator initialValue() {
-        return _defAuthenticator.createLocalCopy();
-      }
-    };
+    defAuthenticatorThreadLocal =
+        new ThreadLocal<Authenticator>() {
+          @Override
+          protected Authenticator initialValue() {
+            return _defAuthenticator.createLocalCopy();
+          }
+        };
 
     if (AsyncGlobals.verbose) {
-      log.info("defReceiveBufferSize: {}" , defReceiveBufferSize);
-      log.info("defSendBufferSize: {}" , defSendBufferSize);
-      log.info("defSocketReadTimeout: {}" , defSocketReadTimeout);
-      log.info("defSocketConnectTimeout: {}" , defSocketConnectTimeout);
+      log.info("defReceiveBufferSize: {}", defReceiveBufferSize);
+      log.info("defSendBufferSize: {}", defSendBufferSize);
+      log.info("defSocketReadTimeout: {}", defSocketReadTimeout);
+      log.info("defSocketConnectTimeout: {}", defSocketConnectTimeout);
     }
   }
 
@@ -128,20 +134,28 @@ public abstract class AsyncBase<T extends Connection> {
       rVal = Integer.parseInt(val);
     }
     if (AsyncGlobals.verbose) {
-      log.info("{}:  {}",property , rVal);
+      log.info("{}:  {}", property, rVal);
     }
     return rVal;
   }
 
-  //TODO (OPTIMUS-0000): we may need to remove this hardcode "/tmp/silverking/"
+  // TODO (OPTIMUS-0000): we may need to remove this hardcode "/tmp/silverking/"
   private static File statsBaseDir(int port) {
     return new File("/tmp/silverking/stats/" + port);
   }
 
-  private AsyncBase(int port, int numSelectorControllers, String controllerClass,
+  private AsyncBase(
+      int port,
+      int numSelectorControllers,
+      String controllerClass,
       BaseWorker<Triple<ServerSocketChannel, SelectorController<T>, SelectionKey>> acceptWorker,
-      ConnectionCreator<T> connectionCreator, ChannelSelectorControllerAssigner<T> cscAssigner, LWTPool readerWorkPool,
-      LWTPool writerWorkPool, int selectionThreadWorkLimit, boolean debug) throws IOException {
+      ConnectionCreator<T> connectionCreator,
+      ChannelSelectorControllerAssigner<T> cscAssigner,
+      LWTPool readerWorkPool,
+      LWTPool writerWorkPool,
+      int selectionThreadWorkLimit,
+      boolean debug)
+      throws IOException {
     this.cscAssigner = cscAssigner;
     this.connectionCreator = connectionCreator;
     this.connectionManager = new ConnectionManager<T>();
@@ -150,8 +164,15 @@ public abstract class AsyncBase<T extends Connection> {
     selectorControllers = new ArrayList<SelectorController<T>>();
     running = true;
     for (int i = 0; i < numSelectorControllers; i++) {
-      selectorControllers.add(new SelectorController(acceptWorker, null/*ConnecctWorker*/, new Reader(readerWorkPool),
-          new Writer(writerWorkPool), controllerClass, selectionThreadWorkLimit, debug));
+      selectorControllers.add(
+          new SelectorController(
+              acceptWorker,
+              null /*ConnecctWorker*/,
+              new Reader(readerWorkPool),
+              new Writer(writerWorkPool),
+              controllerClass,
+              selectionThreadWorkLimit,
+              debug));
     }
 
     if (Connection.statsEnabled) {
@@ -169,25 +190,37 @@ public abstract class AsyncBase<T extends Connection> {
     this.authenticator = defAuthenticatorThreadLocal.get();
   }
 
-  public AsyncBase(int port, int numSelectorControllers, String controllerClass,
+  public AsyncBase(
+      int port,
+      int numSelectorControllers,
+      String controllerClass,
       BaseWorker<Triple<ServerSocketChannel, SelectorController<T>, SelectionKey>> acceptWorker,
-      ConnectionCreator<T> connectionCreator, LWTPool readerLWTPool, LWTPool writerLWTPool,
-      int selectionThreadWorkLimit, boolean debug) throws IOException {
-    this(port, numSelectorControllers, controllerClass, acceptWorker, connectionCreator,
-        new LocalGroupingCSCA<T>(numSelectorControllers / 4), readerLWTPool, writerLWTPool, selectionThreadWorkLimit,
+      ConnectionCreator<T> connectionCreator,
+      LWTPool readerLWTPool,
+      LWTPool writerLWTPool,
+      int selectionThreadWorkLimit,
+      boolean debug)
+      throws IOException {
+    this(
+        port,
+        numSelectorControllers,
+        controllerClass,
+        acceptWorker,
+        connectionCreator,
+        new LocalGroupingCSCA<T>(numSelectorControllers / 4),
+        readerLWTPool,
+        writerLWTPool,
+        selectionThreadWorkLimit,
         debug);
     // FUTURE allow more than just the fixed fraction of local selector controllers
-    //new RandomChannelSelectorControllerAssigner<T>(), lwtPool, debug);
+    // new RandomChannelSelectorControllerAssigner<T>(), lwtPool, debug);
   }
 
   //////////////////////////////////////////////////////////////////////
 
-  public void start() throws IOException {
-  }
+  public void start() throws IOException {}
 
-  /**
-   * Terminates all SelectorControllers, reads, and writers.
-   */
+  /** Terminates all SelectorControllers, reads, and writers. */
   public void shutdown() {
     running = false;
     for (SelectorController<T> selectorController : selectorControllers) {
@@ -240,24 +273,24 @@ public abstract class AsyncBase<T extends Connection> {
         }
       } catch (IOException ioe) {
         if (connection.isConnected()) {
-          log.error("",ioe);
+          log.error("", ioe);
           informSuspectAddressListener(connection.getRemoteSocketAddress());
           // FUTURE - think about marking for all exceptions
-                    /*
-                    if (ioe.getMessage() != null) {
-                        if (ioe.getMessage().startsWith("Connection reset")) {
-                            if (suspectAddressListener != null) {
-                                suspectAddressListener.addSuspect(connection.getRemoteSocketAddress());
-                            } else {
-                                Log.info("suspectAddressListener is null");
-                            }
-                        }
-                    }
-                    */
+          /*
+          if (ioe.getMessage() != null) {
+              if (ioe.getMessage().startsWith("Connection reset")) {
+                  if (suspectAddressListener != null) {
+                      suspectAddressListener.addSuspect(connection.getRemoteSocketAddress());
+                  } else {
+                      Log.info("suspectAddressListener is null");
+                  }
+              }
+          }
+          */
         }
       } catch (Exception e) {
         if (connection.isConnected()) {
-          log.error("Unhandled exception",e);
+          log.error("Unhandled exception", e);
         }
       } finally {
         if (!cleanRead) {
@@ -287,15 +320,15 @@ public abstract class AsyncBase<T extends Connection> {
         cleanWrite = true;
       } catch (IOException ioe) {
         if (connection.isConnected()) {
-          log.error("",ioe);
+          log.error("", ioe);
           // Commented out for new approach.
           // New approach is to simply do the disconnect as before, but not mark as suspect.
           // If the reconnect fails, then it will get marked.
-          //if (suspectAddressListener != null) {
+          // if (suspectAddressListener != null) {
           //  suspectAddressListener.addSuspect(connection.getRemoteSocketAddress());
-          //} else {
+          // } else {
           //  Log.info("suspectAddressListener is null");
-          //}
+          // }
         }
       } catch (Exception e) {
         if (connection.isConnected()) {
@@ -310,7 +343,8 @@ public abstract class AsyncBase<T extends Connection> {
   }
 
   ////////////////////////////////////////////////////////////////////////////////////
-  public T newOutgoingConnection(InetSocketAddress dest, ConnectionListener listener) throws IOException, AuthFailedException {
+  public T newOutgoingConnection(InetSocketAddress dest, ConnectionListener listener)
+      throws IOException, AuthFailedException {
     SocketChannel channel = null;
     boolean connectionSuccess = false;
 
@@ -322,8 +356,8 @@ public abstract class AsyncBase<T extends Connection> {
       connectionSuccess = true;
       return conn;
     } catch (UnresolvedAddressException uae) {
-      log.error("",uae);
-      log.info("{}",dest);
+      log.error("", uae);
+      log.info("{}", dest);
       throw new ConnectException(dest.toString());
     } finally {
       LWTThreadUtil.setNonBlocked();
@@ -331,17 +365,19 @@ public abstract class AsyncBase<T extends Connection> {
         try {
           channel.close();
         } catch (IOException e) {
-          log.error("Could not close socketChannel {}" , channel, e);
+          log.error("Could not close socketChannel {}", channel, e);
         }
       }
     }
   }
 
-  public T addConnection(SocketChannel channel, boolean serverside) throws SocketException, AuthFailedException {
+  public T addConnection(SocketChannel channel, boolean serverside)
+      throws SocketException, AuthFailedException {
     return addConnection(channel, null, serverside);
   }
 
-  public T addConnection(SocketChannel channel, ConnectionListener listener, boolean serverside) throws SocketException, AuthFailedException {
+  public T addConnection(SocketChannel channel, ConnectionListener listener, boolean serverside)
+      throws SocketException, AuthFailedException {
     T connection;
     SelectorController<T> selectorController;
 
@@ -355,27 +391,36 @@ public abstract class AsyncBase<T extends Connection> {
     channel.socket().setSoTimeout(defSocketReadTimeout); // (for auth as the rest is non-blocking)
 
     String connInfo = channel.socket() != null ? channel.socket().toString() : "nullSock";
-    AuthenticationResult authResult = authenticator.syncAuthenticate(channel.socket(), serverside,
-        defAuthenticationTimeoutInMillisecond);
+    AuthenticationResult authResult =
+        authenticator.syncAuthenticate(
+            channel.socket(), serverside, defAuthenticationTimeoutInMillisecond);
     Authenticator.checkForAuthFailure(authResult, connInfo, serverside, authenticator);
 
     if (logConnections) {
-      log.info("AsyncBase addConnection: {} sBuf {} rBuf {}", channel, channel.socket().getSendBufferSize(),
+      log.info(
+          "AsyncBase addConnection: {} sBuf {} rBuf {}",
+          channel,
+          channel.socket().getSendBufferSize(),
           channel.socket().getReceiveBufferSize());
     }
 
     try {
       channel.configureBlocking(false);
     } catch (IOException ioe) {
-      log.error("",ioe);
+      log.error("", ioe);
       throw new RuntimeException("Unable to configure non-blocking socket");
     }
-    selectorController = cscAssigner.assignChannelToSelectorController(channel, selectorControllers);
+    selectorController =
+        cscAssigner.assignChannelToSelectorController(channel, selectorControllers);
     connection = connectionCreator.createConnection(channel, selectorController, listener, debug);
 
     if (authResult.isSuccessful()) {
-      log.debug("Authenticator: authId[ {} ] is obtained in [ {} ] by [ {} ] for connection {}" ,authResult.getAuthenticatedId().get(),
-                (serverside ? "ServerSide" : "ClientSide"), authenticator.getName()  , connInfo);
+      log.debug(
+          "Authenticator: authId[ {} ] is obtained in [ {} ] by [ {} ] for connection {}",
+          authResult.getAuthenticatedId().get(),
+          (serverside ? "ServerSide" : "ClientSide"),
+          authenticator.getName(),
+          connInfo);
       connection.setAuthenticationResult(authResult);
     }
     connection.start();
@@ -384,8 +429,8 @@ public abstract class AsyncBase<T extends Connection> {
   }
 
   /**
-   * Assigned a new ServerSocketChannel to a selector and adds it to that
-   * selector. Also, configures the channel as non-blocking.
+   * Assigned a new ServerSocketChannel to a selector and adds it to that selector. Also, configures
+   * the channel as non-blocking.
    *
    * @param serverChannel
    * @throws IOException
@@ -394,7 +439,8 @@ public abstract class AsyncBase<T extends Connection> {
     SelectorController<T> selectorController;
 
     serverChannel.configureBlocking(false);
-    selectorController = cscAssigner.assignChannelToSelectorController(serverChannel, selectorControllers);
+    selectorController =
+        cscAssigner.assignChannelToSelectorController(serverChannel, selectorControllers);
     selectorController.addServerChannel(serverChannel);
   }
 
@@ -408,11 +454,11 @@ public abstract class AsyncBase<T extends Connection> {
     }
   }
 
-  public ConnectionController getConnectionController(){
+  public ConnectionController getConnectionController() {
     return connectionManager;
   }
 
-  void registerConnectionManager(){
+  void registerConnectionManager() {
     ConnectionManager.addManager(connectionManager);
   }
 }

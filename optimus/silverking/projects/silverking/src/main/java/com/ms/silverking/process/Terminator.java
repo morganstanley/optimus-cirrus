@@ -73,7 +73,7 @@ public class Terminator implements Runnable {
   public void postpone(int pSeconds) {
     int pMillis;
 
-    log.info("Terminator postponing: {}" , pSeconds);
+    log.info("Terminator postponing: {}", pSeconds);
     pMillis = pSeconds * 1000;
     synchronized (this) {
       termTime += pMillis;
@@ -94,10 +94,11 @@ public class Terminator implements Runnable {
       log.info("Terminator will execute in  {}  ms", calcSleepMillis());
     }
     if (termFile != null) {
-      log.info("Terminator will execute if exists: {}" , termFile);
+      log.info("Terminator will execute if exists: {}", termFile);
     }
-    while (System.currentTimeMillis() < termTime && (termFile == null || (termFile != null && !termFile.exists()))) {
-      //termTime = SystemTime.currentTimeMillis() + sleepMillis;
+    while (System.currentTimeMillis() < termTime
+        && (termFile == null || (termFile != null && !termFile.exists()))) {
+      // termTime = SystemTime.currentTimeMillis() + sleepMillis;
       do {
         try {
           Thread.sleep(calcSleepMillis());

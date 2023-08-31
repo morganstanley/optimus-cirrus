@@ -20,9 +20,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * OutgoingData base implementation. Associates data with a unique send id,
- * the deadline by which the data should be sent, and a callback to
- * be informed upon successful send or upon failure.
+ * OutgoingData base implementation. Associates data with a unique send id, the deadline by which
+ * the data should be sent, and a callback to be informed upon successful send or upon failure.
  */
 public abstract class OutgoingData {
   private final UUIDBase sendUUID; // FUTURE - probably change this from uuid to long
@@ -51,17 +50,24 @@ public abstract class OutgoingData {
     absMillisTimeSource = _absMillisTimeSource;
   }
 
-  public enum Priority {NORMAL, HIGH}
+  public enum Priority {
+    NORMAL,
+    HIGH
+  }
 
-  public OutgoingData(UUIDBase sendUUID, AsyncSendListener sendListener, long deadline, Priority priority) {
+  public OutgoingData(
+      UUIDBase sendUUID, AsyncSendListener sendListener, long deadline, Priority priority) {
     this.sendUUID = sendUUID;
     this.sendListener = sendListener;
     this.priority = priority;
     this.creationTime = absMillisTimeSource.absTimeMillis();
     if (deadline <= creationTime) {
-      log.warn("deadline <= creationTime; {} < {} with time source {}", deadline, creationTime,
+      log.warn(
+          "deadline <= creationTime; {} < {} with time source {}",
+          deadline,
+          creationTime,
           absMillisTimeSource.name());
-      //throw new RuntimeException("deadline <= creationTime");
+      // throw new RuntimeException("deadline <= creationTime");
       Thread.dumpStack();
       for (StackTraceElement stack : Thread.currentThread().getStackTrace()) {
         log.warn(stack.toString());
@@ -110,7 +116,14 @@ public abstract class OutgoingData {
 
   protected final void timeout(long lastPollTime, long currPollTime, int currQueueSize) {
     if (sendListener != null && sendUUID != null) {
-      sendListener.timeout(sendUUID, lastPollTime, currPollTime, currQueueSize, creationTime, deadline, absMillisTimeSource.absTimeMillis());
+      sendListener.timeout(
+          sendUUID,
+          lastPollTime,
+          currPollTime,
+          currQueueSize,
+          creationTime,
+          deadline,
+          absMillisTimeSource.absTimeMillis());
     }
     displayForDebug();
   }
@@ -122,8 +135,14 @@ public abstract class OutgoingData {
   }
 
   public void displayForDebug() {
-    log.warn("sendUuid {} creationTime {} deadline {} curTimeMillis {} {}", sendUUID, creationTime, deadline,
+    log.warn(
+        "sendUuid {} creationTime {} deadline {} curTimeMillis {} {}",
+        sendUUID,
+        creationTime,
+        deadline,
         absMillisTimeSource.absTimeMillis(),
-        absMillisTimeSource.absTimeMillis() <= deadline ? "Data has NOT timed out" : "Data has timed out!");
+        absMillisTimeSource.absTimeMillis() <= deadline
+            ? "Data has NOT timed out"
+            : "Data has timed out!");
   }
 }

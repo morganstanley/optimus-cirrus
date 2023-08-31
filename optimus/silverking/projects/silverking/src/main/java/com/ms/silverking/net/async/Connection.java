@@ -33,14 +33,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Connection state for TCP connection to remote socket. Specialized by subclasses
- * to optimize connections for specific types of communication.
- * <p>
- * AsyncBase is responsible for calling disconnect() when an IOException occurs. Thus the
- * reads and writes here do not need to call disconnect, but bubble fatal exceptions up
- * where AsyncBase can handle them.
+ * Connection state for TCP connection to remote socket. Specialized by subclasses to optimize
+ * connections for specific types of communication.
+ *
+ * <p>AsyncBase is responsible for calling disconnect() when an IOException occurs. Thus the reads
+ * and writes here do not need to call disconnect, but bubble fatal exceptions up where AsyncBase
+ * can handle them.
  */
-public abstract class Connection implements ChannelRegistrationWorker, Comparable<Connection>, Authenticable {
+public abstract class Connection
+    implements ChannelRegistrationWorker, Comparable<Connection>, Authenticable {
   protected final SocketChannel channel;
   private SelectionKey selectionKey;
   private final InetSocketAddress remoteSocketAddress;
@@ -74,7 +75,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
    * by a single thread.
    */
   protected final Lock channelWriteLock;
-  //protected final Lock channelReceiveLock;
+  // protected final Lock channelReceiveLock;
   protected volatile boolean writing;
   /*
    * Protects internal connection accounting. For example, disconnection
@@ -84,15 +85,20 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
    */
   protected final Lock connectionLock;
 
-  public Connection(SocketChannel channel, SelectorController<? extends Connection> selectorController,
-      ConnectionListener connectionListener, boolean verbose, boolean debug, boolean allowSynchronous) {
+  public Connection(
+      SocketChannel channel,
+      SelectorController<? extends Connection> selectorController,
+      ConnectionListener connectionListener,
+      boolean verbose,
+      boolean debug,
+      boolean allowSynchronous) {
     this.channel = channel;
     this.selectorController = selectorController;
     this.connectionListener = connectionListener;
     remoteSocketAddress = (InetSocketAddress) channel.socket().getRemoteSocketAddress();
     localSocketAddress = (InetSocketAddress) channel.socket().getLocalSocketAddress();
     channelWriteLock = new ReentrantLock();
-    //channelReceiveLock = new ReentrantLock();
+    // channelReceiveLock = new ReentrantLock();
     connectionLock = new ReentrantLock();
     if (allowSynchronous) {
       activeBlockingSends = new ConcurrentHashMap<UUIDBase, ActiveSend>();
@@ -112,7 +118,9 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
     }
   }
 
-  public Connection(SocketChannel channel, SelectorController<? extends Connection> selectorController,
+  public Connection(
+      SocketChannel channel,
+      SelectorController<? extends Connection> selectorController,
       ConnectionListener connectionListener) {
     this(channel, selectorController, connectionListener, true, false, false);
   }
@@ -159,7 +167,6 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
     return remoteSocketAddress;
   }
 
-
   public final IPAndPort getLocalIPAndPort() {
     return new IPAndPort(localSocketAddress);
   }
@@ -172,9 +179,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   // FUTURE - consider locking, removing the write/read locks
 
-  /**
-   * Called by writer threads when a socket is available for writing.
-   */
+  /** Called by writer threads when a socket is available for writing. */
   public final void writeAllPending() throws IOException {
     if (AsyncGlobals.debug) {
       log.debug("Connection.writeAllPending");
@@ -202,9 +207,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
   }
 
   /**
-   * Implemented by subclasses to actually write pending data to the channel.
-   * Upon invocation, the channelWriteLock will have already been locked, and
-   * writes will have been deselected.
+   * Implemented by subclasses to actually write pending data to the channel. Upon invocation, the
+   * channelWriteLock will have already been locked, and writes will have been deselected.
    *
    * @throws IOException
    */
@@ -212,30 +216,27 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   //////////////////////////////////////////////////////////////////////
 
-  /**
-   * Called by user threads to send data on this channel asynchronously.
-   */
+  /** Called by user threads to send data on this channel asynchronously. */
   public void sendAsynchronous(Object data, long deadline) throws IOException {
     sendAsynchronous(data, null, null, deadline);
   }
 
-  /**
-   * Called by user threads to send data on this channel asynchronously.
-   */
-  public abstract void sendAsynchronous(Object data, UUIDBase sendID, AsyncSendListener asyncSendListener,
-      long deadline) throws IOException;
+  /** Called by user threads to send data on this channel asynchronously. */
+  public abstract void sendAsynchronous(
+      Object data, UUIDBase sendID, AsyncSendListener asyncSendListener, long deadline)
+      throws IOException;
 
   /**
-   * Called by user threads to send data on this channel asynchronously.
-   * This is a single synchronous send attempt. Retries must be handled
-   * outside of this method.
+   * Called by user threads to send data on this channel asynchronously. This is a single
+   * synchronous send attempt. Retries must be handled outside of this method.
    *
    * @param data
    * @param sendID
    * @param asyncSendListener
    * @throws IOException
    */
-  public void sendSynchronous(Object data, UUIDBase sendID, AsyncSendListener asyncSendListener, long deadline)
+  public void sendSynchronous(
+      Object data, UUIDBase sendID, AsyncSendListener asyncSendListener, long deadline)
       throws IOException {
     ActiveSend activeSend;
 
@@ -277,10 +278,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   //////////////////////////////////////////////////////////////////////
 
-  /**
-   * Called by reader threads when incoming data is available from a
-   * socket.
-   */
+  /** Called by reader threads when incoming data is available from a socket. */
   public final int read() throws IOException {
     if (!connected) {
       return 0;
@@ -289,8 +287,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       log.debug("channelReceiveLock.lock();");
     }
     // Only a single thread calls this for a given Connection, so lock is elided.
-    //channelReceiveLock.lock();
-    //try {
+    // channelReceiveLock.lock();
+    // try {
     int numRead;
     boolean okToRead;
 
@@ -317,12 +315,12 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       }
     }
     return numRead;
-    //} finally {
+    // } finally {
     //    channelReceiveLock.unlock();
     //    if (AsyncGlobals.debug && debug) {
     //        Log.fine("channelReceiveLock.unlock();");
     //    }
-    //}
+    // }
   }
 
   /**
@@ -337,7 +335,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   public void start() {
     selectorController.addKeyChangeRequest(
-        new NewKeyChangeRequest(channel, KeyChangeRequest.Type.ADD_AND_CHANGE_OPS, SelectionKey.OP_READ, this));
+        new NewKeyChangeRequest(
+            channel, KeyChangeRequest.Type.ADD_AND_CHANGE_OPS, SelectionKey.OP_READ, this));
   }
 
   public void close() {
@@ -349,7 +348,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
   //////////////////////////////////////////////////////////////////////
 
   private void addInterestOpsAsync(int newOps) {
-    selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.ADD_OPS, newOps));
+    selectorController.addKeyChangeRequest(
+        new KeyChangeRequest(channel, KeyChangeRequest.Type.ADD_OPS, newOps));
   }
 
   private void addInterestOps(int newOps) {
@@ -365,10 +365,11 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       // Below is unused.
       // If a disconnect happens after this check, we catch that later
       /**/
-      //selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.REMOVE_OPS,
+      // selectorController.addKeyChangeRequest(new KeyChangeRequest(channel,
+      // KeyChangeRequest.Type.REMOVE_OPS,
       //       SelectionKey.OP_READ));
       /**/
-      //removeInterestOps(SelectionKey.OP_READ);
+      // removeInterestOps(SelectionKey.OP_READ);
     } else {
       log.info("Ignoring disconnected disable reads");
     }
@@ -377,7 +378,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
   protected final void enableReads() {
     if (connected) {
       // if a disconnect happens after this check, we catch that later
-      //selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.ADD_OPS,
+      // selectorController.addKeyChangeRequest(new KeyChangeRequest(channel,
+      // KeyChangeRequest.Type.ADD_OPS,
       //       SelectionKey.OP_READ));
       addInterestOps(SelectionKey.OP_READ);
     } else {
@@ -392,39 +394,39 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
         // if a disconnect happens after this check, we catch that later
         addInterestOpsAsync(SelectionKey.OP_WRITE);
         // FUTURE - below fails; determine why we need the async version
-        //addInterestOps(SelectionKey.OP_WRITE);
+        // addInterestOps(SelectionKey.OP_WRITE);
       }
     } else {
       log.info("Ignoring disconnected enable writes");
     }
   }
-    
-    /*
-    protected final void enableWritesAsync() {
-        if (connected) {
-            // if a disconnect happens after this check, we catch that later
-            selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.ADD_OPS,
-                    SelectionKey.OP_WRITE));
-        } else {
-            Log.info("Ignoring disconnected enable writes");
-        }
-    }
-    */
+
+  /*
+  protected final void enableWritesAsync() {
+      if (connected) {
+          // if a disconnect happens after this check, we catch that later
+          selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.ADD_OPS,
+                  SelectionKey.OP_WRITE));
+      } else {
+          Log.info("Ignoring disconnected enable writes");
+      }
+  }
+  */
 
   protected final void enableWritesIfNotWriting() {
-    //boolean    locked;
+    // boolean    locked;
 
-    //locked = channelWriteLock.tryLock();
-    //locked = !writing;
-    //try {
-    //if (true || locked) {  // TODO (OPTIMUS-0000): determine why we must always enable
+    // locked = channelWriteLock.tryLock();
+    // locked = !writing;
+    // try {
+    // if (true || locked) {  // TODO (OPTIMUS-0000): determine why we must always enable
     enableWrites();
-    //}
-    //} finally {
+    // }
+    // } finally {
     //    if (locked) {
     //        channelWriteLock.unlock();
     //    }
-    //}
+    // }
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -434,17 +436,14 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
   }
 
   /**
-   * Perform subclass specific disconnect work after performing general
-   * disconnection work, but before notifying the connectionListener.
-   * connectionLock is locked during this call.
+   * Perform subclass specific disconnect work after performing general disconnection work, but
+   * before notifying the connectionListener. connectionLock is locked during this call.
    */
   protected Object disconnect_locked() {
     return null;
   }
 
-  /**
-   * Called by AsyncBase when a read or write encounters an IOException.
-   */
+  /** Called by AsyncBase when a read or write encounters an IOException. */
   void disconnect() {
     InetSocketAddress remoteAddr;
     Object disconnectionData;
@@ -453,7 +452,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       return;
     }
     // multiple sets to false are ok here
-    selectorController.addKeyChangeRequest(new KeyChangeRequest(channel, KeyChangeRequest.Type.CANCEL_AND_CLOSE));
+    selectorController.addKeyChangeRequest(
+        new KeyChangeRequest(channel, KeyChangeRequest.Type.CANCEL_AND_CLOSE));
     connected = false;
     connectionLock.lock();
     try {
@@ -468,7 +468,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       try {
         channel.close();
       } catch (IOException ioe) {
-        log.info("{} " , remoteSocketAddress, ioe);
+        log.info("{} ", remoteSocketAddress, ioe);
       }
       disconnectionData = disconnect_locked();
     } finally {
@@ -482,9 +482,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
     }
   }
 
-  /**
-   * After a disconnection, release all pending activeSends.
-   */
+  /** After a disconnection, release all pending activeSends. */
   private void releaseActiveSends() {
     IOException ioe;
 
@@ -497,9 +495,7 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   //////////////////////////////////////////////////////////////////////
 
-  /**
-   * Must be called if a send fails.
-   */
+  /** Must be called if a send fails. */
   protected void sendFailed(OutgoingData data) {
     ActiveSend activeSend;
     UUIDBase sendUUID;
@@ -518,17 +514,16 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       activeSend.setException(new IOException("send failed"));
     } else {
       if (log.isDebugEnabled()) {
-        log.debug("sendFailed() not an active send {}  {}", data.getSendUUID() , remoteSocketAddress);
+        log.debug(
+            "sendFailed() not an active send {}  {}", data.getSendUUID(), remoteSocketAddress);
       }
     }
     data.failed();
   }
 
-  /**
-   * Must be called if a send times out. This happens when a send
-   * deadline is not met.
-   */
-  protected void sendTimedOut(OutgoingData data, long lastPollTime, long currPollTime, int currQueueSize) {
+  /** Must be called if a send times out. This happens when a send deadline is not met. */
+  protected void sendTimedOut(
+      OutgoingData data, long lastPollTime, long currPollTime, int currQueueSize) {
     ActiveSend activeSend;
     UUIDBase sendUUID;
 
@@ -571,7 +566,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
       activeSend.setSentSuccessfully();
     } else {
       if (AsyncGlobals.debug && debug && log.isDebugEnabled()) {
-        log.debug("sendSucceeded() not an active send {}  {}", data.getSendUUID() ,remoteSocketAddress);
+        log.debug(
+            "sendSucceeded() not an active send {}  {}", data.getSendUUID(), remoteSocketAddress);
       }
     }
     data.successful();
@@ -594,7 +590,8 @@ public abstract class Connection implements ChannelRegistrationWorker, Comparabl
 
   @Override
   public int compareTo(Connection other) {
-    return InetSocketAddressComparator.instance.compare(getRemoteSocketAddress(), other.getRemoteSocketAddress());
+    return InetSocketAddressComparator.instance.compare(
+        getRemoteSocketAddress(), other.getRemoteSocketAddress());
   }
 
   //////////////////////////////////////////////////////////////////////

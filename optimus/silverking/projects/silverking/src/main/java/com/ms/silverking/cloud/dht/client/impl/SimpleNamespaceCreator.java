@@ -22,8 +22,7 @@ public class SimpleNamespaceCreator implements NamespaceCreator {
 
   private static Logger log = LoggerFactory.getLogger(SimpleNamespaceCreator.class);
 
-  public SimpleNamespaceCreator() {
-  }
+  public SimpleNamespaceCreator() {}
 
   @Override
   public Namespace createNamespace(String namespace) {

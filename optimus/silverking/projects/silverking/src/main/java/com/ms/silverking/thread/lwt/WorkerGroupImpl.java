@@ -42,7 +42,8 @@ class WorkerGroupImpl<I> implements WorkerGroup<I> {
     this.idleThreadThreshold = idleThreadThreshold;
   }
 
-  public WorkerGroupImpl(String name, BaseWorker<I>[] workers, int maxDirectCallDepth, int idleThreadThreshold) {
+  public WorkerGroupImpl(
+      String name, BaseWorker<I>[] workers, int maxDirectCallDepth, int idleThreadThreshold) {
     this(name, maxDirectCallDepth, idleThreadThreshold);
     for (BaseWorker<I> worker : workers) {
       addWorker(worker);
@@ -50,10 +51,17 @@ class WorkerGroupImpl<I> implements WorkerGroup<I> {
   }
 
   public WorkerGroupImpl(BaseWorker<I>[] workers) {
-    this(null, workers, LWTConstants.defaultMaxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+    this(
+        null,
+        workers,
+        LWTConstants.defaultMaxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
-  public WorkerGroupImpl(String name, Collection<BaseWorker<I>> workers, int maxDirectCallDepth,
+  public WorkerGroupImpl(
+      String name,
+      Collection<BaseWorker<I>> workers,
+      int maxDirectCallDepth,
       int idleThreadThreshold) {
     this(name, maxDirectCallDepth, idleThreadThreshold);
     for (BaseWorker<I> worker : workers) {
@@ -61,8 +69,13 @@ class WorkerGroupImpl<I> implements WorkerGroup<I> {
     }
   }
 
-  public WorkerGroupImpl(Collection<BaseWorker<I>> workers, int maxDirectCallDepth, int idleThreadThreshold) {
-    this(null, workers, LWTConstants.defaultMaxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+  public WorkerGroupImpl(
+      Collection<BaseWorker<I>> workers, int maxDirectCallDepth, int idleThreadThreshold) {
+    this(
+        null,
+        workers,
+        LWTConstants.defaultMaxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
   @Override
@@ -77,9 +90,9 @@ class WorkerGroupImpl<I> implements WorkerGroup<I> {
 
   @Override
   public void broadcastWork(I item) {
-    //System.out.println("broadcast: "+ item);
+    // System.out.println("broadcast: "+ item);
     for (BaseWorker<I> worker : workers) {
-      //System.out.println("adding to worker: "+ worker);
+      // System.out.println("adding to worker: "+ worker);
       worker.addWork(item, maxDirectCallDepth, idleThreadThreshold);
     }
   }
@@ -100,7 +113,8 @@ class WorkerGroupImpl<I> implements WorkerGroup<I> {
 
   @Override
   public void addWork(I item) {
-    workers.get(Math.abs(nextWorker.getAndIncrement() % workers.size())).addWork(item, maxDirectCallDepth,
-        idleThreadThreshold);
+    workers
+        .get(Math.abs(nextWorker.getAndIncrement() % workers.size()))
+        .addWork(item, maxDirectCallDepth, idleThreadThreshold);
   }
 }

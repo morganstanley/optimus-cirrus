@@ -42,7 +42,8 @@ public class Util {
   private static Logger log = LoggerFactory.getLogger(Util.class);
 
   public enum InstanceState {
-    STOPPED, RUNNING
+    STOPPED,
+    RUNNING
   }
 
   public static final String USER_HOME = System.getProperty("user.home");
@@ -55,8 +56,15 @@ public class Util {
   static void printInstance(Instance instance) {
     if (debugPrint)
       log.info(
-          "Found instance with id {}, " + "AMI {}, " + "type {}, " + "state {} " + "and monitoring state {}",
-          instance.getInstanceId(), instance.getImageId(), instance.getInstanceType(), instance.getState().getName(),
+          "Found instance with id {}, "
+              + "AMI {}, "
+              + "type {}, "
+              + "state {} "
+              + "and monitoring state {}",
+          instance.getInstanceId(),
+          instance.getImageId(),
+          instance.getInstanceType(),
+          instance.getState().getName(),
           instance.getMonitoring().getState());
   }
 
@@ -86,15 +94,13 @@ public class Util {
   }
 
   static void debugPrint(String text) {
-    if (debugPrint)
-      log.debug("{}",text);
+    if (debugPrint) log.debug("{}", text);
   }
 
   static List<String> getInstanceIds(List<Instance> instances) {
     List<String> ids = new ArrayList<>();
 
-    for (Instance instance : instances)
-      ids.add(instance.getInstanceId());
+    for (Instance instance : instances) ids.add(instance.getInstanceId());
 
     return ids;
   }
@@ -102,8 +108,7 @@ public class Util {
   static List<String> getIps(List<Instance> instances) {
     List<String> ips = new ArrayList<>();
 
-    for (Instance instance : instances)
-      ips.add(instance.getPrivateIpAddress());
+    for (Instance instance : instances) ips.add(instance.getPrivateIpAddress());
 
     return ips;
   }
@@ -112,7 +117,8 @@ public class Util {
     File file = new File(filename);
 
     try {
-      // mkdirs and createNewFile only create iff those paths/file don't already exist. so no need to check for
+      // mkdirs and createNewFile only create iff those paths/file don't already exist. so no need
+      // to check for
       // existence beforehand.
       file.getParentFile().mkdirs();
       file.createNewFile();
@@ -123,7 +129,8 @@ public class Util {
       e.printStackTrace();
     }
 
-    // needs to be done in this order, b/c "everyone else" wipes out all permissions (including "owner")...
+    // needs to be done in this order, b/c "everyone else" wipes out all permissions (including
+    // "owner")...
     // "everyone else"
     file.setExecutable(false, false);
     file.setReadable(false, false);
@@ -174,8 +181,7 @@ public class Util {
         }
       }
 
-      if (ips.isEmpty())
-        break;
+      if (ips.isEmpty()) break;
 
       checkForTimeoutException(sleepSeconds, totalRunTimeSeconds, retriesCount, "running");
 
@@ -187,10 +193,9 @@ public class Util {
     printDone(getIps(instances));
   }
 
-  private static void checkForTimeoutException(long sleepSeconds, long totalRunTimeSeconds, int retriesCount,
-      String status) {
-    if (retriesCount * sleepSeconds > totalRunTimeSeconds)
-      throwTimeoutException(status);
+  private static void checkForTimeoutException(
+      long sleepSeconds, long totalRunTimeSeconds, int retriesCount, String status) {
+    if (retriesCount * sleepSeconds > totalRunTimeSeconds) throwTimeoutException(status);
   }
 
   private static void throwTimeoutException(String status) {
@@ -213,12 +218,13 @@ public class Util {
     while (!ips.isEmpty()) {
       DescribeInstanceStatusResult response = ec2.describeInstanceStatus(disRequest);
       for (InstanceStatus status : response.getInstanceStatuses()) {
-        if (passedSystemStatusCheck(status.getSystemStatus()) && passedInstanceStatusCheck(
-            status.getInstanceStatus())) {
+        if (passedSystemStatusCheck(status.getSystemStatus())
+            && passedInstanceStatusCheck(status.getInstanceStatus())) {
           Instance instance = getInstance(status.getInstanceId(), instances);
           String ip = instance.getPrivateIpAddress();
           if (ips.contains(
-              ip)) {    // avoids multiple printing of those that are already 'good', while waiting for the rest to
+              ip)) { // avoids multiple printing of those that are already 'good', while waiting for
+            // the rest to
             // reach 'good' status
             log.info("  {} is good", ip);
             ips.remove(ip);
@@ -226,8 +232,7 @@ public class Util {
         }
       }
 
-      if (ips.isEmpty())
-        break;
+      if (ips.isEmpty()) break;
 
       checkForTimeoutException(sleepSeconds, totalRunTimeSeconds, retriesCount, "reachable");
 
@@ -265,9 +270,7 @@ public class Util {
   }
 
   private static Instance getInstance(String id, List<Instance> instances) {
-    for (Instance instance : instances)
-      if (instance.getInstanceId().equals(id))
-        return instance;
+    for (Instance instance : instances) if (instance.getInstanceId().equals(id)) return instance;
 
     throw new RuntimeException("instance '" + id + "' not found");
   }
@@ -283,7 +286,7 @@ public class Util {
   private static long printMinutesElapsed(long sleepSeconds, int retries, long lastMinutePrinted) {
     long minute = sleepSeconds * retries / 60;
     if (minute != 0 && minute != lastMinutePrinted) {
-      log.info("      *{} mins elapsed*", minute );
+      log.info("      *{} mins elapsed*", minute);
       lastMinutePrinted = minute;
     }
 
@@ -298,7 +301,8 @@ public class Util {
     return findInstancesStateWithKeyPair(ec2, keyPair, InstanceState.STOPPED);
   }
 
-  static List<Instance> findInstancesStateWithKeyPair(AmazonEC2 ec2, String keyPair, InstanceState state) {
+  static List<Instance> findInstancesStateWithKeyPair(
+      AmazonEC2 ec2, String keyPair, InstanceState state) {
     print("Finding " + state + " Instances");
 
     List<Instance> instances = new ArrayList<>();
@@ -311,22 +315,18 @@ public class Util {
         for (Instance instance : reservation.getInstances()) {
           printInstance(instance);
           switch (state) {
-          case STOPPED:
-            if (isStopped(instance) && isKeyPair(instance, keyPair))
-              instances.add(instance);
-            break;
-          case RUNNING:
-            if (isRunning(instance) && isKeyPair(instance, keyPair))
-              instances.add(instance);
-            break;
-          default:
-            throwRuntimeException("Unknown Instance state: " + state);
+            case STOPPED:
+              if (isStopped(instance) && isKeyPair(instance, keyPair)) instances.add(instance);
+              break;
+            case RUNNING:
+              if (isRunning(instance) && isKeyPair(instance, keyPair)) instances.add(instance);
+              break;
+            default:
+              throwRuntimeException("Unknown Instance state: " + state);
           }
-
         }
 
-      if (response.getNextToken() == null)
-        break;
+      if (response.getNextToken() == null) break;
 
       debugPrint("token: " + response.getNextToken());
       request.setNextToken(response.getNextToken());
@@ -375,12 +375,16 @@ public class Util {
 
   public static void checkNumInstances(int numInstances) {
     if (numInstances <= 0)
-      throwIllegalArgumentException("numInstances", numInstances,
+      throwIllegalArgumentException(
+          "numInstances",
+          numInstances,
           "must be > 0. You need to set \"-n\", if you haven't already.");
   }
 
-  public static void throwIllegalArgumentException(String variableName, Object variableValue, String msg) {
-    throw new IllegalArgumentException("Invalid " + variableName + ": \"" + variableValue + "\" .... " + msg);
+  public static void throwIllegalArgumentException(
+      String variableName, Object variableValue, String msg) {
+    throw new IllegalArgumentException(
+        "Invalid " + variableName + ": \"" + variableValue + "\" .... " + msg);
   }
 
   public static void throwRuntimeException(String msg) {

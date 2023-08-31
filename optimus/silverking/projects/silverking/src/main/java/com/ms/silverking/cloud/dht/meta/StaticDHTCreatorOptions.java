@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.dht.meta;
 import org.kohsuke.args4j.Option;
 
 class StaticDHTCreatorOptions {
-  StaticDHTCreatorOptions() {
-  }
+  StaticDHTCreatorOptions() {}
 
   static final int defaultPort = 7575;
 

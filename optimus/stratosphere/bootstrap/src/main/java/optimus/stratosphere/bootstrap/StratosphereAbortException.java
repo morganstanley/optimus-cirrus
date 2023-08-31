@@ -12,7 +12,14 @@
 package optimus.stratosphere.bootstrap;
 
 public class StratosphereAbortException extends StratosphereException {
-  public StratosphereAbortException(String msg) {
+  private final boolean abortedByUser;
+
+  public StratosphereAbortException(String msg, boolean abortedByUser) {
     super(msg);
+    this.abortedByUser = abortedByUser;
+  }
+
+  public boolean isAbortedByUser() {
+    return abortedByUser;
   }
 }

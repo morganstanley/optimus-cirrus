@@ -73,12 +73,12 @@ final case class SparseProfile(name: String, scopes: Set[String], subProfiles: S
         val profileConfigFile = ws.directoryStructure.sparseProfile(profileConfigName)
         if (!profileConfigFile.exists()) {
           throw new StratosphereException(
-            s"""Error: Profile named '$profileConfigName' was not found. Config file is missing: $profileConfigFile.
+            s"""Profile named '$profileConfigName' was not found. Config file is missing: $profileConfigFile.
                |Available profiles: ${SparseProfile.loadAll().map(_.name).mkString(", ")}""".stripMargin)
         }
         if (seenSoFar.contains(profileConfigName)) {
           throw new StratosphereException(
-            s"""Error: Profile '$profileConfigName' depends on itself which creates an infinite loop when loading.
+            s"""Profile '$profileConfigName' depends on itself which creates an infinite loop when loading.
                |Please check the configuration file at: $profileConfigFile""".stripMargin)
         }
         SparseProfile.loadFromPath(profileConfigFile).toSet.flatMap { profile: SparseProfile =>

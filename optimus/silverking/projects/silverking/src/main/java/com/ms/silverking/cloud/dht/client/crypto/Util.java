@@ -24,7 +24,8 @@ public class Util {
 
   public static byte[] getBytesFromKeyFile() throws IOException {
     return FileUtil.readFileAsBytes(
-        new File(PropertiesHelper.systemHelper.getString(keyFilePropertyName, UndefinedAction.ExceptionOnUndefined)));
+        new File(
+            PropertiesHelper.systemHelper.getString(
+                keyFilePropertyName, UndefinedAction.ExceptionOnUndefined)));
   }
-
 }

@@ -21,9 +21,7 @@ import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.cloud.dht.ForwardingMode;
 import com.ms.silverking.time.AbsMillisTimeSource;
 
-/**
- * Provides functionality common to all operations,
- */
+/** Provides functionality common to all operations, */
 public abstract class BaseOperation<S> {
   // entryStateMap is only written to during creation
   // Hence, no concurrency control around reads
@@ -48,12 +46,17 @@ public abstract class BaseOperation<S> {
     absMillisTimeSource = _absMillisTimeSource;
   }
 
-  public BaseOperation(long deadline, OperationContainer operationContainer, ForwardingMode forwardingMode,
-      int minInternalRelTimeoutMillis, int numEntries) {
+  public BaseOperation(
+      long deadline,
+      OperationContainer operationContainer,
+      ForwardingMode forwardingMode,
+      int minInternalRelTimeoutMillis,
+      int numEntries) {
     this.deadline = deadline;
     this.operationContainer = operationContainer;
     this.forwardingMode = forwardingMode;
-    this.minInternalAbsTimeoutMillis = absMillisTimeSource.absTimeMillis() + minInternalRelTimeoutMillis;
+    this.minInternalAbsTimeoutMillis =
+        absMillisTimeSource.absTimeMillis() + minInternalRelTimeoutMillis;
     entryStateMap = new HashMap<>(numEntries * capacityFactor);
     this.numEntries = numEntries;
     completeEntries = new AtomicInteger();

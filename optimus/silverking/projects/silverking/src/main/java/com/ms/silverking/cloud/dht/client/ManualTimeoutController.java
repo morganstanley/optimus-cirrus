@@ -15,9 +15,7 @@ import java.util.Arrays;
 
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * OpTimeoutController implementation that supports manual specification of timeouts
- */
+/** OpTimeoutController implementation that supports manual specification of timeouts */
 public class ManualTimeoutController implements OpTimeoutController {
   private final int[] attemptTimeoutsMillis;
   private final int[] attemptExclusionChangeTimeoutsMillis;
@@ -27,8 +25,11 @@ public class ManualTimeoutController implements OpTimeoutController {
   static final int defaultAttemptTimeoutMillis = 2 * 60 * 1000;
   static final int defaultAttemptExclusionChangeTimeoutMillis = 2 * 1000;
 
-  static final ManualTimeoutController template = ManualTimeoutController.createWithFixedTimeouts(defaultMaxAttempts,
-      defaultAttemptTimeoutMillis, defaultAttemptExclusionChangeTimeoutMillis);
+  static final ManualTimeoutController template =
+      ManualTimeoutController.createWithFixedTimeouts(
+          defaultMaxAttempts,
+          defaultAttemptTimeoutMillis,
+          defaultAttemptExclusionChangeTimeoutMillis);
 
   static {
     ObjectDefParser2.addParser(template);
@@ -39,19 +40,22 @@ public class ManualTimeoutController implements OpTimeoutController {
    *
    * @param maxRelativeTimeoutMillis relative timeout in milliseconds
    */
-  public ManualTimeoutController(int[] attemptTimeoutsMillis, int[] attemptExclusionChangeTimeoutsMillis,
+  public ManualTimeoutController(
+      int[] attemptTimeoutsMillis,
+      int[] attemptExclusionChangeTimeoutsMillis,
       int maxRelativeTimeoutMillis) {
     Util.checkAttempts(attemptTimeoutsMillis.length);
     if (attemptTimeoutsMillis.length != attemptExclusionChangeTimeoutsMillis.length) {
-      throw new RuntimeException("attemptTimeoutsMillis.length != attemptExclusionChangeTimeoutsMillis.length");
+      throw new RuntimeException(
+          "attemptTimeoutsMillis.length != attemptExclusionChangeTimeoutsMillis.length");
     }
     this.attemptTimeoutsMillis = attemptTimeoutsMillis;
     this.attemptExclusionChangeTimeoutsMillis = attemptExclusionChangeTimeoutsMillis;
     this.maxRelativeTimeoutMillis = maxRelativeTimeoutMillis;
   }
 
-  public static ManualTimeoutController createWithFixedTimeouts(int maxAttempts, int attemptTimeoutMillis,
-      int attemptExclusionChangeTimeoutMillis) {
+  public static ManualTimeoutController createWithFixedTimeouts(
+      int maxAttempts, int attemptTimeoutMillis, int attemptExclusionChangeTimeoutMillis) {
     int[] attemptTimeoutsMillis;
     int[] attemptExclusionChangeTimeoutsMillis;
 
@@ -65,7 +69,9 @@ public class ManualTimeoutController implements OpTimeoutController {
     attemptExclusionChangeTimeoutsMillis = new int[maxAttempts];
     Arrays.fill(attemptTimeoutsMillis, attemptTimeoutMillis);
     Arrays.fill(attemptExclusionChangeTimeoutsMillis, attemptExclusionChangeTimeoutMillis);
-    return new ManualTimeoutController(attemptTimeoutsMillis, attemptExclusionChangeTimeoutsMillis,
+    return new ManualTimeoutController(
+        attemptTimeoutsMillis,
+        attemptExclusionChangeTimeoutsMillis,
         maxAttempts * attemptTimeoutMillis);
   }
 
@@ -80,7 +86,8 @@ public class ManualTimeoutController implements OpTimeoutController {
   }
 
   @Override
-  public long getRelativeExclusionChangeRetryMillisForAttempt(AsyncOperation op, int curAttemptIndex) {
+  public long getRelativeExclusionChangeRetryMillisForAttempt(
+      AsyncOperation op, int curAttemptIndex) {
     return attemptExclusionChangeTimeoutsMillis[curAttemptIndex];
   }
 
@@ -91,8 +98,9 @@ public class ManualTimeoutController implements OpTimeoutController {
 
   @Override
   public int hashCode() {
-    return Arrays.hashCode(attemptTimeoutsMillis) ^ Arrays.hashCode(attemptExclusionChangeTimeoutsMillis)
-      ^ maxRelativeTimeoutMillis;
+    return Arrays.hashCode(attemptTimeoutsMillis)
+        ^ Arrays.hashCode(attemptExclusionChangeTimeoutsMillis)
+        ^ maxRelativeTimeoutMillis;
   }
 
   @Override
@@ -110,7 +118,8 @@ public class ManualTimeoutController implements OpTimeoutController {
     other = (ManualTimeoutController) o;
     return maxRelativeTimeoutMillis == other.maxRelativeTimeoutMillis
         && Arrays.equals(attemptTimeoutsMillis, ((ManualTimeoutController) o).attemptTimeoutsMillis)
-        && Arrays.equals(attemptExclusionChangeTimeoutsMillis, attemptExclusionChangeTimeoutsMillis);
+        && Arrays.equals(
+            attemptExclusionChangeTimeoutsMillis, attemptExclusionChangeTimeoutsMillis);
   }
 
   @Override

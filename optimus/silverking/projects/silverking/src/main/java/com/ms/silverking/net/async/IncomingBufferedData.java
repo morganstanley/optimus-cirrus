@@ -23,20 +23,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is designed to receive data organized into ByteBuffers.
- * It first receives metadata regarding the buffers to be received,
- * after which it receives the buffers themselves.
- * <p>
- * Header format <fieldName> (<number of bytes>):
- * numberOfBuffers    (4)
- * <p>
- * bufferLength[0]    (4)
- * ...
- * bufferLength[numberOfBuffers - 1] (4)
- * <p>
- * buffer[0]
- * buffer[1]
- * ...
+ * This class is designed to receive data organized into ByteBuffers. It first receives metadata
+ * regarding the buffers to be received, after which it receives the buffers themselves.
+ *
+ * <p>Header format <fieldName> (<number of bytes>): numberOfBuffers (4)
+ *
+ * <p>bufferLength[0] (4) ... bufferLength[numberOfBuffers - 1] (4)
+ *
+ * <p>buffer[0] buffer[1] ...
  */
 public final class IncomingBufferedData {
   private final boolean isClient;
@@ -53,21 +47,27 @@ public final class IncomingBufferedData {
   private static Logger log = LoggerFactory.getLogger(IncomingBufferedData.class);
 
   private enum ReadState {
-    INIT_PREAMBLE_SEARCH, PREAMBLE_SEARCH, HEADER_LENGTH, BUFFER_LENGTHS, BUFFERS, DONE, CHANNEL_CLOSED
-  }
+    INIT_PREAMBLE_SEARCH,
+    PREAMBLE_SEARCH,
+    HEADER_LENGTH,
+    BUFFER_LENGTHS,
+    BUFFERS,
+    DONE,
+    CHANNEL_CLOSED
+  };
 
-  ;
+  public enum ReadResult {
+    CHANNEL_CLOSED,
+    COMPLETE,
+    INCOMPLETE
+  };
 
-  public enum ReadResult {CHANNEL_CLOSED, COMPLETE, INCOMPLETE}
-
-  ;
-
-  //private static final int maxBufferSize = Integer.MAX_VALUE >> 2;
+  // private static final int maxBufferSize = Integer.MAX_VALUE >> 2;
   private static final int maxBufferSize = 1024 * 1024 * 1024;
   private static final int errorTolerance = 4;
 
-  public static final byte[] preamble = { (byte) 0xab, (byte) 0xad };
-  private static final byte[] clientPreamble = { (byte) 0xfe, (byte) 0xed };
+  public static final byte[] preamble = {(byte) 0xab, (byte) 0xad};
+  private static final byte[] clientPreamble = {(byte) 0xfe, (byte) 0xed};
   private final byte[] _preamble;
 
   private static final int maxNumBuffers = 2048;
@@ -76,7 +76,7 @@ public final class IncomingBufferedData {
   private final boolean debug = false;
 
   public static void setClient() {
-    //isClient = true;
+    // isClient = true;
   }
 
   public IncomingBufferedData(boolean debug, boolean isClient) {
@@ -90,7 +90,7 @@ public final class IncomingBufferedData {
     headerLengthBuffer = ByteBuffer.allocate(NumConversion.BYTES_PER_INT);
     headerLengthBufferInt = headerLengthBuffer.asIntBuffer();
     readState = ReadState.INIT_PREAMBLE_SEARCH;
-    //this.debug = debug;
+    // this.debug = debug;
   }
 
   public ByteBuffer[] getBuffers() {
@@ -109,141 +109,144 @@ public final class IncomingBufferedData {
     lastNumRead = 0;
     do {
       if (debug) {
-        log.debug("{}",readState);
+        log.debug("{}", readState);
       }
       try {
         switch (readState) {
-        case INIT_PREAMBLE_SEARCH:
-          if (debug) {
-            log.debug("preambleBuffer.clear()");
-          }
-          preambleBuffer.clear();
-          readState = ReadState.PREAMBLE_SEARCH;
-          break;
-        case PREAMBLE_SEARCH:
-          numRead = channel.read(preambleBuffer);
-          if (debug) {
-            log.debug("{} {}  {}",numRead , preambleBuffer.hasRemaining() , StringUtil.byteArrayToHexString(
-                preambleBuffer.array()));
-          }
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          }
-          lastNumRead += numRead;
-          if (preambleBuffer.hasRemaining()) {
-            return ReadResult.INCOMPLETE;
-          } else {
-            byte[] candidatePreamble;
-
-            // we have a full preamble buffer, see if we match
-            candidatePreamble = preambleBuffer.array();
-            if (Arrays.equals(_preamble, candidatePreamble)) {
-              readState = ReadState.HEADER_LENGTH;
-            } else {
-              // mismatch - search for real preamble
-              preambleBuffer.clear();
-              if (candidatePreamble[1] == preamble[0]) {
-                preambleBuffer.put(preamble[0]);
-              }
-            }
-          }
-          break;
-        case HEADER_LENGTH:
-          if (!isClient) {
-            numRead = channel.read(headerLengthBuffer);
+          case INIT_PREAMBLE_SEARCH:
             if (debug) {
-              log.debug("numRead {}", numRead);
+              log.debug("preambleBuffer.clear()");
+            }
+            preambleBuffer.clear();
+            readState = ReadState.PREAMBLE_SEARCH;
+            break;
+          case PREAMBLE_SEARCH:
+            numRead = channel.read(preambleBuffer);
+            if (debug) {
+              log.debug(
+                  "{} {}  {}",
+                  numRead,
+                  preambleBuffer.hasRemaining(),
+                  StringUtil.byteArrayToHexString(preambleBuffer.array()));
             }
             if (numRead < 0) {
               return ReadResult.CHANNEL_CLOSED;
             }
             lastNumRead += numRead;
-            if (headerLengthBuffer.hasRemaining()) {
+            if (preambleBuffer.hasRemaining()) {
               return ReadResult.INCOMPLETE;
             } else {
-              allocateBufferLengthsBuffer(headerLengthBufferInt.get(0));
-              readState = ReadState.BUFFER_LENGTHS;
-              break;
-            }
-          } else {
-            allocateBufferLengthsBuffer(1);
-          }
-        case BUFFER_LENGTHS:
-          if (bufferLengthsBuffer.remaining() <= 0) {
-            throw new IOException("bufferLengthsBuffer.remaining() <= 0");
-          }
-          numRead = channel.read(bufferLengthsBuffer);
-          if (debug) {
-            log.debug("numRead {}", numRead);
-          }
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          } else if (numRead == 0) {
-            return ReadResult.INCOMPLETE;
-          } else {
-            lastNumRead += numRead;
-            if (bufferLengthsBuffer.remaining() == 0) {
-              allocateBuffers();
-              readState = ReadState.BUFFERS;
+              byte[] candidatePreamble;
+
+              // we have a full preamble buffer, see if we match
+              candidatePreamble = preambleBuffer.array();
+              if (Arrays.equals(_preamble, candidatePreamble)) {
+                readState = ReadState.HEADER_LENGTH;
+              } else {
+                // mismatch - search for real preamble
+                preambleBuffer.clear();
+                if (candidatePreamble[1] == preamble[0]) {
+                  preambleBuffer.put(preamble[0]);
+                }
+              }
             }
             break;
-          }
-        case BUFFERS:
-          ByteBuffer curBuffer;
-
-          curBuffer = buffers[curBufferIndex];
-          //if (curBuffer.remaining() <= 0) {
-          //    throw new IOException("curBuffer.remaining() <= 0");
-          //}
-          if (curBuffer.remaining() > 0) {
-            numRead = channel.read(curBuffer);
-          } else {
-            numRead = 0;
-          }
-          if (debug) {
-            log.info("numRead {}", numRead);
-          }
-          if (numRead < 0) {
-            return ReadResult.CHANNEL_CLOSED;
-          } else if (numRead == 0) {
-            if (curBuffer.remaining() > 0) {
+          case HEADER_LENGTH:
+            if (!isClient) {
+              numRead = channel.read(headerLengthBuffer);
+              if (debug) {
+                log.debug("numRead {}", numRead);
+              }
+              if (numRead < 0) {
+                return ReadResult.CHANNEL_CLOSED;
+              }
+              lastNumRead += numRead;
+              if (headerLengthBuffer.hasRemaining()) {
+                return ReadResult.INCOMPLETE;
+              } else {
+                allocateBufferLengthsBuffer(headerLengthBufferInt.get(0));
+                readState = ReadState.BUFFER_LENGTHS;
+                break;
+              }
+            } else {
+              allocateBufferLengthsBuffer(1);
+            }
+          case BUFFER_LENGTHS:
+            if (bufferLengthsBuffer.remaining() <= 0) {
+              throw new IOException("bufferLengthsBuffer.remaining() <= 0");
+            }
+            numRead = channel.read(bufferLengthsBuffer);
+            if (debug) {
+              log.debug("numRead {}", numRead);
+            }
+            if (numRead < 0) {
+              return ReadResult.CHANNEL_CLOSED;
+            } else if (numRead == 0) {
               return ReadResult.INCOMPLETE;
             } else {
-              curBufferIndex++;
-              assert curBufferIndex <= buffers.length;
-              if (curBufferIndex == buffers.length) {
-                readState = ReadState.DONE;
-                return ReadResult.COMPLETE;
-              } else {
-                break;
+              lastNumRead += numRead;
+              if (bufferLengthsBuffer.remaining() == 0) {
+                allocateBuffers();
+                readState = ReadState.BUFFERS;
               }
-            }
-          } else {
-            lastNumRead += numRead;
-            if (curBuffer.remaining() == 0) {
-              curBufferIndex++;
-              assert curBufferIndex <= buffers.length;
-              if (curBufferIndex == buffers.length) {
-                readState = ReadState.DONE;
-                return ReadResult.COMPLETE;
-              } else {
-                break;
-              }
-            } else {
               break;
             }
-          }
-        case DONE:
-          log.debug("IncomingBufferedData.DONE");
-          return ReadResult.COMPLETE;
-        case CHANNEL_CLOSED:
-          throw new IOException("Channel closed");
-        default:
-          throw new RuntimeException("panic");
+          case BUFFERS:
+            ByteBuffer curBuffer;
+
+            curBuffer = buffers[curBufferIndex];
+            // if (curBuffer.remaining() <= 0) {
+            //    throw new IOException("curBuffer.remaining() <= 0");
+            // }
+            if (curBuffer.remaining() > 0) {
+              numRead = channel.read(curBuffer);
+            } else {
+              numRead = 0;
+            }
+            if (debug) {
+              log.info("numRead {}", numRead);
+            }
+            if (numRead < 0) {
+              return ReadResult.CHANNEL_CLOSED;
+            } else if (numRead == 0) {
+              if (curBuffer.remaining() > 0) {
+                return ReadResult.INCOMPLETE;
+              } else {
+                curBufferIndex++;
+                assert curBufferIndex <= buffers.length;
+                if (curBufferIndex == buffers.length) {
+                  readState = ReadState.DONE;
+                  return ReadResult.COMPLETE;
+                } else {
+                  break;
+                }
+              }
+            } else {
+              lastNumRead += numRead;
+              if (curBuffer.remaining() == 0) {
+                curBufferIndex++;
+                assert curBufferIndex <= buffers.length;
+                if (curBufferIndex == buffers.length) {
+                  readState = ReadState.DONE;
+                  return ReadResult.COMPLETE;
+                } else {
+                  break;
+                }
+              } else {
+                break;
+              }
+            }
+          case DONE:
+            log.debug("IncomingBufferedData.DONE");
+            return ReadResult.COMPLETE;
+          case CHANNEL_CLOSED:
+            throw new IOException("Channel closed");
+          default:
+            throw new RuntimeException("panic");
         }
       } catch (IOException ioe) {
         if (debug) {
-          log.error("",ioe);
+          log.error("", ioe);
         }
         if (ioe.getMessage().startsWith("Connection reset")) {
           readState = ReadState.CHANNEL_CLOSED;
@@ -251,7 +254,7 @@ public final class IncomingBufferedData {
         } else {
           readErrors++;
           if (readErrors <= errorTolerance) {
-            log.error("Ignoring read error {}" , readErrors, ioe);
+            log.error("Ignoring read error {}", readErrors, ioe);
             preambleBuffer.clear();
             readState = ReadState.INIT_PREAMBLE_SEARCH;
             return ReadResult.INCOMPLETE;

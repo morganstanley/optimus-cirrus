@@ -24,32 +24,46 @@ import org.apache.zookeeper.WatchedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watchers all children under a znode for changes.
- */
+/** Watchers all children under a znode for changes. */
 public class ChildrenWatcher extends WatcherBase {
   private final ChildrenListener listener;
   private volatile Map<String, byte[]> childStates;
 
   private static Logger log = LoggerFactory.getLogger(ChildrenWatcher.class);
 
-  public ChildrenWatcher(Timer timer, MetaClientCore metaClientCore, String basePath, ChildrenListener listener,
-      long intervalMillis, long maxInitialSleep) {
+  public ChildrenWatcher(
+      Timer timer,
+      MetaClientCore metaClientCore,
+      String basePath,
+      ChildrenListener listener,
+      long intervalMillis,
+      long maxInitialSleep) {
     super(metaClientCore, timer, basePath, intervalMillis, maxInitialSleep);
     this.listener = listener;
   }
 
-  public ChildrenWatcher(MetaClientCore metaClientCore, String basePath, ChildrenListener listener, long intervalMillis,
+  public ChildrenWatcher(
+      MetaClientCore metaClientCore,
+      String basePath,
+      ChildrenListener listener,
+      long intervalMillis,
       long maxInitialSleep) {
     this(null, metaClientCore, basePath, listener, intervalMillis, maxInitialSleep);
   }
 
-  public ChildrenWatcher(Timer timer, MetaClientCore metaClientCore, String basePath, ChildrenListener listener,
+  public ChildrenWatcher(
+      Timer timer,
+      MetaClientCore metaClientCore,
+      String basePath,
+      ChildrenListener listener,
       long intervalMillis) {
     this(timer, metaClientCore, basePath, listener, intervalMillis, intervalMillis);
   }
 
-  public ChildrenWatcher(MetaClientCore metaClientCore, String basePath, ChildrenListener listener,
+  public ChildrenWatcher(
+      MetaClientCore metaClientCore,
+      String basePath,
+      ChildrenListener listener,
       long intervalMillis) {
     this(metaClientCore, basePath, listener, intervalMillis, intervalMillis);
   }

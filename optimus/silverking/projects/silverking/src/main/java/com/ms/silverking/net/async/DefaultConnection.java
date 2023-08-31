@@ -17,25 +17,36 @@ import java.nio.channels.SocketChannel;
 
 import com.ms.silverking.id.UUIDBase;
 
-/**
- * A simple default ByteBuffer-based connection.
- */
-public class DefaultConnection extends QueueingConnection<OutgoingByteBuffer, NewIncomingBufferedData> {
+/** A simple default ByteBuffer-based connection. */
+public class DefaultConnection
+    extends QueueingConnection<OutgoingByteBuffer, NewIncomingBufferedData> {
   private final Receiver receiver;
   private final ByteBuffer readBuffer;
 
   private static final int defaultReceiveBufferSize = 2 * 1024;
 
-  public DefaultConnection(SocketChannel channel, SelectorController<DefaultConnection> selectorController,
-      ConnectionListener connectionListener, Receiver receiver, ByteBuffer readBuffer) {
+  public DefaultConnection(
+      SocketChannel channel,
+      SelectorController<DefaultConnection> selectorController,
+      ConnectionListener connectionListener,
+      Receiver receiver,
+      ByteBuffer readBuffer) {
     super(channel, selectorController, connectionListener, true);
     this.receiver = receiver;
     this.readBuffer = readBuffer;
   }
 
-  public DefaultConnection(SocketChannel channel, SelectorController<DefaultConnection> selectorController,
-      ConnectionListener connectionListener, Receiver receiver) {
-    this(channel, selectorController, connectionListener, receiver, ByteBuffer.allocate(defaultReceiveBufferSize));
+  public DefaultConnection(
+      SocketChannel channel,
+      SelectorController<DefaultConnection> selectorController,
+      ConnectionListener connectionListener,
+      Receiver receiver) {
+    this(
+        channel,
+        selectorController,
+        connectionListener,
+        receiver,
+        ByteBuffer.allocate(defaultReceiveBufferSize));
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -46,8 +57,9 @@ public class DefaultConnection extends QueueingConnection<OutgoingByteBuffer, Ne
   }
 
   @Override
-  protected OutgoingByteBuffer wrapForSend(Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline) throws IOException {
+  protected OutgoingByteBuffer wrapForSend(
+      Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline)
+      throws IOException {
     return OutgoingByteBuffer.wrap((byte[]) data, sendUUID, asyncSendListener);
   }
 

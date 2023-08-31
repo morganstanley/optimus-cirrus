@@ -14,8 +14,7 @@ package com.ms.silverking.net.analysis.iperf;
 import java.util.Comparator;
 
 public class BPSComparator implements Comparator<Measurement> {
-  public BPSComparator() {
-  }
+  public BPSComparator() {}
 
   @Override
   public int compare(Measurement o1, Measurement o2) {

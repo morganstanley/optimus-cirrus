@@ -15,6 +15,7 @@ import com.typesafe.config.Config
 import optimus.stratosphere.common.RemoteIntellijLocation
 import optimus.stratosphere.utils.MemSize
 import optimus.stratosphere.utils.MemUnit
+import org.fusesource.jansi.Ansi.Color
 
 import java.nio.file.Path
 import java.time.{Duration => JDuration}
@@ -31,6 +32,11 @@ sealed trait DurationOrDuration[A]
 object DurationOrDuration {
   implicit val javaDuration: DurationOrDuration[java.time.Duration] = new DurationOrDuration[java.time.Duration] {}
   implicit val scalaDuration: DurationOrDuration[FiniteDuration] = new DurationOrDuration[FiniteDuration] {}
+}
+
+final case class ConsoleColors(enabled: Boolean, error: Color, warning: Color, highlight: Color)
+object ConsoleColors {
+  val Disabled: ConsoleColors = ConsoleColors(enabled = false, Color.DEFAULT, Color.DEFAULT, Color.DEFAULT)
 }
 
 // IMPORTANT: Remember to add a case to TypeSafeOptionsTest every time you add an 'object' here
@@ -79,8 +85,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   object catchUp {
     def defaultBranch: String = self.select("catch-up.default-branch")
     def defaultMode: String = self.select("catch-up.default-mode")
-    def defaultStrategy: String = self.select("catch-up.default-strategy")
-    def ignoreLocalChanges: Boolean = self.select("catch-up.ignore-local-changes")
 
     object remote {
       def name: String = self.select("catch-up.remote.name")
@@ -122,6 +126,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     protected def disabledPlugins: Seq[Map[String, String]] = self.select("intellij.disabledPlugins")
     def disabledPluginsNames: Seq[String] = disabledPlugins.map(_.apply("name"))
     def disabledPluginsDirs: Seq[String] = disabledPlugins.map(_.apply("path"))
+
+    object backup {
+      def maxBackupsCount: Int = self.select("intellij.backups.max-backups-count")
+      def dirsToSkip: Seq[String] = self.select("intellij.backups.dirs-to-skip")
+    }
 
     object catchUp {
       def showQuestion: Boolean = self.select("intellij.catch-up.show-question")
@@ -185,6 +194,15 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def msGroup: Path = self.select("internal.ms-group")
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
     def stashHostname: String = self.select("internal.stash-hostname")
+
+    object console {
+      def colors: ConsoleColors = ConsoleColors(
+        enabled = self.select("internal.console.use-colors"),
+        error = Color.valueOf(self.select("internal.console.colors.error")),
+        warning = Color.valueOf(self.select("internal.console.colors.warning")),
+        highlight = Color.valueOf(self.select("internal.console.colors.highlight"))
+      )
+    }
 
     object diag {
       def uploadLocation: Path = self.select("internal.diag.upload-location")
@@ -257,6 +275,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def executable: String = self.select("internal.obt.executable")
       def install: Path = self.select("internal.obt.install")
       def installDir: Path = self.select("internal.obt.install-dir")
+      def pythonEnabled: Boolean = self.select("internal.obt.python-enabled")
       def serverExecutable: String = self.select("internal.obt.server-executable")
       def testRunnerExecutable: String = self.select("internal.obt.test-runner-executable")
     }

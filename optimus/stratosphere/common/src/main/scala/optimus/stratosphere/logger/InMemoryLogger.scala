@@ -12,11 +12,11 @@
 package optimus.stratosphere.logger
 
 final case class InMemoryLogger() extends Logger {
-  protected var loggedLines: List[String] = Nil
+  protected var loggedLines: Seq[String] = Nil
   override def handleAnswer(answer: String): Unit = info(answer)
-  override def info(toLog: String): Unit = loggedLines = loggedLines :+ toLog.toString
+  override def info(toLog: String): Unit = loggedLines = loggedLines :+ toLog
   override def debug(toLog: String): Unit = info(toLog)
 
   def resetState(): Unit = loggedLines = Nil
-  def getLoggedLines(): List[String] = loggedLines
+  def getLoggedLines(): Seq[String] = loggedLines
 }

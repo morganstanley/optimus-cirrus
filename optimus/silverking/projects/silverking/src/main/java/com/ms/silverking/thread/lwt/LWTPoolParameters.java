@@ -25,7 +25,12 @@ public class LWTPoolParameters {
   private static final LightLinkedBlockingQueue<AssignedWork> defaultCommonQueue = null;
   private static final int defaultWorkUnit = 1;
 
-  private LWTPoolParameters(String name, int targetSize, int maxSize, LightLinkedBlockingQueue<AssignedWork> commonQueue, int workUnit) {
+  private LWTPoolParameters(
+      String name,
+      int targetSize,
+      int maxSize,
+      LightLinkedBlockingQueue<AssignedWork> commonQueue,
+      int workUnit) {
     this.name = name;
     this.targetSize = targetSize;
     this.maxSize = maxSize;
@@ -34,11 +39,13 @@ public class LWTPoolParameters {
   }
 
   public static LWTPoolParameters create(String name) {
-    return new LWTPoolParameters(name, defaultTargetSize, defaultMaxSize, defaultCommonQueue, defaultWorkUnit);
+    return new LWTPoolParameters(
+        name, defaultTargetSize, defaultMaxSize, defaultCommonQueue, defaultWorkUnit);
   }
 
   public LWTPoolParameters targetSize(int targetSize) {
-    return new LWTPoolParameters(name, targetSize, Math.max(maxSize, targetSize), commonQueue, workUnit);
+    return new LWTPoolParameters(
+        name, targetSize, Math.max(maxSize, targetSize), commonQueue, workUnit);
   }
 
   public LWTPoolParameters maxSize(int maxSize) {

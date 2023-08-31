@@ -38,13 +38,29 @@ import com.ms.silverking.numeric.NumConversion;
 
 public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
 
-  public ProtoRetrievalMessageGroup(UUIDBase uuid, long context, InternalRetrievalOptions retrievalOptions,
-      byte[] originator, int size, int deadlineRelativeMillis, ForwardingMode forward, SkTraceId maybeTraceID) {
-    super(TraceIDProvider.isValidTraceID(maybeTraceID) ? MessageType.RETRIEVE_TRACE : MessageType.RETRIEVE, uuid,
+  public ProtoRetrievalMessageGroup(
+      UUIDBase uuid,
+      long context,
+      InternalRetrievalOptions retrievalOptions,
+      byte[] originator,
+      int size,
+      int deadlineRelativeMillis,
+      ForwardingMode forward,
+      SkTraceId maybeTraceID) {
+    super(
+        TraceIDProvider.isValidTraceID(maybeTraceID)
+            ? MessageType.RETRIEVE_TRACE
+            : MessageType.RETRIEVE,
+        uuid,
         context,
-        ByteBuffer.allocate(RetrievalMessageFormat.getOptionsBufferLength(retrievalOptions.getRetrievalOptions())),
-        size, RetrievalMessageFormat.size - KeyedMessageFormat.baseBytesPerKeyEntry, originator, deadlineRelativeMillis,
-        forward, maybeTraceID);
+        ByteBuffer.allocate(
+            RetrievalMessageFormat.getOptionsBufferLength(retrievalOptions.getRetrievalOptions())),
+        size,
+        RetrievalMessageFormat.size - KeyedMessageFormat.baseBytesPerKeyEntry,
+        originator,
+        deadlineRelativeMillis,
+        forward,
+        maybeTraceID);
     Set<SecondaryTarget> secondaryTargets;
     byte[] userOptions;
     byte[] authorizationUser;
@@ -55,11 +71,14 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
     // begin retrievalType, waitMode encoding
     // see getRetrievalOptions() for decoding
     optionsByteBuffer.put(
-        (byte) ((retrievalOptions.getRetrievalType().ordinal() << 4) | retrievalOptions.getWaitMode().ordinal()));
+        (byte)
+            ((retrievalOptions.getRetrievalType().ordinal() << 4)
+                | retrievalOptions.getWaitMode().ordinal()));
     // end retrievalType, waitMode encoding
-    optionsByteBuffer.put((byte) (((retrievalOptions.getVerifyIntegrity() ?
-        1 :
-        0) << 1) | (retrievalOptions.getRetrievalOptions().getUpdateSecondariesOnMiss() ? 1 : 0)));
+    optionsByteBuffer.put(
+        (byte)
+            (((retrievalOptions.getVerifyIntegrity() ? 1 : 0) << 1)
+                | (retrievalOptions.getRetrievalOptions().getUpdateSecondariesOnMiss() ? 1 : 0)));
     VersionConstraint vc = retrievalOptions.getVersionConstraint();
     optionsByteBuffer.putLong(vc.getMin());
     optionsByteBuffer.putLong(vc.getMax());
@@ -101,22 +120,35 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
       optionsByteBuffer.put(zoneId.getBytes());
     }
   }
-    
-    /*
-    public ProtoRetrievalMessageGroup(UUIDBase uuid, long context, RetrievalOptions retrievalOptions,
-            byte[] originator, List<? extends DHTKey> destEntries, int deadlineRelativeMillis) {
-        this(uuid, context, retrievalOptions, originator, destEntries.size(), 
-                deadlineRelativeMillis, ForwardingMode.DO_NOT_FORWARD);
-        for (DHTKey key : destEntries) {
-            addKey(key);
-        }
-    }
-    */
 
-  public ProtoRetrievalMessageGroup(UUIDBase uuid, long context, InternalRetrievalOptions retrievalOptions,
-      byte[] originator, Collection<DHTKey> keys, int deadlineRelativeMillis, SkTraceId maybeTraceID) {
-    this(uuid, context, retrievalOptions, originator, keys.size(), deadlineRelativeMillis,
-        ForwardingMode.DO_NOT_FORWARD, maybeTraceID);
+  /*
+  public ProtoRetrievalMessageGroup(UUIDBase uuid, long context, RetrievalOptions retrievalOptions,
+          byte[] originator, List<? extends DHTKey> destEntries, int deadlineRelativeMillis) {
+      this(uuid, context, retrievalOptions, originator, destEntries.size(),
+              deadlineRelativeMillis, ForwardingMode.DO_NOT_FORWARD);
+      for (DHTKey key : destEntries) {
+          addKey(key);
+      }
+  }
+  */
+
+  public ProtoRetrievalMessageGroup(
+      UUIDBase uuid,
+      long context,
+      InternalRetrievalOptions retrievalOptions,
+      byte[] originator,
+      Collection<DHTKey> keys,
+      int deadlineRelativeMillis,
+      SkTraceId maybeTraceID) {
+    this(
+        uuid,
+        context,
+        retrievalOptions,
+        originator,
+        keys.size(),
+        deadlineRelativeMillis,
+        ForwardingMode.DO_NOT_FORWARD,
+        maybeTraceID);
     for (DHTKey key : keys) {
       addKey(key);
     }
@@ -126,7 +158,9 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
     int startIdx;
 
     // This protocol appends the optionBuffer to its baseClass(ProtoKeyedMessageGroup)'s bufferList
-    startIdx = ProtoKeyedMessageGroup.getOptionsByteBufferBaseOffset(TraceIDProvider.hasTraceID(mg.getMessageType()));
+    startIdx =
+        ProtoKeyedMessageGroup.getOptionsByteBufferBaseOffset(
+            TraceIDProvider.hasTraceID(mg.getMessageType()));
     return mg.getBuffers()[startIdx];
   }
 
@@ -141,7 +175,8 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
     boolean updateSecondariesOnMiss;
 
     optionBuffer = getOptionBuffer(mg);
-    retrievalWaitByte = optionBuffer.get(RetrievalResponseMessageFormat.retrievalTypeWaitModeOffset);
+    retrievalWaitByte =
+        optionBuffer.get(RetrievalResponseMessageFormat.retrievalTypeWaitModeOffset);
     // begin retrievalType, waitMode decoding
     // see ProtoRetrievalMessageGroup() for encoding
     retrievalType = EnumValues.retrievalType[retrievalWaitByte >> 4];
@@ -150,13 +185,25 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
     miscOptionsByte = optionBuffer.get(RetrievalResponseMessageFormat.miscOptionsOffset);
     verifyIntegrity = (miscOptionsByte & 0x2) != 0;
     updateSecondariesOnMiss = (miscOptionsByte & 0x1) != 0;
-    vc = new VersionConstraint(optionBuffer.getLong(RetrievalResponseMessageFormat.vcMinOffset),
-        optionBuffer.getLong(RetrievalResponseMessageFormat.vcMaxOffset),
-        EnumValues.versionConstraint_Mode[optionBuffer.get(RetrievalResponseMessageFormat.vcModeOffset)],
-        optionBuffer.getLong(RetrievalResponseMessageFormat.vcMaxStorageTimeOffset));
+    vc =
+        new VersionConstraint(
+            optionBuffer.getLong(RetrievalResponseMessageFormat.vcMinOffset),
+            optionBuffer.getLong(RetrievalResponseMessageFormat.vcMaxOffset),
+            EnumValues.versionConstraint_Mode[
+                optionBuffer.get(RetrievalResponseMessageFormat.vcModeOffset)],
+            optionBuffer.getLong(RetrievalResponseMessageFormat.vcMaxStorageTimeOffset));
     return new InternalRetrievalOptions(
-        OptionsHelper.newRetrievalOptions(retrievalType, waitMode, vc, updateSecondariesOnMiss, getSecondaryTargets(mg),
-            getUserOptions(mg), getAuthorizationUser(mg), getZoneId(mg)), verifyIntegrity).originator(mg.getOriginator());
+            OptionsHelper.newRetrievalOptions(
+                retrievalType,
+                waitMode,
+                vc,
+                updateSecondariesOnMiss,
+                getSecondaryTargets(mg),
+                getUserOptions(mg),
+                getAuthorizationUser(mg),
+                getZoneId(mg)),
+            verifyIntegrity)
+        .originator(mg.getOriginator());
   }
 
   public static int getSTLength(MessageGroup mg) {
@@ -172,8 +219,12 @@ public class ProtoRetrievalMessageGroup extends ProtoKeyedMessageGroup {
       return DHTConstants.noSecondaryTargets;
     } else {
       stDef = new byte[stLength];
-      System.arraycopy(getOptionBuffer(mg).array(), RetrievalMessageFormat.stDataOffset + NumConversion.BYTES_PER_SHORT,
-          stDef, 0, stLength);
+      System.arraycopy(
+          getOptionBuffer(mg).array(),
+          RetrievalMessageFormat.stDataOffset + NumConversion.BYTES_PER_SHORT,
+          stDef,
+          0,
+          stLength);
       return SecondaryTargetSerializer.deserialize(stDef);
     }
   }

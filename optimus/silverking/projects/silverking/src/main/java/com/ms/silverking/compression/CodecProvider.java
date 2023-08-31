@@ -21,40 +21,39 @@ public class CodecProvider {
   static final NullCodec nullCodec = new NullCodec();
 
   static {
-
   }
 
   public static Compressor getCompressor(Compression compression) {
     switch (compression) {
-    case LZ4:
-      return lz4;
-    case SNAPPY:
-      return snappy;
-    case ZIP:
-      return zip;
-    case BZIP2:
-      return bzip2;
-    case NONE:
-      return null;
-    default:
-      throw new RuntimeException("No compressor for " + compression);
+      case LZ4:
+        return lz4;
+      case SNAPPY:
+        return snappy;
+      case ZIP:
+        return zip;
+      case BZIP2:
+        return bzip2;
+      case NONE:
+        return null;
+      default:
+        throw new RuntimeException("No compressor for " + compression);
     }
   }
 
   public static Decompressor getDecompressor(Compression compression) {
     switch (compression) {
-    case LZ4:
-      return lz4;
-    case SNAPPY:
-      return snappy;
-    case ZIP:
-      return zip;
-    case BZIP2:
-      return bzip2;
-    case NONE:
-      return null;
-    default:
-      throw new RuntimeException("No decompressor for " + compression);
+      case LZ4:
+        return lz4;
+      case SNAPPY:
+        return snappy;
+      case ZIP:
+        return zip;
+      case BZIP2:
+        return bzip2;
+      case NONE:
+        return null;
+      default:
+        throw new RuntimeException("No decompressor for " + compression);
     }
   }
 }

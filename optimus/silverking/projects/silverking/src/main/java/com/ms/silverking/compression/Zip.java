@@ -33,7 +33,7 @@ public class Zip implements Compressor, Decompressor {
     byte[] buf;
     int compressedLength;
 
-    //Log.info("rawValue.length ", rawValue.length);
+    // Log.info("rawValue.length ", rawValue.length);
     baos = new ByteArrayOutputStream(rawValue.length / zipInitFactor);
     zipos = new DeflaterOutputStream(baos);
     zipos.write(rawValue, offset, length);
@@ -43,21 +43,22 @@ public class Zip implements Compressor, Decompressor {
     baos.flush();
     baos.close();
     buf = baos.toByteArray();
-    //System.out.println(StringUtil.byteArrayToHexString(buf));
+    // System.out.println(StringUtil.byteArrayToHexString(buf));
 
     compressedLength = buf.length;
-    //Log.info("compressedLength ", compressedLength);
+    // Log.info("compressedLength ", compressedLength);
 
     if (log.isDebugEnabled()) {
       log.debug("rawValue.length: {}", rawValue.length);
       log.debug("buf.length: {}", buf.length);
       log.debug("compressedLength: {}", compressedLength);
     }
-    //Log.info("buf.length ", buf.length);
+    // Log.info("buf.length ", buf.length);
     return buf;
   }
 
-  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength) throws IOException {
+  public byte[] decompress(byte[] value, int offset, int length, int uncompressedLength)
+      throws IOException {
     InflaterInputStream zipis;
     InputStream inStream;
     byte[] uncompressedValue;
@@ -99,7 +100,7 @@ public class Zip implements Compressor, Decompressor {
         original = arg.getBytes();
         compressed = new Zip().compress(original, 0, 0);
         uncompressed = new Zip().decompress(compressed, 0, 0, original.length);
-        log.info("{} {} {} {}", arg , original.length ,compressed.length , new String(uncompressed));
+        log.info("{} {} {} {}", arg, original.length, compressed.length, new String(uncompressed));
         log.info(StringUtil.byteArrayToHexString(original));
         log.info(StringUtil.byteArrayToHexString(uncompressed));
       }

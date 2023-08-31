@@ -21,13 +21,18 @@ public class MessageGroupPutEntry extends MessageGroupKVEntry {
   private final ChecksumType checksumType;
   private final byte[] checksum;
 
-  public MessageGroupPutEntry(ByteBuffer keyBuffer, int offset, ByteBuffer[] buffers, ChecksumType checksumType) {
+  public MessageGroupPutEntry(
+      ByteBuffer keyBuffer, int offset, ByteBuffer[] buffers, ChecksumType checksumType) {
     super(keyBuffer, offset);
     this.checksumType = checksumType;
     uncompressedLength = keyBuffer.getInt(offset + PutMessageFormat.uncompressedValueLengthOffset);
     storedLength = keyBuffer.getInt(offset + PutMessageFormat.compressedValueLengthOffset);
     checksum = new byte[checksumType.length()];
-    System.arraycopy(keyBuffer.array(), offset + PutMessageFormat.checksumOffset, checksum, 0,
+    System.arraycopy(
+        keyBuffer.array(),
+        offset + PutMessageFormat.checksumOffset,
+        checksum,
+        0,
         checksum.length); // TODO (OPTIMUS-0000): delete
     // TODO (OPTIMUS-0000): CHECK ABOVE LINE
     initValBuffer(buffers);

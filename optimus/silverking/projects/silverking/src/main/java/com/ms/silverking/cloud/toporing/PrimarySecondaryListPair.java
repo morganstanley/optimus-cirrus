@@ -21,9 +21,7 @@ import com.ms.silverking.collection.CollectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Two lists: one for primaryOwners, and one for secondaryOwners.
- */
+/** Two lists: one for primaryOwners, and one for secondaryOwners. */
 class PrimarySecondaryListPair {
   private final List<Node> primaryOwners;
   private final List<Node> secondaryOwners;
@@ -50,12 +48,12 @@ class PrimarySecondaryListPair {
 
   List<Node> getOwners(ReplicationType rType) {
     switch (rType) {
-    case Primary:
-      return primaryOwners;
-    case Secondary:
-      return secondaryOwners;
-    default:
-      throw new RuntimeException("panic");
+      case Primary:
+        return primaryOwners;
+      case Secondary:
+        return secondaryOwners;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -97,12 +95,12 @@ class PrimarySecondaryListPair {
 
   int totalOwners(ReplicationType rType) {
     switch (rType) {
-    case Primary:
-      return primaryOwners.size();
-    case Secondary:
-      return secondaryOwners.size();
-    default:
-      throw new RuntimeException("Panic");
+      case Primary:
+        return primaryOwners.size();
+      case Secondary:
+        return secondaryOwners.size();
+      default:
+        throw new RuntimeException("Panic");
     }
   }
 
@@ -168,8 +166,8 @@ class PrimarySecondaryListPair {
         secondaryIndex--;
       } else {
         if (primaryOwners.size() == 0) {
-          log.info("{}",this);
-          log.info("{}",CollectionUtil.toString(excluding));
+          log.info("{}", this);
+          log.info("{}", CollectionUtil.toString(excluding));
           throw new RuntimeException("getLastAddedOwnerNotIn() failed");
         }
         node = primaryOwners.get(primaryIndex);
@@ -180,13 +178,13 @@ class PrimarySecondaryListPair {
       }
     } while (node == null);
     return node;
-        /*
-        if (secondaryOwners.size() > 0) {
-            return secondaryOwners.get(secondaryOwners.size() - 1);
-        } else {
-            assert primaryOwners.size() > 0;
-            return primaryOwners.get(primaryOwners.size() - 1);
-        }
-        */
+    /*
+    if (secondaryOwners.size() > 0) {
+        return secondaryOwners.get(secondaryOwners.size() - 1);
+    } else {
+        assert primaryOwners.size() > 0;
+        return primaryOwners.get(primaryOwners.size() - 1);
+    }
+    */
   }
 }

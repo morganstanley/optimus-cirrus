@@ -26,7 +26,8 @@ public interface SSHManager extends Remote {
 
   public HostAndCommand getHostAndCommand() throws RemoteException;
 
-  public void setHostResult(HostAndCommand hostAndCommand, HostResult result) throws RemoteException;
+  public void setHostResult(HostAndCommand hostAndCommand, HostResult result)
+      throws RemoteException;
 
   public void workerComplete() throws RemoteException;
 }

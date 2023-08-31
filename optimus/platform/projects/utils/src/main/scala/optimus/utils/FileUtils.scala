@@ -15,6 +15,7 @@ import com.opencsv.CSVParserBuilder
 import com.opencsv.CSVReader
 import com.opencsv.CSVReaderBuilder
 import com.opencsv.CSVWriterBuilder
+import com.opencsv.ICSVParser
 import com.opencsv.ICSVWriter
 import optimus.platform.IO.usingQuietly
 
@@ -23,9 +24,11 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.io.Reader
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 import java.util.zip.ZipFile
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -55,6 +58,23 @@ object FileUtils {
   def getCSVReader(filename: String, separator: Char): CSVReader = {
     new CSVReaderBuilder(new BufferedReader(new InputStreamReader(new FileInputStream(filename))))
       .withCSVParser(new CSVParserBuilder().withSeparator(separator).build)
+      .build
+  }
+
+  def getCSVReader(reader: Reader, separator: Char): CSVReader = {
+    val csvParser = new CSVParserBuilder()
+      .withSeparator(separator)
+      .withQuoteChar(ICSVParser.DEFAULT_QUOTE_CHARACTER)
+      .withEscapeChar(ICSVParser.DEFAULT_ESCAPE_CHARACTER)
+      .withErrorLocale(Locale.getDefault())
+      .withStrictQuotes(ICSVParser.DEFAULT_STRICT_QUOTES)
+      .withIgnoreLeadingWhiteSpace(ICSVParser.DEFAULT_IGNORE_LEADING_WHITESPACE)
+      .withIgnoreQuotations(ICSVParser.DEFAULT_IGNORE_QUOTATIONS)
+      .withFieldAsNull(ICSVParser.DEFAULT_NULL_FIELD_INDICATOR)
+      .build
+
+    new CSVReaderBuilder(reader)
+      .withCSVParser(csvParser)
       .build
   }
 

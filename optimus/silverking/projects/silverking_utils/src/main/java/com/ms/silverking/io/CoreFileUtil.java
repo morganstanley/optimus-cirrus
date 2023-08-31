@@ -39,7 +39,8 @@ public class CoreFileUtil {
   }
 
   public static void writeToFile(File file, String text, boolean append) throws IOException {
-    try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, append)))) {
+    try (BufferedWriter out =
+        new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, append)))) {
       out.write(text);
     }
   }

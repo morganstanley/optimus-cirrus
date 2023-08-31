@@ -64,7 +64,8 @@ public class MetaClient extends MetaClientBase<MetaPaths> {
     return DHTConfiguration.parse(def, version, zkid);
   }
 
-  public IpAliasConfiguration getIpAliasConfiguration(String ipAliasMapName) throws KeeperException {
+  public IpAliasConfiguration getIpAliasConfiguration(String ipAliasMapName)
+      throws KeeperException {
     if (ipAliasMapName != null) {
       String fullPath = MetaPaths.getIpAliasMapPath(ipAliasMapName);
       log.debug("ipAliasMapName {}", ipAliasMapName);

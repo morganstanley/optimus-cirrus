@@ -23,9 +23,7 @@ import com.ms.silverking.cloud.zookeeper.ZooKeeperConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches for new DHTConfigurations
- */
+/** Watches for new DHTConfigurations */
 public class DHTConfigurationWatcher implements VersionListener {
   private final MetaClient mc;
   private final MetaPaths mp;
@@ -36,7 +34,8 @@ public class DHTConfigurationWatcher implements VersionListener {
 
   private static Logger log = LoggerFactory.getLogger(DHTConfigurationWatcher.class);
 
-  public DHTConfigurationWatcher(ZooKeeperConfig zkConfig, String dhtName, long intervalMillis, boolean enableLogging)
+  public DHTConfigurationWatcher(
+      ZooKeeperConfig zkConfig, String dhtName, long intervalMillis, boolean enableLogging)
       throws IOException, KeeperException {
     mc = new MetaClient(dhtName, zkConfig);
     mp = mc.getMetaPaths();
@@ -78,9 +77,7 @@ public class DHTConfigurationWatcher implements VersionListener {
     return dhtConfig;
   }
 
-  /**
-   * Called when a new DHT configuration is found. Reads the configuration notifies listeners.
-   */
+  /** Called when a new DHT configuration is found. Reads the configuration notifies listeners. */
   private void newDHTConfiguration() {
     try {
       synchronized (this) {
@@ -89,7 +86,7 @@ public class DHTConfigurationWatcher implements VersionListener {
         _dhtConfig = mc.getDHTConfiguration();
         dhtConfig = _dhtConfig;
         if (enableLogging) {
-          log.info("DHTConfigurationWatcher.newDHTConfiguration: {}" , dhtConfig);
+          log.info("DHTConfigurationWatcher.newDHTConfiguration: {}", dhtConfig);
         }
         if (dhtConfig != null) {
           this.notifyAll();
@@ -99,7 +96,7 @@ public class DHTConfigurationWatcher implements VersionListener {
         notifyListeners(_dhtConfig);
       }
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
 
@@ -109,12 +106,12 @@ public class DHTConfigurationWatcher implements VersionListener {
   @Override
   public void newVersion(String basePath, long version) {
     if (enableLogging) {
-      log.debug("DHTConfigurationWatcher.newVersion: {}  {}" , basePath , version);
+      log.debug("DHTConfigurationWatcher.newVersion: {}  {}", basePath, version);
     }
     if (basePath.equals(mp.getInstanceConfigPath())) {
       newDHTConfiguration();
     } else {
-      log.info("Unexpected update in DHTConfigurationWatcher: {}" , basePath);
+      log.info("Unexpected update in DHTConfigurationWatcher: {}", basePath);
     }
   }
 

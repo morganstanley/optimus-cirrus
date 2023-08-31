@@ -25,9 +25,7 @@ import com.ms.silverking.cloud.topology.Node;
 import com.ms.silverking.io.StreamParser;
 import com.ms.silverking.text.StringUtil;
 
-/**
- * Common functionality used by ExclusionSet and PassiveNodeSet
- */
+/** Common functionality used by ExclusionSet and PassiveNodeSet */
 class ServerSet implements VersionedDefinition {
   private final Set<String> servers;
   private final long version;
@@ -75,7 +73,7 @@ class ServerSet implements VersionedDefinition {
     builder = new ImmutableSet.Builder<>();
     ServerSet ss = new ServerSet(builder.addAll(servers).addAll(newServers).build(), getVersion());
     return ss;
-    //return new ServerSet(builder.addAll(servers).addAll(newServers).build(), getVersion());
+    // return new ServerSet(builder.addAll(servers).addAll(newServers).build(), getVersion());
   }
 
   public ServerSet remove(Set<String> removedServers) {
@@ -111,7 +109,8 @@ class ServerSet implements VersionedDefinition {
   }
 
   public static ServerSet parse(InputStream in, long version) throws IOException {
-    return new ServerSet(ImmutableSet.copyOf(filterExtraText(StreamParser.parseLines(in))), version);
+    return new ServerSet(
+        ImmutableSet.copyOf(filterExtraText(StreamParser.parseLines(in))), version);
   }
 
   private static List<String> filterExtraText(List<String> defs) {

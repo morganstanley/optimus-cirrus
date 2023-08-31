@@ -28,7 +28,7 @@ import com.ms.silverking.cloud.topology.Node;
 
 public class WeightSpecifications implements VersionedDefinition {
   private final long version;
-  //private final Map<String, Double>   classWeights;
+  // private final Map<String, Double>   classWeights;
   private final Map<String, Double> nodeWeights;
 
   // TODO (OPTIMUS-0000): we need to be able to specify weights by groups of some sort
@@ -38,7 +38,7 @@ public class WeightSpecifications implements VersionedDefinition {
 
   public WeightSpecifications(long version) {
     this.version = version;
-    //classWeights = new HashMap<>();
+    // classWeights = new HashMap<>();
     nodeWeights = new HashMap<>();
   }
 
@@ -47,26 +47,26 @@ public class WeightSpecifications implements VersionedDefinition {
     this.nodeWeights = new HashMap<>(nodeWeights);
   }
 
-  //public void setClassWeight(NodeClass nodeClass, double weight) {
+  // public void setClassWeight(NodeClass nodeClass, double weight) {
   //    classWeights.put(nodeClass.g, weight);
-  //}
+  // }
 
   private void setNodeWeightByID(String nodeName, double weight) {
     nodeWeights.put(nodeName, weight);
   }
-    
-    /*
-    public double getWeight(NodeClass nodeClass) {
-        Double  weight;
-        
-        weight = classWeights.get(nodeClass.getName());
-        if (weight == null) {
-            return 0.0;
-        } else {
-            return weight;
-        }
-    }
-    */
+
+  /*
+  public double getWeight(NodeClass nodeClass) {
+      Double  weight;
+
+      weight = classWeights.get(nodeClass.getName());
+      if (weight == null) {
+          return 0.0;
+      } else {
+          return weight;
+      }
+  }
+  */
 
   public double getWeight(Node node) {
     Double weight;
@@ -75,14 +75,14 @@ public class WeightSpecifications implements VersionedDefinition {
     if (weight != null) {
       return weight;
     } else {
-            /*
-            weight = getWeight(node.getNodeClass());
-            if (weight == 0.0) {
-                return defaultWeight;
-            } else {
-                return weight;
-            }
-            */
+      /*
+      weight = getWeight(node.getNodeClass());
+      if (weight == 0.0) {
+          return defaultWeight;
+      } else {
+          return weight;
+      }
+      */
       return defaultWeight;
     }
   }

@@ -14,9 +14,7 @@ package com.ms.silverking.cloud.dht.client.impl;
 import com.ms.silverking.cloud.dht.client.AsyncOperation;
 import com.ms.silverking.cloud.dht.client.OpTimeoutController;
 
-/**
- * Encapsulates state related to attempts, retries, and timeouts.
- */
+/** Encapsulates state related to attempts, retries, and timeouts. */
 class OpTimeoutState {
   private final AsyncOperation op;
   private final OpTimeoutController timeoutController;
@@ -37,23 +35,24 @@ class OpTimeoutState {
   }
 
   boolean opHasTimedOut(long curTimeMillis) {
-        /*
-        System.out.printf("%d > %d || \n%d cur\n%d start\n%d to\n", 
-                curAttemptIndex, timeoutController.getMaxAttempts(op), 
-                curTimeMillis, startTimeMillis, startTimeMillis + timeoutController.getMaxRelativeTimeoutMillis(op));
-        System.out.printf("%s || %s\n", 
-                curAttempt>  timeoutController.getMaxAttempts(op), 
-                curTimeMillis > startTimeMillis + timeoutController.getMaxRelativeTimeoutMillis(op));
-        System.out.printf("curAttemptIndex %d timeoutController.getMaxAttempts(op) %d\tmaxRelativeTimeoutMillis %d\n", 
-                curAttemptIndex, timeoutController.getMaxAttempts(op), timeoutController.getMaxRelativeTimeoutMillis
-                (op));
-        */
+    /*
+    System.out.printf("%d > %d || \n%d cur\n%d start\n%d to\n",
+            curAttemptIndex, timeoutController.getMaxAttempts(op),
+            curTimeMillis, startTimeMillis, startTimeMillis + timeoutController.getMaxRelativeTimeoutMillis(op));
+    System.out.printf("%s || %s\n",
+            curAttempt>  timeoutController.getMaxAttempts(op),
+            curTimeMillis > startTimeMillis + timeoutController.getMaxRelativeTimeoutMillis(op));
+    System.out.printf("curAttemptIndex %d timeoutController.getMaxAttempts(op) %d\tmaxRelativeTimeoutMillis %d\n",
+            curAttemptIndex, timeoutController.getMaxAttempts(op), timeoutController.getMaxRelativeTimeoutMillis
+            (op));
+    */
     return curTimeMillis > startTimeMillis + timeoutController.getMaxRelativeTimeoutMillis(op);
   }
 
   boolean attemptHasTimedOut(long curTimeMillis) {
-    return curTimeMillis > attemptStartTimeMillis + timeoutController.getRelativeTimeoutMillisForAttempt(op,
-        curAttemptIndex);
+    return curTimeMillis
+        > attemptStartTimeMillis
+            + timeoutController.getRelativeTimeoutMillisForAttempt(op, curAttemptIndex);
   }
 
   boolean newAttemptAllowed(AsyncOperation op) {
@@ -61,8 +60,10 @@ class OpTimeoutState {
   }
 
   boolean retryOnExclusionChange(long curTimeMillis) {
-    return curTimeMillis > attemptStartTimeMillis + timeoutController.getRelativeExclusionChangeRetryMillisForAttempt(
-        op, curAttemptIndex);
+    return curTimeMillis
+        > attemptStartTimeMillis
+            + timeoutController.getRelativeExclusionChangeRetryMillisForAttempt(
+                op, curAttemptIndex);
   }
 
   void newAttempt(long curTimeMillis) {

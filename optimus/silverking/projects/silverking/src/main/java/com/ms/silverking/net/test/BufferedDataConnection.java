@@ -23,14 +23,16 @@ import com.ms.silverking.net.async.OutgoingBufferedData;
 import com.ms.silverking.net.async.QueueingConnection;
 import com.ms.silverking.net.async.SelectorController;
 
-/**
- * A Connection for exchanging BufferedData
- */
-public class BufferedDataConnection extends QueueingConnection<OutgoingBufferedData, NewIncomingBufferedData> {
+/** A Connection for exchanging BufferedData */
+public class BufferedDataConnection
+    extends QueueingConnection<OutgoingBufferedData, NewIncomingBufferedData> {
   private final BufferedDataReceiver receiver;
 
-  public BufferedDataConnection(SocketChannel channel, SelectorController<BufferedDataConnection> selectorController,
-      ConnectionListener connectionListener, BufferedDataReceiver receiver) {
+  public BufferedDataConnection(
+      SocketChannel channel,
+      SelectorController<BufferedDataConnection> selectorController,
+      ConnectionListener connectionListener,
+      BufferedDataReceiver receiver) {
     super(channel, selectorController, connectionListener, true);
     this.receiver = receiver;
   }
@@ -41,8 +43,9 @@ public class BufferedDataConnection extends QueueingConnection<OutgoingBufferedD
   }
 
   @Override
-  protected OutgoingBufferedData wrapForSend(Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener,
-      long deadline) throws IOException {
+  protected OutgoingBufferedData wrapForSend(
+      Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline)
+      throws IOException {
     return new OutgoingBufferedData((ByteBuffer[]) data, sendUUID, asyncSendListener, deadline);
   }
 

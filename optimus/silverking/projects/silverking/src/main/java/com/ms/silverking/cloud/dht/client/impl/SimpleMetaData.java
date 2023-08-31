@@ -26,14 +26,22 @@ public class SimpleMetaData implements MetaData {
   private final long creationTime;
   private final ValueCreator valueCreator;
   private final short lockSeconds;
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   private final byte[] userData;
   private final byte[] checksum;
   private final Compression compression;
   private final ChecksumType checksumType;
 
-  public SimpleMetaData(int storedLength, int uncompressedLength, long version, long creationTime,
-      ValueCreator valueCreator, short lockSeconds, byte[] userData, byte[] checksum, Compression compression,
+  public SimpleMetaData(
+      int storedLength,
+      int uncompressedLength,
+      long version,
+      long creationTime,
+      ValueCreator valueCreator,
+      short lockSeconds,
+      byte[] userData,
+      byte[] checksum,
+      Compression compression,
       ChecksumType checksumType) {
     this.storedLength = storedLength;
     this.uncompressedLength = uncompressedLength;
@@ -48,29 +56,73 @@ public class SimpleMetaData implements MetaData {
   }
 
   public SimpleMetaData(MetaData metaData) {
-    this(metaData.getStoredLength(), metaData.getUncompressedLength(), metaData.getVersion(),
-        metaData.getCreationTime().inNanos(), metaData.getCreator(), metaData.getLockSeconds(), metaData.getUserData(),
-        metaData.getChecksum(), metaData.getCompression(), metaData.getChecksumType());
+    this(
+        metaData.getStoredLength(),
+        metaData.getUncompressedLength(),
+        metaData.getVersion(),
+        metaData.getCreationTime().inNanos(),
+        metaData.getCreator(),
+        metaData.getLockSeconds(),
+        metaData.getUserData(),
+        metaData.getChecksum(),
+        metaData.getCompression(),
+        metaData.getChecksumType());
   }
 
   public SimpleMetaData setValueCreator(ValueCreator _valueCreator) {
-    return new SimpleMetaData(storedLength, uncompressedLength, version, creationTime, _valueCreator, lockSeconds,
-        userData, checksum, compression, checksumType);
+    return new SimpleMetaData(
+        storedLength,
+        uncompressedLength,
+        version,
+        creationTime,
+        _valueCreator,
+        lockSeconds,
+        userData,
+        checksum,
+        compression,
+        checksumType);
   }
 
   public SimpleMetaData setStoredLength(int _storedLength) {
-    return new SimpleMetaData(_storedLength, uncompressedLength, version, creationTime, valueCreator, lockSeconds,
-        userData, checksum, compression, checksumType);
+    return new SimpleMetaData(
+        _storedLength,
+        uncompressedLength,
+        version,
+        creationTime,
+        valueCreator,
+        lockSeconds,
+        userData,
+        checksum,
+        compression,
+        checksumType);
   }
 
   public SimpleMetaData setUncompressedLength(int _uncompressedLength) {
-    return new SimpleMetaData(storedLength, _uncompressedLength, version, creationTime, valueCreator, lockSeconds,
-        userData, checksum, compression, checksumType);
+    return new SimpleMetaData(
+        storedLength,
+        _uncompressedLength,
+        version,
+        creationTime,
+        valueCreator,
+        lockSeconds,
+        userData,
+        checksum,
+        compression,
+        checksumType);
   }
 
   public SimpleMetaData setChecksumTypeAndChecksum(ChecksumType checksumType, byte[] checksum) {
-    return new SimpleMetaData(storedLength, uncompressedLength, version, creationTime, valueCreator, lockSeconds,
-        userData, checksum, compression, checksumType);
+    return new SimpleMetaData(
+        storedLength,
+        uncompressedLength,
+        version,
+        creationTime,
+        valueCreator,
+        lockSeconds,
+        userData,
+        checksum,
+        compression,
+        checksumType);
   }
 
   @Override
@@ -109,7 +161,8 @@ public class SimpleMetaData implements MetaData {
     long millisRemaining;
 
     nanosRemaining =
-        (creationTime + (long) lockSeconds * 1_000_000_000L) - SystemTimeUtil.skSystemTimeSource.absTimeNanos();
+        (creationTime + (long) lockSeconds * 1_000_000_000L)
+            - SystemTimeUtil.skSystemTimeSource.absTimeNanos();
     millisRemaining = nanosRemaining / 1_000_000L;
     if (millisRemaining > 0) {
       return millisRemaining;
@@ -126,7 +179,8 @@ public class SimpleMetaData implements MetaData {
 
   @Override
   public boolean isLocked() {
-    return SystemTimeUtil.skSystemTimeSource.absTimeNanos() <= creationTime + (long) lockSeconds * 1_000_000_000L;
+    return SystemTimeUtil.skSystemTimeSource.absTimeNanos()
+        <= creationTime + (long) lockSeconds * 1_000_000_000L;
   }
 
   @Override

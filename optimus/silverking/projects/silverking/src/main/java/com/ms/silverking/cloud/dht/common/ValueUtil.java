@@ -49,8 +49,8 @@ public class ValueUtil {
       compressedLength = MetaDataUtil.getCompressedLength(storedData, baseOffset);
       uncompressedLength = MetaDataUtil.getUncompressedLength(storedData, baseOffset);
       if (debugChecksum) {
-        log.debug("compressedLength: {}" , compressedLength);
-        log.debug("uncompressedLength: {}" , uncompressedLength);
+        log.debug("compressedLength: {}", compressedLength);
+        log.debug("uncompressedLength: {}", uncompressedLength);
       }
       dataOffset = MetaDataUtil.getDataOffset(storedData, baseOffset);
       compression = EnumValues.compression[MetaDataUtil.getCompression(storedData, baseOffset)];
@@ -61,8 +61,9 @@ public class ValueUtil {
         log.debug("Compressed");
         decompressor = CodecProvider.getDecompressor(compression);
         try {
-          //System.out.println(compression +" "+ decompressor);
-          uncompressedData = decompressor.decompress(storedData, dataOffset, compressedLength, uncompressedLength);
+          // System.out.println(compression +" "+ decompressor);
+          uncompressedData =
+              decompressor.decompress(storedData, dataOffset, compressedLength, uncompressedLength);
           dataToVerify = uncompressedData;
           verifyDataOffset = 0;
         } catch (Exception e) {
@@ -81,15 +82,16 @@ public class ValueUtil {
     return MetaDataUtil.isInvalidated(storedValue, storedOffset);
   }
 
-  public static void verifyChecksum(byte[] storedValue, int storedOffset, byte[] value, int valueOffset,
-      int valueLength) throws CorruptValueException {
+  public static void verifyChecksum(
+      byte[] storedValue, int storedOffset, byte[] value, int valueOffset, int valueLength)
+      throws CorruptValueException {
     byte[] expectedChecksum;
     byte[] actualChecksum;
     ChecksumType checksumType;
     Checksum checksum;
 
     if (debugChecksum) {
-      log.debug("storedValue: {}" , StringUtil.byteArrayToHexString(storedValue));
+      log.debug("storedValue: {}", StringUtil.byteArrayToHexString(storedValue));
     }
     checksumType = MetaDataUtil.getChecksumType(storedValue, storedOffset);
     if (checksumType != ChecksumType.NONE) {
@@ -98,19 +100,22 @@ public class ValueUtil {
       if (!checksum.isEmpty(actualChecksum)) {
         expectedChecksum = checksum.checksum(value, valueOffset, valueLength);
         if (debugChecksum) {
-          log.debug("valueOffset: {}" , valueOffset);
-          log.debug("valueLength: {}" , valueLength);
+          log.debug("valueOffset: {}", valueOffset);
+          log.debug("valueLength: {}", valueLength);
           log.debug(
-              "value: {}  {}" , StringUtil.byteArrayToHexString(value, valueOffset, valueLength) , valueLength);
-          log.debug("value: {}" , new String(value, valueOffset, valueLength));
-          log.debug("expectedChecksum: {}" , StringUtil.byteArrayToHexString(expectedChecksum));
-          log.debug("actualChecksum: {}" , StringUtil.byteArrayToHexString(actualChecksum));
+              "value: {}  {}",
+              StringUtil.byteArrayToHexString(value, valueOffset, valueLength),
+              valueLength);
+          log.debug("value: {}", new String(value, valueOffset, valueLength));
+          log.debug("expectedChecksum: {}", StringUtil.byteArrayToHexString(expectedChecksum));
+          log.debug("actualChecksum: {}", StringUtil.byteArrayToHexString(actualChecksum));
           System.out.flush();
         }
         if (!Arrays.equals(expectedChecksum, actualChecksum)) {
           throw new CorruptValueException(
-              StringUtil.byteArrayToHexString(actualChecksum) + " != " + StringUtil.byteArrayToHexString(
-                  expectedChecksum));
+              StringUtil.byteArrayToHexString(actualChecksum)
+                  + " != "
+                  + StringUtil.byteArrayToHexString(expectedChecksum));
         }
       }
     }

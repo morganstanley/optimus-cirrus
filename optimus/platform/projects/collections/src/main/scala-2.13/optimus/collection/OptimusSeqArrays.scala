@@ -316,7 +316,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
   // lo and hi are sensible and always not everything
   // hi is exclusive
   private[collection] def sliceSafe(lo: Int, hi: Int): OptimusSeq[T] = {
-    val from_target = Arrays.binarySearch(offsets, lo)
+    val from_target = Arrays.binarySearch(offsets, lo+1)
 
     val to_target = Arrays.binarySearch(offsets, hi)
 

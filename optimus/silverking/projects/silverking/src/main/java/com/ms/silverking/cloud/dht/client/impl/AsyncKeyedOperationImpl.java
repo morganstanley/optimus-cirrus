@@ -33,7 +33,8 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.util.concurrent.locks.SpinLock;
 
-abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl implements AsyncKeyedOperation<K> {
+abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl
+    implements AsyncKeyedOperation<K> {
   private final KeyedNamespaceOperation<K> keyedNamespaceOperation;
   protected final int size;
   protected final Set<DHTKey> dhtKeys;
@@ -49,17 +50,21 @@ abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl im
 
   protected static final boolean debugFragmentation = false;
 
-  public AsyncKeyedOperationImpl(KeyedNamespaceOperation<K> operation, KeyCreator<K> keyCreator,
-      ClientNamespace namespace, long curTime, byte[] originator) {
+  public AsyncKeyedOperationImpl(
+      KeyedNamespaceOperation<K> operation,
+      KeyCreator<K> keyCreator,
+      ClientNamespace namespace,
+      long curTime,
+      byte[] originator) {
     super(operation, namespace.getContext(), curTime, originator);
 
     this.keyedNamespaceOperation = (KeyedNamespaceOperation<K>) operation;
     size = keyedNamespaceOperation.size();
     this.keyCreator = keyCreator;
-    //dhtKeyToKey = new Object2ObjectOpenHashMap<>(size);
-    //keyToDHTKey = new Object2ObjectOpenHashMap<>(size);
-    //dhtKeyToKey = new HashMap<>(size);
-    //keyToDHTKey = new HashMap<>(size);
+    // dhtKeyToKey = new Object2ObjectOpenHashMap<>(size);
+    // keyToDHTKey = new Object2ObjectOpenHashMap<>(size);
+    // dhtKeyToKey = new HashMap<>(size);
+    // keyToDHTKey = new HashMap<>(size);
     if (size != 1) {
       keyDHTKeyBiMap = HashBiMap.create(size);
       keyToDHTKey = keyDHTKeyBiMap;
@@ -73,7 +78,7 @@ abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl im
     failureCausesRef = new AtomicReference<>();
     resultsReceived = new AtomicInteger();
     completionCheckLock = new SpinLock();
-    //completionCheckLock = new ReentrantLock();
+    // completionCheckLock = new ReentrantLock();
   }
 
   protected Map<K, FailureCause> getFailureCauses() {
@@ -183,7 +188,7 @@ abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl im
     // times, then this approach is not appropriate.
     completionCheckLock.lock();
     try {
-      //synchronized (this) {
+      // synchronized (this) {
       if (keyedNamespaceOperation.size() == 0) {
         setResult(OpResult.SUCCEEDED);
         return;
@@ -224,7 +229,7 @@ abstract class AsyncKeyedOperationImpl<K> extends AsyncNamespaceOperationImpl im
     // times, then this approach is not appropriate.
     completionCheckLock.lock();
     try {
-      //synchronized (this) {
+      // synchronized (this) {
       if (keyedNamespaceOperation.size() == 0) {
         setResult(OpResult.SUCCEEDED);
         return;

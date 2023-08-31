@@ -40,7 +40,8 @@ public class SparseFileCreator {
     }
   }
 
-  public void createSparseFile(File f, int headerLength, int skipLength, int tailLength, int finalLength)
+  public void createSparseFile(
+      File f, int headerLength, int skipLength, int tailLength, int finalLength)
       throws IOException {
     RandomAccessFile raf;
 

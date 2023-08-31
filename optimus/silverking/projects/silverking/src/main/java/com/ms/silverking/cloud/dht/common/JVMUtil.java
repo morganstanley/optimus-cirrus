@@ -18,8 +18,9 @@ public class JVMUtil {
   private static final Finalization finalization;
 
   static {
-    boolean verboseFinalization = PropertiesHelper.systemHelper.getBoolean(
-        DHTConstants.verboseGlobalFinalizationProperty, true);
+    boolean verboseFinalization =
+        PropertiesHelper.systemHelper.getBoolean(
+            DHTConstants.verboseGlobalFinalizationProperty, true);
     finalization = new Finalization(SystemTimeUtil.timerDrivenTimeSource, verboseFinalization);
   }
 

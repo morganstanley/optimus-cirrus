@@ -16,18 +16,8 @@ import optimus.stratosphere.config.StratoWorkspaceCommon
 final case class CatchUpParams(
     remoteName: String,
     branchToUse: String,
-    strategy: CatchUpStrategy,
-    ignoreLocalChanges: Boolean,
-    maxDistance: Int = Integer.MAX_VALUE,
-    noFetch: Boolean = false,
-    checkout: Boolean = false,
-    merge: Boolean = false,
-    rebase: Boolean = false,
+    isMerge: Boolean = false,
     scalaMajorVersion: Option[String] = None,
-    dryRun: Boolean = false,
-    ignoreWrongBranch: Boolean = false,
-    allowUnverified: Boolean = false,
-    disableInteractive: Boolean = false,
     gitRef: String = "FETCH_HEAD"
 )
 
@@ -36,8 +26,6 @@ object CatchUpParams {
   def withWorkspaceDefaults(stratoWorkspace: StratoWorkspaceCommon): CatchUpParams =
     CatchUpParams(
       stratoWorkspace.catchUp.remote.name,
-      stratoWorkspace.catchUp.defaultBranch,
-      CatchUpStrategy(stratoWorkspace.catchUp.defaultStrategy),
-      stratoWorkspace.catchUp.ignoreLocalChanges
+      stratoWorkspace.catchUp.defaultBranch
     )
 }

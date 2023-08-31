@@ -126,11 +126,17 @@ public class Quadruple<T1, T2, T3, T4> extends TupleBase {
 
   @Override
   public String toString() {
-    return CoreStringUtil.nullSafeToString(v1) + ":" + CoreStringUtil.nullSafeToString(v2) + ":" + CoreStringUtil.nullSafeToString(
-        v3) + ":" + CoreStringUtil.nullSafeToString(v4);
+    return CoreStringUtil.nullSafeToString(v1)
+        + ":"
+        + CoreStringUtil.nullSafeToString(v2)
+        + ":"
+        + CoreStringUtil.nullSafeToString(v3)
+        + ":"
+        + CoreStringUtil.nullSafeToString(v4);
   }
 
-  public static <T1, T2, T3, T4> Quadruple<T1, T2, T3, T4> parse(String def, String pattern, String... typeNames) {
+  public static <T1, T2, T3, T4> Quadruple<T1, T2, T3, T4> parse(
+      String def, String pattern, String... typeNames) {
     List<Object> l;
 
     l = TupleUtil.parse(def, pattern, SIZE, typeNames);

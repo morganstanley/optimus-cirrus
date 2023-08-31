@@ -180,7 +180,7 @@ public final class LightLinkedBlockingQueue<T> implements BlockingQueue<T> {
       try {
         while ((entry = q.poll()) == null) {
           nonEmpty.await();
-          //nonEmpty.awaitNanos(1000 * 1000); // FUTURE think about this
+          // nonEmpty.awaitNanos(1000 * 1000); // FUTURE think about this
         }
       } finally {
         lock.unlock();
@@ -201,31 +201,31 @@ public final class LightLinkedBlockingQueue<T> implements BlockingQueue<T> {
     }
     return numTaken;
   }
-    
-    /*
-    public int takeAll(Collection<? extends T> c) throws InterruptedException {
-        int    numTaken;
-        
-        // optimistic attempt to dequeue an entry without locking
-        q.
-        entry = q.poll();
-        if (entry == null) {
-            // optimistic attempt failed, so we might need to wait
-            // coordinate with writers
-            potentialWaiters.incrementAndGet();
-            lock.lock();
-            try {
-                while ((entry = q.poll()) == null) {
-                    nonEmpty.await();
-                }
-            } finally {
-                lock.unlock();
-                potentialWaiters.decrementAndGet();
-            }
-        }
-        return entry;
-    }
-    */
+
+  /*
+  public int takeAll(Collection<? extends T> c) throws InterruptedException {
+      int    numTaken;
+
+      // optimistic attempt to dequeue an entry without locking
+      q.
+      entry = q.poll();
+      if (entry == null) {
+          // optimistic attempt failed, so we might need to wait
+          // coordinate with writers
+          potentialWaiters.incrementAndGet();
+          lock.lock();
+          try {
+              while ((entry = q.poll()) == null) {
+                  nonEmpty.await();
+              }
+          } finally {
+              lock.unlock();
+              potentialWaiters.decrementAndGet();
+          }
+      }
+      return entry;
+  }
+  */
 
   @Override
   public int remainingCapacity() {
