@@ -20,14 +20,14 @@ public class MetaPaths extends com.ms.silverking.cloud.meta.MetaPaths {
   public static final String ringsServerGlobalBase = serverConfigBase + "/rings";
   public static final String weightsBase = ringsGlobalBase + "/weights";
   public static final String weightsServerBase = ringsServerGlobalBase + "/weights";
-  //public static final String  replicationBase = ringsGlobalBase +"/replication";
+  // public static final String  replicationBase = ringsGlobalBase +"/replication";
   public static final String instancesBase = ringsGlobalBase + "/instances";
   public static final String storagePolicyBase = ringsGlobalBase + "/storagePolicyGroups";
   private static final String configElement = "config";
   // configuration instance paths
   private final String weightsPath;
   private final String weightsServerPath;
-  //private final String  replicationPath;
+  // private final String  replicationPath;
   private final String instancePath;
   private final String configPath;
   private final String storagePolicyGroupPath;
@@ -49,19 +49,20 @@ public class MetaPaths extends com.ms.silverking.cloud.meta.MetaPaths {
       weightsPath = null;
       weightsServerPath = null;
     }
-        /*
-        if (ringConfig.getReplicationSpecsName() != null) {
-            replicationPath = replicationBase +"/"+ ringConfig.getReplicationSpecsName();
-            listBuilder.add(replicationPath);
-        } else {
-            replicationPath = null;
-        }
-        */
+    /*
+    if (ringConfig.getReplicationSpecsName() != null) {
+        replicationPath = replicationBase +"/"+ ringConfig.getReplicationSpecsName();
+        listBuilder.add(replicationPath);
+    } else {
+        replicationPath = null;
+    }
+    */
 
     if (namedRingConfig.getRingConfiguration().getStoragePolicyGroupName() != null) {
-      storagePolicyGroupPath = storagePolicyBase +
-                               "/" +
-                               namedRingConfig.getRingConfiguration().getStoragePolicyGroupName();
+      storagePolicyGroupPath =
+          storagePolicyBase
+              + "/"
+              + namedRingConfig.getRingConfiguration().getStoragePolicyGroupName();
       listBuilder.add(storagePolicyGroupPath);
     } else {
       storagePolicyGroupPath = null;
@@ -70,7 +71,7 @@ public class MetaPaths extends com.ms.silverking.cloud.meta.MetaPaths {
     if (namedRingConfig.getRingName() != null) {
       instancePath = instancesBase + "/" + namedRingConfig.getRingName();
       configPath = instancePath + "/" + configElement;
-      //configPath = instancePath +"/config/" + ringConfig.getVersion();
+      // configPath = instancePath +"/config/" + ringConfig.getVersion();
       listBuilder.add(configPath);
     } else {
       instancePath = null;

@@ -17,12 +17,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A group of ChecksumTrees for a set of regions and a particular version
- * as of a particular time. External code should ensure that - in the context
- * of a particular namespace - no two ChecksumTreeGroups have the same
- * creationTimeMillis and versions.
- * <p>
- * ChecksumTrees are obtained from RegionTreeBuilders.
+ * A group of ChecksumTrees for a set of regions and a particular version as of a particular time.
+ * External code should ensure that - in the context of a particular namespace - no two
+ * ChecksumTreeGroups have the same creationTimeMillis and versions.
+ *
+ * <p>ChecksumTrees are obtained from RegionTreeBuilders.
  */
 public class ChecksumTreeGroup {
   private final long creationTimeMillis;
@@ -32,8 +31,10 @@ public class ChecksumTreeGroup {
 
   private static Logger log = LoggerFactory.getLogger(ChecksumTreeGroup.class);
 
-
-  public ChecksumTreeGroup(long creationTimeMillis, long minVersion, long maxVersion,
+  public ChecksumTreeGroup(
+      long creationTimeMillis,
+      long minVersion,
+      long maxVersion,
       NavigableMap<Long, RegionTreeBuilder> regionTreeBuilders) {
     this.creationTimeMillis = creationTimeMillis;
     this.minVersion = minVersion;
@@ -59,9 +60,9 @@ public class ChecksumTreeGroup {
     return maxVersion;
   }
 
-  //public Map<Long, RegionTreeBuilder> getRegionTreeBuilders() {
+  // public Map<Long, RegionTreeBuilder> getRegionTreeBuilders() {
   //    return regionTreeBuilders;
-  //}
+  // }
 
   public ChecksumNode getTreeRoot(long regionStart) {
     RegionTreeBuilder rtb;
@@ -72,16 +73,19 @@ public class ChecksumTreeGroup {
     if (rtb != null) {
       return rtb.getRoot();
     } else {
-            /*
-            StringBuilder   sb;
-            
-            sb = new StringBuilder();
-            for (Long rs : regionTreeBuilders.keySet()) {
-                sb.append(rs +"\n");
-            }
-            System.out.println(sb);
-            */
-      log.error("creationTimeMillis {} minVersion {} maxVersion {}", creationTimeMillis, minVersion,
+      /*
+      StringBuilder   sb;
+
+      sb = new StringBuilder();
+      for (Long rs : regionTreeBuilders.keySet()) {
+          sb.append(rs +"\n");
+      }
+      System.out.println(sb);
+      */
+      log.error(
+          "creationTimeMillis {} minVersion {} maxVersion {}",
+          creationTimeMillis,
+          minVersion,
           maxVersion);
       throw new RuntimeException("Can't find RegionTreeBuilder for: " + regionStart);
     }

@@ -45,10 +45,10 @@ public class UUIDBenchmark implements Runnable {
     sw = new SimpleStopwatch();
     for (int i = 0; i < iterations; i++) {
       UUIDBase uuid;
-      //UUID    uuid;
+      // UUID    uuid;
 
-      //uuid = UUID.randomUUID();
-      //uuid = new UUID(0, l2.getAndIncrement());
+      // uuid = UUID.randomUUID();
+      // uuid = new UUID(0, l2.getAndIncrement());
       uuid = new UUIDBase();
       sum += uuid.hashCode();
     }

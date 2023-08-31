@@ -63,7 +63,7 @@ public class RetrievalResult extends KeyedResult {
 
     totalResultLength = 0;
     for (RetrievalResult retrievalResult : results) {
-      //System.out.printf("%s\t%d\n", retrievalResult, retrievalResult.getResultLength());
+      // System.out.printf("%s\t%d\n", retrievalResult, retrievalResult.getResultLength());
       totalResultLength += retrievalResult.getResultLength();
     }
     return totalResultLength;
@@ -74,8 +74,9 @@ public class RetrievalResult extends KeyedResult {
     if (obj instanceof RetrievalResult) {
       RetrievalResult other = (RetrievalResult) obj;
 
-      return (this.getKey().equals(other.getKey()) && this.getResult().equals(
-          other.getResult()) && ((this.value == null && other.value == null) || this.value.equals(other.value)));
+      return (this.getKey().equals(other.getKey())
+          && this.getResult().equals(other.getResult())
+          && ((this.value == null && other.value == null) || this.value.equals(other.value)));
     } else {
       return false;
     }

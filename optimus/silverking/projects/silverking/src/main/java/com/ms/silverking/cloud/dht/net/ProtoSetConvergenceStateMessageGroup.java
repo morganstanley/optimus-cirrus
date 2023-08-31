@@ -33,9 +33,19 @@ public class ProtoSetConvergenceStateMessageGroup extends ProtoMessageGroup {
   private static final int ringStateOffset = targetCPOffset + ConvergencePoint.serializedSizeBytes;
   private static final int dataBufferSizeBytes = ringStateOffset + 1;
 
-  public ProtoSetConvergenceStateMessageGroup(UUIDBase uuid, byte[] originator, int deadlineRelativeMillis,
-      ConvergencePoint curCP, ConvergencePoint targetCP, RingState ringState) {
-    super(MessageType.SET_CONVERGENCE_STATE, uuid, 0, originator, deadlineRelativeMillis,
+  public ProtoSetConvergenceStateMessageGroup(
+      UUIDBase uuid,
+      byte[] originator,
+      int deadlineRelativeMillis,
+      ConvergencePoint curCP,
+      ConvergencePoint targetCP,
+      RingState ringState) {
+    super(
+        MessageType.SET_CONVERGENCE_STATE,
+        uuid,
+        0,
+        originator,
+        deadlineRelativeMillis,
         ForwardingMode.DO_NOT_FORWARD);
 
     ByteBuffer buffer;

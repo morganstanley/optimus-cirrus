@@ -17,9 +17,7 @@ import java.util.UUID;
 import com.ms.silverking.id.UUIDBase;
 import com.ms.silverking.id.UUIDUtil;
 
-/**
- * Serializer/deserializer for UUID
- */
+/** Serializer/deserializer for UUID */
 public final class UUIDSerDes implements BufferSerDes<UUID> {
   @Override
   public ByteBuffer serializeToBuffer(UUID uuid) {

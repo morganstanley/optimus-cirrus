@@ -23,9 +23,10 @@ import org.kohsuke.args4j.CmdLineParser;
 public class RingCurTargetTool {
   private final PrintStream out;
 
-  enum Mode {Read, Write}
-
-  ;
+  enum Mode {
+    Read,
+    Write
+  };
 
   public RingCurTargetTool() {
     out = System.out;
@@ -45,17 +46,20 @@ public class RingCurTargetTool {
     dhtConfig = new DHTConfigurationZK(mc).readFromZK(latestConfigVersion, null);
     zk = new DHTRingCurTargetZK(mc, dhtConfig);
     switch (options.mode) {
-    case Write:
-      if (options.versionPair == null) {
-        throw new CmdLineException("Write requires a version");
-      }
-      doWrite(zk, options.nodeType, getRingAndVersionPair(dhtConfig.getRingName(), options.versionPair));
-      break;
-    case Read:
-      doRead(zk, options.nodeType);
-      break;
-    default:
-      throw new RuntimeException("Panic");
+      case Write:
+        if (options.versionPair == null) {
+          throw new CmdLineException("Write requires a version");
+        }
+        doWrite(
+            zk,
+            options.nodeType,
+            getRingAndVersionPair(dhtConfig.getRingName(), options.versionPair));
+        break;
+      case Read:
+        doRead(zk, options.nodeType);
+        break;
+      default:
+        throw new RuntimeException("Panic");
     }
   }
 
@@ -66,8 +70,11 @@ public class RingCurTargetTool {
     return new Triple<>(ringName, Long.parseLong(versionDefs[0]), Long.parseLong(versionDefs[1]));
   }
 
-  private void doWrite(DHTRingCurTargetZK zk, DHTRingCurTargetZK.NodeType nodeType,
-      Triple<String, Long, Long> ringAndVersionPair) throws KeeperException {
+  private void doWrite(
+      DHTRingCurTargetZK zk,
+      DHTRingCurTargetZK.NodeType nodeType,
+      Triple<String, Long, Long> ringAndVersionPair)
+      throws KeeperException {
     Triple<String, Long, Long> _ringAndVersionPair;
     boolean verifiedOK;
 
@@ -82,7 +89,8 @@ public class RingCurTargetTool {
     }
   }
 
-  private void doRead(DHTRingCurTargetZK zk, DHTRingCurTargetZK.NodeType nodeType) throws KeeperException {
+  private void doRead(DHTRingCurTargetZK zk, DHTRingCurTargetZK.NodeType nodeType)
+      throws KeeperException {
     Triple<String, Long, Long> ringAndVersionPair;
 
     ringAndVersionPair = zk.getRingAndVersionPair(nodeType);

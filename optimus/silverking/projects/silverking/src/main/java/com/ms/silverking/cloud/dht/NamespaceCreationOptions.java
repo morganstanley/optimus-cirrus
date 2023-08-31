@@ -15,60 +15,52 @@ import com.ms.silverking.cloud.dht.common.DHTConstants;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * <p>For a given DHT, this class defines when automatic namespace
- * creation is allowed and what options will be used when it is used.</p>
+ * For a given DHT, this class defines when automatic namespace creation is allowed and what options
+ * will be used when it is used.
  *
- * <p>Explicit creation is when a user explicitly calls createNamespace.
- * Auto creation is where a user does *not* call createNamespace, but - rather - the
- * namespace is created when a put is first issued.</p>
+ * <p>Explicit creation is when a user explicitly calls createNamespace. Auto creation is where a
+ * user does *not* call createNamespace, but - rather - the namespace is created when a put is first
+ * issued.
  *
- * <p>This class should not be created programmatically by applications. Rather,
- * this class is defined administratively when defining a DHT, and applications
- * may obtain an instance through DHTSession.</p>
+ * <p>This class should not be created programmatically by applications. Rather, this class is
+ * defined administratively when defining a DHT, and applications may obtain an instance through
+ * DHTSession.
  */
 public class NamespaceCreationOptions {
   private final Mode mode;
   private final String regex;
   private final NamespaceOptions defaultNSOptions;
 
-  /**
-   * Controls when namespaces may be automatically created versus explicitly created.
-   */
+  /** Controls when namespaces may be automatically created versus explicitly created. */
   public enum Mode {
-    /**
-     * Users must always explicitly create a namespace before use.
-     */
+    /** Users must always explicitly create a namespace before use. */
     RequireExplicitCreation,
     /**
-     * Users must never explicitly create a namespace. Namespaces will be
-     * automatically created using DHT-wide specified NamespaceOptions.
+     * Users must never explicitly create a namespace. Namespaces will be automatically created
+     * using DHT-wide specified NamespaceOptions.
      */
     RequireAutoCreation,
     /**
-     * Users may either explicitly create namespaces or
-     * optionally autocreate namespaces. Autocreation will only be allowed
-     * for namespaces matching the given regular expression.
+     * Users may either explicitly create namespaces or optionally autocreate namespaces.
+     * Autocreation will only be allowed for namespaces matching the given regular expression.
      */
     OptionalAutoCreation_AllowMatches,
     /**
-     * Users may either explicitly create namespaces or
-     * optionally autocreate namespaces. Autocreation will only be disallowed
-     * for namespaces matching the given regular expression.
+     * Users may either explicitly create namespaces or optionally autocreate namespaces.
+     * Autocreation will only be disallowed for namespaces matching the given regular expression.
      */
     OptionalAutoCreation_DisallowMatches
-  }
-
-  ;
+  };
 
   /**
-   * Default NamespaceCreationOptions. Subject to change. Recommended practice is for each SilverKing instance
-   * to explicitly specify.
+   * Default NamespaceCreationOptions. Subject to change. Recommended practice is for each
+   * SilverKing instance to explicitly specify.
    */
-  public static final NamespaceCreationOptions defaultOptions = DHTConstants.defaultNamespaceCreationOptions;
-  /**
-   * Internal use only
-   */
-  private static final NamespaceCreationOptions emptyTemplate = new NamespaceCreationOptions(null, null, null);
+  public static final NamespaceCreationOptions defaultOptions =
+      DHTConstants.defaultNamespaceCreationOptions;
+  /** Internal use only */
+  private static final NamespaceCreationOptions emptyTemplate =
+      new NamespaceCreationOptions(null, null, null);
 
   static {
     ObjectDefParser2.addParser(emptyTemplate);
@@ -77,8 +69,8 @@ public class NamespaceCreationOptions {
   /**
    * NamespaceCreationOptions constructor for internal use
    *
-   * @param mode             namespace creation mode
-   * @param regex            regex for namespace creation modes that require a regex
+   * @param mode namespace creation mode
+   * @param regex regex for namespace creation modes that require a regex
    * @param defaultNSOptions default NamespaceOptions to use
    */
   public NamespaceCreationOptions(Mode mode, String regex, NamespaceOptions defaultNSOptions) {
@@ -88,10 +80,12 @@ public class NamespaceCreationOptions {
   }
 
   /**
-   * Return whether or not the given namespace can be explicitly created given the mode and regex in place
+   * Return whether or not the given namespace can be explicitly created given the mode and regex in
+   * place
    *
    * @param ns namespace to test
-   * @return whether or not the given namespace can be explicitly created given the mode and regex in place
+   * @return whether or not the given namespace can be explicitly created given the mode and regex
+   *     in place
    */
   public boolean canBeExplicitlyCreated(String ns) {
     return mode != Mode.RequireAutoCreation;
@@ -101,22 +95,24 @@ public class NamespaceCreationOptions {
    * Return whether or not the given namespace can be auto created given the mode and regex in place
    *
    * @param ns namespace to test
-   * @return whether or not the given namespace can be auto created given the mode and regex in place
+   * @return whether or not the given namespace can be auto created given the mode and regex in
+   *     place
    */
   public boolean canBeAutoCreated(String ns) {
-    return mode == Mode.RequireAutoCreation || (mode == Mode.OptionalAutoCreation_AllowMatches && ns.matches(
-        regex)) || (mode == Mode.OptionalAutoCreation_DisallowMatches && !ns.matches(regex));
+    return mode == Mode.RequireAutoCreation
+        || (mode == Mode.OptionalAutoCreation_AllowMatches && ns.matches(regex))
+        || (mode == Mode.OptionalAutoCreation_DisallowMatches && !ns.matches(regex));
   }
-    
-    /*
-    public Mode getMode() {
-        return mode;
-    }
 
-    public String getRegex() {
-        return regex;
-    }
-    */
+  /*
+  public Mode getMode() {
+      return mode;
+  }
+
+  public String getRegex() {
+      return regex;
+  }
+  */
 
   /**
    * Return defaultNSOptions
@@ -127,36 +123,34 @@ public class NamespaceCreationOptions {
     return defaultNSOptions;
   }
 
-  /**
-   * mode:regex:defaultnsoptions
-   */
-    /*
-    public static NamespaceCreationOptions parse(String def) {
-        String[]    defs;
-        
-        defs = def.split(":");
-        if (defs.length != 3) {
-            for (int i = 0; i < defs.length; i++) {
-                System.err.printf("%d\t%s\n", i, defs[i]);
-            }
-            throw new RuntimeException("Invalid definition: "+ def);
-        } else {
-            Mode    mode;
-            String  regex;
-            NamespaceOptions    defaultNSOptions;
-            
-            mode = Mode.valueOf(defs[0]);
-            regex = defs[1];
-            defaultNSOptions = NamespaceOptions.parse(defs[2]);
-            return new NamespaceCreationOptions(mode, regex, defaultNSOptions); 
-        }
-    }
-    
-    @Override
-    public String toString() {
-        return mode +":"+ regex +":"+ defaultNSOptions;
-    }
-    */
+  /** mode:regex:defaultnsoptions */
+  /*
+  public static NamespaceCreationOptions parse(String def) {
+      String[]    defs;
+
+      defs = def.split(":");
+      if (defs.length != 3) {
+          for (int i = 0; i < defs.length; i++) {
+              System.err.printf("%d\t%s\n", i, defs[i]);
+          }
+          throw new RuntimeException("Invalid definition: "+ def);
+      } else {
+          Mode    mode;
+          String  regex;
+          NamespaceOptions    defaultNSOptions;
+
+          mode = Mode.valueOf(defs[0]);
+          regex = defs[1];
+          defaultNSOptions = NamespaceOptions.parse(defs[2]);
+          return new NamespaceCreationOptions(mode, regex, defaultNSOptions);
+      }
+  }
+
+  @Override
+  public String toString() {
+      return mode +":"+ regex +":"+ defaultNSOptions;
+  }
+  */
 
   /**
    * Parse a NamespaceCreationOptions definition
@@ -172,15 +166,15 @@ public class NamespaceCreationOptions {
   public String toString() {
     return ObjectDefParser2.objectToString(this);
   }
-    
-    /*
-     * for unit testing only
-    public static void main(String[] args) {
-        for (String arg : args) {
-        //    System.out.printf("%s\t%s\n", defaultOptions.canBeAutoCreated(ns), defaultOptions
-        * .canBeExplicitlyCreated(arg));
-            System.out.println(parse(arg));
-        }
-    }
-    */
+
+  /*
+   * for unit testing only
+  public static void main(String[] args) {
+      for (String arg : args) {
+      //    System.out.printf("%s\t%s\n", defaultOptions.canBeAutoCreated(ns), defaultOptions
+      * .canBeExplicitlyCreated(arg));
+          System.out.println(parse(arg));
+      }
+  }
+  */
 }

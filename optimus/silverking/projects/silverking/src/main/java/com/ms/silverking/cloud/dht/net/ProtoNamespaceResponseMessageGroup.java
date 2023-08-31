@@ -34,8 +34,14 @@ public class ProtoNamespaceResponseMessageGroup extends ProtoMessageGroup {
   private static final int deadlineRelativeMillis = 10 * 60 * 1000;
   private static final long nsRequestMGContext = 0L;
 
-  public ProtoNamespaceResponseMessageGroup(UUIDBase uuid, byte[] originator, List<Long> namespaces) {
-    super(MessageType.NAMESPACE_RESPONSE, uuid, nsRequestMGContext, originator, deadlineRelativeMillis,
+  public ProtoNamespaceResponseMessageGroup(
+      UUIDBase uuid, byte[] originator, List<Long> namespaces) {
+    super(
+        MessageType.NAMESPACE_RESPONSE,
+        uuid,
+        nsRequestMGContext,
+        originator,
+        deadlineRelativeMillis,
         ForwardingMode.FORWARD);
 
     dataByteBuffer = ByteBuffer.allocate(dataBufferSize + bufferSizeFor(namespaces));
@@ -73,7 +79,9 @@ public class ProtoNamespaceResponseMessageGroup extends ProtoMessageGroup {
     nsListSize = mg.getBuffers()[dataBufferIndex].getInt(nsListOffset);
     namespaces = new ArrayList<>(nsListSize);
     for (int i = 0; i < nsListSize; i++) {
-      namespaces.add(mg.getBuffers()[dataBufferIndex].getLong(nsListDataOffset + i * NumConversion.BYTES_PER_LONG));
+      namespaces.add(
+          mg.getBuffers()[dataBufferIndex].getLong(
+              nsListDataOffset + i * NumConversion.BYTES_PER_LONG));
     }
     return namespaces;
   }

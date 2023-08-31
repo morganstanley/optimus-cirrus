@@ -30,64 +30,64 @@ public class ChannelUtil {
   }
 
   /**
-   * Emperical observation shows that throughput degrades significantly for
-   * gathered writes over a certain number of buffers. This method
-   * writes the buffer without exceeding this threshold.
+   * Emperical observation shows that throughput degrades significantly for gathered writes over a
+   * certain number of buffers. This method writes the buffer without exceeding this threshold.
    *
    * @param buffers
    * @param channel
    * @throws IOException
    */
-    /*
-    public static void sendBuffers(ByteBuffer[] buffers, GatheringByteChannel outChannel) 
-            throws IOException {
-        sendBuffers(buffers, totalBytes(buffers), outChannel);
-    }
-    
-    private static void sendBuffers(ByteBuffer[] buffers, long totalToWrite, GatheringByteChannel outChannel)
-            throws IOException {
-        if (buffers.length > bufferSendLimit) {
-            int curGroupMax;
-            int prevGroupMax;
+  /*
+  public static void sendBuffers(ByteBuffer[] buffers, GatheringByteChannel outChannel)
+          throws IOException {
+      sendBuffers(buffers, totalBytes(buffers), outChannel);
+  }
 
-            curGroupMax = Integer.MIN_VALUE;
-            prevGroupMax = -1;
-            while (curGroupMax < buffers.length - 1) {
-                ByteBuffer[] splitBuffers;
-                long subTotal;
+  private static void sendBuffers(ByteBuffer[] buffers, long totalToWrite, GatheringByteChannel outChannel)
+          throws IOException {
+      if (buffers.length > bufferSendLimit) {
+          int curGroupMax;
+          int prevGroupMax;
 
-                curGroupMax = Math.min(buffers.length - 1, prevGroupMax + bufferSendLimit);
-                splitBuffers = new ByteBuffer[curGroupMax - prevGroupMax];
-                subTotal = 0;
-                for (int i = 0; i < splitBuffers.length; i++) {
-                    splitBuffers[i] = buffers[prevGroupMax + i + 1];
-                    subTotal += splitBuffers[i].capacity();
-                }
-                sendBuffers(splitBuffers, subTotal, outChannel);
-                prevGroupMax = curGroupMax;
-            }
-        } else {
-            long totalWritten;
+          curGroupMax = Integer.MIN_VALUE;
+          prevGroupMax = -1;
+          while (curGroupMax < buffers.length - 1) {
+              ByteBuffer[] splitBuffers;
+              long subTotal;
 
-            //for (int i = 0; i < buffers.length; i++) {
-            //    buffers[i].rewind();
-            //}
-            totalWritten = 0;
-            while (totalWritten < totalToWrite) {
-                long written;
+              curGroupMax = Math.min(buffers.length - 1, prevGroupMax + bufferSendLimit);
+              splitBuffers = new ByteBuffer[curGroupMax - prevGroupMax];
+              subTotal = 0;
+              for (int i = 0; i < splitBuffers.length; i++) {
+                  splitBuffers[i] = buffers[prevGroupMax + i + 1];
+                  subTotal += splitBuffers[i].capacity();
+              }
+              sendBuffers(splitBuffers, subTotal, outChannel);
+              prevGroupMax = curGroupMax;
+          }
+      } else {
+          long totalWritten;
 
-                written = outChannel.write(buffers);
-                if (written > 0) {
-                    totalWritten += written;
-                }
-            }
-            if (totalWritten != totalToWrite) {
-                throw new RuntimeException("totalWritten != totalToWrite");
-            }
-        }
-    }
-    */
-  public static long writeBuffersBatched(ByteBuffer[] buffers, GatheringByteChannel channel) throws IOException {
+          //for (int i = 0; i < buffers.length; i++) {
+          //    buffers[i].rewind();
+          //}
+          totalWritten = 0;
+          while (totalWritten < totalToWrite) {
+              long written;
+
+              written = outChannel.write(buffers);
+              if (written > 0) {
+                  totalWritten += written;
+              }
+          }
+          if (totalWritten != totalToWrite) {
+              throw new RuntimeException("totalWritten != totalToWrite");
+          }
+      }
+  }
+  */
+  public static long writeBuffersBatched(ByteBuffer[] buffers, GatheringByteChannel channel)
+      throws IOException {
     if (buffers.length < bufferSendLimit) {
       return channel.write(buffers);
     } else {
@@ -100,19 +100,19 @@ public class ChannelUtil {
       }
       batchSize = Math.min(buffers.length - startIndex, bufferSendLimit);
       return channel.write(buffers, startIndex, batchSize);
-            /*
-            while (true) {
-                int     startIndex;
-                int     batchSize;
-                
-                startIndex = 0;
-                while (!buffers[startIndex].hasRemaining()) {
-                    startIndex++;
-                }
-                batchSize = Math.min(buffers.length - startIndex, bufferSendLimit);
-                return channel.write(buffers, startIndex, batchSize);
-            }
-            */
+      /*
+      while (true) {
+          int     startIndex;
+          int     batchSize;
+
+          startIndex = 0;
+          while (!buffers[startIndex].hasRemaining()) {
+              startIndex++;
+          }
+          batchSize = Math.min(buffers.length - startIndex, bufferSendLimit);
+          return channel.write(buffers, startIndex, batchSize);
+      }
+      */
     }
   }
 }

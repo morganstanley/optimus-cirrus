@@ -21,19 +21,19 @@ import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.cloud.dht.daemon.storage.StorageValueAndParameters;
 
 public interface PutTrigger extends Trigger {
-  OpResult put(SSNamespaceStore nsStore,
-               DHTKey key,
-               ByteBuffer value,
-               SSPutOptions options,
-               SSStorageParametersAndRequirements storageParams,
-               byte[] userData,
-               NamespaceVersionMode nsVersionMode);
+  OpResult put(
+      SSNamespaceStore nsStore,
+      DHTKey key,
+      ByteBuffer value,
+      SSPutOptions options,
+      SSStorageParametersAndRequirements storageParams,
+      byte[] userData,
+      NamespaceVersionMode nsVersionMode);
 
   OpResult putUpdate(SSNamespaceStore nsStore, DHTKey key, long version, byte storageState);
 
   /**
-   * Merges and puts in one step.
-   * writeLock is held by caller
+   * Merges and puts in one step. writeLock is held by caller
    *
    * @param values
    * @return results of the individual puts

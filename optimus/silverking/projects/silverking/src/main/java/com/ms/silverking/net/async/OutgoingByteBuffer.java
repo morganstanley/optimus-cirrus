@@ -21,9 +21,7 @@ import com.ms.silverking.text.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * OutgoingData wrapper for ByteBuffers.
- */
+/** OutgoingData wrapper for ByteBuffers. */
 public class OutgoingByteBuffer extends OutgoingData {
   private final ByteBuffer buffer;
   private AtomicLong totalWritten;
@@ -32,7 +30,8 @@ public class OutgoingByteBuffer extends OutgoingData {
 
   private static Logger log = LoggerFactory.getLogger(OutgoingByteBuffer.class);
 
-  public OutgoingByteBuffer(ByteBuffer buffer, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline) {
+  public OutgoingByteBuffer(
+      ByteBuffer buffer, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline) {
     super(sendUUID, asyncSendListener, deadline);
     this.buffer = buffer;
   }
@@ -41,12 +40,16 @@ public class OutgoingByteBuffer extends OutgoingData {
     return new OutgoingByteBuffer(ByteBuffer.wrap(buf), null, null, Long.MAX_VALUE);
   }
 
-  public static OutgoingByteBuffer wrap(byte[] buf, UUIDBase sendUUID, AsyncSendListener asyncSendListener) {
-    return new OutgoingByteBuffer(ByteBuffer.wrap(buf), sendUUID, asyncSendListener, Long.MAX_VALUE);
+  public static OutgoingByteBuffer wrap(
+      byte[] buf, UUIDBase sendUUID, AsyncSendListener asyncSendListener) {
+    return new OutgoingByteBuffer(
+        ByteBuffer.wrap(buf), sendUUID, asyncSendListener, Long.MAX_VALUE);
   }
 
-  public static OutgoingByteBuffer allocate(int capacity, UUIDBase sendUUID, AsyncSendListener asyncSendListener) {
-    return new OutgoingByteBuffer(ByteBuffer.allocate(capacity), sendUUID, asyncSendListener, Long.MAX_VALUE);
+  public static OutgoingByteBuffer allocate(
+      int capacity, UUIDBase sendUUID, AsyncSendListener asyncSendListener) {
+    return new OutgoingByteBuffer(
+        ByteBuffer.allocate(capacity), sendUUID, asyncSendListener, Long.MAX_VALUE);
   }
 
   public long getTotalBytes() {
@@ -60,7 +63,7 @@ public class OutgoingByteBuffer extends OutgoingData {
     written = channel.write(buffer);
     totalWritten.addAndGet(written);
     if (AsyncGlobals.debug && log.isDebugEnabled()) {
-      log.debug("written to channel: {} {}", written ,totalWritten.get());
+      log.debug("written to channel: {} {}", written, totalWritten.get());
     }
     return buffer.remaining() == 0;
   }

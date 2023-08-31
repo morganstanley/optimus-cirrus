@@ -77,7 +77,9 @@ public class BufferOffsetListStore implements OffsetListStore {
       }
       listBuf = BufferUtil.sliceAt(buf, listOffset);
       listNumEntries = listBuf.getInt(BufferOffsetList.listSizeOffset);
-      listSizeBytes = listNumEntries * entrySizeBytes(supportsStorageTime) + OffsetListBase.persistedHeaderSizeBytes;
+      listSizeBytes =
+          listNumEntries * entrySizeBytes(supportsStorageTime)
+              + OffsetListBase.persistedHeaderSizeBytes;
       listBuf.limit(listSizeBytes);
       return new BufferOffsetList(listBuf, supportsStorageTime);
     } catch (RuntimeException re) { // FUTURE - consider removing debug
@@ -104,6 +106,7 @@ public class BufferOffsetListStore implements OffsetListStore {
   private static int entrySizeBytes(boolean supportsStorageTime) {
     return (supportsStorageTime
             ? OffsetListBase.entrySizeInts_supportsStorageTime
-            : OffsetListBase.entrySizeInts_noStorageTime) * NumConversion.BYTES_PER_INT;
+            : OffsetListBase.entrySizeInts_noStorageTime)
+        * NumConversion.BYTES_PER_INT;
   }
 }

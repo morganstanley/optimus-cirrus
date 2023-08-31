@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.trace;
 
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * This TraceIdProvider impl is used by default in SilverKing
- */
+/** This TraceIdProvider impl is used by default in SilverKing */
 public class NoTraceIDProvider implements TraceIDProvider {
   private static final NoTraceIDProvider template = new NoTraceIDProvider();
 

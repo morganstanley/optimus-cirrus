@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.time;
 
-/**
- * AbsMillisTimeSource returning a constant specified value.
- */
+/** AbsMillisTimeSource returning a constant specified value. */
 public final class ConstantAbsMillisTimeSource implements AbsMillisTimeSource {
   private final long absMillisTime;
 

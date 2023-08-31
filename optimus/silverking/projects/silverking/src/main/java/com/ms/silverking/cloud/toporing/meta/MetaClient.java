@@ -29,22 +29,33 @@ public class MetaClient extends MetaClientBase<MetaPaths> {
     this.cloudConfiguration = cloudConfiguration;
   }
 
-  public MetaClient(NamedRingConfiguration ringConfig, ZooKeeperConfig zkConfig) throws IOException, KeeperException {
-    this(new MetaPaths(ringConfig), ringConfig.getRingConfiguration().getCloudConfiguration(), zkConfig);
+  public MetaClient(NamedRingConfiguration ringConfig, ZooKeeperConfig zkConfig)
+      throws IOException, KeeperException {
+    this(
+        new MetaPaths(ringConfig),
+        ringConfig.getRingConfiguration().getCloudConfiguration(),
+        zkConfig);
   }
 
-  public static MetaClient createMetaClient(String ringName, long ringVersion, ZooKeeperConfig zkConfig)
+  public static MetaClient createMetaClient(
+      String ringName, long ringVersion, ZooKeeperConfig zkConfig)
       throws IOException, KeeperException {
     MetaClient _mc;
     NamedRingConfiguration ringConfig;
 
-    _mc = new MetaClient(new NamedRingConfiguration(ringName, RingConfiguration.emptyTemplate), zkConfig);
-    ringConfig = new NamedRingConfiguration(ringName, new RingConfigurationZK(_mc).readFromZK(ringVersion, null));
+    _mc =
+        new MetaClient(
+            new NamedRingConfiguration(ringName, RingConfiguration.emptyTemplate), zkConfig);
+    ringConfig =
+        new NamedRingConfiguration(
+            ringName, new RingConfigurationZK(_mc).readFromZK(ringVersion, null));
     return new com.ms.silverking.cloud.toporing.meta.MetaClient(ringConfig, zkConfig);
   }
 
-  public com.ms.silverking.cloud.meta.MetaClient createCloudMC() throws KeeperException, IOException {
-    return new com.ms.silverking.cloud.meta.MetaClient(cloudConfiguration, getZooKeeper().getZKConfig());
+  public com.ms.silverking.cloud.meta.MetaClient createCloudMC()
+      throws KeeperException, IOException {
+    return new com.ms.silverking.cloud.meta.MetaClient(
+        cloudConfiguration, getZooKeeper().getZKConfig());
   }
 
   public String createConfigInstancePath(long configVersion) throws KeeperException {

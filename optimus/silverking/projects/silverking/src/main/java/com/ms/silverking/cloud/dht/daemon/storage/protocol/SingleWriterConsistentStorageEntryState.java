@@ -25,23 +25,27 @@ class SingleWriterConsistentStorageEntryState extends StorageEntryState {
   private final TwoPhaseStorageState[] replicaStates;
   private final AtomicInteger phaseIncomplete;
   private TwoPhaseStorageState state;
-  //private final List<String>      debugList;
+  // private final List<String>      debugList;
 
-  enum StateTransitionResult {NO_TRANSITION, REPLICA_TRANSITION, QUORUM_TRANSITION, COMPLETION}
-
-  ;
+  enum StateTransitionResult {
+    NO_TRANSITION,
+    REPLICA_TRANSITION,
+    QUORUM_TRANSITION,
+    COMPLETION
+  };
 
   private static final boolean debug = false;
 
   // FUTURE - potentially optimize this
 
-  SingleWriterConsistentStorageEntryState(List<IPAndPort> primaryReplicas, List<IPAndPort> secondaryReplicas) {
+  SingleWriterConsistentStorageEntryState(
+      List<IPAndPort> primaryReplicas, List<IPAndPort> secondaryReplicas) {
     this.primaryReplicas = primaryReplicas;
     this.secondaryReplicas = secondaryReplicas;
     replicaStates = new TwoPhaseStorageState[primaryReplicas.size()];
     this.state = TwoPhaseStorageState.INITIAL;
     phaseIncomplete = new AtomicInteger(primaryReplicas.size());
-    //debugList = new ArrayList<>();
+    // debugList = new ArrayList<>();
   }
 
   List<IPAndPort> primaryReplicas() {
@@ -59,7 +63,7 @@ class SingleWriterConsistentStorageEntryState extends StorageEntryState {
     if (newState != prevState) {
       return updateState(replica, prevState, newState);
     } else {
-      //Log.info("Disallowed update: "+ state +"\t"+ newState);
+      // Log.info("Disallowed update: "+ state +"\t"+ newState);
       return StateTransitionResult.NO_TRANSITION;
     }
   }
@@ -68,8 +72,8 @@ class SingleWriterConsistentStorageEntryState extends StorageEntryState {
     updateState(replica, prevState, TwoPhaseStorageState.FAILED);
   }
 
-  private StateTransitionResult updateState(IPAndPort replica, TwoPhaseStorageState prevState,
-      TwoPhaseStorageState newState) {
+  private StateTransitionResult updateState(
+      IPAndPort replica, TwoPhaseStorageState prevState, TwoPhaseStorageState newState) {
     int replicaIndex;
 
     replicaIndex = primaryReplicas.indexOf(replica);
@@ -86,11 +90,12 @@ class SingleWriterConsistentStorageEntryState extends StorageEntryState {
       if (replicaState == null) {
         replicaState = TwoPhaseStorageState.INITIAL;
       }
-      // debugList.add(prevState +" "+ replicaState +" "+ newState +"\t"+ phaseIncomplete +" "+ replica +" "+ state);
+      // debugList.add(prevState +" "+ replicaState +" "+ newState +"\t"+ phaseIncomplete +" "+
+      // replica +" "+ state);
       if (replicaState != prevState) {
         if (debug) {
           System.out.printf("replicaState %s != prevState %s\n", replicaState, prevState);
-          //StringUtil.display(debugList, '\n');
+          // StringUtil.display(debugList, '\n');
         }
         return StateTransitionResult.NO_TRANSITION;
       } else {
@@ -101,7 +106,7 @@ class SingleWriterConsistentStorageEntryState extends StorageEntryState {
         if (debug) {
           System.out.printf("replicaState %s\n", replica);
           System.out.printf("replicaState %s prevState %s\n", replicaState, prevState);
-          //StringUtil.display(debugList, '\n');
+          // StringUtil.display(debugList, '\n');
         }
         if (incomplete < 0) {
           throw new RuntimeException("Panic");

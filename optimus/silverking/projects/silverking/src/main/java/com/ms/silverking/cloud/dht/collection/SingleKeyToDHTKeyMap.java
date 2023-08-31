@@ -23,8 +23,7 @@ public class SingleKeyToDHTKeyMap<K> implements Map<K, DHTKey> {
   private K key;
   private DHTKey dhtKey;
 
-  public SingleKeyToDHTKeyMap() {
-  }
+  public SingleKeyToDHTKeyMap() {}
 
   @Override
   public int size() {
@@ -65,7 +64,8 @@ public class SingleKeyToDHTKeyMap<K> implements Map<K, DHTKey> {
       this.dhtKey = dhtKey;
       return _dhtKey;
     } else {
-      throw new RuntimeException("This map can only hold one key-value pair " + this.key + " " + key);
+      throw new RuntimeException(
+          "This map can only hold one key-value pair " + this.key + " " + key);
     }
   }
 

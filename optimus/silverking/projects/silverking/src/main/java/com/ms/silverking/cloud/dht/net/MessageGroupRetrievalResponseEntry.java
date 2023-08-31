@@ -24,7 +24,8 @@ public class MessageGroupRetrievalResponseEntry extends MessageGroupKVEntry {
   private int debtIndex;
   private String debtProperty = "silverking.mg.debtEnabled";
 
-  public MessageGroupRetrievalResponseEntry(ByteBuffer keyBuffer, int offset, ByteBuffer[] buffers) {
+  public MessageGroupRetrievalResponseEntry(
+      ByteBuffer keyBuffer, int offset, ByteBuffer[] buffers) {
     super(keyBuffer, offset);
     storedLength = keyBuffer.getInt(offset + RetrievalResponseMessageFormat.resultLengthOffset);
     initValBuffer(buffers);
@@ -32,7 +33,8 @@ public class MessageGroupRetrievalResponseEntry extends MessageGroupKVEntry {
   }
 
   public void initialiseTotalDebt(ByteBuffer[] buffers) {
-    // TODO (OPTIMUS-42080): debtIndex cannot be assigned a fixed position since buffers are added in inheritance order. ProtoValueMG is the very last level so this index works for now.
+    // TODO (OPTIMUS-42080): debtIndex cannot be assigned a fixed position since buffers are added
+    // in inheritance order. ProtoValueMG is the very last level so this index works for now.
     boolean debtEnabled = Boolean.getBoolean(debtProperty);
     if (debtEnabled) {
       debtIndex = buffers.length - 1;
@@ -52,8 +54,6 @@ public class MessageGroupRetrievalResponseEntry extends MessageGroupKVEntry {
   }
 
   public OpResult getOpResult() {
-    return hasValue()
-           ? OpResult.SUCCEEDED
-           : EnumValues.opResult[getErrorCode()];
+    return hasValue() ? OpResult.SUCCEEDED : EnumValues.opResult[getErrorCode()];
   }
 }

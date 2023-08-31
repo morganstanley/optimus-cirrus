@@ -27,21 +27,24 @@ import com.ms.silverking.cloud.dht.client.SynchronousNamespacePerspective;
 import com.ms.silverking.cloud.dht.daemon.storage.NamespacePropertiesIO;
 
 public class NamespaceOptionsClientNSPImpl extends NamespaceOptionsClientBase {
-  private final static String implName = "MetaNamespaceStore";
+  private static final String implName = "MetaNamespaceStore";
 
   private final SynchronousNamespacePerspective<String, String> syncNSP;
   private final SessionEstablishmentTimeoutController seTimeoutController;
 
-  public NamespaceOptionsClientNSPImpl(DHTSession session,
-                                       ClientDHTConfigurationProvider dhtConfigProvider,
-                                       SessionEstablishmentTimeoutController seTimeoutController) {
+  public NamespaceOptionsClientNSPImpl(
+      DHTSession session,
+      ClientDHTConfigurationProvider dhtConfigProvider,
+      SessionEstablishmentTimeoutController seTimeoutController) {
     super(dhtConfigProvider);
-    this.syncNSP = session.openSyncNamespacePerspective(NamespaceUtil.metaInfoNamespaceName,
-                                                        NamespaceUtil.metaNSPOptions);
+    this.syncNSP =
+        session.openSyncNamespacePerspective(
+            NamespaceUtil.metaInfoNamespaceName, NamespaceUtil.metaNSPOptions);
     this.seTimeoutController = seTimeoutController;
   }
 
-  public NamespaceOptionsClientNSPImpl(DHTSession session, ClientDHTConfigurationProvider dhtConfigProvider) {
+  public NamespaceOptionsClientNSPImpl(
+      DHTSession session, ClientDHTConfigurationProvider dhtConfigProvider) {
     this(session, dhtConfigProvider, SessionOptions.getDefaultTimeoutController());
   }
 
@@ -78,20 +81,24 @@ public class NamespaceOptionsClientNSPImpl extends NamespaceOptionsClientBase {
 
     try {
       if (debug) {
-        System.out.printf("%s::retrieveFullNamespaceProperties(%x)\n", implementationName(), nsContext);
+        System.out.printf(
+            "%s::retrieveFullNamespaceProperties(%x)\n", implementationName(), nsContext);
       }
-      storedDef = syncNSP.retrieve(getOptionsKey(nsContext),
-                                   syncNSP.getOptions()
-                                          .getDefaultGetOptions()
-                                          .retrievalType(RetrievalType.VALUE_AND_META_DATA));
+      storedDef =
+          syncNSP.retrieve(
+              getOptionsKey(nsContext),
+              syncNSP
+                  .getOptions()
+                  .getDefaultGetOptions()
+                  .retrievalType(RetrievalType.VALUE_AND_META_DATA));
       if (debug) {
-        System.out.printf("%s::retrieveFullNamespaceProperties(%x) complete %s\n",
-                          implementationName(),
-                          nsContext,
-                          storedDef);
+        System.out.printf(
+            "%s::retrieveFullNamespaceProperties(%x) complete %s\n",
+            implementationName(), nsContext, storedDef);
       }
       if (storedDef != null) {
-        return NamespaceProperties.parse(storedDef.getValue(), storedDef.getCreationTime().inNanos());
+        return NamespaceProperties.parse(
+            storedDef.getValue(), storedDef.getCreationTime().inNanos());
       } else {
         return null;
       }
@@ -101,12 +108,10 @@ public class NamespaceOptionsClientNSPImpl extends NamespaceOptionsClientBase {
   }
 
   @Override
-  protected void deleteNamespaceProperties(long nsContext) throws NamespacePropertiesDeleteException {
-    throw new NamespacePropertiesDeleteException("Deletion for ns [" +
-                                                 nsContext +
-                                                 "] is not supported in [" +
-                                                 implementationName() +
-                                                 "]");
+  protected void deleteNamespaceProperties(long nsContext)
+      throws NamespacePropertiesDeleteException {
+    throw new NamespacePropertiesDeleteException(
+        "Deletion for ns [" + nsContext + "] is not supported in [" + implementationName() + "]");
   }
 
   @Override

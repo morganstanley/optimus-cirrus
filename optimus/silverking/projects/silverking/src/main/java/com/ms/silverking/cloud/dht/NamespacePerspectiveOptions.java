@@ -21,15 +21,13 @@ import com.ms.silverking.cloud.dht.common.SystemTimeUtil;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * <p>Options specific to NamespacePerspectives as well as default options for individual
- * operations.</p>
+ * Options specific to NamespacePerspectives as well as default options for individual operations.
  *
- * <p>Individual operations retain the ability to specify options such as
- * compression, but - by having defaults here - users may elide
- * these from individual operations if desired.</p>
+ * <p>Individual operations retain the ability to specify options such as compression, but - by
+ * having defaults here - users may elide these from individual operations if desired.
  *
- * <p>Note that unlike the defaults in NamespaceOptions (which are fixed at Namespace creation time and persist),
- * these options only apply to the perspective of a single client.</p>
+ * <p>Note that unlike the defaults in NamespaceOptions (which are fixed at Namespace creation time
+ * and persist), these options only apply to the perspective of a single client.
  */
 public final class NamespacePerspectiveOptions<K, V> {
   private final Class<K> keyClass;
@@ -45,11 +43,10 @@ public final class NamespacePerspectiveOptions<K, V> {
   // FUTURE - think about this
   static final KeyDigestType standardKeyDigestType = KeyDigestType.MD5;
 
-  static final ConstantVersionProvider standardVersionProvider = new ConstantVersionProvider(
-      SystemTimeUtil.skSystemTimeSource.absTimeMillis());
-  static final NamespacePerspectiveOptions<byte[], byte[]> templateOptions = new NamespacePerspectiveOptions<byte[],
-      byte[]>(
-      byte[].class, byte[].class);
+  static final ConstantVersionProvider standardVersionProvider =
+      new ConstantVersionProvider(SystemTimeUtil.skSystemTimeSource.absTimeMillis());
+  static final NamespacePerspectiveOptions<byte[], byte[]> templateOptions =
+      new NamespacePerspectiveOptions<byte[], byte[]>(byte[].class, byte[].class);
 
   static {
     ObjectDefParser2.addParser(templateOptions);
@@ -60,23 +57,30 @@ public final class NamespacePerspectiveOptions<K, V> {
    * This constructor should generally be avoided. Instead, an instance of this class should be
    * obtained using Namespace.getDefaultNSPOptions().
    *
-   * @param keyClass                   TODO (OPTIMUS-0000): describe
-   * @param valueClass                 TODO (OPTIMUS-0000): describe
-   * @param keyDigestType              TODO (OPTIMUS-0000): describe
-   * @param defaultPutOptions          default PutOptions. If null, the namespace default will be used
-   *                                   as the perspective default
-   * @param defaultInvalidationOptions default InvalidationOptions. If null, the namespace default will be used
-   *                                   as the perspective default
-   * @param defaultGetOptions          default GetOptions. If null, the namespace default will be used
-   *                                   as the perspective default
-   * @param defaultWaitOptions         default WaitOptions. If null, the namespace default will be used
-   *                                   as the perspective default
-   * @param defaultVersionProvider     TODO (OPTIMUS-0000): describe
-   * @param encrypterDecrypter         TODO (OPTIMUS-0000): describe
+   * @param keyClass TODO (OPTIMUS-0000): describe
+   * @param valueClass TODO (OPTIMUS-0000): describe
+   * @param keyDigestType TODO (OPTIMUS-0000): describe
+   * @param defaultPutOptions default PutOptions. If null, the namespace default will be used as the
+   *     perspective default
+   * @param defaultInvalidationOptions default InvalidationOptions. If null, the namespace default
+   *     will be used as the perspective default
+   * @param defaultGetOptions default GetOptions. If null, the namespace default will be used as the
+   *     perspective default
+   * @param defaultWaitOptions default WaitOptions. If null, the namespace default will be used as
+   *     the perspective default
+   * @param defaultVersionProvider TODO (OPTIMUS-0000): describe
+   * @param encrypterDecrypter TODO (OPTIMUS-0000): describe
    */
-  public NamespacePerspectiveOptions(Class<K> keyClass, Class<V> valueClass, KeyDigestType keyDigestType,
-      PutOptions defaultPutOptions, InvalidationOptions defaultInvalidationOptions, GetOptions defaultGetOptions,
-      WaitOptions defaultWaitOptions, VersionProvider defaultVersionProvider, EncrypterDecrypter encrypterDecrypter) {
+  public NamespacePerspectiveOptions(
+      Class<K> keyClass,
+      Class<V> valueClass,
+      KeyDigestType keyDigestType,
+      PutOptions defaultPutOptions,
+      InvalidationOptions defaultInvalidationOptions,
+      GetOptions defaultGetOptions,
+      WaitOptions defaultWaitOptions,
+      VersionProvider defaultVersionProvider,
+      EncrypterDecrypter encrypterDecrypter) {
     Preconditions.checkNotNull(keyClass);
     Preconditions.checkNotNull(valueClass);
     Preconditions.checkNotNull(keyDigestType);
@@ -104,20 +108,34 @@ public final class NamespacePerspectiveOptions<K, V> {
   /**
    * For C++ implementation only. Do not use.
    *
-   * @param keyClass                   same as above
-   * @param valueClass                 same as above
-   * @param keyDigestType              same as above
-   * @param defaultPutOptions          same as above
+   * @param keyClass same as above
+   * @param valueClass same as above
+   * @param keyDigestType same as above
+   * @param defaultPutOptions same as above
    * @param defaultInvalidationOptions same as above
-   * @param defaultGetOptions          same as above
-   * @param defaultWaitOptions         same as above
-   * @param defaultVersionProvider     same as above
+   * @param defaultGetOptions same as above
+   * @param defaultWaitOptions same as above
+   * @param defaultVersionProvider same as above
    */
-  public NamespacePerspectiveOptions(Class<K> keyClass, Class<V> valueClass, KeyDigestType keyDigestType,
-      PutOptions defaultPutOptions, InvalidationOptions defaultInvalidationOptions, GetOptions defaultGetOptions,
-      WaitOptions defaultWaitOptions, VersionProvider defaultVersionProvider) {
-    this(keyClass, valueClass, keyDigestType, defaultPutOptions, defaultInvalidationOptions, defaultGetOptions,
-        defaultWaitOptions, defaultVersionProvider, null);
+  public NamespacePerspectiveOptions(
+      Class<K> keyClass,
+      Class<V> valueClass,
+      KeyDigestType keyDigestType,
+      PutOptions defaultPutOptions,
+      InvalidationOptions defaultInvalidationOptions,
+      GetOptions defaultGetOptions,
+      WaitOptions defaultWaitOptions,
+      VersionProvider defaultVersionProvider) {
+    this(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        null);
   }
 
   /**
@@ -127,9 +145,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @param valueClass
    */
   private NamespacePerspectiveOptions(Class<K> keyClass, Class<V> valueClass) {
-    this(keyClass, valueClass, standardKeyDigestType, DHTConstants.standardPutOptions,
-        DHTConstants.standardInvalidationOptions, DHTConstants.standardGetOptions, DHTConstants.standardWaitOptions,
-        standardVersionProvider, null);
+    this(
+        keyClass,
+        valueClass,
+        standardKeyDigestType,
+        DHTConstants.standardPutOptions,
+        DHTConstants.standardInvalidationOptions,
+        DHTConstants.standardGetOptions,
+        DHTConstants.standardWaitOptions,
+        standardVersionProvider,
+        null);
   }
 
   public Class<K> getKeyClass() {
@@ -175,8 +200,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @return the modified copy of the instance
    */
   public NamespacePerspectiveOptions<K, V> keyClass(Class keyClass) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -186,8 +219,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @return the modified copy of the instance
    */
   public NamespacePerspectiveOptions<K, V> valueClass(Class valueClass) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -197,8 +238,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @return the modified copy of the instance
    */
   public NamespacePerspectiveOptions<K, V> keyDigestType(KeyDigestType keyDigestType) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -211,8 +260,16 @@ public final class NamespacePerspectiveOptions<K, V> {
     if (defaultPutOptions instanceof InvalidationOptions) {
       throw new IllegalArgumentException("InvalidationOptions not allowed for defaultPutOptions");
     }
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -221,9 +278,18 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @param defaultInvalidationOptions new default InvalidationOptions
    * @return the modified copy of the instance
    */
-  public NamespacePerspectiveOptions<K, V> defaultInvalidationOptions(InvalidationOptions defaultInvalidationOptions) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+  public NamespacePerspectiveOptions<K, V> defaultInvalidationOptions(
+      InvalidationOptions defaultInvalidationOptions) {
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -233,8 +299,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @return the modified copy of the instance
    */
   public NamespacePerspectiveOptions<K, V> defaultGetOptions(GetOptions defaultGetOptions) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -244,8 +318,16 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @return the modified copy of the instance
    */
   public NamespacePerspectiveOptions<K, V> defaultWaitOptions(WaitOptions defaultWaitOptions) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -254,9 +336,18 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @param defaultVersionProvider new default VersionProvider
    * @return the modified copy of the instance
    */
-  public NamespacePerspectiveOptions<K, V> defaultVersionProvider(VersionProvider defaultVersionProvider) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+  public NamespacePerspectiveOptions<K, V> defaultVersionProvider(
+      VersionProvider defaultVersionProvider) {
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -265,9 +356,18 @@ public final class NamespacePerspectiveOptions<K, V> {
    * @param encrypterDecrypter the new encrypterDecrypter
    * @return the modified copy of the instance
    */
-  public NamespacePerspectiveOptions<K, V> encrypterDecrypter(EncrypterDecrypter encrypterDecrypter) {
-    return new NamespacePerspectiveOptions<>(keyClass, valueClass, keyDigestType, defaultPutOptions,
-        defaultInvalidationOptions, defaultGetOptions, defaultWaitOptions, defaultVersionProvider, encrypterDecrypter);
+  public NamespacePerspectiveOptions<K, V> encrypterDecrypter(
+      EncrypterDecrypter encrypterDecrypter) {
+    return new NamespacePerspectiveOptions<>(
+        keyClass,
+        valueClass,
+        keyDigestType,
+        defaultPutOptions,
+        defaultInvalidationOptions,
+        defaultGetOptions,
+        defaultWaitOptions,
+        defaultVersionProvider,
+        encrypterDecrypter);
   }
 
   /**
@@ -285,7 +385,14 @@ public final class NamespacePerspectiveOptions<K, V> {
     int hashCode;
 
     hashCode =
-        keyClass.hashCode() ^ valueClass.hashCode() ^ keyDigestType.hashCode() ^ defaultPutOptions.hashCode() ^ defaultInvalidationOptions.hashCode() ^ defaultGetOptions.hashCode() ^ defaultWaitOptions.hashCode() ^ defaultVersionProvider.hashCode();
+        keyClass.hashCode()
+            ^ valueClass.hashCode()
+            ^ keyDigestType.hashCode()
+            ^ defaultPutOptions.hashCode()
+            ^ defaultInvalidationOptions.hashCode()
+            ^ defaultGetOptions.hashCode()
+            ^ defaultWaitOptions.hashCode()
+            ^ defaultVersionProvider.hashCode();
 
     if (encrypterDecrypter != null) {
       hashCode ^= encrypterDecrypter.hashCode();
@@ -322,13 +429,15 @@ public final class NamespacePerspectiveOptions<K, V> {
       }
     }
 
-    return keyClass.equals(other.keyClass) && valueClass.equals(
-        other.valueClass) && keyDigestType == other.keyDigestType && defaultPutOptions.equals(
-        other.defaultPutOptions) && defaultInvalidationOptions.equals(
-        other.defaultInvalidationOptions) && defaultGetOptions.equals(
-        other.defaultGetOptions) && defaultWaitOptions.equals(
-        other.defaultWaitOptions) && defaultVersionProvider.equals(
-        other.defaultVersionProvider) && encrypterDecrypterEquals;
+    return keyClass.equals(other.keyClass)
+        && valueClass.equals(other.valueClass)
+        && keyDigestType == other.keyDigestType
+        && defaultPutOptions.equals(other.defaultPutOptions)
+        && defaultInvalidationOptions.equals(other.defaultInvalidationOptions)
+        && defaultGetOptions.equals(other.defaultGetOptions)
+        && defaultWaitOptions.equals(other.defaultWaitOptions)
+        && defaultVersionProvider.equals(other.defaultVersionProvider)
+        && encrypterDecrypterEquals;
   }
 
   @Override

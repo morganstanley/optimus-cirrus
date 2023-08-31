@@ -20,9 +20,7 @@ import com.ms.silverking.cloud.dht.common.DHTConstants;
 import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Options for Get operations. (RetrievalOptions with WaitMode fixed at GET.)
- */
+/** Options for Get operations. (RetrievalOptions with WaitMode fixed at GET.) */
 public final class GetOptions extends RetrievalOptions {
   private static final Set<String> exclusionFields = ImmutableSet.of("waitMode");
 
@@ -47,36 +45,38 @@ public final class GetOptions extends RetrievalOptions {
 
   ///
   /// TODO (OPTIMUS-0000): this is C++ only.
-  /// This should be removed once C++ SKGetOptions.cpp is using the other constructor below properly.
+  /// This should be removed once C++ SKGetOptions.cpp is using the other constructor below
+  // properly.
   ///
 
   /**
-   * Construct a fully-specified GetOptions.
-   * Usage should be avoided; an instance should be obtained and modified from an enclosing environment.
+   * Construct a fully-specified GetOptions. Usage should be avoided; an instance should be obtained
+   * and modified from an enclosing environment.
    *
-   * @param opTimeoutController     opTimeoutController for the operation
-   * @param secondaryTargets        constrains queried secondary replicas
-   *                                to operation solely on the node that receives this operation
-   * @param retrievalType           type of retrieval
-   * @param versionConstraint       specify the version
-   * @param nonExistenceResponse    action to perform for non-existent keys
-   * @param verifyChecksums         whether or not to verify checksums
-   * @param returnInvalidations     normally false, true causes invalidated values to be returned.
-   *                                only valid for META_DATA retrievals
-   * @param forwardingMode          FORWARD is for normal operation. DO_NOT_FORWARD restricts the get
-   *                                to the receiving node
+   * @param opTimeoutController opTimeoutController for the operation
+   * @param secondaryTargets constrains queried secondary replicas to operation solely on the node
+   *     that receives this operation
+   * @param retrievalType type of retrieval
+   * @param versionConstraint specify the version
+   * @param nonExistenceResponse action to perform for non-existent keys
+   * @param verifyChecksums whether or not to verify checksums
+   * @param returnInvalidations normally false, true causes invalidated values to be returned. only
+   *     valid for META_DATA retrievals
+   * @param forwardingMode FORWARD is for normal operation. DO_NOT_FORWARD restricts the get to the
+   *     receiving node
    * @param updateSecondariesOnMiss update secondary replicas when a value is not found at the
-   *                                replica, but is found at the primary
+   *     replica, but is found at the primary
    */
-  public GetOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    RetrievalType retrievalType,
-                    VersionConstraint versionConstraint,
-                    NonExistenceResponse nonExistenceResponse,
-                    boolean verifyChecksums,
-                    boolean returnInvalidations,
-                    ForwardingMode forwardingMode,
-                    boolean updateSecondariesOnMiss) {
+  public GetOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -86,22 +86,26 @@ public final class GetOptions extends RetrievalOptions {
         nonExistenceResponse,
         verifyChecksums,
         returnInvalidations,
-        forwardingMode, false, null, null);
+        forwardingMode,
+        false,
+        null,
+        null);
   }
 
-  public GetOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    RetrievalType retrievalType,
-                    VersionConstraint versionConstraint,
-                    NonExistenceResponse nonExistenceResponse,
-                    boolean verifyChecksums,
-                    boolean returnInvalidations,
-                    ForwardingMode forwardingMode,
-                    boolean updateSecondariesOnMiss,
-                    byte[] userOptions,
-                    byte[] authorizationUser,
-                    AllReplicasExcludedResponse allReplicasExcludedResponse,
-                    String zoneId) {
+  public GetOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      String zoneId) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -113,39 +117,47 @@ public final class GetOptions extends RetrievalOptions {
         verifyChecksums,
         returnInvalidations,
         forwardingMode,
-        updateSecondariesOnMiss, userOptions, authorizationUser, zoneId);
+        updateSecondariesOnMiss,
+        userOptions,
+        authorizationUser,
+        zoneId);
   }
 
   /**
-   * Construct a fully-specified GetOptions. (Complete constructor for reflection)
-   * Usage should be avoided; an instance should be obtained and modified from an enclosing environment.
+   * Construct a fully-specified GetOptions. (Complete constructor for reflection) Usage should be
+   * avoided; an instance should be obtained and modified from an enclosing environment.
    *
-   * @param opTimeoutController     opTimeoutController for the operation
-   * @param secondaryTargets        constrains queried secondary replicas
-   *                                to operation solely on the node that receives this operation
-   * @param traceIDProvider         trace provider for message group
-   * @param retrievalType           type of retrieval
-   * @param versionConstraint       specify the version
-   * @param nonExistenceResponse    action to perform for non-existent keys
-   * @param verifyChecksums         whether or not to verify checksums
-   * @param returnInvalidations     normally false, true causes invalidated values to be returned.
-   *                                only valid for META_DATA retrievals
+   * @param opTimeoutController opTimeoutController for the operation
+   * @param secondaryTargets constrains queried secondary replicas to operation solely on the node
+   *     that receives this operation
+   * @param traceIDProvider trace provider for message group
+   * @param retrievalType type of retrieval
+   * @param versionConstraint specify the version
+   * @param nonExistenceResponse action to perform for non-existent keys
+   * @param verifyChecksums whether or not to verify checksums
+   * @param returnInvalidations normally false, true causes invalidated values to be returned. only
+   *     valid for META_DATA retrievals
    * @param updateSecondariesOnMiss update secondary replicas when a value is not found at the
-   *                                replica, but is found at the primary
-   * @param userOptions             side channel for user options that can be handled with custom logic
-   * @param authorizationUser       a username which may be required by an authorization plugin on the server
+   *     replica, but is found at the primary
+   * @param userOptions side channel for user options that can be handled with custom logic
+   * @param authorizationUser a username which may be required by an authorization plugin on the
+   *     server
    */
-  public GetOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    TraceIDProvider traceIDProvider,
-                    AllReplicasExcludedResponse allReplicasExcludedResponse,
-                    RetrievalType retrievalType,
-                    VersionConstraint versionConstraint,
-                    NonExistenceResponse nonExistenceResponse,
-                    boolean verifyChecksums,
-                    boolean returnInvalidations,
-                    ForwardingMode forwardingMode,
-                    boolean updateSecondariesOnMiss, byte[] userOptions, byte[] authorizationUser, String zoneId) {
+  public GetOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser,
+      String zoneId) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -158,22 +170,26 @@ public final class GetOptions extends RetrievalOptions {
         verifyChecksums,
         returnInvalidations,
         forwardingMode,
-        updateSecondariesOnMiss, userOptions, authorizationUser, zoneId);
+        updateSecondariesOnMiss,
+        userOptions,
+        authorizationUser,
+        zoneId);
   }
 
-  public GetOptions(OpTimeoutController opTimeoutController,
-                    Set<SecondaryTarget> secondaryTargets,
-                    TraceIDProvider traceIDProvider,
-                    AllReplicasExcludedResponse allReplicasExcludedResponse,
-                    RetrievalType retrievalType,
-                    VersionConstraint versionConstraint,
-                    NonExistenceResponse nonExistenceResponse,
-                    boolean verifyChecksums,
-                    boolean returnInvalidations,
-                    ForwardingMode forwardingMode,
-                    boolean updateSecondariesOnMiss,
-                    byte[] userOptions,
-                    byte[] authorizationUser) {
+  public GetOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      RetrievalType retrievalType,
+      VersionConstraint versionConstraint,
+      NonExistenceResponse nonExistenceResponse,
+      boolean verifyChecksums,
+      boolean returnInvalidations,
+      ForwardingMode forwardingMode,
+      boolean updateSecondariesOnMiss,
+      byte[] userOptions,
+      byte[] authorizationUser) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -209,7 +225,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -230,7 +249,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -252,7 +274,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -274,7 +299,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -295,7 +323,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -316,7 +347,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -337,7 +371,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -358,7 +395,10 @@ public final class GetOptions extends RetrievalOptions {
         verifyChecksums,
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -379,7 +419,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         returnInvalidations,
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -400,7 +443,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        updateSecondariesOnMiss, getUserOptions(), getAuthorizationUser(), getZoneId());
+        updateSecondariesOnMiss,
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -421,7 +467,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         forwardingMode,
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -442,7 +491,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), userOptions, getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        userOptions,
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   /**
@@ -463,7 +515,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), authorizationUser, getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        authorizationUser,
+        getZoneId());
   }
 
   /**
@@ -472,7 +527,8 @@ public final class GetOptions extends RetrievalOptions {
    * @param allReplicasExcludedResponse the new field value
    * @return the modified GetOptions
    */
-  public GetOptions allReplicasExcludedResponse(AllReplicasExcludedResponse allReplicasExcludedResponse) {
+  public GetOptions allReplicasExcludedResponse(
+      AllReplicasExcludedResponse allReplicasExcludedResponse) {
     return new GetOptions(
         getOpTimeoutController(),
         getSecondaryTargets(),
@@ -484,7 +540,10 @@ public final class GetOptions extends RetrievalOptions {
         getVerifyChecksums(),
         getReturnInvalidations(),
         getForwardingMode(),
-        getUpdateSecondariesOnMiss(), getUserOptions(), getAuthorizationUser(), getZoneId());
+        getUpdateSecondariesOnMiss(),
+        getUserOptions(),
+        getAuthorizationUser(),
+        getZoneId());
   }
 
   public GetOptions zoneId(String zoneId) {

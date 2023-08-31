@@ -64,11 +64,13 @@ public class SuspectSet extends ServerSetExtension {
 
   public static SuspectSet parse(String def) {
     return new SuspectSet(
-        new ServerSet(CollectionUtil.parseSet(def, singleLineDelimiter), VersionedDefinition.NO_VERSION));
+        new ServerSet(
+            CollectionUtil.parseSet(def, singleLineDelimiter), VersionedDefinition.NO_VERSION));
   }
 
   public static SuspectSet parse(File file) throws IOException {
-    return new SuspectSet(ServerSet.parse(new FileInputStream(file), VersionedDefinition.NO_VERSION));
+    return new SuspectSet(
+        ServerSet.parse(new FileInputStream(file), VersionedDefinition.NO_VERSION));
   }
 
   public static SuspectSet union(SuspectSet s1, SuspectSet s2) {

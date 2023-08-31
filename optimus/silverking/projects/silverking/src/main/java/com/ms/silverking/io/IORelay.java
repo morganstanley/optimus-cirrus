@@ -27,12 +27,7 @@ import com.ms.silverking.thread.ThreadUtil;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
-/**
- * <p>
- * A java "pipe" implementation. Simply connects an InputStream and an
- * OutputStream.
- * </p>
- */
+/** A java "pipe" implementation. Simply connects an InputStream and an OutputStream. */
 public class IORelay implements Runnable {
   protected BufferedInputStream in;
   protected BufferedOutputStream out;
@@ -45,7 +40,8 @@ public class IORelay implements Runnable {
 
   public static final int DEF_BUFFER_SIZE = 1460;
 
-  public IORelay(InputStream in, OutputStream out, int bufferSize, boolean close, boolean displayData) {
+  public IORelay(
+      InputStream in, OutputStream out, int bufferSize, boolean close, boolean displayData) {
     this.in = new BufferedInputStream(in, bufferSize);
     this.out = new BufferedOutputStream(out, bufferSize);
     this.close = close;
@@ -155,7 +151,10 @@ public class IORelay implements Runnable {
           }
           if (numRead > 0) {
             if (displayData) {
-              log.info("{} {}  {}...", numRead, StringUtil.byteArrayToHexString(buf, 0, numRead),
+              log.info(
+                  "{} {}  {}...",
+                  numRead,
+                  StringUtil.byteArrayToHexString(buf, 0, numRead),
                   new String(buf, 0, numRead));
             }
             out.write(buf, 0, numRead);
@@ -170,21 +169,21 @@ public class IORelay implements Runnable {
     } catch (IOException ioe) {
       if (!drain) {
         // Bad file descriptor error (ok because process is dying)
-        log.error("",ioe);
+        log.error("", ioe);
       }
     } finally {
       if (close && in != null) {
         try {
           in.close();
         } catch (IOException ioe_close) {
-          log.error("Exception closing IORelay input: " , ioe_close);
+          log.error("Exception closing IORelay input: ", ioe_close);
         }
       }
       if (close && out != null) {
         try {
           out.close();
         } catch (IOException ioe_close) {
-          log.error("Exception closing IORelay output: " , ioe_close);
+          log.error("Exception closing IORelay output: ", ioe_close);
         }
       }
       synchronized (this) {

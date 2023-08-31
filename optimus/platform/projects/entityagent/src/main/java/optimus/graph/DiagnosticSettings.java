@@ -37,21 +37,25 @@ public class DiagnosticSettings {
       "optimus.monitor.classUsage.overheadTrace";
   private static final String SHOW_TOP_N_CLASS_USAGE = "optimus.monitor.classUsage.showTopN";
   private static final String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
-
+  // aka --profile-temporal-surface
   private static final String PROFILE_LVL_TEMPORAL_SURFACE =
-      "optimus.scheduler.profile.temporalsurface"; // aka --profile-temporal-surface
+      "optimus.scheduler.profile.temporalsurface";
+  // aka --profile-ts-folder
   private static final String PROFILE_TS_FOLDER_PROPERTY =
-      "optimus.scheduler.profile.temporalsurface.folder"; // aka --profile-ts-folder
-
-  private static final String PROFILE_PROPERTY = "optimus.scheduler.profile"; // aka --profile-graph
-  private static final String PROFILE_FOLDER_PROPERTY =
-      "optimus.scheduler.profile.folder"; // aka --profile-csvfolder
+      "optimus.scheduler.profile.temporalsurface.folder";
+  // aka --profile-graph
+  private static final String PROFILE_PROPERTY = "optimus.scheduler.profile";
+  // aka --profile-csvfolder
+  private static final String PROFILE_FOLDER_PROPERTY = "optimus.scheduler.profile.folder";
+  // aka --profile-aggregation
   private static final String PROFILE_AGGREGATION_PROPERTY =
-      "optimus.scheduler.profile.aggregation"; // aka --profile-aggregation
+      "optimus.scheduler.profile.aggregation";
+  // aka --profile-custom-metrics
   private static final String PROFILE_CUSTOM_FILTER_PROPERTY =
-      "optimus.scheduler.profile.filters.custom"; // aka --profile-custom-metrics
+      "optimus.scheduler.profile.filters.custom";
+  // aka --profile-hotspot-filters
   private static final String PROFILE_HOTSPOTS_FILTER_PROPERTY =
-      "optimus.scheduler.profile.filters.hotspots"; // aka --profile-hotspot-filters
+      "optimus.scheduler.profile.filters.hotspots";
 
   public static final String DEBUG_PROPERTY = "optimus.scheduler.console"; // console ???
   private static final String EVALUATE_NODE_ON_TOUCH = "optimus.scheduler.evaluateNodeOnTouch";
@@ -105,16 +109,20 @@ public class DiagnosticSettings {
   public static final boolean enableRTVerifier = getBoolProperty("optimus.rt.verifier", false);
 
   public static final boolean enableRTVNodeRerunner =
-      getBoolProperty("optimus.rt.verifier.node.rerunner", false);
+      enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner", false);
   public static final boolean rtvNodeRerunnerExcludeByDefault =
-      getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+      enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
 
   /** Publish RT violations as crumbs in splunk */
   public static final boolean publishRTVerifierCrumbs =
-      getBoolProperty("optimus.rt.verifier.crumbs", true);
+      enableRTVerifier && getBoolProperty("optimus.rt.verifier.crumbs", true);
   /** Report RT violations to file */
   public static final boolean writeRTVerifierReport =
-      getBoolProperty("optimus.rt.verifier.report", true);
+      enableRTVerifier && getBoolProperty("optimus.rt.verifier.report", true);
+
+  /** Used for test purposes, it accumulates RT violations in memory even if a report has not been requested */
+  public static final boolean rtvAccumulateViolations =
+      enableRTVerifier && getBoolProperty("optimus.rt.verifier.accumulate.violations", false);
 
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
   public static final boolean enableXSReporting;

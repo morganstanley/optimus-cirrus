@@ -11,11 +11,13 @@
  */
 package optimus.stratosphere.logger
 
+import optimus.stratosphere.config.ConsoleColors
+
 import scala.io.StdIn
 
-final case class ConsoleLogger() extends Logger {
+final case class ConsoleLogger(colors: ConsoleColors) extends Logger(colors) {
   override def readLine(text: String, args: Any*): Option[String] = Option(StdIn.readLine(text, args: _*))
   override def handleAnswer(answer: String): Unit = ()
-  override def info(toLog: String): Unit = Console.println(toLog)
+  override def info(toLog: String): Unit = System.out.println(toLog)
   override def debug(toLog: String): Unit = {} // Never on console, verbose will upgrade to info for us
 }

@@ -52,7 +52,8 @@ class CPUtils {
     }
   }
 
-  static <T> Constructor<T> getConstructor(Class _class, Class[] fields) throws NoSuchMethodException {
+  static <T> Constructor<T> getConstructor(Class _class, Class[] fields)
+      throws NoSuchMethodException {
     Constructor<T>[] constructors;
 
     if (ObjectDefParser2.debug) {
@@ -73,7 +74,9 @@ class CPUtils {
 
     cFields = constructor.getParameterTypes();
     if (debug) {
-      log.info("cFields {}  fields {}  ", StringUtil.arrayToString(cFields),
+      log.info(
+          "cFields {}  fields {}  ",
+          StringUtil.arrayToString(cFields),
           StringUtil.arrayToString(fields));
     }
     if (fields.length != cFields.length) {
@@ -134,10 +137,9 @@ class CPUtils {
     if (debug) {
       log.info(".....");
       for (Class c : classes) {
-        log.info("{}",c);
+        log.info("{}", c);
       }
     }
     return classes;
   }
-
 }

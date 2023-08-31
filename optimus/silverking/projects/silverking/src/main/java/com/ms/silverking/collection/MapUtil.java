@@ -24,19 +24,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MapUtil {
-  public enum NoDelimiterAction {Ignore, Warn, Exception}
-
-  ;
+  public enum NoDelimiterAction {
+    Ignore,
+    Warn,
+    Exception
+  };
 
   private static Logger log = LoggerFactory.getLogger(MapUtil.class);
 
-  public static Map<String, String> parseStringMap(InputStream in, char delimiter, NoDelimiterAction noDelimiterAction)
-      throws IOException {
+  public static Map<String, String> parseStringMap(
+      InputStream in, char delimiter, NoDelimiterAction noDelimiterAction) throws IOException {
     return parseMap(in, delimiter, noDelimiterAction, new StringParser(), new StringParser());
   }
 
-  public static <K, V> Map<K, V> parseMap(InputStream in, char delimiter, NoDelimiterAction noDelimiterAction,
-      Function<String, K> keyParser, Function<String, V> valueParser) throws IOException {
+  public static <K, V> Map<K, V> parseMap(
+      InputStream in,
+      char delimiter,
+      NoDelimiterAction noDelimiterAction,
+      Function<String, K> keyParser,
+      Function<String, V> valueParser)
+      throws IOException {
     BufferedReader reader;
     String line;
     int lineNumber;
@@ -61,15 +68,15 @@ public class MapUtil {
           map.put(keyParser.apply(kDef), valueParser.apply(vDef));
         } else {
           switch (noDelimiterAction) {
-          case Ignore:
-            break;
-          case Warn:
-            log.info("No delimiter found on line {}", lineNumber);
-            break;
-          case Exception:
-            throw new RuntimeException("No delimiter found on line: " + lineNumber);
-          default:
-            throw new RuntimeException("Panic");
+            case Ignore:
+              break;
+            case Warn:
+              log.info("No delimiter found on line {}", lineNumber);
+              break;
+            case Exception:
+              throw new RuntimeException("No delimiter found on line: " + lineNumber);
+            default:
+              throw new RuntimeException("Panic");
           }
         }
       }
@@ -92,9 +99,11 @@ public class MapUtil {
     try {
       Map<String, String> m;
 
-      m = MapUtil.parseStringMap(new FileInputStream(args[0]), '\t', MapUtil.NoDelimiterAction.Warn);
+      m =
+          MapUtil.parseStringMap(
+              new FileInputStream(args[0]), '\t', MapUtil.NoDelimiterAction.Warn);
       m.put("1", "1");
-      log.info("{}",m);
+      log.info("{}", m);
     } catch (Exception e) {
       e.printStackTrace();
     }

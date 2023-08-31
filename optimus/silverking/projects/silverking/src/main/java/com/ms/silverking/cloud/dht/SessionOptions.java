@@ -26,9 +26,7 @@ import com.ms.silverking.util.PropertiesHelper.UndefinedAction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Options for a DHTSession.
- */
+/** Options for a DHTSession. */
 public final class SessionOptions {
 
   private static Logger log = LoggerFactory.getLogger(SessionOptions.class);
@@ -41,8 +39,7 @@ public final class SessionOptions {
   private static final String defaultTimeoutControllerProperty =
       SessionEstablishmentTimeoutController.class.getName() + ".DefaultSETimeoutController";
   private static final SessionEstablishmentTimeoutController defaultDefaultTimeoutController =
-      new SimpleSessionEstablishmentTimeoutController(
-      14, 2 * 60 * 1000, 8 * 60 * 1000);
+      new SimpleSessionEstablishmentTimeoutController(14, 2 * 60 * 1000, 8 * 60 * 1000);
 
   private static SessionEstablishmentTimeoutController defaultTimeoutController;
   private static final boolean debugDefaultTimeoutController = false;
@@ -56,8 +53,12 @@ public final class SessionOptions {
     sampleGCMap.put(ClientDHTConfiguration.zkLocVar, "localhost:0");
   }
 
-  private static final SessionOptions template = new SessionOptions(new SKGridConfiguration("samplegc", sampleGCMap),
-      "localhost", defaultDefaultTimeoutController, SessionPolicyOnDisconnect.DoNothing);
+  private static final SessionOptions template =
+      new SessionOptions(
+          new SKGridConfiguration("samplegc", sampleGCMap),
+          "localhost",
+          defaultDefaultTimeoutController,
+          SessionPolicyOnDisconnect.DoNothing);
 
   static {
     ObjectDefParser2.addParser(template, FieldsRequirement.ALLOW_INCOMPLETE);
@@ -66,14 +67,17 @@ public final class SessionOptions {
   static {
     String def;
 
-    def = PropertiesHelper.systemHelper.getString(defaultTimeoutControllerProperty, UndefinedAction.ZeroOnUndefined);
+    def =
+        PropertiesHelper.systemHelper.getString(
+            defaultTimeoutControllerProperty, UndefinedAction.ZeroOnUndefined);
     if (debugDefaultTimeoutController) {
       log.debug("defaultTimeoutControllerProperty {}", defaultTimeoutControllerProperty);
       log.debug("def {}", def);
     }
     if (def != null) {
-      //defaultTimeoutController = SimpleConnectionEstablishmentTimeoutController.parse(def);
-      defaultTimeoutController = ObjectDefParser2.parse(SessionEstablishmentTimeoutController.class, def);
+      // defaultTimeoutController = SimpleConnectionEstablishmentTimeoutController.parse(def);
+      defaultTimeoutController =
+          ObjectDefParser2.parse(SessionEstablishmentTimeoutController.class, def);
     } else {
       defaultTimeoutController = defaultDefaultTimeoutController;
     }
@@ -82,7 +86,8 @@ public final class SessionOptions {
     }
   }
 
-  public void setDefaultTimeoutController(SessionEstablishmentTimeoutController newDefaultTimeoutController) {
+  public void setDefaultTimeoutController(
+      SessionEstablishmentTimeoutController newDefaultTimeoutController) {
     defaultTimeoutController = newDefaultTimeoutController;
   }
 
@@ -90,16 +95,20 @@ public final class SessionOptions {
     return defaultTimeoutController;
   }
 
-  public SessionOptions(ClientDHTConfigurationProvider dhtConfigProvider, String preferredServer,
+  public SessionOptions(
+      ClientDHTConfigurationProvider dhtConfigProvider,
+      String preferredServer,
       SessionEstablishmentTimeoutController timeoutController) {
-    this(dhtConfigProvider, preferredServer, timeoutController, SessionPolicyOnDisconnect.DoNothing);
+    this(
+        dhtConfigProvider, preferredServer, timeoutController, SessionPolicyOnDisconnect.DoNothing);
   }
 
-  /**
-   * Create a fully-specified SessionOptions instance
-   */
-  public SessionOptions(ClientDHTConfigurationProvider dhtConfigProvider, String preferredServer,
-      SessionEstablishmentTimeoutController timeoutController, SessionPolicyOnDisconnect onDisconnect) {
+  /** Create a fully-specified SessionOptions instance */
+  public SessionOptions(
+      ClientDHTConfigurationProvider dhtConfigProvider,
+      String preferredServer,
+      SessionEstablishmentTimeoutController timeoutController,
+      SessionPolicyOnDisconnect onDisconnect) {
     if (dhtConfigProvider == null) {
       this.preferredServer = preferredServer;
       this.dhtConfig = null;
@@ -115,10 +124,14 @@ public final class SessionOptions {
    * Create a SessionOptions instance with a default timeout controller and disconnect policy.
    *
    * @param dhtConfigProvider TODO (OPTIMUS-0000): describe
-   * @param preferredServer   TODO (OPTIMUS-0000): describe
+   * @param preferredServer TODO (OPTIMUS-0000): describe
    */
   public SessionOptions(ClientDHTConfigurationProvider dhtConfigProvider, String preferredServer) {
-    this(dhtConfigProvider, preferredServer, getDefaultTimeoutController(), SessionPolicyOnDisconnect.DoNothing);
+    this(
+        dhtConfigProvider,
+        preferredServer,
+        getDefaultTimeoutController(),
+        SessionPolicyOnDisconnect.DoNothing);
   }
 
   /**
@@ -137,7 +150,8 @@ public final class SessionOptions {
    * @return a modified SessionOptions object
    */
   public SessionOptions dhtConfig(ClientDHTConfiguration dhtConfig) {
-    return new SessionOptions(dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
+    return new SessionOptions(
+        dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
   }
 
   /**
@@ -147,7 +161,8 @@ public final class SessionOptions {
    * @return a modified SessionOptions object
    */
   public SessionOptions preferredServer(String preferredServer) {
-    return new SessionOptions(dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
+    return new SessionOptions(
+        dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
   }
 
   /**
@@ -157,7 +172,8 @@ public final class SessionOptions {
    * @return a modified SessionOptions object
    */
   public SessionOptions timeoutController(SessionEstablishmentTimeoutController timeoutController) {
-    return new SessionOptions(dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
+    return new SessionOptions(
+        dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
   }
 
   /**
@@ -166,8 +182,10 @@ public final class SessionOptions {
    * @param sessionPolicyOnDisconnect the new sessionPolicyOnDisconnect
    * @return a modified SessionOptions object
    */
-  public SessionOptions sessionPolicyOnDisconnect(SessionPolicyOnDisconnect sessionPolicyOnDisconnect) {
-    return new SessionOptions(dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
+  public SessionOptions sessionPolicyOnDisconnect(
+      SessionPolicyOnDisconnect sessionPolicyOnDisconnect) {
+    return new SessionOptions(
+        dhtConfig, preferredServer, timeoutController, sessionPolicyOnDisconnect);
   }
 
   /**
@@ -216,8 +234,9 @@ public final class SessionOptions {
     SessionOptions o;
 
     o = (SessionOptions) obj;
-    return this.dhtConfig.equals(o.dhtConfig) && this.preferredServer.equals(
-        o.preferredServer) && this.timeoutController.equals(o.timeoutController);
+    return this.dhtConfig.equals(o.dhtConfig)
+        && this.preferredServer.equals(o.preferredServer)
+        && this.timeoutController.equals(o.timeoutController);
   }
 
   @Override

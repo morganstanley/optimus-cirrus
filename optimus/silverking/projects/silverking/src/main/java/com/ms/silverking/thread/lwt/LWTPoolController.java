@@ -23,9 +23,7 @@ import com.ms.silverking.util.PropertiesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches LWTThreadPools and adjusts the number of threads in each pool.
- */
+/** Watches LWTThreadPools and adjusts the number of threads in each pool. */
 class LWTPoolController implements Runnable {
   private final List<LWTPoolImpl> pools;
   private boolean running;
@@ -34,8 +32,8 @@ class LWTPoolController implements Runnable {
 
   private static Logger log = LoggerFactory.getLogger(LWTPoolController.class);
 
-  private static final int checkIntervalMillis = PropertiesHelper.systemHelper.getInt(
-      LWTConstants.lwtControllerCheckInterval, 1000);
+  private static final int checkIntervalMillis =
+      PropertiesHelper.systemHelper.getInt(LWTConstants.lwtControllerCheckInterval, 1000);
   private static final boolean debugPool = false;
 
   LWTPoolController(String name) {

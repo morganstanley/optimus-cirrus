@@ -23,6 +23,4 @@ public class StringSHA1KeyCreator extends BaseKeyCreator<String> {
   public DHTKey createKey(String key) {
     return sha1KeyDigest.computeKey(key.getBytes());
   }
-
-
 }

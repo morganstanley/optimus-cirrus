@@ -33,31 +33,38 @@ public class StorageFormat {
     return formattedBuf.remaining() + DHTKey.BYTES_PER_KEY;
   }
 
-  public static int writeFormattedValueToBuf(DHTKey key, ByteBuffer formattedBuf, ByteBuffer buf,
-      AtomicInteger nextFree, int writeLimit) {
+  public static int writeFormattedValueToBuf(
+      DHTKey key, ByteBuffer formattedBuf, ByteBuffer buf, AtomicInteger nextFree, int writeLimit) {
     int writeSize;
     int storedLength;
     int offset;
 
     storedLength = formattedBuf.remaining();
     writeSize = storedLength + DHTKey.BYTES_PER_KEY;
-    //System.out.println("writeSize: "+ writeSize);
+    // System.out.println("writeSize: "+ writeSize);
     offset = nextFree.getAndAdd(writeSize);
     log.debug("offset: {}", offset);
-    //System.out.println(index +"\t"+ dataSegmentSize);
+    // System.out.println(index +"\t"+ dataSegmentSize);
     if (nextFree.get() < writeLimit) {
       buf.putLong(key.getMSL());
       buf.putLong(key.getLSL());
       buf.put((ByteBuffer) formattedBuf.duplicate().slice().limit(storedLength));
-      //buf.put(formattedBuf.array(), formattedBuf.position(), storedLength);
+      // buf.put(formattedBuf.array(), formattedBuf.position(), storedLength);
       return offset;
     } else {
       return writeFailedOffset;
     }
   }
 
-  public static int writeToBuf(DHTKey key, ByteBuffer value, StorageParameters storageParams, byte[] userData,
-      ByteBuffer buf, AtomicInteger nextFree, int writeLimit, boolean includeValue) {
+  public static int writeToBuf(
+      DHTKey key,
+      ByteBuffer value,
+      StorageParameters storageParams,
+      byte[] userData,
+      ByteBuffer buf,
+      AtomicInteger nextFree,
+      int writeLimit,
+      boolean includeValue) {
     int offset;
     int writeSize;
     int storedLength;
@@ -65,7 +72,9 @@ public class StorageFormat {
     int checksumLength;
     short ccss;
 
-    if (storageParams.compressedSizeSet()) { // regex-ignore-line (open-sourcing) due to false positive on URL detection
+    if (storageParams
+        .compressedSizeSet()) { // regex-ignore-line (open-sourcing) due to false positive on URL
+      // detection
       compressedLength = storageParams.getCompressedSize();
     } else {
       compressedLength = value.remaining();
@@ -81,7 +90,8 @@ public class StorageFormat {
     }
 
     checksumLength = storageParams.getChecksum().length;
-    storedLength = MetaDataUtil.computeStoredLength(compressedLength, checksumLength, userData.length);
+    storedLength =
+        MetaDataUtil.computeStoredLength(compressedLength, checksumLength, userData.length);
 
     writeSize = storedLength + (key != null ? DHTKey.BYTES_PER_KEY : 0);
     offset = nextFree.getAndAdd(writeSize);
@@ -101,10 +111,11 @@ public class StorageFormat {
       if (debug) {
         System.out.printf("compressedLength: %d\n", compressedLength);
         System.out.printf("checksumLength: %d\n", checksumLength);
-        //TODO (OPTIMUS-43326): Remove userdata.
+        // TODO (OPTIMUS-43326): Remove userdata.
         System.out.printf("userData.length: %d\n", userData.length);
         System.out.printf("storedLength: %d\n", storedLength);
-        System.out.printf("storageParams.getUncompressedSize(): %d\n", storageParams.getUncompressedSize());
+        System.out.printf(
+            "storageParams.getUncompressedSize(): %d\n", storageParams.getUncompressedSize());
         System.out.printf("value: %s %s\n", value, StringUtil.byteBufferToHexString(value));
       }
 
@@ -114,7 +125,7 @@ public class StorageFormat {
       buf.put(storageParams.getValueCreator());
       buf.putShort(storageParams.getLockSeconds());
       buf.putShort(ccss);
-      //TODO (OPTIMUS-43326): Remove userdata.
+      // TODO (OPTIMUS-43326): Remove userdata.
       buf.put((byte) userData.length);
       buf.put(storageParams.getChecksum());
 

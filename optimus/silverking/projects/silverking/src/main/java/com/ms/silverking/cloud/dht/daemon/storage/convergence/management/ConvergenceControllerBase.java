@@ -80,11 +80,16 @@ public abstract class ConvergenceControllerBase implements RequestController {
 
   protected static final boolean verbose = true;
   protected static final boolean debug = true;
-  
+
   protected static Logger log = LoggerFactory.getLogger(ConvergenceControllerBase.class);
 
-  public ConvergenceControllerBase(UUIDBase uuid, DHTMetaReader dhtMetaReader, ConvergencePoint targetCP,
-      ExclusionSet exclusionSet, MessageGroupBase mgBase, Set<Long> ignoredNamespaces)
+  public ConvergenceControllerBase(
+      UUIDBase uuid,
+      DHTMetaReader dhtMetaReader,
+      ConvergencePoint targetCP,
+      ExclusionSet exclusionSet,
+      MessageGroupBase mgBase,
+      Set<Long> ignoredNamespaces)
       throws KeeperException, IOException {
     assert dhtMetaReader != null;
     assert targetCP != null;
@@ -96,24 +101,32 @@ public abstract class ConvergenceControllerBase implements RequestController {
     this.mgBase = mgBase;
     this.ignoredNamespaces = ignoredNamespaces;
     targetRingName = getRingNameFromCP(targetCP);
-    targetRing = dhtMetaReader.readRing(targetRingName, targetCP.getRingIDAndVersionPair().getRingVersionPair());
+    targetRing =
+        dhtMetaReader.readRing(
+            targetRingName, targetCP.getRingIDAndVersionPair().getRingVersionPair());
 
-    syncController = new SyncController(mgBase, targetCP, targetCP, SystemTimeUtil.skSystemTimeSource);
+    syncController =
+        new SyncController(mgBase, targetCP, targetCP, SystemTimeUtil.skSystemTimeSource);
 
     NamedRingConfiguration namedRingConfig;
 
     namedRingConfig = new NamedRingConfiguration(targetRingName, RingConfiguration.emptyTemplate);
-    ringMC = new com.ms.silverking.cloud.toporing.meta.MetaClient(namedRingConfig,
-        dhtMetaReader.getMetaClient().getZooKeeper().getZKConfig());
+    ringMC =
+        new com.ms.silverking.cloud.toporing.meta.MetaClient(
+            namedRingConfig, dhtMetaReader.getMetaClient().getZooKeeper().getZKConfig());
 
     ringConfigZK = new RingConfigurationZK(ringMC);
     log.info("Reading ring configuration: {}", targetRing.getRingIDAndVersionPair());
-    targetRingConfig = ringConfigZK.readFromZK(targetRing.getRingIDAndVersionPair().getRingVersionPair().getV1(), null);
+    targetRingConfig =
+        ringConfigZK.readFromZK(
+            targetRing.getRingIDAndVersionPair().getRingVersionPair().getV1(), null);
     log.info("Target ring configuration: {}", targetRingConfig);
 
     log.info("Reading ring: {}", targetRing.getRingIDAndVersionPair());
-    targetReplicaMap = targetRing.getRingTree().getResolvedMap(targetRingConfig.getRingParentName(),
-        new ReplicaNaiveIPPrioritizer());
+    targetReplicaMap =
+        targetRing
+            .getRingTree()
+            .getResolvedMap(targetRingConfig.getRingParentName(), new ReplicaNaiveIPPrioritizer());
     log.info("Reading ring complete: {}", targetRing.getRingIDAndVersionPair());
     displayReplicas();
 
@@ -130,16 +143,19 @@ public abstract class ConvergenceControllerBase implements RequestController {
     return uuid;
   }
 
-  protected ResolvedReplicaMap getResolvedReplicaMap(DHTMetaUpdate metaUpdate, RingConfiguration ringConfig) {
+  protected ResolvedReplicaMap getResolvedReplicaMap(
+      DHTMetaUpdate metaUpdate, RingConfiguration ringConfig) {
     RingTree ringTreeMinusExclusions;
     ResolvedReplicaMap resolvedReplicaMapMinusExclusions;
 
     try {
-      ringTreeMinusExclusions = RingTreeBuilder.removeExcludedNodes(metaUpdate.getRingTree(), exclusionSet);
+      ringTreeMinusExclusions =
+          RingTreeBuilder.removeExcludedNodes(metaUpdate.getRingTree(), exclusionSet);
     } catch (InvalidRingException ire) {
       throw new RuntimeException("Unexpected InvalidRingException", ire);
     }
-    resolvedReplicaMapMinusExclusions = ringTreeMinusExclusions.getResolvedMap(ringConfig.getRingParentName(), null);
+    resolvedReplicaMapMinusExclusions =
+        ringTreeMinusExclusions.getResolvedMap(ringConfig.getRingParentName(), null);
     return resolvedReplicaMapMinusExclusions;
   }
 
@@ -180,21 +196,32 @@ public abstract class ConvergenceControllerBase implements RequestController {
   public void handleOpResponse(MessageGroup message, MessageGroupConnection connection) {
     if (opUUIDs.contains(message.getUUID())) {
       if (debug) {
-        log.info("Received op response for: {}  from: {} {}", message.getUUID(),
-            connection.getRemoteSocketAddress(), ProtoOpResponseMessageGroup.result(message));
+        log.info(
+            "Received op response for: {}  from: {} {}",
+            message.getUUID(),
+            connection.getRemoteSocketAddress(),
+            ProtoOpResponseMessageGroup.result(message));
       }
-      opCompletionTracker.setComplete(message.getUUID(), ProtoOpResponseMessageGroup.result(message));
+      opCompletionTracker.setComplete(
+          message.getUUID(), ProtoOpResponseMessageGroup.result(message));
     } else {
       if (!syncController.isInactive(message.getUUID())) {
         if (debug) {
-          log.info("Received op response for: {}  from: {} {}", message.getUUID(),
-              connection.getRemoteSocketAddress(), ProtoOpResponseMessageGroup.result(message));
+          log.info(
+              "Received op response for: {}  from: {} {}",
+              message.getUUID(),
+              connection.getRemoteSocketAddress(),
+              ProtoOpResponseMessageGroup.result(message));
         }
-        syncController.requestComplete(message.getUUID(), ProtoOpResponseMessageGroup.result(message));
+        syncController.requestComplete(
+            message.getUUID(), ProtoOpResponseMessageGroup.result(message));
       } else {
         if (debug) {
-          log.info("Received op response for: {}  from: {} {}", message.getUUID(),
-              connection.getRemoteSocketAddress(), "Ignoring duplicate result");
+          log.info(
+              "Received op response for: {}  from: {} {}",
+              message.getUUID(),
+              connection.getRemoteSocketAddress(),
+              "Ignoring duplicate result");
         }
       }
     }
@@ -228,10 +255,13 @@ public abstract class ConvergenceControllerBase implements RequestController {
     } else {
       Set<Long> nrMinusIgnored;
 
-      log.info("Received all namespaces {}\n{}", targetRing.getRingIDAndVersionPair(),
+      log.info(
+          "Received all namespaces {}\n{}",
+          targetRing.getRingIDAndVersionPair(),
           CollectionUtil.numberSetToHexString(nr.getNamespaces()));
       nrMinusIgnored = new HashSet<>(nr.getNamespaces());
-      log.info("Removing ignored namespaces {}", CollectionUtil.numberSetToHexString(ignoredNamespaces));
+      log.info(
+          "Removing ignored namespaces {}", CollectionUtil.numberSetToHexString(ignoredNamespaces));
       nrMinusIgnored.removeAll(ignoredNamespaces);
       return ImmutableSet.copyOf(nrMinusIgnored);
     }
@@ -253,19 +283,26 @@ public abstract class ConvergenceControllerBase implements RequestController {
   private long requests;
   private static final long requestDisplayInterval = 1000;
 
-  protected Action syncReplica(long ns, RingRegion region, IPAndPort newOwner, IPAndPort oldOwner,
-      Action upstreamDependency, List<ReplicaSyncRequest> srList) throws ConvergenceException {
+  protected Action syncReplica(
+      long ns,
+      RingRegion region,
+      IPAndPort newOwner,
+      IPAndPort oldOwner,
+      Action upstreamDependency,
+      List<ReplicaSyncRequest> srList)
+      throws ConvergenceException {
     if (!newOwner.equals(oldOwner)) {
       ReplicaSyncRequest replicaSyncRequest;
 
-            /*
-            Log.infoAsyncf("syncReplica %x %s\t%s <- %s", ns, region, newOwner, oldOwner);
-            sendChecksumTreeRequest(new ChecksumTreeRequest(targetCP, curCP, region, oldOwner), ns, newOwner);
-            Log.infoAsyncf("Done syncReplica %x %s\t%s <- %s", ns, region, newOwner, oldOwner);
-            */
-      replicaSyncRequest = ReplicaSyncRequest.of(ns, region, newOwner, oldOwner, upstreamDependency);
+      /*
+      Log.infoAsyncf("syncReplica %x %s\t%s <- %s", ns, region, newOwner, oldOwner);
+      sendChecksumTreeRequest(new ChecksumTreeRequest(targetCP, curCP, region, oldOwner), ns, newOwner);
+      Log.infoAsyncf("Done syncReplica %x %s\t%s <- %s", ns, region, newOwner, oldOwner);
+      */
+      replicaSyncRequest =
+          ReplicaSyncRequest.of(ns, region, newOwner, oldOwner, upstreamDependency);
       srList.add(replicaSyncRequest);
-      //Log.infof("Adding %s", replicaSyncRequest);
+      // Log.infof("Adding %s", replicaSyncRequest);
       syncController.addAction(replicaSyncRequest);
       if (++requests - lastDisplayedRequests > requestDisplayInterval) {
         lastDisplayedRequests = requests;

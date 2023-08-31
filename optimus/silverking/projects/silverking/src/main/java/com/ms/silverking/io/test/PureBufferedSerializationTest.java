@@ -20,16 +20,16 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 public class PureBufferedSerializationTest {
-  public enum Test {serialization}
+  public enum Test {
+    serialization
+  };
 
-  ;
+  public enum AllocationMethod {
+    byteBuffer,
+    directBuffer
+  };
 
-  public enum AllocationMethod {byteBuffer, directBuffer}
-
-  ;
-
-  public PureBufferedSerializationTest() {
-  }
+  public PureBufferedSerializationTest() {}
 
   private static Logger log = LoggerFactory.getLogger(PureBufferedSerializationTest.class);
 
@@ -42,14 +42,14 @@ public class PureBufferedSerializationTest {
 
     length = 0;
     switch (allocationMethod) {
-    case byteBuffer:
-      buf = ByteBuffer.allocate(size);
-      break;
-    case directBuffer:
-      buf = ByteBuffer.allocateDirect(size);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case byteBuffer:
+        buf = ByteBuffer.allocate(size);
+        break;
+      case directBuffer:
+        buf = ByteBuffer.allocateDirect(size);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
     while (buf.hasRemaining()) {
       buf.put((byte) 7);
@@ -57,17 +57,17 @@ public class PureBufferedSerializationTest {
     samplePutMessage = new SamplePutMessage(buf, 0, size);
     sw = new SimpleStopwatch();
     switch (test) {
-    case serialization:
-      sw.reset();
-      for (int i = 0; i < iterations; i++) {
-        ByteBuffer[] buffers;
+      case serialization:
+        sw.reset();
+        for (int i = 0; i < iterations; i++) {
+          ByteBuffer[] buffers;
 
-        buffers = samplePutMessage.toBuffers();
-        length += buffers[0].limit();
-      }
-      break;
-    default:
-      throw new RuntimeException("");
+          buffers = samplePutMessage.toBuffers();
+          length += buffers[0].limit();
+        }
+        break;
+      default:
+        throw new RuntimeException("");
     }
     sw.stop();
     log.info(length + " " + sw);

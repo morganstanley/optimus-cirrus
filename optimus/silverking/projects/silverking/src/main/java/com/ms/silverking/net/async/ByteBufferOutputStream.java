@@ -16,9 +16,7 @@ import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.List;
 
-/**
- *
- */
+/** */
 public class ByteBufferOutputStream extends ByteArrayOutputStream {
   private List<ByteBuffer> byteBuffers;
 
@@ -32,12 +30,12 @@ public class ByteBufferOutputStream extends ByteArrayOutputStream {
   }
 
   public ByteBuffer[] toBuffers() {
-        /*
-        byte[]        objBytes;
-        ByteBuffer    objByteBuffer;
-        
-        objBytes = toByteArray();
-        */
+    /*
+    byte[]        objBytes;
+    ByteBuffer    objByteBuffer;
+
+    objBytes = toByteArray();
+    */
     return null;
   }
 }

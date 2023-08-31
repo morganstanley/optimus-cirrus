@@ -19,8 +19,7 @@ import com.ms.silverking.cloud.dht.common.SimpleKey;
 import com.ms.silverking.numeric.NumConversion;
 
 public class MD5KeyDigest implements KeyDigest {
-  public MD5KeyDigest() {
-  }
+  public MD5KeyDigest() {}
 
   @Override
   public DHTKey computeKey(byte[] bytes) {

@@ -31,7 +31,9 @@ public class LeafChecksumNode extends AbstractChecksumNode {
   // The array is used to store the list of keys and checksums efficiently
   private long[] _keyAndVersionChecksums;
 
-  private LeafChecksumNode(RingRegion ringRegion, List<KeyAndVersionChecksum> keyAndVersionChecksums,
+  private LeafChecksumNode(
+      RingRegion ringRegion,
+      List<KeyAndVersionChecksum> keyAndVersionChecksums,
       Mutability mutability) {
     super(ringRegion, mutability);
     this.keyAndVersionChecksums = keyAndVersionChecksums;
@@ -40,7 +42,8 @@ public class LeafChecksumNode extends AbstractChecksumNode {
     }
   }
 
-  public LeafChecksumNode(RingRegion ringRegion, List<KeyAndVersionChecksum> keyAndVersionChecksums) {
+  public LeafChecksumNode(
+      RingRegion ringRegion, List<KeyAndVersionChecksum> keyAndVersionChecksums) {
     super(ringRegion, Mutability.Immutable);
     this.keyAndVersionChecksums = keyAndVersionChecksums;
     _freeze();
@@ -56,16 +59,18 @@ public class LeafChecksumNode extends AbstractChecksumNode {
   }
 
   private void _freeze() {
-    Collections.sort(keyAndVersionChecksums, new KeyAndVersionChecksumCoordinateComparator(ringRegion));
+    Collections.sort(
+        keyAndVersionChecksums, new KeyAndVersionChecksumCoordinateComparator(ringRegion));
     this.checksum = computeChecksum(keyAndVersionChecksums);
     _keyAndVersionChecksums = KeyAndVersionChecksum.listToArray(keyAndVersionChecksums);
     keyAndVersionChecksums = null;
   }
 
-  private static ConvergenceChecksum computeChecksum(List<KeyAndVersionChecksum> keyAndVersionChecksums) {
+  private static ConvergenceChecksum computeChecksum(
+      List<KeyAndVersionChecksum> keyAndVersionChecksums) {
     ConvergenceChecksum checksum;
 
-    //checksum = new byte[keyValueChecksums.get(0).getValueChecksum().length];
+    // checksum = new byte[keyValueChecksums.get(0).getValueChecksum().length];
     checksum = null;
     for (KeyAndVersionChecksum keyAndVersionChecksum : keyAndVersionChecksums) {
       DHTKey key;
@@ -94,8 +99,9 @@ public class LeafChecksumNode extends AbstractChecksumNode {
   @Override
   public ChecksumNode duplicate() {
     mutability.ensureImmutable();
-    //return new LeafChecksumNode(ringRegion, new ArrayList<>(keyAndVersionChecksums));
-    return new LeafChecksumNode(ringRegion, KeyAndVersionChecksum.arrayToList(_keyAndVersionChecksums));
+    // return new LeafChecksumNode(ringRegion, new ArrayList<>(keyAndVersionChecksums));
+    return new LeafChecksumNode(
+        ringRegion, KeyAndVersionChecksum.arrayToList(_keyAndVersionChecksums));
   }
 
   public List<KeyAndVersionChecksum> getKeyAndVersionChecksums() {
@@ -135,7 +141,9 @@ public class LeafChecksumNode extends AbstractChecksumNode {
     super.toString(sb, depth);
     if (mutability == Mutability.Mutable) {
       for (KeyAndVersionChecksum keyAndVersionChecksum : keyAndVersionChecksums) {
-        sb.append(String.format("%s[%s]\n", StringUtil.replicate('\t', depth + 1), keyAndVersionChecksum));
+        sb.append(
+            String.format(
+                "%s[%s]\n", StringUtil.replicate('\t', depth + 1), keyAndVersionChecksum));
       }
     } else {
       Iterator<KeyAndVersionChecksum> iterator;
@@ -145,7 +153,9 @@ public class LeafChecksumNode extends AbstractChecksumNode {
         KeyAndVersionChecksum keyAndVersionChecksum;
 
         keyAndVersionChecksum = iterator.next();
-        sb.append(String.format("%s[%s]\n", StringUtil.replicate('\t', depth + 1), keyAndVersionChecksum));
+        sb.append(
+            String.format(
+                "%s[%s]\n", StringUtil.replicate('\t', depth + 1), keyAndVersionChecksum));
       }
     }
   }
@@ -153,7 +163,7 @@ public class LeafChecksumNode extends AbstractChecksumNode {
   @Override
   public Iterator<KeyAndVersionChecksum> iterator() {
     mutability.ensureImmutable();
-    //return keyAndVersionChecksums.iterator();
+    // return keyAndVersionChecksums.iterator();
     return KeyAndVersionChecksum.getKVCArrayIterator(_keyAndVersionChecksums);
   }
 }

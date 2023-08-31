@@ -29,5 +29,4 @@ public interface AbsNanosTimeSource {
    * @return the difference between absDeadlineNanos and absTimeNanos()
    */
   public long relNanosRemaining(long absDeadlineNanos);
-
 }

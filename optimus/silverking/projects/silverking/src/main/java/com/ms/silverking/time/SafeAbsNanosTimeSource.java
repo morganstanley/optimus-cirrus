@@ -19,13 +19,12 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 /**
- * SafeAbsNanosTimeSource returns a "safe" absolute time in nano seconds by
- * filtering out observed issues in System.nanoTime(). In particular, this
- * class guards against both System.nanoTime() forward and backward excursions.
- * System.currentTimeMillis() provides the ground truth;.
- * <p>
- * NOTE: Presently, the safety features are turned off as they need additional
- * testing before introducing them
+ * SafeAbsNanosTimeSource returns a "safe" absolute time in nano seconds by filtering out observed
+ * issues in System.nanoTime(). In particular, this class guards against both System.nanoTime()
+ * forward and backward excursions. System.currentTimeMillis() provides the ground truth;.
+ *
+ * <p>NOTE: Presently, the safety features are turned off as they need additional testing before
+ * introducing them
  */
 public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
   public final long nanoOriginTimeInMillis;
@@ -42,28 +41,30 @@ public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
   private static final long nanosPerMilli = 1000000;
 
   private static final long defaultQuickCheckThresholdNanos;
-  private static final String defaultQuickCheckThresholdNanosProperty = SafeAbsNanosTimeSource.class.getName() +
-                                                                        ".DefaultQuickCheckThresholdNanos";
+  private static final String defaultQuickCheckThresholdNanosProperty =
+      SafeAbsNanosTimeSource.class.getName() + ".DefaultQuickCheckThresholdNanos";
   private static final long defaultDefaultQuickCheckThresholdNanos = 20 * nanosPerMilli;
 
   private static final long defaultOriginDeltaToleranceNanos;
-  private static final String defaultOriginDeltaToleranceNanosProperty = SafeAbsNanosTimeSource.class.getName() +
-                                                                         ".DefaultOriginDeltaToleranceNanos";
+  private static final String defaultOriginDeltaToleranceNanosProperty =
+      SafeAbsNanosTimeSource.class.getName() + ".DefaultOriginDeltaToleranceNanos";
   private static final long defaultDefaultOriginDeltaToleranceNanos = 100 * nanosPerMilli;
 
   static {
     String def;
 
-    def = PropertiesHelper.systemHelper.getString(defaultQuickCheckThresholdNanosProperty,
-                                                  UndefinedAction.ZeroOnUndefined);
+    def =
+        PropertiesHelper.systemHelper.getString(
+            defaultQuickCheckThresholdNanosProperty, UndefinedAction.ZeroOnUndefined);
     if (def != null) {
       defaultQuickCheckThresholdNanos = Long.parseLong(def);
     } else {
       defaultQuickCheckThresholdNanos = defaultDefaultQuickCheckThresholdNanos;
     }
 
-    def = PropertiesHelper.systemHelper.getString(defaultOriginDeltaToleranceNanosProperty,
-                                                  UndefinedAction.ZeroOnUndefined);
+    def =
+        PropertiesHelper.systemHelper.getString(
+            defaultOriginDeltaToleranceNanosProperty, UndefinedAction.ZeroOnUndefined);
     if (def != null) {
       defaultOriginDeltaToleranceNanos = Long.parseLong(def);
     } else {
@@ -71,9 +72,8 @@ public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
     }
   }
 
-  public SafeAbsNanosTimeSource(long nanoOriginTimeInMillis,
-                                long quickCheckThresholdNanos,
-                                long originDeltaToleranceNanos) {
+  public SafeAbsNanosTimeSource(
+      long nanoOriginTimeInMillis, long quickCheckThresholdNanos, long originDeltaToleranceNanos) {
     this.nanoOriginTimeInMillis = nanoOriginTimeInMillis;
     this.quickCheckThresholdNanos = quickCheckThresholdNanos;
     this.originDeltaToleranceNanos = originDeltaToleranceNanos;
@@ -87,9 +87,7 @@ public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
     this(nanoOriginTimeInMillis, defaultQuickCheckThresholdNanos, defaultOriginDeltaToleranceNanos);
   }
 
-  /**
-   * When a problem is detected, recompute nanoOriginTimeInMillis.
-   */
+  /** When a problem is detected, recompute nanoOriginTimeInMillis. */
   private void setNanosOriginTime(long _systemTimeNanos) {
     long curTimeMillis;
     long curTimeNanos;
@@ -110,11 +108,12 @@ public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
     // FUTURE - put into mutex function new in Java 8
     if (Math.abs(nanoOriginTimeInNanos.get() - newOriginTimeInNanos) > originDeltaToleranceNanos) {
       if (log.isDebugEnabled()) {
-        log.debug("nanoOriginTimeInNanos {} -> {}", nanoOriginTimeInNanos.get(), newOriginTimeInNanos);
+        log.debug(
+            "nanoOriginTimeInNanos {} -> {}", nanoOriginTimeInNanos.get(), newOriginTimeInNanos);
       }
       nanoOriginTimeInNanos.set(newOriginTimeInNanos);
     }
-    //System.out.printf("nanoOriginTimeInNanos\t%s\n", nanoOriginTimeInNanos);
+    // System.out.printf("nanoOriginTimeInNanos\t%s\n", nanoOriginTimeInNanos);
   }
 
   @Override
@@ -128,93 +127,89 @@ public class SafeAbsNanosTimeSource implements AbsNanosTimeSource {
     long prev;
 
     t = System.nanoTime() - nanoOriginTimeInNanos.get();
-    prev = lastTimeNanos.getAndUpdate(x -> x < t
-                                           ? t
-                                           : x + 1);
-    return t > prev
-           ? t
-           : prev + 1;
-    //return System.nanoTime() - nanoOriginTimeInNanos.get();
+    prev = lastTimeNanos.getAndUpdate(x -> x < t ? t : x + 1);
+    return t > prev ? t : prev + 1;
+    // return System.nanoTime() - nanoOriginTimeInNanos.get();
   }
-    
-    /*
-    @Override
-    public long absTimeNanos() {
-        long    candidateAbsTimeNanos;
-        long    safeAbsTimeNanos;
-        long    _systemNanoTime;
-        long    _lastReturnedNanos;
-        long    _lastSystemNanos;
-        long    _nanoOriginTime;
-        
-        _lastReturnedNanos = lastReturnedAbsTimeNanos.get();
-        _lastSystemNanos = lastSystemNanos.get();
-        _systemNanoTime = System.nanoTime(); // must only retrieve system time once
-                                             // so that remaining logic is valid
-        lastSystemNanos.set(_systemNanoTime);
-        if (_systemNanoTime < _lastSystemNanos) {
-            _systemNanoTime = _lastSystemNanos;
-        }
-        _nanoOriginTime = nanoOriginTimeInNanos.get();
-        
-        if (_systemNanoTime < _lastSystemNanos) {
-            setNanosOriginTime(_systemNanoTime);
-        } 
-        
-        candidateAbsTimeNanos = _systemNanoTime - _nanoOriginTime;
-        if (candidateAbsTimeNanos - _lastReturnedNanos > quickCheckThresholdNanos) {
-            setNanosOriginTime(_systemNanoTime);
-            candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
-            
-            if (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) {
-                safeAbsTimeNanos = lastReturnedAbsTimeNanos.get();
-            } else {
-                safeAbsTimeNanos = candidateAbsTimeNanos;
-                lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
-            }            
-        } else {
-            safeAbsTimeNanos = candidateAbsTimeNanos; 
-            lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
-        }        
-        return safeAbsTimeNanos;
-    }
-    */
 
-    /*
-    @Override
-    public long absTimeNanos() {
-        long    candidateAbsTimeNanos;
-        long    safeAbsTimeNanos;
-        long    _systemNanoTime;
-        
-        _systemNanoTime = System.nanoTime(); // must only retrieve system time once
-                                             // so that remaining logic is valid
-        candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
-        if (candidateAbsTimeNanos - lastReturnedAbsTimeNanos.get() > quickCheckThresholdNanos
-                || candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) { // if we suspect something is wrong
-            if (debug) {
-                System.out.printf("%s\t%d\t%d\n", Thread.currentThread().getName(), candidateAbsTimeNanos,
-                lastReturnedAbsTimeNanos.get());
-                System.out.printf("%s\t%s\n", (candidateAbsTimeNanos - lastReturnedAbsTimeNanos.get() >
-                quickCheckThresholdNanos),
-                (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()));
-            }
-            setNanosOriginTime(_systemNanoTime);
-            candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
-            
-            if (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) {
-                safeAbsTimeNanos = lastReturnedAbsTimeNanos.get();
-            } else {
-                safeAbsTimeNanos = candidateAbsTimeNanos;
-                lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
-            }            
-        } else {
-            safeAbsTimeNanos = candidateAbsTimeNanos; 
-            lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
-        }        
-        return safeAbsTimeNanos;
-    }
-    */
+  /*
+  @Override
+  public long absTimeNanos() {
+      long    candidateAbsTimeNanos;
+      long    safeAbsTimeNanos;
+      long    _systemNanoTime;
+      long    _lastReturnedNanos;
+      long    _lastSystemNanos;
+      long    _nanoOriginTime;
+
+      _lastReturnedNanos = lastReturnedAbsTimeNanos.get();
+      _lastSystemNanos = lastSystemNanos.get();
+      _systemNanoTime = System.nanoTime(); // must only retrieve system time once
+                                           // so that remaining logic is valid
+      lastSystemNanos.set(_systemNanoTime);
+      if (_systemNanoTime < _lastSystemNanos) {
+          _systemNanoTime = _lastSystemNanos;
+      }
+      _nanoOriginTime = nanoOriginTimeInNanos.get();
+
+      if (_systemNanoTime < _lastSystemNanos) {
+          setNanosOriginTime(_systemNanoTime);
+      }
+
+      candidateAbsTimeNanos = _systemNanoTime - _nanoOriginTime;
+      if (candidateAbsTimeNanos - _lastReturnedNanos > quickCheckThresholdNanos) {
+          setNanosOriginTime(_systemNanoTime);
+          candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
+
+          if (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) {
+              safeAbsTimeNanos = lastReturnedAbsTimeNanos.get();
+          } else {
+              safeAbsTimeNanos = candidateAbsTimeNanos;
+              lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
+          }
+      } else {
+          safeAbsTimeNanos = candidateAbsTimeNanos;
+          lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
+      }
+      return safeAbsTimeNanos;
+  }
+  */
+
+  /*
+  @Override
+  public long absTimeNanos() {
+      long    candidateAbsTimeNanos;
+      long    safeAbsTimeNanos;
+      long    _systemNanoTime;
+
+      _systemNanoTime = System.nanoTime(); // must only retrieve system time once
+                                           // so that remaining logic is valid
+      candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
+      if (candidateAbsTimeNanos - lastReturnedAbsTimeNanos.get() > quickCheckThresholdNanos
+              || candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) { // if we suspect something is wrong
+          if (debug) {
+              System.out.printf("%s\t%d\t%d\n", Thread.currentThread().getName(), candidateAbsTimeNanos,
+              lastReturnedAbsTimeNanos.get());
+              System.out.printf("%s\t%s\n", (candidateAbsTimeNanos - lastReturnedAbsTimeNanos.get() >
+              quickCheckThresholdNanos),
+              (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()));
+          }
+          setNanosOriginTime(_systemNanoTime);
+          candidateAbsTimeNanos = _systemNanoTime - nanoOriginTimeInNanos.get();
+
+          if (candidateAbsTimeNanos < lastReturnedAbsTimeNanos.get()) {
+              safeAbsTimeNanos = lastReturnedAbsTimeNanos.get();
+          } else {
+              safeAbsTimeNanos = candidateAbsTimeNanos;
+              lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
+          }
+      } else {
+          safeAbsTimeNanos = candidateAbsTimeNanos;
+          lastReturnedAbsTimeNanos.set(safeAbsTimeNanos);
+      }
+      return safeAbsTimeNanos;
+  }
+  */
 
   @Override
   public long relNanosRemaining(long absDeadlineNanos) {

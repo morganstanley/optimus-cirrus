@@ -48,7 +48,8 @@ public class ParallelSSHBase {
   public static String hostnameVar = "HOSTNAME";
 
   private static final String sshEnvVar = "SK_PSSH_SSH";
-  private static final String defaultSSHCmdRH5 = "ssh -x -o StrictHostKeyChecking=no " + hostnameVar;
+  private static final String defaultSSHCmdRH5 =
+      "ssh -x -o StrictHostKeyChecking=no " + hostnameVar;
   private static final String defaultSSHCmd =
       "timeout " + timeoutVar + " ssh -x -o StrictHostKeyChecking=no " + hostnameVar;
   private static final String globalSSHCmd;
@@ -69,12 +70,15 @@ public class ParallelSSHBase {
       globalSSHCmd = PropertiesHelper.envHelper.getString(sshEnvVar, defaultSSHCmdRH5);
       globalSSHCmdIsDefault = globalSSHCmd.equals(defaultSSHCmdRH5);
     }
-    mapFile = PropertiesHelper.envHelper.getString(sshMapEnvVar, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
+    mapFile =
+        PropertiesHelper.envHelper.getString(
+            sshMapEnvVar, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
     if (mapFile != null && mapFile.trim().length() != 0) {
       log.info("mapFile {}", mapFile);
       try {
-        globalSSHCmdMap = MapUtil.parseStringMap(new FileInputStream(mapFile), mapDelimiter,
-            MapUtil.NoDelimiterAction.Ignore);
+        globalSSHCmdMap =
+            MapUtil.parseStringMap(
+                new FileInputStream(mapFile), mapDelimiter, MapUtil.NoDelimiterAction.Ignore);
       } catch (IOException ioe) {
         throw new RuntimeException(ioe);
       }
@@ -166,8 +170,10 @@ public class ParallelSSHBase {
         hostSSHCmd = sshCmd;
       }
     }
-    resolvedSSHCmd = hostSSHCmd.replaceAll(timeoutVar, Integer.toString(timeoutSeconds)).replaceAll(hostnameVar,
-        hostname);
+    resolvedSSHCmd =
+        hostSSHCmd
+            .replaceAll(timeoutVar, Integer.toString(timeoutSeconds))
+            .replaceAll(hostnameVar, hostname);
     _sshCmd = new ArrayList<>();
     for (String s : resolvedSSHCmd.split("\\s+")) {
       _sshCmd.add(s);
@@ -205,7 +211,7 @@ public class ParallelSSHBase {
       ProcessWaiter waiter;
 
       log.info(" ****************************************");
-      log.info("Host: {}" , host);
+      log.info("Host: {}", host);
       ssh = sshCmd(host, cmd, timeoutSeconds, quotedBash);
       log.info(StringUtil.arrayToQuotedString(ssh));
       pb = new ProcessBuilder(ssh);
@@ -222,10 +228,10 @@ public class ParallelSSHBase {
       }
       execProc.getInputStream().close();
       execProc.getErrorStream().close();
-      log.info("Result: {}  {}" , result , host);
+      log.info("Result: {}  {}", result, host);
       return result;
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
       return exceptionErrorCode;
     } finally {
       completed.add(host);
@@ -251,7 +257,7 @@ public class ParallelSSHBase {
     lastCompleted = completed.size();
     while (completed.size() < toComplete) {
       if (completed.size() != lastCompleted) {
-        log.info("waitForCompletion: {}/{}" , completed.size() ,toComplete);
+        log.info("waitForCompletion: {}/{}", completed.size(), toComplete);
         lastCompleted = completed.size();
       }
       ThreadUtil.sleep(1000); // fast notification is not important

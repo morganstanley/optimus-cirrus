@@ -24,5 +24,4 @@ public class IntegerSHA1KeyCreator extends BaseKeyCreator<Integer> {
   public DHTKey createKey(Integer key) {
     return md5KeyDigest.computeKey(NumConversion.intToBytes(key));
   }
-
 }

@@ -20,28 +20,33 @@ import com.ms.silverking.net.IPAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Write operation for the LooseConsistency StorageProtocol.
- */
-public class LooseConsistencyWrite extends BaseStorageOperation<SingleWriterLooseStorageEntryState> {
+/** Write operation for the LooseConsistency StorageProtocol. */
+public class LooseConsistencyWrite
+    extends BaseStorageOperation<SingleWriterLooseStorageEntryState> {
   private static final boolean debug = false;
 
   private static final int looseConsistencySuccessThreshold = 1;
 
   private static Logger log = LoggerFactory.getLogger(LooseConsistencyWrite.class);
 
-  LooseConsistencyWrite(PutOperationContainer putOperationContainer, ForwardingMode forwardingMode, long deadline) {
+  LooseConsistencyWrite(
+      PutOperationContainer putOperationContainer, ForwardingMode forwardingMode, long deadline) {
     super(deadline, putOperationContainer, forwardingMode);
   }
 
   @Override
-  public void initializeEntryState(DHTKey entryKey, List<IPAndPort> primaryReplicas,
-      List<IPAndPort> secondaryReplicas) {
+  public void initializeEntryState(
+      DHTKey entryKey, List<IPAndPort> primaryReplicas, List<IPAndPort> secondaryReplicas) {
     setEntryState(entryKey, new SingleWriterLooseStorageEntryState(primaryReplicas));
   }
-  
+
   @Override
-  public void update(DHTKey key, IPAndPort replica, byte storageState, OpResult update, PutVirtualCommunicator pvComm) {
+  public void update(
+      DHTKey key,
+      IPAndPort replica,
+      byte storageState,
+      OpResult update,
+      PutVirtualCommunicator pvComm) {
     // TODO (OPTIMUS-0000): reduce or eliminate locking here
     synchronized (this) {
       SingleWriterLooseStorageEntryState entryState;
@@ -72,7 +77,8 @@ public class LooseConsistencyWrite extends BaseStorageOperation<SingleWriterLoos
             }
           }
           if (debug) {
-            System.out.printf("completeEntries %d numEntries %d\n", completeEntries.get(), numEntries);
+            System.out.printf(
+                "completeEntries %d numEntries %d\n", completeEntries.get(), numEntries);
           }
         } else {
           log.info("Unexpected incomplete update: {}", update);
@@ -87,5 +93,5 @@ public class LooseConsistencyWrite extends BaseStorageOperation<SingleWriterLoos
 
   public byte nextStorageState(byte prevStorageState) {
     return 0;
-  }  
+  }
 }

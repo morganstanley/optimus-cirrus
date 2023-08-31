@@ -37,7 +37,10 @@ public class RetainedOffsetMapCheck implements EntryRetentionCheck {
     } else if (discardedOffsets.contains(offset)) {
       return false;
     } else {
-      log.info("Unexpected unknown offset in RetainedOffsetMapCheck.shouldRetain() {} {}", entry.getKey(), offset);
+      log.info(
+          "Unexpected unknown offset in RetainedOffsetMapCheck.shouldRetain() {} {}",
+          entry.getKey(),
+          offset);
       return true;
     }
   }

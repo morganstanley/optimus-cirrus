@@ -16,7 +16,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.{util => ju}
+import java.{ util => ju }
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import spray.json.DefaultJsonProtocol._
@@ -480,6 +480,9 @@ object Properties extends KnownProperties {
   val replicaFrom = prop[ChainedID]
   val currentlyRunning = prop[Seq[ChainedID]]
   val distRunning = propI
+  val distLostTasks = propI
+  val distRegistered = propI
+  val distRegisteredTime = propL
   val currentScopes = prop[Seq[String]]
   val currentRoots = prop[Seq[String]]
   val dedupKey = prop[String]
@@ -683,6 +686,7 @@ object Properties extends KnownProperties {
   val time = prop[String]
   val splunkTime = prop[String]
   val rootUuid = prop[String]
+  val approxId = prop[Seq[Int]]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
   val gsfEngineId = prop[String]
@@ -805,6 +809,7 @@ object Properties extends KnownProperties {
   val numStacksPublished = propL
   val stackElem = prop[String]
   val stackType = prop[String]
+  val jfrSize = propL
   val selfCount = propL
   val totalCount = propL
   val miniGridCalc = prop[String]
@@ -814,10 +819,10 @@ object Properties extends KnownProperties {
   val profStackId = prop[String]
   val profPreOptimusStartup = propL
   val distWallTime = propL
-  val distTasksCompleted = propI
-  val distTasksReceived = propI
-  val gridTasksRunning = propI
-  val distBytesReceived = propL
+  val distTaskDuration = propL
+  val distTasksComplete = propI
+  val distTasksRcvd = propI
+  val distBytesRcvd = propL
   val distBytesSent = propL
 
   // Temporal surface tracing
@@ -848,7 +853,7 @@ object Properties extends KnownProperties {
 
   /** RT verifier violations */
   val rtvViolation = prop[String]
-  val rtvModule = prop[String]
+  val rtvOwner = prop[String]
   val rtvLocation = prop[String]
   val rtvStack = prop[String]
 
@@ -907,6 +912,13 @@ object Properties extends KnownProperties {
 
   val auxSchedulerTimedOutNodes = prop[Seq[String]]
 
+  val kvProcessorStats = prop[NestedMapOrValue[Double]]
+
+  val artifactId = prop[String]
+  val artifactCacheZkPath = prop[String]
+  val artifactDownloadStats = prop[NestedMapOrValue[Long]]
+  val artifactDownloadTempArchivePath = prop[String]
+  val artifactDownloadExtractPath = prop[String]
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {
@@ -959,3 +971,4 @@ final case class ProfiledEventCause(
     }
   }
 }
+

@@ -16,9 +16,7 @@ import java.nio.ByteBuffer;
 import com.ms.silverking.cloud.dht.RetrievalType;
 import com.ms.silverking.cloud.dht.client.StoredValue;
 
-/**
- * Multi-versioned RawRetrievalResult
- */
+/** Multi-versioned RawRetrievalResult */
 public class RawRetrievalResultMV extends RawRetrievalResult {
   private final RawRetrievalResultMV next;
 

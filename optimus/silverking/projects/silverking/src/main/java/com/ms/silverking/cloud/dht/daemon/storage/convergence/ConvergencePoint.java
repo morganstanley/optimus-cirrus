@@ -20,9 +20,7 @@ import com.ms.silverking.util.IncomparableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Objective of convergence: DHT configuration version, RingID, ring version, data version.
- */
+/** Objective of convergence: DHT configuration version, RingID, ring version, data version. */
 public class ConvergencePoint implements Comparable<ConvergencePoint> {
   private final long dhtConfigVersion;
   private final RingIDAndVersionPair ringIDAndVersionPair;
@@ -30,10 +28,12 @@ public class ConvergencePoint implements Comparable<ConvergencePoint> {
 
   private static Logger log = LoggerFactory.getLogger(ConvergencePoint.class);
 
-  public ConvergencePoint(long dhtConfigVersion, RingIDAndVersionPair ringIDAndVersion, long dataVersion) {
-    //this.dhtConfigVersion = dhtConfigVersion;
+  public ConvergencePoint(
+      long dhtConfigVersion, RingIDAndVersionPair ringIDAndVersion, long dataVersion) {
+    // this.dhtConfigVersion = dhtConfigVersion;
     // dhtConfigVersion is to be deprecated
-    this.dhtConfigVersion = 16; // dhtConfigVersion hasn't proven to be useful as the remaining members are
+    this.dhtConfigVersion =
+        16; // dhtConfigVersion hasn't proven to be useful as the remaining members are
     // sufficient to describe a CP.
     this.ringIDAndVersionPair = ringIDAndVersion;
     this.dataVersion = dataVersion;
@@ -57,7 +57,9 @@ public class ConvergencePoint implements Comparable<ConvergencePoint> {
 
   @Override
   public int hashCode() {
-    return NumUtil.longHashCode(dhtConfigVersion) ^ ringIDAndVersionPair.hashCode() ^ NumUtil.longHashCode(dataVersion);
+    return NumUtil.longHashCode(dhtConfigVersion)
+        ^ ringIDAndVersionPair.hashCode()
+        ^ NumUtil.longHashCode(dataVersion);
   }
 
   @Override
@@ -65,8 +67,9 @@ public class ConvergencePoint implements Comparable<ConvergencePoint> {
     ConvergencePoint oCP;
 
     oCP = (ConvergencePoint) other;
-    return dhtConfigVersion == oCP.dhtConfigVersion && ringIDAndVersionPair.equals(
-        oCP.ringIDAndVersionPair) && dataVersion == oCP.dataVersion;
+    return dhtConfigVersion == oCP.dhtConfigVersion
+        && ringIDAndVersionPair.equals(oCP.ringIDAndVersionPair)
+        && dataVersion == oCP.dataVersion;
   }
 
   @Override
@@ -100,10 +103,13 @@ public class ConvergencePoint implements Comparable<ConvergencePoint> {
   private static final int dhtConfigVersionOffset = 0;
   private static final int ringIDOffset = dhtConfigVersionOffset + NumConversion.BYTES_PER_LONG;
   private static final int ringConfigVersionOffset = ringIDOffset + RingID.BYTES;
-  private static final int configInstanceVersionOffset = ringConfigVersionOffset + NumConversion.BYTES_PER_LONG;
-  private static final int versionOffset = configInstanceVersionOffset + NumConversion.BYTES_PER_LONG;
+  private static final int configInstanceVersionOffset =
+      ringConfigVersionOffset + NumConversion.BYTES_PER_LONG;
+  private static final int versionOffset =
+      configInstanceVersionOffset + NumConversion.BYTES_PER_LONG;
 
-  public static final int serializedSizeBytes = RingIDAndVersionPair.BYTES + NumConversion.BYTES_PER_LONG * 2;
+  public static final int serializedSizeBytes =
+      RingIDAndVersionPair.BYTES + NumConversion.BYTES_PER_LONG * 2;
 
   public void writeToBuffer(ByteBuffer dataByteBuffer) {
     dataByteBuffer.putLong(getDHTConfigVersion());
@@ -125,7 +131,8 @@ public class ConvergencePoint implements Comparable<ConvergencePoint> {
     ringID = RingID.readFromBuffer(buf, offset + ringIDOffset);
     ringConfigVersion = buf.getLong(offset + ringConfigVersionOffset);
     configInstanceVersion = buf.getLong(offset + configInstanceVersionOffset);
-    ringIDAndVersion = new RingIDAndVersionPair(ringID, new Pair<>(ringConfigVersion, configInstanceVersion));
+    ringIDAndVersion =
+        new RingIDAndVersionPair(ringID, new Pair<>(ringConfigVersion, configInstanceVersion));
     dataVersion = buf.getLong(offset + versionOffset);
     return new ConvergencePoint(dhtConfigVersion, ringIDAndVersion, dataVersion);
   }

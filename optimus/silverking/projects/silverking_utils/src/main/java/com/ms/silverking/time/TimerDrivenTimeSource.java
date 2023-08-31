@@ -17,9 +17,8 @@ import com.ms.silverking.util.SafeTimer;
 import com.ms.silverking.util.SafeTimerTask;
 
 /**
- * A RelNanosAbsMillisTimeSource that utilizes a Timer class to provide very
- * low-overhead time reads. This timer is faster than SystemTimeSource, but
- * is less accurate and more granular.
+ * A RelNanosAbsMillisTimeSource that utilizes a Timer class to provide very low-overhead time
+ * reads. This timer is faster than SystemTimeSource, but is less accurate and more granular.
  */
 public final class TimerDrivenTimeSource extends TimerTask implements RelNanosAbsMillisTimeSource {
   private final SafeTimer timer;
@@ -72,7 +71,8 @@ public final class TimerDrivenTimeSource extends TimerTask implements RelNanosAb
 
   @Override
   public String name() {
-    return String.format("TimerDrivenTimeSource(absTimeMillis=%d,relTimeNanos=%d)", absTimeMillis, relTimeNanos);
+    return String.format(
+        "TimerDrivenTimeSource(absTimeMillis=%d,relTimeNanos=%d)", absTimeMillis, relTimeNanos);
   }
 
   @Override

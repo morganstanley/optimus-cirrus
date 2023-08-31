@@ -26,8 +26,15 @@ import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
 public class StreamParser {
-  public enum TrimMode {noTrim, trim}
-  public enum CloseMode {noClose, close}
+  public enum TrimMode {
+    noTrim,
+    trim
+  }
+
+  public enum CloseMode {
+    noClose,
+    close
+  }
 
   private static final char setDelimiterChar = ',';
   private static final String setDelimiter = "" + setDelimiterChar;
@@ -73,15 +80,18 @@ public class StreamParser {
     return parseLines(inStream, TrimMode.trim, CloseMode.close, regex);
   }
 
-  public static List<String> parseLines(InputStream inStream, CloseMode closeMode) throws IOException {
+  public static List<String> parseLines(InputStream inStream, CloseMode closeMode)
+      throws IOException {
     return parseLines(inStream, TrimMode.trim, closeMode, null);
   }
 
-  public static List<String> parseLines(InputStream inStream, TrimMode trimMode) throws IOException {
+  public static List<String> parseLines(InputStream inStream, TrimMode trimMode)
+      throws IOException {
     return parseLines(inStream, trimMode, CloseMode.close, null);
   }
 
-  public static List<String> parseLines(InputStream inStream, TrimMode trimMode, CloseMode closeMode, String regex)
+  public static List<String> parseLines(
+      InputStream inStream, TrimMode trimMode, CloseMode closeMode, String regex)
       throws IOException {
     BufferedReader reader;
     ArrayList<String> lines;
@@ -114,7 +124,8 @@ public class StreamParser {
     return parseLine(file, TrimMode.trim, CloseMode.close);
   }
 
-  public static String parseLine(File file, TrimMode trimMode, CloseMode closeMode) throws IOException {
+  public static String parseLine(File file, TrimMode trimMode, CloseMode closeMode)
+      throws IOException {
     return parseLine(new FileInputStream(file), trimMode, closeMode);
   }
 
@@ -122,7 +133,8 @@ public class StreamParser {
     return parseLine(inStream, TrimMode.trim, CloseMode.close);
   }
 
-  public static String parseLine(InputStream inStream, TrimMode trimMode, CloseMode closeMode) throws IOException {
+  public static String parseLine(InputStream inStream, TrimMode trimMode, CloseMode closeMode)
+      throws IOException {
     BufferedReader reader;
 
     reader = new BufferedReader(new InputStreamReader(inStream));
@@ -143,8 +155,8 @@ public class StreamParser {
     return parseMap(inStream, TrimMode.trim, CloseMode.close);
   }
 
-  public static Map<String, String> parseMap(InputStream inStream, TrimMode trimMode, CloseMode closeMode)
-      throws IOException {
+  public static Map<String, String> parseMap(
+      InputStream inStream, TrimMode trimMode, CloseMode closeMode) throws IOException {
     Map<String, String> map;
     List<String> lines;
 
@@ -168,7 +180,8 @@ public class StreamParser {
     return parseSet(inStream, TrimMode.trim, CloseMode.close);
   }
 
-  public static Set<String> parseSet(InputStream inStream, TrimMode trimMode, CloseMode closeMode) throws IOException {
+  public static Set<String> parseSet(InputStream inStream, TrimMode trimMode, CloseMode closeMode)
+      throws IOException {
     Set<String> set;
     List<String> lines;
 
@@ -198,4 +211,3 @@ public class StreamParser {
     return set;
   }
 }
-

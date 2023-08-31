@@ -58,12 +58,12 @@ public class TreeTest {
     tree2 = tree1.duplicate();
 
     log.info(" *** Should be equal ***");
-    log.info("{}",TreeMatcher.match(tree2, tree1));
+    log.info("{}", TreeMatcher.match(tree2, tree1));
 
     tree2b = RegionTreeBuilder.build(region, entriesPerNode, numKeys / 2, kvcList);
-    log.info("{}",tree2b);
+    log.info("{}", tree2b);
     log.info(" *** Should be equal (different key estimates) ***");
-    log.info("{}",TreeMatcher.match(tree2b, tree1));
+    log.info("{}", TreeMatcher.match(tree2b, tree1));
 
     List<KeyAndVersionChecksum> _kvcList;
     List<KeyAndVersionChecksum> _kvcList4;
@@ -88,13 +88,13 @@ public class TreeTest {
     tree5 = RegionTreeBuilder.build(region, entriesPerNode, numKeys, _kvcList4);
 
     log.info(" *** Should have destNotInSource ***");
-    log.info("{}",TreeMatcher.match(tree3, tree1));
+    log.info("{}", TreeMatcher.match(tree3, tree1));
     log.info(" *** Should have sourceNotInDest ***");
-    log.info("{}",TreeMatcher.match(tree1, tree3));
+    log.info("{}", TreeMatcher.match(tree1, tree3));
     log.info(" *** Should have mismatch ***");
-    log.info("{}",TreeMatcher.match(tree4, tree1));
+    log.info("{}", TreeMatcher.match(tree4, tree1));
     log.info(" *** Should be a mix ***");
-    log.info("{}",TreeMatcher.match(tree5, tree3));
+    log.info("{}", TreeMatcher.match(tree5, tree3));
     System.out.flush();
 
     serializationTest(tree1);
@@ -111,12 +111,12 @@ public class TreeTest {
     log.info("{}", buffer);
     dNode = ProtoChecksumTreeMessageGroup.deserialize(buffer);
     log.info(" *** Pre-serialization ***");
-    log.info("{}",checksumNode);
+    log.info("{}", checksumNode);
     log.info(" *** Post-serialization ***");
     log.info("{}", dNode);
 
     log.info(" *** Match test ***");
-    log.info("{}",TreeMatcher.match(dNode, checksumNode));
+    log.info("{}", TreeMatcher.match(dNode, checksumNode));
   }
 
   /**

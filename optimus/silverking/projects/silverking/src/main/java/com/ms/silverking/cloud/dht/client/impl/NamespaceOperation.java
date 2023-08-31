@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client.impl;
 
 import com.ms.silverking.cloud.dht.OperationOptions;
 
-/**
- * Operation specific to a namespace.
- */
+/** Operation specific to a namespace. */
 abstract class NamespaceOperation extends Operation {
   protected final ClientNamespace namespace;
 

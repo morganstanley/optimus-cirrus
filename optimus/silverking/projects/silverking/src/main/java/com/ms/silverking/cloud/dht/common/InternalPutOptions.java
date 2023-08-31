@@ -19,8 +19,8 @@ import com.ms.silverking.cloud.dht.trace.SkTraceId;
 import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 
 /**
- * Adds internally useful information to PutOptions that should not be exposed to
- * end users. Also removes PutOptions that only apply in the client.
+ * Adds internally useful information to PutOptions that should not be exposed to end users. Also
+ * removes PutOptions that only apply in the client.
  */
 public class InternalPutOptions implements SSPutOptions {
   private final PutOptions putOptions;

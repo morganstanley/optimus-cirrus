@@ -25,9 +25,7 @@ import java.util.List;
 
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Bundles a hostname and a port.
- */
+/** Bundles a hostname and a port. */
 public final class HostAndPort implements Comparable<HostAndPort>, Serializable, AddrAndPort {
   private final String hostName;
   private final int port;
@@ -61,9 +59,8 @@ public final class HostAndPort implements Comparable<HostAndPort>, Serializable,
   }
 
   /**
-   * Optimization for cases where toInetAddress will be called
-   * many times. Precompute so that we can pass it back without
-   * the overhead of creation.
+   * Optimization for cases where toInetAddress will be called many times. Precompute so that we can
+   * pass it back without the overhead of creation.
    */
   public void computeInetAddress() {
     inetSocketAddress = new InetSocketAddress(hostName, port);
@@ -74,13 +71,13 @@ public final class HostAndPort implements Comparable<HostAndPort>, Serializable,
       computeInetAddress();
     }
     return inetSocketAddress;
-        /*
-        if (inetSocketAddress == null) {
-            return new InetSocketAddress(hostName, port);
-        } else {
-            return inetSocketAddress;
-        }
-        */
+    /*
+    if (inetSocketAddress == null) {
+        return new InetSocketAddress(hostName, port);
+    } else {
+        return inetSocketAddress;
+    }
+    */
   }
 
   public byte[] getBytes() throws UnknownHostException {
@@ -176,7 +173,8 @@ public final class HostAndPort implements Comparable<HostAndPort>, Serializable,
 
   /////////////////////////////////////////////////////////////////
 
-  public static HostAndPort readFromExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+  public static HostAndPort readFromExternal(ObjectInput in)
+      throws IOException, ClassNotFoundException {
     return new HostAndPort(in.readUTF(), in.readInt());
   }
 
@@ -214,7 +212,7 @@ public final class HostAndPort implements Comparable<HostAndPort>, Serializable,
     return new IPAndPort(ip, port);
   }
 
-  //public static void main(String[] args) {
+  // public static void main(String[] args) {
   //    System.out.println(new HostAndPort(args[0]));
-  //}
+  // }
 }

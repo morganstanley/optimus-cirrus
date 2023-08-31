@@ -22,9 +22,7 @@ import com.ms.silverking.thread.ThreadUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * A thread specialized to only do LWT work.
- */
+/** A thread specialized to only do LWT work. */
 public class LWTThread extends Thread implements LWTCompatibleThread {
 
   private static Logger log = LoggerFactory.getLogger(LWTThread.class);
@@ -48,7 +46,8 @@ public class LWTThread extends Thread implements LWTCompatibleThread {
    * @param name
    * @param q
    */
-  public LWTThread(String name, BlockingQueue<AssignedWork> q, LWTPoolImpl threadPool, int workUnit) {
+  public LWTThread(
+      String name, BlockingQueue<AssignedWork> q, LWTPoolImpl threadPool, int workUnit) {
     super(name);
     this.q = q;
     this.threadPool = threadPool;
@@ -232,7 +231,7 @@ public class LWTThread extends Thread implements LWTCompatibleThread {
     AssignedWork[] workList;
 
     ThreadState.setLWTThread();
-    //System.out.println("LWTThread.runMultiple()\t"+ this);
+    // System.out.println("LWTThread.runMultiple()\t"+ this);
     workList = new AssignedWork[workUnit];
     while (running) {
       try {

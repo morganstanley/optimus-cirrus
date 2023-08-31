@@ -17,8 +17,8 @@ public class CompactionCheckResult {
   private final int retainedBytes;
   private final boolean consideredStoredLengths;
 
-  public CompactionCheckResult(int validEntries, int invalidEntries, int retainedBytes,
-      boolean consideredStoredLengths) {
+  public CompactionCheckResult(
+      int validEntries, int invalidEntries, int retainedBytes, boolean consideredStoredLengths) {
     this.validEntries = validEntries;
     this.invalidEntries = invalidEntries;
     this.retainedBytes = retainedBytes;
@@ -51,7 +51,9 @@ public class CompactionCheckResult {
 
   @Override
   public String toString() {
-    String bytesStr = consideredStoredLengths ? String.format("- bytes retained %d", retainedBytes) : "";
-    return String.format("Entries Retained: %d - deleted %d %s", validEntries, invalidEntries, bytesStr);
+    String bytesStr =
+        consideredStoredLengths ? String.format("- bytes retained %d", retainedBytes) : "";
+    return String.format(
+        "Entries Retained: %d - deleted %d %s", validEntries, invalidEntries, bytesStr);
   }
 }

@@ -13,17 +13,18 @@ package com.ms.silverking.net.async;
 
 import java.nio.channels.SelectableChannel;
 
-/**
- * Request sent to Selector
- */
+/** Request sent to Selector */
 public class KeyChangeRequest {
   private final SelectableChannel channel;
   private final Type type;
   private final int newOps;
 
-  public enum Type {ADD_OPS, REMOVE_OPS, ADD_AND_CHANGE_OPS, CANCEL_AND_CLOSE}
-
-  ;
+  public enum Type {
+    ADD_OPS,
+    REMOVE_OPS,
+    ADD_AND_CHANGE_OPS,
+    CANCEL_AND_CLOSE
+  };
 
   public KeyChangeRequest(SelectableChannel channel, Type type, int newOps) {
     this.channel = channel;

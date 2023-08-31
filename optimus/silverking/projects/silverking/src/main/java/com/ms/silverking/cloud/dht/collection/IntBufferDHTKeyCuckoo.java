@@ -20,14 +20,12 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.collection.cuckoo.IntCuckooConstants;
 import com.ms.silverking.collection.cuckoo.WritableCuckooConfig;
 
-/**
- *
- */
+/** */
 public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<DHTKeyIntEntry> {
   private final SubTable[] subTables;
 
   private static final int empty = IntCuckooConstants.empty;
-  private static final int[] extraShiftPerTable = { -1, -1, 32, -1, 16, -1, -1, -1, 8 };
+  private static final int[] extraShiftPerTable = {-1, -1, 32, -1, 16, -1, -1, -1, 8};
 
   private static final boolean debugCycle = false;
 
@@ -64,17 +62,30 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
       bufStartBytes = subtableSizeBytes * i;
       valuesStartBytes = subtableSizeBytes * i + bufferSizeBytes;
 
-      buf = ((ByteBuffer) byteBuf.duplicate().position(bufStartBytes).limit(bufStartBytes + bufferSizeBytes)).slice()
-                                                                                                             .asLongBuffer();
-      values = ((ByteBuffer) byteBuf.duplicate().position(valuesStartBytes).limit(valuesStartBytes +
-                                                                                  valuesSizeBytes)).slice()
-                                                                                                   .asIntBuffer();
-      subTables[i] = new SubTable(i,
-                                  cuckooConfig.getNumSubTableBuckets(),
-                                  entriesPerBucket,
-                                  extraShiftPerTable[numSubTables] * i,
-                                  buf,
-                                  values);
+      buf =
+          ((ByteBuffer)
+                  byteBuf
+                      .duplicate()
+                      .position(bufStartBytes)
+                      .limit(bufStartBytes + bufferSizeBytes))
+              .slice()
+              .asLongBuffer();
+      values =
+          ((ByteBuffer)
+                  byteBuf
+                      .duplicate()
+                      .position(valuesStartBytes)
+                      .limit(valuesStartBytes + valuesSizeBytes))
+              .slice()
+              .asIntBuffer();
+      subTables[i] =
+          new SubTable(
+              i,
+              cuckooConfig.getNumSubTableBuckets(),
+              entriesPerBucket,
+              extraShiftPerTable[numSubTables] * i,
+              buf,
+              values);
     }
     setSubTables(subTables);
   }
@@ -117,16 +128,22 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
     private static final int lslOffset = 1;
     private static final int _singleEntrySize = 2;
 
-    SubTable(int id, int numBuckets, int entriesPerBucket, int extraShift, LongBuffer buf, IntBuffer values) {
+    SubTable(
+        int id,
+        int numBuckets,
+        int entriesPerBucket,
+        int extraShift,
+        LongBuffer buf,
+        IntBuffer values) {
       super(numBuckets, entriesPerBucket, _singleEntrySize);
-      //System.out.println("numEntries: "+ numBuckets +"\tentriesPerBucket: "+ entriesPerBucket);
+      // System.out.println("numEntries: "+ numBuckets +"\tentriesPerBucket: "+ entriesPerBucket);
       this.id = id;
       this.buf = buf;
       this.values = values;
-      //buf = new long[bufferSizeLongs];
-      //values = new int[numBuckets * entriesPerBucket];
+      // buf = new long[bufferSizeLongs];
+      // values = new int[numBuckets * entriesPerBucket];
       keyShift = extraShift;
-      //clear();
+      // clear();
     }
 
     @Override
@@ -141,9 +158,9 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
       for (int i = 0; i < entriesPerBucket; i++) {
         int entryIndex;
 
-        //if (entryMatches(msl, lsl, index, i)) {
+        // if (entryMatches(msl, lsl, index, i)) {
         entryIndex = ((int) ((int) lsl >>> balanceShift) + i) & entriesMask;
-        //entryIndex = i;
+        // entryIndex = i;
         if (entryMatches(msl, lsl, bucketIndex, entryIndex)) {
           return getValue(bucketIndex, entryIndex);
         }
@@ -176,8 +193,12 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
       int baseOffset;
 
       baseOffset = getHTEntryIndex(bucketIndex, entryIndex);
-      return "" + buf.get(baseOffset + mslOffset) + "\t" + buf.get(baseOffset + lslOffset) + "\t" + values.get(
-          bucketIndex);
+      return ""
+          + buf.get(baseOffset + mslOffset)
+          + "\t"
+          + buf.get(baseOffset + lslOffset)
+          + "\t"
+          + values.get(bucketIndex);
     }
 
     protected final boolean isEmpty(int bucketIndex, int entryIndex) {
@@ -187,10 +208,10 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
     private boolean entryMatches(long msl, long lsl, int bucketIndex, int entryIndex) {
       int baseOffset;
 
-      //displayEntry(bucketIndex, entryIndex);
+      // displayEntry(bucketIndex, entryIndex);
       baseOffset = getHTEntryIndex(bucketIndex, entryIndex);
-      //System.out.println("\t"+ entryIndex +"\t"+ bucketIndex +"\t"+ baseOffset);
-      //System.out.printf("%x:%x\t%x:%x\n",
+      // System.out.println("\t"+ entryIndex +"\t"+ bucketIndex +"\t"+ baseOffset);
+      // System.out.printf("%x:%x\t%x:%x\n",
       //        buf[baseOffset + mslOffset], buf[baseOffset + lslOffset],
       //        msl, lsl);
       return buf.get(baseOffset + mslOffset) == msl && buf.get(baseOffset + lslOffset) == lsl;
@@ -235,9 +256,11 @@ public class IntBufferDHTKeyCuckoo extends DHTKeyCuckooBase implements Iterable<
       DHTKeyIntEntry mapEntry;
 
       // precondition: moveToNonEmpty() has been called
-      mapEntry = new DHTKeyIntEntry(subTables[subTable].getMSL(bucket, entry),
-                                    subTables[subTable].getLSL(bucket, entry),
-                                    subTables[subTable].getValue(bucket, entry));
+      mapEntry =
+          new DHTKeyIntEntry(
+              subTables[subTable].getMSL(bucket, entry),
+              subTables[subTable].getLSL(bucket, entry),
+              subTables[subTable].getValue(bucket, entry));
       moveToNonEmpty();
       return mapEntry;
     }

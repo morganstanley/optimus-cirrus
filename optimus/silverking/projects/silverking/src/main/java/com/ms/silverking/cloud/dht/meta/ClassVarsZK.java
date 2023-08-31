@@ -30,7 +30,10 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
   private static Logger log = LoggerFactory.getLogger(ClassVarsZK.class);
 
   public ClassVarsZK(MetaClient mc) throws KeeperException {
-    super(mc, mc.getMetaPaths().getClassVarsBasePath(), mc.getMetaPaths().getClassVarsServerBasePath());
+    super(
+        mc,
+        mc.getMetaPaths().getClassVarsBasePath(),
+        mc.getMetaPaths().getClassVarsServerBasePath());
   }
 
   @Override
@@ -81,11 +84,11 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
   public void writeToFile(File file, ClassVars instance) throws IOException {
 
     FileUtil.writeToFile(file, instance.toString());
-
   }
 
   @Override
-  public String writeToZK(ClassVars classVars, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(ClassVars classVars, MetaToolOptions options)
+      throws IOException, KeeperException {
     return writeToZK(classVars, options.name);
   }
 
@@ -101,13 +104,13 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
       try {
         cloudPath = writeToCloudZK(classVars, name);
       } catch (KeeperException ke) {
-        log.error("Failed to write to cloud path : {}/{}  {}", getBase() , name, ke);
+        log.error("Failed to write to cloud path : {}/{}  {}", getBase(), name, ke);
         cloudKe = ke;
       }
       try {
         serverConfig = writeToServerConfigZK(classVars, name);
       } catch (KeeperException ke) {
-        log.error("Failed to write to serverconfig path {}/{} {} ", getBase2() , name, ke);
+        log.error("Failed to write to serverconfig path {}/{} {} ", getBase2(), name, ke);
         serverConfigKe = ke;
       }
 
@@ -140,7 +143,9 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
     }
     log.info("writing to path : {}", classVarsName2);
     zk.createString(classVarsName2, classVars.toString(), CreateMode.PERSISTENT);
-    path = zk.createString(classVarsName2 + "/", classVars.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
+    path =
+        zk.createString(
+            classVarsName2 + "/", classVars.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
     log.info("write path: {}", path);
     return path;
   }
@@ -158,12 +163,15 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
     }
     log.info("writing to path : {}", classVarsName);
     zk.createString(classVarsName, classVars.toString(), CreateMode.PERSISTENT);
-    path = zk.createString(classVarsName + "/", classVars.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
+    path =
+        zk.createString(
+            classVarsName + "/", classVars.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
 
     return path;
   }
 
-  public void deleteFromZK(long version, String name) throws KeeperException, InterruptedException, ExecutionException {
+  public void deleteFromZK(long version, String name)
+      throws KeeperException, InterruptedException, ExecutionException {
     if (mode == 1) {
       zk.deleteRecursive(getVersionPath(name, version));
     } else {
@@ -207,10 +215,9 @@ public class ClassVarsZK extends MetaToolModuleBase<ClassVars, MetaPaths> {
       if (zk.exists(base2 + "/" + name)) {
         return zk.getLatestVersion(base2 + "/" + name);
       } else {
-        log.error("Failed to get latest version from serverconfig path : {}/{}", base2 , name);
+        log.error("Failed to get latest version from serverconfig path : {}/{}", base2, name);
         return zk.getLatestVersion(base + "/" + name);
       }
     }
   }
-
 }

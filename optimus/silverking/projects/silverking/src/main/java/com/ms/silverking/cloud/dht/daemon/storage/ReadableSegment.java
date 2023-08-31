@@ -17,6 +17,6 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.InternalRetrievalOptions;
 
 interface ReadableSegment {
-  //int size();
+  // int size();
   ByteBuffer retrieve(DHTKey key, InternalRetrievalOptions options);
 }

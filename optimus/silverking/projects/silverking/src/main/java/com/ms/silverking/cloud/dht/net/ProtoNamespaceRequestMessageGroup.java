@@ -31,7 +31,12 @@ public class ProtoNamespaceRequestMessageGroup extends ProtoMessageGroup {
   private static final long nsRequestMGContext = 0L;
 
   public ProtoNamespaceRequestMessageGroup(UUIDBase uuid, byte[] originator) {
-    super(MessageType.NAMESPACE_REQUEST, uuid, nsRequestMGContext, originator, deadlineRelativeMillis,
+    super(
+        MessageType.NAMESPACE_REQUEST,
+        uuid,
+        nsRequestMGContext,
+        originator,
+        deadlineRelativeMillis,
         ForwardingMode.FORWARD);
 
     dataByteBuffer = ByteBuffer.allocate(dataBufferSize);

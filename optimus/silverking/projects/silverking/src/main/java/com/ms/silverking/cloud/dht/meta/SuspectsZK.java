@@ -33,12 +33,12 @@ import scala.Option;
 
 /**
  * Used to track nodes that are suspected of being bad. Each node in an instance may accuse other
- * nodes of being suspicious. For each node, a list of suspects is maintained. Thus the
- * mapping in zookeeper is accuser->list of suspects
+ * nodes of being suspicious. For each node, a list of suspects is maintained. Thus the mapping in
+ * zookeeper is accuser->list of suspects
  */
 public class SuspectsZK {
-  private static long timerPeriodMillis = Long.getLong("com.ms.silverking.cloud.dht.meta.SuspectsZK.timerPeriodMillis",
-                                                       10000);
+  private static long timerPeriodMillis =
+      Long.getLong("com.ms.silverking.cloud.dht.meta.SuspectsZK.timerPeriodMillis", 10000);
   private static final char suspectsDelimiter = ',';
   private static final String suspectsDelimiterString = "" + suspectsDelimiter;
 
@@ -53,51 +53,53 @@ public class SuspectsZK {
   private String suspectsPath;
   private IPAndPort ipAndPort;
 
-  public SuspectsZK(SilverKingZooKeeperClient zkClient,
-                    String suspectsPath,
-                    IPAndPort ipAndPort,
-                    StrongSuspectSet strongSuspectSet) {
+  public SuspectsZK(
+      SilverKingZooKeeperClient zkClient,
+      String suspectsPath,
+      IPAndPort ipAndPort,
+      StrongSuspectSet strongSuspectSet) {
 
     this.zkClient = zkClient;
     this.suspectsPath = suspectsPath;
     this.ipAndPort = ipAndPort;
 
     String path = suspectsPath + "/" + ipAndPort;
-    ReadOnlyDistributedValue<Set<IPAndPort>> zkSuspectSet = new ReadOnlyDistributedValue<>(zkClient.getCurator()
-                                                                                                   .getCurator(),
-                                                                                           zkClient.getCurator()
-                                                                                                   .getResolvedPath(path),
-                                                                                           this::deserializeZkSuspectsList,
-                                                                                           false) {
-      @Override
-      public void onNodeChange(Option<Set<IPAndPort>> set) {
-        Set<IPAndPort> suspectSet;
-        suspectSet = set.isEmpty() ? new HashSet<>() : set.get();
-        log.warn("Current Suspects: {}", CollectionUtil.toString(suspectSet));
-      }
-    };
+    ReadOnlyDistributedValue<Set<IPAndPort>> zkSuspectSet =
+        new ReadOnlyDistributedValue<>(
+            zkClient.getCurator().getCurator(),
+            zkClient.getCurator().getResolvedPath(path),
+            this::deserializeZkSuspectsList,
+            false) {
+          @Override
+          public void onNodeChange(Option<Set<IPAndPort>> set) {
+            Set<IPAndPort> suspectSet;
+            suspectSet = set.isEmpty() ? new HashSet<>() : set.get();
+            log.warn("Current Suspects: {}", CollectionUtil.toString(suspectSet));
+          }
+        };
 
-    this.suspectsTimerTask = new TimerTask() {
-      @Override
-      public void run() {
-        startZkUpdate();
-        Set<IPAndPort> localSuspects = strongSuspectSet.computeCurrentStrongSuspects();
-        Option<Set<IPAndPort>> zkSuspects = zkSuspectSet.value();
-        if (zkSuspects.isEmpty() || localSuspects != zkSuspects.get()) {
-          writeSuspectsToZK(ipAndPort, localSuspects);
-        }
-        finishZkUpdate();
-      }
-    };
+    this.suspectsTimerTask =
+        new TimerTask() {
+          @Override
+          public void run() {
+            startZkUpdate();
+            Set<IPAndPort> localSuspects = strongSuspectSet.computeCurrentStrongSuspects();
+            Option<Set<IPAndPort>> zkSuspects = zkSuspectSet.value();
+            if (zkSuspects.isEmpty() || localSuspects != zkSuspects.get()) {
+              writeSuspectsToZK(ipAndPort, localSuspects);
+            }
+            finishZkUpdate();
+          }
+        };
     this.suspectsTimer = new Timer();
     suspectsTimer.scheduleAtFixedRate(suspectsTimerTask, 0, timerPeriodMillis);
   }
 
   // Test method
-  protected void startZkUpdate() { }
+  protected void startZkUpdate() {}
 
   // Test method
-  protected void finishZkUpdate() { }
+  protected void finishZkUpdate() {}
 
   private Set<IPAndPort> deserializeZkSuspectsList(byte[] nodeData) {
     Set<IPAndPort> suspectSet;
@@ -130,8 +132,7 @@ public class SuspectsZK {
    * @throws KeeperException
    */
   public static Pair<Set<IPAndPort>, SetMultimap<IPAndPort, IPAndPort>> readAccuserSuspectsFromZK(
-      SilverKingZooKeeperClient zkClient,
-      String suspectsPath) throws KeeperException {
+      SilverKingZooKeeperClient zkClient, String suspectsPath) throws KeeperException {
     List<IPAndPort> accusers;
     SetMultimap<IPAndPort, IPAndPort> accuserSuspectsMap;
 
@@ -146,8 +147,8 @@ public class SuspectsZK {
     return new Pair<>(ImmutableSet.copyOf(accusers), accuserSuspectsMap);
   }
 
-  public static Set<IPAndPort> readActiveNodesFromZK(SilverKingZooKeeperClient zkClient, String suspectsPath)
-      throws KeeperException {
+  public static Set<IPAndPort> readActiveNodesFromZK(
+      SilverKingZooKeeperClient zkClient, String suspectsPath) throws KeeperException {
     return ImmutableSet.copyOf(IPAndPort.list(zkClient.getChildren(suspectsPath)));
   }
 
@@ -158,7 +159,8 @@ public class SuspectsZK {
       if (zkClient.exists(path)) {
         zkClient.setString(path, CollectionUtil.toString(suspects, suspectsDelimiter));
       } else {
-        zkClient.createString(path, CollectionUtil.toString(suspects, suspectsDelimiter), CreateMode.EPHEMERAL);
+        zkClient.createString(
+            path, CollectionUtil.toString(suspects, suspectsDelimiter), CreateMode.EPHEMERAL);
       }
     } catch (KeeperException ke) {
       log.error("Unable to write suspects for: {}", accuser, ke);
@@ -169,9 +171,8 @@ public class SuspectsZK {
     return readSuspectsFromZK(zkClient, suspectsPath, ipAndPort);
   }
 
-  public static Set<IPAndPort> readSuspectsFromZK(SilverKingZooKeeperClient zkClient,
-                                                  String suspectsPath,
-                                                  IPAndPort accuser) {
+  public static Set<IPAndPort> readSuspectsFromZK(
+      SilverKingZooKeeperClient zkClient, String suspectsPath, IPAndPort accuser) {
     Set<IPAndPort> suspects;
     String suspectsDef;
 

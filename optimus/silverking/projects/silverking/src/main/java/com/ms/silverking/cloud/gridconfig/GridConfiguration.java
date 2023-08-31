@@ -24,9 +24,7 @@ import com.ms.silverking.util.PropertiesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Provides coherent, centralized configuration for grid settings.
- */
+/** Provides coherent, centralized configuration for grid settings. */
 public class GridConfiguration implements Serializable {
   private final String name;
   private final Map<String, String> envMap;
@@ -34,7 +32,8 @@ public class GridConfiguration implements Serializable {
   private static Logger log = LoggerFactory.getLogger(GridConfiguration.class);
 
   public static final String defaultBaseEnvVar = "GC_DEFAULT_BASE";
-  static final String defaultBaseProperty = GridConfiguration.class.getCanonicalName() + ".DefaultBase";
+  static final String defaultBaseProperty =
+      GridConfiguration.class.getCanonicalName() + ".DefaultBase";
   private static File defaultBase;
 
   public static final String defaultGCEnvVar = "GC_DEFAULT";
@@ -53,15 +52,19 @@ public class GridConfiguration implements Serializable {
   static String getFromEnvOrProperty(String defaultEnvVar, String defaultProperty) {
     String val;
 
-    val = PropertiesHelper.systemHelper.getString(defaultProperty, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
+    val =
+        PropertiesHelper.systemHelper.getString(
+            defaultProperty, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
     if (val == null) {
-      val = PropertiesHelper.envHelper.getString(defaultEnvVar, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
+      val =
+          PropertiesHelper.envHelper.getString(
+              defaultEnvVar, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
       if (val == null) {
       } else {
-        log.debug("GridConfiguration using val from environment variable {}" , defaultEnvVar);
+        log.debug("GridConfiguration using val from environment variable {}", defaultEnvVar);
       }
     } else {
-      log.debug("GridConfiguration using val from property {}" , defaultProperty);
+      log.debug("GridConfiguration using val from property {}", defaultProperty);
     }
     return val;
   }
@@ -79,8 +82,9 @@ public class GridConfiguration implements Serializable {
 
     defaultGC = getFromEnvOrProperty(defaultGCEnvVar, defaultGCProperty);
 
-    envSuffixVal = PropertiesHelper.systemHelper.getString(envSuffixProperty,
-        PropertiesHelper.UndefinedAction.ZeroOnUndefined);
+    envSuffixVal =
+        PropertiesHelper.systemHelper.getString(
+            envSuffixProperty, PropertiesHelper.UndefinedAction.ZeroOnUndefined);
     if (envSuffixVal == null) {
       envSuffixVal = PropertiesHelper.envHelper.getString(envSuffixEnvVar, defaultEnvSuffix);
     }
@@ -138,7 +142,7 @@ public class GridConfiguration implements Serializable {
 
         tokens = line.split("[\\s=]");
         if (tokens.length != 3 || !tokens[0].equals("export")) {
-          log.info("Skipping bad env line: {} {}" , tokens.length ,line);
+          log.info("Skipping bad env line: {} {}", tokens.length, line);
         } else {
           envMap.put(tokens[1], tokens[2]);
         }

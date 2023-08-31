@@ -29,9 +29,7 @@ import com.ms.silverking.cloud.dht.client.serialization.internal.SerializedMD5Ke
 import com.ms.silverking.cloud.dht.client.serialization.internal.StringMD5KeyCreator;
 import com.ms.silverking.cloud.dht.client.serialization.internal.UUIDMD5KeyCreator;
 
-/**
- * NamespacePerspectiveOptions and classes necessary to implement the requested options.
- */
+/** NamespacePerspectiveOptions and classes necessary to implement the requested options. */
 class NamespacePerspectiveOptionsImpl<K, V> {
   private final NamespacePerspectiveOptions<K, V> nspOptions;
   private final SerializationRegistry serializationRegistry;
@@ -39,18 +37,22 @@ class NamespacePerspectiveOptionsImpl<K, V> {
   private final BufferDestSerializer<V> valueSerializer;
   private final BufferSourceDeserializer<V> valueDeserializer;
 
-  public NamespacePerspectiveOptionsImpl(NamespacePerspectiveOptions<K, V> nspOptions,
-      SerializationRegistry serializationRegistry) {
+  public NamespacePerspectiveOptionsImpl(
+      NamespacePerspectiveOptions<K, V> nspOptions, SerializationRegistry serializationRegistry) {
     this.nspOptions = nspOptions;
     this.serializationRegistry = serializationRegistry;
-    keyCreator = keyCreatorFor(serializationRegistry, nspOptions.getKeyClass(), nspOptions.getKeyDigestType());
+    keyCreator =
+        keyCreatorFor(
+            serializationRegistry, nspOptions.getKeyClass(), nspOptions.getKeyDigestType());
     valueSerializer = serializationRegistry.getSerializer(nspOptions.getValueClass());
     if (valueSerializer == null) {
-      throw new IllegalArgumentException("Can't find serializer for: " + nspOptions.getValueClass());
+      throw new IllegalArgumentException(
+          "Can't find serializer for: " + nspOptions.getValueClass());
     }
     valueDeserializer = serializationRegistry.getDeserializer(nspOptions.getValueClass());
     if (valueDeserializer == null) {
-      throw new IllegalArgumentException("Can't find deserializer for: " + nspOptions.getValueClass());
+      throw new IllegalArgumentException(
+          "Can't find deserializer for: " + nspOptions.getValueClass());
     }
   }
 
@@ -86,42 +88,42 @@ class NamespacePerspectiveOptionsImpl<K, V> {
     return nspOptions.getDefaultWaitOptions();
   }
 
-  private static <K> KeyCreator<K> keyCreatorFor(SerializationRegistry serializationRegistry, Class keyClass,
-      KeyDigestType keyDigestType) {
+  private static <K> KeyCreator<K> keyCreatorFor(
+      SerializationRegistry serializationRegistry, Class keyClass, KeyDigestType keyDigestType) {
     if (keyClass == String.class) {
       switch (keyDigestType) {
-      case MD5:
-        return (KeyCreator<K>) new StringMD5KeyCreator();
-      default:
-        throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
+        case MD5:
+          return (KeyCreator<K>) new StringMD5KeyCreator();
+        default:
+          throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
       }
     } else if (keyClass == Integer.class) {
       switch (keyDigestType) {
-      case MD5:
-        return (KeyCreator<K>) new IntegerMD5KeyCreator();
-      default:
-        throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
+        case MD5:
+          return (KeyCreator<K>) new IntegerMD5KeyCreator();
+        default:
+          throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
       }
     } else if (keyClass == Long.class) {
       switch (keyDigestType) {
-      case MD5:
-        return (KeyCreator<K>) new LongMD5KeyCreator();
-      default:
-        throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
+        case MD5:
+          return (KeyCreator<K>) new LongMD5KeyCreator();
+        default:
+          throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
       }
     } else if (keyClass == UUID.class) {
       switch (keyDigestType) {
-      case MD5:
-        return (KeyCreator<K>) new UUIDMD5KeyCreator();
-      default:
-        throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
+        case MD5:
+          return (KeyCreator<K>) new UUIDMD5KeyCreator();
+        default:
+          throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
       }
     } else if (keyClass == byte[].class) {
       switch (keyDigestType) {
-      case MD5:
-        return (KeyCreator<K>) new ArrayMD5KeyCreator();
-      default:
-        throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
+        case MD5:
+          return (KeyCreator<K>) new ArrayMD5KeyCreator();
+        default:
+          throw new RuntimeException("Unsupported <keyClass, KeyDigestType>");
       }
     } else {
       BufferDestSerializer<K> s;
@@ -131,40 +133,48 @@ class NamespacePerspectiveOptionsImpl<K, V> {
         return new SerializedMD5KeyCreator(s);
       } else {
         throw new IllegalArgumentException(
-            "Unsupported key class. " + "No custom serializer, and no serializer found: " + keyClass);
+            "Unsupported key class. "
+                + "No custom serializer, and no serializer found: "
+                + keyClass);
       }
     }
   }
 
   public NamespacePerspectiveOptionsImpl<K, V> defaultPutOptions(PutOptions defaultPutOptions) {
-    return new NamespacePerspectiveOptionsImpl(nspOptions.defaultPutOptions(defaultPutOptions), serializationRegistry);
+    return new NamespacePerspectiveOptionsImpl(
+        nspOptions.defaultPutOptions(defaultPutOptions), serializationRegistry);
   }
 
   public NamespacePerspectiveOptionsImpl<K, V> defaultInvalidationOptions(
       InvalidationOptions defaultInvalidationOptions) {
-    return new NamespacePerspectiveOptionsImpl(nspOptions.defaultInvalidationOptions(defaultInvalidationOptions),
-        serializationRegistry);
+    return new NamespacePerspectiveOptionsImpl(
+        nspOptions.defaultInvalidationOptions(defaultInvalidationOptions), serializationRegistry);
   }
 
   public NamespacePerspectiveOptionsImpl<K, V> defaultGetOptions(GetOptions defaultGetOptions) {
-    return new NamespacePerspectiveOptionsImpl(nspOptions.defaultGetOptions(defaultGetOptions), serializationRegistry);
+    return new NamespacePerspectiveOptionsImpl(
+        nspOptions.defaultGetOptions(defaultGetOptions), serializationRegistry);
   }
 
   public NamespacePerspectiveOptionsImpl<K, V> defaultWaitOptions(WaitOptions defaultWaitOptions) {
-    return new NamespacePerspectiveOptionsImpl(nspOptions.defaultWaitOptions(defaultWaitOptions),
-        serializationRegistry);
+    return new NamespacePerspectiveOptionsImpl(
+        nspOptions.defaultWaitOptions(defaultWaitOptions), serializationRegistry);
   }
 
-  private static void ensureCompatible(NamespacePerspectiveOptions o1, NamespacePerspectiveOptions o2) {
+  private static void ensureCompatible(
+      NamespacePerspectiveOptions o1, NamespacePerspectiveOptions o2) {
     if (!o1.getKeyClass().equals(o2.getKeyClass())) {
-      throw new RuntimeException("Incompatible key classes: " + o1.getKeyClass() + "\t" + o2.getKeyClass());
+      throw new RuntimeException(
+          "Incompatible key classes: " + o1.getKeyClass() + "\t" + o2.getKeyClass());
     }
     if (!o1.getValueClass().equals(o2.getValueClass())) {
-      throw new RuntimeException("Incompatible value classes: " + o1.getValueClass() + "\t" + o2.getValueClass());
+      throw new RuntimeException(
+          "Incompatible value classes: " + o1.getValueClass() + "\t" + o2.getValueClass());
     }
   }
 
-  public NamespacePerspectiveOptionsImpl namespacePerspectiveOptions(NamespacePerspectiveOptions nspOptions) {
+  public NamespacePerspectiveOptionsImpl namespacePerspectiveOptions(
+      NamespacePerspectiveOptions nspOptions) {
     ensureCompatible(this.nspOptions, nspOptions);
     return new NamespacePerspectiveOptionsImpl(nspOptions, serializationRegistry);
   }

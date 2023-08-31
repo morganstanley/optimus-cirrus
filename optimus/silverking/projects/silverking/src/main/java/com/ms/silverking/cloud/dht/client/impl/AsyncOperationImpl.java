@@ -46,8 +46,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * AsyncOperationImpl provides a concrete implementation of AsyncOperation
- * and wraps an Operation with current state.
+ * AsyncOperationImpl provides a concrete implementation of AsyncOperation and wraps an Operation
+ * with current state.
  */
 abstract class AsyncOperationImpl implements AsyncOperation {
   protected final Operation operation;
@@ -62,11 +62,12 @@ abstract class AsyncOperationImpl implements AsyncOperation {
 
   private static final boolean spin = true;
   private static final int spinDurationNanos = 5 * 1000;
-  private static final int spinLogPeriodMillis = Integer.getInteger("com.ms.silverking.cloud.dht.client.impl.AsyncOperationImpl.spinLogPeriodMillis",
-                                                                    5000);
+  private static final int spinLogPeriodMillis =
+      Integer.getInteger(
+          "com.ms.silverking.cloud.dht.client.impl.AsyncOperationImpl.spinLogPeriodMillis", 5000);
 
   // Attempt state
-  private volatile boolean sent;    // a hint as to whether or not this operation has been sent before
+  private volatile boolean sent; // a hint as to whether or not this operation has been sent before
   // used to optimize the first message creation
   protected OpTimeoutState timeoutState;
 
@@ -150,8 +151,7 @@ abstract class AsyncOperationImpl implements AsyncOperation {
     cleanup();
   }
 
-  protected void cleanup() {
-  }
+  protected void cleanup() {}
 
   // must hold completionCheckLock
   protected void setResult(EnumSet<OpResult> results) {
@@ -242,37 +242,44 @@ abstract class AsyncOperationImpl implements AsyncOperation {
   }
 
   private static final String packageName = AsyncOperationImpl.class.getPackage().getName();
-  private static final String notificationWorkerPoolSizeProperty = packageName + ".NotificationWorkerPoolSize";
-  private static final String notificationWorkerMaxDirectCallDepthProperty = packageName + ".NotificationWorkerMaxDirectCallDepth";
+  private static final String notificationWorkerPoolSizeProperty =
+      packageName + ".NotificationWorkerPoolSize";
+  private static final String notificationWorkerMaxDirectCallDepthProperty =
+      packageName + ".NotificationWorkerMaxDirectCallDepth";
   private static final int notificationWorkerMaxDirectCallDepth;
   private static final LWTPool notificationWorkerPool;
   private static final NotificationWorker notificationWorker;
 
   static {
-    int notificationWorkerPoolSize = PropertiesHelper.systemHelper.getInt(notificationWorkerPoolSizeProperty, 0);
+    int notificationWorkerPoolSize =
+        PropertiesHelper.systemHelper.getInt(notificationWorkerPoolSizeProperty, 0);
     log.debug("notificationWorkerPoolSize {}", notificationWorkerPoolSize);
     if (notificationWorkerPoolSize > 0) {
-      LWTPoolParameters parameters = LWTPoolParameters.create("NotificationWorkerPool")
-                                                      .targetSize(notificationWorkerPoolSize)
-                                                      .maxSize(notificationWorkerPoolSize)
-                                                      .workUnit(1);
+      LWTPoolParameters parameters =
+          LWTPoolParameters.create("NotificationWorkerPool")
+              .targetSize(notificationWorkerPoolSize)
+              .maxSize(notificationWorkerPoolSize)
+              .workUnit(1);
       notificationWorkerPool = LWTPoolProvider.createPool(parameters);
     } else {
       notificationWorkerPool = LWTPoolProvider.defaultConcurrentWorkPool;
     }
     notificationWorker = new NotificationWorker(notificationWorkerPool);
-    notificationWorkerMaxDirectCallDepth = PropertiesHelper.systemHelper.getInt(notificationWorkerMaxDirectCallDepthProperty, 0);
+    notificationWorkerMaxDirectCallDepth =
+        PropertiesHelper.systemHelper.getInt(notificationWorkerMaxDirectCallDepthProperty, 0);
     log.debug("notificationWorkerMaxDirectCallDepth {}", notificationWorkerMaxDirectCallDepth);
   }
 
-  private static class NotificationWorker extends BaseWorker<Pair<AsyncOperationImpl, Set<AsyncOperationListener>>> {
+  private static class NotificationWorker
+      extends BaseWorker<Pair<AsyncOperationImpl, Set<AsyncOperationListener>>> {
     NotificationWorker(LWTPool lwtPool) {
       super(lwtPool, true);
     }
 
-    void filterForUpdates(AsyncOperationImpl opImpl,
-                          Set<Pair<AsyncOperationListener, EnumSet<OperationState>>> _listeners,
-                          OperationState opState) {
+    void filterForUpdates(
+        AsyncOperationImpl opImpl,
+        Set<Pair<AsyncOperationListener, EnumSet<OperationState>>> _listeners,
+        OperationState opState) {
       Set<AsyncOperationListener> listeners = new HashSet();
       for (Pair<AsyncOperationListener, EnumSet<OperationState>> candidate : _listeners) {
         if (candidate.getV2().contains(opState)) {
@@ -344,8 +351,8 @@ abstract class AsyncOperationImpl implements AsyncOperation {
 
   /**
    * Adds a completion listener. If the operation is already complete, the callback will be
-   * immediately executed, possibly in the calling thread.
-   * Equivalent to addListener(listener, OperationState.SUCCEEDED, OperationState.FAILED)
+   * immediately executed, possibly in the calling thread. Equivalent to addListener(listener,
+   * OperationState.SUCCEEDED, OperationState.FAILED)
    *
    * @param listener completion listener
    */
@@ -354,9 +361,9 @@ abstract class AsyncOperationImpl implements AsyncOperation {
   }
 
   /**
-   * Adds multiple completion listeners. For any listener that is already complete, the callback will be
-   * immediately executed, possibly in the calling thread.
-   * Equivalent to addListeners(listeners, OperationState.SUCCEEDED, OperationState.FAILED)
+   * Adds multiple completion listeners. For any listener that is already complete, the callback
+   * will be immediately executed, possibly in the calling thread. Equivalent to
+   * addListeners(listeners, OperationState.SUCCEEDED, OperationState.FAILED)
    *
    * @param listeners update listeners
    */
@@ -366,11 +373,10 @@ abstract class AsyncOperationImpl implements AsyncOperation {
 
   /**
    * Adds an operation listener. If the operation is already complete, the callback will be
-   * immediately executed, possibly in the calling thread.
-   * Updates of completion will occur exactly once. Updates of other states may
-   * occur multiple times and may occur in any order.
+   * immediately executed, possibly in the calling thread. Updates of completion will occur exactly
+   * once. Updates of other states may occur multiple times and may occur in any order.
    *
-   * @param listener     update listener
+   * @param listener update listener
    * @param listenStates states to generate updates for
    */
   public void addListener(AsyncOperationListener listener, OperationState... listenStates) {
@@ -378,13 +384,13 @@ abstract class AsyncOperationImpl implements AsyncOperation {
   }
 
   /**
-   * Adds multiple completion listeners. For any listener that is already complete, the callback will be
-   * Adds multiple listeners. If the operation is already complete, the callback will be
-   * immediately executed, possibly in the calling thread.
-   * Updates of completion will occur exactly once. Updates of other states may
-   * occur multiple times and may occur in any order.
+   * Adds multiple completion listeners. For any listener that is already complete, the callback
+   * will be Adds multiple listeners. If the operation is already complete, the callback will be
+   * immediately executed, possibly in the calling thread. Updates of completion will occur exactly
+   * once. Updates of other states may occur multiple times and may occur in any order.
    */
-  public void addListeners(Iterable<AsyncOperationListener> _listeners, OperationState... listenStates) {
+  public void addListeners(
+      Iterable<AsyncOperationListener> _listeners, OperationState... listenStates) {
     OperationState opState;
     boolean notifyListeners = false;
     EnumSet<OperationState> _listenStates = CollectionUtil.arrayToEnumSet(listenStates);
@@ -501,9 +507,8 @@ abstract class AsyncOperationImpl implements AsyncOperation {
 
   abstract ProtoMessageGroup createProtoMG(MessageEstimate estimate);
 
-  abstract ProtoMessageGroup createMessagesForIncomplete(ProtoMessageGroup protoMG,
-                                                         List<MessageGroup> messageGroups,
-                                                         MessageEstimate estimate);
+  abstract ProtoMessageGroup createMessagesForIncomplete(
+      ProtoMessageGroup protoMG, List<MessageGroup> messageGroups, MessageEstimate estimate);
 
   @Override
   public String toString() {
@@ -523,8 +528,7 @@ abstract class AsyncOperationImpl implements AsyncOperation {
   }
 
   /**
-   * Determine if this operation can be grouped with another operation in a single
-   * message.
+   * Determine if this operation can be grouped with another operation in a single message.
    *
    * @param asyncOperationImpl
    * @return True iff this operation can be another operation

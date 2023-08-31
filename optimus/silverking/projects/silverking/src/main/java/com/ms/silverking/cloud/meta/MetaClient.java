@@ -24,7 +24,8 @@ import org.slf4j.LoggerFactory;
 public class MetaClient extends MetaClientBase<MetaPaths> {
   private final CloudConfiguration cloudConfig;
 
-  public MetaClient(CloudConfiguration cloudConfig, ZooKeeperConfig zkConfig) throws IOException, KeeperException {
+  public MetaClient(CloudConfiguration cloudConfig, ZooKeeperConfig zkConfig)
+      throws IOException, KeeperException {
     super(new MetaPaths(cloudConfig), zkConfig);
     this.cloudConfig = cloudConfig;
   }
@@ -39,7 +40,7 @@ public class MetaClient extends MetaClientBase<MetaPaths> {
     Topology topology;
 
     topology = TopologyParser.parse(new File("c:/tmp/topo2.txt"));
-    log.info("{}",topology);
+    log.info("{}", topology);
   }
 
   // for unit testing only
@@ -58,7 +59,7 @@ public class MetaClient extends MetaClientBase<MetaPaths> {
         mc.test();
       }
     } catch (Exception e) {
-      log.error("",e);
+      log.error("", e);
     }
   }
 }

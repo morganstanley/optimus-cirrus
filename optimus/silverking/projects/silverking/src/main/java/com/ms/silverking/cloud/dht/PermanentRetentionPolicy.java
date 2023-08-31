@@ -22,8 +22,7 @@ public class PermanentRetentionPolicy implements ValueRetentionPolicy {
   }
 
   @OmitGeneration
-  public PermanentRetentionPolicy() {
-  }
+  public PermanentRetentionPolicy() {}
 
   @Override
   public int hashCode() {

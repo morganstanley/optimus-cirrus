@@ -14,9 +14,8 @@ package com.ms.silverking.thread.lwt;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Provides:
- * a) The capability to create LWTPools.
- * b) Default work pools that are used by BaseWorker if no other pool is provided.
+ * Provides: a) The capability to create LWTPools. b) Default work pools that are used by BaseWorker
+ * if no other pool is provided.
  */
 public class LWTPoolProvider {
   public static LWTPool defaultNonConcurrentWorkPool;
@@ -44,10 +43,12 @@ public class LWTPoolProvider {
             throw new RuntimeException("Double initialization");
           } else {
             if (defaultNonConcurrentWorkPool == null) {
-              defaultNonConcurrentWorkPool = createPool(LWTPoolParameters.create("defaultNonConcurrent").
-                  targetSize(params.getNumNonConcurrentThreads()).
-                  maxSize(params.getMaxConcurrentThreads()).
-                  workUnit(params.getWorkUnit()));
+              defaultNonConcurrentWorkPool =
+                  createPool(
+                      LWTPoolParameters.create("defaultNonConcurrent")
+                          .targetSize(params.getNumNonConcurrentThreads())
+                          .maxSize(params.getMaxConcurrentThreads())
+                          .workUnit(params.getWorkUnit()));
             }
           }
         }
@@ -56,10 +57,12 @@ public class LWTPoolProvider {
             throw new RuntimeException("Double initialization");
           } else {
             if (defaultConcurrentWorkPool == null) {
-              defaultConcurrentWorkPool = createPool(LWTPoolParameters.create("defaultConcurrent").
-                  targetSize(params.getNumConcurrentThreads()).
-                  maxSize(params.getMaxConcurrentThreads()).
-                  workUnit(params.getWorkUnit()));
+              defaultConcurrentWorkPool =
+                  createPool(
+                      LWTPoolParameters.create("defaultConcurrent")
+                          .targetSize(params.getNumConcurrentThreads())
+                          .maxSize(params.getMaxConcurrentThreads())
+                          .workUnit(params.getWorkUnit()));
             }
           }
         }
@@ -69,9 +72,7 @@ public class LWTPoolProvider {
 
   private static AtomicBoolean created = new AtomicBoolean();
 
-  /**
-   * Create the default LWTPools using the default parameters.
-   */
+  /** Create the default LWTPools using the default parameters. */
   public static void createDefaultWorkPools() {
     createDefaultWorkPools(DefaultWorkPoolParameters.defaultParameters());
   }

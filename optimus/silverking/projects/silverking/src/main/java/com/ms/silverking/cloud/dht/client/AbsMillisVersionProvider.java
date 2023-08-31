@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client;
 
 import com.ms.silverking.time.AbsMillisTimeSource;
 
-/**
- * Provides versions from an AbsMillisTimeSource.
- */
+/** Provides versions from an AbsMillisTimeSource. */
 public class AbsMillisVersionProvider implements VersionProvider {
   private final AbsMillisTimeSource absMillisTimeSource;
 

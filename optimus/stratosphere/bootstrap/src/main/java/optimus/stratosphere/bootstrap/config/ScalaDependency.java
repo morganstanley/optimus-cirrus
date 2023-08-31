@@ -158,7 +158,7 @@ public class ScalaDependency {
     File nightliesLocation = new File(ossScalaPath);
     if (!nightliesLocation.exists()) {
       throw new StratosphereException(
-          "[ERROR] Couldn't find the expected location of Scala: " + ossScalaPath);
+          "Couldn't find the expected location of Scala: " + ossScalaPath);
     }
     String scalaVersionToFind =
         baseScalaVersion.length() > 4 ? baseScalaVersion : baseScalaVersion + ".";
@@ -166,8 +166,7 @@ public class ScalaDependency {
         nightliesLocation.listFiles(
             f -> f.isDirectory() && f.getName().startsWith(scalaVersionToFind));
     if (dirs.length == 0) {
-      throw new StratosphereException(
-          "[ERROR] Couldn't find Scala installations in: " + ossScalaPath);
+      throw new StratosphereException("Couldn't find Scala installations in: " + ossScalaPath);
     }
     // okay as long as we don't have Scala 2.11.10
     Arrays.sort(dirs, (f1, f2) -> f2.getName().compareTo(f1.getName()));
@@ -201,8 +200,7 @@ public class ScalaDependency {
         || scalaPath.getParent() == null
         || scalaPath.getParent().getParent() == null) {
       throw new StratosphereException(
-          "[ERROR] Scala is not in a correct [organization]/[module] repository."
-              + properPathToScala);
+          "Scala is not in a correct [organization]/[module] repository." + properPathToScala);
     }
 
     String basePath = scalaPath.getParent().getParent().toString();

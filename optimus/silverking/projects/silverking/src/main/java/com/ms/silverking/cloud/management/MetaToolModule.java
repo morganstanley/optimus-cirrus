@@ -25,15 +25,15 @@ public interface MetaToolModule<T> {
   public void writeToFile(File file, T instance) throws IOException;
 
   /**
-   * Write to zookeeper using the version provided and ignoring any
-   * version already present.
+   * Write to zookeeper using the version provided and ignoring any version already present.
    *
    * @param options TODO (OPTIMUS-0000): describe
    * @return TODO (OPTIMUS-0000): describe
    */
   public String writeToZK(T instance, MetaToolOptions options) throws IOException, KeeperException;
 
-  public void deleteFromZK(long version) throws KeeperException, ExecutionException, InterruptedException;
+  public void deleteFromZK(long version)
+      throws KeeperException, ExecutionException, InterruptedException;
 
   public long getLatestVersion() throws KeeperException;
 }

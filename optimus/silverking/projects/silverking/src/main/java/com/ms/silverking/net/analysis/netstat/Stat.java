@@ -82,7 +82,9 @@ public class Stat {
       subs = new String[2];
       subs[0] = s.substring(0, splitIndex).trim();
       subs[1] = s.substring(splitIndex + 1).trim();
-      return new Stat(parentName != null ? parentName + ":" + subs[nameIndex] : "", subs[nameIndex],
+      return new Stat(
+          parentName != null ? parentName + ":" + subs[nameIndex] : "",
+          subs[nameIndex],
           Long.parseLong(subs[valueIndex]));
     }
   }

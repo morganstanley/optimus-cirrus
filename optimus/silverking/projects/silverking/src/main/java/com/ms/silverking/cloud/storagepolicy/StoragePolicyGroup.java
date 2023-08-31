@@ -22,10 +22,7 @@ import com.google.common.collect.ListMultimap;
 import com.ms.silverking.cloud.meta.VersionedDefinition;
 import com.ms.silverking.cloud.topology.NodeClass;
 
-/**
- * Group of StoragePolicies as well as particular root node
- * class and name.
- */
+/** Group of StoragePolicies as well as particular root node class and name. */
 public class StoragePolicyGroup implements VersionedDefinition {
   private final String name;
   private final NodeClassAndName rootClassAndName;
@@ -37,7 +34,10 @@ public class StoragePolicyGroup implements VersionedDefinition {
 
   public static final String label = "StoragePolicyGroup";
 
-  public StoragePolicyGroup(String name, NodeClassAndName rootClassAndName, Map<String, StoragePolicy> policies,
+  public StoragePolicyGroup(
+      String name,
+      NodeClassAndName rootClassAndName,
+      Map<String, StoragePolicy> policies,
       long version) {
     this.name = name;
     this.rootClassAndName = rootClassAndName;
@@ -53,8 +53,11 @@ public class StoragePolicyGroup implements VersionedDefinition {
     }
   }
 
-  public static StoragePolicyGroup create(String name, NodeClassAndName rootClassAndName,
-      List<StoragePolicy> policyList, long version) {
+  public static StoragePolicyGroup create(
+      String name,
+      NodeClassAndName rootClassAndName,
+      List<StoragePolicy> policyList,
+      long version) {
     Map<String, StoragePolicy> policyMap;
 
     policyMap = new HashMap<>();
@@ -64,7 +67,8 @@ public class StoragePolicyGroup implements VersionedDefinition {
     return new StoragePolicyGroup(name, rootClassAndName, policyMap, version);
   }
 
-  public static StoragePolicyGroup parse(File policyFile, long version) throws PolicyParseException {
+  public static StoragePolicyGroup parse(File policyFile, long version)
+      throws PolicyParseException {
     return new PolicyParser().parsePolicyGroup(policyFile, version);
   }
 
@@ -77,17 +81,17 @@ public class StoragePolicyGroup implements VersionedDefinition {
     return name;
   }
 
-  //public NodeClassAndName getRootClassAndName() {
+  // public NodeClassAndName getRootClassAndName() {
   //    return rootClassAndName;
-  //}
+  // }
 
-  //public NodeClass getRootNodeClass() {
+  // public NodeClass getRootNodeClass() {
   //    return rootClassAndName.getNodeClass();
-  //}
+  // }
 
-  //public StoragePolicy getRootPolicy() {
+  // public StoragePolicy getRootPolicy() {
   //    return policies.get(rootClassAndName.getName());
-  //}
+  // }
 
   public StoragePolicy getPolicy(String policyName) {
     return policies.get(policyName);

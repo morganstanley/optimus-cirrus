@@ -21,9 +21,7 @@ import com.google.common.collect.ImmutableSet;
 import com.ms.silverking.cloud.topology.Node;
 import com.ms.silverking.net.IPAndPort;
 
-/**
- * Common functionality used by ExclusionSet to wrap ServerSet.
- */
+/** Common functionality used by ExclusionSet to wrap ServerSet. */
 public abstract class ServerSetExtension implements VersionedDefinition {
   public static final long INVALID_ZXID = -1;
   public static final String singleLineDelimiter = ",";

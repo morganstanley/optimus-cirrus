@@ -38,18 +38,15 @@ public interface AsyncValueRetrieval<K, V> extends AsyncRetrieval<K, V> {
   public V getValue(K key) throws RetrievalException;
 
   /**
-   * Returns raw values for all successfully complete retrievals that
-   * have completed since the last call to this method and getLatestStoredValues().
-   * Each successfully retrieved value will be reported exactly once by this
-   * method and getLatestStoredValues().
-   * This method is unaffected by calls to either getValues() or getStoredValues().
-   * Concurrent execution is permitted, but the precise values returned are
-   * undefined.
+   * Returns raw values for all successfully complete retrievals that have completed since the last
+   * call to this method and getLatestStoredValues(). Each successfully retrieved value will be
+   * reported exactly once by this method and getLatestStoredValues(). This method is unaffected by
+   * calls to either getValues() or getStoredValues(). Concurrent execution is permitted, but the
+   * precise values returned are undefined.
    *
-   * @return raw values for all successfully complete retrievals that
-   * have completed since the last call to this method and getLatestStoredValues()
+   * @return raw values for all successfully complete retrievals that have completed since the last
+   *     call to this method and getLatestStoredValues()
    * @throws RetrievalException TODO (OPTIMUS-0000): describe
    */
   public Map<K, V> getLatestValues() throws RetrievalException;
-
 }

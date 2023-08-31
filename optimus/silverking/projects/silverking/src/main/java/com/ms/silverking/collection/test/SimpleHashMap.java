@@ -48,8 +48,8 @@ public final class SimpleHashMap<K, V> implements Map<K, V> {
     Entry<K, V> entry;
 
     index = hashCode & (size - 1);
-    //index = Math.abs(hashCode) % size;
-    //index = (hashCode * hashCode) % size;
+    // index = Math.abs(hashCode) % size;
+    // index = (hashCode * hashCode) % size;
     startIndex = index;
     do {
       entry = entries[index];
@@ -72,8 +72,8 @@ public final class SimpleHashMap<K, V> implements Map<K, V> {
     Entry<K, V> entry;
 
     index = hashCode & (size - 1);
-    //index = Math.abs(hashCode) % size;
-    //index = (hashCode * hashCode) % size;
+    // index = Math.abs(hashCode) % size;
+    // index = (hashCode * hashCode) % size;
     startIndex = index;
     do {
       entry = entries[index];

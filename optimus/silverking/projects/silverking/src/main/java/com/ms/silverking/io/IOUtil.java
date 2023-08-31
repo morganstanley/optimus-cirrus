@@ -22,7 +22,8 @@ public class IOUtil {
     writeAsLines(new FileOutputStream(outFile), c, true);
   }
 
-  public static <T> void writeAsLines(OutputStream out, Collection<T> c, boolean close) throws IOException {
+  public static <T> void writeAsLines(OutputStream out, Collection<T> c, boolean close)
+      throws IOException {
     try {
       for (T element : c) {
         out.write(element.toString().getBytes());

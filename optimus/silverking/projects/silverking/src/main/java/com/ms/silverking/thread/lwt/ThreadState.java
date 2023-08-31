@@ -13,9 +13,7 @@ package com.ms.silverking.thread.lwt;
 
 import com.ms.silverking.numeric.MutableInteger;
 
-/**
- * Per-thread LWT state.
- */
+/** Per-thread LWT state. */
 final class ThreadState {
   private static final ThreadLocal<MutableInteger> depth = new ThreadLocal<MutableInteger>();
   private static final ThreadLocal<Boolean> isLWTThread = new ThreadLocal<Boolean>();
@@ -25,7 +23,7 @@ final class ThreadState {
   }
 
   public static boolean isLWTThread() {
-    //if (Thread.currentThread() instanceof LWTThread) {
+    // if (Thread.currentThread() instanceof LWTThread) {
     if (Thread.currentThread() instanceof LWTCompatibleThread) {
       return true;
     } else {

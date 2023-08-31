@@ -34,12 +34,12 @@ import org.slf4j.LoggerFactory;
 
 public class PeerHealthMonitor implements SuspectAddressListener, StrongSuspectSet {
   /*
-   For all peers, we store a health status by the daemon IPAndPort.
-   A peer that is unhealthy is a "suspect". We divide suspects into two classes:
-    1) Strong suspects. High confidence that they are in a bad state.
-    2) Weak suspects. Not acting normally, but are not known to be in a bad state. E.g. slow peers.
-   Code that uses the term "suspect" without qualification, refers to strong suspects.
-   */
+  For all peers, we store a health status by the daemon IPAndPort.
+  A peer that is unhealthy is a "suspect". We divide suspects into two classes:
+   1) Strong suspects. High confidence that they are in a bad state.
+   2) Weak suspects. Not acting normally, but are not known to be in a bad state. E.g. slow peers.
+  Code that uses the term "suspect" without qualification, refers to strong suspects.
+  */
   private final ConcurrentMap<IPAndPort, PeerHealthStatus> healthStatusMap;
   private final IPAliasMap aliasMap;
   private final IPAndPort localIPAndPort;
@@ -55,10 +55,13 @@ public class PeerHealthMonitor implements SuspectAddressListener, StrongSuspectS
 
   private static Logger log = LoggerFactory.getLogger(PeerHealthMonitor.class);
 
-  public PeerHealthMonitor(MetaClient mc, IPAndPort localIPAndPort, IPAliasMap aliasMap) throws KeeperException {
+  public PeerHealthMonitor(MetaClient mc, IPAndPort localIPAndPort, IPAliasMap aliasMap)
+      throws KeeperException {
     healthStatusMap = new ConcurrentHashMap<>();
     if (mc != null) {
-      suspectsZK = new SuspectsZK(mc.getZooKeeper(), mc.getMetaPaths().getInstanceSuspectsPath(), localIPAndPort, this);
+      suspectsZK =
+          new SuspectsZK(
+              mc.getZooKeeper(), mc.getMetaPaths().getInstanceSuspectsPath(), localIPAndPort, this);
     } else {
       log.warn("PeerHealthMonitor in unit test mode");
       suspectsZK = null;

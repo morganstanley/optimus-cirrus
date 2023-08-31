@@ -19,5 +19,6 @@ import com.ms.silverking.cloud.dht.net.MessageGroup;
 import com.ms.silverking.cloud.dht.trace.SkTraceId;
 
 public interface ForwardCreator<K extends DHTKey> {
-  public MessageGroup createForward(List<K> destEntries, ByteBuffer optionsByteBuffer, SkTraceId traceIDInFinalReplica);
+  public MessageGroup createForward(
+      List<K> destEntries, ByteBuffer optionsByteBuffer, SkTraceId traceIDInFinalReplica);
 }

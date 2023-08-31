@@ -64,7 +64,11 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
     startProcessRunner();
   }
 
-  public WatcherBase(MetaClientCore metaClientCore, Timer timer, String basePath, long intervalMillis,
+  public WatcherBase(
+      MetaClientCore metaClientCore,
+      Timer timer,
+      String basePath,
+      long intervalMillis,
       long maxInitialSleep) {
     this.metaClientCore = metaClientCore;
     lock = new ReentrantLock();
@@ -77,11 +81,14 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
     this.minIntervalMillis = Math.max(intervalMillis - minIntervalReductionMillis, 0);
     lastCheckMillis = new AtomicLong();
     timerTask = new SafeTimerTask(new WatcherTimerTask());
-    timer.schedule(timerTask, ThreadLocalRandom.current().nextInt(Math.max(minSleepMS, (int) maxInitialSleep + 1)),
+    timer.schedule(
+        timerTask,
+        ThreadLocalRandom.current().nextInt(Math.max(minSleepMS, (int) maxInitialSleep + 1)),
         intervalMillis);
   }
 
-  public WatcherBase(MetaClientCore metaClientCore, String basePath, long intervalMillis, long maxInitialSleep) {
+  public WatcherBase(
+      MetaClientCore metaClientCore, String basePath, long intervalMillis, long maxInitialSleep) {
     this(metaClientCore, _timer, basePath, intervalMillis, maxInitialSleep);
   }
 
@@ -126,8 +133,7 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
   }
 
   class WatcherTimerTask extends TimerTask {
-    WatcherTimerTask() {
-    }
+    WatcherTimerTask() {}
 
     @Override
     public void run() {
@@ -137,7 +143,7 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
           timerRang();
         }
       } catch (Exception e) {
-        log.error("",e);
+        log.error("", e);
       } finally {
         lock.unlock();
       }
@@ -149,7 +155,7 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
       try {
         watchedEventQueue.put(new EventAndWatcher(event, this));
       } catch (InterruptedException e) {
-        log.error("",e);
+        log.error("", e);
       }
     }
   }
@@ -208,29 +214,29 @@ public abstract class WatcherBase implements Watcher, CancelableObserver {
   }
 
   public void processSafely(WatchedEvent event) {
-    log.debug("{}",event);
+    log.debug("{}", event);
     if (active) {
       switch (event.getType()) {
-      case None:
-        if (event.getState() == KeeperState.SyncConnected) {
-          log.debug("Connected");
-          connected(event);
-        }
-        break;
-      case NodeCreated:
-        nodeCreated(event);
-        break;
-      case NodeDeleted:
-        nodeDeleted(event);
-        break;
-      case NodeDataChanged:
-        nodeDataChanged(event);
-        break;
-      case NodeChildrenChanged:
-        nodeChildrenChanged(event);
-        break;
-      default:
-        log.info("Unknown event type: {}", event.getType());
+        case None:
+          if (event.getState() == KeeperState.SyncConnected) {
+            log.debug("Connected");
+            connected(event);
+          }
+          break;
+        case NodeCreated:
+          nodeCreated(event);
+          break;
+        case NodeDeleted:
+          nodeDeleted(event);
+          break;
+        case NodeDataChanged:
+          nodeDataChanged(event);
+          break;
+        case NodeChildrenChanged:
+          nodeChildrenChanged(event);
+          break;
+        default:
+          log.info("Unknown event type: {}", event.getType());
       }
     } else {
       log.debug("Ignoring. Not active.");

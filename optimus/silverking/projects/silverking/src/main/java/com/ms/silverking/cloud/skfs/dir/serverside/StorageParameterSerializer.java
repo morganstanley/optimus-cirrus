@@ -31,7 +31,11 @@ public class StorageParameterSerializer {
   // FUTURE - deprecate this class
 
   private static final int BASE_SERIALIZED_SIZE =
-      NumConversion.BYTES_PER_LONG * 2 + NumConversion.BYTES_PER_INT * 2 + NumConversion.BYTES_PER_SHORT + ValueCreator.BYTES + 1;
+      NumConversion.BYTES_PER_LONG * 2
+          + NumConversion.BYTES_PER_INT * 2
+          + NumConversion.BYTES_PER_SHORT
+          + ValueCreator.BYTES
+          + 1;
 
   public static int getSerializedLength(SSStorageParameters p) {
     return BASE_SERIALIZED_SIZE + p.getChecksumType().length();
@@ -95,7 +99,14 @@ public class StorageParameterSerializer {
     ccss = b.getShort();
     b.get(); // userdatalength
     checksum = BufferUtil.arrayCopy(b, CCSSUtil.getChecksumType(ccss).length());
-    return new StorageParameters(version, uncompressedSize, compressedSize, lockSeconds, ccss, checksum, valueCreator,
+    return new StorageParameters(
+        version,
+        uncompressedSize,
+        compressedSize,
+        lockSeconds,
+        ccss,
+        checksum,
+        valueCreator,
         creationTime);
   }
 
@@ -108,11 +119,19 @@ public class StorageParameterSerializer {
 
     checksum = new byte[ChecksumType.MD5.length()];
     valueCreator = new byte[ValueCreator.BYTES];
-    p1 = new StorageParameters(1, 2, 3, (short) 0, CCSSUtil.createCCSS(Compression.NONE, ChecksumType.MD5, 0), checksum,
-        valueCreator, System.currentTimeMillis());
-    log.info("{}",p1);
+    p1 =
+        new StorageParameters(
+            1,
+            2,
+            3,
+            (short) 0,
+            CCSSUtil.createCCSS(Compression.NONE, ChecksumType.MD5, 0),
+            checksum,
+            valueCreator,
+            System.currentTimeMillis());
+    log.info("{}", p1);
     s = serialize(p1);
     p2 = deserialize(s);
-    log.info("{}",p2);
+    log.info("{}", p2);
   }
 }

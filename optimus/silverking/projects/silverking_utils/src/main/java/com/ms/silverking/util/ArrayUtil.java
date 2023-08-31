@@ -20,7 +20,10 @@ import org.slf4j.LoggerFactory;
 public class ArrayUtil<T> {
   private final Random random;
 
-  public enum MismatchedLengthMode {Exception, Ignore};
+  public enum MismatchedLengthMode {
+    Exception,
+    Ignore
+  };
 
   private static Logger log = LoggerFactory.getLogger(ArrayUtil.class);
 
@@ -96,8 +99,8 @@ public class ArrayUtil<T> {
   }
 
   /**
-   * Compare two byte arrays. Handle degenerate cases so that we impose a total
-   * ordering on all byte arrays.
+   * Compare two byte arrays. Handle degenerate cases so that we impose a total ordering on all byte
+   * arrays.
    */
   public static int compareSignedForOrdering(byte[] a, byte[] b) {
     if (a == null) {
@@ -175,7 +178,8 @@ public class ArrayUtil<T> {
     return 0;
   }
 
-  public static int compareSigned(byte[] a, int startA, int lengthA, byte[] b, int startB, int lengthB) {
+  public static int compareSigned(
+      byte[] a, int startA, int lengthA, byte[] b, int startB, int lengthB) {
     int result;
 
     result = compareSigned(a, startA, b, startB, Math.min(lengthA, lengthB));
@@ -194,7 +198,8 @@ public class ArrayUtil<T> {
     }
   }
 
-  public static int compareUnsigned(byte[] a, int startA, int lengthA, byte[] b, int startB, int lengthB) {
+  public static int compareUnsigned(
+      byte[] a, int startA, int lengthA, byte[] b, int startB, int lengthB) {
     int result;
 
     result = compareUnsigned(a, startA, b, startB, Math.min(lengthA, lengthB));
@@ -215,7 +220,7 @@ public class ArrayUtil<T> {
 
   public static void display(byte[] array) {
     for (int i = 0; i < array.length; i++) {
-      log.info("{}:  {}",i , array[i]);
+      log.info("{}:  {}", i, array[i]);
     }
   }
 
@@ -264,12 +269,18 @@ public class ArrayUtil<T> {
   }
 
   public static <K> String toString(K[] c, char separator) {
-    return toString(c, CollectionUtil.defaultStartBrace, CollectionUtil.defaultEndBrace, separator,
+    return toString(
+        c,
+        CollectionUtil.defaultStartBrace,
+        CollectionUtil.defaultEndBrace,
+        separator,
         CollectionUtil.defaultEmptyDef);
   }
 
-  public static <K> String toString(K[] c, String startBrace, String endBrace, char separator, String emptyDef) {
-    return CollectionUtil.toString(java.util.Arrays.asList(c), startBrace, endBrace, separator, emptyDef);
+  public static <K> String toString(
+      K[] c, String startBrace, String endBrace, char separator, String emptyDef) {
+    return CollectionUtil.toString(
+        java.util.Arrays.asList(c), startBrace, endBrace, separator, emptyDef);
   }
 
   public static <K> boolean containsNull(K[] c) {

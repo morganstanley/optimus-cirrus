@@ -22,7 +22,8 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.KeyedResult;
 import com.ms.silverking.net.IPAndPort;
 
-public class OpCommunicator<T extends DHTKey, R extends KeyedResult> implements OpVirtualCommunicator<T, R> {
+public class OpCommunicator<T extends DHTKey, R extends KeyedResult>
+    implements OpVirtualCommunicator<T, R> {
   private volatile Map<IPAndPort, List<T>> replicaMessageLists;
   private volatile List<R> results;
   private Lock rmlLock;
@@ -84,14 +85,14 @@ public class OpCommunicator<T extends DHTKey, R extends KeyedResult> implements 
     } finally {
       rLock.unlock();
     }
-        /*
-        this.rString.add(result.toString());
-        try {
-            throw new RuntimeException();
-        } catch (RuntimeException re) {
-            this.re.add(re);
-        }
-        */
+    /*
+    this.rString.add(result.toString());
+    try {
+        throw new RuntimeException();
+    } catch (RuntimeException re) {
+        this.re.add(re);
+    }
+    */
   }
 
   @Override
@@ -115,14 +116,14 @@ public class OpCommunicator<T extends DHTKey, R extends KeyedResult> implements 
     }
   }
 
-    /*
-    private List<String> rString = new ArrayList<>();
-    private List<RuntimeException> re = new ArrayList<>();
-    public void displayDebug() {
-        for (int i = 0; i < re.size(); i++) {
-            System.out.println(rString.get(i));
-            re.get(i).printStackTrace();
-        }
-    }
-    */
+  /*
+  private List<String> rString = new ArrayList<>();
+  private List<RuntimeException> re = new ArrayList<>();
+  public void displayDebug() {
+      for (int i = 0; i < re.size(); i++) {
+          System.out.println(rString.get(i));
+          re.get(i).printStackTrace();
+      }
+  }
+  */
 }

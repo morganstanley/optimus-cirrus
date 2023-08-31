@@ -23,8 +23,9 @@ public class LogAndExitUncaughtExceptionHandler implements UncaughtExceptionHand
 
   public void uncaughtException(Thread t, Throwable e) {
     try {
-      log.error("UncaughtException , defaultHandler",e );
-    } catch (Throwable x) {} // Ensure we get to System.exit
+      log.error("UncaughtException , defaultHandler", e);
+    } catch (Throwable x) {
+    } // Ensure we get to System.exit
     System.exit(1);
   }
 }

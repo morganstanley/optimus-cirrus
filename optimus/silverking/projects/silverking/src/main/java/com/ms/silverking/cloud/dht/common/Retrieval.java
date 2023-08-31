@@ -19,7 +19,7 @@ import com.ms.silverking.cloud.dht.net.MessageGroupRetrievalResponseEntry;
 import com.ms.silverking.id.UUIDBase;
 
 public interface Retrieval {
-  //public Namespace getNamespace();
+  // public Namespace getNamespace();
   public UUIDBase getUUID();
 
   public Collection<DHTKey> getDHTKeys();

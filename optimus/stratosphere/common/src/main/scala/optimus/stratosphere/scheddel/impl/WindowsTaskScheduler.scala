@@ -44,7 +44,7 @@ object WindowsTaskScheduler {
 
     val dateFormat = getDateFormat(stratoWorkspace)
     val cmd = formatScheduleTaskOnceCmd(taskName, taskCommand, startDateTime, userName, scheduleFrequency, dateFormat)
-    stratoWorkspace.log.info(s"Scheduling Windows task: $taskName with:")
+    stratoWorkspace.log.highlight(s"Scheduling Windows task: $taskName with:")
     stratoWorkspace.log.info(s"`${cmd.mkString(" ")}`")
     new CommonProcess(stratoWorkspace).runAndWaitFor(cmd)
   }
@@ -127,7 +127,7 @@ object WindowsTaskScheduler {
 
     result.split("\n").find(_.contains(key)).map(a => a.split("\\s+")) match {
       case Some(columns) => columns.last
-      case None          => throw new StratosphereException("[ERROR] $key not defined in the registry.")
+      case None          => throw new StratosphereException("$key not defined in the registry.")
     }
   }
 }

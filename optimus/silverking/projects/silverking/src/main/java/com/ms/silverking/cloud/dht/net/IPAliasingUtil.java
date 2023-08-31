@@ -32,7 +32,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class IPAliasingUtil {
-  public static IPAliasMap readAliases(DHTConfiguration dhtConfig, IpAliasConfiguration aliasConfig) {
+  public static IPAliasMap readAliases(
+      DHTConfiguration dhtConfig, IpAliasConfiguration aliasConfig) {
     Map<String, String> aliasMap = aliasConfig.getIPAliasMap();
     Map<IPAndPort, IPAndPort[]> resolvedMap;
     if (aliasMap != null) {
@@ -49,7 +50,8 @@ public class IPAliasingUtil {
     try {
       MetaClient mc = new MetaClient(config);
       DHTConfiguration dhtConfig = mc.getDHTConfiguration();
-      IpAliasConfiguration ipAliasConfiguration = mc.getIpAliasConfiguration(dhtConfig.getIpAliasMapName());
+      IpAliasConfiguration ipAliasConfiguration =
+          mc.getIpAliasConfiguration(dhtConfig.getIpAliasMapName());
       return readAliases(dhtConfig, ipAliasConfiguration);
     } catch (KeeperException | IOException ex) {
       log.error("Failed to lookup aliases on ZK, will try locally", ex);
@@ -57,7 +59,8 @@ public class IPAliasingUtil {
     }
   }
 
-  static Map<IPAndPort, IPAndPort[]> parseConfigAliasMap(Map<String, String> aliasMap, int configPort) {
+  static Map<IPAndPort, IPAndPort[]> parseConfigAliasMap(
+      Map<String, String> aliasMap, int configPort) {
     if (aliasMap != null) {
       ImmutableMap.Builder<IPAndPort, IPAndPort[]> builder = ImmutableMap.builder();
 
@@ -76,10 +79,10 @@ public class IPAliasingUtil {
   }
 
   /**
-   * Reads the IP alias map from a file declared by DHTConstants.ipAliasMapFileVar envVar
-   * File structure - ip+ip,ip,ip - one set per line. The LHS is the real IP, the RHS is a set of aliases
-   * OR ip+ip:port,ip:port,ip:port..
-   * N.b. if port is not provided in the alias, a fixed port is assumed as declared in the DHT config
+   * Reads the IP alias map from a file declared by DHTConstants.ipAliasMapFileVar envVar File
+   * structure - ip+ip,ip,ip - one set per line. The LHS is the real IP, the RHS is a set of aliases
+   * OR ip+ip:port,ip:port,ip:port.. N.b. if port is not provided in the alias, a fixed port is
+   * assumed as declared in the DHT config
    *
    * @param fixedPort the fixed port expected for the SK cluster (from DHT config)
    * @return a map of ip -> List of aliases
@@ -109,7 +112,7 @@ public class IPAliasingUtil {
         reader.close();
         return ImmutableMap.copyOf(map);
       } catch (IOException ioe) {
-        log.error("Unable to read ip alias map: {}" , aliasMapFile,ioe);
+        log.error("Unable to read ip alias map: {}", aliasMapFile, ioe);
         return null;
       }
     } else {

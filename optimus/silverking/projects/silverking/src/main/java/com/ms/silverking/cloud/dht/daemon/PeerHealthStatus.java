@@ -22,9 +22,7 @@ import com.ms.silverking.collection.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Tracks the health of a peer.
- */
+/** Tracks the health of a peer. */
 public class PeerHealthStatus {
   private final Map<PeerHealthIssue, Long> healthReports;
   private long healthyTimeMillis;
@@ -56,7 +54,8 @@ public class PeerHealthStatus {
   }
 
   public boolean isStrongSuspect() {
-    return getCurrentIssues(SystemTimeUtil.timerDrivenTimeSource.absTimeMillis()).getV1().size() > 0;
+    return getCurrentIssues(SystemTimeUtil.timerDrivenTimeSource.absTimeMillis()).getV1().size()
+        > 0;
   }
 
   public Pair<Set<PeerHealthIssue>, Set<PeerHealthIssue>> getCurrentIssues(long curTimeMillis) {
@@ -66,14 +65,15 @@ public class PeerHealthStatus {
   }
 
   /**
-   * Return issues that have occurred >= sinceTimeMillis. curTimeMillis is used to compute
-   * weak error timeouts
+   * Return issues that have occurred >= sinceTimeMillis. curTimeMillis is used to compute weak
+   * error timeouts
    *
    * @param curTimeMillis
    * @param sinceTimeMillis
    * @return
    */
-  private Pair<Set<PeerHealthIssue>, Set<PeerHealthIssue>> getIssues(long curTimeMillis, long sinceTimeMillis) {
+  private Pair<Set<PeerHealthIssue>, Set<PeerHealthIssue>> getIssues(
+      long curTimeMillis, long sinceTimeMillis) {
     Set<PeerHealthIssue> strongIssues;
     Set<PeerHealthIssue> weakIssues;
 

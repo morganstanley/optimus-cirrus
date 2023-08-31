@@ -24,8 +24,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class MetaToolModuleBase<T, M extends MetaPathsBase> implements MetaToolModule<T> {
-  private final static int defaultMode = 1;
-  private final static String defaultModeName = "mode";
+  private static final int defaultMode = 1;
+  private static final String defaultModeName = "mode";
   protected final MetaClientBase<M> mc;
   protected final SilverKingZooKeeperClient zk;
   protected final M paths;
@@ -46,12 +46,14 @@ public abstract class MetaToolModuleBase<T, M extends MetaPathsBase> implements 
     }
   }
 
-  public MetaToolModuleBase(MetaClientBase<M> mc, String base, String base2) throws KeeperException {
+  public MetaToolModuleBase(MetaClientBase<M> mc, String base, String base2)
+      throws KeeperException {
     this.mc = mc;
     this.zk = mc.getZooKeeper();
-    this.mode = zk.exists(MetaPathsBase.modeZKPath)
-                ? (int) getMode(this.zk).get(defaultModeName)
-                : defaultMode;
+    this.mode =
+        zk.exists(MetaPathsBase.modeZKPath)
+            ? (int) getMode(this.zk).get(defaultModeName)
+            : defaultMode;
     log.info("mode : {}", this.mode);
     paths = mc.getMetaPaths();
     mc.ensureMetaPathsExist();
@@ -123,7 +125,8 @@ public abstract class MetaToolModuleBase<T, M extends MetaPathsBase> implements 
   }
 
   @Override
-  public void deleteFromZK(long version) throws KeeperException, InterruptedException, ExecutionException {
+  public void deleteFromZK(long version)
+      throws KeeperException, InterruptedException, ExecutionException {
     if (mode == 1) {
       zk.deleteRecursive(getVersionPath(version));
     } else {
@@ -180,14 +183,13 @@ public abstract class MetaToolModuleBase<T, M extends MetaPathsBase> implements 
   public Map getMode(SilverKingZooKeeperClient zk) throws KeeperException {
     String modeString = zk.getString(MetaPathsBase.modeZKPath);
     Map<String, Integer> modes = new HashMap<>();
-    if(modeString.matches("\\bmode\\b=\\d$")){
+    if (modeString.matches("\\bmode\\b=\\d$")) {
       String[] modeArray = modeString.split("=");
       modes.put(modeArray[0], Integer.parseInt(modeArray[1]));
-    } else{
+    } else {
       log.warn("wrong config data in {}", MetaPathsBase.modeZKPath);
       modes.put(defaultModeName, defaultMode);
     }
     return modes;
   }
 }
-

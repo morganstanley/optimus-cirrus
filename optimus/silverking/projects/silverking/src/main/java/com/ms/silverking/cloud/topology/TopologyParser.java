@@ -28,14 +28,14 @@ public class TopologyParser {
 
   private static Logger log = LoggerFactory.getLogger(TopologyParser.class);
 
-  public TopologyParser() {
-  }
+  public TopologyParser() {}
 
   public static Topology parse(File file) throws IOException, TopologyParseException {
     return parse(new FileInputStream(file));
   }
 
-  public static Topology _parse(InputStream in, long version) throws IOException, TopologyParseException {
+  public static Topology _parse(InputStream in, long version)
+      throws IOException, TopologyParseException {
     BufferedReader reader;
     String line;
     int lineNumber;
@@ -63,53 +63,55 @@ public class TopologyParser {
             for (TopologyFileToken token : tokens) {
               if (root == null) {
                 switch (token.getType()) {
-                case OPEN_BLOCK:
-                case CLOSE_BLOCK:
-                  throw new TopologyParseException("Invalid block defiition");
-                case ENTRY:
-                  root = new TopologyEntry(token.getEntry());
-                  parentEntries.add(root);
-                  break;
-                default:
-                  throw new RuntimeException("panic");
-                }
-              } else {
-                switch (token.getType()) {
-                case OPEN_BLOCK:
-                  if (prevToken != null) {
-                    switch (prevToken.getType()) {
-                    case OPEN_BLOCK:
-                    case CLOSE_BLOCK:
-                      throw new TopologyParseException("Invalid block defiition");
-                    case ENTRY:
-                      TopologyEntry parent;
-                      TopologyEntry lastAdded;
-
-                      parent = parentEntries.get(parentEntries.size() - 1);
-                      lastAdded = parent.getLastChild();
-                      parentEntries.add(lastAdded);
-                      break;
-                    default:
-                      throw new RuntimeException("panic");
-                    }
-                  }
-                  break;
-                case CLOSE_BLOCK:
-                  switch (prevToken.getType()) {
-                  case CLOSE_BLOCK:
                   case OPEN_BLOCK:
+                  case CLOSE_BLOCK:
+                    throw new TopologyParseException("Invalid block defiition");
                   case ENTRY:
-                    parentEntries.remove(parentEntries.size() - 1);
+                    root = new TopologyEntry(token.getEntry());
+                    parentEntries.add(root);
                     break;
                   default:
                     throw new RuntimeException("panic");
-                  }
-                  break;
-                case ENTRY:
-                  parentEntries.get(parentEntries.size() - 1).addChild(new TopologyEntry(token.getEntry()));
-                  break;
-                default:
-                  throw new RuntimeException("panic");
+                }
+              } else {
+                switch (token.getType()) {
+                  case OPEN_BLOCK:
+                    if (prevToken != null) {
+                      switch (prevToken.getType()) {
+                        case OPEN_BLOCK:
+                        case CLOSE_BLOCK:
+                          throw new TopologyParseException("Invalid block defiition");
+                        case ENTRY:
+                          TopologyEntry parent;
+                          TopologyEntry lastAdded;
+
+                          parent = parentEntries.get(parentEntries.size() - 1);
+                          lastAdded = parent.getLastChild();
+                          parentEntries.add(lastAdded);
+                          break;
+                        default:
+                          throw new RuntimeException("panic");
+                      }
+                    }
+                    break;
+                  case CLOSE_BLOCK:
+                    switch (prevToken.getType()) {
+                      case CLOSE_BLOCK:
+                      case OPEN_BLOCK:
+                      case ENTRY:
+                        parentEntries.remove(parentEntries.size() - 1);
+                        break;
+                      default:
+                        throw new RuntimeException("panic");
+                    }
+                    break;
+                  case ENTRY:
+                    parentEntries
+                        .get(parentEntries.size() - 1)
+                        .addChild(new TopologyEntry(token.getEntry()));
+                    break;
+                  default:
+                    throw new RuntimeException("panic");
                 }
                 prevToken = token;
               }

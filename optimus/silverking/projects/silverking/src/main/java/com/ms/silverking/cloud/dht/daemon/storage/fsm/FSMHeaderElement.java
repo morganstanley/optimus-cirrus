@@ -26,12 +26,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Format of header:
- * Header length
- * Header type
- * Header value
- * numEntries
- * <entry...> Each entry is a 4 byte type followed by a 4 byte offset
+ * Format of header: Header length Header type Header value numEntries <entry...> Each entry is a 4
+ * byte type followed by a 4 byte offset
  */
 class FSMHeaderElement extends LTVElement {
   private static final int numEntriesOffset = valueOffset;
@@ -134,7 +130,8 @@ class FSMHeaderElement extends LTVElement {
       log.debug("numEntries: {}\n", numEntries);
       System.out.flush();
     }
-    entryOffset = entriesOffset_relative; // relative because this is the value buffer that we're looking at
+    entryOffset =
+        entriesOffset_relative; // relative because this is the value buffer that we're looking at
     for (int i = 0; i < numEntries; i++) {
       FSMElementType type;
       int offset;

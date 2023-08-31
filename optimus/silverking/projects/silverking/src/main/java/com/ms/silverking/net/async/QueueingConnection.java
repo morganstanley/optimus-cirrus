@@ -24,10 +24,9 @@ import com.ms.silverking.id.UUIDBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Connection that maintains an output queue.
- */
-public abstract class QueueingConnection<D extends OutgoingData, I extends IncomingData> extends Connection {
+/** Connection that maintains an output queue. */
+public abstract class QueueingConnection<D extends OutgoingData, I extends IncomingData>
+    extends Connection {
   private final ConcurrentLinkedQueue<D> priorityOutputQueue;
   private final ConcurrentLinkedDequeWithSize<D> outputQueue;
   private final boolean failSendsOnError;
@@ -36,7 +35,7 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
   private final int queueLimit;
   private OutgoingData outgoingData;
   private long lastPollTime;
-  //private long    totalBytesWritten; // for debugging only
+  // private long    totalBytesWritten; // for debugging only
 
   private static Logger log = LoggerFactory.getLogger(QueueingConnection.class);
 
@@ -49,11 +48,17 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
   private static final boolean debugMessageTimeouts = false;
   private static final long messageTimeoutMargin = 20;
 
-  static final boolean enableDeadline = Boolean.parseBoolean(System.getProperty("com.ms.silverking.queueingConn.deadline", "false"));
+  static final boolean enableDeadline =
+      Boolean.parseBoolean(System.getProperty("com.ms.silverking.queueingConn.deadline", "false"));
 
-  public QueueingConnection(SocketChannel channel, SelectorController<? extends Connection> selectorController,
-      ConnectionListener connectionListener, boolean failSendsOnError, boolean debug,
-      QueueingConnectionLimitListener limitListener, int queueLimit) {
+  public QueueingConnection(
+      SocketChannel channel,
+      SelectorController<? extends Connection> selectorController,
+      ConnectionListener connectionListener,
+      boolean failSendsOnError,
+      boolean debug,
+      QueueingConnectionLimitListener limitListener,
+      int queueLimit) {
     super(channel, selectorController, connectionListener, true, debug, false);
     priorityOutputQueue = new ConcurrentLinkedQueue<>();
     outputQueue = new ConcurrentLinkedDequeWithSize<>();
@@ -73,19 +78,34 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
     this.lastPollTime = -1;
   }
 
-  public QueueingConnection(SocketChannel channel, SelectorController<? extends Connection> selectorController,
-      ConnectionListener connectionListener, boolean failSendsOnError, boolean debug) {
-    this(channel, selectorController, connectionListener, failSendsOnError, debug, null, Integer.MAX_VALUE);
+  public QueueingConnection(
+      SocketChannel channel,
+      SelectorController<? extends Connection> selectorController,
+      ConnectionListener connectionListener,
+      boolean failSendsOnError,
+      boolean debug) {
+    this(
+        channel,
+        selectorController,
+        connectionListener,
+        failSendsOnError,
+        debug,
+        null,
+        Integer.MAX_VALUE);
   }
 
   protected abstract I createIncomingData(boolean debug);
 
-  public QueueingConnection(SocketChannel channel, SelectorController<? extends Connection> selectorController,
-      ConnectionListener connectionListener, boolean failSendsOnError) {
+  public QueueingConnection(
+      SocketChannel channel,
+      SelectorController<? extends Connection> selectorController,
+      ConnectionListener connectionListener,
+      boolean failSendsOnError) {
     this(channel, selectorController, connectionListener, failSendsOnError, false);
   }
 
-  protected abstract D wrapForSend(Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline)
+  protected abstract D wrapForSend(
+      Object data, UUIDBase sendUUID, AsyncSendListener asyncSendListener, long deadline)
       throws IOException;
 
   @Override
@@ -117,7 +137,8 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
             if (enableDeadline) {
               outputQueue.remove();
             }
-            log.warn("QueueingConnection deadline expired: lastPollTime={} queueSize={} data={} ",
+            log.warn(
+                "QueueingConnection deadline expired: lastPollTime={} queueSize={} data={} ",
                 lastPollTime < 0 ? "N/A(First msg in queue)" : lastPollTime,
                 outputQueue.size(),
                 outgoingData);
@@ -151,9 +172,9 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
               break;
             }
           } catch (IOException ioe) {
-            //if (verbose) {
+            // if (verbose) {
             log.info("send failed due to exception: {}  remote: {}", ioe, getRemoteSocketAddress());
-            //}
+            // }
             sendFailed(outgoingData);
             disconnect();
             throw ioe;
@@ -161,8 +182,8 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
         }
       }
     } finally {
-      //System.out.println("outputQueue.size(): "+ outputQueue.size());
-      //if (!outputQueue.isEmpty() || !priorityOutputQueue.isEmpty()) {
+      // System.out.println("outputQueue.size(): "+ outputQueue.size());
+      // if (!outputQueue.isEmpty() || !priorityOutputQueue.isEmpty()) {
       if (!outputQueue.isEmpty()) {
         // didn't drain the queue; update the selector
         enableWrites();
@@ -176,53 +197,54 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
     if (debug) {
       log.info("out writeAllPending_locked");
     }
-    //totalBytesWritten += bytesWritten; // for debugging only
+    // totalBytesWritten += bytesWritten; // for debugging only
     return bytesWritten;
   }
-    
-    /*
-    private long writeQueuePending(ConcurrentLinkedQueue<D>    queue) throws IOException {
-        if (queue.isEmpty()) {
-            return 0;
-        } else {
-            D        outgoingData;
-            boolean    allWritten;
-            long    bytesWritten;
-    
-            bytesWritten = 0;
-            outgoingData = queue.peek();
-            if (outgoingData.deadlineExpired()) {
-                //Log.fine("QueueingConnection deadline expired");
-                queue.remove();                
-                sendTimedOut(outgoingData); 
-            } else {
-                try {
-                    allWritten = outgoingData.writeToChannel(channel);
-                    if (allWritten) {
-                        queue.remove();
-                        sendSucceeded(outgoingData);
-                        bytesWritten += outgoingData.getTotalBytes();
-                    } else {
-                        // write blocked; exit so selector can watch for
-                        // available buffer space
-                        return -1;
-                    }
-                } catch (IOException ioe) {
-                    //if (verbose) {
-                        Log.info("send failed: ", getRemoteSocketAddress());
-                    //}
-                    sendFailed(outgoingData); 
-                    disconnect();
-                    throw ioe;
-                }
-            }
-            return bytesWritten;
-        }
-    }
-    */
+
+  /*
+  private long writeQueuePending(ConcurrentLinkedQueue<D>    queue) throws IOException {
+      if (queue.isEmpty()) {
+          return 0;
+      } else {
+          D        outgoingData;
+          boolean    allWritten;
+          long    bytesWritten;
+
+          bytesWritten = 0;
+          outgoingData = queue.peek();
+          if (outgoingData.deadlineExpired()) {
+              //Log.fine("QueueingConnection deadline expired");
+              queue.remove();
+              sendTimedOut(outgoingData);
+          } else {
+              try {
+                  allWritten = outgoingData.writeToChannel(channel);
+                  if (allWritten) {
+                      queue.remove();
+                      sendSucceeded(outgoingData);
+                      bytesWritten += outgoingData.getTotalBytes();
+                  } else {
+                      // write blocked; exit so selector can watch for
+                      // available buffer space
+                      return -1;
+                  }
+              } catch (IOException ioe) {
+                  //if (verbose) {
+                      Log.info("send failed: ", getRemoteSocketAddress());
+                  //}
+                  sendFailed(outgoingData);
+                  disconnect();
+                  throw ioe;
+              }
+          }
+          return bytesWritten;
+      }
+  }
+  */
 
   @Override
-  public void sendAsynchronous(Object data, UUIDBase sendID, AsyncSendListener asyncSendListener, long deadline)
+  public void sendAsynchronous(
+      Object data, UUIDBase sendID, AsyncSendListener asyncSendListener, long deadline)
       throws IOException {
     boolean writeEnableRequired;
     boolean locked;
@@ -230,15 +252,20 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
     locked = false;
     writeEnableRequired = true;
     if (debug && log.isDebugEnabled()) {
-      log.debug("sendAsynchronous {} {} {} {} {}",
-          outputQueue.size() , sendID , System.currentTimeMillis() , this , Thread.currentThread().getName());
-      //Thread.dumpStack();
+      log.debug(
+          "sendAsynchronous {} {} {} {} {}",
+          outputQueue.size(),
+          sendID,
+          System.currentTimeMillis(),
+          this,
+          Thread.currentThread().getName());
+      // Thread.dumpStack();
     }
     if (debugMessageTimeouts) {
       if (SystemTimeUtil.skSystemTimeSource.absTimeMillis() > deadline - messageTimeoutMargin) {
-        log.info("{}",data);
+        log.info("{}", data);
         log.info("Message is about to time out");
-        log.info("{} {}",SystemTimeUtil.skSystemTimeSource.absTimeMillis() , deadline);
+        log.info("{} {}", SystemTimeUtil.skSystemTimeSource.absTimeMillis(), deadline);
         Thread.dumpStack();
       }
     }
@@ -250,15 +277,15 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
         throw new IOException("not connected");
       }
       wrappedData = wrapForSend(data, sendID, asyncSendListener, deadline);
-            /*
-            currentThread = Thread.currentThread();
-            if ((currentThread instanceof SelectorThread) 
-                    && ((SelectorThread)currentThread).getAllowBlocking()) {
-                locked = channelWriteLock.tryLock();
-            } else {
-                locked = false;
-            }
-            */
+      /*
+      currentThread = Thread.currentThread();
+      if ((currentThread instanceof SelectorThread)
+              && ((SelectorThread)currentThread).getAllowBlocking()) {
+          locked = channelWriteLock.tryLock();
+      } else {
+          locked = false;
+      }
+      */
       if (outputQueue.isEmpty()) {
         locked = channelWriteLock.tryLock();
       }
@@ -267,9 +294,9 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
 
         allWritten = wrappedData.writeToChannel(channel);
         if (!allWritten) {
-          //if (DebugUtil.delayedDebug()) {
+          // if (DebugUtil.delayedDebug()) {
           //    System.out.println("queued data at front");
-          //}
+          // }
           // We must add this to the front of the queue
           // so that it is sent next.
           outputQueue.push(wrappedData);
@@ -278,42 +305,49 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
             cumulativeDirectSends.incrementAndGet();
             cumulativeSends.incrementAndGet();
           }
-          //if (DebugUtil.delayedDebug()) {
+          // if (DebugUtil.delayedDebug()) {
           //    System.out.println("written directly");
-          //}
+          // }
           writeEnableRequired = false;
           if (debug) {
-            log.info("sendAsynchronous result {} {} {} {}",
-                allWritten , outputQueue.size() , sendID , System.currentTimeMillis());
+            log.info(
+                "sendAsynchronous result {} {} {} {}",
+                allWritten,
+                outputQueue.size(),
+                sendID,
+                System.currentTimeMillis());
           }
         }
       } else {
-        //if (DebugUtil.delayedDebug()) {
+        // if (DebugUtil.delayedDebug()) {
         //    System.out.println("queued data");
-        //}
+        // }
         outputQueue.add(wrappedData);
         wrappedData.pushIntoOutputQueue(outputQueue.size());
         if (limitListener != null && outputQueue.size() > queueLimit) {
-          //if (DebugUtil.delayedDebug()) {
+          // if (DebugUtil.delayedDebug()) {
           //    System.out.println("limitListener.queueAboveLimit()");
-          //}
+          // }
           // FUTURE - think about why the above level-triggered approach
           // is required instead of an edge-triggered approach.
-          //System.out.println("::>"+ outputQueue.size() +"\t"+ queueLimit);
+          // System.out.println("::>"+ outputQueue.size() +"\t"+ queueLimit);
           limitListener.queueAboveLimit();
-          log.warn("sendAsynchronous result triggers queue limit: qSize={} sendId={} limit={}",
-              outputQueue.size() , sendID , queueLimit);
+          log.warn(
+              "sendAsynchronous result triggers queue limit: qSize={} sendId={} limit={}",
+              outputQueue.size(),
+              sendID,
+              queueLimit);
         } else {
-          //System.out.println("::<"+ outputQueue.size() +"\t"+ queueLimit);
+          // System.out.println("::<"+ outputQueue.size() +"\t"+ queueLimit);
         }
       }
-            /*
-            if (wrappedData.getPriority() == OutgoingData.Priority.HIGH) {
-                priorityOutputQueue.add(wrappedData);
-            } else {
-                outputQueue.add(wrappedData);
-            }
-            */
+      /*
+      if (wrappedData.getPriority() == OutgoingData.Priority.HIGH) {
+          priorityOutputQueue.add(wrappedData);
+      } else {
+          outputQueue.add(wrappedData);
+      }
+      */
     } finally {
       if (locked) {
         channelWriteLock.unlock();
@@ -358,45 +392,48 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
 
       // if we throw an exception, this connection will be closed
       if (debug) {
-        log.info("incomingData.readFromChannel {} " , this );
-        //Thread.dumpStack();
+        log.info("incomingData.readFromChannel {} ", this);
+        // Thread.dumpStack();
       }
       try {
         readResult = incomingData.readFromChannel(channel);
       } catch (RuntimeException re) {
         log.error(
-            "Exception proceessing connection {}  {}" , getRemoteSocketAddress() , incomingData.toString(),re);
+            "Exception proceessing connection {}  {}",
+            getRemoteSocketAddress(),
+            incomingData.toString(),
+            re);
         throw re;
       }
       if (debug) {
         log.debug("readResult: {}", readResult);
       }
       switch (readResult) {
-      case CHANNEL_CLOSED:
-        return -1;
-      case ERROR:
-        return -1;
-      case COMPLETE:
-        int lastNumRead;
-        I completeData;
+        case CHANNEL_CLOSED:
+          return -1;
+        case ERROR:
+          return -1;
+        case COMPLETE:
+          int lastNumRead;
+          I completeData;
 
-        if (statsEnabled) {
-          cumulativeReceives.incrementAndGet();
-        }
-        //lastNumRead = incomingData.getLastNumRead();
-        completeData = incomingData;
-        //channelReceiveLock.unlock();
-        try {
-          readComplete(completeData);
-        } finally {
-          //    channelReceiveLock.lock();
-          incomingData = createIncomingData(debug);
-        }
-        //return lastNumRead;
-      case INCOMPLETE:
-        return incomingData.getLastNumRead();
-      default:
-        throw new RuntimeException("panic");
+          if (statsEnabled) {
+            cumulativeReceives.incrementAndGet();
+          }
+          // lastNumRead = incomingData.getLastNumRead();
+          completeData = incomingData;
+          // channelReceiveLock.unlock();
+          try {
+            readComplete(completeData);
+          } finally {
+            //    channelReceiveLock.lock();
+            incomingData = createIncomingData(debug);
+          }
+          // return lastNumRead;
+        case INCOMPLETE:
+          return incomingData.getLastNumRead();
+        default:
+          throw new RuntimeException("panic");
       }
     }
   }
@@ -410,8 +447,12 @@ public abstract class QueueingConnection<D extends OutgoingData, I extends Incom
 
   @Override
   public String statString() {
-    return String.format("%s:%d:%d:%d", super.statString(), cumulativeQueuedSends.longValue(),
-        cumulativeDirectSends.longValue(), cumulativeExpiredSends.longValue());
+    return String.format(
+        "%s:%d:%d:%d",
+        super.statString(),
+        cumulativeQueuedSends.longValue(),
+        cumulativeDirectSends.longValue(),
+        cumulativeExpiredSends.longValue());
   }
 
   @Override

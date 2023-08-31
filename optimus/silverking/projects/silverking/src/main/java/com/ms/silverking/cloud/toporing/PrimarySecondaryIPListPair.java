@@ -17,14 +17,13 @@ import java.util.List;
 import com.ms.silverking.cloud.storagepolicy.ReplicationType;
 import com.ms.silverking.net.IPAndPort;
 
-/**
- * Two lists: one for primaryOwners, and one for secondaryOwners.
- */
+/** Two lists: one for primaryOwners, and one for secondaryOwners. */
 public class PrimarySecondaryIPListPair {
   private final List<IPAndPort> primaryOwners;
   private final List<IPAndPort> secondaryOwners;
 
-  public PrimarySecondaryIPListPair(List<IPAndPort> primaryOwners, List<IPAndPort> secondaryOwners) {
+  public PrimarySecondaryIPListPair(
+      List<IPAndPort> primaryOwners, List<IPAndPort> secondaryOwners) {
     this.primaryOwners = primaryOwners;
     this.secondaryOwners = secondaryOwners;
   }
@@ -45,12 +44,12 @@ public class PrimarySecondaryIPListPair {
 
   List<IPAndPort> getOwners(ReplicationType rType) {
     switch (rType) {
-    case Primary:
-      return primaryOwners;
-    case Secondary:
-      return secondaryOwners;
-    default:
-      throw new RuntimeException("panic");
+      case Primary:
+        return primaryOwners;
+      case Secondary:
+        return secondaryOwners;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -68,12 +67,12 @@ public class PrimarySecondaryIPListPair {
 
   int totalOwners(ReplicationType rType) {
     switch (rType) {
-    case Primary:
-      return primaryOwners.size();
-    case Secondary:
-      return secondaryOwners.size();
-    default:
-      throw new RuntimeException("Panic");
+      case Primary:
+        return primaryOwners.size();
+      case Secondary:
+        return secondaryOwners.size();
+      default:
+        throw new RuntimeException("Panic");
     }
   }
 
@@ -104,7 +103,8 @@ public class PrimarySecondaryIPListPair {
     return toString("", "", "");
   }
 
-  public static PrimarySecondaryIPListPair merge(PrimarySecondaryIPListPair p0, PrimarySecondaryIPListPair p1) {
+  public static PrimarySecondaryIPListPair merge(
+      PrimarySecondaryIPListPair p0, PrimarySecondaryIPListPair p1) {
     List<IPAndPort> primaryOwners;
     List<IPAndPort> secondaryOwners;
 

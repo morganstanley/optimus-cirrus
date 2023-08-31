@@ -11,6 +11,8 @@
  */
 package optimus.stratosphere.logger
 
+import optimus.stratosphere.config.ConsoleColors
+
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.immutable.Seq
@@ -25,16 +27,23 @@ object CentralLogger {
 final case class CentralLogger(loggers: Seq[Logger]) extends Logger {
   import CentralLogger._
 
-  def this(dir: Path) = {
-    this(Seq(ConsoleLogger(), new FileLogger(dir, "stratosphere")))
-  }
+  def this(dir: Path, colors: ConsoleColors) =
+    this(Seq(ConsoleLogger(colors), new FileLogger(dir, "stratosphere")))
 
-  def withLogger(additionalLogger: Logger): CentralLogger = {
+  def withLogger(additionalLogger: Logger): CentralLogger =
     CentralLogger(loggers :+ additionalLogger)
-  }
 
   override def info(toLog: String): Unit =
     loggers.foreach(_.info(toLog))
+
+  override def highlight(toLog: String): Unit =
+    loggers.foreach(_.highlight(toLog))
+
+  override def warning(toLog: String): Unit =
+    loggers.foreach(_.warning(toLog))
+
+  override def error(toLog: String): Unit =
+    loggers.foreach(_.error(toLog))
 
   // When verbose is ON, we upgrade to info
   override def debug(toLog: String): Unit =
@@ -43,9 +52,8 @@ final case class CentralLogger(loggers: Seq[Logger]) extends Logger {
   def getProcessLogger(printOutputToScreen: Boolean): CustomProcessLogger =
     CustomProcessLogger(this, printOutputToScreen)
 
-  override def handleAnswer(answer: String): Unit = {
+  override def handleAnswer(answer: String): Unit =
     loggers.foreach(_.handleAnswer(answer))
-  }
 
   override def readLine(text: String, args: Any*): Option[String] = {
     val answer = loggers.flatMap { strategy =>

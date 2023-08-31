@@ -124,7 +124,7 @@ object SchedulingScripts extends ExitCode {
       scriptLocations match {
         case Some(location) =>
           location.file.deleteIfExists()
-          workspace.log.info(s"Task: $taskName for this workspace has been successfully disabled")
+          workspace.log.highlight(s"Task: $taskName for this workspace has been successfully disabled")
           ExitCode.Success
         case None =>
           workspace.log.warning(s"There are no scheduled tasks for this workspace!")

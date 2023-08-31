@@ -31,7 +31,8 @@ public class RingConfigurationZK extends MetaToolModuleBase<RingConfiguration, M
   }
 
   @Override
-  public RingConfiguration readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public RingConfiguration readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     return RingConfiguration.parse(zk.getString(getVBase(version)), version);
   }
 
@@ -41,7 +42,8 @@ public class RingConfigurationZK extends MetaToolModuleBase<RingConfiguration, M
   }
 
   @Override
-  public String writeToZK(RingConfiguration ringConfig, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(RingConfiguration ringConfig, MetaToolOptions options)
+      throws IOException, KeeperException {
     String path;
 
     path = zk.createString(base + "/", ringConfig.toString(), CreateMode.PERSISTENT_SEQUENTIAL);

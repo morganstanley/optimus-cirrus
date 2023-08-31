@@ -27,28 +27,31 @@ public class SimpleNewConnectionTimeoutController implements NewConnectionTimeou
   private static final int defaultAttemptRelativeTimeoutMillis = 2 * 60 * 1000;
   private static final int defaultMaxRelativeTimeoutMillis = 8 * 60 * 1000;
 
-  private static final SimpleNewConnectionTimeoutController template = new SimpleNewConnectionTimeoutController(
-      defaultMaxAttempts, defaultAttemptRelativeTimeoutMillis, defaultMaxRelativeTimeoutMillis);
+  private static final SimpleNewConnectionTimeoutController template =
+      new SimpleNewConnectionTimeoutController(
+          defaultMaxAttempts, defaultAttemptRelativeTimeoutMillis, defaultMaxRelativeTimeoutMillis);
 
   static {
     ObjectDefParser2.addParser(template);
   }
 
-  public SimpleNewConnectionTimeoutController(int maxAttempts, int attemptRelativeTimeoutMillis,
-      int maxRelativeTimeoutMillis) {
+  public SimpleNewConnectionTimeoutController(
+      int maxAttempts, int attemptRelativeTimeoutMillis, int maxRelativeTimeoutMillis) {
     this.maxAttempts = maxAttempts;
     this.attemptRelativeTimeoutMillis = attemptRelativeTimeoutMillis;
     this.maxRelativeTimeoutMillis = maxRelativeTimeoutMillis;
   }
 
   /**
-   * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts.
+   * Create a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
+   * maxAttempts.
    *
-   * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new maxAttempts
+   * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
+   *     maxAttempts
    */
   public SimpleNewConnectionTimeoutController maxAttempts(int maxAttempts) {
-    return new SimpleNewConnectionTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+    return new SimpleNewConnectionTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   /**
@@ -56,11 +59,12 @@ public class SimpleNewConnectionTimeoutController implements NewConnectionTimeou
    * attemptRelativeTimeoutMillis.
    *
    * @return a SimpleConnectionEstablishmentTimeoutController like this instance, but with a new
-   * attemptRelativeTimeoutMillis
+   *     attemptRelativeTimeoutMillis
    */
-  public SimpleNewConnectionTimeoutController attemptRelativeTimeoutMillis(int attemptRelativeTimeoutMillis) {
-    return new SimpleNewConnectionTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+  public SimpleNewConnectionTimeoutController attemptRelativeTimeoutMillis(
+      int attemptRelativeTimeoutMillis) {
+    return new SimpleNewConnectionTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   /**
@@ -68,9 +72,10 @@ public class SimpleNewConnectionTimeoutController implements NewConnectionTimeou
    *
    * @return a SimpleTimeoutController like this instance, but with a new maxRelativeTimeoutMillis
    */
-  public SimpleNewConnectionTimeoutController maxRelativeTimeoutMillis(int maxRelativeTimeoutMillis) {
-    return new SimpleNewConnectionTimeoutController(maxAttempts, attemptRelativeTimeoutMillis,
-        maxRelativeTimeoutMillis);
+  public SimpleNewConnectionTimeoutController maxRelativeTimeoutMillis(
+      int maxRelativeTimeoutMillis) {
+    return new SimpleNewConnectionTimeoutController(
+        maxAttempts, attemptRelativeTimeoutMillis, maxRelativeTimeoutMillis);
   }
 
   @Override
@@ -98,7 +103,9 @@ public class SimpleNewConnectionTimeoutController implements NewConnectionTimeou
     SimpleNewConnectionTimeoutController o;
 
     o = (SimpleNewConnectionTimeoutController) other;
-    return maxAttempts == o.maxAttempts && attemptRelativeTimeoutMillis == o.attemptRelativeTimeoutMillis && maxRelativeTimeoutMillis == o.maxRelativeTimeoutMillis;
+    return maxAttempts == o.maxAttempts
+        && attemptRelativeTimeoutMillis == o.attemptRelativeTimeoutMillis
+        && maxRelativeTimeoutMillis == o.maxRelativeTimeoutMillis;
   }
 
   @Override

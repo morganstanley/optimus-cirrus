@@ -43,46 +43,34 @@ import com.ms.silverking.numeric.NumConversion;
 import com.ms.silverking.util.ArrayUtil;
 
 /**
- * ProtoMessageGroup for put messages
- * Clients create a MessageGroup object for data they want to serialize and transfer.
- * Servers takes a MessageGroup object they received and tries to parse it.
- * <p>
- * Data in optionsByteBuffer is stored in the following order with specific offsets.
- * Offsets are point in the byte[] that tells where data for a specific value is stored (start index)
- * i.e. secondaryTargetLengthOffset 28 means that data for the length is stored from index 28 (inclusive) onwards
- * <p>
- * |        Offset      | Size (bytes) |                                                          |
+ * ProtoMessageGroup for put messages Clients create a MessageGroup object for data they want to
+ * serialize and transfer. Servers takes a MessageGroup object they received and tries to parse it.
+ *
+ * <p>Data in optionsByteBuffer is stored in the following order with specific offsets. Offsets are
+ * point in the byte[] that tells where data for a specific value is stored (start index) i.e.
+ * secondaryTargetLengthOffset 28 means that data for the length is stored from index 28 (inclusive)
+ * onwards
+ *
+ * <p>| Offset | Size (bytes) | |
  * -----------------------------------------------------------------------------------------------|
- * |          0         |     8       | version                                                   |
- * |          8         |     8       | required previous version                                 |
- * |         16         |     2       | lock seconds                                              |
- * |         18         |     2       | ccss - (compression type, checksum type, StorageState)    |
- * |         20         |     8       | creator (usually 8 bytes, but may vary)                   |
- * |         28         |     2       | secondaryTarget length                                    |
- * |         30         |    ANY_1    | secondaryTarget data                                      |
- * |     30 + ANY_1     |     1       | user data length                                          |
- * |     31 + ANY_1     |    ANY_2    | user data                                                 |
- * | 31 + ANY_1 + ANY_2 |    4        | authorization user length                                 |
- * | 35 + ANY_1 + ANY_2 |    ANY_3    | authorization user                                        |
- * <p>
- * // TODO (OPTIMUS-43373): Remove comment once legacy put and put_trace is removed
- * Handling backwards compatibility
- * Some clients may still be using the old message group without storing the authorization user.
- * We use MessageType to determine which version the data they want to parse is in.
- * MessageType.LEGACY_PUT is used for the old version
- * MessageType.PUT is used for the new version
- * ProtoMessage with MessageType.LEGACY_PUT will have offsets as follow:
- * Note that userdata length is not specified and everything beyond the secondaryTarget data is userdata
- * |        Offset      | Size (bytes) |                                                          |
+ * | 0 | 8 | version | | 8 | 8 | required previous version | | 16 | 2 | lock seconds | | 18 | 2 |
+ * ccss - (compression type, checksum type, StorageState) | | 20 | 8 | creator (usually 8 bytes, but
+ * may vary) | | 28 | 2 | secondaryTarget length | | 30 | ANY_1 | secondaryTarget data | | 30 +
+ * ANY_1 | 1 | user data length | | 31 + ANY_1 | ANY_2 | user data | | 31 + ANY_1 + ANY_2 | 4 |
+ * authorization user length | | 35 + ANY_1 + ANY_2 | ANY_3 | authorization user |
+ *
+ * <p>// TODO (OPTIMUS-43373): Remove comment once legacy put and put_trace is removed Handling
+ * backwards compatibility Some clients may still be using the old message group without storing the
+ * authorization user. We use MessageType to determine which version the data they want to parse is
+ * in. MessageType.LEGACY_PUT is used for the old version MessageType.PUT is used for the new
+ * version ProtoMessage with MessageType.LEGACY_PUT will have offsets as follow: Note that userdata
+ * length is not specified and everything beyond the secondaryTarget data is userdata | Offset |
+ * Size (bytes) | |
  * -----------------------------------------------------------------------------------------------|
- * |          0         |     8       | version                                                   |
- * |          8         |     8       | required previous version                                 |
- * |         16         |     2       | lock seconds                                              |
- * |         18         |     2       | ccss - (compression type, checksum type, StorageState)    |
- * |         20         |     8       | creator (usually 8 bytes, but may vary)                   |
- * |         28         |     2       | secondaryTarget length                                    |
- * |         30         |    ANY_1    | secondaryTarget data                                      |
- * |     30 + ANY_1     |    ANY_2    | user data                                                 |
+ * | 0 | 8 | version | | 8 | 8 | required previous version | | 16 | 2 | lock seconds | | 18 | 2 |
+ * ccss - (compression type, checksum type, StorageState) | | 20 | 8 | creator (usually 8 bytes, but
+ * may vary) | | 28 | 2 | secondaryTarget length | | 30 | ANY_1 | secondaryTarget data | | 30 +
+ * ANY_1 | ANY_2 | user data |
  */
 public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
   private final BufferDestSerializer<V> bdSerializer;
@@ -94,30 +82,32 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
 
   private static final byte[] emptyValue = new byte[0];
 
-  public ProtoPutMessageGroup(UUIDBase uuid,
-                              long context,
-                              int putOpSize,
-                              long version,
-                              BufferDestSerializer<V> bdSerializer,
-                              PutOptions putOptions,
-                              ChecksumType checksumType,
-                              byte[] originator,
-                              byte[] creator,
-                              int deadlineRelativeMillis,
-                              EncrypterDecrypter encrypterDecrypter,
-                              SkTraceId maybeTraceID) {
-    super(TraceIDProvider.isValidTraceID(maybeTraceID)
-          ? MessageType.LEGACY_PUT_TRACE
-          : MessageType.LEGACY_PUT,
-          uuid,
-          context,
-          putOpSize,
-          ByteBuffer.allocate(optionBufferLength(putOptions)),
-          PutMessageFormat.size(checksumType) - KeyedMessageFormat.baseBytesPerKeyEntry,
-          originator,
-          deadlineRelativeMillis,
-          ForwardingMode.FORWARD,
-          maybeTraceID);
+  public ProtoPutMessageGroup(
+      UUIDBase uuid,
+      long context,
+      int putOpSize,
+      long version,
+      BufferDestSerializer<V> bdSerializer,
+      PutOptions putOptions,
+      ChecksumType checksumType,
+      byte[] originator,
+      byte[] creator,
+      int deadlineRelativeMillis,
+      EncrypterDecrypter encrypterDecrypter,
+      SkTraceId maybeTraceID) {
+    super(
+        TraceIDProvider.isValidTraceID(maybeTraceID)
+            ? MessageType.LEGACY_PUT_TRACE
+            : MessageType.LEGACY_PUT,
+        uuid,
+        context,
+        putOpSize,
+        ByteBuffer.allocate(optionBufferLength(putOptions)),
+        PutMessageFormat.size(checksumType) - KeyedMessageFormat.baseBytesPerKeyEntry,
+        originator,
+        deadlineRelativeMillis,
+        ForwardingMode.FORWARD,
+        maybeTraceID);
     this.bdSerializer = bdSerializer;
     checksum = ChecksumProvider.getChecksum(checksumType);
     Compression compression = putOptions.getCompression();
@@ -167,24 +157,20 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     //      optionsByteBuffer.put(authorizationUser);
     //    }
 
-    //TODO (OPTIMUS-43325)- a zoneId field needs to be added to puts.
+    // TODO (OPTIMUS-43325)- a zoneId field needs to be added to puts.
   }
 
   public static InternalPutOptions getPutOptions(MessageGroup messageGroup) {
     // TODO (OPTIMUS-43373): Remove this legacy check once client side is using new puts
 
     Optional<SkTraceId> maybeTraceID = tryGetTraceIDCopy(messageGroup);
-    SkTraceId traceID = maybeTraceID.isPresent()
-                     ? maybeTraceID.get()
-                     : TraceIDProvider.noTraceID;
+    SkTraceId traceID = maybeTraceID.isPresent() ? maybeTraceID.get() : TraceIDProvider.noTraceID;
 
     byte[] userData = getUserData(messageGroup);
 
     boolean isLegacy = messageIsLegacy(messageGroup);
 
-    byte[] auth = isLegacy
-                  ? PutOptions.noAuthorizationUser
-                  : getAuthorizationUser(messageGroup);
+    byte[] auth = isLegacy ? PutOptions.noAuthorizationUser : getAuthorizationUser(messageGroup);
 
     PutOptions putOptions = OptionsHelper.newPutOptions(userData, auth);
     return new InternalPutOptions(putOptions, traceID);
@@ -238,11 +224,12 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
 
   public static byte[] getValueCreator(MessageGroup messageGroup) {
     byte[] valueCreatorArr = new byte[ValueCreator.BYTES];
-    System.arraycopy(getOptionBuffer(messageGroup).array(),
-                     PutMessageFormat.valueCreatorOffset,
-                     valueCreatorArr,
-                     0,
-                     ValueCreator.BYTES);
+    System.arraycopy(
+        getOptionBuffer(messageGroup).array(),
+        PutMessageFormat.valueCreatorOffset,
+        valueCreatorArr,
+        0,
+        ValueCreator.BYTES);
     return valueCreatorArr;
   }
 
@@ -259,11 +246,12 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
       return null;
     } else {
       byte[] secondaryTargetArr = new byte[stLength];
-      System.arraycopy(getOptionBuffer(messageGroup).array(),
-                       PutMessageFormat.secondaryTargetDataOffset + NumConversion.BYTES_PER_SHORT,
-                       secondaryTargetArr,
-                       0,
-                       stLength);
+      System.arraycopy(
+          getOptionBuffer(messageGroup).array(),
+          PutMessageFormat.secondaryTargetDataOffset + NumConversion.BYTES_PER_SHORT,
+          secondaryTargetArr,
+          0,
+          stLength);
       return SecondaryTargetSerializer.deserialize(secondaryTargetArr);
     }
   }
@@ -283,17 +271,20 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     // if messageGroup is legacy, then offset is the actual userdata's offset
     // else the offset is the userdata length's offset
     int offset = PutMessageFormat.userDataLengthOffset(secondaryTargetLength);
-    int userDataLength = isLegacy
-                         ? optionsBufferByteArr.length - offset
-                         : NumConversion.unsignedByteToInt(optionsBufferByteArr, offset);
+    int userDataLength =
+        isLegacy
+            ? optionsBufferByteArr.length - offset
+            : NumConversion.unsignedByteToInt(optionsBufferByteArr, offset);
 
-    // note: cannot return null because it will cause a NullPointerException in StorageFormat.java:writeToBuf
-    if (userDataLength == 0) { return ArrayUtil.emptyByteArray; }
+    // note: cannot return null because it will cause a NullPointerException in
+    // StorageFormat.java:writeToBuf
+    if (userDataLength == 0) {
+      return ArrayUtil.emptyByteArray;
+    }
 
     byte[] userData = new byte[userDataLength];
-    int userdataStartOffset = isLegacy
-                              ? offset
-                              : offset + 1; // +1 because userDataLength takes 1 byte
+    int userdataStartOffset =
+        isLegacy ? offset : offset + 1; // +1 because userDataLength takes 1 byte
     System.arraycopy(optionsBufferByteArr, userdataStartOffset, userData, 0, userDataLength);
     return userData;
   }
@@ -340,12 +331,16 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     return true;
   }
 
-  public enum ValueAdditionResult {Added, MessageGroupFull, ValueNeedsFragmentation}
+  public enum ValueAdditionResult {
+    Added,
+    MessageGroupFull,
+    ValueNeedsFragmentation
+  }
 
   /**
    * Add a raw value to this message group.
-   * <p>
-   * Currently, this code eagerly serializes, compresses, and checksums this value.
+   *
+   * <p>Currently, this code eagerly serializes, compresses, and checksums this value.
    *
    * @param dhtKey
    * @param value
@@ -364,7 +359,8 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     int _bufferIndex;
     int _bufferPosition;
 
-    // FUTURE - in the future offload serialization, compression and/or checksum computation to a worker?
+    // FUTURE - in the future offload serialization, compression and/or checksum computation to a
+    // worker?
     // for values over some threshold? or for number of keys over some threshold?
 
     // compression
@@ -379,9 +375,11 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
       if (serializedBytes.limit() != 0) {
         try {
           if (compressor != null) {
-            bytesToStore = compressor.compress(serializedBytes.array(),
-                                               serializedBytes.position(),
-                                               serializedBytes.remaining());
+            bytesToStore =
+                compressor.compress(
+                    serializedBytes.array(),
+                    serializedBytes.position(),
+                    serializedBytes.remaining());
             if (bytesToStore.length >= bytesToChecksumLength) {
               // If compression is not useful, then use the
               // uncompressed data. Note that NamespaceStore must
@@ -443,8 +441,12 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
         bdSerializer.serializeToBuffer(value, valueBuffer);
         bytesToChecksumOffset = prevPosition;
         bytesToChecksumLength = valueBuffer.position() - prevPosition;
-        bytesToChecksumBuf = (ByteBuffer) valueBuffer.asReadOnlyBuffer().position(bytesToChecksumOffset).limit(
-            prevPosition + bytesToChecksumLength);
+        bytesToChecksumBuf =
+            (ByteBuffer)
+                valueBuffer
+                    .asReadOnlyBuffer()
+                    .position(bytesToChecksumOffset)
+                    .limit(prevPosition + bytesToChecksumLength);
       } else {
         assert bytesToChecksum != null;
         valueBuffer.put(bytesToStore, bytesToStorePosition, bytesToStoreSize);
@@ -463,7 +465,8 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
         bytesToChecksum = newBuf.array();
         bytesToChecksumOffset = newBuf.position();
         bytesToChecksumLength = newBuf.remaining();
-        bytesToChecksumBuf = ByteBuffer.wrap(bytesToChecksum, bytesToChecksumOffset, bytesToChecksumLength);
+        bytesToChecksumBuf =
+            ByteBuffer.wrap(bytesToChecksum, bytesToChecksumOffset, bytesToChecksumLength);
       }
       newBuf.position(bytesToStorePosition + bytesToStoreSize);
 
@@ -480,12 +483,13 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     }
     compressedValueSize = bytesToStoreSize;
 
-    addValueHelper(dhtKey,
-                   _bufferIndex,
-                   _bufferPosition,
-                   uncompressedValueSize,
-                   compressedValueSize,
-                   bytesToChecksumBuf);
+    addValueHelper(
+        dhtKey,
+        _bufferIndex,
+        _bufferPosition,
+        uncompressedValueSize,
+        compressedValueSize,
+        bytesToChecksumBuf);
 
     return ValueAdditionResult.Added;
   }
@@ -498,7 +502,13 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
     int _bufferPosition = 0;
     int uncompressedValueSize = valueBuf.limit();
     int compressedValueSize = uncompressedValueSize;
-    addValueHelper(dhtKey, _bufferIndex, _bufferPosition, uncompressedValueSize, compressedValueSize, valueBuf);
+    addValueHelper(
+        dhtKey,
+        _bufferIndex,
+        _bufferPosition,
+        uncompressedValueSize,
+        compressedValueSize,
+        valueBuf);
     // Handle the side effect expected by addValueHelper.
     // In the future eliminate this side effect and this code.
     if (valueBuf.position() == 0) {
@@ -508,12 +518,13 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
 
   // NOTE: currently this method counts on the fact that checksum will move
   // the position of the bytesToChecksumBuf. FUTURE - eliminate this side effect.
-  private void addValueHelper(DHTKey dhtKey,
-                              int _bufferIndex,
-                              int _bufferPosition,
-                              int uncompressedValueSize,
-                              int compressedValueSize,
-                              ByteBuffer bytesToChecksumBuf) {
+  private void addValueHelper(
+      DHTKey dhtKey,
+      int _bufferIndex,
+      int _bufferPosition,
+      int uncompressedValueSize,
+      int compressedValueSize,
+      ByteBuffer bytesToChecksumBuf) {
     // key byte buffer update
     addKey(dhtKey);
     keyByteBuffer.putInt(_bufferIndex);
@@ -530,7 +541,8 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
   }
 
   public static ByteBuffer getOptionBuffer(MessageGroup messageGroup) {
-    // This protocol appends the optionBuffer to its baseClass(ProtoValueMessageGroupBase)'s bufferList
+    // This protocol appends the optionBuffer to its baseClass(ProtoValueMessageGroupBase)'s
+    // bufferList
     boolean hasTraceId = TraceIDProvider.hasTraceID(messageGroup.getMessageType());
     int startIdx = ProtoValueMessageGroupBase.getOptionsByteBufferBaseOffset(hasTraceId);
     return messageGroup.getBuffers()[startIdx];
@@ -538,13 +550,14 @@ public final class ProtoPutMessageGroup<V> extends ProtoValueMessageGroupBase {
 
   public void getMostRecentChecksum(byte[] checksum) {
     if (checksum.length > 0) {
-      BufferUtil.get(keyByteBuffer, keyByteBuffer.limit() - checksum.length, checksum, checksum.length);
+      BufferUtil.get(
+          keyByteBuffer, keyByteBuffer.limit() - checksum.length, checksum, checksum.length);
     }
   }
 
   // TODO (OPTIMUS-43373): Remove this legacy check once client is using new puts
   private static boolean messageIsLegacy(MessageGroup messageGroup) {
-    return messageGroup.getMessageType() == MessageType.LEGACY_PUT ||
-           messageGroup.getMessageType() == MessageType.LEGACY_PUT_TRACE;
+    return messageGroup.getMessageType() == MessageType.LEGACY_PUT
+        || messageGroup.getMessageType() == MessageType.LEGACY_PUT_TRACE;
   }
 }

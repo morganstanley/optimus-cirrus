@@ -21,14 +21,16 @@ import com.ms.silverking.net.async.AsyncSendListener;
 /**
  * Provides the communication functionality required for operation processing while hiding whether
  * or not the actual communication is via an actual MessageGroupConnection or via an LWT worker.
- * <p>
- * This allows local communication to use the same methods as remote communication without incurring
- * the overhead of (local) network communication.
+ *
+ * <p>This allows local communication to use the same methods as remote communication without
+ * incurring the overhead of (local) network communication.
  */
 interface MessageGroupConnectionProxy {
   void sendAsynchronous(Object data, long deadline) throws IOException;
 
-  void sendAsynchronousWithTrace(Object data, long deadline, UUIDBase sendID, AsyncSendListener asyncSendListener) throws IOException;
+  void sendAsynchronousWithTrace(
+      Object data, long deadline, UUIDBase sendID, AsyncSendListener asyncSendListener)
+      throws IOException;
 
   String getConnectionID();
 

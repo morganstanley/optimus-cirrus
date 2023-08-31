@@ -20,8 +20,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Makes a Worker look like a BlockingQueue for legacy code that submits
- * work via queues. Only work submission is supported via this "queue".
+ * Makes a Worker look like a BlockingQueue for legacy code that submits work via queues. Only work
+ * submission is supported via this "queue".
  *
  * @param <T>
  */

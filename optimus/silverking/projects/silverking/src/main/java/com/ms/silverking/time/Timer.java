@@ -22,9 +22,7 @@ public interface Timer extends Stopwatch {
    */
   public boolean hasExpired();
 
-  /**
-   * Wait uninterruptibly for expiration
-   */
+  /** Wait uninterruptibly for expiration */
   public void waitForExpiration();
 
   /* Remaining time methods */
@@ -105,8 +103,8 @@ public interface Timer extends Stopwatch {
    * Wait on the provided Condition for the remaining time
    *
    * @param cv TODO (OPTIMUS-0000): describe
-   * @return {@code false} if the waiting time detectably elapsed
-   * before return from the method, else {@code true}
+   * @return {@code false} if the waiting time detectably elapsed before return from the method,
+   *     else {@code true}
    * @throws InterruptedException TODO (OPTIMUS-0000): describe
    */
   public boolean await(Condition cv) throws InterruptedException;

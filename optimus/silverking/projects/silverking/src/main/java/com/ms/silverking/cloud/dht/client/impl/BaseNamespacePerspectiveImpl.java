@@ -41,7 +41,9 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
   protected final ClientNamespace clientNamespace;
   protected volatile NamespacePerspectiveOptionsImpl<K, V> nspoImpl;
 
-  BaseNamespacePerspectiveImpl(ClientNamespace clientNamespace, String name,
+  BaseNamespacePerspectiveImpl(
+      ClientNamespace clientNamespace,
+      String name,
       NamespacePerspectiveOptionsImpl<K, V> nspoImpl) {
     this.clientNamespace = clientNamespace;
     if (nspoImpl.getDefaultPutOptions() == null) {
@@ -81,8 +83,10 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
     NamespacePerspectiveOptions<K, V> nspOptions;
 
     nspOptions = nspoImpl.getNSPOptions();
-    nspOptions = nspOptions.defaultGetOptions(nspOptions.getDefaultGetOptions().versionConstraint(vc));
-    nspOptions = nspOptions.defaultWaitOptions(nspOptions.getDefaultWaitOptions().versionConstraint(vc));
+    nspOptions =
+        nspOptions.defaultGetOptions(nspOptions.getDefaultGetOptions().versionConstraint(vc));
+    nspOptions =
+        nspOptions.defaultWaitOptions(nspOptions.getDefaultWaitOptions().versionConstraint(vc));
     setOptions(nspOptions);
   }
 
@@ -91,7 +95,8 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
   }
 
   public void setDefaultVersion(long version) {
-    setOptions(nspoImpl.getNSPOptions().defaultVersionProvider(new ConstantVersionProvider(version)));
+    setOptions(
+        nspoImpl.getNSPOptions().defaultVersionProvider(new ConstantVersionProvider(version)));
   }
 
   public AbsMillisTimeSource getAbsMillisTimeSource() {
@@ -99,19 +104,22 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
   }
 
   @Override
-  public void close() {
-  }
+  public void close() {}
 
   // reads
 
-  public AsyncRetrieval<K, V> baseRetrieve(Set<? extends K> keys, RetrievalOptions retrievalOptions,
-      OpLWTMode opLWTMode) {
+  public AsyncRetrieval<K, V> baseRetrieve(
+      Set<? extends K> keys, RetrievalOptions retrievalOptions, OpLWTMode opLWTMode) {
     AsyncRetrievalOperationImpl<K, V> opImpl;
 
     clientNamespace.validateOpOptions(retrievalOptions);
-    opImpl = new AsyncRetrievalOperationImpl(new RetrievalOperation<>(clientNamespace, keys, retrievalOptions),
-        clientNamespace, nspoImpl, clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
-        clientNamespace.getOriginator());
+    opImpl =
+        new AsyncRetrievalOperationImpl(
+            new RetrievalOperation<>(clientNamespace, keys, retrievalOptions),
+            clientNamespace,
+            nspoImpl,
+            clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
+            clientNamespace.getOriginator());
     try {
       clientNamespace.startOperation(opImpl, opLWTMode);
     } catch (SessionClosedException ex) {
@@ -122,31 +130,39 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
 
   // writes
 
-  public AsyncPut<K> basePut(Map<? extends K, ? extends V> values, PutOptions putOptions,
-      AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl, OpLWTMode opLWTMode) {
+  public AsyncPut<K> basePut(
+      Map<? extends K, ? extends V> values,
+      PutOptions putOptions,
+      AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl,
+      OpLWTMode opLWTMode) {
     AsyncPutOperationImpl<K, V> opImpl;
 
-        /*
-        if (clientNamespace.getOptions() != null) {
-            if (clientNamespace.getOptions().getVersionMode() == NamespaceVersionMode.SINGLE_VERSION) {
-                putOptions = putOptions.version(clientNamespace.getAbsMillisTimeSource().absTimeMillis());
-            } else if (clientNamespace.getOptions().getVersionMode().isSystemSpecified()) {
-                if (putOptions.getVersion() == PutOptions.defaultVersion) {
-                    putOptions = putOptions.version(DHTConstants.unspecifiedVersion);
-                }
-            } else {
-                if (putOptions.getVersion() == PutOptions.defaultVersion) {
-                    putOptions = putOptions.version(nspoImpl.getNSPOptions().getDefaultVersionProvider().getVersion());
-                }
+    /*
+    if (clientNamespace.getOptions() != null) {
+        if (clientNamespace.getOptions().getVersionMode() == NamespaceVersionMode.SINGLE_VERSION) {
+            putOptions = putOptions.version(clientNamespace.getAbsMillisTimeSource().absTimeMillis());
+        } else if (clientNamespace.getOptions().getVersionMode().isSystemSpecified()) {
+            if (putOptions.getVersion() == PutOptions.defaultVersion) {
+                putOptions = putOptions.version(DHTConstants.unspecifiedVersion);
+            }
+        } else {
+            if (putOptions.getVersion() == PutOptions.defaultVersion) {
+                putOptions = putOptions.version(nspoImpl.getNSPOptions().getDefaultVersionProvider().getVersion());
             }
         }
-        */
+    }
+    */
 
     clientNamespace.validateOpOptions(putOptions);
     clientNamespace.validatePutOptions(putOptions);
-    opImpl = new AsyncPutOperationImpl<>(new PutOperation<>(clientNamespace, values, putOptions), clientNamespace,
-        nspoImpl, clientNamespace.getAbsMillisTimeSource().absTimeMillis(), clientNamespace.getOriginator(),
-        nspoImpl.getNSPOptions().getDefaultVersionProvider());
+    opImpl =
+        new AsyncPutOperationImpl<>(
+            new PutOperation<>(clientNamespace, values, putOptions),
+            clientNamespace,
+            nspoImpl,
+            clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
+            clientNamespace.getOriginator(),
+            nspoImpl.getNSPOptions().getDefaultVersionProvider());
     try {
       clientNamespace.startOperation(opImpl, opLWTMode);
     } catch (SessionClosedException ex) {
@@ -155,13 +171,17 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
     return opImpl;
   }
 
-  public AsyncPut<K> basePut(Map<? extends K, ? extends V> values, PutOptions putOptions, OpLWTMode opLWTMode)
+  public AsyncPut<K> basePut(
+      Map<? extends K, ? extends V> values, PutOptions putOptions, OpLWTMode opLWTMode)
       throws PutException {
     return basePut(values, putOptions, null, opLWTMode);
   }
 
-  public AsyncInvalidation<K> baseInvalidation(Set<? extends K> keys, InvalidationOptions invalidationOptions,
-      BufferDestSerializer<V> valueSerializer, OpLWTMode oplwtmode) {
+  public AsyncInvalidation<K> baseInvalidation(
+      Set<? extends K> keys,
+      InvalidationOptions invalidationOptions,
+      BufferDestSerializer<V> valueSerializer,
+      OpLWTMode oplwtmode) {
     ImmutableMap.Builder<K, V> values;
 
     clientNamespace.validateOpOptions(invalidationOptions);
@@ -174,16 +194,21 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
 
   // snapshots
 
-  protected AsyncSnapshot baseSnapshot(long version,
-      AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl) throws SessionClosedException {
+  protected AsyncSnapshot baseSnapshot(
+      long version, AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl)
+      throws SessionClosedException {
     SnapshotOperation snapshotOperation;
     AsyncSnapshotOperationImpl asyncSnapshotImpl;
 
     snapshotOperation = new SnapshotOperation(clientNamespace, version);
     // TODO (OPTIMUS-0000): Snapshot is not supported in a server who enables traceID feature
     clientNamespace.validateOpOptions(snapshotOperation.options);
-    asyncSnapshotImpl = new AsyncSnapshotOperationImpl(snapshotOperation, clientNamespace.getContext(),
-        clientNamespace.getAbsMillisTimeSource().absTimeMillis(), clientNamespace.getOriginator());
+    asyncSnapshotImpl =
+        new AsyncSnapshotOperationImpl(
+            snapshotOperation,
+            clientNamespace.getContext(),
+            clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
+            clientNamespace.getOriginator());
     clientNamespace.getActiveVersionedBasicOperations().addOp(asyncSnapshotImpl);
     clientNamespace.startOperation(asyncSnapshotImpl, OpLWTMode.DisallowUserThreadUsage);
     return asyncSnapshotImpl;
@@ -191,19 +216,24 @@ class BaseNamespacePerspectiveImpl<K, V> implements BaseNamespacePerspective<K, 
 
   // syncRequest
 
-  protected AsyncSyncRequest baseSyncRequest(long version,
-      AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl) throws SessionClosedException {
+  protected AsyncSyncRequest baseSyncRequest(
+      long version, AsynchronousNamespacePerspectiveImpl<K, V> asynchronousNSPerspectiveImpl)
+      throws SessionClosedException {
     SyncRequestOperation syncRequestOperation;
     AsyncSyncRequestOperationImpl asyncSyncRequestOperationImpl;
 
     syncRequestOperation = new SyncRequestOperation(clientNamespace, version);
     // TODO (OPTIMUS-0000): SyncRequest is not supported in a server who enables traceID feature
     clientNamespace.validateOpOptions(syncRequestOperation.options);
-    asyncSyncRequestOperationImpl = new AsyncSyncRequestOperationImpl(syncRequestOperation,
-        clientNamespace.getContext(), clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
-        clientNamespace.getOriginator());
+    asyncSyncRequestOperationImpl =
+        new AsyncSyncRequestOperationImpl(
+            syncRequestOperation,
+            clientNamespace.getContext(),
+            clientNamespace.getAbsMillisTimeSource().absTimeMillis(),
+            clientNamespace.getOriginator());
     clientNamespace.getActiveVersionedBasicOperations().addOp(asyncSyncRequestOperationImpl);
-    clientNamespace.startOperation(asyncSyncRequestOperationImpl, OpLWTMode.DisallowUserThreadUsage);
+    clientNamespace.startOperation(
+        asyncSyncRequestOperationImpl, OpLWTMode.DisallowUserThreadUsage);
     return asyncSyncRequestOperationImpl;
   }
 

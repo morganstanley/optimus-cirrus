@@ -12,8 +12,8 @@
 package com.ms.silverking.time;
 
 /**
- * A simple concrete implementation of StopwatchBase that utilizes a
- * RelNanosTimeSource and performs some basic quick checks.
+ * A simple concrete implementation of StopwatchBase that utilizes a RelNanosTimeSource and performs
+ * some basic quick checks.
  */
 public class SimpleStopwatch extends StopwatchBase {
   private final RelNanosTimeSource relNanosTimeSource;

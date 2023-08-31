@@ -15,8 +15,8 @@ import com.ms.silverking.cloud.dht.OperationOptions;
 import com.ms.silverking.cloud.dht.client.OpTimeoutController;
 
 /**
- * Base operation class. An Operation is a static representation of the action
- * specified by the user and does not contain any dynamic state such as completion.
+ * Base operation class. An Operation is a static representation of the action specified by the user
+ * and does not contain any dynamic state such as completion.
  */
 abstract class Operation {
   private final OperationUUID opUUID;

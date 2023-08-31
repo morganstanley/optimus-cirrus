@@ -27,24 +27,27 @@ public class MetaDataTextUtil {
     format(sb, "UncompressedLength", Integer.toString(metaData.getUncompressedLength()), labeled);
     format(sb, "Compression", metaData.getCompression().toString(), labeled);
     format(sb, "Version", Long.toString(metaData.getVersion()), labeled);
-    format(sb, "CreationTime", metaData.getCreationTime() + "\t[" + metaData.getCreationTime().toDateString() + "]",
+    format(
+        sb,
+        "CreationTime",
+        metaData.getCreationTime() + "\t[" + metaData.getCreationTime().toDateString() + "]",
         labeled);
     format(sb, "ValueCreator", metaData.getCreator().toString(), labeled);
     format(sb, "LockSeconds", Integer.toString(metaData.getLockSeconds()), labeled);
     format(sb, "ChecksumType", metaData.getChecksumType().toString(), labeled);
     format(sb, "Checksum", StringUtil.byteArrayToHexString(metaData.getChecksum()), labeled);
-        /*
-        if (labeled) {
-            sb.append("UserData: ");
-        }
-        userData = metaData.getUserData();
-        if (userData == null) {
-            sb.append("null");
-        } else {
-            sb.append(StringUtil.byteArrayToHexString(userData));
-        }
-        //TODO (OPTIMUS-0000): complete user data
-        */
+    /*
+    if (labeled) {
+        sb.append("UserData: ");
+    }
+    userData = metaData.getUserData();
+    if (userData == null) {
+        sb.append("null");
+    } else {
+        sb.append(StringUtil.byteArrayToHexString(userData));
+    }
+    //TODO (OPTIMUS-0000): complete user data
+    */
     return sb.toString();
   }
 
@@ -53,29 +56,51 @@ public class MetaDataTextUtil {
     byte[] userData;
 
     sb = new StringBuilder();
-    format(sb, "StoredLength", Integer.toString(MetaDataUtil.getStoredLength(sv, baseOffset)), labeled);
-    format(sb, "UncompressedLength", Integer.toString(MetaDataUtil.getUncompressedLength(sv, baseOffset)), labeled);
-    format(sb, "Compression", Compression.values()[MetaDataUtil.getCompression(sv, baseOffset)].toString(), labeled);
+    format(
+        sb,
+        "StoredLength",
+        Integer.toString(MetaDataUtil.getStoredLength(sv, baseOffset)),
+        labeled);
+    format(
+        sb,
+        "UncompressedLength",
+        Integer.toString(MetaDataUtil.getUncompressedLength(sv, baseOffset)),
+        labeled);
+    format(
+        sb,
+        "Compression",
+        Compression.values()[MetaDataUtil.getCompression(sv, baseOffset)].toString(),
+        labeled);
     format(sb, "Version", Long.toString(MetaDataUtil.getVersion(sv, baseOffset)), labeled);
-    format(sb, "CreationTime",
-        MetaDataUtil.getCreationTime(sv, baseOffset) + "\t[" + MetaDataUtil.getCreationTime(sv, baseOffset) + "]",
+    format(
+        sb,
+        "CreationTime",
+        MetaDataUtil.getCreationTime(sv, baseOffset)
+            + "\t["
+            + MetaDataUtil.getCreationTime(sv, baseOffset)
+            + "]",
         labeled);
     format(sb, "ValueCreator", MetaDataUtil.getCreator(sv, baseOffset).toString(), labeled);
-    format(sb, "LockSeconds", Integer.toString(MetaDataUtil.getLockSeconds(sv, baseOffset)), labeled);
+    format(
+        sb, "LockSeconds", Integer.toString(MetaDataUtil.getLockSeconds(sv, baseOffset)), labeled);
     format(sb, "ChecksumType", MetaDataUtil.getChecksumType(sv, baseOffset).toString(), labeled);
-    format(sb, "Checksum", StringUtil.byteArrayToHexString(MetaDataUtil.getChecksum(sv, baseOffset)), labeled);
-        /*
-        if (labeled) {
-            sb.append("UserData: ");
-        }
-        userData = metaData.getUserData();
-        if (userData == null) {
-            sb.append("null");
-        } else {
-            sb.append(StringUtil.byteArrayToHexString(userData));
-        }
-        //TODO (OPTIMUS-0000): complete user data
-        */
+    format(
+        sb,
+        "Checksum",
+        StringUtil.byteArrayToHexString(MetaDataUtil.getChecksum(sv, baseOffset)),
+        labeled);
+    /*
+    if (labeled) {
+        sb.append("UserData: ");
+    }
+    userData = metaData.getUserData();
+    if (userData == null) {
+        sb.append("null");
+    } else {
+        sb.append(StringUtil.byteArrayToHexString(userData));
+    }
+    //TODO (OPTIMUS-0000): complete user data
+    */
     return sb.toString();
   }
 

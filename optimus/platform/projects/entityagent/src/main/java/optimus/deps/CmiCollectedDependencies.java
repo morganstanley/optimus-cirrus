@@ -20,8 +20,6 @@ public class CmiCollectedDependencies {
   public final Set<String> classDependencies;
   public final Set<ResourceDependency> resourceDependencies;
   public final List<String> internalEvents;
-  public final Map<String, String> systemProperties;
-  public final Map<String, String> environmentVariables;
   public final CmiCollectionStateSnapshot snapshot;
 
   public CmiCollectedDependencies(
@@ -29,15 +27,11 @@ public class CmiCollectedDependencies {
       Set<String> classDependencies,
       Set<ResourceDependency> resourceDependencies,
       List<String> internalEvents,
-      Map<String, String> systemProperties,
-      Map<String, String> environmentVariables,
       CmiCollectionStateSnapshot snapshot) {
     this.usedClasses = Set.copyOf(usedClasses);
     this.classDependencies = Set.copyOf(classDependencies);
     this.resourceDependencies = Set.copyOf(resourceDependencies);
     this.internalEvents = List.copyOf(internalEvents);
-    this.systemProperties = Map.copyOf(systemProperties);
-    this.environmentVariables = Map.copyOf(environmentVariables);
     this.snapshot = snapshot;
   }
 
@@ -55,14 +49,6 @@ public class CmiCollectedDependencies {
 
   public List<String> getInternalEvents() {
     return internalEvents;
-  }
-
-  public Map<String, String> getSystemProperties() {
-    return systemProperties;
-  }
-
-  public Map<String, String> getEnvironmentVariables() {
-    return environmentVariables;
   }
 
   public CmiCollectionStateSnapshot getSnapshot() {

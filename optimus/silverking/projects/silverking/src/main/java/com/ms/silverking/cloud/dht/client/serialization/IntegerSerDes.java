@@ -15,9 +15,7 @@ import java.nio.ByteBuffer;
 
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Serializer/deserializer for Integer
- */
+/** Serializer/deserializer for Integer */
 public final class IntegerSerDes implements BufferSerDes<Integer> {
   @Override
   public ByteBuffer serializeToBuffer(Integer n) {

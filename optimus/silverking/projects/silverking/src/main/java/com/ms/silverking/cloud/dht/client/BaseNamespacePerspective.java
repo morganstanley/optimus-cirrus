@@ -16,21 +16,15 @@ import com.ms.silverking.cloud.dht.VersionConstraint;
 import com.ms.silverking.cloud.dht.client.gen.OmitGeneration;
 
 /**
- * <p>A namespace perspective is a typed view of a DHT namespace.
- * Internally, DHT data is stored as untyped sequences of bytes.
- * A namespace perspective translates data between native
- * Java objects and untyped byte sequences.
- * Multiple namespace perspectives may exist for any given namespace.</p>
+ * A namespace perspective is a typed view of a DHT namespace. Internally, DHT data is stored as
+ * untyped sequences of bytes. A namespace perspective translates data between native Java objects
+ * and untyped byte sequences. Multiple namespace perspectives may exist for any given namespace.
  *
- * <p>SilverKing does not support the storage of null objects, but
- * does support the storage of zero-length byte arrays.
- * Retrieval operations return null for keys that do not have a
- * value associated with them, unless an exception is requested
- * for non-existent key-value pairs.</p>
+ * <p>SilverKing does not support the storage of null objects, but does support the storage of
+ * zero-length byte arrays. Retrieval operations return null for keys that do not have a value
+ * associated with them, unless an exception is requested for non-existent key-value pairs.
  *
- * <p>
- * This interface provides functionality common to all namespace perspectives.
- * </p>
+ * <p>This interface provides functionality common to all namespace perspectives.
  */
 public interface BaseNamespacePerspective<K, V> {
   /**
@@ -70,23 +64,21 @@ public interface BaseNamespacePerspective<K, V> {
   public void setDefaultRetrievalVersionConstraint(VersionConstraint vc);
 
   /**
-   * Set the default VersionProvider used for storage operations.
-   * For use only when NamespaceVersionMode is CLIENT_SPECIFIED.
+   * Set the default VersionProvider used for storage operations. For use only when
+   * NamespaceVersionMode is CLIENT_SPECIFIED.
    *
    * @param versionProvider the new default VersionProvider
    */
   public void setDefaultVersionProvider(VersionProvider versionProvider);
 
   /**
-   * Set the default version used for storage operations.
-   * For use only when NamespaceVersionMode is CLIENT_SPECIFIED.
+   * Set the default version used for storage operations. For use only when NamespaceVersionMode is
+   * CLIENT_SPECIFIED.
    *
    * @param version the new default version
    */
   public void setDefaultVersion(long version);
 
-  /**
-   * Close this perspective
-   */
+  /** Close this perspective */
   public void close();
 }

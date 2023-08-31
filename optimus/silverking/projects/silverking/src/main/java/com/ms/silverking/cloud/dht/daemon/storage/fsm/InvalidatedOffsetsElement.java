@@ -54,8 +54,9 @@ public class InvalidatedOffsetsElement extends LTVElement {
     int invalidatedOffsetsSizeBytes;
 
     invalidatedOffsetsSizeBytes = invalidatedOffsets.size() * NumConversion.BYTES_PER_INT;
-    elementSize = NumConversion.BYTES_PER_INT * 2   // length + type
-        + invalidatedOffsetsSizeBytes;
+    elementSize =
+        NumConversion.BYTES_PER_INT * 2 // length + type
+            + invalidatedOffsetsSizeBytes;
 
     elementBuf = ByteBuffer.allocate(elementSize);
     elementBuf = elementBuf.order(ByteOrder.nativeOrder());

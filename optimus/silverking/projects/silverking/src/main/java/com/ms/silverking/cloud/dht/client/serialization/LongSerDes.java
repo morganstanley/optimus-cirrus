@@ -15,9 +15,7 @@ import java.nio.ByteBuffer;
 
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Serializer/deserializer for Long
- */
+/** Serializer/deserializer for Long */
 public final class LongSerDes implements BufferSerDes<Long> {
   @Override
   public ByteBuffer serializeToBuffer(Long n) {

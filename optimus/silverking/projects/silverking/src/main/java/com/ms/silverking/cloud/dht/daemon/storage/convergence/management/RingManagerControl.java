@@ -34,8 +34,9 @@ public interface RingManagerControl extends Remote {
 
   public UUIDBase setTarget(Triple<String, Long, Long> target) throws RemoteException;
 
-  public UUIDBase syncData(Triple<String, Long, Long> source, Triple<String, Long, Long> target,
-      SyncTargets syncTargets) throws RemoteException;
+  public UUIDBase syncData(
+      Triple<String, Long, Long> source, Triple<String, Long, Long> target, SyncTargets syncTargets)
+      throws RemoteException;
 
   public String getDHTConfiguration() throws RemoteException;
 
@@ -53,6 +54,10 @@ public interface RingManagerControl extends Remote {
 
   public UUIDBase recoverData() throws RemoteException;
 
-  public void requestChecksumTree(Triple<Long, Long, Long> nsAndRegion, Triple<String, Long, Long> source,
-      Triple<String, Long, Long> target, String owner) throws RemoteException;
+  public void requestChecksumTree(
+      Triple<Long, Long, Long> nsAndRegion,
+      Triple<String, Long, Long> source,
+      Triple<String, Long, Long> target,
+      String owner)
+      throws RemoteException;
 }

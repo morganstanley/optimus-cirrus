@@ -21,8 +21,9 @@ import com.ms.silverking.util.ArrayUtil;
 
 /**
  * Used by multi-version convergence to compute checksums for all versions of values stored.
- * Currently, this is computed as the xor of all md5 hashes of all <version, storageTime> pairs.
- * As such, the order of the values doesn't matter. Prob(xor checksum collision) is low enough to be ignored.
+ * Currently, this is computed as the xor of all md5 hashes of all <version, storageTime> pairs. As
+ * such, the order of the values doesn't matter. Prob(xor checksum collision) is low enough to be
+ * ignored.
  */
 public class MultiVersionChecksum {
   private final byte[] checksum;
@@ -83,6 +84,7 @@ public class MultiVersionChecksum {
   }
 
   public long getLongChecksum() {
-    return NumConversion.bytesToLong(checksum, 0) ^ NumConversion.bytesToLong(checksum, NumConversion.BYTES_PER_LONG);
+    return NumConversion.bytesToLong(checksum, 0)
+        ^ NumConversion.bytesToLong(checksum, NumConversion.BYTES_PER_LONG);
   }
 }

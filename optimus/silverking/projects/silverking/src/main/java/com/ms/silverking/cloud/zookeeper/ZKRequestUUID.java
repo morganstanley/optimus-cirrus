@@ -15,9 +15,7 @@ import java.util.UUID;
 
 import com.ms.silverking.id.UUIDBase;
 
-/**
- * UUID of a zookeeper request.
- */
+/** UUID of a zookeeper request. */
 final class ZKRequestUUID extends UUIDBase {
   public ZKRequestUUID() {
     super();

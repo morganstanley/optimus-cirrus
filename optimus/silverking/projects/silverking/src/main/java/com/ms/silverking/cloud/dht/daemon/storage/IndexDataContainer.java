@@ -16,23 +16,24 @@ import java.util.Set;
 import com.ms.silverking.cloud.dht.VersionConstraint;
 
 /**
- * A container for index data. This is implemented concretely by two subtypes, {@link RAMOffsetList} and
- * {@link NamespaceStoreIndex.SegmentId}. These correspond (respectively) to index data where there is more than one
- * version to index and where this is only a single version to index.
+ * A container for index data. This is implemented concretely by two subtypes, {@link RAMOffsetList}
+ * and {@link NamespaceStoreIndex.SegmentId}. These correspond (respectively) to index data where
+ * there is more than one version to index and where this is only a single version to index.
  */
 public interface IndexDataContainer extends Iterable<Integer> {
   int EmptyContainer = -1;
 
   /**
-   * Returns the segment number from the index data. Although attempts may be made to satisfy the given {@link
-   * VersionConstraint}, this is implementation-dependent and callers should not rely on this.
-   * <p>
-   * If supplied, the given {@link ValidityVerifier} can be used to verify the storage state of the data. Otherwise,
-   * the caller should supply <tt>null</tt>.
-   * <p>
-   * The implementation wil return either a segment number or {@link OffsetList#NO_MATCH_FOUND}.
+   * Returns the segment number from the index data. Although attempts may be made to satisfy the
+   * given {@link VersionConstraint}, this is implementation-dependent and callers should not rely
+   * on this.
    *
-   * @param vc               a constraint on the version of the key to query index data for
+   * <p>If supplied, the given {@link ValidityVerifier} can be used to verify the storage state of
+   * the data. Otherwise, the caller should supply <tt>null</tt>.
+   *
+   * <p>The implementation wil return either a segment number or {@link OffsetList#NO_MATCH_FOUND}.
+   *
+   * @param vc a constraint on the version of the key to query index data for
    * @param validityVerifier optional verification to be run on the data
    * @return a segment number
    */
@@ -46,10 +47,11 @@ public interface IndexDataContainer extends Iterable<Integer> {
   void removeEntriesBySegment(Set<Integer> segmentsToRemove);
 
   /**
-   * Update entries in the container based on modifications performed during compaction which may have impacted the
-   * index data in this container.
+   * Update entries in the container based on modifications performed during compaction which may
+   * have impacted the index data in this container.
    *
-   * @param entriesToUpdate The compaction modifications which need to be reflected by the update operation
+   * @param entriesToUpdate The compaction modifications which need to be reflected by the update
+   *     operation
    */
   void updateEntriesByMatch(Set<CompactorModifiedEntry> entriesToUpdate);
 

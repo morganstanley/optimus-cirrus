@@ -18,7 +18,9 @@ import optimus.platform.AsyncImplicits._
 import optimus.platform.relational._
 import optimus.platform.relational.tree._
 
+import java.lang.reflect.InvocationTargetException
 import scala.collection.immutable
+import scala.util.control.NonFatal
 
 trait CellFormatter[-T] { def format(cell: T): String }
 
@@ -262,10 +264,25 @@ abstract class Formatter {
           else
             rs map { r =>
               names.iterator.map { n =>
-                n -> formatValue(n, typeInfo[Row].propertyValue(n, r), settings)
+                n -> formatValue(n, readPropery(typeInfo[Row], n, r), settings)
               }.toMap
             }
         )
+      }
+
+      private def readPropery[T](ti: TypeInfo[T], property: String, obj: Any): Any = {
+        if (PriqlSettings.handlePropertyReadErrorForQueryDisplay) {
+          try {
+            ti.propertyValue(property, obj)
+          } catch {
+            case i: InvocationException =>
+              i.getCause match {
+                case t: InvocationTargetException => t.getTargetException()
+                case e                            => e
+              }
+            case NonFatal(err) => err
+          }
+        } else ti.propertyValue(property, obj)
       }
     }
   }

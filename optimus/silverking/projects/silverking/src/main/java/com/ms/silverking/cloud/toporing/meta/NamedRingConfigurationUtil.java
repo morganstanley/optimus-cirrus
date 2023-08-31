@@ -21,9 +21,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NamedRingConfigurationUtil {
-  public enum Op {GetRingName}
-
-  ;
+  public enum Op {
+    GetRingName
+  };
 
   private static Logger log = LoggerFactory.getLogger(NamedRingConfigurationUtil.class);
 
@@ -39,20 +39,23 @@ public class NamedRingConfigurationUtil {
     ringName = dhtMC.getDHTConfiguration().getRingName();
     zkConfig = dhtMC.getZooKeeper().getZKConfig();
 
-    _mc = new MetaClient(new NamedRingConfiguration(ringName, RingConfiguration.emptyTemplate), zkConfig);
+    _mc =
+        new MetaClient(
+            new NamedRingConfiguration(ringName, RingConfiguration.emptyTemplate), zkConfig);
 
     // TODO (OPTIMUS-0000): version never changes
     version = _mc.getZooKeeper().getLatestVersion(MetaPaths.getRingConfigPath(ringName));
-    return new NamedRingConfiguration(ringName, new RingConfigurationZK(_mc).readFromZK(version, null));
+    return new NamedRingConfiguration(
+        ringName, new RingConfigurationZK(_mc).readFromZK(version, null));
   }
 
   private static void doOp(Op op, String[] args) throws IOException, KeeperException {
     switch (op) {
-    case GetRingName:
-      getRingName(args[0]);
-      break;
-    default:
-      throw new RuntimeException("panic");
+      case GetRingName:
+        getRingName(args[0]);
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
   }
 

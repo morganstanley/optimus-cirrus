@@ -17,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class IntermediateResult {
-  private final static Logger log = LoggerFactory.getLogger(IntermediateResult.class);
+  private static final Logger log = LoggerFactory.getLogger(IntermediateResult.class);
   private ByteBuffer resultBuffer;
   private SkThrottlingDebt throttleDebt;
 
@@ -30,9 +30,12 @@ public class IntermediateResult {
     return of(resultBuffer, throttleDebt, "Untraced");
   }
 
-  public static IntermediateResult of(ByteBuffer resultBuffer, SkThrottlingDebt throttleDebt, String traceId) {
-    if(resultBuffer == null) {
-      log.warn("Tried to construct IntermediateResult for null result buffer for trace id: " + traceId, new NullPointerException("Suspicious code path"));
+  public static IntermediateResult of(
+      ByteBuffer resultBuffer, SkThrottlingDebt throttleDebt, String traceId) {
+    if (resultBuffer == null) {
+      log.warn(
+          "Tried to construct IntermediateResult for null result buffer for trace id: " + traceId,
+          new NullPointerException("Suspicious code path"));
       return null;
     }
     return new IntermediateResult(resultBuffer, throttleDebt);

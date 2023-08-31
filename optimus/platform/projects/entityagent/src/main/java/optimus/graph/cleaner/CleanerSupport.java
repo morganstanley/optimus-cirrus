@@ -24,7 +24,7 @@ public final class CleanerSupport {
     MethodHandle mh; // Lazily found as we need to be in the right class loader
 
     MethodRef(String owner, String name) {
-      this.owner = owner.replace("/", ".") ;
+      this.owner = owner.replace("/", ".");
       this.name = name;
     }
 
@@ -64,7 +64,8 @@ public final class CleanerSupport {
     }
   }
 
-  public static Cleaner.Cleanable register(Object instance, long pointer, boolean ownership, int callSiteId) {
+  public static Cleaner.Cleanable register(
+      Object instance, long pointer, boolean ownership, int callSiteId) {
     // we don't register a cleanable if we do not own the instance
     if (!ownership) return null;
     return cleaner.register(instance, new State(callSiteId, pointer));

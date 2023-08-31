@@ -25,7 +25,13 @@ class CleanerInjectorMethodVisitor extends CommonAdapter {
   private final String name;
   private final String descriptor;
 
-  CleanerInjectorMethodVisitor(CommonAdapter mv, Type classType, int callSiteID, int access, String name, String descriptor) {
+  CleanerInjectorMethodVisitor(
+      CommonAdapter mv,
+      Type classType,
+      int callSiteID,
+      int access,
+      String name,
+      String descriptor) {
     super(mv, access, name, descriptor);
     this.classType = classType;
     this.callSiteID = callSiteID;

@@ -12,8 +12,7 @@
 package com.ms.silverking.net.security;
 
 public abstract class AuthFailedException extends Exception {
-  public AuthFailedException() {
-  }
+  public AuthFailedException() {}
 
   public AuthFailedException(String message) {
     super(message);

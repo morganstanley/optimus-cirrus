@@ -33,14 +33,16 @@ public class RingManagerControlImpl extends UnicastRemoteObject implements RingM
 
   private static Logger log = LoggerFactory.getLogger(RingManagerControlImpl.class);
 
-  protected RingManagerControlImpl(DHTRingManager rm, int port) throws RemoteException, AlreadyBoundException {
+  protected RingManagerControlImpl(DHTRingManager rm, int port)
+      throws RemoteException, AlreadyBoundException {
     super();
     this.rm = rm;
     registry = LocateRegistry.createRegistry(port);
     registry.rebind(RingManagerControl.getRegistryName(rm.getDHTName()), this);
   }
 
-  protected RingManagerControlImpl(DHTRingManager rm) throws RemoteException, AlreadyBoundException {
+  protected RingManagerControlImpl(DHTRingManager rm)
+      throws RemoteException, AlreadyBoundException {
     this(rm, defaultRegistryPort);
   }
 
@@ -61,7 +63,9 @@ public class RingManagerControlImpl extends UnicastRemoteObject implements RingM
   }
 
   @Override
-  public UUIDBase syncData(Triple<String, Long, Long> source, Triple<String, Long, Long> target,
+  public UUIDBase syncData(
+      Triple<String, Long, Long> source,
+      Triple<String, Long, Long> target,
       SyncTargets syncTargets) {
     log.info("RingManagerControlImpl.syncData {}", source);
     return rm.syncData(source, target, syncTargets);
@@ -73,9 +77,17 @@ public class RingManagerControlImpl extends UnicastRemoteObject implements RingM
   }
 
   @Override
-  public void requestChecksumTree(Triple<Long, Long, Long> nsAndRegion, Triple<String, Long, Long> source,
-      Triple<String, Long, Long> target, String owner) {
-    log.info("RingManagerControlImpl.requestChecksumTree {} {} {} {}", nsAndRegion, source, target, owner);
+  public void requestChecksumTree(
+      Triple<Long, Long, Long> nsAndRegion,
+      Triple<String, Long, Long> source,
+      Triple<String, Long, Long> target,
+      String owner) {
+    log.info(
+        "RingManagerControlImpl.requestChecksumTree {} {} {} {}",
+        nsAndRegion,
+        source,
+        target,
+        owner);
     rm.requestChecksumTree(nsAndRegion, source, target, owner);
   }
 

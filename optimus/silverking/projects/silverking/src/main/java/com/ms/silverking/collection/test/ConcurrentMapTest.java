@@ -26,37 +26,42 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 public class ConcurrentMapTest {
-  public enum Sharing {Global, PerThread}
+  public enum Sharing {
+    Global,
+    PerThread
+  };
 
-  ;
+  public enum MapType {
+    ConcurrentHashMap,
+    ConcurrentSkipListMap,
+    HashMap,
+    TreeMap,
+    RWLockMap
+  };
 
-  public enum MapType {ConcurrentHashMap, ConcurrentSkipListMap, HashMap, TreeMap, RWLockMap}
-
-  ;
-
-  public ConcurrentMapTest() {
-  }
+  public ConcurrentMapTest() {}
 
   private Map<Integer, Integer> createMap(MapType mapType, int numThreads) {
     switch (mapType) {
-    case ConcurrentHashMap:
-      return new ConcurrentHashMap<Integer, Integer>();
-    case ConcurrentSkipListMap:
-      return new ConcurrentSkipListMap<Integer, Integer>();
-    case HashMap:
-      return new HashMap<Integer, Integer>();
-    case TreeMap:
-      return new TreeMap<Integer, Integer>();
-    case RWLockMap:
-      return new RWLockMap<Integer, Integer>();
-    default:
-      throw new RuntimeException("panic");
+      case ConcurrentHashMap:
+        return new ConcurrentHashMap<Integer, Integer>();
+      case ConcurrentSkipListMap:
+        return new ConcurrentSkipListMap<Integer, Integer>();
+      case HashMap:
+        return new HashMap<Integer, Integer>();
+      case TreeMap:
+        return new TreeMap<Integer, Integer>();
+      case RWLockMap:
+        return new RWLockMap<Integer, Integer>();
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   private static Logger log = LoggerFactory.getLogger(ConcurrentMapTest.class);
 
-  public void runTest(Sharing sharing, MapType mapType, int threads, int iterations, double putFraction) {
+  public void runTest(
+      Sharing sharing, MapType mapType, int threads, int iterations, double putFraction) {
     Worker[] workers;
     AtomicBoolean start;
     Stopwatch sw;
@@ -64,24 +69,24 @@ public class ConcurrentMapTest {
     start = new AtomicBoolean(false);
     workers = new Worker[threads];
     switch (sharing) {
-    case Global:
-      Map<Integer, Integer> globalMap;
+      case Global:
+        Map<Integer, Integer> globalMap;
 
-      globalMap = createMap(mapType, threads);
-      for (int i = 0; i < workers.length; i++) {
-        workers[i] = new Worker(i, globalMap, iterations, start, putFraction);
-      }
-      break;
-    case PerThread:
-      for (int i = 0; i < workers.length; i++) {
-        Map<Integer, Integer> workerMap;
+        globalMap = createMap(mapType, threads);
+        for (int i = 0; i < workers.length; i++) {
+          workers[i] = new Worker(i, globalMap, iterations, start, putFraction);
+        }
+        break;
+      case PerThread:
+        for (int i = 0; i < workers.length; i++) {
+          Map<Integer, Integer> workerMap;
 
-        workerMap = createMap(mapType, 1);
-        workers[i] = new Worker(i, workerMap, iterations, start, putFraction);
-      }
-      break;
-    default:
-      throw new RuntimeException("panic");
+          workerMap = createMap(mapType, 1);
+          workers[i] = new Worker(i, workerMap, iterations, start, putFraction);
+        }
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
     sw = new SimpleStopwatch();
     start.set(true);
@@ -91,10 +96,15 @@ public class ConcurrentMapTest {
     sw.stop();
 
     log.info("Complete");
-    log.info("Global elapsed {}accesses/s {}", sw.getElapsedSeconds(),
+    log.info(
+        "Global elapsed {}accesses/s {}",
+        sw.getElapsedSeconds(),
         (double) (iterations * workers.length) / sw.getElapsedSeconds());
     for (int i = 0; i < workers.length; i++) {
-      log.info("Worker {}elapsed {} accesses/s {}", i, workers[i].getStopwatch().getElapsedSeconds(),
+      log.info(
+          "Worker {}elapsed {} accesses/s {}",
+          i,
+          workers[i].getStopwatch().getElapsedSeconds(),
           (double) iterations / workers[i].getStopwatch().getElapsedSeconds());
     }
   }
@@ -111,7 +121,12 @@ public class ConcurrentMapTest {
 
     private static final int randomRange = 1000;
 
-    Worker(int id, Map<Integer, Integer> map, int iterations, AtomicBoolean start, double putFraction) {
+    Worker(
+        int id,
+        Map<Integer, Integer> map,
+        int iterations,
+        AtomicBoolean start,
+        double putFraction) {
       this.id = id;
       this.random = new Random(id);
       this.map = map;
@@ -139,8 +154,7 @@ public class ConcurrentMapTest {
     }
 
     public void run() {
-      while (!start.get()) {
-      }
+      while (!start.get()) {}
       sw.reset();
       for (int i = 0; i < iterations; i++) {
         int k;

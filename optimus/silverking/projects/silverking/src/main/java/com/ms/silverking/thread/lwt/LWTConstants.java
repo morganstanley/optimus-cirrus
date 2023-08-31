@@ -14,9 +14,7 @@ package com.ms.silverking.thread.lwt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Common LWT constants.
- */
+/** Common LWT constants. */
 public class LWTConstants {
   public static final String LWTEnvPrefix = "LWT_";
   public static final String numProcessorsEnvVar = LWTEnvPrefix + "NUM_PROCESSORS";
@@ -28,10 +26,12 @@ public class LWTConstants {
 
   private static final int _defaultMaxDirectCallDepth = 100;
   public static final int defaultMaxDirectCallDepth;
-  static final String defaultMaxDirectCallDepthProperty = propertyBase + ".DefaultMaxDirectCallDepth";
+  static final String defaultMaxDirectCallDepthProperty =
+      propertyBase + ".DefaultMaxDirectCallDepth";
   private static final int _defaultIdleThreadThreshold = 1;
   public static final int defaultIdleThreadThreshold;
-  static final String defaultIdleThreadThresholdProperty = propertyBase + ".DefaultIdleThreadThreshold";
+  static final String defaultIdleThreadThresholdProperty =
+      propertyBase + ".DefaultIdleThreadThreshold";
 
   static final String lwtControllerCheckInterval = propertyBase + ".LWTControllerCheckInterval";
 
@@ -60,7 +60,7 @@ public class LWTConstants {
       defaultMaxDirectCallDepth = _defaultMaxDirectCallDepth;
     }
     if (log.isDebugEnabled()) {
-      log.debug("{} : {}",defaultMaxDirectCallDepthProperty , defaultMaxDirectCallDepth);
+      log.debug("{} : {}", defaultMaxDirectCallDepthProperty, defaultMaxDirectCallDepth);
     }
 
     val = System.getProperty(defaultIdleThreadThresholdProperty);
@@ -70,7 +70,7 @@ public class LWTConstants {
       defaultIdleThreadThreshold = _defaultIdleThreadThreshold;
     }
     if (log.isDebugEnabled()) {
-      log.debug("{} : {}", defaultIdleThreadThresholdProperty , defaultIdleThreadThreshold);
+      log.debug("{} : {}", defaultIdleThreadThresholdProperty, defaultIdleThreadThreshold);
     }
 
     val = System.getProperty(enableLoggingProperty);
@@ -80,7 +80,7 @@ public class LWTConstants {
       enableLogging = _enableLogging;
     }
     if (log.isDebugEnabled()) {
-      log.debug("{} : {}", enableLoggingProperty , enableLogging);
+      log.debug("{} : {}", enableLoggingProperty, enableLogging);
     }
 
     val = System.getProperty(verboseProperty);
@@ -90,7 +90,7 @@ public class LWTConstants {
       verbose = _verbose;
     }
     if (log.isDebugEnabled()) {
-      log.debug("{} : {}", verboseProperty , verbose);
+      log.debug("{} : {}", verboseProperty, verbose);
     }
   }
 }

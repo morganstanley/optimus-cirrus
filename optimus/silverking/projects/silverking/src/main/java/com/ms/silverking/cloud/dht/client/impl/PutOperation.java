@@ -27,11 +27,9 @@ import com.ms.silverking.cloud.dht.client.OpTimeoutController;
 class PutOperation<K, V> extends KeyedNamespaceOperation<K> {
   private final Map<? extends K, ? extends V> values;
 
-  /**
-   * options applied to all key/value pairs in this operation
-   */
-
-  public PutOperation(ClientNamespace namespace, Map<? extends K, ? extends V> values, PutOptions putOptions) {
+  /** options applied to all key/value pairs in this operation */
+  public PutOperation(
+      ClientNamespace namespace, Map<? extends K, ? extends V> values, PutOptions putOptions) {
     super(ClientOpType.PUT, namespace, values.keySet(), putOptions);
     // FUTURE - THINK ABOUT THIS. CONSIDER ALLOWING USERS TO GET RID OF
     // THIS COPY

@@ -13,12 +13,10 @@ package com.ms.silverking.cloud.dht.daemon.storage.protocol;
 
 import com.ms.silverking.cloud.dht.ForwardingMode;
 
-/**
- * Storage protocol for distributed storage.
- */
+/** Storage protocol for distributed storage. */
 public interface StorageProtocol {
-  public StorageOperation createStorageOperation(long timeout, PutOperationContainer putOperationContainer,
-      ForwardingMode forwardingMode);
+  public StorageOperation createStorageOperation(
+      long timeout, PutOperationContainer putOperationContainer, ForwardingMode forwardingMode);
 
   public boolean sendResultsDuringStart();
 }

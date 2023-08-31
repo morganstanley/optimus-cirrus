@@ -14,8 +14,8 @@ package com.ms.silverking.cloud.ring;
 import java.util.Collection;
 
 /**
- * Implemented by classes that support a logical ring divided into
- * regions owned by members of the ring.
+ * Implemented by classes that support a logical ring divided into regions owned by members of the
+ * ring.
  *
  * @param <K> key type
  * @param <T> member type

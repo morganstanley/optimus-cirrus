@@ -23,8 +23,9 @@ public class CoreStringUtil {
   public static final int defaultHexMinorGroupSize = 4;
   public static final int defaultHexMajorGroupSize = 16;
 
-  public static final String[] digits = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e",
-      "f" };
+  public static final String[] digits = {
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"
+  };
 
   public static final char hexMajorDelim = ' ';
   public static final char hexMinorDelim = ':';
@@ -121,14 +122,12 @@ public class CoreStringUtil {
   }
 
   public static String byteArrayToHexString(byte[] inBytes, int offset, int length) {
-    return byteArrayToHexString(inBytes, offset, length, defaultHexMinorGroupSize, defaultHexMajorGroupSize);
+    return byteArrayToHexString(
+        inBytes, offset, length, defaultHexMinorGroupSize, defaultHexMajorGroupSize);
   }
 
-  public static String byteArrayToHexString(byte[] inBytes,
-                                            int offset,
-                                            int length,
-                                            int minorGroupSize,
-                                            int majorGroupSize) {
+  public static String byteArrayToHexString(
+      byte[] inBytes, int offset, int length, int minorGroupSize, int majorGroupSize) {
     if (inBytes == null) {
       return defaultNullString;
     } else {
@@ -153,5 +152,4 @@ public class CoreStringUtil {
       return out.toString();
     }
   }
-
 }

@@ -15,15 +15,19 @@ class TopologyFileToken {
   private final Type type;
   private final String entry;
 
-  enum Type {ENTRY, OPEN_BLOCK, CLOSE_BLOCK}
-
-  ;
+  enum Type {
+    ENTRY,
+    OPEN_BLOCK,
+    CLOSE_BLOCK
+  };
 
   private static final String OPEN_BLOCK_DELIMITER = "{";
   private static final String CLOSE_BLOCK_DELIMITER = "}";
 
-  private static final TopologyFileToken OPEN_BLOCK_TOKEN = new TopologyFileToken(Type.OPEN_BLOCK, null);
-  private static final TopologyFileToken CLOSE_BLOCK_TOKEN = new TopologyFileToken(Type.CLOSE_BLOCK, null);
+  private static final TopologyFileToken OPEN_BLOCK_TOKEN =
+      new TopologyFileToken(Type.OPEN_BLOCK, null);
+  private static final TopologyFileToken CLOSE_BLOCK_TOKEN =
+      new TopologyFileToken(Type.CLOSE_BLOCK, null);
 
   static TopologyFileToken[] parseLine(String def) {
     TopologyFileToken[] tokens;

@@ -29,7 +29,8 @@ import com.ms.silverking.util.PropertiesHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements QueueingConnectionLimitListener {
+class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl>
+    implements QueueingConnectionLimitListener {
   private final MessageGroupBase mgBase;
   private final AddrAndPort dest;
   private final AtomicLong doWorkCalls;
@@ -38,34 +39,40 @@ class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements 
   private static Logger log = LoggerFactory.getLogger(OpSender.class);
   private static final boolean trackCallStats = false;
 
-  public static final String opGroupingEnabledProperty = OpSender.class.getPackage().getName() + ".OpGroupingEnabled";
+  public static final String opGroupingEnabledProperty =
+      OpSender.class.getPackage().getName() + ".OpGroupingEnabled";
   public static final boolean defaultOpGroupingEnabled = true;
   static final boolean opGroupingEnabled;
 
   static {
-    opGroupingEnabled = PropertiesHelper.systemHelper.getBoolean(opGroupingEnabledProperty, defaultOpGroupingEnabled);
+    opGroupingEnabled =
+        PropertiesHelper.systemHelper.getBoolean(
+            opGroupingEnabledProperty, defaultOpGroupingEnabled);
   }
 
-  private static final int idleThreadsThreshold = Integer.MAX_VALUE; // Don't queue work when possible
-  //private static final int idleThreadsThreshold = LWTConstants.defaultIdleThreadThreshold; // Queue most work
+  private static final int idleThreadsThreshold =
+      Integer.MAX_VALUE; // Don't queue work when possible
+  // private static final int idleThreadsThreshold = LWTConstants.defaultIdleThreadThreshold; //
+  // Queue most work
 
   private static LWTPool senderPool;
 
   static {
-        /*
-        LWTPoolParameters   params;
-        
-        params = LWTPoolParameters.create("senderPool").targetSize(2).workUnit(512);
-        senderPool = LWTPoolProvider.createPool(params);
-        //senderPool.dumpStatsOnShutdown();
-         */
+    /*
+    LWTPoolParameters   params;
+
+    params = LWTPoolParameters.create("senderPool").targetSize(2).workUnit(512);
+    senderPool = LWTPoolProvider.createPool(params);
+    //senderPool.dumpStatsOnShutdown();
+     */
     senderPool = LWTPoolProvider.defaultConcurrentWorkPool;
   }
 
   OpSender(AddrAndPort dest, MessageGroupBase mgBase) {
     super(senderPool, true, Integer.MAX_VALUE, idleThreadsThreshold);
-    //super(senderPool, true, 0, LWTConstants.defaultIdleThreadThreshold);
-    //super(senderPool, true, LWTConstants.defaultMaxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+    // super(senderPool, true, 0, LWTConstants.defaultIdleThreadThreshold);
+    // super(senderPool, true, LWTConstants.defaultMaxDirectCallDepth,
+    // LWTConstants.defaultIdleThreadThreshold);
     this.dest = dest;
     this.mgBase = mgBase;
     doWorkCalls = new AtomicLong();
@@ -104,53 +111,53 @@ class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements 
     if (trackCallStats) {
       doGroupedWorkCalls.incrementAndGet();
     }
-    //showQ();
+    // showQ();
     createMessagesForIncomplete(asyncOpImpls);
   }
 
   /**
-   * Breaks asyncOpImpls into groups of same-typed operations calling
-   * createMessages() for each group.
+   * Breaks asyncOpImpls into groups of same-typed operations calling createMessages() for each
+   * group.
    *
    * @param asyncOpImpls
    */
-    /*
-     * this implementation was before we took care of incompatible ops
-    private void createMessagesForIncomplete(AsyncOperationImpl[] asyncOpImpls) {
-        if (opGroupingEnabled) {
-            createMessages(asyncOpImpls, 0, asyncOpImpls.length - 1);
-        } else {
-            for (int i = 0; i < asyncOpImpls.length; i++) {
-                createMessages(asyncOpImpls, i, i);
-            }
-        }
-    }
-    */
-    /*
-     * this implementation allowed for messages of different types, we now assume the same type
-     * since we have one OpSender per type
-    private void createMessagesForIncomplete(AsyncOperationImpl[] asyncOpImpls) {
-        int startIndex;
-        int endIndex;
-        
-        //System.out.printf("single %d\tgrouped%d\n", doWorkCalls.get(), doGroupedWorkCalls.get());
-        startIndex = 0;
-        endIndex = startIndex + 1;
-        while (startIndex < asyncOpImpls.length) {
-            if (opGroupingEnabled) {
-                while (endIndex < asyncOpImpls.length && asyncOpImpls[endIndex].getType() == asyncOpImpls[startIndex]
-                * .getType()) {
-                    endIndex++;
-                }
-                createMessages(asyncOpImpls, startIndex, endIndex - 1);
-                startIndex = endIndex;
-            } else {
-                createMessages(asyncOpImpls, startIndex, startIndex);
-                startIndex++;
-            }
-        }
-    }
-    */
+  /*
+   * this implementation was before we took care of incompatible ops
+  private void createMessagesForIncomplete(AsyncOperationImpl[] asyncOpImpls) {
+      if (opGroupingEnabled) {
+          createMessages(asyncOpImpls, 0, asyncOpImpls.length - 1);
+      } else {
+          for (int i = 0; i < asyncOpImpls.length; i++) {
+              createMessages(asyncOpImpls, i, i);
+          }
+      }
+  }
+  */
+  /*
+   * this implementation allowed for messages of different types, we now assume the same type
+   * since we have one OpSender per type
+  private void createMessagesForIncomplete(AsyncOperationImpl[] asyncOpImpls) {
+      int startIndex;
+      int endIndex;
+
+      //System.out.printf("single %d\tgrouped%d\n", doWorkCalls.get(), doGroupedWorkCalls.get());
+      startIndex = 0;
+      endIndex = startIndex + 1;
+      while (startIndex < asyncOpImpls.length) {
+          if (opGroupingEnabled) {
+              while (endIndex < asyncOpImpls.length && asyncOpImpls[endIndex].getType() == asyncOpImpls[startIndex]
+              * .getType()) {
+                  endIndex++;
+              }
+              createMessages(asyncOpImpls, startIndex, endIndex - 1);
+              startIndex = endIndex;
+          } else {
+              createMessages(asyncOpImpls, startIndex, startIndex);
+              startIndex++;
+          }
+      }
+  }
+  */
 
   private static final OpGroupingComparator opGroupingComparator = new OpGroupingComparator();
 
@@ -159,11 +166,11 @@ class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements 
     public int compare(AsyncOperationImpl o1, AsyncOperationImpl o2) {
       if (o1.getClass() == o2.getClass()) {
         if (o1 instanceof AsyncPutOperationImpl) {
-          return AsyncPutOperationImplComparator.instance.compare((AsyncPutOperationImpl) o1,
-              (AsyncPutOperationImpl) o2);
+          return AsyncPutOperationImplComparator.instance.compare(
+              (AsyncPutOperationImpl) o1, (AsyncPutOperationImpl) o2);
         } else if (o1 instanceof AsyncRetrievalOperationImpl) {
-          return AsyncRetrievalOperationImplComparator.instance.compare((AsyncRetrievalOperationImpl) o1,
-              (AsyncRetrievalOperationImpl) o2);
+          return AsyncRetrievalOperationImplComparator.instance.compare(
+              (AsyncRetrievalOperationImpl) o1, (AsyncRetrievalOperationImpl) o2);
         } else {
           return 0;
         }
@@ -189,12 +196,13 @@ class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements 
       groupOps(asyncOpImpls);
     }
 
-    //System.out.printf("single %d\tgrouped%d\n", doWorkCalls.get(), doGroupedWorkCalls.get());
+    // System.out.printf("single %d\tgrouped%d\n", doWorkCalls.get(), doGroupedWorkCalls.get());
     startIndex = 0;
     endIndex = startIndex + 1;
     while (startIndex < asyncOpImpls.length) {
       if (opGroupingEnabled) {
-        while (endIndex < asyncOpImpls.length && asyncOpImpls[startIndex].canBeGroupedWith(asyncOpImpls[endIndex])) {
+        while (endIndex < asyncOpImpls.length
+            && asyncOpImpls[startIndex].canBeGroupedWith(asyncOpImpls[endIndex])) {
           endIndex++;
         }
         createMessages(asyncOpImpls, startIndex, endIndex - 1);
@@ -206,7 +214,8 @@ class OpSender extends GroupingPausingBaseWorker<AsyncOperationImpl> implements 
     }
   }
 
-  private MessageEstimate estimateMessage(AsyncOperationImpl[] asyncOpImpls, int startIndex, int endIndex) {
+  private MessageEstimate estimateMessage(
+      AsyncOperationImpl[] asyncOpImpls, int startIndex, int endIndex) {
     MessageEstimate estimate;
 
     estimate = asyncOpImpls[startIndex].createMessageEstimate();

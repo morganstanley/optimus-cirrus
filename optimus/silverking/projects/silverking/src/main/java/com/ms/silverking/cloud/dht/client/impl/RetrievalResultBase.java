@@ -88,7 +88,7 @@ abstract class RetrievalResultBase<V> implements StoredValue<V> {
     return getMetaData().isInvalidation();
   }
 
-  //TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
+  // TODO (OPTIMUS-43326): Remove userdata. It should be part of value rather than metadata
   @Override
   public byte[] getUserData() {
     return getMetaData().getUserData();

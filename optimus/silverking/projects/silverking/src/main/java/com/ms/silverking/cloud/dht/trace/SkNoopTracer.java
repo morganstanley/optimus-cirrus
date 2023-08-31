@@ -38,8 +38,8 @@ public class SkNoopTracer implements Tracer {
   public void onAuthorizationFailure(SkTraceId traceID) {}
 
   @Override
-  public SkTraceId issueForwardTraceID(SkTraceId maybeTraceID, IPAndPort replica, MessageType msgType,
-      byte[] originator) {
+  public SkTraceId issueForwardTraceID(
+      SkTraceId maybeTraceID, IPAndPort replica, MessageType msgType, byte[] originator) {
     return maybeTraceID;
   }
 
@@ -50,11 +50,12 @@ public class SkNoopTracer implements Tracer {
   public void onLocalEnqueueRetrievalResult(SkTraceId traceID) {}
 
   @Override
-  public void onBothDequeueAndAsyncSendRetrievalResult(SkTraceId traceID, List<RetrievalResult> results) {}
+  public void onBothDequeueAndAsyncSendRetrievalResult(
+      SkTraceId traceID, List<RetrievalResult> results) {}
 
   @Override
-  public void onProxyHandleRetrievalResponse(SkTraceId traceID, Map<DHTKey, OpResult> results,
-      OpResult responseState) {}
+  public void onProxyHandleRetrievalResponse(
+      SkTraceId traceID, Map<DHTKey, OpResult> results, OpResult responseState) {}
 
   @Override
   public void onProxyHandleRetrievalResultComplete(SkTraceId traceID) {}

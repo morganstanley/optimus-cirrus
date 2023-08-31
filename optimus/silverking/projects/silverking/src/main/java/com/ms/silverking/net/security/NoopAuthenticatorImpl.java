@@ -37,7 +37,8 @@ public class NoopAuthenticatorImpl extends Authenticator {
   }
 
   @Override
-  public AuthenticationResult syncAuthenticate(Socket unauthNetwork, boolean serverside, int timeoutInMillisecond) {
+  public AuthenticationResult syncAuthenticate(
+      Socket unauthNetwork, boolean serverside, int timeoutInMillisecond) {
     return Authenticator.createAuthFailResult(AuthenticationFailedAction.GO_WITHOUT_AUTH);
   }
 }

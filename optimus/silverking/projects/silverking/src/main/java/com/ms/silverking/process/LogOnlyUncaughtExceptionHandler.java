@@ -16,7 +16,6 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 public class LogOnlyUncaughtExceptionHandler implements UncaughtExceptionHandler {
   public LogOnlyUncaughtExceptionHandler() {}
 
@@ -24,7 +23,8 @@ public class LogOnlyUncaughtExceptionHandler implements UncaughtExceptionHandler
 
   public void uncaughtException(Thread t, Throwable e) {
     try {
-      log.error("UncaughtException , defaultHandler",e);
-    } catch (Throwable x) {}
+      log.error("UncaughtException , defaultHandler", e);
+    } catch (Throwable x) {
+    }
   }
 }

@@ -24,7 +24,8 @@ public class StoragePolicy {
   private final SubPolicy secondaryPolicy;
   private final SubPolicy[] subPolicies;
 
-  public StoragePolicy(NodeClassAndName nodeClassAndName, SubPolicy primaryPolicy, SubPolicy secondaryPolicy) {
+  public StoragePolicy(
+      NodeClassAndName nodeClassAndName, SubPolicy primaryPolicy, SubPolicy secondaryPolicy) {
     this.nodeClassAndName = nodeClassAndName;
     this.primaryPolicy = primaryPolicy;
     this.secondaryPolicy = secondaryPolicy;
@@ -47,21 +48,20 @@ public class StoragePolicy {
   }
 
   public int getReplicas(OwnerQueryMode oqm) {
-    return (oqm.includePrimary() ? primaryPolicy.getNumReplicas() : 0) + (oqm.includeSecondary() ?
-        secondaryPolicy.getNumReplicas() :
-        0);
+    return (oqm.includePrimary() ? primaryPolicy.getNumReplicas() : 0)
+        + (oqm.includeSecondary() ? secondaryPolicy.getNumReplicas() : 0);
   }
 
   public SubPolicy getPolicy(OwnerQueryMode oqm) {
     switch (oqm) {
-    case Primary:
-      return primaryPolicy;
-    case Secondary:
-      return secondaryPolicy;
-    case All:
-      throw new RuntimeException("All not supported for getPolicy");
-    default:
-      throw new RuntimeException("panic");
+      case Primary:
+        return primaryPolicy;
+      case Secondary:
+        return secondaryPolicy;
+      case All:
+        throw new RuntimeException("All not supported for getPolicy");
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -90,6 +90,6 @@ public class StoragePolicy {
       subPolicy.toFormattedString(sb);
     }
     sb.append("}\n");
-    //StringUtil.replicate('\t', depth)
+    // StringUtil.replicate('\t', depth)
   }
 }

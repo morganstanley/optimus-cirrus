@@ -39,7 +39,11 @@ public class BlockingQueueTest implements Runnable {
 
   private static Logger log = LoggerFactory.getLogger(BlockingQueueTest.class);
 
-  public BlockingQueueTest(int readers, int writers, long readerDelayNanos, long writerDelayNanos,
+  public BlockingQueueTest(
+      int readers,
+      int writers,
+      long readerDelayNanos,
+      long writerDelayNanos,
       BlockingQueue<Integer> q) {
     this.readers = readers;
     this.writers = writers;
@@ -79,7 +83,7 @@ public class BlockingQueueTest implements Runnable {
     int myWorkComplete;
     boolean useTransfer;
 
-    //useTransfer = q instanceof TransferQueue;
+    // useTransfer = q instanceof TransferQueue;
     useTransfer = false;
     myID = threadID.getAndIncrement();
     _isReader = myID < readers;
@@ -161,9 +165,13 @@ public class BlockingQueueTest implements Runnable {
       if (isReader[i]) {
         readsComplete += workComplete[i];
       }
-      log.info("{} {} {} {}", i, isReader[i], workComplete[i],
+      log.info(
+          "{} {} {} {}",
+          i,
+          isReader[i],
+          workComplete[i],
           (sw.getElapsedSeconds() / (double) workComplete[i]));
-      //System.out.println(i +"\t"+ (isReader[i] ? "reader" : "writer") +"\t"+ workComplete[i]);
+      // System.out.println(i +"\t"+ (isReader[i] ? "reader" : "writer") +"\t"+ workComplete[i]);
     }
     log.info("{} {}", readsComplete, (sw.getElapsedSeconds() / (double) readsComplete));
   }
@@ -184,8 +192,8 @@ public class BlockingQueueTest implements Runnable {
 
       if (args.length != 6) {
         log.info(
-            "args: <readers> <writers> <duration> <readerDelayNanos> <writerDelayNanos> " +
-                "<LightLinkedBlockingQueue|LinkedBlockingQueue|SpinningTransferQueue|SynchronousQueue>");
+            "args: <readers> <writers> <duration> <readerDelayNanos> <writerDelayNanos> "
+                + "<LightLinkedBlockingQueue|LinkedBlockingQueue|SpinningTransferQueue|SynchronousQueue>");
         return;
       }
       readers = Integer.parseInt(args[0]);
@@ -195,11 +203,11 @@ public class BlockingQueueTest implements Runnable {
       writerDelayNanos = Long.parseLong(args[4]);
       qDefs = args[5].split(",");
       for (String qDef : qDefs) {
-        log.info("Queue type: {}" , qDef);
+        log.info("Queue type: {}", qDef);
         if (qDef.equals("LightLinkedBlockingQueue")) {
           q = new LightLinkedBlockingQueue<Integer>(0);
-          //q = new LightLinkedBlockingQueue<Integer>(10000);
-          //q = new LightLinkedBlockingQueue<Integer>(20000);
+          // q = new LightLinkedBlockingQueue<Integer>(10000);
+          // q = new LightLinkedBlockingQueue<Integer>(20000);
         } else if (qDef.equals("LinkedBlockingQueue")) {
           q = new LinkedBlockingQueue<Integer>();
         } else if (qDef.equals("LinkedTransferQueue")) {

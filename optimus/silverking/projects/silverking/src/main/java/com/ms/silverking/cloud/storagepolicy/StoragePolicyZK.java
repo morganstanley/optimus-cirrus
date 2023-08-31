@@ -36,7 +36,8 @@ public class StoragePolicyZK extends MetaToolModuleBase<StoragePolicyGroup, Meta
   }
 
   @Override
-  public StoragePolicyGroup readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public StoragePolicyGroup readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     try {
       String vPath;
 
@@ -62,7 +63,8 @@ public class StoragePolicyZK extends MetaToolModuleBase<StoragePolicyGroup, Meta
   }
 
   @Override
-  public String writeToZK(StoragePolicyGroup policyGroup, MetaToolOptions options) throws IOException, KeeperException {
+  public String writeToZK(StoragePolicyGroup policyGroup, MetaToolOptions options)
+      throws IOException, KeeperException {
     zk.createString(base + "/", policyGroup.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
     return null;
   }

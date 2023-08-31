@@ -14,9 +14,7 @@ package com.ms.silverking.cloud.meta;
 import com.ms.silverking.text.FieldsRequirement;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Groups cloud configuration settings. Neither named nor stored in zk.
- */
+/** Groups cloud configuration settings. Neither named nor stored in zk. */
 public class CloudConfiguration {
   private final String topologyName;
   private final String exclusionSpecsName;
@@ -28,7 +26,8 @@ public class CloudConfiguration {
     ObjectDefParser2.addParser(emptyTemplate, FieldsRequirement.REQUIRE_ALL_FIELDS);
   }
 
-  public CloudConfiguration(String topologyName, String exclusionSpecsName, String hostGroupTableName) {
+  public CloudConfiguration(
+      String topologyName, String exclusionSpecsName, String hostGroupTableName) {
     this.topologyName = topologyName;
     this.exclusionSpecsName = exclusionSpecsName;
     this.hostGroupTableName = hostGroupTableName;

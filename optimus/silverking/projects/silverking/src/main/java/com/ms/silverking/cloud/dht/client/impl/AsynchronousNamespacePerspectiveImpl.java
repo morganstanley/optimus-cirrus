@@ -46,7 +46,9 @@ class AsynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspectiv
     opLWTMode = OpLWTMode.DisallowUserThreadUsage;
   }
 
-  AsynchronousNamespacePerspectiveImpl(ClientNamespace clientNamespace, String name,
+  AsynchronousNamespacePerspectiveImpl(
+      ClientNamespace clientNamespace,
+      String name,
       NamespacePerspectiveOptionsImpl<K, V> nspoImpl) {
     super(clientNamespace, name, nspoImpl);
   }
@@ -65,7 +67,8 @@ class AsynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspectiv
 
   @Override
   public AsyncSingleRetrieval<K, V> retrieve(K key, RetrievalOptions retrievalOptions) {
-    return (AsyncSingleRetrieval<K, V>) baseRetrieve(ImmutableSet.of(key), retrievalOptions, opLWTMode);
+    return (AsyncSingleRetrieval<K, V>)
+        baseRetrieve(ImmutableSet.of(key), retrievalOptions, opLWTMode);
   }
 
   @Override
@@ -141,7 +144,8 @@ class AsynchronousNamespacePerspectiveImpl<K, V> extends BaseNamespacePerspectiv
 
   // invalidations
 
-  public AsyncInvalidation<K> invalidate(Set<? extends K> keys, InvalidationOptions invalidationOptions) {
+  public AsyncInvalidation<K> invalidate(
+      Set<? extends K> keys, InvalidationOptions invalidationOptions) {
     return baseInvalidation(keys, invalidationOptions, nspoImpl.getValueSerializer(), opLWTMode);
   }
 

@@ -14,11 +14,9 @@ package com.ms.silverking.cloud.dht.meta;
 import com.ms.silverking.cloud.meta.VersionedDefinition;
 
 /**
- * DHT configuration settings.
- * (For use within the context of a single ZooKeeper ensemble -
- * thus specification of the ensemble is not necessary -
- * as opposed to ClientDHTConfiguration which specifies a
- * ZooKeeper ensemble.)
+ * DHT configuration settings. (For use within the context of a single ZooKeeper ensemble - thus
+ * specification of the ensemble is not necessary - as opposed to ClientDHTConfiguration which
+ * specifies a ZooKeeper ensemble.)
  */
 public class DHTSKFSConfiguration implements VersionedDefinition {
   private final String skfsConfigName;

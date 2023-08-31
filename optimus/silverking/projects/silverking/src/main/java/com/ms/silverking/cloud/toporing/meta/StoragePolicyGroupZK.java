@@ -33,7 +33,8 @@ public class StoragePolicyGroupZK extends MetaToolModuleBase<StoragePolicyGroup,
   }
 
   @Override
-  public StoragePolicyGroup readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public StoragePolicyGroup readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     try {
       return StoragePolicyGroup.parse(zk.getString(getVBase(version)), version);
     } catch (PolicyParseException ppe) {

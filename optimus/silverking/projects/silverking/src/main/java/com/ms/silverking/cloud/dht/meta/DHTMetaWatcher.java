@@ -37,14 +37,14 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Observers ZooKeeper for changes in metadata that this DHT is dependent upon.
- * <p>
- * Currently, this comprises two types of data: the DHT configuration, and
- * the ring tree (only one currently supported) that this DHT uses.
+ *
+ * <p>Currently, this comprises two types of data: the DHT configuration, and the ring tree (only
+ * one currently supported) that this DHT uses.
  */
 public class DHTMetaWatcher implements VersionListener, RingChangeListener {
   private final MetaClient mc;
   private final MetaPaths mp;
-  //private final com.ms.silverking.cloud.toporing.meta.MetaPaths   topoMP;
+  // private final com.ms.silverking.cloud.toporing.meta.MetaPaths   topoMP;
   private final ZooKeeperConfig zkConfig;
   private volatile RingConfigWatcher ringConfigWatcher;
   private final long intervalMillis;
@@ -54,14 +54,15 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
 
   private static Logger log = LoggerFactory.getLogger(DHTMetaWatcher.class);
 
-  public DHTMetaWatcher(ZooKeeperConfig zkConfig, String dhtName, long intervalMillis, boolean enableLogging)
+  public DHTMetaWatcher(
+      ZooKeeperConfig zkConfig, String dhtName, long intervalMillis, boolean enableLogging)
       throws IOException, KeeperException {
     mc = new MetaClient(dhtName, zkConfig);
     this.intervalMillis = intervalMillis;
     mp = mc.getMetaPaths();
     this.zkConfig = zkConfig;
     new VersionWatcher(mc, mp.getInstanceConfigPath(), this, intervalMillis, 0);
-    //new VersionWatcher(mc.getZooKeeper(), mp.getTopologyPath(), this, intervalMillis);
+    // new VersionWatcher(mc.getZooKeeper(), mp.getTopologyPath(), this, intervalMillis);
     this.enableLogging = enableLogging;
     dhtMetaUpdateListeners = Collections.synchronizedList(new ArrayList<DHTMetaUpdateListener>());
   }
@@ -99,15 +100,15 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
   }
 
   /**
-   * Called when a new DHT configuration is found. Reads the configuration and starts a ring configuration
-   * watcher for it. Stops the old ring configuration watcher if there is one.
+   * Called when a new DHT configuration is found. Reads the configuration and starts a ring
+   * configuration watcher for it. Stops the old ring configuration watcher if there is one.
    */
   private void newDHTConfiguration() {
     try {
       synchronized (this) {
         dhtConfig = mc.getDHTConfiguration();
         if (enableLogging) {
-          log.info("DHTMetaWatcher.newDHTConfiguration: {}" , dhtConfig);
+          log.info("DHTMetaWatcher.newDHTConfiguration: {}", dhtConfig);
         }
         if (dhtConfig != null) {
           this.notifyAll();
@@ -115,34 +116,34 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
           log.info("Ignoring null dhtConfig");
         }
       }
-      //readRing(dhtConfig.getRingName(), dhtConfig.getZKID());
+      // readRing(dhtConfig.getRingName(), dhtConfig.getZKID());
       startRingConfigWatcher(dhtConfig.getRingName());
     } catch (Exception e) {
-      log.warn("",e);
+      log.warn("", e);
     }
   }
 
-  /**
-   * Start a new ring configuration watcher, stopping the old if it exists.
-   */
+  /** Start a new ring configuration watcher, stopping the old if it exists. */
   private void startRingConfigWatcher(String ringName) {
     if (enableLogging) {
-      log.info("DHTMetaWatcher.startRingConfigWatcher: {}" , ringName);
+      log.info("DHTMetaWatcher.startRingConfigWatcher: {}", ringName);
     }
     synchronized (this) {
       try {
         if (ringConfigWatcher != null) {
           ringConfigWatcher.stop();
         }
-        ringConfigWatcher = new RingConfigWatcher(zkConfig, ringName, intervalMillis, enableLogging, this);
+        ringConfigWatcher =
+            new RingConfigWatcher(zkConfig, ringName, intervalMillis, enableLogging, this);
       } catch (Exception e) {
-        log.warn("",e);
+        log.warn("", e);
       }
     }
   }
 
   @Override
-  public void ringChanged(String ringName, String basePath, Pair<Long, Long> version, long creationTimeMillis) {
+  public void ringChanged(
+      String ringName, String basePath, Pair<Long, Long> version, long creationTimeMillis) {
     try {
       if (enableLogging) {
         log.info("ringChanged: {}", ringName);
@@ -152,14 +153,14 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
       // We want to make sure that we read consistent rings and don't read the same ring twice
       readRing(dhtConfig.getRingName(), Long.MAX_VALUE);
     } catch (Exception e) {
-      log.warn("",e);
+      log.warn("", e);
     }
   }
 
   // TODO (OPTIMUS-0000): think about zkidLimit
   public void readRing(String ringName, long zkidLimit) throws KeeperException, IOException {
     com.ms.silverking.cloud.toporing.meta.MetaClient ringMC;
-    //com.ms.silverking.cloud.meta.MetaClient             cloudMC;
+    // com.ms.silverking.cloud.meta.MetaClient             cloudMC;
     NamedRingConfiguration namedRingConfig;
     RingConfiguration ringConfig;
     InstantiatedRingTree ringTree;
@@ -171,7 +172,7 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
     int ringReadRetryInvervalSeconds = 2;
     SilverKingZooKeeperClient zk;
 
-    //cloudMC = new com.ms.silverking.cloud.meta.MetaClient(ringConfig.getCloudConfiguration(),
+    // cloudMC = new com.ms.silverking.cloud.meta.MetaClient(ringConfig.getCloudConfiguration(),
     //                                                      zkConfig);
 
     zk = mc.getZooKeeper();
@@ -189,20 +190,25 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
       log.info("ringConfig  {}", ringConfig);
     }
 
-    configInstanceVersion = zk.getVersionPriorTo(ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
-        zkidLimit);
+    configInstanceVersion =
+        zk.getVersionPriorTo(
+            ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion), zkidLimit);
     if (enableLogging) {
-      log.info("configInstanceVersion: {}" , configInstanceVersion);
+      log.info("configInstanceVersion: {}", configInstanceVersion);
     }
     if (configInstanceVersion == -1) {
       configInstanceVersion = 0;
     }
 
     if (DHTConstants.isDaemon || log.isDebugEnabled()) {
-      log.debug("Waiting until valid {}  {}" , ringMC.getMetaPaths().getConfigInstancePath(
-          ringConfigVersion) ,configInstanceVersion);
+      log.debug(
+          "Waiting until valid {}  {}",
+          ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
+          configInstanceVersion);
     }
-    SingleRingZK.waitUntilValid(ringMC, ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
+    SingleRingZK.waitUntilValid(
+        ringMC,
+        ringMC.getMetaPaths().getConfigInstancePath(ringConfigVersion),
         configInstanceVersion);
     if (DHTConstants.isDaemon || log.isDebugEnabled()) {
       log.debug("Valid");
@@ -212,7 +218,9 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
     readAttemptIndex = 0;
     while (ringTree == null) {
       try {
-        ringTree = SingleRingZK.readTree(ringMC, ringConfigVersion, configInstanceVersion);//, weightsVersion);
+        ringTree =
+            SingleRingZK.readTree(
+                ringMC, ringConfigVersion, configInstanceVersion); // , weightsVersion);
       } catch (Exception e) {
         if (++readAttemptIndex >= ringReadAttempts) {
           throw new RuntimeException("Ring read failed", e);
@@ -222,12 +230,12 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
       }
     }
     if (enableLogging) {
-      log.info("    ###  {}  {}" , ringConfigVersion , configInstanceVersion);
+      log.info("    ###  {}  {}", ringConfigVersion, configInstanceVersion);
     }
     dhtMetaUpdate = new DHTMetaUpdate(dhtConfig, namedRingConfig, ringTree, mc);
     notifyListeners(dhtMetaUpdate);
-    //ringUpdateListener.newRingTree(new NamedRingConfiguration(ringName, ringConfig), ringTree);
-    //ringUpdateListener.newRingTree(ringTree.getMap(ringConfig.getRingParentName()));
+    // ringUpdateListener.newRingTree(new NamedRingConfiguration(ringName, ringConfig), ringTree);
+    // ringUpdateListener.newRingTree(ringTree.getMap(ringConfig.getRingParentName()));
   }
 
   /*
@@ -236,12 +244,12 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
   @Override
   public void newVersion(String basePath, long version) {
     if (enableLogging) {
-      log.debug("DHTMetaWatcher.newVersion: {}  {}" , basePath , version);
+      log.debug("DHTMetaWatcher.newVersion: {}  {}", basePath, version);
     }
     if (basePath.equals(mp.getInstanceConfigPath())) {
       newDHTConfiguration();
     } else {
-      log.info("Unexpected update in DHTMetaWatcher: {}" , basePath);
+      log.info("Unexpected update in DHTMetaWatcher: {}", basePath);
     }
   }
 
@@ -252,14 +260,12 @@ public class DHTMetaWatcher implements VersionListener, RingChangeListener {
     }
   }
 
-  /**
-   */
-
+  /** */
   static class RingUpdateListenerTest implements DHTMetaUpdateListener {
     @Override
     public void dhtMetaUpdate(DHTMetaUpdate dhtMetaUpdate) {
       log.info("      *** newRing");
-      log.info("{}",dhtMetaUpdate);
+      log.info("{}", dhtMetaUpdate);
     }
   }
 

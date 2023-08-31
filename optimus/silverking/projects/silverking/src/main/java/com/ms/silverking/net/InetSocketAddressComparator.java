@@ -19,8 +19,7 @@ import com.ms.silverking.util.ArrayUtil;
 public class InetSocketAddressComparator implements Comparator<InetSocketAddress> {
   public static final InetSocketAddressComparator instance = new InetSocketAddressComparator();
 
-  public InetSocketAddressComparator() {
-  }
+  public InetSocketAddressComparator() {}
 
   @Override
   public int compare(InetSocketAddress a1, InetSocketAddress a2) {

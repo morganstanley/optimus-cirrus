@@ -51,8 +51,8 @@ class PathsOpts protected (val path: Path) {
     def deleteIfNeeded() = exists() && (!delete() || exists())
     if (deleteIfNeeded() || deleteIfNeeded()) {
       throw new StratosphereException(
-        s"""[ERROR] Cannot delete directory ($getFullPath).
-           |        Please turn off all applications using files in this directory and try again""".stripMargin)
+        s"""Cannot delete directory ($getFullPath).
+           |Please turn off all applications using files in this directory and try again""".stripMargin)
     }
   }
 

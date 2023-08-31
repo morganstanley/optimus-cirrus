@@ -17,9 +17,7 @@ import com.ms.silverking.cloud.zookeeper.SilverKingZooKeeperClient.KeeperExcepti
 import com.ms.silverking.collection.Triple;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 
-/**
- * Write/Reads health for a particular instance of a particular ring for a particular DHT.
- */
+/** Write/Reads health for a particular instance of a particular ring for a particular DHT. */
 public class RingHealthZK {
   private final MetaClient mc;
   private final String ringName;
@@ -31,7 +29,8 @@ public class RingHealthZK {
    * <DHTPath>/ringHealth/<RingName>/<RingConfigVersion>/<ConfigInstanceVersion>
    */
 
-  public RingHealthZK(MetaClient mc, String ringName, long ringConfigVersion, long configInstanceVersion)
+  public RingHealthZK(
+      MetaClient mc, String ringName, long ringConfigVersion, long configInstanceVersion)
       throws KeeperException {
     this.mc = mc;
     this.ringName = ringName;
@@ -40,8 +39,13 @@ public class RingHealthZK {
     ensureBasePathExists();
   }
 
-  public RingHealthZK(MetaClient mc, Triple<String, Long, Long> ringNameAndVersionPair) throws KeeperException {
-    this(mc, ringNameAndVersionPair.getV1(), ringNameAndVersionPair.getV2(), ringNameAndVersionPair.getV3());
+  public RingHealthZK(MetaClient mc, Triple<String, Long, Long> ringNameAndVersionPair)
+      throws KeeperException {
+    this(
+        mc,
+        ringNameAndVersionPair.getV1(),
+        ringNameAndVersionPair.getV2(),
+        ringNameAndVersionPair.getV3());
   }
 
   private void ensureBasePathExists() throws KeeperException {
@@ -62,7 +66,9 @@ public class RingHealthZK {
   }
 
   public String getRingInstanceHealthPath() {
-    return getRingConfigVersionPath() + "/" + SilverKingZooKeeperClient.padVersion(configInstanceVersion);
+    return getRingConfigVersionPath()
+        + "/"
+        + SilverKingZooKeeperClient.padVersion(configInstanceVersion);
   }
 
   public void writeHealth(RingHealth health) throws KeeperException {
@@ -83,7 +89,8 @@ public class RingHealthZK {
         return null;
       }
     } catch (KeeperException ke) {
-      if (ke.getCause() != null && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
+      if (ke.getCause() != null
+          && NoNodeException.class.isAssignableFrom(ke.getCause().getClass())) {
         return null;
       } else {
         throw ke;

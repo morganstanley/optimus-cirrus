@@ -25,8 +25,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Base class for implementing an asynchronous TCP/IP server.
- * Maintains persistent connections with peers.
+ * Base class for implementing an asynchronous TCP/IP server. Maintains persistent connections with
+ * peers.
  */
 public class AsyncServer<T extends Connection> extends AsyncBase<T> {
   private final InetSocketAddress localSocketAddr;
@@ -39,12 +39,30 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
 
   public static boolean verbose = AsyncGlobals.verbose;
 
-  private AsyncServer(int port, int backlog, int numSelectorControllers, String controllerClass, Acceptor<T> acceptor,
-      ConnectionCreator<T> connectionCreator, IncomingConnectionListener<T> incomingConnectionListener,
-      LWTPool readerLWTPool, LWTPool writerLWTPool, int selectionThreadWorkLimit, boolean enabled, boolean debug)
+  private AsyncServer(
+      int port,
+      int backlog,
+      int numSelectorControllers,
+      String controllerClass,
+      Acceptor<T> acceptor,
+      ConnectionCreator<T> connectionCreator,
+      IncomingConnectionListener<T> incomingConnectionListener,
+      LWTPool readerLWTPool,
+      LWTPool writerLWTPool,
+      int selectionThreadWorkLimit,
+      boolean enabled,
+      boolean debug)
       throws IOException {
-    super(port, numSelectorControllers, controllerClass, acceptor, connectionCreator, readerLWTPool, writerLWTPool,
-        selectionThreadWorkLimit, debug);
+    super(
+        port,
+        numSelectorControllers,
+        controllerClass,
+        acceptor,
+        connectionCreator,
+        readerLWTPool,
+        writerLWTPool,
+        selectionThreadWorkLimit,
+        debug);
 
     this.incomingConnectionListener = incomingConnectionListener;
     this.enabled = enabled;
@@ -63,7 +81,7 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
     addServerChannel(serverChannel);
 
     if (verbose) {
-      log.info("AsyncServer.port: {}" , getPort());
+      log.info("AsyncServer.port: {}", getPort());
     }
   }
 
@@ -71,12 +89,33 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
     return enabled;
   }
 
-  public AsyncServer(int port, int backlog, int numSelectorControllers, String controllerClass,
-      ConnectionCreator<T> connectionCreator, IncomingConnectionListener<T> newConnectionListener,
-      LWTPool readerLWTPool, LWTPool writerLWTPool, LWTPool acceptorPool, int selectionThreadWorkLimit, boolean enabled,
-      boolean debug) throws IOException {
-    this(port, backlog, numSelectorControllers, controllerClass, new Acceptor<T>(acceptorPool), connectionCreator,
-        newConnectionListener, readerLWTPool, writerLWTPool, selectionThreadWorkLimit, enabled, debug);
+  public AsyncServer(
+      int port,
+      int backlog,
+      int numSelectorControllers,
+      String controllerClass,
+      ConnectionCreator<T> connectionCreator,
+      IncomingConnectionListener<T> newConnectionListener,
+      LWTPool readerLWTPool,
+      LWTPool writerLWTPool,
+      LWTPool acceptorPool,
+      int selectionThreadWorkLimit,
+      boolean enabled,
+      boolean debug)
+      throws IOException {
+    this(
+        port,
+        backlog,
+        numSelectorControllers,
+        controllerClass,
+        new Acceptor<T>(acceptorPool),
+        connectionCreator,
+        newConnectionListener,
+        readerLWTPool,
+        writerLWTPool,
+        selectionThreadWorkLimit,
+        enabled,
+        debug);
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -98,12 +137,12 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
         serverChannel = null;
       }
     } catch (IOException ioe) {
-      log.error("",ioe);
+      log.error("", ioe);
     }
     super.shutdown();
   }
 
-  //Need to expose this for tests as socket chanell close is final and cannot be mocked
+  // Need to expose this for tests as socket chanell close is final and cannot be mocked
   void closeChannel(SocketChannel socketChannel) throws IOException {
     socketChannel.close();
   }
@@ -137,13 +176,13 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
       }
       connectionSuccess = true;
     } catch (AuthFailedException | IOException e) {
-      log.error("",e);
+      log.error("", e);
     } finally {
       if (!connectionSuccess && socketChannel != null) {
         try {
           closeChannel(socketChannel);
         } catch (IOException e) {
-          log.error("Could not close socketChannel {}" , socketChannel, e);
+          log.error("Could not close socketChannel {}", socketChannel, e);
         }
       }
     }
@@ -178,7 +217,8 @@ public class AsyncServer<T extends Connection> extends AsyncBase<T> {
     }
 
     @Override
-    public Triple<ServerSocketChannel, SelectorController<T>, SelectionKey>[] newWorkArray(int size) {
+    public Triple<ServerSocketChannel, SelectorController<T>, SelectionKey>[] newWorkArray(
+        int size) {
       return new Triple[size];
     }
   }

@@ -17,11 +17,10 @@ import com.ms.silverking.numeric.NumConversion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Read-only OffsetList stored on disk.
- */
+/** Read-only OffsetList stored on disk. */
 public final class BufferOffsetList extends OffsetListBase {
-  // there is an unused, deprecated field that lives at offset 0. That field is one int in size. The listSize field
+  // there is an unused, deprecated field that lives at offset 0. That field is one int in size. The
+  // listSize field
   // goes directly after that field, and so has an offset of BYTES_PER_INT.
   static final int listSizeOffset = NumConversion.BYTES_PER_INT;
 

@@ -35,11 +35,17 @@ public class JVMUtil {
 
       threadID = thread.getThreadId();
       log.info(
-          "ThreadId: {}  ThreadName: {}  ThreadState: {}   BlockedCount: {}  WaitedCount:  {}",thread.getThreadId(), thread.getThreadName(), thread.getThreadState() ,thread.getBlockedCount(), thread.getWaitedCount());
+          "ThreadId: {}  ThreadName: {}  ThreadState: {}   BlockedCount: {}  WaitedCount:  {}",
+          thread.getThreadId(),
+          thread.getThreadName(),
+          thread.getThreadState(),
+          thread.getBlockedCount(),
+          thread.getWaitedCount());
 
       if (thread.getLockOwnerId() > -1) {
-        log.info("LOCK INFORMATION For: {}" , threadID);
-        log.info("LockName: {}  LockOwnerName: {}",thread.getLockOwnerName() , thread.getLockName());
+        log.info("LOCK INFORMATION For: {}", threadID);
+        log.info(
+            "LockName: {}  LockOwnerName: {}", thread.getLockOwnerName(), thread.getLockName());
       }
     }
   }

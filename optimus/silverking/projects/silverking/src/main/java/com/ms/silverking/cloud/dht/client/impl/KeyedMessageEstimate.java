@@ -14,7 +14,7 @@ package com.ms.silverking.cloud.dht.client.impl;
 public class KeyedMessageEstimate extends MessageEstimate {
   private int numKeys;
 
-  //protected StringBuilder   sb = new StringBuilder();
+  // protected StringBuilder   sb = new StringBuilder();
 
   public KeyedMessageEstimate(int numKeys) {
     this.numKeys = numKeys;
@@ -26,7 +26,7 @@ public class KeyedMessageEstimate extends MessageEstimate {
 
   public void addKeys(int delta) {
     numKeys += delta;
-    //sb.append(" +k:"+ delta);
+    // sb.append(" +k:"+ delta);
     assert numKeys >= 0;
   }
 

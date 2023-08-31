@@ -33,27 +33,35 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Maps UUIDs from active messages back to active operations. This is necessary since we allow multiple
- * operations to be combined in a single message to improve performance.
- * <p>
- * The typing of the mapping is complex enough that we hide it in this class.
- * <p>
- * The strategy of this implementation is to allow GC and weak references
- * to handle the removal of entries from the map. This removes the need to
- * perform any manual deletion.
+ * Maps UUIDs from active messages back to active operations. This is necessary since we allow
+ * multiple operations to be combined in a single message to improve performance.
+ *
+ * <p>The typing of the mapping is complex enough that we hide it in this class.
+ *
+ * <p>The strategy of this implementation is to allow GC and weak references to handle the removal
+ * of entries from the map. This removes the need to perform any manual deletion.
  */
 class ActiveRetrievalListeners implements ActiveOperationListeners {
 
   private static final boolean enableMultipleOpsPerMessage = OpSender.opGroupingEnabled;
 
-  private final ConcurrentMap<UUIDBase, ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>> activeOpListeners;
+  private final ConcurrentMap<
+          UUIDBase, ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>
+      activeOpListeners;
 
   private static Logger log = LoggerFactory.getLogger(ActiveRetrievalListeners.class);
 
   // UUIDBase-->
   //            DHTKey-->
   //                     List<ActiveKeyedOperationResultListener...>
-  private final Map<UUIDBase, ConcurrentMap<DHTKey, List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>>> activeRetrievalListeners;
+  private final Map<
+          UUIDBase,
+          ConcurrentMap<
+              DHTKey,
+              List<
+                  WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>>>
+      activeRetrievalListeners;
 
   private static final int mapCapacity = 8; // FUTURE - use something non-static
   private static final int keyMapConcurrencyLevel = 2;
@@ -75,7 +83,8 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
   OperationUUID newOpUUID() {
     OperationUUID opUUID = new OperationUUID();
     if (enableMultipleOpsPerMessage) {
-      activeRetrievalListeners.put(opUUID, new ConcurrentHashMap(mapCapacity, keyMapConcurrencyLevel));
+      activeRetrievalListeners.put(
+          opUUID, new ConcurrentHashMap(mapCapacity, keyMapConcurrencyLevel));
     }
     return opUUID;
   }
@@ -84,14 +93,18 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
    * @param opUUID
    * @param dhtKey
    * @param listener
-   * @return true if a new list was created for this key, false if a list already existed for this key
+   * @return true if a new list was created for this key, false if a list already existed for this
+   *     key
    */
-  boolean addListener(UUIDBase opUUID,
-                      DHTKey dhtKey,
-                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener) {
+  boolean addListener(
+      UUIDBase opUUID,
+      DHTKey dhtKey,
+      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener) {
     if (enableMultipleOpsPerMessage) {
-      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> listenerList = new LinkedList();
-      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> existingList;
+      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+          listenerList = new LinkedList();
+      List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+          existingList;
       existingList = activeRetrievalListeners.get(opUUID).putIfAbsent(dhtKey, listenerList);
       boolean newListCreated;
       if (existingList != null) {
@@ -118,15 +131,25 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
   Set<AsyncRetrievalOperationImpl> currentRetrievalSet() {
     ImmutableSet.Builder<AsyncRetrievalOperationImpl> operationBuilder = ImmutableSet.builder();
     if (enableMultipleOpsPerMessage) {
-      for (ConcurrentMap<DHTKey, List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>> map : activeRetrievalListeners
-          .values()) {
+      for (ConcurrentMap<
+              DHTKey,
+              List<
+                  WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>>
+          map : activeRetrievalListeners.values()) {
         log.debug("maps: {}", map);
         // FUTURE - we can encounter concurrent modifications here
         // think about tolerating vs. preventing
         try {
-          for (List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> list : map.values()) {
-            for (WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>> listenerRef : list) {
-              ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener = listenerRef.get();
+          for (List<
+                  WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+              list : map.values()) {
+            for (WeakReference<
+                    ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>
+                listenerRef : list) {
+              ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener =
+                  listenerRef.get();
               log.debug("listener: {}", listener);
               if (listener instanceof AsyncRetrievalOperationImpl) {
                 operationBuilder.add((AsyncRetrievalOperationImpl) listener);
@@ -135,7 +158,8 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
           }
         } catch (Exception exception) {
           // Currently, we tolerate concurrent modification-induced exceptions
-          // Not critical if we skip a retry. In the future, however, we should probably prevent this.
+          // Not critical if we skip a retry. In the future, however, we should probably prevent
+          // this.
           if (log.isDebugEnabled()) {
             log.debug("", exception);
             log.debug("Ignoring exception during currentRetrievalSet()");
@@ -143,7 +167,8 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
         }
       }
     } else {
-      for (ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener : activeOpListeners.values()) {
+      for (ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener :
+          activeOpListeners.values()) {
         if (listener instanceof AsyncRetrievalOperationImpl) {
           operationBuilder.add((AsyncRetrievalOperationImpl) listener);
         }
@@ -154,27 +179,34 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
 
   @Override
   public boolean isResponsibleFor(UUIDBase messageId) {
-    return (activeRetrievalListeners != null && activeRetrievalListeners.containsKey(messageId)) ||
-           (activeOpListeners != null && activeOpListeners.containsKey(messageId));
+    return (activeRetrievalListeners != null && activeRetrievalListeners.containsKey(messageId))
+        || (activeOpListeners != null && activeOpListeners.containsKey(messageId));
   }
 
   void receivedRetrievalResponse(MessageGroup message) {
     if (enableMultipleOpsPerMessage) {
-      ConcurrentMap<DHTKey, List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>> listenerMap;
+      ConcurrentMap<
+              DHTKey,
+              List<
+                  WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>>
+          listenerMap;
       ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener;
       listenerMap = activeRetrievalListeners.get(message.getUUID());
 
       if (listenerMap != null) {
-        List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>> listenerList;
+        List<WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>>
+            listenerList;
 
         if (message.getMessageType() == MessageType.ERROR_RESPONSE) {
-          MessageGroupRetrievalResponseEntry errorResultAsRetrievalResult = message.getRetrievalResponseValueKeyIterator()
-                                                                                   .iterator()
-                                                                                   .next();
+          MessageGroupRetrievalResponseEntry errorResultAsRetrievalResult =
+              message.getRetrievalResponseValueKeyIterator().iterator().next();
           for (DHTKey key : listenerMap.keySet()) {
             listenerList = listenerMap.get(key);
             if (listenerList != null) {
-              for (WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>> listenerRef : listenerList) {
+              for (WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>
+                  listenerRef : listenerList) {
                 listener = listenerRef.get();
                 if (listener != null) {
                   listener.resultReceived(key, errorResultAsRetrievalResult);
@@ -185,15 +217,19 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
             }
           }
         } else {
-          for (MessageGroupRetrievalResponseEntry entry : message.getRetrievalResponseValueKeyIterator()) {
+          for (MessageGroupRetrievalResponseEntry entry :
+              message.getRetrievalResponseValueKeyIterator()) {
             listenerList = listenerMap.get(entry);
             if (listenerList != null) {
-              for (WeakReference<ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>> listenerRef : listenerList) {
+              for (WeakReference<
+                      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry>>
+                  listenerRef : listenerList) {
                 listener = listenerRef.get();
                 if (listener != null) {
                   listener.resultReceived(entry, entry);
                 } else {
-                  log.debug("receivedRetrievalResponse. null listenerRef.get() for entry: {}", entry);
+                  log.debug(
+                      "receivedRetrievalResponse. null listenerRef.get() for entry: {}", entry);
                 }
               }
             } else {
@@ -208,11 +244,13 @@ class ActiveRetrievalListeners implements ActiveOperationListeners {
       }
     } else {
 
-      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener = activeOpListeners.get(message.getUUID());
+      ActiveKeyedOperationResultListener<MessageGroupRetrievalResponseEntry> listener =
+          activeOpListeners.get(message.getUUID());
       if (listener == null) {
         log.debug("receivedRetrievalResponse. No listener for uuid: {}", message.getUUID());
       } else {
-        for (MessageGroupRetrievalResponseEntry entry : message.getRetrievalResponseValueKeyIterator()) {
+        for (MessageGroupRetrievalResponseEntry entry :
+            message.getRetrievalResponseValueKeyIterator()) {
           listener.resultReceived(entry, entry);
         }
       }

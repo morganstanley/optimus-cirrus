@@ -13,8 +13,7 @@ package com.ms.silverking.text;
 
 public class ObjectDefParseException extends RuntimeException {
 
-  public ObjectDefParseException() {
-  }
+  public ObjectDefParseException() {}
 
   public ObjectDefParseException(String message) {
     super(message);
@@ -28,8 +27,8 @@ public class ObjectDefParseException extends RuntimeException {
     super(message, cause);
   }
 
-  public ObjectDefParseException(String message, Throwable cause, boolean enableSuppression,
-      boolean writableStackTrace) {
+  public ObjectDefParseException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
   }
 }

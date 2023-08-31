@@ -33,7 +33,8 @@ public class StringMD5KeyCreator extends BaseKeyCreator<String> {
 
   public StringMD5KeyCreator() {
     super();
-    //cachedKeys = new MapMaker().concurrencyLevel(cacheConcurrencyLevel).initialCapacity(cacheCapacity).makeMap();
+    // cachedKeys = new
+    // MapMaker().concurrencyLevel(cacheConcurrencyLevel).initialCapacity(cacheCapacity).makeMap();
     cachedKeys = null;
     // FUTURE - could consider using cached keys
   }
@@ -42,16 +43,15 @@ public class StringMD5KeyCreator extends BaseKeyCreator<String> {
   public DHTKey createKey(String key) {
     DHTKey dhtKey;
 
-    //dhtKey = cachedKeys.get(key);
-    //if (dhtKey == null) {
+    // dhtKey = cachedKeys.get(key);
+    // if (dhtKey == null) {
     if (use8BitEncoding && key.length() < noArrayThreshold) {
       dhtKey = md5KeyDigest.computeKey(key);
     } else {
       dhtKey = md5KeyDigest.computeKey(key.getBytes());
     }
-    //cachedKeys.put(key, dhtKey);
-    //}
+    // cachedKeys.put(key, dhtKey);
+    // }
     return dhtKey;
   }
-
 }

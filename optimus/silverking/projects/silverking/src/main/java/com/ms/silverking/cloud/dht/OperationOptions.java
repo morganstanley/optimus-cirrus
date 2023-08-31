@@ -30,11 +30,15 @@ public class OperationOptions {
   public static final byte[] noAuthorizationUser = null;
 
   static {
-    ObjectDefParser2.addParserWithExclusions(OperationOptions.class, null, FieldsRequirement.ALLOW_INCOMPLETE, null);
+    ObjectDefParser2.addParserWithExclusions(
+        OperationOptions.class, null, FieldsRequirement.ALLOW_INCOMPLETE, null);
   }
 
-  public OperationOptions(OpTimeoutController opTimeoutController, Set<SecondaryTarget> secondaryTargets,
-      TraceIDProvider traceIDProvider, AllReplicasExcludedResponse allReplicasExcludedResponse) {
+  public OperationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse) {
     Preconditions.checkNotNull(opTimeoutController);
     Preconditions.checkNotNull(traceIDProvider);
     this.opTimeoutController = opTimeoutController;
@@ -48,21 +52,26 @@ public class OperationOptions {
   }
 
   public OperationOptions opTimeoutController(OpTimeoutController opTimeoutController) {
-    return new OperationOptions(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
-  }
-  
-  public OperationOptions traceIDProvider(Set<SecondaryTarget> secondaryTargets) {
-    return new OperationOptions(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
-  }
-  
-  public OperationOptions traceIDProvider(TraceIDProvider traceIDProvider) {
-    return new OperationOptions(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
+    return new OperationOptions(
+        opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
   }
 
-  public OperationOptions allReplicasExcludedResponse(AllReplicasExcludedResponse allReplicasExcludedResponse) {
-    return new OperationOptions(opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
+  public OperationOptions traceIDProvider(Set<SecondaryTarget> secondaryTargets) {
+    return new OperationOptions(
+        opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
   }
-  
+
+  public OperationOptions traceIDProvider(TraceIDProvider traceIDProvider) {
+    return new OperationOptions(
+        opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
+  }
+
+  public OperationOptions allReplicasExcludedResponse(
+      AllReplicasExcludedResponse allReplicasExcludedResponse) {
+    return new OperationOptions(
+        opTimeoutController, secondaryTargets, traceIDProvider, allReplicasExcludedResponse);
+  }
+
   public TraceIDProvider getTraceIDProvider() {
     return traceIDProvider;
   }
@@ -74,7 +83,7 @@ public class OperationOptions {
   public Set<SecondaryTarget> getSecondaryTargets() {
     return secondaryTargets;
   }
-  
+
   /**
    * Return allReplicasExcludedResponse
    *
@@ -90,7 +99,11 @@ public class OperationOptions {
 
     hashCode = opTimeoutController.hashCode();
     if (secondaryTargets != null) {
-      hashCode = hashCode ^ secondaryTargets.hashCode() ^ ObjectUtil.hashCode(traceIDProvider) ^ allReplicasExcludedResponse.hashCode();
+      hashCode =
+          hashCode
+              ^ secondaryTargets.hashCode()
+              ^ ObjectUtil.hashCode(traceIDProvider)
+              ^ allReplicasExcludedResponse.hashCode();
     }
     return hashCode;
   }
@@ -100,8 +113,9 @@ public class OperationOptions {
     OperationOptions oOptions;
 
     oOptions = (OperationOptions) other;
-    return Objects.equals(opTimeoutController, oOptions.opTimeoutController) && Objects.equals(secondaryTargets,
-        oOptions.secondaryTargets) && Objects.equals(traceIDProvider, oOptions.traceIDProvider)
+    return Objects.equals(opTimeoutController, oOptions.opTimeoutController)
+        && Objects.equals(secondaryTargets, oOptions.secondaryTargets)
+        && Objects.equals(traceIDProvider, oOptions.traceIDProvider)
         && oOptions.allReplicasExcludedResponse == allReplicasExcludedResponse;
   }
 }

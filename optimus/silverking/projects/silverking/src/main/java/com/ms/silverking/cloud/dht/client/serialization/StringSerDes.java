@@ -13,9 +13,7 @@ package com.ms.silverking.cloud.dht.client.serialization;
 
 import java.nio.ByteBuffer;
 
-/**
- * Serializer/deserializer for String
- */
+/** Serializer/deserializer for String */
 public final class StringSerDes implements BufferSerDes<String> {
   @Override
   public ByteBuffer serializeToBuffer(String s) {

@@ -17,10 +17,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A BaseWorker with the ability pause work processing and group the paused work.
- * An external source tells this worker when to pause. When paused, all incoming
- * work is queueud up. Upon being unpaused, work in the queue is grouped and
- * processed.
+ * A BaseWorker with the ability pause work processing and group the paused work. An external source
+ * tells this worker when to pause. When paused, all incoming work is queueud up. Upon being
+ * unpaused, work in the queue is grouped and processed.
  */
 public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
   private volatile boolean paused;
@@ -34,7 +33,10 @@ public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
 
   private static final boolean debugPause = false;
 
-  public GroupingPausingBaseWorker(LWTPool workPool, boolean allowsConcurrentWork, int workerMaxDirectCallDepth,
+  public GroupingPausingBaseWorker(
+      LWTPool workPool,
+      boolean allowsConcurrentWork,
+      int workerMaxDirectCallDepth,
       int idleThreadThreshold) {
     super(workPool, allowsConcurrentWork, workerMaxDirectCallDepth, idleThreadThreshold);
     pauseQ = new ConcurrentLinkedQueue<>();
@@ -43,26 +45,41 @@ public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
     unpauseCount = new AtomicLong();
   }
 
-  public GroupingPausingBaseWorker(LWTPool workPool, boolean allowsConcurrentWork, int workerMaxDirectCallDepth) {
-    this(workPool, allowsConcurrentWork, workerMaxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+  public GroupingPausingBaseWorker(
+      LWTPool workPool, boolean allowsConcurrentWork, int workerMaxDirectCallDepth) {
+    this(
+        workPool,
+        allowsConcurrentWork,
+        workerMaxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
   public GroupingPausingBaseWorker(LWTPool workPool, boolean allowsConcurrentWork) {
-    this(workPool, allowsConcurrentWork, LWTConstants.defaultMaxDirectCallDepth,
+    this(
+        workPool,
+        allowsConcurrentWork,
+        LWTConstants.defaultMaxDirectCallDepth,
         LWTConstants.defaultIdleThreadThreshold);
   }
 
   public GroupingPausingBaseWorker(boolean allowsConcurrentWork, int maxDirectCallDepth) {
-    this(LWTPoolProvider.defaultConcurrentWorkPool, true, maxDirectCallDepth, LWTConstants.defaultIdleThreadThreshold);
+    this(
+        LWTPoolProvider.defaultConcurrentWorkPool,
+        true,
+        maxDirectCallDepth,
+        LWTConstants.defaultIdleThreadThreshold);
   }
 
-  public GroupingPausingBaseWorker(boolean allowsConcurrentWork, int maxDirectCallDepth, int idleThreadThreshold) {
+  public GroupingPausingBaseWorker(
+      boolean allowsConcurrentWork, int maxDirectCallDepth, int idleThreadThreshold) {
     this(LWTPoolProvider.defaultConcurrentWorkPool, true, maxDirectCallDepth, idleThreadThreshold);
   }
 
   public GroupingPausingBaseWorker(boolean allowsConcurrentWork) {
     this(
-        allowsConcurrentWork ? LWTPoolProvider.defaultConcurrentWorkPool : LWTPoolProvider.defaultNonConcurrentWorkPool,
+        allowsConcurrentWork
+            ? LWTPoolProvider.defaultConcurrentWorkPool
+            : LWTPoolProvider.defaultNonConcurrentWorkPool,
         allowsConcurrentWork);
   }
 
@@ -72,28 +89,28 @@ public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
 
   public void pause() {
     if (debugPause) {
-      log.debug("pause  {}" , pauseQ.size());
+      log.debug("pause  {}", pauseQ.size());
     }
     paused = true;
   }
 
   public void unpause() {
     if (debugPause) {
-      log.debug("unpause  {}" , pauseQ.size());
+      log.debug("unpause  {}", pauseQ.size());
     }
     if (paused) {
       paused = false;
       unpauseCount.incrementAndGet();
       qWorker.addWork(null, 0);
     } else {
-      //qWorker.addWork(null, 0);
+      // qWorker.addWork(null, 0);
     }
   }
 
   public void addWorkForGrouping(I item, int callerMaxDirectCallDepth) {
-    //if (debugPause) {
+    // if (debugPause) {
     //    System.out.println("awg:\t"+ pauseQ.size() +"\t"+ paused);
-    //}
+    // }
     if (!paused) {
       if (debugPause) {
         log.debug("   addWorkForGrouping.!paused1");
@@ -111,7 +128,8 @@ public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
         }
         addWork(item, callerMaxDirectCallDepth);
       } else {
-        // If between the last read of "paused", an upause() (and its corresponding QWorker.doWork())
+        // If between the last read of "paused", an upause() (and its corresponding
+        // QWorker.doWork())
         // has occurred, then this pauseQ.add() could result in stranded work.
         pauseQ.add(item);
         if (debugPause) {
@@ -162,7 +180,7 @@ public abstract class GroupingPausingBaseWorker<I> extends BaseWorker<I> {
     @Override
     public void doWork(Object item) {
       if (debugPause) {
-        log.debug("GroupingPausingBaseWorker.QWorker.doWork() {}" , pauseQ.size());
+        log.debug("GroupingPausingBaseWorker.QWorker.doWork() {}", pauseQ.size());
       }
       gpbw.drainPauseQ();
     }

@@ -11,114 +11,114 @@
  */
 package com.ms.silverking.cloud.ring;
 
-public class LongLockingTreeMapRing<T> {// implements Ring<Long, T> {
-    /*
-    private final Mode    mode;
-    private final TreeMap<Long, T>    ringMap;
-    private final ReentrantReadWriteLock    rwLock;
-    private final ReadLock    readLock;
-    private final WriteLock    writeLock;
-    
-    public enum Mode {SUBSEQUENT, ROTATE};
+public class LongLockingTreeMapRing<T> { // implements Ring<Long, T> {
+  /*
+  private final Mode    mode;
+  private final TreeMap<Long, T>    ringMap;
+  private final ReentrantReadWriteLock    rwLock;
+  private final ReadLock    readLock;
+  private final WriteLock    writeLock;
 
-    public LongLockingTreeMapRing(Mode mode) {
-        this.mode = mode;
-        ringMap = new TreeMap<Long, T>();
-        rwLock = new ReentrantReadWriteLock();
-        readLock = rwLock.readLock();
-        writeLock = rwLock.writeLock();
-    }
-    
-    @Override
-    public void put(Long key, T member) {
-        writeLock.lock();
-        try {
-            ringMap.put(key, member);
-        } finally {
-            writeLock.unlock();
-        }
-    }
-    
-    private Map.Entry<Long, T> getEntry(Long key) {
-        readLock.lock();
-        try {
-            Map.Entry<Long, T> entry;
-            
-            entry = ringMap.ceilingEntry(key);
-            if (entry == null) {
-                entry = ringMap.firstEntry();
-            }
-            return entry;
-        } finally {
-            readLock.unlock();
-        }
-    }
-    
-    @Override
-    public T getOwner(Long key) {
-        readLock.lock();
-        try {
-            Map.Entry<Long, T> entry;
-    
-            entry = getEntry(key);
-            return entry.getValue();
-        } finally {
-            readLock.unlock();
-        }
-    }
-    
-    @Override
-    public List<T> get(Long key, int numMembers) {
-        readLock.lock();
-        try {
-            Map.Entry<Long, T> entry;
-            List<T>    members;
-            
-            if (numMembers < 1) {
-                throw new RuntimeException("numMembers < 1");
-            }
-            members = new ArrayList<T>(numMembers);
-            entry = getEntry(key);
-            members.add(entry.getValue());
-            switch (mode) {
-            case SUBSEQUENT: addSubsequent(members, entry, numMembers - 1); break;
-            case ROTATE: addRotated(members, entry, numMembers - 1); break;
-            default: throw new RuntimeException("panic");
-            }
-            return members;
-        } finally {
-            readLock.unlock();
-        }
-    }
-    
-    private void addSubsequent(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
-        for (int i = 0; i < numSubsequent; i++) {
-            entry = ringMap.higherEntry(entry.getKey());
-            if (entry == null) {
-                entry = ringMap.firstEntry();
-            }
-            members.add(entry.getValue());
-        }
-    }
-    
-    private void addRotated(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
-        for (int i = 0; i < numSubsequent; i++) {
-            Long    rotated;
-            
-            rotated = Long.rotateRight(entry.getKey(), 1);
-            entry = getEntry(rotated);
-            members.add(entry.getValue());
-        }
-    }
-    
-    @Override
-    public Collection<T> getMembers() {
-        return ringMap.values();
-    }
-    
-    @Override
-    public int numMembers() {
-        return ringMap.size();
-    }
-    */
+  public enum Mode {SUBSEQUENT, ROTATE};
+
+  public LongLockingTreeMapRing(Mode mode) {
+      this.mode = mode;
+      ringMap = new TreeMap<Long, T>();
+      rwLock = new ReentrantReadWriteLock();
+      readLock = rwLock.readLock();
+      writeLock = rwLock.writeLock();
+  }
+
+  @Override
+  public void put(Long key, T member) {
+      writeLock.lock();
+      try {
+          ringMap.put(key, member);
+      } finally {
+          writeLock.unlock();
+      }
+  }
+
+  private Map.Entry<Long, T> getEntry(Long key) {
+      readLock.lock();
+      try {
+          Map.Entry<Long, T> entry;
+
+          entry = ringMap.ceilingEntry(key);
+          if (entry == null) {
+              entry = ringMap.firstEntry();
+          }
+          return entry;
+      } finally {
+          readLock.unlock();
+      }
+  }
+
+  @Override
+  public T getOwner(Long key) {
+      readLock.lock();
+      try {
+          Map.Entry<Long, T> entry;
+
+          entry = getEntry(key);
+          return entry.getValue();
+      } finally {
+          readLock.unlock();
+      }
+  }
+
+  @Override
+  public List<T> get(Long key, int numMembers) {
+      readLock.lock();
+      try {
+          Map.Entry<Long, T> entry;
+          List<T>    members;
+
+          if (numMembers < 1) {
+              throw new RuntimeException("numMembers < 1");
+          }
+          members = new ArrayList<T>(numMembers);
+          entry = getEntry(key);
+          members.add(entry.getValue());
+          switch (mode) {
+          case SUBSEQUENT: addSubsequent(members, entry, numMembers - 1); break;
+          case ROTATE: addRotated(members, entry, numMembers - 1); break;
+          default: throw new RuntimeException("panic");
+          }
+          return members;
+      } finally {
+          readLock.unlock();
+      }
+  }
+
+  private void addSubsequent(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
+      for (int i = 0; i < numSubsequent; i++) {
+          entry = ringMap.higherEntry(entry.getKey());
+          if (entry == null) {
+              entry = ringMap.firstEntry();
+          }
+          members.add(entry.getValue());
+      }
+  }
+
+  private void addRotated(List<T> members, Map.Entry<Long,T> entry, int numSubsequent) {
+      for (int i = 0; i < numSubsequent; i++) {
+          Long    rotated;
+
+          rotated = Long.rotateRight(entry.getKey(), 1);
+          entry = getEntry(rotated);
+          members.add(entry.getValue());
+      }
+  }
+
+  @Override
+  public Collection<T> getMembers() {
+      return ringMap.values();
+  }
+
+  @Override
+  public int numMembers() {
+      return ringMap.size();
+  }
+  */
 }

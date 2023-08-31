@@ -20,9 +20,7 @@ import com.ms.silverking.cloud.dht.collection.IntArrayDHTKeyCuckoo;
 import com.ms.silverking.io.util.BufferUtil;
 import com.ms.silverking.numeric.NumConversion;
 
-/**
- * Mimics LTV storage format for legacy storage.
- */
+/** Mimics LTV storage format for legacy storage. */
 public class KeyToOffsetMapElementV0 extends KeyToIntegerMapElement {
   static final int legacyLengthOffset = 0;
 
@@ -30,7 +28,7 @@ public class KeyToOffsetMapElementV0 extends KeyToIntegerMapElement {
 
   private KeyToOffsetMapElementV0(ByteBuffer buf) {
     super(buf);
-    //System.out.printf("buf %s\n", buf);
+    // System.out.printf("buf %s\n", buf);
   }
 
   public static KeyToOffsetMapElementV0 fromFSMBuffer(ByteBuffer fsmBuf) {
@@ -39,8 +37,9 @@ public class KeyToOffsetMapElementV0 extends KeyToIntegerMapElement {
 
     htBufSize = fsmBuf.getInt(KeyToOffsetMapElementV0.legacyLengthOffset);
     legacyPersistedSize = headerSize + htBufSize;
-    //System.out.printf("htBufSize %d\n", htBufSize);
-    return new KeyToOffsetMapElementV0((ByteBuffer) BufferUtil.duplicate(fsmBuf).limit(legacyPersistedSize));
+    // System.out.printf("htBufSize %d\n", htBufSize);
+    return new KeyToOffsetMapElementV0(
+        (ByteBuffer) BufferUtil.duplicate(fsmBuf).limit(legacyPersistedSize));
   }
 
   public int getLegacyPersistedSize() {
@@ -55,9 +54,7 @@ public class KeyToOffsetMapElementV0 extends KeyToIntegerMapElement {
     return FSMElementType.OffsetMap.ordinal();
   }
 
-  /**
-   * Unsupported as the underlying storage is not LTV
-   */
+  /** Unsupported as the underlying storage is not LTV */
   public ByteBuffer getBuffer() {
     throw new UnsupportedOperationException();
   }
@@ -91,9 +88,9 @@ public class KeyToOffsetMapElementV0 extends KeyToIntegerMapElement {
     //  Store legacy format
     elementBuf.putInt(mapSize); // legacy size does *not* include header etc., just the cuckoo map
     keyToOffset.getConfig().persist(elementBuf, elementBuf.position());
-    //elementBuf.position(0/*legacyPersistedSize*/);
+    // elementBuf.position(0/*legacyPersistedSize*/);
     elementBuf.rewind();
-    //System.out.printf("legacyPersistedSize %d\n", legacyPersistedSize);
+    // System.out.printf("legacyPersistedSize %d\n", legacyPersistedSize);
 
     return new KeyToOffsetMapElementV0(elementBuf);
   }

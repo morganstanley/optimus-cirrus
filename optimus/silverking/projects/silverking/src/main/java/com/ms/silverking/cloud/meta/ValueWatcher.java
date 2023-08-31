@@ -18,9 +18,7 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Watches a single versioned ZooKeeper path for new versions.
- */
+/** Watches a single versioned ZooKeeper path for new versions. */
 public class ValueWatcher extends WatcherBase {
   private final ValueListener listener;
   private long lastNotifiedZXID;
@@ -29,14 +27,19 @@ public class ValueWatcher extends WatcherBase {
 
   private static Logger log = LoggerFactory.getLogger(ValueWatcher.class);
 
-  public ValueWatcher(MetaClientCore metaClientCore, String basePath, ValueListener listener, long intervalMillis,
+  public ValueWatcher(
+      MetaClientCore metaClientCore,
+      String basePath,
+      ValueListener listener,
+      long intervalMillis,
       long maxInitialSleep) {
     super(metaClientCore, basePath, intervalMillis, maxInitialSleep);
     this.listener = listener;
     lastNotifiedZXID = Long.MIN_VALUE;
   }
 
-  public ValueWatcher(MetaClientCore metaClientCore, String basePath, ValueListener listener, long intervalMillis) {
+  public ValueWatcher(
+      MetaClientCore metaClientCore, String basePath, ValueListener listener, long intervalMillis) {
     this(metaClientCore, basePath, listener, intervalMillis, intervalMillis);
   }
 
@@ -95,6 +98,6 @@ public class ValueWatcher extends WatcherBase {
 
   public void nodeChildrenChanged(WatchedEvent event) {
     log.debug("nodeChildrenChanged");
-    //checkValue();
+    // checkValue();
   }
 }

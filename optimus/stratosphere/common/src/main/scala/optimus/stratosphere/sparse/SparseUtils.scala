@@ -71,7 +71,7 @@ trait SparseUtils {
     if (sparseSetChanged) {
       updateSparseSet(newProfile)
     } else {
-      stratoWorkspace.log.info("Skipping reapplying settings.")
+      stratoWorkspace.log.highlight("Skipping reapplying settings.")
     }
   }
 

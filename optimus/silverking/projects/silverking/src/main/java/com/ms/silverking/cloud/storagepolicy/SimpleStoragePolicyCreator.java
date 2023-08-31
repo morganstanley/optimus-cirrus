@@ -31,13 +31,31 @@ public class SimpleStoragePolicyCreator {
   private static String createDef(int replication) {
     String s;
 
-    s = "StoragePolicyGroup:" + storagePolicyGroupName + " {\n" + "    root    Rack:" + storagePolicyName + "\n" +
-        "}\n" + "\n" + "Rack:" + storagePolicyName + " {\n" + "    primary {\n" + "        " + replication + " of " + "Server\n" + "    }\n" + "}\n" + "\n";
+    s =
+        "StoragePolicyGroup:"
+            + storagePolicyGroupName
+            + " {\n"
+            + "    root    Rack:"
+            + storagePolicyName
+            + "\n"
+            + "}\n"
+            + "\n"
+            + "Rack:"
+            + storagePolicyName
+            + " {\n"
+            + "    primary {\n"
+            + "        "
+            + replication
+            + " of "
+            + "Server\n"
+            + "    }\n"
+            + "}\n"
+            + "\n";
     return s;
   }
 
   public static void main(String[] args) {
-    //System.out.println(createDef(Integer.parseInt(args[0])));
-    log.info("{}",createStoragePolicyGroup(Integer.parseInt(args[0])));
+    // System.out.println(createDef(Integer.parseInt(args[0])));
+    log.info("{}", createStoragePolicyGroup(Integer.parseInt(args[0])));
   }
 }

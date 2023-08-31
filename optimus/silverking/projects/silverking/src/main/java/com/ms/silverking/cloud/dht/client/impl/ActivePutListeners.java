@@ -34,19 +34,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Maps UUIDs from active messages back to active operations.
- * The typing of the mapping is complex enough that we hide
- * it in this class.
- * <p>
- * The strategy of this implementation is to allow GC and weak references
- * to handle the removal of entries from the map. This removes the need to
- * perform any manual deletion.
+ * Maps UUIDs from active messages back to active operations. The typing of the mapping is complex
+ * enough that we hide it in this class.
+ *
+ * <p>The strategy of this implementation is to allow GC and weak references to handle the removal
+ * of entries from the map. This removes the need to perform any manual deletion.
  */
 class ActivePutListeners implements ActiveOperationListeners {
 
   private static final boolean enableMultipleOpsPerMessage = OpSender.opGroupingEnabled;
-  private final ConcurrentMap<UUIDBase, ActiveKeyedOperationResultListener<OpResult>> activeOpListeners;
-  private final Map<UUIDBase, ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>>> activePutListeners;
+  private final ConcurrentMap<UUIDBase, ActiveKeyedOperationResultListener<OpResult>>
+      activeOpListeners;
+  private final Map<
+          UUIDBase,
+          ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>>>
+      activePutListeners;
 
   private static Logger log = LoggerFactory.getLogger(ActivePutListeners.class);
 
@@ -78,12 +80,15 @@ class ActivePutListeners implements ActiveOperationListeners {
    * @param listener
    * @return true if listener was added successfully, false otherwise
    * @throws NullPointerException if opUUID does not exist in activePutListeners map
-   * @throws RuntimeException     if enableMultipleOpsPerMessage is false, but you try to add multiple operations
+   * @throws RuntimeException if enableMultipleOpsPerMessage is false, but you try to add multiple
+   *     operations
    */
-  boolean addListener(UUIDBase opUUID, DHTKey dhtKey, ActiveKeyedOperationResultListener<OpResult> listener)
+  boolean addListener(
+      UUIDBase opUUID, DHTKey dhtKey, ActiveKeyedOperationResultListener<OpResult> listener)
       throws RuntimeException {
     if (enableMultipleOpsPerMessage) {
-      return activePutListeners.get(opUUID).putIfAbsent(dhtKey, new WeakReference(listener)) == null;
+      return activePutListeners.get(opUUID).putIfAbsent(dhtKey, new WeakReference(listener))
+          == null;
     } else {
       Object prev = activeOpListeners.putIfAbsent(opUUID, listener);
       if (prev != null && prev != listener) {
@@ -100,9 +105,11 @@ class ActivePutListeners implements ActiveOperationListeners {
     log.debug("currentPutSet()");
     ImmutableSet.Builder<AsyncPutOperationImpl> ops = ImmutableSet.builder();
     if (enableMultipleOpsPerMessage) {
-      for (ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>> map : activePutListeners.values()) {
+      for (ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>> map :
+          activePutListeners.values()) {
         log.debug("maps: {}", map);
-        for (WeakReference<ActiveKeyedOperationResultListener<OpResult>> listenerRef : map.values()) {
+        for (WeakReference<ActiveKeyedOperationResultListener<OpResult>> listenerRef :
+            map.values()) {
           ActiveKeyedOperationResultListener<OpResult> listener = listenerRef.get();
           log.debug("listener: {}", listener);
           if (listener instanceof AsyncPutOperationImpl) {
@@ -122,13 +129,14 @@ class ActivePutListeners implements ActiveOperationListeners {
 
   @Override
   public boolean isResponsibleFor(UUIDBase messageId) {
-    return (activePutListeners != null && activePutListeners.containsKey(messageId)) ||
-           (activeOpListeners != null && activeOpListeners.containsKey(messageId));
+    return (activePutListeners != null && activePutListeners.containsKey(messageId))
+        || (activeOpListeners != null && activeOpListeners.containsKey(messageId));
   }
 
   public void receivedPutResponse(MessageGroup message) {
     if (enableMultipleOpsPerMessage) {
-      ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>> listenerMap;
+      ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>>
+          listenerMap;
       listenerMap = activePutListeners.get(message.getUUID());
       if (listenerMap != null) {
         if (message.getMessageType() == MessageType.ERROR_RESPONSE) {
@@ -143,12 +151,16 @@ class ActivePutListeners implements ActiveOperationListeners {
 
         } else {
           for (MessageGroupKeyOrdinalEntry entry : message.getKeyOrdinalIterator()) {
-            WeakReference<ActiveKeyedOperationResultListener<OpResult>> listenerRef = listenerMap.get(entry.getKey());
+            WeakReference<ActiveKeyedOperationResultListener<OpResult>> listenerRef =
+                listenerMap.get(entry.getKey());
             ActiveKeyedOperationResultListener<OpResult> listener = listenerRef.get();
             if (listener != null) {
               listener.resultReceived(entry.getKey(), EnumValues.opResult[entry.getOrdinal()]);
             } else {
-              log.debug("receivedPutResponse. null listener ref for: {}   {}", message.getUUID(), entry.getKey());
+              log.debug(
+                  "receivedPutResponse. null listener ref for: {}   {}",
+                  message.getUUID(),
+                  entry.getKey());
             }
           }
         }
@@ -160,7 +172,8 @@ class ActivePutListeners implements ActiveOperationListeners {
       }
 
     } else {
-      ActiveKeyedOperationResultListener<OpResult> listener = activeOpListeners.get(message.getUUID());
+      ActiveKeyedOperationResultListener<OpResult> listener =
+          activeOpListeners.get(message.getUUID());
       if (listener == null) {
         log.debug("receivedRetrievalResponse. No listener for uuid: {}", message.getUUID());
       } else {
@@ -171,7 +184,8 @@ class ActivePutListeners implements ActiveOperationListeners {
     }
   }
 
-  public ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>> getKeyMap(OperationUUID opUUID) {
+  public ConcurrentMap<DHTKey, WeakReference<ActiveKeyedOperationResultListener<OpResult>>>
+      getKeyMap(OperationUUID opUUID) {
     if (enableMultipleOpsPerMessage) {
       return activePutListeners.get(opUUID);
     } else {

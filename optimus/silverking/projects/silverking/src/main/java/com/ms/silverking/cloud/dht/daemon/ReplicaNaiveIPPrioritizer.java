@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.dht.daemon;
 import com.ms.silverking.net.IPAndPort;
 
 public class ReplicaNaiveIPPrioritizer implements ReplicaPrioritizer {
-  public ReplicaNaiveIPPrioritizer() {
-  }
+  public ReplicaNaiveIPPrioritizer() {}
 
   @Override
   public int compare(IPAndPort r1, IPAndPort r2) {

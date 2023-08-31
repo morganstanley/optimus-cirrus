@@ -70,8 +70,11 @@ public class RingIntegrityCheck {
 
     log.info("{}", gc.getClientDHTConfiguration().getName());
     log.info("{}", gc.getClientDHTConfiguration().getZKConfig());
-    metaUtil = new MetaUtil(gc.getClientDHTConfiguration().getName(), gc.getClientDHTConfiguration().getZKConfig(),
-        MetaUtilOptions.dhtVersionUnspecified);
+    metaUtil =
+        new MetaUtil(
+            gc.getClientDHTConfiguration().getName(),
+            gc.getClientDHTConfiguration().getZKConfig(),
+            MetaUtilOptions.dhtVersionUnspecified);
     dhtMC = metaUtil.getDHTMC();
     cloudMC = metaUtil.getRingMC().createCloudMC();
     ringParentName = metaUtil.getRingConfiguration().getRingParentName();
@@ -83,7 +86,8 @@ public class RingIntegrityCheck {
     rMap = readReplicaMap(ring);
   }
 
-  public RingIntegrityCheck(SKGridConfiguration gc) throws IOException, KeeperException, ClientException {
+  public RingIntegrityCheck(SKGridConfiguration gc)
+      throws IOException, KeeperException, ClientException {
     this(gc, null);
   }
 
@@ -95,8 +99,10 @@ public class RingIntegrityCheck {
     exclusionZK = new ExclusionZK(cloudMC);
     serverExclusionSet = exclusionZK.readLatestFromZK();
     try {
-      instanceExclusionSet = new ExclusionSet(
-          new ServerSetExtensionZK(dhtMC, dhtMC.getMetaPaths().getInstanceExclusionsPath()).readLatestFromZK());
+      instanceExclusionSet =
+          new ExclusionSet(
+              new ServerSetExtensionZK(dhtMC, dhtMC.getMetaPaths().getInstanceExclusionsPath())
+                  .readLatestFromZK());
     } catch (Exception e) {
       log.info("No instance ExclusionSet found");
       instanceExclusionSet = ExclusionSet.emptyExclusionSet(0);
@@ -133,11 +139,12 @@ public class RingIntegrityCheck {
       boolean allExcluded;
 
       allExcluded = true;
-      //System.out.printf("replicaSet %s\n", replicaSet);
+      // System.out.printf("replicaSet %s\n", replicaSet);
       Set<IPAndPort> currentMembers = new HashSet<>();
       Set<IPAndPort> excludedMembers = new HashSet<>();
       for (IPAndPort member : replicaSet) {
-        //System.out.printf("member %s %s\n", member.getIPAsString(), exclusionSet.contains(member.getIPAsString()));
+        // System.out.printf("member %s %s\n", member.getIPAsString(),
+        // exclusionSet.contains(member.getIPAsString()));
         if (!exclusionSet.contains(member.getIPAsString())) {
           allExcluded = false;
           currentMembers.add(member);
@@ -148,7 +155,11 @@ public class RingIntegrityCheck {
       if (currentMembers.size() < minReplicaSetSize) {
         minReplicaSetSize = currentMembers.size();
         if (verbose) {
-          log.info("new minReplicaSet of {}: {} {}", minReplicaSetSize, replicaSet, excludedMembers.size());
+          log.info(
+              "new minReplicaSet of {}: {} {}",
+              minReplicaSetSize,
+              replicaSet,
+              excludedMembers.size());
         }
       }
 
@@ -157,8 +168,13 @@ public class RingIntegrityCheck {
       updateCount(excludedReplicaSetCounts, excludedMembers.size());
 
       if (verbose) {
-        log.info("{} {} {} e={} c={}", replicaSet, excludedMembers.size(), currentMembers.size(),
-            excludedMembers, currentMembers);
+        log.info(
+            "{} {} {} e={} c={}",
+            replicaSet,
+            excludedMembers.size(),
+            currentMembers.size(),
+            excludedMembers,
+            currentMembers);
       }
       if (allExcluded) {
         ++setsExcluded;
@@ -178,9 +194,8 @@ public class RingIntegrityCheck {
       printSet("Current", currentReplicaSetCounts);
       printSet("Excluded", excludedReplicaSetCounts, "excluded");
 
-      log.info("Excluded sets: " , setsExcluded);
-      for (Set<IPAndPort> s : excludedSets)
-        log.info("{}" , s);
+      log.info("Excluded sets: ", setsExcluded);
+      for (Set<IPAndPort> s : excludedSets) log.info("{}", s);
     }
     lastExcludedSets = excludedSets;
     return minReplicaSetSize;
@@ -203,7 +218,7 @@ public class RingIntegrityCheck {
   }
 
   private void printSet(String setName, Map<Integer, Integer> counts, String description) {
-    log.info(setName , " set sizes: {}");
+    log.info(setName, " set sizes: {}");
     for (Map.Entry<Integer, Integer> entry : counts.entrySet())
       log.info("{} sets have {} {}", entry.getValue(), entry.getKey(), description);
   }
@@ -227,11 +242,13 @@ public class RingIntegrityCheck {
     return am;
   }
 
-  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private ResolvedReplicaMap readReplicaMap(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     return readTree(ring).getResolvedMap(ringParentName, new ReplicaNaiveIPPrioritizer());
   }
 
-  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring) throws IOException, KeeperException {
+  private InstantiatedRingTree readTree(Triple<String, Long, Long> ring)
+      throws IOException, KeeperException {
     MetaClient ringMC;
     long ringConfigVersion;
     long configInstanceVersion;
@@ -289,8 +306,8 @@ public class RingIntegrityCheck {
     return (double) numBad / (double) numSimulations;
   }
 
-  public List<Double> estimateLoss(Pair<List<Integer>, Integer> lossEstimationParameters,
-      ExclusionSet baseExclusionSet) {
+  public List<Double> estimateLoss(
+      Pair<List<Integer>, Integer> lossEstimationParameters, ExclusionSet baseExclusionSet) {
     List<Double> pLoss;
 
     pLoss = new ArrayList<>(lossEstimationParameters.getV1().size());
@@ -300,40 +317,47 @@ public class RingIntegrityCheck {
     return pLoss;
   }
 
-  private List<Double> estimateAndDisplayLoss(Pair<List<Integer>, Integer> lossEstimationParameters,
-      ExclusionSet baseExclusionSet) {
+  private List<Double> estimateAndDisplayLoss(
+      Pair<List<Integer>, Integer> lossEstimationParameters, ExclusionSet baseExclusionSet) {
     List<Double> pLoss;
 
     log.info("Estimating loss");
     pLoss = estimateLoss(lossEstimationParameters, baseExclusionSet);
     log.info("Loss estimation complete");
-   log.info("Servers pLoss");
+    log.info("Servers pLoss");
     for (int i = 0; i < lossEstimationParameters.getV1().size(); i++) {
       log.info("{} {}", lossEstimationParameters.getV1().get(i), pLoss.get(i));
     }
     return pLoss;
   }
 
-  private static double[] getNumServerLossProbabilities(double pServerLoss, int numServers, int maxLostServers) {
+  private static double[] getNumServerLossProbabilities(
+      double pServerLoss, int numServers, int maxLostServers) {
     double[] p;
 
     log.info("");
     p = new double[maxLostServers + 1];
     for (int i = 0; i <= maxLostServers; i++) {
-      p[i] = (double) NumUtil.combinations(numServers, i) * Math.pow(1.0 - pServerLoss, numServers - i) * Math.pow(
-          pServerLoss, i);
+      p[i] =
+          (double) NumUtil.combinations(numServers, i)
+              * Math.pow(1.0 - pServerLoss, numServers - i)
+              * Math.pow(pServerLoss, i);
       log.info("{} {}", i, p[i]);
     }
     return p;
   }
 
-  private double[] estimateAndDisplayServerLoss(Pair<List<Integer>, Integer> lossEstimationParameters,
-      double pServerLoss, List<Double> pLoss) {
+  private double[] estimateAndDisplayServerLoss(
+      Pair<List<Integer>, Integer> lossEstimationParameters,
+      double pServerLoss,
+      List<Double> pLoss) {
     int maxLostServers;
     double[] serverLossProbabilities;
 
-    maxLostServers = lossEstimationParameters.getV1().get(lossEstimationParameters.getV1().size() - 1);
-    serverLossProbabilities = getNumServerLossProbabilities(pServerLoss, rMap.allReplicas().size(), maxLostServers);
+    maxLostServers =
+        lossEstimationParameters.getV1().get(lossEstimationParameters.getV1().size() - 1);
+    serverLossProbabilities =
+        getNumServerLossProbabilities(pServerLoss, rMap.allReplicas().size(), maxLostServers);
     return null;
   }
 
@@ -376,7 +400,8 @@ public class RingIntegrityCheck {
         String[] toks;
 
         toks = options.ringAndVersionPair.split(",");
-        ringAndVersionPair = new Triple<>(toks[0], Long.parseLong(toks[1]), Long.parseLong(toks[2]));
+        ringAndVersionPair =
+            new Triple<>(toks[0], Long.parseLong(toks[1]), Long.parseLong(toks[2]));
       } else {
         ringAndVersionPair = null;
       }
@@ -391,12 +416,16 @@ public class RingIntegrityCheck {
       }
 
       if (options.union) {
-        //                exclusionSet = exclusionSet.add( ringIntegrityCheck.getCurrentExclusionSet().getServers() )
-        //                ;    // could use this, but I think calling the union function is more insightful into what
+        //                exclusionSet = exclusionSet.add(
+        // ringIntegrityCheck.getCurrentExclusionSet().getServers() )
+        //                ;    // could use this, but I think calling the union function is more
+        // insightful into what
         //                we are doing
-        // if exclusionSet or exclusionSetFile weren't set above, this'll just union currentExclusionSet with itself.
+        // if exclusionSet or exclusionSetFile weren't set above, this'll just union
+        // currentExclusionSet with itself.
         // redundant, but fine for now.
-        exclusionSet = ExclusionSet.union(exclusionSet, ringIntegrityCheck.getCurrentExclusionSet());
+        exclusionSet =
+            ExclusionSet.union(exclusionSet, ringIntegrityCheck.getCurrentExclusionSet());
       }
 
       ringIntegrityCheck.checkIntegrity(exclusionSet, true);
@@ -405,16 +434,16 @@ public class RingIntegrityCheck {
       pLoss = ringIntegrityCheck.estimateAndDisplayLoss(lossEstimationParameters, exclusionSet);
 
       if (options.serverFailureProbability != 0.0) {
-        ringIntegrityCheck.estimateAndDisplayServerLoss(lossEstimationParameters, options.serverFailureProbability,
-            pLoss);
+        ringIntegrityCheck.estimateAndDisplayServerLoss(
+            lossEstimationParameters, options.serverFailureProbability, pLoss);
       }
 
       if (!options.union && (options.exclusionSet != null || options.exclusionSetFile != null)) {
         log.info(
             "************************************************************************************************************");
         log.info(
-            "* NOTE: this is not taking into account the current excludes, it's assuming your list is the only " +
-                "excludes *");
+            "* NOTE: this is not taking into account the current excludes, it's assuming your list is the only "
+                + "excludes *");
         log.info(
             "*       use the union flag '-u' to include the current excludes in addition to your list                "
                 + "   *");

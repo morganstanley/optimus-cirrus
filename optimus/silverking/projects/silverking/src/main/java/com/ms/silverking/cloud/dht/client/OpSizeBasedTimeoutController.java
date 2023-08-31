@@ -16,9 +16,8 @@ import com.ms.silverking.cloud.dht.common.DHTConstants;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * An OpTimeoutController that computes timeouts based on operation size.
- * Specifically, each attempt timeout is computed as:
- * constantTimeMillis + itemTimeMillis * opSizeInKeys. For non-keyed
+ * An OpTimeoutController that computes timeouts based on operation size. Specifically, each attempt
+ * timeout is computed as: constantTimeMillis + itemTimeMillis * opSizeInKeys. For non-keyed
  * operations, the nonKeyedOpMaxRelTimeout_ms is used.
  */
 @OmitGeneration
@@ -26,19 +25,20 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
   private final int maxAttempts;
   private final int constantTime_ms;
   private final int itemTime_ms;
-  //private final int   keyedOpMaxRelTimeout_ms; // Waiting for C++ client change to include this, for no using
+  // private final int   keyedOpMaxRelTimeout_ms; // Waiting for C++ client change to include this,
+  // for no using
   // nonKeyed as a workaround
   private final int nonKeyedOpMaxRelTimeout_ms;
   private final int exclusionChangeRetryInterval_ms;
 
   private static final int minTransferRate_bps = 275 * 1000 * 1000;
   private static final int minTransferRate_Bps = minTransferRate_bps / 8;
-  static final int defaultItemTime_ms = Math.toIntExact(
-      (1000L * DHTConstants.defaultFragmentationThreshold) / minTransferRate_Bps);
+  static final int defaultItemTime_ms =
+      Math.toIntExact((1000L * DHTConstants.defaultFragmentationThreshold) / minTransferRate_Bps);
 
   // For testing
-  //private static final int    defaultConstantTime_ms = 10 * 1000;
-  //private static final int    defaultConstantTime_ms = 20 * 1000;
+  // private static final int    defaultConstantTime_ms = 10 * 1000;
+  // private static final int    defaultConstantTime_ms = 20 * 1000;
 
   // For production
   static final int defaultConstantTime_ms = 5 * 60 * 1000;
@@ -48,7 +48,8 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
 
   static final OpSizeBasedTimeoutController template = new OpSizeBasedTimeoutController();
 
-  //    static final int    defaultKeyedOpMaxRelTimeout_ms    = 25 * 60 * 1000;    // this is actually unused right
+  //    static final int    defaultKeyedOpMaxRelTimeout_ms    = 25 * 60 * 1000;    // this is
+  // actually unused right
   //    now, in the code, we only have keyed-ops that are available for creation
   static final int defaultNonKeyedOpMaxRelTimeout_ms = 25 * 60 * 1000;
 
@@ -68,29 +69,35 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
   /**
    * Construct a fully-specified OpSizeBasedTimeoutController
    *
-   * @param maxAttempts                     maximum number of attempts
-   * @param constantTimeMillis              constant time in milliseconds
-   * @param itemTimeMillis                  per-item time in milliseconds
-   * @param nonKeyedOpMaxRelTimeoutMillis   maximum relative timeout in milliseconds
+   * @param maxAttempts maximum number of attempts
+   * @param constantTimeMillis constant time in milliseconds
+   * @param itemTimeMillis per-item time in milliseconds
+   * @param nonKeyedOpMaxRelTimeoutMillis maximum relative timeout in milliseconds
    * @param exclusionChangeRetryInterval_ms TODO (OPTIMUS-0000): describe
    */
-  public OpSizeBasedTimeoutController(int maxAttempts, int constantTimeMillis, int itemTimeMillis,
-      /*int keyedOpMaxRelTimeoutMillis,*/ int nonKeyedOpMaxRelTimeoutMillis, int exclusionChangeRetryInterval_ms) {
+  public OpSizeBasedTimeoutController(
+      int maxAttempts,
+      int constantTimeMillis,
+      int itemTimeMillis,
+      /*int keyedOpMaxRelTimeoutMillis,*/ int nonKeyedOpMaxRelTimeoutMillis,
+      int exclusionChangeRetryInterval_ms) {
     Util.checkAttempts(maxAttempts);
     this.maxAttempts = maxAttempts;
     this.constantTime_ms = constantTimeMillis;
     this.itemTime_ms = itemTimeMillis;
-    //this.keyedOpMaxRelTimeout_ms = keyedOpMaxRelTimeoutMillis;
+    // this.keyedOpMaxRelTimeout_ms = keyedOpMaxRelTimeoutMillis;
     this.nonKeyedOpMaxRelTimeout_ms = nonKeyedOpMaxRelTimeoutMillis;
     this.exclusionChangeRetryInterval_ms = exclusionChangeRetryInterval_ms;
   }
 
-  /**
-   * Construct an OpSizeBasedTimeoutController using default parameters
-   */
+  /** Construct an OpSizeBasedTimeoutController using default parameters */
   public OpSizeBasedTimeoutController() {
-    this(defaultMaxAttempts, defaultConstantTime_ms, defaultItemTime_ms, /*defaultKeyedOpMaxRelTimeout_ms, */
-        defaultNonKeyedOpMaxRelTimeout_ms, defaultExclusionChangeRetryIntervalMS);
+    this(
+        defaultMaxAttempts,
+        defaultConstantTime_ms,
+        defaultItemTime_ms, /*defaultKeyedOpMaxRelTimeout_ms, */
+        defaultNonKeyedOpMaxRelTimeout_ms,
+        defaultExclusionChangeRetryIntervalMS);
   }
 
   @Override
@@ -108,7 +115,8 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
   }
 
   @Override
-  public long getRelativeExclusionChangeRetryMillisForAttempt(AsyncOperation op, int curAttemptIndex) {
+  public long getRelativeExclusionChangeRetryMillisForAttempt(
+      AsyncOperation op, int curAttemptIndex) {
     return exclusionChangeRetryInterval_ms;
   }
 
@@ -122,85 +130,108 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
   }
 
   int computeTimeout(int numItems) {
-    //return Math.min(constantTime_ms + numItems * itemTime_ms, keyedOpMaxRelTimeout_ms);
+    // return Math.min(constantTime_ms + numItems * itemTime_ms, keyedOpMaxRelTimeout_ms);
     return Math.min(constantTime_ms + numItems * itemTime_ms, nonKeyedOpMaxRelTimeout_ms);
   }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified maxAttempts.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * maxAttempts.
    *
    * @param maxAttempts maxAttempts for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
   public OpSizeBasedTimeoutController maxAttempts(int maxAttempts) {
-    return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTime_ms, /*keyedOpMaxRelTimeout_ms,*/
-        nonKeyedOpMaxRelTimeout_ms, exclusionChangeRetryInterval_ms);
+    return new OpSizeBasedTimeoutController(
+        maxAttempts,
+        constantTime_ms,
+        itemTime_ms, /*keyedOpMaxRelTimeout_ms,*/
+        nonKeyedOpMaxRelTimeout_ms,
+        exclusionChangeRetryInterval_ms);
   }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified constantTimeMillis.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * constantTimeMillis.
    *
    * @param constantTimeMillis constantTimeMillis for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
   public OpSizeBasedTimeoutController constantTimeMillis(int constantTimeMillis) {
-    return new OpSizeBasedTimeoutController(maxAttempts, constantTimeMillis, itemTime_ms, /*keyedOpMaxRelTimeout_ms,*/
-        nonKeyedOpMaxRelTimeout_ms, exclusionChangeRetryInterval_ms);
+    return new OpSizeBasedTimeoutController(
+        maxAttempts,
+        constantTimeMillis,
+        itemTime_ms, /*keyedOpMaxRelTimeout_ms,*/
+        nonKeyedOpMaxRelTimeout_ms,
+        exclusionChangeRetryInterval_ms);
   }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified itemTimeMillis.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * itemTimeMillis.
    *
    * @param itemTimeMillis itemTimeMillis for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
   public OpSizeBasedTimeoutController itemTimeMillis(int itemTimeMillis) {
-    return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTimeMillis, /*keyedOpMaxRelTimeout_ms,*/
-        nonKeyedOpMaxRelTimeout_ms, exclusionChangeRetryInterval_ms);
+    return new OpSizeBasedTimeoutController(
+        maxAttempts,
+        constantTime_ms,
+        itemTimeMillis, /*keyedOpMaxRelTimeout_ms,*/
+        nonKeyedOpMaxRelTimeout_ms,
+        exclusionChangeRetryInterval_ms);
   }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified maxRelTimeoutMillis.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * maxRelTimeoutMillis.
+   *
    * @param maxRelTimeoutMillis maxRelTimeoutMillis for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
-  //public OpSizeBasedTimeoutController keyedOpMaxRelTimeoutMillis(int keyedOpMaxRelTimeout_ms) {
-  //return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTime_ms, /*keyedOpMaxRelTimeout_ms,*/
+  // public OpSizeBasedTimeoutController keyedOpMaxRelTimeoutMillis(int keyedOpMaxRelTimeout_ms) {
+  // return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTime_ms,
+  // /*keyedOpMaxRelTimeout_ms,*/
   // nonKeyedOpMaxRelTimeout_ms);
-  //}
+  // }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified maxRelTimeoutMillis.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * maxRelTimeoutMillis.
+   *
    * @param maxRelTimeoutMillis maxRelTimeoutMillis for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
-  //    public OpSizeBasedTimeoutController nonKeyedOpMaxRelTimeoutMillis(int nonKeyedOpMaxRelTimeout_ms) {
+  //    public OpSizeBasedTimeoutController nonKeyedOpMaxRelTimeoutMillis(int
+  // nonKeyedOpMaxRelTimeout_ms) {
   //        return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTime_ms,
   //        /*keyedOpMaxRelTimeout_ms,*/ nonKeyedOpMaxRelTimeout_ms);
   //    }
 
   /**
-   * Create a new OpSizeBasedTimeoutController exactly like this instance, but
-   * with the specified maxRelTimeoutMillis.
+   * Create a new OpSizeBasedTimeoutController exactly like this instance, but with the specified
+   * maxRelTimeoutMillis.
    *
    * @param maxRelTimeoutMillis maxRelTimeoutMillis for the new instance
    * @return the specified OpSizeBasedTimeoutController
    */
   public OpSizeBasedTimeoutController maxRelTimeoutMillis(int maxRelTimeoutMillis) {
-    return new OpSizeBasedTimeoutController(maxAttempts, constantTime_ms, itemTime_ms, maxRelTimeoutMillis,
+    return new OpSizeBasedTimeoutController(
+        maxAttempts,
+        constantTime_ms,
+        itemTime_ms,
+        maxRelTimeoutMillis,
         exclusionChangeRetryInterval_ms);
   }
 
   @Override
   public int hashCode() {
-    return Integer.hashCode(maxAttempts) ^ Integer.hashCode(constantTime_ms) ^ Integer.hashCode(itemTime_ms) ^
-        /*Integer.hashCode(keyedOpMaxRelTimeout_ms) ^*/ Integer.hashCode(nonKeyedOpMaxRelTimeout_ms) ^ Integer.hashCode(
-        exclusionChangeRetryInterval_ms);
+    return Integer.hashCode(maxAttempts)
+        ^ Integer.hashCode(constantTime_ms)
+        ^ Integer.hashCode(itemTime_ms)
+        ^
+        /*Integer.hashCode(keyedOpMaxRelTimeout_ms) ^*/ Integer.hashCode(nonKeyedOpMaxRelTimeout_ms)
+        ^ Integer.hashCode(exclusionChangeRetryInterval_ms);
   }
 
   @Override
@@ -216,9 +247,12 @@ public class OpSizeBasedTimeoutController implements OpTimeoutController {
     }
 
     other = (OpSizeBasedTimeoutController) o;
-    return maxAttempts == other.maxAttempts && constantTime_ms == other.constantTime_ms && itemTime_ms == other.itemTime_ms
-        //&& keyedOpMaxRelTimeout_ms == o.keyedOpMaxRelTimeout_ms
-        && nonKeyedOpMaxRelTimeout_ms == other.nonKeyedOpMaxRelTimeout_ms && exclusionChangeRetryInterval_ms == other.exclusionChangeRetryInterval_ms;
+    return maxAttempts == other.maxAttempts
+        && constantTime_ms == other.constantTime_ms
+        && itemTime_ms == other.itemTime_ms
+        // && keyedOpMaxRelTimeout_ms == o.keyedOpMaxRelTimeout_ms
+        && nonKeyedOpMaxRelTimeout_ms == other.nonKeyedOpMaxRelTimeout_ms
+        && exclusionChangeRetryInterval_ms == other.exclusionChangeRetryInterval_ms;
   }
 
   @Override

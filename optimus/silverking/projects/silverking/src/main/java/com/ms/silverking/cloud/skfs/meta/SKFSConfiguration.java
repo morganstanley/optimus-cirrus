@@ -21,9 +21,7 @@ import java.util.List;
 
 import com.ms.silverking.cloud.meta.VersionedDefinition;
 
-/**
- * SKFS configuration settings.
- */
+/** SKFS configuration settings. */
 public class SKFSConfiguration implements VersionedDefinition {
   private final List<String> vars;
   private final String config;
@@ -66,7 +64,8 @@ public class SKFSConfiguration implements VersionedDefinition {
     }
   }
 
-  public static SKFSConfiguration parse(String skfsConfName, InputStream inStream, long version) throws IOException {
+  public static SKFSConfiguration parse(String skfsConfName, InputStream inStream, long version)
+      throws IOException {
     try {
       List<String> strList = new LinkedList<>();
       String line;
@@ -92,5 +91,4 @@ public class SKFSConfiguration implements VersionedDefinition {
     }
     return sb.toString();
   }
-
 }

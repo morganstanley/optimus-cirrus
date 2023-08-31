@@ -12,9 +12,8 @@
 package com.ms.silverking.cloud.dht.client;
 
 /**
- * <p>Bundles values and metadata retrieved from a DHT. Will contain
- * a value and/or metadata depending on what form of retrieve
- * was used to obtain the instance.</p>
+ * Bundles values and metadata retrieved from a DHT. Will contain a value and/or metadata depending
+ * on what form of retrieve was used to obtain the instance.
  *
  * @param <V> value type
  */

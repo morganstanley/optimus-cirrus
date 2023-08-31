@@ -53,8 +53,10 @@ public class Test {
     }
     Collections.sort(measurements, new BPSComparator());
     if (measurements.size() % 2 == 0) {
-      median = (measurements.get(measurements.size() / 2).getBitsPerSecond() + measurements.get(
-          measurements.size() / 2 - 1).getBitsPerSecond()) / 2;
+      median =
+          (measurements.get(measurements.size() / 2).getBitsPerSecond()
+                  + measurements.get(measurements.size() / 2 - 1).getBitsPerSecond())
+              / 2;
     } else {
       median = measurements.get(measurements.size() / 2 - 1).getBitsPerSecond();
     }

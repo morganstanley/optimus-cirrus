@@ -31,7 +31,8 @@ public class DHTSKFSConfigurationZK extends MetaToolModuleBase<DHTSKFSConfigurat
   }
 
   @Override
-  public DHTSKFSConfiguration readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public DHTSKFSConfiguration readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     System.out.println(zk.getString(getVBase(version)));
     return DHTSKFSConfiguration.parse(zk.getString(getVBase(version)), version);
   }

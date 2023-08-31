@@ -55,7 +55,8 @@ public class TwoLevelParallelSSHWorker implements Runnable {
     }
   }
 
-  public TwoLevelParallelSSHWorker(String managerURL, int numWorkerThreads, int timeoutSeconds) throws Exception {
+  public TwoLevelParallelSSHWorker(String managerURL, int numWorkerThreads, int timeoutSeconds)
+      throws Exception {
     Runtime.getRuntime().addShutdownHook(new ShutdownHook());
 
     this.timeoutSeconds = timeoutSeconds;
@@ -106,9 +107,8 @@ public class TwoLevelParallelSSHWorker implements Runnable {
 
               log.info("  Host: {}  Active: {}", hostAndCommand, active);
               resultCode = sshBase.doSSH(hostAndCommand, timeoutSeconds, true);
-              result = resultCode == resultErrorCode
-                       ? result = HostResult.failure
-                       : HostResult.success;
+              result =
+                  resultCode == resultErrorCode ? result = HostResult.failure : HostResult.success;
             } finally {
               active.decrementAndGet();
             }
@@ -141,8 +141,7 @@ public class TwoLevelParallelSSHWorker implements Runnable {
   }
 
   public class ShutdownHook extends Thread {
-    public void ShutdownHook() {
-    }
+    public void ShutdownHook() {}
 
     public void run() {
       log.info("Shutdown");

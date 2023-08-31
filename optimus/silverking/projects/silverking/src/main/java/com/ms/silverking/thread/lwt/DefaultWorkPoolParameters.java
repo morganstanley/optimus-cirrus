@@ -24,8 +24,13 @@ public class DefaultWorkPoolParameters {
   private static final double defaultExtraThreadFactor = 1.0;
   private static final double defaultMaxThreadFactor = 4.0;
 
-  private DefaultWorkPoolParameters(int numConcurrentThreads, int numNonConcurrentThreads, int maxConcurrentThreads,
-      int maxNonConcurrentThreads, int workUnit, boolean ignoreDoubleInit) {
+  private DefaultWorkPoolParameters(
+      int numConcurrentThreads,
+      int numNonConcurrentThreads,
+      int maxConcurrentThreads,
+      int maxNonConcurrentThreads,
+      int workUnit,
+      boolean ignoreDoubleInit) {
     this.numConcurrentThreads = numConcurrentThreads;
     this.numNonConcurrentThreads = numNonConcurrentThreads;
     this.maxConcurrentThreads = maxConcurrentThreads;
@@ -40,7 +45,8 @@ public class DefaultWorkPoolParameters {
 
     numThreads = extraThreadFactorToNumThreads(defaultExtraThreadFactor);
     maxThreads = extraThreadFactorToNumThreads(defaultMaxThreadFactor);
-    return new DefaultWorkPoolParameters(numThreads, 0, maxThreads, 0, defaultWorkUnit, defaultIgnoreDoubleInit);
+    return new DefaultWorkPoolParameters(
+        numThreads, 0, maxThreads, 0, defaultWorkUnit, defaultIgnoreDoubleInit);
   }
 
   private static int extraThreadFactorToNumThreads(double extraThreadFactor) {
@@ -48,13 +54,23 @@ public class DefaultWorkPoolParameters {
   }
 
   public DefaultWorkPoolParameters workUnit(int workUnit) {
-    return new DefaultWorkPoolParameters(numConcurrentThreads, numNonConcurrentThreads, maxConcurrentThreads,
-        maxNonConcurrentThreads, workUnit, ignoreDoubleInit);
+    return new DefaultWorkPoolParameters(
+        numConcurrentThreads,
+        numNonConcurrentThreads,
+        maxConcurrentThreads,
+        maxNonConcurrentThreads,
+        workUnit,
+        ignoreDoubleInit);
   }
 
   public DefaultWorkPoolParameters ignoreDoubleInit(boolean ignoreDoubleInit) {
-    return new DefaultWorkPoolParameters(numConcurrentThreads, numNonConcurrentThreads, maxConcurrentThreads,
-        maxNonConcurrentThreads, workUnit, ignoreDoubleInit);
+    return new DefaultWorkPoolParameters(
+        numConcurrentThreads,
+        numNonConcurrentThreads,
+        maxConcurrentThreads,
+        maxNonConcurrentThreads,
+        workUnit,
+        ignoreDoubleInit);
   }
 
   public int getNumConcurrentThreads() {
@@ -83,6 +99,12 @@ public class DefaultWorkPoolParameters {
 
   @Override
   public String toString() {
-    return numConcurrentThreads + ":" + numNonConcurrentThreads + ":" + workUnit + ":" + ignoreDoubleInit;
+    return numConcurrentThreads
+        + ":"
+        + numNonConcurrentThreads
+        + ":"
+        + workUnit
+        + ":"
+        + ignoreDoubleInit;
   }
 }

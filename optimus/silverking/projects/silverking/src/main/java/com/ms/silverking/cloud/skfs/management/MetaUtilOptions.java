@@ -12,15 +12,15 @@
 package com.ms.silverking.cloud.skfs.management;
 
 import org.kohsuke.args4j.Option;
-//import com.ms.silverking.cloud.dht.management.Command;
+// import com.ms.silverking.cloud.dht.management.Command;
 
 enum Command {
-  GetFromZK, LoadFromFile
+  GetFromZK,
+  LoadFromFile
 }
 
 public class MetaUtilOptions {
-  MetaUtilOptions() {
-  }
+  MetaUtilOptions() {}
 
   static final int dhtVersionUnspecified = -1;
 

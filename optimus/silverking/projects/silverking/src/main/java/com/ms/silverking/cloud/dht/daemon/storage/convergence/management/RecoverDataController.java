@@ -31,7 +31,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Search all replicas for data. Currently, this will only function on relatively small-scale instances.
+ * Search all replicas for data. Currently, this will only function on relatively small-scale
+ * instances.
  */
 public class RecoverDataController extends ConvergenceControllerBase implements RequestController {
   private final Set<IPAndPort> targetReplicas;
@@ -44,8 +45,13 @@ public class RecoverDataController extends ConvergenceControllerBase implements 
 
   private static Logger log = LoggerFactory.getLogger(RecoverDataController.class);
 
-  public RecoverDataController(UUIDBase uuid, DHTMetaReader dhtMetaReader, ConvergencePoint targetCP,
-      ExclusionSet exclusionSet, MessageGroupBase mgBase, Set<Long> ignoredNamespaces)
+  public RecoverDataController(
+      UUIDBase uuid,
+      DHTMetaReader dhtMetaReader,
+      ConvergencePoint targetCP,
+      ExclusionSet exclusionSet,
+      MessageGroupBase mgBase,
+      Set<Long> ignoredNamespaces)
       throws KeeperException, IOException {
     super(uuid, dhtMetaReader, targetCP, exclusionSet, mgBase, ignoredNamespaces);
     targetMap = getResolvedReplicaMap(targetRing, targetRingConfig);
@@ -54,7 +60,8 @@ public class RecoverDataController extends ConvergenceControllerBase implements 
 
   //////////////////////////////////////////////////////////////////
 
-  private void recoverRegion(long ns, RingEntry targetEntry, Action nsSync, List<ReplicaSyncRequest> srList)
+  private void recoverRegion(
+      long ns, RingEntry targetEntry, Action nsSync, List<ReplicaSyncRequest> srList)
       throws ConvergenceException {
     log.info("recoverRegion {} {}", ns, targetEntry);
 
@@ -64,8 +71,14 @@ public class RecoverDataController extends ConvergenceControllerBase implements 
 
       prev = nsSync;
       for (IPAndPort source : targetReplicas) {
-        prev = syncReplica(ns, targetEntry.getRegion(), newOwner.port(dhtConfig.getPort()),
-            source.port(dhtConfig.getPort()), prev, srList);
+        prev =
+            syncReplica(
+                ns,
+                targetEntry.getRegion(),
+                newOwner.port(dhtConfig.getPort()),
+                source.port(dhtConfig.getPort()),
+                prev,
+                srList);
       }
     }
     log.info("Done recoverRegion {} {}", ns, targetEntry);
@@ -108,7 +121,8 @@ public class RecoverDataController extends ConvergenceControllerBase implements 
     syncController.freeze();
 
     log.info(" *** Sending requests");
-    syncController.waitForCompletion(1, TimeUnit.DAYS); // FUTURE - improve this from a failsafe to a real limit
+    syncController.waitForCompletion(
+        1, TimeUnit.DAYS); // FUTURE - improve this from a failsafe to a real limit
     log.info(" *** Requests complete");
   }
 
@@ -138,7 +152,8 @@ public class RecoverDataController extends ConvergenceControllerBase implements 
   public RequestStatus getStatus(UUIDBase uuid) {
     ensureUUIDMatches(uuid);
     if (syncController != null) {
-      return new SimpleRequestStatus(getRequestState(), "Recovery:" + syncController.getStatus().toString());
+      return new SimpleRequestStatus(
+          getRequestState(), "Recovery:" + syncController.getStatus().toString());
     } else {
       return new SimpleRequestStatus(getRequestState(), "<init>");
     }

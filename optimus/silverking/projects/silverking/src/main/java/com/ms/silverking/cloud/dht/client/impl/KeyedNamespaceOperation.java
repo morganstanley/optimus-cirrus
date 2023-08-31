@@ -25,7 +25,10 @@ import com.ms.silverking.cloud.dht.OperationOptions;
 abstract class KeyedNamespaceOperation<K> extends NamespaceOperation {
   private final Set<K> keys;
 
-  KeyedNamespaceOperation(ClientOpType opType, ClientNamespace namespace, Collection<? extends K> keys,
+  KeyedNamespaceOperation(
+      ClientOpType opType,
+      ClientNamespace namespace,
+      Collection<? extends K> keys,
       OperationOptions options) {
     super(opType, namespace, options);
     this.keys = ImmutableSet.copyOf(keys);

@@ -20,6 +20,7 @@ import optimus.stratosphere.common.IntellijDirectoryStructure
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.logger.CentralLogger
 import optimus.stratosphere.logger.Logger
+import org.fusesource.jansi.AnsiConsole
 
 import java.nio.file.Files
 import java.nio.file.Path
@@ -109,7 +110,8 @@ class StratoWorkspaceCommon(val customWorkspaceLocation: WorkspaceLocation, boot
             Paths.get(System.getProperty("java.io.tmpdir"), "strato-logs")
         }
 
-      new CentralLogger(logDir)
+      if (internal.console.colors.enabled) AnsiConsole.systemInstall()
+      new CentralLogger(logDir, internal.console.colors)
     }
 
     _reloadCallback()

@@ -16,8 +16,8 @@ import com.ms.silverking.text.ObjectDefParser2;
 
 abstract class CapacityBasedRetentionPolicy implements ValueRetentionPolicy {
   static {
-    ObjectDefParser2.addParserWithExclusions(CapacityBasedRetentionPolicy.class, null,
-        FieldsRequirement.ALLOW_INCOMPLETE, null);
+    ObjectDefParser2.addParserWithExclusions(
+        CapacityBasedRetentionPolicy.class, null, FieldsRequirement.ALLOW_INCOMPLETE, null);
   }
 
   protected final long capacityBytes;

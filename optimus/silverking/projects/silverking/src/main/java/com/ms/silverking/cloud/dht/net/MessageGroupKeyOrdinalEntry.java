@@ -17,7 +17,6 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.SimpleKey;
 import com.ms.silverking.numeric.NumConversion;
 
-
 /*
  * FUTURE - think about why this isn't a child of MessageGroupKeyEntry
  * think about GC etc.
@@ -48,7 +47,10 @@ public class MessageGroupKeyOrdinalEntry extends MessageGroupKeyEntry {
   }
 
   public MessageGroupKeyOrdinalEntry(ByteBuffer buffer, int offset) {
-    this(buffer.getLong(offset), buffer.getLong(offset + lslOffset), buffer.get(offset + responseOffset));
+    this(
+        buffer.getLong(offset),
+        buffer.getLong(offset + lslOffset),
+        buffer.get(offset + responseOffset));
   }
 
   public MessageGroupKeyOrdinalEntry(DHTKey key, byte ordinal) {
@@ -58,26 +60,26 @@ public class MessageGroupKeyOrdinalEntry extends MessageGroupKeyEntry {
   public DHTKey getKey() {
     return dhtKey;
   }
-    
-    /*
-    public MessageGroupKeyOrdinalEntry(long msl, long lsl, byte ordinal) {
-        this.dhtKey = new SimpleKey(msl, lsl);
-        this.ordinal = ordinal;
-    }
 
-    public MessageGroupKeyOrdinalEntry(ByteBuffer buffer, int offset) {
-        dhtKey = new SimpleKey(buffer.getLong(offset), buffer.getLong(offset + lslOffset));
-        ordinal = buffer.get(offset + responseOffset);
-    }
+  /*
+  public MessageGroupKeyOrdinalEntry(long msl, long lsl, byte ordinal) {
+      this.dhtKey = new SimpleKey(msl, lsl);
+      this.ordinal = ordinal;
+  }
 
-    public MessageGroupKeyOrdinalEntry(DHTKey key, byte ordinal) {
-        this(key.getMSL(), key.getLSL(), ordinal);
-    }
-    
-    public DHTKey getKey() {
-        return dhtKey;
-    }
-    */
+  public MessageGroupKeyOrdinalEntry(ByteBuffer buffer, int offset) {
+      dhtKey = new SimpleKey(buffer.getLong(offset), buffer.getLong(offset + lslOffset));
+      ordinal = buffer.get(offset + responseOffset);
+  }
+
+  public MessageGroupKeyOrdinalEntry(DHTKey key, byte ordinal) {
+      this(key.getMSL(), key.getLSL(), ordinal);
+  }
+
+  public DHTKey getKey() {
+      return dhtKey;
+  }
+  */
 
   public byte getOrdinal() {
     return ordinal;

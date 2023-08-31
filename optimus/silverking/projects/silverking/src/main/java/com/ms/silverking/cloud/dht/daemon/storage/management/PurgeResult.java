@@ -18,11 +18,12 @@ public class PurgeResult {
   public final int segmentsReaped;
   public final int segmentsDeleted;
 
-  public PurgeResult(long versionsCount,
-                     long latestCreationTimeNanos,
-                     long latestVersion,
-                     int segmentsReaped,
-                     int segmentsDeleted) {
+  public PurgeResult(
+      long versionsCount,
+      long latestCreationTimeNanos,
+      long latestVersion,
+      int segmentsReaped,
+      int segmentsDeleted) {
     this.versionsCount = versionsCount;
     this.latestCreationTimeNanos = latestCreationTimeNanos;
     this.latestVersion = latestVersion;

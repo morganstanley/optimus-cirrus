@@ -11,9 +11,7 @@
  */
 package com.ms.silverking.net.async;
 
-/**
- * Globals for this package.
- */
+/** Globals for this package. */
 public class AsyncGlobals {
   public static final boolean debug = false;
 

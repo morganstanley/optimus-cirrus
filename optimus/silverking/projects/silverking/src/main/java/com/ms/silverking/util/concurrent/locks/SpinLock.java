@@ -17,8 +17,8 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 
 /**
- * User-level spin lock. Use with care as the scheduler may preempt the thread
- * that holds the lock at any time.
+ * User-level spin lock. Use with care as the scheduler may preempt the thread that holds the lock
+ * at any time.
  */
 public class SpinLock implements Lock {
   private final AtomicBoolean locked;

@@ -15,9 +15,7 @@ import java.util.Comparator;
 
 import com.ms.silverking.cloud.dht.RetrievalOptions;
 
-/**
- * Impose an ordering so that compatible retrievals may be grouped together.
- */
+/** Impose an ordering so that compatible retrievals may be grouped together. */
 class RetrievalOptionsComparator implements Comparator<RetrievalOptions> {
   public static RetrievalOptionsComparator instance = new RetrievalOptionsComparator();
 
@@ -37,7 +35,9 @@ class RetrievalOptionsComparator implements Comparator<RetrievalOptions> {
         if (c != 0) {
           return c;
         } else {
-          c = VersionConstraintComparator.instance.compare(o1.getVersionConstraint(), o2.getVersionConstraint());
+          c =
+              VersionConstraintComparator.instance.compare(
+                  o1.getVersionConstraint(), o2.getVersionConstraint());
           if (c != 0) {
             return c;
           } else {

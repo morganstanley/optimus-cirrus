@@ -27,24 +27,23 @@ import com.ms.silverking.id.UUIDBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * ProtoMessageGroup for messages that contains values
- */
+/** ProtoMessageGroup for messages that contains values */
 public final class ProtoValueMessageGroup extends ProtoValueMessageGroupBase {
   private int expectedSize;
   private static Logger log = LoggerFactory.getLogger(ProtoValueMessageGroup.class);
 
-  public ProtoValueMessageGroup(UUIDBase uuid,
-                                long context,
-                                int opSize,
-                                int valueBytes,
-                                byte[] originator,
-                                int deadlineRelativeMillis,
-                                SkTraceId maybeTraceID) {
+  public ProtoValueMessageGroup(
+      UUIDBase uuid,
+      long context,
+      int opSize,
+      int valueBytes,
+      byte[] originator,
+      int deadlineRelativeMillis,
+      SkTraceId maybeTraceID) {
     super(
         TraceIDProvider.isValidTraceID(maybeTraceID)
-        ? MessageType.RETRIEVE_RESPONSE_TRACE
-        : MessageType.RETRIEVE_RESPONSE,
+            ? MessageType.RETRIEVE_RESPONSE_TRACE
+            : MessageType.RETRIEVE_RESPONSE,
         uuid,
         context,
         opSize,
@@ -91,8 +90,10 @@ public final class ProtoValueMessageGroup extends ProtoValueMessageGroupBase {
     }
     if (copyValue) {
       if (valueBuffer == null || storedValueSize > valueBuffer.remaining()) {
-        // in below line we don't need to consider compressedValueSize since dedicatedBufferSizeThreshold <= valueBufferSize
-        valueBuffer = ByteBuffer.allocate(Math.max(expectedSize - totalValueBytes, storedValueSize));
+        // in below line we don't need to consider compressedValueSize since
+        // dedicatedBufferSizeThreshold <= valueBufferSize
+        valueBuffer =
+            ByteBuffer.allocate(Math.max(expectedSize - totalValueBytes, storedValueSize));
         if (!addMultiValueBuffer(valueBuffer)) {
           throw new RuntimeException("Too many buffers");
         }

@@ -67,7 +67,7 @@ public class WeightsTable {
 
   public void display() {
     for (Map.Entry<String, Double> entry : nodeWeights.entrySet()) {
-      log.info("{}  {}",entry.getKey() , entry.getValue());
+      log.info("{}  {}", entry.getKey(), entry.getValue());
     }
   }
 }

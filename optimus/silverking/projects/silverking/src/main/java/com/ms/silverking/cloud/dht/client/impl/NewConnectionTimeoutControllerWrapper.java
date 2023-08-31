@@ -16,12 +16,14 @@ import com.ms.silverking.net.AddrAndPort;
 import com.ms.silverking.net.async.NewConnectionTimeoutController;
 
 /**
- * Allows a SessionEstablishmentTimeoutController to be used as the basis of a NewConnectionTimeoutController
+ * Allows a SessionEstablishmentTimeoutController to be used as the basis of a
+ * NewConnectionTimeoutController
  */
 class NewConnectionTimeoutControllerWrapper implements NewConnectionTimeoutController {
   private final SessionEstablishmentTimeoutController sessionEstablishmentTimeoutController;
 
-  NewConnectionTimeoutControllerWrapper(SessionEstablishmentTimeoutController sessionEstablishmentTimeoutController) {
+  NewConnectionTimeoutControllerWrapper(
+      SessionEstablishmentTimeoutController sessionEstablishmentTimeoutController) {
     this.sessionEstablishmentTimeoutController = sessionEstablishmentTimeoutController;
   }
 
@@ -32,7 +34,8 @@ class NewConnectionTimeoutControllerWrapper implements NewConnectionTimeoutContr
 
   @Override
   public int getRelativeTimeoutMillisForAttempt(AddrAndPort addrAndPort, int attemptIndex) {
-    return sessionEstablishmentTimeoutController.getRelativeTimeoutMillisForAttempt(null, attemptIndex);
+    return sessionEstablishmentTimeoutController.getRelativeTimeoutMillisForAttempt(
+        null, attemptIndex);
   }
 
   @Override

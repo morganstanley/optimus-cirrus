@@ -24,11 +24,10 @@ import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.text.FieldsRequirement;
 import com.ms.silverking.text.ObjectDefParser2;
 
-/**
- * Options for Invalidation operations
- */
+/** Options for Invalidation operations */
 public class InvalidationOptions extends PutOptions {
-  private static final OpTimeoutController standardTimeoutController = new OpSizeBasedTimeoutController();
+  private static final OpTimeoutController standardTimeoutController =
+      new OpSizeBasedTimeoutController();
   private static final PutOptions template = new InvalidationOptions();
 
   static {
@@ -47,13 +46,14 @@ public class InvalidationOptions extends PutOptions {
   }
 
   // TODO (OPTIMUS-0000): temp until legacy instances have current defs
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             byte[] userData) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      byte[] userData) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -68,16 +68,17 @@ public class InvalidationOptions extends PutOptions {
         PutOptions.noAuthorizationUser);
   }
 
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds,
-                             int fragmentationThreshold,
-                             byte[] userData) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData) {
     this(
         opTimeoutController,
         secondaryTargets,
@@ -93,22 +94,23 @@ public class InvalidationOptions extends PutOptions {
   }
 
   /**
-   * Complete constructor. We ignore any fragmentationThreshold passed in as it does not make sense for an
-   * invalidation
+   * Complete constructor. We ignore any fragmentationThreshold passed in as it does not make sense
+   * for an invalidation
    *
    * @param lockSeconds seconds to lock this key
    */
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             TraceIDProvider traceIDProvider,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds,
-                             int fragmentationThreshold,
-                             byte[] userData) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -129,20 +131,21 @@ public class InvalidationOptions extends PutOptions {
    * Instead of using this constructor, most applications should obtain an InvalidationOptions
    * object from a valid source such as the session, the namespace, or the namespace perspective.
    *
-   * @param opTimeoutController         opTimeoutController for the operation
-   * @param secondaryTargets            constrains queried secondary replicas
-   *                                    to operation solely on the node that receives this operation
+   * @param opTimeoutController opTimeoutController for the operation
+   * @param secondaryTargets constrains queried secondary replicas to operation solely on the node
+   *     that receives this operation
    * @param allReplicasExcludedResponse TODO (OPTIMUS-0000): describe
-   * @param version                     version of this object
-   * @param lockSeconds                 seconds to lock this key
+   * @param version version of this object
+   * @param lockSeconds seconds to lock this key
    */
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             TraceIDProvider traceIDProvider,
-                             AllReplicasExcludedResponse allReplicasExcludedResponse,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -159,18 +162,19 @@ public class InvalidationOptions extends PutOptions {
         PutOptions.noAuthorizationUser);
   }
 
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             TraceIDProvider traceIDProvider,
-                             AllReplicasExcludedResponse allReplicasExcludedResponse,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds,
-                             int fragmentationThreshold,
-                             byte[] userData) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -187,19 +191,20 @@ public class InvalidationOptions extends PutOptions {
         PutOptions.noAuthorizationUser);
   }
 
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             Set<SecondaryTarget> secondaryTargets,
-                             TraceIDProvider traceIDProvider,
-                             AllReplicasExcludedResponse allReplicasExcludedResponse,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds,
-                             int fragmentationThreshold,
-                             byte[] userData,
-                             byte[] authorizationUser) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      Set<SecondaryTarget> secondaryTargets,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] userData,
+      byte[] authorizationUser) {
     super(
         opTimeoutController,
         secondaryTargets,
@@ -216,17 +221,18 @@ public class InvalidationOptions extends PutOptions {
         authorizationUser);
   }
 
-  public InvalidationOptions(OpTimeoutController opTimeoutController,
-                             TraceIDProvider traceIDProvider,
-                             AllReplicasExcludedResponse allReplicasExcludedResponse,
-                             Compression compression,
-                             ChecksumType checksumType,
-                             boolean checksumCompressedValues,
-                             long version,
-                             long requiredPreviousVersion,
-                             short lockSeconds,
-                             int fragmentationThreshold,
-                             byte[] authorizationUser) {
+  public InvalidationOptions(
+      OpTimeoutController opTimeoutController,
+      TraceIDProvider traceIDProvider,
+      AllReplicasExcludedResponse allReplicasExcludedResponse,
+      Compression compression,
+      ChecksumType checksumType,
+      boolean checksumCompressedValues,
+      long version,
+      long requiredPreviousVersion,
+      short lockSeconds,
+      int fragmentationThreshold,
+      byte[] authorizationUser) {
     super(
         opTimeoutController,
         DHTConstants.noSecondaryTargets,
@@ -340,7 +346,8 @@ public class InvalidationOptions extends PutOptions {
   }
 
   /**
-   * Return an InvalidationOptions instance like this instance, but with a new requiredPreviousVersion.
+   * Return an InvalidationOptions instance like this instance, but with a new
+   * requiredPreviousVersion.
    *
    * @param requiredPreviousVersion the new field value
    * @return the modified InvalidationOptions

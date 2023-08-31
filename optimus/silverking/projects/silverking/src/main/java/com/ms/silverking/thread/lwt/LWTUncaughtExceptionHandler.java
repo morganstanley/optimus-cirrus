@@ -17,19 +17,18 @@ import com.ms.silverking.thread.ThreadUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 public class LWTUncaughtExceptionHandler implements UncaughtExceptionHandler {
   private static final int uncaughtExceptionExitDelayMillis = 4 * 1000;
 
   private static Logger log = LoggerFactory.getLogger(LWTUncaughtExceptionHandler.class);
 
   /**
-   * Display information about the uncaught exception and then force the JVM to exit.
-   * We prefer fail-stop behavior to unexpected behavior.
+   * Display information about the uncaught exception and then force the JVM to exit. We prefer
+   * fail-stop behavior to unexpected behavior.
    */
   @Override
   public void uncaughtException(Thread t, Throwable e) {
-    log.error("Thread {} threw an uncaught exception",t.getName()  ,e);
+    log.error("Thread {} threw an uncaught exception", t.getName(), e);
     ThreadUtil.sleep(uncaughtExceptionExitDelayMillis);
     System.exit(1);
   }

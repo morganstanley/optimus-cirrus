@@ -14,7 +14,8 @@ package com.ms.silverking.cloud.dht.collection;
 import com.ms.silverking.cloud.dht.common.DHTKey;
 
 /**
- * A map entry from a Key-Int hash table. Pairs the DHTKey with the integer that the key maps to in the hash table.
+ * A map entry from a Key-Int hash table. Pairs the DHTKey with the integer that the key maps to in
+ * the hash table.
  */
 public class DHTKeyIntEntry extends DHTKeyEntryBase {
   private final int value;

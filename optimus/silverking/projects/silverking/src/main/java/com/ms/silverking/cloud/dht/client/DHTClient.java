@@ -40,10 +40,7 @@ import com.ms.silverking.time.TimerDrivenTimeSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Base client interface to DHT functionality. Provides sessions
- * to specific DHT instances.
- */
+/** Base client interface to DHT functionality. Provides sessions to specific DHT instances. */
 public class DHTClient {
   private static final double concurrentExtraThreadFactor = 1.25;
   private static final double nonConcurrentExtraThreadFactor = 1.0;
@@ -56,9 +53,10 @@ public class DHTClient {
   static {
     AsyncGlobals.setVerbose(false);
     TopoRingConstants.setVerbose(false);
-    LWTPoolProvider.createDefaultWorkPools(DefaultWorkPoolParameters.defaultParameters()
-                                                                    .workUnit(defaultClientWorkUnit)
-                                                                    .ignoreDoubleInit(true));
+    LWTPoolProvider.createDefaultWorkPools(
+        DefaultWorkPoolParameters.defaultParameters()
+            .workUnit(defaultClientWorkUnit)
+            .ignoreDoubleInit(true));
     valueCreator = SimpleValueCreator.forLocalProcess();
     absMillisTimeSource = new TimerDrivenTimeSource();
     OutgoingData.setAbsMillisTimeSource(absMillisTimeSource);
@@ -102,14 +100,16 @@ public class DHTClient {
    * @return a new session to the given instance
    * @throws ClientException
    */
-  public DHTSession openSession(ClientDHTConfigurationProvider dhtConfigProvider) throws ClientException {
+  public DHTSession openSession(ClientDHTConfigurationProvider dhtConfigProvider)
+      throws ClientException {
     return openSession(new SessionOptions(dhtConfigProvider.getClientDHTConfiguration()));
   }
 
   /**
    * Open a new session to the specified SilverKing DHT instance using the given SessionOptions.
    *
-   * @param sessionOptions options specifying the SilverKing DHT instance and the parameters of this session
+   * @param sessionOptions options specifying the SilverKing DHT instance and the parameters of this
+   *     session
    * @return a new session to the given instance
    * @throws ClientException
    */
@@ -197,7 +197,8 @@ public class DHTClient {
         }
       } else {
         // A preferred server was explicitly specified
-        preferredServerAndPort = new IPAndPort(IPAddrUtil.serverNameToAddr(preferredServer), serverPort);
+        preferredServerAndPort =
+            new IPAndPort(IPAddrUtil.serverNameToAddr(preferredServer), serverPort);
         log.debug("preferredServerAndPort: {}", preferredServerAndPort);
         // Check if we need to resolve this daemon to an interface
         resolvedServer = (IPAndPort) aliasMap.daemonToInterface(preferredServerAndPort);
@@ -207,20 +208,21 @@ public class DHTClient {
       }
 
       log.debug("Opening session to resolvedServer: {}", resolvedServer);
-      session = new DHTSessionImpl(dhtConfig,
-                                   resolvedServer,
-                                   absMillisTimeSource,
-                                   serializationRegistry,
-                                   sessionOptions.getTimeoutController(),
-                                   nsOptionsMode,
-                                   enableMsgGroupTrace,
-                                   aliasMap,
-                                   sessionOptions.getSessionPolicyOnDisconnect());
+      session =
+          new DHTSessionImpl(
+              dhtConfig,
+              resolvedServer,
+              absMillisTimeSource,
+              serializationRegistry,
+              sessionOptions.getTimeoutController(),
+              nsOptionsMode,
+              enableMsgGroupTrace,
+              aliasMap,
+              sessionOptions.getSessionPolicyOnDisconnect());
     } catch (IOException | AuthFailedException e) {
       throw new ClientException(e);
     }
     log.debug("session returned: {}", session);
     return session;
   }
-
 }

@@ -29,12 +29,15 @@ public class RingRegion {
 
   private static Logger log = LoggerFactory.getLogger(RingRegion.class);
 
-  public static final RingRegion allRingspace = new RingRegion(LongRingspace.start, LongRingspace.end);
+  public static final RingRegion allRingspace =
+      new RingRegion(LongRingspace.start, LongRingspace.end);
 
   // used for ordering RingRegions
   public static final Comparator<RingRegion> sizeComparator = new RingRegionSizeComparator();
-  public static final Comparator<RingRegion> positionComparator = new RingRegionPositionComparator();
-  public static final Comparator<RingRegion> sizePositionComparator = new RingRegionSizePositionComparator();
+  public static final Comparator<RingRegion> positionComparator =
+      new RingRegionPositionComparator();
+  public static final Comparator<RingRegion> sizePositionComparator =
+      new RingRegionSizePositionComparator();
 
   public RingRegion(long start, long end) {
     LongRingspace.ensureInRingspace(start);
@@ -116,7 +119,8 @@ public class RingRegion {
       int index;
 
       index = s.indexOf(':');
-      return new RingRegion(Long.parseLong(s.substring(0, index)), Long.parseLong(s.substring(index + 1)));
+      return new RingRegion(
+          Long.parseLong(s.substring(0, index)), Long.parseLong(s.substring(index + 1)));
     } catch (RuntimeException re) {
       System.err.println(s);
       throw re;
@@ -139,7 +143,8 @@ public class RingRegion {
   }
 
   public boolean isContiguousWith(RingRegion oRegion) {
-    return LongRingspace.nextPoint(end) == oRegion.start || LongRingspace.nextPoint(oRegion.end) == start;
+    return LongRingspace.nextPoint(end) == oRegion.start
+        || LongRingspace.nextPoint(oRegion.end) == start;
   }
 
   public static void display(Collection<RingRegion> regions) {
@@ -210,7 +215,7 @@ public class RingRegion {
       } else {
         subRegionEnd = end;
       }
-      //System.out.println(i +" "+ subRegionStart +" "+ subRegionEnd +" "+ subRegionSize);
+      // System.out.println(i +" "+ subRegionStart +" "+ subRegionEnd +" "+ subRegionSize);
       subRegions.add(new RingRegion(subRegionStart, subRegionEnd));
       subRegionStart += subRegionSize;
     }
@@ -228,37 +233,37 @@ public class RingRegion {
     }
     return regionSizes;
   }
-    
-    /*
-    public List<RingRegion> divide(List<Double> weights) {
-        List<RingRegion>   subRegions;
-        long               subRegionStart;
-        int                numRegions;
-        List<Double>       normalizedWeights;
 
-        normalizedWeights = NumUtil.normalize(weights);
-        numRegions = normalizedWeights.size();
-        subRegions = new ArrayList<>(numRegions);
-        subRegionStart = start;
-        for (int i = 0; i < numRegions; i++) {
-            long    subRegionEnd;
-            long    subRegionSize;
-            
-            subRegionSize = (long)((double)getSize() * normalizedWeights.get(i));
-            if (i < numRegions - 1) {
-                subRegionEnd = subRegionStart + (subRegionSize - 1);
-            } else {
-                subRegionEnd = end;
-            }
-            if (Log.levelMet(Level.FINE)) {
-                Log.fine(i +" "+ subRegionStart +" "+ subRegionEnd +" "+ subRegionSize +" "+ normalizedWeights.get(i));
-            }
-            subRegions.add(new RingRegion(subRegionStart, subRegionEnd));
-            subRegionStart += subRegionSize;
-        }
-        return subRegions;
-    }
-    */
+  /*
+  public List<RingRegion> divide(List<Double> weights) {
+      List<RingRegion>   subRegions;
+      long               subRegionStart;
+      int                numRegions;
+      List<Double>       normalizedWeights;
+
+      normalizedWeights = NumUtil.normalize(weights);
+      numRegions = normalizedWeights.size();
+      subRegions = new ArrayList<>(numRegions);
+      subRegionStart = start;
+      for (int i = 0; i < numRegions; i++) {
+          long    subRegionEnd;
+          long    subRegionSize;
+
+          subRegionSize = (long)((double)getSize() * normalizedWeights.get(i));
+          if (i < numRegions - 1) {
+              subRegionEnd = subRegionStart + (subRegionSize - 1);
+          } else {
+              subRegionEnd = end;
+          }
+          if (Log.levelMet(Level.FINE)) {
+              Log.fine(i +" "+ subRegionStart +" "+ subRegionEnd +" "+ subRegionSize +" "+ normalizedWeights.get(i));
+          }
+          subRegions.add(new RingRegion(subRegionStart, subRegionEnd));
+          subRegionStart += subRegionSize;
+      }
+      return subRegions;
+  }
+  */
 
   public List<RingRegion> divide(List<Double> weights) {
     List<RingRegion> subRegions;
@@ -274,16 +279,24 @@ public class RingRegion {
       long subRegionEnd;
       long subRegionSize;
 
-      //subRegionSize = (long)((double)getSize() * normalizedWeights.get(i));
-      subRegionSize = new BigDecimal(getSize(), LongRingspace.mathContext).multiply(normalizedWeights.get(i),
-          LongRingspace.mathContext).longValue();
+      // subRegionSize = (long)((double)getSize() * normalizedWeights.get(i));
+      subRegionSize =
+          new BigDecimal(getSize(), LongRingspace.mathContext)
+              .multiply(normalizedWeights.get(i), LongRingspace.mathContext)
+              .longValue();
       if (i < numRegions - 1) {
         subRegionEnd = subRegionStart + (subRegionSize - 1);
       } else {
         subRegionEnd = end;
       }
       if (log.isDebugEnabled()) {
-        log.debug("{} {} {} {} {}",i ,subRegionStart , subRegionEnd , subRegionSize , normalizedWeights.get(i));
+        log.debug(
+            "{} {} {} {} {}",
+            i,
+            subRegionStart,
+            subRegionEnd,
+            subRegionSize,
+            normalizedWeights.get(i));
       }
       subRegions.add(new RingRegion(subRegionStart, subRegionEnd));
       subRegionStart += subRegionSize;
@@ -358,11 +371,15 @@ public class RingRegion {
   }
 
   public boolean overlaps(RingRegion oRegion) {
-    return contains(oRegion.start) || contains(oRegion.end) || oRegion.contains(start) || oRegion.contains(end);
+    return contains(oRegion.start)
+        || contains(oRegion.end)
+        || oRegion.contains(start)
+        || oRegion.contains(end);
   }
 
   public RingRegion shiftTo(long newStart) {
-    return new RingRegion(newStart, LongRingspace.prevPoint(LongRingspace.add(newStart, getSize())));
+    return new RingRegion(
+        newStart, LongRingspace.prevPoint(LongRingspace.add(newStart, getSize())));
   }
 
   public RingRegion trimOverlappingWith(RingRegion region) {
@@ -403,7 +420,8 @@ public class RingRegion {
     }
   }
 
-  public static RingRegion trimOverlappingIn(Collection<RingRegion> regions, RingRegion trimRegion) {
+  public static RingRegion trimOverlappingIn(
+      Collection<RingRegion> regions, RingRegion trimRegion) {
     for (RingRegion region : regions) {
       trimRegion = region.trimOverlappingIn(trimRegion);
       if (trimRegion == null) {
@@ -428,9 +446,10 @@ public class RingRegion {
     trimTest(region, 150, 0);
     trimTest(region, 400, 150);
 
-    trimTest(-3074457345618258603L, -3074457345618258603L, -3074457345618258602L, -2767011611056432744L);
-    trimTest(-3074457345618258603L, -3074457345618258603L, -4611686018427387903L, -3996794549303736184L);
-
+    trimTest(
+        -3074457345618258603L, -3074457345618258603L, -3074457345618258602L, -2767011611056432744L);
+    trimTest(
+        -3074457345618258603L, -3074457345618258603L, -4611686018427387903L, -3996794549303736184L);
   }
 
   private static void trimTest(long s1, long e1, long s2, long e2) {
@@ -453,8 +472,8 @@ public class RingRegion {
           // bbbbbb
           return IntersectionType.isomorphic;
         } else {
-          if (LongRingspace.clockwiseDistance(a.getStart(), b.getStart()) <= LongRingspace.clockwiseDistance(
-              a.getStart(), b.getEnd())) {
+          if (LongRingspace.clockwiseDistance(a.getStart(), b.getStart())
+              <= LongRingspace.clockwiseDistance(a.getStart(), b.getEnd())) {
             // aaaaaaaa  aaaaaa  aaaaaa
             //   bbbb    bbbb      bbbb
             return IntersectionType.aSubsumesB;
@@ -503,8 +522,8 @@ public class RingRegion {
   }
 
   /**
-   * Trim portions of trimRegion that overlap with this region. This routine should
-   * be favored over case-specific logic.
+   * Trim portions of trimRegion that overlap with this region. This routine should be favored over
+   * case-specific logic.
    *
    * @return trimmed trimRegion, null if it is completely overlapped
    */
@@ -517,77 +536,81 @@ public class RingRegion {
 
     intersectionType = intersectionType(a, b);
     switch (intersectionType) {
-    case isomorphic:
-      // aaaaaa
-      // bbbbbb
-      aNonOverlapping = ImmutableList.of();
-      bNonOverlapping = ImmutableList.of();
-      overlapping = ImmutableList.of(a);
-      break;
-    case aSubsumesB:
-      // aaaaaa  aaaaaaaa  aaaaaa
-      // bbbb      bbbb      bbbb
-      builder = ImmutableList.builder();
-      if (a.start != b.start) {
-        builder.add(new RingRegion(a.start, LongRingspace.prevPoint(b.start)));
-      }
-      if (a.end != b.end) {
-        builder.add(new RingRegion(LongRingspace.nextPoint(b.end), a.end));
-      }
-      aNonOverlapping = builder.build();
-      bNonOverlapping = ImmutableList.of();
-      overlapping = ImmutableList.of(b);
-      break;
-    case abPartial:
-      // aaaaaa
-      //   bbbbbb
-      aNonOverlapping = ImmutableList.of(new RingRegion(a.start, LongRingspace.prevPoint(b.start)));
-      bNonOverlapping = ImmutableList.of(new RingRegion(LongRingspace.nextPoint(a.end), b.end));
-      overlapping = ImmutableList.of(new RingRegion(b.start, a.end));
-      break;
-    case bSubsumesA:
-      // aaaa      aaaa      aaaa
-      // bbbbbb  bbbbbbbb  bbbbbb
-      builder = ImmutableList.builder();
-      aNonOverlapping = ImmutableList.of();
-      if (a.start != b.start) {
-        builder.add(new RingRegion(b.start, LongRingspace.prevPoint(a.start)));
-      }
-      if (a.end != b.end) {
-        builder.add(new RingRegion(LongRingspace.nextPoint(a.end), b.end));
-      }
-      bNonOverlapping = builder.build();
-      overlapping = ImmutableList.of(a);
-      break;
-    case baPartial:
-      //   aaaaaa
-      // bbbbbb
-      aNonOverlapping = ImmutableList.of(new RingRegion(LongRingspace.nextPoint(b.end), a.end));
-      bNonOverlapping = ImmutableList.of(new RingRegion(b.start, LongRingspace.prevPoint(a.start)));
-      overlapping = ImmutableList.of(new RingRegion(a.start, b.end));
-      break;
-    case disjoint:
-      // aaaaaa
-      //         bbbbbb
-      aNonOverlapping = ImmutableList.of();
-      bNonOverlapping = ImmutableList.of();
-      overlapping = ImmutableList.of();
-      break;
-    case wrappedPartial:
-      //       aaaa  aaaa     aaaaaa
-      //         bbbbbb     bbbb  bbbb
+      case isomorphic:
+        // aaaaaa
+        // bbbbbb
+        aNonOverlapping = ImmutableList.of();
+        bNonOverlapping = ImmutableList.of();
+        overlapping = ImmutableList.of(a);
+        break;
+      case aSubsumesB:
+        // aaaaaa  aaaaaaaa  aaaaaa
+        // bbbb      bbbb      bbbb
+        builder = ImmutableList.builder();
+        if (a.start != b.start) {
+          builder.add(new RingRegion(a.start, LongRingspace.prevPoint(b.start)));
+        }
+        if (a.end != b.end) {
+          builder.add(new RingRegion(LongRingspace.nextPoint(b.end), a.end));
+        }
+        aNonOverlapping = builder.build();
+        bNonOverlapping = ImmutableList.of();
+        overlapping = ImmutableList.of(b);
+        break;
+      case abPartial:
+        // aaaaaa
+        //   bbbbbb
+        aNonOverlapping =
+            ImmutableList.of(new RingRegion(a.start, LongRingspace.prevPoint(b.start)));
+        bNonOverlapping = ImmutableList.of(new RingRegion(LongRingspace.nextPoint(a.end), b.end));
+        overlapping = ImmutableList.of(new RingRegion(b.start, a.end));
+        break;
+      case bSubsumesA:
+        // aaaa      aaaa      aaaa
+        // bbbbbb  bbbbbbbb  bbbbbb
+        builder = ImmutableList.builder();
+        aNonOverlapping = ImmutableList.of();
+        if (a.start != b.start) {
+          builder.add(new RingRegion(b.start, LongRingspace.prevPoint(a.start)));
+        }
+        if (a.end != b.end) {
+          builder.add(new RingRegion(LongRingspace.nextPoint(a.end), b.end));
+        }
+        bNonOverlapping = builder.build();
+        overlapping = ImmutableList.of(a);
+        break;
+      case baPartial:
+        //   aaaaaa
+        // bbbbbb
+        aNonOverlapping = ImmutableList.of(new RingRegion(LongRingspace.nextPoint(b.end), a.end));
+        bNonOverlapping =
+            ImmutableList.of(new RingRegion(b.start, LongRingspace.prevPoint(a.start)));
+        overlapping = ImmutableList.of(new RingRegion(a.start, b.end));
+        break;
+      case disjoint:
+        // aaaaaa
+        //         bbbbbb
+        aNonOverlapping = ImmutableList.of();
+        bNonOverlapping = ImmutableList.of();
+        overlapping = ImmutableList.of();
+        break;
+      case wrappedPartial:
+        //       aaaa  aaaa     aaaaaa
+        //         bbbbbb     bbbb  bbbb
 
-      aNonOverlapping = ImmutableList.of(
-          new RingRegion(LongRingspace.nextPoint(b.end), LongRingspace.prevPoint(b.start)));
-      bNonOverlapping = ImmutableList.of(
-          new RingRegion(LongRingspace.nextPoint(a.end), LongRingspace.prevPoint(a.start)));
-      builder = ImmutableList.builder();
-      builder.add(new RingRegion(a.start, b.end));
-      builder.add(new RingRegion(b.start, a.end));
-      overlapping = builder.build();
-      break;
-    default:
-      throw new RuntimeException("panic");
+        aNonOverlapping =
+            ImmutableList.of(
+                new RingRegion(LongRingspace.nextPoint(b.end), LongRingspace.prevPoint(b.start)));
+        bNonOverlapping =
+            ImmutableList.of(
+                new RingRegion(LongRingspace.nextPoint(a.end), LongRingspace.prevPoint(a.start)));
+        builder = ImmutableList.builder();
+        builder.add(new RingRegion(a.start, b.end));
+        builder.add(new RingRegion(b.start, a.end));
+        overlapping = builder.build();
+        break;
+      default:
+        throw new RuntimeException("panic");
     }
     return new IntersectionResult(intersectionType, aNonOverlapping, bNonOverlapping, overlapping);
   }
@@ -642,7 +665,8 @@ public class RingRegion {
     testIntersection2(large_m1, "large_m1", large_p1, "large_p1");
     System.out.println();
     System.out.println();
-    testIntersection(new RingRegion(4459345355264627536L, 4470841357153488195L),
+    testIntersection(
+        new RingRegion(4459345355264627536L, 4470841357153488195L),
         new RingRegion(4469529232424279716L, 4469544142932566175L));
   }
 
@@ -657,30 +681,30 @@ public class RingRegion {
 
     intersectionType = intersectionType(a, b);
     switch (intersectionType) {
-    case isomorphic:
-      // aaaaaa
-      // bbbbbb
-      return a;
-    case aSubsumesB:
-      // aaaaaa  aaaaaaaa  aaaaaa
-      // bbbb      bbbb      bbbb
-      return a;
-    case abPartial:
-      // aaaaaa
-      //   bbbbbb
-      return new RingRegion(a.start, b.end);
-    case bSubsumesA:
-      // aaaa      aaaa      aaaa
-      // bbbbbb  bbbbbbbb  bbbbbb
-      return b;
-    case baPartial:
-      //   aaaaaa
-      // bbbbbb
-      return new RingRegion(b.start, a.end);
-    case disjoint:
-      throw new RuntimeException("Can't union disjoint regions");
-    default:
-      throw new RuntimeException("panic");
+      case isomorphic:
+        // aaaaaa
+        // bbbbbb
+        return a;
+      case aSubsumesB:
+        // aaaaaa  aaaaaaaa  aaaaaa
+        // bbbb      bbbb      bbbb
+        return a;
+      case abPartial:
+        // aaaaaa
+        //   bbbbbb
+        return new RingRegion(a.start, b.end);
+      case bSubsumesA:
+        // aaaa      aaaa      aaaa
+        // bbbbbb  bbbbbbbb  bbbbbb
+        return b;
+      case baPartial:
+        //   aaaaaa
+        // bbbbbb
+        return new RingRegion(b.start, a.end);
+      case disjoint:
+        throw new RuntimeException("Can't union disjoint regions");
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -731,7 +755,8 @@ public class RingRegion {
     }
   }
 
-  public static Collection<RingRegion> union(List<RingRegion>[] regionsA, List<RingRegion> regionsB) {
+  public static Collection<RingRegion> union(
+      List<RingRegion>[] regionsA, List<RingRegion> regionsB) {
     return RingRegion.union(RingRegion.union(regionsA), regionsB);
   }
 
@@ -746,9 +771,7 @@ public class RingRegion {
     return new PositionComparator();
   }
 
-  /**
-   * Orders points within this region
-   */
+  /** Orders points within this region */
   private class PositionComparator implements Comparator<Long> {
     @Override
     public int compare(Long p0, Long p1) {
@@ -787,16 +810,16 @@ public class RingRegion {
   // for unit testing
   public static void main(String[] args) {
     try {
-            /*
-            List<RingRegion>    r;
-            
-            r = allRingspace.divide(3);
-            display(r);
-            System.out.println("\nMerged");
-            r = mergeAdjacent(r);
-            display(r);
-            runTrimTests();
-            */
+      /*
+      List<RingRegion>    r;
+
+      r = allRingspace.divide(3);
+      display(r);
+      System.out.println("\nMerged");
+      r = mergeAdjacent(r);
+      display(r);
+      runTrimTests();
+      */
       testIntersection();
     } catch (Exception e) {
       e.printStackTrace();

@@ -16,13 +16,11 @@ import com.ms.silverking.util.PropertiesHelper.UndefinedAction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Thread class with pre-configured uncaught exception handler
- */
+/** Thread class with pre-configured uncaught exception handler */
 public class SafeThread extends Thread {
   private static final Logger log = LoggerFactory.getLogger(SafeThread.class);
-  private static final String defaultUncaughtExceptionHandlerProperty = SafeThread.class.getName() +
-      ".DefaultUncaughtExceptionHandler";
+  private static final String defaultUncaughtExceptionHandlerProperty =
+      SafeThread.class.getName() + ".DefaultUncaughtExceptionHandler";
 
   static {
     String handlerName;
@@ -35,8 +33,9 @@ public class SafeThread extends Thread {
      * silently ignored.
      */
 
-    handlerName = PropertiesHelper.systemHelper.getString(defaultUncaughtExceptionHandlerProperty,
-        UndefinedAction.ZeroOnUndefined);
+    handlerName =
+        PropertiesHelper.systemHelper.getString(
+            defaultUncaughtExceptionHandlerProperty, UndefinedAction.ZeroOnUndefined);
     log.info("UncaughtExceptionHandler: {}", handlerName == null ? "<none>" : handlerName);
     if (handlerName != null) {
       try {
@@ -44,7 +43,8 @@ public class SafeThread extends Thread {
         setDefaultUncaughtExceptionHandler(handler);
       } catch (Exception e) {
         log.error("Unable to create UncaughtExceptionHandler: {}", handlerName, e);
-        // TODO (OPTIMUS-40540): revisit System.exit as this isn't the correct thing to do either on the client or
+        // TODO (OPTIMUS-40540): revisit System.exit as this isn't the correct thing to do either on
+        // the client or
         // on the server
         System.exit(-1);
       }
@@ -68,7 +68,8 @@ public class SafeThread extends Thread {
     this(target, name, customHandler, false);
   }
 
-  public SafeThread(Runnable target, String name, UncaughtExceptionHandler customHandler, boolean daemon) {
+  public SafeThread(
+      Runnable target, String name, UncaughtExceptionHandler customHandler, boolean daemon) {
     super(target, name);
     this.setDaemon(daemon);
     if (customHandler != null) {

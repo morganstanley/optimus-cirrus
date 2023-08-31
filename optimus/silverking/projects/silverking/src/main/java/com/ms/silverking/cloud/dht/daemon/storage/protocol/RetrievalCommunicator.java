@@ -19,9 +19,7 @@ import com.ms.silverking.net.IPAndPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Not thread-safe. Only to be used for a single processing pass.
- */
+/** Not thread-safe. Only to be used for a single processing pass. */
 public class RetrievalCommunicator extends OpCommunicator<DHTKey, RetrievalResult>
     implements RetrievalVirtualCommunicator {
   private List<SecondaryReplicasUpdate> secondaryReplicasUpdates;
@@ -32,8 +30,7 @@ public class RetrievalCommunicator extends OpCommunicator<DHTKey, RetrievalResul
 
   private static Logger log = LoggerFactory.getLogger(RetrievalCommunicator.class);
 
-  public RetrievalCommunicator() {
-  }
+  public RetrievalCommunicator() {}
 
   ////////////////
 

@@ -21,9 +21,8 @@ import com.ms.silverking.text.FieldsRequirement;
 import com.ms.silverking.text.ObjectDefParser2;
 
 /**
- * Configuration settings required to build a ring.
- * Unlike CloudConfiguration, a RingConfiguration is named
- * and stored in zk.
+ * Configuration settings required to build a ring. Unlike CloudConfiguration, a RingConfiguration
+ * is named and stored in zk.
  */
 public class RingConfiguration implements VersionedDefinition {
   private final CloudConfiguration cloudConfig;
@@ -34,10 +33,17 @@ public class RingConfiguration implements VersionedDefinition {
   private final Set<String> hostGroups;
   private final long version;
 
-  //public static final char    delimiter = CloudConfiguration.delimiter;
+  // public static final char    delimiter = CloudConfiguration.delimiter;
 
-  public static final RingConfiguration emptyTemplate = new RingConfiguration(CloudConfiguration.emptyTemplate, null,
-      null, null, null, null, VersionedDefinition.NO_VERSION);
+  public static final RingConfiguration emptyTemplate =
+      new RingConfiguration(
+          CloudConfiguration.emptyTemplate,
+          null,
+          null,
+          null,
+          null,
+          null,
+          VersionedDefinition.NO_VERSION);
   public static final Set<String> optionalFields;
 
   static {
@@ -47,11 +53,18 @@ public class RingConfiguration implements VersionedDefinition {
     builder.addAll(Utils.optionalVersionFieldSet);
     builder.add("hostGroups");
     optionalFields = builder.build();
-    ObjectDefParser2.addParser(emptyTemplate, FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS, optionalFields);
+    ObjectDefParser2.addParser(
+        emptyTemplate, FieldsRequirement.REQUIRE_ALL_NONOPTIONAL_FIELDS, optionalFields);
   }
 
-  public RingConfiguration(CloudConfiguration cloudConfig, String weightSpecsName, String ringParentName,
-      String storagePolicyGroupName, String storagePolicyName, Set<String> hostGroups, long version) {
+  public RingConfiguration(
+      CloudConfiguration cloudConfig,
+      String weightSpecsName,
+      String ringParentName,
+      String storagePolicyGroupName,
+      String storagePolicyName,
+      Set<String> hostGroups,
+      long version) {
     this.cloudConfig = cloudConfig;
     this.weightSpecsName = weightSpecsName;
     this.ringParentName = ringParentName;
@@ -59,19 +72,36 @@ public class RingConfiguration implements VersionedDefinition {
     this.storagePolicyName = storagePolicyName;
     this.hostGroups = hostGroups;
     this.version = version;
-    //this.mapName = topologyName + delimiter + weightSpecsName
+    // this.mapName = topologyName + delimiter + weightSpecsName
     //       + delimiter + exclusionListName + delimiter + replicationFactor;
   }
 
-  public RingConfiguration(CloudConfiguration cloudConfig, String weightSpecsName, String ringParentName,
-      String storagePolicyGroupName, String storagePolicyName, Set<String> hostGroups) {
-    this(cloudConfig, weightSpecsName, ringParentName, storagePolicyGroupName, storagePolicyName, hostGroups,
+  public RingConfiguration(
+      CloudConfiguration cloudConfig,
+      String weightSpecsName,
+      String ringParentName,
+      String storagePolicyGroupName,
+      String storagePolicyName,
+      Set<String> hostGroups) {
+    this(
+        cloudConfig,
+        weightSpecsName,
+        ringParentName,
+        storagePolicyGroupName,
+        storagePolicyName,
+        hostGroups,
         VersionedDefinition.NO_VERSION);
   }
 
   public RingConfiguration version(long version) {
-    return new RingConfiguration(cloudConfig, weightSpecsName, ringParentName, storagePolicyGroupName,
-        storagePolicyName, hostGroups, version);
+    return new RingConfiguration(
+        cloudConfig,
+        weightSpecsName,
+        ringParentName,
+        storagePolicyGroupName,
+        storagePolicyName,
+        hostGroups,
+        version);
   }
 
   public CloudConfiguration getCloudConfiguration() {
@@ -122,7 +152,7 @@ public class RingConfiguration implements VersionedDefinition {
   public static RingConfiguration parse(String def, long version) {
     RingConfiguration instance;
 
-    //instance = (RingConfiguration)new ObjectDefParser(emptyTemplate, FieldsRequirement
+    // instance = (RingConfiguration)new ObjectDefParser(emptyTemplate, FieldsRequirement
     // .REQUIRE_ALL_NONOPTIONAL_FIELDS,
     //        Utils.optionalVersionFieldSet).parse(def);
     instance = ObjectDefParser2.parse(RingConfiguration.class, def);
@@ -131,7 +161,7 @@ public class RingConfiguration implements VersionedDefinition {
 
   @Override
   public String toString() {
-    //return new ObjectDefParser(this).objectToString(this);
+    // return new ObjectDefParser(this).objectToString(this);
     return ObjectDefParser2.objectToString(this);
   }
 }

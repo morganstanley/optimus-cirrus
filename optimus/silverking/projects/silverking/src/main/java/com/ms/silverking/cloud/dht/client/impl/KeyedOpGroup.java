@@ -22,14 +22,14 @@ import com.ms.silverking.cloud.dht.common.OpResult;
 class KeyedOpGroup {
   private final KeyedOpGroup parent;
   private final DHTKey parentKey;
-  //private final Set<DHTKey>   keys;
+  // private final Set<DHTKey>   keys;
   private AtomicInteger minIncomplete;
   private final ConcurrentMap<DHTKey, OpResult> results;
 
   KeyedOpGroup(KeyedOpGroup parent, DHTKey parentKey, Set<DHTKey> keys) {
     this.parent = parent;
     this.parentKey = parentKey;
-    //this.keys = keys;
+    // this.keys = keys;
     minIncomplete = new AtomicInteger(keys.size());
     results = new ConcurrentHashMap<>(keys.size());
     for (DHTKey key : keys) {

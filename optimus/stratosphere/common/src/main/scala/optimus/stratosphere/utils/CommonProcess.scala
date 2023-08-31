@@ -53,11 +53,13 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
 
   def runDetachedStratosphereCommand(args: String*): Unit = {
     val dir = stratoWorkspace.directoryStructure.sourcesDirectory.toFile
-    val env = sys.env.map { case (k, v) => s"$k=$v" }.toArray
     val stratosphereInfra = stratoWorkspace.stratosphereInfra
     val exec = stratosphereInfra.resolve("bin").resolve(s"stratosphere${OsSpecific.shellExt}")
-    val cmd = Array(exec.toAbsolutePath.toString) ++ args
-    Runtime.getRuntime.exec(cmd, env, dir)
+
+    // Launch a console so that user can see something is happening. Installing new IntelliJ may take a while.
+    val pre = if (OsSpecific.isWindows) CommonProcess.preamble.toArray :+ "start" else Array.empty
+
+    new ProcessBuilder((pre ++ Array(exec.toAbsolutePath.toString) ++ args): _*).directory(dir).start()
   }
 
   def runCommandFromStratosphereBin(appName: String, args: Seq[String])(
@@ -213,6 +215,16 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
 
   def isRunning(processName: String): Boolean = processList(processName).nonEmpty
 
+  def isIntellijRunning(shared: Boolean): Boolean =
+    if (shared) {
+      // check any Intellij process
+      isRunning(CommonProcess.intellijProcessName)
+    } else {
+      // check current workspace's Intellij process
+      isRunning(CommonProcess.intellijProcessName) &&
+      stratoWorkspace.intellijDirectoryStructure.intellijPortFile.exists()
+    }
+
   def processList(processName: String): Iterator[ProcessHandle] = {
     ProcessHandle.allProcesses().iterator().asScala.filter { process =>
       process.info().command().orElse("").contains(processName)
@@ -254,6 +266,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
 object CommonProcess {
   val fsCellPattern: Regex = ".*This workstation belongs to cell '(.+)\\.ms\\.com'.*".r
   private val gitTracePattern: Regex = """^\d\d:\d\d:\d\d\.[\d]+ .*[\w]+: .*$""".r
+  val intellijProcessName = "idea64"
 
   def isGitTraceStatement(line: String): Boolean =
     gitTracePattern.findFirstIn(line).isDefined

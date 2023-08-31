@@ -105,20 +105,27 @@ public class NamespacePropertiesIO {
     }
   }
 
-  private static void _write(File propertiesFile, NamespaceProperties nsProperties) throws IOException {
+  private static void _write(File propertiesFile, NamespaceProperties nsProperties)
+      throws IOException {
     // For backward compatibility, the legacy format of nsProperties is used
-    FileUtil.writeToFile(propertiesFile, nsProperties.toLegacySKDef() + "," + nsProperties.getCreationTime());
+    FileUtil.writeToFile(
+        propertiesFile, nsProperties.toLegacySKDef() + "," + nsProperties.getCreationTime());
   }
 
-  private static void _rewrite(File propertiesFile, NamespaceProperties nsProperties) throws IOException {
+  private static void _rewrite(File propertiesFile, NamespaceProperties nsProperties)
+      throws IOException {
     File tempFile;
 
-    // Try not to pollute the old properties, we firstly write new properties into a temp file and atomic move and
+    // Try not to pollute the old properties, we firstly write new properties into a temp file and
+    // atomic move and
     // replace the old one
-    tempFile = Files.createTempFile(propertiesFile.getParentFile().toPath(), propertiesFile.getName(),
-        "_pre_overwrite").toFile();
+    tempFile =
+        Files.createTempFile(
+                propertiesFile.getParentFile().toPath(), propertiesFile.getName(), "_pre_overwrite")
+            .toFile();
     // For backward compatibility, the legacy format of nsProperties is used
-    FileUtil.writeToFile(tempFile, nsProperties.toLegacySKDef() + "," + nsProperties.getCreationTime());
+    FileUtil.writeToFile(
+        tempFile, nsProperties.toLegacySKDef() + "," + nsProperties.getCreationTime());
     Files.move(tempFile.toPath(), propertiesFile.toPath(), ATOMIC_MOVE, REPLACE_EXISTING);
   }
 

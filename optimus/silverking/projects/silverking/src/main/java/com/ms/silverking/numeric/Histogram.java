@@ -117,7 +117,7 @@ public class Histogram {
         if (value == min) {
           return 0;
         } else {
-          //System.out.println(log +" "+ value +" "+ min + log.log(value - min));
+          // System.out.println(log +" "+ value +" "+ min + log.log(value - min));
           return (int) log.log(value - min);
         }
       }
@@ -136,7 +136,8 @@ public class Histogram {
     return parse(inStream, numBins, NOT_LOG_SCALE);
   }
 
-  public static Histogram parse(InputStream inStream, int numBins, double logBase) throws IOException {
+  public static Histogram parse(InputStream inStream, int numBins, double logBase)
+      throws IOException {
     BufferedReader reader;
     String line;
     Histogram histogram;
@@ -160,10 +161,10 @@ public class Histogram {
             values.add(Double.parseDouble(tokens[0]));
             counts.add(Integer.parseInt(tokens[1]));
           } catch (NumberFormatException nfe) {
-            logger.info("Ignoring: {}" , line);
+            logger.info("Ignoring: {}", line);
           }
         } else {
-          logger.info("Ignoring: {}" , line);
+          logger.info("Ignoring: {}", line);
         }
       }
     } while (line != null);

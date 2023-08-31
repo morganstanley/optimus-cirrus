@@ -32,8 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Associates a RingRegion with one or more Node primary owners, and zero or
- * more secondary owners.
+ * Associates a RingRegion with one or more Node primary owners, and zero or more secondary owners.
  */
 public class RingEntry {
   private final List<Node> primaryOwners;
@@ -49,15 +48,21 @@ public class RingEntry {
   private static final List<Node> emptyNodeList = ImmutableList.of();
 
   public static final Comparator<RingEntry> positionComparator = new RingEntryPositionComparator();
-  public static RingEntry unownedWholeRing = new RingEntry(emptyNodeList, emptyNodeList, RingRegion.allRingspace, 0);
+  public static RingEntry unownedWholeRing =
+      new RingEntry(emptyNodeList, emptyNodeList, RingRegion.allRingspace, 0);
 
-  public RingEntry(Collection<Node> primaryOwners, Collection<Node> secondaryOwners, RingRegion region,
+  public RingEntry(
+      Collection<Node> primaryOwners,
+      Collection<Node> secondaryOwners,
+      RingRegion region,
       int minPrimaryUnderFailure) {
     this.primaryOwners = ImmutableList.copyOf(primaryOwners);
     this.secondaryOwners = ImmutableList.copyOf(secondaryOwners);
     this.region = region;
-    if (minPrimaryUnderFailure < defaultMinPrimaryUnderFailureIndicator || minPrimaryUnderFailure > primaryOwners.size()) {
-      throw new RuntimeException("Bad minPrimaryUnderFailure: " + minPrimaryUnderFailure + " " + primaryOwners.size());
+    if (minPrimaryUnderFailure < defaultMinPrimaryUnderFailureIndicator
+        || minPrimaryUnderFailure > primaryOwners.size()) {
+      throw new RuntimeException(
+          "Bad minPrimaryUnderFailure: " + minPrimaryUnderFailure + " " + primaryOwners.size());
     } else {
       this.minPrimaryUnderFailure = minPrimaryUnderFailure;
     }
@@ -102,30 +107,30 @@ public class RingEntry {
 
   public List<Node> getOwnersList(OwnerQueryMode oqm) {
     switch (oqm) {
-    case Primary:
-      return primaryOwners;
-    case Secondary:
-      return secondaryOwners;
-    case All:
-      ImmutableList.Builder<Node> builder;
+      case Primary:
+        return primaryOwners;
+      case Secondary:
+        return secondaryOwners;
+      case All:
+        ImmutableList.Builder<Node> builder;
 
-      builder = ImmutableList.builder();
-      return builder.addAll(primaryOwners).addAll(secondaryOwners).build();
-    default:
-      throw new RuntimeException("panic");
+        builder = ImmutableList.builder();
+        return builder.addAll(primaryOwners).addAll(secondaryOwners).build();
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
   public Set<Node> getOwnersSet(OwnerQueryMode oqm) {
     switch (oqm) {
-    case Primary:
-      return ImmutableSet.copyOf(primaryOwners);
-    case Secondary:
-      return ImmutableSet.copyOf(secondaryOwners);
-    case All:
-      return new ImmutableSet.Builder().addAll(primaryOwners).addAll(secondaryOwners).build();
-    default:
-      throw new RuntimeException("panic");
+      case Primary:
+        return ImmutableSet.copyOf(primaryOwners);
+      case Secondary:
+        return ImmutableSet.copyOf(secondaryOwners);
+      case All:
+        return new ImmutableSet.Builder().addAll(primaryOwners).addAll(secondaryOwners).build();
+      default:
+        throw new RuntimeException("panic");
     }
   }
 
@@ -157,8 +162,10 @@ public class RingEntry {
   }
 
   public boolean isSubset(RingEntry o) {
-    return region.equals(o.region) && nodesAreSubset(primaryOwners, o.primaryOwners) && nodesAreSubset(secondaryOwners,
-        o.secondaryOwners) && minPrimaryUnderFailure == o.minPrimaryUnderFailure;
+    return region.equals(o.region)
+        && nodesAreSubset(primaryOwners, o.primaryOwners)
+        && nodesAreSubset(secondaryOwners, o.secondaryOwners)
+        && minPrimaryUnderFailure == o.minPrimaryUnderFailure;
   }
 
   private boolean nodesAreSubset(List<Node> nodes0, List<Node> nodes1) {
@@ -215,8 +222,8 @@ public class RingEntry {
   }
 
   public boolean containsOwner(Node owner, OwnerQueryMode oqm) {
-    return (oqm.includePrimary() && (primaryOwners.indexOf(
-        owner)) >= 0) || (oqm.includeSecondary() && (secondaryOwners.indexOf(owner)) >= 0);
+    return (oqm.includePrimary() && (primaryOwners.indexOf(owner)) >= 0)
+        || (oqm.includeSecondary() && (secondaryOwners.indexOf(owner)) >= 0);
   }
 
   public RingEntry replaceRegion(Collection<RingRegion> newRegionCollection) {
@@ -277,7 +284,7 @@ public class RingEntry {
     if (splitS.length > 0) {
       return parseOwnersString(topology, splitS[0]);
     } else {
-      //throw new RuntimeException("Unexpected bad primary owners string: "+ s);
+      // throw new RuntimeException("Unexpected bad primary owners string: "+ s);
       // Manager mode ring creation may create empty entries at some levels of the topology
       // we allow this. This requires verifying the projected ring to ensure that no
       // projected entries are without primary owners.
@@ -320,8 +327,11 @@ public class RingEntry {
   }
 
   public static RingEntry parseZKDefs(Topology topology, String regionDef, String ownersDef) {
-    return new RingEntry(parsePrimaryOwnersString(topology, ownersDef), parseSecondaryOwnersString(topology, ownersDef),
-        RingRegion.parseZKString(regionDef), parseMinPrimaryUnderFailure(ownersDef));
+    return new RingEntry(
+        parsePrimaryOwnersString(topology, ownersDef),
+        parseSecondaryOwnersString(topology, ownersDef),
+        RingRegion.parseZKString(regionDef),
+        parseMinPrimaryUnderFailure(ownersDef));
   }
 
   public RingEntry addOwners(RingEntry oEntry) {
@@ -421,9 +431,10 @@ public class RingEntry {
     RingEntry oEntry;
 
     oEntry = (RingEntry) other;
-    return region.equals(oEntry.region) && getPrimaryOwnersSet().equals(
-        oEntry.getPrimaryOwnersSet()) && getSecondaryOwnersSet().equals(
-        oEntry.getSecondaryOwnersSet()) && this.minPrimaryUnderFailure == oEntry.minPrimaryUnderFailure;
+    return region.equals(oEntry.region)
+        && getPrimaryOwnersSet().equals(oEntry.getPrimaryOwnersSet())
+        && getSecondaryOwnersSet().equals(oEntry.getSecondaryOwnersSet())
+        && this.minPrimaryUnderFailure == oEntry.minPrimaryUnderFailure;
   }
 
   public static List<RingEntry> eliminateDuplicates(List<RingEntry> entries) {
@@ -443,7 +454,7 @@ public class RingEntry {
     int index;
     RingEntry curEntry;
 
-    //System.out.println("raw\t"+ raw);
+    // System.out.println("raw\t"+ raw);
     simplified = new ArrayList<>();
     Collections.sort(simplified, positionComparator);
     curEntry = raw.get(0);
@@ -452,13 +463,13 @@ public class RingEntry {
       RingEntry nextEntry;
 
       nextEntry = raw.get(index);
-      //System.out.println(curEntry);
-      //System.out.println(nextEntry);
-      //System.out.println(curEntry.getRegion().isContiguousWith(nextEntry.getRegion()));
-      //System.out.println(curEntry.getPrimaryOwnersSet().equals(nextEntry.getPrimaryOwnersSet()));
-      if (curEntry.getRegion().isContiguousWith(nextEntry.getRegion()) && curEntry.getPrimaryOwnersSet().equals(
-          nextEntry.getPrimaryOwnersSet()) && curEntry.getSecondaryOwnersSet().equals(
-          nextEntry.getSecondaryOwnersSet())) {
+      // System.out.println(curEntry);
+      // System.out.println(nextEntry);
+      // System.out.println(curEntry.getRegion().isContiguousWith(nextEntry.getRegion()));
+      // System.out.println(curEntry.getPrimaryOwnersSet().equals(nextEntry.getPrimaryOwnersSet()));
+      if (curEntry.getRegion().isContiguousWith(nextEntry.getRegion())
+          && curEntry.getPrimaryOwnersSet().equals(nextEntry.getPrimaryOwnersSet())
+          && curEntry.getSecondaryOwnersSet().equals(nextEntry.getSecondaryOwnersSet())) {
         curEntry = curEntry.merge(nextEntry);
       } else {
         simplified.add(curEntry);
@@ -467,7 +478,7 @@ public class RingEntry {
       index++;
     }
     simplified.add(curEntry);
-    //System.out.println("simplified\t"+ simplified);
+    // System.out.println("simplified\t"+ simplified);
     return simplified;
   }
 

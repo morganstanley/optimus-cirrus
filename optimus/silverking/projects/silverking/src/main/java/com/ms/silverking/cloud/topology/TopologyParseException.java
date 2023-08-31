@@ -14,8 +14,7 @@ package com.ms.silverking.cloud.topology;
 import java.io.IOException;
 
 public class TopologyParseException extends IOException {
-  public TopologyParseException() {
-  }
+  public TopologyParseException() {}
 
   public TopologyParseException(String arg0) {
     super(arg0);

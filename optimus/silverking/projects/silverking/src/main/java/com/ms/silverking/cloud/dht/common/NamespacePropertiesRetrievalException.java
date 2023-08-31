@@ -28,8 +28,8 @@ public class NamespacePropertiesRetrievalException extends NamespacePropertiesOp
     super(message, cause);
   }
 
-  public NamespacePropertiesRetrievalException(String message, Throwable cause, boolean enableSuppression,
-      boolean writableStackTrace) {
+  public NamespacePropertiesRetrievalException(
+      String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
     super(message, cause, enableSuppression, writableStackTrace);
   }
 }

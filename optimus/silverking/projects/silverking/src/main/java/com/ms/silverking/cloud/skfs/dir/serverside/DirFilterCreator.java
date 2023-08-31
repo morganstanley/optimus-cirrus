@@ -52,7 +52,7 @@ public class DirFilterCreator {
   }
 
   private void filterPath(String path) {
-    //System.err.printf("Filtering %s\n", path);
+    // System.err.printf("Filtering %s\n", path);
     paths.add(keyCreator.createKey(path));
   }
 
@@ -83,23 +83,23 @@ public class DirFilterCreator {
       Triple<String, String, LocalDate> datelessPathAndDate;
 
       datelessPathAndDate = pathToDatelessPathAndDate(path);
-      //System.out.printf("%s\t%s\n", path, datelessPathAndDate);
+      // System.out.printf("%s\t%s\n", path, datelessPathAndDate);
       if (datelessPathAndDate != null) {
         Pair<String, String> datelessPath;
         LocalDate d;
 
         datelessPath = datelessPathAndDate.getPairAt1();
         d = datelessPathAndDate.getV3();
-        //System.out.printf("%s %s\n", currentDate, d);
+        // System.out.printf("%s %s\n", currentDate, d);
         if (shouldBeRetained(d)) {
-          //System.out.printf("Keeping (recent) %s\n", path);
+          // System.out.printf("Keeping (recent) %s\n", path);
         } else {
-          //System.out.printf("Filtering %s\n", path);
+          // System.out.printf("Filtering %s\n", path);
           filterPath(path);
         }
         datelessPaths.add(datelessPath);
       } else {
-        //System.out.printf("Keeping (no date) %s\n", path);
+        // System.out.printf("Keeping (no date) %s\n", path);
       }
     }
 
@@ -108,7 +108,7 @@ public class DirFilterCreator {
   }
 
   private int getInt(String s, int i0, int i1) {
-    //System.out.printf("%s %d\n", s, Integer.parseInt(s.substring(i0, i1)));
+    // System.out.printf("%s %d\n", s, Integer.parseInt(s.substring(i0, i1)));
     return Integer.parseInt(s.substring(i0, i1));
   }
 
@@ -151,7 +151,8 @@ public class DirFilterCreator {
         s1 = path.substring(i0 + dateLength);
         ds = path.substring(i0, i0 + dateLength);
         d = getLocalDate(ds);
-        //System.out.printf("%d %d %d %s\n", d.getYear(), d.getMonth().getValue(), d.getDayOfMonth(), d);
+        // System.out.printf("%d %d %d %s\n", d.getYear(), d.getMonth().getValue(),
+        // d.getDayOfMonth(), d);
         return new Triple<>(s0, s1, d);
       }
       i0 = path.indexOf(yearPrefix, i1 + 1);
@@ -175,7 +176,7 @@ public class DirFilterCreator {
   }
 
   public void processMonth(String year, int month) {
-    //System.out.printf("%s %d\n", year, month);
+    // System.out.printf("%s %d\n", year, month);
     // generating invalid dates is fine here
     for (int date = 1; date <= 31; date++) {
       processDate(String.format("%s%02d%02d", year, month, date));
@@ -186,24 +187,24 @@ public class DirFilterCreator {
     try {
       if (!shouldBeRetained(date)) {
         log.info("Filtering all of {}", date);
-                /*
-                System.out.printf("\nprocessYear %s\n", date);
-                System.out.printf("datelessPaths %d\n", datelessPaths.size());
-                System.out.printf("namespaces    %d\n", namespaces.size());
-                */
+        /*
+        System.out.printf("\nprocessYear %s\n", date);
+        System.out.printf("datelessPaths %d\n", datelessPaths.size());
+        System.out.printf("namespaces    %d\n", namespaces.size());
+        */
         for (Pair<String, String> datelessPath : datelessPaths) {
           String path;
 
           ++pathsProcessed;
           path = datelessPath.getV1() + date + datelessPath.getV2();
           filterPath(path);
-          //System.out.println(path);
+          // System.out.println(path);
         }
-                /*
-                System.out.printf("datelessPaths %d\n", datelessPaths.size());
-                System.out.printf("namespaces    %d\n", namespaces.size());
-                System.out.println();
-                */
+        /*
+        System.out.printf("datelessPaths %d\n", datelessPaths.size());
+        System.out.printf("namespaces    %d\n", namespaces.size());
+        System.out.println();
+        */
       } else {
         log.info("Keeping all of {}", date);
       }
@@ -222,7 +223,7 @@ public class DirFilterCreator {
 
       dirHashCreator = new DirFilterCreator();
       dirHashCreator.readPaths(dirFile);
-      //dirHashCreator.processYear("2017");
+      // dirHashCreator.processYear("2017");
       dirHashCreator.processYear("2018");
       return dirHashCreator.getNamespaces();
     } catch (IOException ioe) {

@@ -24,7 +24,8 @@ public class ChecksumTreeRequest {
 
   private static final long checksumTreeRequestTimeout = 1 * 60 * 1000;
 
-  public ChecksumTreeRequest(ConvergencePoint targetCP, ConvergencePoint curCP, RingRegion region, IPAndPort replica) {
+  public ChecksumTreeRequest(
+      ConvergencePoint targetCP, ConvergencePoint curCP, RingRegion region, IPAndPort replica) {
     this.targetCP = targetCP;
     this.curCP = curCP;
     this.region = region;
@@ -52,7 +53,8 @@ public class ChecksumTreeRequest {
   }
 
   public boolean hasTimedOut() {
-    return SystemTimeUtil.skSystemTimeSource.absTimeMillis() > sendTime + checksumTreeRequestTimeout;
+    return SystemTimeUtil.skSystemTimeSource.absTimeMillis()
+        > sendTime + checksumTreeRequestTimeout;
   }
 
   @Override

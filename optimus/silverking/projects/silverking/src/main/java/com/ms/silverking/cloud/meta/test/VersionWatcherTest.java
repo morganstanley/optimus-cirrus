@@ -63,5 +63,4 @@ public class VersionWatcherTest implements VersionListener {
       e.printStackTrace();
     }
   }
-
 }

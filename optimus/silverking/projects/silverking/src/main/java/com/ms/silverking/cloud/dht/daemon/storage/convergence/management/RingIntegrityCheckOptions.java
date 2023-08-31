@@ -19,8 +19,7 @@ import com.ms.silverking.collection.Pair;
 import org.kohsuke.args4j.Option;
 
 public class RingIntegrityCheckOptions {
-  RingIntegrityCheckOptions() {
-  }
+  RingIntegrityCheckOptions() {}
 
   @Option(name = "-G", usage = "GridConfigBase", required = false)
   String gridConfigBase;
@@ -43,7 +42,10 @@ public class RingIntegrityCheckOptions {
   @Option(name = "-serverFailureProbability", usage = "ServerFailureProbability", required = false)
   double serverFailureProbability;
 
-  @Option(name = "-serverFailureProbabilities", usage = "ServerFailureProbabilities", required = false)
+  @Option(
+      name = "-serverFailureProbabilities",
+      usage = "ServerFailureProbabilities",
+      required = false)
   String serverFailureProbabilities;
 
   private static final String sfp_delimiter = ",";

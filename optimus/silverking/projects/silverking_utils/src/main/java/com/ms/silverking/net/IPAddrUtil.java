@@ -49,7 +49,12 @@ public class IPAddrUtil {
         if (ipDef != null && !ipDef.equals(ip)) {
           // sys prop was already set and doesn't match IP parameter to method
           throw new RuntimeException(
-              "Cannot ensureLocalIP of " + ip + " as property " + ipProperty + " sets IP to " + ipDef);
+              "Cannot ensureLocalIP of "
+                  + ip
+                  + " as property "
+                  + ipProperty
+                  + " sets IP to "
+                  + ipDef);
         } else {
           // either the sys prop was not set or it matches the method parameter, we can continue
           System.setProperty(ipProperty, ip);
@@ -62,7 +67,10 @@ public class IPAddrUtil {
         if (ipInt != localIPInt) {
           // the local IP is already initialized and does not match
           throw new RuntimeException(
-              "Cannot ensureLocalIP of " + ip + " as IP is already initialized to " + localIPString());
+              "Cannot ensureLocalIP of "
+                  + ip
+                  + " as IP is already initialized to "
+                  + localIPString());
         }
       }
     } finally {
@@ -71,9 +79,8 @@ public class IPAddrUtil {
   }
 
   /**
-   * Tear down a local IP setting. Do not use in a running cluster or client;
-   * this is primarly expected to be used to tidy up between separate test suites
-   * with unique embedded clients
+   * Tear down a local IP setting. Do not use in a running cluster or client; this is primarly
+   * expected to be used to tidy up between separate test suites with unique embedded clients
    */
   public static void resetLocalIP() {
     localIPInt = 0;
@@ -166,7 +173,8 @@ public class IPAddrUtil {
     for (int i = 0; i < IPV4_BYTES; i++) {
       if (NumConversion.unsignedByteToInt(addr1[i]) < NumConversion.unsignedByteToInt(addr2[i])) {
         return -1;
-      } else if (NumConversion.unsignedByteToInt(addr1[i]) > NumConversion.unsignedByteToInt(addr2[i])) {
+      } else if (NumConversion.unsignedByteToInt(addr1[i])
+          > NumConversion.unsignedByteToInt(addr2[i])) {
         return 1;
       }
     }

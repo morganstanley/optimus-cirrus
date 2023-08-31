@@ -44,7 +44,8 @@ public class WeightsZK extends MetaToolModuleBase<WeightSpecifications, MetaPath
   }
 
   @Override
-  public WeightSpecifications readFromZK(long version, MetaToolOptions options) throws KeeperException {
+  public WeightSpecifications readFromZK(long version, MetaToolOptions options)
+      throws KeeperException {
     String vBase;
     ByteArrayInputStream inStream;
     vBase = getVBase(version);
@@ -59,22 +60,22 @@ public class WeightsZK extends MetaToolModuleBase<WeightSpecifications, MetaPath
     } catch (IOException ioe) {
       throw new RuntimeException(ioe);
     }
-        /*
-        String  vBase;
-        List<String>    nodes;
-        Map<String, Double> nodeWeights;
+    /*
+    String  vBase;
+    List<String>    nodes;
+    Map<String, Double> nodeWeights;
 
-        nodeWeights = new HashMap<>();
-        vBase = getVBase(version);
-        nodes = zk.getChildren(vBase);
-        for (String node : nodes) {
-            double  weight;
-            
-            weight = zk.getDouble(vBase +"/"+ node);
-            nodeWeights.put(node, weight);
-        }
-        return new WeightSpecifications(version, nodeWeights);
-        */
+    nodeWeights = new HashMap<>();
+    vBase = getVBase(version);
+    nodes = zk.getChildren(vBase);
+    for (String node : nodes) {
+        double  weight;
+
+        weight = zk.getDouble(vBase +"/"+ node);
+        nodeWeights.put(node, weight);
+    }
+    return new WeightSpecifications(version, nodeWeights);
+    */
   }
 
   @Override
@@ -118,13 +119,15 @@ public class WeightsZK extends MetaToolModuleBase<WeightSpecifications, MetaPath
     }
   }
 
-  private String writeToCloudZK(WeightSpecifications weightSpecs, MetaToolOptions options) throws KeeperException {
+  private String writeToCloudZK(WeightSpecifications weightSpecs, MetaToolOptions options)
+      throws KeeperException {
     String vBaseCloud;
     StringBuilder sb;
 
     sb = new StringBuilder();
     for (Map.Entry<String, Double> nodeWeight : weightSpecs.getNodeWeights()) {
-      sb.append(nodeWeight.getKey() + fieldDelimiterChar + nodeWeight.getValue() + entryDelimiterChar);
+      sb.append(
+          nodeWeight.getKey() + fieldDelimiterChar + nodeWeight.getValue() + entryDelimiterChar);
     }
     // trim trailing entryDelimiter
     if (sb.length() > 0) {
@@ -142,14 +145,16 @@ public class WeightsZK extends MetaToolModuleBase<WeightSpecifications, MetaPath
 
     sb = new StringBuilder();
     for (Map.Entry<String, Double> nodeWeight : weightSpecs.getNodeWeights()) {
-      sb.append(nodeWeight.getKey() + fieldDelimiterChar + nodeWeight.getValue() + entryDelimiterChar);
+      sb.append(
+          nodeWeight.getKey() + fieldDelimiterChar + nodeWeight.getValue() + entryDelimiterChar);
     }
     // trim trailing entryDelimiter
     if (sb.length() > 0) {
       sb.deleteCharAt(sb.length() - 1);
     }
     log.info("writing to base path : {}", base2);
-    vBaseServerConfig = zk.createString(base2 + "/", sb.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
+    vBaseServerConfig =
+        zk.createString(base2 + "/", sb.toString(), CreateMode.PERSISTENT_SEQUENTIAL);
     return null;
   }
 }

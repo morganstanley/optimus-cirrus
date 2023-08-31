@@ -22,14 +22,16 @@ public class SingleWriterConsistent implements StorageProtocol, RetrievalProtoco
   }
 
   @Override
-  public RetrievalOperation createRetrievalOperation(long deadline,
-      RetrievalOperationContainer retrievalOperationContainer, ForwardingMode forwardingMode) {
+  public RetrievalOperation createRetrievalOperation(
+      long deadline,
+      RetrievalOperationContainer retrievalOperationContainer,
+      ForwardingMode forwardingMode) {
     return new SingleWriterConsistentRead(deadline, retrievalOperationContainer, forwardingMode);
   }
 
   @Override
-  public StorageOperation createStorageOperation(long timeout, PutOperationContainer putOperationContainer,
-      ForwardingMode forwardingMode) {
+  public StorageOperation createStorageOperation(
+      long timeout, PutOperationContainer putOperationContainer, ForwardingMode forwardingMode) {
     return new SingleWriterConsistentWrite(timeout, putOperationContainer, forwardingMode);
   }
 
