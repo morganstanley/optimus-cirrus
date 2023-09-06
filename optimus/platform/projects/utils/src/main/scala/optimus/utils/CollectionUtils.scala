@@ -12,7 +12,6 @@
 package optimus.utils
 
 import java.{util => ju}
-
 import optimus.utils.CollectionUtils.ExtraTraversableOps2
 import optimus.utils.CollectionUtils.TraversableOps
 import optimus.scalacompat.collection._
@@ -20,6 +19,7 @@ import optimus.scalacompat.collection.BuildFrom
 
 import scala.collection.SeqLike
 import scala.collection.immutable.Seq
+import scala.collection.mutable.ListBuffer
 import scala.util._
 
 object CollectionUtils extends CollectionUtils {
@@ -169,6 +169,27 @@ object CollectionUtils extends CollectionUtils {
       }
       import scala.jdk.CollectionConverters._
       result.entrySet.iterator.asScala.map(entry => build(entry.getKey, entry.getValue)).toVector
+    }
+
+    /**
+     * Groups the collection based on the key function. Results are deterministically ordered in the
+     * same order as the input collection.
+     */
+    def groupByStable[K](key: A => K): Seq[(K, Seq[A])] = {
+      val result = new java.util.LinkedHashMap[K, ListBuffer[A]]()
+      for (a <- as) {
+        val k = key(a)
+        val buffer = result.computeIfAbsent(k, (k: K) => ListBuffer[A]())
+        buffer += a
+      }
+      val vectorBuilder = Vector.newBuilder[(K, Seq[A])]
+      vectorBuilder.sizeHint(result.size())
+      val it = result.entrySet().iterator()
+      while (it.hasNext) {
+        val elem = it.next()
+        vectorBuilder += (elem.getKey -> elem.getValue.result())
+      }
+      vectorBuilder.result()
     }
   }
 

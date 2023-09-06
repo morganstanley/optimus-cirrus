@@ -25,11 +25,13 @@ class ExternalVersionUpdater(scope: ScopeId, firstVersionToPublish: Int) extends
   override def doStart(): Unit = {
     val t = new Thread() {
       override def run(): Unit = {
-        while (true) {
-          Thread.sleep(10000)
+        var i = 0
+        while (i < 3) {
+          Thread.sleep(5000)
           val version = versions.next()
           log.info(s"Updating $scope version: $version")
           publishData(version)
+          i = i + 1
         }
       }
     }
@@ -61,7 +63,8 @@ trait DisplayString { self: BuildResult =>
     case "utils" => 1
     case "data"  => 1
     case "model" => 1
-    case "app"   => 2
+    case "app1"  => 2
+    case "app2"  => 2
   }
 
   // time taken for classes to compile
@@ -69,6 +72,7 @@ trait DisplayString { self: BuildResult =>
     case "utils" => 1
     case "data"  => 2
     case "model" => 3
-    case "app"   => 4
+    case "app1"  => 4
+    case "app2"  => 5
   }
 }

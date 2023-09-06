@@ -11,7 +11,7 @@ applications {
   ScalaDays {
     mainClass = "scala.days.obt.ScalaDays"
     mainClassArgs += "-e none"
-    javaOpts += "-Doptimus.gthread.ideal=4"
+    javaOpts += "-Doptimus.gthread.ideal=5"
     javaOpts += "-Dlogback.configurationFile=talks-logback.xml"
     javaOpts += "-Doptimus.entityagent.silent=true"
   }

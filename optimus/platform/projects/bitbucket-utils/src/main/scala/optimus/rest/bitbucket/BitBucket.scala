@@ -100,18 +100,25 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     }
   }
 
-  def addTasks(tasks: Seq[String], commentId: Int): Seq[PrTask] =
-    tasks.map(addTask(_, commentId))
+  def getBlockerComment(project: String, repo: String, prNumber: Int, commentId: Int): PrBlockerComment = {
+    val url = apiPrBlockerCommentUpdateUrl(project, repo, prNumber, commentId)
+    get[PrBlockerComment](url)
+  }
 
-  def addTask(text: String, commentId: Int): PrTask = {
-    val postUrl = apiTasksUrl
+  def addTasks(project: String, repo: String, prNumber: Int, tasks: Seq[String], commentId: Int): Seq[PrTask] =
+    tasks.map(t => addTask(project, repo, prNumber, t, commentId))
+
+  def addTask(project: String, repo: String, prNumber: Int, text: String, commentId: Int): PrTask = {
+    val postUrl = apiPrBlockerCommentsUrl(project, repo, prNumber)
     val data = AddTask(text, Anchor(commentId, "COMMENT"))
     post[PrTask](postUrl, Some(data.toJson.toString))
   }
 
-  def updateTask(state: String, taskId: Int): Int = {
-    val updateUrl = apiUrl("api", s"tasks/$taskId")
-    val data = UpdateTaskState(state)
+  def updateTask(project: String, repo: String, prNumber: Int, state: String, taskId: Int): Int = {
+    val version = getBlockerComment(project, repo, prNumber, taskId).version
+    val updateUrl = apiPrBlockerCommentUpdateUrl(project, repo, prNumber, taskId)
+
+    val data = UpdateTaskState(state, version)
     put[Id](updateUrl, Some(data.toJson.toString)).id
   }
 

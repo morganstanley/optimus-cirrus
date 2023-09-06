@@ -11,6 +11,7 @@
  */
 package optimus.scalacompat
 
+import scala.annotation.nowarn
 import scala.collection.compat.Factory
 import scala.collection.generic.CanBuildFrom
 import scala.reflect.ClassTag
@@ -177,6 +178,7 @@ package object collection {
 
   def FloatOrdering: Ordering[Float] = Ordering.Float
   def DoubleOrdering: Ordering[Double] = Ordering.Double
+  type DoubleOrdering = Ordering.DoubleOrdering
 
   object ParCollectionConverters
 
@@ -189,4 +191,6 @@ package object collection {
       self.view.slice(from, until)
   }
   implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
+  @nowarn("cat=deprecation")
+  type ForkJoin = scala.concurrent.forkjoin.ForkJoinPool
 }
