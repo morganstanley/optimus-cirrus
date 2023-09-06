@@ -43,6 +43,17 @@ object PropertyUtils {
     orig ++ propertyMap(overridess: _*)
   }
 
+  /*
+   * Parses a string like
+   *    "auto=false:howdy=1,2,3
+   * into
+   *    Map("auto" -> "false", "howdy" -> "1,2,3"
+   * Entries can be delimited by colon, as above or semicolon; commas are included in the parsed value.
+   * If multiple such strings are present, the rightmost overrides any given key.  E.g.
+   *    propertyMap("auto=false:howdy=1,2,3", "howdy=fun;truth=lies"
+   * yields
+   *    Map("auto" -> "false", "howdy" -> "fun", "truth" -> "lies")
+   */
   def propertyMap(settingss: String*): Map[String, String] =
     settingss.foldLeft(Map.empty[String, String]) {
       case (z, null) => z

@@ -25,6 +25,12 @@ trait BitBucketApiUrls {
   protected def apiPrUrl(project: String, repo: String, prNumber: Int): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber"
 
+  protected def apiPrBlockerCommentsUrl(project: String, repo: String, prNumber: Int): String =
+    s"${apiPrUrl(project, repo, prNumber)}/blocker-comments"
+
+  protected def apiPrBlockerCommentUpdateUrl(project: String, repo: String, prNumber: Int, taskId: Int): String =
+    s"${apiPrBlockerCommentsUrl(project, repo, prNumber)}/$taskId"
+
   protected def apiPrActivitesUrl(project: String, repo: String): String =
     s"${apiRepoUrl(project, repo)}/pull-requests"
 
@@ -37,7 +43,7 @@ trait BitBucketApiUrls {
   protected def apiPrCommentsByCommitIdUrl(project: String, repo: String, prNumber: Int, commentId: Int): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments/$commentId"
 
-  protected def apiTasksUrl: String = apiUrl("api", "tasks")
+  protected def apiTasksUrl(project: String, repo: String, prNumber: Int): String = apiUrl("api", "blocker-comments")
 
   protected def apiBrowseUrl(
       project: String,

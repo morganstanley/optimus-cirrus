@@ -13,6 +13,8 @@ Chris Marsh
 
 Cyrus Lyons ([@cbwl](http://github.com/cbwl))
 
+Daniela Sfregola ([@DanielaSfregola](http://github.com/DanielaSfregola))
+
 Gjeta Gjyshinca
 
 Harrison Houghton ([@hrhino](http://github.com/hrhino))

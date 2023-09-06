@@ -9,21 +9,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package scala.days.live
+package optimus.scalacompat.collection
 
-import optimus.platform._
+import scala.collection.mutable.Map
 
-// Starting point for live demos
-final case class ScopeId(meta: String, bundle: String, module: String)
+abstract class AbstractMutableMap[K, V] extends Map[K, V] {
 
-final case class ScopeConfiguration(scopeId: ScopeId, dependencies: Seq[ScopeId], sourceVersion: Int)
-
-sealed trait Artifact {
-  def scopeId: ScopeId
-  def fingerprint: Map[ScopeId, Int]
 }
-
-final case class ClassFileArtifact(scopeId: ScopeId, fingerprint: Map[ScopeId, Int]) extends Artifact
-final case class SignatureArtifact(scopeId: ScopeId, fingerprint: Map[ScopeId, Int]) extends Artifact
-
-final case class BuildResult(artifacts: Set[ClassFileArtifact])
