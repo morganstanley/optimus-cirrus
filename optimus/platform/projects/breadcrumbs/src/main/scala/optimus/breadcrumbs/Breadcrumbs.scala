@@ -761,6 +761,8 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
               countSent(1)
           }
         }
+      } catch {
+        case ie: InterruptedException => log.info("Drain thread interrupted", ie)
       } finally {
         sendKafka(LogPropertiesCrumb(ChainedID.root, Properties.breadcrumbsSentSoFar -> sentCount))
         producer.foreach { p =>

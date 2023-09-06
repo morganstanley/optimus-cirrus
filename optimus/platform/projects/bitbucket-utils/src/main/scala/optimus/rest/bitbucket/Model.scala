@@ -192,6 +192,11 @@ object PrTask extends DefaultJsonProtocol with InstantJsonFormat {
   implicit lazy val format: RootJsonFormat[PrTask] = jsonFormat4(PrTask.apply)
 }
 
+final case class PrBlockerComment(id: Int, text: String, state: String, version: Int)
+object PrBlockerComment extends DefaultJsonProtocol with InstantJsonFormat {
+  implicit lazy val format: RootJsonFormat[PrBlockerComment] = jsonFormat4(PrBlockerComment.apply)
+}
+
 final case class CommitActivityRequest(isLastPage: Boolean, values: Seq[CommitId], nextPageStart: Option[Int])
     extends Paged[CommitId]
 object CommitActivityRequest extends DefaultJsonProtocol with NullOptions {
@@ -319,12 +324,12 @@ object UpdateComment extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[UpdateComment] = jsonFormat2(UpdateComment.apply)
 }
 
-final case class UpdateTaskState(state: String)
+final case class UpdateTaskState(state: String, version: Int)
 object UpdateTaskState extends DefaultJsonProtocol {
-  implicit lazy val format: RootJsonFormat[UpdateTaskState] = jsonFormat1(UpdateTaskState.apply)
+  implicit lazy val format: RootJsonFormat[UpdateTaskState] = jsonFormat2(UpdateTaskState.apply)
 }
 
-final case class AddTask(text: String, anchor: Anchor)
+final case class AddTask(text: String, parent: Anchor)
 object AddTask extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[AddTask] = jsonFormat2(AddTask.apply)
 }

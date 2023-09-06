@@ -19,6 +19,9 @@ trait OptimusStringUtils {
     def emptyOrSome: Option[String] =
       if (underlying.isEmpty) None else Some(underlying)
 
+    def getOrElse(default: => String): String =
+      if (underlying.isEmpty) default else underlying
+
     def isNullOrEmpty: Boolean = (underlying eq null) || (underlying.length == 0)
 
     def abbrev(n: Int, ellipsis: String = "..."): String = if(underlying.size <= n) underlying else underlying.substring(0, n-1) + ellipsis

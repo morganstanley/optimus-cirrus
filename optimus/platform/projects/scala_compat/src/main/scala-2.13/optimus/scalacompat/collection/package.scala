@@ -90,6 +90,7 @@ package object collection extends MapBuildFromImplicits {
   }
   def FloatOrdering: Ordering[Float] = Ordering.Float.IeeeOrdering
   def DoubleOrdering: Ordering[Double] = Ordering.Double.IeeeOrdering
+  type DoubleOrdering = Ordering.Double.IeeeOrdering
 
   implicit class MapValuesFilterKeysNow[K, +V, Repr <: sc.MapOps[K, V, Iterable2, Repr]](
       private val self: Repr with sc.Map[K, V])
@@ -135,7 +136,7 @@ package object collection extends MapBuildFromImplicits {
   final private class DeepArray(as: Array[_]) extends sc.IndexedSeq[Any] {
     override def apply(i: Int): Any = {
       val a = as(i)
-      if (a.getClass.isArray) new DeepArray(a.asInstanceOf[Array[_]])
+      if (a != null && a.getClass.isArray) new DeepArray(a.asInstanceOf[Array[_]])
       else a
     }
     override def length: Int = as.length
@@ -143,4 +144,5 @@ package object collection extends MapBuildFromImplicits {
   implicit class ArrayDeepOps(private val self: Array[_]) {
     def deep: sc.IndexedSeq[Any] = new DeepArray(self)
   }
+  type ForkJoin = java.util.concurrent.ForkJoinPool
 }

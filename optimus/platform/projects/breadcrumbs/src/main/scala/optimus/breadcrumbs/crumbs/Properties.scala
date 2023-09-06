@@ -16,7 +16,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.{ util => ju }
+import java.{util => ju}
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import spray.json.DefaultJsonProtocol._
@@ -479,12 +479,11 @@ object Properties extends KnownProperties {
   val engine = prop[String]
   val replicaFrom = prop[ChainedID]
   val currentlyRunning = prop[Seq[ChainedID]]
-  val distRunning = propI
+  val distActive = propI
   val distLostTasks = propI
-  val distRegistered = propI
-  val distRegisteredTime = propL
-  val currentScopes = prop[Seq[String]]
-  val currentRoots = prop[Seq[String]]
+  val distActiveTime = propL
+  val activeScopes = prop[Seq[String]]
+  val activeRoots = prop[Seq[String]]
   val dedupKey = prop[String]
   val requestId = prop[ChainedID]
   val exception = prop[Throwable]
@@ -659,6 +658,7 @@ object Properties extends KnownProperties {
   val env = prop[String]
   val sysEnv = prop[Map[String, String]]
   val appId = prop[String]
+  val appIds = prop[Seq[String]]
   val timeout = propL
   val pid = propL
   val host = prop[String]
@@ -971,4 +971,3 @@ final case class ProfiledEventCause(
     }
   }
 }
-
