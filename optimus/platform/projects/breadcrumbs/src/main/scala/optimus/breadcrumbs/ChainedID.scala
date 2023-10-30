@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{ArrayList => JavaArrayList}
 import java.util.{List => JavaList}
 import java.util.{UUID => JUUID}
-
 import msjava.base.util.uuid.{MSUuid => UUID}
 import optimus.utils.PropertyUtils
 import org.slf4j.Logger
@@ -54,11 +53,6 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
 
   private[optimus] def asList: JavaArrayList[String] = ChainedID.asList(this)
 
-  // Approximate the full chain ID in four bytes.  This is useful for publishing to destinations like pyroscope that can't handle high cardinality.
-  def approx: Seq[Int] = {
-    val h = repr.hashCode
-    (0 until 4).map(i => (h & (0xff << i)) >> i)
-  }
 }
 
 object ChainedID {

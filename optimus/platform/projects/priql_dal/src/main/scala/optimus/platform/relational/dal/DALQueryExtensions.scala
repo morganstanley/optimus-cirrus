@@ -131,6 +131,10 @@ trait DALQueryExtensions {
       findBitemporalSpaceQueryExecutor(query).getDeltaInTT(fromTt, DeltaUpdate)
     }
 
+    @node def deltaSinceTTLegacy[T <: Entity](query: Query[T], fromTt: Instant): Seq[EntityChange[T]] = {
+      findBitemporalSpaceQueryExecutor(query).getDeltaInTTLegacy(fromTt, DeltaUpdate)
+    }
+
     @node def deltaSinceVT[T <: Entity](query: Query[T], fromVt: Instant): Seq[EntityChange[T]] = {
       findBitemporalSpaceQueryExecutor(query).getDeltaInVT(fromVt, DeltaUpdate)
     }

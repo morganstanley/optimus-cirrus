@@ -22,6 +22,7 @@ main {
     libs = [
       ossjava.args4j
       ossjava.commons-compress
+      ossjava.hamcrest
       ossjava.jackson2.jaxrs-json
       ossjava.jansi
       ossjava.jna

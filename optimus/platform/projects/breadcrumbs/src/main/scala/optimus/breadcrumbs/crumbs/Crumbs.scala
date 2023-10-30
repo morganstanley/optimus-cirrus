@@ -29,6 +29,8 @@ import optimus.breadcrumbs.crumbs
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs.Crumb.Headers
 import optimus.breadcrumbs.crumbs.Crumb.OptimusSource
+import optimus.breadcrumbs.crumbs.Properties.Elem
+import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.logging.LoggingInfo
 import optimus.utils.datetime.ZoneIds
 
@@ -53,7 +55,7 @@ sealed abstract class Crumb(
   val now: String = t.toString
   val locator: String = Crumb.newLocator()
   def prettyNow: String = Crumb.prettyNow(t)
-  private[crumbs] def clazz: String = this.getClass.getName match {
+  private[breadcrumbs] def clazz: String = this.getClass.getName match {
     case Crumb.extractClass(c) => c
     case c                     => c
   }
@@ -102,11 +104,13 @@ sealed abstract class Crumb(
   // Making this a lazy val to avoid multiple conversions, but this means the caller must be sure by the time this
   // is called, the Crumb is at its final shape to be sent, i.e., no more property fields would be added.
   private[optimus] final lazy val asJSON: JsValue = asJMap.toJson
+
+  private[breadcrumbs] def withProperties(elems: Elem[_]*) = new WithProperties(this, Elems(elems: _*))
 }
 
 private[breadcrumbs] class WithReplicaFrom(uuid: ChainedID, crumb: Crumb)
     extends Crumb(uuid, crumb.source, crumb.hints) {
-  private[crumbs] override def clazz = crumb.clazz
+  private[breadcrumbs] override def clazz = crumb.clazz
   override val t: Long = crumb.t
   private[breadcrumbs] override def stringProperties: Map[String, String] = crumb.stringProperties
   private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
@@ -115,11 +119,21 @@ private[breadcrumbs] class WithReplicaFrom(uuid: ChainedID, crumb: Crumb)
 
 private[breadcrumbs] class WithCurrentlyRunning(crumb: Crumb, uuids: Seq[ChainedID])
     extends Crumb(crumb.uuid, crumb.source, crumb.hints) {
-  private[crumbs] override def clazz = crumb.clazz
+  private[breadcrumbs] override def clazz = crumb.clazz
   override val t: Long = crumb.t
   private[breadcrumbs] override def stringProperties: Map[String, String] = crumb.stringProperties
   private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
     crumb.jsonProperties + (Properties.currentlyRunning -> uuids).toTuple
+}
+
+private[breadcrumbs] class WithProperties(crumb: Crumb, elems: Elems)
+    extends Crumb(crumb.uuid, crumb.source, crumb.hints) {
+  private[breadcrumbs] override def clazz = crumb.clazz
+  override val t: Long = crumb.t
+  private[breadcrumbs] override def stringProperties: Map[String, String] = crumb.stringProperties
+  private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
+    crumb.jsonProperties ++ elems.toMap
+
 }
 
 private[breadcrumbs] class FlushMarker extends Crumb(ChainedID.root) {
@@ -498,7 +512,16 @@ object Crumb {
     def apply(flags: CrumbFlag*) = flags.toSet
   }
 
-  trait Source { def name: String; override def toString: String = name; val flags: CrumbFlags = CrumbFlags.None }
+  trait Source {
+    def name: String
+    override def toString: String = name
+    val flags: CrumbFlags = CrumbFlags.None
+    // If positive, specifies the hard limit for the number of crumbs sent with this source
+    val maxCrumbs: Int = -1
+    @volatile final private var _shutdown = false
+    final def shutdown(): Unit = _shutdown = true
+    final def isShutdown: Boolean = _shutdown
+  }
   trait DalSource extends Source { require(name.startsWith("DAL")) }
   object OptimusSource extends Source { override val name: String = Headers.DefaultSource }
   object RuntimeSource extends Source { override val name = "RT" }
@@ -512,8 +535,8 @@ object Crumb {
   def newSource(sourceName: String) = new Source {
     override def name = sourceName
   }
-  def rtSource() = RuntimeSource
-  def gcSource() = GCSource
+  def rtSource(): RuntimeSource.type = RuntimeSource
+  def gcSource(): GCSource.type = GCSource
 
   private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
 

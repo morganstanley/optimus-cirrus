@@ -11,7 +11,6 @@
  */
 package optimus.debug;
 
-import optimus.EntityAgent;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -22,6 +21,8 @@ import static optimus.debug.InstrumentationConfig.FieldRef;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.allocateID;
+import java.util.Arrays;
+import java.util.List;
 
 /** A collection of useful ASM helper functions built on top of AdviceAdapter */
 public class CommonAdapter extends AdviceAdapter {
@@ -149,12 +150,6 @@ public class CommonAdapter extends AdviceAdapter {
     visitEnd();
   }
 
-  protected void returnValueOrVoid(Type tpe) {
-    if (tpe.getSize() == 0) {
-      mv.visitInsn(Opcodes.RETURN);
-    } else returnValue();
-  }
-
   protected void dup(Type tpe) {
     var size = tpe.getSize();
     if (size == 0) {
@@ -173,5 +168,26 @@ public class CommonAdapter extends AdviceAdapter {
 
   public static Boolean hasStaticAccess(int access) {
     return (access & ACC_STATIC) != 0;
+  }
+
+  public static Boolean isCCtor(int access, String name, String desc) {
+    return (access & ACC_STATIC) == ACC_STATIC && "<clinit>".equals(name) && "()V".equals(desc);
+  }
+
+  private static final List<String> packagesToIgnore =
+      Arrays.asList("scala/reflect", "sun/", "java/security");
+
+  /**
+   * Identifies JVM/Scala/Sun owned classes, such as ProfilerEventsWriter, as they should be
+   * excluded from the transformation
+   */
+  public static Boolean isThirdPartyOwned(ClassLoader loader, String className) {
+    if (loader == null) return true;
+
+    for (String pkg : packagesToIgnore) {
+      if (className.startsWith(pkg)) return true;
+    }
+
+    return false;
   }
 }

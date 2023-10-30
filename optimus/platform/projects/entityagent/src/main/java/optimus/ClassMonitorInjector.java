@@ -501,13 +501,11 @@ public class ClassMonitorInjector implements ClassFileTransformer {
                 ? Paths.get(resource.getPath().substring(4))
                 : Paths.get(resource.toURI());
         logFileResourceUsage(path.toFile(), "r", className);
-      } catch (URISyntaxException
-          | FileSystemNotFoundException
-          | UnsupportedOperationException
-          | InvalidPathException e) {
+      } catch (Exception e) {
         recordInternalEvent(
             String.format(
                 "%s Cannot parse URI %s from %s: ignored", CMI_WARN, resource, className));
+        logFileResourceUsage(resource.getPath(), "r", className);
       }
     } else {
       logNetworkResourceUsage(resource.toString(), className);

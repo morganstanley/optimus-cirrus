@@ -57,8 +57,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   def stratosphereHome: Path = self.select("stratosphereHome")
   def stratosphereSrcDir: Option[String] = self.select("stratosphereSrcDir")
   def stratosphereVersion[A: Extractor]: A = self.select("stratosphereVersion")
+  def stratosphereVersionSymlink: Option[String] = self.select("stratosphereVersionSymlink")
   def stratosphereWorkspace: String = self.select("stratosphereWorkspace")
   def obtVersion: String = self.select("obt-version")
+
+  def userName: String = self.select("userName")
 
   // please keep the object sorted
 
@@ -109,6 +112,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object git {
     def copyHooks: Boolean = self.select("git.copy-hooks")
+    def indexUpdated: Boolean = self.select("git.index-updated")
     def usedInWorkspace: Boolean = self.select("git.used-in-workspace")
     def requiredVersion: String = self.select("git.required-version")
   }
@@ -190,6 +194,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   }
 
   object internal {
+    def bannerMessage: String = self.select("internal.banner-message")
     def helpMailGroup: String = self.select("internal.help-mail-group")
     def msGroup: Path = self.select("internal.ms-group")
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
@@ -202,6 +207,10 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         warning = Color.valueOf(self.select("internal.console.colors.warning")),
         highlight = Color.valueOf(self.select("internal.console.colors.highlight"))
       )
+    }
+
+    object environment {
+      def proids: Seq[String] = self.select("internal.environment.proids")
     }
 
     object diag {
@@ -282,6 +291,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object paths {
       def afsDev: Path = self.select("internal.paths.afs-dev")
+      def conemu: Path = self.select("internal.paths.conemu")
       def console2: String = self.select("internal.paths.console2")
       def execv2: String = self.select("internal.paths.execv2")
       def initEnviron: String = self.select("internal.paths.init-environ")

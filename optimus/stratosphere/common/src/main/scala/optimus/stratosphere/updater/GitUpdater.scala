@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 object GitUpdater {
   def gitVersion(stratoWorkspace: StratoWorkspaceCommon): Option[SemanticVersion] = {
-    if (!gitUsedInWorkspace(stratoWorkspace)) {
+    if (!stratoWorkspace.hasGitInWorkspace) {
       None
     } else {
       Some(
@@ -40,18 +40,13 @@ object GitUpdater {
         ))
     }
   }
-
-  private def gitUsedInWorkspace(stratoWorkspace: StratoWorkspaceCommon): Boolean =
-    stratoWorkspace.git.usedInWorkspace && stratoWorkspace.directoryStructure.gitDirectory.exists()
 }
 
 class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
-  import GitUpdater._
-
   private val overwrittenHookNames = List("pre-commit", "prepare-commit-msg", "pre-push")
 
   def configureRepo(forceConfigUpdate: Boolean): Unit = {
-    if (gitUsedInWorkspace(stratoWorkspace)) {
+    if (stratoWorkspace.hasGitInWorkspace) {
       ensureGitInstalled(GitProcess.isUsingGitFromTools(stratoWorkspace.config))
       if (forceConfigUpdate) {
         adjustSettings()
@@ -69,7 +64,7 @@ class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
         setGitVersionInConfig(useGitFromArtifactory)
       }
 
-      val gitProcess = new GitProcess(stratoWorkspace.directoryStructure.stratosphereWorkspaceDir)
+      val gitProcess = new GitProcess(stratoWorkspace.config)
       val gitPath = gitProcess.getGitPath
 
       if (useGitFromArtifactory && !Paths.get(gitPath).exists()) {

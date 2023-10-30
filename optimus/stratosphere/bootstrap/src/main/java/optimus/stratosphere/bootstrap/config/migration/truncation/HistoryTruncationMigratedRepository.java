@@ -17,9 +17,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import optimus.stratosphere.bootstrap.config.migration.MigrationUtils;
 import com.typesafe.config.Config;
+import optimus.stratosphere.bootstrap.config.migration.MigrationUtils;
 
 public class HistoryTruncationMigratedRepository {
   public final HistoryTruncationConfigKeys keys;

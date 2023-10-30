@@ -16,18 +16,16 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import optimus.stratosphere.bootstrap.OsSpecific;
-import optimus.stratosphere.bootstrap.config.StratosphereConfig;
-import optimus.stratosphere.bootstrap.config.migration.MigrationFiles;
 import com.typesafe.config.Config;
+import optimus.stratosphere.bootstrap.OsSpecific;
+import optimus.stratosphere.bootstrap.config.migration.MigrationFiles;
 
 public class NewToOldLayoutMigration extends MigrationFiles {
-  private Config config;
+  private final Config config;
 
-  public NewToOldLayoutMigration(Path workspaceRoot) {
+  public NewToOldLayoutMigration(Path workspaceRoot, Config config) {
     super(workspaceRoot);
-    this.config = StratosphereConfig.get(workspaceRoot);
+    this.config = config;
   }
 
   public void runIfNeeded() throws IOException {

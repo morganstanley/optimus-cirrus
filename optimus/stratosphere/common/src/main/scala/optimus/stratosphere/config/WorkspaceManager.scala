@@ -49,6 +49,6 @@ object WorkspaceManager {
     import java.nio.file.Files
     val path = Files.createTempDirectory(namePrefix)
     path.toFile.deleteOnExit()
-    new StratoWorkspace(CustomWorkspace(path))
+    StratoWorkspace(CustomWorkspace(path))
   }
 }

@@ -95,7 +95,10 @@ object VersioningAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHel
     "Invalid transformation step for embeddable. Embeddables only support 'add' and 'copy' transformation steps.")
   val NOT_SUPPORTED_TRANSFORMER_IN_EMBEDDABLE = abort0(85021, "UnsafeTransformers are not supported for embeddables.")
 
-  val INVALID_MINUS_OPERATION_FOR_TYPES = abort2(
+  val INVALID_MINUS_OPERATION_FOR_TYPES = abort3(
     86000,
-    "Invalid operation 'typeA -:- typeB' between shapes %s. { %s } fields missing from the left operand or do you meant 'typeB -:- typeA?")
+    "Invalid transformation A -:- B, where A and B are defined as\n" +
+      "A is {\n%s\n} and B is {\n%s\n}\n" +
+      "The following members are missing from the left operand: %s. Did you mean to do B -:- A?"
+  )
 }

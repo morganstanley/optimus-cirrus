@@ -12,13 +12,12 @@
 package optimus.stratosphere.common
 
 import com.typesafe.config.Config
-
-import java.nio.file.Path
-import java.nio.file.Paths
 import optimus.stratosphere.bootstrap.OsSpecific.isLinux
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 
+import java.nio.file.Path
+import java.nio.file.Paths
 import scala.collection.immutable.Seq
 
 final class RemoteIntellijLocation(

@@ -144,7 +144,7 @@ private[optimus] object ClassMetaData {
   val flagIsEntity: Byte = 0x10
   val flagIsEmbeddable: Byte = 0x20
   val flagIsEvent: Byte = 0x40
-  // just in time, last bit of the unsigned java Byte
+  // just in time, last bit of the signed java Byte
   val flagIsMeta: Byte = -0x80
 
   class MetaDataBuilder[T <: BaseMetaData](raw: Map[String, T]) {
@@ -206,7 +206,11 @@ private[optimus] object ClassMetaData {
       case e: EntityBaseMetaData => e.explicitSlotNumber
       case _                     => false
     }
-    new ClassMetaData(baseMetaData.fullClassName, baseMetaData.flags, slotNumber, explicitSlotNumber)
+    val catalogingInfo: Option[(String, String)] = baseMetaData match {
+      case e: MetaBaseMetaData => Some((e.owner, e.catalogClass))
+      case _                   => None
+    }
+    new ClassMetaData(baseMetaData.fullClassName, baseMetaData.flags, slotNumber, explicitSlotNumber, catalogingInfo)
   }
 }
 
@@ -214,7 +218,8 @@ private[optimus] class ClassMetaData private (
     val fullClassName: String,
     private val flags: Byte,
     val slotNumber: Int,
-    val explicitSlotNumber: Boolean) {
+    val explicitSlotNumber: Boolean,
+    val catalogingInfo: Option[(String, String)]) {
 
   def packageName: String = {
     packageIndex match {

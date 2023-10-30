@@ -21,8 +21,6 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-
-import optimus.stratosphere.bootstrap.config.StratosphereConfig;
 import com.typesafe.config.Config;
 
 /**
@@ -57,8 +55,8 @@ public class GitProcess {
 
   private Supplier<Config> config;
 
-  public GitProcess(Path workspaceRoot) {
-    this.config = () -> StratosphereConfig.get(workspaceRoot);
+  public GitProcess(Config config) {
+    this.config = () -> config;
   }
 
   public List<String> gitCmd(String... args) {
@@ -101,7 +99,7 @@ public class GitProcess {
 
   public static boolean isUsingGitFromTools(Config conf) {
     String path = "tools.git.isDefault";
-    return conf.hasPath(path) && conf.getBoolean(path);
+    return OsSpecific.isWindows && conf.hasPath(path) && conf.getBoolean(path);
   }
 
   public Path getGitExecPath() {

@@ -33,7 +33,7 @@ trait OptimusMacroAlarmHelper extends BuilderHelpers { self: OptimusMacroAlarmsB
 
   final val (error0, error1, error2, error3, error4, error5, error6) = builders(ERROR)
   final val (warning0, warning1, warning2, warning3, warning4, _, _) = builders(WARNING)
-  final val (abort0, abort1, abort2, _, _, _, _) = builders(ABORT)
+  final val (abort0, abort1, abort2, abort3, _, _, _) = builders(ABORT)
 }
 
 final case class OptimusMacroAlarm(id: AlarmId, tpe: OptimusMacroType, message: String, template: String)

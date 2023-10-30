@@ -24,10 +24,9 @@ import spray.json._
 
 import java.util.Objects
 import scala.annotation.varargs
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.SortedSet
 import scala.collection.immutable.TreeSet
-import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -114,6 +113,12 @@ object Properties extends KnownProperties {
     def getp[A: JsonReader](k: Properties.Key[A]): Option[A] =
       m.get(k.toString).flatMap(x => Try(x.convertTo[A]).toOption)
     def get[T](k: EnumeratedKey[T]): Option[T] = m.get(k.name).map(k.parse)
+    def getKey[T](k: EnumeratedKey[T]): Option[T] = m.get(k.name).map(k.parse)
+    // For use in iterable-dominated for-comprehensions
+    def geti[T](k: EnumeratedKey[T]): Iterable[T] = m.get(k.name).map(k.parse).toIterable
+    def getOrElse[T](k: EnumeratedKey[T], default: => T): T = get(k).getOrElse(default)
+    // Same thing, if scala gets confused
+    def getKeyOrElse[T](k: EnumeratedKey[T], default: => T): T = get(k).getOrElse(default)
 
     // These two methods avoid converting fully parsing the Elems entry
     def getAsMap(k: Key[Elems]): Option[Map[String, JsValue]] =
@@ -477,7 +482,8 @@ object Properties extends KnownProperties {
   val engineId = prop[ChainedID]
   val engineRoot = prop[String]
   val engine = prop[String]
-  val replicaFrom = prop[ChainedID]
+  private[breadcrumbs] val replicaFrom = prop[ChainedID]
+  private[breadcrumbs] val limitCount = propL
   val currentlyRunning = prop[Seq[ChainedID]]
   val distActive = propI
   val distLostTasks = propI
@@ -670,6 +676,7 @@ object Properties extends KnownProperties {
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
   val event = prop[String]
+  val severity = prop[String]
   val duration = propL // event duration in milliseconds
   val commands = prop[Seq[String]]
   val className = prop[String]
@@ -686,7 +693,8 @@ object Properties extends KnownProperties {
   val time = prop[String]
   val splunkTime = prop[String]
   val rootUuid = prop[String]
-  val approxId = prop[Seq[Int]]
+  val appPrint = prop[String]
+  val engPrint = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
   val gsfEngineId = prop[String]
@@ -808,15 +816,17 @@ object Properties extends KnownProperties {
   val profStacks = prop[Seq[Elems]]
   val numStacksPublished = propL
   val stackElem = prop[String]
-  val stackType = prop[String]
+  val pTpe = prop[String]
   val jfrSize = propL
-  val selfCount = propL
-  val totalCount = propL
+  val pSlf = propL
+  val pTot = propL
+  val pSID = prop[String]
   val miniGridCalc = prop[String]
+  val stepName = prop[String]
+  val stepProfile = prop[Seq[Elems]]
   val profStack = prop[Seq[String]]
   val profCollapsed = prop[String]
   val stackThumb = prop[Map[String, Int]]
-  val profStackId = prop[String]
   val profPreOptimusStartup = propL
   val distWallTime = propL
   val distTaskDuration = propL
@@ -884,8 +894,14 @@ object Properties extends KnownProperties {
   val overrideInitRuntimeEnv = propB
 
   val schedulerState = prop[String]
+  val profWorkThreads = propI
+  val profWaitThreads = propI
+  val profBlockedThreads = propI
   val scalaFallbackModule = prop[String] // object that was looked up
   val scalaFallbackCls = prop[String] // class it was looked up from
+
+  val scenarioExpected = prop[String]
+  val scenarioFound = prop[String]
 
   /** Graph Stress Test history and timings */
   val stressTestInjector = prop[String]

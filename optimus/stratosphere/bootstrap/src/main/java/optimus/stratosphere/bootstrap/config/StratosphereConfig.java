@@ -18,18 +18,17 @@ import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import optimus.stratosphere.bootstrap.FsCampus;
-import optimus.stratosphere.bootstrap.OsSpecific;
-import optimus.stratosphere.bootstrap.StratosphereException;
-import optimus.stratosphere.bootstrap.WorkspaceRoot;
-import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
 import com.typesafe.config.ConfigResolveOptions;
 import com.typesafe.config.ConfigValue;
 import com.typesafe.config.ConfigValueFactory;
+import optimus.stratosphere.bootstrap.FsCampus;
+import optimus.stratosphere.bootstrap.OsSpecific;
+import optimus.stratosphere.bootstrap.StratosphereException;
+import optimus.stratosphere.bootstrap.WorkspaceRoot;
+import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys;
 
 public class StratosphereConfig {
 
@@ -40,13 +39,15 @@ public class StratosphereConfig {
 
   public static String stratosphereVersionProperty = "stratosphereVersion";
 
-  private String stratosphereInfraOverride = System.getenv("STRATOSPHERE_INFRA_OVERRIDE");
-  private String buildtoolOverride = System.getenv("BUILDTOOL_OVERRIDE");
+  public static String obtVersionProperty = "obt-version";
+
+  private final String stratosphereInfraOverride = System.getenv("STRATOSPHERE_INFRA_OVERRIDE");
+  private final String buildtoolOverride = System.getenv("BUILDTOOL_OVERRIDE");
 
   public static String stratosphereMigrationLocationOverride =
       System.getenv("STRATOSPHERE_MIGRATION_LOCATION_OVERRIDE");
 
-  private static ConfigResolveOptions allowUnresolved =
+  private static final ConfigResolveOptions allowUnresolved =
       ConfigResolveOptions.defaults().setAllowUnresolved(true);
 
   private static String prepareConfigExceptionMessage(ConfigException exception) {
@@ -63,11 +64,24 @@ public class StratosphereConfig {
     return msg;
   }
 
-  public static Config get() {
-    return get(WorkspaceRoot.find());
+  /**
+   * Loads the workspace config from current dir. This operation is relatively expensive and should
+   * be cached.
+   *
+   * @return config for the given workspace
+   */
+  public static Config loadFromCurrentDir() {
+    return loadFromLocation(WorkspaceRoot.find());
   }
 
-  public static Config get(Path workspaceRoot) {
+  /**
+   * Loads the workspace config from current dir. This operation is relatively expensive and should
+   * be cached.
+   *
+   * @param workspaceRoot location to load the workspace config from.
+   * @return config for the given workspace
+   */
+  public static Config loadFromLocation(Path workspaceRoot) {
     return new StratosphereConfig(
             workspaceRoot, workspaceRoot == null ? "no-workspace.conf" : "workspace.conf")
         .config;
@@ -109,14 +123,9 @@ public class StratosphereConfig {
             replaceLast(stratosphereInfraOverride, "stratosphere", "optimusIDE"));
       }
 
-      if (buildtoolOverride != null && !buildtoolOverride.isEmpty()) {
-        String location = buildtoolOverride + "/optimus/buildtool/local/install/common";
-        updateProperty("internal.obt.install", location);
-      }
-
       if (workspaceRoot != null) {
         addConfig(workspaceRoot, "src/" + WorkspaceRoot.STRATOSPHERE_CONFIG_FILE);
-        addConfig(workspaceRoot, "src/profiles/" + StratosphereEarlyAdoptersConfig.configFile);
+        addConfig(workspaceRoot, "src/profiles/" + StratosphereChannelsConfig.configFile);
         if (repositoryConfigName != null) {
           addConfig(workspaceRoot, "src/profiles/" + repositoryConfigName);
         }
@@ -134,6 +143,16 @@ public class StratosphereConfig {
 
       updateProperty("userHome", OsSpecific.userHome().toString());
 
+      // resolving to have version-mapping property
+      Config tmpResolvedConfig = config.resolve(allowUnresolved);
+
+      if (buildtoolOverride != null && !buildtoolOverride.isEmpty()) {
+        String location = buildtoolOverride + "/optimus/buildtool/local/install/common";
+        updateProperty("internal.obt.install", location);
+      } else {
+        mapProperty(obtVersionProperty, tmpResolvedConfig);
+      }
+
       if (stratosphereInfraOverride != null) {
         updateProperty(
             stratosphereVersionProperty,
@@ -143,6 +162,8 @@ public class StratosphereConfig {
                 .getParent()
                 .getFileName()
                 .toString());
+      } else {
+        mapProperty(stratosphereVersionProperty, tmpResolvedConfig);
       }
 
       if (workspaceRoot != null) {
@@ -161,15 +182,25 @@ public class StratosphereConfig {
       }
 
       // resolving to have stratosphereSrcDir, we need it to add sysloc property
-      Config tmpResolvedConfig = config.resolve(allowUnresolved);
+      tmpResolvedConfig = config.resolve(allowUnresolved);
 
-      if (StratosphereEarlyAdoptersConfig.eligibleForQA(
+      if (StratosphereChannelsConfig.shouldUseStratosphereChannels(
           tmpResolvedConfig, stratosphereInfraOverride)) {
-        updateProperty(
-            stratosphereVersionProperty,
-            config.getString(StratosphereEarlyAdoptersConfig.qaVersionProperty));
-        if (!config.hasPath(StratosphereEarlyAdoptersConfig.showQaBannerProperty))
-          updateProperty(StratosphereEarlyAdoptersConfig.showQaBannerProperty, true);
+        Channel selectedChannel = StratosphereChannelsConfig.selectChannel(tmpResolvedConfig);
+        if (selectedChannel != null) {
+          System.out.printf("Used Stratosphere Channel: %s\n", selectedChannel.name);
+          config = selectedChannel.config.withFallback(config);
+          tmpResolvedConfig = config.resolve(allowUnresolved);
+        }
+      }
+
+      if (stratosphereInfraOverride == null) {
+        String stratosphereVersion = config.getString(stratosphereVersionProperty);
+        String resolvedSymlinkVersion = resolveSymlinkVersion(tmpResolvedConfig);
+        if (!stratosphereVersion.equals(resolvedSymlinkVersion)) {
+          updateProperty(stratosphereVersionProperty, resolvedSymlinkVersion);
+          updateProperty("stratosphereVersionSymlink", stratosphereVersion);
+        }
       }
 
       FsCampus fsCampus =
@@ -349,6 +380,33 @@ public class StratosphereConfig {
     return config;
   }
 
+  private void mapProperty(final String propertyName, final Config tmpConfig) {
+    if (tmpConfig.hasPath("internal.version-mapping")) {
+      final String currentVersion = tmpConfig.getString(propertyName);
+      final Path configFile = Paths.get(tmpConfig.getString("internal.version-mapping"));
+      final String newVersion = getMappedProperty(currentVersion, configFile);
+      if (!newVersion.equals(currentVersion)) {
+        System.out.printf(
+            "Detected version change for '%s' from '%s' to '%s'%n",
+            propertyName, currentVersion, newVersion);
+        updateProperty(propertyName, newVersion);
+      }
+    }
+  }
+
+  protected static String getMappedProperty(final String currentVersion, final Path configFile) {
+    try {
+      if (Files.exists(configFile)) {
+        final Config mapping = ConfigFactory.parseFile(configFile.toFile());
+        return mapping.getString("version-mapping." + "\"" + currentVersion + "\"");
+      } else {
+        return currentVersion;
+      }
+    } catch (ConfigException.Missing e) {
+      return currentVersion;
+    }
+  }
+
   private void updateProperty(String propertyName, Object newValue) {
     config = config.withValue(propertyName, ConfigValueFactory.fromAnyRef(newValue));
   }
@@ -382,6 +440,20 @@ public class StratosphereConfig {
           "It's expected that JAVA_VERSION has MAJOR.MINOR[.SECURITY[.PATH]] format but found '"
               + javaVersion
               + "'");
+    }
+  }
+
+  private static String resolveSymlinkVersion(Config config) {
+    String location = config.getString("internal.stratosphere.infra-path");
+    String stratoVersion = config.getString(stratosphereVersionProperty);
+    String infraPath = location.replace("{version}", stratoVersion);
+    try {
+      Path resolvedPath = Paths.get(infraPath);
+      if (Files.exists(resolvedPath))
+        return resolvedPath.toRealPath().getParent().getFileName().toString();
+      else return stratoVersion;
+    } catch (Exception e) {
+      throw new StratosphereException("Problem with resolving stratosphere symlink", e);
     }
   }
 }

@@ -18,4 +18,5 @@ final case class OptimusPhaseInfo(phaseName: String, description: String, runsAf
 object OptimusPhaseInfo {
   val NoPhase: OptimusPhaseInfo = OptimusPhaseInfo("NoPhase", "<no phase>", "parser", "terminal")
   val Namer: OptimusPhaseInfo = OptimusPhaseInfo("namer", "scala_namer_phase", "", "")
+  val ScalaAsync: OptimusPhaseInfo = OptimusPhaseInfo("async", "scala_async_phase", "", "")
 }

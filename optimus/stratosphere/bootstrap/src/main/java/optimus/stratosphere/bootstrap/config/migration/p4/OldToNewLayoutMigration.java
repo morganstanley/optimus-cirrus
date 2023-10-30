@@ -16,13 +16,12 @@ import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import optimus.stratosphere.bootstrap.OsSpecific;
-import optimus.stratosphere.bootstrap.config.migration.MigrationFiles;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import com.typesafe.config.ConfigRenderOptions;
 import com.typesafe.config.ConfigValueFactory;
+import optimus.stratosphere.bootstrap.OsSpecific;
+import optimus.stratosphere.bootstrap.config.migration.MigrationFiles;
 
 public class OldToNewLayoutMigration extends MigrationFiles {
 

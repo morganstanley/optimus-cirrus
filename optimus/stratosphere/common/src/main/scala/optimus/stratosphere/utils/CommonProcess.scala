@@ -232,7 +232,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
   }
 
   def runGit(srcDir: Path, env: Map[String, String] = Map.empty)(args: String*): String = {
-    val pb = new GitProcess(srcDir.getParent).createProcessBuilder(srcDir, env.asJava, args: _*)
+    val pb = new GitProcess(stratoWorkspace.config).createProcessBuilder(srcDir, env.asJava, args: _*)
     runAndWaitForPb(pb)
       .split("\n")
       .filterNot(CommonProcess.isGitTraceStatement)

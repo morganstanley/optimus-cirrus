@@ -2,6 +2,8 @@
 #
 # A set of global Git ignores. This file is open-sourced.
 # If you want to add some local paths, please add a .gitignore inside the project/directory where the files reside.
+#
+# When updating this file, consider keeping in sync with stratosphere workspace.conf `internal.sparse.backup.skip-patterns`
 
 # General
 *.log
@@ -22,7 +24,7 @@
 .mypy_cache/
 *.pyc
 
-# Stratosphere
+# Stratosphere - human-generated
 *.local.runconf
 profiles/*local.conf
 
@@ -39,7 +41,7 @@ diff-chunked.txt
 # TODO (OPTIMUS-41799): fix zinc + jcstress and remove this
 *_jcstress.java
 
-# configuration file that should never go to codetree
+# Human-generated configuration file that should never go to codetree
 mischief.obt
 
 # EOF
