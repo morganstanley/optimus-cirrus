@@ -70,7 +70,7 @@ class GeneralAPICheckComponent(
             value.toString
           }
           if (!arg0.exists(a => a.startsWith("msg=") || a.startsWith("cat=")))
-            alarm(OptimusErrors.NOWARN, md.pos, "missing restriction pattern (eg. msg=12345 or cat=CATEGORY)")
+            alarm(OptimusErrors.NOWARN, a.pos, "missing restriction pattern (eg. msg=12345 or cat=CATEGORY)")
           arg0.foreach {
             case NoWarnMessage(id, nws) if noWarnsFor(id.toInt) =>
               try {
@@ -88,7 +88,7 @@ class GeneralAPICheckComponent(
                 val i = id.toInt
                 unusedNoWarn += nwx -> (a.pos, nws)
                 nowarnPositions += a.pos
-                val pos = md.symbol.pos
+                val pos = md.pos
                 symNoWarn += ((i, md.symbol) -> v)
                 if (md.symbol.companion != NoSymbol)
                   symNoWarn += ((i, md.symbol.companion) -> v)
@@ -96,7 +96,7 @@ class GeneralAPICheckComponent(
                   posNoWarnAB += (i, pos) -> v
               } catch {
                 case p: PatternSyntaxException =>
-                  alarm(OptimusErrors.NOWARN, md.pos, s"Illegal deprecation specification ${p.getPattern}")
+                  alarm(OptimusErrors.NOWARN, a.pos, s"Illegal deprecation specification ${p.getPattern}")
               }
             case _ =>
           }
@@ -239,7 +239,7 @@ class GeneralAPICheckComponent(
         case tpt @ TypeTree() =>
           if (tpt.original != null) {
             tpt.original foreach {
-              case dc @ TypeTreeWithDeferredRefCheck() =>
+              case dc: TypeTreeWithDeferredRefCheck =>
                 // https://github.com/scala/bug/issues/2416
                 applyRefchecksToAnnotations(dc.check())
               case _ =>
@@ -289,7 +289,7 @@ class GeneralAPICheckComponent(
                 path.collect {
                   case callerTree: MemberDef
                       if callerTree.hasSymbolField && symNoWarn.contains((DepId, callerTree.symbol)) =>
-                    (symNoWarn((DepId, callerTree.symbol))._2, callerTree.symbol.pos)
+                    (symNoWarn((DepId, callerTree.symbol))._2, callerTree.pos)
                 }
             }.distinct
             // Check for a match now, so we can record that the nowarn was used, even we don't emit a deprecating warning.

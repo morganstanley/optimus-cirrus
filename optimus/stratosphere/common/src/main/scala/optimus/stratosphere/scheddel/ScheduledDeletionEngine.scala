@@ -11,19 +11,18 @@
  */
 package optimus.stratosphere.scheddel
 
-import java.nio.file.Path
-import java.time.LocalDateTime
-
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.scheddel.impl.FileRenamer
-import optimus.stratosphere.scheddel.impl.TaskFrequency
 import optimus.stratosphere.scheddel.impl.RenameResult
 import optimus.stratosphere.scheddel.impl.ScheduledDeletionException
+import optimus.stratosphere.scheddel.impl.TaskFrequency
 import optimus.stratosphere.scheddel.impl.WindowsTaskScheduler
 import optimus.stratosphere.utils.DateTimeUtils._
 import optimus.stratosphere.utils.EnvironmentUtils
 
+import java.nio.file.Path
+import java.time.ZonedDateTime
 import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
@@ -62,7 +61,7 @@ object ScheduledDeletionEngine {
     stagingScriptPath.getParent.dir.create()
     deleteFilesScriptDir.dir.create()
 
-    val dateTimeString = formatDateTime(Patterns.fileDateTimeUpToMillisSuffix, LocalDateTime.now())
+    val dateTimeString = formatDateTime(Patterns.fileDateTimeUpToMillisSuffix, ZonedDateTime.now())
     SchedulingScripts.createStagingScript(
       stagingScriptPath = stagingScriptPath,
       scriptsDir = deleteFilesScriptDir,
@@ -95,19 +94,19 @@ object ScheduledDeletionEngine {
     val taskCommand =
       Seq("cmd.exe", "/c", stagingScriptPath.toAbsolutePath.toString, ">", logFile.toAbsolutePath.toString, "2>&1")
 
-    val startDateTime = LocalDateTime
+    val startDateTime = ZonedDateTime
       .now()
       .withHour(stratoWorkspace.internal.scheduledCleanup.startHour)
       .withMinute(stratoWorkspace.internal.scheduledCleanup.startMinute)
 
     val userName = EnvironmentUtils.userName
 
-    WindowsTaskScheduler.scheduleTaskOnce(
+    WindowsTaskScheduler.scheduleTask(
       taskName = taskName,
       taskCommand = taskCommand,
       startDateTime = startDateTime,
       userName = userName,
-      scheduleFrequency = TaskFrequency.Daily,
+      daysToRun = TaskFrequency.Daily,
       stratoWorkspace)
   }
 

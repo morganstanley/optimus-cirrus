@@ -11,14 +11,13 @@
  */
 package optimus.stratosphere.scheddel.impl
 
-import java.time.LocalDateTime
-
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.utils.CommonProcess
 import optimus.stratosphere.utils.DateTimeUtils.formatDateTime
 import optimus.stratosphere.utils.Text._
 
+import java.time.ZonedDateTime
 import scala.collection.immutable.Seq
 
 object TaskFrequency {
@@ -34,27 +33,27 @@ object WindowsTaskScheduler {
    *
    * schtasks.exe /Create /RU batko /SC ONCE /TN runNotepad /TR notepad /ST 03:00 /SD 25/08/2017 /F
    */
-  def scheduleTaskOnce(
+  def scheduleTask(
       taskName: String,
       taskCommand: Seq[String],
-      startDateTime: LocalDateTime,
+      startDateTime: ZonedDateTime,
       userName: String,
-      scheduleFrequency: String,
+      daysToRun: String,
       stratoWorkspace: StratoWorkspaceCommon): Unit = {
 
     val dateFormat = getDateFormat(stratoWorkspace)
-    val cmd = formatScheduleTaskOnceCmd(taskName, taskCommand, startDateTime, userName, scheduleFrequency, dateFormat)
+    val cmd = formatScheduleTaskCmd(taskName, taskCommand, startDateTime, userName, daysToRun, dateFormat)
     stratoWorkspace.log.highlight(s"Scheduling Windows task: $taskName with:")
     stratoWorkspace.log.info(s"`${cmd.mkString(" ")}`")
     new CommonProcess(stratoWorkspace).runAndWaitFor(cmd)
   }
 
-  private[scheddel] def formatScheduleTaskOnceCmd(
+  private[scheddel] def formatScheduleTaskCmd(
       taskName: String,
       taskCommand: Seq[String],
-      startDateTime: LocalDateTime,
+      startDateTime: ZonedDateTime,
       userName: String,
-      scheduleFrequency: String,
+      daysToRun: String,
       dateFormat: String): Seq[String] = {
     val startTime = formatDateTime(timeFormat, startDateTime)
     val startDate = formatDateTime(dateFormat, startDateTime)
@@ -66,7 +65,7 @@ object WindowsTaskScheduler {
       "/SC",
       "WEEKLY",
       "/D",
-      scheduleFrequency,
+      daysToRun,
       "/TN",
       doubleQuote(taskName),
       "/TR",

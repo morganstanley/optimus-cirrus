@@ -187,7 +187,12 @@ object PrActivity extends DefaultJsonProtocol with NullOptions with InstantJsonF
   implicit lazy val format: RootJsonFormat[PrActivity] = jsonFormat3(PrActivity.apply)
 }
 
-final case class PrTask(id: Int, text: String, state: String, createdDate: Instant)
+trait PrTextActivity {
+  val state: String
+  def isOpen: Boolean = state == TaskState.Open.toString
+}
+
+final case class PrTask(id: Int, text: String, state: String, createdDate: Instant) extends PrTextActivity
 object PrTask extends DefaultJsonProtocol with InstantJsonFormat {
   implicit lazy val format: RootJsonFormat[PrTask] = jsonFormat4(PrTask.apply)
 }
@@ -234,7 +239,6 @@ final case class PrComment(
     text: String,
     version: Int,
     author: User,
-    tasks: Seq[PrTask],
     createdDate: Instant,
     updatedDate: Instant, // PrComment always includes updatedDate, if it has never been updated it is equal to the created date
     state: String,
@@ -243,14 +247,18 @@ final case class PrComment(
     resolvedDate: Option[Instant],
     resolver: Option[User],
     parentCommentId: Option[Int]
-) {
+) extends PrTextActivity {
   import PrComment._
 
   def resolvedBy: Option[String] = resolver.map(_.name)
 
-  def isOpen: Boolean = state == TaskState.Open.toString
   def isTask: Boolean = severity == CommentSeverity.Blocker.toString
   def isRestricted: Boolean = text.startsWith(restrictedPrefix)
+
+  def tasks: Seq[PrTask] = comments.collect {
+    case taskComment: PrComment if taskComment.isTask =>
+      PrTask(taskComment.id, taskComment.text, taskComment.state, taskComment.createdDate)
+  }
 
   def textComments: Set[String] = text.split("\n").filter(_.startsWith("[comment]: # ")).toSet
 
@@ -263,7 +271,7 @@ final case class PrComment(
 }
 
 object PrComment extends DefaultJsonProtocol with NullOptions with InstantJsonFormat {
-  implicit lazy val format: JsonFormat[PrComment] = lazyFormat(jsonFormat13(PrComment.apply))
+  implicit lazy val format: JsonFormat[PrComment] = lazyFormat(jsonFormat12(PrComment.apply))
 
   val restrictedPrefix: String = "[Restricted] "
   val mandatoryPrefix: String = "[Mandatory] "
@@ -278,7 +286,6 @@ object PrComment extends DefaultJsonProtocol with NullOptions with InstantJsonFo
       comment.text,
       comment.version,
       comment.author,
-      comment.tasks,
       comment.createdDate,
       comment.updatedDate,
       comment.state,
@@ -339,7 +346,7 @@ object Anchor extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[Anchor] = jsonFormat2(Anchor.apply)
 }
 
-final case class CommitFilePathSize(filePath: String, size: Int, commitId: String, commitDisplayId: String)
+final case class CommitFilePathSize(filePath: String, sizeInBytes: Int, commitId: String, commitDisplayId: String)
 object CommitFilePathSize extends DefaultJsonProtocol {}
 
 final case class BrowsePath(components: Seq[String], parent: Option[String], name: String, extension: Option[String])

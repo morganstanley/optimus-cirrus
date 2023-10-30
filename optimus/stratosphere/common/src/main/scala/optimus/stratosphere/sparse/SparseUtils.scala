@@ -22,7 +22,7 @@ import optimus.stratosphere.utils.MemUnit
 
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import scala.collection.immutable.Seq
 import scala.util.Try
@@ -116,10 +116,10 @@ trait SparseUtils {
     }
   }
 
-  def refresh()(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
+  def refresh(updatedProfile: Option[SparseProfile] = None)(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
     val config = SparseConfiguration.load()
-    if (!stratoWorkspace.isOutsideOfWorkspace && config.profile.isDefined && config.isEnabled)
-      updateSparseSet(config.profile.get, forceReapply = true)
+    if (!stratoWorkspace.isOutsideOfWorkspace && config.isEnabled)
+      updateSparseSet(updatedProfile.getOrElse(config.profile.orNull), forceReapply = true)
   }
 
   def printConfigurationInfo(printWarningIfDisabled: Boolean)(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
@@ -139,9 +139,9 @@ trait SparseUtils {
       if (currentProfile.isCustomProfile) {
         stratoWorkspace.log.info("")
         stratoWorkspace.log.info("Opened profiles:")
-        currentProfile.subProfiles.foreach(profile => stratoWorkspace.log.info(s"  - $profile"))
+        currentProfile.subProfiles.toList.sorted.foreach(profile => stratoWorkspace.log.info(s"  - $profile"))
         stratoWorkspace.log.info("Opened scopes:")
-        currentProfile.scopes.foreach(scope => stratoWorkspace.log.info(s"  - $scope"))
+        currentProfile.scopes.toList.sorted.foreach(scope => stratoWorkspace.log.info(s"  - $scope"))
       } else {
         stratoWorkspace.log.info("")
         stratoWorkspace.log.info("Opened profile:")
@@ -151,7 +151,7 @@ trait SparseUtils {
   }
 
   private def timestampedDirName(): String = {
-    val date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy.MM.dd-HH.mm.ss"))
+    val date = ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy.MM.dd-HH.mm.ss"))
     s"sparse-$date"
   }
 
@@ -319,6 +319,16 @@ trait SparseUtils {
 
   protected def runSparseCmd(args: String*)(implicit stratoWorkspace: StratoWorkspaceCommon): Boolean = {
     Try(runGitCmd("sparse-checkout" +: args: _*)).isSuccess
+  }
+
+  def checkLocalChangesForUncommittedFiles(ws: StratoWorkspaceCommon): Seq[String] = {
+    ws.log.info("Checking local changes...")
+    val gitUtils = GitUtils(ws)
+    val localChanges = gitUtils.localChanges()
+    val skipBackupPatterns: Seq[String] = ws.internal.sparse.backup.skipPatterns
+    val ignoredFiles =
+      gitUtils.listIgnoredFiles(listDirectories = false, additionalGitIgnorePatterns = skipBackupPatterns)
+    localChanges.filterNot { file => ignoredFiles.contains(file) }
   }
 }
 

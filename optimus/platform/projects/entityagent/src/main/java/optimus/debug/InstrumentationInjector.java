@@ -26,6 +26,8 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.BiPredicate;
 
 import optimus.DynamicClassLoader;
@@ -67,13 +69,16 @@ public class InstrumentationInjector implements ClassFileTransformer {
       if (patch == null) patch = forClass(className); // Re-read reconfigured value
     }
 
-    boolean addHashCode = shouldAddHashCode(loader, crSource, className);
-    if (patch != null && patch.methodForward == null && addHashCode)
+    var addHashCode = shouldOverrideHashCode(loader, crSource, className);
+    if (addHashCode) {
+      if (patch == null) patch = new ClassPatch();
       setForwardMethodToNewHashCode(className, patch);
+    }
 
-    if (patch == null && addHashCode) {
-      patch = new ClassPatch();
-      setForwardMethodToNewHashCode(className, patch);
+    var addEquals = shouldOverrideEquals(loader, crSource, className);
+    if (addEquals) {
+      if (patch == null) patch = new ClassPatch();
+      setForwardMethodToNewEquals(className, patch);
     }
 
     if (instrumentAllNativePackagePrefixes != null
@@ -156,37 +161,65 @@ public class InstrumentationInjector implements ClassFileTransformer {
     return isModuleCtor && !isModuleOrEntityExcluded(className);
   }
 
-  private boolean shouldAddHashCode(ClassLoader loader, ClassReader crSource, String className) {
+  private boolean shouldOverrideHashCode(
+      ClassLoader loader, ClassReader crSource, String className) {
     if (!instrumentAllHashCodes) return false;
+
     // Interfaces are not included
     if ((crSource.getAccess() & ACC_INTERFACE) != 0) return false;
+
+    // Scala objects are singleton in nature, therefore they always have a stable hashCode
+    if (crSource.getClassName().endsWith("$")) return false;
+
     // Only class with base class Object should be patched
     if (!crSource.getSuperName().equals(OBJECT_TYPE.getInternalName())) return false;
 
-    if (loader == null) return false;
-
-    // Probably should be extracted
-    if (className.startsWith("scala/reflect")) return false;
-
     // Presumably we know what we are doing, also ProfilerEventsWriter for sure needs to be ignored
-    return !className.startsWith("sun/") && !className.startsWith("java/security");
+    return !CommonAdapter.isThirdPartyOwned(loader, className);
   }
 
   private void setForwardMethodToNewHashCode(String className, ClassPatch patch) {
     var mrHashCode = new MethodRef(className, "hashCode", "()I");
-    patch.methodForward = new MethodForward(mrHashCode, InstrumentedHashCodes.mrHashCode);
+    patch.methodForwardsIfMissing.add(
+        new MethodForward(mrHashCode, InstrumentedHashCodes.mrHashCode));
+  }
+
+  private boolean shouldOverrideEquals(ClassLoader loader, ClassReader crSource, String className) {
+    if (!instrumentEquals) return false;
+
+    // Interfaces are not included
+    if ((crSource.getAccess() & ACC_INTERFACE) != 0) return false;
+
+    // Scala objects are singleton in nature, therefore they always have a stable equality
+    if (crSource.getClassName().endsWith("$")) return false;
+
+    // Only class with base class Object should be patched
+    if (!crSource.getSuperName().equals(OBJECT_TYPE.getInternalName())) return false;
+
+    return !CommonAdapter.isThirdPartyOwned(loader, className);
+  }
+
+  private void setForwardMethodToNewEquals(String className, ClassPatch patch) {
+    var equalsDef = new MethodRef(className, "equals", "(Ljava/lang/Object;)Z");
+    patch.methodForwardsIfMissing.add(new MethodForward(equalsDef, instrumentedEquals));
   }
 }
 
 class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
   private final ClassPatch classPatch;
   private final String className;
-  private boolean seenForwardedMethod;
+  private final Set<MethodForward> methodForwardsToCall;
+
+  private boolean hasCCtor;
 
   InstrumentationInjectorAdapter(ClassPatch patch, String className, ClassVisitor cv) {
     super(ASM9, cv);
     this.classPatch = patch;
     this.className = className;
+
+    // copying forwarders here, so that we can mutate them as we visit
+    // the class without modifying the given patch
+    this.methodForwardsToCall = new HashSet<>(patch.methodForwardsIfMissing);
   }
 
   @Override
@@ -214,12 +247,14 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
   }
 
   private static boolean maybeSimpleGetter(int access, String name, String desc) {
-    if ((access & ACC_STATIC) != 0) // 1. Only care about "normal" vals
-    return false;
-    if (!desc.startsWith("()")) // 2. Takes no args
-    return false;
-    if (name.contains("$")) // 3. Some hidden method we probably don't care about
-    return false;
+    // 1. Only care about "normal" vals
+    if ((access & ACC_STATIC) != 0) return false;
+
+    // 2. Takes no args
+    if (!desc.startsWith("()")) return false;
+
+    // 3. Some hidden method we probably don't care about
+    if (name.contains("$")) return false;
 
     // 4. Return type can't be void or scala.Nothing
     Type fieldType = Type.getReturnType(desc);
@@ -238,8 +273,14 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
 
   public MethodVisitor visitMethod(
       int access, String name, String desc, String signature, String[] exceptions) {
-    if (classPatch.methodForward != null && name.equals(classPatch.methodForward.from.method))
-      seenForwardedMethod = true;
+    // this relies on us visiting the class ctor before other methods
+    // which unfortunately it is not always guaranteed.
+    // We are ok with accepting this limitation, as this just for reporting purposes only
+    // and we really don't want to traverse each method twice!
+    if (CommonAdapter.isCCtor(access, name, desc)) hasCCtor = true;
+
+    // the method has been correctly overridden, so we are not going to forward it!
+    methodForwardsToCall.removeIf(forwarder -> name.equals(forwarder.from.method));
 
     var isNativeCall = (access & ACC_NATIVE) != 0;
     CommonAdapter mv =
@@ -279,7 +320,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
           new InstrumentationInjectorMethodVisitor(
               patchForSuffixAsNode(className, name), mv, access, name, desc);
 
-    if (classPatch.bracketAllLzyComputes && name.endsWith("$lzycompute"))
+    if (classPatch.bracketAllLzyComputes && name.endsWith("$lzycompute") && hasCCtor)
       mv =
           new InstrumentationInjectorMethodVisitor(
               patchForLzyCompute(className, name), mv, access, name, desc);
@@ -340,7 +381,7 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
     mv.visitEnd();
   }
 
-  private void writeImplementForwardCall(MethodForward forwards) {
+  private void implementWithForwardCall(MethodForward forwards) {
     assert forwards.from.descriptor != null;
     var mv = cv.visitMethod(ACC_PUBLIC, forwards.from.method, forwards.from.descriptor, null, null);
     var mv2 = new GeneratorAdapter(mv, ACC_PUBLIC, forwards.from.method, forwards.from.descriptor);
@@ -365,8 +406,8 @@ class InstrumentationInjectorAdapter extends ClassVisitor implements Opcodes {
 
   @Override
   public void visitEnd() {
-    if (classPatch.methodForward != null && !seenForwardedMethod)
-      writeImplementForwardCall(classPatch.methodForward);
+    // implementing functions that should have been overridden using their forwarder methods
+    methodForwardsToCall.forEach(this::implementWithForwardCall);
 
     if (classPatch.getterMethod != null) writeGetterMethod(classPatch.getterMethod);
 
@@ -425,8 +466,8 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
     }
 
     if (prefix != null) {
-      if (prefix.descriptor != null) // If descriptor was supplied just use that
-      descriptor = prefix.descriptor;
+      // If descriptor was supplied just use that
+      if (prefix.descriptor != null) descriptor = prefix.descriptor;
 
       mv.visitMethodInsn(INVOKESTATIC, prefix.cls, prefix.method, descriptor, false);
     }

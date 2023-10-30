@@ -11,6 +11,9 @@
  */
 package optimus.stratosphere.bootstrap.config.migration.truncation;
 
+import static optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys.migratedRepositoriesKey;
+import static optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys.pleaseLeanUpMessageKey;
+import static optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys.pleaseMigrateMessageKey;
 import java.awt.AWTException;
 import java.io.FileReader;
 import java.io.IOException;
@@ -28,15 +31,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
+import com.typesafe.config.Config;
 import optimus.stratosphere.bootstrap.IniFile;
 import optimus.stratosphere.bootstrap.OsSpecific;
 import optimus.stratosphere.bootstrap.TrayNotification;
-import optimus.stratosphere.bootstrap.config.StratosphereConfig;
 import optimus.stratosphere.bootstrap.config.migration.MigrationFiles;
-import com.typesafe.config.Config;
-
-import static optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationConfigKeys.*;
 
 public class HistoryTruncationMigration extends MigrationFiles {
   private final Pattern remotePattern = Pattern.compile("remote \"(.*)\"");
@@ -46,9 +45,9 @@ public class HistoryTruncationMigration extends MigrationFiles {
 
   private final Config config;
 
-  public HistoryTruncationMigration(Path workspaceRoot) {
+  public HistoryTruncationMigration(Path workspaceRoot, final Config config) {
     super(workspaceRoot);
-    this.config = StratosphereConfig.get(workspaceRoot);
+    this.config = config;
   }
 
   public boolean isMigrationNeeded() {

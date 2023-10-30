@@ -14,12 +14,15 @@ package optimus.rest.bitbucket
 import scala.util.matching.Regex
 
 object MergeCommitUtils {
-  val stagingPrMessagePattern: Regex = """.*[Pp]ull request #(\d+)(?s).*from .+ to .*staging(?s).*""".r
+  val stagingPrMessagePattern: Regex = prMessagePattern("staging")
+  def prMessagePattern(branchName: String): Regex =
+    (""".*[Pp]ull request #(\d+)(?s).*from .+ to .*""" + branchName + """(?s).*""").r
 
-  def prIdOf(message: String): Option[Int] = message match {
-    case stagingPrMessagePattern(id) =>
-      Some(id.toInt)
-    case _ =>
-      None
+  def prIdOf(message: String, branch: String = "staging"): Option[Int] = {
+    val pattern = prMessagePattern(branch)
+    message match {
+      case pattern(id) => Some(id.toInt)
+      case _           => None
+    }
   }
 }

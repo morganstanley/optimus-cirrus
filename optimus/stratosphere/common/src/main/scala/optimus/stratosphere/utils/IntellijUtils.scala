@@ -18,7 +18,7 @@ import optimus.stratosphere.utils.IntellijBackupCause.IntellijBackupCause
 
 import java.io.File
 import java.nio.file.attribute.BasicFileAttributes
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 
 object IntellijBackupCause extends Enumeration {
   type IntellijBackupCause = Value
@@ -43,7 +43,7 @@ object IntellijUtils {
     if (ideaDir.exists()) {
       val ijVersion: String = versionForBackupCreation(stratoWorkspace).getOrElse("NO_IJ")
       val stratoVersion: String = stratoWorkspace.stratosphereVersion
-      val backupCreationDate: String = DateTimeUtils.formatDateTime("yyyy.MM.dd-HH.mm", LocalDateTime.now())
+      val backupCreationDate: String = DateTimeUtils.formatDateTime("yyyy.MM.dd-HH.mm", ZonedDateTime.now())
       val backupName = s"${ijVersion}_${stratoVersion}_${backupCreationDate}_$cause"
       val targetBackupDir = backupDir.resolve(backupName).dir.create()
       log.debug(s"""Creating workspace backup in $targetBackupDir""")

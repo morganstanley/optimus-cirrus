@@ -40,6 +40,7 @@ final case class GitLog(commit: String, date: String)
  * Simple wrapper for git commands. Note: Beware git- (and not only) injection.
  */
 final case class GitUtils(workspace: StratoWorkspaceCommon) {
+
   def diff(): String = runGit("diff")
 
   def diffNameOnly(commit: String, withPattern: String = ""): Seq[String] = {
@@ -69,6 +70,15 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def disableTags(name: String): String = runGit("config", s"remote.$name.tagopt", "--no-tags")
 
   def disableGc(): String = runGit("config", "gc.auto", "0")
+
+  def collectGarbage(): String = runGit("gc") + runGit("prune")
+
+  def updateIndex(version: Int): String = {
+    require(Seq(2, 3, 4).contains(version), s"Version must be one of: (2,3,4), was $version")
+    runGit("update-index", "--index-version", version.toString)
+  }
+
+  def writeCommitGraph(): String = runGit("commit-graph", "write", "--reachable")
 
   def originRemoteUrl(): RemoteUrl = RemoteUrl(runGit("config", "remote.origin.url"))
 
@@ -148,6 +158,11 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   }
 
   private val noGc: Seq[String] = Seq("-c", "gc.auto=0")
+
+  def fetchAll(): String = {
+    val cmd = noGc ++ Seq("fetch", "--no-tags")
+    runGit(cmd: _*)
+  }
 
   def fetch(remoteRepo: String): String = {
     val cmd = noGc ++ Seq("fetch", remoteRepo, "--no-tags")
@@ -241,6 +256,8 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   private[utils] def retrieveBranchesNames(listBranchesOutput: String) =
     listBranchesOutput.split("""\s+|[\s*]+""").filter(_.nonEmpty).toList
 
-  def runGit(args: String*): String =
-    CommonProcess.in(workspace).runGit(workspace.directoryStructure.sourcesDirectory)(args: _*)
+  def runGit(args: String*): String = {
+    val env = Map("GIT_ASK_YESNO" -> "false")
+    CommonProcess.in(workspace).runGit(workspace.directoryStructure.sourcesDirectory, env)(args: _*)
+  }
 }

@@ -20,6 +20,7 @@ import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ListBuffer
 import scala.reflect.internal.Reporter.Severity
+import scala.reflect.internal.util.CodeAction
 import scala.reflect.internal.util.Position
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.IMain
@@ -45,10 +46,10 @@ class ScalaInterpreter private (settings: Settings, interpreterSettings: ScalaIn
   def reporterState: ReporterState = _reporterState
 
   private[repl] val reporter: ReplReporterImpl = new ReplReporterImpl(settings, interpreterSettings.out) {
-    override def doReport(pos: Position, msg: String, severity: Severity): Unit = {
+    override def doReport(pos: Position, msg: String, severity: Severity, actions: List[CodeAction]): Unit = {
       if (_reporterState != null)
         _reporterState.add(Message(pos, msg, severity))
-      super.doReport(pos, msg, severity)
+      super.doReport(pos, msg, severity, actions)
     }
   }
 

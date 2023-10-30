@@ -43,7 +43,7 @@ case object AutoDetect extends WorkspaceLocation(None)
 /** Use when running outside of workspace */
 case object NoWorkspace extends WorkspaceLocation(Some(null))
 
-class StratoWorkspaceCommon(val customWorkspaceLocation: WorkspaceLocation, bootstrapLogger: String => Unit)
+class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLocation, bootstrapLogger: String => Unit)
     extends TypeSafeOptions {
 
   private var _config: Config = _
@@ -93,7 +93,8 @@ class StratoWorkspaceCommon(val customWorkspaceLocation: WorkspaceLocation, boot
     // Cannot use logger here, we're initializing it below
     bootstrapLogger("Initializing workspace...")
 
-    _config = workspaceLocation.path.map(StratosphereConfig.get).getOrElse(StratosphereConfig.get())
+    _config =
+      workspaceLocation.path.map(StratosphereConfig.loadFromLocation).getOrElse(StratosphereConfig.loadFromCurrentDir())
 
     _directoryStructure = new CommonDirectoryStructure(this)
 
@@ -121,6 +122,8 @@ class StratoWorkspaceCommon(val customWorkspaceLocation: WorkspaceLocation, boot
     directoryStructure.stratosphereWorkspaceName == StratoWorkspaceNames.noWorkspace ||
       !Files.exists(directoryStructure.sourcesDirectory)
 
+  final def hasGitInWorkspace: Boolean = git.usedInWorkspace && directoryStructure.gitDirectory.exists()
+
   final def select[A: Extractor](name: String): A = implicitly[Extractor[A]].extract(config, name)
 
   final def update(name: String)(value: Any): Unit = {
@@ -135,7 +138,7 @@ object StratoWorkspaceNames {
   val noWorkspace = ".no-workspace"
 }
 
-class StratoWorkspace(
+class StratoWorkspace protected (
     override val customWorkspaceLocation: WorkspaceLocation = AutoDetect,
     bootstrapLogger: String => Unit = println
 ) extends StratoWorkspaceCommon(customWorkspaceLocation, bootstrapLogger) {

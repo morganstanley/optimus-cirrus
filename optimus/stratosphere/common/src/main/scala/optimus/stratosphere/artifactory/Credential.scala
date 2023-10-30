@@ -11,14 +11,15 @@
  */
 package optimus.stratosphere.artifactory
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import msjava.slf4jutils.scalalog.getLogger
+
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
 import java.util.Properties
-import com.fasterxml.jackson.databind.ObjectMapper
-import msjava.slf4jutils.scalalog.getLogger
 
 /** A basic authentication credential e.g. for Artifactory */
 final case class Credential(host: String, user: String, password: String) {

@@ -27,9 +27,9 @@ import optimus.stratosphere.stash.UnsuccessfulStashCall
 import spray.json._
 
 import scala.concurrent.Await
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import scala.xml._
 
 trait RestClient extends RestApi {

@@ -70,7 +70,7 @@ class PluginData(private val global: Global) {
     global.perRunCaches.recordCache(onCompileFinished)
     // always install the threshold profiler since it's lightweight and we always want to know about very slow compilation
     val thresholdProfiler =
-      new ThresholdProfiler(global.reporter.echo, thresholdNs = slowCompilationWarningThresholdMs * 1000000)
+      new ThresholdProfiler(global.reporter.echo(_, _), thresholdNs = slowCompilationWarningThresholdMs * 1000000)
     // keep the existing profiler (if any) so that we don't prevent -Yprofile from working
     global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
   }
@@ -114,6 +114,7 @@ class PluginData(private val global: Global) {
   }
 
   var slowCompilationWarningThresholdMs = 20 * 1000L
+  var forceLoad: List[String] = Nil
 }
 
 object PublishDefinition {

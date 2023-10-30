@@ -11,8 +11,12 @@
  */
 package optimus.stratosphere.utils
 
+import optimus.stratosphere.bootstrap.OsSpecific
+import optimus.stratosphere.config.StratoWorkspaceCommon
+
 import java.lang.management.ManagementFactory
 import java.net.InetAddress
+import scala.concurrent.duration._
 
 object EnvironmentUtils {
 
@@ -27,18 +31,20 @@ object EnvironmentUtils {
 
   def getFreePhysicalMemorySize: MemSize = MemSize.of(system.getFreePhysicalMemorySize)
 
-  /**
-   * RAM available for JVM in bytes
-   */
-  def ramAvailableFormJvm(): MemSize = MemSize.of(Runtime.getRuntime.maxMemory())
-
-  def isBigHeapApplicable: Boolean = {
-    getTotalPhysicalMemorySize > MemSize.of(24, MemUnit.GB) &&
-    getFreePhysicalMemorySize > MemSize.of(15, MemUnit.GB)
-  }
-
   def availableProcessors(): Int = Runtime.getRuntime.availableProcessors()
 
+  def isProid(ws: StratoWorkspaceCommon): Boolean = {
+    val proidTypeMarker = "G"
+    val knownProids = ws.internal.environment.proids
+    val isKnownProid = knownProids.contains(ws.userName)
+
+    if (OsSpecific.isWindows || isKnownProid) isKnownProid
+    else
+      CommonProcess
+        .in(ws)
+        .runAndWaitFor(Seq("phone", "-bw", "-type", ws.userName), timeout = 5.seconds)
+        .endsWith(proidTypeMarker)
+  }
 }
 
 /**

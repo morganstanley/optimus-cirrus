@@ -36,6 +36,7 @@ object StagingSettings {
     val rewriteCaseClassToFinalName = "rewriteCaseClassToFinal:"
     val slowCompilationWarningThresholdMsName = "slowCompilationWarningThresholdMs:"
     val unsortedName = "unsorted:"
+    val forceLoadName = "forceLoad:"
   }
 }
 object StagingPlugin {
@@ -46,6 +47,11 @@ object StagingPlugin {
   }
 
   def parseInt(option: String, name: String): Int = option.substring(name.length).toInt
+
+  def parseStringList(option: String, name: String): List[String] = {
+    val bits = option.substring(name.length).split(";")
+    bits.toList
+  }
 
   def parseReportConfig(option: String, name: String): Set[String] = {
     option.substring(name.length).split(";").toSet
@@ -87,6 +93,8 @@ object StagingPlugin {
       pluginData.slowCompilationWarningThresholdMs = parseInt(option, slowCompilationWarningThresholdMsName)
     else if (option.startsWith(unsortedName))
       pluginData.rewriteConfig.unsorted = parseOption(option, unsortedName, false)
+    else if (option.startsWith(forceLoadName))
+      pluginData.forceLoad = pluginData.forceLoad ::: parseStringList(option, forceLoadName)
     else error(s"unknown option '$option'")
   }
 

@@ -9,23 +9,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.stratosphere.handlers
+package optimus.debug;
 
-import org.kohsuke.args4j.CmdLineParser
-import org.kohsuke.args4j.OptionDef
-import org.kohsuke.args4j.spi.OneArgumentOptionHandler
-import org.kohsuke.args4j.spi.Setter
-import scala.collection.compat._
-import scala.collection.immutable.Seq
-
-class SeqOfStringsOptionHandler(parser: CmdLineParser, optionDef: OptionDef, setter: Setter[Seq[String]])
-    extends OneArgumentOptionHandler[Seq[String]](parser, optionDef, setter) {
-
-  override def parse(arg: String): Seq[String] = {
-    arg.trim
-      .split(",")
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .to(Seq)
-  }
+public enum EntityInstrumentationType {
+  markScenarioStack,
+  recordConstructedAt,
+  none
 }

@@ -31,6 +31,8 @@ trait WithOptimusMacroReporter {
     OptimusReporter.abortImpl(c)(builder(arg), c.macroApplication.pos)
   @inline final def abort(builder: OptimusMacroAlarmBuilder2, arg1: Any, arg2: Any) =
     OptimusReporter.abortImpl(c)(builder(arg1, arg2), c.macroApplication.pos)
+  @inline final def abort(builder: OptimusMacroAlarmBuilder3, arg1: Any, arg2: Any, arg3: Any) =
+    OptimusReporter.abortImpl(c)(builder(arg1, arg2, arg3), c.macroApplication.pos)
 
   @inline final def error(builder: OptimusMacroAlarmBuilder0) =
     OptimusReporter.errorImpl(c)(builder(), c.macroApplication.pos)

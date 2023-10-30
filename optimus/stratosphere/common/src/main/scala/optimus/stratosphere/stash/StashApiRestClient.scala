@@ -21,6 +21,7 @@ import optimus.stratosphere.utils.RemoteSpec
 import optimus.stratosphere.utils.RemoteUrl
 import spray.json._
 
+import java.time.Instant
 import java.time.{Duration => JDuration}
 import scala.annotation.tailrec
 import scala.collection.compat._
@@ -71,6 +72,12 @@ class StashApiRestClient(
 
   private def findValue(command: String)(predicate: Config => Boolean): Option[Config] = {
     pagedGet(command, predicate, shouldReturnFirstFound = true).headOption
+  }
+
+  def allForks(project: String, repository: String): Seq[Repository] = {
+    getValues(s"projects/$project/repos/$repository/forks").map { config =>
+      Repository(project = Project(config.getConfig("project").getString("key")), slug = config.getString("slug"))
+    }
   }
 
   private[stash] def allProjects(): Seq[String] = {
@@ -203,9 +210,40 @@ class StashApiRestClient(
     convertRepoUrlToProxy(cloneUrl)
   }
 
-  def forkSyncStatus(userName: String, repository: String): Config = {
-    val forkSyncingUrl = prepareUrl(s"projects/~$userName/repos/$repository", "sync")
-    httpClient.get(forkSyncingUrl)
+  def getForkSyncStatus(projectSlug: String, repository: String, assumeUserName: Boolean = true): ForkSyncStatus = {
+    val project = if (assumeUserName) s"~$projectSlug" else projectSlug
+    val forkSyncingUrl = prepareUrl(s"projects/$project/repos/$repository", "sync")
+
+    val config = httpClient.get(forkSyncingUrl)
+
+    val syncAvailable = config.getBoolean("available")
+    val syncEnabled = config.getBoolean("enabled")
+
+    val maybeLastSync =
+      if (syncEnabled) Some(Instant.ofEpochMilli(config.getLong("lastSync")))
+      else None
+
+    val divergedBranches = {
+      if (config.hasPath("divergedRefs")) {
+        config
+          .getConfigList("divergedRefs")
+          .asScala
+          .to(Seq)
+          .filter(entry => entry.hasPath("id"))
+          .filter(_.getString("state").toUpperCase == "DIVERGED")
+          .map(_.getString("displayId"))
+      } else {
+        Seq.empty
+      }
+    }
+
+    ForkSyncStatus(
+      Repository(Project(project), repository),
+      available = syncAvailable,
+      enabled = syncEnabled,
+      lastSync = maybeLastSync,
+      divergedBranches = divergedBranches
+    )
   }
 
   def setForkSyncing(userName: String, repository: String, enabled: Boolean = true): Config = {

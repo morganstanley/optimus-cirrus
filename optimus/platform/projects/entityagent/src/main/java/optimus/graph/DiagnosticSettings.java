@@ -17,6 +17,7 @@ import java.lang.management.RuntimeMXBean;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -82,7 +83,7 @@ public class DiagnosticSettings {
   public static final boolean isClassMonitorOverheadTraceEnabled;
   public static final int showThisNumberOfTopUsedClasses;
   public static final boolean keepFullTraceFile;
-  public static final String traceToOverride;
+  public static final String alwaysAppendTraceToOverride; // [SEE_TRACE_TO_OVERRIDE]
   public static final String fullTraceDir;
   public static final boolean
       profileShowThreadSummary; // light profile shows per-thread breakdown at shutdown
@@ -111,7 +112,10 @@ public class DiagnosticSettings {
   public static final boolean enableRTVNodeRerunner =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner", false);
   public static final boolean rtvNodeRerunnerExcludeByDefault =
-      enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+      enableRTVNodeRerunner && getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+
+  public static final boolean rtvNodeRerunnerSkipBadEquality =
+      enableRTVNodeRerunner && getBoolProperty("optimus.rt.verifier.node.rerunner.skipBadEquality", true);
 
   /** Publish RT violations as crumbs in splunk */
   public static final boolean publishRTVerifierCrumbs =
@@ -120,7 +124,12 @@ public class DiagnosticSettings {
   public static final boolean writeRTVerifierReport =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.report", true);
 
-  /** Used for test purposes, it accumulates RT violations in memory even if a report has not been requested */
+  public static final boolean edgeCrumbsByDefault = getBoolProperty("optimus.edge.crumbs", false);
+
+  /**
+   * Used for test purposes, it accumulates RT violations in memory even if a report has not been
+   * requested
+   */
   public static final boolean rtvAccumulateViolations =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.accumulate.violations", false);
 
@@ -161,7 +170,10 @@ public class DiagnosticSettings {
   public static volatile boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, true);
 
   public static final int tweakUsageQWords = getIntProperty("optimus.graph.tweakUsageQWords", 6);
-
+  // after there is tweakId overflow we will log a warning every time the number of tweaks increases
+  // by a multiple of this
+  public static final int tweakOverflowAmountToLog =
+      getIntProperty("optimus.graph.tweakOverflowAmountToLog", 20);
   public static final String instrumentationConfig = getStringProperty("optimus.instrument.cfg");
 
   // semi-colon separated list of functions to cache - NOT for production!
@@ -202,8 +214,10 @@ public class DiagnosticSettings {
   public static boolean includeCancelledNodeInException =
       getBoolProperty("optimus.diagnostic.includeCancelledNodeInException", false);
 
+  public final static boolean isWindows = System.getProperty("os.name","").toLowerCase().contains("windows");
   public static final String asyncProfilerSettings;
   public static final boolean awaitStacks;
+  public static final boolean samplingProfiler;
   public static final boolean repairEnqueuerChain;
   public static final int awaitChainHashStrategy;
 
@@ -340,6 +354,16 @@ public class DiagnosticSettings {
 
   private static boolean parseConsoleArg(String arg) {
     return arg.equals("stop");
+  }
+
+  public static String propWithEnvFallback(String arg) {
+    var s = System.getProperty(arg);
+    if (!Objects.isNull(s)) return s;
+    arg = arg.toUpperCase().replaceAll("\\.", "_");
+    s = System.getenv(arg);
+    if (!Objects.isNull(s)) return s;
+    s = System.getenv("OPTIMUS_DIST_" + arg);
+    return s;
   }
 
   public static int getIntProperty(String name, int deflt) {
@@ -548,7 +572,8 @@ public class DiagnosticSettings {
     classBiopsyClasses = getStringPropertyAsSet(AGENT_BIOPSY_CLASSES);
     classDumpEnabled = !classDumpClasses.isEmpty() || !classBiopsyClasses.isEmpty();
 
-    traceToOverride = getStringProperty("optimus.traceTo", null);
+    // not to be used in the usual case (unless interested in distributedTasks case)
+    alwaysAppendTraceToOverride = getStringProperty("optimus.traceTo", null);
 
     // set this to true to avoid deleting the backing storage for the full trace: this is intended
     // to be useful
@@ -599,8 +624,13 @@ public class DiagnosticSettings {
       asyncProfilerSettings = aps;
     }
 
-    awaitStacks = asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true");
-    repairEnqueuerChain = getBoolProperty("optimus.graph.enqueue.repair", awaitStacks);
+    samplingProfiler = parseBooleanWithDefault(propWithEnvFallback("optimus.sampling"), false);
+    awaitStacks =
+        samplingProfiler
+            || (asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true"));
+    repairEnqueuerChain =
+        getBoolProperty(
+            "optimus.graph.enqueue.repair", samplingProfiler || awaitStacks || jvmDebugging);
     awaitChainHashStrategy = getIntProperty("optimus.graph.enqueue.hash.strategy", 0);
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
     syntheticGraphMethodsEnabled =

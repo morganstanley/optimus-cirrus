@@ -12,7 +12,6 @@
 package optimus.stratosphere.utils
 
 import java.util
-
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedSet

@@ -19,11 +19,11 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.Properties
 import scala.collection.compat._
+import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 import scala.util.control.NonFatal
-import scala.collection.immutable.Seq
 
 object CaseClassSerializer {
   final implicit class StringOps(prefix: String) {

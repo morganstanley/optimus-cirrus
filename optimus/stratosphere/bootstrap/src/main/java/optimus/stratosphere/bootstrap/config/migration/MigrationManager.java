@@ -14,7 +14,7 @@ package optimus.stratosphere.bootstrap.config.migration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
+import com.typesafe.config.Config;
 import optimus.stratosphere.bootstrap.Stratosphere;
 import optimus.stratosphere.bootstrap.WorkspaceRoot;
 import optimus.stratosphere.bootstrap.config.migration.p4.NewToOldLayoutMigration;
@@ -22,14 +22,15 @@ import optimus.stratosphere.bootstrap.config.migration.p4.OldToNewLayoutMigratio
 import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationMigration;
 
 public class MigrationManager {
-  public static int runIfNeeded(Path workspaceRoot, String command, boolean showTrayNotification) {
+  public static int runIfNeeded(
+      Path workspaceRoot, String command, Config config, boolean showTrayNotification) {
     try {
       boolean isNewLayout =
           Files.exists(workspaceRoot.resolve("src/" + WorkspaceRoot.STRATOSPHERE_CONFIG_FILE));
       if (isNewLayout) {
         new OldToNewLayoutMigration(workspaceRoot).runIfNeeded();
       } else {
-        new NewToOldLayoutMigration(workspaceRoot).runIfNeeded();
+        new NewToOldLayoutMigration(workspaceRoot, config).runIfNeeded();
       }
     } catch (IOException e) {
       System.err.println("[ERROR] Problem occurred during migration of configuration:");
@@ -38,7 +39,7 @@ public class MigrationManager {
     }
 
     try {
-      new HistoryTruncationMigration(workspaceRoot)
+      new HistoryTruncationMigration(workspaceRoot, config)
           .printWarningIfNeeded(command, showTrayNotification);
     } catch (Exception e) {
       System.err.println(

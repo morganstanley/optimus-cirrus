@@ -33,6 +33,7 @@ class CrumbCounter extends BreadcrumbsAnalyzer with Log {
   import optimus.breadcrumbs.crumbs.Properties._
   private val counts = mutable.Map.empty[String, Int]
   def count(id: ChainedID): Int = counts.getOrElse(id.toString, 0)
+  def reset(): Unit = counts.clear()
   private def addCount(uuid: String): Unit = {
     counts
       .get(uuid)

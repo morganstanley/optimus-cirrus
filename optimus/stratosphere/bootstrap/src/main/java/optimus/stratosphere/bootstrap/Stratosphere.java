@@ -18,8 +18,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
-
 import com.typesafe.config.Config;
 import optimus.stratosphere.bootstrap.config.StratosphereConfig;
 import optimus.stratosphere.bootstrap.config.migration.MigrationManager;
@@ -29,8 +27,7 @@ public class Stratosphere {
   public static int SUCCESS = 0;
   public static int FAILURE = 1;
 
-  private static int runInfra(Path infraPath, String[] args) {
-    Config config = StratosphereConfig.get();
+  private static int runInfra(Path infraPath, String[] args, Config config) {
     Path javaInstall = Paths.get(config.getString("internal.java.install"));
     Path javaPath =
         OsSpecific.isWindows
@@ -93,19 +90,19 @@ public class Stratosphere {
     }
   }
 
-  private static int runSnapshotInfra(String[] args) {
+  private static int runSnapshotInfra(String[] args, Config config) {
     String stratosphereInfraOverride = System.getenv("STRATOSPHERE_INFRA_OVERRIDE");
     Path infraPath =
         Paths.get(
             stratosphereInfraOverride != null
                 ? stratosphereInfraOverride
                 : System.getenv("STRATOSPHERE_INFRA"));
-    return runInfra(infraPath, args);
+    return runInfra(infraPath, args, config);
   }
 
-  private static int runNewInfra(String[] args) throws Exception {
-    Path infraPath = Paths.get(StratosphereConfig.get().getString("stratosphereInfra"));
-    return runInfra(infraPath, args);
+  private static int runNewInfra(final String[] args, final Config config) throws Exception {
+    Path infraPath = Paths.get(config.getString("stratosphereInfra"));
+    return runInfra(infraPath, args, config);
   }
 
   public static void main(String[] args) {
@@ -136,18 +133,20 @@ public class Stratosphere {
 
   private static int runCommand(String command, String[] args) throws Exception {
     Path workspace = WorkspaceRoot.findOldOrNew();
-    Set<String> commandsToRunWithSnapshotInfra = Set.of("catchup", "migrate", "setup");
+    final Config config = StratosphereConfig.loadFromCurrentDir();
+    final List<String> commandsToRunWithSnapshotInfra =
+        config.getStringList("internal.commands-to-run-with-snapshot-infra");
 
     if (workspace != null) {
       int migrationStatus =
-          MigrationManager.runIfNeeded(workspace, command, /* showTrayNotification = */ true);
+          MigrationManager.runIfNeeded(
+              workspace, command, config, /* showTrayNotification = */ true);
       if (migrationStatus == FAILURE) {
         return migrationStatus;
       }
     }
-
     return (workspace == null || commandsToRunWithSnapshotInfra.contains(command.toLowerCase()))
-        ? runSnapshotInfra(args)
-        : runNewInfra(args);
+        ? runSnapshotInfra(args, config)
+        : runNewInfra(args, config);
   }
 }

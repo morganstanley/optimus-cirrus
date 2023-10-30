@@ -11,19 +11,18 @@
  */
 package optimus.stratosphere.utils
 
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter.ofPattern
 
 object DateTimeUtils {
 
-  def formatDateTime(pattern: String, dateTime: LocalDateTime): String = {
+  def formatDateTime(pattern: String, dateTime: ZonedDateTime): String =
     dateTime.format(ofPattern(pattern))
-  }
 
   object Patterns {
     val fileDateTimeUpToMillisSuffix = "yyyy.MM.dd-HH.mm.ss.SSS"
   }
 
-  def nextDateTimeSuffix(): String = formatDateTime(Patterns.fileDateTimeUpToMillisSuffix, LocalDateTime.now())
+  def nextDateTimeSuffix(): String = formatDateTime(Patterns.fileDateTimeUpToMillisSuffix, ZonedDateTime.now())
 
 }

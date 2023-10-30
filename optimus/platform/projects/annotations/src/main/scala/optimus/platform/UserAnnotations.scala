@@ -215,17 +215,25 @@ sealed class upcastingTarget(val domain: UpcastDomain) extends StaticAnnotation
 final case class nodeDebug(dir: String)
 
 /**
+ * Trait Utils used by the meta annotation below
+ */
+final case class MetadataOwner(captain: String, marshal: String)
+trait DalMetadata
+trait OptOut extends DalMetadata
+trait OwnershipMetadata {
+  val owner: MetadataOwner
+}
+
+/**
  * Annotate a class with @meta to supply metadata for the CasC's manifest generator
  */
 // docs-snippet:MetaDeclaration
-trait DalMetadata
-trait OwnershipMetadata
 class meta(
     /** Ownership - an object that extends OwnershipMetadata */
     val owner: OwnershipMetadata,
     /** Catalog - an object that extends DalMetadata */
     val catalog: DalMetadata
-) extends annotation.StaticAnnotation
+) extends StaticAnnotation
 // docs-snippet:MetaDeclaration
 
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it

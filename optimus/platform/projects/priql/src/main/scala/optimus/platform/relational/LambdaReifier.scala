@@ -14,15 +14,31 @@ package optimus.platform.relational
 import optimus.platform.GroupQuery
 import optimus.platform.JoinQuery
 import optimus.platform.Query
+import optimus.platform.relational.tree.BinaryExpressionType.BinaryExpressionType
+import optimus.platform.relational.tree._
 
 import scala.reflect.macros.blackbox.Context
 
 class LambdaReifier[C <: Context](val c: C) extends AbstractLambdaReifier {
   import c.universe._
 
-  override protected def transformConstant(constant: c.universe.Tree): c.universe.Tree = {
+  private val ElementFactoryExT = Ident(typeOf[ElementFactoryEx.type].termSymbol)
+
+  override protected def transformConstant(constant: Tree): Tree = {
     val AsyncValueHolderT = Ident(typeOf[AsyncValueHolder.type].termSymbol)
     q"$AsyncValueHolderT.constant(() => ${c.untypecheck(constant)}, ${Helper.mkTypeInfo(constant.tpe)})"
+  }
+
+  override protected def transformBinary(opEncoded: String, left: Tree, right: Tree, method: Tree): Tree = {
+    import Helper._
+    opEncoded match {
+      case "$bar$bar" =>
+        q"$ElementFactoryExT.orElse($left, $right)"
+      case "$amp$amp" =>
+        q"$ElementFactoryExT.andAlso($left, $right)"
+      case _ =>
+        super.transformBinary(opEncoded, left, right, method)
+    }
   }
 
   override protected def canTranslateToMethodElement(s: Symbol): Boolean = {
@@ -71,5 +87,41 @@ class LambdaReifier[C <: Context](val c: C) extends AbstractLambdaReifier {
       "withRightDefault",
       "onNatural"
     )
+  }
+}
+
+object ElementFactoryEx {
+  def andAlso(left: RelationElement, right: => RelationElement): RelationElement = {
+    left match {
+      case ConstValueElement(v: Boolean, _) =>
+        if (!v) left else right
+      case ConstValueElement(a: AsyncValueHolder[Boolean @unchecked], _) =>
+        if (!a.evaluateSync) ElementFactory.constant(false, TypeInfo.BOOLEAN) else right
+      case _ =>
+        right match {
+          case r @ ConstValueElement(v: Boolean, _) =>
+            if (!v) r else left
+          case ConstValueElement(a: AsyncValueHolder[Boolean @unchecked], _) =>
+            if (!a.evaluateSync) ElementFactory.constant(false, TypeInfo.BOOLEAN) else left
+          case r => ElementFactory.andAlso(left, r)
+        }
+    }
+  }
+
+  def orElse(left: RelationElement, right: => RelationElement): RelationElement = {
+    left match {
+      case ConstValueElement(v: Boolean, _) =>
+        if (v) left else right
+      case ConstValueElement(a: AsyncValueHolder[Boolean @unchecked], _) =>
+        if (a.evaluateSync) ElementFactory.constant(true, TypeInfo.BOOLEAN) else right
+      case _ =>
+        right match {
+          case r @ ConstValueElement(v: Boolean, _) =>
+            if (v) r else left
+          case ConstValueElement(a: AsyncValueHolder[Boolean @unchecked], _) =>
+            if (a.evaluateSync) ElementFactory.constant(true, TypeInfo.BOOLEAN) else left
+          case r => ElementFactory.orElse(left, r)
+        }
+    }
   }
 }

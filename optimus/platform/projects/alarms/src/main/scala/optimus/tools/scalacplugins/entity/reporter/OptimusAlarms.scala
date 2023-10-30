@@ -992,7 +992,7 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val DEAD_NODE_CALL =
     warning1(17005, OptimusPhases.ASYNC_GRAPH, "Dead code: result of call to @node%s is not used.")
 
-  val CODE_MOTION = info1(17006, OptimusPhases.ASYNC_GRAPH, "Code motion: %s")
+  val CODE_MOTION = debug1(17006, OptimusPhaseInfo.ScalaAsync, "Code motion: %s")
 
   // location tag phase warnings
   val LOCATION_TAG_INVALID_USE =

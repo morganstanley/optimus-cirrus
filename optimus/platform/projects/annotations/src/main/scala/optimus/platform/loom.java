@@ -9,17 +9,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.stratosphere.handlers
+package optimus.platform;
 
-import org.kohsuke.args4j.CmdLineParser
-import org.kohsuke.args4j.OptionDef
-import org.kohsuke.args4j.spi.OneArgumentOptionHandler
-import org.kohsuke.args4j.spi.Setter
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-class OptionOptionHandler(parser: CmdLineParser, optionDef: OptionDef, setter: Setter[Option[String]])
-    extends OneArgumentOptionHandler[Option[String]](parser, optionDef, setter) {
-  override def parse(arg: String): Option[String] = {
-    val trimmed = arg.trim
-    if (trimmed.nonEmpty) Some(trimmed) else None
-  }
-}
+/**
+ * Currently tells the entiyagent to transform this class into a loom calls
+ * Also tells entityplugin to generate fun$_ calls/methods
+ */
+@Retention(RetentionPolicy.CLASS)
+@Target(ElementType.TYPE)
+public @interface loom {}

@@ -146,6 +146,7 @@ class AnnotatingComponent(
       add(deprecatings, deprecatingAnno)
       add(discourageds, discouragedAnno)
       add(discouragedStream, discouragedAnno, _.owner != genTraversableFactory)
+      pluginData.forceLoad.foreach(fqn => rootMirror.getClassIfDefined(fqn).andAlso(_.initialize))
     }
   }
 

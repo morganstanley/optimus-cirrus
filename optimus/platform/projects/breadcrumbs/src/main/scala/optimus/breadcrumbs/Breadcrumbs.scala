@@ -18,6 +18,7 @@ import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.BreadcrumbLevel.Level
 import optimus.breadcrumbs.Breadcrumbs.SetupFlags
+import optimus.breadcrumbs.BreadcrumbsSendLimit.LimitByKey
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.filter._
@@ -36,7 +37,9 @@ import org.apache.kafka.clients.producer.RecordMetadata
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import java.util.Objects
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import java.util.{ArrayList => jArrayList}
@@ -131,6 +134,8 @@ object Breadcrumbs {
   private val queueDrainTime = "breadcrumb.queue.drain.ms"
 
   private val defaultResources = PropertyUtils.get(resourceName, "deferred")
+
+  def getCounts: Map[Crumb.Source, Int] = impl.getCounts
 
   val queueLength: Int =
     if (defaultResources == "none" || defaultResources == "off") 1 else PropertyUtils.get(queueLengthName, 10000)
@@ -371,30 +376,24 @@ object Breadcrumbs {
   def warn(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.warn(uuid, cf)
   def error(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.error(uuid, cf)
 
-  // Instantiates crumb if publisher or uuid level is trace/debug/info/warn/error enabled, and then
-  // sends it unless it's still in our cache of crumbs already sent.
-  def traceOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.traceOnce(uuid, cf)
-  def debugOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.debugOnce(uuid, cf)
-  def infoOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.infoOnce(uuid, cf)
-  def warnOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.warnOnce(uuid, cf)
-  def errorOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.errorOnce(uuid, cf)
-
   // Instantiates and sends the crumb if the publisher or uuid level is trace/debug/info/warn/error enabled and
   // the specified key is not in our already-sent cache.
-  def traceOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.traceOnce(key, uuid, cf)
-  def debugOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.debugOnce(key, uuid, cf)
-  def infoOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.infoOnce(key, uuid, cf)
-  def warnOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.warnOnce(key, uuid, cf)
-  def errorOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.errorOnce(key, uuid, cf)
+  def trace(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.trace(key, uuid, cf)
+  def debug(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.debug(key, uuid, cf)
+  def info(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.info(key, uuid, cf)
+  def warn(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.warn(key, uuid, cf)
+  def error(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean = impl.error(key, uuid, cf)
 
   // Instantiates and sends the crumb if the publisher or uuid level is enabled for the specified log level.
   def apply(uuid: ChainedID, cf: => ChainedID => Crumb, level: BreadcrumbLevel.Level = BreadcrumbLevel.All): Boolean =
     impl.send(uuid, cf, level)
 
-  def sendOnce(uuid: ChainedID, cf: ChainedID => Crumb, level: BreadcrumbLevel.Level = BreadcrumbLevel.Default): Unit =
-    impl.sendOnce(null, uuid, cf, level)
-  def sendOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb, level: BreadcrumbLevel.Level): Boolean =
-    impl.sendOnce(key, uuid, cf, level)
+  def send(
+      key: BreadcrumbsSendLimit.LimitByKey,
+      uuid: ChainedID,
+      cf: ChainedID => Crumb,
+      level: BreadcrumbLevel.Level = BreadcrumbLevel.Default): Boolean =
+    impl.sendLimited(key, uuid, cf, level)
 
   def flush(): Unit = {
     log.debug("Breadcrumbs about to be flushed")
@@ -422,10 +421,66 @@ object Breadcrumbs {
         log.error(s"An error occurred", ex)
     }
   }
+}
 
+object BreadcrumbsSendLimit {
+  import scala.reflect.macros.blackbox
+  import scala.language.experimental.macros
+
+  sealed trait LimitByKey {
+    val n: Int
+    val backoff: Boolean
+    def key: AnyRef = this
+    def thenBackoff: Counting
+  }
+
+  final case class Counting private[BreadcrumbsSendLimit] (
+      override val n: Int,
+      override val backoff: Boolean,
+      of: OnceByKey)
+      extends LimitByKey {
+    override def hashCode(): Int = key.hashCode()
+    override def equals(obj: Any): Boolean = obj match {
+      case Counting(_, _, k) => key == k
+      case _                 => false
+    }
+    override def key: AnyRef = of.key
+    override def thenBackoff: Counting = copy(backoff = true)
+  }
+
+  trait OnceByKey extends LimitByKey {
+    override val n = 0
+    override val backoff: Boolean = false
+
+    def &&(other: OnceByKey): OnceByKey = Combo(this, other)
+    def *(n: Int): Counting = Counting(n, false, this)
+    override def thenBackoff: Counting = Counting(1, true, this)
+  }
+
+  implicit class MaxTimesMultiplier(val n: Int) extends AnyVal {
+    def *(obk: OnceByKey): Counting = Counting(n, false, obk)
+  }
+
+  case object OnceByCrumbEquality extends OnceByKey
+  case object OnceByChainedID extends OnceByKey
+  final case class PublishLocation(src: String, line: Int, col: Int) extends OnceByKey
+  final def OnceBySourceLoc(implicit loc: PublishLocation): OnceByKey = loc
+  final case class OnceBy(o: Any*) extends OnceByKey
+  final case class Combo private[BreadcrumbsSendLimit] (left: OnceByKey, right: OnceByKey) extends OnceByKey
+
+  implicit def makeSourceLocation: BreadcrumbsSendLimit.PublishLocation = macro sourceLocationMacroImpl
+
+  final def sourceLocationMacroImpl(c: blackbox.Context): c.Expr[PublishLocation] = {
+    import c.universe._
+    val line = c.Expr[Int](Literal(Constant(c.enclosingPosition.line)))
+    val col = c.Expr[Int](Literal(Constant(c.enclosingPosition.column)))
+    val sourceName = c.Expr[String](Literal(Constant(c.enclosingPosition.source.file.name)))
+    reify(PublishLocation(sourceName.splice, line.splice, col.splice))
+  }
 }
 
 abstract class BreadcrumbsPublisher extends Filterable {
+  import BreadcrumbsSendLimit._
   Breadcrumbs.log.debug(s"Initializing ${this.getClass}")
 
   private[breadcrumbs] lazy val level: Level = BreadcrumbLevel.parse(PropertyUtils.get("breadcrumb.level", "DEFAULT"))
@@ -453,43 +508,53 @@ abstract class BreadcrumbsPublisher extends Filterable {
   protected[breadcrumbs] final def error(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
     send(uuid, cf, BreadcrumbLevel.Error)
 
-  protected[breadcrumbs] final def traceOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(null, uuid, cf, BreadcrumbLevel.Trace)
-  protected[breadcrumbs] final def debugOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(null, uuid, cf, BreadcrumbLevel.Debug)
-  protected[breadcrumbs] final def infoOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(null, uuid, cf, BreadcrumbLevel.Info)
-  protected[breadcrumbs] final def warnOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(null, uuid, cf, BreadcrumbLevel.Warn)
-  protected[breadcrumbs] final def errorOnce(uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(null, uuid, cf, BreadcrumbLevel.Error)
+  protected[breadcrumbs] final def trace(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
+    sendLimited(key, uuid, cf, BreadcrumbLevel.Trace)
+  protected[breadcrumbs] final def debug(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
+    sendLimited(key, uuid, cf, BreadcrumbLevel.Debug)
+  protected[breadcrumbs] final def info(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
+    sendLimited(key, uuid, cf, BreadcrumbLevel.Info)
+  protected[breadcrumbs] final def warn(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
+    sendLimited(key, uuid, cf, BreadcrumbLevel.Warn)
 
-  protected[breadcrumbs] final def traceOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(key, uuid, cf, BreadcrumbLevel.Trace)
-  protected[breadcrumbs] final def debugOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(key, uuid, cf, BreadcrumbLevel.Debug)
-  protected[breadcrumbs] final def infoOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(key, uuid, cf, BreadcrumbLevel.Info)
-  protected[breadcrumbs] final def warnOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(key, uuid, cf, BreadcrumbLevel.Warn)
-
-  protected[breadcrumbs] final def errorOnce(key: AnyRef, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
-    sendOnce(key, uuid, cf, BreadcrumbLevel.Error)
+  protected[breadcrumbs] final def error(key: LimitByKey, uuid: ChainedID, cf: ChainedID => Crumb): Boolean =
+    sendLimited(key, uuid, cf, BreadcrumbLevel.Error)
 
   protected[breadcrumbs] def sendInternal(c: Crumb): Boolean
 
   protected def warning: Option[ThrottledWarnOrDebug] = None
 
+  private val countBySource = new ConcurrentHashMap[Crumb.Source, Int]()
+
+  private def addBySource(src: Crumb.Source, n: Int) = {
+    countBySource.compute(
+      src,
+      (_, i) => {
+        if (Objects.isNull(i)) n
+        else i + n
+      })
+  }
+
   final protected[breadcrumbs] def send(c: Crumb): Boolean = {
-    if (c.uuid.base.length > 0) {
+    if (c.source.isShutdown) false
+    else if (c.uuid.base.length > 0) {
       val cs = Breadcrumbs.replicate(c)
-      cs.forall(sendInternal)
+      val source = c.source
+      val count = addBySource(source, cs.size)
+      if (source.maxCrumbs < 1 || count <= source.maxCrumbs)
+        Breadcrumbs.replicate(c).forall(sendInternal)
+      else {
+        source.shutdown()
+        false
+      }
     } else {
       Breadcrumbs.log
         .warn(s"Not sending crumb with empty uuid base: $c", new IllegalArgumentException("Empty UUID base"))
       false
     }
   }
+
+  def getCounts: Map[Crumb.Source, Int] = countBySource.asScala.toMap
 
   final protected[breadcrumbs] def send(
       uuid: ChainedID,
@@ -524,32 +589,53 @@ abstract class BreadcrumbsPublisher extends Filterable {
 
   // Try to avoid sending the same crumb multiple times
   private val CacheMax = PropertyUtils.get("breadcrumb.dedup.cache.size", 10000)
-  private val dummy = new Object
-  private val sent = CacheBuilder.newBuilder().maximumSize(CacheMax).build[AnyRef, Object]
+  private val sent = CacheBuilder.newBuilder().maximumSize(CacheMax).build[AnyRef, java.lang.Long]
 
-  private[breadcrumbs] final def sendOnce(
-      key: AnyRef,
+  private[breadcrumbs] final def sendLimited(
+      limitByKey: LimitByKey,
       uuid: ChainedID,
-      cf: ChainedID => Crumb,
+      genCrumb: ChainedID => Crumb,
       level: BreadcrumbLevel.Level): Boolean = {
+    // Thread through series of LimitByKeys.
+    def getKey(ob: LimitByKey, cf: ChainedID => Crumb): (AnyRef, ChainedID => Crumb) =
+      ob match {
+        case OnceByCrumbEquality =>
+          // We have to instantiate the crumb now, to use it for an identity check later.
+          val c = cf(uuid)
+          scv.validate(c)
+          // Modify crumb generator to return the value we just instantiated.
+          (c, { _: ChainedID => c })
+        case Combo(left, right) =>
+          val (keyLeft, cf1) = getKey(left, cf)
+          val (keyRight, cf2) = getKey(right, cf1)
+          // Roughly preserve order for equality checks; this isn't really important.
+          val k = if (keyLeft.hashCode() < keyRight.hashCode()) (keyLeft, keyRight) else (keyRight, keyLeft)
+          (k, cf2)
+        case OnceByChainedID =>
+          (uuid, cf)
+        case _ =>
+          (ob.key, cf)
+      }
     var crumbSent = false
     if (collecting && level >= Math.min(this.level, uuid.crumbLevel)) {
       // Note: can't use get(,Callable), because we could end up being called recursively via logging;
-      // an erroneous cache miss will just result in extra breadcrumbs being sent.
-      if (key ne null) {
-        // Don't bother instantiating crumb if key is present
-        if (sent.getIfPresent(key) eq null) {
-          sent.put(key, dummy)
-          crumbSent = send(cf(uuid))
-        }
+      // an racey cache miss will just result in a few extra breadcrumbs being sent.
+      val (k: AnyRef, f) = getKey(limitByKey, genCrumb)
+      // If positive, this is the number of remaining sends; if negative, it is the number of attempts
+      // since hitting the limit.
+      val count = sent.getIfPresent(k)
+      if (Objects.isNull(count)) {
+        sent.put(k, limitByKey.n - 1)
+        crumbSent = send(f(uuid).withProperties(Properties.limitCount -> limitByKey.n))
       } else {
-        // We're using the crumb as the key, so we need to instantiate it to check.
-        val c = cf(uuid)
-        scv.validate(c)
-        if (sent.getIfPresent(c) eq null) {
-          sent.put(c, dummy)
-          crumbSent = send(c)
-        }
+        sent.put(k, count - 1)
+        // If backoff is enabled, then we will send once at each power of 2 attempted
+        if (
+          count > 0 ||
+          (count < -1 && limitByKey.backoff &&
+            (-count & (-count - 1)) == 0)
+        )
+          crumbSent = send(f(uuid).withProperties(Properties.limitCount -> count))
       }
     }
     crumbSent
@@ -628,6 +714,7 @@ class BreadcrumbsIgnorer extends BreadcrumbsPublisher {
 }
 
 class DeferredConfigurationBreadcrumbsPublisher() extends BreadcrumbsPublisher {
+  import Breadcrumbs.SetupFlags
   override def customize(
       keys: => Map[String, String],
       zkc: => ZkaContext,
@@ -875,6 +962,7 @@ class BreadcrumbsCompositePublisher(private[breadcrumbs] val publishers: Set[Bre
 }
 
 trait BreadcrumbRegistration {
+  import scala.reflect.macros.blackbox.Context
   import scala.language.experimental.macros
   def withRegistration[T](interestedIn: ChainedID)(block: T): T = macro BreadcrumbRegistration.withRegistrationImpl[T]
   def withRootRegistration[T](block: T): T = macro BreadcrumbRegistration.withRootRegistrationImpl[T]
@@ -882,6 +970,7 @@ trait BreadcrumbRegistration {
 
 object BreadcrumbRegistration extends BreadcrumbRegistration {
   import scala.reflect.macros.blackbox.Context
+  import scala.language.experimental.macros
 
   def withRegistrationImpl[T: c.WeakTypeTag](c: Context)(interestedIn: c.Expr[ChainedID])(
       block: c.Expr[T]): c.Expr[T] = {

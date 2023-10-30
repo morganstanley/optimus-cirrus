@@ -15,6 +15,9 @@ import static org.objectweb.asm.Type.VOID_TYPE;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -22,12 +25,6 @@ import java.util.function.Predicate;
 import optimus.EntityAgent;
 import optimus.systemexit.SystemExitReplacement;
 import org.objectweb.asm.Type;
-
-enum EntityInstrumentationType {
-  markScenarioStack,
-  recordConstructedAt,
-  none
-}
 
 public class InstrumentationConfig {
   private static final HashMap<String, ClassPatch> clsPatches = new HashMap<>();
@@ -37,9 +34,11 @@ public class InstrumentationConfig {
   private static final ArrayList<ClassPatch> multiClsPatches = new ArrayList<>();
 
   public static boolean setExceptionHookToTraceAsNodeOnStartup;
-  static EntityInstrumentationType instrumentAllEntities = EntityInstrumentationType.none;
-  static boolean instrumentAllModuleConstructors = false;
+  public static EntityInstrumentationType instrumentAllEntities = EntityInstrumentationType.none;
+  public static boolean instrumentAllModuleConstructors = false;
   public static boolean instrumentAllHashCodes = false;
+
+  public static boolean instrumentEquals = false;
 
   public static String instrumentAllNativePackagePrefixes = null;
   public static MethodRef instrumentNativePrefix = null;
@@ -159,6 +158,10 @@ public class InstrumentationConfig {
   static InstrumentationConfig.MethodRef imcResume =
       new InstrumentationConfig.MethodRef(IMC_TYPE, "resumeReporting", "(I)V");
 
+  private static final String equalsDesc = "(Ljava/lang/Object;Ljava/lang/Object;)Z";
+  public static final MethodRef instrumentedEquals =
+      new InstrumentationConfig.MethodRef("optimus/debug/InstrumentedEquals", "equals", equalsDesc);
+
   // Allows fast attribution to the location
   public static final ArrayList<MethodDesc> descriptors = new ArrayList<>();
 
@@ -173,7 +176,8 @@ public class InstrumentationConfig {
         || instrumentAllEntities != EntityInstrumentationType.none
         || instrumentAllEntityApplies
         || instrumentAllModuleConstructors
-        || instrumentAllNativePackagePrefixes != null;
+        || instrumentAllNativePackagePrefixes != null
+        || instrumentEquals;
   }
 
   private static boolean keepHierarchy(
@@ -263,6 +267,21 @@ public class InstrumentationConfig {
       return cls + "." + method;
     }
 
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      MethodRef methodRef = (MethodRef) o;
+      return Objects.equals(cls, methodRef.cls)
+          && Objects.equals(method, methodRef.method)
+          && Objects.equals(descriptor, methodRef.descriptor);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(cls, method, descriptor);
+    }
+
     public MethodRef(String cls, String method) {
       this.cls = cls;
       this.method = method;
@@ -329,6 +348,19 @@ public class InstrumentationConfig {
       this.from = from;
       this.to = to;
     }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      MethodForward that = (MethodForward) o;
+      return Objects.equals(from, that.from) && Objects.equals(to, that.to);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(from, to);
+    }
   }
 
   static class FieldRef {
@@ -348,7 +380,10 @@ public class InstrumentationConfig {
     ArrayList<FieldRef> fieldRefs = new ArrayList<>();
     ArrayList<String> interfacePatches = new ArrayList<>();
     GetterMethod getterMethod;
-    MethodForward methodForward;
+
+    // if the method has not been overridden from superclass,
+    // implement it by calling the given forward method
+    final Set<MethodForward> methodForwardsIfMissing = new HashSet<>();
     boolean traceValsAsNodes;
     boolean poisonCacheEquality;
     boolean cacheAllApplies;
@@ -594,7 +629,7 @@ public class InstrumentationConfig {
 
   public static void addImplementCallByForwarding(MethodRef from, MethodRef to) {
     var clsPatch = putIfAbsentClassPatch(from.cls);
-    clsPatch.methodForward = new MethodForward(from, to);
+    clsPatch.methodForwardsIfMissing.add(new MethodForward(from, to));
   }
 
   public static FieldRef addField(String clsName, String fieldName) {

@@ -22,7 +22,7 @@ import optimus.stratosphere.utils.EnvironmentUtils
 import optimus.utils.ExitCode
 
 import java.nio.file.Path
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import scala.collection.immutable.Seq
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -102,7 +102,7 @@ object SchedulingScripts extends ExitCode {
           CommonProcess.preamble ++ Seq(script.toAbsolutePath.toString, ">", logFile.toAbsolutePath.toString, "2>&1")
 
         val user = EnvironmentUtils.userName
-        WindowsTaskScheduler.scheduleTaskOnce(taskName, command, date, user, TaskFrequency.WorkDay, workspace)
+        WindowsTaskScheduler.scheduleTask(taskName, command, date, user, TaskFrequency.WorkDay, workspace)
         ExitCode.Success
       } catch {
         case NonFatal(e) =>
@@ -155,8 +155,8 @@ object SchedulingScripts extends ExitCode {
     fetchScript.file.write(scriptContent)
   }
 
-  private def timeFromInterval(startHour: Int, endHour: Int): LocalDateTime = {
-    LocalDateTime
+  private def timeFromInterval(startHour: Int, endHour: Int): ZonedDateTime = {
+    ZonedDateTime
       .now()
       .withHour(Random.nextInt(endHour - startHour + 1))
       .withMinute(Random.nextInt(60))

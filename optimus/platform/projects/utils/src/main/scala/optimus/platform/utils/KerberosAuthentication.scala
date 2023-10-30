@@ -28,9 +28,7 @@ trait KerberosAuthentication {
   protected def setupKerberosCredentials(clientNames: List[String] = List("KafkaClient", "Client")): Unit = {
     if (isKerberized) {
       MSKerberosConfiguration.setClientConfiguration()
-      clientNames.foreach(clientName => {
-        registerAppConfigurationEntryFor(clientName)
-      })
+      clientNames.foreach(clientName => registerAppConfigurationEntryFor(clientName))
     }
   }
 

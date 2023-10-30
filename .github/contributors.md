@@ -9,6 +9,8 @@ Adam Fitzgerald ([@afitz](http://github.com/afitz))
 
 Andrew Brett ([@ephemerist](http://github.com/ephemerist))
 
+Chris Andrews
+
 Chris Marsh
 
 Cyrus Lyons ([@cbwl](http://github.com/cbwl))

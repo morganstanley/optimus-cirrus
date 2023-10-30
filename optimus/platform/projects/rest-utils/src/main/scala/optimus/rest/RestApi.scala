@@ -14,7 +14,7 @@ package optimus.rest
 import spray.json.JsonReader
 
 final case class UnsuccessfulRestCall(url: String, status: Int, message: String, rawPayload: Option[String])
-    extends Exception(message)
+    extends Exception(s"$message at: $url with status: $status")
 
 trait RestApi {
   protected def get[A: JsonReader](url: String, headers: Map[String, String] = Map.empty): A
