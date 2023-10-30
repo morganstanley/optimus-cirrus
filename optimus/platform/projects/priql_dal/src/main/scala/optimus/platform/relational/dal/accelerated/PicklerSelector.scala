@@ -12,6 +12,7 @@
 package optimus.platform.relational.dal.accelerated
 
 import optimus.breadcrumbs.ChainedID
+import optimus.datatype.FullName
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.cm.Knowable
@@ -32,6 +33,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetTime
 import java.time.Period
+import java.time.Year
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -40,8 +42,8 @@ import scala.collection.Map
 import scala.collection.SortedSet
 import scala.collection.immutable
 import scala.reflect.ManifestFactory
-import scala.reflect.runtime.{ currentMirror => cm }
-import scala.reflect.runtime.{ universe => ru }
+import scala.reflect.runtime.{currentMirror => cm}
+import scala.reflect.runtime.{universe => ru}
 
 object PicklerSelector {
   val IdentityPickler = new IdentityPickler[Any]
@@ -85,6 +87,7 @@ object PicklerSelector {
       case _: Instant       => instantPickler
       case _: Duration      => durationPickler
       case _: YearMonth     => yearMonthPickler
+      case _: Year          => yearPickler
 
       case _: EntityReference      => IdentityPickler
       case e: Entity               => entityPickler
@@ -118,6 +121,8 @@ object PicklerSelector {
       case kn: Knowable[_] =>
         val pickler = kn.map(t => getPickler(t)).getOrElse(IdentityPickler)
         knowablePickler(pickler)
+
+      case _: FullName => fullNamePickler
 
       case _ =>
         // Tuple pickler
@@ -155,17 +160,18 @@ object PicklerSelector {
       case _ if target == classOf[Float]      => floatUnpickler
       case _ if target == classOf[BigDecimal] => bigdecimalUnpickler
 
-      case _ if target == classOf[ChainedID]     => chainedIdUnpickler
-      case _ if target == classOf[ZonedDateTime] => zdtUnpickler
-      case _ if target == classOf[LocalDate]     => localDateUnpickler
-      case _ if target == classOf[LocalTime]     => localTimeUnpickler
-      case _ if target == classOf[OffsetTime]    => offsetTimeUnpickler
-      case _ if target == classOf[ZoneId]        => zoneIdUnpickler
-      case _ if target == classOf[Period]        => periodUnpickler
-      case _ if target == classOf[Instant]       => instantUnpickler
-      case _ if target == classOf[Duration]      => durationUnpickler
-      case _ if target == classOf[YearMonth]     => yearMonthUnpickler
-
+      case _ if target == classOf[ChainedID]          => chainedIdUnpickler
+      case _ if target == classOf[ZonedDateTime]      => zdtUnpickler
+      case _ if target == classOf[LocalDate]          => localDateUnpickler
+      case _ if target == classOf[LocalTime]          => localTimeUnpickler
+      case _ if target == classOf[OffsetTime]         => offsetTimeUnpickler
+      case _ if target == classOf[ZoneId]             => zoneIdUnpickler
+      case _ if target == classOf[Period]             => periodUnpickler
+      case _ if target == classOf[Instant]            => instantUnpickler
+      case _ if target == classOf[Duration]           => durationUnpickler
+      case _ if target == classOf[YearMonth]          => yearMonthUnpickler
+      case _ if target == classOf[Year]               => yearUnpickler
+      case _ if target == classOf[FullName]           => fullNameUnpickler
       case _ if target == classOf[EntityReference]    => EntityReferenceUnpickler
       case _ if target == classOf[VersionedReference] => VersionedReferenceUnpickler
       case _ if target == classOf[BusinessEvent]      => BusinessEventUnpickler

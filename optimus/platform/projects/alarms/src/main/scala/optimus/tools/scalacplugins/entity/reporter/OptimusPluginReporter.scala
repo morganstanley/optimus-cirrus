@@ -68,14 +68,15 @@ trait OptimusPluginReporter {
       suppressOverrideInTesting(alarm.id)
     } else {
       // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
-      val asMessage = Reporting.Message.Plain(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
+      val asMessage =
+        OptimusReporterCompat.Message(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
       val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]
       if (suppressed && alarm.id.tpe != OptimusAlarmType.WARNING) {
         // If we report this as an error, we'll abort before showing the actual illegal suppression, so make it a warning.
         import optimus.tools.scalacplugins.entity.reporter.OptimusAlarmType._
         val article = alarm.id.tpe match {
-          case SILENT | DEBUG | WARNING  => "a"
-          case INFO | ERROR | ABORT => "an"
+          case SILENT | DEBUG | WARNING => "a"
+          case INFO | ERROR | ABORT     => "an"
         }
         global.reporter.warning(
           pos,

@@ -14,7 +14,16 @@ package optimus.stratosphere.stash
 import spray.json.DefaultJsonProtocol
 import spray.json.JsonFormat
 
+import java.time.Instant
 import scala.collection.immutable.Seq
+
+final case class ForkSyncStatus(
+    repository: Repository,
+    available: Boolean,
+    enabled: Boolean,
+    lastSync: Option[Instant],
+    divergedBranches: Seq[String]
+)
 
 final case class Project(key: String)
 

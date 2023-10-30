@@ -11,12 +11,11 @@
  */
 package optimus.stratosphere.scheddel.impl
 
-import java.nio.file.Files
-import java.nio.file.Path
-
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.utils.DateTimeUtils._
 
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.util.Try
 
 final case class RenameResult(path: Path, renamed: Try[Path])

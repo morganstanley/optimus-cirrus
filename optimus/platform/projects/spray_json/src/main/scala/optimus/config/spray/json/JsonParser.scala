@@ -101,7 +101,12 @@ class JsonParser(input: ParserInput) {
         ws()
         val key = sb.toString
         `value`()
-        val nextMap = map.updated(key, jsValue)
+        val nextMap =
+          if (!map.contains(key)) map.updated(key, jsValue)
+          else {
+            val existing = map(key)
+            map.updated(key, JsObject(existing.asJsObject().fields ++ jsValue.asJsObject().fields))
+          }
         if (ws(',')) members(nextMap) else nextMap
       }
       var map = Map.empty[String, JsValue]

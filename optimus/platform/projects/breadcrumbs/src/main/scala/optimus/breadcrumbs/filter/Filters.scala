@@ -113,11 +113,10 @@ final class CrumbTypeAllowList(private[breadcrumbs] val types: Set[String])
     extends AbstractFilter(Result.Accept, Result.Deny) {
   private[this] val processedTypes: Set[String] = types
     .map(_.replaceAll("Crumb$", ""))
-    .map(t => s"${t.trim}Crumb")
 
   override def filter(crumb: Crumb): Result =
     // so that EventPropertiesCrumb will be matched when PropertiesCrumb is included
-    if (processedTypes.exists(crumb.getClass.getSimpleName.contains(_)))
+    if (processedTypes.exists(crumb.clazz.contains(_)))
       onMatch
     else onMismatch
 
@@ -136,10 +135,10 @@ final class LargeCrumbFilter(private[breadcrumbs] val threshold: Integer)
 
 final class CrumbHintFilter(private[breadcrumbs] val hint: CrumbHint)
     extends AbstractFilter(Result.Accept, Result.Deny) {
-  override def filter(crumb: Crumb) : Result =
+  override def filter(crumb: Crumb): Result =
     if (crumb.hints contains hint)
       onMatch
-  else onMismatch
+    else onMismatch
 
   override def toString() = s"${CrumbFilter.CRUMB_HINT_FILTER}[hint=$hint]"
 }

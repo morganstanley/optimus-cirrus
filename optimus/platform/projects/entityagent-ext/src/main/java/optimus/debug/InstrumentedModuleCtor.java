@@ -56,8 +56,8 @@ public class InstrumentedModuleCtor {
     var threadState = state.get();
     if (threadState.recurseCount > 0) {
       if (callback != null) callback.accept(threadState.recurseCount);
-      else dumpWarning(); // this happens when we detect violations before we have initialized the
-      // callback
+      // this happens when we detect violations before we have initialized the callback
+      else dumpWarning();
     }
   }
 }

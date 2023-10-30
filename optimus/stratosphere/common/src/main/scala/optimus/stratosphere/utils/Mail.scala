@@ -15,7 +15,7 @@ import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.net.InetAddress
-import java.time.LocalDateTime
+import java.time.ZonedDateTime
 import java.util.Properties
 import javax.activation.CommandMap
 import javax.activation.MailcapCommandMap
@@ -31,7 +31,7 @@ object Mail {
       from = from,
       to = Seq(to),
       cc = Seq(from),
-      subject = s"[${LocalDateTime.now().toLocalDate.toString}] $subject.",
+      subject = s"[${ZonedDateTime.now().toLocalDate.toString}] $subject.",
       body = s"""
                 |<b>$subject:</b><br><br>
                 |

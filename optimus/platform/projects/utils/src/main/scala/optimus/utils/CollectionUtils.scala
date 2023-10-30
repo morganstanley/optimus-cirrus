@@ -35,12 +35,28 @@ object CollectionUtils extends CollectionUtils {
         else if (lc == 0) 1
         else 2
       case x =>
-        val it = x.toIterator
+        val it = x.toIterator // mostly `as` is Iterable for which this is just .iterator, thus cheap
         if (!it.hasNext) 0
         else {
           it.next()
           if (it.hasNext) 2 else 1
         }
+    }
+
+    /**
+     * Like zeroOneOrMany, but as if it was run on the result of .distinct.
+     */
+    private[this] def distinctZeroOneOrMany: Int = {
+      // note that this doesn't build an intermediate set, which is expensive
+      val iter = as.toIterator
+      if (iter.hasNext) {
+        val first = iter.next()
+        while (iter.hasNext) {
+          val next = iter.next()
+          if (next != first) return 2 // break out of the loop, we have at least 2 distinct elements
+        }
+        1
+      } else 0
     }
 
     /**
@@ -92,28 +108,21 @@ object CollectionUtils extends CollectionUtils {
       if (zeroOneOrMany < 2) singleOption else fallback
 
     /**
-     * Returns true if the Traversable contains one element ( possibly multiple times ). Returns false otherwise.
+     * Returns true if the Traversable contains one distinct element (possibly multiple times).
      */
-    def isSingleDistinct: Boolean = zeroOneOrMany match {
-      case 0 => false
-      case 1 => true
-      case _ => as.toSet.size == 1
-    }
+    def isSingleDistinct: Boolean = distinctZeroOneOrMany == 1
 
     /**
      * Resolution logic
      *   - Returns an element of type A if this is the only member of the Traversable.
      *   - Otherwise an exception is thrown.
      */
-    def singleDistinct: A = zeroOneOrMany match {
+    def singleDistinct: A = distinctZeroOneOrMany match {
       case 0 => throw new IllegalArgumentException("Expected single element, but was empty!")
       case 1 => as.head
-      case _ =>
-        as.toSet.size match {
-          case 1 => as.head
-          case n =>
-            throw new IllegalArgumentException(s"Expected single distinct element, but found $n: [${as.mkString(",")}]")
-        }
+      case 2 =>
+        throw new IllegalArgumentException(
+          s"Expected single distinct element, but found multiple: [${as.mkString(",")}]")
     }
 
     /**
@@ -123,14 +132,10 @@ object CollectionUtils extends CollectionUtils {
      *   - Otherwise exception flies.
      */
     def singleDistinctOption: Option[A] =
-      if (zeroOneOrMany < 2) as.headOption
+      if (distinctZeroOneOrMany < 2) as.headOption
       else
-        as.toSet.size match {
-          case 0 | 1 => as.headOption
-          case n =>
-            throw new IllegalArgumentException(
-              s"Expected zero or one distinct element, but found $n: [${as.mkString(",")}]")
-        }
+        throw new IllegalArgumentException(
+          s"Expected zero or one distinct element, but found multiple: [${as.mkString(",")}]")
 
     /**
      * Resolution logic
@@ -139,8 +144,8 @@ object CollectionUtils extends CollectionUtils {
      *   - Otherwise returns single distinct value or None if no distinct value.
      */
     def singleDistinctOrNone: Option[A] =
-      if (zeroOneOrMany < 2) as.headOption
-      else as.toSet.singleOrNone
+      if (distinctZeroOneOrMany < 2) as.headOption
+      else None
 
     /** Not async friendly, for that see singleOrElseAsync. */
     def singleOptionOrElse(nonSingleHandler: (Int, Traversable[A]) => Option[A]): Option[A] = as.size match {

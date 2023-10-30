@@ -15,6 +15,7 @@ import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 
+import optimus.debug.CommonAdapter;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
@@ -101,7 +102,7 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
   public MethodVisitor visitMethod(
       int access, String name, String desc, String signature, String[] exceptions) {
     MethodVisitor mv = super.visitMethod(access, name, desc, signature, exceptions);
-    if ((access & ACC_STATIC) == ACC_STATIC && "<clinit>".equals(name) && "()V".equals(desc)) {
+    if (CommonAdapter.isCCtor(access, name, desc)) {
       seenCCtor = true;
       return new CtorMethodVisitor(className, mv);
     } else return mv;

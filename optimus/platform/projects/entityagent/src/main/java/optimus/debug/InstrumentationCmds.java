@@ -74,7 +74,7 @@ public class InstrumentationCmds {
   /**
    * either from file (instrumentationConfig) or inline from system property (instrumentationCache)
    */
-  static void loadCommands() {
+  public static void loadCommands() {
     if (DiagnosticSettings.instrumentationCache != null) {
       for (var function : DiagnosticSettings.instrumentationCache) cache(function);
     }
@@ -254,8 +254,7 @@ public class InstrumentationCmds {
    * @param methodToPatch full name package1.class2.methodName1
    * @param methodToCall full name package1.class2.methodName2
    */
-  public static void suffixCall(String methodToPatch, String methodToCall)
-      throws ClassNotFoundException {
+  public static void suffixCall(String methodToPatch, String methodToCall) {
     MethodRef from = asMethodRef(methodToPatch);
     MethodRef to = asMethodRef(methodToCall);
     var suffix = InstrumentationConfig.addSuffixCall(from, to);
@@ -290,6 +289,7 @@ public class InstrumentationCmds {
    * @see InstrumentationCmds#markAllModuleCtors()
    * @see InstrumentedModuleCtor#trigger()
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see RTVerifierCategory#MODULE_CTOR_SI_NODE
    * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void prefixECCurrentWithTriggerIfInModuleCtor() {
@@ -365,6 +365,7 @@ public class InstrumentationCmds {
    * as running
    *
    * @see RTVerifierCategory#MODULE_CTOR_EC_CURRENT
+   * @see RTVerifierCategory#MODULE_CTOR_SI_NODE
    * @see RTVerifierCategory#MODULE_LAZY_VAL_EC_CURRENT
    */
   public static void markAllModuleCtors() {
@@ -382,6 +383,20 @@ public class InstrumentationCmds {
    */
   public static void reportSuspiciousHashCodesCalls() {
     instrumentAllHashCodes = true;
+  }
+
+  public static void reportSuspiciousEqualityCallsIfEnabled() {
+    if (DiagnosticSettings.rtvNodeRerunnerSkipBadEquality) reportSuspiciousEqualityCalls();
+  }
+
+  /**
+   * Instrument all classes that don't implement (and base class doesn't either) their own equals.
+   *
+   * @apiNote Use to flag values that use identity types that rely on Object.equals
+   * @see InstrumentedEquals#equals(java.lang.Object, java.lang.Object)
+   */
+  public static void reportSuspiciousEqualityCalls() {
+    instrumentEquals = true;
   }
 
   /**

@@ -22,6 +22,7 @@ import optimus.platform.IO.usingQuietly
 import java.io.BufferedReader
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.Reader
@@ -34,26 +35,6 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object FileUtils {
-
-  def fileToMapTwoColumns(filename: String): Map[String, String] = {
-    Try {
-      val reader = getCSVReader(filename, '\t')
-
-      usingQuietly(reader) { r =>
-        r.readAll().asScala.toArray
-      }.map { case Array(k, v) =>
-        (k, v)
-      }.toMap
-    }.getOrElse(Map.empty)
-  }
-
-  def writeToFileTwoColumns(filename: String, data: Seq[Array[String]]): Unit = {
-    val writer = getCSVWriter(filename, '\t')
-
-    usingQuietly(writer) { w =>
-      w.writeAll(data.asJava)
-    }
-  }
 
   def getCSVReader(filename: String, separator: Char): CSVReader = {
     new CSVReaderBuilder(new BufferedReader(new InputStreamReader(new FileInputStream(filename))))
@@ -116,7 +97,7 @@ object FileUtils {
    * work (you can only access the resource as a stream and not as a URI). See
    * https://stackoverflow.com/questions/51705451
    * @param basePath
-   *   path to file under resources/ dir
+   *   path to file under resources/ dir.
    * @param fileName
    *   file name (no path) with extension
    * @param tmpPrefix
@@ -126,10 +107,15 @@ object FileUtils {
    */
   def getResourcePath(basePath: String, fileName: String, tmpPrefix: String = ""): String = {
     val name = if (basePath.isEmpty) fileName else s"$basePath/$fileName"
-    val resourceStream = getClass.getClassLoader.getResourceAsStream(name)
-    assert(resourceStream ne null)
-    val path = Files.createTempFile(tmpPrefix, fileName)
-    Files.copy(resourceStream, path, StandardCopyOption.REPLACE_EXISTING)
-    path.toString
+    var resourceStream: InputStream = null
+    try {
+      // For the difference between getClass.getResourceAsStream & getClass.getClassLoader.getResourceAsStream. See
+      // https://stackoverflow.com/questions/14739550
+      val resourceStream = getClass.getClassLoader.getResourceAsStream(name)
+      assert(resourceStream ne null)
+      val path = Files.createTempFile(tmpPrefix, fileName)
+      Files.copy(resourceStream, path, StandardCopyOption.REPLACE_EXISTING)
+      path.toString
+    } finally if (resourceStream ne null) resourceStream.close()
   }
 }

@@ -123,6 +123,18 @@ object HardwareInfo {
         case Success(map) => map
         case Failure(t)   => Map("exception" -> t.toString)
       }
+
+  /**
+   * Intel sandybridge architecture detection based on cpu_family and cpu model according to:
+   * https://en.wikichip.org/wiki/intel/cpuid
+   */
+  lazy val isSandyBridge =
+    HardwareInfo.cpuInfo.getOrElse("model_name", "").contains("Intel") &&
+      HardwareInfo.cpuInfo.get("cpu_family") == Some("6") &&
+      (HardwareInfo.cpuInfo.get("model") == Some("45") || HardwareInfo.cpuInfo.get("model") == Some(
+        "42"
+      ))
+
   lazy val memInfo: Map[String, String] =
     if (Properties.isWin) Map("exception" -> "windows")
     else

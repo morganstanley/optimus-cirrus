@@ -44,4 +44,6 @@ object CollectionConverters {
   def mapAsScalaConcurrentMap[A, B](m: juc.ConcurrentMap[A, B]): sc.concurrent.Map[A, B] = CC.mapAsScalaConcurrentMap(m)
   def dictionaryAsScalaMap[A, B](p: ju.Dictionary[A, B]): mutable.Map[A, B] = CC.dictionaryAsScalaMap(p)
   def propertiesAsScalaMap(p: ju.Properties): mutable.Map[String, String] = CC.propertiesAsScalaMap(p)
+
+  def mapAsScalaImmutableMap[A, B](m: ju.Map[A, B]): Map[A, B] = mapAsScalaMap(m).toMap
 }

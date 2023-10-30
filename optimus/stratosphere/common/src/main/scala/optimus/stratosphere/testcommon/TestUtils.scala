@@ -11,18 +11,17 @@
  */
 package optimus.stratosphere.testcommon
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.utils.EnvironmentUtils
+import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
-import org.hamcrest.MatcherAssert.assertThat
 import org.junit.Assert._
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import scala.collection.immutable.Seq
 import scala.reflect.ClassTag
 import scala.util.Random

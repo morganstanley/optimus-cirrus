@@ -11,12 +11,6 @@
  */
 package optimus.stratosphere.filesanddirs
 
-import java.io.File
-import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.file._
-import java.nio.file.attribute._
-import java.util
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.AutoDetect
@@ -24,9 +18,15 @@ import optimus.stratosphere.config.StratoWorkspace
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 
+import java.io.File
 import java.io.FileNotFoundException
-import scala.jdk.CollectionConverters._
+import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.file._
+import java.nio.file.attribute._
+import java.util
 import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 class DirectoryOpts(path: Path) extends PathsOpts(path: Path) {

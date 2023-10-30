@@ -69,7 +69,7 @@ class CatchUp(
   def run(): Unit = {
     step(CatchupProgress.postStateInit)
 
-    if (new HistoryTruncationMigration(ws.directoryStructure.stratosphereWorkspaceDir).isMigrationNeeded) {
+    if (new HistoryTruncationMigration(ws.directoryStructure.stratosphereWorkspaceDir, ws.config).isMigrationNeeded) {
       abort("Migration is required. Please run 'stratosphere migrate' first.")
     }
 
@@ -164,6 +164,9 @@ class CatchUp(
     }
 
     logger.info(s"Successfully caught up with remote tag $catchupTag from ${gitUtil.relativeAge(commit)}")
+    if (!isMerge && isOnLocalBranch)
+      logger.warning(s"""Rebase mode was used, so please anticipate using the --force (-f) flag on push.
+                        |For more info see https://stackoverflow.com/questions/8939977/8940299""".stripMargin)
     gitUtil.deleteBranch(fetchBranch, evenIfNotMerged = true)
   }
 

@@ -11,6 +11,8 @@
  */
 package optimus.stratosphere.filesanddirs
 
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -18,8 +20,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
-
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
 object Unzip {
   private val BufferSize = 8192

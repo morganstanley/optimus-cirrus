@@ -11,9 +11,9 @@
  */
 package optimus.stratosphere.common
 
-import java.nio.file.Path
-
 import optimus.stratosphere.bootstrap.OsSpecific
+
+import java.nio.file.Path
 
 object PlatformSpecific {
 

@@ -78,8 +78,12 @@ class DALEntityBitemporalSpaceProvider(
   private def bitempSpace(
       dsiAt: DSIQueryTemporality.At,
       fromVt: Option[Instant],
-      fromTt: Option[Instant]): DSIQueryTemporality.BitempRange = {
+      fromTt: Option[Instant],
+      legacyStrictAtInfinityValidTime: Boolean): DSIQueryTemporality.BitempRange = {
     require(fromTt.isEmpty == fromVt.isDefined, "provide either fromTt or fromVt")
+    require(
+      !legacyStrictAtInfinityValidTime || fromTt.isDefined,
+      "only when fromTt is set, legacyStrictAtInfinityValidTime can be set")
     if (fromVt.isDefined) {
       DSIQueryTemporality.BitempRange(
         TimeInterval(fromVt.get, dsiAt.validTime),
@@ -89,7 +93,8 @@ class DALEntityBitemporalSpaceProvider(
       DSIQueryTemporality.BitempRange(
         TimeInterval(dsiAt.validTime, dsiAt.validTime),
         TimeInterval(fromTt.get, dsiAt.txTime),
-        false)
+        dsiAt.validTime == TimeInterval.Infinity && !legacyStrictAtInfinityValidTime
+      )
     }
   }
 
@@ -97,13 +102,17 @@ class DALEntityBitemporalSpaceProvider(
       changeKind: UpdateKind,
       fromVt: Option[Instant] = None,
       fromTt: Option[Instant] = None,
-      sendEntity: Boolean = false): (ExpressionQueryCommand, BitempRange) = {
+      sendEntity: Boolean = false,
+      legacyStrictAtInfinityValidTime: Boolean = false): (ExpressionQueryCommand, BitempRange) = {
     require(fromTt.isEmpty == fromVt.isDefined, "provide either fromTt or fromVt")
+    require(
+      !legacyStrictAtInfinityValidTime || fromTt.isDefined,
+      "only when fromTt is set, legacyStrictAtInfinityValidTime can be set")
     val s @ Select(e: EntityBitemporalSpace, _, where, _, _, _, _, _, _, _) =
       ConstFormatter.format(AsyncValueEvaluator.evaluate(expression), dalApi.loadContext)
     val entity = EntityInfoRegistry.getClassInfo(e.name).runtimeClass
     val dsiAt = dalTemporalContext(dalApi.loadContext, entity, where)
-    val bitempRange = bitempSpace(dsiAt, fromVt, fromTt)
+    val bitempRange = bitempSpace(dsiAt, fromVt, fromTt, legacyStrictAtInfinityValidTime)
     val newEx = s.copy(
       from = e.copy(when = bitempRange, kind = changeKind),
       properties = if (sendEntity) entity_props(e.id) else rectangle_props(e.id))
@@ -217,6 +226,12 @@ class DALEntityBitemporalSpaceProvider(
 
   @async def getDeltaInTT[T <: Entity](fromTt: Instant, changeKind: UpdateKind): Seq[EntityChange[T]] = {
     val (command, range) = buildExpressionQueryCommand(changeKind, fromTt = Some(fromTt))
+    executeQuery[T](command, range)
+  }
+
+  @async def getDeltaInTTLegacy[T <: Entity](fromTt: Instant, changeKind: UpdateKind): Seq[EntityChange[T]] = {
+    val (command, range) =
+      buildExpressionQueryCommand(changeKind, fromTt = Some(fromTt), legacyStrictAtInfinityValidTime = true)
     executeQuery[T](command, range)
   }
 

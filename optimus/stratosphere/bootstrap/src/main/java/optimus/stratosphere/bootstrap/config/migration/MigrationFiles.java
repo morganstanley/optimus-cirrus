@@ -12,7 +12,6 @@
 package optimus.stratosphere.bootstrap.config.migration;
 
 import java.nio.file.Path;
-
 import optimus.stratosphere.bootstrap.OsSpecific;
 
 public class MigrationFiles {

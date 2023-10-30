@@ -17,8 +17,6 @@ import spray.json._
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
-import scala.util.Failure
-import scala.util.Success
 import scala.util.Try
 
 abstract class BitBucket(protected val instance: String, val timeout: Duration = 15.seconds)
@@ -75,10 +73,8 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       .find(activity => activity.comment.exists(_.text.contains(commentId)))
       .flatMap(_.comment)
 
-  def findCommentById(project: String, repo: String, prNumber: Int, commentId: Int): Option[PrComment] = {
-    val getUrl = apiPrCommentsByCommitIdUrl(project, repo, prNumber, commentId)
-    Some(get[PrComment](getUrl))
-  }
+  def findCommentById(project: String, repo: String, prNumber: Int, commentId: Int): Option[PrComment] =
+    Try(get[PrComment](apiPrCommentsByCommitIdUrl(project, repo, prNumber, commentId))).toOption
 
   def addOrUpdateComment(
       project: String,
@@ -100,10 +96,8 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     }
   }
 
-  def getBlockerComment(project: String, repo: String, prNumber: Int, commentId: Int): PrBlockerComment = {
-    val url = apiPrBlockerCommentUpdateUrl(project, repo, prNumber, commentId)
-    get[PrBlockerComment](url)
-  }
+  def getBlockerComment(project: String, repo: String, prNumber: Int, commentId: Int): PrBlockerComment =
+    get[PrBlockerComment](apiPrBlockerCommentUpdateUrl(project, repo, prNumber, commentId))
 
   def addTasks(project: String, repo: String, prNumber: Int, tasks: Seq[String], commentId: Int): Seq[PrTask] =
     tasks.map(t => addTask(project, repo, prNumber, t, commentId))
@@ -155,10 +149,9 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
   def getChangedFilesByCommitId(project: String, repo: String, commitId: String): Seq[CommitFile] =
     queryPaged[CommitFile, CommitRequest](apiChangedFilesByCommitUrl(project, repo, commitId))
 
-  def getFileSizeByFilePath(project: String, repo: String, filePath: String, commitId: String): Int = {
-    val url = apiFileSizeByFilePathUrl(project, repo, filePath, commitId)
-    get[CommitFileSize](url).size
-  }
+  /** @return size of the given file in bytes */
+  def getFileSizeByFilePath(project: String, repo: String, filePath: String, commitId: String): Int =
+    handleErrors { get[CommitFileSize](apiFileSizeByFilePathUrl(project, repo, filePath, commitId)).size }
 
   def getAllFileSizes(project: String, repo: String, commitId: CommitId): Seq[CommitFilePathSize] = {
     val commitFiles = getChangedFilesByCommitId(project, repo, commitId.id).filter(_.`type` != "DELETE")
@@ -175,6 +168,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     handleErrors { postWithoutResponse(url, Some(payload)) }
   }
 
+  /** Wraps generic UnsuccessfulRestCall responses in sub-classes of [[BitBucketException]]. */
   private def handleErrors[A](code: => A): A =
     try code
     catch {
@@ -182,11 +176,15 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
         import spray.json._
         e.rawPayload.flatMap(_.parseJson.convertTo[BitBucketErrors].errors.headOption) match {
           case Some(err) if err.exceptionName == "com.atlassian.bitbucket.pull.NoSuchPullRequestException" =>
-            throw NoSuchPullRequestException(err)
+            throw NoSuchPullRequestException(err, e)
           case Some(err) if err.exceptionName == "com.atlassian.bitbucket.project.NoSuchProjectException" =>
-            throw NoSuchProjectException(err)
+            throw NoSuchProjectException(err, e)
+          case Some(err) if err.exceptionName == "com.atlassian.bitbucket.content.NoSuchPathException" =>
+            throw NoSuchPathException(err, e)
+          case Some(err) if err.exceptionName == "com.atlassian.bitbucket.AuthorisationException" =>
+            throw AuthorisationException(err, e)
           case Some(other) =>
-            throw UncategorizedBitBucketException(other)
+            throw UncategorizedBitBucketException(other, e)
           case None =>
             throw e
         }
@@ -212,14 +210,22 @@ sealed trait BitBucketException {
   def bitBucketError: BitBucketError
 }
 
-final case class UncategorizedBitBucketException(bitBucketError: BitBucketError)
-    extends RuntimeException(bitBucketError.message)
+final case class UncategorizedBitBucketException(bitBucketError: BitBucketError, e: Throwable)
+    extends RuntimeException(bitBucketError.message, e)
     with BitBucketException
 
-final case class NoSuchPullRequestException(bitBucketError: BitBucketError)
-    extends RuntimeException(bitBucketError.message)
+final case class NoSuchPullRequestException(bitBucketError: BitBucketError, e: Throwable)
+    extends RuntimeException(bitBucketError.message, e)
     with BitBucketException
 
-final case class NoSuchProjectException(bitBucketError: BitBucketError)
-    extends RuntimeException(bitBucketError.message)
+final case class NoSuchProjectException(bitBucketError: BitBucketError, e: Throwable)
+    extends RuntimeException(bitBucketError.message, e)
+    with BitBucketException
+
+final case class NoSuchPathException(bitBucketError: BitBucketError, e: Throwable)
+    extends RuntimeException(bitBucketError.message, e)
+    with BitBucketException
+
+final case class AuthorisationException(bitBucketError: BitBucketError, e: Throwable)
+    extends RuntimeException(bitBucketError.message, e)
     with BitBucketException
