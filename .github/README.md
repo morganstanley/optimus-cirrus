@@ -7,6 +7,7 @@ We hope that you find the project interesting and useful. If you want to ask que
 [Contributors](contributors.md)
 
 Here are some links to talks we have done about the principles behind Optimus Cirrus:
+* https://youtu.be/2PxsyWqZ5dI  "Monad I Love You Now Get Out Of My Type System" by Gjeta Gjyshinca (Strange Loop 2022)
 * https://www.youtube.com/watch?v=V0jJvgiI_xs (ScalaCon 2021; technical portion starts at 24:30)
 * https://skillsmatter.com/skillscasts/13108-monad-i-love-you-now-get-out-of-my-type-system (Scala eXchange London 2018)
 * https://www.youtube.com/watch?v=BW8S92jP5sE (ScalaDays 2018)
