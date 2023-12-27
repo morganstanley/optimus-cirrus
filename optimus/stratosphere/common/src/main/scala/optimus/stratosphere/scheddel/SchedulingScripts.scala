@@ -53,6 +53,8 @@ object SchedulingScripts extends ExitCode {
                             |
                             |:invoke-script
                             |set script=%1
+                            |echo Invoking %script%
+                            |pushd $scriptsDir
                             |call %script% > $logFile%script%_log.txt 2>&1
                             |
                             |$removeFile

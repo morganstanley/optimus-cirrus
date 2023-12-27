@@ -10,24 +10,38 @@
  * limitations under the License.
  */
 package optimus.datatype
+import optimus.datatype.Classification.DataSubjectCategory
 
+/**
+ * This trait is indicator for PIIElement
+ */
 sealed trait PIIElement {
   val sensitiveValue: String
   def maskedValue = "PII Element"
 }
 
+/**
+ * This trait is indicator if element is 100 % confirmed that it is NotAPIIElement
+ */
 sealed trait NotAPIIElement {}
 
-final class FullName(val sensitiveValue: String) extends PIIElement {
+object Classification {
+  trait DataSubjectCategory
+  class Worker extends DataSubjectCategory
+  class Client extends DataSubjectCategory
+  class ThirdParty extends DataSubjectCategory
+}
+
+final case class FullName[T <: DataSubjectCategory](val sensitiveValue: String) extends PIIElement {
   override def equals(other: Any): Boolean =
     other match {
-      case t: FullName => t.sensitiveValue == sensitiveValue
-      case _           => false
+      case t: FullName[_] => t.sensitiveValue == sensitiveValue
+      case _              => false
     }
   override def hashCode() = sensitiveValue.hashCode
   override def maskedValue = "FullName PII Element"
-  override def toString = maskedValue
+  override def toString = s"FullName PII Element($hashCode)"
 }
 object FullName {
-  def apply(sensitiveValue: String): FullName = new FullName(sensitiveValue)
+  def apply[T <: DataSubjectCategory](sensitiveValue: String): FullName[T] = new FullName[T](sensitiveValue)
 }

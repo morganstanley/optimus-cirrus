@@ -145,4 +145,8 @@ package object collection extends MapBuildFromImplicits {
     def deep: sc.IndexedSeq[Any] = new DeepArray(self)
   }
   type ForkJoin = java.util.concurrent.ForkJoinPool
+
+  implicit class ArrayToVarArgsOps[A](private val self: Array[A]) extends AnyVal {
+    def toVarArgsSeq: scala.collection.immutable.Seq[A] = scala.collection.immutable.ArraySeq.unsafeWrapArray(self)
+  }
 }

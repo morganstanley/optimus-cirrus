@@ -647,7 +647,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // lazy val XFUNC_WITH_HANDLE = error0(XXX, OptimusPhases.REF_CHECKS, "@handle cannot be @xFunc")
 
   val RETURN_IN_NODE =
-    error1(22959, OptimusPhases.REF_CHECKS, "@node %s cannot contain return expressions")
+    error1(22959, OptimusPhases.REF_CHECKS, "@node/@async %s cannot contain return expressions")
 
   val FORBIDDEN_PARAM_NAME =
     error2(
@@ -819,6 +819,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
   val POISONED_PLACEHOLDER =
     error1(29200, OptimusPhases.POSITION, "A placeholder method wasn't replaced during compilation: %s")
+
+  val INCORRECT_META_FIELDS =
+    error1(
+      29201,
+      OptimusPhases.EXPORTINFO,
+      "This Catalog/Owner %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
+    )
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -964,7 +971,7 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val ILLEGAL_TWEAK_BODY = warning1(
     16000,
     OptimusPhases.REF_CHECKS,
-    "Illegal use of %s as tweak body!  (use transactionTimeNow or validTimeNow)"
+    "Illegal use of %s as tweak body!  (use transactionTimeNow, validTimeNow, or storeContextNow)"
   )
 
   // async graph phase warnings
@@ -1002,13 +1009,6 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     info2(18000, OptimusPhaseInfo.NoPhase, "Falling back to GenPropertyInfo for %s on %s")
 
   val NOPOSITION = info1(19009, OptimusPhases.POSITION, "INFO: %s is not positioned")
-
-  val INCORRECT_META_FIELDS =
-    error1(
-      19101,
-      OptimusPhases.EXPORTINFO,
-      "This Catalog/Owner %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
-    )
 
   val POTENTIALLY_BROKEN_PROPERTY_TWEAKING =
     warning4(

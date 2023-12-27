@@ -44,5 +44,8 @@ diff-chunked.txt
 # Human-generated configuration file that should never go to codetree
 mischief.obt
 
+# cucumber test reports
+bdd_report.html
+
 # EOF
 # See top of file for .gitignore guidelines.

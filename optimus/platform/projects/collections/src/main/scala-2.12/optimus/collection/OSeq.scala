@@ -37,7 +37,7 @@ object OSeq {
   def apply[T](p1: T, p2: T, p3: T): OptimusSeq[T] = OptimusSeq.apply(p1, p2, p3)
   def apply[T](p1: T, p2: T, p3: T, p4: T): OptimusSeq[T] = OptimusSeq.apply(p1, p2, p3, p4)
 
-  private def getCompanion[T: ClassTag](): OSeqCompanion[T] = {
+  private def getCompanion[T: ClassTag]: OSeqCompanion[T] = {
     val clz = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
     if (clz.isPrimitive) {
       clz match {

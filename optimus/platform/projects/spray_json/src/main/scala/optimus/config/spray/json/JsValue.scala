@@ -23,7 +23,7 @@ import collection.immutable
 /**
  * The general type of a JSON AST node.
  */
-sealed abstract class JsValue {
+abstract class JsValue {
   override def toString = compactPrint
   def toString(printer: (JsValue => String)) = printer(this)
   def compactPrint = CompactPrinter(this)

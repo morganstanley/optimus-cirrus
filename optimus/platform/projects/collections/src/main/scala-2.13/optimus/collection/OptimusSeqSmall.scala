@@ -37,9 +37,9 @@ private[collection] object OptimusSeqEmpty extends OptimusSeq[Nothing] {
   override def reverseIterator: Iterator[Nothing] = Iterator.empty
   override def collectFirst[B](pf: PartialFunction[Nothing, B]): Option[B] = None
   override def collect[B](pf: PartialFunction[Nothing, B]): OptimusSeqEmpty.type = this
-  override def head: Nothing = Iterator.empty.next
-  override def tail: OptimusSeq[Nothing] = Iterator.empty.next
-  override def last: Nothing = Iterator.empty.next
+  override def head: Nothing = Iterator.empty.next()
+  override def tail: OptimusSeq[Nothing] = Iterator.empty.next()
+  override def last: Nothing = Iterator.empty.next()
   // extension methods
   override def mapWithIndex[B](f: (Nothing, Int) => B): OptimusSeq[B] = {
     this.asInstanceOf[OptimusSeq[B]]

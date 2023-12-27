@@ -134,7 +134,7 @@ public class EntityAgent {
             safeTransform(collInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      if (DiagnosticSettings.syntheticGraphMethodsEnabled) {
+      if (DiagnosticSettings.markGraphMethodsAsSynthetic) {
         transformed =
             safeTransform(
                 syntheticMethodInjector, loader, clsName, clsRedefined, domain, transformed);

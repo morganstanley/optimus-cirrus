@@ -53,6 +53,15 @@ object DALQueryMethod {
     override def toString: String = "ProjectedViewOnly(DAL)"
   }
 
+  object FullTextSearchOnly extends Executable with MethodKeyOptimizer.Optimizable {
+    def execute(method: MethodElement, rewriter: MultiRelationRewriter): NodeFunction0[Iterable[Any]] = {
+      throw new RelationalUnsupportedException(
+        "'fullTextSearchOnly' should be used against a DAL query and match the execution constraint.")
+    }
+
+    override def toString: String = "FullTextSearchOnly(DAL)"
+  }
+
   object Reverse extends Executable {
     def execute(method: MethodElement, rewriter: MultiRelationRewriter): NodeFunction0[Iterable[Any]] = {
       val (s: MultiRelationElement) :: _ = method.methodArgs.map(_.param)

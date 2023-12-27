@@ -107,7 +107,8 @@ class AnnotatingComponent(
       "instead of `object + string`, use a string interpolation or `\"\" + object + string`."),
     "scala.collection.JavaConverters" -> List(useInstead("scala.jdk.CollectionConverters")),
     "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters")),
-    "scala.collection.mutable.MutableList" -> List(useInstead("scala.collection.mutable.ListBuffer"))
+    "scala.collection.mutable.MutableList" -> List(useInstead("scala.collection.mutable.ListBuffer")),
+    "org.mockito.MockitoEnhancer.withObjectMocked" -> List("This is incompatible with with Scala 2.13. Refer to documentation of optimus.utils.MockableObject for an alternative")
   ) ++ List(
     "MapLike",
     "GenMapLike",

@@ -16,6 +16,7 @@ import optimus.platform.relational.RelationalException
 import optimus.platform.relational.dal.core._
 import optimus.platform.relational.tree._
 import optimus.platform.relational.data.mapping._
+import optimus.platform.relational.data.tree.ContainsElement
 import optimus.platform.relational.data.tree.SelectElement
 
 class PubSubBinder(mapper: QueryMapper, root: RelationElement) extends DALBinder(mapper, root) {
@@ -35,6 +36,17 @@ class PubSubBinder(mapper: QueryMapper, root: RelationElement) extends DALBinder
       Query.flattenBOOLANDConditions(s.where) exists { cond =>
         psLanguage.canBeServerWhere(cond)
       }
+    }
+  }
+
+  // only reason to override this method is to switch off optimization for contains on empty collections
+  // as PubSub matching engine on the broker doesn't allow it
+  override protected def bindContains(binary: BinaryExpressionElement): RelationElement = {
+    binary.right match {
+      case ConstValueElement(i: Iterable[_], _) if i.isEmpty =>
+        val l = visitElement(binary.left)
+        new ContainsElement(l, Right(i.iterator.map(v => ElementFactory.constant(v, l.rowTypeInfo)).toList))
+      case _ => super.bindContains(binary)
     }
   }
 }

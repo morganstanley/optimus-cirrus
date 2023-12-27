@@ -112,10 +112,12 @@ public class DiagnosticSettings {
   public static final boolean enableRTVNodeRerunner =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.node.rerunner", false);
   public static final boolean rtvNodeRerunnerExcludeByDefault =
-      enableRTVNodeRerunner && getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
+      enableRTVNodeRerunner
+          && getBoolProperty("optimus.rt.verifier.node.rerunner.excludeAll", false);
 
   public static final boolean rtvNodeRerunnerSkipBadEquality =
-      enableRTVNodeRerunner && getBoolProperty("optimus.rt.verifier.node.rerunner.skipBadEquality", true);
+      enableRTVNodeRerunner
+          && getBoolProperty("optimus.rt.verifier.node.rerunner.skipBadEquality", true);
 
   /** Publish RT violations as crumbs in splunk */
   public static final boolean publishRTVerifierCrumbs =
@@ -124,7 +126,7 @@ public class DiagnosticSettings {
   public static final boolean writeRTVerifierReport =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.report", true);
 
-  public static final boolean edgeCrumbsByDefault = getBoolProperty("optimus.edge.crumbs", false);
+  public static final boolean granularCacheSize = getBoolProperty("optimus.graph.timeline.granular.cache", false);
 
   /**
    * Used for test purposes, it accumulates RT violations in memory even if a report has not been
@@ -214,10 +216,14 @@ public class DiagnosticSettings {
   public static boolean includeCancelledNodeInException =
       getBoolProperty("optimus.diagnostic.includeCancelledNodeInException", false);
 
-  public final static boolean isWindows = System.getProperty("os.name","").toLowerCase().contains("windows");
+  public static final boolean isWindows =
+      System.getProperty("os.name", "").toLowerCase().contains("windows");
   public static final String asyncProfilerSettings;
   public static final boolean awaitStacks;
   public static final boolean samplingProfiler;
+  public static final boolean pluginCounts;
+
+  public static final boolean autoAsyncProfiler;
   public static final boolean repairEnqueuerChain;
   public static final int awaitChainHashStrategy;
 
@@ -293,7 +299,7 @@ public class DiagnosticSettings {
    * If enabled marks methods in optimus.graph.* as synthetic and this allows for nicer step through
    * debugging
    */
-  public static final boolean syntheticGraphMethodsEnabled;
+  public static final boolean markGraphMethodsAsSynthetic;
 
   /**
    * If set, forces calls to transcendental functions in {@link Math} to use {@link StrictMath}
@@ -310,10 +316,6 @@ public class DiagnosticSettings {
   public static final boolean outOfProcessAppConsole =
       parseConsoleArg(getStringProperty("optimus.graph.outOfProcessAppConsole", ""));
 
-  public static final boolean sequenceTiming =
-      getBoolProperty("optimus.seq.timings.capture", false);
-  public static final boolean sequenceTimingExperimental =
-      getBoolProperty("optimus.seq.timings.experimental", false);
   public static final boolean explainPgoDecision =
       getBoolProperty("optimus.profile.explainPgoDecision", false);
 
@@ -347,7 +349,6 @@ public class DiagnosticSettings {
     ret.add("optimus.graph.detectStallAdaptedTimeoutSecs");
     ret.add("optimus.graph.detectStallAdapted");
     ret.add("optimus.graph.detectStallIntervalSecs");
-    ret.add("optimus.seq.timings.capture");
     ret.add("optimus.seq.timings.experimental");
     return ret;
   }
@@ -356,13 +357,16 @@ public class DiagnosticSettings {
     return arg.equals("stop");
   }
 
-  public static String propWithEnvFallback(String arg) {
-    var s = System.getProperty(arg);
-    if (!Objects.isNull(s)) return s;
-    arg = arg.toUpperCase().replaceAll("\\.", "_");
-    s = System.getenv(arg);
-    if (!Objects.isNull(s)) return s;
-    s = System.getenv("OPTIMUS_DIST_" + arg);
+  public static String envOrProp(String arg) {
+    String asEnv = arg.toUpperCase().replaceAll("\\.", "_");
+    // First look for FOO_BAR_BAZ
+    var s = System.getenv(asEnv);
+    if (Objects.nonNull(s)) return s;
+    // then OPTIMUS_DIST_FOO_BAR_BAZ
+    s = System.getenv("OPTIMUS_DIST_" + asEnv);
+    if (Objects.nonNull(s)) return s;
+    // finall as property foo.bar.baz
+    s = System.getProperty(arg);
     return s;
   }
 
@@ -618,23 +622,26 @@ public class DiagnosticSettings {
     }
 
     {
-      var aps = getStringProperty("optimus.graph.async.profiler");
-      if (aps == null) aps = System.getenv("ASYNC_PROFILER_SETTINGS");
-      if (aps == null) aps = System.getenv("OPTIMUS_DIST_ASYNC_PROFILER_SETTINGS");
+      // Look for async-profiler settings with old and new properties.
+      var aps = envOrProp("optimus.graph.async.profiler");
+      if (Objects.isNull(aps)) aps = envOrProp("async.profiler.settings");
       asyncProfilerSettings = aps;
+      autoAsyncProfiler = Objects.nonNull(aps) && aps.contains("auto=true");
     }
 
-    samplingProfiler = parseBooleanWithDefault(propWithEnvFallback("optimus.sampling"), false);
+    samplingProfiler =
+        parseBooleanWithDefault(envOrProp("optimus.sampling"), false) && !autoAsyncProfiler;
+    pluginCounts = samplingProfiler || getBoolProperty("optimus.plugin.counts", false);
     awaitStacks =
-        samplingProfiler
-            || (asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true"));
+        !enableRTVNodeRerunner
+            && (parseBooleanWithDefault(envOrProp("optimus.await.stacks"), false)
+                || (asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true")));
     repairEnqueuerChain =
         getBoolProperty(
             "optimus.graph.enqueue.repair", samplingProfiler || awaitStacks || jvmDebugging);
     awaitChainHashStrategy = getIntProperty("optimus.graph.enqueue.hash.strategy", 0);
     traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
-    syntheticGraphMethodsEnabled =
-        getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging || awaitStacks);
-    isAsyncStackTracesEnabled = traceEnqueuer && syntheticGraphMethodsEnabled;
+    markGraphMethodsAsSynthetic = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging);
+    isAsyncStackTracesEnabled = traceEnqueuer && markGraphMethodsAsSynthetic;
   }
 }

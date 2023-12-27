@@ -31,6 +31,7 @@ import optimus.platform.relational.dal.accelerated.ProjectedViewOnlyReducer
 import optimus.platform.relational.dal.core.ExpressionQuery
 import optimus.platform.relational.dal.core.ParameterReplacer
 import optimus.platform.relational.dal.deltaquery.DALEntityBitemporalSpaceReducer
+import optimus.platform.relational.dal.fullTextSearch.FullTextSearchOnlyReducer
 import optimus.platform.relational.dal.sampling.DALSamplingReducer
 import optimus.platform.relational.dal.serialization.DALFrom
 import optimus.platform.relational.data.DataProvider
@@ -58,6 +59,7 @@ class DALProvider(
     pos: MethodPosition,
     val dalApi: DalAPI,
     val canBeProjected: Boolean,
+    val canBeFullTextSearch: Boolean,
     keyPolicy: KeyPropagationPolicy,
     val entitledOnly: Boolean = false)
     extends DataProvider(rowTypeInfo, key, pos, keyPolicy)
@@ -71,6 +73,7 @@ class DALProvider(
 
   override def reducersFor(category: ExecutionCategory): List[ReducerVisitor] = {
     def wrapped(r: ReducerVisitor) = new ProjectedViewOnlyReducer(r)
+    def wrappedFullText(r: ReducerVisitor) = new FullTextSearchOnlyReducer(r)
     def mkDALReducer = if (this.supportsRegisteredIndexes) mkDALRegisteredIndexReducer else new core.DALReducer(this)
     def mkDALReferenceReducer =
       if (this.supportsRegisteredIndexes) mkDALRegisteredIndexReferenceReducer else new core.DALReferenceReducer(this)
@@ -80,9 +83,13 @@ class DALProvider(
     def mkSamplingReducer = new DALSamplingReducer(this)
     def mkDALRegisteredIndexReducer = new core.DALRegisteredIndexReducer(this)
     def mkDALRegisteredIndexReferenceReducer = new core.DALRegisteredIndexReferenceReducer(this)
+    def mkDALFullTextSearchReducer = new fullTextSearch.DALFullTextSearchReducer(this)
     category match {
-      case ExecutionCategory.Execute if enableProjectedPriql => List(mkAccReducer, mkDALReducer)
-      case ExecutionCategory.Execute                         => List(wrapped(mkAccReducer), mkDALReducer)
+      case ExecutionCategory.Execute if enableProjectedPriql && enableFullTextSearchPriql =>
+        List(mkAccReducer, mkDALFullTextSearchReducer, mkDALReducer)
+      case ExecutionCategory.Execute if enableProjectedPriql      => List(mkAccReducer, mkDALReducer)
+      case ExecutionCategory.Execute if enableFullTextSearchPriql => List(mkDALFullTextSearchReducer, mkDALReducer)
+      case ExecutionCategory.Execute                              => List(wrapped(mkAccReducer), mkDALReducer)
       case ExecutionCategory.ExecuteReference if enableProjectedPriql =>
         List(mkAccReferenceReducer, mkDALReferenceReducer)
       case ExecutionCategory.ExecuteReference =>
@@ -102,7 +109,7 @@ class DALProvider(
   def classInfo = classEntityInfo
 
   override def makeKey(newKey: RelationKey[_]) =
-    new DALProvider(classEntityInfo, rowTypeInfo, newKey, pos, dalApi, canBeProjected, keyPolicy)
+    new DALProvider(classEntityInfo, rowTypeInfo, newKey, pos, dalApi, canBeProjected, canBeFullTextSearch, keyPolicy)
 
   override def execute[T](
       command: QueryCommand,
@@ -113,6 +120,8 @@ class DALProvider(
     command.formattedQuery match {
       case ExpressionQuery(ex, QueryPlan.Accelerated) =>
         new accelerated.DALAccExecutionProvider(ex, projector, shapeType, projKey, dalApi, executeOptions)
+      case ExpressionQuery(ex, QueryPlan.FullTextSearch) =>
+        new fullTextSearch.FullTextSearchExecutionProvider(ex, projector, shapeType, projKey, dalApi, executeOptions)
       case ExpressionQuery(ex, plan @ (QueryPlan.Default | QueryPlan.Sampling)) =>
         new core.DALExecutionProvider(ex, plan, projector, shapeType, projKey, dalApi, executeOptions, pos)
     }
@@ -129,6 +138,9 @@ class DALProvider(
       case ExpressionQuery(ex, QueryPlan.Accelerated) =>
         val newEx = ParameterReplacer.replace(command.parameters.zip(paramValues), ex)
         new accelerated.DALAccExecutionProvider(newEx, projector, shapeType, projKey, dalApi, executeOptions)
+      case ExpressionQuery(ex, QueryPlan.FullTextSearch) =>
+        val newEx = ParameterReplacer.replace(command.parameters.zip(paramValues), ex)
+        new fullTextSearch.FullTextSearchExecutionProvider(newEx, projector, shapeType, projKey, dalApi, executeOptions)
       case ExpressionQuery(ex, plan @ (QueryPlan.Default | QueryPlan.Sampling)) =>
         val newEx = ParameterReplacer.replace(command.parameters.zip(paramValues), ex)
         new core.DALExecutionProvider(newEx, plan, projector, shapeType, projKey, dalApi, executeOptions, pos)
@@ -140,7 +152,16 @@ class DALProvider(
   }
 
   override def copyAsEntitledOnly() =
-    new DALProvider(classEntityInfo, rowTypeInfo, key, pos, dalApi, canBeProjected, keyPolicy, true)
+    new DALProvider(
+      classEntityInfo,
+      rowTypeInfo,
+      key,
+      pos,
+      dalApi,
+      canBeProjected,
+      canBeFullTextSearch,
+      keyPolicy,
+      true)
 
   val supportsRegisteredIndexes: Boolean = {
     if (EvaluationContext.isInitialised) {
@@ -153,6 +174,8 @@ class DALProvider(
         }
     } else false
   }
+
+  val isFullTextSearchEnabled: Boolean = PriqlSettings.enableFullTextSearchPriql
 }
 
 object DALProvider {
@@ -165,7 +188,16 @@ object DALProvider {
       dalApi: DalAPI,
       keyPolicy: KeyPropagationPolicy): DALProvider = {
     val canBeProjected = classEntityInfo.isStorable && isProjectedEntity(classEntityInfo.runtimeClass)
-    new DALProvider(classEntityInfo, implicitly[TypeInfo[A]], key, pos, dalApi, canBeProjected, keyPolicy)
+    val canBeFullTextSearch = classEntityInfo.isStorable && isFullTextSearchEnabledEntity(classEntityInfo.runtimeClass)
+    new DALProvider(
+      classEntityInfo,
+      implicitly[TypeInfo[A]],
+      key,
+      pos,
+      dalApi,
+      canBeProjected,
+      canBeFullTextSearch,
+      keyPolicy)
   }
 
   def unapply(dalProvider: DALProvider) = Some(dalProvider.classEntityInfo, dalProvider.key, dalProvider.pos)
@@ -327,6 +359,10 @@ object DALProvider {
 
   def isProjectedEmbeddable(runtimeClass: Class[_]): Boolean = {
     runtimeClass.getAnnotation(classOf[EmbeddableMetaDataAnnotation]).projected
+  }
+
+  def isFullTextSearchEnabledEntity(runtimeClass: Class[_]): Boolean = {
+    runtimeClass.getAnnotation(classOf[EntityMetaDataAnnotation]).fullTextSearch
   }
 }
 

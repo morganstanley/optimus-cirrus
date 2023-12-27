@@ -12,7 +12,6 @@
 package optimus.stratosphere.sparse
 
 import optimus.stratosphere.bootstrap.GitProcess
-import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
@@ -288,22 +287,13 @@ trait SparseUtils {
 
     if (!GitProcess.isSparseReady(stratoWorkspace.config))
       stratoWorkspace.log.info("Upgrading git to version with sparse checkout support.")
-    new GitUpdater().ensureGitInstalled(useGitFromArtifactory = true)
+    new GitUpdater(stratoWorkspace).ensureGitInstalled(useGitFromArtifactory = true)
 
     val dirStructure = stratoWorkspace.directoryStructure
     val gitSparseConfig = dirStructure.gitDirectory.resolve("info").resolve("sparse-checkout")
     gitSparseConfig.file.deleteIfExists()
 
     val dirsToOpen = newProfile.listAllRelativeDirs()
-    if (!currentConfig.isEnabled) {
-      if (OsSpecific.isWindows) {
-        runSparseCmd("init", "--sparse-index", "--cone")
-      } else {
-        // TODO (OPTIMUS-49990): use sparse index when we have git 2.34 or newer
-        stratoWorkspace.log.info("not using sparse index for linux due to compatibility issues")
-        runSparseCmd("init", "--no-sparse-index", "--cone")
-      }
-    }
 
     backupIgnoredFiles(dirsToOpen)
     runSparseCmd("set" +: dirsToOpen.map(_.toString).toSeq: _*)

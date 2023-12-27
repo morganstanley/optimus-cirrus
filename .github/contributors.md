@@ -21,7 +21,11 @@ Gjeta Gjyshinca
 
 Harrison Houghton ([@hrhino](http://github.com/hrhino))
 
+Jerry Junhao Ying ([@enjoysoft](http://github.com/enjoysoft))
+
 Nolita Ebama-Mpeta ([@musinoli](http://github.com/musinoli))
+
+Robert Tarsi
 
 Sarthak Banerjee ([@sarthakbanerjee](http://github.com/sarthakbanerjee))
 

@@ -193,4 +193,6 @@ package object collection {
   implicit def ArrayViewSlice[A](self: Array[A]): MutableIndexedSeqViewSlice[A] = MutableIndexedSeqViewSlice(self)
   @nowarn("cat=deprecation")
   type ForkJoin = scala.concurrent.forkjoin.ForkJoinPool
+
+  implicit class ArrayToVarArgsOps[A](val toVarArgsSeq: Array[A]) extends AnyVal
 }

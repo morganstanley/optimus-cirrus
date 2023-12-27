@@ -23,7 +23,8 @@ import scala.collection.compat.Factory
 
 class ImmutableArray[A] private (private val as: Array[A])
     extends immutable.IndexedSeq[A]
-    with GenericTraversableTemplate[A, collection.IndexedSeq] {
+    with GenericTraversableTemplate[A, collection.IndexedSeq]
+    with Serializable {
   override def apply(idx: Int): A = as.apply(idx)
   override def length: Int = as.length
 

@@ -67,4 +67,13 @@ object PriqlSettings {
   // Only enable projected registration metadata check if this flag is true.
   val enableProjectedRegistrationCheck =
     DiagnosticSettings.getBoolProperty("optimus.priql.projected.registrationCheck", false)
+
+  // Full text search
+  val defaultEnableFullTextSearchQueryValue = false
+  private val fullTextSearchQuery = new AtomicBoolean(defaultEnableFullTextSearchQueryValue)
+  private[optimus] def setFullTextSearchQuery(b: Boolean) = fullTextSearchQuery.set(b)
+  private[optimus] def resetFullTextSearchQuery() = fullTextSearchQuery.set(defaultEnableFullTextSearchQueryValue)
+  def enableFullTextSearchPriql =
+    DiagnosticSettings.getBoolProperty("optimus.priql.fullTextSearch.enable", fullTextSearchQuery.get)
+
 }

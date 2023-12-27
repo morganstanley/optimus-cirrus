@@ -44,7 +44,7 @@ class ProjectedViewOnlyReducer(val reducer: ReducerVisitor) extends QueryTreeVis
       case p: DALProvider =>
         if (!p.canBeProjected || PriqlSettings.enableProjectedPriql) p
         else
-          new DALProvider(p.classEntityInfo, p.rowTypeInfo, p.key, p.pos, p.dalApi, false, p.keyPolicy, p.entitledOnly)
+          new DALProvider(p.classEntityInfo, p.rowTypeInfo, p.key, p.pos, p.dalApi, false, p.canBeFullTextSearch, p.keyPolicy, p.entitledOnly)
       case p =>
         require(!insideProjectedViewOnly, s"$p cannot be within 'projectedViewOnly' scope")
         p

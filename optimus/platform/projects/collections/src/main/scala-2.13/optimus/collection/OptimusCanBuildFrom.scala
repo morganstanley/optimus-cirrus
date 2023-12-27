@@ -179,12 +179,12 @@ private[collection] abstract class OptimusCanBuildFrom[-From, -Elem, +To, ArrayT
         addFromArray(data, 0, data.length)
       }
     }
-    def addArray(anArray: Array[ArrayType]) {
+    def addArray(anArray: Array[ArrayType]): Unit = {
       assert(elemsIndex == 0)
       val index = ensureArrays(1)
       arrays(index) = anArray
     }
-    def clear() {
+    def clear(): Unit = {
       clearRefsInArray(elems, elemsIndex)
       elemsIndex = 0
       if (arrays ne null)
@@ -227,7 +227,7 @@ abstract class OptimusBuilder[-Elem, +To] extends mutable.Builder[Elem, To] {
   // allows structural sharing of arrays. Only used by higher order functions in ArraysSeq
   private[collection] def addSharedArray(data: Array[_]): Unit
 
-  private[collection] def returnBorrowed()
+  private[collection] def returnBorrowed(): Unit
   override def result(): To
 }
 abstract class OptimusDoubleBuilder[+To] extends OptimusBuilder[Double, To] {

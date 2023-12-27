@@ -628,6 +628,7 @@ object Properties extends KnownProperties {
   val profThreads = prop[Map[String, Map[String, Long]]]
   val profMetricsDiff = prop[Map[String, Map[String, Array[Double]]]]
   val profSS = prop[Map[String, Array[String]]]
+  val profEvictions = prop[Map[String, Long]]
 
   val profStallTime = propL
   val pluginInFlight = prop[Map[String, Long]]
@@ -651,6 +652,8 @@ object Properties extends KnownProperties {
   val snapTimeUTC = prop[String]
   val snapEpochId = propL
   val snapPeriod = propL
+  val snapDuration = propL
+  val snapBatch = propI
   val canonicalPub = propB
 
   val pulse = prop[Elems]
@@ -673,6 +676,7 @@ object Properties extends KnownProperties {
   val clusterName = prop[String]
   val server = prop[Map[String, JsValue]]
   val args = prop[Seq[String]]
+  val argsType = prop[String]
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
   val event = prop[String]
@@ -808,6 +812,15 @@ object Properties extends KnownProperties {
   val hotspotChildNodeLookupCount = propI
   val hotspotChildNodeLookupTime = propL
 
+  val smplEverything = propL
+  val smplGraphTime = propL
+  val smplSyncStackTime = propL
+  val smplTweakLookupATime = propL
+  val smplTweakLookupSTime = propL
+  val smplCacheTime = propL
+  val smplOHSampling = propL
+  val smplOHInstrum = propL
+
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
   val profSummary = prop[Map[String, JsObject]]
@@ -824,10 +837,10 @@ object Properties extends KnownProperties {
   val miniGridCalc = prop[String]
   val stepName = prop[String]
   val stepProfile = prop[Seq[Elems]]
-  val profStack = prop[Seq[String]]
   val profCollapsed = prop[String]
   val stackThumb = prop[Map[String, Int]]
   val profPreOptimusStartup = propL
+
   val distWallTime = propL
   val distTaskDuration = propL
   val distTasksComplete = propI
@@ -888,6 +901,8 @@ object Properties extends KnownProperties {
 
   val cpuInfo = prop[Map[String, String]]
   val cpuCores = propI
+  val idealThreads = propI
+  val graphUtil = propD
   val memInfo = prop[Map[String, String]]
 
   /** Catch production uses of -Doptimus.runtime.allowIllegalOverrideOfInitialRuntimeEnvironment=true */
@@ -927,6 +942,8 @@ object Properties extends KnownProperties {
   val newCacheSize = propI
 
   val auxSchedulerTimedOutNodes = prop[Seq[String]]
+  val auxSchedulerTotalFlushDurationNs = propL
+  val auxSchedulerFlushDurationNs = propL
 
   val kvProcessorStats = prop[NestedMapOrValue[Double]]
 
@@ -935,6 +952,18 @@ object Properties extends KnownProperties {
   val artifactDownloadStats = prop[NestedMapOrValue[Long]]
   val artifactDownloadTempArchivePath = prop[String]
   val artifactDownloadExtractPath = prop[String]
+
+  val snapshotType = prop[String]
+  val snapshotName = prop[String]
+  val snapshotFullTime = prop[String]
+  val snapshotIncrementalTime = prop[String]
+  val snapshotProcessingTimeMs = propL
+  val snapshotEntries = propL
+  val snapshotBytes = propL
+  val snapshotRawBytes = propL
+  val snapshotBlockingWaitMs = propL
+  val snapshotRetries = propI
+
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

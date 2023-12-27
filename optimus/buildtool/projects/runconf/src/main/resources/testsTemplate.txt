@@ -1,0 +1,80 @@
+tests {
+{{#runConfs}}
+  {{{name}}} {
+{{! -------- Definition ----------------------------- }}
+    isTest = true
+    moduleName = "{{{moduleName}}}"
+{{#hasMainClass}}
+    mainClass = "{{{mainClass}}}"
+{{/hasMainClass}}
+{{#hasMethodName}}
+    methodName = "{{{methodName}}}"
+{{/hasMethodName}}
+{{#hasPackageName}}
+    packageName = "{{{packageName}}}"
+{{/hasPackageName}}
+{{! -------- Java Module ---------------------------- }}
+{{#hasJavaModule}}
+    javaModule {
+{{#javaModule}}
+{{#hasMeta}}      meta = "{{{meta}}}"{{/hasMeta}}
+{{#hasProject}}      project = "{{{project}}}"{{/hasProject}}{{#hasVersion}}
+      version = "{{{version}}}"{{/hasVersion}}
+{{/javaModule}}
+    }
+{{/hasJavaModule}}
+{{! -------- Java Options --------------------------- }}
+{{#hasJavaOpts}}
+    javaOpts = [{{#javaOpts}}
+      {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/javaOpts}}
+    ]
+{{/hasJavaOpts}}
+{{! -------- Environment variables ------------------ }}
+{{#hasEnv}}
+    env = {
+{{#env}}      {{#quoted}}{{{_1}}}{{/quoted}} = {{#quoted}}{{{_2}}}{{/quoted}}{{^-last}},{{/-last}}
+{{/env}}
+    }
+{{/hasEnv}}
+{{! -------- Agents --------------------------------- }}
+{{#hasAgents}}
+    agents = [{{#agents}}{{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/agents}}]
+{{/hasAgents}}
+{{! -------- Launcher ------------------------------- }}
+    launcher = {{#quoted}}{{{launcher}}}{{/quoted}}
+{{! -------- Native Libraries ----------------------- }}
+{{#hasNativeLibraries}}
+{{#nativeLibraries}}
+    nativeLibraries {
+{{#hasIncludes}}
+      includes = [{{#includes}}
+        {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/includes}}
+      ]
+{{/hasIncludes}}{{#hasExcludes}}
+      excludes = [{{#excludes}}
+        {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/excludes}}
+      ]{{/hasExcludes}}{{#hasReorder}}{{#reorder}}
+      reorder += [{{#quoted}}{{{shouldBeBefore}}}{{/quoted}}, {{#quoted}}{{{shouldBeAfter}}}{{/quoted}}]
+{{/reorder}}
+{{/hasReorder}}
+    }
+{{/nativeLibraries}}
+{{/hasNativeLibraries}}
+{{! -------- Scope ---------------------------------- }}
+{{#hasIncludes}}
+    includes = [{{#includes}}
+      {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/includes}}
+    ]
+{{/hasIncludes}}
+{{#hasExcludes}}
+    excludes = [{{#excludes}}
+      {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/excludes}}
+    ]
+{{/hasExcludes}}
+{{! -------- Control -------------------------------- }}
+    maxParallelForks = {{{maxParallelForks}}}
+    forkEvery = {{{forkEvery}}}
+  }
+
+{{/runConfs}}
+}

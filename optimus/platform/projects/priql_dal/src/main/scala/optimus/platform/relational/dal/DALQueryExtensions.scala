@@ -43,6 +43,13 @@ trait DALQueryExtensions {
       query.provider.createQuery(method)
     }
 
+    def fullTextSearchOnly(implicit pos: MethodPosition): Query[T] = {
+      val src = query.element
+      val method =
+        new MethodElement(DALQueryMethod.FullTextSearchOnly, List(MethodArg("src", src)), src.rowTypeInfo, src.key, pos)
+      query.provider.createQuery(method)
+    }
+
     @impure @async def nonTemporalCount: Long = {
       query.element match {
         case e: EventMultiRelation[_] =>

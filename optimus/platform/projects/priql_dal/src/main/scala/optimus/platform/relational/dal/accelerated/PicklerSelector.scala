@@ -17,6 +17,7 @@ import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.cm.Knowable
 import optimus.platform.pickling.DefaultPicklers._
+import optimus.platform.pickling.DefaultPicklers.fullNamePickler
 import optimus.platform.pickling.DefaultUnpicklers._
 import optimus.platform.pickling._
 import optimus.platform.relational.RelationalUnsupportedException
@@ -122,7 +123,7 @@ object PicklerSelector {
         val pickler = kn.map(t => getPickler(t)).getOrElse(IdentityPickler)
         knowablePickler(pickler)
 
-      case _: FullName => fullNamePickler
+      case _: FullName[_] => fullNamePickler
 
       case _ =>
         // Tuple pickler
@@ -171,7 +172,7 @@ object PicklerSelector {
       case _ if target == classOf[Duration]           => durationUnpickler
       case _ if target == classOf[YearMonth]          => yearMonthUnpickler
       case _ if target == classOf[Year]               => yearUnpickler
-      case _ if target == classOf[FullName]           => fullNameUnpickler
+      case _ if target == classOf[FullName[_]]        => fullNameUnpickler
       case _ if target == classOf[EntityReference]    => EntityReferenceUnpickler
       case _ if target == classOf[VersionedReference] => VersionedReferenceUnpickler
       case _ if target == classOf[BusinessEvent]      => BusinessEventUnpickler

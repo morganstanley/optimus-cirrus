@@ -18,12 +18,11 @@ class ObtConfigException(msg: String) extends Exception(msg)
 
 object ObtConfigHealthCheck {
 
-  def checkSwitch(switch: Variable[Option[(OperationType, String)]]): Unit = {
-    switch.state match {
-      case Some((disabledOp, _)) =>
-        throw new ObtConfigException(
-          s"Cluster not enabled for $disabledOp. If there is not an upgrade ongoing, re-enable this in ZK ASAP")
-      case None =>
+  def checkSwitch(switch: Variable[Map[OperationType, String]]): Unit = {
+    val state = switch.state
+    if (state.nonEmpty) {
+      throw new ObtConfigException(
+        s"Cluster not enabled for ${state.keySet}. If there is not an upgrade ongoing, re-enable this in ZK ASAP")
     }
   }
 

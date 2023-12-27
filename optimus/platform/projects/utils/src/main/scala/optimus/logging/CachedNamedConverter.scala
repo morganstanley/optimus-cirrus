@@ -25,15 +25,15 @@ package optimus.logging {
 
   object OptimusLogging {
     lazy val installed = {
-      PatternLayout.defaultConverterMap.put("C", classOf[CachedNamedConverter].getName)
-      PatternLayout.defaultConverterMap.put("class", classOf[CachedNamedConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("C", classOf[CachedNamedConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("class", classOf[CachedNamedConverter].getName)
 
-      PatternLayout.defaultConverterMap.put("lo", classOf[CachedLoggerConverter].getName)
-      PatternLayout.defaultConverterMap.put("logger", classOf[CachedLoggerConverter].getName)
-      PatternLayout.defaultConverterMap.put("c", classOf[CachedLoggerConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("lo", classOf[CachedLoggerConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("logger", classOf[CachedLoggerConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("c", classOf[CachedLoggerConverter].getName)
 
-      PatternLayout.defaultConverterMap.put("d", classOf[DateConverter].getName)
-      PatternLayout.defaultConverterMap.put("date", classOf[DateConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("d", classOf[DateConverter].getName)
+      PatternLayout.DEFAULT_CONVERTER_MAP.put("date", classOf[DateConverter].getName)
 
       // we could also add some stuff about logging optimus aware stuff here
       true

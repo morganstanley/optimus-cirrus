@@ -86,7 +86,12 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   }
 
   object catchUp {
-    def defaultBranch: String = self.select("catch-up.default-branch")
+    def oldDefaultBranch: String = self.select("catch-up.old-default-branch")
+    def defaultBranch: String = self.select("catch-up.default-branch") match {
+      // auto-upgrade everyone
+      case value if value == oldDefaultBranch => "staging"
+      case other                              => other
+    }
     def defaultMode: String = self.select("catch-up.default-mode")
 
     object remote {
@@ -121,6 +126,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def attachAgent: Boolean = self.select("intellij.attach-agent")
     def jdk: Option[String] = self.select("intellij.jdk")
     def licenseServer: String = self.select("intellij.license-server")
+    def linuxJcefSandbox: Boolean = self.select("intellij.linux-jcef-sandbox")
     def migrateSettings: Boolean = self.select("intellij.migrate-settings")
     def pythonPluginVersion: String = self.select("intellij.pythonPluginVersion")
     def scalaPluginVersion: String = self.select("intellij.scalaPluginVersion")
@@ -195,6 +201,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object internal {
     def bannerMessage: String = self.select("internal.banner-message")
+    def hasVersionChanged: Boolean = self.select[Boolean]("internal.version-changed")
     def helpMailGroup: String = self.select("internal.help-mail-group")
     def msGroup: Path = self.select("internal.ms-group")
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
@@ -217,10 +224,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def uploadLocation: Path = self.select("internal.diag.upload-location")
     }
 
-    object download {
-      def timeout: FiniteDuration = self.select("internal.download.timeout")
-    }
-
     object factories {
       def restClient: Option[String] = self.select("internal.factories.rest-client")
     }
@@ -237,6 +240,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object java {
       def install: Path = self.select("internal.java.install")
+      def jdkPath(javaProject: String, javaVersion: String): Path =
+        self.select[Path]("internal.java.base-path").resolve(javaProject).resolve(javaVersion).resolve("exec")
       def home: Path = self.select("internal.java.home")
     }
 
@@ -354,6 +359,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def indexerExclusions: String = self.select("internal.urls.indexer-exclusions")
       def gitVersion: String = self.select("internal.urls.git-version")
       def jenkinsLibrary: String = self.select("internal.urls.jenkins-library")
+      def jenkinsLibraryBrowser: String = self.select("internal.urls.jenkins-library-browser")
       def runconfs: String = self.select("internal.urls.runconfs")
       def splunk: String = self.select("internal.urls.splunk")
       def stackoverflow: String = self.select("internal.urls.stackoverflow")

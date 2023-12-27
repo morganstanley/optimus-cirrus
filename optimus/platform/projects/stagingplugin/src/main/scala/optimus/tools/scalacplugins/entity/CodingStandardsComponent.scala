@@ -27,7 +27,7 @@ class CodingStandardsComponent(
   import global._
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
-    override def apply(unit: CompilationUnit) {
+    override def apply(unit: CompilationUnit): Unit = {
       if (!pluginData.rewriteConfig.anyEnabled)
         standardsTraverser traverse unit.body
     }
@@ -48,7 +48,7 @@ class CodingStandardsComponent(
     }
 
     private var state = TraversalState.initial
-    override def traverse(tree: Tree) {
+    override def traverse(tree: Tree): Unit = {
       tree match {
         case Return(retVal) if state.inLastExpr => alarm(CodeStyleErrors.RETURN_STATEMENT, retVal.pos)
 
@@ -79,8 +79,8 @@ class CodingStandardsComponent(
           alarm(StagingErrors.NO_COLLECTION_WILDCARD_IMPORT, tree.pos)
 
         case Import(pre, _) =>
-          def loop(tree: Tree) {
-            def fail() { alarm(StagingErrors.NO_PACKAGE_OBJECT_IMPORT, pre.pos) }
+          def loop(tree: Tree): Unit = {
+            def fail(): Unit = { alarm(StagingErrors.NO_PACKAGE_OBJECT_IMPORT, pre.pos) }
 
             tree match {
               case Ident(nme.PACKAGEkw)     => fail()

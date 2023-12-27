@@ -11,6 +11,8 @@
  */
 package optimus.exceptions.config
 
+import optimus.scalacompat.collection.ArrayToVarArgsOps
+
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -136,7 +138,7 @@ private[optimus] object ExceptionMatcher {
 
   object Parser {
     def parse(matcher: String): ExceptionMatcher = {
-      ExceptionMatcher(matcher.split(',').map(criteria => MatchingCriteria.Parser.parse(criteria)): _*)
+      ExceptionMatcher(matcher.split(',').map(criteria => MatchingCriteria.Parser.parse(criteria)).toVarArgsSeq: _*)
     }
   }
 }

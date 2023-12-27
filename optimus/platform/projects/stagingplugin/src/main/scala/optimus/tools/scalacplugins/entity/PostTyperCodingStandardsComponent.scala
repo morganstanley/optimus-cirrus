@@ -14,6 +14,7 @@ package optimus.tools.scalacplugins.entity
 import optimus.tools.scalacplugins.entity.reporter._
 
 import scala.collection.mutable
+import scala.reflect.internal.Flags.ABSTRACT
 import scala.tools.nsc.Global
 import scala.tools.nsc.Phase
 import scala.tools.nsc.plugins.PluginComponent
@@ -29,9 +30,11 @@ class PostTyperCodingStandardsComponent(
   import global._
   import definitions._
   import PostTyperCodingStandardsComponent._
+  lazy val appClass = rootMirror.getRequiredClass("scala.App")
+  lazy val optimusAppClass = rootMirror.getClassIfDefined("optimus.platform.OptimusApp")
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
-    override def apply(unit: CompilationUnit) {
+    override def apply(unit: CompilationUnit): Unit = {
       if (!pluginData.rewriteConfig.anyEnabled)
         new StandardsTraverser(unit).traverse(unit.body)
     }
@@ -68,14 +71,11 @@ class PostTyperCodingStandardsComponent(
         if (qual.tpe != null && pos.isDefined && pos.start != pos.end && pos == tree.qualifier.pos) {
           if (IntegralToFloating(sym)) {
             if (IsIntegralDivision(qual))
-              alarm(
-                Scala213MigrationMessages.INTEGRAL_DIVISION_TO_FLOATING,
-                tree.pos,
-                sym.name)
+              alarm(Scala213MigrationMessages.INTEGRAL_DIVISION_TO_FLOATING, tree.pos, sym.name)
             val qualSym = qual.tpe.typeSymbol
             if (
               qualSym == IntClass && sym == IntToFloat ||
-                qualSym == LongClass && (sym == LongToFloat || sym == LongToDouble)
+              qualSym == LongClass && (sym == LongToFloat || sym == LongToDouble)
             )
               alarm(
                 Scala213MigrationMessages.INT_TO_FLOAT,
@@ -94,12 +94,7 @@ class PostTyperCodingStandardsComponent(
     }
 
     object IsIntegralDivision extends Traverser {
-      lazy val ScalaIntegralValueClasses: Set[Symbol] = Set(
-        CharClass,
-        ByteClass,
-        ShortClass,
-        IntClass,
-        LongClass)
+      lazy val ScalaIntegralValueClasses: Set[Symbol] = Set(CharClass, ByteClass, ShortClass, IntClass, LongClass)
 
       private var res = false
       def apply(t: Tree): Boolean = {
@@ -126,9 +121,6 @@ class PostTyperCodingStandardsComponent(
       case _            => false
     }
 
-    private def notEntirelyPrivate(mods: Modifiers): Boolean =
-      mods.isPublic || mods.isProtected || mods.hasAccessBoundary
-
     override def traverse(tree: Tree): Unit = {
       val inMacroExpansionSaved = inMacroExpansion
       if (tree.hasAttachment[analyzer.MacroExpansionAttachment]) {
@@ -151,6 +143,10 @@ class PostTyperCodingStandardsComponent(
           case sel: Select =>
             checkSelection(sel)
             super.traverse(tree)
+          case cd: ClassDef
+              if !cd.mods.hasFlag(ABSTRACT) && (cd.symbol.baseClasses.contains(appClass) || cd.symbol.baseClasses
+                .contains(optimusAppClass)) =>
+            alarm(CodeStyleNonErrorMessages.CLASS_EXTENDS_APP, tree.pos, cd.symbol)
           case ClassDef(mods, _, _, _) if alarmOnCaseClass(mods) =>
             if (!inClass)
               alarm(CodeStyleNonErrorMessages.NON_FINAL_CASE_CLASS, tree.pos)
@@ -163,9 +159,8 @@ class PostTyperCodingStandardsComponent(
             super.traverse(tree)
             inClass = oldInClass
           case vd: ValOrDefDef
-              if vd.symbol != null && vd.symbol.isImplicit &&
-                notEntirelyPrivate(vd.mods) && isInferred(vd.tpt) && !isLocal(vd.symbol) =>
-            alarm(StagingNonErrorMessages.UNTYPED_IMPLICIT(vd.name), tree.pos)
+              if vd.symbol != null && vd.symbol.isImplicit && isInferred(vd.tpt) && !isLocal(vd.symbol) =>
+            alarm(StagingNonErrorMessages.UNTYPED_IMPLICIT(vd.symbol.tpe.finalResultType), tree.pos)
             super.traverse(tree)
           case Application(fun, targs, argss) =>
             checkApplication(tree, fun, targs, argss)
@@ -199,17 +194,27 @@ class PostTyperCodingStandardsComponent(
         }
 
         // Optimus macros collapse range positions to offset, so skip this check as it depends on range positions.
-        // Abstract `def f` and `def f()` have tpt.pos == dd.pos (range positions).
-        // All others have offset position: `def f { }`, `def f() { }`, `def f(x: Int)`, `def f(x: Int) { }`
         val isProcedureUnit = !inMacroExpansion && settings.Yrangepos.value && (dd.tpt match {
           case tt: TypeTree =>
             !sym.isSynthetic && // e.g., default getters
             !sym.isParamAccessor && // @entity param accessors are not synthetic
             !sym.isAccessor && // field of type Unit
-            !isValAccessor(sym) && // generated for @stored @entity class fields
-            tt.tpe.typeSymbol == UnitClass &&
-            tt.original != null &&
-            (tt.pos.isOffset || tt.pos == dd.pos)
+            !isValAccessor(sym) && { // generated for @stored @entity class fields
+              // Abstract `def f` and `def f()` have tpt.pos == dd.pos (range positions).
+              // All others have offset position: `def f { }`, `def f() { }`, `def f(x: Int)`, `def f(x: Int) { }`
+              (tt.tpe.typeSymbol == UnitClass) && tt.original != null && (tt.pos.isOffset || tt.pos == dd.pos) ||
+              // def this() { this(1) }
+              sym.isAuxiliaryConstructor && {
+                var proc = true
+                var i = dd.rhs.pos.start
+                var cs = unit.source.content
+                while (cs(i) != ')') {
+                  if (cs(i) == '=') proc = false
+                  i -= 1
+                }
+                proc
+              }
+            }
           case _ => false
         })
         if (isProcedureUnit)
@@ -312,13 +317,21 @@ class PostTyperCodingStandardsComponent(
         if (argss == List(Nil) && tree.hasAttachment[InfixAttachment.type])
           alarm(Scala213MigrationMessages.NILARY_INFIX, fun.pos)
 
-        if (argss == List(Nil) && tree.hasAttachment[AutoApplicationAttachment.type]) {
+        val isAutoApplication = tree.hasAttachment[AutoApplicationAttachment.type] ||
+          sym.paramss.lastOption.flatMap(_.headOption).exists(_.isImplicit) && (tree match {
+            case Apply(f, _) => f.hasAttachment[AutoApplicationAttachment.type]
+            case _ => false
+          })
+
+        if (isAutoApplication) {
           enclosingDefs
-            .collectFirst { case dd: DefDef => dd }
-            .foreach(dd => {
-              val enclMeth = dd.symbol
-              if (!enclMeth.isSynthetic && !enclMeth.isAccessor) {
-                def skip = sym.isConstructor || sym.paramss != List(Nil) ||
+            .collectFirst {
+              case dd: DefDef   => dd.symbol
+              case cd: ClassDef => cd.symbol
+            }
+            .foreach(enclSym => {
+              if (!enclSym.isSynthetic && !enclSym.isAccessor) {
+                def skip = sym.isConstructor ||
                   sym.overrideChain.exists(o => o.isJavaDefined || definitions.isUniversalMember(o))
                 def okFor213 =
                   allowAutoApplicationNames(sym.name) && allowAutoApplication.exists(m => sym.overrideChain.contains(m))
@@ -333,8 +346,7 @@ class PostTyperCodingStandardsComponent(
             })
         }
 
-        val isNullaryIn213 = nullaryIn213Names(sym.name) && nullaryIn213.exists(m => sym.overrideChain.contains(m))
-        if (isNullaryIn213 && !tree.hasAttachment[AutoApplicationAttachment.type])
+        if (!isAutoApplication && isNullaryIn213(sym))
           alarm(Scala213MigrationMessages.NULLARY_IN_213, fun.pos, sym.name.toString)
 
         // TypeApply(fun, targs).tpe is different than fun.tpe

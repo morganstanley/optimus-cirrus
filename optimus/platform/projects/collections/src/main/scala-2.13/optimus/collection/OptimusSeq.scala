@@ -532,7 +532,7 @@ abstract class OptimusSeq[+T]
             val thatIt = that.iterator
             while (i < size || thatIt.hasNext) {
               val a = if (i < size) apply(i) else thisElem
-              val b = if (thatIt.hasNext) thatIt.next else thatElem
+              val b = if (thatIt.hasNext) thatIt.next() else thatElem
               builder += ((a, b))
               i += 1
             }
