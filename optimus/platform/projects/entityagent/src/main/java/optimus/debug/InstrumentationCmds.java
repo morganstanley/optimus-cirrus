@@ -273,13 +273,13 @@ public class InstrumentationCmds {
   }
 
   /**
-   * Instrument @methodToPatch to dump node and jvm stack if called from a cacheable node
+   * Instrument @methodToPatch to report node and jvm stack if called from a cacheable node
    * (transitively)
    *
    * @param methodToPatch full name package1.class2.methodName1
    */
-  public static void prefixCallWithDumpOnTransitivelyCached(String methodToPatch) {
-    prefixCall(methodToPatch, "optimus.graph.InstrumentationSupport.dumpStackIfTransitivelyCached");
+  public static void reportIfTransitivelyCached(String methodToPatch) {
+    prefixCall(methodToPatch, "optimus.debug.InstrumentedNotRTFunction.trigger");
   }
 
   /**

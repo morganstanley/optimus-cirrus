@@ -107,6 +107,8 @@ trait Args4jOptionHandlers {
   type PositiveIntOptionOptionHandler = optimus.utils.app.PositiveIntOptionOptionHandler
   type ScalaEnumerationOptionHandler = optimus.utils.app.ScalaEnumerationOptionHandler
   type SemicolonDelimitedArgumentOptionHandler[A] = optimus.utils.app.SemicolonDelimitedArgumentOptionHandler[A]
+  type SemicolonDelimitedEnumerationOptionHandler[T <: Enumeration] =
+    optimus.utils.app.SemicolonDelimitedEnumerationOptionHandler[T]
   type SeqIntegerOptionHandler = optimus.utils.app.SeqIntegerOptionHandler
   type SeqLocalDateOptionHandler = optimus.utils.app.SeqLocalDateOptionHandler
   type SeqPathOptionHandler = optimus.utils.app.SeqPathOptionHandler

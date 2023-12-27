@@ -12,17 +12,14 @@
 package optimus.buildtool.cache.silverking
 
 sealed trait OperationType {
-  def underlying: Set[SingleOperationType]
-}
-
-sealed trait SingleOperationType extends OperationType {
-  override def underlying: Set[SingleOperationType] = Set(this)
+  def str: String
 }
 
 object OperationType {
-  case object Read extends SingleOperationType
-  case object Write extends SingleOperationType
-  case object ReadAndWrite extends OperationType {
-    override def underlying: Set[SingleOperationType] = Set(Read, Write)
+  case object Read extends OperationType {
+    val str = "reads"
+  }
+  case object Write extends OperationType {
+    val str = "writes"
   }
 }

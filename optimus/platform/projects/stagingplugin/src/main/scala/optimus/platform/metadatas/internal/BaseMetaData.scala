@@ -38,7 +38,8 @@ case class EntityBaseMetaData(
     isTrait: Boolean,
     slotNumber: Int,
     explicitSlotNumber: Boolean,
-    parentNames: List[String])
+    parentNames: List[String],
+    piiElementMap: Map[String, String])
     extends BaseMetaData {
 
   def flags: Byte = {
@@ -210,7 +211,17 @@ private[optimus] object ClassMetaData {
       case e: MetaBaseMetaData => Some((e.owner, e.catalogClass))
       case _                   => None
     }
-    new ClassMetaData(baseMetaData.fullClassName, baseMetaData.flags, slotNumber, explicitSlotNumber, catalogingInfo)
+    val piiElementMap = baseMetaData match {
+      case e: EntityBaseMetaData => e.piiElementMap
+      case _                     => Map.empty[String, String]
+    }
+    new ClassMetaData(
+      baseMetaData.fullClassName,
+      baseMetaData.flags,
+      slotNumber,
+      explicitSlotNumber,
+      catalogingInfo,
+      piiElementMap)
   }
 }
 
@@ -219,7 +230,9 @@ private[optimus] class ClassMetaData private (
     private val flags: Byte,
     val slotNumber: Int,
     val explicitSlotNumber: Boolean,
-    val catalogingInfo: Option[(String, String)]) {
+    val catalogingInfo: Option[(String, String)],
+    val piiElementMap: Map[String, String]
+) {
 
   def packageName: String = {
     packageIndex match {
@@ -291,7 +304,7 @@ private[optimus] class ClassMetaData private (
 // implicit values used for spray json
 object MetaJsonProtocol extends DefaultJsonProtocol {
   import optimus.config.spray.json._
-  implicit val entityBaseMetaDataProtocol: RootJsonFormat[EntityBaseMetaData] = jsonFormat9(EntityBaseMetaData.apply)
+  implicit val entityBaseMetaDataProtocol: RootJsonFormat[EntityBaseMetaData] = jsonFormat10(EntityBaseMetaData.apply)
   implicit val embeddableBaseMetaDataProtocol: RootJsonFormat[EmbeddableBaseMetaData] =
     jsonFormat5(EmbeddableBaseMetaData.apply)
   implicit val eventBaseMetaDataProtocol: RootJsonFormat[EventBaseMetaData] = jsonFormat5(EventBaseMetaData.apply)

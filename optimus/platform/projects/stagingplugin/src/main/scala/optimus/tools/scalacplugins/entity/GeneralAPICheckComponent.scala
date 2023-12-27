@@ -63,8 +63,8 @@ class GeneralAPICheckComponent(
 
     override def traverse(tree: Tree): Unit = tree match {
       case md: MemberDef if md.hasSymbolField && md.symbol.hasAnnotation(NowarnAnnotation) =>
-        val annot = md.symbol.getAnnotation(NowarnAnnotation)
-        annot.foreach { a =>
+        val annots = md.symbol.annotations.filter(_.matches(NowarnAnnotation))
+        annots.foreach { a =>
           // The nowarn argument will either be an ordinal string or a (lone) member of a key-value map
           val arg0 = a.stringArg(0) orElse a.assocs.collectFirst { case (ValueName, LiteralAnnotArg(Constant(value))) =>
             value.toString

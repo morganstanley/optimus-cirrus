@@ -77,15 +77,14 @@ object LoggingInfo {
     files.toSeq
   }
 
-  // I'm worried that this might be huge for some apps, causing the crumb to exceed the size limit and get dropped
-  def getJavaOpts(): String = {
+  def getJavaOpts(maxLen: Int = 2000): String = {
     Option(System.getenv("JAVA_OPTS"))
       .map(_.trim)
       .map { o =>
         // the --add-exports / --add-opens are generally uninformative and waste room in our 2k limit
         // drop args after we reach 2000 chars
         val withoutJigsaw = o.split(" ").filterNot(_ startsWith "--add-").mkString(" ")
-        if (withoutJigsaw.length > 2000) withoutJigsaw.substring(0, 1997) + "..." else withoutJigsaw
+        if (withoutJigsaw.length > maxLen) withoutJigsaw.substring(0, maxLen - 3) + "..." else withoutJigsaw
       }
       .orNull
   }

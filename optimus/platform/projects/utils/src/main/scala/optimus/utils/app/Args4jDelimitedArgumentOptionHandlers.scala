@@ -166,6 +166,15 @@ final class SeqIntegerOptionHandler(parser: CmdLineParser, option: OptionDef, se
       .getOrThrow(s"Invalid character $s in argument. Expected characters 0 to 9.")
 }
 
+abstract class SemicolonDelimitedEnumerationOptionHandler[T <: Enumeration](
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Seq[T#Value]],
+    values: T)
+    extends SemicolonDelimitedArgumentOptionHandler[T#Value](parser, option, setter) {
+  def convert(s: String): T#Value = values.withName(s)
+}
+
 /////////// Other types ///////////
 
 abstract class DelimitedArgumentOptionOptionHandler[A](

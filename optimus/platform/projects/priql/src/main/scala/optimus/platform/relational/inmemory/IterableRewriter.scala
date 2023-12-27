@@ -16,10 +16,8 @@ import optimus.graph.CompletableNode
 import optimus.graph.Node
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerContext
-import optimus.graph.SequenceTiming
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
-import optimus.platform._
 import optimus.platform.relational.ExtensionProxyFactory
 import optimus.platform.relational.RelationalException
 import optimus.platform.relational.RelationalUnsupportedException
@@ -459,9 +457,7 @@ class IterableRewriter extends QueryTreeVisitor with MultiRelationRewriter {
     val CollectionInvocationElement(sf) = visitElement(src.param)
     CollectionInvocationElement(asNode { () =>
       val src = sf()
-      val id = SequenceTiming.create(src, "IterableRewriter.rewriteArrange")
       val ret = arrange(src, m.key.asInstanceOf[RelationKey[Any]])
-      SequenceTiming.completeTiming(id, ret, 0)
       ret
     })
   }

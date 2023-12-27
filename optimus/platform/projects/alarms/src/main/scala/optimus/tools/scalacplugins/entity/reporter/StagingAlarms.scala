@@ -19,6 +19,11 @@ object CodeStyleErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 }
 
 object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
+  val CLASS_EXTENDS_APP = warning1(
+    10001,
+    StagingPhase.POST_TYPER_STANDARDS,
+    "Concrete classes cannot extend OptimusApp or App, make %s into an object")
+
   val NON_FINAL_INNER_CASE_CLASS =
     warning0(
       10002,
@@ -92,7 +97,7 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
     error1(
       20307,
       StagingPhase.POST_TYPER_STANDARDS,
-      "Auto-application (insertion of an empty parameter list) is deprecated, write %s() instead.")
+      "Auto-application to `()` is deprecated. Supply the empty argument list `()` explicitly to invoke method %s, or remove the empty argument list from its definition.")
 
   val NULLARY_IN_213 =
     error1(
@@ -130,14 +135,14 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
     warning3(
       20312,
       StagingPhase.POST_TYPER_STANDARDS,
-      """[NEW]Widening conversion from %s to %s is deprecated because it loses precision, add an explicit `%s`.""".stripMargin
+      """Widening conversion from %s to %s is deprecated because it loses precision, add an explicit `%s`.""".stripMargin
     )
 
   val INTEGRAL_DIVISION_TO_FLOATING =
     warning1(
       20313,
       StagingPhase.POST_TYPER_STANDARDS,
-      """[NEW]Integral division is implicitly converted (widened) to a floating point value. Add an explicit `.%s`.""".stripMargin
+      """Integral division is implicitly converted (widened) to a floating point value. Add an explicit `.%s`.""".stripMargin
     )
 
   val NEEDS_UNSORTED =
@@ -198,5 +203,5 @@ object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     warning1(
       10005,
       StagingPhase.POST_TYPER_STANDARDS,
-      "Public implicit methods and classes should have explicit type: %s")
+      "Implicit definition should have explicit type (inferred %s)")
 }

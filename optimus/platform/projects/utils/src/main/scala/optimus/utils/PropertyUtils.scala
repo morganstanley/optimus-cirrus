@@ -13,7 +13,10 @@ package optimus.utils
 
 object PropertyUtils {
 
-  // Look first for -Dfoo.bar.baz and then for OPTIMUS_DIST_FOO_BAR_BAZ.
+  // Check in order:
+  // 1. FOO_BAR_BAZ
+  // 2. OPTIMUS_DIST_FOO_BAR_BAZ
+  // 3. -Dfoo.bar.baz
   // While this could be a generic utility, its real purpose is to lever
   // the auto-distribution of OPTIMUS_DIST-prefixed environment variables.
   private val Prefix = "optimus.dist."
@@ -21,15 +24,20 @@ object PropertyUtils {
   def flag(k: String) = get(k, false)
   def get(k: String, default: => Boolean): Boolean = get(k).map(parseBoolean(_)).getOrElse(default)
   def get(k: String, default: => Int): Int = get(k).map(_.toInt).getOrElse(default)
+  def getDouble(k: String, default: => Double): Double = get(k).map(_.toDouble).getOrElse(default)
+  def getLong(k: String, default: => Long): Long = get(k).map(_.toLong).getOrElse(default)
   def get(k: String, default: => String): String = get(k).getOrElse(default)
   def get(k: String, overrides: Map[String, String] = Map.empty): Option[String] = {
     overrides.get(k) orElse {
-      Option(System.getProperty(k))
-    } orElse {
+      // FOO_BAR_BAZ
       Option(System.getenv(asEnv(k)))
     } orElse {
+      // OPTIMUS_DIST_FOO_BAR_BAZ
       val kv = (if (k.startsWith(Prefix)) k else s"$Prefix$k")
       Option(System.getenv(asEnv(kv)))
+    } orElse {
+      // -Dfoo.bar.baz
+      Option(System.getProperty(k))
     }
   }
 

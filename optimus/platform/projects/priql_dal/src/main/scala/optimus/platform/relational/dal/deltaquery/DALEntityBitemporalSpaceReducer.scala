@@ -56,7 +56,7 @@ class DALEntityBitemporalSpaceReducer(override val provider: DALProvider) extend
 
     val expression = command.formattedQuery match {
       case ExpressionQuery(ex, QueryPlan.Default) => ex
-      case ExpressionQuery(_, QueryPlan.Accelerated | QueryPlan.Sampling) =>
+      case ExpressionQuery(_, QueryPlan.Accelerated | QueryPlan.Sampling | QueryPlan.FullTextSearch) =>
         throw new RelationalUnsupportedException("Query not supported")
     }
     new DALEntityBitemporalSpaceProvider(

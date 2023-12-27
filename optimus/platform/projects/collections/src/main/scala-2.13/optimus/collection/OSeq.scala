@@ -20,7 +20,7 @@ import scala.reflect.ClassTag
 
 object OSeq extends SeqFactory.Delegate(OptimusSeq) {
   def emptySeq[T: ClassTag]: OSeq[T] = {
-    getCompanion[T].emptyOS[Nothing]
+    getCompanion[T]().emptyOS[Nothing]
   }
 
   @compileTimeOnly("Use OSeq.emptySeq[T] instead, as of Scala 2.13 OSeq.empty cannot accept a ClassTag")
@@ -51,10 +51,10 @@ object OSeq extends SeqFactory.Delegate(OptimusSeq) {
     } else OptimusSeq.asInstanceOf[OSeqCompanion[T]]
   }
   def tabulate[T: ClassTag](size: Int)(elemFn: OSeqTabulate[T]): OSeq[T] = {
-    getCompanion[T].tabulateOS[T](size)(elemFn)
+    getCompanion[T]().tabulateOS[T](size)(elemFn)
   }
   def fill[T: ClassTag](size: Int)(elem: T): OSeq[T] = {
-    getCompanion[T].fillOS[T](size)(elem)
+    getCompanion[T]().fillOS[T](size)(elem)
   }
 }
 abstract class OSeq[+T] private[collection] ()
@@ -83,8 +83,8 @@ abstract class OSeq[+T] private[collection] ()
         }
         (aBuilder.result(), bBuilder.result())
       } finally {
-        aBuilder.returnBorrowed
-        bBuilder.returnBorrowed
+        aBuilder.returnBorrowed()
+        bBuilder.returnBorrowed()
       }
     }
   }
@@ -108,9 +108,9 @@ abstract class OSeq[+T] private[collection] ()
         }
         (aBuilder.result(), bBuilder.result(), cBuilder.result())
       } finally {
-        aBuilder.returnBorrowed
-        bBuilder.returnBorrowed
-        cBuilder.returnBorrowed
+        aBuilder.returnBorrowed()
+        bBuilder.returnBorrowed()
+        cBuilder.returnBorrowed()
       }
     }
   }

@@ -21,13 +21,14 @@ public class RTVerifierCategory {
   public static final String NONE = "RTV_CATEGORY_UNKNOWN";
   public static final String MODULE_CTOR_EC_CURRENT = "MODULE_CTOR_EC_CURRENT";
 
-  // currently hidden in reports and dashboards, as not an RT violation until we introduce multi-tenancy
+  // currently hidden in reports and dashboards, as not an RT violation until we introduce
+  // multi-tenancy
   public static final String MODULE_CTOR_SI_NODE = "MODULE_CTOR_SI_NODE";
   public static final String MODULE_LAZY_VAL_EC_CURRENT = "MODULE_LAZY_VAL_EC_CURRENT";
   public static final String TWEAK_IN_ENTITY_CTOR = "TWEAK_IN_ENTITY_CTOR";
   public static final String TWEAKABLE_IN_ENTITY_CTOR = "TWEAKABLE_IN_ENTITY_CTOR";
   public static final String NON_RT_NODE = "NON_RT_NODE";
-
+  public static final String NODE_WITH_NON_RT_CALL = "NODE_WITH_NON_RT_CALL";
   public static final String UTRACK_OVER_INVALIDATION = "UTRACK_OVER_INVALIDATION";
   public static final String UI_INVALIDATION_AFTER_EVAL = "UI_INVALIDATION_AFTER_EVAL";
 }

@@ -11,8 +11,6 @@
  */
 package optimus.tools.scalacplugins.entity.reporter
 
-import optimus.tools.scalacplugins.entity.OptimusPhaseInfo
-
 import scala.collection.mutable
 
 object OptimusAlarms {
@@ -58,10 +56,9 @@ object OptimusAlarms {
           val validatedAlarms = mutable.HashMap[Int, OptimusAlarmBuilder]()
 
           def initGroup(entry: (Int, mutable.Buffer[OptimusAlarmBuilder])): Unit = {
-            val (base, group) = entry
+            val (_, group) = entry
             def add(oab: OptimusAlarmBuilder): Unit = {
               val sn = oab.id.sn
-              val code = sn - (sn % 10000)
               validatedAlarms.get(sn) match {
                 case Some(existing) =>
                   assert(
@@ -70,7 +67,6 @@ object OptimusAlarms {
                   )
                 case None => ()
               }
-              assert(code == base, s"Bad message code $sn, should have base of $base")
               validatedAlarms.put(sn, oab)
             }
 
@@ -111,6 +107,7 @@ object OptimusAlarms {
 }
 
 trait OptimusAlarms {
+  // TODO (OPTIMUS-62197): get rid of this field entirely
   protected def base: Int
   private val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
 
@@ -124,7 +121,7 @@ trait OptimusAlarms {
       (a.id, a.template)
     }.toMap
 
-  final def alarmId(sn: Int, tpe: OptimusAlarmType.Tpe) = {
+  final def alarmId(sn: Int, tpe: OptimusAlarmType.Tpe): AlarmId = {
     require(sn >= 0)
     AlarmId(sn, tpe)
   }

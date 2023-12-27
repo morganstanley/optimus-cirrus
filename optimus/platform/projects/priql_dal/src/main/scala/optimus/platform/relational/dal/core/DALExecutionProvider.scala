@@ -13,14 +13,12 @@ package optimus.platform.relational.dal.core
 
 import optimus.entity.EntityInfoRegistry
 import optimus.graph.Node
-import optimus.graph.SequenceTiming
 import optimus.platform._
 import optimus.platform.dal.DalAPI
 import optimus.platform.dal.EntityResolverReadImpl
 import optimus.platform.dal.QueryTemporalityFinder
 import optimus.platform.pickling.PickledInputStream
 import optimus.platform.AsyncImplicits._
-import optimus.platform._
 import optimus.platform.dsi.bitemporal.EntityClassQuery
 import optimus.platform.dsi.bitemporal.ExpressionQueryCommand
 import optimus.platform.dsi.bitemporal.QueryPlan
@@ -78,33 +76,23 @@ class DALExecutionProvider[T](
     val displayExpr = AsyncValueEvaluator.prepareForDisplay(expression)
     val sel @ Select(e: Entity, _, _, _, Nil, _, None, _, _, _) = ConstFormatter.format(displayExpr, null)
     val detail = ExpressionPriQLFormatter.format(sel).substring(6 + e.name.length) // remove the from(...)
-    table += new QueryExplainItem(
-      level_id,
-      "DALAccess",
-      rowTypeInfo.name,
-      if (detail.length == 0) "TableScan" else detail,
-      0)
+    table += QueryExplainItem(level_id, "DALAccess", rowTypeInfo.name, if (detail.isEmpty) "TableScan" else detail, 0)
   }
 
   @async
   final protected def getViaExpression(resolver: EntityResolverReadImpl): Iterable[T] = {
     val command = buildServerSideCommand()
-    val seqOpId = SequenceTiming.create(s"DALExecutionProvider.getViaExpression(resolver)")
     val resultSet = Query.Tracer.trace(
       executeOptions.pos,
       asNode { () =>
-        AdvancedUtils.givenWithSeqId(seqOpId, Scenario.empty) {
-          resolver.findByExpressionCommandWithTemporalContext(command, dalApi.loadContext)
-        }
+        resolver.findByExpressionCommandWithTemporalContext(command, dalApi.loadContext)
       }
     )
     val intermediate = resultSet.result
-    SequenceTiming.completeTiming(seqOpId, intermediate, 0)
 
     val inputStream = DbPickledInputStream(Map.empty, dalApi.loadContext)
     val ret = nodeOrFunc match {
       case Right(f) =>
-        val readId = SequenceTiming.create(intermediate, s"DALExecutionProvider.resultSet.reader: $somePosition")
         val builder = new VectorBuilder[T]()
         val rsReader = resultSet.reader
         val reader = new DALFieldReader(rsReader, inputStream)
@@ -112,7 +100,7 @@ class DALExecutionProvider[T](
           builder += f(reader)
         }
         val ret = builder.result()
-        SequenceTiming.completeTiming(readId, ret, 1)
+        ret
 
       case Left(nf) =>
         val nodeFunc = asNode.apply$withNode(nf)
@@ -124,7 +112,6 @@ class DALExecutionProvider[T](
   @async override def get(): Iterable[T] = {
     import BinaryOperator.Equal
     import PropertyType.Special
-    import optimus.platform.dsi.bitemporal.QueryResultMetaData._
     val resolver = EvaluationContext.env.entityResolver.asInstanceOf[EntityResolverReadImpl]
     val Select(e: Entity, properties, where, sortBy, Nil, take, None, _, _, _) = expression
     val entity = EntityInfoRegistry.getClassInfo(e.name).runtimeClass.asInstanceOf[Class[OptimusEntity]]
@@ -138,18 +125,15 @@ class DALExecutionProvider[T](
         where match {
           case None if sortBy.isEmpty && take.isEmpty =>
             // class query, we should trace it since there is no DAL api for such query
-            val seqOpId = SequenceTiming.create(s"DALExecutionProvider.findEntitesByClassWithContext: $somePosition")
             val ret = Query.Tracer.trace(
               executeOptions.pos,
               asNode { () =>
-                AdvancedUtils.givenWithSeqId(seqOpId, Scenario.empty) {
-                  resolver
-                    .findEntitiesByClassWithContext(entity, loadCtx, executeOptions.entitledOnly)
-                    .asInstanceOf[Iterable[T]]
-                }
+                resolver
+                  .findEntitiesByClassWithContext(entity, loadCtx, executeOptions.entitledOnly)
+                  .asInstanceOf[Iterable[T]]
               }
             )
-            SequenceTiming.completeTiming(seqOpId, ret, 0)
+            ret
 
           case Some(Binary(Equal, _: Property, r @ RichConstant(_, _, Some(index))))
               if (index.unique || index.storableClass == entity) && sortBy.isEmpty && take.isEmpty =>
@@ -157,30 +141,26 @@ class DALExecutionProvider[T](
             val sk = index.toSerializedKey(checkLoadContext(v, loadCtx))
             val k = if (index.unique) {
               new UniqueKey[OptimusEntity] {
-                def toSerializedKey = sk
-                def subjectClass = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+                def toSerializedKey: SerializedKey = sk
+                def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
               }
             } else {
               new NonUniqueKey[OptimusEntity] {
-                def toSerializedKey = sk
-                def subjectClass = index.storableClass.asInstanceOf[Class[OptimusEntity]]
+                def toSerializedKey: SerializedKey = sk
+                def subjectClass: Class[OptimusEntity] = index.storableClass.asInstanceOf[Class[OptimusEntity]]
               }
             }
             // query equivalent to Entity.index.find(...) or Entity.get(...)
-            val seqOpId = SequenceTiming.create("DALExecutionProvider.findByIndex")
             val result = Query.Tracer.trace(
               executeOptions.pos,
               asNode { () =>
-                AdvancedUtils.givenWithSeqId(seqOpId, Scenario.empty) {
-                  resolver.findByIndex(k, loadCtx, Some(entity), executeOptions.entitledOnly).asInstanceOf[Iterable[T]]
-                }
+                resolver.findByIndex(k, loadCtx, Some(entity), executeOptions.entitledOnly).asInstanceOf[Iterable[T]]
               }
             )
             val ret =
               if (k.subjectClass == entity) result
               else result.filter(e => entity.isAssignableFrom(e.getClass))
-            SequenceTiming.completeTiming(seqOpId, ret, 0)
-
+            ret
           case _ =>
             getViaExpression(resolver)
         }

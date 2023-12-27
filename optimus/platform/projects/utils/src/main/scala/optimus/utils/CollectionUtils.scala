@@ -177,8 +177,8 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * Groups the collection based on the key function. Results are deterministically ordered in the
-     * same order as the input collection.
+     * Groups the collection based on the key function. Results are deterministically ordered in the same order as the
+     * input collection.
      */
     def groupByStable[K](key: A => K): Seq[(K, Seq[A])] = {
       val result = new java.util.LinkedHashMap[K, ListBuffer[A]]()
@@ -339,5 +339,11 @@ trait CollectionUtils {
       builder ++= those
       builder.result()
     }
+  }
+
+  implicit class RichSeqOps[A, C[X] <: Seq[X]](private val xs: C[A]) {
+    def combinations2: Iterator[(A, A)] =
+      xs.combinations(2).map(x => (x: @unchecked) match { case Seq(a, b) => (a, b) })
+    def sliding2: Iterator[(A, A)] = xs.sliding(2).map(x => (x: @unchecked) match { case Seq(a, b) => (a, b) })
   }
 }

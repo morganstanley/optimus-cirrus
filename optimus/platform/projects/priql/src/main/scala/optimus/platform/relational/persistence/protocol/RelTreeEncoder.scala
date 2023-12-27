@@ -84,7 +84,7 @@ trait RelTreeEncoder extends RelationTreeEncoder {
       .setItemType(encodeType(u.projectedType()))
       .setUnary(
         RelExpr.UnaryExpressionElement.newBuilder
-          .setExprType(UnaryExpressionType.valueOf(u.op.id))
+          .setExprType(UnaryExpressionType.forNumber(u.op.id))
           .setOperand(encodeRelation(u.element, encodeType)))
   }
 
@@ -94,7 +94,7 @@ trait RelTreeEncoder extends RelationTreeEncoder {
       .setItemType(encodeType(b.projectedType()))
       .setBinary(
         RelExpr.BinaryExpressionElement.newBuilder
-          .setExprType(BinaryExpressionType.valueOf(b.op.id))
+          .setExprType(BinaryExpressionType.forNumber(b.op.id))
           .setLeft(encodeRelation(b.left, encodeType))
           .setRight(encodeRelation(b.right, encodeType)))
 
@@ -253,7 +253,7 @@ trait RelTreeEncoder extends RelationTreeEncoder {
   }
 
   protected def encodeQueryMethod(qm: QueryMethod): QueryMethodType =
-    Option(QueryMethodType.valueOf(QueryMethodNumberMap.getNumberByQueryMethod(qm))) getOrElse {
+    Option(QueryMethodType.forNumber(QueryMethodNumberMap.getNumberByQueryMethod(qm))) getOrElse {
       throw new UnsupportedOperationException("Unsupported QueryMethod: " + qm)
     }
 }

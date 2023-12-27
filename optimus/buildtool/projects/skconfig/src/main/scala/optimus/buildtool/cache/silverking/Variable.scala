@@ -39,6 +39,27 @@ object FailureState {
   case object Failed extends FailureState
 }
 
+private[silverking] class MaxFailuresReadWriteSwitch(
+    maxFailures: Int = SilverKingConfig.MaxFailures,
+    onTrigger: Option[() => Unit]
+) {
+  protected val readSwitch: MaxFailuresSwitch = createSwitch()
+  protected val writeSwitch: MaxFailuresSwitch = createSwitch()
+
+  protected def createSwitch(): MaxFailuresSwitch = new MaxFailuresSwitch(maxFailures, onTrigger)
+
+  private def switch(opType: OperationType) = opType match {
+    case OperationType.Read  => readSwitch
+    case OperationType.Write => writeSwitch
+  }
+
+  def state(opType: OperationType): Boolean = switch(opType).state
+
+  def reportFailure(opType: OperationType): FailureState = switch(opType).reportFailure()
+
+  def retryTime(opType: OperationType): Option[Instant] = switch(opType).retryTime
+}
+
 private[silverking] class MaxFailuresSwitch(
     maxFailures: Int = SilverKingConfig.MaxFailures,
     onTrigger: Option[() => Unit]
@@ -76,28 +97,25 @@ private[silverking] class MaxFailuresSwitch(
 
 private[silverking] class DistributedSwitch(
     onTrigger: Option[() => Unit]
-) extends Variable[Option[(OperationType, String)]] {
+) extends Variable[Map[OperationType, String]] {
 
-  @volatile protected var current: Option[(OperationType, String)] = initialValue
+  @volatile protected var current: Map[OperationType, String] = initialValue
 
-  protected def initialValue: Option[(OperationType, String)] = None
+  protected def initialValue: Map[OperationType, String] = Map.empty
 
-  // None == enabled
-  // Some((opType, msg)) == disabled for `opType`, with informational message `msg`
-  override def state: Option[(OperationType, String)] = current
+  // state.get(opType) == None ==> enabled
+  // state.get(opType) == Some(msg) ==> disabled for `opType`, with informational message `msg`
+  override def state: Map[OperationType, String] = current
 
-  protected def updateState(v: Option[(OperationType, String)]): Unit = {
+  protected def updateState(v: Map[OperationType, String]): Unit = {
     if (current != v) {
       logUpdate(v)
-      v match {
-        case Some((OperationType.ReadAndWrite, _)) => onTrigger.foreach(_())
-        case _                                     => // do nothing
-      }
+      if (v.contains(OperationType.Read)) onTrigger.foreach(_())
       current = v
     }
   }
 
-  protected def logUpdate(v: Option[(OperationType, String)]): Unit = ()
+  protected def logUpdate(v: Map[OperationType, String]): Unit = ()
 }
 
 private[buildtool] class ZookeeperSwitch(
@@ -110,7 +128,7 @@ private[buildtool] class ZookeeperSwitch(
 
   private def clusterStr = SilverKingStoreConfig.clusterStr(clusterType)
 
-  override protected def initialValue: Option[(OperationType, String)] = {
+  override protected def initialValue: Map[OperationType, String] = {
     // register listener
     val zkValue = new ReadOnlyDistributedValue[String](
       curator,
@@ -127,36 +145,37 @@ private[buildtool] class ZookeeperSwitch(
     updateState(newVal)
   }
 
-  protected def parse(update: Option[String]): Option[(OperationType, String)] = update.flatMap { s =>
-    val lines = s.linesIterator.map(_.trim).toSeq
-    val disabled = lines.contains("enabled=false")
-    val readDisabled = lines.contains("readEnabled=false")
-    val writeDisabled = lines.contains("writeEnabled=false")
-    val disabledOpType =
-      if (disabled || (readDisabled && writeDisabled)) Some(OperationType.ReadAndWrite)
-      else if (readDisabled) Some(OperationType.Read)
-      else if (writeDisabled) Some(OperationType.Write)
-      else None
+  protected def parse(update: Option[String]): Map[OperationType, String] = update
+    .map { s =>
+      val lines = s.linesIterator.map(_.trim).toSeq
+      val disabled = lines.contains("enabled=false")
+      val readDisabled = lines.contains("readEnabled=false")
+      val writeDisabled = lines.contains("writeEnabled=false")
+      val disabledOpTypes =
+        if (disabled || (readDisabled && writeDisabled)) Set(OperationType.Read, OperationType.Write)
+        else if (readDisabled) Set(OperationType.Read)
+        else if (writeDisabled) Set(OperationType.Write)
+        else Set.empty[OperationType]
 
-    disabledOpType.map { t =>
-      val typeStr = t match {
-        case ReadAndWrite => "reads and writes"
-        case Read         => "reads"
-        case Write        => "writes"
-      }
-      val defaultMsg = s"$clusterStr $typeStr ${ZookeeperSwitch.silverKingDisabledMsg}"
-      (
-        t,
-        lines
+      if (disabledOpTypes.nonEmpty) {
+        val typeStr = disabledOpTypes
+          .map {
+            case Read  => "reads"
+            case Write => "writes"
+          }
+          .mkString(" and ")
+        val defaultMsg = s"$clusterStr $typeStr ${ZookeeperSwitch.silverKingDisabledMsg}"
+        val message = lines
           .collectFirst { case ZookeeperSwitch.MessageRe(message) => s"$defaultMsg ($message)" }
           .getOrElse(defaultMsg)
-      )
+        disabledOpTypes.map { t => (t, message) }.toMap[OperationType, String]
+      } else Map.empty[OperationType, String]
     }
-  }
+    .getOrElse(Map.empty[OperationType, String])
 
-  override protected def logUpdate(v: Option[(OperationType, String)]): Unit = {
+  override protected def logUpdate(v: Map[OperationType, String]): Unit = {
     log.debug(s"Changing setting of SK ZookeeperSwitch from $current to $v")
-    log.info(v match {
+    log.info(v.headOption match {
       case Some((_, msg)) => msg
       case None           => s"$clusterStr re-enabled"
     })
@@ -173,13 +192,14 @@ private[buildtool] object ZookeeperSwitch {
       config: SilverKingConfig,
       clusterType: ClusterType,
       onTrigger: Option[() => Unit]
-  ): Variable[Option[(OperationType, String)]] = {
+  ): Variable[Map[OperationType, String]] = {
     (SilverKingStoreConfig.enabled, config) match {
       case (Some(true), _) =>
         log.info(s"${SilverKingStoreConfig.clusterStr(clusterType)} force-enabled by system property")
-        Constant(None)
+        Constant(Map.empty[OperationType, String])
       case (Some(false), _) =>
-        Constant(Some((ReadAndWrite, s"${SilverKingStoreConfig.clusterStr(clusterType)} disabled by system property")))
+        val msg = s"${SilverKingStoreConfig.clusterStr(clusterType)} disabled by system property"
+        Constant(Map(Read -> msg, Write -> msg))
       case (None, cfg: ZookeeperConfig) =>
         try {
           val curator = ZkUtils.getRootContext(cfg.env).getCurator
@@ -188,10 +208,10 @@ private[buildtool] object ZookeeperSwitch {
         } catch {
           case NonFatal(e) =>
             log.warn("Failed to create ZookeeperSwitch", e)
-            Constant(None)
+            Constant(Map.empty[OperationType, String])
         }
       case _ =>
-        Constant(None)
+        Constant(Map.empty[OperationType, String])
     }
   }
 }

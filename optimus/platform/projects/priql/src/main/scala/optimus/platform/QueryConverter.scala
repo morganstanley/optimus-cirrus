@@ -11,8 +11,6 @@
  */
 package optimus.platform
 
-import optimus.graph.SequenceTiming
-import optimus.platform._
 import optimus.platform.relational.KeyPropagationPolicy
 import optimus.platform.relational.csv.{AbstractCsvSource, CsvMultiRelation, CsvSource}
 import optimus.platform.relational.excel.{ExcelMultiRelation, ExcelSource}
@@ -55,7 +53,6 @@ object QueryConverter extends LowPriorityConverters {
         case _                    => true
       }
       val iseq = src.toIndexedSeq
-      SequenceTiming.forward(src, iseq)
       val elem = ScalaTypeMultiRelation(iseq, key, pos, itemType, shouldExecuteDistinct, getKeyPolicy(p))
       p.createQuery(elem)
     }

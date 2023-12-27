@@ -17,7 +17,7 @@ trait StagingPluginDefinitions {
   val global: Global
   import global._
   import definitions._
-  import rootMirror.{getClassIfDefined, getRequiredClass, requiredClass}
+  import rootMirror.{getClassIfDefined, getRequiredClass, requiredClass, requiredModule}
 
   lazy val GenTraversableOnceClass = getClassIfDefined("scala.collection.GenTraversableOnce")
   lazy val GenTraversableOnce_to = getMemberIfDefined(GenTraversableOnceClass, TermName("to"))
@@ -74,9 +74,14 @@ trait StagingPluginDefinitions {
   } ++ {
     val bd = requiredClass[scala.math.BigDecimal]
     Set("toBigInt", "toBigIntExact").map(n => getMemberMethod(bd, TermName(n)))
-  } + getMemberMethod(requiredClass[scala.concurrent.duration.Duration], TermName("isFinite"))
+  } +
+    getMemberMethod(requiredClass[scala.concurrent.duration.Duration], TermName("isFinite")) +
+    getMemberMethod(requiredModule[scala.collection.mutable.ArrayBuilder.type], TermName("make"))
 
   lazy val nullaryIn213Names = nullaryIn213.map(_.name)
+
+  def isNullaryIn213(sym: Symbol) =
+    nullaryIn213Names(sym.name) && nullaryIn213.exists(m => sym.overrideChain.contains(m))
 
   lazy val allowAutoApplication = Set(
     definitions.Any_##,

@@ -22,7 +22,8 @@ import scala.util.hashing.MurmurHash3
 
 class ImmutableArray[A] private (private val as: Array[A])
     extends immutable.IndexedSeq[A]
-    with immutable.IndexedSeqOps[A, immutable.IndexedSeq, collection.IndexedSeq[A]] {
+    with immutable.IndexedSeqOps[A, immutable.IndexedSeq, collection.IndexedSeq[A]]
+    with Serializable {
   override def apply(idx: Int): A = as.apply(idx)
   override def length: Int = as.length
 
@@ -87,7 +88,7 @@ object ImmutableArray {
           private val buf = mutable.ArrayBuffer.empty[T]
           // Using ImmutableArray.wrapped here as a reference to the array should never escape
           override def result(): ImmutableArray[T] = ImmutableArray.wrapped[T](buf.toArray)
-          override def clear(): Unit = buf.clear
+          override def clear(): Unit = buf.clear()
           override def addOne(e: T): this.type = { buf += e; this }
         }
       }
@@ -109,7 +110,7 @@ object ImmutableArray {
       override def sizeHint(size: Int): Unit = buf.sizeHint(size)
       // Using ImmutableArray.wrapped here as a reference to the array should never escape
       override def result(): ImmutableArray[A] = ImmutableArray.wrapped[A](buf.toArray)
-      override def clear(): Unit = buf.clear
+      override def clear(): Unit = buf.clear()
       override def addOne(e: A): this.type = { buf += e; this }
     }
   }

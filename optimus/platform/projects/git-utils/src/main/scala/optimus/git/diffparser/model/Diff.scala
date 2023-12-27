@@ -36,7 +36,7 @@ object Line {
 }
 
 final case class PartialHunk(fromFileRange: Range, toFileRange: Range, lines: mutable.Buffer[Line]) {
-  def this(fromFileRange: Range, toFileRange: Range) { // used from Java
+  def this(fromFileRange: Range, toFileRange: Range) = { // used from Java
     this(fromFileRange, toFileRange, mutable.Buffer.empty)
   }
 

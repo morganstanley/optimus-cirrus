@@ -49,9 +49,9 @@ object JsonParser {
 class JsonParser(input: ParserInput) {
   import JsonParser.ParsingException
 
-  private[this] val sb = new JStringBuilder
-  private[this] var cursorChar: Char = input.nextChar()
-  private[this] var jsValue: JsValue = _
+  protected[this] val sb = new JStringBuilder
+  protected[this] var cursorChar: Char = input.nextChar()
+  protected[this] var jsValue: JsValue = _
 
   def parseJsValue(): JsValue = {
     ws()
@@ -65,7 +65,7 @@ class JsonParser(input: ParserInput) {
   private final val EOI = '\uFFFF' // compile-time constant
 
   // http://tools.ietf.org/html/rfc4627#section-2.1
-  private def `value`(): Unit = {
+  protected final def `value`(): Unit = {
     val mark = input.cursor
     def simpleValue(matched: Boolean, value: JsValue) = if (matched) jsValue = value else fail("JSON Value", mark)
     (cursorChar: @switch) match {
@@ -77,30 +77,25 @@ class JsonParser(input: ParserInput) {
       case '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '-' => `number`()
       case '"' => `string`(); jsValue = if (sb.length == 0) JsString.empty else JsString(sb.toString)
       case _ =>
-        val inputIterator = new Iterator[Char]() {
-          override def hasNext: Boolean = cursorChar != EOI
-          override def next(): Char = { advance(); cursorChar }
-        }
-        jsValue = valueExtension(inputIterator)
+        jsValue = valueExtension()
     }
   }
 
-  protected def valueExtension(input: Iterator[Char]): JsValue = fail("JSON Value")
+  protected def valueExtension(): JsValue = fail("JSON Value")
 
   private def `false`() = advance() && ch('a') && ch('l') && ch('s') && ws('e')
   private def `null`() = advance() && ch('u') && ch('l') && ws('l')
   private def `true`() = advance() && ch('r') && ch('u') && ws('e')
 
+  protected def enteringField(key: String): Unit = ()
+  protected def exitingField(): Unit = ()
+
   // http://tools.ietf.org/html/rfc4627#section-2.2
-  private def `object`(): Unit = {
+  protected def `object`(): Unit = {
     ws()
     jsValue = if (cursorChar != '}') {
       @tailrec def members(map: Map[String, JsValue]): Map[String, JsValue] = {
-        `string`()
-        require(':')
-        ws()
-        val key = sb.toString
-        `value`()
+        val key: String = keyValue()
         val nextMap =
           if (!map.contains(key)) map.updated(key, jsValue)
           else {
@@ -120,7 +115,18 @@ class JsonParser(input: ParserInput) {
     ws()
   }
 
-  // http://tools.ietf.org/html/rfc4627#section-2.3
+  protected def keyValue(): String = {
+    `string`()
+    require(':')
+    ws()
+    val key = sb.toString
+    enteringField(key)
+    `value`()
+    exitingField()
+    key
+  }
+
+// http://tools.ietf.org/html/rfc4627#section-2.3
   private def `array`(): Unit = {
     ws()
     jsValue = if (cursorChar != ']') {
@@ -164,7 +170,7 @@ class JsonParser(input: ParserInput) {
   private def DIGIT(): Boolean = cursorChar >= '0' && cursorChar <= '9' && advance()
 
   // http://tools.ietf.org/html/rfc4627#section-2.5
-  private def `string`(): Unit = {
+  protected final def `string`(): Unit = {
     if (cursorChar == '"') cursorChar = input.nextUtf8Char() else fail("'\"'")
     sb.setLength(0)
     while (`char`()) cursorChar = input.nextUtf8Char()
@@ -211,7 +217,7 @@ class JsonParser(input: ParserInput) {
     }
   }
 
-  @tailrec private def ws(): Unit =
+  @tailrec protected final def ws(): Unit =
     // fast test whether cursorChar is one of " \n\r\t"
     if (((1L << cursorChar) & ((cursorChar - 64) >> 31) & 0x100002600L) != 0L) { advance(); ws() }
 
@@ -219,11 +225,11 @@ class JsonParser(input: ParserInput) {
 
   private def ch(c: Char): Boolean = if (cursorChar == c) { advance(); true }
   else false
-  private def ws(c: Char): Boolean = if (ch(c)) { ws(); true }
+  protected final def ws(c: Char): Boolean = if (ch(c)) { ws(); true }
   else false
-  private def advance(): Boolean = { cursorChar = input.nextChar(); true }
+  protected final def advance(): Boolean = { cursorChar = input.nextChar(); true }
   private def appendSB(c: Char): Boolean = { sb.append(c); true }
-  private def require(c: Char): Unit = if (!ch(c)) fail(s"'$c'")
+  protected final def require(c: Char): Unit = if (!ch(c)) fail(s"'$c'")
 
   protected final def fail(
       target: String,

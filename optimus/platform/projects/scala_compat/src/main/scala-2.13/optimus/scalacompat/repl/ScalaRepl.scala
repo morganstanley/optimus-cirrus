@@ -54,9 +54,8 @@ class ScalaInterpreter private (settings: Settings, interpreterSettings: ScalaIn
   }
 
   val iMain: IMain = new IMain(settings, interpreterSettings.parentClassLoader, settings, reporter) { iMainSelf =>
-    override lazy val memberHandlers = new {
-      val intp: iMainSelf.type = iMainSelf
-    } with OptimusMemberHandlers
+    class ScalaInterpreterMHs(override val intp: iMainSelf.type) extends OptimusMemberHandlers
+    override lazy val memberHandlers = new ScalaInterpreterMHs(iMainSelf)
   }
 
   private val maxPrintStringProp = reporter.config.maxPrintString.option.orElse(interpreterSettings.maxPrintString)

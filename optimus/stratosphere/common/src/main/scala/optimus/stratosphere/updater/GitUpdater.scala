@@ -42,23 +42,16 @@ object GitUpdater {
   }
 }
 
-class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
+class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
   private val overwrittenHookNames = List("pre-commit", "prepare-commit-msg", "pre-push")
 
-  def configureRepo(forceConfigUpdate: Boolean): Unit = {
-    if (stratoWorkspace.hasGitInWorkspace) {
-      ensureGitInstalled(GitProcess.isUsingGitFromTools(stratoWorkspace.config))
-      if (forceConfigUpdate) {
-        adjustSettings()
-        copyHooks()
-      }
-    } else {
-      stratoWorkspace.log.info("Git configuration skipped...")
-    }
+  def configureRepo(): Unit = {
+    adjustSettings()
+    copyHooks()
   }
 
-  def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit = {
-    if (OsSpecific.isWindows) {
+  def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit =
+    if (OsSpecific.isWindows && !OsSpecific.isCi) {
       if (stratoWorkspace.tools.git.isDefault != useGitFromArtifactory) {
         stratoWorkspace.log.info("Updating git settings...")
         setGitVersionInConfig(useGitFromArtifactory)
@@ -68,11 +61,9 @@ class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
       val gitPath = gitProcess.getGitPath
 
       if (useGitFromArtifactory && !Paths.get(gitPath).exists()) {
-        val downloader = new ArtifactoryToolDownloader(name = "git", stratoWorkspace = stratoWorkspace)
-        if (!downloader.install(forceReinstall = false)) {
-          setGitVersionInConfig(useGitFromArtifactory = false)
+        val downloader = new ArtifactoryToolDownloader(stratoWorkspace, name = "git")
+        if (!downloader.install(forceReinstall = false))
           throw new StratosphereException("Could not install git: please see the logs above for more information")
-        }
       }
 
       val stratoPathFile = sys.env.get("STRATO_PATH_FILE")
@@ -83,11 +74,10 @@ class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
         path.file.write(s"set ${pathEntry.getKey}=${pathEntry.getValue}")
       }
     }
-  }
 
   private def setGitVersionInConfig(useGitFromArtifactory: Boolean): Unit = {
     val customConf = stratoWorkspace.directoryStructure.customConfFile
-    ConfigUtils.updateConfigProperty(customConf)("tools.git.isDefault", useGitFromArtifactory)
+    ConfigUtils.updateConfigProperty(customConf)("tools.git.isDefault", useGitFromArtifactory)(stratoWorkspace)
     stratoWorkspace.reload()
   }
 
@@ -97,13 +87,13 @@ class GitUpdater()(implicit stratoWorkspace: StratoWorkspaceCommon) {
     val blameIgnoreRevsFileName = "git-blame-ignore-revs"
     try {
       // populate if missing
-      Seq(configFileName, blameIgnoreRevsFileName).foreach(file => {
+      Seq(configFileName, blameIgnoreRevsFileName).foreach { file =>
         val sourceFile = s"/git/$file"
         if (getClass.getResource(sourceFile) != null) {
           val destinationFile = stratoWorkspace.directoryStructure.gitDirectory.resolve(file)
           destinationFile.file.createFromResourceOrFile(sourceFile)
         }
-      })
+      }
 
       val configureRepositoryCommands = Seq(
         Seq("remote", "set-branches", "origin", "*"),

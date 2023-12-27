@@ -1,0 +1,61 @@
+applications {
+{{#runConfs}}
+  {{{name}}} {
+{{! -------- Definition ----------------------------- }}
+    mainClass = "{{{mainClass}}}"
+{{#hasMainClassArgs}}
+    mainClassArgs = [{{#mainClassArgs}}
+      {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/mainClassArgs}}
+    ]
+{{/hasMainClassArgs}}
+{{! -------- Java Module ---------------------------- }}
+{{#hasJavaModule}}
+    javaModule {
+{{#javaModule}}
+{{#hasMeta}}      meta = "{{{meta}}}"{{/hasMeta}}
+{{#hasProject}}      project = "{{{project}}}"{{/hasProject}}{{#hasVersion}}
+      version = "{{{version}}}"{{/hasVersion}}
+{{/javaModule}}
+    }
+{{/hasJavaModule}}
+{{! -------- Java Options --------------------------- }}
+{{#hasJavaOpts}}
+    javaOpts = [{{#javaOpts}}
+      {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/javaOpts}}
+    ]
+{{/hasJavaOpts}}
+{{! -------- Environment variables ------------------ }}
+{{#hasEnv}}
+    env = {
+{{#env}}      {{#quoted}}{{{_1}}}{{/quoted}} = {{#quoted}}{{{_2}}}{{/quoted}}{{^-last}},{{/-last}}
+{{/env}}
+    }
+{{/hasEnv}}
+{{! -------- Agents --------------------------------- }}
+{{#hasAgents}}
+    agents = [{{#agents}}{{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/agents}}]
+{{/hasAgents}}
+{{! -------- Launcher ------------------------------- }}
+    launcher = "{{{launcher}}}"
+{{! -------- Native Libraries ----------------------- }}
+{{#hasNativeLibraries}}
+{{#nativeLibraries}}
+    nativeLibraries {
+{{#hasIncludes}}
+      includes = [{{#includes}}
+        {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/includes}}
+      ]
+{{/hasIncludes}}{{#hasExcludes}}
+      excludes = [{{#excludes}}
+        {{#quoted}}{{{.}}}{{/quoted}}{{^-last}},{{/-last}}{{/excludes}}
+      ]{{/hasExcludes}}{{#hasReorder}}{{#reorder}}
+      reorder += [{{{shouldBeBefore}}}, {{{shouldBeAfter}}}]
+{{/reorder}}
+{{/hasReorder}}
+    }
+{{/nativeLibraries}}
+{{/hasNativeLibraries}}
+  }
+
+{{/runConfs}}
+}

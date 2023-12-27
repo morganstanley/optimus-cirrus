@@ -544,7 +544,7 @@ object Query {
     @pluggable @node def trace[R](pos: MethodPosition, nf: NodeFunction0[R]): R = nf()
 
     if (Settings.showPriqlMethodInfo)
-      trace_info.plugin = priqlTracePlugin
+      trace_info.setPlugin(priqlTracePlugin)
     trace_info.setCacheable(false)
   }
 
