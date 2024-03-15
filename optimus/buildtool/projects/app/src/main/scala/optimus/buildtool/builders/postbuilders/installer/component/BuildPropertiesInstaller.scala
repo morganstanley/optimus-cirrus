@@ -12,13 +12,16 @@
 package optimus.buildtool.builders.postbuilders.installer.component
 
 import optimus.buildtool.builders.postbuilders.installer.BatchInstallableArtifacts
+import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.trace.CategoryTrace
 import optimus.buildtool.trace.InstallBuildPropertiesFiles
+import optimus.buildtool.trace.InstallBuildPropertiesRootFile
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Hashing
 import optimus.platform._
@@ -36,30 +39,53 @@ class BuildPropertiesInstaller(
   import installer._
 
   override val descriptor = "build properties"
-  private[buildtool] val buildPropertiesFileName = "build.properties"
-  private[buildtool] def context(metaBundles: Seq[MetaBundle]): Seq[String] = Seq(
-    s"obt-version=${versionConfig.obtVersion}",
-    s"scala-version=${versionConfig.scalaVersion}",
-    s"install-version=${versionConfig.installVersion}",
-    s"stratosphere-version=${versionConfig.stratosphereVersion}"
-  ) :+ s"bundles=${metaBundles.map(_.properPath).sorted.mkString(",")}"
+  private val buildPropertiesFileName = "build.properties"
 
   @async override def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
     val metaBundles = installable.metaBundles.to(Seq)
-    installable.metaBundles.apar.flatMap(installBuildProperties(_, metaBundles)).toIndexedSeq
+    val content = Seq(
+      s"obt-version=${versionConfig.obtVersion}",
+      s"scala-version=${versionConfig.scalaVersion}",
+      s"install-version=${versionConfig.installVersion}",
+      s"stratosphere-version=${versionConfig.stratosphereVersion}"
+    ) :+ s"bundles=${metaBundles.map(_.properPath).sorted.mkString(",")}"
+    val contentHash = Hashing.hashStrings(content)
+
+    installable.metaBundles.apar
+      .flatMap(installMetaBundleBuildProperties(_, content, contentHash))
+      .toIndexedSeq ++
+      installRootBuildProperties(content, contentHash)
   }
 
-  private def getBuildPropertiesFile(bundle: MetaBundle): FileAsset =
-    installPathBuilder.etcDir(bundle).resolveFile(buildPropertiesFileName)
+  private def installMetaBundleBuildProperties(
+      bundle: MetaBundle,
+      content: Seq[String],
+      contentHash: String): Option[FileAsset] =
+    installBuildProperties(
+      installPathBuilder.etcDir(bundle).resolveFile(buildPropertiesFileName),
+      bundleFingerprints(bundle),
+      InstallBuildPropertiesFiles(bundle),
+      content,
+      contentHash
+    )
 
-  private def installBuildProperties(mb: MetaBundle, allMetaBundles: Seq[MetaBundle]): Option[FileAsset] = {
-    val content = context(allMetaBundles)
-    val hashes = Hashing.hashStrings(content)
-    val buildPropertiesFile = getBuildPropertiesFile(mb: MetaBundle)
-    bundleFingerprints(mb).writeIfChanged(buildPropertiesFile, hashes) {
-      ObtTrace.traceTask(RootScopeId, InstallBuildPropertiesFiles(mb)) {
-        Installer.writeFile(buildPropertiesFile, content)
-      }
+  private def installRootBuildProperties(content: Seq[String], contentHash: String): Option[FileAsset] =
+    installBuildProperties(
+      installDir.resolveFile(buildPropertiesFileName),
+      bundleFingerprints(RootScopeId),
+      InstallBuildPropertiesRootFile,
+      content,
+      contentHash)
+
+  private def installBuildProperties(
+      target: FileAsset,
+      fingerprints: BundleFingerprints,
+      category: CategoryTrace,
+      content: Seq[String],
+      contentHash: String
+  ): Option[FileAsset] = fingerprints.writeIfChanged(target, contentHash) {
+    ObtTrace.traceTask(RootScopeId, category) {
+      Installer.writeFile(target, content)
     }
   }
 

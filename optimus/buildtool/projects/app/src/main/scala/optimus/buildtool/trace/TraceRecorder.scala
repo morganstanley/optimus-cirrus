@@ -41,7 +41,7 @@ private[buildtool] object TraceRecorder {
     val startTimeMicros: Long = toEpocMicro(startTime)
     def endTimeMicros = endTimeMicrosVar
     @volatile private var endTimeMicrosVar: Long = -1
-    private val threadId: Long = Thread.currentThread.getId
+    private val threadId: Long = Thread.currentThread.threadId
     private val threadName: String = Thread.currentThread.getName
 
     def durationMicros = {

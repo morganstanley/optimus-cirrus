@@ -11,12 +11,10 @@
  */
 package optimus.buildtool.builders.postbuilders.installer
 
-import java.nio.file.Files
-import java.util.concurrent.ConcurrentHashMap
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
@@ -31,6 +29,9 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 
+import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
 /**

@@ -19,7 +19,6 @@ import optimus.platform._
 import optimus.platform.util.Log
 import org.apache.velocity.VelocityContext
 import org.apache.velocity.app.VelocityEngine
-import org.apache.velocity.runtime.log.NullLogChute
 import org.apache.velocity.runtime.resource.loader.StringResourceLoader
 
 import java.io.StringWriter
@@ -55,7 +54,6 @@ object VelocityProcessor extends Log {
   private def engine(processorKey: String) = {
     val ve = new VelocityEngine()
     ve.setProperty("runtime.references.strict", "true")
-    ve.setProperty("runtime.log.logsystem.class", classOf[NullLogChute].getName)
     ve.setProperty("resource.loader", "string")
     ve.setProperty("string.resource.loader.class", "org.apache.velocity.runtime.resource.loader.StringResourceLoader")
     ve.setProperty("string.resource.loader.repository.name", processorKey)

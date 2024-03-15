@@ -31,6 +31,7 @@ import optimus.buildtool.config.DependencyId
 import optimus.buildtool.config.Id
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NamingConventions.MavenReleaseFrontier
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScalacConfiguration
 import optimus.buildtool.config.ScopeConfiguration
@@ -64,7 +65,6 @@ class ScopeDefinitionCompiler(
     loadConfig: ObtFile.Loader,
     centralDependencies: CentralDependencies,
     structure: WorkspaceStructure,
-    rules: RulesStructure,
     toolchains: Map[String, CppToolchain],
     cppOsVersions: Seq[String],
     useMavenLibs: Boolean = false
@@ -219,7 +219,13 @@ class ScopeDefinitionCompiler(
             if (transitiveIds.isEmpty) true
             else {
               val searchedMap = mutable.Map[ScopeId, Boolean]()
-              transitiveIds.foreach { id => searchedMap.getOrElseUpdate(id, mavenCompatible(scopes(id))) }
+              transitiveIds.foreach { id =>
+                searchedMap.getOrElseUpdate(
+                  id, {
+                    val newSearch = scopes(id)
+                    newSearch != scope && mavenCompatible(newSearch)
+                  })
+              }
               searchedMap.values.forall(_ == true)
             }
           transitiveIdsCompatible && allExternalLibsCompatible
@@ -235,7 +241,8 @@ class ScopeDefinitionCompiler(
             Seq(error(invalidDependencyMsg(target.id.toString, "is not open", sourceId.toString)))
           case Some(target) if mavenOnly(source) && !mavenOnly(target) && !mavenCompatible(target) =>
             Seq(error(invalidDependencyMsg(target.id.toString, "is not mavenOnly", sourceId.toString)))
-          case Some(target) if !mavenOnly(source) && mavenOnly(target) =>
+          // special case: allow maven release frontier depends on mavenOnly modules
+          case Some(target) if (!mavenOnly(source) && source.id.module != MavenReleaseFrontier) && mavenOnly(target) =>
             Seq(error(invalidDependencyMsg(target.id.toString, "is mavenOnly", sourceId.toString)))
           case Some(target) if javaRel(source) < javaRel(target) =>
             Seq(
@@ -285,7 +292,7 @@ class ScopeDefinitionCompiler(
     for {
       ds <- allDepsAndSources
       c <- conditionals
-    } yield ScopeDefaults(ds.toMap, c.to(Seq).sortBy(_.name), rules.rules)
+    } yield ScopeDefaults(ds.toMap, c.to(Seq).sortBy(_.name))
   }
 
   private def loadDefaults(file: ObtFile, parent: ScopeDefaults): Result[ScopeDefaults] =
@@ -320,7 +327,6 @@ class ScopeDefinitionCompiler(
       config: Config
   ): Result[(DualDependencies, Seq[ScopeRelationship])] = if (config.hasPath(dependencyType)) {
     val problems = Array.newBuilder[Message]
-    val isExtraLibs = NamingConventions.ExtraLibsTypes.contains(dependencyType)
 
     def error(msg: String, line: Int): Unit = problems += Error(msg, origin, line)
 
@@ -379,7 +385,13 @@ class ScopeDefinitionCompiler(
       maven = getJvmLibs(s"$dependencyType.${NamingConventions.MavenLibsKey}")
     )
 
-    Success((dependencies, relationships.result()))
+    val extraLibs = {
+      val loaded = getJvmLibs(s"$dependencyType.${NamingConventions.ExtraLibsKey}")
+      val (mavenExtraLibs, afsExtraLibs) = loaded.partition(_.isMaven)
+      DualDependencies(Nil, afs = afsExtraLibs, maven = mavenExtraLibs)
+    }
+
+    Success((dependencies ++ extraLibs, relationships.result()))
       .withProblems(problems.result().to(Seq))
       .withProblems(config.getObject(dependencyType).toConfig.checkExtraProperties(origin, keysToUse))
   } else Success((DualDependencies.empty, Nil))
@@ -465,10 +477,10 @@ class ScopeDefinitionCompiler(
         javacConf <- loadJavac(config, origin)
         cppConf <- loadInheritableCpps(config, origin)
         tokenConf <- config.stringMapOrEmpty("tokens", origin)
-        regexConf <- RegexConfigurationCompiler.load(config, origin)
         copyFilesConf <- CopyFilesConfigurationCompiler.load(config, origin)
         extensionsConf <- ExtensionConfigurationCompiler.load(config, origin)
         postInstallApps <- loadPostInstallApps(config, origin)
+        (extraLibs, extraRels) <- loadScopeDeps(origin, "extraLibs", config)
       } yield {
         val archiveContentRoots = config.seqOrEmpty("archiveContents")
         val scope = InheritableScopeDefinition(
@@ -491,7 +503,6 @@ class ScopeDefinitionCompiler(
           parents = config.seqOrEmpty("extends"),
           usePipelining = config.optionalBoolean("usePipelining"),
           resourceTokens = tokenConf,
-          regexConfiguration = regexConf,
           copyFiles = copyFilesConf,
           extensions = extensionsConf,
           postInstallApps = postInstallApps,
@@ -501,7 +512,8 @@ class ScopeDefinitionCompiler(
           bundle = config.optionalBoolean("bundle"),
           includeInClassBundle = config.optionalBoolean("includeInClassBundle"),
           mavenOnly = config.optionalBoolean("mavenOnly"),
-          relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct
+          relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
+          extraLibs = extraLibs
         ).withParent(parent)
 
         origin match {
@@ -643,7 +655,8 @@ class ScopeDefinitionCompiler(
           defn.compileOnly.distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly),
         runtimeDependencies =
           (defn.runtime ++ defn.compile).distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly),
-        externalNativeDependencies = defn.native
+        externalNativeDependencies = defn.native,
+        extraLibs = defn.extraLibs.distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly = false)
       )
     }
 
@@ -715,7 +728,6 @@ class ScopeDefinitionCompiler(
           generatorConfig = generatorConfiguration,
           resourceTokens = resolvedConfiguration.resourceTokens,
           runConfConfig = None,
-          regexConfig = resolvedConfiguration.regexConfiguration,
           sourceExclusionsStr = config.seqOrEmpty("sourceExcludes"),
           dependencies = allDependencies(resolvedConfiguration, containsMacros, mavenLibs),
           scalacConfig = resolvedConfiguration.scalac,

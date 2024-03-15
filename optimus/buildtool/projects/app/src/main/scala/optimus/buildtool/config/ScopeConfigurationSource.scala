@@ -13,7 +13,6 @@ package optimus.buildtool.config
 
 import optimus.buildtool.files.Directory
 import optimus.buildtool.format.PostInstallApp
-import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
 import scala.util.Failure
@@ -45,6 +44,7 @@ import scala.collection.immutable.Set
   @node def root(id: ParentId): Directory
   @node def pathingBundles(ids: Set[ScopeId]): Set[ScopeId]
   @node def includeInClassBundle(id: ScopeId): Boolean
+  @node def globalRules: Seq[CodeFlaggingRule]
 }
 
 object ScopeConfigurationSourceBase {
@@ -55,7 +55,6 @@ object ScopeConfigurationSourceBase {
 }
 
 @entity private[buildtool] trait ScopeConfigurationSourceBase extends ScopeConfigurationSource {
-  import ScopeConfigurationSourceBase._
 
   @node override def scope(id: String): ScopeId = id match {
     case ScopeIdString(scopeId) if compilationScopeIds.contains(scopeId) =>
@@ -66,28 +65,11 @@ object ScopeConfigurationSourceBase {
       throw new IllegalArgumentException(s"Invalid scope: '$id'")
   }
 
-  @node override def tryResolveScopes(partialId: String): Option[Set[ScopeId]] = {
-    val Seq(meta, bundle, module, tpe) = RelaxedIdString.parts(partialId)
+  @node override def tryResolveScopes(partialId: String): Option[Set[ScopeId]] =
+    ScopeResolver.tryResolveScopes(compilationScopeIds, partialId)
 
-    val scopes = compilationScopeIds
-      .fieldFilter(_.meta, meta)
-      .fieldFilter(_.bundle, bundle)
-      .fieldFilter(_.module, module)
-      .fieldFilter(_.tpe, tpe)
-
-    if (scopes.isEmpty) None else Some(scopes)
-  }
-
-  @node override def resolveScopes(partialId: String): Set[ScopeId] = {
-    val Seq(meta, bundle, module, tpe) = RelaxedIdString.parts(partialId)
-    val scopes = tryResolveScopes(partialId)
-
-    scopes.getOrElse {
-      throw new IllegalArgumentException(
-        s"No scope(s) found matching partial ID '$partialId'" +
-          s" (meta: ${str(meta)}, bundle: ${str(bundle)}, module: ${str(module)}, type: ${str(tpe)})")
-    }
-  }
+  @node override def resolveScopes(partialId: String): Set[ScopeId] =
+    ScopeResolver.resolveScopes(compilationScopeIds, partialId)
 
   @node override def metaBundle(id: String): MetaBundle =
     Try(MetaBundle.parse(id)) match {

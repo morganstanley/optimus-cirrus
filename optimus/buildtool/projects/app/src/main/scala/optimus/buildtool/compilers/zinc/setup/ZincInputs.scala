@@ -18,7 +18,6 @@ import java.nio.file.Paths
 import java.util.Optional
 import java.util.UUID
 import java.util.zip.Deflater
-
 import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.Artifact.InternalArtifact
@@ -42,6 +41,7 @@ import optimus.buildtool.compilers.zinc.mappers.MappingTrace
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ConfigurableWarnings
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.Java
 import optimus.buildtool.trace.MessageTrace
@@ -93,7 +93,7 @@ class ZincInputs(
 
   private val prefix = Utils.logPrefix(scopeId, traceType)
 
-  val mischiefExtraScalacArgs =
+  private val mischiefExtraScalacArgs =
     obtInputs.mischief.toSeq.flatMap(_.extraScalacArgs)
 
   def resolveWarnings: ConfigurableWarnings =
@@ -168,8 +168,18 @@ class ZincInputs(
     val classpath = classpathDetails.map(_.file)
     log.trace(s"${prefix}Input classpath:\n  ${classpath.mkString("\n  ")}")
 
+    val previousAnalysis = analysisStore.get.asScala
+    val previousResult = previousAnalysis match {
+      case Some(a) =>
+        log.debug(s"${prefix}Loaded previous analysis $a")
+        PreviousResult.of(Optional.of(a.getAnalysis), Optional.of(a.getMiniSetup))
+      case None =>
+        log.debug(s"${prefix}Starting with empty analysis")
+        PreviousResult.create(Optional.empty[CompileAnalysis](), Optional.empty[MiniSetup]())
+    }
+
     val incOptions = this.incOptions(
-      analysisStore = analysisStore,
+      previousAnalysis = previousAnalysis.map(_.getAnalysis),
       analysisMappingTrace = analysisMappingTrace,
       fileConverter = fileConverter,
       classFileManager = classFileManager,
@@ -211,15 +221,6 @@ class ZincInputs(
       if (traceType == Java) Array.empty[String]
       else (scalacOptions(jars.signatureJar) ++ mischiefExtraScalacArgs).toArray
 
-    val previousAnalysis = analysisStore.get.asScala match {
-      case Some(a) =>
-        log.debug(s"${prefix}Loaded previous analysis $a")
-        PreviousResult.of(Optional.of(a.getAnalysis), Optional.of(a.getMiniSetup))
-      case None =>
-        log.debug(s"${prefix}Starting with empty analysis")
-        PreviousResult.create(Optional.empty[CompileAnalysis](), Optional.empty[MiniSetup]())
-    }
-
     incrementalCompiler.inputs(
       classpath = classpath.toArray,
       sources = sources.toArray,
@@ -232,7 +233,7 @@ class ZincInputs(
       order = CompileOrder.Mixed,
       compilers = compilers,
       setup = incrementalSetup,
-      pr = previousAnalysis,
+      pr = previousResult,
       temporaryClassesDirectory = Optional.of(tmpDirPath),
       converter = fileConverter,
       stampReader = ObtReadStamps
@@ -248,7 +249,7 @@ class ZincInputs(
   }
 
   private def incOptions(
-      analysisStore: AnalysisStore,
+      previousAnalysis: Option[CompileAnalysis],
       analysisMappingTrace: MappingTrace,
       fileConverter: ObtZincFileConverter,
       classFileManager: ClassFileManager,
@@ -260,8 +261,6 @@ class ZincInputs(
       classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact],
       lookupTracker: Option[LookupTracker]
   ): IncOptions = {
-
-    val previousAnalysis = analysisStore.get.asScala
 
     val pathToInternalClassJar = inputClasspath.collect { case InternalArtifact(id, a) =>
       a.path -> InternalArtifact(id, a)
@@ -275,7 +274,7 @@ class ZincInputs(
       analysisMappingTrace = analysisMappingTrace,
       sources = sources,
       classpath = classpath,
-      fingerprintHash = obtInputs.fingerprintHash,
+      fingerprintHash = obtInputs.fingerprint.hash,
       outputJar = outputJar,
       classType = ZincUtils.classType(traceType),
       pathToInternalClassJar = pathToInternalClassJar,
@@ -288,7 +287,7 @@ class ZincInputs(
 
     // Because Zinc does its own rewrites to -Ypickle-write, we can't use platform independent paths, and therefore
     // our mappers don't understand it. So just ignore it along with any mischievous arguments
-    val ignoredOptions = Array("-Ypickle-write .*") ++ mischiefExtraScalacArgs.map(o => s"$o.*")
+    val ignoredOptions = Array(s"$pickleWriteFlag .*") ++ mischiefExtraScalacArgs.map(o => s"$o.*")
 
     settings.zincOptionMutator(
       IncOptions
@@ -351,12 +350,12 @@ class ZincInputs(
     val signatureArgs = signatureJar
       .map { j =>
         // not using platform independent path because Zinc rewrites this path and // confuses it
-        Seq("-Ypickle-java", "-Ypickle-write", j.tempPath.path.toString)
+        Seq("-Ypickle-java", pickleWriteFlag, j.tempPath.path.toString)
       }
       .getOrElse(Nil)
 
     val pluginPathArgs = obtInputs.pluginArtifacts.map { as =>
-      as.map(_.pathString).distinct.mkString("-Xplugin:", File.pathSeparator, "")
+      as.map(_.pathString).distinct.mkString(pluginFlag, File.pathSeparator, "")
     }
 
     val outlineArgs =
@@ -369,7 +368,7 @@ class ZincInputs(
         case c: ClassFileArtifact if c.containsOrUsedByMacros => c.file.pathString
       }
       "-Ycache-plugin-class-loader:always" :: "-Ycache-macro-class-loader:always" ::
-        "-Ymacro-classpath" :: macroClasspath.mkString(File.pathSeparator) :: Nil
+        macroFlag :: macroClasspath.mkString(File.pathSeparator) :: Nil
     } else Nil
 
     val miscParams = obtInputs.scalacConfig.resolvedOptions

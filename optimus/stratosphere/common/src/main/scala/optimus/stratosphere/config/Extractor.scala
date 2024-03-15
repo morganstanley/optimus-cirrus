@@ -22,6 +22,7 @@ import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
+import scala.util.matching.Regex
 
 trait Extractor[+A] {
   def extract(config: Config, property: String): A
@@ -101,6 +102,10 @@ trait LowerPriorityImplicits {
 
   implicit def memSizeExtractor: Extractor[MemSize] = new Extractor[MemSize] {
     override def extract(config: Config, property: String): MemSize = MemSize.of(config.getString(property))
+  }
+
+  implicit def regexExtractor: Extractor[Regex] = new Extractor[Regex] {
+    override def extract(config: Config, property: String): Regex = config.getString(property).r
   }
 
 }

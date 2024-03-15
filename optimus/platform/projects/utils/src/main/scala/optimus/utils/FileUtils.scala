@@ -17,6 +17,7 @@ import com.opencsv.CSVReaderBuilder
 import com.opencsv.CSVWriterBuilder
 import com.opencsv.ICSVParser
 import com.opencsv.ICSVWriter
+import optimus.logging.LoggingInfo
 import optimus.platform.IO.usingQuietly
 
 import java.io.BufferedReader
@@ -28,7 +29,12 @@ import java.io.OutputStreamWriter
 import java.io.Reader
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.zip.ZipFile
 import scala.jdk.CollectionConverters._
@@ -118,4 +124,18 @@ object FileUtils {
       path.toString
     } finally if (resourceStream ne null) resourceStream.close()
   }
+
+  final val diagnosticDumpDirName: String = PropertyUtils.get("optimus.diagnostic.dump.dir") orElse
+    Option(System.getenv("DIAGNOSTIC_DUMP_DIR")) getOrElse System.getProperty("java.io.tmpdir")
+
+  lazy val diagnosticDumpDir = Files.createDirectories(Paths.get(diagnosticDumpDirName))
+
+  private val formatter = DateTimeFormatter.ofPattern("YYYY-MM-DD_HHmmss").withZone(ZoneId.systemDefault)
+
+  def tmpPath(prefix: String, suffix: String = "log"): Path = {
+    val safeTime = formatter.format(Instant.now)
+    val safePath = s"$prefix-${LoggingInfo.getHost}-${LoggingInfo.pid}-$safeTime.$suffix"
+    diagnosticDumpDir.resolve(safePath)
+  }
+
 }

@@ -13,6 +13,7 @@ package optimus.buildtool.processors
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -48,7 +49,7 @@ import scala.util.control.NonFatal
     val templateFooterContent = templateFooterFile.flatMap(content(_, scope))
     val objectsContent = objectsFile.flatMap(content(_, scope))
 
-    val fingerprintHash = ScopeProcessor.computeFingerprintHash(
+    val fingerprint = ScopeProcessor.computeFingerprintHash(
       name,
       templateContent,
       templateHeaderContent,
@@ -70,7 +71,7 @@ import scala.util.control.NonFatal
       objectsContent = objectsContent,
       installLocation = installLocation,
       configuration = configuration,
-      fingerprintHash = fingerprintHash
+      fingerprint = fingerprint
     )
   }
 
@@ -123,7 +124,7 @@ object TemplatingProcessor extends Log {
       objectsContent: Option[(FileAsset, HashedContent)],
       installLocation: RelativePath,
       configuration: Map[String, String],
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends ScopeProcessor.Inputs
 
 }

@@ -18,6 +18,8 @@ import optimus.buildtool.artifacts.ArtifactType.PathingFingerprint
 import optimus.buildtool.artifacts.Artifacts
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.ElectronArtifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
@@ -133,7 +135,8 @@ trait CompilationNode extends ScopedCompilation {
 
 @entity private[buildtool] class ScopedCompilationImpl(
     scope: CompilationScope,
-    sources: JavaAndScalaCompilationSources,
+    sources: SourceCompilationSources,
+    jvmSources: JavaAndScalaCompilationSources,
     sourcePackaging: SourcePackaging,
     signatures: SignatureScopedCompilation,
     scala: ScalaScopedCompilation,
@@ -158,9 +161,10 @@ trait CompilationNode extends ScopedCompilation {
 
   override def allCompileDependencies: Seq[ScopeDependencies] = upstream.allCompileDependencies
   override def runtimeDependencies: ScopeDependencies = upstream.runtimeDependencies
+  private def allDependencies = allCompileDependencies :+ runtimeDependencies
   override def toString: String = s"ScopedCompilation($id)"
 
-  @node private[buildtool] def signaturesForDownstreamCompilers: Seq[Artifact] = distinctArtifacts() {
+  @node private[buildtool] def signaturesForDownstreamCompilers: Seq[Artifact] =
     // if we have macros (or we've disabled pipelining), any downstream compilers need our jars
     // and analysis
     if (config.containsMacros || !config.usePipelining) {
@@ -168,108 +172,102 @@ trait CompilationNode extends ScopedCompilation {
     }
     // otherwise they just need our signatures plus our own typing dependencies (note that scalac produces java signatures too)
     else {
-      val (ourArtifacts, upstreamSignatures) =
+      distinctArtifacts("signature artifacts for downstreams") {
         apar(
           signatureErrorsOr(signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis),
           upstream.signaturesForDownstreamCompilers
         )
-      log.debug(s"[$id] Returning ${ourArtifacts.size} signature artifacts for downstreams: $ourArtifacts")
-      ourArtifacts ++ upstreamSignatures
-    }
-  }
-
-  @node private[buildtool] def classesForDownstreamCompilers: Seq[Artifact] = distinctArtifacts() {
-    val (ourArtifacts, theirArtifacts, relevantResources) = apar(
-      if (config.usePipelining) signatureErrorsOr(signatures.analysis ++ ourClasses)
-      else ourClasses ++ scala.analysis ++ java.analysis,
-      upstream.classesForDownstreamCompilers,
-      resources.relevantResourcesForDownstreams
-    )
-
-    log.debug(s"[$id] Returning ${ourArtifacts.size} class artifacts for downstreams: $ourArtifacts")
-
-    // if we have macros, we re-package our upstream artifacts to reflect this so that
-    // downstream compilers know to treat them specially (eg. by putting them on the macro classpath)
-    val upstreamArtifacts = if (config.containsMacros) {
-      theirArtifacts.apar.map {
-        case c: ClassFileArtifact => c.copy(containsOrUsedByMacros = true)
-        case a                    => a
       }
-    } else theirArtifacts
+    }
 
-    ourArtifacts ++ relevantResources ++ upstreamArtifacts
-  }
+  @node private[buildtool] def classesForDownstreamCompilers: Seq[Artifact] =
+    distinctArtifacts("class artifacts for downstreams") {
+      val (ourArtifacts, theirArtifacts, relevantResources) = apar(
+        if (config.usePipelining) signatureErrorsOr(signatures.analysis ++ ourClasses)
+        else ourClasses ++ scala.analysis ++ java.analysis,
+        upstream.classesForDownstreamCompilers,
+        resources.relevantResourcesForDownstreams
+      )
 
-  @node override private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact] = {
-    val (ourArtifacts, upstreamPlugins) = apar(
-      if (config.containsPlugin) ourClasses else Nil,
-      upstream.pluginsForOurCompiler
-    )
-    log.debug(s"[$id] Returning ${ourArtifacts.size} plugin artifacts for downstreams: $ourArtifacts")
-    ourArtifacts ++ upstreamPlugins
-  }
+      // if we have macros, we re-package our upstream artifacts to reflect this so that
+      // downstream compilers know to treat them specially (eg. by putting them on the macro classpath)
+      val upstreamArtifacts = if (config.containsMacros) {
+        theirArtifacts.apar.map {
+          case c: ClassFileArtifact => c.copy(containsOrUsedByMacros = true)
+          case a                    => a
+        }
+      } else theirArtifacts
+
+      (ourArtifacts ++ relevantResources, upstreamArtifacts)
+    }
+
+  @node override private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact] =
+    distinctArtifacts("plugin artifacts for downstreams") {
+      apar(
+        if (config.containsPlugin) ourClasses ++ resources.resources else Nil,
+        upstream.pluginsForOurCompiler
+      )
+    }
 
   @node private def ourClasses: Seq[Artifact] = scala.classes ++ scala.messages ++ java.classes ++ java.messages
 
-  @node def runconfArtifacts: Seq[Artifact] = distinctArtifacts() {
-    runconf.runConfArtifacts
+  @node def runconfArtifacts: Seq[Artifact] = distinctArtifacts("runconf artifacts") {
+    (runconf.runConfArtifacts, Nil)
   }
 
-  @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact] = distinctArtifacts() {
-    val (ourArtifacts, upstreamCpp) = apar(
-      cpp.artifacts,
-      upstream.cppForOurCompiler
-    )
+  @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact] =
+    distinctArtifacts("cpp artifacts for downstreams") {
+      apar(
+        cpp.artifacts,
+        upstream.cppForOurCompiler
+      )
+    }
 
-    log.debug(s"[$id] Returning ${ourArtifacts.size} cpp artifacts for downstreams: $ourArtifacts")
-    ourArtifacts ++ upstreamCpp
-  }
+  @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact] =
+    distinctArtifacts("runtime artifacts for downstreams", track = true) {
+      apar(signatureErrorsOr(ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
+    }
 
-  @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact] = distinctArtifacts(track = true) {
-    val (ourArtifacts, theirArtifacts) = apar(signatureErrorsOr(ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
-    log.debug(s"[$id] Returning ${ourArtifacts.size} runtime artifacts for downstreams: $ourArtifacts")
-    ourArtifacts ++ theirArtifacts
-  }
-
-  @node def runtimeArtifacts: Artifacts = distinct(track = true) {
-    val (ourArtifacts, theirArtifacts) =
-      apar(signatureErrorsOr(pathingArtifact +: ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
-
-    log.debug(s"[$id] Returning ${ourArtifacts.size} runtime artifacts: $ourArtifacts")
-    Artifacts(ourArtifacts, theirArtifacts)
+  @node def runtimeArtifacts: Artifacts = distinct("runtime artifacts", track = true) {
+    apar(signatureErrorsOr(pathingArtifact +: ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
   }
 
   @node private def pathingArtifact: PathingArtifact =
+    pathingArtifactWithFingerprint._1
+
+  @node private def pathingArtifacts: Seq[Artifact] = {
+    val (pa, fa) = pathingArtifactWithFingerprint
+    Seq(pa, fa)
+  }
+
+  @node private def pathingArtifactWithFingerprint: (PathingArtifact, FingerprintArtifact) =
     buildPathingArtifact(ourRuntimeArtifacts ++ upstream.artifactsForOurRuntime)
 
-  @node def allArtifacts: Artifacts = distinct(track = true) {
+  @node def allArtifacts: Artifacts = distinct("total artifacts", track = true, includeFingerprints = true) {
     // we include the compile and runtime dependencies artifacts because these may contain errors about resolution
-    val (ourArtifacts, theirArtifacts) =
-      apar(
-        signatureErrorsOr {
-          Seq(pathingArtifact) ++
-            ourRuntimeArtifacts ++ {
-              if (config.usePipelining) signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis
-              else Nil
-            } ++ scala.analysis ++ scala.locator ++ java.analysis ++ java.locator ++
-            processing.process(pathingArtifact)
-        } ++
-          cpp.artifacts ++
-          python.artifacts ++
-          web.artifacts ++
-          electron.artifacts ++
-          sources.fingerprintArtifact ++
-          sourcePackaging.packagedSources ++
-          // always copy generated sources and regex messages (among others) so that we can make use of
-          // them even if we've got signature errors
-          sources.generatedSourceArtifacts ++
-          regexMessages.messages ++
-          sources.externalCompileDependencies :+ scopeMessages :+
-          runtimeDependencies.transitiveExternalDependencies,
-        upstream.allUpstreamArtifacts
-      )
-    log.debug(s"[$id] Returning ${ourArtifacts.size} total artifacts: $ourArtifacts")
-    Artifacts(ourArtifacts, theirArtifacts)
+    apar(
+      signatureErrorsOr {
+        pathingArtifacts ++
+          ourRuntimeArtifacts ++ {
+            if (config.usePipelining) signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis
+            else Nil
+          } ++ scala.analysis ++ scala.locator ++ java.analysis ++ java.locator ++
+          processing.process(pathingArtifact)
+      } ++
+        cpp.artifacts ++
+        python.artifacts ++
+        web.artifacts ++
+        electron.artifacts ++
+        sourcePackaging.packagedSources ++
+        Seq(sources.compilationFingerprint) ++
+        // always copy generated sources and regex messages (among others) so that we can make use of
+        // them even if we've got signature errors
+        jvmSources.generatedSourceArtifacts ++
+        regexMessages.messages ++
+        allDependencies.apar.flatMap(_.transitiveExternalArtifacts) :+
+        scopeMessages,
+      upstream.allUpstreamArtifacts
+    )
   }
 
   @node def bundlePathingArtifacts(compiledArtifacts: Seq[Artifact]): Seq[Artifact] = if (config.pathingBundle) {
@@ -277,25 +275,48 @@ trait CompilationNode extends ScopedCompilation {
     val artifactsForBundle = compiledArtifacts.collect {
       case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) => a
     }
-    Seq(buildPathingArtifact(artifactsForBundle))
+    val (pa, fa) = buildPathingArtifact(artifactsForBundle)
+    Seq(pa, fa)
   } else Nil
 
   // noinspection ScalaUnusedSymbol
   @alwaysAutoAsyncArgs
-  private def distinct(track: Boolean = false)(f: => Artifacts): Artifacts = needsPlugin
+  private def distinctArtifacts(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
+      f: => (Seq[Artifact], Seq[Artifact])
+  ): Seq[Artifact] = needsPlugin
   // noinspection ScalaUnusedSymbol
-  @node private def distinct$NF(track: Boolean = false)(f: NodeFunction0[Artifacts]): Artifacts = {
+  @node private def distinctArtifacts$NF(
+      artifactType: String,
+      track: Boolean = false,
+      includeFingerprints: Boolean = false
+  )(
+      f: NodeFunction0[(Seq[Artifact], Seq[Artifact])]
+  ): Seq[Artifact] = {
+    def fingerprintFilter(as: Seq[Artifact]) =
+      if (includeFingerprints) as else as.filter(!_.isInstanceOf[FingerprintArtifact])
     import optimus.platform.{track => doTrack}
-    distinctLast(if (track) doTrack(f()) else f())
+    val (scope, upstream) = distinctLast(if (track) doTrack(f()) else f())
+    val filteredScope = fingerprintFilter(scope)
+    log.debug(s"[$id] Returning ${filteredScope.size} $artifactType: $filteredScope")
+    filteredScope ++ upstream
   }
 
   // noinspection ScalaUnusedSymbol
   @alwaysAutoAsyncArgs
-  private def distinctArtifacts(track: Boolean = false)(f: => Seq[Artifact]): Seq[Artifact] = needsPlugin
+  private def distinct(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
+      f: => (Seq[Artifact], Seq[Artifact])
+  ): Artifacts = needsPlugin
   // noinspection ScalaUnusedSymbol
-  @node private def distinctArtifacts$NF(track: Boolean = false)(f: NodeFunction0[Seq[Artifact]]): Seq[Artifact] = {
+  @node private def distinct$NF(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
+      f: NodeFunction0[(Seq[Artifact], Seq[Artifact])]
+  ): Artifacts = {
+    def fingerprintFilter(as: Seq[Artifact]) =
+      if (includeFingerprints) as else as.filter(!_.isInstanceOf[FingerprintArtifact])
     import optimus.platform.{track => doTrack}
-    distinctLast(if (track) doTrack(f()) else f())
+    val (scope, upstream) = distinctLast(if (track) doTrack(f()) else f())
+    val filteredScope = fingerprintFilter(scope)
+    log.debug(s"[$id] Returning ${scope.size} $artifactType: $scope")
+    Artifacts(filteredScope, upstream)
   }
 
   // noinspection ScalaUnusedSymbol
@@ -318,7 +339,7 @@ trait CompilationNode extends ScopedCompilation {
       runconf.runConfArtifacts ++ runconf.messages ++
       genericFiles.files
 
-  @node private def buildPathingArtifact(allRuntimeArtifacts: Seq[Artifact]): PathingArtifact = {
+  @node private def buildPathingArtifact(allRuntimeArtifacts: Seq[Artifact]): (PathingArtifact, FingerprintArtifact) = {
     val internalClassFileArtifacts = allRuntimeArtifacts.collect { case c: ClassFileArtifact =>
       c
     }
@@ -399,6 +420,9 @@ trait CompilationNode extends ScopedCompilation {
         )
       }
       .getOrElse(None, classFileArtifacts)
+    val electronMetadata = allRuntimeArtifacts
+      .collect { case e: ElectronArtifact => s"${e.scopeId};${e.pathString};${e.mode};${e.executables.mkString(",")}" }
+      .mkString(" ")
     val manifest = Jars.updateManifest(
       Jars.createPathingManifest(filteredArtifacts.map(_.path), premainOption),
       JarUtils.nme.ExtraFiles -> extraFiles.map(_.pathString).mkString(";"),
@@ -408,6 +432,7 @@ trait CompilationNode extends ScopedCompilation {
       JarUtils.nme.JniFallbackPath -> jniFallbackPaths.map(_.pathString).mkString(";"),
       JarUtils.nme.PreloadReleaseScopes -> preloadReleaseScopes.map(_.properPath).mkString(";"),
       JarUtils.nme.PreloadDebugScopes -> preloadDebugScopes.map(_.properPath).mkString(";"),
+      JarUtils.nme.PackagedElectron -> electronMetadata,
       JarUtils.nme.PackagedPreloadReleaseLibs -> packagedPreloadReleaseLibs.map(_.pathString).mkString(";"),
       JarUtils.nme.PackagedPreloadDebugLibs -> packagedPreloadDebugLibs.map(_.pathString).mkString(";"),
       JarUtils.nme.PreloadReleaseFallbackPath -> preloadReleaseFallbackPaths.map(_.pathString).mkString(";"),
@@ -419,13 +444,13 @@ trait CompilationNode extends ScopedCompilation {
       JarUtils.nme.PreloadPath -> preloadReleaseFallbackPaths.map(_.pathString).mkString(";")
     )
     val fingerprint = Jars.fingerprint(manifest)
-    val pathingHash = scope.hasher.hashFingerprint(fingerprint, PathingFingerprint)
+    val pathingFingerprint = scope.hasher.hashFingerprint(fingerprint, PathingFingerprint)
 
-    val jarPath = scope.pathBuilder.outputPathFor(id, pathingHash, AT.Pathing, None, incremental = false)
+    val jarPath = scope.pathBuilder.outputPathFor(id, pathingFingerprint.hash, AT.Pathing, None, incremental = false)
     AssetUtils.atomicallyWriteIfMissing(jarPath) { tmpName =>
       ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), manifest) }
     }
-    AT.Pathing.fromAsset(id, jarPath)
+    (AT.Pathing.fromAsset(id, jarPath), pathingFingerprint)
   }
 
   @node def runConfigurations: Seq[RunConf] = runconf.runConfigurations
@@ -461,6 +486,7 @@ private[buildtool] object ScopedCompilationImpl {
 
   @node def apply(
       scope: CompilationScope,
+      scopeConfigSource: ScopeConfigurationSource,
       sourceGenerators: Map[GeneratorType, SourceGenerator],
       scalac: AsyncSignaturesCompiler,
       javac: AsyncClassFileCompiler,
@@ -491,7 +517,7 @@ private[buildtool] object ScopedCompilationImpl {
       JavaScopedCompilation(scope, javaAndScalaSources, javac, analysisLocator, incrementalMode, signatures, scala)
     val jmh = JmhScopedCompilation(scope, javaAndScalaSources, jmhc, scala, java)
 
-    val cppSources = scope.config.cppConfigs.map(cfg => CppCompilationSources(cfg.osVersion, scope))
+    val cppSources = scope.config.cppConfigs.map(cfg => CppCompilationSources(cfg.osVersion, scope, cppFallback))
     val cpp = CppScopedCompilation(scope, cppSources, cppc, cppFallback)
 
     val pythonSources = PythonCompilationSources(scope)
@@ -503,7 +529,7 @@ private[buildtool] object ScopedCompilationImpl {
     val electronSources = ElectronCompilationSources(scope)
     val electron = ElectronScopedCompilation(scope, electronSources, electronc)
 
-    val sourcePackaging = SourcePackaging(scope, sources, jarPackager)
+    val sourcePackaging = SourcePackaging(scope, sources, scopeConfigSource, jarPackager)
 
     val resourceSources = ResourceCompilationSourcesImpl(scope, generation)
     val resources = ResourcePackaging(scope, resourceSources, jarPackager)
@@ -511,8 +537,9 @@ private[buildtool] object ScopedCompilationImpl {
     val archiveSources = ArchivePackageSources(scope)
     val archivePackaging = ArchivePackaging(scope, archiveSources, jarPackager)
 
-    val regexSources = RegexMessagesCompilationSources(scope, sources, resourceSources)
-    val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, regexScanner)
+    val globalRules = scopeConfigSource.globalRules
+    val regexSources = RegexMessagesCompilationSources(scope, sources, resourceSources, globalRules)
+    val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, regexScanner, globalRules)
 
     val runconfSources = RunconfCompilationSources(
       runconfc.obtWorkspaceProperties,
@@ -530,6 +557,7 @@ private[buildtool] object ScopedCompilationImpl {
 
     ScopedCompilationImpl(
       scope,
+      sources,
       javaAndScalaSources,
       sourcePackaging,
       signatures,

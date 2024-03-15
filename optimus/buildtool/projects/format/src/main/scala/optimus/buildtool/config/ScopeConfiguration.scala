@@ -74,7 +74,8 @@ private[buildtool] final case class AllDependencies(
     compileDependencies: Dependencies,
     compileOnlyDependencies: Dependencies,
     runtimeDependencies: Dependencies,
-    externalNativeDependencies: Seq[NativeDependencyDefinition]
+    externalNativeDependencies: Seq[NativeDependencyDefinition],
+    extraLibs: Dependencies
 ) {
   def allInternal: Seq[ScopeId] =
     compileDependencies.internal ++ compileOnlyDependencies.internal ++ runtimeDependencies.internal
@@ -161,7 +162,6 @@ private[buildtool] final case class ScopeConfiguration(
     generatorConfig: Seq[(GeneratorType, GeneratorConfiguration)],
     resourceTokens: Map[String, String],
     runConfConfig: Option[RunConfConfiguration[RelativePath]],
-    regexConfig: Option[RegexConfiguration],
     private val sourceExclusionsStr: Seq[String],
     private[buildtool] val dependencies: AllDependencies,
     scalacConfig: ScalacConfiguration,

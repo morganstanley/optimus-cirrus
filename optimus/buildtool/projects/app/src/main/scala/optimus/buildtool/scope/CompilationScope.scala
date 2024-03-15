@@ -13,6 +13,8 @@ package optimus.buildtool.scope
 
 import optimus.buildtool.app.CompilationNodeFactory
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.Artifact.InternalArtifact
+import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ArtifactType.CompileOnlyResolution
 import optimus.buildtool.artifacts.ArtifactType.CompileResolution
 import optimus.buildtool.artifacts.ArtifactType.RuntimeResolution
@@ -38,9 +40,9 @@ import optimus.buildtool.config.LocalDefinition
 import optimus.buildtool.config.ModuleType
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.NativeDependencyDefinition
+import optimus.buildtool.config.NpmConfiguration
 import optimus.buildtool.config.RunConfConfiguration
 import optimus.buildtool.config.ScopeConfiguration
-import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.files.DirectoryFactory
@@ -49,8 +51,11 @@ import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.format.MischiefArgs
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.ExternalDependencyResolver
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
@@ -80,7 +85,6 @@ import scala.collection.immutable.SortedMap
     val hasher: FingerprintHasher,
     cache: ArtifactCache with HasArtifactStore,
     val factory: CompilationNodeFactory,
-    val scopeConfigSource: ScopeConfigurationSource,
     val directoryFactory: DirectoryFactory,
     val upstream: UpstreamArtifacts,
     val mischief: Option[MischiefArgs]
@@ -112,8 +116,14 @@ import scala.collection.immutable.SortedMap
     def versionString(name: String, version: String): String = s"[Version:$name]$version"
     def pythonDef(definition: PythonDefinition, moduleType: ModuleType): Seq[String] = Seq(
       Some(s"[PythonPath]${definition.path}"),
+      Some(s"[PythonVersion]${definition.version}"),
+      definition.variant match {
+        case Some(variantDef) => Some(s"[PythonVariant]${variantDef.name}")
+        case None             => None
+      },
       Some(s"[venvPack2]${definition.venvPack}"),
-      Some(s"[moduleType]${moduleType.label}")
+      Some(s"[moduleType]${moduleType.label}"),
+      Some(s"[osVersion]${OsUtils.osVersion}")
     ).flatten
 
     val libs = config.pythonConfig
@@ -130,37 +140,39 @@ import scala.collection.immutable.SortedMap
     pythonDefinitions ++ libs
   }
 
-  @node private def loadWebDependency(
+  @node private def loadNpmDependency(
       group: String,
       name: String,
       variant: Option[String]): Option[DependencyDefinition] = {
-    externalDependencyResolver.dependencyDefinitions
+    externalDependencyResolver.extraLibsDefinitions
       .find(d => d.group == group && d.name == name && d.variant.map(_.name) == variant)
   }
 
-  @node private def getWebDependenciesFingerprint(
+  @node private def getNpmDependenciesFingerprint(
+      config: NpmConfiguration,
       node: Option[DependencyDefinition],
       pnpm: Option[DependencyDefinition]): Seq[String] = {
     def ver(name: String, dep: Option[DependencyDefinition]): Option[String] =
       dep.map(d => s"[Version:$name]${d.version}")
 
-    config.webConfig.map(_.fingerprint).getOrElse(Nil) ++
-      ver(NpmName, node) ++ ver(PnpmName, pnpm)
+    config.fingerprint ++ ver(NpmName, node) ++ ver(PnpmName, pnpm)
   }
 
   @node def webNodeDependency: Option[DependencyDefinition] =
-    loadWebDependency(NpmGroup, NpmName, config.webConfig.flatMap(_.nodeVariant))
+    loadNpmDependency(NpmGroup, NpmName, config.webConfig.flatMap(_.nodeVariant))
   @node def webPnpmDependency: Option[DependencyDefinition] =
-    loadWebDependency(PnpmGroup, PnpmName, config.webConfig.flatMap(_.pnpmVariant))
+    loadNpmDependency(PnpmGroup, PnpmName, config.webConfig.flatMap(_.pnpmVariant))
   @node def webDependenciesFingerprint: Seq[String] =
-    getWebDependenciesFingerprint(webNodeDependency, webPnpmDependency)
+    config.webConfig.map(getNpmDependenciesFingerprint(_, webNodeDependency, webPnpmDependency)).getOrElse(Nil)
 
   @node def electronNodeDependency: Option[DependencyDefinition] =
-    loadWebDependency(NpmGroup, NpmName, config.electronConfig.flatMap(_.nodeVariant))
+    loadNpmDependency(NpmGroup, NpmName, config.electronConfig.flatMap(_.nodeVariant))
   @node def electronPnpmDependency: Option[DependencyDefinition] =
-    loadWebDependency(PnpmGroup, PnpmName, config.electronConfig.flatMap(_.pnpmVariant))
+    loadNpmDependency(PnpmGroup, PnpmName, config.electronConfig.flatMap(_.pnpmVariant))
   @node def electronDependenciesFingerprint: Seq[String] =
-    getWebDependenciesFingerprint(electronNodeDependency, electronPnpmDependency)
+    config.electronConfig
+      .map(getNpmDependenciesFingerprint(_, electronNodeDependency, electronPnpmDependency))
+      .getOrElse(Nil)
 
   @node def scalaInputArtifacts: Seq[Artifact] =
     upstream.signaturesForOurCompiler ++
@@ -254,9 +266,23 @@ import scala.collection.immutable.SortedMap
 
   // noinspection ScalaUnusedSymbol
   @node def cached$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String], fingerprintHash: String)(
-      nf: NodeFunction0[Option[A#A]]): Seq[A#A] =
-    if (factory.mischiefScope(id)) nf().toIndexedSeq
-    else cache.getOrCompute$NF(id, tpe, discriminator, fingerprintHash)(nf).toIndexedSeq
+      nf: NodeFunction0[Option[A#A]]): Seq[A#A] = {
+    val artifact =
+      if (factory.mischiefScope(id)) nf()
+      else cache.getOrCompute$NF(id, tpe, discriminator, fingerprintHash)(nf)
+    // If we've got to the point of calling out to the local/remote caches then record this as a node cache miss.
+    // Note - we deliberately inspect the type of the artifact rather than just using `tpe` and use Sets to eliminate
+    // duplicate cache misses in order that we can infer cache hits from totalArtifacts - cacheMisses.
+    artifact match {
+      case Some(InternalArtifact(id, _)) if id.tpe == ArtifactType.Scala =>
+        ObtTrace.addToStat(ObtStats.NodeCacheScalaMiss, Set((id.scopeId, id.tpe)))
+      case Some(InternalArtifact(id, _)) if id.tpe == ArtifactType.Java =>
+        ObtTrace.addToStat(ObtStats.NodeCacheJavaMiss, Set((id.scopeId, id.tpe)))
+      case _ =>
+      // do nothing
+    }
+    artifact.toIndexedSeq
+  }
 
   @node def fingerprint[A <: SourceUnitId](
       content: SortedMap[A, HashedContent],
@@ -288,7 +314,6 @@ object CompilationScope {
       externalDependencyResolver: ExternalDependencyResolver,
       cache: ArtifactCache with HasArtifactStore,
       factory: CompilationNodeFactory,
-      scopeConfigSource: ScopeConfigurationSource,
       directoryFactory: DirectoryFactory,
       mischief: Option[MischiefArgs]
   ): CompilationScope = {
@@ -322,7 +347,6 @@ object CompilationScope {
       hasher,
       cache,
       factory,
-      scopeConfigSource,
       directoryFactory,
       upstream,
       mischief

@@ -45,8 +45,12 @@ import scala.collection.immutable.SortedMap
     val resourceFingerprint = sourceContent.content.apar.flatMap { case (tpe, content) =>
       scope.fingerprint(content, tpe)
     }
-    val tokensFingerprint = scope.config.resourceTokens.map { case (k, v) => s"[Token]$k=$v" }
-    val fingerprintHash = scope.hasher.hashFingerprint(resourceFingerprint ++ tokensFingerprint, fingerprintType)
+    val fingerprint = if (resourceFingerprint.nonEmpty) {
+      // No point hashing the tokens if we've got no resources
+      val tokensFingerprint = scope.config.resourceTokens.map { case (k, v) => s"[Token]$k=$v" }
+      resourceFingerprint ++ tokensFingerprint
+    } else Nil
+    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, fingerprintType)
 
     HashedSourcesImpl(
       sourceContent.content,
@@ -103,7 +107,7 @@ object ResourceCompilationSources {
   protected val fingerprintType: FingerprintArtifactType = ArtifactType.ArchiveFingerprint
   override protected val hashTask: CategoryTrace = HashArchiveContents
 
-  @node @node override protected def sourceContent: SourceFileContent = {
+  @node override protected def sourceContent: SourceFileContent = {
     val content = scope.archiveContentFolders.apar.map(_.resources()).merge[SourceUnitId]
     SourceFileContent(Seq("Archive" -> content), Nil)
   }

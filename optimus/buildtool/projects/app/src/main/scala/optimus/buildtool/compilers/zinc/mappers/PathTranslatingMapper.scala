@@ -59,6 +59,13 @@ private[zinc] abstract class ZincPathTranslatingMapper extends PathTranslatingMa
     else AfsDist.pathString.stripSuffix("/")
   protected val depCopyHttpStr: String = depCopyRoot.resolveDir("http").pathString.stripSuffix("/")
   protected val depCopyHttpsStr: String = depCopyRoot.resolveDir("https").pathString.stripSuffix("/")
+  // for workspace external libs, for example `<workspace>/a/b/install/lib`
+  protected val workspaceSubstitution: Substitution = Substitution(workspaceRootStr, WORKSPACE)
+  protected val externalDepsSubstitutions: IndexedSeq[Substitution] = // need check https first
+    workspaceSubstitution +: IndexedSeq(
+      Substitution(depCopyHttpsStr, HTTPSCOPY),
+      Substitution(depCopyHttpStr, HTTPCOPY),
+      Substitution(depCopyDistStr, DEPCOPY))
 
   protected def validatePath(path: String): Unit = {
     if (looksDissectable(path))
@@ -90,6 +97,8 @@ private[zinc] abstract class ZincPathTranslatingMapper extends PathTranslatingMa
 
   }
 }
+
+final case class Substitution(realDirectory: String, key: String) { def isSame: Boolean = realDirectory == key }
 
 private object PathTranslatingMapper {
   private val log = msjava.slf4jutils.scalalog.getLogger(this)

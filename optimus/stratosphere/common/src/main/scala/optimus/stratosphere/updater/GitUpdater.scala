@@ -25,6 +25,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util
 import scala.util.control.NonFatal
+import scala.util.matching.Regex
 
 object GitUpdater {
   def gitVersion(stratoWorkspace: StratoWorkspaceCommon): Option[SemanticVersion] = {
@@ -40,14 +41,120 @@ object GitUpdater {
         ))
     }
   }
+
+  val NamePattern: Regex = """(?s).*Name:\s+([^\n\r]+)[\r\n]+.*""".r
+  val ConfigPattern: Regex = """(\S+)\s+(\S+)""".r
+  val UserInURLPattern: Regex = """http://\w+@\w.*""".r
+
 }
 
 class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
+  import GitUpdater._
   private val overwrittenHookNames = List("pre-commit", "prepare-commit-msg", "pre-push")
+  private val bitbucketInstances = stratoWorkspace.internal.urls.bitbucket.all.values.toSeq
 
   def configureRepo(): Unit = {
     adjustSettings()
+    applyFetchConfig()
     copyHooks()
+  }
+
+  private def runGitIgnoreExit(args: String*): String = {
+    new CommonProcess(stratoWorkspace)
+      .runGit(srcDir = stratoWorkspace.directoryStructure.sourcesDirectory, ignoreExitCode = true)(args: _*)
+  }
+  private def runGit(args: String*): String = {
+    new CommonProcess(stratoWorkspace)
+      .runGit(srcDir = stratoWorkspace.directoryStructure.sourcesDirectory, ignoreExitCode = false)(args: _*)
+  }
+
+  private def getGitConfig(regexp: String): Seq[String] = {
+    runGitIgnoreExit("config", "--get-regexp", regexp).linesIterator.toSeq
+  }
+
+  private def getAndModifyGitConfig(regexp: String)(
+      mapper: (String, String) => (String, String),
+      filter: (String, String) => Boolean = (_, _) => true): Unit = {
+    val result = getGitConfig(regexp).collect {
+      case ConfigPattern(configKey, configValue)
+          if bitbucketInstances.exists(i => configValue.contains(i)) && filter(configKey, configValue) =>
+        mapper(configKey, configValue)
+    }
+    result.foreach { case (key, value) => runGit("config", key, value) }
+  }
+
+  private def configValueContainsUsername(key: String, value: String): Boolean = {
+    UserInURLPattern.findFirstIn(value).isDefined
+  }
+
+  def reportResolutionFailures(value: Map[String, String]): Unit = {
+    val missing = bitbucketInstances.filterNot(value.contains)
+    if (missing.nonEmpty) {
+      stratoWorkspace.log.warning(s"""Could not resolve the following stash instances to host names:
+                                     |${missing.mkString("\n")}""".stripMargin)
+    }
+    // TODO (OPTIMUS-62963): emit crumb on failure w/ details
+  }
+
+  def doUpdateFetchSettings(): Unit = {
+    stratoWorkspace.log.info("Updating Bitbucket host mappings...")
+    removeInsteadOfs()
+    val resolved: Map[String, String] = bitbucketInstances.collect { instance =>
+      new CommonProcess(stratoWorkspace).runAndWaitFor(Seq("nslookup", instance)) match {
+        case NamePattern(name) => (instance, name)
+      }
+    }.toMap
+    stratoWorkspace.log.debug(s"""resolved stash instances to names: ${resolved.toString}""")
+    reportResolutionFailures(resolved)
+    val configureRepositoryCommands: Seq[Seq[String]] = resolved.map { case (instance, name) =>
+      Seq("config", s"""url."http://${name}".insteadOf""", s"""http://${instance}""")
+    }.toSeq
+    configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
+    // emptyAuth
+    runGit("config", "http.emptyAuth", "true")
+  }
+
+  def removeInsteadOfs(): Unit = getAndModifyGitConfig("url\\..*\\.insteadOf") { (configKey, configValue) =>
+    ("--unset", configKey)
+  }
+
+  def doRevertToOldFetchConfig(): Unit = {
+    // unset all insteadOf settings for instances we care about
+    removeInsteadOfs()
+    // emptyAuth
+    runGitIgnoreExit("config", "--unset", "http.emptyAuth")
+  }
+
+  def doAddUserNamesToBitbucketRemotes(): Unit = {
+    def addUsernameToRemoteUrl(configKey: String, configValue: String): (String, String) = {
+      (configKey, configValue.replaceFirst(s"""http://""", s"""http://${stratoWorkspace.userName}@"""))
+    }
+    getAndModifyGitConfig("remote\\..+\\.url")(
+      mapper = addUsernameToRemoteUrl,
+      filter = !configValueContainsUsername(_, _) // only add usernames to remotes that don't already have them
+    )
+  }
+
+  def doRemoveUserPrefixFromFetchUrl(): Unit = {
+    def removeUsernameFromRemoteUrl(configKey: String, configValue: String): (String, String) = {
+      (configKey, configValue.replaceFirst(s"""http://\\w+@""", "http://"))
+    }
+    getAndModifyGitConfig("remote\\..+\\.url")(
+      mapper = removeUsernameFromRemoteUrl,
+      filter = configValueContainsUsername // only remove usernames from remotes that have them
+    )
+  }
+
+  def applyFetchConfig(): Unit = {
+    if (OsSpecific.isWindows) {
+      if (stratoWorkspace.git.useUpdatedFetchSettings) {
+        doUpdateFetchSettings()
+        doRemoveUserPrefixFromFetchUrl()
+      } else {
+        doRevertToOldFetchConfig()
+        doAddUserNamesToBitbucketRemotes()
+      }
+    }
   }
 
   def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit =
@@ -102,9 +209,7 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         Seq("config", "--local", "blame.ignoreRevsFile", Path.of(".git", blameIgnoreRevsFileName).toString)
       )
 
-      configureRepositoryCommands.foreach { args =>
-        new CommonProcess(stratoWorkspace).runGit(stratoWorkspace.directoryStructure.sourcesDirectory)(args.toSeq: _*)
-      }
+      configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
     } catch {
       case NonFatal(e) =>
         stratoWorkspace.log.warning(

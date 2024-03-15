@@ -38,6 +38,9 @@ final case class WorkspaceDefinition(
 )
 
 object WorkspaceDefinition {
+  // keep in sync with optimus.stratosphere.config.TypeSafeOptions.scalaVersion
+  private val ScalaVersionKey = "scalaVersion"
+
   def load(
       workspaceName: String,
       workspaceSrcRoot: Directory,
@@ -52,28 +55,34 @@ object WorkspaceDefinition {
     loadFileWithProperties = ObtFile.Loader(loadFile) { res =>
       res.map(_.resolveWithReferences(projectProperties.config))
     }
+    scalaMajorVersion = externalConfig.optionalString(ScalaVersionKey).map(_.split('.').take(2).mkString("."))
 
     workspace <- WorkspaceStructure.loadModuleStructure(workspaceName, loadFileWithProperties)
     resolvers <- ResolverDefinition.load(loadFileWithProperties)
     pythonDependencies <- PythonDependenciesLoader.load(PythonConfig, loadFile)
-    jvmDependencies <- JvmDependenciesLoader.load(projectProperties, loadFile, useMavenLibs)
+    jvmDependencies <- JvmDependenciesLoader.load(
+      projectProperties,
+      loadFile,
+      useMavenLibs,
+      scalaMajorVersion,
+      resolvers
+    )
     jdkDependencies <- JdkDependenciesLoader.load(loadFile)
     updatedProperties = projectProperties.includeConfig(jvmDependencies.versionsConfig)
-    rules <- RulesStructure.load(loadFile)
     toolchainStructure <- CppToolchainStructure.load(loadFileWithProperties)
     cppToolchains = toolchainStructure.toolchains.map(c => c.name -> c).toMap
     centralDependencies = dependencies.CentralDependencies(jvmDependencies, jdkDependencies, pythonDependencies)
 
-    modules <- new ScopeDefinitionCompiler(
+    scopes <- new ScopeDefinitionCompiler(
       loadFileWithProperties,
       centralDependencies,
       workspace,
-      rules,
       cppToolchains,
       cppOsVersions,
       useMavenLibs
     ).compile(workspaceSrcRoot)
 
+    rules <- RulesStructure.load(loadFile, scopes.keySet)
     appValidator <- AppValidator.load(loadFileWithProperties)
     runConfSubstitutions <- RunConfSubstitutionsValidator.load(loadFileWithProperties)
     dockerStructure <- DockerStructure.load(loadFileWithProperties)
@@ -83,7 +92,7 @@ object WorkspaceDefinition {
       updatedProperties,
       centralDependencies,
       resolvers.toList,
-      modules,
+      scopes,
       appValidator,
       runConfSubstitutions,
       dockerStructure,

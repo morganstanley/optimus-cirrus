@@ -28,42 +28,42 @@ import scala.collection.compat._
 object GeneratorConfigurationCompiler {
   def load(config: Config, origin: ObtFile): Result[Seq[(GeneratorType, GeneratorConfiguration)]] = {
     Success {
-        if (config.hasPath("generators")) {
-          val gens = config.getConfig("generators")
-          gens.root.keySet.asScala
-            .map { name =>
-              val nameCfg = gens.getConfig(name)
-              val tpe = nameCfg.stringOrDefault("type", name)
-              val templateRoots = nameCfg.getStringList("templates").asScala.map(Paths.get(_)).to(Seq)
-              val (externalRootPaths, internalRootPaths) = templateRoots.partition(_.isAbsolute)
-              val internalRoots = internalRootPaths.map(RelativePath(_))
-              val externalRoots = externalRootPaths.map(Directory(_))
-              val cfg = if (nameCfg.hasPath("configuration")) {
-                nameCfg
-                  .getConfig("configuration")
-                  .entrySet()
-                  .asScala
-                  .map { e =>
-                    e.getKey -> e.getValue.unwrapped.toString
-                  }
-                  .toMap
-              } else Map.empty[String, String]
-              val files = nameCfg.stringListOrEmpty("files").map(RelativePath(_))
-              val includes = nameCfg.optionalString("includes")
-              val excludes = nameCfg.optionalString("excludes")
-              GeneratorType(tpe) -> GeneratorConfiguration(
-                name,
-                internalRoots,
-                externalRoots,
-                files,
-                includes,
-                excludes,
-                cfg)
-            }
-            .to(Seq)
-            .sortBy(_._2.name)
-        } else Nil
-      }
+      if (config.hasPath("generators")) {
+        val gens = config.getConfig("generators")
+        gens.root.keySet.asScala
+          .map { name =>
+            val nameCfg = gens.getConfig(name)
+            val tpe = nameCfg.stringOrDefault("type", name)
+            val templateRoots = nameCfg.getStringList("templates").asScala.map(Paths.get(_)).to(Seq)
+            val (externalRootPaths, internalRootPaths) = templateRoots.partition(_.isAbsolute)
+            val internalRoots = internalRootPaths.map(RelativePath(_))
+            val externalRoots = externalRootPaths.map(Directory(_))
+            val cfg = if (nameCfg.hasPath("configuration")) {
+              nameCfg
+                .getConfig("configuration")
+                .entrySet()
+                .asScala
+                .map { e =>
+                  e.getKey -> e.getValue.unwrapped.toString
+                }
+                .toMap
+            } else Map.empty[String, String]
+            val files = nameCfg.stringListOrEmpty("files").map(RelativePath(_))
+            val includes = nameCfg.optionalString("includes")
+            val excludes = nameCfg.optionalString("excludes")
+            GeneratorType(tpe) -> GeneratorConfiguration(
+              name,
+              internalRoots,
+              externalRoots,
+              files,
+              includes,
+              excludes,
+              cfg)
+          }
+          .to(Seq)
+          .sortBy(_._2.name)
+      } else Nil
+    }
       .withProblems(
         if (config.hasPath("generators")) {
           val gens = config.getConfig("generators")

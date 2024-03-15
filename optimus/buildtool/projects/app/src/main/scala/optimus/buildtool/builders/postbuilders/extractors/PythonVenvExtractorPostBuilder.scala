@@ -1,0 +1,91 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package optimus.buildtool.builders.postbuilders.extractors
+
+import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.PythonArtifact
+import optimus.buildtool.builders.postbuilders.FilteredPostBuilder
+import optimus.buildtool.config.ScopeId
+import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
+import optimus.platform._
+import optimus.stratosphere.filesanddirs.Unzip
+
+import java.io.PrintWriter
+import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
+import scala.annotation.tailrec
+import scala.collection.immutable.Seq
+import scala.util.Random
+import scala.jdk.CollectionConverters._
+
+class PythonVenvExtractorPostBuilder(buildDir: Directory) extends FilteredPostBuilder {
+  private val venvFolder: Directory = buildDir.resolveDir("venvs")
+  private val mappingFile: FileAsset = venvFolder.resolveFile("venv-mapping.txt")
+  private val mapping: ConcurrentHashMap[(ScopeId, String), Directory] =
+    new ConcurrentHashMap(loadMappingsFile().asJava)
+
+  @async override protected def postProcessFilteredScopeArtifacts(id: ScopeId, artifacts: Seq[Artifact]): Unit = {
+    artifacts.foreach {
+      case pythonArtifact: PythonArtifact =>
+        val venvExtractionDest = venvLocation(id, pythonArtifact.inputsHash)
+        if (!venvExtractionDest.exists) {
+          Files.createDirectories(venvExtractionDest.path)
+          Unzip.extract(pythonArtifact.file.path.toFile, venvExtractionDest.path.toFile)
+        }
+      case _ => None
+    }
+    writeMappingsFile()
+  }
+
+  def venvLocation(id: ScopeId, artifactHash: String): Directory =
+    mapping.computeIfAbsent((id, artifactHash), { _ => uniqueVenvDir(id) })
+
+  private def venvDir(id: ScopeId, dirName: String): Directory =
+    venvFolder.resolveDir(id.meta).resolveDir(id.bundle).resolveDir(dirName)
+
+  private def uniqueVenvDir(id: ScopeId): Directory = {
+    @tailrec
+    def uniqueDir: Directory = {
+      val uniqueDirName: String = id.module + "-" + Random.alphanumeric.take(5).mkString
+      val dir = venvDir(id, uniqueDirName)
+      if (dir.exists) uniqueDir
+      else dir
+    }
+    uniqueDir
+  }
+
+  private def writeMappingsFile(): Unit = {
+    val mappingEntries = mapping.asScala.map { case ((scope, hash), mapping) =>
+      s"$scope,$hash,${mapping.path.getFileName}"
+    }
+    IO.using(new PrintWriter(Files.newOutputStream(mappingFile.path)))(pw => mappingEntries.foreach(pw.println))
+  }
+
+  private def loadMappingsFile(): Map[(ScopeId, String), Directory] = {
+    if (mappingFile.exists) {
+      Files
+        .readAllLines(mappingFile.path)
+        .asScala
+        .map { line =>
+          line.split(',') match {
+            case Array(id, hash, mapping) =>
+              val scopeId = ScopeId.parse(id)
+              (scopeId, hash) -> venvDir(scopeId, mapping)
+          }
+        }
+        .toMap
+    } else {
+      Map.empty
+    }
+  }
+}

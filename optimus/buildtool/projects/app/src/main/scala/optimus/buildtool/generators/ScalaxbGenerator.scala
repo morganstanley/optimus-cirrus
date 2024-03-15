@@ -17,9 +17,9 @@ import java.io.PrintWriter
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
@@ -80,7 +80,7 @@ import scala.xml.Node
       Seq(s"[scalaxb]${SourceGenerator.location[Driver].pathFingerprint}") ++
         templateFingerprint ++
         configuration.to(Seq).sorted.map { case (k, v) => s"[Configuration:$k]$v" }
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint)
+    val hashedFingerprint = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     ScalaxbGenerator.Inputs(
       name,
@@ -89,7 +89,7 @@ import scala.xml.Node
       wrappedComplexTypes,
       generateRuntime,
       ignoreUnknown,
-      fingerprintHash
+      hashedFingerprint
     )
   }
 
@@ -164,7 +164,7 @@ object ScalaxbGenerator extends Log {
       wrappedComplexTypes: Seq[String],
       generateRuntime: Boolean,
       ignoreUnknown: Boolean,
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends SourceGenerator.Inputs
 
   private val Schema: CanBeRawSchema[(FileAsset, HashedContent), Node] =

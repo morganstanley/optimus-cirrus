@@ -12,6 +12,7 @@
 package optimus.buildtool.resolvers
 
 import java.net.URL
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystem
 import java.nio.file.FileSystemException
@@ -39,7 +40,6 @@ import coursier.core.Extension
 import coursier.core.Repository
 import coursier.util.Artifact
 import coursier.util.EitherT
-import coursier.util.Sync
 import optimus.buildtool.artifacts.ExternalArtifactType
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore
@@ -52,20 +52,24 @@ import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.ExtraLibDefinition
 import optimus.buildtool.config.LocalDefinition
 import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.files.BaseHttpAsset
+import optimus.buildtool.dependencies.AfsSource
+import optimus.buildtool.dependencies.DependencySource
+import optimus.buildtool.dependencies.MavenSource
 import optimus.buildtool.format.JvmDependenciesConfig
-import optimus.buildtool.resolvers.MavenUtils.checkLocalDisk
-import optimus.buildtool.resolvers.MavenUtils.checkSK
 import optimus.buildtool.resolvers.MavenUtils.downloadUrl
+import optimus.buildtool.resolvers.MavenUtils.maxSrcDocDownloadSeconds
+import optimus.buildtool.utils.StackUtils
 import optimus.core.CoreAPI
 import optimus.graph.Node
 import optimus.stratosphere.artifactory.Credential
+import org.xml.sax.SAXParseException
 
 import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 object NativeIvyConstants {
   private[resolvers] val JNIPathSepRegex: String = Pattern.quote("${PATH_SEP}")
@@ -150,9 +154,10 @@ object CoursierArtifactResolver {
 }
 
 @entity class CoursierArtifactResolver(
-    resolvers: Seq[IvyResolver],
+    resolvers: Seq[DependencyMetadataResolver],
     externalDependencies: ExternalDependencies,
     dependencyCopier: DependencyCopier,
+    dependencySource: DependencySource,
     globalExcludes: Seq[Exclude] = Nil,
     fileSystem: FileSystem = FileSystems.getDefault,
     credentials: Seq[Credential] = Nil,
@@ -167,8 +172,19 @@ object CoursierArtifactResolver {
     .filter(_.variant.isEmpty)
     .map(d => Module(Organization(d.group), ModuleName(d.name)) -> d)
     .toMap
-  private val localRepos: Seq[(String, IvyPattern.Local)] =
-    resolvers.flatMap(_.ivyPatterns).collectAll[IvyPattern.Local].map(p => p.urlRepoRoot -> p)
+  private val enabledResolversMap: Map[String, DependencyMetadataResolver] = resolvers.map(r => r.name -> r).toMap
+  private[buildtool] val predefinedResolvers: Map[Module, Seq[DependencyMetadataResolver]] =
+    dependencyDefinitions.collect {
+      case d if d.resolvers.nonEmpty =>
+        Module(Organization(d.group), ModuleName(d.name)) -> d.resolvers.map(enabledResolversMap)
+    }.toMap
+  private val dependencyMappingMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
+    dependencySource match {
+      case AfsSource   => Map.empty
+      case MavenSource => externalDependencies.afsToMavenMap
+    }
+  private val localRepos: Seq[(String, MetadataPattern.Local)] =
+    resolvers.flatMap(_.metadataPatterns).collectAll[MetadataPattern.Local].map(p => p.urlRepoRoot -> p)
 
   private def coursierDepToDefinition(coursierDep: Dependency): DependencyDefinition = dependencyDefinitions
     .find(d => d.group == coursierDep.module.organization.value && d.name == coursierDep.module.name.value)
@@ -204,8 +220,8 @@ object CoursierArtifactResolver {
   @node private def fingerprintDependencyDefinitions(tpe: String, deps: Iterable[DependencyDefinition]): Seq[String] = {
     deps.map { d =>
       s"$tpe-dependency-definition:${d.group}:${d.name}:${d.variant}:${d.version}:${d.configuration}:" +
-        s"${d.ivyArtifacts.mkString(",")}:${d.excludes.mkString(",")}:transitive=${d.transitive}:force=${d.force}:" +
-        s"macros=${d.containsMacros}:plugin=${d.isScalacPlugin}"
+        s"resolvers=${d.resolvers.mkString(",")}:${d.ivyArtifacts.mkString(",")}:${d.excludes.mkString(",")}:" +
+        s"transitive=${d.transitive}:force=${d.force}:macros=${d.containsMacros}:plugin=${d.isScalacPlugin}"
     }.toIndexedSeq
   }
 
@@ -360,8 +376,7 @@ object CoursierArtifactResolver {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint
     val distinctDeps = distinctRequestedDeps(deps.all).filter(_.kind != ExtraLibDefinition)
     val (mavenDeps, afsDeps) = distinctDeps.partition(_.isMaven)
-    val mappedAfsDepsResult =
-      MavenUtils.applyDirectMapping(externalDependencies.afsToMavenMap, afsDeps)
+    val mappedAfsDepsResult = MavenUtils.applyDirectMapping(dependencyMappingMap, afsDeps)
     val distinctDepsWithMapping = (mappedAfsDepsResult.allDepsAfterMapping ++ mavenDeps).to(Seq)
 
     // note that requested dependencies always overwrite the defaults (only matters if they are variants requested),
@@ -417,7 +432,9 @@ object CoursierArtifactResolver {
 
   @node private def parseRepo(ivy: String, artifactPatterns: Seq[String]): Repository = {
     if (NamingConventions.isHttpOrHttps(ivy)) {
-      val host = new URL(ivy).getHost
+      // note that the ivy pattern isn't a valid URI because it contains [variables] in the path part.
+      // we strip those out so that we can extract the hostname without URI parsing failures.
+      val host = new URI(ivy.replaceAllLiterally("[", "").replaceAllLiterally("]", "")).toURL.getHost
       val credentialOption = credentials.find(_.host == host)
       if (artifactPatterns.exists(_.contains("tar.gz!"))) {
         UnzipFileRepository
@@ -435,16 +452,18 @@ object CoursierArtifactResolver {
           artifactPatterns,
           fileSystem = fileSystem,
           excludes = excludes,
-          afsGroupNameToMavenMap = externalDependencies.afsGroupNameToMavenMap
+          afsGroupNameToMavenMap = dependencyMappingMap.map { case (afs, maven) =>
+            (afs.group, afs.name) -> maven
+          }
         )
         .toOption
         .getOrElse(throw new Exception(s"failed for $ivy -> $artifactPatterns"))
   }
 
-  @node private def repos: Seq[Repository] =
+  @node private def repos(module: Module): Seq[Repository] =
     for {
-      resolver <- resolvers.apar
-      ivy <- resolver.ivyPatterns.apar
+      resolver <- predefinedResolvers.getOrElse(module, resolvers).apar
+      ivy <- resolver.metadataPatterns.apar
     } yield parseRepo(ivy.urlPattern, resolver.artifactPatterns.map(_.urlPattern))
 
   private val LocalRepoUrl = new Extractor((u: String) =>
@@ -452,37 +471,14 @@ object CoursierArtifactResolver {
 
   private def loadContent(path: Path): Either[String, String] = Right(Files.readString(path))
 
-  @node def downloadMavenLib(url: URL): Either[String, String] = {
-    downloadUrl(url, dependencyCopier)(asNode(d => loadContent(d.path)))(Left(_))
-  }
-
-  @entersGraph private def fetchHttp[F[_]](artifact: Artifact)(implicit syncF: Sync[F]): EitherT[F, String, String] = {
-
-    /**
-     * This is a customized Coursier:fetch to make obt support download maven files(.xml/.pom) into SilverKing. By
-     * default OBT would try resolve maven artifacts in this order:
-     *   1. local disk 2. silverking 3. maven
-     */
-    @entersGraph def doHttpFetch(artifact: Artifact): Either[String, String] = {
-      val url: URL = new URL(artifact.url)
-      val httpAsset = BaseHttpAsset.httpAsset(url)
-
-      if (checkLocalDisk(url, dependencyCopier)) {
-        loadContent(dependencyCopier.httpLocalAsset(httpAsset).path)
-      } else if (checkSK(url, remoteAssetStore)) {
-        val depCopiedLocation = dependencyCopier.httpLocalAsset(httpAsset)
-        remoteAssetStore.get(url, depCopiedLocation) match {
-          case Some(file) =>
-            loadContent(file.path)
-          case None =>
-            log.debug(s"Failed load url from SK, try download it now: $url")
-            downloadMavenLib(url)
-        }
-      } else downloadMavenLib(url)
-    }
-
-    // Delaying here as we do not want to fetch from maven when the other resolvers are not working.
-    EitherT(syncF.delay(doHttpFetch(artifact)))
+  /**
+   * This is a customized Coursier:fetch to make obt support download maven files(.xml/.pom) into SilverKing. By
+   * default OBT would try resolve maven artifacts in this order:
+   *   1. local disk 2. silverking 3. maven
+   */
+  @entersGraph def doHttpFetch(artifact: Artifact): Either[String, String] = {
+    val url: URL = new URI(artifact.url).toURL
+    downloadUrl(url, dependencyCopier, remoteAssetStore)(asNode(d => loadContent(d.path)))(Left(_))
   }
 
   /**
@@ -490,12 +486,12 @@ object CoursierArtifactResolver {
    * file that we hashed in the resolver fingerprint). Falls back to defaultFetch for non-local ivys or fetch poms from
    * remote maven server.
    */
-  private def fetchIvyOrPom(artifact: coursier.util.Artifact): EitherT[Node, String, String] = artifact.url match {
+  private def fetchDepMetadata(artifact: coursier.util.Artifact): EitherT[Node, String, String] = artifact.url match {
     // local ivy files are loaded from memory to avoid TOCTOU issues between hashing and reading
-    case LocalRepoUrl(IvyPattern.Local(_, urlRepoRoot, _, contents)) =>
+    case LocalRepoUrl(MetadataPattern.Local(_, urlRepoRoot, _, contents)) =>
       val relpath = RelativePath(artifact.url.stripPrefix(urlRepoRoot))
       EitherT.fromEither {
-        contents.ivyContent(relpath).toRight(s"File not found in local ivy-repo: $relpath")
+        contents.localMetadataContent(relpath).toRight(s"File not found in local repo: $relpath")
       }
     // optimized path for file:// URLs which avoids inefficient Files.exists probing in Coursier
     case f if f.startsWith("file://") =>
@@ -508,16 +504,38 @@ object CoursierArtifactResolver {
           case e: FileSystemException => Left(s"FileSystem error: ${artifact.url}, $e")
         }
       })
-    case _ => fetchHttp(artifact)
+    case _ => EitherT(CoursierGraphAdaptor.delay(doHttpFetch(artifact)))
+  }
+
+  // try fetch dependency files by Coursier api
+  @async private def doCoursierFetch(
+      module: Module,
+      version: String,
+      repos: Seq[Repository]): Either[Seq[String], (ArtifactSource, Project)] = {
+    val (durationInNanos, fetchedResult) = AdvancedUtils.timed {
+      asyncResult {
+        asyncGet { fetchOne(repos, module, version, fetchDepMetadata, Nil).run }.left.map(_.toVector)
+      }.recover { // capture Coursier side exception, eventually will be transferred to error CompilationMessage
+        case e: SAXParseException => // we already downloaded correct file from remote but it's broken
+          val nonParseable = "Coursier got non parseable metadata"
+          log.debug(s"$nonParseable! ${StackUtils.multiLineStacktrace(e)}")
+          DependencyDownloadTracker.addBrokenMetadata(cleanModuleStr(module))
+          Left(Seq(s"$nonParseable file: $e"))
+        case NonFatal(e) =>
+          val fetchFailed = "Cousier fetch failed"
+          log.debug(s"$fetchFailed! ${StackUtils.multiLineStacktrace(e)}")
+          DependencyDownloadTracker.addFailedMetadata(cleanModuleStr(module))
+          Left(Seq(s"$fetchFailed with exception: $e"))
+      }.value
+    }
+    DependencyDownloadTracker.addFetchDuration(cleanModuleStr(module), durationInNanos)
+    fetchedResult
   }
 
   // it's a node so that we can cache the find across all repos - this is valuable because we'll probably request the
   // same module and version in many different scopes
-  @node private def findModuleInRepos(
-      module: Module,
-      version: String): Either[Seq[String], (ArtifactSource, Project)] = {
-    asyncGet(fetchOne(repos, module, version, fetchIvyOrPom, Nil).run).left.map(_.toVector)
-  }
+  @node private def findModuleInRepos(module: Module, version: String): Either[Seq[String], (ArtifactSource, Project)] =
+    doCoursierFetch(module, version, repos(module))
 
   @node private def doResolution(directDeps: Seq[Dependency], forceVersions: Map[Module, String]): Resolution = {
 
@@ -606,17 +624,19 @@ object CoursierArtifactResolver {
   }
 
   private def toAsset(a: Artifact): JarAsset =
-    if (NamingConventions.isHttpOrHttps(a.url)) JarAsset(new URL(a.url))
+    if (NamingConventions.isHttpOrHttps(a.url)) JarAsset(new URI(a.url).toURL())
     else JarAsset(PathUtils.uriToPath(a.url, fileSystem))
 
-  @node private def downloadMavenClassifier(
+  @node private def downloadMavenSrcDocClassifier(
       source: ArtifactSource,
       dep: Dependency,
       proj: Project,
       classifier: Classifier): Option[JarAsset] =
     source.artifacts(dep, proj, Some(Seq(classifier))).headOption.flatMap { case (p, art) =>
-      downloadUrl(new URL(art.url), dependencyCopier)(asNode(f => if (f.exists) Some(toAsset(art)) else None))(_ =>
-        None)
+      val url = new URI(art.url).toURL
+      // quick search on src and doc files, normal url should return within 1s
+      downloadUrl(url, dependencyCopier, remoteAssetStore, timeoutSec = maxSrcDocDownloadSeconds)(asNode(f =>
+        if (f.exists) Some(toAsset(art)) else None))(_ => None)
     }
 
   @node private def convertArtifact(
@@ -641,10 +661,10 @@ object CoursierArtifactResolver {
       artifact.extra
         .get("src")
         .map(toAsset)
-        .orElse(if (isMaven) downloadMavenClassifier(source, dep, proj, Classifier.sources) else None)
+        .orElse(if (isMaven) downloadMavenSrcDocClassifier(source, dep, proj, Classifier.sources) else None)
     val javadocAsset = (artifact.extra.get("javadoc") orElse artifact.extra.get("doc"))
       .map(toAsset)
-      .orElse(if (isMaven) downloadMavenClassifier(source, dep, proj, Classifier.javadoc) else None)
+      .orElse(if (isMaven) downloadMavenSrcDocClassifier(source, dep, proj, Classifier.javadoc) else None)
 
     ExternalDependencyResolver
       .makeArtifact(

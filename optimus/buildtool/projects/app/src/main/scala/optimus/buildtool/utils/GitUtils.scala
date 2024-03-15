@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.utils
 
+import optimus.buildtool.config.StratoConfig
+
 import java.io.InputStream
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
@@ -108,7 +110,9 @@ final case class GitFile(path: String, repo: Repository, fileId: ObjectId) {
 }
 
 final case class NativeGitUtils(workspaceSourceRoot: Directory) extends Log {
-  val gitProcess = new GitProcess(StratoWorkspace(CustomWorkspace(workspaceSourceRoot.parent.path)).config)
+  val gitProcess = new GitProcess(
+    StratoWorkspace(CustomWorkspace(workspaceSourceRoot.parent.path), StratoConfig.stratoLogger).config,
+  )
 
   def diffFiles(from: String): Set[FileAsset] = {
     val lines = execute("-C", workspaceSourceRoot.pathString, "diff", "--name-only", from)

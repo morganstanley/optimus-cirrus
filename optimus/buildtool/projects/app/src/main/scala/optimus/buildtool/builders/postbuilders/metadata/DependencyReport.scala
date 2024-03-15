@@ -44,6 +44,8 @@ object DependencyReport {
     fieldName8 = "parent"
   )
 
+  def dependencyNamespace(dep: DependencyDefinition): String = if (dep.isMaven) MavenNamespace else AfsNamespace
+
   def fromExternalResolution(
       dependencyDef: DependencyDefinition,
       resolution: ResolutionResult,
@@ -51,7 +53,7 @@ object DependencyReport {
       settings: MetadataSettings): Seq[DependencyReport] = {
     resolution.resolvedArtifacts.map { externalArtifact =>
       DependencyReport(
-        namespace = if (settings.generatePoms || dependencyDef.isMaven) MavenNamespace else AfsNamespace,
+        namespace = if (settings.generatePoms) MavenNamespace else dependencyNamespace(dependencyDef),
         meta = dependencyDef.group,
         project = dependencyDef.name,
         release = Some(dependencyDef.version),
@@ -61,6 +63,18 @@ object DependencyReport {
       )
     }
   }
+
+  def fromExtraLib(extraLib: DependencyDefinition, qualifiers: Set[QualifierReport]): DependencyReport =
+    DependencyReport(
+      namespace = dependencyNamespace(extraLib),
+      meta = extraLib.group,
+      project = extraLib.name,
+      release = Some(extraLib.version),
+      artifact = None,
+      qualifiers = qualifiers,
+      isTransitive = extraLib.transitive,
+      parent = None
+    )
 
   def fromWebDependency(npmDep: WebDependency, qualifiers: Set[QualifierReport]): DependencyReport =
     DependencyReport(
@@ -77,7 +91,7 @@ object DependencyReport {
 
   def fromWebToolingDefinition(dependency: DependencyDefinition, qualifiers: Set[QualifierReport]): DependencyReport =
     DependencyReport(
-      namespace = if (dependency.group == MsWebDependencyDefaultMeta) NpmNamespace else AfsNamespace,
+      namespace = if (dependency.group == MsWebDependencyDefaultMeta) NpmNamespace else dependencyNamespace(dependency),
       meta = if (dependency.name == PnpmName) OutsideWebDependencyDefaultMeta else dependency.group,
       project = dependency.name,
       release = Some(dependency.version),

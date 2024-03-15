@@ -19,6 +19,7 @@ public class TransformationStatistics {
   public final AtomicLong visited = new AtomicLong(0);
   public final AtomicLong instrumented = new AtomicLong(0);
   public final AtomicLong optimusClasses = new AtomicLong(0);
+  public final AtomicLong exemptedInstrumentationClasses = new AtomicLong(0);
   public final AtomicLong failures = new AtomicLong(0);
 
   @Override
@@ -33,6 +34,8 @@ public class TransformationStatistics {
         + instrumented
         + ", optimusClasses="
         + optimusClasses
+        + ", exemptedInstrumentationClasses="
+        + exemptedInstrumentationClasses
         + ", failures="
         + failures
         + '}';

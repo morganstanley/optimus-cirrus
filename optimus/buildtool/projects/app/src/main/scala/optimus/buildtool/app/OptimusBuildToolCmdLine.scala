@@ -92,19 +92,18 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   val outputDir: String = ""
 
   @args.Option(
+    name = "--dependencySource",
+    required = false,
+    usage = "jvm dependencies mapping preferred source. One of 'afs' or 'maven' (defaults to 'afs')"
+  )
+  val dependencySource: String = "afs"
+
+  @args.Option(
     name = "--useMavenLibs",
     required = false,
     usage = "Decide to use mavenLibs of external dependencies or not (defaults to false)"
   )
   val useMavenLibs: Boolean = false
-
-  // TODO (OPTIMUS-62407): delete this after next obt release with related CI usages
-  @args.Option(
-    name = "--installMaven",
-    required = false,
-    usage = "Decide to install maven libs into /install dir or not (defaults to false)"
-  )
-  val installMaven: Boolean = false
 
   @args.Option(
     name = "--generatePoms",
@@ -139,6 +138,9 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   // Non-@Option vals need to be lazy so that they pick up the fully initialized state of this class
   lazy val (workspaceRoot, workspaceSourceRoot): (Directory, Directory) =
     Utils.resolveWorkspaceAndSrcRoots(workspaceDir.asDirectory, sourceDir.asDirectory)
+  lazy val buildDir: Directory = outputDir.asDirectory.getOrElse(workspaceRoot.resolveDir("build_obt"))
+  lazy val reportDir: Directory = buildDir.resolveDir(".build-report")
+  lazy val errorsDir: Directory = reportDir.resolveDir("compilation-errors")
 
   // Non-@Option vals need to be lazy so that they pick up the fully initialized state of this class
   lazy val logDir: Path =
@@ -578,7 +580,7 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   val zincPathAndVersion: String = null
 
   @args.Option(name = "--zincAnalysisCacheSize", required = false, usage = "Zinc analysis cache size (defaults to 50)")
-  val zincAnalysisCache = 50
+  val zincAnalysisCacheSize = 50
 
   @args.Option(
     name = "--zincIgnorePluginHash",
@@ -840,4 +842,11 @@ private[buildtool] trait OptimusBuildToolCmdLineT
       "Enables a minimal install mode where app scripts of transitive dependencies are not installed (defaults to false)"
   )
   val minimalInstall: Boolean = false
+
+  @args.Option(
+    name = "--pypiCredentials",
+    required = false,
+    usage = "Location of the cached pip.ini credential file to load, used by Pypi Artifactory"
+  )
+  val pypiCredentials: String = NoneArg
 }

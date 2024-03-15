@@ -12,40 +12,32 @@
 package com.ms.silverking.cloud.dht.serverside;
 
 import java.nio.ByteBuffer;
-import com.ms.silverking.cloud.dht.throttle.SkThrottlingDebt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class IntermediateResult {
   private static final Logger log = LoggerFactory.getLogger(IntermediateResult.class);
   private ByteBuffer resultBuffer;
-  private SkThrottlingDebt throttleDebt;
 
-  private IntermediateResult(ByteBuffer resultBuffer, SkThrottlingDebt throttleDebt) {
+  private IntermediateResult(ByteBuffer resultBuffer) {
     this.resultBuffer = resultBuffer;
-    this.throttleDebt = throttleDebt;
   }
 
-  public static IntermediateResult of(ByteBuffer resultBuffer, SkThrottlingDebt throttleDebt) {
-    return of(resultBuffer, throttleDebt, "Untraced");
+  public static IntermediateResult of(ByteBuffer resultBuffer) {
+    return of(resultBuffer, "Untraced");
   }
 
-  public static IntermediateResult of(
-      ByteBuffer resultBuffer, SkThrottlingDebt throttleDebt, String traceId) {
+  public static IntermediateResult of(ByteBuffer resultBuffer, String traceId) {
     if (resultBuffer == null) {
       log.warn(
           "Tried to construct IntermediateResult for null result buffer for trace id: " + traceId,
           new NullPointerException("Suspicious code path"));
       return null;
     }
-    return new IntermediateResult(resultBuffer, throttleDebt);
+    return new IntermediateResult(resultBuffer);
   }
 
   public ByteBuffer getResultBuffer() {
     return resultBuffer;
-  }
-
-  public SkThrottlingDebt getThrottleDebt() {
-    return throttleDebt;
   }
 }

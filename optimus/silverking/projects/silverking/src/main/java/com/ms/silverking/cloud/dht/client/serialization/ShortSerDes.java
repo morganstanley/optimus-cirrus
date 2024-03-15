@@ -50,6 +50,6 @@ public final class ShortSerDes implements BufferSerDes<Short> {
 
   @Override
   public Short emptyObject() {
-    return new Short((short) 0);
+    return Short.valueOf((short) 0);
   }
 }

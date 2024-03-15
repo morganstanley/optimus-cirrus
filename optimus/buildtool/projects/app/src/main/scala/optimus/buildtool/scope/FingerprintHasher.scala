@@ -11,7 +11,7 @@
  */
 package optimus.buildtool.scope
 
-import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.artifacts.ArtifactType.CompilationFingerprint
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.FingerprintArtifactType
 import optimus.buildtool.artifacts.InternalArtifactId
@@ -33,38 +33,32 @@ import scala.collection.immutable.Seq
     mischief: Boolean
 ) {
 
-  @node def hashFingerprint(fingerprint: Seq[String], tpe: FingerprintArtifactType): String =
-    hashedArtifact(fingerprint, tpe)._1
-
-  @node def fingerprintArtifact(fingerprint: Seq[String], tpe: FingerprintArtifactType): Option[FingerprintArtifact] =
-    hashedArtifact(fingerprint, tpe)._2
-
-  @node private def hashedArtifact(
+  @node def hashFingerprint(
       fingerprint: Seq[String],
-      tpe: FingerprintArtifactType
-  ): (String, Option[FingerprintArtifact]) = {
+      tpe: FingerprintArtifactType,
+      discriminator: Option[String] = None
+  ): FingerprintArtifact = {
     log.debug(s"[$id] Calculating hashed fingerprint for $tpe...")
     val hashPrefix = Hashing.hashStrings(fingerprint ++ freezeHash)
     // we use Z for freezer because F could be interpreted as part of the hash!
     val hash: String = hashPrefix + (if (freezeHash.nonEmpty) "Z" else "") + (if (mischief) "M" else "")
     log.debug(s"[$id] Hashed fingerprint (${fingerprint.size}) for $tpe: $hash")
     if (fingerprint.nonEmpty) {
-      val path = pathBuilder.outputPathFor(id, hash, tpe, None, incremental = false)
+      val path = pathBuilder.outputPathFor(id, hash, tpe, discriminator, incremental = false)
       AssetUtils.atomicallyWriteIfMissing(path) { tmp =>
         Utils.writeStringsToFile(tmp, fingerprint)
       }
 
       // Note that we deliberately create the artifact here (even if we're not going to write it to the store below)
       // so that we watch for its deletion
-      val artifact = FingerprintArtifact.create(InternalArtifactId(id, tpe, None), path)
+      val artifact = FingerprintArtifact.create(InternalArtifactId(id, tpe, discriminator), path, fingerprint, hash)
       tpe match {
         // Most of the time, there's no reason to cache the fingerprints.
         // CompilationFingerprints are useful for debugging though, so we would like them to be cached.
-        // This is safe because we need (tpe: CachedArtifactType) in order to try to read from cache.
-        case tpeCached: CachedArtifactType => store.put(tpeCached)(id, hash, None, artifact)
-        case _                             => // do nothing
+        case CompilationFingerprint => store.put(CompilationFingerprint)(id, hash, discriminator, artifact)
+        case _                      => // do nothing
       }
-      (hash, Some(artifact))
-    } else (hash, None)
+      artifact
+    } else FingerprintArtifact.empty(InternalArtifactId(id, tpe, discriminator), hash)
   }
 }

@@ -13,7 +13,6 @@ package optimus.buildtool.compilers.zinc
 
 import java.io.File
 import java.io.InputStream
-import java.net.URL
 import java.nio.file.Path
 import java.util.Properties
 import optimus.buildtool.app.BuildInstrumentation
@@ -36,6 +35,7 @@ import sbt.internal.inc._
 import xsbti.VirtualFile
 import xsbti.compile.IncOptions
 
+import java.net.URI
 import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
@@ -51,7 +51,7 @@ private[buildtool] final case class ZincCompilerFactory(
     cachePluginAndMacroClassLoaders: Boolean,
     zincIgnorePluginHash: Boolean = false,
     zincIgnoreChangesRegexp: String = "jre/lib/rt.jar$",
-    zincAnalysisCache: Int,
+    analysisCache: ZincAnalysisCache,
     zincRecompileAllFraction: Double,
     instrumentation: BuildInstrumentation,
     bspServer: Boolean = false,
@@ -103,14 +103,6 @@ private[buildtool] final case class ZincCompilerFactory(
   override def newCompiler(scopeId: ScopeId, traceType: MessageTrace): SyncCompiler =
     new ZincCompiler(this, scopeId, traceType)
 
-  private[zinc] lazy val generalLogger = new ZincGeneralLogger
-  private[zinc] lazy val analysisCache =
-    new ZincAnalysisCache(
-      zincAnalysisCache,
-      generalLogger,
-      instrumentation
-    )
-
   private def findScalaJar(baseJarName: String, scalaClasspath: Iterable[File]): File =
     scalaClasspath
       .find { entry =>
@@ -123,7 +115,7 @@ private[buildtool] final case class ZincCompilerFactory(
   private def readScalaVersion(compilerJar: File): String = {
     var input: InputStream = null
     try {
-      input = new URL(s"jar:${compilerJar.toURI}!/compiler.properties").openStream()
+      input = new URI(s"jar:${compilerJar.toURI}!/compiler.properties").toURL().openStream()
       val properties = new Properties
       properties.load(input)
       properties.getProperty("version.number")

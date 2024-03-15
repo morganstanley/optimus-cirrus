@@ -27,6 +27,7 @@ public class DistInputs {
     public static final String OPTIMUS_DIST_GSF_PREFIX = "optimus.dist.gsf.";
     public static final String CancelTasksOnExit = "client.cancelTasksOnExit";
     public static final String EngineCmdLine = "client.engine.cmdLine";
+    public static final String AfsOnly = "client.engine.afsOnly";
     public static final String ProvideEngineClasspath = "client.engine.provideClasspath";
     public static final String ProvideEngineEnv = "client.engine.provideEngineEnv";
     public static final String EngineEnv = "client.engine.env";
@@ -145,6 +146,14 @@ public class DistInputs {
           "True if tasks are cancelled by GSF broker if the client process exits",
           true,
           Source.fromBoolJavaProperties(prefixed(SourceNames.CancelTasksOnExit)),
+          CombinationStrategies.distCombinator());
+
+  public static final ScopedSINodeInput<Boolean> AfsOnly =
+      NodeInputs.newSerializableWithDefault(
+          "afsOnly",
+          "any attempt to distribute nodes to the grid from a non-AFS location will be declined if true",
+          false,
+          Source.fromBoolJavaProperties(prefixed(SourceNames.AfsOnly)),
           CombinationStrategies.distCombinator());
 
   public static final ScopedSINodeInput<Boolean> CompressData =

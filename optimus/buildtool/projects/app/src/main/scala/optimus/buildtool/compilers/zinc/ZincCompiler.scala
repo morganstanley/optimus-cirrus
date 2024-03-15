@@ -62,6 +62,7 @@ import sbt.internal.inc.CompileFailed
 import sbt.internal.inc.IncrementalCompilerImpl
 import sbt.internal.inc.ZincInvalidationProfiler
 import sbt.internal.prof.Zprof
+import sbt.internal.prof.Zprof.ZincRun
 import xsbti.compile.AnalysisContents
 
 import scala.jdk.CollectionConverters._
@@ -83,6 +84,13 @@ object ZincCompiler {
 
   // workaround for incompatible JNA native library version
   sys.props.put("sbt.io.jdktimestamps", "true")
+
+  // these are copied from ZincInvalidationProfiler - it's unfortunate that we have to depend on these
+  // but the only other alternative is to implement our own profiler
+  private val NameChangeReason = "Standard API name change in modified class."
+  private val AnnotationChangeReason = "API change due to annotation definition."
+  private val PrivateTraitMembersReason = "API change due to existence of private trait members in modified class."
+  private val MacroChangeReason = "API change due to macro definition."
 }
 
 class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: MessageTrace) extends SyncCompiler {
@@ -201,9 +209,9 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
       val profile = invalidationProfiler.toProfile
       settings.instrumentation.zincInvalidationCallback.foreach(c => c(scopeId, activeTask.category, profile))
 
+      val runs = profile.getRunsList.asScala
+      val run = runs.singleOrNone
       val cycles = {
-        val runs = profile.getRunsList.asScala
-        val run = runs.singleOrNone
         run.map(_.getCyclesList.asScala.toIndexedSeq).getOrElse {
           log.warn(s"Expected exactly one runProfile but got ${runs.size}")
           Nil
@@ -215,8 +223,9 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
         activeTask,
         inputs.sourceFiles,
         previousAnalysis,
-        cycles,
         profile,
+        run,
+        cycles,
         reporter.messages
       )
 
@@ -444,26 +453,45 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
       activeTask: Task,
       sources: SortedMap[SourceUnitId, HashedContent],
       previousAnalysis: Option[AnalysisArtifact],
-      cycles: Seq[Zprof.CycleInvalidation],
       profile: Zprof.Profile,
+      run: Option[ZincRun],
+      cycles: Seq[Zprof.CycleInvalidation],
       messages: Seq[CompilationMessage]
   ): Unit = {
-    if (cycles.isEmpty) {
+    def filter(files: Iterable[String]): Iterable[String] =
+      if (traceType == Scala) files.filter(_.endsWith("scala")) else files.filter(_.endsWith("java"))
+
+    val tracer = activeTask.trace
+    def name(i: Int) = profile.getStringTable(i)
+
+    val runStats = run.map { r =>
+      val changes = r.getInitial.getChanges
+      val added = filter(changes.getAddedList.asScala.map(name(_)))
+      val modified = filter(changes.getModifiedList.asScala.map(name(_)))
+      val removed = filter(changes.getRemovedList.asScala.map(name(_)))
+      RunStats(
+        r,
+        added.size,
+        modified.size,
+        removed.size,
+        r.getInitial.getBinaryDependenciesList.asScala.map(name(_)).toSet
+      )
+    }
+
+    val (invalidatedSources, totalSources) = if (cycles.isEmpty) {
       if (success) { // Cycles are often empty if the build failed
         val msg = s"${prefix}No source invalidations"
         log.info(msg)
         ObtTrace.info(msg)
       }
+      (0, 0)
     } else {
-      def filter(files: Iterable[String]): Iterable[String] =
-        if (traceType == Scala) files.filter(_.endsWith("scala")) else files.filter(_.endsWith("java"))
-
       val filteredSources = filter(sources.keySet.map(_.sourceFolderToFilePath.pathString))
       val totalSize = filteredSources.size
       val analysisStr = if (previousAnalysis.isDefined) "" else " (non-incremental)"
 
-      cycles.reverse.zipWithIndex.foreach { case (c, i) =>
-        val allInvalidatedSources = c.getInvalidatedSourcesList.asScala.map(profile.getStringTable(_))
+      val invalidated = cycles.reverse.zipWithIndex.map { case (c, i) =>
+        val allInvalidatedSources = c.getInvalidatedSourcesList.asScala.map(name(_))
         val invalidatedSources = filter(allInvalidatedSources)
         val msg: String = if (invalidatedSources.isEmpty) {
           s"Cycle ${i + 1}, No ${traceType.name} invalidations"
@@ -475,36 +503,88 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
           s"Cycle ${i + 1}, ${invalidatedSources.size}/$totalSize ${traceType.name} invalidations$analysisStr: ${srcst.toSeq.sorted
               .mkString("", ", ", ddd)}"
         }
+
         log.info(s"$prefix$msg")
         ObtTrace.info(s"$prefix$msg")
-      }
+
+        invalidatedSources.size
+      }.sum
+
+      (invalidated, totalSize)
+    }
+
+    // If we found a previous analysis but zinc still thinks every source file in the scope was added then
+    // that suggests zinc didn't use the previous analysis at all. This could be due to bad zinc read/write mapping.
+    if (previousAnalysis.isDefined && runStats.exists(rs => totalSources > 0 && totalSources == rs.added)) {
+      val msg =
+        s"${prefix}Incremental analysis was found by OBT but apparently discarded by zinc. This may be a bug - please contact the OBT team unless this is expected."
+      log.debug(msg)
     }
 
     val slowTypecheckDurations = republishSlowCompilationWarnings(messages)
 
-    val tracer = activeTask.trace
     if (tracer.supportsStats) {
-      tracer.addToStat(SlowTypechecks, slowTypecheckDurations.size)
-      tracer.addToStat(SlowTypecheckDurationMs, (slowTypecheckDurations.sum * 1000).toInt)
-      tracer.setStat(ObtStats.Compilations, 1)
-      tracer.setStat(ObtStats.Cycles, cycles.size)
-      tracer.setStat(ObtStats.SourceFiles, sources.size)
-      tracer.setStat(ObtStats.InvalidatedSourceFiles, cycles.map(_.getInvalidatedSourcesCount).sum)
-      tracer.setStat(
-        ObtStats.LinesOfCode,
-        SourceCodeStats.getStats(sources.values.view.map(_.utf8ContentAsString)).realCodeLineCount
-      )
-      val sourcesByPath = sources.map { case (id, c) => id.localRootToFilePath.pathString -> c }
-      val compiledSources = for {
-        cycle <- cycles
-        sourceId <- cycle.getInitialSourcesList.asScala
-        sourcePath = profile.getStringTable(sourceId)
-        source <- sourcesByPath.get(sourcePath)
-      } yield source
-      tracer.setStat(
-        ObtStats.CompiledLinesOfCode,
-        SourceCodeStats.getStats(compiledSources.view.map(_.utf8ContentAsString)).realCodeLineCount
-      )
+      if (cycles.nonEmpty) {
+        tracer.setStat(ObtStats.Compilations, 1)
+        tracer.setStat(ObtStats.Cycles, cycles.size)
+        tracer.setStat(ObtStats.SourceFiles, totalSources)
+        tracer.addToStat(ObtStats.InvalidatedSourceFiles, invalidatedSources)
+        tracer.addToStat(SlowTypechecks, slowTypecheckDurations.size)
+        tracer.addToStat(SlowTypecheckDurationMs, (slowTypecheckDurations.sum * 1000).toInt)
+
+        tracer.setStat(
+          ObtStats.LinesOfCode,
+          SourceCodeStats.getStats(sources.values.view.map(_.utf8ContentAsString)).realCodeLineCount
+        )
+        val sourcesByPath = sources.map { case (id, c) => id.localRootToFilePath.pathString -> c }
+        val compiledSources = for {
+          cycle <- cycles
+          sourceId <- cycle.getInitialSourcesList.asScala
+          sourcePath = profile.getStringTable(sourceId)
+          source <- sourcesByPath.get(sourcePath)
+        } yield source
+        tracer.setStat(
+          ObtStats.CompiledLinesOfCode,
+          SourceCodeStats.getStats(compiledSources.view.map(_.utf8ContentAsString)).realCodeLineCount
+        )
+
+        runStats.foreach { rs =>
+          tracer.setStat(ObtStats.AddedSourceFiles, rs.added)
+          tracer.setStat(ObtStats.ModifiedSourceFiles, rs.modified)
+          tracer.setStat(ObtStats.RemovedSourceFiles, rs.removed)
+          tracer.addToStat(ObtStats.ExternalDependencyChanges, rs.changedExternalDependencies)
+
+          val externalChanges = rs.run.getInitial.getExternalChangesList.asScala
+          // Note: The external change checks are done in approximate order of specificity -
+          // for example, zinc can be quite targeted when there's an upstream API change, but
+          // has to be very conservative when something like a macro changes.
+          if (rs.changed > 0)
+            tracer.setStat(ObtStats.CompilationsDueToSourceChanges, 1)
+          else if (externalChanges.exists(_.getReason == NameChangeReason))
+            tracer.setStat(ObtStats.CompilationsDueToUpstreamApiChanges, 1)
+          else if (externalChanges.exists(_.getReason == AnnotationChangeReason))
+            tracer.setStat(ObtStats.CompilationsDueToUpstreamAnnotationChanges, 1)
+          else if (externalChanges.exists(_.getReason == PrivateTraitMembersReason))
+            tracer.setStat(ObtStats.CompilationsDueToUpstreamTraitChanges, 1)
+          else if (externalChanges.exists(_.getReason == MacroChangeReason))
+            tracer.setStat(ObtStats.CompilationsDueToUpstreamMacroChanges, 1)
+          else if (rs.changedExternalDependencies.nonEmpty)
+            tracer.setStat(ObtStats.CompilationsDueToExternalDependencyChanges, 1)
+          else if (invalidatedSources == 0 && traceType == Scala) {
+            // If we get an OBT cache miss on a scope with java sources, we always have
+            // to rerun signature compilation since our previous (scala) analysis doesn't
+            // contain details of java signatures. Fortunately, these compilations are generally
+            // pretty fast.
+            tracer.setStat(ObtStats.CompilationsDueToNonIncrementalJavaSignatures, 1)
+          } else {
+            log.debug(s"${prefix}Compilation for unknown reason detected: $profile")
+            tracer.setStat(ObtStats.CompilationsDueToUnknownReason, 1)
+          }
+        }
+      } else {
+        tracer.setStat(ObtStats.ZincCacheHit, 1)
+      }
+
       // warnings/errors are captured as part of trace completion
       tracer.setStat(ObtStats.Info, messages.count(_.severity == CompilationMessage.Info))
     }
@@ -524,4 +604,14 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
         durationInSecs
     }
   }
+}
+
+final case class RunStats(
+    run: ZincRun,
+    added: Int,
+    modified: Int,
+    removed: Int,
+    changedExternalDependencies: Set[String]
+) {
+  def changed: Int = added + modified + removed
 }

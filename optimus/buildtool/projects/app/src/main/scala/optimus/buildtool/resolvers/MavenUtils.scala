@@ -16,43 +16,91 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.MappedDependencyDefinitions
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.files.BaseHttpAsset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarHttpAsset
+import optimus.buildtool.resolvers.HttpResponseUtils._
+import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.utils.Hashing.hashFileContent
+import optimus.exceptions.RTException
 import optimus.platform._
 
+import java.io.FileNotFoundException
+import java.io.InputStream
+import java.net.URI
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.Path
 import java.security.InvalidParameterException
+import java.util.jar.JarFile
 import scala.util.control.NonFatal
 
 @entity private[buildtool] object MavenUtils {
+  private[buildtool] val WrongCredMsg = "Credential is invalid!"
+
+  // may make these be configurable in future
   private[buildtool] val maxRetry = 1
-  private[buildtool] val wrongCredMsg = "Credential is invalid!"
+  private[buildtool] val maxDownloadSeconds = 300
+  private[buildtool] val maxSrcDocDownloadSeconds = 10
+  private[buildtool] val retryIntervalSeconds = 60
+
+  def isNonUnzipLibJarFile(urlStr: String): Boolean =
+    !urlStr.contains(s"$MavenUnzipFileKey!/") && !isSrcOrDocFile(urlStr) && urlStr.endsWith(JarKey)
 
   def invalidUrlMsg(url: URL, e: Throwable): String = s"${e.toString.replaceAll(url.toString, "")} $url"
 
-  @node def downloadUrl[T](url: URL, depCopier: DependencyCopier, isMarker: Boolean = false, retry: Int = maxRetry)(
-      f: NodeFunction1[FileAsset, T])(r: String => T): T = {
-    val fileUrl = if (isMarker) new URL(url.toString + ".marker") else url
+  def getUrlFileName(url: URL): String = {
+    val urlStr = url.toString
+    urlStr.substring(urlStr.lastIndexOf("/") + 1, urlStr.length)
+  }
+
+  // be used by Coursier maven repo .pom files fetch and our manually downloads: 1. unzipRepo 2. maven javadoc & sources
+  @node def downloadUrl[T](
+      url: URL,
+      depCopier: DependencyCopier,
+      remoteAssetStore: RemoteAssetStore,
+      isMarker: Boolean = false,
+      timeoutSec: Int = maxDownloadSeconds)(f: NodeFunction1[FileAsset, T])(r: String => T): T = {
+    val fileUrl = if (isMarker) new URI(url.toString + ".marker").toURL else url
     val urlAsset = BaseHttpAsset.httpAsset(fileUrl)
-    depCopier.getHttpStream(urlAsset, retry) match {
-      case Left(e) if !isMarker =>
-        e match {
-          case invalidCredential: InvalidParameterException => r(invalidUrlMsg(url, invalidCredential))
-          case noElement: NoSuchElementException            => r(invalidUrlMsg(url, noElement))
-          case e: Exception =>
-            if (retry > 0) {
-              ObtTrace.warn(s"Retrying download url $retry/$maxRetry: $url")
-              downloadUrl(url, depCopier, isMarker, retry - 1)(f)(r)
-            } else r(s"${invalidUrlMsg(url, e)}, tried ${maxRetry + 1} times")
+
+    if (isMarker || checkLocalDisk(url, depCopier)) f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker))
+    else if (checkSK(url, remoteAssetStore)) {
+      val depCopiedLocation = depCopier.httpLocalAsset(urlAsset)
+      remoteAssetStore.get(url, depCopiedLocation) match {
+        case Some(file) =>
+          log.debug(
+            s"Downloaded http file from silverking to: ${file.path} ${getLocalChecksumStr(file.path, getSha256(file.path))}")
+          f(file)
+        case None =>
+          log.debug(s"Failed load url from SK, try download it now: $url")
+          f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker))
+      }
+    } else { // check url, only download it when valid
+      val (durationInNanos, (downloadResult, urlCode, isSuccess)) = AdvancedUtils.timed {
+        val probingHttpResponse = depCopier.getHttpAssetResponse(urlAsset, timeoutSec)
+        probingHttpResponse.inputStream match {
+          case Right(stream) =>
+            NodeTry {
+              (
+                f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker, Some(probingHttpResponse))),
+                probingHttpResponse.headerInfo.code,
+                true)
+            } getOrRecover { case e @ RTException =>
+              (r(e.toString), probingHttpResponse.headerInfo.code, false)
+            }
+          case Left(e) => (r(e.toString), probingHttpResponse.headerInfo.code, false)
         }
-      case _ =>
-        // this atomicallyCopyOverHttp invoke at resolver stage would be cached as @node, which no side-effect and could be
-        // reused in compilation stage latter.
-        f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker))
+      }
+      if (isSuccess) // add .pom/-sources.jar/-javadoc.jar/unzip.jar downloads trace
+        DependencyDownloadTracker.addDownloadDuration(url.toString, durationInNanos)
+      else
+        DependencyDownloadTracker.addFailedDownloadDuration(s"${url.toString}, reason: $urlCode", durationInNanos)
+
+      downloadResult
     }
   }
 
@@ -126,8 +174,114 @@ import scala.util.control.NonFatal
 final case class AutoMappedResult(autoAfsToMavenMap: Map[Dependency, Set[Dependency]]) {
   def afs: Set[Dependency] = autoAfsToMavenMap.keySet
 }
+
 final case class UnmappedResult(all: Set[Dependency], leafs: Set[Dependency])
+
 final case class DependencyManagementResult(finalDeps: Seq[DependencyDefinition], msgs: Seq[CompilationMessage]) {
   def ++(to: DependencyManagementResult): DependencyManagementResult =
     DependencyManagementResult(this.finalDeps ++ to.finalDeps, this.msgs ++ to.msgs)
+}
+
+final case class HttpProbingResponse(inputStream: Either[Exception, InputStream], headerInfo: HttpHeaderInfo)
+
+final case class HttpHeaderInfo(headerMap: Map[String, String]) {
+  override def toString: String = headerMap.mkString(", ")
+
+  def code: Option[String] = headerMap.get(ServerCodeKey)
+  def keepAlive: Option[String] = headerMap.get("Keep-Alive")
+  def connection: Option[String] = headerMap.get("Connection")
+  def server: Option[String] = headerMap.get("Server")
+  def sha1: Option[String] = headerMap.get("X-Checksum-Sha1")
+  def sha256: Option[String] = headerMap.get("X-Checksum-Sha256")
+  def md5: Option[String] = headerMap.get("X-Checksum-Md5")
+  def eTag: Option[String] = headerMap.get("ETag")
+  def lastModified: Option[String] = headerMap.get("Last-Modified")
+  def date: Option[String] = headerMap.get("Date")
+  def serverId: Option[String] = headerMap.get(MavenServerId)
+  def serverNodeId: Option[String] = headerMap.get(MavenServerNodeId)
+  def contentDisposition: Option[String] = headerMap.get("Content-Disposition")
+  def contentLength: Option[String] = headerMap.get("Content-Length")
+  def contentType: Option[String] = headerMap.get("Content-Type")
+  def acceptRanges: Option[String] = headerMap.get("Accept-Ranges")
+}
+
+object HttpResponseUtils {
+  import optimus.buildtool.resolvers.MavenUtils._
+
+  val ServerCodeKey = "null"
+  val emptyHttpHeaderInfo: HttpHeaderInfo = HttpHeaderInfo(Map.empty)
+  private val LocalSha256 = "localSha256"
+  private val RemoteSha256 = "remoteSha256"
+
+  def loadHttpHeaderInfo(header: String, url: URL): HttpHeaderInfo = {
+    val loadedMap: Map[String, String] =
+      try {
+        header
+          .replaceAll("[{}\\n]", "")
+          .split("],")
+          .map { raw =>
+            val strs = raw.split("=")
+            val (key, rawValue) = (strs.headOption.getOrElse("").trim, strs.lastOption.getOrElse("").trim)
+            key -> rawValue.replaceAll("[\\[\\]]", "")
+          }
+          .toMap
+      } catch {
+        case NonFatal(e) =>
+          ObtTrace.warn(s"Failed to parse http header: $url, $e")
+          Map.empty
+      }
+    HttpHeaderInfo(loadedMap)
+  }
+
+  def getSha256(localPath: Path): String = hashFileContent(FileAsset.apply(localPath)).replaceFirst("HASH", "")
+
+  def getLocalChecksumStr(localPath: Path, checksumStr: String): String = {
+    s"Size: ${Files.size(localPath)} bytes, $LocalSha256:$checksumStr"
+  }
+
+  def retryWarningMsg(retry: Int, maxRetry: Int, url: URL, exception: Exception, actStr: String): Unit = {
+    ObtTrace.warn(s"Retrying $actStr url $retry/$maxRetry: $url, $exception")
+    ObtTrace.addToStat(ObtStats.MavenRetry, 1)
+  }
+
+  def getHttpException(httpAsset: BaseHttpAsset, maxRetry: Int, e: Exception): RuntimeException = {
+    if (e.getMessage.contains("401")) new InvalidParameterException(s"$WrongCredMsg $e")
+    else if (e.getMessage.contains("404") || e.isInstanceOf[FileNotFoundException])
+      new NoSuchElementException(e.toString)
+    else new UnsupportedOperationException(s"${invalidUrlMsg(httpAsset.url, e)}, tried ${maxRetry + 1} times")
+  }
+
+  // should exclude javadoc & sources files
+  def pathShouldValidate(pathStr: String): Boolean =
+    !pathStr.endsWith(s"${Classifier.javadoc.value}.jar") && !pathStr.endsWith(
+      s"${Classifier.sources.value}.jar") && pathStr.endsWith(".jar")
+
+  // not all url contain SHA-256 checksum, we should verify the downloaded jar is readable or not
+  def validateJarFileReadable(
+      httpAsset: BaseHttpAsset,
+      localPath: Path,
+      headerInfo: HttpHeaderInfo,
+      localFileSha256: String): Unit = if (pathShouldValidate(localPath.getFileName.toString)) try {
+    val msgPrefix = "Downloaded remote file is"
+    val validated = headerInfo.sha256 match {
+      case Some(remoteChecksum) => remoteChecksum == localFileSha256
+      case None                 => true // skip when remote server not provide
+    }
+    val msgSuffix =
+      s"$localPath, $RemoteSha256: ${headerInfo.sha256.getOrElse("")}, $LocalSha256: $localFileSha256"
+    val jarFile = new JarFile(localPath.toFile)
+    val readable =
+      try jarFile.entries.hasMoreElements
+      finally jarFile.close()
+    if (readable && validated)
+      log.debug(s"$msgPrefix valid: $msgSuffix")
+    else throw new UnsupportedOperationException(s"$msgPrefix invalid! $msgSuffix")
+  } catch {
+    case e: Exception =>
+      ObtTrace.warn(s"Downloaded remote file broken! from ${httpAsset.url}, $RemoteSha256: ${headerInfo.sha256
+          .getOrElse("")}, ${getLocalChecksumStr(localPath, localFileSha256)}, header: $headerInfo, $e")
+      DependencyDownloadTracker.addBrokenFile(httpAsset.url.toString)
+      throw e
+  }
+
 }

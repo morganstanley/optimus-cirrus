@@ -13,25 +13,25 @@ package optimus.buildtool.format
 
 import com.typesafe.config.Config
 import optimus.buildtool.config.RegexConfiguration
+import optimus.buildtool.config.RuleFilterConfiguration
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.format.ConfigUtils._
 
 final case class RulesStructure(rules: Option[RegexConfiguration])
 
 object RulesStructure {
 
-  val Empty = RulesStructure(rules = None)
+  val Empty: RulesStructure = RulesStructure(rules = None)
 
-  private val origin = RulesConfig
+  def load(loader: ObtFile.Loader, validScopes: Set[ScopeId]): Result[RulesStructure] =
+    for {
+      filters <- RuleFilterConfigurationCompiler.load(loader, validScopes)
+      rulesStructure <- loader(RulesConfig).flatMap(load(_, RulesConfig, filters))
+    } yield rulesStructure
 
-  def load(loader: ObtFile.Loader): Result[RulesStructure] =
-    loader(origin).flatMap(load)
-
-  def load(config: Config): Result[RulesStructure] =
-    load(config, origin)
-
-  def load(config: Config, obtFile: ObtFile): Result[RulesStructure] =
+  def load(config: Config, obtFile: ObtFile, ruleFilters: RuleFilterConfiguration): Result[RulesStructure] =
     Result.tryWith(obtFile, config) {
-      val rules = RegexConfigurationCompiler.load(config, obtFile)
+      val rules = RegexConfigurationCompiler.load(config, obtFile, ruleFilters)
       rules
         .map(RulesStructure.apply)
         .withProblems(config.checkExtraProperties(obtFile, Keys.regexDefinition))

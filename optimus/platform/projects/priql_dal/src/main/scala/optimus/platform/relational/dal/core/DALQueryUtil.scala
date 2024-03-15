@@ -81,6 +81,8 @@ trait DALQueryUtil {
     case _: BigDecimal                                => TypeCode.Decimal
     case _ @(_: Instant | _: Duration | _: YearMonth) => TypeCode.Sequence
     case None                                         => TypeCode.None
+    case _: Enumeration#Value                         => TypeCode.String
+    case x if x.getClass.isEnum                       => TypeCode.String
   }
 
   @async def dalTemporalContext(

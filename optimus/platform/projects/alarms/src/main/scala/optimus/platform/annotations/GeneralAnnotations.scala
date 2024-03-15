@@ -25,4 +25,10 @@ import scala.annotation.meta.setter
 @getter @setter @beanGetter @beanSetter
 class deprecating(suggestion: String) extends StaticAnnotation
 
+/**
+ * same as @deprecating but will only be fatal in new/modified files (used to avoid merge race condition when merging
+ * PRs which mark commonly used APIs as deprecating)
+ */
+class deprecatingNew(suggestion: String) extends StaticAnnotation
+
 class discouraged(discouragedThing: String, reason: String) extends StaticAnnotation

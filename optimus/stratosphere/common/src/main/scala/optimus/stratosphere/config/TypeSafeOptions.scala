@@ -12,6 +12,7 @@
 package optimus.stratosphere.config
 
 import com.typesafe.config.Config
+import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
 import optimus.stratosphere.utils.MemSize
 import optimus.stratosphere.utils.MemUnit
@@ -51,6 +52,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   def historyMerges: Seq[Config] = self.select("history-merges")
 
+  def stratosphereChannel: Option[String] = self.select("stratosphereChannel")
   def stratosphereInfra: Path = self.select("stratosphereInfra")
   def stratosphereInfraOverride: Option[String] = self.select("stratosphereInfraOverride")
   def stratosphereInstallDir: Option[Path] = self.select("stratosphereInstallDir")
@@ -75,7 +77,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object available {
       def forName(name: String): Config = self.select(s"artifactory-tools.available.$name")
-
+      def installerPattern(toolName: String): Option[Regex] =
+        self.select(s"artifactory-tools.available.$toolName.installer-pattern")
       object graphviz {
         def version: Option[String] = self.select("artifactory-tools.available.graphviz.version")
       }
@@ -86,17 +89,18 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   }
 
   object catchUp {
-    def oldDefaultBranch: String = self.select("catch-up.old-default-branch")
-    def defaultBranch: String = self.select("catch-up.default-branch") match {
+    def oldDefaultBranch: String = self.select("catchup.old-default-branch")
+    def defaultBranch: String = self.select("catchup.default-branch") match {
       // auto-upgrade everyone
       case value if value == oldDefaultBranch => "staging"
       case other                              => other
     }
-    def defaultMode: String = self.select("catch-up.default-mode")
+
+    def defaultMode: String = self.select("catchup.default-mode")
 
     object remote {
-      def name: String = self.select("catch-up.remote.name")
-      def url: String = self.select("catch-up.remote.url")
+      def name: String = self.select("catchup.remote.name")
+      def url: String = self.select("catchup.remote.url")
     }
   }
 
@@ -120,6 +124,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def indexUpdated: Boolean = self.select("git.index-updated")
     def usedInWorkspace: Boolean = self.select("git.used-in-workspace")
     def requiredVersion: String = self.select("git.required-version")
+    def useUpdatedFetchSettings: Boolean = self.select("git.use-updated-fetch-settings")
   }
 
   object intellij {
@@ -143,7 +148,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     }
 
     object catchUp {
-      def showQuestion: Boolean = self.select("intellij.catch-up.show-question")
+      def showQuestion: Boolean = self.select("intellij.catchup.show-question")
     }
 
     object defaults {
@@ -182,9 +187,24 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     }
 
     object plugins {
-      def main: Seq[Map[String, String]] = self.select("intellij.plugins.main")
-      def optional: Seq[Map[String, String]] = self.select("intellij.plugins.optional")
-      def extension: Seq[Map[String, String]] = self.select("intellij.plugins.extension")
+      def artifactoryDir: String = self.select("intellij.plugins.artifactory-dir")
+
+      def community: Seq[PluginInfo] =
+        self.select[Seq[Config]]("intellij.plugins.community").map(PluginInfo.fromConfig(_))
+      def main: Seq[PluginInfo] =
+        self.select[Seq[Config]]("intellij.plugins.main").map(PluginInfo.fromConfig(_))
+      def optional: Seq[PluginInfo] =
+        self.select[Seq[Config]]("intellij.plugins.optional").map(PluginInfo.fromConfig(_, isOptional = true))
+      def extension: Seq[PluginInfo] =
+        self.select[Seq[Config]]("intellij.plugins.extension").map(PluginInfo.fromConfig(_, isExtension = true))
+      def ultimate: Seq[PluginInfo] =
+        self.select[Seq[Config]]("intellij.plugins.ultimate").map(PluginInfo.fromConfig(_))
+    }
+
+    object proxy {
+      def enabled: Boolean = self.select("intellij.proxy.enabled")
+      def server: String = self.select("intellij.proxy.server")
+      def port: Int = self.select("intellij.proxy.port")
     }
 
     object telemetry {
@@ -201,11 +221,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object internal {
     def bannerMessage: String = self.select("internal.banner-message")
+    def bitbucketHostname: String = self.select("internal.bitbucket-hostname")
     def hasVersionChanged: Boolean = self.select[Boolean]("internal.version-changed")
     def helpMailGroup: String = self.select("internal.help-mail-group")
     def msGroup: Path = self.select("internal.ms-group")
     def oldStratosphereVersion: Option[String] = self.select("internal.old-stratosphere-version")
-    def stashHostname: String = self.select("internal.stash-hostname")
 
     object console {
       def colors: ConsoleColors = ConsoleColors(
@@ -286,6 +306,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def appRunnerExecutable: String = self.select("internal.obt.app-runner-executable")
       def configDir: Path = self.select("internal.obt.config-dir")
       def enabledRunTypes: Seq[String] = self.select("internal.obt.enabled-run-types")
+      def enabledRunConfigProducers: Seq[String] = self.select("internal.obt.enabled-run-config-producers")
       def executable: String = self.select("internal.obt.executable")
       def install: Path = self.select("internal.obt.install")
       def installDir: Path = self.select("internal.obt.install-dir")
@@ -307,8 +328,12 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def windowsTerminal: String = self.select("internal.paths.windows-terminal")
     }
 
+    object pypi {
+      def configFile: Path = self.select("internal.pypi.config-file")
+    }
+
     object repositoryMigration {
-      def stashTimeout: JDuration = self.select("internal.repository-migration.stash-timeout")
+      def bitbucketTimeout: JDuration = self.select("internal.repository-migration.bitbucket-timeout")
     }
 
     object robocopy {
@@ -346,8 +371,9 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object tools {
       def artifactoryUrl: String = self.select("internal.tools.artifactory-url")
       def artifactoryApikeyUrl: String = self.select("internal.tools.artifactory-apikey-url")
-      def artifactorySetupCmd: Seq[String] = self.select("internal.tools.artifactory-setup-cmd")
+      def jfrogArtifactorySetupCmd: Seq[String] = self.select("internal.tools.jfrog-artifactory-setup-cmd")
       def jfrogCmd: Seq[String] = self.select("internal.tools.jfrog-cmd")
+      def pypiArtifactorySetupCmd: Seq[String] = self.select("internal.tools.pypi-artifactory-setup-cmd")
 
       object versions {
         def jfrogCli: String = self.select("internal.tools.versions.jfrog-cli")
@@ -369,6 +395,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       object bitbucket {
         def blue: String = self.select("internal.urls.bitbucket.blue")
         def red: String = self.select("internal.urls.bitbucket.red")
+        def all: Map[String, String] = self.select("internal.urls.bitbucket")
       }
 
       object migration {

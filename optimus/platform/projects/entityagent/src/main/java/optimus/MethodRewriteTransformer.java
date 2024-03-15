@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import static optimus.EntityAgent.logErrMsg;
 import java.lang.instrument.*;
 import java.security.ProtectionDomain;
 import java.util.Collection;
@@ -73,7 +74,7 @@ class MethodRewriteTransformer implements ClassFileTransformer {
       return null;
     }
     if (targets == null) {
-      System.err.println("COULD MAKE CHANGES TO " + className);
+      logErrMsg("COULD MAKE CHANGES TO " + className);
       return null;
     }
     return cw.toByteArray();

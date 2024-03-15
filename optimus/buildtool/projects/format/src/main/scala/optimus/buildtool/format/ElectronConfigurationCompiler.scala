@@ -13,7 +13,8 @@ package optimus.buildtool.format
 
 import com.typesafe.config.Config
 import optimus.buildtool.config.ElectronConfiguration
-import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NpmConfiguration._
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -23,28 +24,33 @@ object ElectronConfigurationCompiler {
   import ConfigUtils._
 
   private val ElectronConfig = "electron"
-  private val LibsKey = "libs"
-  private val MavenKey = NamingConventions.MavenLibsKey
-  private val NpmCommandTemplateKey = "npmCommandTemplate"
-  private val NpmBuildCommandsKey = "npmBuildCommands"
+  private val ExecutablesKey = "executables"
 
-  def load(config: Config, origin: ObtFile): Result[Option[ElectronConfiguration]] = {
+  def load(config: Config, origin: ObtFile): Result[Option[ElectronConfiguration]] =
     Result.tryWith(origin, config) {
       Result.optional(config.hasPath(ElectronConfig)) {
-        val electron = config.getConfig(ElectronConfig)
-        val electronLibs = electron.stringListOrEmpty(LibsKey) ++ electron.stringListOrEmpty(MavenKey)
-        val npmCommandTemplate = electron.stringMapOrEmpty(NpmCommandTemplateKey, origin)
-        npmCommandTemplate
-          .map { t =>
-            val npmBuildCommands = {
-              if (electron.hasPath(NpmBuildCommandsKey))
-                Some(electron.getStringList(NpmBuildCommandsKey).asScala.to(Seq))
-              else None
-            }
-            ElectronConfiguration(t, electronLibs, npmBuildCommands)
-          }
-          .withProblems(electron.checkExtraProperties(origin, Keys.electronProperties))
+        val web = config.getConfig(ElectronConfig)
+        val executables = web.stringListOrEmpty(ExecutablesKey)
+        web.getString(ModeKey) match {
+          case Production.name =>
+            val npmCommandTemplate = web.stringMapOrEmpty(NpmCommandTemplateKey, origin)
+            val libs = web.stringListOrEmpty(LibsKey) ++ web.stringListOrEmpty(MavenKey)
+            npmCommandTemplate
+              .map { t =>
+                val npmBuildCommands =
+                  if (web.hasPath(NpmBuildCommandsKey)) Some(web.getStringList(NpmBuildCommandsKey).asScala.to(Seq))
+                  else None
+                ElectronConfiguration(Production, executables, libs, t, npmBuildCommands)
+              }
+              .withProblems(web.checkExtraProperties(origin, Keys.electronProperties))
+
+          case Development.name =>
+            Success(ElectronConfiguration(Development, executables, Seq.empty, Map.empty, None))
+              .withProblems(web.checkExtraProperties(origin, Keys.electronProperties))
+
+          case other =>
+            origin.failure(web.getValue(ModeKey), s"Invalid mode: $other, mode must be one of [prod, test, dev]")
+        }
       }
     }
-  }
 }

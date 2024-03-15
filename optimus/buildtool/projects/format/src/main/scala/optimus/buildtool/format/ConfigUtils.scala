@@ -21,6 +21,9 @@ import com.typesafe.config.ConfigValue
 import com.typesafe.config.ConfigValueType
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.OctalMode
+import optimus.buildtool.config.PartialScopeId
+import optimus.buildtool.config.RelaxedIdString
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.RelativePath
 
@@ -105,6 +108,39 @@ object ConfigUtils {
       extraKeys.map(k => origin.warningAt(conf.getValue(k), msg(k))).to(Seq)
     }
 
+    def checkUniqueValuesForKey(origin: ObtFile, topLevelKey: String, key: String): Seq[Message] = {
+      // Checks if all values for a given key within a Config are unique
+      val topLevelConfig = conf.configs(topLevelKey)
+      val seq = topLevelConfig.flatMap(cfg =>
+        cfg
+          .optionalString(key)
+          .map(x => x.strip()))
+
+      if (seq.distinct != seq) {
+        val diff = (seq diff seq.distinct).distinct
+        Seq(
+          origin.errorAt(
+            v = conf.getValue(topLevelKey),
+            msg = s"Values for '$key' in $topLevelKey must be unique. Duplicated value(s): ${diff.mkString(" , ")}."
+          ))
+      } else Seq.empty
+    }
+
+    def nonBlankString(origin: ObtFile, key: String): Result[String] = {
+      val nonBlankValue = conf.optionalString(key).flatMap { value =>
+        if (value.isBlank) None else Some(value)
+      }
+
+      nonBlankValue match {
+        case Some(value) => Success(value)
+        case None =>
+          origin.failure(
+            v = conf.root(),
+            msg = s"Invalid value: '$key' must not be blank"
+          )
+      }
+    }
+
     def loadOctal(origin: ObtFile, key: String): Result[OctalMode] =
       Result.tryWith(origin, conf.getValue(key)) {
         try {
@@ -134,6 +170,8 @@ object ConfigUtils {
     def optionalBoolean(path: String): Option[Boolean] = if (conf.hasPath(path)) Some(conf.getBoolean(path)) else None
 
     def optionalValue(path: String): Option[ConfigValue] = if (conf.hasPath(path)) Some(conf.getValue(path)) else None
+
+    def optionalConfig(path: String): Option[Config] = if (conf.hasPath(path)) Some(conf.getConfig(path)) else None
 
     def intOrDefault(path: String, default: Int): Int =
       if (conf.hasPath(path)) conf.getInt(path) else default
@@ -216,6 +254,48 @@ object ConfigUtils {
         else Success(path)
       } catch {
         case NonFatal(t) => file.failure(value, s"Invalid path $rawPath: ${t.getMessage}")
+      }
+    }
+
+    private def toPartialScopeId(partialScope: String): Option[PartialScopeId] =
+      partialScope match {
+        case "." => Some(PartialScopeId.RootPartialScopeId)
+        case _ =>
+          val seq = RelaxedIdString.parts(partialScope)
+          if (seq.exists(_.isDefined)) {
+            val Seq(meta, bundle, module, tpe) = seq
+            Some(PartialScopeId(meta, bundle, module, tpe))
+          } else None
+      }
+
+    def expandPartialScope(origin: ObtFile, partialScope: String, validScopes: Set[ScopeId]): Result[Set[ScopeId]] = {
+      def validField(scopeField: String, filterField: Option[String]): Boolean =
+        filterField match {
+          case None      => true
+          case Some("")  => true
+          case Some(str) => str == scopeField
+        }
+
+      val partialScopeId = toPartialScopeId(partialScope)
+      partialScopeId match {
+        case Some(partialScopeId) =>
+          val scopes = validScopes.filter(s =>
+            validField(s.meta, partialScopeId.meta) &&
+              validField(s.bundle, partialScopeId.bundle) &&
+              validField(s.module, partialScopeId.module) &&
+              validField(s.tpe, partialScopeId.tpe))
+
+          if (scopes.nonEmpty) Success(scopes)
+          else
+            origin.failure(
+              v = conf.root(),
+              msg = s"$partialScope is an invalid scope or partial scope"
+            )
+        case None =>
+          origin.failure(
+            v = conf.root(),
+            msg = s"'$partialScope' is an invalid format for a scope or partial scope"
+          )
       }
     }
 

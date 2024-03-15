@@ -25,6 +25,7 @@ import com.sun.tools.xjc.api.XJC
 import com.sun.tools.xjc.api.impl.s2j.SchemaCompilerImpl
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.artifacts.MessagePosition
@@ -46,6 +47,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.trace.GenerateSource
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
@@ -157,7 +159,7 @@ import scala.xml.InputSource
           bindingFingerprint.getOrElse(Nil) ++
           rootFingerprint.getOrElse(Nil)
       )
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint)
+    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     JaxbGenerator.Inputs(
       name,
@@ -248,7 +250,7 @@ import scala.xml.InputSource
               .flatMap { f =>
                 val args = Seq("-autoNameResolution") ++
                   pkgs.flatMap(p => Seq("-p", s"$p")) ++
-                  Seq("-d", outputDir.pathString, f.pathString)
+                  Seq("-d", outputDir.pathString, PathUtils.mappedUriString(f.path))
 
                 val wsdlToJava = new WSDLToJava(args.toArray)
                 val c = new ToolContext
@@ -304,7 +306,7 @@ object JaxbGenerator extends Log {
       templateFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
       bindingFiles: SortedMap[FileAsset, HashedContent],
       rootFiles: SortedMap[FileAsset, HashedContent],
-      fingerprintHash: String,
+      fingerprint: FingerprintArtifact,
       plugins: Seq[Plugin]
   ) extends SourceGenerator.Inputs
 

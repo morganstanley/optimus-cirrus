@@ -9,14 +9,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.stratosphere.stash
+package optimus.stratosphere.bitbucket
 
 import akka.http.scaladsl.model.Uri
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigRenderOptions
+import optimus.stratosphere.bitbucket.PulRequestJsonProtocol._
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.http.client.HttpClientFactory
-import optimus.stratosphere.stash.PulRequestJsonProtocol._
 import optimus.stratosphere.utils.RemoteSpec
 import optimus.stratosphere.utils.RemoteUrl
 import spray.json._
@@ -31,7 +31,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.matching.Regex
 
-object StashApiRestClient {
+object BitbucketApiRestClient {
   private val privateForkOwnerExtractor: Regex = s".+scm/~(\\w+)/.+".r
   private val remoteUrlExtractor: Regex = s"(\\w+://)(\\w+)@(.*)".r
 
@@ -50,10 +50,24 @@ object StashApiRestClient {
   }
 }
 
-class StashApiRestClient(
-    workspace: StratoWorkspaceCommon,
+final case class Comment(text: String)
+final case class SetForkSyncing(enabled: Boolean)
+final case class SetAccess(enabled: Boolean)
+final case class CreatePrivateFork(name: String)
+final case class SynchronizeFork(refId: String, action: String)
+
+trait BitbucketApiRestClientProtocol extends DefaultJsonProtocol {
+  implicit val commentFormat: JsonFormat[Comment] = jsonFormat1(Comment.apply)
+  implicit val createPrivateForkFormat: JsonFormat[CreatePrivateFork] = jsonFormat1(CreatePrivateFork.apply)
+  implicit val setAccessFormat: JsonFormat[SetAccess] = jsonFormat1(SetAccess.apply)
+  implicit val setForkSyncingFormat: JsonFormat[SetForkSyncing] = jsonFormat1(SetForkSyncing.apply)
+  implicit val synchronizeForkFormat: JsonFormat[SynchronizeFork] = jsonFormat2(SynchronizeFork.apply)
+}
+
+final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     val timeout: JDuration,
-    stashHostOverride: Option[String] = None) {
+    val bitbucketHost: String = workspace.internal.bitbucketHostname)
+    extends BitbucketApiRestClientProtocol {
 
   private val version = "1.0"
   private val defaultApiName = "api"
@@ -61,10 +75,9 @@ class StashApiRestClient(
   // We raise it to 1,000 for forks in particular, as to minimize a large number of calls for BitBucket.
   private val defaultLimit = 1000
 
-  private val stashHost: String = stashHostOverride.getOrElse(workspace.internal.stashHostname)
   private val httpClient = HttpClientFactory
     .factory(workspace)
-    .createClient(Uri(s"http://$stashHost"), "BitBucket", timeout.toMillis milliseconds, sendCrumbs = false)
+    .createClient(Uri(s"http://$bitbucketHost"), "BitBucket", timeout.toMillis milliseconds, sendCrumbs = false)
 
   private def getValues(command: String): Seq[Config] = {
     pagedGet(command, _ => true, shouldReturnFirstFound = false)
@@ -80,7 +93,7 @@ class StashApiRestClient(
     }
   }
 
-  private[stash] def allProjects(): Seq[String] = {
+  private[bitbucket] def allProjects(): Seq[String] = {
     getValues("projects/").map(_.getString("key"))
   }
 
@@ -128,20 +141,18 @@ class StashApiRestClient(
         getRelativeLinkUrl(pullRequest) + "/decline",
         defaultApiName,
         "version" -> pullRequest.getString("version")
-      ),
-      ""
+      )
     )
   }
 
-  def addPullRequestComment(pullRequest: Config, comment: String): Unit = {
+  def addPullRequestComment(pullRequest: Config, comment: String): Unit =
     httpClient.post(
       prepareUrl(
         getRelativeLinkUrl(pullRequest) + "/comments",
         defaultApiName
       ),
-      s"""{ "text": "$comment" }"""
+      Comment(comment)
     )
-  }
 
   def getPrivateRepoOrigin(
       userName: String,
@@ -175,7 +186,7 @@ class StashApiRestClient(
       s"projects/${toRef.repository.project.key}/repos/${toRef.repository.slug}/pull-requests",
       defaultApiName)
 
-    httpClient.post(url, pullRequest.toJson.compactPrint)
+    httpClient.post(url, pullRequest)
   }
 
   def pullRequest(project: String, repository: String, pullRequestId: Int): Config = {
@@ -183,7 +194,7 @@ class StashApiRestClient(
   }
 
   def pullRequestUrl(pullRequest: Config): String = {
-    s"http://$stashHost/atlassian-stash/" + getRelativeLinkUrl(pullRequest)
+    s"http://$bitbucketHost/atlassian-stash/" + getRelativeLinkUrl(pullRequest)
   }
 
   def selectedProjects(projectsRegexps: Seq[String]): Seq[String] = {
@@ -198,9 +209,8 @@ class StashApiRestClient(
 
   def createPrivateFork(meta: String, project: String, repo: String, forkName: String): RemoteUrl = {
     val forkUrl = prepareUrl(s"projects/${meta}_$project/repos/$repo", defaultApiName)
-    val data = s"""{ "name": "$forkName" }"""
     val cloneUrl = httpClient
-      .post(forkUrl, data)
+      .post(forkUrl, CreatePrivateFork(forkName))
       .getConfigList("links.clone")
       .asScala
       .find(_.getString("name") == "http")
@@ -248,12 +258,12 @@ class StashApiRestClient(
 
   def setForkSyncing(userName: String, repository: String, enabled: Boolean = true): Config = {
     val enableForkSyncingUrl = prepareUrl(s"projects/~$userName/repos/$repository", "sync")
-    httpClient.post(enableForkSyncingUrl, s"""{ "enabled": "$enabled" }""")
+    httpClient.post(enableForkSyncingUrl, SetForkSyncing(enabled))
   }
 
   def setAccess(userName: String, repository: String, makePublic: Boolean): Unit = {
     val setPublicAccessUrl = prepareUrl(s"projects/~$userName/repos/$repository", defaultApiName)
-    httpClient.put(setPublicAccessUrl, s"""{ "public": "$makePublic" }""")
+    httpClient.put(setPublicAccessUrl, SetAccess(makePublic))
   }
 
   def grantWriteAccessToSelf(userName: String, repository: String): Unit = {
@@ -262,12 +272,12 @@ class StashApiRestClient(
       defaultApiName,
       "permission" -> "REPO_WRITE",
       "name" -> userName)
-    httpClient.put(grantWriteAccessUrl, "")
+    httpClient.put(grantWriteAccessUrl)
   }
 
   def forceForkSyncWithDiscard(userName: String, repository: String, ref: String): Config = {
     val forkSyncUrl = prepareUrl(s"projects/~$userName/repos/$repository/synchronize", "sync")
-    httpClient.post(forkSyncUrl, s"""{"refId": "$ref", "action": "DISCARD"}}""")
+    httpClient.post(forkSyncUrl, SynchronizeFork(ref, "DISCARD"))
   }
 
   def getRemoteBranchDetails(userName: String, repository: String, branch: String): Config = {
@@ -288,10 +298,10 @@ class StashApiRestClient(
 
   def enableRepoHook(userName: String, repository: String, hookKey: String): Unit = {
     val url = prepareUrl(s"projects/~$userName/repos/$repository/settings/hooks/$hookKey/enabled", defaultApiName)
-    httpClient.put(url, "{}")
+    httpClient.put(url)
   }
 
-  private[stash] def getRelativeLinkUrl(pullRequest: Config): String = {
+  private[bitbucket] def getRelativeLinkUrl(pullRequest: Config): String = {
     // example href:
     // http://stash.company.com/atlassian-stash/projects/PROJECT_NAME/repos/REPO_NAME/pull-requests/42
     pullRequest.getConfigList("links.self").get(0).getString("href").split('/').drop(4).mkString("/")
@@ -320,12 +330,12 @@ class StashApiRestClient(
   }
 
   private def convertRepoUrlToProxy(url: String) = {
-    RemoteUrl(url.replaceAll("@.*/atlassian-stash/", s"@$stashHost/atlassian-stash/"))
+    RemoteUrl(url.replaceAll("@.*/atlassian-stash/", s"@$bitbucketHost/atlassian-stash/"))
   }
 
   private def prepareUrl(command: String, api: String, urlParameters: (String, Any)*): String = {
     val preparedUrlParameters = urlParameters.map { case (name, value) => s"$name=$value" }.mkString("&")
-    s"http://$stashHost/atlassian-stash/rest/$api/$version/$command?$preparedUrlParameters"
+    s"http://$bitbucketHost/atlassian-stash/rest/$api/$version/$command?$preparedUrlParameters"
   }
 
   private def configToRemote(config: Config): RemoteSpec =

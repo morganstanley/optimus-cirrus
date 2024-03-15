@@ -11,6 +11,7 @@
  */
 package optimus.testidle;
 
+import static optimus.EntityAgent.logErrMsg;
 import static org.objectweb.asm.Opcodes.*;
 
 import java.lang.instrument.ClassFileTransformer;
@@ -52,7 +53,7 @@ public class TestIdleTransformer implements ClassFileTransformer {
         reader.accept(visitor, ClassReader.SKIP_FRAMES);
         return writer.toByteArray();
       } else {
-        System.err.println("Skipping TestManager instrumentation as it is not on the classpath!");
+        logErrMsg("Skipping TestManager instrumentation as it is not on the classpath!");
         return null;
       }
     } else return null;

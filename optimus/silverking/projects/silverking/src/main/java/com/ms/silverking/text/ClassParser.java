@@ -304,7 +304,7 @@ class ClassParser<T> {
       if (type == Byte.class || type == byte.class) {
         return Byte.parseByte(def);
       } else if (type == Character.class || type == char.class) {
-        return new Character(def.charAt(0));
+        return Character.valueOf(def.charAt(0));
       } else if (type == Short.class || type == short.class) {
         return Short.parseShort(def);
       } else if (type == Integer.class || type == int.class) {

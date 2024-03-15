@@ -18,7 +18,7 @@ import optimus.config.spray.json.JsValue
 import optimus.config.spray.json.RootJsonFormat
 
 import scala.reflect.ClassTag
-import scala.reflect.{ classTag => TagOfClass }
+import scala.reflect.{classTag => TagOfClass}
 import scala.reflect.runtime.{universe => ru}
 
 trait EnumerationFormats {

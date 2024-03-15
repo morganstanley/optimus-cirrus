@@ -14,6 +14,7 @@ package optimus.buildtool.processors
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.ProcessorArtifactType
 import optimus.buildtool.config.ScopeId
@@ -69,7 +70,7 @@ import scala.util.Try
     val templateFooterContent = None
     val objectsContent = objectsFile.flatMap(content(_, scope))
 
-    val fingerprintHash = ScopeProcessor.computeFingerprintHash(
+    val fingerprint = ScopeProcessor.computeFingerprintHash(
       name,
       templateContent,
       templateHeaderContent,
@@ -90,7 +91,7 @@ import scala.util.Try
       objectsContent = objectsContent,
       configuration = configuration,
       installLocation = installLocation,
-      fingerprintHash = fingerprintHash
+      fingerprint = fingerprint
     )
   }
   @node override protected def generateContent(
@@ -172,7 +173,7 @@ object DeploymentScriptProcessor extends Log {
       objectsContent: Option[(FileAsset, HashedContent)],
       configuration: Map[String, String],
       installLocation: RelativePath,
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends ScopeProcessor.Inputs
 
   val DefaultFileName: String = StaticConfig.string("deploymentDefaultFileName")

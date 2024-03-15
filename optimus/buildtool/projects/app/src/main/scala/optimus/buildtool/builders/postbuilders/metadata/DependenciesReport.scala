@@ -26,8 +26,6 @@ import scala.collection.immutable.Seq
 
 final case class DependenciesReport(dependencies: Set[DependencyReport])
 
-final case class DependencyType(maven: Boolean, test: Boolean)
-
 final case class ExternalDependenciesReports(jvm: DependenciesReport, extraLibs: DependenciesReport)
 
 object DependenciesReport {
@@ -83,14 +81,22 @@ object DependenciesReport {
       settings: MetadataSettings,
       qualifier: QualifierReport,
       deps: Set[DependencyDefinition],
-      testDeps: Set[DependencyDefinition],
-      resolver: ExternalDependencyResolver): Set[DependencyReport] = {
-    val nonTestReports = resolveExternalDependencies(deps, resolver).apar.flatMap { case (depDef, resolution) =>
-      DependencyReport.fromExternalResolution(depDef, resolution, Set(qualifier), settings)
-    }
-    val testReports = resolveExternalDependencies(testDeps, resolver).apar.flatMap { case (depDef, resolution) =>
-      DependencyReport.fromExternalResolution(depDef, resolution, Set(qualifier, TestOnly), settings)
-    }
+      testDeps: Set[DependencyDefinition]): Set[DependencyReport] = {
+
+    def extraLibsReports(libs: Set[DependencyDefinition], qualifiers: Set[QualifierReport]): Set[DependencyReport] =
+      libs.filter(_.isExtraLib).map(DependencyReport.fromExtraLib(_, qualifiers))
+
+    val nonTestReports = resolveExternalDependencies(deps, settings.dependencyResolver).apar.flatMap {
+      case (depDef, resolution) =>
+        DependencyReport.fromExternalResolution(depDef, resolution, Set(qualifier), settings)
+    } ++ extraLibsReports(deps, Set(qualifier))
+
+    val testQualifier = Set(qualifier, TestOnly)
+    val testReports = resolveExternalDependencies(testDeps, settings.dependencyResolver).apar.flatMap {
+      case (depDef, resolution) =>
+        DependencyReport.fromExternalResolution(depDef, resolution, testQualifier, settings)
+    } ++ extraLibsReports(testDeps, testQualifier)
+
     nonTestReports ++ testReports
   }
 
@@ -103,8 +109,8 @@ object DependenciesReport {
     val toolingReports =
       resolution.tools.apar.map(DependencyReport.fromWebToolingDefinition(_, Set(Tooling)))
     val webLibsReport = configs.apar.flatMap { case (id, conf) =>
-      conf.webConfig.map(_.webLibs) match {
-        case Some(libs) => getExtraLibsReports(id, libs, settings, qualifier)
+      conf.webConfig.map(_.libs) match {
+        case Some(libs) => getNpmLibsReports(id, libs, settings, qualifier)
         case None       => Set[DependencyReport]()
       }
     }
@@ -112,7 +118,7 @@ object DependenciesReport {
     reports ++ toolingReports ++ webLibsReport
   }
 
-  @node private def getExtraLibsReports(
+  @node private def getNpmLibsReports(
       id: ScopeId,
       libs: Seq[String],
       settings: MetadataSettings,
@@ -121,11 +127,11 @@ object DependenciesReport {
     .map { str =>
       val splitStr = str.split("\\.")
       val variant = if (splitStr.contains("variant")) Some(splitStr.last) else None
-      val electronLib = settings.afsDependencyResolver.dependencyDefinitions
+      val afsElectronLibs = settings.dependencyResolver.extraLibsDefinitions
         .find(d => d.group == splitStr(0) && d.name == splitStr(1) && d.variant.map(_.name) == variant)
         .map(_.copy(transitive = false))
         .getOrThrow(s"can't find related extra lib $str for $id")
-      DependencyReport.fromWebToolingDefinition(electronLib, Set(qualifier))
+      DependencyReport.fromWebToolingDefinition(afsElectronLibs, Set(qualifier))
     }
     .toSet
 
@@ -133,8 +139,8 @@ object DependenciesReport {
       settings: MetadataSettings,
       qualifier: QualifierReport,
       configs: Map[ScopeId, ScopeConfiguration]): Set[DependencyReport] = configs.apar.flatMap { case (id, conf) =>
-    val electronLibReport: Set[DependencyReport] = conf.electronConfig.map(_.electronLibs) match {
-      case Some(libs) => getExtraLibsReports(id, libs, settings, qualifier)
+    val electronLibReport: Set[DependencyReport] = conf.electronConfig.map(_.libs) match {
+      case Some(libs) => getNpmLibsReports(id, libs, settings, qualifier)
       case None       => Set.empty
     }
     if (conf.electronConfig.flatMap(_.npmBuildCommands).isDefined)
@@ -147,31 +153,24 @@ object DependenciesReport {
       depExtractor: ScopeConfiguration => Seq[DependencyDefinition],
       settings: MetadataSettings
   ): ExternalDependenciesReports = {
-    val groupedConfigurations = configurations.groupBy { case (id, cfg) =>
-      DependencyType(maven = cfg.flags.mavenOnly, test = isTest(id))
+    val (testConfs, confs) = configurations.partition { case (id, conf) => isTest(id) }
+
+    def getDeps(cfgs: Map[ScopeId, ScopeConfiguration]): Set[DependencyDefinition] = cfgs.flatMap { case (id, conf) =>
+      depExtractor(conf)
+    }.toSet
+
+    val (testOnlyDeps, deps) = {
+      val (loadTestDeps, loadDeps) = (getDeps(testConfs), getDeps(confs))
+      (loadTestDeps.diff(loadDeps), loadDeps)
     }
-
-    def deps(maven: Boolean, test: Boolean): Set[DependencyDefinition] =
-      groupedConfigurations
-        .get(DependencyType(maven, test))
-        .map(_.values.flatMap(depExtractor).toSet)
-        .getOrElse(Set.empty)
-
-    val nonTestAfsDeps = deps(maven = false, test = false)
-    val testOnlyAfsDeps = deps(maven = false, test = true).diff(nonTestAfsDeps)
-    val nonTestMavenDeps = deps(maven = true, test = false)
-    val testOnlyMavenDeps = deps(maven = true, test = true).diff(nonTestMavenDeps)
     val electronConfigs = configurations.filter { case (id, conf) => conf.electronConfig.isDefined }
     val webConfigs = configurations.filter { case (id, conf) => conf.webConfig.isDefined }
 
-    val afsReports =
-      getDepsReports(settings, qualifier, nonTestAfsDeps, testOnlyAfsDeps, settings.afsDependencyResolver)
-    val mavenReports =
-      getDepsReports(settings, qualifier, nonTestMavenDeps, testOnlyMavenDeps, settings.mavenDependencyResolver)
-    val extraLibsReports = getWebDepsReports(settings, qualifier, webConfigs) ++
+    val dependenciesReports = getDepsReports(settings, qualifier, deps, testOnlyDeps)
+    val otherExtraLibsReports = getWebDepsReports(settings, qualifier, webConfigs) ++
       getElectronReports(settings, qualifier, electronConfigs)
 
-    ExternalDependenciesReports(DependenciesReport(afsReports ++ mavenReports), DependenciesReport(extraLibsReports))
+    ExternalDependenciesReports(DependenciesReport(dependenciesReports), DependenciesReport(otherExtraLibsReports))
   }
 
   @node private def resolveExternalDependencies(

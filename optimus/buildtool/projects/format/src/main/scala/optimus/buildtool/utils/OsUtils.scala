@@ -54,6 +54,13 @@ object OsUtils {
     n
   }
 
+  def exec: String = OsUtils.osVersion match {
+    case OsUtils.WindowsVersion => OsUtils.WindowsSysName
+    case OsUtils.Linux7Version  => OsUtils.Linux7SysName
+    case OsUtils.Linux6Version  => OsUtils.Linux6SysName
+    case x                      => throw new IllegalArgumentException(s"Unrecognized OS version: $x")
+  }
+
   private val sysNameRegex = s"'([^']+)'".r
   private[utils] def readSysName(output: String): Seq[String] =
     sysNameRegex.findAllMatchIn(output).map(_.group(1)).to(Seq)

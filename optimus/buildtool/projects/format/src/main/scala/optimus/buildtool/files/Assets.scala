@@ -19,7 +19,6 @@ import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
-
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.FileAsset.SimpleFileAsset
 import optimus.buildtool.utils.AssetUtils
@@ -28,6 +27,7 @@ import optimus.buildtool.utils.PathUtils
 import optimus.platform.impure
 import spray.json.JsonFormat
 
+import java.net.URI
 import scala.collection.immutable.Seq
 
 trait Pathed {
@@ -255,7 +255,7 @@ final case class HttpAsset private[files] (override val url: URL) extends BaseHt
 }
 
 object HttpAsset {
-  def apply(s: String): HttpAsset = new HttpAsset(new URL(s))
+  def apply(s: String): HttpAsset = new HttpAsset(new URI(s).toURL())
 }
 
 final case class JarHttpAsset private[files] (override val url: URL) extends BaseHttpAsset with JarAsset {
@@ -265,7 +265,7 @@ final case class JarHttpAsset private[files] (override val url: URL) extends Bas
 }
 
 object JarHttpAsset {
-  def apply(s: String): JarHttpAsset = new JarHttpAsset(new URL(s))
+  def apply(s: String): JarHttpAsset = new JarHttpAsset(new URI(s).toURL())
 }
 
 final case class JarFileSystemAsset private[files] (path: Path, lastModified: Instant) extends JarAsset

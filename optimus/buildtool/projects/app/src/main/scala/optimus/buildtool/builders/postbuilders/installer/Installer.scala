@@ -40,7 +40,6 @@ import optimus.platform._
 import optimus.platform.util.Log
 
 import scala.collection.immutable.Seq
-import scala.collection.immutable.Set
 
 /**
  * A post-build step which copies all installable artifacts to install paths and generates location-independent pathing
@@ -133,7 +132,8 @@ class Installer(
         new IntellijPluginInstaller(this, archiveInstaller),
         new WarInstaller(this, archiveInstaller, warScopes),
         new MavenInstaller(this),
-        new ElectronJarOnlyInstaller(this, pathBuilder)
+        new ElectronInstaller(this, pathBuilder),
+        new PythonVenvInstaller(pathBuilder, bundleFingerprintsCache)
       ) ++ testplanInstaller
     }
   }

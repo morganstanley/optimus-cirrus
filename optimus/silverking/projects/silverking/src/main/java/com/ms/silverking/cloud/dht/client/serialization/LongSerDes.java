@@ -50,6 +50,6 @@ public final class LongSerDes implements BufferSerDes<Long> {
 
   @Override
   public Long emptyObject() {
-    return new Long(0);
+    return Long.valueOf(0);
   }
 }

@@ -26,16 +26,16 @@ import scala.collection.immutable.IndexedSeq
 import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
-object IvyResolver {
-  @node def loadIvyConfig(
+object DependencyMetadataResolver {
+  @node def loadResolverConfig(
       factory: SourceFolderFactory,
       workspaceSrcRoot: WorkspaceSourceRoot,
-      defns: Seq[ResolverDefinition]): Seq[IvyResolver] = {
+      defns: Seq[ResolverDefinition]): Seq[DependencyMetadataResolver] = {
     defns.apar.collect {
-      case defn if defn.ivyPatterns.nonEmpty && defn.artifactPatterns.nonEmpty =>
+      case defn if defn.metadataPatterns.nonEmpty && defn.artifactPatterns.nonEmpty =>
         val InWorkspace = new StartingWith(workspaceSrcRoot.pathString + '/')
-        val ivyPatterns: IndexedSeq[IvyPattern] =
-          defn.ivyPatterns
+        val metadataPatterns: IndexedSeq[MetadataPattern] =
+          defn.metadataPatterns
             .map(PathUtils.platformIndependentString)
             .apar
             .map {
@@ -45,19 +45,19 @@ object IvyResolver {
                 // we want ws/src/optimus/platform/projects/ivy_repo_fixes/ivy-repo
                 val beginnings = List(wsRelPattern indexOf '[', wsRelPattern indexOf '(').filter(_ >= 0)
                 if (beginnings.isEmpty)
-                  throw new RuntimeException(s"local ivy pattern $absPattern should have at least one variable")
+                  throw new RuntimeException(s"local metadata pattern $absPattern should have at least one variable")
                 val srcDirToRepoRoot = RelativePath(wsRelPattern take beginnings.min)
                 val folder = factory.lookupSourceFolder(workspaceSrcRoot, workspaceSrcRoot resolveDir srcDirToRepoRoot)
-                IvyPattern.Local(
+                MetadataPattern.Local(
                   urlPattern = formatAsPatternURL(absPattern),
                   urlRepoRoot = formatAsPatternURL(
                     workspaceSrcRoot.resolveDir(folder.workspaceSrcRootToSourceFolderPath).pathString + '/'
                   ),
                   relPattern = wsRelPattern,
-                  contents = LocalIvyRepo.load(folder)
+                  contents = LocalMetadataRepo.load(folder)
                 )
               case absPat =>
-                IvyPattern.Remote(formatAsPatternURL(absPat))
+                MetadataPattern.Remote(formatAsPatternURL(absPat))
             }(IndexedSeq.breakOut)
         val artifactPatterns: IndexedSeq[ArtifactPattern] =
           defn.artifactPatterns
@@ -69,33 +69,34 @@ object IvyResolver {
               case absPat =>
                 ArtifactPattern.Remote(formatAsPatternURL(absPat))
             }(IndexedSeq.breakOut)
-        IvyResolver(ivyPatterns, artifactPatterns)
+        DependencyMetadataResolver(defn.name, metadataPatterns, artifactPatterns)
     }
   }
 
-  // coursier expects ivy patterns as URLs (and we need them in platform independent format for caching)
+  // coursier expects ivy or pom patterns as URLs (and we need them in platform independent format for caching)
   def formatAsPatternURL(path: String): String =
     if (NamingConventions.isHttpOrHttps(path)) path
     else PathUtils.uriString(PathUtils.platformIndependentString(path), absolute = true)
 }
 
-final case class IvyResolver(
-    ivyPatterns: Seq[IvyPattern],
+final case class DependencyMetadataResolver(
+    name: String,
+    metadataPatterns: Seq[MetadataPattern],
     artifactPatterns: Seq[ArtifactPattern]
 ) {
-  lazy val fingerprint: Seq[String] = ivyPatterns.flatMap(_.fingerprint) ++ artifactPatterns.map(_.fingerprint)
+  lazy val fingerprint: Seq[String] = metadataPatterns.flatMap(_.fingerprint) ++ artifactPatterns.map(_.fingerprint)
 }
 
-sealed abstract class IvyPattern {
+sealed abstract class MetadataPattern {
   val urlPattern: String
   def fingerprint: Seq[String]
 }
-object IvyPattern {
+object MetadataPattern {
   // just a URL pattern, nothing special
-  final case class Remote(urlPattern: String) extends IvyPattern {
-    def fingerprint: Seq[String] = s"ivy-pattern:$urlPattern" :: Nil
+  final case class Remote(urlPattern: String) extends MetadataPattern {
+    def fingerprint: Seq[String] = s"matadata-pattern:$urlPattern" :: Nil
   }
-  // Pattern to an ivy repo living in codetree
+  // Pattern to an ivy or pom repo living in codetree
   // Kinda assumes that there's only one pattern per repo, but I think that's reasonable.
   final case class Local(
       /** The full literal pattern as read from resolvers.obt */
@@ -105,28 +106,28 @@ object IvyPattern {
       /** The part of the pattern after the source root; used for fingerprinting */
       relPattern: String,
       /** The contents of the repo at the moment we snapshotted it. Used to avoid a potential TOCTOU. */
-      contents: LocalIvyRepo
-  ) extends IvyPattern {
+      contents: LocalMetadataRepo
+  ) extends MetadataPattern {
     // urlPattern/urlRepoRoot are *not* stable and cannot make it into a fingerprint
-    def fingerprint: Seq[String] = s"local-ivy-pattern:$relPattern" +: contents.fingerprint
+    def fingerprint: Seq[String] = s"local-matadata-pattern:$relPattern" +: contents.fingerprint
   }
 }
 
-final case class LocalIvyRepo(ivys: Map[RelativePath, HashedContent]) {
-  def ivyContent(path: RelativePath): Option[String] = ivys.get(path).map(_.utf8ContentAsString)
+final case class LocalMetadataRepo(metadataMap: Map[RelativePath, HashedContent]) {
+  def localMetadataContent(path: RelativePath): Option[String] = metadataMap.get(path).map(_.utf8ContentAsString)
   // the order of the ivy files in the filesystem has no effect on results, so sort to ensure consistent fingerprints
-  lazy val fingerprint: Seq[String] = ivys.toIndexedSeq.sortBy(_._1.pathString).map { case (p, c) =>
-    s"local-ivy:$p@${c.hash}"
+  lazy val fingerprint: Seq[String] = metadataMap.toIndexedSeq.sortBy(_._1.pathString).map { case (p, c) =>
+    s"local-metadata:$p@${c.hash}"
   }
 }
 
-@entity object LocalIvyRepo {
-  @node def load(dir: SourceFolder): LocalIvyRepo = {
+@entity object LocalMetadataRepo {
+  @node def load(dir: SourceFolder): LocalMetadataRepo = {
     val files = dir.resources(false).apar.map { case (id, hc) => id.sourceFolderToFilePath -> hc }
-    LocalIvyRepo(files)
+    LocalMetadataRepo(files)
   }
 
-  val empty = LocalIvyRepo(Map.empty)
+  val empty = LocalMetadataRepo(Map.empty)
 }
 
 sealed abstract class ArtifactPattern {

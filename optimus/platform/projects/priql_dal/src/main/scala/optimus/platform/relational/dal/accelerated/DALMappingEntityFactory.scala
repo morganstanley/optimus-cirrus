@@ -25,6 +25,7 @@ import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
 import optimus.platform.dsi.expressions.{Linkage => LinkageExpression}
+import optimus.platform.pickling.Registry
 import optimus.platform.pickling.Unpickler
 import optimus.platform.relational.RelationalUnsupportedException
 import optimus.platform.relational.dal.DALProvider
@@ -39,7 +40,6 @@ import optimus.platform.relational.tree.FieldDescriptor
 import optimus.platform.relational.tree.MethodDescriptor
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.storable.EmbeddableCompanionBase
-import optimus.platform.storable.EmbeddableCompanionPickle
 import optimus.platform.storable.Entity
 import optimus.platform.util.ReflectUtils
 import optimus.platform.versioning.TransformerRegistry
@@ -49,6 +49,7 @@ import scala.collection.immutable.HashMap
 import scala.collection.mutable
 import scala.reflect.runtime.{currentMirror => cm}
 import optimus.scalacompat.collection._
+
 import scala.collection.compat._
 
 object DALMappingEntityFactory {
@@ -105,10 +106,7 @@ object DALMappingEntityFactory {
       extends DALMappingEntity {
     val tableId = s"${owner.runtimeClassName}_${property}[${projectedType.clazz.getSimpleName}]"
     private val companion = ReflectUtils.getCompanion[EmbeddableCompanionBase](projectedType.clazz)
-    private def unpickler = companion match {
-      case e: EmbeddableCompanionPickle => Some(e.unpickler)
-      case _                            => None
-    }
+    private def unpickler = Some(Registry.unsafeUnpicklerOfClass(projectedType.clazz.asInstanceOf[Class[Embeddable]]))
 
     lazy val addedFieldMap = getAddedFieldMap(projectedType.clazz.getName)
 

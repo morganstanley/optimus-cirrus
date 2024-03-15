@@ -16,27 +16,17 @@ import optimus.buildtool.utils.Hashing
 
 import scala.collection.immutable.Seq
 import scala.util.matching.Regex
-import scala.collection.compat._
 
 private[buildtool] final case class RegexConfiguration(
     rules: Seq[CodeFlaggingRule]
 )
-object RegexConfiguration {
 
-  def merge(child: Option[RegexConfiguration], parent: Option[RegexConfiguration]): Option[RegexConfiguration] =
-    (child, parent) match {
-      case (None, None)       => None
-      case (Some(c), Some(p)) =>
-        // allow child rules to override parent rules
-        def toMap(rc: RegexConfiguration): Map[String, CodeFlaggingRule] = rc.rules.map(r => r.key -> r).toMap
-        val m = toMap(p) ++ toMap(c)
-        Some(RegexConfiguration(m.values.to(Seq)))
-      case _ =>
-        Some(RegexConfiguration(parent.map(_.rules).getOrElse(Nil) ++ child.map(_.rules).getOrElse(Nil)))
-    }
+private[buildtool] object RegexConfiguration {
+  val Empty: RegexConfiguration = RegexConfiguration(rules = Nil)
 }
 
-private[buildtool] final case class Pattern(reStr: String, exclude: Boolean = false) extends Pattern.Fields
+private[buildtool] final case class Pattern(reStr: String, exclude: Boolean = false, message: Option[String] = None)
+    extends Pattern.Fields
 
 object Pattern {
 
@@ -52,6 +42,7 @@ private[buildtool] final case class CodeFlaggingRule private (
     title: String,
     description: String,
     filePatterns: Seq[String],
+    filter: Option[Filter],
     severityLevel: Severity,
     regexes: Seq[Pattern],
     isNew: Boolean
@@ -61,7 +52,8 @@ object CodeFlaggingRule {
 
   def fingerprint(rule: CodeFlaggingRule): String = rule.key + "@" + Hashing.hashStrings {
     import rule._
-    ((List(title, description) ++ filePatterns :+ severityLevel) ++ regexes.flatMap(_.productIterator)).map(_.toString)
+    ((List(title, description) ++ filePatterns ++ filter :+ severityLevel) ++ regexes.flatMap(_.productIterator))
+      .map(_.toString)
   }
 
   sealed abstract class Fields {
