@@ -413,7 +413,7 @@ class ProtoRegionList {
 
         allocation = allocations.get(node.getIDString());
         if (allocation == null) {
-          allocation = new Long(0);
+          allocation = Long.valueOf(0);
         }
         allocation += pr.getRegionSize();
         allocations.put(node.getIDString(), allocation);

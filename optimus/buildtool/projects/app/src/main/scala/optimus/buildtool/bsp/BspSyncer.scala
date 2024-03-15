@@ -12,10 +12,11 @@
 package optimus.buildtool.bsp
 
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import ch.epfl.scala.bsp4j._
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.PythonArtifact
+import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
 import optimus.buildtool.config._
 import optimus.buildtool.files.Directory
@@ -23,6 +24,7 @@ import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.Pathed
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.format.JsonSupport
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.trace.BuildTargetPythonOptions
 import optimus.buildtool.trace.BuildTargetScalacOptions
 import optimus.buildtool.trace.BuildTargetSources
@@ -40,6 +42,8 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
 
+import java.nio.file.Path
+import java.nio.file.Paths
 import scala.annotation.tailrec
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -68,6 +72,8 @@ class BspSyncer(
 
   private val isWindows = OsUtils.isWindows(osVersion)
 
+  val pythonVenvExtractor = new PythonVenvExtractorPostBuilder(service.buildDir)
+
   def buildTargets(buildSparseScopes: Boolean): CompletableFuture[Seq[BuildTarget]] = run[Seq[BuildTarget]] {
     val structure = structureBuilder.structure
 
@@ -75,6 +81,18 @@ class BspSyncer(
     // pass an empty diff here since we know that for sparse scopes we have no local changes
     if (buildSparseScopes && sparseScopes.nonEmpty)
       builder().build(sparseScopes, installerFactory(None), modifiedFiles = Some(EmptyFileDiff))
+
+    val pythonScopes =
+      if (structure.pythonEnabled)
+        structure.scopes.filter { case (_, scopeInfo) => scopeInfo.config.pythonConfig.isDefined }.keySet
+      else Set.empty[ScopeId]
+
+    val pythonArtifactHashMap: Map[ScopeId, String] = if (pythonScopes.nonEmpty && structure.extractVenvs) {
+      val results = builder().build(pythonScopes, pythonVenvExtractor, modifiedFiles = Some(EmptyFileDiff))
+      results.artifacts.collect { case pythonArtifact: PythonArtifact =>
+        pythonArtifact.scopeId -> pythonArtifact.inputsHash
+      }.toMap
+    } else Map.empty[ScopeId, String]
 
     listener.traceTask(ScopeId.RootScopeId, BuildTargets) {
       writeVsCodeConfig(structure)
@@ -119,12 +137,20 @@ class BspSyncer(
         None,
         None,
         None,
+        Map.empty,
         pythonEnabled = false,
+        extractVenvs = false,
         Some(structure.structureHash)
       )
 
       emptyRootTarget +: uniquelyNamedScopes
-        .map(asBuildTarget(_, Some(structure.scalaConfig), structure.pythonEnabled))
+        .map(
+          asBuildTarget(
+            _,
+            Some(structure.scalaConfig),
+            structure.pythonEnabled,
+            structure.extractVenvs,
+            pythonArtifactHashMap))
     }
   }.whenComplete((_, _) => bspListener.ensureDiagnosticsReported(Nil))
 
@@ -294,7 +320,7 @@ class BspSyncer(
             target,
             resolvedScope.config.scalacConfig.options.asJava,
             (internalSparseClasspath ++ externalClasspath).asJava,
-            intellijFriendlyURI(buildDir.path)
+            PathUtils.mappedUriString(buildDir.path)
           )
         }
       }
@@ -310,7 +336,9 @@ class BspSyncer(
       scalaConfig: Option[ScalaVersionConfig],
       javaConfig: Option[JavacConfiguration],
       pythonConfig: Option[PythonConfiguration],
+      pythonArtifactHashMap: Map[ScopeId, String],
       pythonEnabled: Boolean,
+      extractVenvs: Boolean,
       configHash: Option[String] = None
   ): BuildTarget = {
     val deps = moduleDependencies.map(id => new BuildTargetIdentifier(converter.toURI(id)))
@@ -324,39 +352,44 @@ class BspSyncer(
     res.setBaseDirectory(intellijFriendlyURI(root))
     res.setDisplayName(displayName)
 
-    if (usingPython) {
-      res.setDataKind(BuildTargetDataKind.PYTHON)
-      res.setData(
-        new PythonBuildTarget(
-          pythonConfig.map(_.python.version).getOrElse("MISSING VERSION"),
-          pythonConfig.map(_.python.path).getOrElse("MISSING_INTERPRETER_LOCATION")
-        )
-      )
-    } else {
-      scalaConfig match {
-        case Some(cfg) =>
-          res.setDataKind(BuildTargetDataKind.SCALA)
-          val scalaTarget = new ScalaBuildTarget(
-            "org.scala-lang",
-            cfg.scalaVersion,
-            cfg.scalaMajorVersion,
-            ScalaPlatform.JVM,
-            cfg.scalaJars.map(intellijFriendlyURI(_, alwaysIncludeSources = false)).asJava
+    (pythonConfig, scalaConfig, javaConfig) match {
+      case (Some(pythonCfg), _, _) if pythonEnabled =>
+        val interpreter: Path = if (extractVenvs) {
+          val hash = pythonArtifactHashMap(scopeId)
+          val venv: Path = pythonVenvExtractor
+            .venvLocation(scopeId, hash)
+            .path
+          val binaryDir = if (OsUtils.isWindows) "Scripts" else "bin"
+          venv.resolve(s"venv-${scopeId.module}").resolve(binaryDir)
+        } else {
+          Paths.get(pythonCfg.python.binPath.getOrElse("MISSING_INTERPRETER"))
+        }
+        res.setDataKind(BuildTargetDataKind.PYTHON)
+        res.setData(
+          new PythonBuildTarget(
+            /*version = */ pythonCfg.python.version,
+            /*interpreter = */ PathUtils.mappedUriString(interpreter)
           )
-          javaConfig.foreach(c => scalaTarget.setJvmBuildTarget(asJvmBuildTarget(c)))
-          res.setData(scalaTarget)
-        case None =>
-          javaConfig match {
-            case Some(cfg) =>
-              res.setDataKind(BuildTargetDataKind.JVM)
-              res.setData(asJvmBuildTarget(cfg))
-            case None =>
-              configHash.foreach { hash =>
-                res.setDataKind(BuildServerProtocolService.ConfigHash)
-                res.setData(hash)
-              }
-          }
-      }
+        )
+      case (_, Some(scalaCfg), _) =>
+        res.setDataKind(BuildTargetDataKind.SCALA)
+        val scalaTarget = new ScalaBuildTarget(
+          "org.scala-lang",
+          scalaCfg.scalaVersion,
+          scalaCfg.scalaMajorVersion,
+          ScalaPlatform.JVM,
+          scalaCfg.scalaJars.map(intellijFriendlyURI(_, alwaysIncludeSources = false)).asJava
+        )
+        javaConfig.foreach(c => scalaTarget.setJvmBuildTarget(asJvmBuildTarget(c)))
+        res.setData(scalaTarget)
+      case (_, _, Some(javaCfg)) =>
+        res.setDataKind(BuildTargetDataKind.JVM)
+        res.setData(asJvmBuildTarget(javaCfg))
+      case _ =>
+        configHash.foreach { hash =>
+          res.setDataKind(BuildServerProtocolService.ConfigHash)
+          res.setData(hash)
+        }
     }
     res
   }
@@ -365,14 +398,16 @@ class BspSyncer(
     val javaRelease = javaConfig.release
     // IntelliJ refers to Java as 1.x for x < 10 (see com.intellij.pom.java.LanguageLevel)
     val javaReleaseString = if (javaRelease < 10) s"1.$javaRelease" else javaRelease.toString
-    val jdkUri = intellijFriendlyURI(javaConfig.jdkHome.path)
+    val jdkUri = PathUtils.mappedUriString(javaConfig.jdkHome.path)
     val jvmBuildTarget = new JvmBuildTarget(jdkUri, javaReleaseString)
     jvmBuildTarget
   }
   private def asBuildTarget(
       scopeInfo: ScopeInfo,
       scalaConfig: Option[ScalaVersionConfig],
-      pythonEnabled: Boolean
+      pythonEnabled: Boolean,
+      extractVenvs: Boolean,
+      pythonArtifactsHashMap: Map[ScopeId, String]
   ): BuildTarget = {
     val scope = scopeInfo.resolvedScope.config
     val scalaCfg = if (scope.javaOnly) None else scalaConfig
@@ -387,7 +422,10 @@ class BspSyncer(
       scalaCfg,
       Some(scopeInfo.resolvedScope.config.javacConfig),
       scopeInfo.resolvedScope.config.pythonConfig,
-      pythonEnabled
+      pythonArtifactsHashMap,
+      pythonEnabled,
+      extractVenvs,
+      configHash = None
     )
   }
 
@@ -403,37 +441,28 @@ class BspSyncer(
       throw new ResponseErrorException(error)
     }
 
-  private def intellijFriendlyURI(path: Path): String = {
-    val uri = PathUtils.uriString(path)
-    // we can't use `path.startsWith(root)`, because `path.startsWith` requires at least two elements for a
-    // network path and root may only be one element long, so instead we use `path.toString.startsWith(...)`
-    if (path.toString.startsWith(s"${NamingConventions.AfsRootStr.replace('/', '\\')}"))
-      uri.replaceFirst(s"${NamingConventions.AfsRootStr}", s"/${NamingConventions.AfsRootMapping}")
-    else uri
-  }
-
   private def intellijFriendlyURI(jar: JarAsset, alwaysIncludeSources: Boolean = false): String = {
-    val coreUrl = intellijFriendlyURI(jar.path)
+    val coreUrl = PathUtils.mappedUriString(jar.path)
     val srcJar = {
-      val afsSrc = jar.parent.resolveJar(jar.name.replace(".jar", ".src.jar"))
-      if (afsSrc.exists) afsSrc else jar.parent.resolveJar(jar.name.replace(".jar", "-sources.jar"))
+      val afsSrc = jar.parent.resolveJar(jar.name.replace(".jar", IvySourceKey))
+      if (afsSrc.exists) afsSrc else jar.parent.resolveJar(jar.name.replace(".jar", SourceKey))
     }
     val javadocJar = {
-      val afsDoc = jar.parent.resolveJar(jar.name.replace(".jar", ".javadoc.jar"))
-      if (afsDoc.exists) afsDoc else jar.parent.resolveJar(jar.name.replace(".jar", "-javadoc.jar"))
+      val afsDoc = jar.parent.resolveJar(jar.name.replace(".jar", IvyJavaDocKey))
+      if (afsDoc.exists) afsDoc else jar.parent.resolveJar(jar.name.replace(".jar", JavaDocKey))
     }
     val additions = mutable.Buffer[String]()
-    if (alwaysIncludeSources || srcJar.exists) additions += s"src=${intellijFriendlyURI(srcJar.path)}"
-    if (javadocJar.exists) additions += s"javadoc=${intellijFriendlyURI(javadocJar.path)}"
+    if (alwaysIncludeSources || srcJar.exists) additions += s"src=${PathUtils.mappedUriString(srcJar.path)}"
+    if (javadocJar.exists) additions += s"javadoc=${PathUtils.mappedUriString(javadocJar.path)}"
     if (additions.isEmpty) coreUrl else s"$coreUrl${additions.mkString("?", "&", "")}"
   }
 
-  private def intellijFriendlyURI(d: Directory): String = intellijFriendlyURI(d.path)
+  private def intellijFriendlyURI(d: Directory): String = PathUtils.mappedUriString(d.path)
 
   private def intellijFriendlyURI(e: ExternalClassFileArtifact): String = {
-    val coreUrl = intellijFriendlyURI(e.path)
+    val coreUrl = PathUtils.mappedUriString(e.path)
     val additions = Seq(e.source.map("src" -> _), e.javadoc.map("javadoc" -> _)).collect { case Some((tpe, a)) =>
-      s"$tpe=${intellijFriendlyURI(a.path)}"
+      s"$tpe=${PathUtils.mappedUriString(a.path)}"
     }
     if (additions.isEmpty) coreUrl else s"$coreUrl${additions.mkString("?", "&", "")}"
   }

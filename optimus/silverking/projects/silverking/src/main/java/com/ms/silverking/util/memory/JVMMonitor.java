@@ -20,6 +20,7 @@ import com.ms.silverking.thread.ThreadUtil;
 import com.ms.silverking.time.SimpleStopwatch;
 import com.ms.silverking.time.Stopwatch;
 import com.ms.silverking.util.jvm.Finalization;
+import optimus.utils.SystemFinalization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,7 +128,7 @@ public class JVMMonitor implements Runnable {
       finalizationSW.reset();
       log.info("Forcing finalization");
       if (finalization == null) {
-        System.runFinalization();
+        SystemFinalization.runFinalizers();
       } else {
         finalization.forceFinalization(0);
       }

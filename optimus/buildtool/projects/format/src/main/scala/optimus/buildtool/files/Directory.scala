@@ -328,6 +328,11 @@ object Directory {
     }
   }
 
+  object JarMetaExclusionFilter extends PathFilter {
+    override def apply(path: Path, attrs: BasicFileAttributes): Boolean =
+      !path.startsWith("/META-INF") && path.toString != s"/${NamingConventions.MetadataFileName}"
+  }
+
   // Constructor arg is a String, since Regexes and Patterns don't implement equals/hashCode
   final case class PathRegexFilter(regex: String) extends PathFilter {
     private val pattern: Pattern = Pattern.compile(regex)

@@ -23,12 +23,16 @@ import optimus.scalacompat.collection._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
-@entity class CppCompilationSources(val osVersion: String, scope: CompilationScope) extends CompilationSources {
+@entity class CppCompilationSources(
+    val osVersion: String,
+    scope: CompilationScope,
+    cppFallback: Boolean
+) extends CompilationSources {
 
   override def id: ScopeId = scope.id
 
   @node protected def hashedSources: HashedSourcesImpl = {
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.CppFingerprint)
+    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.CppFingerprint, Some(osVersion))
     HashedSourcesImpl(Seq("Source" -> sourceContent), Nil, fingerprintHash)
   }
 
@@ -46,10 +50,12 @@ import scala.collection.immutable.SortedMap
   @node private def fingerprint: Seq[String] = {
     import scope._
 
-    val sourceFingerprint = scope.fingerprint(sourceContent, "Source")
-    val inputArtifacts = fingerprintDeps(upstream.cppForOurOsCompiler(osVersion), "Dependency")
-    val cppDeps = config.cppConfig(osVersion).fingerprint
-    sourceFingerprint ++ inputArtifacts ++ cppDeps
+    if (!cppFallback && sourceContent.nonEmpty) {
+      val sourceFingerprint = scope.fingerprint(sourceContent, "Source")
+      val inputArtifacts = fingerprintDeps(upstream.cppForOurOsCompiler(osVersion), "Dependency")
+      val cppDeps = config.cppConfig(osVersion).fingerprint
+      sourceFingerprint ++ inputArtifacts ++ cppDeps
+    } else Nil
   }
 
 }

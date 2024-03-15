@@ -34,17 +34,14 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
   @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
     installMavenJars(
       installable.allScopeArtifacts,
-      installable.includedScopeArtifacts,
-      installable.includedRunconfJars
+      installable.includedScopeArtifacts
     )
 
   @async private def installMavenJars(
       allScopeArtifacts: Seq[ScopeArtifacts],
-      includedScopeArtifacts: Seq[ScopeArtifacts],
-      includedRunconfJars: Seq[(ScopeId, JarAsset)]
+      includedScopeArtifacts: Seq[ScopeArtifacts]
   ): Seq[JarAsset] = {
     val installJarMapping = InstallJarMapping(allScopeArtifacts)
-    val scopesWithRunconfJar: Set[ScopeId] = includedRunconfJars.map(_._1).toSet
 
     def copyFile(scopeId: ScopeId, copyFrom: JarAsset, copyTo: JarAsset) = ObtTrace.traceTask(scopeId, InstallJar) {
       Files.createDirectories(copyTo.parent.path)
@@ -53,7 +50,7 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
     }
 
     includedScopeArtifacts.apar.flatMap {
-      case scopeArtifacts: ScopeArtifacts if scopesWithRunconfJar.contains(scopeArtifacts.scopeId) =>
+      case scopeArtifacts: ScopeArtifacts =>
         val scopeId = scopeArtifacts.scopeId
         val pathingJar = scopeArtifacts.pathingJar
         val mavenAssetOption: Option[Seq[(JarAsset, JarAsset)]] = pathingJar map { pj =>

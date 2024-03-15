@@ -201,6 +201,7 @@ private[bsp] final class BSPTraceListener(
       new TaskTrace {
         override def setStat(obtStat: ObtStat, value: Long): Unit = {}
         override def addToStat(obtStat: ObtStat, value: Long): Unit = {}
+        override def addToStat(obtStat: ObtStat, value: Set[_]): Unit = {}
         override def supportsStats: Boolean = false
         override def reportProgress(message: String, progress: Double): Unit = {
           val res = new TaskProgressParams(taskId)
@@ -355,7 +356,7 @@ private[bsp] final class BSPTraceListener(
 
   def ensureDiagnosticsReported(msgArtifacts: Seq[MessagesArtifact]): Unit = {
     msgArtifacts.foreach { a =>
-      reportDiagnostics(a.id.scopeId, a.taskCategory, a.messages)
+      if (a.messages.nonEmpty) reportDiagnostics(a.id.scopeId, a.taskCategory, a.messages)
     }
     // for any diagnostics published in the previous build but not this one, send empty diagnostics to ensure
     // they're removed by the client

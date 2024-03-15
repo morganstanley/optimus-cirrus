@@ -15,6 +15,7 @@ import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.app._
 import optimus.buildtool.builders.BackgroundProcessBuilder
+import optimus.buildtool.config.NamingConventions.MavenNamespaceToolExe
 import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
@@ -23,12 +24,13 @@ import optimus.platform.dal.config.DalEnv
 import org.kohsuke.args4j
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.tools.MavenTool.mavenToolDir
 import optimus.buildtool.trace.MavenApp
 
 import scala.collection.immutable.Seq
 
 object MavenTool {
-  val artDirectory = StaticConfig.string("mavenExePath")
+  val mavenToolDir = StaticConfig.string(MavenNamespaceToolExe)
 
   // each art cmd will contain 2~4 lines msgs, set 40 to limit msgs for last 10~20 cmds.
   private val printLogLines = 40
@@ -94,7 +96,7 @@ private[buildtool] object MavenReserveTool
 
     def scopeIdToTrainCmd(id: ScopeId): Seq[String] =
       Seq(
-        artDirectory,
+        mavenToolDir,
         "create-package",
         "--type",
         "maven",

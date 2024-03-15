@@ -9,6 +9,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.stratosphere.stash
+package optimus.platform;
 
-final case class UnsuccessfulStashCall(stashUri: String, message: String) extends Exception(message)
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * It tells entityplugin to generate fun$newNode, fun$queued, @nodeSync fun methods in the non-loom
+ * fashion.
+ */
+@Retention(RetentionPolicy.CLASS)
+@Target(ElementType.TYPE)
+public @interface loomOff {}

@@ -38,8 +38,10 @@ final case class GlobalConfig(
     depCopyRoot: Option[Directory],
     testplanConfig: TestplanConfiguration,
     defaultSrcFilesToUpload: Seq[Regex],
+    filesToExcludeFromUpload: Seq[Regex],
     genericRunnerAppDirOverride: Option[Directory],
-    pythonEnabled: Boolean
+    pythonEnabled: Boolean,
+    extractVenvs: Boolean
 ) {
 
   val versionConfig: VersionConfiguration =
@@ -72,6 +74,7 @@ final case class GlobalConfig(
     // don't use stratoConfig.scalaHome (for now) -- java.home is the version we use to compile java (set by OBT runscript)
     val javaPath = Directory(mapDepCopyPath(depCopyRoot, tweakedJavaHome.path.toString, normalizeLib = false))
     val pythonEnabled = stratoConfig.config.booleanOrDefault("internal.obt.python-enabled", default = false)
+    val extractVenvs = stratoConfig.config.booleanOrDefault("internal.obt.python-extract-venvs", default = false)
 
     def obtTestplansConfigBoolean(key: String) = stratoConfig.config.getBoolean(s"obt.testplans.$key")
     def obtTestplansConfigString(key: String, default: String) =
@@ -96,12 +99,14 @@ final case class GlobalConfig(
       scalaVersion = stratoConfig.scalaVersion,
       stratoVersion = stratoConfig.stratoVersion,
       pythonEnabled = pythonEnabled,
+      extractVenvs = extractVenvs,
       workspaceName = workspaceName,
       workspaceRoot = workspaceRoot,
       workspaceSourceRoot = workspaceSourceRoot,
       depCopyRoot = depCopyRoot,
       testplanConfig = testplanConfig,
       defaultSrcFilesToUpload = stratoConfig.config.stringListOrEmpty("obt.defaultSrcFilesToUpload").map(_.r),
+      filesToExcludeFromUpload = stratoConfig.config.stringListOrEmpty("obt.defaultFilesToExcludeFromUpload").map(_.r),
       genericRunnerAppDirOverride =
         stratoConfig.config.stringOrDefault("internal.obt.genericRunnerAppDir", "").asDirectory
     )

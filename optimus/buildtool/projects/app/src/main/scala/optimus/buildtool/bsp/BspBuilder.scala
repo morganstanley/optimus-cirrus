@@ -133,7 +133,7 @@ class BspBuilder(
   }
 
   def configHash: CompletableFuture[String] = run {
-    structureHasher.hash()
+    structureHasher.hash.hash
   }
 
   @closuresEnterGraph

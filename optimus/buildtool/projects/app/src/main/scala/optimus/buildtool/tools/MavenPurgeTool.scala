@@ -64,7 +64,7 @@ private[buildtool] object MavenPurgeTool
       val restoreMode = if (cmdLine.restore) "restore" else "purge"
       versions.map(
         Seq(
-          artDirectory,
+          mavenToolDir,
           s"$restoreMode-release",
           "--type",
           "maven",

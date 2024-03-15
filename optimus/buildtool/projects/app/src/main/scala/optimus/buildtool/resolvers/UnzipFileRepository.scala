@@ -35,9 +35,10 @@ import java.net.URL
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.NamingConventions.MavenUnzipFileKey
 import optimus.buildtool.resolvers.MavenUtils._
-import optimus.buildtool.trace.ObtTrace
 import optimus.platform._
 import optimus.stratosphere.artifactory.Credential
+
+import java.net.URI
 
 /**
  * This is a customized ivyRepo to make obt support download maven file in compressed archives(.tar), it will take
@@ -68,7 +69,6 @@ private[resolvers] final case class UnzipFileRepository(
     dependencyCopier: DependencyCopier
 ) extends Repository {
   val authentication: Option[Authentication] = credentialOption.map(x => Authentication(x.user, x.password))
-  val credential: Credential = credentialOption.getOrElse(Credential("", "", ""))
 
   private def variables(
       module: Module,
@@ -103,25 +103,21 @@ private[resolvers] final case class UnzipFileRepository(
     } yield url
 
     eitherUrl match {
-      case Right(url) => new URL(url)
+      case Right(url) => new URI(url).toURL()
       case Left(msg)  => throw new IllegalArgumentException(msg)
     }
   }
 
   @node def downloadUnzip(url: URL, isMarker: Boolean, artifact: Artifact): Either[String, Artifact] =
-    downloadUrl[Either[String, Artifact]](url, dependencyCopier, isMarker)(asNode(d => Right(artifact)))(Left(_))
+    downloadUrl[Either[String, Artifact]](url, dependencyCopier, remoteAssetStore, isMarker)(asNode(d =>
+      Right(artifact)))(Left(_))
 
   @entersGraph def downloadUnzipUrl(rawUrl: URL, isZip: Boolean = false): Either[String, Artifact] = {
     val isMarker = isZip || rawUrl.toString.endsWith(MavenUnzipFileKey)
-    val url = if (isMarker) new URL(rawUrl.toString + ".marker") else rawUrl
+    val url = if (isMarker) new URI(rawUrl.toString + ".marker").toURL() else rawUrl
     val foundArtifact = Artifact(url.toString).withAuthentication(authentication)
     // The order of checking is 1. local disk, 2. SK, 3. maven
-    if (checkLocalDisk(url, dependencyCopier)) Right(foundArtifact)
-    else {
-      val result = downloadUnzip(url, isMarker, foundArtifact)
-      if (result.isRight) ObtTrace.info(s"Downloaded remote intellij artifact to local disk: $rawUrl")
-      result
-    }
+    downloadUnzip(url, isMarker, foundArtifact)
   }
 
   override def find[F[_]](module: core.Module, version: String, fetch: Fetch[F])(implicit

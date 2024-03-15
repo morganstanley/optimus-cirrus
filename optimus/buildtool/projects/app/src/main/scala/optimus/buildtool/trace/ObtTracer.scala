@@ -46,6 +46,7 @@ object ObtTrace extends ObtTraceListener with ObtTracePluginApi {
   override def setStat(stat: ObtStat, value: Long): Unit = current.setStat(stat, value)
   override def setProperty[T](p: Properties.EnumeratedKey[T], v: T): Unit = current.setProperty(p, v)
   override def addToStat(stat: ObtStat, value: Long): Unit = current.addToStat(stat, value)
+  override def addToStat(stat: ObtStat, value: Set[_]): Unit = current.addToStat(stat, value)
   override def supportsStats: Boolean = current.supportsStats
 
   def logMsg(msg: String, tpe: MessageType): Unit = current.logMsg(msg, tpe)
@@ -66,8 +67,6 @@ private[buildtool] object ObtStats {
   case object ModifiedDirectories extends ObtStat
   case object RubbishFiles extends ObtStat
   case object RubbishSizeBytes extends ObtStat
-  case object InvalidatedSourceFiles extends ObtStat
-  case object SourceFiles extends ObtStat
   case object LinesOfCode extends ObtStat
   case object CompiledLinesOfCode extends ObtStat
   case object Cycles extends ObtStat
@@ -75,9 +74,9 @@ private[buildtool] object ObtStats {
   case object AllocatedBytes extends ObtStat
   case object InstalledJarBytes extends ObtStat
   case object Scopes extends ObtStat
+  case object TransitiveScopes extends ObtStat
   case object PythonScopes extends ObtStat
   case object ScalacScopes extends ObtStat
-  case object Compilations extends ObtStat
   case object Success extends ObtStat
   case object Errors extends ObtStat
   case object Warnings extends ObtStat
@@ -85,12 +84,47 @@ private[buildtool] object ObtStats {
   case object InstalledJars extends ObtStat
   case object InstalledWars extends ObtStat
   case object MavenDownloads extends ObtStat
+  case object MavenRetry extends ObtStat
+  case object MavenCorruptedJar extends ObtStat
+  case object CoursierCorruptedMetadata extends ObtStat
+  case object CoursierFetchFailure extends ObtStat
+  case object TotalDepDownloadTime extends ObtStat
+  case object TotalDepFailedDownloadTime extends ObtStat
+  case object TotalDepFetchTime extends ObtStat
+
+  case object ScalaArtifacts extends ObtStat
+  case object JavaArtifacts extends ObtStat
+  case object DeletedArtifacts extends ObtStat
+  case object MutableExternalDependencies extends ObtStat
+
+  case object Compilations extends ObtStat
+  case object CompilationsDueToSourceChanges extends ObtStat
+  case object CompilationsDueToUpstreamApiChanges extends ObtStat
+  case object CompilationsDueToUpstreamMacroChanges extends ObtStat
+  case object CompilationsDueToUpstreamTraitChanges extends ObtStat
+  case object CompilationsDueToUpstreamAnnotationChanges extends ObtStat
+  case object CompilationsDueToExternalDependencyChanges extends ObtStat
+  case object CompilationsDueToNonIncrementalJavaSignatures extends ObtStat
+  case object CompilationsDueToUnknownReason extends ObtStat
+  case object ZincCacheHit extends ObtStat
+
+  case object NodeCacheScalaMiss extends ObtStat
+  case object NodeCacheJavaMiss extends ObtStat
+
+  case object SourceFiles extends ObtStat
+  case object InvalidatedSourceFiles extends ObtStat
+  case object AddedSourceFiles extends ObtStat
+  case object ModifiedSourceFiles extends ObtStat
+  case object RemovedSourceFiles extends ObtStat
+  case object ExternalDependencyChanges extends ObtStat
 
   case object SlowTypechecks extends ObtStat
   case object SlowTypecheckDurationMs extends ObtStat
 
   case object FileSystemSourceFolder extends ObtStat
   case object GitSourceFolder extends ObtStat
+  case object ReadFileSystemSourceFiles extends ObtStat
+  case object ReadGitSourceFiles extends ObtStat
 
   trait Cache {
     private val cache = this.toString
@@ -98,6 +132,8 @@ private[buildtool] object ObtStats {
       override def key = s"$cache$this"
     }
     case object Hit extends ObtStat with CacheStat
+    case object ScalaHit extends ObtStat with CacheStat
+    case object JavaHit extends ObtStat with CacheStat
     case object Miss extends ObtStat with CacheStat
     case object Write extends ObtStat with CacheStat
     case object ReadBytes extends ObtStat with CacheStat
@@ -148,6 +184,7 @@ trait ObtLogger {
 trait ObtStatsHolder {
   def setStat(stat: ObtStat, value: Long): Unit
   def addToStat(stat: ObtStat, value: Long): Unit
+  def addToStat(stat: ObtStat, value: Set[_]): Unit
   def supportsStats: Boolean
 }
 
@@ -260,6 +297,7 @@ trait DefaultObtTraceListener extends ObtTraceListener {
   override def setProperty[T](p: Properties.EnumeratedKey[T], v: T): Unit = {}
   override def setStat(stat: ObtStat, value: Long): Unit = {}
   override def addToStat(stat: ObtStat, value: Long): Unit = {}
+  override def addToStat(stat: ObtStat, value: Set[_]): Unit = {}
   override def supportsStats: Boolean = false
 
   override def logMsg(msg: String, tpe: MessageType): Unit = ()
@@ -280,6 +318,7 @@ object LoggingTaskTrace extends TaskTrace {
     log.debug(s"End: ${if (success) "success" else "failure"}")
   override def setStat(obtStat: ObtStat, value: Long): Unit = {}
   override def addToStat(obtStat: ObtStat, value: Long): Unit = {}
+  override def addToStat(obtStat: ObtStat, value: Set[_]): Unit = {}
   override def supportsStats: Boolean = false
 }
 
@@ -289,6 +328,7 @@ trait DefaultTaskTrace extends TaskTrace {
   override def end(success: Boolean, errors: Int, warnings: Int, time: Instant): Unit = ()
   override def setStat(obtStat: ObtStat, value: Long): Unit = {}
   override def addToStat(Stat: ObtStat, value: Long): Unit = {}
+  override def addToStat(stat: ObtStat, value: Set[_]): Unit = {}
   override def supportsStats: Boolean = false
 }
 

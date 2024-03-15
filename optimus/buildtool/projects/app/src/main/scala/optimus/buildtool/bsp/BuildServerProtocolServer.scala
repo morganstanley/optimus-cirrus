@@ -29,7 +29,7 @@ import optimus.buildtool.config.ScalaVersionConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.resolvers.DependencyCopier
-import optimus.buildtool.resolvers.IvyResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.rubbish.ArtifactRecency
 import optimus.buildtool.scope.FingerprintHasher
 import optimus.buildtool.trace.ObtTraceListener
@@ -61,7 +61,8 @@ class BuildServerProtocolServer(
     installerFactory: NodeFunction1[Option[Directory], PostBuilder],
     scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
     pythonEnabled: NodeFunction0[Boolean],
-    ivyResolvers: NodeFunction0[Seq[IvyResolver]],
+    extractVenvs: NodeFunction0[Boolean],
+    depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]],
     directoryFactory: LocalDirectoryFactory,
     dependencyCopier: DependencyCopier,
     incrementalMode: IncrementalMode,
@@ -90,7 +91,8 @@ class BuildServerProtocolServer(
       installerFactory = installerFactory,
       scalaVersionConfig = scalaVersionConfig,
       pythonEnabled = pythonEnabled,
-      ivyResolvers = ivyResolvers,
+      extractVenvs = extractVenvs,
+      depMetadataResolvers = depMetadataResolvers,
       directoryFactory = directoryFactory,
       dependencyCopier = dependencyCopier,
       incrementalMode = incrementalMode,

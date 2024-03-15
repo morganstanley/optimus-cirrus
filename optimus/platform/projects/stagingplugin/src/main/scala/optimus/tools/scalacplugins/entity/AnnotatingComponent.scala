@@ -11,6 +11,7 @@
  */
 package optimus.tools.scalacplugins.entity
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.tools.nsc._
 import scala.tools.nsc.plugins._
 
@@ -32,6 +33,14 @@ class AnnotatingComponent(
     with WithOptimusPhase {
   import global._
 
+  private val cachedModuleSymbols = new ConcurrentHashMap[String, Symbol]()
+  private def moduleSymbolLookup(fullname: String): Symbol =
+    cachedModuleSymbols.computeIfAbsent(fullname, rootMirror.getModuleIfDefined(_))
+
+  private val cachedClassSymbols = new ConcurrentHashMap[String, Symbol]()
+  private def classSymbolLookup(fullname: String): Symbol =
+    cachedClassSymbols.computeIfAbsent(fullname, rootMirror.getClassIfDefined(_))
+
   /**
    * lookup class / object or term member. For `x.y.z`, returns all type and term symbols `z` located either in class or
    * module `x.y`.
@@ -42,9 +51,7 @@ class AnnotatingComponent(
     val last = name.last
     val trm = last == '$' || last != '#'
     val tpe = last == '#' || last != '$'
-    def owners(n: String) =
-      Set(rootMirror.getModuleIfDefined(n), rootMirror.getModuleIfDefined(n), rootMirror.getClassIfDefined(n))
-        .filter(_.exists)
+    def owners(n: String) = Set(moduleSymbolLookup(n), classSymbolLookup(n)).filter(_.exists)
     def members(o: Symbol, n: String) =
       ((if (tpe) o.info.member(TypeName(n)) else NoSymbol) ::
         (if (trm) o.info.member(TermName(n)) else NoSymbol).alternatives).filter(_.exists)
@@ -53,8 +60,7 @@ class AnnotatingComponent(
     owners(name.substring(0, dot)).flatMap(o => members(o, memberName)).toSeq
   }
 
-  private def useInstead(alt: String, neu: Boolean = false) =
-    s"${if (neu) "[NEW]" else ""}use $alt instead (deprecated by optimus staging)"
+  private def useInstead(alt: String) = s"use $alt instead (deprecated by optimus staging)"
 
   private val view = "view"
   private val mapValuesReasonSuffix =
@@ -108,7 +114,8 @@ class AnnotatingComponent(
     "scala.collection.JavaConverters" -> List(useInstead("scala.jdk.CollectionConverters")),
     "scala.collection.JavaConversions" -> List(useInstead("scala.jdk.CollectionConverters")),
     "scala.collection.mutable.MutableList" -> List(useInstead("scala.collection.mutable.ListBuffer")),
-    "org.mockito.MockitoEnhancer.withObjectMocked" -> List("This is incompatible with with Scala 2.13. Refer to documentation of optimus.utils.MockableObject for an alternative")
+    "org.mockito.MockitoEnhancer.withObjectMocked" -> List(
+      "This is incompatible with with Scala 2.13. Refer to documentation of optimus.utils.MockableObject for an alternative")
   ) ++ List(
     "MapLike",
     "GenMapLike",
@@ -121,8 +128,13 @@ class AnnotatingComponent(
     .flatMap(c => List(s"scala.collection.$c.mapValues", s"scala.collection.$c.filterKeys"))
     .map(_ -> List(AnnotatingComponent.lazyReason + mapValuesReasonSuffix))
 
+  // these will only be flagged in new/modified files - useful for avoiding PR merge races
+  private val newDeprecatings =
+    Seq[(String, List[String])]("java.net.URL.<init>" -> List(useInstead("new URI( ).toURL")))
+
   private lazy val deprecatedAnno = rootMirror.getRequiredClass("scala.deprecated")
   private lazy val deprecatingAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.deprecating")
+  private lazy val deprecatingNewAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.deprecatingNew")
   private lazy val constAnno = rootMirror.getClassIfDefined("scala.annotation.ConstantAnnotation")
   private lazy val discouragedAnno = rootMirror.getClassIfDefined("optimus.platform.annotations.discouraged")
 
@@ -145,6 +157,7 @@ class AnnotatingComponent(
     def apply(unit: global.CompilationUnit): Unit = {
       add(deprecations, deprecatedAnno)
       add(deprecatings, deprecatingAnno)
+      add(newDeprecatings, deprecatingNewAnno)
       add(discourageds, discouragedAnno)
       add(discouragedStream, discouragedAnno, _.owner != genTraversableFactory)
       pluginData.forceLoad.foreach(fqn => rootMirror.getClassIfDefined(fqn).andAlso(_.initialize))

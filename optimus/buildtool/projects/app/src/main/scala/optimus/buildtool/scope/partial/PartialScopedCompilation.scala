@@ -11,9 +11,13 @@
  */
 package optimus.buildtool.scope.partial
 
+import optimus.buildtool.artifacts.AnalysisArtifact
+import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.LocatorArtifact
+import optimus.buildtool.compilers.zinc.AnalysisLocator
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.CompilationSources
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
@@ -21,13 +25,14 @@ import optimus.core.needsPlugin
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
+import java.time.Instant
 import scala.collection.immutable.Seq
 
 @entity private[partial] trait PartialScopedCompilation {
   protected def scope: CompilationScope
   protected def sources: CompilationSources
 
-  @node protected def fingerprintHash: String = sources.compilationInputsHash
+  @node protected def fingerprint: FingerprintArtifact = sources.compilationFingerprint
 
   @node protected def upstreamArtifacts: Seq[Artifact]
 
@@ -44,7 +49,9 @@ import scala.collection.immutable.Seq
   @node protected def compile$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
       f: NodeFunction0[Option[A#A]]
   ): Seq[Artifact] =
-    if (containsRelevantSources) upstreamErrors.getOrElse(scope.cached$NF(tpe, discriminator, fingerprintHash)(f))
+    if (containsRelevantSources) upstreamErrors.getOrElse {
+      scope.cached$NF(tpe, discriminator, fingerprint.hash)(f) :+ fingerprint
+    }
     else Nil
 
   override def toString: String = s"${getClass.getSimpleName}(${scope.id})"
@@ -57,5 +64,26 @@ private[buildtool] final case class AnalysisWithLocator(analysis: Seq[Artifact],
 
   // externalCompileDependencies can have errors too
   @node override protected def prerequisites: Seq[Artifact] = sources.externalCompileDependencies ++ super.prerequisites
+
+  @node protected def analysisWithLocator(
+      analysis: Seq[Artifact],
+      at: AnalysisArtifactType,
+      analysisLocator: Option[AnalysisLocator]
+  ): AnalysisWithLocator = {
+    val locator = analysisLocator.flatMap { l =>
+      // A couple of subtleties here:
+      // 1. We save locators for a good build even if we get a local/remote cache hit, to
+      //    ensure we record the fact that this is the most recent build for this commit (we don't have
+      //    to do this for node cache hits since DependencyTracker invalidation means we'll never
+      //    get us a node cache hit for anything other than the most recent previous build).
+      // 2. `saveLocator` is not RT, so we make the return of this method (`analysisWithLocator`) RT by
+      //    stripping out the timestamp part of the `LocatorArtifact` (which would otherwise be set to now).
+      if (analysis.exists(_.isInstanceOf[AnalysisArtifact])) {
+        l.saveLocator(scope.id, at, scope.pathBuilder, sources.compilationFingerprint.hash)
+          .map(_.withTimestamp(Instant.EPOCH))
+      } else None
+    }
+    AnalysisWithLocator(analysis, locator)
+  }
 
 }

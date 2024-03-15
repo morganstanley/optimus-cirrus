@@ -26,7 +26,6 @@ import scala.io.Source
 import scala.util.Try
 import java.time.ZonedDateTime
 import java.util.zip.GZIPInputStream
-
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.EdgeType
@@ -41,6 +40,7 @@ import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
 import org.slf4j.Logger
 
+import java.net.URI
 import scala.collection.mutable.ArrayBuffer
 
 class CrumbMergerArgs {
@@ -268,7 +268,7 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
   def merge(name: String): Iterable[Vertex] = {
     val gzip = name.endsWith(".gz")
     if (name.matches("\\w+:\\/\\S+$"))
-      merge(new URL(name), gzip)
+      merge(new URI(name).toURL(), gzip)
     else
       merge(new FileInputStream(name), gzip)
   }

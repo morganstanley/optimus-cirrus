@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import static optimus.EntityAgent.logMsg;
 import java.io.File;
 import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
@@ -19,8 +20,6 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.FileSystemNotFoundException;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.ProtectionDomain;
@@ -33,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
@@ -93,6 +93,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
   private static final boolean isIJ = System.getenv().containsKey("STRATO_INTELLIJ");
 
+  private static final AtomicBoolean announcedActive = new AtomicBoolean(false);
+
   // WARNING: Source of Thread Contention
   // very frequent, repeated access across all threads
   private static final Map<String, Integer> usedClasses =
@@ -149,131 +151,27 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   public static final Set<String> instrumentationExemptedClasses =
       new HashSet<>(
           Arrays.asList(
+              // NOTE: Only include the injectors in this section. Use the `ExemptedPackage` for
+              // every other use cases
               "optimus/ClassMonitorInjector",
-              "optimus/deps/CmiCollectedDependencies",
-              "optimus/deps/CmiCollectionStateSnapshot",
-              "optimus/deps/CmiTransformationStateSnapshot",
-              "optimus/deps/ResourceAccessType",
-              "optimus/deps/ResourceDependency",
-              "optimus/deps/VisitContext",
-              "optimus/dtc/DependenciesCollator$",
-              "optimus/dtc/DependenciesCollector",
-              "optimus/dtc/DependenciesCollector$",
-              "optimus/dtc/DependenciesGrinder",
-              "optimus/dtc/DependenciesGrinder$",
-              "optimus/dtc/DependenciesNarrator",
-              "optimus/dtc/DependenciesNarrator$",
-              "optimus/dtc/DependenciesNormalizer",
-              "optimus/dtc/DependenciesSanitizer",
-              "optimus/dtc/DependencyCleanUpEffect",
-              "optimus/dtc/DtcContextualizedArgument",
-              "optimus/dtc/DtcContextualizedDependencies",
-              "optimus/dtc/DtcContextualizedEnvironmentalDependencies",
-              "optimus/dtc/DtcContextualizedJar",
-              "optimus/dtc/DtcContextualizedResource",
-              "optimus/dtc/DtcContextualizedValue",
-              "optimus/dtc/DtcMarker$",
-              "optimus/dtc/DtcNormalizedDependencies",
-              "optimus/dtc/DtcNormalizedDependencies$",
-              "optimus/dtc/DtcNormalizedResource",
-              "optimus/dtc/DtcNormalizedResource$",
-              "optimus/dtc/Hasher",
-              "optimus/dtc/cache/CachedRunsLookupError",
-              "optimus/dtc/cache/CachedRunsManager",
-              "optimus/dtc/cache/CachedRunsManager$",
-              "optimus/dtc/cache/CachedRunsManagerDhtClient",
-              "optimus/dtc/cache/CachedRunsManagerDhtClient$",
-              "optimus/dtc/comparison/CacheVsLocalComparator",
-              "optimus/dtc/comparison/CacheVsLocalComparator$",
-              "optimus/dtc/comparison/Difference",
-              "optimus/dtc/comparison/Difference$",
-              "optimus/dtc/comparison/DifferenceReporter",
-              "optimus/dtc/comparison/KeyValueChange",
-              "optimus/dtc/comparison/MissingKeyValueLocally",
-              "optimus/dtc/comparison/MissingLocally",
-              "optimus/dtc/comparison/NewKeyValueLocally",
-              "optimus/dtc/comparison/NewLocally",
-              "optimus/dtc/comparison/OrderingDiscrepancy",
-              // optimus/dtc/crumbs: We ignore as it is not on any hot loop
-              "optimus/dtc/dht/DhtRegion$",
-              "optimus/dtc/model/ApplicationArgumentsHelper$",
-              "optimus/dtc/model/Argument",
-              "optimus/dtc/model/ArgumentDependency",
-              "optimus/dtc/model/ArgumentDependency$",
-              "optimus/dtc/model/Classpath$",
-              "optimus/dtc/model/ClasspathDependency",
-              "optimus/dtc/model/ClasspathDependency$",
-              "optimus/dtc/model/Dependency",
-              "optimus/dtc/model/DtcCollectedHashedDependencies",
-              "optimus/dtc/model/EnrichedOptimusCachedRun",
-              "optimus/dtc/model/EnrichedOptimusCachedRun$",
-              "optimus/dtc/model/EnvironmentVariableDependency",
-              "optimus/dtc/model/EnvironmentVariableDependency$",
-              "optimus/dtc/model/EnvironmentVariablesHelper",
-              "optimus/dtc/model/FeatureFlagsString",
-              "optimus/dtc/model/FeatureFlagsString$",
-              "optimus/dtc/model/GenericArgumentsHelper$",
-              "optimus/dtc/model/HashedDependency",
-              "optimus/dtc/model/LookupResultType",
-              "optimus/dtc/model/LookupResultType$",
-              "optimus/dtc/model/NamedDependency",
-              "optimus/dtc/model/OptimusCachedRun",
-              "optimus/dtc/model/OptimusCachedRun$",
-              "optimus/dtc/model/OptimusCachedRunPruner",
-              "optimus/dtc/model/OptimusCachedRunPruner$",
-              "optimus/dtc/model/OptimusCachedRunStats",
-              "optimus/dtc/model/PathAndValueNormalizationHelper",
-              "optimus/dtc/model/PathAndValueNormalizationHelper$",
-              "optimus/dtc/model/PathSubstitution",
-              "optimus/dtc/model/RecordedFiles",
-              "optimus/dtc/model/RecordedResults",
-              "optimus/dtc/model/ResourceDependency",
-              "optimus/dtc/model/ResourceDependency$",
-              "optimus/dtc/model/RunDependencies",
-              "optimus/dtc/model/Substitution",
-              "optimus/dtc/model/SystemPropertiesHelper",
-              "optimus/dtc/model/SystemPropertyDependency",
-              "optimus/dtc/model/SystemPropertyDependency$",
-              "optimus/dtc/model/ValueSubstitution",
-              "optimus/dtc/runners/DTCRunListener",
-              "optimus/dtc/runners/DTCRunListener$",
-              "optimus/dtc/runners/DefensiveDescriptionHelper$",
-              "optimus/dtc/runners/RecordedRun",
-              "optimus/dtc/runners/RunRecorder",
-              "optimus/dtc/runners/TestAssumptionFailure",
-              "optimus/dtc/runners/TestFailure",
-              "optimus/dtc/runners/TestFinished",
-              "optimus/dtc/runners/TestIgnored",
-              "optimus/dtc/runners/TestRunFinished",
-              "optimus/dtc/runners/TestRunStarted",
-              "optimus/dtc/runners/TestStarted",
-              "optimus/dtc/runners/UnitTestResult",
-              "optimus/dtc/utils/CachedTestResults",
-              "optimus/dtc/utils/CachedTestResults$",
-              "optimus/dtc/utils/CmiEventsDescription",
-              "optimus/dtc/utils/CmiEventsHelper$",
-              "optimus/dtc/utils/DHTFailSafeExecution",
-              "optimus/dtc/utils/DTCConstants$",
-              "optimus/dtc/utils/DTCRuntimeContext$",
-              "optimus/dtc/utils/FailSafeExecution",
-              "optimus/dtc/utils/RunDependenciesUtils",
-              "optimus/dtc/utils/RunDependenciesUtils$",
-              "optimus/utils/Explanation",
-              "optimus/utils/Explanation$",
-              "optimus/utils/ExplanationState",
-              "optimus/utils/ExplanationState$",
-              "optimus/utils/StringDiffExplainer",
-              "optimus/utils/StringDiffExplainer$",
-              "optimus/utils/Tabulator",
-              "optimus/utils/Tabulator$"));
+              "optimus/junit/CachingJunitRunnerInjector",
+              "optimus/junit/OptimusTestWorkerClientInjector"));
+  // Exempt are DTC, CMI and their related structures
   public static final List<ExemptedPackage> instrumentationExemptedPackages =
       Arrays.asList(
+          // Graph has hot loops
           new ExemptedPackage("optimus/graph/", "optimus.platform.core.main", "core.jar"),
+          // CMI dependencies are hot
           new ExemptedPackage(
-              "optimus/dtc/", "optimus.platform.dtc_collector.", "dtc_collector.jar"),
-          new ExemptedPackage("optimus/dtc/", "optimus.platform.dtc_runners.", "dtc_runners.jar"));
+              "optimus/deps/", "optimus.platform.entityagent.main", "entityagent.jar"),
+          // DTC collectors are hot
+          new ExemptedPackage(
+              "optimus/dtc/", "optimus.platform.dtc_collector.main", "dtc_collector.jar"),
+          // DTC runners are hot
+          new ExemptedPackage(
+              "optimus/dtc/", "optimus.platform.dtc_runners.main", "dtc_runners.jar"));
   // CAUTION: This list is dynamic and cannot be used to analyze cached dependencies!
-  //          Used only by DTC and CMI internals
+  //          Used only by DTC and CMI internals.
   public static final List<String> classesFromExemptedPackages = new CopyOnWriteArrayList<>();
 
   // internal error/warning tracking--can't use logback or console
@@ -300,6 +198,13 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     rejectedLocalJarPathPrefix = rejectedPrefix;
   }
 
+  public ClassMonitorInjector() {
+    super();
+    if (!announcedActive.getAndSet(true)) {
+      logMsg("[DTC] Static and dynamic dependency tracking is ON!");
+    }
+  }
+
   private void markTransformationUnsafe(String transformedClassName, String throwableText) {
     recordInternalEvent(
         String.format(
@@ -316,6 +221,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         statistics.visited.get(),
         statistics.instrumented.get(),
         statistics.optimusClasses.get(),
+        statistics.exemptedInstrumentationClasses.get(),
         statistics.failures.get());
   }
 
@@ -325,7 +231,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
             .getClassLoader()
             .getResource(constructDependencyName(ClassMonitorInjector.class.getName()));
     if (resourceURL != null) {
-      Path thisJarPath = Paths.get(new URL(resourceURL.getPath().split("!")[0]).toURI());
+      Path thisJarPath = Paths.get(new URI(resourceURL.getPath().split("!")[0]));
       boolean isBuildDirJar = thisJarPath.getFileName().toString().contains("HASH");
       if (isBuildDirJar) {
         return thisJarPath.getParent().getParent().getParent().getParent();
@@ -402,6 +308,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         }
         if (exemptedPackage) {
           classesFromExemptedPackages.add(classResourceName);
+          statistics.exemptedInstrumentationClasses.set(classesFromExemptedPackages.size());
         }
       } else {
         // Always instrument third party classes for resources and dynamic class usage
@@ -788,11 +695,13 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
     if (jarfileName.endsWith(".jar")) {
       try {
-        boolean result = isOptimusJar(new URL(jarfileName));
+        boolean result = isOptimusJar(new URI(jarfileName).toURL());
         cachedIsOptimusJar.put(jarfileName, result);
         return rememberAsOptimusClass(resourcePath, result);
       } catch (IOException ignored) {
         return false;
+      } catch (URISyntaxException e) {
+        throw new RuntimeException(e);
       }
     } else {
       // If not a JAR, then it could be an unsupported protocol (as we discovered with jrt)
@@ -835,15 +744,22 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
   }
 
+  private static final ConcurrentHashMap<ClassLoader, ClassFileTransformer> cachedInjectors =
+      new ConcurrentHashMap<>();
+
   public static ClassFileTransformer instance(ClassLoader host) {
-    try {
-      Class<?> cmiLoadedByAppClassloader =
-          Class.forName(ClassMonitorInjector.class.getName(), true, host);
-      return (ClassFileTransformer)
-          cmiLoadedByAppClassloader.getDeclaredConstructor().newInstance();
-    } catch (ReflectiveOperationException ex) {
-      // boot classloader, or another classloader not owned by us; skip
-      return null;
-    }
+    return cachedInjectors.computeIfAbsent(
+        host,
+        k -> {
+          try {
+            Class<?> cmiLoadedByAppClassloader =
+                Class.forName(ClassMonitorInjector.class.getName(), true, host);
+            return (ClassFileTransformer)
+                cmiLoadedByAppClassloader.getDeclaredConstructor().newInstance();
+          } catch (ReflectiveOperationException ex) {
+            // boot classloader, or another classloader not owned by us; skip
+            return null;
+          }
+        });
   }
 }

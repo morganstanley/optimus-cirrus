@@ -20,7 +20,6 @@ import optimus.buildtool.config.Dependencies
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.ExtensionConfiguration
 import optimus.buildtool.config.NativeDependencyDefinition
-import optimus.buildtool.config.RegexConfiguration
 import optimus.buildtool.config.ScalacConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.dependencies.JvmDependencies
@@ -76,7 +75,6 @@ final case class InheritableScopeDefinition(
     parents: Seq[String], // eg. test extends main
     usePipelining: Option[Boolean],
     resourceTokens: Map[String, String],
-    regexConfiguration: Option[RegexConfiguration],
     copyFiles: Option[CopyFilesConfiguration],
     extensions: Option[ExtensionConfiguration],
     postInstallApps: Seq[Set[PostInstallApp]],
@@ -86,7 +84,8 @@ final case class InheritableScopeDefinition(
     bundle: Option[Boolean],
     includeInClassBundle: Option[Boolean],
     mavenOnly: Option[Boolean],
-    relationships: Seq[ScopeRelationship]
+    relationships: Seq[ScopeRelationship],
+    extraLibs: DualDependencies
 ) {
   def withParent(parent: InheritableScopeDefinition): InheritableScopeDefinition = {
     InheritableScopeDefinition(
@@ -108,7 +107,6 @@ final case class InheritableScopeDefinition(
       parents = (parent.parents ++ parents).distinct,
       usePipelining = usePipelining.orElse(parent.usePipelining),
       resourceTokens = parent.resourceTokens ++ resourceTokens,
-      regexConfiguration = RegexConfiguration.merge(regexConfiguration, parent.regexConfiguration),
       copyFiles = CopyFilesConfiguration.merge(copyFiles, parent.copyFiles),
       extensions = ExtensionConfiguration.merge(current = extensions, parent = parent.extensions),
       postInstallApps = postInstallApps ++ parent.postInstallApps,
@@ -118,7 +116,8 @@ final case class InheritableScopeDefinition(
       bundle = bundle.orElse(parent.bundle),
       includeInClassBundle = includeInClassBundle.orElse(parent.includeInClassBundle),
       mavenOnly = mavenOnly.orElse(parent.mavenOnly),
-      relationships = relationships ++ parent.relationships
+      relationships = relationships ++ parent.relationships,
+      extraLibs = extraLibs ++ parent.extraLibs
     )
   }
 
@@ -148,7 +147,6 @@ object InheritableScopeDefinition {
     parents = Nil,
     usePipelining = None,
     resourceTokens = Map.empty,
-    regexConfiguration = None,
     copyFiles = None,
     extensions = None,
     postInstallApps = Nil,
@@ -158,7 +156,8 @@ object InheritableScopeDefinition {
     bundle = None,
     includeInClassBundle = None,
     mavenOnly = None,
-    relationships = Nil
+    relationships = Nil,
+    extraLibs = DualDependencies.empty
   )
 }
 

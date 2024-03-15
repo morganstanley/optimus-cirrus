@@ -11,10 +11,12 @@
  */
 package optimus.buildtool.builders.reporter
 
+import msjava.slf4jutils.scalalog.Logger
+import msjava.slf4jutils.scalalog.getLogger
+
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
@@ -24,18 +26,19 @@ import optimus.buildtool.files.RelativePath
 import scala.xml.Elem
 
 object HtmlReporter {
+  protected val log: Logger = getLogger(this)
+  val DefaultName: String = "index.html"
 
   def writeAssetSummaryPage(dir: Directory, assets: Seq[Asset], title: String): FileAsset = {
     val htmlContent = generateAssetReport(assets.map(dir.relativize), title)
     writeHtmlfile(dir, htmlContent)
   }
 
-  def writeErrorReport(dir: Directory, artifactsErrors: Seq[(MessagesArtifact, Seq[CompilationMessage])]): FileAsset = {
-    val idErrorMsgs: Seq[(ScopeId, Seq[CompilationMessage])] = artifactsErrors.map { case (art, errs) =>
-      (art.id.scopeId, errs)
-    }
+  def writeErrorReport(dir: Directory, idErrorMsgs: Seq[(ScopeId, Seq[CompilationMessage])]): FileAsset = {
     val htmlContent = generateCompilationMessageReport(idErrorMsgs, "Compilation Error Summary")
-    writeHtmlfile(dir, htmlContent)
+    val generatedReport = writeHtmlfile(dir, htmlContent)
+    log.info(s"Compilation errors report generated - see ${generatedReport.pathString}")
+    generatedReport
   }
 
   def writeTrackerReport(dir: Directory, discrepancies: LookupReporter.Discrepancies): FileAsset = {
@@ -43,14 +46,14 @@ object HtmlReporter {
     writeHtmlfile(dir, htmlContent, "tracker.html")
   }
 
-  private def writeHtmlfile(dir: Directory, html: Elem, fileName: String = "index.html"): FileAsset = {
+  private def writeHtmlfile(dir: Directory, html: Elem, fileName: String = DefaultName): FileAsset = {
     val dest = dir.path.resolve(fileName)
     val content = html.toString.getBytes(StandardCharsets.UTF_8)
     Files.createDirectories(dest.getParent)
     FileAsset(Files.write(dest, content))
   }
 
-  private def generateCompilationMessageReport(
+  private[buildtool] def generateCompilationMessageReport(
       msgsToReport: Seq[(ScopeId, Seq[CompilationMessage])],
       title: String,
       filterPredicate: CompilationMessage => Boolean = _.msg.nonEmpty): Elem = generateReport(title) {

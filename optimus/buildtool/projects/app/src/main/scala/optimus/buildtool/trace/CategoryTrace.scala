@@ -118,6 +118,11 @@ trait MetaBundleTrace extends CategoryTrace {
   override lazy val name: String = s"$categoryName($meta.$bundle)"
 }
 
+trait UrlTrace extends CategoryTrace {
+  val url: URL
+  override lazy val name: String = s"$categoryName($url)"
+}
+
 // OBT configuration
 private[buildtool] case object LoadStratoConfig extends MessageTrace
 private[buildtool] case object LoadConfig extends MessageTrace
@@ -212,17 +217,18 @@ private[buildtool] case object CompileOnlyResolve extends ResolveTrace
 private[buildtool] case object RuntimeResolve extends ResolveTrace
 private[buildtool] case object DepCopy extends CategoryTrace
 private[buildtool] case object DepCopyFromRemote extends CategoryTrace
-private[buildtool] case object CheckRemoteUrl extends CategoryTrace
 private[buildtool] case object InstallJar extends CategoryTrace
 private[buildtool] case object InstallSourceJar extends CategoryTrace
 private[buildtool] case object InstallPathingJar extends CategoryTrace
 private[buildtool] case object InstallArchive extends CategoryTrace
 private[buildtool] case object InstallCpp extends CategoryTrace
+private[buildtool] case object InstallPython extends CategoryTrace
 private[buildtool] case object InstallIvyFile extends CategoryTrace
 private[buildtool] case object InstallPomFile extends CategoryTrace
 private[buildtool] case object InstallGenericFiles extends CategoryTrace
 private[buildtool] case object InstallProcessedFiles extends CategoryTrace
 private[buildtool] case object InstallElectronFiles extends CategoryTrace
+private[buildtool] case object InstallBuildPropertiesRootFile extends CategoryTrace
 private[buildtool] final case class InstallBuildPropertiesFiles(metaBundle: MetaBundle) extends MetaBundleTrace
 private[buildtool] final case class InstallBundleJar(metaBundle: MetaBundle) extends MetaBundleTrace
 private[buildtool] final case class InstallRunconfs(metaBundle: MetaBundle) extends MetaBundleTrace
@@ -230,6 +236,8 @@ private[buildtool] final case class InstallVersionJar(metaBundle: MetaBundle) ex
 private[buildtool] final case class InstallWorkspace(metaBundle: MetaBundle) extends MetaBundleTrace
 private[buildtool] final case class InstallLoadState(metaBundle: MetaBundle) extends MetaBundleTrace
 private[buildtool] final case class InstallSaveState(metaBundle: MetaBundle) extends MetaBundleTrace
+private[buildtool] final case class CheckRemoteUrl(url: URL) extends UrlTrace
+private[buildtool] final case class DownloadRemoteUrl(url: URL) extends UrlTrace
 private[buildtool] case object InstallApplicationScripts extends SingletonCategoryTrace
 private[buildtool] case object CopyFiles extends SingletonCategoryTrace
 private[buildtool] case object SourceSync extends CategoryTrace

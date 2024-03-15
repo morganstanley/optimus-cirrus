@@ -11,6 +11,7 @@
  */
 package optimus.systemexit;
 
+import static optimus.EntityAgent.logException;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -107,10 +108,9 @@ public class StandardSystemExitLogger implements SystemExitLogger {
         pw = new PrintWriter(new BufferedWriter(fw));
         pw.println(msg);
       } catch (IOException e) {
-        warn(
-            "Could not write to System.exit intercepts log file ("
-                + logFileProperty
-                + " property)");
+        logException(
+            "Could not write to System.exit intercepts log file (" + logFileProperty + " property)",
+            e);
       } finally {
         if (pw != null) pw.close();
       }

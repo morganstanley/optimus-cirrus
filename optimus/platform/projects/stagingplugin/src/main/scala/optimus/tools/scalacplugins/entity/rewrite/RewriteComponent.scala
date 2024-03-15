@@ -1217,7 +1217,6 @@ class RewriteComponent(val pluginData: PluginData, val global: Global, val phase
   private class Unsorted(unit: CompilationUnit, state: RewriteState) extends RewriteTypingTransformer(unit) {
     override def transform(tree: Tree): Tree = tree match {
       case NeedsUnsorted(qual) =>
-
         state.patches ++= selectFromInfix(qual, "unsorted", state.parseTree, false)
         state.newImports += OptimusCompatCollectionImport
         super.transform(tree)

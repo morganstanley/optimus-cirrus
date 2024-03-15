@@ -38,7 +38,8 @@ object WebDependencyResolver {
   val DependenciesKey = "dependencies"
   val VersionKey = "version"
   val PackagesKey = "packages"
-  val LocalFileKey = "link:"
+  val LockFileVersionKey = "lockfileVersion"
+  val LocalFileKeys = Seq("link:", "file:")
 
   private[resolvers] def retryMsg(retry: Int, exception: String) =
     s"Retrying $retry/$MaxRetry - web dependencies metadata load failed! with exception: $exception"
@@ -103,7 +104,7 @@ object WebDependencyResolver {
         withIntegrity.split("_", 2)(0)
       case _ => rawVersion
     }
-    if (result.contains("@") || (!result.contains(LocalFileKey) && result.contains("/")))
+    if (result.contains("@") || (!LocalFileKeys.exists(result.contains(_)) && result.contains("/")))
       throw new IllegalArgumentException(s"$rawVersion is invalid!")
     else result
   }
@@ -184,16 +185,22 @@ object YamlResolver {
    * @return
    *   PackageDependencyInfo
    */
-  @node private def getPackageDependency(depString: String, definitions: Map[String, Object]): PackageDependencyInfo = {
+  @node private def getPackageDependency(
+      depString: String,
+      definitions: Map[String, Object],
+      lockFileVersion: Option[String]): PackageDependencyInfo = {
     val depStringWithoutSubDeps =
       if (depString.contains("(")) depString.splitAt(depString.indexOf("("))._1 else depString
 
     val (meta, project, depVersion) = {
 
       val (first, second) = depStringWithoutSubDeps.splitAt(depStringWithoutSubDeps.lastIndexOf("/"))
-      val withSubRegex = new Regex(".*[^.]_.*") // for example my_.name
-      val containSub = withSubRegex.findFirstMatchIn(second).isDefined
-      if (second.contains("@") && !containSub) // newer dependency format
+
+      val containLock5Sub = // for example my_name
+        if (lockFileVersion.exists(_.startsWith("5"))) new Regex(".*[^.]_.*").findFirstMatchIn(second).isDefined
+        else false
+      val nameOnly = first.isEmpty // /my_name@1.1.1
+      if (nameOnly || (second.contains("@") && !containLock5Sub)) // newer dependency format
         {
           val (name, version) = second.splitAt(second.indexOf("@"))
           val (meta, project) = getMetaProject(first + name)
@@ -211,9 +218,16 @@ object YamlResolver {
           .asScala
           .toMap
           .apar
-          .map { case (name, version) =>
-            val (meta, project) = getMetaProject(name)
-            PackageDependencyInfo(meta, project, getActualVersion(version))
+          .map { case (name, value) =>
+            if (value.startsWith("/")) // lock file 6.0 format, for example nickName: /name@7.0.0
+              {
+                val (libName, libVersion) = value.splitAt(value.indexOf("@"))
+                val (meta, project) = getMetaProject(libName)
+                PackageDependencyInfo(meta, project, getActualVersion(libVersion.substring(1)))
+              } else { // legacy lock file
+              val (meta, project) = getMetaProject(name)
+              PackageDependencyInfo(meta, project, getActualVersion(value))
+            }
           }
           .toSet
       case None => Set.empty
@@ -224,10 +238,11 @@ object YamlResolver {
   @node def loadYaml(content: String): Set[WebDependency] = {
     val yaml = new Yaml()
     val yamlMap = safeContentParse(content) { yaml.load[java.util.Map[String, Object]](content).asScala.toMap }
+    val lockFileVersion = yamlMap.get(LockFileVersionKey).map(_.toString)
     // dependencies section should reflect the version that is installed and used by web cmd
     // we should ignore localDependencies metadata since they are inside of module dir
     val (localDependencies, directDependencies) =
-      getDirectDependencies(yamlMap.get(DependenciesKey)).partition(_.version.contains(LocalFileKey))
+      getDirectDependencies(yamlMap.get(DependenciesKey)).partition(d => LocalFileKeys.exists(d.version.contains(_)))
     // packages section is all resolved web dependency tree info, for metadata we should includes all non-dev deps
     val packages: Map[String, Map[String, Object]] = yamlMap
       .get(PackagesKey) match {
@@ -246,7 +261,7 @@ object YamlResolver {
     }
     val packageDependencies: Set[PackageDependencyInfo] =
       packages.apar.map { case (dep, definitions) =>
-        getPackageDependency(dep, definitions)
+        getPackageDependency(dep, definitions, lockFileVersion)
       }.toSet
     getWebDependencies(directDependencies, packageDependencies)
   }
@@ -256,7 +271,6 @@ object JsonResolver {
   import optimus.buildtool.resolvers.WebDependencyResolver._
   private val depStrSplitter = "node_modules/"
   private val versionKey = "version"
-  private val localFileKey = "file:"
 
   @node private def jsonInfoToPackageDependencies(
       jsonDeps: Map[(String, String, String), JsValue],
@@ -297,7 +311,7 @@ object JsonResolver {
         .fields(DependenciesKey)
         .asJsObject
         .fields
-        .filter { case (nameStr, version) => !version.toString.contains(localFileKey) }
+        .filter { case (nameStr, version) => !LocalFileKeys.exists(version.toString.contains(_)) }
         .keySet
         .map(getMetaProject)
     val nameVersionMap: Map[(String, String), String] = packages.apar.map {

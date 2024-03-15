@@ -42,7 +42,8 @@ object NamingConventions {
 
   // extra libs are for some special use cases that not involved in normal obt dependencies resolver process.
   // obt won't download these libs, but will generate related metadata for release purposes
-  val ExtraLibsTypes = Seq("web", "electron")
+  val ExtraLibsKey = "extraLibs"
+
   val NpmGroup = "ossjs"
   val NpmName = "node"
   val PnpmGroup = "pnpm"
@@ -63,10 +64,15 @@ object NamingConventions {
   val InstallPattern = s"install/$Common"
 
   val ArtifactoryStr = "artifactory"
+  val MavenNamespaceToolExe = "artifactoryExePath"
+  val MavenReleaseFrontier = "artifactory_frontier"
+  val MavenServerId = "X-Artifactory-Id"
+  val MavenServerNodeId = "X-Artifactory-Node-Id"
   val MavenUploadDirectory = "packages/maven/com/ms"
   val MavenCIScope = "optimus/codetree"
   val MavenInstallScope = "main"
   val MavenUrlRoot = s".com/$ArtifactoryStr/maven"
+  // keep in sync with PathingJarsGetter.scala:isExternalJar at 192
   val MavenDepsCentralMeta = "optimus"
   val MavenDepsCentralBundle = "artifactory-deps"
   val MavenLibsKey = "mavenLibs"
@@ -77,6 +83,11 @@ object NamingConventions {
   val MsjavaCopyRoot: Regex = ".*/\\.stratosphere/msjava/(.*)".r
   val OssjavaCopyRoot: Regex = ".*/\\.stratosphere/ossjava/(.*)".r
   val DepCopyMavenRoot: Regex = ".*/\\.stratosphere/depcopy/https?/(.*)".r
+
+  // These are common zinc flags
+  val pluginFlag = "-Xplugin:"
+  val macroFlag = "-Ymacro-classpath"
+  val pickleWriteFlag = "-Ypickle-write"
 
   val HASH = "HASH"
   val COMMIT = "COMMIT"
@@ -96,6 +107,8 @@ object NamingConventions {
 
   val Sandboxes = "sandboxes"
 
+  val MetadataFileName = "metadata.json"
+
   val ANALYSIS = "analysis"
   val SIGNATURE_ANALYSIS = "signature-analysis"
 
@@ -112,6 +125,17 @@ object NamingConventions {
   val capturedPropertiesExtension = "properties"
 
   val dockerMetadataProperties: Path = Paths.get("/etc/obt/version.properties")
+
+  // common .jar file extensions
+  val IvyJavaDocKey = ".javadoc.jar"
+  val IvySourceKey = ".src.jar"
+  val JavaDocKey = "-javadoc.jar"
+  val SourceKey = "-sources.jar"
+  val JarKey = ".jar"
+
+  def isSrcOrDocFile(filePath: String): Boolean =
+    filePath.endsWith(JavaDocKey) || filePath.endsWith(IvyJavaDocKey) || filePath.endsWith(SourceKey) || filePath
+      .endsWith(IvySourceKey)
 
   def isHttpOrHttps(url: String): Boolean =
     url.startsWith(NamingConventions.HttpPrefix) || url.startsWith(NamingConventions.HttpsPrefix)

@@ -51,7 +51,7 @@ object ZstdUtils {
   }
 
   def decompress(src: Array[Byte]): Array[Byte] = {
-    val outputSize = Zstd.decompressedSize(src).toInt
+    val outputSize = Zstd.getFrameContentSize(src).toInt
 
     if (outputSize > 0) {
       val ctx = DecompressCtx.get()

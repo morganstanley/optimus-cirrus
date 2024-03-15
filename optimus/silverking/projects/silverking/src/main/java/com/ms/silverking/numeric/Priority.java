@@ -66,6 +66,6 @@ public class Priority implements Comparable<Priority>, Serializable {
   }
 
   public String toString() {
-    return new Integer(priority).toString();
+    return Integer.toString(priority);
   }
 }

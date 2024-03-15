@@ -14,12 +14,9 @@ package optimus.tools.scalacplugins.entity
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.nio.file.Path
-import optimus.tools.scalacplugins.entity.reporter._
 
 import scala.reflect.internal.util.NoPosition
-import scala.reflect.internal.util.Position
 import scala.reflect.internal.util.SourceFile
-import scala.sys.props
 import scala.tools.nsc.Global
 
 class PluginData(private val global: Global) {
@@ -112,6 +109,9 @@ class PluginData(private val global: Global) {
     // disabled in some unit tests
     var useOptimusCompat: Boolean = true
   }
+
+  // TODO (OPTIMUS-48502): Drop this once we drop 2.12 support and then adopt 2.13 meaning of Seq
+  var varargs213Compat = true
 
   var slowCompilationWarningThresholdMs = 20 * 1000L
   var forceLoad: List[String] = Nil

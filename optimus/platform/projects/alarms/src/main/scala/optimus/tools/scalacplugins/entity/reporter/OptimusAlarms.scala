@@ -31,13 +31,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
         "implicits to convert to and from java.time at call-sites"
     )
 
-  val PLATFORM_ONLY =
-    error1(
-      20514,
-      OptimusPhases.APICHECK,
-      "%s may not be used outside of optimus.platform and related platform code"
-    )
-
   val INCORRECT_ADVANCED_USAGE =
     error1(
       20515,
@@ -284,7 +277,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     "Unsupported variadic constructor parameter '%s' on @entity. Consider using a Seq instead."
   )
   val EMBEDDABLE_ONLY_WITH_CASE_CLASS =
-    error0(21900, OptimusPhases.ADJUST_AST, "@embeddable is only supported on case classes and sealed traits")
+    error0(21900, OptimusPhases.ADJUST_AST, "@embeddable is only supported on case classes, case objects and traits")
   val EMBEDDABLE_ONLY_WITH_CASE_OBJECT = error0(
     21901,
     OptimusPhases.ADJUST_AST,
@@ -295,11 +288,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
 
   val NO_DEFERRED_LAZY_VALS = error0(21903, OptimusPhases.ADJUST_AST, "Async lazy vals cannot be abstract")
 
-  val EMBEDDABLE_SUBTYPE_NAME_CONFLICT = error2(
-    20021,
-    OptimusPhases.EMBEDDABLE,
-    "Cannot define %s more than once which extend the same @embeddable trait %s"
-  )
   val EMBEDDABLE_SUBTYPE =
     error2(20022, OptimusPhases.EMBEDDABLE, "Subtype %s of @embeddable type %s must be marked @embeddable")
 
@@ -516,7 +504,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODE_OVERLOAD_ERROR =
     error1(22109, OptimusPhaseInfo.Namer, "Can't overload @node methods, see overload on line (%s)")
   val CREATE_NODE_TRAIT_OVERLOAD_ERROR =
-    error1(22110, OptimusPhaseInfo.Namer, "Can't overload @createNodeTrait methods, see overload on line (%s)")
+    error1(
+      22110,
+      OptimusPhaseInfo.Namer,
+      "Can't overload @node(exposeArgTypes = true)/@async(exposeArgTypes = true) methods, see overload on line (%s)"
+    )
   val IMPLICIT_OVERRIDE_ERROR = error1(
     22111,
     OptimusPhases.REF_CHECKS,
@@ -653,7 +645,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error2(
       22909,
       OptimusPhases.REF_CHECKS,
-      "Due to implementation limitations, @node/@createNodeTrait method %s cannot contain a forbidden parameter name %s"
+      "Due to implementation limitations, @node/@async method %s cannot contain a forbidden parameter name %s"
     )
   val NO_UNIQUE_INDEXED_COLLECTION =
     error1(22910, OptimusPhases.REF_CHECKS, "Unique Indexes not allowed for Collection types")
@@ -698,16 +690,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODELIFT_NOMATCH = error1(26100, OptimusPhases.NODE_LIFT, "nodeLift: Could not find matching %s")
   val NODELIFT_UNSUPPORT = error1(26101, OptimusPhases.NODE_LIFT, "nodeLift: Unsupported construct %s")
   val USE_TWEAK_OPT_DIRECT = error0(26102, OptimusPhases.NODE_LIFT, "tweak operator cant be used directly")
-  val NODELIFT_NOMATCH_VALUE2TT = error1(
-    26103,
-    OptimusPhases.NODE_LIFT,
-    "nodeLift: type mismatch between value2TweakTarget and %s: do not import optimus.platform.value2TweakTarget to obtain the correct diagnostic"
-  )
-  val NODELIFT_NONTWEAK_VALUE2TT = error1(
-    26104,
-    OptimusPhases.NODE_LIFT,
-    "nodeLift: type mismatch between value2TweakTarget and %s: do not import optimus.platform.value2TweakTarget to obtain the correct diagnostic"
-  )
+  val CAN_CONVERT_TO_BYVALUE =
+    error1(26103, OptimusPhases.NODE_LIFT, "byValue() can not be used, did you mean byName()? %s")
 
   // optimus_generatenodemethods phase errors
   val GENERATENODES_TRANSFORM_ERROR =
@@ -841,6 +825,12 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
       10503,
       OptimusPhases.APICHECK,
       "Suppressing a deprecation warning for %s. Please contact owners of the %s scope for reviews.")
+
+  // Note that this is marked as new: in workspace.obt so only affects new/modified files. Also note that to suppress
+  // it you need to use @nowarn("msg=10500") not 10504. This is intentional because we expect things to be marked as
+  // @deprecatingNew only briefly (to avoid merge races) and then to be marked as @deprecating, and we don't want to
+  // have to update the @nowarns from 10504 to 10500
+  val DEPRECATING_NEW = warning2(10504, OptimusPhases.APICHECK, "%s is deprecated (in new/modified files): %s")
 
   val INCORRECT_ADVANCED_USAGE_LIGHT =
     warning1(10510, OptimusPhases.APICHECK, "Incorrect usage of %s.  You probably should not be using it at all.")

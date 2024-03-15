@@ -17,11 +17,9 @@ import optimus.core.CoreAPI
 import optimus.graph.AlreadyCompletedNode
 import optimus.graph.AlreadyCompletedOrFailedNode
 import optimus.graph.Node
+import optimus.graph.NodeResultNode
 import optimus.graph.Scheduler
-import optimus.platform.NodeTryNode
 import optimus.platform._
-
-import scala.annotation.nowarn
 
 object CoursierGraphAdaptor extends Sync[Node] {
   override def point[A](a: A): Node[A] = new AlreadyCompletedNode(a)
@@ -35,12 +33,11 @@ object CoursierGraphAdaptor extends Sync[Node] {
   override def handle[A](a: Node[A])(f: PartialFunction[Throwable, A]): Node[A] =
     throw new UnsupportedOperationException("Use attempt rather than directly calling handle")
 
-  /**
-   * This is a "benign" sync stack because f is already executed by the time attempt() is called, hence the .toTry
-   * doesn't need to wait on anything. [[NodeTry.toTry]] is async for propagation reasons only.
-   */
-  @nowarn("msg=17001") override def attempt[A](f: Node[A]): Node[Either[Throwable, A]] =
-    new NodeTryNode[A](f).map(_.toTry.toEither)
+  override def attempt[A](f: Node[A]): Node[Either[Throwable, A]] =
+    new NodeResultNode(f).map {
+      case NodeSuccess(a) => Right(a)
+      case NodeFailure(t) => Left(t)
+    }
 
   override def schedule[A](pool: ExecutorService)(f: => A): Node[A] = {
     // we ignore the pool and always schedule on the graph scheduler

@@ -51,7 +51,7 @@ class ClassAnalysisStore(
   private val mappers = new ReadWriteMappers(
     new ZincReadMapper(
       scopeId = scopeId,
-      fingerprintHash = inputs.fingerprintHash,
+      fingerprintHash = inputs.fingerprint.hash,
       incremental = incremental,
       traceType = traceType,
       outputJar = jars.outputJar,
@@ -67,7 +67,7 @@ class ClassAnalysisStore(
     // On output, all we need to do is strip out the UUID-hyphen.
     new ZincWriteMapper(
       scopeId = scopeId,
-      fingerprintHash = inputs.fingerprintHash,
+      fingerprintHash = inputs.fingerprint.hash,
       incremental = incremental,
       traceType = traceType,
       outputJar = jars.outputJar,

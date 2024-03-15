@@ -27,7 +27,7 @@ import scala.collection.immutable.Seq
 
 class MessageReporter(
     obtConfig: ObtConfig,
-    errorsDir: Option[Directory],
+    val errorReporter: ErrorReporter,
     warningsDir: Option[Directory],
     lookupsDir: Option[Directory],
     codeReviewSettings: Option[CodeReviewSettings],
@@ -41,7 +41,7 @@ class MessageReporter(
 
   @async def writeReports(buildResult: CompletedBuildResult): Unit =
     apar(
-      writeErrorReport(buildResult),
+      errorReporter.writeErrorReport(buildResult),
       writeLookupReport(buildResult),
       writeOptimusWarningReports(buildResult),
       writeCodeReviewAnalysis(buildResult),
@@ -63,14 +63,6 @@ class MessageReporter(
             "Zinc lookup tracker report was requested but no lookups were made. "
               + "Is it possible that no scopes were compiled at all?")
       }
-    }
-  }
-
-  @async private def writeErrorReport(buildResult: CompletedBuildResult): Unit = errorsDir.foreach { dir =>
-    val artifactsErrors = buildResult.errorsByArtifact
-    if (artifactsErrors.nonEmpty) {
-      val file = HtmlReporter.writeErrorReport(dir, artifactsErrors)
-      log.info(s"Compilation errors report generated - see ${file.pathString}")
     }
   }
 

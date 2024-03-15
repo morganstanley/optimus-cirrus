@@ -12,10 +12,10 @@
 package optimus.buildtool.generators
 
 import java.nio.file.Files
-
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ClassFileArtifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.compilers.AsyncClassFileCompiler
@@ -74,7 +74,7 @@ import scala.collection.immutable.SortedMap
     val dependenciesFingerprint = scope.scalaDependenciesFingerprint
     val fingerprint = templatesFingerprint ++ configFingerprint ++ dependenciesFingerprint
 
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint)
+    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
       scope.upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies.result.resolvedArtifacts)
@@ -164,7 +164,7 @@ import scala.collection.immutable.SortedMap
 
     SyncCompiler.Inputs(
       sourceFiles = resolvedInputs.templateContent,
-      fingerprintHash = resolvedInputs.fingerprintHash,
+      fingerprint = resolvedInputs.fingerprint,
       bestPreviousAnalysis = Hide(None),
       outPath = dummyOutputJar,
       signatureOutPath = None,
@@ -188,7 +188,7 @@ object CppBridgeGenerator {
   final case class Inputs(
       generatorName: String,
       templateContent: SortedMap[SourceUnitId, HashedContent],
-      fingerprintHash: String,
+      fingerprint: FingerprintArtifact,
       scalacConfig: ScalacConfiguration,
       javacConfig: JavacConfiguration,
       allInputArtifacts: Seq[Artifact],

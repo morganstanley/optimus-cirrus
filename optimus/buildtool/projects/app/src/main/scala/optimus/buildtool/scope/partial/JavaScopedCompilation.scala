@@ -12,10 +12,10 @@
 package optimus.buildtool.scope.partial
 
 import optimus.buildtool.app.IncrementalMode
-import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType.JavaAnalysis
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.SyncCompiler
@@ -29,6 +29,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.utils.Hide
 import optimus.buildtool.utils.OsUtils
+import optimus.buildtool.utils.Utils.distinctLast
 import optimus.platform._
 
 import scala.collection.immutable.Seq
@@ -56,7 +57,8 @@ import scala.collection.immutable.Seq
   // Javac can't cope with UNC paths, so convert to mapped drive path
   private def replaceUncPath(j: JarAsset): JarAsset =
     if (j.pathString.startsWith(NamingConventions.AfsRootStr))
-      JarAsset(j.fileSystem.getPath(j.pathString.replaceFirst(NamingConventions.AfsRootStr, NamingConventions.AfsRootMapping)))
+      JarAsset(
+        j.fileSystem.getPath(j.pathString.replaceFirst(NamingConventions.AfsRootStr, NamingConventions.AfsRootMapping)))
     else j
 }
 
@@ -73,7 +75,7 @@ import scala.collection.immutable.Seq
 
   @node override protected def containsRelevantSources: Boolean = sources.containsJava
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = {
+  @node override protected def upstreamArtifacts: Seq[Artifact] = distinctLast {
     val scalaClasses = scala.classes
     val scalaMessages = scala.messages
     // if we don't have scala classes, then we don't need the signature analysis for them
@@ -81,35 +83,25 @@ import scala.collection.immutable.Seq
       if (scalaClasses.nonEmpty && config.usePipelining) signatures.analysis ++ scalaClasses ++ scalaMessages
       else if (scalaClasses.nonEmpty) scalaClasses ++ scalaMessages ++ scala.analysis
       else scalaMessages
-    scalaArtifacts ++ upstream.classesForOurCompiler
+    scalaArtifacts.filter(!_.isInstanceOf[FingerprintArtifact]) ++ upstream.classesForOurCompiler
   }
 
   @node def messages: Seq[Artifact] = compile(AT.JavaMessages, None)(Some(javac.messages(id, javacInputsN)))
 
   @node def classes: Seq[Artifact] = compile(AT.Java, None)(javac.classes(id, javacInputsN))
 
-  @node def analysis: Seq[Artifact] = analysisWithLocator.analysis
+  @node def analysis: Seq[Artifact] =
+    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).analysis
 
-  @node def locator: Seq[Artifact] = analysisWithLocator.locator.toIndexedSeq
+  @node def locator: Seq[Artifact] =
+    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).locator.toIndexedSeq
 
   @node protected def javaAnalysis: Seq[Artifact] = compile(AT.JavaAnalysis, None)(javac.analysis(id, javacInputsN))
-
-  @node private def analysisWithLocator: AnalysisWithLocator = {
-    val locator = analysisLocator.flatMap { l =>
-      // Save locators for a good build even if we got a cache hit, to ensure we
-      // capture the current commit hash and build time. We may end up double-writing this (if a module
-      // has both scala and java sources), but that's a minor performance penalty.
-      if (javaAnalysis.exists(_.isInstanceOf[AnalysisArtifact]))
-        l.saveLocator(id, AT.JavaAnalysis, pathBuilder, sources.compilationInputsHash)
-      else None
-    }
-    AnalysisWithLocator(javaAnalysis, locator)
-  }
 
   private val javacInputsN = asNode(() => javacInputs)
 
   @node private def javacInputs: SyncCompiler.Inputs = {
-    val fingerprintHash = sources.compilationInputsHash
+    val fingerprint = sources.compilationFingerprint
 
     val bestPreviousAnalysis = analysisLocator.flatMap { l =>
       val mode =
@@ -122,9 +114,9 @@ import scala.collection.immutable.Seq
 
     SyncCompiler.Inputs(
       sourceFiles = sources.javaSources,
-      fingerprintHash = fingerprintHash,
+      fingerprint = fingerprint,
       bestPreviousAnalysis = Hide(bestPreviousAnalysis),
-      outPath = pathBuilder.javaOutPath(id, fingerprintHash, incremental = bestPreviousAnalysis.isDefined),
+      outPath = pathBuilder.javaOutPath(id, fingerprint.hash, incremental = bestPreviousAnalysis.isDefined),
       signatureOutPath = None,
       scalacConfig = ScalacConfiguration.empty,
       javacConfig = config.javacConfig,

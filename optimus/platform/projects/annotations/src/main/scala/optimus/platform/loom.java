@@ -17,8 +17,19 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Currently tells the entiyagent to transform this class into a loom calls
- * Also tells entityplugin to generate fun$_ calls/methods
+ * It tells entityplugin to just generate a minimal version of func$newNode, func$queued and not to
+ * transform @nodeSync func. This also tells entityagent to transform the class into a loom calls,
+ * which includes a proper implementation for func$newNode, func$queued and @nodeSync func and a new
+ * method func$_.
+ *
+ * <p>Note: In the future where most everything is loom(ed) we can find ourselves in the situation
+ * where all/most entity classes would have @loom attribute. As a small optimization we can check
+ * for the base class first and not even emit the @loom attribute to save on some space and
+ * checking...
+ *
+ * <p>[SEE_LOOM_STATIC_FUNC] We currently don't support static @node functions, which seems like we
+ * shouldn't even care... Currently scala however automatically generates forwarders between modules
+ * and class definitions We might want to support all kinds of additional permutations
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.TYPE)

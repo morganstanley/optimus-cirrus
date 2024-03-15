@@ -12,7 +12,6 @@
 package optimus.buildtool.format
 
 import optimus.buildtool.config.Id
-import optimus.buildtool.config.RegexConfiguration
 import optimus.buildtool.config.ScopeId
 
 final case class ConditionalDefaults(
@@ -52,8 +51,7 @@ final case class ConditionalDefaults(
 
 final case class ScopeDefaults(
     depsAndSources: Map[String, InheritableScopeDefinition], // Scope type (eg. "main", "test") -> Scope definition
-    conditionals: Seq[ConditionalDefaults],
-    defaultRules: Option[RegexConfiguration]
+    conditionals: Seq[ConditionalDefaults]
 ) {
   private def getOrEmpty(name: String) = depsAndSources.getOrElse(name, InheritableScopeDefinition.empty)
 
@@ -64,9 +62,7 @@ final case class ScopeDefaults(
   ): InheritableScopeDefinition = {
 
     val all = depsAndSources.getOrElse("all", InheritableScopeDefinition.empty)
-    val allWithDefaultRules =
-      all.copy(regexConfiguration = RegexConfiguration.merge(all.regexConfiguration, defaultRules))
-    val combinedParent = conditionals.foldLeft(allWithDefaultRules) { (parent, conditional) =>
+    val combinedParent = conditionals.foldLeft(all) { (parent, conditional) =>
       if (conditional.appliesTo(id, mavenDefinition, mavenLibs))
         conditional.defaults.forScope(id, mavenDefinition, mavenLibs).withParent(parent)
       else parent
@@ -83,12 +79,11 @@ final case class ScopeDefaults(
     ScopeDefaults(
       newDepsAndSources,
       parent.conditionals ++ conditionals,
-      RegexConfiguration.merge(defaultRules, parent.defaultRules)
     )
   }
 }
 
 object ScopeDefaults {
-  val empty: ScopeDefaults = ScopeDefaults(Map.empty, Seq.empty, None)
+  val empty: ScopeDefaults = ScopeDefaults(Map.empty, Seq.empty)
 
 }

@@ -12,6 +12,7 @@
 package optimus.buildtool.scope.partial
 
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.compilers.AsyncJmhCompiler
 import optimus.buildtool.format.WarningsConfiguration
@@ -51,10 +52,11 @@ import scala.collection.immutable.Seq
       r.resolvedArtifacts
     }
     AsyncJmhCompiler.Inputs(
-      localArtifacts = scala.classes ++ java.classes,
+      localArtifacts = (scala.classes ++ java.classes).filter(!_.isInstanceOf[FingerprintArtifact]),
       otherArtifacts = JavaScopedCompilation.updateNetworkPaths(dependencyCopier, otherArtifacts),
       jmhJars = jmhJars,
-      outputJar = pathBuilder.outputPathFor(id, sources.compilationInputsHash, AT.Jmh, None, incremental = false).asJar,
+      outputJar =
+        pathBuilder.outputPathFor(id, sources.compilationFingerprint.hash, AT.Jmh, None, incremental = false).asJar,
       // no current use case for passing through full options/warnings, and it's not clear that it would be correct
       scope.config.javacConfig.copy(options = Nil, warnings = WarningsConfiguration.empty)
     )

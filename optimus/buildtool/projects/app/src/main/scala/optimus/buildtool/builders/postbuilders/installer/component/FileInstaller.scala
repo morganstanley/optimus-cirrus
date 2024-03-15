@@ -20,9 +20,10 @@ import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
-import optimus.buildtool.files.Directory
+import optimus.buildtool.files.Directory.JarMetaExclusionFilter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
@@ -40,7 +41,6 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 
 import scala.collection.immutable.Seq
-import scala.collection.immutable.Set
 
 class GenericFileInstaller(installer: Installer, fileInstaller: FileInstaller) extends ComponentInstaller {
   import installer._
@@ -88,37 +88,38 @@ class ElectronInstaller(installer: Installer, installPathBuilder: InstallPathBui
   @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
     installElectron(installable.artifacts, installable.includedScopes)
 
-  @async private def installElectron(artifacts: Seq[Artifact], includedScopes: Set[ScopeId]) = {
+  @async private def installElectron(artifacts: Seq[Artifact], includedScopes: Set[ScopeId]): Seq[FileAsset] = {
     val electronArtifacts = artifacts.collectAll[ElectronArtifact].filter(a => includedScopes.contains(a.scopeId))
-    electronArtifacts.apar.flatMap(artifact => {
-      ObtTrace.traceTask(artifact.scopeId, InstallElectronFiles) {
-        Jars.withJar(artifact.file, create = false) { root =>
-          val sourceDir = root.resolveDir(RelativePath("common"))
-          val sourceFiles = Directory.findFiles(sourceDir)
-          sourceFiles
-            .map { f =>
-              val target =
-                installPathBuilder
-                  .dirForScope(artifact.scopeId)
-                  .resolveDir("bin")
-                  .resolveFile(sourceDir.relativize(f).pathString)
-              val installed = bundleFingerprints(artifact.scopeId)
-                .writeIfChanged(target, Hashing.hashFileContent(f)) {
-                  Files.createDirectories(target.parent.path)
-                  AssetUtils.atomicallyCopy(f, target, replaceIfExists = true)
-                  // Only interested in making executable the executables
-                  if (target.name.toLowerCase.startsWith("optimuselectron")) {
-                    target.path.toFile.setExecutable(true, false)
+    electronArtifacts.apar.flatMap { artifact =>
+      // Only install electron when mode = "prod"
+      if (artifact.mode == NpmBuildMode.Production) {
+        ObtTrace.traceTask(artifact.scopeId, InstallElectronFiles) {
+          Jars.withJar(artifact.file, create = false) { root =>
+            val path = root.resolveDir(artifact.scopeId.toString)
+            val sourceFiles = Directory.findFiles(path, JarMetaExclusionFilter)
+            val binDir = installPathBuilder.binDir(artifact.scopeId)
+            val fingerprints = bundleFingerprints(artifact.scopeId)
+            val executableSet = artifact.executables.map(_.toLowerCase).toSet
+            sourceFiles
+              .map { f =>
+                val target = binDir.resolveFile(path.relativize(f))
+                val installed = fingerprints
+                  .writeIfChanged(target, Hashing.hashFileContent(f)) {
+                    Files.createDirectories(target.parent.path)
+                    AssetUtils.atomicallyCopy(f, target, replaceIfExists = true)
+                    // Only interested in making executable the executables
+                    if (executableSet.contains(target.name.toLowerCase)) {
+                      target.path.toFile.setExecutable(true, false)
+                    }
                   }
-                }
-                .isDefined
-
-              (target, installed)
-            }
-            .collect { case (f, true) => f }
+                  .isDefined
+                (target, installed)
+              }
+              .collect { case (f, true) => f }
+          }
         }
-      }
-    })
+      } else Nil
+    }
   }
 }
 

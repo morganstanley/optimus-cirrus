@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.scope.sources
 
-import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.cache.NodeCaching.optimizerCache
@@ -32,13 +31,6 @@ import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
-private[sources] final case class FingerprintedSources(
-    content: Seq[(String, SortedMap[SourceUnitId, HashedContent])],
-    generatedSourceArtifacts: Seq[Artifact],
-    fingerprint: Seq[String],
-    fingerprintHash: String
-) extends HashedSources
-
 @entity class SourceCompilationSources(
     scope: CompilationScope,
     sourceGeneration: SourceGeneration
@@ -46,9 +38,9 @@ private[sources] final case class FingerprintedSources(
 
   override def id: ScopeId = scope.id
 
-  @node def fingerprint: Seq[String] = hashedSources.fingerprint
+  @node def fingerprint: Seq[String] = hashedSources.fingerprint.fingerprint
 
-  @node protected def hashedSources: FingerprintedSources = {
+  @node protected def hashedSources: HashedSources = {
     // the source files could be changing while the build is running (e.g. developer is still editing files in the IDE),
     // so we are careful here to ensure that the source file content that we pass in to the compiler is the same
     // as the content that we hash. hashedSources is part of the reallyBigCache to ensure they don't get evicted mid-build.
@@ -59,10 +51,9 @@ private[sources] final case class FingerprintedSources(
     }
     val fingerprintHash = scope.hasher.hashFingerprint(sourceFingerprint, ArtifactType.SourceFingerprint)
 
-    FingerprintedSources(
+    HashedSourcesImpl(
       sourceFileContent.content,
       sourceFileContent.generatedSourceArtifacts,
-      sourceFingerprint,
       fingerprintHash
     )
   }

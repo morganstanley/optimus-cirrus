@@ -53,7 +53,8 @@ import scala.collection.immutable.Seq
           scope,
           javaAndScalaSources
         )
-        val fingerprintHash = inputs().fingerprintHash
+        val fingerprint = inputs().fingerprint
+        val fingerprintHash = fingerprint.hash
         val tpe = processor.artifactType
         scope.cached(tpe, Some(cfg.name), fingerprintHash) {
           val outputJar =
@@ -64,7 +65,7 @@ import scala.collection.immutable.Seq
           if (!artifact.exists(_.hasErrors)) log.info(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name}")
           else Utils.FailureLog.error(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name} with errors")
           artifact
-        }
+        } :+ fingerprint
       }
     }
   }

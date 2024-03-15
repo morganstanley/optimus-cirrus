@@ -121,14 +121,24 @@ object DALAccExecutionProvider {
 
   class ConstFormatter(loadContext: TemporalContext, val forDisplay: Boolean) extends DALExpressionVisitor {
     protected override def visitFunction(f: Function): Expression = {
-      (f.method, visitExpressionList(f.arguments)) match {
-        case ("knowable.value", List(Constant(s: Seq[_], _))) =>
+      (f.method, f.arguments, visitExpressionList(f.arguments)) match {
+        case ("knowable.value", _, List(Constant(s: Seq[_], _))) =>
           if (s.size == 1) Constant(null, TypeCode.None) else Constant(s.last, typeCode(s.last))
-        case (m, List(Constant(e1, _), Constant(e2, _))) if m.endsWith(".equals") =>
+        case ("option.value", RichConstant(valueOpt: Option[_], _, _) :: Nil, visitedArgs) =>
+          if (valueOpt == None) Function("option.value", visitedArgs)
+          else {
+            val result = Function("option.value", visitedArgs)
+            val pickler = PicklerSelector.getPickler(valueOpt.get)
+            if (pickler.isInstanceOf[CaseObjectPickler[_]] && !forDisplay)
+              Function("convert.toJsonb", List(Function("convert.toText", List(result))))
+            else
+              result
+          }
+        case (m, _, List(Constant(e1, _), Constant(e2, _))) if m.endsWith(".equals") =>
           Constant(e1 == e2, TypeCode.Boolean)
-        case (m, List(Constant(e1, _), Constant(e2, _))) if m.endsWith(".notEquals") =>
+        case (m, _, List(Constant(e1, _), Constant(e2, _))) if m.endsWith(".notEquals") =>
           Constant(e1 != e2, TypeCode.Boolean)
-        case (_, args) => updateFunction(f, args)
+        case (_, _, args) => updateFunction(f, args)
       }
     }
 

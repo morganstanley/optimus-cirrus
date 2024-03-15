@@ -38,6 +38,8 @@ object MultiwayTraceListener {
       taskTraces.foreach(_.end(success, errors, warnings, time))
     override def addToStat(obtStat: ObtStat, value: Long): Unit =
       taskTraces.foreach(_.addToStat(obtStat, value))
+    override def addToStat(obtStat: ObtStat, value: Set[_]): Unit =
+      taskTraces.foreach(_.addToStat(obtStat, value))
     override def setStat(obtStat: ObtStat, value: Long): Unit =
       taskTraces.foreach(_.setStat(obtStat, value))
     override def supportsStats: Boolean = taskTraces.exists(_.supportsStats)
@@ -57,6 +59,7 @@ final case class MultiwayTraceListener private (traceListeners: List[ObtTraceLis
   override def setStat(stat: ObtStat, value: Long): Unit = traceListeners.foreach(_.setStat(stat, value))
   override def setProperty[T](p: Properties.EnumeratedKey[T], v: T): Unit = traceListeners.foreach(_.setProperty(p, v))
   override def addToStat(stat: ObtStat, value: Long): Unit = traceListeners.foreach(_.addToStat(stat, value))
+  override def addToStat(stat: ObtStat, value: Set[_]): Unit = traceListeners.foreach(_.addToStat(stat, value))
   override def supportsStats: Boolean = traceListeners.exists(_.supportsStats)
 
   override def logMsg(msg: String, tpe: MessageType): Unit =

@@ -15,8 +15,9 @@ import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
-
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.FileAsset
@@ -27,6 +28,8 @@ import optimus.buildtool.resolvers.DependencyInfo
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.trace.ResolveTrace
 import optimus.buildtool.utils.PathUtils
+
+import java.net.URI
 
 //noinspection TypeAnnotation
 private[buildtool] object JsonImplicits {
@@ -77,7 +80,7 @@ private[buildtool] object JsonImplicits {
   }
   implicit val UrlFormatter: JsonFormat[URL] = new JsonFormat[URL] {
     override def write(obj: URL): JsValue = obj.toString.toJson
-    override def read(json: JsValue): URL = new URL(json.convertTo[String])
+    override def read(json: JsValue): URL = new URI(json.convertTo[String]).toURL()
   }
   implicit val AssetFormat: JsonFormat[Asset] = new JsonFormat[Asset] {
     override def write(obj: Asset): JsValue = obj.path.toJson
@@ -162,6 +165,14 @@ private[buildtool] object JsonImplicits {
     }
   }
 
+  implicit val NpmBuildModeFormat: JsonFormat[NpmBuildMode] = new JsonFormat[NpmBuildMode] {
+    override def write(obj: NpmBuildMode): JsValue = obj.toString.toJson
+    override def read(json: JsValue): NpmBuildMode = json.convertTo[String] match {
+      case Production.name  => Production
+      case Development.name => Development
+    }
+  }
+
   implicit val visualiserInfoFormatter: JsonFormat[DependencyInfo] = new JsonFormat[DependencyInfo] {
     override def write(obj: DependencyInfo): JsValue = {
       JsString(obj.module + "," + obj.config + "," + obj.version)
@@ -184,6 +195,8 @@ private[buildtool] object JsonImplicits {
   implicit val GeneratedSourceMetadataFormatter: RootJsonFormat[GeneratedSourceMetadata] = jsonFormat4(
     GeneratedSourceMetadata.apply)
   implicit val CppMetadataFormatter: RootJsonFormat[CppMetadata] = jsonFormat5(CppMetadata.apply)
+  implicit val ElectronMetadataFormatter: RootJsonFormat[ElectronMetadata] = jsonFormat4(ElectronMetadata.apply)
   implicit val ProcessorMetadataFormatter: RootJsonFormat[ProcessorMetadata] = jsonFormat3(ProcessorMetadata.apply)
+  implicit val PythonMetadataFormatter: RootJsonFormat[PythonMetadata] = jsonFormat4(PythonMetadata.apply)
 
 }

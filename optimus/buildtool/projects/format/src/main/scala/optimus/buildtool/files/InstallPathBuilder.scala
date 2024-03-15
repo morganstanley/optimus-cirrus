@@ -30,6 +30,9 @@ sealed abstract class InstallPathBuilder(
 
   type Path = Directory
 
+  val mavenReleaseMetaBundle: MetaBundle =
+    MetaBundle(config.NamingConventions.MavenDepsCentralMeta, config.NamingConventions.MavenDepsCentralBundle)
+
   /** If `installDir` is on AFS, the AFS path for `installVersion`, otherwise the NFS path based on it. */
   def primaryInstallDir(metaBundle: MetaBundle, leaf: String = "", branch: String = NamingConventions.Common): Directory
 
@@ -43,11 +46,9 @@ sealed abstract class InstallPathBuilder(
 
   def getMavenPath(classJar: JarAsset, disted: Boolean = false): Option[JarAsset] = classJar.pathString match {
     case NamingConventions.DepCopyMavenRoot(relativePath) =>
-      val afReleaseMetaBundle =
-        MetaBundle(config.NamingConventions.MavenDepsCentralMeta, config.NamingConventions.MavenDepsCentralBundle)
       // put into sharable MetaBundle dir for AFS release
-      if (disted) Some(dirForDist(afReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath))
-      else Some(libDir(afReleaseMetaBundle).resolveJar(relativePath))
+      if (disted) Some(dirForDist(mavenReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath))
+      else Some(libDir(mavenReleaseMetaBundle).resolveJar(relativePath))
     case _ => None
   }
 

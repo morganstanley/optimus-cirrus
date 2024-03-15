@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.artifacts
 
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Asset
@@ -31,6 +32,8 @@ import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace
 import optimus.buildtool.trace.CategoryTrace
 import optimus.buildtool.trace.MessageTrace
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
@@ -59,6 +62,7 @@ private[buildtool] object PathedArtifact {
     @node(tweak = true) private[artifacts] def version: Int = 1
   }
   @entersGraph def registerDeletion(p: Path): Tweak = {
+    ObtTrace.addToStat(ObtStats.DeletedArtifacts, 1)
     val v = ArtifactVersion(Pathed.pathString(p))
     Tweak.byValue(v.version := v.version + 1)
   }
@@ -163,21 +167,61 @@ object MessagesArtifact {
   @node final protected def contentsHash: String = precomputedContentsHash
 }
 
-@entity private[buildtool] final class FingerprintArtifact private (
+@entity trait FingerprintArtifact extends Artifact {
+  def id: InternalArtifactId
+  val fingerprint: Seq[String]
+  val hash: String
+}
+
+@entity final class FingerprintArtifactImpl private[artifacts] (
     val id: InternalArtifactId,
-    val fingerprintFile: FileAsset
-) extends PathedArtifact {
+    val fingerprintFile: FileAsset,
+    val fingerprint: Seq[String],
+    val hash: String
+) extends FingerprintArtifact
+    with PathedArtifact {
   override def path: Path = fingerprintFile.path
+
+  @node def copy(
+      fingerprintFile: FileAsset = fingerprintFile,
+      fingerprint: Seq[String] = fingerprint,
+      hash: String = hash,
+  ): FingerprintArtifact with PathedArtifact =
+    FingerprintArtifact.create(id, fingerprintFile, fingerprint, hash)
+}
+
+// we don't want to store empty fingerprints on disk
+@entity private[artifacts] final class EmptyFingerprintArtifact private[artifacts] (
+    val id: InternalArtifactId,
+    val hash: String
+) extends FingerprintArtifact {
+  val fingerprint: Seq[String] = Nil
 }
 
 object FingerprintArtifact {
-  @node def create(id: InternalArtifactId, fingerprintFile: FileAsset): FingerprintArtifact =
-    FingerprintArtifact(id, fingerprintFile).watchForDeletion()
+  @node def create(
+      id: InternalArtifactId,
+      fingerprintFile: FileAsset,
+      fingerprint: Seq[String],
+      hash: String
+  ): FingerprintArtifact with PathedArtifact =
+    FingerprintArtifactImpl(id, fingerprintFile, fingerprint, hash).watchForDeletion()
   // Artifacts created with `unwatched` will not be monitored for deletion automatically, and so will need to be
   // watched separately. All uses of `unwatched` outside tests should be accompanied by a method detailing how the
   // deletion monitoring will be achieved.
-  def unwatched(id: InternalArtifactId, fingerprintFile: FileAsset): FingerprintArtifact =
-    FingerprintArtifact(id, fingerprintFile)
+  def unwatched(
+      id: InternalArtifactId,
+      fingerprintFile: FileAsset,
+      fingerprint: Seq[String],
+      hash: String
+  ): FingerprintArtifact with PathedArtifact =
+    FingerprintArtifactImpl(id, fingerprintFile, fingerprint, hash)
+
+  def empty(
+      id: InternalArtifactId,
+      hash: String
+  ): FingerprintArtifact =
+    EmptyFingerprintArtifact(id, hash)
 }
 
 @entity private[buildtool] final class GeneratedSourceArtifact private (
@@ -483,9 +527,11 @@ object InternalClassFileArtifact {
    */
   @node(tweak = true) private def mutableExternalArtifactVersion: Int = 1
 
-  @node def witnessMutableExternalArtifactState(): Unit =
+  @node def witnessMutableExternalArtifactState(): Unit = {
+    ObtTrace.setStat(ObtStats.MutableExternalDependencies, 1) // 1 == true
     // just read the value to establish a dependency
     assert(mutableExternalArtifactVersion > 0)
+  }
 
   @entersGraph def updateMutableExternalArtifactState(): Seq[Tweak] =
     Tweaks.byValue(mutableExternalArtifactVersion := mutableExternalArtifactVersion + 1).toIndexedSeq
@@ -548,35 +594,43 @@ object InternalCppArtifact {
 @entity final class PythonArtifact private (
     val scopeId: ScopeId,
     val file: FileAsset,
+    val osVersion: String,
     val messages: Seq[CompilationMessage],
-    protected val cachedHasErrors: Boolean)
+    protected val cachedHasErrors: Boolean,
+    val inputsHash: String)
     extends PathedArtifact
     with MessagesArtifact {
-  override def id: InternalArtifactId = InternalArtifactId(scopeId, ArtifactType.Python, None)
+  override def id: InternalArtifactId = InternalArtifactId(scopeId, ArtifactType.Python, Some(osVersion))
   override def path: Path = file.path
   override def taskCategory: CategoryTrace = trace.Python
 
   @node def copy(file: FileAsset = file): PythonArtifact =
-    PythonArtifact(scopeId, file, messages, cachedHasErrors)
+    PythonArtifact(scopeId, file, osVersion, messages, cachedHasErrors, inputsHash)
 }
 
 object PythonArtifact {
   @node def create(
       scopeId: ScopeId,
       file: FileAsset,
+      osVersion: String,
       messages: Seq[CompilationMessage],
-      hasErrors: Boolean): PythonArtifact = PythonArtifact(
+      hasErrors: Boolean,
+      inputsHash: String): PythonArtifact = PythonArtifact(
     scopeId = scopeId,
     file = file,
+    osVersion = osVersion,
     messages = messages,
-    cachedHasErrors = hasErrors
+    cachedHasErrors = hasErrors,
+    inputsHash = inputsHash
   )
 }
 
 @entity final class ElectronArtifact private (
     val scopeId: ScopeId,
     val file: JarAsset,
-    val precomputedContentsHash: String)
+    val precomputedContentsHash: String,
+    val mode: NpmBuildMode,
+    val executables: Seq[String])
     extends PreHashedArtifact {
   override def id: InternalArtifactId = InternalArtifactId(scopeId, ArtifactType.Electron, None)
   override def path: Path = file.path
@@ -584,12 +638,17 @@ object PythonArtifact {
       scopeId: ScopeId = scopeId,
       file: JarAsset = file,
       precomputedContentsHash: String = precomputedContentsHash
-  ): ElectronArtifact = ElectronArtifact.create(scopeId, file, precomputedContentsHash)
+  ): ElectronArtifact = ElectronArtifact.create(scopeId, file, precomputedContentsHash, mode, executables)
 }
 
 object ElectronArtifact {
-  @node def create(scopeId: ScopeId, file: JarAsset, precomputedContentsHash: String): ElectronArtifact =
-    ElectronArtifact(scopeId, file, precomputedContentsHash)
+  @node def create(
+      scopeId: ScopeId,
+      file: JarAsset,
+      precomputedContentsHash: String,
+      mode: NpmBuildMode,
+      executables: Seq[String]): ElectronArtifact =
+    ElectronArtifact(scopeId, file, precomputedContentsHash, mode, executables)
 }
 
 /** Represents internal jar files which contain compiled runconf. */

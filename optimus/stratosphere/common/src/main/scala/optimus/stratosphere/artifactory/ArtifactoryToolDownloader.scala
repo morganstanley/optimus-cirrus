@@ -21,16 +21,22 @@ import optimus.stratosphere.utils.CommonProcess
 import optimus.stratosphere.utils.EnvironmentUtils
 import spray.json._
 
+import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import scala.util.Try
 import scala.util.control.NonFatal
+import scala.util.Using
+import scala.util.matching.Regex
 
 object ArtifactoryToolDownloader {
+  private val sfxNoProgressDialogAttribute: String = """Progress="no"
+                                                       |""".stripMargin
   private val extractionFlag: String = "--explode"
 
   def installedTools(stratoWorkspace: StratoWorkspaceCommon): Seq[String] =
@@ -42,12 +48,13 @@ object ArtifactoryToolDownloader {
   def availableTools(stratoWorkspace: StratoWorkspaceCommon): Set[String] =
     stratoWorkspace.artifactoryTools.availableTools.map(_.takeWhile(_ != '.'))
 
-  private def jfrogCliEnv(stratoWorkspace: StratoWorkspaceCommon): Map[String, String] =
+  private def artifactoryCliEnv(stratoWorkspace: StratoWorkspaceCommon): Map[String, String] =
     Map(
       "JFROG_CLI_OFFER_CONFIG" -> "false",
       // .resolve("") is required to add the trailing '/'
       "HOME" -> stratoWorkspace.internal.jfrog.home.getParent.resolve("").toString,
       "JFROG_CLI_HOME_DIR" -> stratoWorkspace.internal.jfrog.home.resolve("").toString,
+      "PIP_CONFIG_FILE" -> stratoWorkspace.internal.pypi.configFile.toFile.toString,
       // setup_user does not like proxies
       "HTTPS_PROXY" -> "",
       "https_proxy" -> "",
@@ -57,24 +64,51 @@ object ArtifactoryToolDownloader {
 
   def presetArtifactoryCredentials(stratoWorkspace: StratoWorkspaceCommon): Unit = {
     val jfrogConfigFile = stratoWorkspace.internal.jfrog.configFile
+    val pypiConfigFile = stratoWorkspace.internal.pypi.configFile
     lazy val credentials = Credential.fromJfrogConfFile(jfrogConfigFile)
     lazy val artifactoryUrl = stratoWorkspace.internal.tools.artifactoryUrl
     if (!jfrogConfigFile.exists() || jfrogConfigFile.toFile.length() == 0 || !artifactoryUrl.contains(credentials.host))
       try {
-        ArtifactoryToolDownloader.setupUser(stratoWorkspace)
+        ArtifactoryToolDownloader.setupJfrogUser(stratoWorkspace)
       } catch {
-        case NonFatal(_) => stratoWorkspace.log.warning("Setting up artifactory credentials failed")
+        case NonFatal(_) => stratoWorkspace.log.warning("Setting up jfrog artifactory credentials failed")
+      }
+    if (!pypiConfigFile.exists() || pypiConfigFile.toFile.length() == 0)
+      try {
+        ArtifactoryToolDownloader.setupPypiUser(stratoWorkspace)
+      } catch {
+        case NonFatal(_) => stratoWorkspace.log.warning("Setting up pypi artifactory credentials failed")
       }
     else
       stratoWorkspace.log.debug("Artifactory credentials already present")
   }
 
   def setupUser(stratoWorkspace: StratoWorkspaceCommon): String = {
-    stratoWorkspace.log.info("Setting up artifactory configuration")
-    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.artifactorySetupCmd
-    val output = new CommonProcess(stratoWorkspace).runAndWaitFor(setupUserCommand, env = jfrogCliEnv(stratoWorkspace))
+    val jfrogResult = setupJfrogUser(stratoWorkspace)
+    val pypiResult = setupPypiUser(stratoWorkspace)
+    jfrogResult + pypiResult
+  }
 
-    if (!stratoWorkspace.internal.jfrog.configFile.exists()) {
+  private def setupJfrogUser(stratoWorkspace: StratoWorkspaceCommon) = {
+    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.jfrogArtifactorySetupCmd
+    stratoWorkspace.log.info("Setting up jfrog artifactory configuration")
+    setupGenericUser(setupUserCommand, stratoWorkspace.internal.jfrog.configFile, stratoWorkspace)
+  }
+
+  private def setupPypiUser(stratoWorkspace: StratoWorkspaceCommon) = {
+    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.pypiArtifactorySetupCmd
+    stratoWorkspace.log.info("Setting up pypi artifactory configuration")
+    setupGenericUser(setupUserCommand, stratoWorkspace.internal.pypi.configFile, stratoWorkspace)
+  }
+
+  private def setupGenericUser(
+      setupUserCommand: Seq[String],
+      configFile: Path,
+      stratoWorkspace: StratoWorkspaceCommon) = {
+    val output =
+      new CommonProcess(stratoWorkspace).runAndWaitFor(setupUserCommand, env = artifactoryCliEnv(stratoWorkspace))
+
+    if (!configFile.exists()) {
       throw new StratosphereException(s"Setting up artifactory configuration failed:\n$output")
     }
 
@@ -117,7 +151,7 @@ object ArtifactoryToolDownloader {
         new CommonProcess(stratoWorkspace).runAndWaitFor(
           jfrogDownloadCommand,
           label = Some("JFrog download command"),
-          env = jfrogCliEnv(stratoWorkspace))
+          env = artifactoryCliEnv(stratoWorkspace))
       checkOutput(output)
       output
     }
@@ -155,8 +189,32 @@ object ArtifactoryToolDownloader {
     // }
 
     val result = output.parseJson.convertTo[ArtifactoryResponse]
-    require(result.totals.success > 0, "Download failed!")
+    if (result.totals.success == 0)
+      throw new StratosphereException("Download failed, see log above for details.")
   }
+
+  def noProgress7Zip(archive: Path, output: Path): Unit = {
+    val target = ";!@InstallEnd@!\n".getBytes
+    if (!Files.exists(archive))
+      throw new FileNotFoundException(s"7z SFX file '${archive.toAbsolutePath.toString}' does not exist!")
+    Using.Manager { use =>
+      val is = use(new BufferedInputStream(Files.newInputStream(archive)))
+      val out = use(Files.newOutputStream(output))
+
+      val content = is.readAllBytes()
+
+      val endOfPropertiesIndex = content.indexOfSlice(target)
+      out.write(content.slice(0, endOfPropertiesIndex))
+      // if doesn't already contain progress=no, add it
+      if (content.slice(0, endOfPropertiesIndex).indexOfSlice(sfxNoProgressDialogAttribute.getBytes) == -1) {
+        out.write(sfxNoProgressDialogAttribute.getBytes)
+      }
+
+      // write the remaining
+      out.write(content.slice(endOfPropertiesIndex, content.length))
+    }
+  }
+
 }
 
 class ArtifactoryToolDownloader(
@@ -170,6 +228,7 @@ class ArtifactoryToolDownloader(
   object install {
     val rootDir: Path = stratoWorkspace.directoryStructure.toolsDir.resolve(name)
     val toolDir: Path = rootDir.resolve(version)
+    val installerPattern: Option[Regex] = stratoWorkspace.artifactoryTools.available.installerPattern(name)
   }
 
   object cache {
@@ -211,15 +270,24 @@ class ArtifactoryToolDownloader(
     downloadArtifact(stratoWorkspace, cache.artifactoryLocation, cache.rootDir)
   }
 
-  private def extract(): Unit = {
-    val installers = cache.toolDir.dir.list()
+  def findInstallers(): Seq[Path] = {
+    // filter files in rt cache dir by installerPattern if it exists
+    cache.toolDir.dir.list().filter { potentialInstaller: Path =>
+      install.installerPattern.forall(_.findFirstIn(potentialInstaller.name).isDefined)
+    }
+  }
 
-    installers match {
+  private def extract(): Unit = {
+    findInstallers() match {
       case Seq() =>
         throw new FileNotFoundException(s"""No artifact files found in '${cache.toolDir}'!""")
       case Seq(installer) if installer.file.name.endsWith(".7z.exe") =>
-        stratoWorkspace.log.info(s"Unpacking $name from $installer to ${install.toolDir}")
-        val command = Seq(s"${installer.toString}", "-y", s"""-o"${install.toolDir.toString}"""")
+        val noProgressInstaller =
+          installer.resolveSibling(installer.getFileName.toString.replace(".7z.", ".7z.noprogress."))
+        stratoWorkspace.log.info(s"Tweaking installer '$installer' as '$noProgressInstaller'")
+        ArtifactoryToolDownloader.noProgress7Zip(installer, noProgressInstaller)
+        stratoWorkspace.log.info(s"Unpacking $name from $noProgressInstaller to ${install.toolDir}")
+        val command = Seq(s"${noProgressInstaller.toString}", "-y", s"""-o"${install.toolDir.toString}"""")
         val result = new CommonProcess(stratoWorkspace).runAndWaitFor(command, dir = Some(cache.rootDir))
         stratoWorkspace.log.info(result)
       case Seq(installer) if installer.file.name.endsWith(".zip") || installer.file.name.endsWith(".nupkg") =>

@@ -23,11 +23,15 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.ReactiveDirectory
-import optimus.buildtool.resolvers.MavenUtils.wrongCredMsg
+import optimus.buildtool.resolvers.HttpResponseUtils._
+import optimus.buildtool.resolvers.MavenUtils.isNonUnzipLibJarFile
+import optimus.buildtool.resolvers.MavenUtils.maxDownloadSeconds
+import optimus.buildtool.resolvers.MavenUtils.maxRetry
+import optimus.buildtool.resolvers.MavenUtils.retryIntervalSeconds
 import optimus.buildtool.trace.CheckRemoteUrl
+import optimus.buildtool.trace.DownloadRemoteUrl
 import optimus.buildtool.trace.DepCopy
 import optimus.buildtool.trace.DepCopyFromRemote
-import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Utils.atomicallyWriteIfMissing
 import optimus.buildtool.utils.PathUtils.isDisted
@@ -37,7 +41,9 @@ import optimus.stratosphere.artifactory.Credential
 
 import java.io.FileNotFoundException
 import java.io.InputStream
-import java.security.InvalidParameterException
+import java.net.SocketTimeoutException
+import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 @entity class DependencyCopier(
     depCopyPath: Directory,
@@ -63,11 +69,16 @@ import java.security.InvalidParameterException
     // n.b. we never extract signature jars since they specifically want classes
     artifact.copyWithUpdatedAssets(
       file = atomicallyDepCopyJarIfMissing(artifact.file),
-      source = artifact.source.map(atomicallyDepCopyJarIfMissing),
-      javadoc = artifact.javadoc.map(atomicallyDepCopyJarIfMissing)
+      source = artifact.source.flatMap(tryAtomicallyDepCopyJarIfMissing(_).toOption),
+      javadoc = artifact.javadoc.flatMap(tryAtomicallyDepCopyJarIfMissing(_).toOption)
     )
 
-  @node def atomicallyDepCopyJarIfMissing(depFile: FileAsset): JarAsset = atomicallyDepCopyFileIfMissing(depFile).asJar
+  @node def atomicallyDepCopyJarIfMissing(depFile: FileAsset): JarAsset =
+    tryAtomicallyDepCopyJarIfMissing(depFile).get
+
+  @node private def tryAtomicallyDepCopyJarIfMissing(depFile: FileAsset): NodeTry[JarAsset] = NodeTry {
+    atomicallyDepCopyFileIfMissing(depFile).asJar
+  }
 
   @node def atomicallyDepCopyFileIfMissing(depFile: FileAsset): FileAsset = depFile match {
     case http: BaseHttpAsset => atomicallyCopyOverHttp(http)
@@ -77,64 +88,125 @@ import java.security.InvalidParameterException
   def httpLocalAsset(httpAsset: BaseHttpAsset): httpAsset.LocalAsset =
     MavenUtils.httpLocalAsset(httpAsset, depCopyPath)
 
-  def skipCopyMissingFileMsg(depFile: FileAsset, reason: String = ""): FileAsset = {
+  private def skipCopyMissingFileMsg(depFile: FileAsset, reason: String = ""): FileAsset = {
     val reasonMsg = if (reason.nonEmpty) s", $reason" else ""
     val msg = s"Not depcopying missing file: ${depFile.pathString}$reasonMsg"
-    log.warn(msg)
     ObtTrace.warn(msg)
     depFile
   }
 
-  @node def getHttpStream(httpAsset: BaseHttpAsset, retry: Int = MavenUtils.maxRetry): Either[Exception, InputStream] =
-    ObtTrace.traceTask(RootScopeId, CheckRemoteUrl) {
+  def getHttpAssetResponse(httpAsset: BaseHttpAsset, timeoutSec: Int): HttpProbingResponse =
+    ObtTrace.traceTask(RootScopeId, CheckRemoteUrl(httpAsset.url)) {
+      val url = httpAsset.url
+      val host = url.getHost
+      val cred = credentials.find(_.host == host)
+      val conn = url.openConnection()
+      cred.foreach(c => conn.setRequestProperty("Authorization", c.toHttpBasicAuth))
+      conn.setReadTimeout(timeoutSec * 1000)
       try {
-        val host = httpAsset.url.getHost
-        val cred = credentials.find(_.host == host)
-        val conn = httpAsset.url.openConnection()
-        cred.foreach(c => conn.setRequestProperty("Authorization", c.toHttpBasicAuth))
-        Right(conn.getInputStream)
+        val stream = conn.getInputStream
+        val header = conn.getHeaderFields.toString
+        log.debug(s"Got response from url: ${url.toString}, length: ${conn.getContentLength}, header: $header")
+        HttpProbingResponse(Right(stream), loadHttpHeaderInfo(header, url))
       } catch {
+        case e: SocketTimeoutException =>
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> "time out!")))
+        case e: FileNotFoundException =>
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> "not found!")))
         case e: Exception =>
-          if (e.getMessage.contains("401"))
-            Left(new InvalidParameterException(s"$wrongCredMsg $e"))
-          else if (e.getMessage.contains("404") || e.isInstanceOf[FileNotFoundException])
-            Left(new NoSuchElementException(e.toString))
-          else Left(new UnsupportedOperationException(e.toString))
+          HttpProbingResponse(
+            Left(getHttpException(httpAsset, maxRetry, e)),
+            HttpHeaderInfo(Map(ServerCodeKey -> e.toString)))
       }
     }
 
-  @node def atomicallyCopyOverHttp(httpAsset: BaseHttpAsset, isMarker: Boolean = false): httpAsset.LocalAsset = {
+  private def downloadUrlFromStream(
+      httpAsset: BaseHttpAsset,
+      localPath: Path,
+      stream: InputStream,
+      headerInfo: HttpHeaderInfo,
+      retry: Int): Unit =
+    ObtTrace.traceTask(RootScopeId, DownloadRemoteUrl(httpAsset.url)) {
+      try {
+        Files.createDirectories(localPath.getParent)
+        Files.copy(stream, localPath)
+        val downloadedFileChecksum = getSha256(localPath)
+        log.debug(
+          s"Downloaded remote url ${httpAsset.uriString} to local disk, ${getLocalChecksumStr(localPath, downloadedFileChecksum)}")
+        // check .jar file
+        validateJarFileReadable(httpAsset, localPath, headerInfo, downloadedFileChecksum)
+      } catch {
+        case e: Exception =>
+          if (retry > 0) {
+            stream.close()
+            Files.deleteIfExists(localPath)
+            retryWarningMsg(retry, maxRetry, httpAsset.url, e, "download")
+            Thread.sleep(TimeUnit.SECONDS.toMillis(retryIntervalSeconds))
+            downloadHttpAsset(httpAsset, localPath, None, retry - 1)
+          } else throw getHttpException(httpAsset, maxRetry, e)
+      } finally stream.close()
+    }
+
+  private def downloadHttpAsset(
+      httpAsset: BaseHttpAsset,
+      localPath: Path,
+      openedHttp: Option[HttpProbingResponse],
+      retry: Int): Unit = {
+    val workingHttpResponse = openedHttp.getOrElse(getHttpAssetResponse(httpAsset, maxDownloadSeconds))
+    workingHttpResponse.inputStream match {
+      case Right(stream) => downloadUrlFromStream(httpAsset, localPath, stream, workingHttpResponse.headerInfo, retry)
+      case Left(unableGetHttpStream) =>
+        skipCopyMissingFileMsg(httpAsset, unableGetHttpStream.toString)
+        throw unableGetHttpStream
+    }
+  }
+
+  @node def atomicallyCopyOverHttp(
+      httpAsset: BaseHttpAsset,
+      isMarker: Boolean = false,
+      openedHttp: Option[HttpProbingResponse] = None): httpAsset.LocalAsset = {
     // even if depCopy is disabled we still need to copy HTTP Jars locally, so use tempDir instead
     val localFile = httpLocalAsset(httpAsset)
 
     val fetchedFromMaven = atomicallyWriteIfMissing(localFile) { tmp =>
       ObtTrace.traceTask(RootScopeId, DepCopyFromRemote) {
-        if (assetStore.get(httpAsset.url, FileAsset(tmp)).isDefined) false // false because we fetched from SK
-        else if (isMarker) {
+        if (assetStore.get(httpAsset.url, FileAsset(tmp)).isDefined) {
+          val downloadedFileChecksum = getSha256(tmp)
+          log.debug(
+            s"Downloaded http file from silverking to: $tmp ${getLocalChecksumStr(tmp, downloadedFileChecksum)}")
+          false // false because we fetched from SK
+        } else if (isMarker) {
           try { // put empty marker url file in local disk
             Files.createDirectories(tmp.getParent)
             Files.createFile(tmp)
           } catch { case e: Exception => log.warn(s"Create marker url file failed! $e") }
           true
-        } else
-          getHttpStream(httpAsset) match {
-            case Left(e) => skipCopyMissingFileMsg(localFile, e.toString)
-            case Right(stream) =>
-              try { // put url file in local disk
-                Files.createDirectories(tmp.getParent)
-                Files.copy(stream, tmp)
-              } finally stream.close()
-              log.debug(s"Downloaded maven file to: $localFile")
-              ObtTrace.addToStat(ObtStats.MavenDownloads, 1)
-              true
+        } else {
+          val (durationInNanos, _) = AdvancedUtils.timed {
+            downloadHttpAsset(httpAsset, tmp, openedHttp, maxRetry)
           }
+          // add non-unzip repo lib .jar download trace
+          val urlStr = httpAsset.url.toString
+          if (isNonUnzipLibJarFile(urlStr)) DependencyDownloadTracker.addDownloadDuration(urlStr, durationInNanos)
+
+          DependencyDownloadTracker.addHttpFile(httpAsset.url.toString)
+          true
+        }
       }
     }
 
     // if we fetched from maven then the artifact wasn't in SK (modulo a small race, but re-putting is safe)
     // so we should put it. Note that we do this using the final localFile name, not the tmp file, because the put
     // is async and the tmp file is often removed by the point where the put actually reads the file.
-    if (fetchedFromMaven.contains(true)) assetStore.put(httpAsset.url, localFile)
+    if (fetchedFromMaven.contains(true) && assetStore != NoOpRemoteAssetStore) {
+      assetStore.put(httpAsset.url, localFile)
+      log.debug(
+        s"Uploaded http file to silverking: ${httpAsset.url}, ${getLocalChecksumStr(localFile.path, getSha256(localFile.path))}")
+    }
 
     localFile
   }

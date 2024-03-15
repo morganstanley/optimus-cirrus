@@ -23,7 +23,6 @@ import scala.collection.mutable
 object ArchiveUtil extends Log {
   final case class ArchiveEntry(file: FileAsset, targetPath: RelativePath, sizeBytes: Long = 0)
 
-
   def populateZip(
       zipFile: FileAsset,
       files: Seq[ArchiveEntry]

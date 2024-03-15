@@ -370,7 +370,7 @@ import scala.collection.compat._
    * who depends on it (and may therefore patch it) to go first.
    */
   def distinctLast[A](s: Seq[A]): Seq[A] = s.reverse.distinct.reverse
-
+  def distinctLast[A](s: (Seq[A], Seq[A])): (Seq[A], Seq[A]) = (distinctLast(s._1), distinctLast(s._2))
   def distinctLast[A](as: Artifacts): Artifacts = Artifacts(distinctLast(as.scope), distinctLast(as.upstream))
 
   /**

@@ -60,11 +60,9 @@ class ZincWriteMapper(
       case Left(file) if coreClasspath.exists(_.id == file.pathString) =>
         DUMMY
       case Left(file) =>
-        val sanitizedPath = file.pathString
-          .replace(workspaceRootStr, WORKSPACE)
-          .replace(depCopyHttpsStr, HTTPSCOPY) // need check https first
-          .replace(depCopyHttpStr, HTTPCOPY)
-          .replace(depCopyDistStr, DEPCOPY) // then go for AFS check
+        val sanitizedPath = externalDepsSubstitutions.foldLeft(file.pathString) { case (result, s) =>
+          result.replace(s.realDirectory, s.key) // convert dir path to KEY
+        }
 
         validatePath(sanitizedPath)
         sanitizedPath
@@ -86,9 +84,9 @@ class ZincWriteMapper(
     assert(!text.contains(BUILD_DIR.pathString), "Input analyses should not contain stand-in BUILD")
     assert(!text.contains(DEPCOPY), "Input analyses should not contain stand-in DEPCOPY")
 
-    val isXPlugin = text.startsWith("-Xplugin:")
-    val isYMacro = previousArg.contains("-Ymacro-classpath")
-    val isPickleWrite = previousArg.contains("-Ypickle-write")
+    val isXPlugin = text.startsWith(pluginFlag)
+    val isYMacro = previousArg.contains(macroFlag)
+    val isPickleWrite = previousArg.contains(pickleWriteFlag)
 
     val ret =
       if (isPickleWrite) {
@@ -97,24 +95,24 @@ class ZincWriteMapper(
         // truly independent we replace it with a fixed string anyway
         DUMMY
       } else {
-        val separatorSubstitutions: Seq[(String, String)] =
+        val separatorSubstitutions: Seq[Substitution] =
           if ((isXPlugin || isYMacro) && File.pathSeparator != ":")
-            Seq((File.pathSeparator, ":"))
+            Seq(Substitution(File.pathSeparator, ":"))
           else Seq.empty
 
-        val buildSubstitutions: Seq[(String, String)] = {
+        val buildSubstitutions: Seq[Substitution] = {
           val jars = findBuildJarsInText(buildDir, text)
-          jars.map(j => (j.pathString, translateOptionPath(j).pathString))
+          jars.map(j => Substitution(j.pathString, translateOptionPath(j).pathString))
         }
 
-        val depcopySubstitutions: Seq[(String, String)] =
-          if (isXPlugin || isYMacro) Seq((depCopyDistStr, DEPCOPY))
-          else Seq.empty
+        val pathSubstitutions: Seq[Substitution] =
+          if (isXPlugin || isYMacro) externalDepsSubstitutions
+          else Seq(workspaceSubstitution)
 
         val substitutions =
-          (separatorSubstitutions ++ buildSubstitutions ++ depcopySubstitutions).filterNot(p => p._1 == p._2)
-        substitutions.foldLeft(text) { case (acc, (from, to)) =>
-          acc.replace(from, to)
+          (separatorSubstitutions ++ buildSubstitutions ++ pathSubstitutions).filterNot(_.isSame)
+        substitutions.foldLeft(text) { case (acc, s) =>
+          acc.replace(s.realDirectory, s.key) // convert dir path to KEY
         }
       }
     previousArg = Some(text)

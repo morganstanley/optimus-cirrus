@@ -18,7 +18,7 @@ import optimus.stratosphere.config.StratoWorkspaceCommon
 import spray.json._
 
 final class BitBucketImpl(stratoWorkspace: StratoWorkspaceCommon)
-    extends BitBucket(stratoWorkspace.internal.stashHostname)
+    extends BitBucket(stratoWorkspace.internal.bitbucketHostname)
     with RestApi {
   private val httpClient = HttpClientFactory
     .factory(stratoWorkspace)

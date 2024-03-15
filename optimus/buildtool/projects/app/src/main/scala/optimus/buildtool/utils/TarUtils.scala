@@ -23,6 +23,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
 import org.apache.commons.compress.archivers.tar.TarConstants
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
+import org.apache.commons.compress.compressors.gzip.GzipParameters
 
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -66,8 +67,9 @@ object TarUtils extends Log {
     result
   }
 
-  def populateTarGz(tarAsset: FileAsset, directory: Directory)(post: TarArchiveOutputStream => Unit): FileAsset = {
-    populateTarGzStream(tarAsset) { taos =>
+  def populateTarGz(tarAsset: FileAsset, directory: Directory, gzipParams: GzipParameters = new GzipParameters())(
+      post: TarArchiveOutputStream => Unit): FileAsset = {
+    populateTarGzStream(tarAsset, gzipParams) { taos =>
       directory.path.toFile.listFiles().toList.foreach { file =>
         addFileToTarGz(taos, file.toPath, None)
       }
@@ -105,11 +107,12 @@ object TarUtils extends Log {
     }
   }
 
-  private def populateTarGzStream(tarAsset: FileAsset)(f: TarArchiveOutputStream => Unit): FileAsset =
+  private def populateTarGzStream(tarAsset: FileAsset, gzipParams: GzipParameters = new GzipParameters())(
+      f: TarArchiveOutputStream => Unit): FileAsset =
     AssetUtils.atomicallyWrite(tarAsset, replaceIfExists = true, localTemp = true) { tempFile =>
       val fos = Files.newOutputStream(tempFile)
       val bos = new BufferedOutputStream(fos)
-      val gzos = new GzipCompressorOutputStream(bos)
+      val gzos = new GzipCompressorOutputStream(bos, gzipParams)
       val taos = new TarArchiveOutputStream(gzos)
       try {
         taos.setLongFileMode(TarArchiveOutputStream.LONGFILE_GNU)

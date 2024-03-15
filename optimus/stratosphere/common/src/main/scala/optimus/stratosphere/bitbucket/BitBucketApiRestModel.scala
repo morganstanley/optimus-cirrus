@@ -9,7 +9,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.stratosphere.stash
+package optimus.stratosphere.bitbucket
 
 import spray.json.DefaultJsonProtocol
 import spray.json.JsonFormat

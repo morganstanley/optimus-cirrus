@@ -31,9 +31,12 @@ import optimus.buildtool.utils.TarUtils
 import optimus.platform._
 import spray.json.JsonParser
 
+import java.nio.file.Files
 import java.nio.file.Path
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 trait ArtifactType {
   def name: String
@@ -75,10 +78,8 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
 }
 
 trait FingerprintArtifactType extends ArtifactType {
-  type A = FingerprintArtifact
+  type A <: FingerprintArtifact
   override val suffix = "fingerprint"
-  @node def fromAsset(id: ScopeId, a: Asset): FingerprintArtifact =
-    FingerprintArtifact.create(InternalArtifactId(id, this, None), FileAsset(a.path))
 }
 
 trait GeneratedSourceArtifactType extends CachedArtifactType {
@@ -205,7 +206,12 @@ trait ElectronArtifactType extends CachedArtifactType {
   override val suffix = "jar"
   @node override def fromAsset(id: ScopeId, a: Asset): ElectronArtifact = {
     val file = JarAsset(a.path)
-    ElectronArtifact.create(id, file, hash(file))
+    val cached = Jars.withJar(file) { root =>
+      val metadata = root.resolveFile(CachedMetadata.MetadataFile).asJson
+      import JsonImplicits._
+      AssetUtils.readJson[ElectronMetadata](metadata, unzip = false)
+    }
+    ElectronArtifact.create(id, file, hash(file), cached.mode, cached.executables)
   }
 }
 
@@ -217,8 +223,14 @@ trait PythonArtifactType extends CachedArtifactType {
       .readFileInTarGz(a.path, CachedMetadata.MetadataFile)
       .map { metadata =>
         import JsonImplicits._
-        val parsed = JsonParser(metadata).convertTo[MessagesMetadata]
-        PythonArtifact.create(id, FileAsset(a.path), parsed.messages, parsed.hasErrors)
+        val parsed = JsonParser(metadata).convertTo[PythonMetadata]
+        PythonArtifact.create(
+          id,
+          FileAsset(a.path),
+          parsed.osVersion,
+          parsed.messages,
+          parsed.hasErrors,
+          parsed.inputsHash)
       }
       .getOrThrow(s"Couldn't read cached metadata in ${a.path}")
   }
@@ -311,6 +323,8 @@ object ArtifactType {
   add(JmhMessages)
   case object ConfigMessages extends BaseArtifactType("config-messages") with MessageArtifactType
   add(ConfigMessages)
+  case object DuplicateMessages extends BaseArtifactType("duplicate-messages") with MessageArtifactType
+  add(DuplicateMessages)
 
   case object ScalaAnalysis extends BaseArtifactType("scala-analysis") with AnalysisArtifactType
   add(ScalaAnalysis)
@@ -354,7 +368,19 @@ object ArtifactType {
   case object CompilationFingerprint
       extends BaseArtifactType("compilation-fingerprint")
       with FingerprintArtifactType
-      with CachedArtifactType
+      with CachedArtifactType {
+    private val HashRegex = s".*\\.(HASH[^.]*)\\.fingerprint".r
+    override type A = FingerprintArtifact with PathedArtifact
+    @node def fromAsset(id: ScopeId, a: Asset): FingerprintArtifact with PathedArtifact = {
+      val fingerprint = Files.readAllLines(a.path).asScala.to(Seq)
+      // slightly hacky
+      val hash = a.pathString match {
+        case HashRegex(hash) => hash
+        case p               => throw new IllegalArgumentException(s"Unexpected fingerprint path: $p")
+      }
+      FingerprintArtifact.create(InternalArtifactId(id, this, None), FileAsset(a.path), fingerprint, hash)
+    }
+  }
   add(CompilationFingerprint)
   case object ResourceFingerprint extends BaseArtifactType("resource-fingerprint") with FingerprintArtifactType
   add(ResourceFingerprint)

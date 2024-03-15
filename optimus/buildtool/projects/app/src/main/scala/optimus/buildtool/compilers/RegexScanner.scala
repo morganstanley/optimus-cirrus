@@ -17,6 +17,7 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.config.CodeFlaggingRule
+import optimus.buildtool.config.Group
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.Pattern
 import optimus.buildtool.config.ScopeId
@@ -50,7 +51,7 @@ import scala.collection.immutable.SortedMap
     val t = NodeTry {
       val messages = sourceFiles.toIndexedSeq.apar
         .flatMap { case (id, content) =>
-          analyzeSource(id, content, rules)
+          analyzeSource(id, content, rules, scopeId)
         }
       trace.publishMessages(messages)
       messages
@@ -64,96 +65,26 @@ import scala.collection.immutable.SortedMap
   @node private def analyzeSource(
       id: SourceUnitId,
       content: HashedContent,
-      rules: Seq[CodeFlaggingRule]
-  ): Seq[CompilationMessage] = {
+      rules: Seq[CodeFlaggingRule],
+      scopeId: ScopeId): Seq[CompilationMessage] = {
     if (NamingConventions.isBinaryExtension(id.suffix)) Nil // no need to scan binary files!
     else {
-      val applicableRules = this.applicableRules(id, rules)
+      val applicableRules = RegexScanner.applicableRules(id, rules, scopeId)
       // TODO (OPTIMUS-42169): this probably could be made faster / less memory-intensive by running the regexen
       // over the entire file and then computing an index range -> line number mapping rather than splitting into lines
       scanLines(id, content.utf8ContentAsString.split('\n').zipWithIndex.toIndexedSeq, applicableRules)
     }
   }
 
-  // likewise extracted/nodulated to avoid more regex matching every time
-  @node private def applicableRules(id: SourceUnitId, rules: Seq[CodeFlaggingRule]): Seq[CodeFlaggingRule] =
-    rules.filter(_ matchesFile id.localRootToFilePath.toString)
-
   private def scanLines(
       id: SourceUnitId,
       lines: Seq[(String, Int)],
-      applicableRules: Seq[CodeFlaggingRule]
-  ): Seq[CompilationMessage] = {
-
-    @tailrec def scanNextLine(
-        remainingLines: Seq[(String, Int)],
-        currentOffset: Int,
-        accum: Seq[CompilationMessage],
-        ignoring: Boolean = false
-    ): Seq[CompilationMessage] = remainingLines match {
-      case (line, _) +: _ if line.contains(IgnoreFileToken) =>
-        // skip the file
-        Nil
-      case (line, _) +: tail if line.contains(IgnoreEndToken) =>
-        // ignore this line but start scanning again from the next one
-        scanNextLine(tail, currentOffset + line.length + 1, accum, ignoring = false)
-      case (line, _) +: tail if ignoring || line.contains(IgnoreStartToken) =>
-        // ignore this line and following ones until we see an end token
-        scanNextLine(tail, currentOffset + line.length + 1, accum, ignoring = true)
-      case (line, _) +: (nextLine, _) +: tail if line.contains(IgnoreLineToken) =>
-        // skip a line
-        scanNextLine(tail, currentOffset + line.length + nextLine.length + 2, accum, ignoring = false)
-      case (line, lineNumber) +: tail =>
-        val lineMessages = applicableRules.flatMap { codingRule =>
-          val (excludes, includes) = codingRule.regexes.partition(_.exclude)
-          val anyExcludeMatches = excludes.exists(_.regex.findAllMatchIn(line).nonEmpty)
-          if (!anyExcludeMatches)
-            generateCompilationMessageForIncludes(includes, line, lineNumber, currentOffset, codingRule, id)
-          else Nil
-        }
-        // +1 to include the stripped '\n'
-        scanNextLine(tail, currentOffset + line.length + 1, accum ++ lineMessages, ignoring = false)
-
-      case Seq() =>
-        accum
-    }
-
-    scanNextLine(lines, 0, Nil, ignoring = false)
-  }
-
-  private def generateCompilationMessageForIncludes(
-      includes: Seq[Pattern],
-      line: String,
-      lineNumber: Int,
-      offset: Int,
-      codingRule: CodeFlaggingRule,
-      id: SourceUnitId
-  ): Seq[CompilationMessage] = {
-    includes.flatMap { includeRules =>
-      val includeMatches = includeRules.regex.findAllMatchIn(line)
-      includeMatches.map { m =>
-        val messagePosition = MessagePosition(
-          filepath = id.localRootToFilePath.pathString,
-          startLine = lineNumber + 1,
-          startColumn = m.start + 1,
-          endLine = lineNumber + 1,
-          endColumn = m.end + 1,
-          startPoint = offset + m.start,
-          endPoint = offset + m.end
-        )
-        CompilationMessage(
-          Some(messagePosition),
-          codingRule.description,
-          codingRule.severityLevel,
-          Some(codingRule.title),
-          isSuppressed = false,
-          isNew = codingRule.isNew)
-      }
-    }
-  }
+      applicableRules: Seq[CodeFlaggingRule]): Seq[CompilationMessage] =
+    scanNextLine(id, lines, 0, Nil, ignoring = false, applicableRules)
 
 }
 
+@entity
 object RegexScanner {
   trait ScanInputs {
     def sourceFiles: SortedMap[SourceUnitId, HashedContent]
@@ -184,4 +115,116 @@ object RegexScanner {
   val IgnoreStartToken = s"$prefix-start"
   val IgnoreEndToken = s"$prefix-end"
   val IgnoreLineToken = s"$prefix-line"
+
+  @node private def matchesGroup(group: Group, fileName: String, scopeId: ScopeId, all: Boolean): Boolean =
+    if (group.filePaths.nonEmpty) {
+      val filePathRegexes = group.filePaths.map(_.r)
+      if (all) filePathRegexes.forall(_.findFirstIn(fileName).isDefined)
+      else
+        filePathRegexes.exists(_.findFirstIn(fileName).isDefined)
+    } else {
+      group.inScopes.contains(scopeId)
+    }
+
+  // likewise extracted/nodulated to avoid more regex matching every time
+  @node private[compilers] def applicableRules(
+      id: SourceUnitId,
+      rules: Seq[CodeFlaggingRule],
+      scopeId: ScopeId): Seq[CodeFlaggingRule] = {
+    val fileName = id.localRootToFilePath.toString
+
+    rules.apar.filter(rule =>
+      rule.filter match {
+        case Some(filter) =>
+          val all = filter.all
+          val any = filter.any
+          val excl = filter.exclude
+
+          all.apar.forall(matchesGroup(_, fileName, scopeId, all = true)) &&
+          (any.isEmpty || any.apar.exists(matchesGroup(_, fileName, scopeId, all = false))) &&
+          !excl.apar.exists(matchesGroup(_, fileName, scopeId, all = false))
+
+        case None => rule matchesFile fileName
+      })
+  }
+
+  def scanLines(
+      id: SourceUnitId,
+      lines: Seq[(String, Int)],
+      applicableRules: Seq[CodeFlaggingRule]
+  ): Seq[CompilationMessage] = scanNextLine(id, lines, 0, Nil, ignoring = false, applicableRules)
+
+  @tailrec def scanNextLine(
+      id: SourceUnitId,
+      remainingLines: Seq[(String, Int)],
+      currentOffset: Int,
+      accum: Seq[CompilationMessage],
+      ignoring: Boolean = false,
+      applicableRules: Seq[CodeFlaggingRule]
+  ): Seq[CompilationMessage] = remainingLines match {
+    case (line, _) +: _ if line.contains(IgnoreFileToken) =>
+      // skip the file
+      Nil
+    case (line, _) +: tail if line.contains(IgnoreEndToken) =>
+      // ignore this line but start scanning again from the next one
+      scanNextLine(id, tail, currentOffset + line.length + 1, accum, ignoring = false, applicableRules)
+    case (line, _) +: tail if ignoring || line.contains(IgnoreStartToken) =>
+      // ignore this line and following ones until we see an end token
+      scanNextLine(id, tail, currentOffset + line.length + 1, accum, ignoring = true, applicableRules)
+    case (line, _) +: (nextLine, _) +: tail if line.contains(IgnoreLineToken) =>
+      // skip a line
+      scanNextLine(
+        id,
+        tail,
+        currentOffset + line.length + nextLine.length + 2,
+        accum,
+        ignoring = false,
+        applicableRules)
+    case (line, lineNumber) +: tail =>
+      val lineMessages = applicableRules.flatMap { codingRule =>
+        val (excludes, includes) = codingRule.regexes.partition(_.exclude)
+        val anyExcludeMatches = excludes.exists(_.regex.findAllMatchIn(line).nonEmpty)
+        if (!anyExcludeMatches)
+          generateCompilationMessageForIncludes(includes, line, lineNumber, currentOffset, codingRule, id)
+        else Nil
+      }
+      // +1 to include the stripped '\n'
+      scanNextLine(id, tail, currentOffset + line.length + 1, accum ++ lineMessages, ignoring = false, applicableRules)
+
+    case Seq() =>
+      accum
+  }
+
+  def generateCompilationMessageForIncludes(
+      includes: Seq[Pattern],
+      line: String,
+      lineNumber: Int,
+      offset: Int,
+      codingRule: CodeFlaggingRule,
+      id: SourceUnitId
+  ): Seq[CompilationMessage] = {
+    includes.flatMap { includeRules =>
+      val includeMatches = includeRules.regex.findAllMatchIn(line)
+      includeMatches.map { m =>
+        val messagePosition = MessagePosition(
+          filepath = id.localRootToFilePath.pathString,
+          startLine = lineNumber + 1,
+          startColumn = m.start + 1,
+          endLine = lineNumber + 1,
+          endColumn = m.end + 1,
+          startPoint = offset + m.start,
+          endPoint = offset + m.end
+        )
+
+        CompilationMessage(
+          Some(messagePosition),
+          includeRules.message.getOrElse(codingRule.description),
+          codingRule.severityLevel,
+          Some(codingRule.title),
+          isSuppressed = false,
+          isNew = codingRule.isNew
+        )
+      }
+    }
+  }
 }

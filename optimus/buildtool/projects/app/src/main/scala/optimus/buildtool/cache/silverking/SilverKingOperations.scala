@@ -35,7 +35,7 @@ import optimus.dal.silverking.client.SkClientKerberosUtils
 import optimus.graph.Node
 import optimus.graph.NodePromise
 import optimus.graph.NodeTaskInfo
-import optimus.platform.annotations.{createNodeTrait, nodeSync}
+import optimus.platform.annotations.nodeSync
 import optimus.platform.util.Log
 import optimus.platform._
 import optimus.scalacompat.collection._
@@ -144,8 +144,6 @@ object SilverKingOperations {
       type Value = ByteBuffer
     }
   }
-
-  val DefaultTimeoutMillis = 60000
 
 }
 
@@ -318,6 +316,8 @@ private[cache] object SilverKingOperationsImpl extends Log {
   object Config {
     private val prefix = SilverKingStoreConfig.prefix
 
+    val connectionTimeoutMillis: Int = sys.props.get(s"$prefix.connectionTimeoutMillis").map(_.toInt).getOrElse(60000)
+    val queryTimeoutMillis: Int = sys.props.get(s"$prefix.queryTimeoutMillis").map(_.toInt).getOrElse(60000)
     // defaults to `false`
     val debug: Boolean = sys.props.get(s"$prefix.debug").exists(_.toBoolean)
     // defaults to `false`
@@ -372,11 +372,11 @@ private[cache] object SilverKingOperationsImpl extends Log {
   ): SilverKingOperationsImpl = {
     // Timeouts on SK connection are notoriously fickle, so protect ourselves here
     // by only ever waiting a set maximum period of time
-    try Await.result(create(config, clusterType, debug, forward), SilverKingOperations.DefaultTimeoutMillis millis)
+    try Await.result(create(config, clusterType, debug, forward), Config.connectionTimeoutMillis millis)
     catch {
       case _: TimeoutException =>
         throw new TimeoutException(
-          s"SilverKing $clusterType connection timed out after ${SilverKingOperations.DefaultTimeoutMillis} millis"
+          s"SilverKing $clusterType connection timed out after ${Config.connectionTimeoutMillis} millis"
         )
     }
   }
@@ -483,7 +483,7 @@ private[cache] class SilverKingOperationsImpl private (
     readUntyped(r, n)(key).asInstanceOf[Option[n.Value]]
 
   // Remove namespace-based typing here to allow for node batching
-  @createNodeTrait @async private def readUntyped(r: RequestInfo, n: Namespace)(key: StoredKey): Option[Any] = {
+  @async(exposeArgTypes = true) private def readUntyped(r: RequestInfo, n: Namespace)(key: StoredKey): Option[Any] = {
     val typedKey = key.asInstanceOf[n.Key]
     val p = perspective(n)
     val traceId = newTraceId(n, "read", r)(typedKey)
@@ -523,7 +523,7 @@ private[cache] class SilverKingOperationsImpl private (
     validKeysUntyped(r, n)(keys).asInstanceOf[Set[n.Key]]
 
   // Remove namespace-based typing here to allow for node batching
-  @createNodeTrait @async private def validKeysUntyped(r: RequestInfo, n: Namespace)(
+  @async(exposeArgTypes = true) private def validKeysUntyped(r: RequestInfo, n: Namespace)(
       keys: Iterable[StoredKey]): Set[StoredKey] =
     _validKeysUntyped(r, n)(keys)
 
@@ -541,7 +541,8 @@ private[cache] class SilverKingOperationsImpl private (
     writeUntyped(r, n)(key, value)
 
   // Remove namespace-based typing here to allow for node batching
-  @createNodeTrait @async private def writeUntyped(r: RequestInfo, n: Namespace)(key: StoredKey, value: Any): Unit = {
+  @async(exposeArgTypes = true)
+  private def writeUntyped(r: RequestInfo, n: Namespace)(key: StoredKey, value: Any): Unit = {
     val typedKey = key.asInstanceOf[n.Key]
     val typedValue = value.asInstanceOf[n.Value]
     val p = perspective(n)
@@ -595,7 +596,7 @@ private[cache] class SilverKingOperationsImpl private (
   @async private def await[A <: AsyncKeyedOperation[_], B](
       traceId: TraceId,
       op: A,
-      timeoutMillis: Int = DefaultTimeoutMillis
+      timeoutMillis: Int = queryTimeoutMillis
   )(
       f: => B
   ): B = {

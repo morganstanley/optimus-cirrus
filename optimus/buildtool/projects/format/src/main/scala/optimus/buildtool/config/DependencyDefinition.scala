@@ -13,7 +13,6 @@ package optimus.buildtool.config
 
 import optimus.buildtool.files.Asset
 
-import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 final case class Variant(name: String, reason: String, configurationOnly: Boolean = false)
@@ -47,6 +46,7 @@ final case class DependencyDefinition(
     classifier: Option[String] = None,
     excludes: Seq[Exclude] = Nil,
     variant: Option[Variant] = None,
+    resolvers: Seq[String] = Nil,
     transitive: Boolean = true,
     force: Boolean = false,
     line: Int = 0,
@@ -55,7 +55,8 @@ final case class DependencyDefinition(
     isScalacPlugin: Boolean = false,
     ivyArtifacts: Seq[IvyArtifact] = Nil,
     isMaven: Boolean = false,
-    isDisabled: Boolean = false
+    isDisabled: Boolean = false,
+    isExtraLib: Boolean = false // for metadata generation only
 ) extends OrderedElement {
   def gradleKey = s"$group:$name:${variant.fold("default")(_ => version)}"
 
@@ -134,16 +135,6 @@ final case class ExternalDependencies(afsDependencies: AfsDependencies, mavenDep
   // be used for direct mapping
   val afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
     multiSourceDependencies.map(d => d.definition -> d.equivalents).toMap
-  val mappedAfsDepsStr: Seq[String] = afsToMavenMap
-    .map { case (afs, maven) =>
-      s"${afs.group}:${afs.name}:${afs.version}"
-    }
-    .to(Seq)
-  // be used for transitive mapping
-  val afsGroupNameToMavenMap: Map[(String, String), Seq[DependencyDefinition]] = afsToMavenMap.map {
-    case (afs, maven) =>
-      (afs.group, afs.name) -> maven
-  }
 }
 
 object AfsDependencies {

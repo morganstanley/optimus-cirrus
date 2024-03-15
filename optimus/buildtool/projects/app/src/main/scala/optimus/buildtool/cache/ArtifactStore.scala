@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.cache
 
+import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.NamingConventions.ConfigPrefix
@@ -99,7 +100,12 @@ trait ArtifactStoreBase extends ArtifactStore {
   final def logFound(id: ScopeId, tpe: CachedArtifactType, details: Seq[String]): Unit =
     logFound(id, ArtifactCacheTraceType(tpe), details)
   final def logFound(id: ScopeId, tpe: CacheTraceType, details: Seq[String]): Unit = {
-    if (tpe.isInstanceOf[RemoteAssetCacheTraceType]) ObtTrace.addToStat(stat.ExternalHit, details.size)
+    tpe match {
+      case ArtifactCacheTraceType(ArtifactType.Scala) => ObtTrace.addToStat(stat.ScalaHit, details.size)
+      case ArtifactCacheTraceType(ArtifactType.Java)  => ObtTrace.addToStat(stat.JavaHit, details.size)
+      case RemoteAssetCacheTraceType(_)               => ObtTrace.addToStat(stat.ExternalHit, details.size)
+      case _                                          => // do nothing
+    }
     ObtTrace.addToStat(stat.Hit, details.size)
     if (details.size == 1) debug(id, s"Artifact found for $tpe: ${details.mkString("")}")
     else debug(id, s"Artifact(s) found for $tpe:\n  ${details.mkString("\n  ")}")

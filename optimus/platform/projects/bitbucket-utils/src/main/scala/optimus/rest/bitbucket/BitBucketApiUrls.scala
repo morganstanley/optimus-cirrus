@@ -45,6 +45,15 @@ trait BitBucketApiUrls {
 
   protected def apiTasksUrl(project: String, repo: String, prNumber: Int): String = apiUrl("api", "blocker-comments")
 
+  protected def apiListFilesUrl(
+      project: String,
+      repo: String,
+      dirToList: String,
+      branchOption: Option[String]): String = {
+    val base = s"${apiRepoUrl(project, repo)}/files/$dirToList"
+    branchOption.fold(base)(branch => s"$base?at=$branch")
+  }
+
   protected def apiBrowseUrl(
       project: String,
       repo: String,

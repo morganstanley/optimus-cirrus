@@ -21,6 +21,7 @@ import optimus.buildtool.app.OptimusBuildToolAppBase
 import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.app.OptimusBuildToolImpl
+import optimus.buildtool.builders.reporter.ErrorReporter
 import optimus.buildtool.files.Directory
 import optimus.platform._
 import optimus.platform.OptimusApp.ExitHandler
@@ -35,7 +36,7 @@ private[buildtool] object OptimusBuildTool
   val originalStdOut: PrintStream = System.out
   val originalStdErr: PrintStream = System.err
 
-  val DefaultArtifactVersionNumber = "1.31"
+  val DefaultArtifactVersionNumber = "1.32"
 
   override protected def parseCmdline(args: Array[String], exitHandler: ExitHandler): Unit = {
     super.parseCmdline(args, exitHandler)
@@ -60,7 +61,8 @@ private[buildtool] object OptimusBuildTool
     AnsiConsole.systemInstall()
   }
 
-  @entersGraph override def run(): Unit =
+  @entersGraph override def run(): Unit = {
+    val errorReporter = new ErrorReporter(cmdLine.errorsDir)
     try {
       log.info(s"Starting OptimusBuildTool with args: ${args.mkString("[", ", ", "]")}")
       OptimusBuildToolBootstrap.initializeCrumbs(
@@ -76,7 +78,7 @@ private[buildtool] object OptimusBuildTool
           true
         } else if (cmdLine.scopesToBuild == Set("nobuild")) true
         else {
-          val impl = OptimusBuildToolImpl(cmdLine, NoBuildInstrumentation)
+          val impl = OptimusBuildToolImpl(cmdLine, NoBuildInstrumentation, Some(errorReporter))
           impl.start()
         }
 
@@ -84,6 +86,8 @@ private[buildtool] object OptimusBuildTool
     } catch {
       case NonFatal(e) =>
         originalStdErr.println(s"OBT exiting due to exception: $e")
+        errorReporter.writeErrorReport(e)
         throw e
     }
+  }
 }

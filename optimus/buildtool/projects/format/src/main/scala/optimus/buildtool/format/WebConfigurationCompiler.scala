@@ -12,7 +12,7 @@
 package optimus.buildtool.format
 
 import com.typesafe.config.Config
-import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NpmConfiguration._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.WebConfiguration
 
@@ -24,38 +24,25 @@ object WebConfigurationCompiler {
   import ConfigUtils._
 
   private val WebConfig = "web"
-  private val ModeKey = "mode"
-  private val LibsKey = "libs"
-  private val MavenKey = NamingConventions.MavenLibsKey
-  private val NpmCommandTemplateKey = "npmCommandTemplate"
-  private val NpmBuildCommandsKey = "npmBuildCommands"
 
   def load(config: Config, origin: ObtFile): Result[Option[WebConfiguration]] =
     Result.tryWith(origin, config) {
       Result.optional(config.hasPath(WebConfig)) {
         val web = config.getConfig(WebConfig)
         web.getString(ModeKey) match {
-          case "prod" =>
+          case Production.name =>
             val npmCommandTemplate = web.stringMapOrEmpty(NpmCommandTemplateKey, origin)
-            val webLibs =
-              web.stringListOrEmpty(LibsKey) ++ web.stringListOrEmpty(MavenKey)
+            val libs = web.stringListOrEmpty(LibsKey) ++ web.stringListOrEmpty(MavenKey)
             npmCommandTemplate
               .map { t =>
                 val npmBuildCommands =
                   if (web.hasPath(NpmBuildCommandsKey)) Some(web.getStringList(NpmBuildCommandsKey).asScala.to(Seq))
                   else None
-                WebConfiguration(Production, webLibs, t, npmBuildCommands)
+                WebConfiguration(Production, libs, t, npmBuildCommands)
               }
               .withProblems(web.checkExtraProperties(origin, Keys.webProperties))
 
-          case "test" =>
-            if (web.hasPath(NpmBuildCommandsKey))
-              origin.failure(web.getValue(NpmBuildCommandsKey), "test mode doesn't any run npm build commands")
-            else
-              Success(WebConfiguration(TestingResource, Seq.empty, Map.empty, None))
-                .withProblems(web.checkExtraProperties(origin, Keys.webProperties))
-
-          case "dev" =>
+          case Development.name =>
             Success(WebConfiguration(Development, Seq.empty, Map.empty, None))
               .withProblems(web.checkExtraProperties(origin, Keys.webProperties))
 

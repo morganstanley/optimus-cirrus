@@ -14,7 +14,7 @@ package optimus.stratosphere.artifactory
 import com.fasterxml.jackson.databind.ObjectMapper
 import msjava.slf4jutils.scalalog.getLogger
 
-import java.net.URL
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -59,7 +59,7 @@ object Credential {
       val fileString = Files.readString(file)
       val artifactoryStr = objMapper.readTree(fileString).get("artifactory").get(0)
       Credential(
-        host = new URL(artifactoryStr.get("url").asText()).getHost,
+        host = new URI(artifactoryStr.get("url").asText()).toURL.getHost,
         user = artifactoryStr.get("user").asText(),
         password = artifactoryStr.get("password").asText()
       )

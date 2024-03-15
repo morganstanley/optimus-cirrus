@@ -103,7 +103,7 @@ trait StagingPluginDefinitions {
     def unapply(tree: Tree): Option[Tree] = tree match {
       case Apply(Apply(x, _), List(buildFrom)) if tree.isInstanceOf[ApplyToImplicitArgs] =>
         def finish(collType: Type, sel: Select, col: Tree) = {
-                      val takesCanBuildFrom = buildFrom.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass)
+          val takesCanBuildFrom = buildFrom.tpe.typeSymbol.isNonBottomSubClass(CanBuildFromClass)
           val calledOnSortedSet = collType.typeSymbol.isNonBottomSubClass(SortedSetClass)
 
           if (calledOnSortedSet && takesCanBuildFrom) {

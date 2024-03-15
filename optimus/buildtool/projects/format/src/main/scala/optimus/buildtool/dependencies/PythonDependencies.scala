@@ -12,6 +12,10 @@
 package optimus.buildtool.dependencies
 import optimus.buildtool.config.ModuleType
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.utils.Hashing
+import optimus.buildtool.utils.OsUtils
+
+import java.nio.file.Paths
 
 final case class PythonDependencies(
     pythonDefinitions: Set[PythonDefinition],
@@ -53,7 +57,20 @@ final case class PythonDefinition(
     version: String,
     path: String,
     venvPack: String,
-    variant: Option[PythonDependencies.Variant])
+    variant: Option[PythonDependencies.Variant]) {
+  def hash: String = Hashing.hashStrings(Seq(version, path, venvPack) ++ variant.map(_.name))
+  private def LinuxPossibleBinPaths: Seq[String] = Seq("/exec/bin").map(path + _)
+  private def WindowsPossibleBinPaths: Seq[String] = Seq("/exec", "/exec/bin").map(path + _)
+  def binPath: Option[String] =
+    if (OsUtils.isWindows) WindowsPossibleBinPaths.find(base => Paths.get(base, "python.exe").toFile.exists())
+    else LinuxPossibleBinPaths.find(base => Paths.get(base, "python").toFile.exists())
+
+  def notFoundMessage: String =
+    s"""
+       | Python not found, was searching in
+       | ${if (OsUtils.isWindows) WindowsPossibleBinPaths else LinuxPossibleBinPaths}
+       |""".stripMargin
+}
 
 sealed trait PythonDependency {
   def name: String

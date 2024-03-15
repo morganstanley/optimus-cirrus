@@ -59,7 +59,7 @@ final case class HashedResources(
     JarPackager.Inputs(
       Resources,
       ArtifactType.Resources,
-      pathBuilder.resourceOutPath(id, sources.compilationInputsHash),
+      pathBuilder.resourceOutPath(id, sources.compilationFingerprint.hash),
       sources.compilationSources,
       scope.config.resourceTokens
     )
@@ -91,7 +91,7 @@ private[scope] object ResourcePackaging {
       WarSources,
       ArtifactType.ArchiveContent,
       pathBuilder
-        .outputPathFor(id, sources.compilationInputsHash, ArtifactType.ArchiveContent, None, incremental = false)
+        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.ArchiveContent, None, incremental = false)
         .asJar,
       sources.compilationSources,
       scope.config.resourceTokens

@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import static optimus.EntityAgent.logException;
 import java.lang.invoke.MethodHandles;
 
 public class DynamicClassLoader extends ClassLoader {
@@ -31,7 +32,7 @@ public class DynamicClassLoader extends ClassLoader {
     try {
       return MethodHandles.lookup().defineClass(bytes);
     } catch (IllegalAccessException ex) {
-      ex.printStackTrace();
+      logException("error in DynamicClassLoader", ex);
       return null;
     }
   }
@@ -41,7 +42,7 @@ public class DynamicClassLoader extends ClassLoader {
       var cls = loadClass(bytes);
       return cls.getConstructor().newInstance();
     } catch (Exception ex) {
-      ex.printStackTrace();
+      logException("error in DynamicClassLoader", ex);
       return null;
     }
   }

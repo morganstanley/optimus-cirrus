@@ -23,8 +23,8 @@ import scala.collection.immutable.Map
  * @tparam B
  */
 class ConsistentDefaultMap[A, +B](
-  underlying: Map[A, B],
-  d: A => B
+    underlying: Map[A, B],
+    d: A => B
 ) extends Map.WithDefault[A, B](underlying, d) {
 
   override def get(key: A) = super.get(key) orElse Some(d(key))

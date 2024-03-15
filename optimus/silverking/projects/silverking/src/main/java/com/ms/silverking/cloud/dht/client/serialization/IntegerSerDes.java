@@ -50,6 +50,6 @@ public final class IntegerSerDes implements BufferSerDes<Integer> {
 
   @Override
   public Integer emptyObject() {
-    return new Integer(0);
+    return Integer.valueOf(0);
   }
 }

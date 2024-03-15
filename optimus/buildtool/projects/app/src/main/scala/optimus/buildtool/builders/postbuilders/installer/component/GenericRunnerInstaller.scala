@@ -12,9 +12,6 @@
 package optimus.buildtool.builders.postbuilders.installer
 package component
 
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.nio.file.StandardOpenOption
 import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.StaticConfig
@@ -26,8 +23,11 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable
-import scala.util.Properties.{ isWin => isWindows }
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
+import scala.collection.immutable.Seq
+import scala.util.Properties.{isWin => isWindows}
 
 class GenericRunnerInstaller(
     fingerprints: BundleFingerprintsCache,
@@ -39,7 +39,7 @@ class GenericRunnerInstaller(
 
   final val descriptor = "generic app runner"
 
-  @async override def install(installable: BatchInstallableArtifacts): immutable.Seq[FileAsset] = {
+  @async override def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
     installable.metaBundles.toList.sorted.apar.flatMap(installOne)
   }
 

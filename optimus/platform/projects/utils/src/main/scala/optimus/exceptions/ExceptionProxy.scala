@@ -46,12 +46,12 @@ trait ExceptionProxy extends Throwable with RTExceptionTrait {
   val isDeprecated = false
   def dep = if (isDeprecated) "Deprecated " else ""
 
-  override def toString: String =  getClass.getSimpleName
+  override def toString: String = getClass.getSimpleName
 
   final override def equals(obj: Any): Boolean = {
     obj match {
       case t: Throwable if matches(t) => {
-        if (RTList.setAsRT(t)) {  // so we handle only the first match of a particular exception instance
+        if (RTList.setAsRT(t)) { // so we handle only the first match of a particular exception instance
           registerComplaintForTestingPurposes()
           n += 1
           if (n >= nWaterMark) {
@@ -75,7 +75,7 @@ object ExceptionProxy {
   // We will eventually move the exception proxies out optimus.platform altogether.
   private val testing = "yesplease" == System.getProperty("optimus.exceptions.testing", "nope")
   private val complaints = new AtomicInteger(0)
-  private def registerComplaintForTestingPurposes(): Unit = if(testing) {
+  private def registerComplaintForTestingPurposes(): Unit = if (testing) {
     complaints.incrementAndGet()
   }
   def complaintsForTestingPurposes: Int = complaints.get()
@@ -126,11 +126,11 @@ class RuntimeExceptionGreedyMatching(contains: String, matcher: Regex) extends E
 }
 
 object TestSolverExceptionProxy
-  extends RuntimeExceptionContaining("this is a bogus exception for testing")
+    extends RuntimeExceptionContaining("this is a bogus exception for testing")
     with ExceptionProxy
 
 object NotificationTestExceptionProxy
-  extends RuntimeExceptionContaining("this is a bogus exception for notification testing")
+    extends RuntimeExceptionContaining("this is a bogus exception for notification testing")
     with ExceptionProxy
 
 object TestDeprecatedExceptionProxy
@@ -187,7 +187,7 @@ object ReflectionExceptionProxy extends ExceptionProxy {
     t match {
       case e: ScalaReflectionException  => Option(e.getCause) exists { RTList.isRT }
       case e: InvocationTargetException => Option(e.getTargetException) exists { RTList.isRT }
-      case _ => false
+      case _                            => false
     }
   }
 }

@@ -84,7 +84,7 @@ public class ProcReader {
     files = procDir.list();
     for (String file : files) {
       if (file.matches("\\d+")) {
-        pidList.add(new Integer(file));
+        pidList.add(Integer.valueOf(file));
       }
     }
     return pidList;

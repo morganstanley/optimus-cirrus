@@ -130,6 +130,10 @@ final case class PartialScopeId(
     s"${meta.getOrElse("*")}.${bundle.getOrElse("*")}.${module.getOrElse("*")}.${tpe.getOrElse("*")}"
 }
 
+object PartialScopeId {
+  val RootPartialScopeId = PartialScopeId(Some(""), Some(""), Some(""), Some(""))
+}
+
 object RelaxedIdString {
   def parts(str: String): Seq[Option[String]] = {
     val partsSeq = split(str)

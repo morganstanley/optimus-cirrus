@@ -11,17 +11,26 @@
  */
 package optimus.buildtool.artifacts
 
+import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.files.RelativePath
 
 import scala.collection.immutable.Seq
 
 object CachedMetadata {
-  val MetadataFile = RelativePath("metadata.json")
+  val MetadataFile: RelativePath = RelativePath(NamingConventions.MetadataFileName)
 }
 
 trait CachedMetadata
 
 final case class MessagesMetadata(messages: Seq[CompilationMessage], hasErrors: Boolean) extends CachedMetadata
+
+final case class PythonMetadata(
+    osVersion: String,
+    messages: Seq[CompilationMessage],
+    hasErrors: Boolean,
+    inputsHash: String)
+    extends CachedMetadata
 
 final case class CppMetadata(
     osVersion: String,
@@ -30,6 +39,13 @@ final case class CppMetadata(
     messages: Seq[CompilationMessage],
     hasErrors: Boolean
 ) extends CachedMetadata
+
+final case class ElectronMetadata(
+    mode: NpmBuildMode,
+    executables: Seq[String],
+    messages: Seq[CompilationMessage],
+    hasErrors: Boolean)
+    extends CachedMetadata
 
 final case class GeneratedSourceMetadata(
     generatorName: String,

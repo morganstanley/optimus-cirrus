@@ -44,7 +44,16 @@ class FullTextSearchOnlyReducer(val reducer: ReducerVisitor) extends QueryTreeVi
       case p: DALProvider =>
         if (!p.canBeFullTextSearch || PriqlSettings.enableFullTextSearchPriql) p
         else
-          new DALProvider(p.classEntityInfo, p.rowTypeInfo, p.key, p.pos, p.dalApi, p.canBeProjected, false, p.keyPolicy, p.entitledOnly)
+          new DALProvider(
+            p.classEntityInfo,
+            p.rowTypeInfo,
+            p.key,
+            p.pos,
+            p.dalApi,
+            p.canBeProjected,
+            false,
+            p.keyPolicy,
+            p.entitledOnly)
       case p =>
         require(!insideFullTextSearchOnly, s"$p cannot be within 'fullTextSearchOnly' scope")
         p

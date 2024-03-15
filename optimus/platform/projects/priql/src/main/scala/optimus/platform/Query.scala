@@ -14,7 +14,6 @@ package optimus.platform
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.core.CoreAPI._
 import optimus.graph._
-import optimus.platform.annotations.pluggable
 import optimus.platform.relational._
 import optimus.platform.relational.aggregation._
 import optimus.platform.relational.inmemory.QueryExplainGenerator
@@ -541,7 +540,7 @@ object Query {
 
   // used in ExecutionProvider
   @entity object Tracer {
-    @pluggable @node def trace[R](pos: MethodPosition, nf: NodeFunction0[R]): R = nf()
+    @node def trace[R](pos: MethodPosition, nf: NodeFunction0[R]): R = nf()
 
     if (Settings.showPriqlMethodInfo)
       trace_info.setPlugin(priqlTracePlugin)

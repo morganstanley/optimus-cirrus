@@ -66,7 +66,7 @@ class SimpleRetrievalOperation extends BaseRetrievalOperation<RetrievalEntrySing
     entryState.updatePresentResult(OpResult.REPLICA_EXCLUDED);
     entryState.setComplete();
     synchronized (rvComm) {
-      rvComm.sendResult(new RetrievalResult(key, OpResult.REPLICA_EXCLUDED, null));
+      rvComm.sendResult(new RetrievalResult(key, OpResult.REPLICA_EXCLUDED));
     }
   }
 
@@ -184,7 +184,7 @@ class SimpleRetrievalOperation extends BaseRetrievalOperation<RetrievalEntrySing
                     "No remaining replicas for key {} - will send current result {}",
                     KeyUtil.keyToString(key),
                     entryState.getPresentResult());
-                rvComm.sendResult(new RetrievalResult(key, entryState.getPresentResult(), null));
+                rvComm.sendResult(new RetrievalResult(key, entryState.getPresentResult()));
               }
             } else {
               synchronized (rvComm) {
@@ -276,6 +276,6 @@ class SimpleRetrievalOperation extends BaseRetrievalOperation<RetrievalEntrySing
       throw new RuntimeException("Invalid replicaIncluded() invocation");
     }
 
-    update(key, replica, new RetrievalResult(key, OpResult.REPLICA_EXCLUDED, null), rComm);
+    update(key, replica, new RetrievalResult(key, OpResult.REPLICA_EXCLUDED), rComm);
   }
 }

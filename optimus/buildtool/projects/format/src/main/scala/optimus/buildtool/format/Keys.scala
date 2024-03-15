@@ -12,6 +12,9 @@
 package optimus.buildtool.format
 
 import optimus.buildtool.dependencies.JvmDependenciesLoader._
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
+
 import scala.collection.immutable
 
 //noinspection TypeAnnotation
@@ -52,7 +55,6 @@ object Keys {
       "usePipelining",
       "tokens",
       "copyFiles",
-      "rules",
       "postInstallApps",
       "extensions",
       "empty",
@@ -135,35 +137,42 @@ object Keys {
   val archiveProperties = KeySet("type", "tokens", "excludes")
 
   val webProperties = KeySet("mode", "libs", "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
-  val electronProperties = KeySet("npmCommandTemplate", "libs", "mavenLibs", "npmBuildCommands")
+  val electronProperties =
+    KeySet("executables", "mode", "libs", "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
 
   val postInstallApp = KeySet("name", "args", "afterInstall")
 
-  val codeFlaggingRule = KeySet("key", "title", "file-patterns", "description", "severity-level", "patterns", "new")
-  val pattern = KeySet("pattern", "exclude")
+  val codeFlaggingRule =
+    KeySet("key", "title", "file-patterns", "filter", "description", "severity-level", "patterns", "new")
+  val pattern = KeySet("pattern", "exclude", "message")
+
+  // filters file
+  val groupsAndFiltersDefinition = KeySet("groups", "filters")
+  val groupsDefinition = KeySet("name", "file-paths", "in-scopes")
+  val filtersDefinition = KeySet("name", "all", "any", "exclude")
 
   // bundles file
   val moduleOwnership = KeySet("owner", "group")
 
-  val bundleDefinition = KeySet("modulesRoot", Names.forbiddenDependencies)
+  val bundleDefinition = KeySet("modulesRoot", Names.ForbiddenDependencies)
 
   val forbiddenDependencyKeys = KeySet(
-    Names.name,
-    Names.configurations,
-    Names.allowedIn,
-    Names.allowedPatterns,
-    Names.internalOnly,
-    Names.externalOnly)
+    Names.Name,
+    Names.Configurations,
+    Names.AllowedIn,
+    Names.AllowedPatterns,
+    Names.InternalOnly,
+    Names.ExternalOnly)
 
   // dependencies file
   val dependenciesFile =
-    KeySet(Dependencies, DepManagement, Excludes, NativeDependencies, Groups, ExtraLibs)
+    KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs)
   val artifactConfig = KeySet("type", "ext")
   val dependencyDefinition =
     KeySet(
       Version,
       Configuration,
-      Configurations,
+      Names.Configurations,
       Classifier,
       Excludes,
       "transitive",
@@ -174,14 +183,21 @@ object Keys {
       "reason",
       "keySuffix",
       Variants,
-      Name // be used for maven lib name override
+      Resolvers,
+      Names.Name // be used for maven lib name override
     )
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
-  val jvmDependencyDefinition = KeySet("maven", "afs", "variants")
+  val jvmDependencyDefinition = KeySet(Maven, Afs, Variants, "scala", IvyConfigurations)
   val excludesConfig = KeySet("group", "name")
 
   // resolvers file
-  val resolversFile = KeySet(Name, "ivys", Artifacts, "root")
+  val resolversFile =
+    KeySet(
+      ResolverDefinition.Name,
+      ResolverDefinition.Ivys,
+      ResolverDefinition.Poms,
+      ResolverDefinition.Artifacts,
+      ResolverDefinition.Root)
 
   // docker file
   val dockerFile = KeySet("images", "configuration")
@@ -229,8 +245,9 @@ object Keys {
     MischiefStructure.invalidateOnly
   )
 
-  val pythonTopLevel = KeySet("python", "dependencies")
-  val pythonDependencyLevel = KeySet("afs", "pypi", "variants")
-  val pythonDefinition = KeySet("version", "variants", "path", "venv-pack")
+  val pythonTopLevel = KeySet("python", Dependencies)
+  val pythonDependencyLevel = KeySet(Afs, "pypi", Variants)
+  val pythonDefinition = KeySet(Version, Variants, "path", "venv-pack")
   val pythonVariant = pythonDefinition ++ KeySet("reason")
+  val pythonObtFile = KeySet("libs", "variant", "type")
 }

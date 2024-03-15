@@ -20,7 +20,6 @@ import com.ms.silverking.cloud.dht.common.MessageType;
 import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.cloud.dht.net.protocol.KeyedMessageFormat;
 import com.ms.silverking.cloud.dht.net.protocol.RetrievalResponseMessageFormat;
-import com.ms.silverking.cloud.dht.throttle.SkThrottlingDebt;
 import com.ms.silverking.cloud.dht.trace.SkTraceId;
 import com.ms.silverking.cloud.dht.trace.TraceIDProvider;
 import com.ms.silverking.id.UUIDBase;
@@ -125,11 +124,6 @@ public final class ProtoValueMessageGroup extends ProtoValueMessageGroupBase {
       value.position(value.limit());
       bufferList.add(value);
     }
-  }
-
-  public void addDebt(SkThrottlingDebt totalDebt) {
-    ByteBuffer debt = SkThrottlingDebt.serialize(totalDebt);
-    bufferList.add(debt);
   }
 
   public void addErrorCode(DHTKey key, OpResult result) {

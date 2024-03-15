@@ -16,7 +16,7 @@ package optimus.plugin
     @node def nodeFunc(i: Int) = i + 1
     @node def foo: (String, Int) = CaptureCode("optimus_autoasync",Some(1).map(nodeFunc))
   will return something like
-    ("optimus.platform.this.async.seq(Some(1)).map(nodeFunc)", Some(i + 1))
+    ("optimus.platform.this.Async.seq(Some(1)).map(nodeFunc)", Some(i + 1))
 
  */
 object CaptureCode {

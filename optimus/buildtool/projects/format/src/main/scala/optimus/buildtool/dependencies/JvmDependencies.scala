@@ -16,6 +16,7 @@ import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyGroup
 import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.NativeDependencyDefinition
+import optimus.buildtool.dependencies.JvmDependenciesLoader.mavenScalaLibName
 import optimus.buildtool.format.MavenDefinition
 
 import scala.collection.immutable.Seq
@@ -28,7 +29,8 @@ class JvmDependencies(
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val groups: Seq[DependencyGroup],
     val globalExcludes: Seq[Exclude],
-    val mavenDefinition: Option[MavenDefinition]
+    val mavenDefinition: Option[MavenDefinition],
+    val scalaMajorVersion: Option[String]
 ) {
 
   private def byName(deps: Seq[MultiSourceDependency]) =
@@ -92,7 +94,8 @@ class JvmDependencies(
       merge(this.globalExcludes, buildDeps.globalExcludes),
       if (hasAfDefinition(this)) this.mavenDefinition
       else if (hasAfDefinition(buildDeps)) buildDeps.mavenDefinition
-      else None
+      else None,
+      scalaMajorVersion.orElse(this.scalaMajorVersion)
     )
   }
 
@@ -104,11 +107,19 @@ class JvmDependencies(
       .asJava
 
   private def versionsById(id: String, fromMavenLibs: Boolean): Seq[DependencyDefinition] = {
-    val searchDeps =
-      if (fromMavenLibs) // maven only projects or maven release build
-        mavenOnlyModulesDependenciesMap(id)
-      else // afs modules
-        afsModulesDependenciesMap(id)
+    val searchDeps = {
+      val dependencies =
+        if (fromMavenLibs) mavenOnlyModulesDependenciesMap // maven only projects or maven release build
+        else afsModulesDependenciesMap
+      scalaMajorVersion match {
+        case Some(scalaStr) =>
+          dependencies
+            .get(id)
+            .orElse(dependencies.get(mavenScalaLibName(id, scalaStr)))
+            .getOrElse(Nil)
+        case None => dependencies(id)
+      }
+    }
     groupsByName(id) ++ searchDeps
   }
 
@@ -130,7 +141,8 @@ object JvmDependencies {
       nativeDependencies: Map[String, NativeDependencyDefinition],
       groups: Seq[DependencyGroup],
       globalExcludes: Seq[Exclude],
-      mavenDefinition: Option[MavenDefinition]): JvmDependencies =
+      mavenDefinition: Option[MavenDefinition],
+      scalaMajorVersion: Option[String]): JvmDependencies =
     new JvmDependencies(
       dependencies,
       mavenDependencies,
@@ -138,7 +150,8 @@ object JvmDependencies {
       nativeDependencies,
       groups,
       globalExcludes,
-      mavenDefinition)
+      mavenDefinition,
+      scalaMajorVersion)
 
-  val empty: JvmDependencies = apply(Seq.empty, Seq.empty, None, Map.empty, Seq.empty, Seq.empty, None)
+  val empty: JvmDependencies = apply(Seq.empty, Seq.empty, None, Map.empty, Seq.empty, Seq.empty, None, None)
 }

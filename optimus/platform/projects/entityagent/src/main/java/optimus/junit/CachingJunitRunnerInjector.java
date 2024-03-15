@@ -55,20 +55,27 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
 
     this.failedState = !dtcHelperClassFound || !baseClassFound;
 
-    if (DiagnosticSettings.isClassMonitorEnabled
-        && DiagnosticSettings.enableJunitRunnerMonitorInjection) {
-      // we've got the instrumentation system property but no dtc on classpath!
-      // we will report only one, if we are asked to instrument
-      if (!dtcHelperClassFound) {
-        logErrMsg(
-            "optimus.dtc.runners.DTCDynamicRunnerHelper not found on classpath, cannot dynamically instrument junit tests for DTC");
+    if (DiagnosticSettings.isClassMonitorEnabled) {
+      final String state;
+      if (DiagnosticSettings.enableJunitRunnerMonitorInjection) {
+        if (!dtcHelperClassFound) {
+          // we've got the instrumentation system property but no dtc on classpath!
+          // we will report only one, if we are asked to instrument
+          logErrMsg(
+              "optimus.dtc.runners.DTCDynamicRunnerHelper not found on classpath, cannot dynamically instrument junit tests for DTC");
+          state = "OFF";
+        } else if (!baseClassFound) {
+          // if we have the instrumentation system property but not junit on the classpath...
+          logErrMsg(
+              "org.junit.runner.Runner not found on classpath, cannot dynamically instrument junit tests for DTC");
+          state = "OFF";
+        } else {
+          state = "ON";
+        }
+      } else {
+        state = "OFF";
       }
-
-      // if we have the instrumentation system property but not junit on the classpath...
-      if (!baseClassFound) {
-        logErrMsg(
-            "org.junit.runner.Runner not found on classpath, cannot dynamically instrument junit tests for DTC");
-      }
+      logMsg(String.format("[DTC] Dynamic instrumentation of JUnit runners is %s!", state));
     }
   }
 

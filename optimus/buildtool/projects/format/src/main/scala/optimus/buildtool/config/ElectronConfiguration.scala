@@ -11,19 +11,26 @@
  */
 package optimus.buildtool.config
 
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
+
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 final case class ElectronConfiguration(
+    mode: NpmBuildMode,
+    executables: Seq[String],
+    libs: Seq[String],
     npmCommandTemplate: Map[String, String], // OS type (eg. "windows", "linux") to command template
-    electronLibs: Seq[String],
-    npmBuildCommands: Option[Seq[String]]) {
+    npmBuildCommands: Option[Seq[String]])
+    extends NpmConfiguration {
   def fingerprint: Seq[String] = {
-    npmCommandTemplate.to(Seq).sorted.map { case (k, v) => s"[Template:$k]$v" } ++
-      electronLibs.sorted.map { d => s"[Libs]$d" } ++
+    Seq(s"[Mode]$mode") ++
+      executables.sorted.map { e => s"[Executables]$e" } ++
+      libs.sorted.map { d => s"[Libs]$d" } ++
+      npmCommandTemplate.to(Seq).sorted.map { case (k, v) => s"[Template:$k]$v" } ++
       npmBuildCommands.getOrElse(Nil).map(s => s"[Command]$s")
   }
 
-  def nodeVariant: Option[String] = NpmConfiguration.getNpmVariant(electronLibs)
-  def pnpmVariant: Option[String] = NpmConfiguration.getPnpmVariant(electronLibs)
+  def nodeVariant: Option[String] = NpmConfiguration.getNpmVariant(libs)
+  def pnpmVariant: Option[String] = NpmConfiguration.getPnpmVariant(libs)
 }

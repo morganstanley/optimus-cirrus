@@ -13,6 +13,7 @@ package optimus.deps;
 
 import static optimus.ClassMonitorInjector.classExtension;
 import static optimus.ClassMonitorInjector.constructDependencyNameFromSimpleType;
+import static optimus.EntityAgent.logErrMsg;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,7 +94,7 @@ public class VisitContext {
         && !value.getClass().isPrimitive()
         && !value.getClass().isSynthetic()
         && !value.getClass().getName().startsWith("java.lang.")) {
-      System.out.println("Unsupported '" + value + "'");
+      logErrMsg("Unsupported '" + value + "'");
     }
   }
 

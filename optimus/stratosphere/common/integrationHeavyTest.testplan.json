@@ -1,0 +1,14 @@
+{
+  "testGroupsOpts": {
+    "testGroupsName": "integrationHeavyTest",
+    "testModulesFileName": "testplan-integrationHeavy-modules.txt"
+  },
+  "testGroups": [
+    {
+      "name": "common-integration",
+      "projects": [
+        "optimus.stratosphere.common.integrationTest"
+      ]
+    }
+  ]
+}

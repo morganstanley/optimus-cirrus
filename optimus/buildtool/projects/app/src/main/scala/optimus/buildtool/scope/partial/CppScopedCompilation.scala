@@ -58,7 +58,7 @@ import scala.collection.immutable.Seq
       pathBuilder
         .outputPathFor(
           id,
-          sources.compilationInputsHash,
+          sources.compilationFingerprint.hash,
           ArtifactType.Cpp,
           Some(sources.osVersion),
           incremental = false

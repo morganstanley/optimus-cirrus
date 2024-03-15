@@ -25,7 +25,7 @@ trait DummyTraversable[A] extends Traversable[A] {
     ???
   override def map[B, That](f: A => B)(implicit bf: CanBuildFrom[Traversable[A], B, That]): That = ???
   override def flatMap[B, That](f: A => GenTraversableOnce[B])(implicit
-    bf: CanBuildFrom[Traversable[A], B, That]): That = ???
+      bf: CanBuildFrom[Traversable[A], B, That]): That = ???
   override def filter(p: A => Boolean): Traversable[A] = ???
   override def partition(p: A => Boolean): (Traversable[A], Traversable[A]) = ???
   override def groupBy[K](f: A => K): Map[K, Traversable[A]] = ???

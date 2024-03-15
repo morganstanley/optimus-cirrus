@@ -1330,7 +1330,7 @@ public class TopologyRingCreator {
       regionSize = nodeRegionSizes.get(i);
       allocation = allocations.get(n.getIDString());
       if (allocation == null) {
-        allocation = new Long(0);
+        allocation = Long.valueOf(0);
       }
       log.debug(
           "{} {}  {}  {}  {}  {}***FAILED1\n",

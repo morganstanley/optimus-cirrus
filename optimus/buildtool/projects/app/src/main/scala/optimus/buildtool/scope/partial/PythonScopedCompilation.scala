@@ -41,11 +41,12 @@ import scala.collection.immutable.Seq
       pathBuilder
         .outputPathFor(
           id,
-          sources.compilationInputsHash,
+          sources.compilationFingerprint.hash,
           ArtifactType.Python,
           incremental = false,
           discriminator = None),
-      pyConfig
+      pyConfig,
+      sources.compilationFingerprint.hash
     )
   }
 

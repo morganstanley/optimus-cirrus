@@ -77,11 +77,9 @@ private[zinc] class ZincReadMapper(
       case Left(file) =>
         val path = file.pathString
         validatePath(path)
-        path
-          .replace(WORKSPACE, workspaceRootStr)
-          .replace(HTTPSCOPY, depCopyHttpsStr) // need check https first
-          .replace(HTTPCOPY, depCopyHttpStr)
-          .replace(DEPCOPY, depCopyDistStr) // then go for AFS check
+        externalDepsSubstitutions.foldLeft(file.pathString) { case (result, s) =>
+          result.replace(s.key, s.realDirectory) // convert KEY to dir path
+        }
 
       // For current output, substitute in current uuid and hash, and prepend current working directory.
       case Right(Dissection(_, `classType`, _, `scopeName`, _, _, "jar", fileInJar)) =>
@@ -98,30 +96,30 @@ private[zinc] class ZincReadMapper(
   var previousArg: Option[String] = None // so far, used only for debugging
   override protected final def translateOptions(text: String): String = {
     // Restore the buildDir for obt files
-    val isXPlugin = text.startsWith("-Xplugin:")
-    val isYMacro = previousArg.contains("-Ymacro-classpath")
+    val isXPlugin = text.startsWith(pluginFlag)
+    val isYMacro = previousArg.contains(macroFlag)
 
     // Note this has to happen before buildSubstitutions, since buildDir may contain ":"
     // Slightly hacky here - we undo the conversion of the colon in "-Xplugin" after doing the separator replacement
-    val separatorSubstitutions: Seq[(String, String)] =
+    val separatorSubstitutions: Seq[Substitution] =
       if ((isXPlugin || isYMacro) && File.pathSeparator != ":")
-        Seq((":", File.pathSeparator), ("-Xplugin" + File.pathSeparator, "-Xplugin:"))
+        Seq(
+          Substitution(File.pathSeparator, ":"),
+          Substitution(pluginFlag, pluginFlag.dropRight(1) + File.pathSeparator))
       else Seq.empty
 
-    val buildSubstitutions: Seq[(String, String)] = {
+    val buildSubstitutions: Seq[Substitution] = {
       val jars = findBuildJarsInText(BUILD_DIR, text)
       val updateHash = updatePluginHash || !isXPlugin
 
-      jars.map(j => (j.pathString, translateOptionPath(j, updateHash).pathString))
+      jars.map(j => Substitution(translateOptionPath(j, updateHash).pathString, j.pathString))
     }
 
-    val pathSubstitutions: Seq[(String, String)] = Seq((DEPCOPY, depCopyDistStr), (WORKSPACE, workspaceRootStr))
-
     val substitutions =
-      (separatorSubstitutions ++ buildSubstitutions ++ pathSubstitutions).filterNot(p => p._1 == p._2)
+      (separatorSubstitutions ++ buildSubstitutions ++ externalDepsSubstitutions).filterNot(_.isSame)
 
-    val ret = substitutions.foldLeft(text) { case (acc, (from, to)) =>
-      acc.replace(from, to)
+    val ret = substitutions.foldLeft(text) { case (acc, s) =>
+      acc.replace(s.key, s.realDirectory) // convert KEY to path
     }
     previousArg = Some(text)
     ret

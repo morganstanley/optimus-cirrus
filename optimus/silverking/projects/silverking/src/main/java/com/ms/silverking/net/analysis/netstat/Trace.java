@@ -97,7 +97,7 @@ public class Trace {
       long interval;
 
       interval = samples.get(i + 1).getAbsTimeMillis() - samples.get(i).getAbsTimeMillis();
-      dSamples.add(new Double(interval));
+      dSamples.add(Double.valueOf(interval));
     }
     median = (long) new StatSeries(dSamples).median();
     maxDeviation = (long) ((double) median * intervalOutlierThreshold);

@@ -36,7 +36,7 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.resolvers.DependencyCopier
-import optimus.buildtool.resolvers.IvyResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.rubbish.ArtifactRecency
 import optimus.buildtool.scope.FingerprintHasher
 import optimus.buildtool.trace.BreadcrumbTraceListener
@@ -135,7 +135,8 @@ class BuildServerProtocolService(
     val installerFactory: NodeFunction1[Option[Directory], PostBuilder],
     val scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
     val pythonEnabled: NodeFunction0[Boolean],
-    val ivyResolvers: NodeFunction0[Seq[IvyResolver]],
+    val extractVenvs: NodeFunction0[Boolean],
+    val depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]],
     val directoryFactory: LocalDirectoryFactory,
     val dependencyCopier: DependencyCopier,
     val incrementalMode: IncrementalMode,
@@ -171,13 +172,15 @@ class BuildServerProtocolService(
     }
   }
 
-  private[bsp] val structureHasher = StructureHasher(hasher, builder, scalaVersionConfig, pythonEnabled, ivyResolvers)
+  private[bsp] val structureHasher =
+    StructureHasher(hasher, builder, scalaVersionConfig, pythonEnabled, depMetadataResolvers)
 
   private[bsp] val structureBuilder =
     StructureBuilder(
       builder,
       scalaVersionConfig,
       pythonEnabled,
+      extractVenvs,
       directoryFactory,
       dependencyCopier,
       structureHasher,

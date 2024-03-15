@@ -13,6 +13,7 @@ package optimus.buildtool.generators
 
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -84,7 +85,7 @@ import scala.sys.process.ProcessLogger
       s"Template:$name"
     )
     val fingerprint = (s"[$generatorExecutableNameForLog]" + generatorFingerprint.pathString) +: templateFingerprint
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint)
+    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     SimpleAfsGenerator.Inputs(name, generatorExecutable, templates, fingerprintHash)
   }
@@ -165,6 +166,6 @@ object SimpleAfsGenerator {
       generatorName: String,
       executable: FileAsset,
       templates: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends SourceGenerator.Inputs
 }

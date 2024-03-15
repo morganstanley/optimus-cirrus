@@ -50,13 +50,9 @@ class CppInstaller(
 
   @async private def install(artifact: InternalCppArtifact, file: FileAsset): Option[FileAsset] = {
     val hash = Hashing.hashFileContent(file)
-    val exec = artifact.osVersion match {
-      case OsUtils.WindowsVersion => OsUtils.WindowsSysName
-      case OsUtils.Linux7Version  => OsUtils.Linux7SysName
-      case OsUtils.Linux6Version  => OsUtils.Linux6SysName
-      case x                      => throw new IllegalArgumentException(s"Unrecognized OS version: $x")
-    }
-    val target = pathBuilder.dirForScope(artifact.scopeId, leaf = "lib", branch = s".exec/$exec").resolveFile(file.name)
+
+    val target =
+      pathBuilder.dirForScope(artifact.scopeId, leaf = "lib", branch = s".exec/${OsUtils.exec}").resolveFile(file.name)
     bundleFingerprintsCache.bundleFingerprints(artifact.scopeId).writeIfChanged(target, hash) {
       ObtTrace.traceTask(artifact.scopeId, InstallCpp) {
         Files.createDirectories(target.parent.path)

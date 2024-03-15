@@ -145,19 +145,6 @@ object AsyncWebCompilerImpl {
           // hasErrors should be always false cause compiledMessages won't contain any errors, when fail it will directly throw.
           (false, compiledMessages)
 
-        case TestingResource =>
-          val hasErrors = webConfig.npmBuildCommands.isDefined
-          val compiledMessages =
-            if (hasErrors) Seq(error(s"${prefix}Test resources will be packaged directly and won't run npm commands"))
-            else {
-              writeNpmMetadata(sandbox.sourceDir, nodeVersion, pnpmVersion)
-              Seq(info(s"${prefix}Test resources packaged successfully"))
-            }
-          AssetUtils.atomicallyWrite(outputJar) { tmp =>
-            Jars.createJar(JarAsset(tmp), compiledMessages, hasErrors = false, Some(sandbox.sourceDir))
-          }
-          (hasErrors, compiledMessages)
-
         case Development =>
           val path = sandbox.sourceDir.path.resolve(scopeId.toString)
           Files.createDirectories(path)
@@ -169,9 +156,6 @@ object AsyncWebCompilerImpl {
             Jars.createJar(JarAsset(tmp), compiledMessages, hasErrors = false, Some(sandbox.sourceDir))
           }
           (false, compiledMessages)
-
-        case mode =>
-          (true, Seq(error(s"${prefix}Unknown mode $mode")))
       }
 
       val artifact = InternalClassFileArtifact.create(

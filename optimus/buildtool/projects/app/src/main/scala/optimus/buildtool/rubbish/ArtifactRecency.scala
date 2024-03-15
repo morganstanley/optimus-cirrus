@@ -107,41 +107,47 @@ private[rubbish] object CommitLog {
     }
   }
 
+  // We need to make sure that the commit-log file doesn't get corrupted by multiple writes and reads at the same time
+  private val lock = new Object
+
   def readLog(clog: FileAsset): CommitLog = {
     // I have no idea how to turn a Map into a HashMap without this builder; sorry
-    def doRead() = HashMap.newBuilder ++= {
-      val in = Files.newBufferedReader(clog.path)
-      try
-        in.lines.iterator.asScala
-          .map { line =>
-            line.split("\t") match {
-              case Array(scopeId, tpe, disc, path) =>
-                (scopeId, tpe, disc) -> clog.fileSystem.getPath(path)
-              // backward compatibility
-              case Array(scopeId, tpe, path) =>
-                (scopeId, tpe, "") -> clog.fileSystem.getPath(path)
-              case _ =>
-                throw new IllegalStateException(
-                  s"Unable to parse line '$line' from file ${clog.pathString}. Is the commit log file corrupted?")
+    def doRead() =
+      HashMap.newBuilder ++= lock.synchronized {
+        val in = Files.newBufferedReader(clog.path)
+        try
+          in.lines.iterator.asScala
+            .map { line =>
+              line.split("\t") match {
+                case Array(scopeId, tpe, disc, path) =>
+                  (scopeId, tpe, disc) -> clog.fileSystem.getPath(path)
+                // backward compatibility
+                case Array(scopeId, tpe, path) =>
+                  (scopeId, tpe, "") -> clog.fileSystem.getPath(path)
+                case _ =>
+                  throw new IllegalStateException(
+                    s"Unable to parse line '$line' from file ${clog.pathString}. Is the commit log file corrupted?")
+              }
             }
-          }
-          .toList
-          .groupMap(_._1)(_._2) // mapValues fine because we immediately force the values
-      finally in.close()
-    }
+            .toList
+            .groupMap(_._1)(_._2) // mapValues fine because we immediately force the values
+        finally in.close()
+      }
     if (clog.exists) doRead().result() else HashMap.empty
   }
 
-  def writeLog(clog: FileAsset)(log: CommitLog): Unit = {
+  def writeLog(clog: FileAsset)(log: CommitLog): Unit = lock.synchronized {
     Files.createDirectories(clog.parent.path)
     val out = Files.newBufferedWriter(clog.path)
     try
       log.foreach { case ((scope, tpe, disc), paths) =>
         paths.foreach { path =>
-          out.write(scope); out.write('\t')
-          out.write(tpe); out.write('\t')
-          out.write(disc); out.write('\t')
-          out.write(path.toString); out.write('\n')
+          val sb = new mutable.StringBuilder()
+          sb.append(scope); sb.append('\t')
+          sb.append(tpe); sb.append('\t')
+          sb.append(disc); sb.append('\t')
+          sb.append(path.toString); sb.append('\n')
+          out.write(sb.toString())
         }
       }
     finally out.close()

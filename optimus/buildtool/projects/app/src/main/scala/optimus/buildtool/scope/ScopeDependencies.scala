@@ -12,9 +12,11 @@
 package optimus.buildtool.scope
 
 import optimus.buildtool.app.CompilationNodeFactory
+import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType.CompileOnlyResolution
 import optimus.buildtool.artifacts.ArtifactType.CompileResolution
 import optimus.buildtool.artifacts.ArtifactType.RuntimeResolution
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.ResolutionArtifact
 import optimus.buildtool.artifacts.ResolutionArtifactType
@@ -76,16 +78,18 @@ import scala.collection.immutable.Seq
     (externalNativeDependencies
       ++ transitiveScopeDependencies.apar.flatMap(_.runtimeDependencies.transitiveNativeDependencies)).distinct
 
-  @node def externalInputsHash: String = {
+  @node def externalInputsHash: FingerprintArtifact = {
     hasher.hashFingerprint(
       externalDependencyResolver.fingerprintDependencies(transitiveExternalDependencyIds.all),
       tpe.fingerprintType
     )
   }
 
+  @node def transitiveExternalArtifacts: Seq[Artifact] = Seq(transitiveExternalDependencies, externalInputsHash)
+
   @node def transitiveExternalDependencies: ResolutionArtifact = {
     val fingerprintHash = externalInputsHash
-    val result = cache.getOrCompute[ResolutionArtifactType](id, tpe, None, fingerprintHash) {
+    val result = cache.getOrCompute[ResolutionArtifactType](id, tpe, None, fingerprintHash.hash) {
       ObtTrace.traceTask(id, tpe.category) {
         val tpeStr = tpe.name.replace('-', ' ')
         log.info(s"[$id] Starting $tpeStr")
@@ -94,7 +98,7 @@ import scala.collection.immutable.Seq
         val artifact = ResolutionArtifact.create(
           InternalArtifactId(id, tpe, None),
           resolved,
-          pathBuilder.outputPathFor(id, fingerprintHash, tpe, None, incremental = false).asJson,
+          pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None, incremental = false).asJson,
           tpe.category)
         artifact.storeJson()
         log.info(s"[$id] Completed $tpeStr")

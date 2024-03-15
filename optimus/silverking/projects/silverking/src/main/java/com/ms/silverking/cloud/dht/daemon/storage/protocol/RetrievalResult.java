@@ -18,35 +18,31 @@ import com.ms.silverking.cloud.dht.common.DHTKey;
 import com.ms.silverking.cloud.dht.common.KeyedResult;
 import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.cloud.dht.serverside.IntermediateResult;
-import com.ms.silverking.cloud.dht.throttle.SkThrottlingDebt;
 
 public class RetrievalResult extends KeyedResult {
   private final ByteBuffer value;
-  private final SkThrottlingDebt debt;
 
-  public RetrievalResult(DHTKey key, OpResult result, ByteBuffer value, SkThrottlingDebt debt) {
+  public RetrievalResult(DHTKey key, OpResult result, ByteBuffer value) {
     super(key, result);
     this.value = value;
-    this.debt = debt;
+  }
+
+  public RetrievalResult(DHTKey key, OpResult result) {
+    super(key, result);
+    this.value = null;
   }
 
   public RetrievalResult(DHTKey key, OpResult opResult, IntermediateResult interResult) {
     super(key, opResult);
     if (interResult != null) {
       this.value = interResult.getResultBuffer();
-      this.debt = interResult.getThrottleDebt();
     } else {
       this.value = null;
-      this.debt = null;
     }
   }
 
   public ByteBuffer getValue() {
     return value;
-  }
-
-  public SkThrottlingDebt getDebt() {
-    return debt;
   }
 
   public int getResultLength() {

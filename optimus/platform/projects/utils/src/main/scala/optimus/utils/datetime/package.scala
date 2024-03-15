@@ -255,8 +255,10 @@ package object datetime {
   trait OrderingImplicits {
 
     implicit def toComparableLocalDate(thiz: LocalDate): ComparableLocalDate = new ComparableLocalDate(thiz)
-    implicit def toComparableLocalDateTime(thiz: LocalDateTime): ComparableLocalDateTime = new ComparableLocalDateTime(thiz)
-    implicit def toComparableZonedDateTime(thiz: ZonedDateTime): ComparableZonedDateTime = new ComparableZonedDateTime(thiz)
+    implicit def toComparableLocalDateTime(thiz: LocalDateTime): ComparableLocalDateTime = new ComparableLocalDateTime(
+      thiz)
+    implicit def toComparableZonedDateTime(thiz: ZonedDateTime): ComparableZonedDateTime = new ComparableZonedDateTime(
+      thiz)
 
     //
     // Ordering[T] for some java.time classes that don't implement Comparable of their-own types, not provided by scala.

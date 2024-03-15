@@ -48,7 +48,7 @@ import scala.collection.immutable.Seq
       blockedSubstitutions = sources.allBlockedSubstitutions,
       installVersion = sources.installVersion,
       outputJar = pathBuilder
-        .outputPathFor(id, sources.compilationInputsHash, AT.CompiledRunconf, None, incremental = false)
+        .outputPathFor(id, sources.compilationFingerprint.hash, AT.CompiledRunconf, None, incremental = false)
         .asJar
     )
   }

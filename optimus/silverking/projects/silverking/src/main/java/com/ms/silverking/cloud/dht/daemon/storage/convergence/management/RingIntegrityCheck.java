@@ -233,7 +233,7 @@ public class RingIntegrityCheck {
 
         curAllocation = am.get(replica);
         if (curAllocation == null) {
-          curAllocation = new Long(0);
+          curAllocation = Long.valueOf(0);
         }
         curAllocation += entry.getRegion().getSize();
         am.put(replica, curAllocation);

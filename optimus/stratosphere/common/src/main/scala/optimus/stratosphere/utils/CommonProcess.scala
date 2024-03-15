@@ -124,8 +124,8 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
       pb: ProcessBuilder,
       label: Option[String] = None,
       timeout: Duration = Duration.Inf,
-      processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false))
-      : String = {
+      processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false),
+      ignoreExitCode: Boolean = false): String = {
 
     val cmdLabel = label.getOrElse(pb.command().asScala.mkString(" "))
 
@@ -144,7 +144,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
 
       try {
         val exitCode = Await.result(future, timeout)
-        if (exitCode == 0) {
+        if (exitCode == 0 || ignoreExitCode) {
           processLogger.standardOutputOnly
         } else {
           stratoWorkspace.log.debug(detailedErrorMessage)
@@ -231,9 +231,10 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
     }
   }
 
-  def runGit(srcDir: Path, env: Map[String, String] = Map.empty)(args: String*): String = {
+  def runGit(srcDir: Path, env: Map[String, String] = Map.empty, ignoreExitCode: Boolean = false)(
+      args: String*): String = {
     val pb = new GitProcess(stratoWorkspace.config).createProcessBuilder(srcDir, env.asJava, args: _*)
-    runAndWaitForPb(pb)
+    runAndWaitForPb(pb, ignoreExitCode = ignoreExitCode)
       .split("\n")
       .filterNot(CommonProcess.isGitTraceStatement)
       .mkString("\n")
@@ -261,6 +262,9 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
     case CommonProcess.fsCellPattern(cell) => cell
     case other                             => other
   }
+
+  def runWhere(exec: String): Option[String] =
+    Try { runAndWaitFor(CommonProcess.preamble ++ Seq("where", exec)) }.toOption
 }
 
 object CommonProcess {

@@ -12,16 +12,16 @@
 package optimus.platform.utils
 
 import java.io.FileInputStream
-import java.net.MalformedURLException
 import java.net.URL
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.jar.Attributes
 import java.util.jar.JarInputStream
-
 import msjava.slf4jutils.scalalog.getLogger
 
+import java.net.URI
+import java.net.URISyntaxException
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -85,24 +85,27 @@ object JarLocations {
 
   object JarLocation {
     def apply(maybeRelativeLocation: String, asSeenFrom: Path): JarLocation = {
+      // If relative, we want it to be relative to the asSeenFrom path.
+      def resolveAsFilePath = asSeenFrom.resolve(maybeRelativeLocation)
       val path =
         try {
-          // try to parse as a URL first, if so construct the path from that
-          val uri = new URL(maybeRelativeLocation).toURI
-          Paths.get(uri)
+          // try to parse as a URI first, if so construct the path from that
+          val uri = new URI(maybeRelativeLocation)
+          // If there's no scheme then it's not a valid URL, so it's probably just a file path
+          if (uri.getScheme eq null) resolveAsFilePath
+          else Paths.get(uri)
         } catch {
-          case m: MalformedURLException =>
-            // This wasn't a URL, instead we should be aiming to resolve is as a file path. If relative, we want it to be
-            // relative to the asSeenFrom path
-            asSeenFrom.resolve(maybeRelativeLocation)
+          case _: URISyntaxException =>
+            // This wasn't a URI at all, so try to resolve is as a file path.
+            resolveAsFilePath
           case m: IllegalArgumentException if m.getMessage == "URI has an authority component" =>
             // This error occurs when runnig grid applications using Intellij grid launcher.
-            // There are some differently formated URLs that throw this exception, so they need to be resolved this way
-            asSeenFrom.resolve(maybeRelativeLocation)
+            // There are some differently formatted URLs that throw this exception, so they need to be resolved this way
+            resolveAsFilePath
           case i: InvalidPathException if i.getMessage.contains("Illegal character [:] in path") =>
             // This occurs because windows local absolute paths (e.g. D:\some\path) get encoded as file:////D:/some/path,
             // so the "path" component of the URL starts with ////D:/, not D:. We need to remove the ////
-            val uri = new URL(maybeRelativeLocation).getPath.substring(4)
+            val uri = new URI(maybeRelativeLocation).getPath.substring(4)
             Paths.get(uri)
         }
       apply(path)

@@ -14,6 +14,7 @@ package optimus.buildtool.scope.partial
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.compilers.RegexScanner
+import optimus.buildtool.config.CodeFlaggingRule
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.RegexMessagesCompilationSources
 import optimus.platform._
@@ -24,12 +25,13 @@ import scala.collection.immutable.Seq
 class RegexMessagesScopedCompilation(
     val scope: CompilationScope,
     val sources: RegexMessagesCompilationSources,
-    regexScanner: RegexScanner
+    regexScanner: RegexScanner,
+    rules: Seq[CodeFlaggingRule]
 ) extends PartialScopedCompilation {
 
   @node override protected def upstreamArtifacts: Seq[Artifact] = Nil
   @node override protected def containsRelevantSources: Boolean =
-    sources.nonEmpty && scope.config.regexConfig.exists(_.rules.nonEmpty)
+    sources.nonEmpty && rules.nonEmpty
 
   @node
   def messages: Seq[Artifact] = compile(ArtifactType.RegexMessages, None) {
@@ -40,11 +42,9 @@ class RegexMessagesScopedCompilation(
 
   @node private def inputs = {
     val jsonFile = scope.pathBuilder
-      .outputPathFor(scope.id, fingerprintHash, ArtifactType.RegexMessages, None, incremental = false)
+      .outputPathFor(scope.id, fingerprint.hash, ArtifactType.RegexMessages, None, incremental = false)
       .asJson
     RegexScanner.Inputs(sources.compilationSources, rules, jsonFile)
   }
-
-  private val rules = scope.config.regexConfig.map(_.rules).getOrElse(Nil)
 
 }

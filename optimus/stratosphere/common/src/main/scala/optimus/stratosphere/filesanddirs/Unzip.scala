@@ -11,6 +11,7 @@
  */
 package optimus.stratosphere.filesanddirs
 
+import optimus.stratosphere.bootstrap.OsSpecific
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
 import java.io.File
@@ -18,13 +19,18 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermission
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
+import scala.jdk.CollectionConverters._
+import scala.collection.immutable.Seq
 
 object Unzip {
   private val BufferSize = 8192
 
-  def extract(fromFile: File, toDirectory: File): Unit = {
+  def extract(fromFile: File, toDirectory: File): Seq[Path] = {
     val from = {
       val inputStream = new FileInputStream(fromFile)
       if (fromFile.getName.endsWith(".tar.gz")) new TarArchiveInputStream(new GZIPInputStream(inputStream))
@@ -32,25 +38,33 @@ object Unzip {
     }
 
     @scala.annotation.tailrec
-    def nextZip(from: ZipInputStream): Unit = {
+    def nextZip(from: ZipInputStream, acc: Seq[Path] = Seq.empty[Path]): Seq[Path] = {
       val entry = from.getNextEntry
       if (entry != null) {
-        createFileOrDirectory(from, entry.getName, entry.isDirectory)
+        val file = createFileOrDirectory(from, entry.getName, entry.isDirectory)
         from.closeEntry()
-        nextZip(from)
-      }
+
+        val newAcc = if (file.isDirectory) acc else acc :+ file.toPath
+        nextZip(from, newAcc)
+      } else acc
     }
 
     @scala.annotation.tailrec
-    def nextTarGz(from: TarArchiveInputStream): Unit = {
-      val entry = from.getNextEntry
+    def nextTarGz(from: TarArchiveInputStream, acc: Seq[Path] = Seq.empty[Path]): Seq[Path] = {
+      val entry = from.getNextTarEntry
       if (entry != null) {
-        createFileOrDirectory(from, entry.getName, entry.isDirectory)
-        nextTarGz(from)
-      }
+        val file = createFileOrDirectory(from, entry.getName, entry.isDirectory)
+        if (OsSpecific.isLinux) {
+          val fileMode = Integer.toOctalString(entry.getMode).takeRight(3)
+          Files.setPosixFilePermissions(file.toPath, PosixUtils.modeToPosix(fileMode).asJava)
+        }
+
+        val newAcc = if (file.isDirectory) acc else acc :+ file.toPath
+        nextTarGz(from, newAcc)
+      } else acc
     }
 
-    def createFileOrDirectory(from: InputStream, entryName: String, isDirectory: Boolean) = {
+    def createFileOrDirectory(from: InputStream, entryName: String, isDirectory: Boolean): File = {
       val target = new File(toDirectory, entryName)
       if (isDirectory)
         target.mkdirs()
@@ -58,10 +72,11 @@ object Unzip {
         target.getParentFile.mkdirs()
         transfer(from, new FileOutputStream(target, false))
       }
+      target
     }
 
-    def runAndClose[T <: InputStream](stream: T, f: T => Unit): Unit =
-      try f(stream)
+    def runAndClose[T <: InputStream](stream: T, f: (T, Seq[Path]) => Seq[Path]): Seq[Path] =
+      try f(stream, Seq.empty[Path])
       finally stream.close()
 
     val inputStream = new FileInputStream(fromFile)
@@ -85,5 +100,20 @@ object Unzip {
     }
     read()
     out.close()
+  }
+}
+
+object PosixUtils {
+  lazy val modeToPosix: Map[String, Set[PosixFilePermission]] = {
+    val allPermissions = PosixFilePermission.values()
+    val allPermutations = allPermissions.toSet.subsets()
+    allPermutations.map { permutation =>
+      var mode = 0
+      allPermissions.foreach { action =>
+        mode = mode << 1
+        mode += (if (permutation.contains(action)) 1 else 0)
+      }
+      Integer.toOctalString(mode) -> permutation
+    }.toMap
   }
 }

@@ -97,7 +97,8 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
     error1(
       20307,
       StagingPhase.POST_TYPER_STANDARDS,
-      "Auto-application to `()` is deprecated. Supply the empty argument list `()` explicitly to invoke method %s, or remove the empty argument list from its definition.")
+      "Auto-application to `()` is deprecated. Supply the empty argument list `()` explicitly to invoke method %s, or remove the empty argument list from its definition."
+    )
 
   val NULLARY_IN_213 =
     error1(
@@ -200,8 +201,5 @@ object StagingNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   // code-standards phase warnings
   val UNTYPED_IMPLICIT =
-    warning1(
-      10005,
-      StagingPhase.POST_TYPER_STANDARDS,
-      "Implicit definition should have explicit type (inferred %s)")
+    warning1(10005, StagingPhase.POST_TYPER_STANDARDS, "Implicit definition should have explicit type (inferred %s)")
 }

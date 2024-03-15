@@ -22,12 +22,15 @@ import java.{util => ju}
 import java.util.jar.Attributes.Name
 import java.util.jar.JarFile
 import java.util.regex.Pattern
-
 import org.slf4j.LoggerFactory.getLogger
 
-import scala.jdk.CollectionConverters._
+import java.net.URI
+import java.util.Properties
+import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.util.matching.Regex
 
 /**
  * Utilities for extracting and expanding the current classpath
@@ -111,7 +114,14 @@ object ClassPathUtils {
   }
 
   /** Recursively expands all Class-Path manifest entries */
-  final def expandClasspath(classPath: collection.Seq[Path]): collection.Seq[Path] = {
+  final def expandClasspath(classPath: collection.Seq[Path]): collection.Seq[Path] =
+    expandClasspath(classPath, normalize = false, recurse = true)
+
+  /** Expands all Class-Path manifest entries (optionally recursively) */
+  final def expandClasspath(
+      classPath: collection.Seq[Path],
+      normalize: Boolean,
+      recurse: Boolean): collection.Seq[Path] = {
     val effectiveClassPath = new ju.LinkedHashSet[Path]()
 
     def loadClassPath(file: Path): Unit = {
@@ -131,10 +141,13 @@ object ClassPathUtils {
               try {
                 val path = {
                   if (pathStr startsWith "file:/")
-                    demanglePathFromUrl(new URL(pathStr)) // handle as a URL (probably a file URL)
-                  else file.getParent.resolve(pathStr) // probably relative (but resolving an absolute path works)
+                    demanglePathFromUrl(new URI(pathStr).toURL()) // handle as a URL (probably a file URL)
+                  else {
+                    val p = file.getParent.resolve(pathStr) // probably relative (but resolving an absolute path works)
+                    if (normalize) p.normalize() else p
+                  }
                 }
-                if (effectiveClassPath.add(path)) pending += path
+                if (effectiveClassPath.add(path) && recurse) pending += path
               } catch {
                 case e: Exception =>
                   log.error(s"ignoring referenced path $pathStr due to error", e)
@@ -150,4 +163,5 @@ object ClassPathUtils {
     classPath.foreach(loadClassPath)
     effectiveClassPath.asScala.toSeq
   }
+
 }

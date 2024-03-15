@@ -13,9 +13,9 @@ package optimus.buildtool
 package generators
 
 import java.io.IOException
-
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
@@ -60,7 +60,8 @@ import scala.collection.immutable.SortedMap
       s"Template:$name"
     )
 
-    val fingerprintHash = scope.hasher.hashFingerprint(templateFingerprint, ArtifactType.GenerationFingerprint)
+    val fingerprintHash =
+      scope.hasher.hashFingerprint(templateFingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     JxbGenerator.Inputs(name, templateFiles, fingerprintHash)
   }
@@ -114,7 +115,7 @@ object JxbGenerator {
   final case class Inputs(
       generatorName: String,
       templateFiles: SortedMap[FileAsset, HashedContent],
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends SourceGenerator.Inputs
 
   final case class DelegateInfo(name: RelativePath, source: String)

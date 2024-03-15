@@ -16,7 +16,7 @@ import scala.collection.IndexedSeqView
 
 // Write-through views were removed from Scala 2.13 collections, we need to roll our own.
 class MutableIndexedSeqView[A](self: MutableIndexedSeqView.SomeIndexedSeqOps[A], from: Int, until: Int)
-  extends IndexedSeqView.Slice[A](self, from, until) {
+    extends IndexedSeqView.Slice[A](self, from, until) {
   def update(idx: Int, elem: A): Unit = {
     if (idx >= 0 && idx + from < until) self.update(idx + from, elem)
     else throw new IndexOutOfBoundsException(idx.toString)

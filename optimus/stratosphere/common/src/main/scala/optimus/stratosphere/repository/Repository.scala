@@ -19,21 +19,21 @@ import java.util.regex.Pattern
 /**
  * Matcher for short repository names.
  */
-class Repository(userName: String, stashHostname: String) {
+class Repository(userName: String, bitbucketHostname: String) {
   private[repository] def privateUrl(repo: String): String =
-    s"http://$userName@$stashHostname/atlassian-stash/scm/~$userName/$repo.git"
+    s"http://$userName@$bitbucketHostname/atlassian-stash/scm/~$userName/$repo.git"
 
   private val defaultMeta = "optimus"
 
-  private val stashRepo =
-    """https?\:\/\/.+@""" + Pattern.quote(stashHostname) + """\:?[0-9]*\/atlassian-stash\/scm\/.*\.git"""
+  private val bitbucketRepo =
+    """https?\:\/\/.+@""" + Pattern.quote(bitbucketHostname) + """\:?[0-9]*\/atlassian-stash\/scm\/.*\.git"""
   val linuxLocalRepo = """(?:\/[^\/]+)+\/?"""
   val windowsLocalRepo = """(?:[A-Z]\:|\\)(?:\\[^\\]+)+\\?"""
-  private val StashUrl = s"^($stashRepo)$$".r
+  private val BitbucketUrl = s"^($bitbucketRepo)$$".r
   private val LocalRepo = s"^(|$windowsLocalRepo|$linuxLocalRepo)$$".r
 
   private def repoUrl(meta: String, project: String, repo: String): String =
-    s"http://$userName@$stashHostname/atlassian-stash/scm/${meta}_$project/$repo.git"
+    s"http://$userName@$bitbucketHostname/atlassian-stash/scm/${meta}_$project/$repo.git"
 
   // https does not work with Kerberos, we need http instead
   private def removeHttps(url: String): String = url.replace("https://", "http://")
@@ -42,7 +42,7 @@ class Repository(userName: String, stashHostname: String) {
 
   def unapply(repoPath: String): Option[RepositoryLocation] =
     repoPath match {
-      case StashUrl(url) if url != null =>
+      case BitbucketUrl(url) if url != null =>
         Some(RawRepository(RemoteUrl(removeHttps(url)), local = false))
       case LocalRepo(path) if path != null =>
         Some(RawRepository(RemoteUrl(path), local = true))
@@ -72,8 +72,8 @@ class Repository(userName: String, stashHostname: String) {
 
 object Repository {
 
-  def resolveRepositoryLocation(remote: String, stashHostname: String): Option[RepositoryLocation] = {
-    val Repo = new Repository(EnvironmentUtils.userName, stashHostname)
+  def resolveRepositoryLocation(remote: String, bitbucketHostname: String): Option[RepositoryLocation] = {
+    val Repo = new Repository(EnvironmentUtils.userName, bitbucketHostname)
     val repository = remote match {
       case Repo(location) => Some(location)
       case _              => None

@@ -49,9 +49,10 @@ import scala.collection.immutable.Seq
         val tpe = gen.artifactType
         val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
 
-        if (gen.containsRelevantSources(inputs)) {
-          val fingerprintHash = inputs().fingerprintHash
-          scope.cached(tpe, Some(cfg.name), fingerprintHash) {
+        val fingerprint = inputs().fingerprint
+        val genSources = if (gen.containsRelevantSources(inputs)) {
+          val fingerprintHash = fingerprint.hash
+          scope.cached(tpe, Some(cfg.name), fingerprint.hash) {
             val outputJar =
               scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false).asJar
             log.info(s"[${scope.id}] Starting $tpeStr source generation")
@@ -69,6 +70,7 @@ import scala.collection.immutable.Seq
               messages,
               GenerateSource))
         }
+        genSources :+ fingerprint
       }
     }
   }

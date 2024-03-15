@@ -87,8 +87,11 @@ object CopyFilesConfigurationCompiler {
 
   private def loadFilters(config: Config, origin: ObtFile): Result[Seq[TokenFilter]] =
     config.stringMapOrEmpty("filters", origin).map { tokenFilters =>
-      tokenFilters.to(Seq).map { case (token, text) =>
-        TokenFilter(token = token, replacement = Replacement(text))
-      }.sortBy(_.token)
+      tokenFilters
+        .to(Seq)
+        .map { case (token, text) =>
+          TokenFilter(token = token, replacement = Replacement(text))
+        }
+        .sortBy(_.token)
     }
 }

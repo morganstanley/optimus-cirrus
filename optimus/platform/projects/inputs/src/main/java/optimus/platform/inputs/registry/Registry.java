@@ -49,7 +49,7 @@ public class Registry {
 
   private static void loadClass(Class<?> clazz) {
     for (Field field : clazz.getDeclaredFields()) {
-      if (!Modifier.isStatic(field.getModifiers())) continue;
+      if (!Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) continue;
       try {
         NodeInput<?> nodeInput = (NodeInput<?>) field.get(null);
         TheHugeRegistryOfAllOptimusProperties.register(nodeInput);
@@ -93,7 +93,7 @@ public class Registry {
       try {
         // reflectively getting the inputs out of scala objects and registering them
         Class<?> inputLoaderClass = Class.forName(inputLoaderString + "$");
-        loadScalaObject(p -> !p.getName().contains("MODULE"), inputLoaderClass);
+        loadScalaObject(p -> !p.getName().contains("MODULE") && !p.isSynthetic(), inputLoaderClass);
       } catch (ClassNotFoundException ignored) {
         // not in code that depends on core
       } catch (Throwable t) {

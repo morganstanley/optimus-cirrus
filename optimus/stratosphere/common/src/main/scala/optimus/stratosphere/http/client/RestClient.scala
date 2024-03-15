@@ -22,8 +22,8 @@ import akka.http.scaladsl.settings.ConnectionPoolSettings
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import optimus.rest.RestApi
+import optimus.stratosphere.bitbucket.UnsuccessfulRestCall
 import optimus.stratosphere.config.StratoWorkspaceCommon
-import optimus.stratosphere.stash.UnsuccessfulStashCall
 import spray.json._
 
 import scala.concurrent.Await
@@ -77,7 +77,7 @@ trait RestClient extends RestApi {
               case 200 | 201 | 204 =>
                 convert(content)
               case _ =>
-                throw UnsuccessfulStashCall(url, content)
+                throw UnsuccessfulRestCall(url, content)
             }
           }
       }
@@ -98,10 +98,16 @@ trait RestClient extends RestApi {
 
   def get(url: String): Config =
     singleRequestWithConversion(url, HttpMethods.GET, None, ConfigFactory.parseString)
-  def post(url: String, data: String): Config =
-    singleRequestWithConversion(url, HttpMethods.POST, Some(data), ConfigFactory.parseString)
-  def put(url: String, data: String): Config =
-    singleRequestWithConversion(url, HttpMethods.PUT, Some(data), ConfigFactory.parseString)
+  def post(url: String): Config =
+    // empty object needed to avoid XSRF issues
+    singleRequestWithConversion(url, HttpMethods.POST, Some("{}"), ConfigFactory.parseString)
+  def post[A: JsonFormat](url: String, data: A): Config =
+    singleRequestWithConversion(url, HttpMethods.POST, Some(data.toJson.toString), ConfigFactory.parseString)
+  def put(url: String): Config =
+    // empty object needed to avoid XSRF issues
+    singleRequestWithConversion(url, HttpMethods.PUT, Some("{}"), ConfigFactory.parseString)
+  def put[A: JsonFormat](url: String, data: A): Config =
+    singleRequestWithConversion(url, HttpMethods.PUT, Some(data.toJson.toString), ConfigFactory.parseString)
 
   def asyncPost(url: String, data: String): Future[Config] =
     asyncSingleRequestWithConversion(url, HttpMethods.POST, Some(data), ConfigFactory.parseString)

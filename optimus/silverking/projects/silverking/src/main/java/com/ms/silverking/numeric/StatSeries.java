@@ -84,7 +84,7 @@ public final class StatSeries {
 
     dSamples = new ArrayList<>(sourceSamples.size());
     for (Long sample : sourceSamples) {
-      dSamples.add(new Double(sample));
+      dSamples.add(Double.valueOf(sample));
     }
     return new StatSeries(dSamples);
   }

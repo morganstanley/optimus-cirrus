@@ -12,6 +12,7 @@
 package optimus.buildtool.scope.sources
 
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
@@ -29,14 +30,14 @@ private[sources] final case class SourceFileContent(
 private[sources] trait HashedSources {
   def content: Seq[(String, SortedMap[SourceUnitId, HashedContent])]
   def generatedSourceArtifacts: Seq[Artifact]
-  def fingerprintHash: String
+  def fingerprint: FingerprintArtifact
   def sourceFiles: SortedMap[SourceUnitId, HashedContent] = SortedMap(content.flatMap(_._2): _*)
 }
 
 private[sources] final case class HashedSourcesImpl(
     content: Seq[(String, SortedMap[SourceUnitId, HashedContent])],
     generatedSourceArtifacts: Seq[Artifact],
-    fingerprintHash: String
+    fingerprint: FingerprintArtifact
 ) extends HashedSources
 
 @entity private[scope] trait CompilationSources {
@@ -44,7 +45,7 @@ private[sources] final case class HashedSourcesImpl(
 
   @node def content: Seq[(String, SortedMap[SourceUnitId, HashedContent])] = hashedSources.content
   @node def compilationSources: SortedMap[SourceUnitId, HashedContent] = hashedSources.sourceFiles
-  @node def compilationInputsHash: String = hashedSources.fingerprintHash
+  @node def compilationFingerprint: FingerprintArtifact = hashedSources.fingerprint
   @node def generatedSourceArtifacts: Seq[Artifact] = hashedSources.generatedSourceArtifacts
   @node def isEmpty: Boolean = compilationSources.isEmpty
   @node def containsFile(name: RelativePath): Boolean =

@@ -17,6 +17,7 @@ public class CmiTransformationStateSnapshot {
   public final long visited;
   public final long instrumented;
   public final long optimusClasses;
+  public final long exemptedInstrumentationClasses;
   public final long failures;
 
   public CmiTransformationStateSnapshot(
@@ -25,12 +26,14 @@ public class CmiTransformationStateSnapshot {
       long visited,
       long instrumented,
       long optimusClasses,
+      long exemptedInstrumentationClasses,
       long failures) {
     this.ignored = ignored;
     this.unchanged = unchanged;
     this.visited = visited;
     this.instrumented = instrumented;
     this.optimusClasses = optimusClasses;
+    this.exemptedInstrumentationClasses = exemptedInstrumentationClasses;
     this.failures = failures;
   }
 }

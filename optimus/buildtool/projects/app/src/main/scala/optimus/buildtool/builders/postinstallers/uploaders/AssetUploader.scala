@@ -76,7 +76,8 @@ class AssetUploader(
     srcPrefix: Option[RelativePath],
     srcFilesToUpload: Seq[Regex],
     uploadFormat: UploadFormat,
-    useCrumbs: Boolean
+    useCrumbs: Boolean,
+    filesToExclude: Seq[Regex] = Seq()
 ) extends PostInstaller
     with Log {
 
@@ -172,7 +173,9 @@ class AssetUploader(
   }
 
   @async def readyToUpload(files: Seq[ArchiveEntry], force: Boolean = false): Unit = if (uploaders.nonEmpty) {
-    Tracker.scheduleForUpload(files)
+    val includedFiles =
+      files.filterNot(path => filesToExclude.exists(pattern => pattern.findFirstIn(path.file.pathString).isDefined))
+    Tracker.scheduleForUpload(includedFiles)
     upload(force)
   }
 

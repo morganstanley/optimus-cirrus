@@ -41,3 +41,12 @@ test {
     ]
   }
 }
+
+integrationTest {
+  root = "src/test-integration"
+  compile {
+    libs = [
+      ossjava.junit
+    ]
+  }
+}

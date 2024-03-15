@@ -13,6 +13,4 @@ package optimus.scalacompat.collection
 
 import scala.collection.mutable.Map
 
-abstract class AbstractMutableMap[K, V] extends Map[K, V] {
-
-}
+abstract class AbstractMutableMap[K, V] extends Map[K, V] {}

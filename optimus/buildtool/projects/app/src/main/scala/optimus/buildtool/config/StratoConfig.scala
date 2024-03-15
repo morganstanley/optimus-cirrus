@@ -33,7 +33,8 @@ final case class StratoConfig(
 )
 
 @entity object StratoConfig {
-  private val stratoLogger = scalalog.getLogger(StratoWorkspace)
+  private val _stratoLogger = scalalog.getLogger(StratoWorkspace)
+  def stratoLogger(s: String): Unit = _stratoLogger.info(s)
 
   @node private def watchStratoDir(directoryFactory: LocalDirectoryFactory, dir: Directory): Directory = {
     val d = directoryFactory // this is the directory we're going to watch for OBT config changes
@@ -55,7 +56,7 @@ final case class StratoConfig(
         watchStratoDir(directoryFactory, WorkspaceLayout.Strato.profiles(workspaceSrcRoot))
       )
 
-      val ws = StratoWorkspace(CustomWorkspace(workspaceSrcRoot.parent.path), s => stratoLogger.info(s))
+      val ws = StratoWorkspace(CustomWorkspace(workspaceSrcRoot.parent.path), stratoLogger)
 
       StratoConfig(
         scalaVersion = ws.scalaVersion,

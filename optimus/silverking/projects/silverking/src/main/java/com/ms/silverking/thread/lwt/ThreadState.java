@@ -19,7 +19,7 @@ final class ThreadState {
   private static final ThreadLocal<Boolean> isLWTThread = new ThreadLocal<Boolean>();
 
   public static void setLWTThread() {
-    isLWTThread.set(new Boolean(true));
+    isLWTThread.set(Boolean.TRUE);
   }
 
   public static boolean isLWTThread() {

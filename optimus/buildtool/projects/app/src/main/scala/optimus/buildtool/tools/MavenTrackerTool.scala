@@ -10,14 +10,15 @@
  * limitations under the License.
  */
 package optimus.buildtool.tools
+import optimus.buildtool.config.NamingConventions.MavenReleaseFrontier
 
 class MavenTrackerTool extends MigrationTrackerTool {
-  val frontierScope = "optimus.onboarding.artifactory_frontier.main"
+  val frontierScope = s"optimus.onboarding.$MavenReleaseFrontier.main"
 }
 
 private[buildtool] trait MavenTrackerParams extends TrackerToolParams {
-  override val frontierScope = "optimus.onboarding.artifactory_frontier.main"
-  override val frontierObtFile = "optimus/onboarding/projects/artifactory_frontier/artifactory_frontier.obt"
+  override val frontierScope = s"optimus.onboarding.$MavenReleaseFrontier.main"
+  override val frontierObtFile = s"optimus/onboarding/projects/$MavenReleaseFrontier/$MavenReleaseFrontier.obt"
   override val rulesYaml = Some("auto-build-rules/obt-rules.yaml")
 }
 

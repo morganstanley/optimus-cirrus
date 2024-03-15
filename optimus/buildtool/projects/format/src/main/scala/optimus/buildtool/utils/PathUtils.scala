@@ -106,6 +106,19 @@ object PathUtils {
     } else path
   }
 
+  /**
+   * Convert a path to a URI string, using mapped drives on Windows where possible (this avoids inconsistent
+   * behaviour for URIs containing UNC paths (eg. //foo/bar/...).
+   */
+  def mappedUriString(path: Path): String = {
+    val uri = uriString(path)
+    // we can't use `path.startsWith(root)`, because `path.startsWith` requires at least two elements for a
+    // network path and root may only be one element long, so instead we use `path.toString.startsWith(...)`
+    if (path.toString.startsWith(s"${NamingConventions.AfsRootStrWindows}"))
+      uri.replaceFirst(s"${NamingConventions.AfsRootStr}", s"/${NamingConventions.AfsRootMapping}")
+    else uri
+  }
+
   def fileName(pathString: String): String = {
     val idx = pathString.lastIndexOf('/')
     if (idx >= 0) pathString.substring(idx + 1)

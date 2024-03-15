@@ -18,6 +18,7 @@ import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.dependencies.PythonDependencies
 import optimus.buildtool.dependencies.PythonDependency
+import optimus.buildtool.format.ConfigUtils._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -27,6 +28,10 @@ object PythonConfigurationCompiler {
     s"""Library $name is not defined"""
   val lacksPythonVersion =
     s"""Python version not defined"""
+
+  private[buildtool] val Libs = "libs"
+  private[buildtool] val Variant = "variant"
+  private[buildtool] val Type = "type"
 
   def load(
       config: Config,
@@ -55,40 +60,48 @@ object PythonConfigurationCompiler {
       }
     }
 
-    Result.tryWith(file, config) {
-
-      val pythonConfiguration = if (config.hasPath("python")) {
-        val pyCfg = config.getConfig("python")
-        val pyVersion = if (pyCfg.hasPath("variant")) Some(pyCfg.getString("variant")) else None
-        val moduleType = {
-          val cfg = if (pyCfg.hasPath("type")) Some(pyCfg.getString("type")) else None
-          cfg match {
-            case Some(label) =>
-              ModuleType.resolve(label).getOrElse {
-                error(Message("No such python module type, defaulting to artifactory", file))
-                ModuleType.default
-              }
-            case None => ModuleType.default
-          }
+    def resolvePythonConfig(pyCfg: Config): Option[PythonConfiguration] = {
+      val pyVersion = pyCfg.optionalString(Variant)
+      val moduleType = {
+        val cfg = pyCfg.optionalString(Type)
+        cfg match {
+          case Some(label) =>
+            ModuleType.resolve(label).getOrElse {
+              error(Message("No such python module type, defaulting to artifactory", file))
+              ModuleType.default
+            }
+          case None => ModuleType.default
         }
-        val pyDefinition = pythonDefinition(pyVersion)
-        val libs: Set[PythonDependency] =
-          if (pyCfg.hasPath("libs"))
-            pyCfg
-              .getList("libs")
-              .asScala
-              .toSet
-              .flatMap { configValue: ConfigValue =>
-                resolveLibrary(configValue, moduleType)
-              }
-          else Set()
+      }
+      val pyDefinition = pythonDefinition(pyVersion)
 
-        if (errors.isEmpty)
-          pyDefinition.map(python => PythonConfiguration(python, libs, moduleType))
-        else None
-      } else None
+      val libs: Set[PythonDependency] =
+        if (pyCfg.hasPath(Libs))
+          pyCfg
+            .getList(Libs)
+            .asScala
+            .toSet
+            .flatMap { configValue: ConfigValue =>
+              resolveLibrary(configValue, moduleType)
+            }
+        else Set()
 
-      Success(pythonConfiguration, errors.toIndexedSeq)
+      if (errors.isEmpty)
+        pyDefinition.map(python => PythonConfiguration(python, libs, moduleType))
+      else None
     }
+
+    Result
+      .tryWith(file, config) {
+        val maybePyCfg = config.optionalConfig("python")
+
+        maybePyCfg match {
+          case Some(pyCfg) =>
+            Success(resolvePythonConfig(pyCfg), errors.toIndexedSeq).withProblems(
+              pyCfg.checkExtraProperties(file, Keys.pythonObtFile))
+          case None => Success(None, errors.toIndexedSeq)
+        }
+      }
+
   }
 }

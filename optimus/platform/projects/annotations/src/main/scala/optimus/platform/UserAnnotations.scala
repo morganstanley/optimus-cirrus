@@ -15,19 +15,6 @@ import scala.annotation.meta._
 import scala.annotation._
 
 /**
- * Marks a def/val as overridable NOTE: Tweak modifier is recognized by the compiler plugin To change its default value
- * it's not enough to change to tweak = false. You also have to change EntitySettings.tweakByDefault in the compiler
- * plugin
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-//noinspection ScalaUnusedSymbol
-@getter
-class node(tweak: Boolean) extends StaticAnnotation {
-  def this() = this(false)
-}
-
-/**
  * @see
  *   http://optimusdoc/BasicAnnotations
  */
@@ -217,11 +204,19 @@ final case class nodeDebug(dir: String)
 /**
  * Trait Utils used by the meta annotation below
  */
-final case class MetadataOwner(captain: String, marshal: String)
+final case class MetadataOwner(
+    captain: String,
+    additionalCaptains: Set[String],
+    marshal: String,
+    additionalMarshals: Set[String])
 trait DalMetadata
 trait OptOut extends DalMetadata
 trait OwnershipMetadata {
   val owner: MetadataOwner
+}
+object MetadataOwner {
+  def apply(captain: String, marshal: String): MetadataOwner =
+    MetadataOwner(captain, Set.empty[String], marshal, Set.empty[String])
 }
 
 /**

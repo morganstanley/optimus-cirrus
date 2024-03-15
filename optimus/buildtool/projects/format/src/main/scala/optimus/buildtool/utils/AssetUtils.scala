@@ -50,6 +50,7 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributeView
 import scala.collection.mutable
 import scala.ref.SoftReference
+import scala.util.Success
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -80,7 +81,8 @@ object AssetUtils {
         targetFile,
         replaceIfExists = replaceIfExists,
         backupPrevious = backupPrevious,
-        sourceMustExists = true)
+        sourceMustExist = true
+      )
       t
     } finally Files.deleteIfExists(tempFile.path)
   }
@@ -99,14 +101,16 @@ object AssetUtils {
 
   /**
    * Atomically moves source to target. If the target already exists, then if replaceIfExists is true we replace it,
-   * else if replaceIfExists is false we do nothing
+   * else if replaceIfExists is false we do nothing.
+   * @return true if the file was moved, false otherwise
    */
   def atomicallyMove(
       source: FileAsset,
       target: FileAsset,
       replaceIfExists: Boolean = false,
       backupPrevious: Boolean = false,
-      sourceMustExists: Boolean = false): Unit = {
+      sourceMustExist: Boolean = false
+  ): Boolean = {
     // deletes without throwing for temp files
     def safeDelete(asset: FileAsset): Unit = {
       try Files.deleteIfExists(asset.path)
@@ -116,19 +120,44 @@ object AssetUtils {
       }
     }
 
-    def atomicMove(src: FileAsset, tgt: FileAsset, opts: Seq[CopyOption]) =
-      Try[Unit] {
-        Files.move(src.path, tgt.path, (opts :+ StandardCopyOption.ATOMIC_MOVE).toSeq: _*)
+    def atomicMove(
+        src: FileAsset,
+        tgt: FileAsset,
+        opts: Seq[CopyOption],
+        retryAtomicMove: Boolean
+    ): Try[Boolean] = {
+      Try[Boolean] {
+        Files.move(src.path, tgt.path, opts :+ StandardCopyOption.ATOMIC_MOVE: _*)
+        true
       }
-        .recover { case _: AtomicMoveNotSupportedException =>
-          // non-atomically move to somewhere on the target filesystem, and then atomically move from there
-          log.debug("FS does not support atomic move")
-          val siblingTempFile = NamingConventions.tempFor(tgt, local = true)
-          try {
-            Files.move(src.path, siblingTempFile.path)
-            Files.move(siblingTempFile.path, tgt.path, opts.toSeq: _*)
-          } finally safeDelete(siblingTempFile)
+        .recoverWith {
+          case _: AtomicMoveNotSupportedException if retryAtomicMove =>
+            // non-atomically move to somewhere on the target filesystem, and then atomically move from there
+            log.debug(
+              s"FS does not support atomic move from ${src.pathString} to ${tgt.pathString} - will move using sibling path")
+            val siblingTempFile = NamingConventions.tempFor(tgt, local = false)
+            try {
+              Files.move(src.path, siblingTempFile.path)
+              // `retryAtomicMove = false` to prevent infinite cycles
+              atomicMove(siblingTempFile, tgt, opts, retryAtomicMove = false)
+            } finally safeDelete(siblingTempFile)
+
+          case _: FileAlreadyExistsException if !replaceIfExists =>
+            log.debug(s"${tgt.pathString} already exists, not replacing it")
+            Success(false)
+
+          case _: AccessDeniedException
+              if !replaceIfExists && tgt.existsUnsafe => // also this one, the file is probably just locked
+            log.debug(
+              s"${tgt.pathString} already exists but is locked by another thread or process, not replacing it"
+            )
+            Success(false)
+
+          case _: NoSuchFileException if !sourceMustExist && !src.existsUnsafe =>
+            log.warn(s"Not moving ${src.pathString} to ${tgt.pathString} since ${src.pathString} doesn't exist")
+            Success(false)
         }
+    }
 
     val opts = if (replaceIfExists) Seq(StandardCopyOption.REPLACE_EXISTING) else Seq.empty
     val backup = target.parent.resolveFile(s"${target.name}.old")
@@ -147,7 +176,7 @@ object AssetUtils {
       // can't write to a location, surely I shouldn't be able to delete it, right? Well that turns out not to be the
       // case! Apparently some windows processes can open files in "delete-allowed" mode that will let deletes go
       // through but NOT writes. To take advantage of this, we thus always move an existing target out if we are
-      // replacing it. (We delete this file or use it as backup at the end of this function.
+      // replacing it. (We delete this file or use it as backup at the end of this function.)
       //
       // The main source of this problem are "updating" functions, such as for classpath-mapping and in
       // stampJarWithConsistentHash. These are also performance bottleneck so we may want to revisit all file updates
@@ -161,37 +190,21 @@ object AssetUtils {
         }
 
       // initial attempt at move
-      val firstAttempt = atomicMove(source, target, opts)
-      val notReplacingErrors =
-        if (replaceIfExists) firstAttempt
-        else
-          // if we are not replacing, we can ignore target already exists errors
-          firstAttempt
-            .recover {
-              case _: FileAlreadyExistsException =>
-                log.debug(s"${target.pathString} already exists, not replacing it")
-              case _: AccessDeniedException if target.existsUnsafe => // also this one, the file is probably just locked
-                log.debug(
-                  s"${target.pathString} already exists but is locked by another thread or process, not replacing it")
-            }
-      // don't fail if source is nonexistent
-      val nonexistentSource =
-        if (sourceMustExists) notReplacingErrors
-        else
-          notReplacingErrors.recover {
-            case _: NoSuchFileException if !source.existsUnsafe =>
-              log.warn(s"Not moving $source to $target since $source doesn't exist")
-          }
+      val firstAttempt = atomicMove(source, target, opts, retryAtomicMove = true)
+
+      val secondAttempt = firstAttempt.recoverWith { case NonFatal(t) =>
+        log.debug(s"Failed to move ${source.pathString} to ${target.pathString}. Retrying...", t)
+        atomicMove(source, target, opts, retryAtomicMove = true)
+      }
 
       if (replaceIfExists && !backupPrevious) safeDelete(backup)
 
-      nonexistentSource.get //  throw everything else, called for side-effects
+      secondAttempt.get //  throw everything else
     } catch {
       // All uncaught errors are thrown using IllegalStateException to avoid caching of non-RT exceptions, such as when the disk is full.
       // see OPTIMUS-49251 for details.
       case NonFatal(t) =>
-        log.warn(s"Failed to move $source to $target: ${StackUtils.oneLineStacktrace(t)}")
-        throw new IllegalStateException(s"Failed to move $source to $target", t)
+        throw new IllegalStateException(s"Failed to move ${source.pathString} to ${target.pathString}", t)
     }
   }
 
@@ -205,13 +218,15 @@ object AssetUtils {
       Files.copy(source.path, target.path, StandardCopyOption.COPY_ATTRIBUTES)
   }
 
-  def loadFileAssetToString(file: FileAsset): String =
-    try Files.readString(file.path)
+  def loadFileAsset[T](file: FileAsset)(f: Path => T): T =
+    try f(file.path)
     catch {
       case NonFatal(t) =>
         log.warn(s"Failed to load $file")
         throw new IllegalStateException(s"Failed to load ${file.pathString}", t)
     }
+
+  def loadFileAssetToString(file: FileAsset): String = loadFileAsset(file)(p => Files.readString(p))
 
   def recursivelyDelete(
       dir: Directory,

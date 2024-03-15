@@ -16,7 +16,7 @@ import optimus.platform.AdvancedOptimusApp
 import optimus.platform.entersGraph
 
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -64,7 +64,7 @@ object OpenApiSpecBuilder extends AdvancedOptimusApp[OpenApiSpecBuilderCmdLine] 
 
   private def writeSpecToFile(port: Int, apiVersion: String, outputFile: Path): Path = {
     val address = s"http://localhost:$port/$apiVersion"
-    val url = new URL(address)
+    val url = new URI(address).toURL
     log.debug(s"Fetching spec from $address...")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     try {

@@ -51,10 +51,7 @@ object StagingPhase {
     typer,
     optimus_general_apicheck
   )
-  val GENERAL_API_CHECK = OptimusPhaseInfo(
-    optimus_general_apicheck,
-    "API checks not specific to Optimus internals",
-    typer,
-    superaccessors)
+  val GENERAL_API_CHECK =
+    OptimusPhaseInfo(optimus_general_apicheck, "API checks not specific to Optimus internals", typer, superaccessors)
   val REWRITE = OptimusPhaseInfo(optimus_rewrite, "rewrite source files in-place during migration", typer, patmat)
 }

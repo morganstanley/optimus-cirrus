@@ -17,6 +17,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.ms.silverking.time.AbsMillisTimeSource;
 import com.ms.silverking.time.SimpleStopwatch;
 import com.ms.silverking.time.Stopwatch;
+import optimus.utils.SystemFinalization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,7 +55,7 @@ public class Finalization {
           lastFinalizationMillis = curTimeMillis;
           sw = new SimpleStopwatch();
           System.gc();
-          System.runFinalization();
+          SystemFinalization.runFinalizers();
           sw.stop();
           finalized = true;
           if (verboseFinalization) {

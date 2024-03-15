@@ -13,8 +13,9 @@ package optimus.buildtool.files
 
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.FileTime
-
 import optimus.buildtool.files.Directory.PathFilter
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.PathUtils
@@ -182,6 +183,7 @@ import scala.collection.mutable
         SourceFileId(workspaceSrcRootToSourceFilePath, workspaceSrcRootToSourceFilePath)
       }
 
+      ObtTrace.addToStat(ObtStats.ReadGitSourceFiles, 1)
       val hashedContent = Hashing.hashFileInputStreamWithContent(p, () => queue.open().openStream())
       contents += ((id, hashedContent))
     }

@@ -117,7 +117,8 @@ trait CovariantSetLike[+A, +This <: CovariantSet[A] with CovariantSetLike[A, Thi
 
   /** Tests whether the set contains a given element - usually called through CovariantSetContra.contains() */
   protected[optimus /*platform*/ ] def hasElem(
-      elem: Any): Boolean // TODO (OPTIMUS-0000): Is there a better way to do this which doesn't require iterating over the entire set?
+      elem: Any)
+      : Boolean // TODO (OPTIMUS-0000): Is there a better way to do this which doesn't require iterating over the entire set?
 
   /** Creates a new set by adding all the elements contained in another collection to this set */
   def ++[B >: A](xs: GenTraversableOnce[B]): CovariantSet[B] = xs.foldLeft(this.asCovariantSet[B])(_ + _)

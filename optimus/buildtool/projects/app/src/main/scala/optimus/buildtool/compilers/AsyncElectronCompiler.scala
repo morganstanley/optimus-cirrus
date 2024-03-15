@@ -16,12 +16,13 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilationMessage._
 import optimus.buildtool.artifacts.ElectronArtifact
+import optimus.buildtool.artifacts.ElectronMetadata
 import optimus.buildtool.artifacts.MessagesArtifact
-import optimus.buildtool.artifacts.MessagesMetadata
 import optimus.buildtool.builders.BackgroundProcessBuilder
 import optimus.buildtool.compilers.AsyncElectronCompiler.Inputs
 import optimus.buildtool.compilers.npm.AsyncNpmCommandRunner
 import optimus.buildtool.config.ElectronConfiguration
+import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
@@ -39,6 +40,8 @@ import optimus.buildtool.utils.Utils
 import optimus.exceptions.RTException
 import optimus.platform._
 
+import java.io.PrintWriter
+import java.nio.file.Files
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
@@ -90,48 +93,75 @@ object AsyncElectronCompilerImpl {
       val sandbox = sandboxFactory(s"${scopeId.properPath}-electron", sourceFiles)
       log.debug(s"${prefix}Output paths: ${sandbox.root} -> ${outputJar.pathString}")
 
-      val (hasErrors: Boolean, compiledMessages: Seq[CompilationMessage]) = {
-        val os = OsUtils.osType
-        val commandTemplate = electronConfig.npmCommandTemplate.get(os).getOrThrow {
-          s"Command template for OS '$os' is missing for scope $scopeId!"
-        }
-        val npmBuildCommands = electronConfig.npmBuildCommands.getOrElse(Nil)
-        val compiledMessages =
-          if (npmBuildCommands.isEmpty) Seq(warning("No npm commands found."))
-          else {
-            val executedCmdMsgs = AsyncNpmCommandRunner.runNpmCmd(
-              scopeId,
-              commandTemplate,
-              nodeVersion,
-              pnpmVersion,
-              npmBuildCommands,
-              sandbox.sourceDir,
-              pnpmStoreDir,
-              logFile
-            )
-            BackgroundProcessBuilder
-              .lastLogLines(logFile, 500)
-              .foreach(log.debug(_)) // print max 500 lines for debugging
-            writeNpmMetadata(sandbox.sourceDir, nodeVersion, pnpmVersion)
-            executedCmdMsgs
+      val executables = electronConfig.executables
+      val (hasErrors: Boolean, compiledMessages: Seq[CompilationMessage]) = electronConfig.mode match {
+        case Production =>
+          val os = OsUtils.osType
+          val commandTemplate = electronConfig.npmCommandTemplate.get(os).getOrThrow {
+            s"Command template for OS '$os' is missing for scope $scopeId!"
+          }
+          val npmBuildCommands = electronConfig.npmBuildCommands.getOrElse(Nil)
+          val compiledMessages =
+            if (npmBuildCommands.isEmpty) Seq(warning("No npm commands found."))
+            else {
+              val executedCmdMsgs = AsyncNpmCommandRunner.runNpmCmd(
+                scopeId,
+                commandTemplate,
+                nodeVersion,
+                pnpmVersion,
+                npmBuildCommands,
+                sandbox.sourceDir,
+                pnpmStoreDir,
+                logFile
+              )
+              BackgroundProcessBuilder
+                .lastLogLines(logFile, 500)
+                .foreach(log.debug(_)) // print max 500 lines for debugging
+              writeNpmMetadata(sandbox.sourceDir, nodeVersion, pnpmVersion)
+              executedCmdMsgs
+            }
+
+          // This is needed for special case when npm generates links between folders
+          AssetUtils.recursivelyDelete(sandbox.sourceDir.resolveDir("node_modules"), throwOnFail = true)
+
+          val hasErrors = MessagesArtifact.hasErrors(compiledMessages)
+
+          AssetUtils.atomicallyWrite(outputJar) { tmp =>
+            import optimus.buildtool.artifacts.JsonImplicits._
+            val tmpJar = JarAsset(tmp)
+            val metadata = ElectronMetadata(electronConfig.mode, executables, compiledMessages, hasErrors = false)
+            Jars.createJar(tmpJar, metadata, Some(sandbox.buildDir)) { tempJarStream =>
+              // Copy in source files (under "src/") so they're available for tests
+              Directory.findFilesUnsafe(sandbox.sourceDir).foreach { f =>
+                tempJarStream.copyInFile(f.path, sandbox.root.relativize(f))
+              }
+            }
           }
 
-        // This is needed for special case when npm generates links between folders
-        AssetUtils.recursivelyDelete(sandbox.sourceDir.resolveDir("node_modules"), throwOnFail = true)
+          (hasErrors, compiledMessages)
 
-        val hasErrors = MessagesArtifact.hasErrors(compiledMessages)
-
-        AssetUtils.atomicallyWrite(outputJar) { tmp =>
-          import optimus.buildtool.artifacts.JsonImplicits._
-          val tmpJar = JarAsset(tmp)
-          val metadata = MessagesMetadata(compiledMessages, hasErrors = false)
-          Jars.createJar(tmpJar, metadata, Some(sandbox.root.resolveDir("install")))(_ => {})
-        }
-
-        (hasErrors, compiledMessages)
+        case Development =>
+          val path = sandbox.sourceDir.path.resolve(scopeId.toString)
+          Files.createDirectories(path)
+          val ignoreBuildFile = Files.createFile(path.resolve(".ignoredInObtBuild"))
+          val message = s"${prefix}Skip compilation in dev mode"
+          IO.using(new PrintWriter(Files.newOutputStream(ignoreBuildFile)))(_.println(message))
+          val compiledMessages = Seq(warning(message))
+          AssetUtils.atomicallyWrite(outputJar) { tmp =>
+            import optimus.buildtool.artifacts.JsonImplicits._
+            val tmpJar = JarAsset(tmp)
+            val metadata = ElectronMetadata(electronConfig.mode, executables, compiledMessages, hasErrors = false)
+            Jars.createJar(tmpJar, metadata, Some(sandbox.sourceDir))(_ => {})
+          }
+          (false, compiledMessages)
       }
 
-      val artifact = ElectronArtifact.create(scopeId, outputJar, hashFileOrDirectoryContent(outputJar))
+      val artifact = ElectronArtifact.create(
+        scopeId,
+        outputJar,
+        hashFileOrDirectoryContent(outputJar),
+        electronConfig.mode,
+        executables)
       sandbox.close()
       trace.end(success = !hasErrors, compiledMessages.count(_.isError), compiledMessages.count(_.isWarning))
       log.info(s"${prefix}Completing compilation")

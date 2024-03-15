@@ -17,4 +17,3 @@ abstract class AbstractBuilder[-A, +To] extends mutable.Builder[A, To] {
   final def +=(elem: A): this.type = addOne(elem)
   def addOne(elem: A): this.type
 }
-

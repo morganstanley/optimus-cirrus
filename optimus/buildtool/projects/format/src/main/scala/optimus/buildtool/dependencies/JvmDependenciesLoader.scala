@@ -27,6 +27,8 @@ import optimus.buildtool.format.MavenDefinition.loadMavenDefinition
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.OrderingUtils
 import optimus.buildtool.format.ProjectProperties
+import optimus.buildtool.format.ResolverDefinition
+import optimus.buildtool.format.ResolverDefinition.ResolverType
 import optimus.buildtool.format.Result
 import optimus.buildtool.format.ResultSeq
 import optimus.buildtool.format.Success
@@ -42,10 +44,10 @@ object JvmDependenciesLoader {
   private[buildtool] val Artifacts = "artifacts"
   private[buildtool] val Configuration = "configuration"
   private[buildtool] val Configurations = "configurations"
+  private[buildtool] val IvyConfigurations = "ivyConfigurations"
   private[buildtool] val ContainsMacros = "containsMacros"
   private[buildtool] val Classifier = "classifier"
   private[buildtool] val Dependencies = "dependencies"
-  private[buildtool] val DepManagement = "dependencyManagement"
   private[buildtool] val Excludes = "excludes"
   private[buildtool] val ExtraLibs = "extraLibs"
   private[buildtool] val Force = "force"
@@ -56,7 +58,7 @@ object JvmDependenciesLoader {
   private[buildtool] val Variants = "variants"
   private[buildtool] val Name = "name"
   private[buildtool] val NativeDependencies = "nativeDependencies"
-  private[buildtool] val Redefinitions = "redefinitions"
+  private[buildtool] val Resolvers = "resolvers"
 
   private val Ext = "ext"
   private val KeySuffix = "keySuffix"
@@ -64,17 +66,38 @@ object JvmDependenciesLoader {
   private val TypeStr = "type"
   private val Transitive = "transitive"
 
+  def mavenScalaLibName(name: String, scalaMajorVer: String) = s"${name}_$scalaMajorVer"
+
+  def afsScalaVersion(version: String, scalaMajorVer: String) = s"$scalaMajorVer-$version"
+
   private[dependencies] def loadLocalDefinitions(
       dependenciesConfig: Config,
       kind: Kind,
       obtFile: ObtFile,
       isMaven: Boolean,
-      loadedVariantsConfig: Option[Config] = None): Result[Seq[DependencyDefinition]] =
+      loadedResolvers: Seq[ResolverDefinition],
+      loadedVariantsConfig: Option[Config] = None,
+      isExtraLib: Boolean = false,
+      scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
     Result.tryWith(obtFile, dependenciesConfig) {
       val dependencies = for {
         (groupName, groupConfig) <- ResultSeq(dependenciesConfig.nested(obtFile))
         (depName, dependencyConfig) <- ResultSeq(groupConfig.nested(obtFile))
-        loadResult = loadLibrary(depName, groupName, dependencyConfig, kind, obtFile, isMaven, loadedVariantsConfig)
+        loadResult = loadLibrary(
+          scalaMajorVersion match { // apply scala maven lib name when "scala = true"
+            case Some(scalaMajorVer) if isMaven => mavenScalaLibName(depName, scalaMajorVer)
+            case _                              => depName
+          },
+          groupName,
+          dependencyConfig,
+          kind,
+          obtFile,
+          isMaven,
+          loadedResolvers,
+          loadedVariantsConfig,
+          isExtraLib,
+          scalaMajorVersion
+        )
         dep <- ResultSeq(loadResult)
       } yield dep
 
@@ -110,7 +133,10 @@ object JvmDependenciesLoader {
       kind: Kind,
       obtFile: ObtFile,
       isMaven: Boolean,
-      loadedVariantsConfig: Option[Config] = None): Result[Seq[DependencyDefinition]] =
+      loadedResolvers: Seq[ResolverDefinition],
+      loadedVariantsConfig: Option[Config] = None,
+      isExtraLib: Boolean = false,
+      scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
     Result.tryWith(obtFile, config) {
 
       def loadArtifacts(config: Config) =
@@ -128,9 +154,35 @@ object JvmDependenciesLoader {
         }
 
       def loadVersion(obtFile: ObtFile, config: Config): Option[String] = {
-        // allow no version config for multiSource afs dependencies
-        if (!isMaven && obtFile.path == JvmDependenciesConfig.path) config.optionalString(Version)
-        else Some(config.getString(Version))
+        val depVersion = // allow no version config for multiSource afs dependencies
+          if (!isMaven && obtFile.path == JvmDependenciesConfig.path) config.optionalString(Version)
+          else Some(config.getString(Version))
+        if (isMaven) depVersion
+        else
+          depVersion.map { v =>
+            scalaMajorVersion match { // special case for AFS lib when scala = true)
+              case Some(scalaVer) => afsScalaVersion(v, scalaVer)
+              case None           => v
+            }
+          }
+      }
+
+      def loadResolvers(
+          obtFile: ObtFile,
+          config: Config,
+          predefinedResolvers: Option[Seq[String]]): Result[Seq[String]] = Result.tryWith(obtFile, config) {
+        val (validNames, invalidNames) = predefinedResolvers match {
+          case Some(userDefined) =>
+            val (validNames, invalidNames) = userDefined.partition(str => loadedResolvers.exists(r => r.name == str))
+            (validNames, invalidNames)
+          case None =>
+            val preDefinedIvyRepos = loadedResolvers.filter(_.tpe == ResolverType.Ivy)
+            val preDefinedMavenRepos = loadedResolvers.filter(_.tpe == ResolverType.Maven)
+            if (isMaven && preDefinedMavenRepos.nonEmpty) (preDefinedMavenRepos.map(_.name), Nil)
+            else (preDefinedIvyRepos.map(_.name), Nil)
+        }
+        Success(validNames).withProblems(invalidNames.map(invalid =>
+          Error(s"resolver name $invalid is invalid!", obtFile, config.origin().lineNumber())))
       }
 
       def loadBaseLibrary(fullConfig: Config) = {
@@ -141,6 +193,8 @@ object JvmDependenciesLoader {
             case Some(ver) => (ver, false)
             case None      => ("", true)
           }
+          predefinedResolvers = config.optionalStringList(Resolvers)
+          resolvers <- loadResolvers(obtFile, config, predefinedResolvers)
         } yield DependencyDefinition(
           group,
           if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
@@ -150,6 +204,7 @@ object JvmDependenciesLoader {
           config.optionalString(Classifier),
           artifactExcludes,
           None,
+          resolvers,
           fullConfig.booleanOrDefault(Transitive, default = true),
           fullConfig.booleanOrDefault(Force, default = false),
           config.origin().lineNumber(),
@@ -158,7 +213,8 @@ object JvmDependenciesLoader {
           fullConfig.booleanOrDefault(IsScalacPlugin, default = false),
           artifacts,
           isMaven = isMaven,
-          isDisabled = isDisabled
+          isDisabled = isDisabled,
+          isExtraLib = isExtraLib
         )
       }.withProblems(fullConfig.checkExtraProperties(obtFile, Keys.dependencyDefinition))
 
@@ -324,21 +380,35 @@ object JvmDependenciesLoader {
   private def loadExtraLibs(
       depsConfig: Config,
       obtFile: ObtFile,
-      isMavenConfig: Boolean): Result[Seq[DependencyDefinition]] =
+      isMavenConfig: Boolean,
+      loadedResolvers: Seq[ResolverDefinition] = Nil): Result[Seq[DependencyDefinition]] =
     if (depsConfig.hasPath(ExtraLibs)) {
       val extraLibOccurrences = depsConfig.getObject(ExtraLibs).toConfig
-      loadLocalDefinitions(extraLibOccurrences, ExtraLibDefinition, obtFile, isMavenConfig)
+      loadLocalDefinitions(
+        extraLibOccurrences,
+        ExtraLibDefinition,
+        obtFile,
+        isMavenConfig,
+        loadedResolvers = loadedResolvers,
+        isExtraLib = true)
     } else Success(Nil)
 
   private def loadMultiSourceDeps(
       singleSourceDep: Option[JvmDependencies],
       jvmDepsConfig: Config,
-      obtFile: ObtFile): Result[Option[MultiSourceDependencies]] =
+      obtFile: ObtFile,
+      loadedResolvers: Seq[ResolverDefinition],
+      scalaMajorVersion: Option[String]): Result[Option[MultiSourceDependencies]] =
     singleSourceDep match {
       case Some(singleSource) =>
         val multiSourceConfig = jvmDepsConfig.getObject(Dependencies).toConfig
         for {
-          multiSourceDeps <- MultiSourceDependenciesLoader.load(multiSourceConfig, LocalDefinition, obtFile)
+          multiSourceDeps <- MultiSourceDependenciesLoader.load(
+            multiSourceConfig,
+            LocalDefinition,
+            obtFile,
+            loadedResolvers,
+            scalaMajorVersion)
           checked <- MultiSourceDependenciesLoader.checkDuplicates(
             obtFile,
             multiSourceDeps,
@@ -354,7 +424,9 @@ object JvmDependenciesLoader {
       obtFile: ObtFile,
       useMavenLibs: Boolean,
       isMavenConfig: Boolean,
-      singleSourceDep: Option[JvmDependencies]
+      singleSourceDep: Option[JvmDependencies],
+      loadedResolvers: Seq[ResolverDefinition],
+      scalaMajorVersion: Option[String]
   ): Result[JvmDependencies] = {
     val resolvedConfig = config.resolve()
     for {
@@ -362,14 +434,24 @@ object JvmDependenciesLoader {
       localDefinitions <-
         if (singleSourceDep.isDefined) Success(Nil)
         else
-          loadLocalDefinitions(resolvedConfig.getObject(Dependencies).toConfig, LocalDefinition, obtFile, isMavenConfig)
+          loadLocalDefinitions(
+            resolvedConfig.getObject(Dependencies).toConfig,
+            LocalDefinition,
+            obtFile,
+            isMavenConfig,
+            loadedResolvers)
       extraLibDefinitions <- loadExtraLibs(resolvedConfig, obtFile, isMavenConfig)
       mavenDefs <- loadMavenDefinition(config, isMavenConfig, useMavenLibs)
       nativeDeps <- loadNativeDeps(resolvedConfig, obtFile)
       all = localDefinitions ++ extraLibDefinitions
       deps <- checkSingleSourceDeps(all, obtFile)
       groups <- loadGroups(config, deps, obtFile)
-      multiSourceDependencies <- loadMultiSourceDeps(singleSourceDep, resolvedConfig, obtFile)
+      multiSourceDependencies <- loadMultiSourceDeps(
+        singleSourceDep,
+        resolvedConfig,
+        obtFile,
+        loadedResolvers,
+        scalaMajorVersion)
     } yield JvmDependencies(
       dependencies = if (isMavenConfig) Nil else deps,
       mavenDependencies = if (isMavenConfig) deps else Nil,
@@ -377,14 +459,17 @@ object JvmDependenciesLoader {
       nativeDependencies = nativeDeps,
       groups = groups,
       globalExcludes = globalExcludes,
-      mavenDefinition = Option(mavenDefs)
+      mavenDefinition = Option(mavenDefs),
+      scalaMajorVersion
     )
   }
 
   def load(
       centralConfiguration: ProjectProperties,
       loader: ObtFile.Loader,
-      useMavenLibs: Boolean): Result[JvmDependencies] = {
+      useMavenLibs: Boolean,
+      scalaMajorVersion: Option[String],
+      loadedResolvers: Seq[ResolverDefinition] = Nil): Result[JvmDependencies] = {
 
     def getCentralDependencies(
         topLevelConfig: TopLevelConfig,
@@ -408,7 +493,9 @@ object JvmDependenciesLoader {
             topLevelConfig,
             useMavenLibs,
             isMavenConfig,
-            singleSourceDep)
+            singleSourceDep,
+            loadedResolvers,
+            scalaMajorVersion)
             .withProblems(conf.checkExtraProperties(topLevelConfig, checkingKeys))
         } yield deps
       else

@@ -11,42 +11,24 @@
  */
 package optimus.buildtool.config
 
-import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 
 import scala.collection.immutable.Seq
 
 final case class WebConfiguration(
     mode: NpmBuildMode,
-    webLibs: Seq[String],
+    libs: Seq[String],
     npmCommandTemplate: Map[String, String], // OS type (eg. "windows", "linux") to command template
-    npmBuildCommands: Option[Seq[String]]) {
+    npmBuildCommands: Option[Seq[String]])
+    extends NpmConfiguration {
 
   def fingerprint: Seq[String] = {
-    Seq(s"[Mode]${mode.getClass.getSimpleName}") ++
-      webLibs.sorted.map { d => s"[Libs]$d" } ++
+    Seq(s"[Mode]$mode") ++
+      libs.sorted.map { d => s"[Libs]$d" } ++
       npmCommandTemplate.toSeq.sorted.map { case (k, v) => s"[Template:$k]$v" } ++
       npmBuildCommands.getOrElse(Nil).map(s => s"[Command]$s")
   }
 
-  def nodeVariant: Option[String] = NpmConfiguration.getNpmVariant(webLibs)
-  def pnpmVariant: Option[String] = NpmConfiguration.getPnpmVariant(webLibs)
-}
-
-object NpmConfiguration {
-  sealed trait NpmBuildMode
-  object NpmBuildMode {
-    case object Production extends NpmBuildMode
-    case object Development extends NpmBuildMode
-    case object TestingResource extends NpmBuildMode
-  }
-
-  private def getVariant(group: String, name: String, from: Seq[String]): Option[String] =
-    from
-      .find(node => node.contains(s"$group.$name") && node.contains("variant"))
-      .map(node => node.substring(node.lastIndexOf(".") + 1))
-
-  def getNpmVariant(webLibs: Seq[String]): Option[String] = getVariant(NpmGroup, NpmName, webLibs)
-
-  def getPnpmVariant(webLibs: Seq[String]): Option[String] = getVariant(PnpmGroup, PnpmName, webLibs)
+  def nodeVariant: Option[String] = NpmConfiguration.getNpmVariant(libs)
+  def pnpmVariant: Option[String] = NpmConfiguration.getPnpmVariant(libs)
 }
