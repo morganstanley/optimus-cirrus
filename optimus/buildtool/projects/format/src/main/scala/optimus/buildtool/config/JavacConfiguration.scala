@@ -42,4 +42,3 @@ object JavacConfiguration {
   def filterJavaRuntimeOptions(javaRuntimeVersion: String, opts: Seq[String], log: String => Unit): Seq[String] =
     JavaOptionFiltering.filterJavaRuntimeOptions(javaRuntimeVersion, opts, log)
 }
-

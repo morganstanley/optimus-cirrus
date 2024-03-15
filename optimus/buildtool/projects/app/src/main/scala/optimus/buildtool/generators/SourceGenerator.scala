@@ -16,6 +16,7 @@ import java.nio.file.Files
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.artifacts.GeneratedSourceMetadata
@@ -83,7 +84,7 @@ import scala.reflect._
 object SourceGenerator {
   trait Inputs {
     def generatorName: String
-    def fingerprintHash: String
+    def fingerprint: FingerprintArtifact
   }
 
   def location[A: ClassTag]: JarAsset =

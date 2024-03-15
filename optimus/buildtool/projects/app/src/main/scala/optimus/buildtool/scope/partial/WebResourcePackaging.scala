@@ -47,7 +47,7 @@ import scala.collection.immutable.Seq
     }
     AsyncWebCompiler.Inputs(
       sources.compilationSources,
-      pathBuilder.resourceOutPath(id, sources.compilationInputsHash),
+      pathBuilder.resourceOutPath(id, sources.compilationFingerprint.hash),
       webConfig,
       nodeVersion,
       pnpmVersion,

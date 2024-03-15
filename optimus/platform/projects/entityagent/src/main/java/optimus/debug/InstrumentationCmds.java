@@ -11,6 +11,7 @@
  */
 package optimus.debug;
 
+import static optimus.EntityAgent.logException;
 import static optimus.debug.InstrumentationConfig.*;
 
 import java.io.BufferedReader;
@@ -113,7 +114,7 @@ public class InstrumentationCmds {
         parser.invoke();
       }
     } catch (Exception e) {
-      e.printStackTrace();
+      logException("error while loading config:", e);
     }
   }
 

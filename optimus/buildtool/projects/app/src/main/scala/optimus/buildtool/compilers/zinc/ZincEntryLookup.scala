@@ -59,7 +59,8 @@ final case class PreviousJars(
   }
 }
 
-class ZincAnalysisCache(zincAnalysisCacheSize: Int, generalLogger: ZincLogger, instrumentation: BuildInstrumentation) {
+class ZincAnalysisCache(zincAnalysisCacheSize: Int, instrumentation: BuildInstrumentation) {
+  private val generalLogger = new ZincGeneralLogger
   private val mappers = new ReadWriteMappers(ZincExternalReadMapper, ZincExternalWriteMapper)
 
   // Attempt to extract the runtime and signature jars corresponding to the analysis file

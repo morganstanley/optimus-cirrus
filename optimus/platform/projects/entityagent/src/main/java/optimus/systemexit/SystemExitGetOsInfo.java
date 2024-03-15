@@ -11,6 +11,7 @@
  */
 package optimus.systemexit;
 
+import static optimus.EntityAgent.logException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
@@ -39,9 +40,13 @@ public class SystemExitGetOsInfo {
 
   private void getStackTrace() {
     logger.info("stack trace:");
-    for (StackTraceElement traceElem : Thread.currentThread().getStackTrace()) {
+    for (StackTraceElement traceElem : getCurrentThread().getStackTrace()) {
       logger.info("[trace] " + traceElem.toString());
     }
+  }
+
+  protected Thread getCurrentThread() {
+    return Thread.currentThread();
   }
 
   private void cpuLoad()
@@ -83,7 +88,7 @@ public class SystemExitGetOsInfo {
     try {
       cpuLoad();
     } catch (Exception e) {
-      e.printStackTrace();
+      logException("error in getInfo()", e);
     }
 
     getEnvVars();
@@ -149,7 +154,7 @@ public class SystemExitGetOsInfo {
   // are business-related classes)
   // TODO (OPTIMUS-30207): use StackWalker instead of this
   private boolean isAllowedExit() {
-    StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+    StackTraceElement[] stackTrace = getCurrentThread().getStackTrace();
     int systemExitPosition = Integer.MAX_VALUE;
     for (int i = 0; i < stackTrace.length; i++) {
       String elem = stackTrace[i].toString();

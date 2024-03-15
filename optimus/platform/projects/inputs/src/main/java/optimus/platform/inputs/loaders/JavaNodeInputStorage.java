@@ -76,7 +76,8 @@ public class JavaNodeInputStorage extends NodeInputStorage<EngineAwareNodeInputR
       LoaderSource newSource = nodeInputMapValue.source();
 
       if (!Objects.equals(newValue, currContent.value())
-          || !Objects.equals(newSource, currContent.source()) || !Objects.equals(currContent.forwardToEngine, newForwardToEngine)) {
+          || !Objects.equals(newSource, currContent.source())
+          || !Objects.equals(currContent.forwardToEngine, newForwardToEngine)) {
         localInputsCopy = new HashMap<>(localInputsCopy);
         localInputsCopy.put(input, new VisibleValue<>(newSource, newValue, newForwardToEngine));
       }
@@ -86,9 +87,7 @@ public class JavaNodeInputStorage extends NodeInputStorage<EngineAwareNodeInputR
               && !engineSpecificInputsCopy.containsKey(input);
       localInputsCopy = new HashMap<>(localInputsCopy);
       localInputsCopy.put(
-          input,
-          new VisibleValue<>(
-              source, value, forceForwardToEngine || forwardToEngine));
+          input, new VisibleValue<>(source, value, forceForwardToEngine || forwardToEngine));
     }
     return new JavaNodeInputStorage(localInputsCopy, engineSpecificInputsCopy);
   }
@@ -131,16 +130,12 @@ public class JavaNodeInputStorage extends NodeInputStorage<EngineAwareNodeInputR
         if (content.forwardToEngine && winningSource == content.source()) return this;
         else {
           localInputsCopy = new HashMap<>(localInputsCopy);
-          localInputsCopy.put(
-              input,
-              new VisibleValue<>(winningSource, content.value(), true));
+          localInputsCopy.put(input, new VisibleValue<>(winningSource, content.value(), true));
           return new JavaNodeInputStorage(localInputsCopy, engineSpecificInputs);
         }
       } else {
         localInputsCopy = new HashMap<>(localInputsCopy);
-        localInputsCopy.put(
-            input,
-            new VisibleValue<>(content.source(), content.value(), false));
+        localInputsCopy.put(input, new VisibleValue<>(content.source(), content.value(), false));
       }
     }
     return addToEngineMap(localInputsCopy, input, value, source);

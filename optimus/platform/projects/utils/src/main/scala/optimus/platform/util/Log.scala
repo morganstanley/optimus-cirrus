@@ -14,5 +14,12 @@ package optimus.platform.util
 import msjava.slf4jutils.scalalog._
 
 trait Log {
-  protected val log: Logger = getLogger(this.getClass)
+  private[util] val logImpl = new LogWrapper(this.getClass)
+  protected def log: Logger = logImpl.log
+}
+private[util] class LogWrapper(clazz: Class[_]) extends Serializable {
+  @transient private[util] val log = getLogger(clazz)
+  private def readResolve: AnyRef = {
+    new LogWrapper(clazz)
+  }
 }

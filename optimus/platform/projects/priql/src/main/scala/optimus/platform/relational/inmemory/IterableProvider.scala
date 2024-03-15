@@ -178,12 +178,12 @@ object IterableProvider {
       untypedAggregations: Seq[UntypedAggregation]): Iterable[Any] = {
     if (src.isEmpty) src
     else {
-      val groupKeys = groupByProperties.toSeq
+      val groupKeys = groupByProperties.toSeq.sorted
       val keyValues = src.map { d =>
         val arr: Array[Any] = groupKeys.iterator.map(d.get).toArray
         new MultiKey(arr) -> d
       }
-      val grouped = mutable.Map.empty[MultiKey, mutable.ArrayBuffer[DynamicObject]]
+      val grouped = mutable.LinkedHashMap.empty[MultiKey, mutable.ArrayBuffer[DynamicObject]]
       for ((key, value) <- keyValues) {
         val buf = grouped.getOrElseUpdate(key, new mutable.ArrayBuffer[DynamicObject])
         buf += value

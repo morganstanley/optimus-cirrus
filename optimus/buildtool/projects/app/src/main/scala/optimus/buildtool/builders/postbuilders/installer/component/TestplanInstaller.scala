@@ -58,9 +58,9 @@ final class TestplanInstaller(
 
   // all path strings in one place
   object PathNames {
-    val Testplans: RelativePath = RelativePath("testplans")
     val TestGroups: RelativePath = RelativePath("profiles/testGroups")
-    val TestplanDir: RelativePath = RelativePath("testplans")
+    val TestplanDir: RelativePath = RelativePath("config/testplans")
+    val InModuleTestplanDir: RelativePath = RelativePath("testplans")
     def templateFile(os: String): RelativePath = RelativePath(s"testplan.$os.pre.template")
     def testplanFile(suffix: String = "merged"): String = s"downstream-$suffix.testplan"
   }
@@ -297,7 +297,7 @@ final class TestplanInstaller(
   }
 
   @async private def installTestplanFiles(metaBundle: MetaBundle, allScopeIds: Set[ScopeId]): Seq[FileAsset] = {
-    val testplansDir = pathBuilder.etcDir(metaBundle).resolveDir(PathNames.Testplans)
+    val testplansDir = pathBuilder.etcDir(metaBundle).resolveDir(PathNames.InModuleTestplanDir)
 
     val allTestData = testData(allScopeIds)
 

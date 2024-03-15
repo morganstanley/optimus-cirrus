@@ -15,6 +15,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedMetadata
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.ProcessorArtifact
 import optimus.buildtool.artifacts.ProcessorArtifactType
@@ -160,7 +161,7 @@ object ScopeProcessor {
 
   trait Inputs {
     def processorName: String
-    def fingerprintHash: String
+    def fingerprint: FingerprintArtifact
     def installLocation: RelativePath
   }
 
@@ -173,7 +174,7 @@ object ScopeProcessor {
       installLocation: RelativePath,
       configuration: Map[String, String],
       javaAndScalaSources: JavaAndScalaCompilationSources,
-      scope: CompilationScope): String = {
+      scope: CompilationScope): FingerprintArtifact = {
 
     val fingerprint =
       fingerprintComponents(
@@ -187,7 +188,7 @@ object ScopeProcessor {
         javaAndScalaSources,
         scope.config.paths.workspaceSourceRoot
       )
-    scope.hasher.hashFingerprint(fingerprint, ArtifactType.ProcessingFingerprint)
+    scope.hasher.hashFingerprint(fingerprint, ArtifactType.ProcessingFingerprint, Some(name))
   }
 
   @node private def fingerprintComponents(
@@ -200,7 +201,7 @@ object ScopeProcessor {
       configuration: Map[String, String],
       javaAndScalaSources: JavaAndScalaCompilationSources,
       workspaceSourceRoot: Directory): Seq[String] = {
-    val compilationFingerprint = s"[Sources]${javaAndScalaSources.compilationInputsHash}"
+    val compilationFingerprint = s"[Sources]${javaAndScalaSources.compilationFingerprint.hash}"
     val installLocationFingerprint = s"[InstallLocation:$name]${installLocation.pathFingerprint}"
     val configFingerprint = configuration.toSeq.sorted.map { case (k, v) => s"[Config:$name]$k=$v" }
 

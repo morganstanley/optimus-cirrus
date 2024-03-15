@@ -191,18 +191,26 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     }
 
   def fetchFilesFromBitBucket(
-      hostPort: String,
-      api: String,
       project: String,
       repo: String,
       dirToList: String,
-      at: String,
+      branchOption: Option[String], // if none, branch will be set to default branch
       maxExpectedData: Option[Int] = None,
       expectedPageSize: Int = 10000 // expected page size in a recursive call
   ): Seq[String] = {
+    queryPaged[String, RequestingFilesFromBitBucket](
+      apiListFilesUrl(project, repo, dirToList, branchOption),
+      maxExpectedData,
+      expectedPageSize)
+  }
 
-    val url = s"http://$hostPort/$api/projects/$project/repos/$repo/files/$dirToList?at=$at"
-    queryPaged[String, RequestingFilesFromBitBucket](url, maxExpectedData, expectedPageSize)
+  def getFileContent(
+      project: String,
+      repo: String,
+      browsePath: String,
+      branchOption: Option[String] // if none, branch will be set to default branch
+  ): FileContent = {
+    handleErrors(get[FileContent](apiBrowseUrl(project, repo, browsePath, branchOption)))
   }
 }
 

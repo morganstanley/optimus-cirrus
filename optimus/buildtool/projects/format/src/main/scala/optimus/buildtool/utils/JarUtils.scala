@@ -39,6 +39,8 @@ object JarUtils {
       new Name("MS-preload-release-scopes") // used by OAR/OTR for installed libs
     val PreloadDebugScopes: Name =
       new Name("MS-preload-debug-scopes") // used by OAR/OTR for installed libs
+    val PackagedElectron: Name =
+      new Name("MS-packaged-electron") // used by ObtRuntimeSupport for intellij and ui
     val PackagedPreloadReleaseLibs: Name =
       new Name("MS-packaged-preload-release-libraries") // used by ObtRuntimeSupport for intellij
     val PackagedPreloadDebugLibs: Name =

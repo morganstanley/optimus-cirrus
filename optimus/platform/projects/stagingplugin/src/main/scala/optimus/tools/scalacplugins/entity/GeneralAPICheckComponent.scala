@@ -115,6 +115,7 @@ class GeneralAPICheckComponent(
     import global._
     import noWarns._
     lazy val DeprecatingAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecating")
+    lazy val DeprecatingNewAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecatingNew")
     lazy val AllowedInAnnotation = rootMirror.getRequiredClass("optimus.graph.allowedIn")
 
     var inPattern: Boolean = false
@@ -277,8 +278,10 @@ class GeneralAPICheckComponent(
     def checkUndesiredProperties(calleeSym: Symbol, callerPos: Position): Unit = {
       // If symbol is deprecated, and the point of reference is not enclosed
       // in a deprecated member issue a warning.
-      if (calleeSym.hasAnnotation(DeprecatingAnnotation)) {
-        val annInfo = calleeSym.getAnnotation(DeprecatingAnnotation).get
+      val deprecatingNew = calleeSym.getAnnotation(DeprecatingNewAnnotation)
+      val either = deprecatingNew.orElse(calleeSym.getAnnotation(DeprecatingAnnotation))
+      if (either.nonEmpty) {
+        val annInfo = either.get
         annInfo.stringArg(0) match {
           case Some(msg) =>
             val typeAndFullName = s"${calleeSym.kindString} ${calleeSym.fullName}"
@@ -311,12 +314,23 @@ class GeneralAPICheckComponent(
                 msg + "  (accessed within another deprecated method)"
               )
             } else if (noWarnRegexes.isEmpty) {
-              alarm(
-                OptimusNonErrorMessages.DEPRECATING,
-                callerPos,
-                typeAndFullName,
-                msg + " (no appropriate @nowarn found)"
-              )
+              if (deprecatingNew.nonEmpty) {
+                // note that the @nowarn would be for DEPRECATING 10500 but we still honor it for DEPRECATING_NEW -
+                // see comment on DEPRECATING_NEW for rationale
+                alarm(
+                  OptimusNonErrorMessages.DEPRECATING_NEW,
+                  callerPos,
+                  typeAndFullName,
+                  msg + " (no appropriate @nowarn found)"
+                )
+              } else {
+                alarm(
+                  OptimusNonErrorMessages.DEPRECATING,
+                  callerPos,
+                  typeAndFullName,
+                  msg + " (no appropriate @nowarn found)"
+                )
+              }
             } else if (matched) {
               alarm(OptimusNonErrorMessages.DEPRECATING_LIGHT, callerPos, typeAndFullName, msg)
               val contactInfo = msg match {
@@ -349,17 +363,19 @@ class GeneralAPICheckComponent(
         case deftree: DefTree if tree.hasSymbolField =>
           val sym = deftree.symbol
           // Add scopeId to deprecation if set
-          sym.getAnnotation(DeprecatingAnnotation).foreach { deprecation =>
-            if (!deprecation.stringArg(0).exists(_.length > 0))
-              alarm(OptimusErrors.DEPRECATING_USAGE, tree.pos, "Missing compile time literal `suggestion` argument.")
-            else
-              scopeId.foreach { sid =>
-                val arg0 = deprecation.stringArg(0).get
-                val newArg0 = Literal(Constant(s"$arg0 (SCOPE=$sid)"))
-                val newArgs = newArg0 :: deprecation.args.tail
-                sym.removeAnnotation(DeprecatingAnnotation)
-                sym.addAnnotation(DeprecatingAnnotation, newArgs)
-              }
+          List(DeprecatingAnnotation, DeprecatingNewAnnotation).foreach { anno =>
+            sym.getAnnotation(anno).foreach { deprecation =>
+              if (!deprecation.stringArg(0).exists(_.length > 0))
+                alarm(OptimusErrors.DEPRECATING_USAGE, tree.pos, "Missing compile time literal `suggestion` argument.")
+              else
+                scopeId.foreach { sid =>
+                  val arg0 = deprecation.stringArg(0).get
+                  val newArg0 = Literal(Constant(s"$arg0 (SCOPE=$sid)"))
+                  val newArgs = newArg0 :: deprecation.args.tail
+                  sym.removeAnnotation(anno)
+                  sym.addAnnotation(anno, newArgs)
+                }
+            }
           }
         case _ =>
       }

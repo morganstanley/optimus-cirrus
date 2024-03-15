@@ -48,7 +48,7 @@ import scala.collection.immutable.Seq
     }
     AsyncElectronCompiler.Inputs(
       sources.compilationSources,
-      pathBuilder.electronOutPath(id, sources.compilationInputsHash),
+      pathBuilder.electronOutPath(id, sources.compilationFingerprint.hash),
       electronConfig,
       nodeVersion,
       pnpmVersion,

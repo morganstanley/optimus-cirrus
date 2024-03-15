@@ -445,3 +445,17 @@ object RequestingFilesFromBitBucket extends DefaultJsonProtocol with NullOptions
   implicit lazy val format: RootJsonFormat[RequestingFilesFromBitBucket] =
     jsonFormat3(RequestingFilesFromBitBucket.apply)
 }
+
+final case class FileContent(lines: Seq[FileContentLine]) {
+  override def toString: String = {
+    lines.map(_.text).mkString("\n")
+  }
+}
+object FileContent extends DefaultJsonProtocol with NullOptions {
+  implicit lazy val format: RootJsonFormat[FileContent] = jsonFormat1(FileContent.apply)
+}
+
+final case class FileContentLine(text: String)
+object FileContentLine extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[FileContentLine] = jsonFormat1(FileContentLine.apply)
+}

@@ -126,7 +126,8 @@ public class DiagnosticSettings {
   public static final boolean writeRTVerifierReport =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.report", true);
 
-  public static final boolean granularCacheSize = getBoolProperty("optimus.graph.timeline.granular.cache", false);
+  public static final boolean granularCacheSize =
+      getBoolProperty("optimus.graph.timeline.granular.cache", false);
 
   /**
    * Used for test purposes, it accumulates RT violations in memory even if a report has not been
@@ -163,13 +164,6 @@ public class DiagnosticSettings {
   // will throw exception
   public static final boolean throwBadSchedulerStateException =
       getBoolProperty("optimus.profiler.throwBadSchedulerStateException", true);
-
-  public static final String XSFT_PROPERTY = "optimus.profile.enableXSFT";
-  /**
-   * Not final, can be configured through command line. Note: volatile in case it changes during a
-   * DistClientInfo snapshot. Writing happens in NodeTrace under lock.
-   */
-  public static volatile boolean enableXSFT = getBoolProperty(XSFT_PROPERTY, true);
 
   public static final int tweakUsageQWords = getIntProperty("optimus.graph.tweakUsageQWords", 6);
   // after there is tweakId overflow we will log a warning every time the number of tweaks increases
@@ -220,7 +214,11 @@ public class DiagnosticSettings {
       System.getProperty("os.name", "").toLowerCase().contains("windows");
   public static final String asyncProfilerSettings;
   public static final boolean awaitStacks;
+  public static final boolean sampleCacheLookups;
+  public static final boolean sampleCardinalities;
   public static final boolean samplingProfiler;
+  public static boolean samplingAsserts = getBoolProperty("optimus.sampling.asserts", false);
+
   public static final boolean pluginCounts;
 
   public static final boolean autoAsyncProfiler;
@@ -232,7 +230,6 @@ public class DiagnosticSettings {
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
   public static boolean fakeOutOfMemoryErrorOnKill =
       getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
-  public static final String infoDumpDir;
   public static boolean infoDumpOnShutdown =
       getBoolProperty("optimus.diagnostic.dump.shutdown", false);
 
@@ -260,11 +257,6 @@ public class DiagnosticSettings {
    * written to $TEMP)
    */
   public static final boolean keepStaleTraces;
-
-  /** Used for async stack traces. */
-  public static final boolean traceEnqueuer;
-
-  public static final String TRACE_ENQUEUER = "optimus.graph.traceEnqueuer";
 
   public static final boolean isAsyncStackTracesEnabled;
 
@@ -331,6 +323,11 @@ public class DiagnosticSettings {
       getBoolProperty("optimus.graph.native.duplicate", false);
   public static final boolean captureNativeAllocations =
       duplicateNativeAllocations || getBoolProperty("optimus.graph.native.capture", false);
+
+  public static final boolean detectMemoryBugs =
+      getBoolProperty("optimus.graph.native.memcheck", false);
+  public static final boolean memoryBugsAreThrown = // or would you rather segfault later?
+      getBoolProperty("optimus.graph.native.memcheck.throws", true);
 
   public static final boolean useDebugCppAgent =
       getBoolProperty("optimus.graph.debugCppAgent", false);
@@ -615,13 +612,6 @@ public class DiagnosticSettings {
     keepStaleTraces = getBoolProperty("optimus.profiler.keepStaleTraces", false);
 
     {
-      var ifd = getStringProperty("optimus.diagnostic.dump.dir");
-      if (ifd == null) ifd = System.getenv("DIAGNOSTIC_DUMP_DIR");
-      if (ifd == null) ifd = System.getProperty("java.io.tmpdir");
-      infoDumpDir = ifd;
-    }
-
-    {
       // Look for async-profiler settings with old and new properties.
       var aps = envOrProp("optimus.graph.async.profiler");
       if (Objects.isNull(aps)) aps = envOrProp("async.profiler.settings");
@@ -631,17 +621,22 @@ public class DiagnosticSettings {
 
     samplingProfiler =
         parseBooleanWithDefault(envOrProp("optimus.sampling"), false) && !autoAsyncProfiler;
+    sampleCacheLookups =
+        parseBooleanWithDefault(envOrProp("optimus.sampling.cachelookups"), samplingProfiler);
+    sampleCardinalities =
+        samplingProfiler
+            && parseBooleanWithDefault(envOrProp("optimus.sampling.cardinality"), false);
     pluginCounts = samplingProfiler || getBoolProperty("optimus.plugin.counts", false);
     awaitStacks =
-        !enableRTVNodeRerunner
-            && (parseBooleanWithDefault(envOrProp("optimus.await.stacks"), false)
-                || (asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true")));
+        // Default on if sampling on
+        parseBooleanWithDefault(envOrProp("optimus.await.stacks"), samplingProfiler)
+            // or turn on explicitly via AP settings
+            || (asyncProfilerSettings != null && asyncProfilerSettings.contains("await=true")
+                || jvmDebugging);
     repairEnqueuerChain =
-        getBoolProperty(
-            "optimus.graph.enqueue.repair", samplingProfiler || awaitStacks || jvmDebugging);
+        getBoolProperty("optimus.graph.enqueue.repair", samplingProfiler || awaitStacks);
     awaitChainHashStrategy = getIntProperty("optimus.graph.enqueue.hash.strategy", 0);
-    traceEnqueuer = getBoolProperty(TRACE_ENQUEUER, jvmDebugging || awaitStacks);
     markGraphMethodsAsSynthetic = getBoolProperty(SYNTHETIC_GRAPH_METHODS, jvmDebugging);
-    isAsyncStackTracesEnabled = traceEnqueuer && markGraphMethodsAsSynthetic;
+    isAsyncStackTracesEnabled = awaitStacks && markGraphMethodsAsSynthetic;
   }
 }

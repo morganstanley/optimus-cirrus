@@ -20,8 +20,7 @@ import optimus.buildtool.resolvers.WebDependencyResolver
 
 final case class MetadataSettings(
     installPathBuilder: InstallPathBuilder,
-    afsDependencyResolver: ExternalDependencyResolver,
-    mavenDependencyResolver: ExternalDependencyResolver,
+    dependencyResolver: ExternalDependencyResolver,
     webDependencyResolver: WebDependencyResolver,
     leafDir: RelativePath,
     installVersion: String,
@@ -35,8 +34,7 @@ object MetadataSettings {
 
   def apply(
       stratoConfig: StratoConfig,
-      afsDependencyResolver: ExternalDependencyResolver,
-      mavenDependencyResolver: ExternalDependencyResolver,
+      dependencyResolver: ExternalDependencyResolver,
       webDependencyResolver: WebDependencyResolver,
       installDir: Directory,
       installVersion: String,
@@ -49,14 +47,14 @@ object MetadataSettings {
     val installPathBuilder = InstallPathBuilder.dev(installDir, installVersion)
     new MetadataSettings(
       installPathBuilder,
-      afsDependencyResolver,
-      mavenDependencyResolver,
+      dependencyResolver,
       webDependencyResolver,
       leafDir,
       installVersion,
       obtVersion,
       javaVersion,
       buildId,
-      generatePoms)
+      generatePoms
+    )
   }
 }

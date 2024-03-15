@@ -708,7 +708,7 @@ public class InstrumentationConfig {
         var patch = addSuffixCall(mref, unload);
         patch.suffixWithThis = true;
       } catch (Exception e) {
-        EntityAgent.logMsg("Unable to load LD_PRELOAD remover: " + e);
+        EntityAgent.logException("Unable to load LD_PRELOAD remover: ", e);
       }
     }
   }

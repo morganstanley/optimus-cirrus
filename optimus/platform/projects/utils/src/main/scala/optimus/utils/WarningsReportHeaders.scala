@@ -16,4 +16,5 @@ object WarningsReportHeaders {
   val ID_HEADER = "ID"
   val SOURCE_PATH_HEADER = "Source Path"
   val SOURCE_COL_HEADER = "Source"
+  val MESSAGE_HEADER = "Message"
 }

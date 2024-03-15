@@ -129,7 +129,7 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   def intellijJdkTable: Path = intellijConfigOptionsDir.resolve("jdk.table.xml")
 
-  def IntellijIdeGeneral: Path = intellijConfigOptionsDir.resolve("ide.general.xml")
+  def intellijIdeGeneral: Path = intellijConfigOptionsDir.resolve("ide.general.xml")
 
   val intellijScalaConfig: Path = intellijConfigOptionsDir.resolve("scala.xml")
 

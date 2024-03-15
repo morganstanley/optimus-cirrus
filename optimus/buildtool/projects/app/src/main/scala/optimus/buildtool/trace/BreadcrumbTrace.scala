@@ -445,5 +445,5 @@ private[trace] object MemoryBean {
   private val mx = ManagementFactory.getThreadMXBean
     .asInstanceOf[ThreadMXBean]
 
-  def getThreadAllocatedBytes(): Long = mx.getThreadAllocatedBytes(Thread.currentThread().getId)
+  def getThreadAllocatedBytes(): Long = mx.getThreadAllocatedBytes(Thread.currentThread().threadId())
 }

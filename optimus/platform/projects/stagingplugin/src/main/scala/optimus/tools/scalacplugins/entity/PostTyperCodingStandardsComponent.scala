@@ -320,7 +320,7 @@ class PostTyperCodingStandardsComponent(
         val isAutoApplication = tree.hasAttachment[AutoApplicationAttachment.type] ||
           sym.paramss.lastOption.flatMap(_.headOption).exists(_.isImplicit) && (tree match {
             case Apply(f, _) => f.hasAttachment[AutoApplicationAttachment.type]
-            case _ => false
+            case _           => false
           })
 
         if (isAutoApplication) {

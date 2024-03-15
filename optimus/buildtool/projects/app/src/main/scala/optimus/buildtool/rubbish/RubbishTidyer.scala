@@ -30,8 +30,9 @@ import optimus.platform._
 import optimus.utils.ErrorIgnoringFileVisitor
 import optimus.utils.MiscUtils.{NumericFoldable, OrderingChain}
 
-import scala.jdk.CollectionConverters._
+import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 trait RubbishTidyer extends Log {
@@ -55,7 +56,11 @@ trait RubbishTidyer extends Log {
     val deleted = fallibly("tidy rubbish") {
       val selected = rubbish
       if (selected.nonEmpty) {
-        def rubbishString = s"Rubbish:\n\t${selected.map(r => buildDir.path.relativize(r.file)).mkString("\n\t")}"
+        def rubbishString = s"Rubbish:\n\t${selected
+            .map { r =>
+              s"${buildDir.path.relativize(r.file)} (${r.lastModified}/${r.weight})"
+            }
+            .mkString("\n\t")}"
 
         log.debug(rubbishString)
         selected.flatMap { rubbish =>
@@ -113,15 +118,21 @@ final class RubbishTidyerImpl(
     git: Option[GitLog]
 ) extends RubbishTidyer {
 
+  private val oneMB = 1 << 20
   private def byteToMB(bytes: Long): Long = bytes >> 20
-  private def mbString(bytes: Long): String = f"${byteToMB(bytes)}%,dMB"
+  private val oneKB = 1 << 10
+  private def byteToKB(bytes: Long): Long = bytes >> 10
+  private def bytesToString(bytes: Long): String =
+    if (math.abs(bytes) > oneMB) f"${byteToMB(bytes)}%,dMB"
+    else if (math.abs(bytes) > oneKB) f"${byteToKB(bytes)}%,dKB"
+    else f"$bytes%,dB"
 
   private[rubbish] def search(): (Seq[Rubbish], Long) = {
     // Sufficient free space where freeDiskSpaceTriggerBytes is defined and less than the current free space
     val freeSpace = Utils.freeSpaceBytes(buildDir)
     (freeSpace, freeDiskSpaceTriggerBytes) match {
       case (Some(f), Some(t)) if f > t =>
-        log.debug(s"Skipping rubbish cleanup (${mbString(f)} is greater than trigger of ${mbString(t)})")
+        log.debug(s"Skipping rubbish cleanup (${bytesToString(f)} is greater than trigger of ${bytesToString(t)})")
         (Nil, 0L)
       case _ =>
         val rubbish = ArrayBuffer.empty[Rubbish]
@@ -131,7 +142,7 @@ final class RubbishTidyerImpl(
             FileVisitResult.CONTINUE
           }
         }
-        val extraInfo = freeSpace.map(f => s" (${mbString(f)} free disk space)").getOrElse("")
+        val extraInfo = freeSpace.map(f => s" (${bytesToString(f)} free disk space)").getOrElse("")
         log.info(s"Searching for potential rubbish$extraInfo...")
         val (time, _) = AdvancedUtils.timed {
           IO.using(Files.list(buildDir.path))(_.iterator.asScala.toArray)
@@ -141,18 +152,28 @@ final class RubbishTidyerImpl(
         }
 
         val totalSize = rubbish.sumOf(_.size)
-        val buildDirRequired = (totalSize - maxSizeBytes) max 0L
-        val overheadRequired = (freeSpace, freeDiskSpaceTriggerBytes) match {
-          /** we want to free as much as is required to hit the trigger if possible, otherwise maxBuildDirSize */
-          case (Some(f), Some(t)) => (t - f) min buildDirRequired
-          case _                  => buildDirRequired
-        }
-
         log.info(
-          f"Found ${rubbish.size}%,d potential pieces of rubbish (total size ${mbString(totalSize)}) in ${time / 1.0e6}%,.1fms"
+          f"Found ${rubbish.size}%,d potential pieces of rubbish (total size ${bytesToString(totalSize)}) in ${time / 1.0e6}%,.1fms"
         )
-        log.info(f"Will attempt to free ${mbString(overheadRequired)}")
-        (rubbish, overheadRequired)
+
+        val aboveMaxBuildDirBytes = totalSize - maxSizeBytes
+        val toDelete = (freeSpace, freeDiskSpaceTriggerBytes) match {
+          /** we want to free as much as is required to hit the trigger if possible, otherwise maxBuildDirSize */
+          case (Some(f), Some(t)) if (t - f) < aboveMaxBuildDirBytes =>
+            val belowTriggerBytes = t - f
+            log.info(s"Will attempt to free ${bytesToString(
+                belowTriggerBytes)} to bring disk free space back to ${bytesToString(t)}")
+            belowTriggerBytes
+          case _ if aboveMaxBuildDirBytes > 0 =>
+            log.info(s"Will attempt to free ${bytesToString(
+                aboveMaxBuildDirBytes)} to bring build dir size back to ${bytesToString(maxSizeBytes)}")
+            aboveMaxBuildDirBytes
+          case _ =>
+            log.info(
+              s"Build dir size (${bytesToString(totalSize)}) less than max allowed size (${bytesToString(maxSizeBytes)}). No rubbish tidying necessary.")
+            0
+        }
+        (rubbish, toDelete)
     }
   }
 
@@ -160,8 +181,8 @@ final class RubbishTidyerImpl(
    * Load artifacts from the git log and their rubbishness weight.
    *
    * Unpinned artifacts have weight 0 (the default). Pinned artifacts of other heads have weight 1. Pinned artifacts of
-   * the current head have weight that depends on their pinning recency, equal to EntriesPerArtifact for the most recent
-   * done to 2 for the least recent ones.
+   * the current head have weight that depends on their pinning recency, equal to `EntriesPerArtifact + 1` for the most
+   * recent down to 2 for the least recent ones.
    */
   @entersGraph // it asks for git metadata, but this shouldn't be called from graph anyways
   private[rubbish] def loadRecentCommitArtifacts(): Map[Path, Int] = {
@@ -199,8 +220,6 @@ final class RubbishTidyerImpl(
 
   private[buildtool] def select(rubbish: Seq[Rubbish], toTrim: Long, includePinned: Boolean): Seq[Rubbish] = {
     if (toTrim > 0L) {
-      log.info(f"Will tidy ~${byteToMB(toTrim)}%,dMB of rubbish")
-
       val commitArtifacts = loadRecentCommitArtifacts()
       val withPin = {
         val all = rubbish
@@ -227,8 +246,14 @@ final class RubbishTidyerImpl(
        */
 
       val (oldest, newest) = (result.minBy(_.lastModified), result.maxBy(_.lastModified))
-      log.info(f"Selected ${result.size}%,d pieces of rubbish (total ${byteToMB(
-          taken)}%,dMB, oldest ${oldest.lastModified}, newest ${newest.lastModified})")
+      log.info(f"Selected ${result.size}%,d pieces of rubbish (total ${bytesToString(
+          taken)}, oldest ${oldest.lastModified}, newest ${newest.lastModified})")
+
+      val byWeight =
+        result.groupBy(_.weight).map { case (w, rs) => w -> rs.size }.to(Seq).sorted.reverse
+      val byWeightStr = byWeight.map { case (w, size) => s"Weight $w: $size" }
+      log.debug(s"Rubbish files by weight: \n\t${byWeightStr.mkString("\n\t")}")
+
       result
     } else {
       log.info(s"Nothing to tidy")

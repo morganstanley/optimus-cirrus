@@ -50,15 +50,25 @@ public class EntityAgent {
       new ConcurrentHashMap<>();
   private static final String VERSION_STRING = "Entity Agent(v8)";
 
+  /** Write to stdout. */
   public static void logMsg(String msg) {
     if (!silent) {
       System.out.println(VERSION_STRING + ": " + msg);
     }
   }
 
+  /** Write to stderr. */
   public static void logErrMsg(String msg) {
     if (!silent) {
       System.err.println(VERSION_STRING + ": " + msg);
+    }
+  }
+
+  /** Writes errors to stderr with a stack trace. */
+  public static void logException(String msg, Throwable exc) {
+    if (!silent) {
+      System.err.println(VERSION_STRING + ": " + msg);
+      exc.printStackTrace(System.err);
     }
   }
 
@@ -215,8 +225,8 @@ public class EntityAgent {
         }
       } catch (IllegalClassFormatException e) {
         throw e;
-      } catch (Throwable t) {
-        logErrMsg("safeTransform error: '" + transformer.getClass().getName() + "': " + t);
+      } catch (Exception t) {
+        logException("safeTransform error: '" + transformer.getClass().getName() + "':", t);
         return input;
       }
     }
@@ -307,6 +317,10 @@ public class EntityAgent {
       customTransformers.put("optimus/core/TPDMask", new TPDMaskTransfomer());
     }
 
+    if (DiagnosticSettings.detectMemoryBugs) {
+      instrumentation.addTransformer(new SwigUseAfterFreeDetector());
+    }
+
     if (System.getProperty(TestIdle.monitorIdlePropertyName) != null) {
       instrumentation.addTransformer(new TestIdleTransformer(), true);
     }
@@ -375,7 +389,7 @@ public class EntityAgent {
       try {
         instrumentation.retransformClasses(cls);
       } catch (UnmodifiableClassException e) {
-        e.printStackTrace();
+        logException("error in retransform", e);
       }
     }
   }

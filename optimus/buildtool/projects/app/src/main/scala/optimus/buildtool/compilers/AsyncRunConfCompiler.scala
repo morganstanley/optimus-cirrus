@@ -157,14 +157,14 @@ final class StaticRunscriptCompilationBindingSources(
         None
 
     (Nil :+
-      captureConfig(Names.scalaHomePath) :+ // RT
-      captureConfig(Names.javaHomePath) // RT
+      captureConfig(Names.ScalaHomePath) :+ // RT
+      captureConfig(Names.JavaHomePath) // RT
     ).flatten.toMap
   }
 
   val obtWorkspacePropertiesOfInterestAsProperties: Map[String, String] = {
     def captureConfig(name: String): Option[(String, String)] = {
-      val path = s"${Names.workspace}.$name"
+      val path = s"${Names.Workspace}.$name"
       if (obtWorkspaceProperties.hasPath(path))
         Some(name -> obtWorkspaceProperties.getAnyRef(path).toString)
       else
@@ -172,13 +172,13 @@ final class StaticRunscriptCompilationBindingSources(
     }
 
     (Nil :+
-      captureConfig(Names.javaProject) :+ // RT
-      captureConfig(Names.javaVersion) :+ // RT
-      captureConfig(Names.stratosphereVersion) :+ // RT
-      captureConfig(Names.obtVersion) :+ // RT
-      captureConfig(Names.scalaSourceCompatibility) :+ // RT
-      captureConfig(Names.scalaVersion) :+ // RT
-      captureConfig(Names.javaOptionFiltering) // RT
+      captureConfig(Names.JavaProject) :+ // RT
+      captureConfig(Names.JavaVersion) :+ // RT
+      captureConfig(Names.StratosphereVersion) :+ // RT
+      captureConfig(Names.ObtVersion) :+ // RT
+      captureConfig(Names.ScalaSourceCompatibility) :+ // RT
+      captureConfig(Names.ScalaVersion) :+ // RT
+      captureConfig(Names.JavaOptionFiltering) // RT
     ).flatten.toMap
   }
 }
@@ -462,8 +462,8 @@ final class StaticRunscriptCompilationBindingSources(
                   Right(Seq(CompilationMessage.error(t)))
               }
             )
-          case Right(compilationMessage) =>
-            ApplicationScriptResult(arc.name, Right(Seq(compilationMessage)))
+          case Right(compilationMessages) =>
+            ApplicationScriptResult(arc.name, Right(compilationMessages))
         }
     }.flatten
   }

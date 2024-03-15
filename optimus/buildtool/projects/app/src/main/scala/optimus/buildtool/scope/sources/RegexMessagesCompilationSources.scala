@@ -12,6 +12,7 @@
 package optimus.buildtool.scope.sources
 
 import optimus.buildtool.artifacts.ArtifactType.RegexMessagesFingerprint
+import optimus.buildtool.config.CodeFlaggingRule
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.scope.CompilationScope
 import optimus.platform._
@@ -22,7 +23,8 @@ import scala.collection.immutable.Seq
 class RegexMessagesCompilationSources(
     scope: CompilationScope,
     sourceSources: SourceCompilationSources,
-    resourceSources: ResourceCompilationSourcesImpl
+    resourceSources: ResourceCompilationSourcesImpl,
+    rules: Seq[CodeFlaggingRule]
 ) extends CompilationSources {
 
   override def id: ScopeId = scope.id
@@ -32,14 +34,16 @@ class RegexMessagesCompilationSources(
 
   @node def nonEmpty: Boolean = allContent.map(_._2).exists(_.nonEmpty)
 
+  @node private def rulesFingerprint = rules.map(r => s"[Rule]${r.fingerprint}")
+
   @node override protected def hashedSources: HashedSources = {
     val sourceFingerprint = allContent.apar.flatMap { case (tpe, content) =>
       scope.fingerprint(content, tpe)
     }
-    val ruleFingerprint = scope.config.regexConfig.toIndexedSeq.flatMap(_.rules).map(r => s"[Rule]${r.fingerprint}")
 
-    val hash = scope.hasher.hashFingerprint(sourceFingerprint ++ ruleFingerprint, RegexMessagesFingerprint)
+    val hash = scope.hasher.hashFingerprint(sourceFingerprint ++ rulesFingerprint, RegexMessagesFingerprint)
     // `generatedSourceArtifacts = Nil` since we're not dependent on any source generation
     HashedSourcesImpl(allContent, generatedSourceArtifacts = Nil, hash)
   }
+
 }

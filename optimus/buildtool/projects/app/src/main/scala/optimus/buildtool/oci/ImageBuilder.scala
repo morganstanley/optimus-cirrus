@@ -20,7 +20,6 @@ import java.nio.file.attribute.PosixFileAttributeView
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.jar
-
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.LoadingCache
 import com.google.cloud.tools.jib.api._
@@ -52,6 +51,7 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.docker.DockerConfiguration
@@ -122,7 +122,8 @@ class ImageBuilder(
     val directoryFactory: DirectoryFactory,
     val layersForDependencies: Int = 30,
     val useMavenLibs: Boolean,
-    val dockerImageCacheDir: Directory
+    val dockerImageCacheDir: Directory,
+    val depCopyDir: Directory
 ) extends AbstractImageBuilder {
 
   override protected lazy val dynamicDependencyDetector: DynamicDependencyDetector = DynamicDependencyDetector
@@ -162,6 +163,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   val directoryFactory: DirectoryFactory
   val useMavenLibs: Boolean
   val dockerImageCacheDir: Directory
+  val depCopyDir: Directory
   val dstImage: ImageLocation = dockerImage.location
   val relevantScopes: Set[ScopeId] = dockerImage.scopeIds
   val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
@@ -187,6 +189,10 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     stagingPathBuilder,
     directoryFactory
   )
+
+  private val distMavenLibDir = pathBuilder.dirForMetaBundle(pathBuilder.mavenReleaseMetaBundle, "lib")
+
+  private def isMavenReleasePath(distPath: Path): Boolean = distMavenLibDir.contains(FileAsset(distPath))
 
   private def stagingFile(scope: ScopeId, hash: String, suffix: String): FileAsset = {
     stagingDir resolveFile s"$scope.$hash.$suffix"
@@ -372,7 +378,6 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val runconfScopes = relevantRunconfJars.map(_._1).toSet
     val scopesNeedingPathing =
       scopes.apar.filter(s => runconfScopes.contains(s) || scopeConfigSource.scopeConfiguration(s).pathingBundle)
-    println(s"Scopes needing pathing: ${scopesNeedingPathing}")
 
     allScopeArtifacts.apar.foreach {
       case scopeArtifacts if scopesNeedingPathing.contains(scopeArtifacts.scopeId) =>
@@ -461,9 +466,19 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       initialPath.hashCode().abs % layersForDependencies
     }
 
+    def getFileAbsPath(distPath: Path): Path = {
+      FileAsset(distPath) match {
+        case httpLib if isMavenReleasePath(distPath) => // copy http file from local disk depcopied location
+          val inHttps = depCopyDir.resolveDir("https").resolveFile(distMavenLibDir.relativize(httpLib))
+          if (inHttps.exists) inHttps.path
+          else depCopyDir.resolveDir("http").resolveFile(distMavenLibDir.relativize(httpLib)).path
+        case _ => distPath // copy disted file from AFS
+      }
+    }
+
     val filePaths =
       if (extraImagePaths.isDefined) paths // all extracted local disk files from extraImage.
-      else paths.filter(_.getRoot ne null).filter(Files.exists(_))
+      else paths.filter(_.getRoot ne null).filter(p => Files.exists(p) || isMavenReleasePath(p))
 
     filePaths.foreach { dependency =>
       processedDependencies.computeIfAbsent(
@@ -474,7 +489,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
               case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(inTarPathToAdd) =>
                 extraImagePathMap(inTarPathToAdd) // get local disk path
               case _ => // when not for extraImage(should also consider not in extraImagePathMap case when concurrent)
-                inTarPathToAdd
+                getFileAbsPath(inTarPathToAdd)
             }
             DependencyFile(pickBucketId(inTarPathToAdd), fileAbsPath, inTarPathToAdd)
           }
@@ -554,7 +569,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     path match {
       case dir if Files.isDirectory(dir) =>
         Files.list(dir).iterator().asScala.toSet.flatMap(processPath(_, withDynamicDeps))
-      case file if isReallyRealFile(file) && !unprincipledExclude(file) =>
+      case file if (isReallyRealFile(file) && !unprincipledExclude(file)) || isMavenReleasePath(file) =>
         val dynamicDeps =
           if (withDynamicDeps) dynamicDependencyDetector.getDynamicDependencies(file, unprincipledExclude)
           else Set.empty

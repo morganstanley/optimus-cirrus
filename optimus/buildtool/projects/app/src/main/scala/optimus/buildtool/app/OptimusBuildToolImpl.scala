@@ -36,6 +36,7 @@ import optimus.buildtool.builders.postinstallers.PostInstaller
 import optimus.buildtool.builders.postinstallers.apprunner.PostInstallAppRunner
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader
 import optimus.buildtool.builders.postinstallers.uploaders.UploadLocation
+import optimus.buildtool.builders.reporter.ErrorReporter
 import optimus.buildtool.builders.reporter.MessageReporter
 import optimus.buildtool.cache.ArtifactCache
 import optimus.buildtool.cache.FilesystemCache
@@ -66,6 +67,7 @@ import optimus.buildtool.compilers.cpp.CppCompilerFactoryImpl
 import optimus.buildtool.compilers.runconfc.Templates
 import optimus.buildtool.compilers.zinc.AnalysisLocatorImpl
 import optimus.buildtool.compilers.zinc.RootLocatorWriter
+import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.compilers.zinc.ZincInstallationLocator
@@ -82,6 +84,9 @@ import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.config.StaticLibraryConfig.scalaJarNamesForZinc
 import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.config.VersionConfiguration
+import optimus.buildtool.dependencies.AfsSource
+import optimus.buildtool.dependencies.DependencySource
+import optimus.buildtool.dependencies.MavenSource
 import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files._
 import optimus.buildtool.generators.CppBridgeGenerator
@@ -96,7 +101,7 @@ import optimus.buildtool.processors.VelocityProcessor
 import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.resolvers.CoursierArtifactResolver
 import optimus.buildtool.resolvers.DependencyCopier
-import optimus.buildtool.resolvers.IvyResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.resolvers.WebDependencyResolver
 import optimus.buildtool.resolvers.WebScopeInfo
 import optimus.buildtool.rubbish.ArtifactRecency
@@ -131,15 +136,24 @@ object OptimusBuildToolImpl {
 
 @entity private[buildtool] class OptimusBuildToolImpl(
     cmdLine: OptimusBuildToolCmdLineT,
-    instrumentation: BuildInstrumentation
+    instrumentation: BuildInstrumentation,
+    errorReporter: Option[ErrorReporter] = None
 ) {
   // do this first to avoid mistakes (failing to write to logs is unhelpful)
   Files.createDirectories(cmdLine.logDir)
   private val logDir: Directory = Directory(cmdLine.logDir)
+  private val obtErrorReporter = errorReporter.getOrElse(new ErrorReporter(cmdLine.errorsDir))
 
   // parameters for maven
   private val useMavenLibs = cmdLine.useMavenLibs
   private val generatePoms = cmdLine.generatePoms
+  private val dependencySource: DependencySource = cmdLine.dependencySource match {
+    case "maven" => MavenSource
+    case "afs"   => AfsSource
+    case unsupported =>
+      throw new IllegalArgumentException(
+        s"unsupported source '$unsupported' detected! should be either 'maven' or 'afs'")
+  }
 
   private val useCrumbs = cmdLine.breadcrumbs
   private val version: String =
@@ -151,7 +165,7 @@ object OptimusBuildToolImpl {
 
   private val workingDir = Directory(Paths.get(sys.props("user.dir")))
 
-  private val buildDir: Directory = cmdLine.outputDir.asDirectory.getOrElse(workspaceRoot.resolveDir("build_obt"))
+  private val buildDir: Directory = cmdLine.buildDir
   private val outputDir: Directory = buildDir.resolveDir(version)
   private val installDir: Directory = cmdLine.installDir.asDirectory.getOrElse(buildDir.parent.resolveDir("install"))
   private val sandboxDir: Directory =
@@ -162,10 +176,11 @@ object OptimusBuildToolImpl {
   private val timingsRecorder = new TimingsRecorder(logDir)
   val countingTrace = new CountingTrace(Some(cmdLine.statusIntervalSec))
   private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = useCrumbs)
+  private val buildSummaryRecorder = new BuildSummaryRecorder
 
   private val memoryThrottle = MemoryThrottle.fromConfigStringOrSysProp(cmdLine.memConfig.nonEmptyOption)
-  private val baseListeners =
-    timingsRecorder :: traceRecorder :: countingTrace :: longRunningTraceListener :: memoryThrottle.toList
+  private val baseListeners = timingsRecorder :: traceRecorder :: countingTrace :: longRunningTraceListener ::
+    buildSummaryRecorder :: memoryThrottle.toList
 
   private val uploadLocations: Seq[UploadLocation] =
     cmdLine.uploadLocations.toIndexedSeq.map(UploadLocation(_, cmdLine.decompressAfterUpload))
@@ -312,7 +327,7 @@ object OptimusBuildToolImpl {
     scalaLibPath.listFiles.filter(isScalaJar).map(_.asJar)
   }
 
-  @node private def ivyResolvers: Seq[IvyResolver] = obtConfig.ivyResolvers
+  @node private def dependencyMetadataResolvers: Seq[DependencyMetadataResolver] = obtConfig.depMetadataResolvers
 
   @node def scalaVersionConfig: ScalaVersionConfig =
     ScalaVersionConfig(globalConfig.scalaVersion, scalaLibPath, scalaJars)
@@ -324,7 +339,9 @@ object OptimusBuildToolImpl {
       new RubbishTidyerImpl(maxSizeMegabytes.toLong << 20L, freeDiskSpaceTriggerBytes, buildDir, sandboxDir, gitLog)
     }
 
-  // NOTE: The compiler factory is not scope-dependent. It would take too much memory otherwise.
+  @node @scenarioIndependent private def zincAnalysisCache =
+    new ZincAnalysisCache(cmdLine.zincAnalysisCacheSize, instrumentation)
+
   @node private def underlyingCompilerFactory: ZincCompilerFactory = {
     val (zincPath: Path, zincVersion: String) =
       ZincInstallationLocator.inferZincPathAndVersion(Option(cmdLine.zincPathAndVersion))
@@ -346,7 +363,7 @@ object OptimusBuildToolImpl {
       zincIgnorePluginHash = cmdLine.zincIgnorePluginHash,
       zincIgnoreChangesRegexp = cmdLine.zincIgnoreChangesRegexp,
       zincRecompileAllFraction = cmdLine.zincRecompileAllFraction,
-      zincAnalysisCache = cmdLine.zincAnalysisCache,
+      analysisCache = zincAnalysisCache,
       instrumentation = instrumentation,
       bspServer = cmdLine.bspServer,
       localArtifactStore = localStore,
@@ -381,7 +398,8 @@ object OptimusBuildToolImpl {
       workspaceSourceRoot,
       configParams,
       cppOsVersions,
-      useMavenLibs
+      useMavenLibs,
+      Some(obtErrorReporter)
     )
   }
 
@@ -416,19 +434,15 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def rootFingerprintHasher =
     FingerprintHasher(ScopeId.RootScopeId, pathBuilder, fsCache.store, None, mischief = false)
 
-  @node def afsDependencyResolver: CoursierArtifactResolver =
-    externalDependencyResolver(ivyResolvers)
+  @node def dependencyResolver: CoursierArtifactResolver =
+    externalDependencyResolver(dependencyMetadataResolvers)
 
-  @node def mavenDependencyResolver: CoursierArtifactResolver =
-    externalDependencyResolver(
-      ivyResolvers.filter(_.ivyPatterns.exists(x => NamingConventions.isHttpOrHttps(x.urlPattern)))
-    )
-
-  @node private def externalDependencyResolver(resolvers: Seq[IvyResolver]): CoursierArtifactResolver =
+  @node private def externalDependencyResolver(resolvers: Seq[DependencyMetadataResolver]): CoursierArtifactResolver =
     CoursierArtifactResolver(
       resolvers = resolvers,
       externalDependencies = obtConfig.externalDependencies,
       dependencyCopier = dependencyCopier,
+      dependencySource = dependencySource,
       globalExcludes = obtConfig.globalExcludes,
       credentials = credentials,
       remoteAssetStore = remoteAssetStore
@@ -465,7 +479,12 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def cppCompiler =
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
-    AsyncPythonCompilerImpl(depCopyRoot.resolveDir("pip-cache"), sandboxFactory, logDir)
+    AsyncPythonCompilerImpl(
+      depCopyRoot.resolveDir("pip-cache"),
+      depCopyRoot.resolveDir("venv-cache"),
+      sandboxFactory,
+      logDir,
+      cmdLine.pypiCredentials)
   @node @scenarioIndependent private def webCompiler =
     AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir)
   @node @scenarioIndependent private def electronCompiler =
@@ -570,13 +589,6 @@ object OptimusBuildToolImpl {
             )
           )
         )
-        val resolver =
-          if (useMavenLibs || (scopeConfig.flags.mavenOnly && id.isMain)) mavenDependencyResolver
-          // for maven only project non-main tpes, we will adopt existing infra from ScopeDefinitionCompiler.scala:
-          // optimus.buildtool.testworker, and this testworker would be added for all non-main scopeIds in workspace.
-          // therefore we should allow AFS resolvers be used for all AF-Only non-main scopes, and prevent user using
-          // other AFS deps/modules based on ScopeDefinitionCompiler.scala.
-          else afsDependencyResolver
         val compilationScope = CompilationScope(
           id,
           config = scopeConfig,
@@ -591,10 +603,9 @@ object OptimusBuildToolImpl {
           pathBuilder = pathBuilder,
           compilers = Seq(scalaCompiler, javaCompiler),
           dependencyCopier = dependencyCopier,
-          externalDependencyResolver = resolver,
+          externalDependencyResolver = dependencyResolver,
           cache = buildCache,
           factory = this,
-          scopeConfigSource = scopeConfigSource,
           directoryFactory = directoryFactory,
           mischief = mischiefOpts.mischief(id)
         )
@@ -602,6 +613,7 @@ object OptimusBuildToolImpl {
         Some(
           ScopedCompilationImpl(
             scope = compilationScope,
+            scopeConfigSource = scopeConfigSource,
             sourceGenerators = sourceGenerators,
             scalac = scalaCompiler,
             javac = javaCompiler,
@@ -878,7 +890,8 @@ object OptimusBuildToolImpl {
       installerFactory = asNode(bspInstaller),
       scalaVersionConfig = asNode(() => scalaVersionConfig),
       pythonEnabled = asNode(() => globalConfig.pythonEnabled),
-      ivyResolvers = asNode(() => ivyResolvers),
+      extractVenvs = asNode(() => globalConfig.extractVenvs),
+      depMetadataResolvers = asNode(() => dependencyMetadataResolvers),
       directoryFactory = directoryFactory,
       dependencyCopier = dependencyCopier,
       incrementalMode = cmdLine.incrementalMode,
@@ -935,7 +948,8 @@ object OptimusBuildToolImpl {
           srcPrefix = srcPrefix,
           srcFilesToUpload = globalConfig.defaultSrcFilesToUpload,
           cmdLine.uploadFormat,
-          useCrumbs = useCrumbs
+          useCrumbs = useCrumbs,
+          filesToExclude = globalConfig.filesToExcludeFromUpload,
         )
       )
     } else None
@@ -992,7 +1006,8 @@ object OptimusBuildToolImpl {
           latestCommit = latestCommit,
           directoryFactory = directoryFactory,
           useMavenLibs = useMavenLibs,
-          dockerImageCacheDir = dockerImageCacheDir
+          dockerImageCacheDir = dockerImageCacheDir,
+          depCopyDir = depCopyRoot
         )
       }
     }
@@ -1040,7 +1055,7 @@ object OptimusBuildToolImpl {
     )
 
     val messageReporter = {
-      val reportDir = buildDir.resolveDir(".build-report")
+      val reportDir = cmdLine.reportDir
       val codeReviewSettings = if (cmdLine.codeReviewAnalysis) {
         Some(
           CodeReviewSettings(
@@ -1055,8 +1070,7 @@ object OptimusBuildToolImpl {
         Some(
           MetadataSettings(
             stratoConfig = stratoConfig,
-            afsDependencyResolver = afsDependencyResolver,
-            mavenDependencyResolver = mavenDependencyResolver,
+            dependencyResolver = dependencyResolver,
             webDependencyResolver = webDependencyResolver,
             installDir = installDir,
             installVersion = cmdLine.installVersion,
@@ -1069,7 +1083,7 @@ object OptimusBuildToolImpl {
 
       new MessageReporter(
         obtConfig,
-        errorsDir = Some(reportDir.resolveDir("compilation-errors")),
+        errorReporter = obtErrorReporter,
         warningsDir = if (cmdLine.warningsReport) Some(reportDir.resolveDir("compilation-warnings")) else None,
         lookupsDir = if (cmdLine.zincTrackLookups) Some(reportDir.resolveDir("compilation-errors")) else None,
         codeReviewSettings = codeReviewSettings,

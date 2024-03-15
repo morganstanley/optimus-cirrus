@@ -18,6 +18,8 @@ import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.Directory.PathRegexFilter
 import optimus.buildtool.runconf.RunConfFile
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OptimusBuildToolAssertions
@@ -113,6 +115,8 @@ object SourceFolder {
 ) extends SourceFolder {
   import FileSystemSourceFolder._
 
+  override def toString: String = s"${getClass.getSimpleName}(${workspaceSrcRootToSourceFolderPath.pathString})"
+
   @node override def exists: Boolean = factory.exists(sourceDir)
 
   @node override def runconfSourceFiles: SortedMap[SourceFileId, HashedContent] = {
@@ -174,7 +178,10 @@ object SourceFolder {
 }
 object FileSystemSourceFolder {
   @entity private class SourceFile(val id: SourceFileId, file: FileAsset) {
-    @node def hashedContent: HashedContent = Hashing.hashFileWithContent(file)
+    @node def hashedContent: HashedContent = {
+      ObtTrace.addToStat(ObtStats.ReadFileSystemSourceFiles, 1)
+      Hashing.hashFileWithContent(file)
+    }
     override def toString: String = s"${getClass.getSimpleName}($id, $file)"
   }
 

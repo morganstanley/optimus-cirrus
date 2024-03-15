@@ -21,7 +21,9 @@ import optimus.buildtool.utils.Hashing
 import optimus.platform._
 import scala.collection.immutable.Seq
 
-@entity abstract class ExternalDependencyResolver(val dependencyDefinitions: Seq[DependencyDefinition]) {
+@entity abstract class ExternalDependencyResolver(val loadedDefinitions: Seq[DependencyDefinition]) {
+  val (extraLibsDefinitions, dependencyDefinitions) = loadedDefinitions.partition(_.isExtraLib)
+
   @node def fingerprintDependencies(deps: Seq[DependencyDefinition]): Seq[String]
   @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult
 }

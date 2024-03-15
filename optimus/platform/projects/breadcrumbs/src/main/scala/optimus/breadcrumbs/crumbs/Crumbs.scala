@@ -326,6 +326,8 @@ class EventPropertiesCrumb(
 ) extends PropertiesCrumb(uuid, source, m, jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"), hints)
 
 object EventPropertiesCrumb {
+  def apply(uuid: ChainedID, source: Crumb.Source, elems: Elems) =
+    new EventPropertiesCrumb(uuid, source, Map.empty[String, String], elems.toMap)
   def apply(uuid: ChainedID, source: Crumb.Source, elems: Properties.Elem[_]*) =
     new EventPropertiesCrumb(uuid, source, Map.empty[String, String], Properties.jsMap(elems: _*))
   def apply(uuid: ChainedID, source: Crumb.Source, hints: Set[CrumbHint], elems: Properties.Elem[_]*) =
@@ -529,6 +531,11 @@ object Crumb {
   object ObservableSource extends Source { override val name = "OBS" }
   object ProfilerSource extends Crumb.Source {
     override val name: String = "PROF"
+    override val flags = Set(CrumbFlag.DoNotReplicate)
+  }
+
+  object SamplingProfilerSource extends Crumb.Source {
+    override val name: String = "SP"
     override val flags = Set(CrumbFlag.DoNotReplicate)
   }
 

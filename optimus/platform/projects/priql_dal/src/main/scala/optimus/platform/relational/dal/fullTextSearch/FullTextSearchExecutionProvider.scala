@@ -66,7 +66,7 @@ class FullTextSearchExecutionProvider[T](
     val pickledEx = ConstFormatter.format(AsyncValueEvaluator.evaluate(expression), dalApi.loadContext)
 
     // Fill DSIQueryTemporality to Entity
-    val expr = QuerySourceCollector.collect(pickledEx, { case x @ (_: Entity ) => x })
+    val expr = QuerySourceCollector.collect(pickledEx, { case x @ (_: Entity) => x })
     val temporalityMap = expr
       .collect { case entity: EntityExpression =>
         entity.name

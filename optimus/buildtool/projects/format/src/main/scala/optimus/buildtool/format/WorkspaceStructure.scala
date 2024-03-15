@@ -107,7 +107,8 @@ object TopLevelConfig {
     BuildDependenciesConfig,
     JdkDependenciesConfig,
     MischiefConfig,
-    PythonConfig
+    PythonConfig,
+    RuleFiltersConfig
   ).sortBy(_.path)
 
   object empty extends TopLevelConfig("")
@@ -125,10 +126,11 @@ object BundlesConfig extends TopLevelConfig("bundles.obt")
 object ApplicationValidation extends TopLevelConfig("app-validation.obt")
 object RunConfSubstitutions extends TopLevelConfig("runconf-substitutions.obt")
 object DockerConfig extends TopLevelConfig("docker.obt")
-object RulesConfig extends TopLevelConfig("rules.obt")
+object RulesConfig extends TopLevelConfig("config/rules/rules.obt")
 object CppToolchainConfig extends TopLevelConfig("cpp-toolchains.obt")
 object MischiefConfig extends TopLevelConfig(NamingConventions.MischiefConfig)
 object PythonConfig extends TopLevelConfig("dependencies/python-dependencies.obt")
+object RuleFiltersConfig extends TopLevelConfig("config/rules/filters.obt")
 
 final case class Module(
     id: ModuleId,
@@ -196,11 +198,11 @@ object WorkspaceStructure {
   val Empty: WorkspaceStructure = WorkspaceStructure("", Seq.empty, Map.empty)
 
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
-    val modulesRoot = if (config.hasPath(Names.modulesRoot)) config.getString(Names.modulesRoot) else s"$meta/$name"
+    val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
     val id = MetaBundle(meta, name)
     val forbiddenDeps: Result[Seq[ForbiddenDependency]] =
-      if (config.hasPath(Names.forbiddenDependencies))
-        Result.traverse(config.configs(Names.forbiddenDependencies))(genForbiddenDependency)
+      if (config.hasPath(Names.ForbiddenDependencies))
+        Result.traverse(config.configs(Names.ForbiddenDependencies))(genForbiddenDependency)
       else Success(Seq.empty)
     forbiddenDeps.map { fds =>
       Bundle(id, modulesRoot, fds, config.origin().lineNumber())
@@ -208,18 +210,18 @@ object WorkspaceStructure {
   }
 
   private def genForbiddenDependency(conf: Config): Result[ForbiddenDependency] = {
-    val name = conf.getString(Names.name)
+    val name = conf.getString(Names.Name)
     val configurations =
-      if (conf.hasPath(Names.configurations)) conf.getStringList(Names.configurations).asScala.toSet
+      if (conf.hasPath(Names.Configurations)) conf.getStringList(Names.Configurations).asScala.toSet
       else Set.empty[String]
     val allowedInModules =
-      if (conf.hasPath(Names.allowedIn)) conf.getStringList(Names.allowedIn).asScala.toSet
+      if (conf.hasPath(Names.AllowedIn)) conf.getStringList(Names.AllowedIn).asScala.toSet
       else Set.empty[String]
     val allowedPatterns: Set[Regex] =
-      if (conf.hasPath(Names.allowedPatterns)) conf.getStringList(Names.allowedPatterns).asScala.map(_.r).toSet
+      if (conf.hasPath(Names.AllowedPatterns)) conf.getStringList(Names.AllowedPatterns).asScala.map(_.r).toSet
       else Set.empty[Regex]
-    val internalOnly = if (conf.hasPath(Names.internalOnly)) conf.getBoolean(Names.internalOnly) else false
-    val externalOnly = if (conf.hasPath(Names.externalOnly)) conf.getBoolean(Names.externalOnly) else false
+    val internalOnly = if (conf.hasPath(Names.InternalOnly)) conf.getBoolean(Names.InternalOnly) else false
+    val externalOnly = if (conf.hasPath(Names.ExternalOnly)) conf.getBoolean(Names.ExternalOnly) else false
     Success(ForbiddenDependency(name, configurations, allowedInModules, allowedPatterns, internalOnly, externalOnly))
       .withProblems(conf.checkExtraProperties(BundlesConfig, Keys.forbiddenDependencyKeys))
   }
@@ -244,17 +246,17 @@ object WorkspaceStructure {
       val bundleAndModulesConf: ResultSeq[(Bundle, Config)] = for {
         bundlesConfig <- ResultSeq.single(bundlesFileConfig)
         (meta, moduleConf) <- ResultSeq(bundlesConfig.nestedWithFilter(BundlesConfig) { case (name, _) =>
-          name != Names.forbiddenDependencies
+          name != Names.ForbiddenDependencies
         })
         (bundleName, bundleConf) <- ResultSeq(moduleConf.nested(BundlesConfig))
         bundle <- ResultSeq.single(loadBundleDef(meta, bundleName, bundleConf))
-      } yield bundle -> bundleConf.withoutPath(Names.modulesRoot).withoutPath(Names.forbiddenDependencies)
+      } yield bundle -> bundleConf.withoutPath(Names.ModulesRoot).withoutPath(Names.ForbiddenDependencies)
 
       val globalForbiddenDependencies: Result[Seq[ForbiddenDependency]] = for {
         bundle <- bundlesFileConfig
         dep <-
-          if (bundle.hasPath(Names.forbiddenDependencies))
-            Result.traverse(bundle.configs(Names.forbiddenDependencies))(genForbiddenDependency)
+          if (bundle.hasPath(Names.ForbiddenDependencies))
+            Result.traverse(bundle.configs(Names.ForbiddenDependencies))(genForbiddenDependency)
           else Success(Nil)
       } yield dep
 

@@ -32,7 +32,7 @@ trait MapBuildFromImplicits extends MapBuildFromImplicitsLow {
 
   implicit def NodeSeqBuildFrom[A]: BuildFrom[NodeSeq, A, Seq[A]] = BuildFrom.buildFromIterableOps[Seq, Node, A]
 
-  implicit def enumerationValueSetToSortedSetBuildFrom[E <: Enumeration with Singleton, A](
-    implicit A: Ordering[A]): BuildFrom[E#ValueSet, A, immutable.SortedSet[A]] =
+  implicit def enumerationValueSetToSortedSetBuildFrom[E <: Enumeration with Singleton, A](implicit
+      A: Ordering[A]): BuildFrom[E#ValueSet, A, immutable.SortedSet[A]] =
     BuildFrom.buildFromSortedSetOps[immutable.SortedSet, E#Value, A](A)
 }

@@ -14,6 +14,7 @@ package optimus.buildtool.scope.partial
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.compilers.JarPackager
+import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.SourceCompilationSources
 import optimus.buildtool.trace.Sources
@@ -24,6 +25,7 @@ import scala.collection.immutable.Seq
 @entity private[scope] class SourcePackaging(
     override protected val scope: CompilationScope,
     override protected val sources: SourceCompilationSources,
+    scopeConfigSource: ScopeConfigurationSource,
     sourcePackager: JarPackager
 ) extends PartialScopedCompilation {
   import scope._
@@ -32,7 +34,7 @@ import scala.collection.immutable.Seq
   // - we're in a sparse workspace and this scope is missing locally
   // - the scope is configured to install sources
   @node override protected def containsRelevantSources: Boolean =
-    !sources.isEmpty && (!scope.scopeConfigSource.local(scope.id) || scope.config.flags.installSources)
+    !sources.isEmpty && (!scopeConfigSource.local(scope.id) || scope.config.flags.installSources)
 
   @node override protected def upstreamArtifacts: Seq[Artifact] = Seq()
 
@@ -46,7 +48,7 @@ import scala.collection.immutable.Seq
       Sources,
       ArtifactType.Sources,
       pathBuilder
-        .outputPathFor(id, sources.compilationInputsHash, ArtifactType.Sources, None, incremental = false)
+        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.Sources, None, incremental = false)
         .asJar,
       sources.compilationSources,
       Map.empty

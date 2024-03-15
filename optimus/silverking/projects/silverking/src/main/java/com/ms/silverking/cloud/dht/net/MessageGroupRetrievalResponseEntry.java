@@ -16,37 +16,14 @@ import java.nio.ByteBuffer;
 import com.ms.silverking.cloud.dht.common.EnumValues;
 import com.ms.silverking.cloud.dht.common.OpResult;
 import com.ms.silverking.cloud.dht.net.protocol.RetrievalResponseMessageFormat;
-import com.ms.silverking.cloud.dht.throttle.SkThrottlingDebt;
 
 public class MessageGroupRetrievalResponseEntry extends MessageGroupKVEntry {
-
-  private SkThrottlingDebt totalDebt;
-  private int debtIndex;
-  private String debtProperty = "silverking.mg.debtEnabled";
 
   public MessageGroupRetrievalResponseEntry(
       ByteBuffer keyBuffer, int offset, ByteBuffer[] buffers) {
     super(keyBuffer, offset);
     storedLength = keyBuffer.getInt(offset + RetrievalResponseMessageFormat.resultLengthOffset);
     initValBuffer(buffers);
-    initialiseTotalDebt(buffers);
-  }
-
-  public void initialiseTotalDebt(ByteBuffer[] buffers) {
-    // TODO (OPTIMUS-42080): debtIndex cannot be assigned a fixed position since buffers are added
-    // in inheritance order. ProtoValueMG is the very last level so this index works for now.
-    boolean debtEnabled = Boolean.getBoolean(debtProperty);
-    if (debtEnabled) {
-      debtIndex = buffers.length - 1;
-      ByteBuffer debtBuffer = buffers[debtIndex];
-      totalDebt = SkThrottlingDebt.deserialize(debtBuffer);
-    } else {
-      totalDebt = SkThrottlingDebt.noDebt();
-    }
-  }
-
-  public SkThrottlingDebt getTotalDebt() {
-    return totalDebt;
   }
 
   public int entryLength() {

@@ -17,7 +17,10 @@ import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.Artifact
+import optimus.buildtool.artifacts.Artifact.InternalArtifact
+import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.Severity
@@ -27,6 +30,7 @@ import optimus.buildtool.builders.reporter.MessageReporter
 import optimus.buildtool.compilers.CompilationException
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.resolvers.DependencyDownloadTracker
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.buildtool.trace._
 import optimus.buildtool.utils.FileDiff
@@ -38,6 +42,7 @@ import optimus.graph.cache.Caches
 import optimus.graph.diagnostics.EvictionReason
 import optimus.platform._
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
@@ -125,7 +130,7 @@ class StandardBuilder(
   ): BuildResult = {
     val startTime = patch.MilliInstant.now
     val totalScopes = scopedCompilations.size
-    ObtTrace.addToStat(ObtStats.Scopes, totalScopes)
+    ObtTrace.setStat(ObtStats.Scopes, totalScopes)
 
     log.info(Utils.LogSeparator)
     val scopesStr = scopedCompilations.map(_.id).mkString(", ")
@@ -207,7 +212,7 @@ class StandardBuilder(
                 artifacts
               }.distinct
 
-              factory.globalMessages ++ compiledArtifacts ++ bundleArtifacts
+              validate(factory.globalMessages ++ compiledArtifacts ++ bundleArtifacts)
             }
           }
         )
@@ -219,6 +224,16 @@ class StandardBuilder(
       if (res.successful) {
         log.info(s"${allArtifacts.size} artifacts successfully generated")
         val transitiveScopes = Artifact.transitiveIds(directScopes, allArtifacts)
+        ObtTrace.setStat(ObtStats.TransitiveScopes, transitiveScopes.size)
+        val scalaArtifacts = allArtifacts.collect {
+          case InternalArtifact(id, a) if id.tpe == ArtifactType.Scala => a
+        }
+        ObtTrace.setStat(ObtStats.ScalaArtifacts, scalaArtifacts.size)
+        val javaArtifacts = allArtifacts.collect {
+          case InternalArtifact(id, a) if id.tpe == ArtifactType.Java => a
+        }
+        ObtTrace.setStat(ObtStats.JavaArtifacts, javaArtifacts.size)
+
         if (transitiveScopes.nonEmpty) postBuilder.postProcessTransitiveArtifacts(transitiveScopes, allArtifacts)
 
         postBuilder.postProcessArtifacts(directScopes, allArtifacts, successful = true)
@@ -237,12 +252,13 @@ class StandardBuilder(
       val durationMillis = endTime.toEpochMilli - startTime.toEpochMilli
       val duration = Utils.durationString(durationMillis)
       val midfix = if (res.successful) "" else "with failures "
-
       val msg = s"BUILD COMPLETED ${midfix}in $duration at $endTime"
+
       if (res.successful) Utils.SuccessLog.info(msg) else Utils.FailureLog.error(msg)
 
       if (res.successful) logTimings(durationMillis, timingListener)
       logCacheDetails()
+      log.debug(DependencyDownloadTracker.summary.mkString("\n\t"))
       messageReporter.foreach(_.writeReports(res))
       log.info(Utils.LogSeparator)
       onBuildEnd.foreach(_())
@@ -273,8 +289,34 @@ class StandardBuilder(
           case ce: CompilationException => show(ce.artifactId, ce.otherMessages)
           case _                        => // do nothing
         }
+        messageReporter.foreach(_.errorReporter.writeErrorReport(t))
         throw t
     }
+  }
+
+  private def validate(allArtifacts: Seq[Artifact]): Seq[Artifact] = {
+    val duplicateArtifacts = allArtifacts.groupBy(_.id).filter(_._2.size > 1)
+    val scopedDuplicates = duplicateArtifacts.groupBy {
+      case (InternalArtifactId(scopeId, _, _), _) =>
+        scopeId
+      case _ =>
+        RootScopeId
+    }
+    val duplicateMessageArtifacts = scopedDuplicates
+      .map { case (scopeId, dupes) =>
+        val messages = dupes
+          .map { case (id, as) =>
+            CompilationMessage.error(s"Multiple (${as.size}) artifacts for key $id\n\t${as.mkString("\n\t")}")
+          }
+          .to(Seq)
+        InMemoryMessagesArtifact(
+          InternalArtifactId(scopeId, ArtifactType.DuplicateMessages, None),
+          messages,
+          Validation)
+      }
+      .to(Seq)
+
+    allArtifacts ++ duplicateMessageArtifacts
   }
 
   private def show(id: InternalArtifactId, ms: Seq[CompilationMessage]): Unit = ms.foreach { m =>
@@ -285,7 +327,7 @@ class StandardBuilder(
   @async private def runBackgroundProcesses(cs: CancellationScope): Unit =
     asyncResult(cs) {
       apar(
-        backgroundBuilder.foreach(_.build(RootScopeId, BackgroundCommand, lastLogLines = 10)),
+        backgroundBuilder.foreach(_.build(RootScopeId, BackgroundCommand, lastLogLines = 20)),
         if (uploadSources) assetUploader.foreach(_.scheduleUploadConfigFromSource())
       )
     }.valueOrElse {

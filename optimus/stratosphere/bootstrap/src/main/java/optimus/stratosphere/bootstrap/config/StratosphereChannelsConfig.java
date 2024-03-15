@@ -74,7 +74,10 @@ public class StratosphereChannelsConfig {
     } else if (nameChannels.size() > 1) {
       throw new StratosphereException("Duplicated entries for channel: " + selectedChannelName);
     } else {
-      throw new StratosphereException("Selected channel doesn't exist: " + selectedChannelName);
+      throw new StratosphereException(
+          "Selected channel doesn't exist: "
+              + selectedChannelName
+              + " To fix this issue, you need to either update your branch using Git or manually remove the configured channel in <workspace>/config/custom.conf.");
     }
   }
 
@@ -86,9 +89,10 @@ public class StratosphereChannelsConfig {
     if (eligibleChannels.size() == 1) {
       return eligibleChannels.get(0);
     } else if (eligibleChannels.size() > 1) {
-      throw new StratosphereException(String.format(
-          "User is added to multiple stratosphere channels: %s. Please make sure to select only one channel\n",
-          eligibleChannels.stream().map(channel -> channel.name).collect(Collectors.toList())));
+      throw new StratosphereException(
+          String.format(
+              "User is added to multiple stratosphere channels: %s. Please make sure to select only one channel\n",
+              eligibleChannels.stream().map(channel -> channel.name).collect(Collectors.toList())));
     } else {
       return null;
     }

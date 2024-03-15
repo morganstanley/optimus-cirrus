@@ -14,12 +14,12 @@ package optimus.buildtool.bsp
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.builders.StandardBuilder
 import optimus.buildtool.compilers.cpp.CppFileCompiler.PrecompiledHeader
 import optimus.buildtool.config.CppConfiguration.CompilerFlag
 import optimus.buildtool.config.CppConfiguration.LinkerFlag
 import optimus.buildtool.config.CppConfiguration.OutputType
-import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.PythonAfsDependencyDefinition
 import optimus.buildtool.dependencies.PythonDefinition
@@ -36,7 +36,7 @@ import optimus.buildtool.format.WarningsConfiguration
 import optimus.buildtool.generators.GeneratorType
 import optimus.buildtool.processors.ProcessorType
 import optimus.buildtool.resolvers.DependencyCopier
-import optimus.buildtool.resolvers.IvyResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.rubbish.ArtifactRecency
 import optimus.buildtool.scope.FingerprintHasher
 import optimus.buildtool.trace.BuildWorkspaceStructure
@@ -56,7 +56,7 @@ import scala.collection.immutable.Seq
     underlyingBuilder: NodeFunction0[StandardBuilder],
     scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
     pythonEnabled: NodeFunction0[Boolean],
-    ivyResolvers: NodeFunction0[Seq[IvyResolver]]) {
+    depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]]) {
   import JsonImplicits._
   import spray.json._
 
@@ -83,17 +83,18 @@ import scala.collection.immutable.Seq
       .apar
       .map(singleScopeFp)
 
-  @node private def ivyResolversFp: String =
-    "resolvers fingerprint:" + Hashing.hashStrings(ivyResolvers().flatMap(_.fingerprint).sorted)
+  @node private def depMetadataResolversFp: String =
+    "resolvers fingerprint:" + Hashing.hashStrings(depMetadataResolvers().flatMap(_.fingerprint).sorted)
 
   /**
    * Compute a hash for the workspace from the scope configurations.
    */
-  @node def hash(): String = ObtTrace.traceTask(ScopeId.RootScopeId, HashWorkspaceStructure) {
-    val (scala, py, resolvers, scopes) = apar(scalaFp, pyEnabledFp, ivyResolversFp, scopesFp)
-    val configHash = hasher.hashFingerprint(Seq(scala, py, resolvers) ++ scopes, ArtifactType.StructureFingerprint)
-    log.debug(s"Hashed config fingerprint: $configHash")
-    configHash
+  @node def hash: FingerprintArtifact = ObtTrace.traceTask(ScopeId.RootScopeId, HashWorkspaceStructure) {
+    val (scala, py, resolvers, scopes) = apar(scalaFp, pyEnabledFp, depMetadataResolversFp, scopesFp)
+    val configFingerprint =
+      hasher.hashFingerprint(Seq(scala, py, resolvers) ++ scopes, ArtifactType.StructureFingerprint)
+    log.debug(s"Hashed config fingerprint: ${configFingerprint.hash}")
+    configFingerprint
   }
 }
 
@@ -101,6 +102,7 @@ import scala.collection.immutable.Seq
     underlyingBuilder: NodeFunction0[StandardBuilder],
     scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
     rawPythonEnabled: NodeFunction0[Boolean],
+    rawExtractVenvs: NodeFunction0[Boolean],
     directoryFactory: LocalDirectoryFactory,
     dependencyCopier: DependencyCopier,
     structureHasher: StructureHasher,
@@ -117,6 +119,7 @@ import scala.collection.immutable.Seq
     val scalaJars = rawScalaConfig.scalaJars.apar.map(dependencyCopier.atomicallyDepCopyJarIfMissing)
     val scalaConfig = rawScalaConfig.copy(scalaLibPath = directoryFactory.reactive(scalaLibPath), scalaJars = scalaJars)
     val pythonEnabled = rawPythonEnabled()
+    val extractVenvs = rawExtractVenvs()
     val scopeConfigSource = builder.factory.scopeConfigSource
 
     val scopes: Map[ScopeId, (Seq[Artifact], ResolvedScopeInformation)] =
@@ -149,11 +152,14 @@ import scala.collection.immutable.Seq
       }
 
     val artifacts = scopes.flatMap { case (_, (as, _)) => as }.to(Seq)
-    // mark the artifacts so that we don't garbage collect them on the next bsp run
-    recency.foreach(_.markRecent(artifacts))
 
     val scopeInfos = scopes.map { case (id, (_, info)) => id -> info }
-    WorkspaceStructure(structureHasher.hash(), scalaConfig, pythonEnabled, scopeInfos)
+    val hashedStructureFingerprint = structureHasher.hash
+
+    // mark the artifacts so that we don't garbage collect them on the next bsp run
+    recency.foreach(_.markRecent(artifacts :+ hashedStructureFingerprint))
+
+    WorkspaceStructure(hashedStructureFingerprint.hash, scalaConfig, pythonEnabled, extractVenvs, scopeInfos)
   }
 
   @node private def localScopeDependencies(id: ScopeId, scopeConfigSource: ScopeConfigurationSource): Seq[ScopeId] = {
@@ -187,6 +193,7 @@ final case class WorkspaceStructure(
     structureHash: String,
     scalaConfig: ScalaVersionConfig,
     pythonEnabled: Boolean,
+    extractVenvs: Boolean,
     scopes: Map[ScopeId, ResolvedScopeInformation]
 ) {
   override def toString: String = s"WorkspaceStructure($structureHash)"
@@ -245,7 +252,7 @@ object JsonImplicits {
   implicit val VariantFormat: RootJsonFormat[Variant] = jsonFormat3(Variant.apply)
   implicit val IvyArtifactFormat: RootJsonFormat[IvyArtifact] = jsonFormat3(IvyArtifact.apply)
 
-  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat17(
+  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat19(
     DependencyDefinition.apply)
   implicit val NativeDependencyDefinitionFormat: RootJsonFormat[NativeDependencyDefinition] = jsonFormat4(
     NativeDependencyDefinition.apply)
@@ -258,14 +265,16 @@ object JsonImplicits {
   implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat2(MetaBundle.apply)
 
   implicit val PatternFormat: JsonFormat[Pattern] = new JsonFormat[Pattern] {
-    override def write(obj: Pattern): JsValue = (obj.regex.regex, obj.exclude).toJson
+    override def write(obj: Pattern): JsValue = (obj.regex.regex, obj.exclude, obj.message).toJson
     override def read(json: JsValue): Pattern = {
-      val (regex, exclude) = json.convertTo[(String, Boolean)]
-      Pattern(regex, exclude)
+      val (regex, exclude, message) = json.convertTo[(String, Boolean, Option[String])]
+      Pattern(regex, exclude, message)
     }
   }
 
-  implicit val CodeFlaggingRuleFormat: RootJsonFormat[CodeFlaggingRule] = jsonFormat7(CodeFlaggingRule.apply)
+  implicit val GroupFormat: RootJsonFormat[Group] = jsonFormat3(Group.apply)
+  implicit val FilterFormat: RootJsonFormat[Filter] = jsonFormat4(Filter.apply)
+  implicit val CodeFlaggingRuleFormat: RootJsonFormat[CodeFlaggingRule] = jsonFormat8(CodeFlaggingRule.apply)
   implicit val RegexConfigurationFormat: RootJsonFormat[RegexConfiguration] = jsonFormat1(RegexConfiguration.apply)
 
   implicit val OutputTypeFormat: JsonFormat[OutputType] = new JsonFormat[OutputType] {
@@ -302,7 +311,7 @@ object JsonImplicits {
       }
       override def write(obj: Dependencies): JsValue = (obj.internal, obj.externalAfs, obj.externalMaven).toJson
     }
-  implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat4(AllDependencies.apply)
+  implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat5(AllDependencies.apply)
   implicit val InheritableWarningsConfigFormat: JsonFormat[WarningsConfiguration] =
     new JsonFormat[WarningsConfiguration] {
       override def write(obj: WarningsConfiguration): JsValue = obj.asJson
@@ -315,20 +324,8 @@ object JsonImplicits {
     CppBuildConfiguration.apply)
   implicit val CppConfigurationFormat: RootJsonFormat[CppConfiguration] = jsonFormat3(CppConfiguration.apply)
 
-  implicit val NpmBuildModeFormat: JsonFormat[NpmBuildMode] = new JsonFormat[NpmBuildMode] {
-    override def write(obj: NpmBuildMode): JsValue = obj match {
-      case NpmBuildMode.Production      => "prod".toJson
-      case NpmBuildMode.Development     => "dev".toJson
-      case NpmBuildMode.TestingResource => "test".toJson
-    }
-    override def read(json: JsValue): NpmBuildMode = json.convertTo[String] match {
-      case "prod" => NpmBuildMode.Production
-      case "dev"  => NpmBuildMode.Development
-      case "test" => NpmBuildMode.TestingResource
-    }
-  }
   implicit val WebConfigurationFormat: RootJsonFormat[WebConfiguration] = jsonFormat4(WebConfiguration.apply)
-  implicit val ElectronConfigurationFormat: RootJsonFormat[ElectronConfiguration] = jsonFormat3(
+  implicit val ElectronConfigurationFormat: RootJsonFormat[ElectronConfiguration] = jsonFormat5(
     ElectronConfiguration.apply)
 
   implicit val ProcessorConfigurationFormat: RootJsonFormat[ProcessorConfiguration] = jsonFormat7(
@@ -369,7 +366,7 @@ object JsonImplicits {
 
   implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat3(PythonConfiguration.apply)
 
-  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat17(ScopeConfiguration.apply)
+  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat16(ScopeConfiguration.apply)
 
   implicit val ExternalClassFileArtifactFormat: JsonFormat[ExternalClassFileArtifact] =
     new JsonFormat[ExternalClassFileArtifact] {

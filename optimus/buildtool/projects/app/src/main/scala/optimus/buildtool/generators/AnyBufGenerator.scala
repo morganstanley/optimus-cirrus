@@ -14,6 +14,7 @@ package optimus.buildtool.generators
 import java.nio.file.Files
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.artifacts.GeneratedSourceArtifactType
 import optimus.buildtool.config.ScopeId
@@ -170,7 +171,8 @@ import scala.sys.process.ProcessLogger
 
     val fingerprint = s"[${generatorExecutableNameForLog}]${execFingerprint.pathString}" +:
       (templateFingerprint ++ localDependencyFingerprint ++ upstreamDependencyFingerprints.flatten)
-    val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint)
+    val fingerprintHash =
+      scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(generatorName))
 
     AnyBufGenerator.Inputs(generatorName, executable, templates, dependencies, fingerprintHash)
   }
@@ -232,6 +234,6 @@ object AnyBufGenerator {
       exec: FileAsset,
       templates: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
       dependencies: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      fingerprintHash: String
+      fingerprint: FingerprintArtifact
   ) extends SourceGenerator.Inputs
 }

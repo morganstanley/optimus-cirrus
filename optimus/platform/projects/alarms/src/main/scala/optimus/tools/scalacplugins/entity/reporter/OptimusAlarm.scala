@@ -15,7 +15,7 @@ import scala.collection.mutable
 
 object OptimusAlarms {
   private sealed trait State
-  private case class RegistrationMode(alarms: mutable.Map[Int, mutable.Buffer[OptimusAlarmBuilder]]) extends State
+  private case class RegistrationMode(alarms: mutable.Map[Int, OptimusAlarmBuilder]) extends State
   private case class ReadMode(alarms: Map[Int, OptimusAlarmBuilder]) extends State
 
   val SuppressedTag = "[SUPPRESSED]"
@@ -55,7 +55,7 @@ object OptimusAlarms {
 
           val validatedAlarms = mutable.HashMap[Int, OptimusAlarmBuilder]()
 
-          def initGroup(entry: (Int, mutable.Buffer[OptimusAlarmBuilder])): Unit = {
+          def initGroup(entry: (Int, OptimusAlarmBuilder)): Unit = {
             val (_, group) = entry
             def add(oab: OptimusAlarmBuilder): Unit = {
               val sn = oab.id.sn
@@ -70,7 +70,7 @@ object OptimusAlarms {
               validatedAlarms.put(sn, oab)
             }
 
-            group.foreach(add)
+            add(group)
           }
 
           registeredAlarms.foreach(initGroup)
@@ -79,18 +79,11 @@ object OptimusAlarms {
     }
   }
 
-  def register(base: Int, alarm: OptimusAlarmBuilder): alarm.type = initLock.synchronized {
-    assert(base % 10000 == 0, "illegal alarm base")
+  def register(alarm: OptimusAlarmBuilder): alarm.type = initLock.synchronized {
     state match {
       case ReadMode(_) => throw new IllegalStateException("already initialized")
       case RegistrationMode(registeredAlarms) =>
-        val idseq: mutable.Buffer[OptimusAlarmBuilder] = registeredAlarms.getOrElse(
-          base, {
-            val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
-            registeredAlarms.put(base, idseq)
-            idseq
-          })
-        idseq += alarm
+        registeredAlarms.put(alarm.id.sn, alarm)
         alarm
     }
   }
@@ -107,14 +100,12 @@ object OptimusAlarms {
 }
 
 trait OptimusAlarms {
-  // TODO (OPTIMUS-62197): get rid of this field entirely
-  protected def base: Int
   private val idseq: mutable.Buffer[OptimusAlarmBuilder] = mutable.ListBuffer()
 
   // This is used as a hack to make sure alarm classes get loaded
   def ensureLoaded(): Unit = {}
 
-  protected def register(alarm: OptimusAlarmBuilder): alarm.type = OptimusAlarms.register(base, alarm)
+  protected def register(alarm: OptimusAlarmBuilder): alarm.type = OptimusAlarms.register(alarm)
 
   final def idToText: Map[AlarmId, String] =
     idseq.map { a =>

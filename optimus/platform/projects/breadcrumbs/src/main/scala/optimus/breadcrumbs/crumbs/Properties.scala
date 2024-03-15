@@ -281,6 +281,9 @@ object Properties extends KnownProperties {
 
     implicit val requestsStallInfoJsonFormat: RootJsonFormat[RequestsStallInfo] = jsonFormat3(RequestsStallInfo.apply)
 
+    implicit val reasonRequestsStallInfoJsonFormat: RootJsonFormat[ReasonRequestsStallInfo] = jsonFormat2(
+      ReasonRequestsStallInfo.apply)
+
     implicit val brokerJsonFormat: RootJsonFormat[Broker] = jsonFormat2(Broker.apply)
 
     implicit val requestSummaryJsonFormat: RootJsonFormat[RequestSummary] = jsonFormat8(RequestSummary.apply)
@@ -496,6 +499,7 @@ object Properties extends KnownProperties {
   val stackTrace = prop[Seq[String]]
   val remoteException = prop[Throwable]
   val batchSize = propI
+  val pricingDate = prop[String]
   val dalReqUuid = prop[String]
   val tStarted = prop[ZonedDateTime]
   val tEnded = prop[ZonedDateTime]
@@ -629,6 +633,8 @@ object Properties extends KnownProperties {
   val profMetricsDiff = prop[Map[String, Map[String, Array[Double]]]]
   val profSS = prop[Map[String, Array[String]]]
   val profEvictions = prop[Map[String, Long]]
+  val cardinalities = prop[Map[String, Int]]
+  val cardEstimators = prop[Map[String, Array[Int]]]
 
   val profStallTime = propL
   val pluginInFlight = prop[Map[String, Long]]
@@ -699,6 +705,7 @@ object Properties extends KnownProperties {
   val rootUuid = prop[String]
   val appPrint = prop[String]
   val engPrint = prop[String]
+  val publisherId =prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
   val gsfEngineId = prop[String]
@@ -709,6 +716,9 @@ object Properties extends KnownProperties {
   val appLaunchContextEnv = prop[String]
   val appLaunchContextName = prop[String]
 
+  val autosysJobName = prop[String]
+  val autosysInstance = prop[String]
+
   // DAL
   val broker = prop[Broker]("broker")
   val reqId = prop[String]
@@ -717,7 +727,7 @@ object Properties extends KnownProperties {
   val clientLatency = prop[String]("cltLat")
 
   val reason = prop[String]
-  val requestsStallInfo = prop[RequestsStallInfo]
+  val reasonRequestsStallInfo = prop[Seq[ReasonRequestsStallInfo]]
 
   val clearCacheIncludeSSPrivate = propB
   val clearCacheIncludeSiGlobal = propB
@@ -953,6 +963,28 @@ object Properties extends KnownProperties {
   val artifactDownloadTempArchivePath = prop[String]
   val artifactDownloadExtractPath = prop[String]
 
+  val jenkinsTestCase = prop[String]
+  val jenkinsAppName = prop[String]
+  val jenkinsModuleName = prop[String]
+  val jenkinsModuleGroupName = prop[String]
+  val jenkinsRegressionName = prop[String]
+  val jenkinsBuildNumber = prop[String]
+  val jenkinsTestPhase = prop[String]
+  val prId = prop[String]
+  val installVersion = prop[String]
+  val stratoVersion = prop[String]
+  val idKvm = prop[String]
+  val buildCommit = prop[String]
+  val customId = prop[String]
+
+  val appExpandedPath = prop[String]
+  val appOriginalPath = prop[String]
+  val appMeta = prop[String]
+  val appProject = prop[String]
+  val appRelease = prop[String]
+  val appReleaseLink = prop[String]
+  val appGroup = prop[String]
+
   val snapshotType = prop[String]
   val snapshotName = prop[String]
   val snapshotFullTime = prop[String]
@@ -964,11 +996,18 @@ object Properties extends KnownProperties {
   val snapshotBlockingWaitMs = propL
   val snapshotRetries = propI
 
+  // splunk result properties
+  val result = prop[Map[String, JsValue]]
+  val results = prop[JsArray]
+  val message = prop[String]
+
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {
   def take(n: Int): RequestsStallInfo = RequestsStallInfo(pluginType, reqCount, req.take(n))
 }
+
+final case class ReasonRequestsStallInfo(reason: String, requestsStallInfo: RequestsStallInfo)
 
 object StallPlugin {
   type Value = String

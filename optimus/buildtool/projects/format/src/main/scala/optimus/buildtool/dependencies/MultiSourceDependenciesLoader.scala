@@ -13,6 +13,9 @@ package optimus.buildtool.dependencies
 
 import com.typesafe.config._
 import optimus.buildtool.config._
+import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
+import optimus.buildtool.dependencies.JvmDependenciesLoader.Variants
+import optimus.buildtool.dependencies.JvmDependenciesLoader.loadLocalDefinitions
 import optimus.buildtool.format.ConfigUtils.ConfOps
 import optimus.buildtool.format.DependenciesConfig
 import optimus.buildtool.format.ObtFile
@@ -23,13 +26,14 @@ import optimus.buildtool.format.Failure
 import optimus.buildtool.format.JvmDependenciesConfig
 import optimus.buildtool.format.Keys.jvmDependencyDefinition
 import optimus.buildtool.format.MavenDependenciesConfig
+import optimus.buildtool.format.ResolverDefinition
 import optimus.buildtool.format.Success
 
 import scala.collection.immutable.Seq
 
 object MultiSourceDependenciesLoader {
-  private[buildtool] val MavenKey = "maven"
-  private[buildtool] val AfsKey = "afs"
+  private[buildtool] val Maven = "maven"
+  private[buildtool] val Afs = "afs"
   private[buildtool] val jvmPathStr = JvmDependenciesConfig.path.pathString
 
   private[buildtool] def duplicationMsg(d: DependencyDefinition, withFile: String, withLine: Int, suffix: String = "") =
@@ -60,8 +64,9 @@ object MultiSourceDependenciesLoader {
     val duplicationAfsErrors =
       multiSourceDeps.afsDefinedDeps.groupBy(d => infoForChecking(d.definition)).filter(_._2.size > 1).flatMap {
         case (_, deps) =>
-          val from = deps.head
-          val to = deps.last
+          val sorted = deps.sortBy(_.line)
+          val from = sorted.head
+          val to = sorted.last
           getErrors(Seq((from.definition, to.definition)), jvmPathStr)
       }
 
@@ -79,8 +84,9 @@ object MultiSourceDependenciesLoader {
         .groupBy(_._2)
         .filter(_._2.size > 1)
         .flatMap { case (_, deps) =>
-          val from = deps.head._1
-          val to = deps.last._1
+          val sorted = deps.map(_._1).sortBy(_.line)
+          val from = sorted.head
+          val to = sorted.last
           getErrors(Seq((from, to)), jvmPathStr)
         }
     val mavenRedefinedErrors = getErrors(
@@ -101,36 +107,81 @@ object MultiSourceDependenciesLoader {
       depConfig: Config,
       kind: Kind,
       obtFile: ObtFile,
-      sourceName: String): Result[Seq[DependencyDefinition]] = {
+      sourceName: String,
+      loadedResolvers: Seq[ResolverDefinition],
+      scalaMajorVersion: Option[String]): Result[Seq[DependencyDefinition]] = {
     if (depConfig.hasPath(sourceName)) {
       val sourceConf = depConfig.getObject(sourceName).toConfig
       val variantsConf: Option[Config] =
-        if (depConfig.hasPath("variants")) Some(depConfig.getObject("variants").toConfig) else None
+        if (depConfig.hasPath(Variants)) Some(depConfig.getObject(Variants).toConfig) else None
       JvmDependenciesLoader
         .loadLocalDefinitions(
           sourceConf,
           kind,
           obtFile,
-          isMaven = sourceName == MavenKey,
-          loadedVariantsConfig = variantsConf)
+          isMaven = sourceName == Maven,
+          loadedVariantsConfig = variantsConf,
+          loadedResolvers = loadedResolvers,
+          scalaMajorVersion = scalaMajorVersion
+        )
         .withProblems(deps => OrderingUtils.checkOrderingIn(obtFile, deps))
     } else Result.sequence(Nil)
   }
 
-  def load(dependenciesConfig: Config, kind: Kind, obtFile: ObtFile): Result[MultiSourceDependencies] =
+  def loadJvmDepsIvyConfigurations(
+      baseAfsDepOpt: Option[DependencyDefinition],
+      depConfig: Config,
+      kind: Kind,
+      obtFile: ObtFile,
+      loadedResolvers: Seq[ResolverDefinition]): Result[Map[DependencyDefinition, Seq[DependencyDefinition]]] = {
+    baseAfsDepOpt match {
+      case Some(baseAfsDep) if depConfig.hasPath(IvyConfigurations) =>
+        val ivyConfig = depConfig.getObject(IvyConfigurations).toConfig
+        Result.traverse(ivyConfig.nested(obtFile)) { case (name, config) =>
+          val mavenEquivalentConfig = config.getObject(Maven).toConfig
+          val afsVariant = Variant(name, "Additional config to use", configurationOnly = true)
+          val afsConfigLib = baseAfsDep.copy(
+            configuration = name,
+            variant = Some(afsVariant),
+            line = mavenEquivalentConfig.origin().lineNumber())
+          val mavenConfigEquivalents =
+            loadLocalDefinitions(mavenEquivalentConfig, kind, obtFile, isMaven = true, loadedResolvers)
+          for {
+            mavenLibs <- mavenConfigEquivalents
+          } yield afsConfigLib -> mavenLibs
+        }
+
+      case _ => Result.sequence(Nil)
+    }
+  }.map(_.toMap)
+
+  def load(
+      dependenciesConfig: Config,
+      kind: Kind,
+      obtFile: ObtFile,
+      loadedResolvers: Seq[ResolverDefinition],
+      scalaMajorVersion: Option[String]): Result[MultiSourceDependencies] =
     Result.tryWith(obtFile, dependenciesConfig) {
       val jvmKeyConfigs = dependenciesConfig.nested(obtFile).getOrElse(Nil)
       val multiSourceDeps: Result[Seq[MultiSourceDependencies]] = Result
         .sequence(jvmKeyConfigs.map { case (strName, depConfig) =>
+          val scalaMajorVer = if (depConfig.optionalBoolean("scala").contains(true)) scalaMajorVersion else None
           for {
-            afsDeps <- loadJvmDepsBySourceName(depConfig, kind, obtFile, AfsKey)
-            mavenDeps <- loadJvmDepsBySourceName(depConfig, kind, obtFile, MavenKey)
+            afsDeps <- loadJvmDepsBySourceName(depConfig, kind, obtFile, Afs, loadedResolvers, scalaMajorVer)
+            mavenDeps <- loadJvmDepsBySourceName(depConfig, kind, obtFile, Maven, loadedResolvers, scalaMajorVer)
+            ivyConfigsMap <- loadJvmDepsIvyConfigurations(
+              afsDeps.find(d => !d.isMaven && d.variant.isEmpty),
+              depConfig,
+              kind,
+              obtFile,
+              loadedResolvers)
             multiSourceDeps <- MultiSourceDependency(
               obtFile,
               dependenciesConfig.getValue(strName),
               strName,
               afsDeps,
               mavenDeps,
+              ivyConfigsMap,
               depConfig.origin().lineNumber())
               .withProblems(depConfig.checkExtraProperties(JvmDependenciesConfig, jvmDependencyDefinition))
           } yield MultiSourceDependencies(multiSourceDeps)

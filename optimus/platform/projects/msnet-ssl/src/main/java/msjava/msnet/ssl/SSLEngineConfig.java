@@ -40,8 +40,11 @@ public class SSLEngineConfig {
       "msjava.msnet.ssl.truststore_password";
   public static final String ENABLED_CLIENT_AUTH_PARAMETER = "msjava.msnet.ssl.enabled_client_auth";
 
-  public SSLStoreType keystoreType = SSLStoreType.valueOf(getProperty(KEY_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
-  public SSLStoreType truststoreType = SSLStoreType.valueOf(getProperty(TRUST_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
+  public SSLStoreType keystoreType =
+      SSLStoreType.valueOf(getProperty(KEY_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
+  public SSLStoreType truststoreType =
+      SSLStoreType.valueOf(
+          getProperty(TRUST_STORE_TYPE_PARAMETER, SSLStoreType.JKS.name(), LOGGER));
   public String keystorePassword = getProperty(KEY_STORE_PASSWORD_PARAMETER, LOGGER);
   public String keyPassword = getProperty(KEY_PASSWORD_PARAMETER, LOGGER);
   public String truststorePassword = getProperty(TRUST_STORE_PASSWORD_PARAMETER, LOGGER);

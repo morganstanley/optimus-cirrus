@@ -68,7 +68,7 @@ object PropertyUtils {
       case (z, value) =>
         z ++ value
           .split("[;:]")
-          .map(_.split("=",2))
+          .map(_.split("=", 2))
           .collect { case Array(k, v) =>
             (k, v)
           }

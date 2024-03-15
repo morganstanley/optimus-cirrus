@@ -45,7 +45,6 @@ import optimus.graph.NodeAwaiter
 import optimus.graph.NodeTask
 import optimus.graph.diagnostics.GraphDiagnostics
 import optimus.platform.{Query => _, _}
-import optimus.platform.annotations.createNodeTrait
 import optimus.platform.util.Log
 
 import scala.annotation.tailrec
@@ -187,7 +186,7 @@ class SilverKingStore private[cache] (
         statusLogger.failed(alwaysLog, opType, msg)
         Left(msg)
       case (_, _, false) =>
-        val msg = s"Cache disabled due to repeated query failures"
+        val msg = s"Cache ${opType.str} temporarily disabled due to repeated failures"
         statusLogger.failed(alwaysLog, opType, msg, failureSwitch.retryTime(opType))
         Left(msg)
       case (Some(conn), _, _) =>
@@ -343,7 +342,7 @@ class SilverKingStore private[cache] (
       _put(key, tpe, file)
   }
 
-  @createNodeTrait @async private def _put(key: ArtifactKey, tpe: CacheTraceType, file: Path): Unit = {
+  @async(exposeArgTypes = true) private def _put(key: ArtifactKey, tpe: CacheTraceType, file: Path): Unit = {
     val id = key.id
     safely(Write, id, (), s"Failed to put artifact for $tpe") { ops =>
       val (timeNanos, contentSize) = AdvancedUtils.timed {

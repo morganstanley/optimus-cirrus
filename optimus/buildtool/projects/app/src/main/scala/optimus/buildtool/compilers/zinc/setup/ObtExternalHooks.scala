@@ -41,7 +41,6 @@ import xsbti.VirtualFile
 import xsbti.VirtualFileRef
 import xsbti.api.AnalyzedClass
 import xsbti.compile
-import xsbti.compile.AnalysisContents
 import xsbti.compile.Changes
 import xsbti.compile.ClassFileManager
 import xsbti.compile.CompileAnalysis
@@ -56,7 +55,7 @@ class ObtExternalHooks(
     scopeId: ScopeId,
     settings: ZincCompilerFactory,
     fileConverter: ObtZincFileConverter,
-    previousAnalysis: Option[AnalysisContents],
+    previousAnalysis: Option[CompileAnalysis],
     analysisMappingTrace: MappingTrace,
     sources: Seq[VirtualSourceFile],
     classpath: Seq[VirtualFile],
@@ -105,7 +104,7 @@ class ObtExternalHooks(
 class ObtExternalLookup(
     settings: ZincCompilerFactory,
     fileConverter: ObtZincFileConverter,
-    previousAnalysis: Option[AnalysisContents],
+    previousAnalysis: Option[CompileAnalysis],
     analysisMappingTrace: MappingTrace,
     sources: Seq[VirtualSourceFile],
     classpath: Seq[VirtualFile],
@@ -146,12 +145,14 @@ class ObtExternalLookup(
         .toSet)
 
   private val (unchanged, prevApis) =
-    previousAnalysis.fold((Set.empty[String], Map.empty[String, AnalyzedClass])) { contents =>
-      (
-        analysisMappingTrace.unchangedProvenances.toSet,
-        contents.getAnalysis.asInstanceOf[Analysis].apis.external
-      )
-    }
+    previousAnalysis
+      .map { analysis =>
+        (
+          analysisMappingTrace.unchangedProvenances.toSet,
+          analysis.asInstanceOf[Analysis].apis.external
+        )
+      }
+      .getOrElse((Set.empty[String], Map.empty[String, AnalyzedClass]))
 
   private val unknown = Some(APIs.emptyAnalyzedClass)
   private val unavailable = None

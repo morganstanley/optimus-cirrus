@@ -12,6 +12,7 @@
 package optimus.utils.app
 
 import optimus.utils.app.Args4jOptionHandlers._
+import optimus.utils.datetime.ZoneIds
 import optimus.utils.datetime.ZonedDateTimeOps
 import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.OptionDef
@@ -21,6 +22,8 @@ import patch.MicroZonedDateTime
 
 import java.time.Duration
 import java.time._
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
 
 /*
  * Args4j handlers for java.time classes.
@@ -124,6 +127,23 @@ final class LocalDateTimeOptionOptionHandler(
     setter: Setter[Option[LocalDateTime]])
     extends OptionOptionHandler[LocalDateTime](parser, option, setter) {
   override def convert(arg: String): LocalDateTime = LocalDateTime.parse(arg)
+}
+
+/**
+ * Option[Date/Time]
+ */
+class InstantOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Instant]])
+    extends OptionOptionHandler[Instant](parser, option, setter) {
+  override def convert(arg: String): Instant = {
+    val dateTimeFormatter = new DateTimeFormatterBuilder()
+      .parseCaseInsensitive()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral('T')
+      .append(DateTimeFormatter.ISO_LOCAL_TIME)
+      .appendLiteral('Z')
+      .toFormatter()
+    LocalDateTime.parse(arg, dateTimeFormatter).atZone(ZoneIds.UTC).toInstant
+  }
 }
 
 final class LocalDateOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[LocalDate]])

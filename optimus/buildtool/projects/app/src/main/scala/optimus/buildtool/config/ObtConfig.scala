@@ -15,6 +15,7 @@ import java.io.InputStreamReader
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import optimus.buildtool.artifacts._
+import optimus.buildtool.builders.reporter.ErrorReporter
 import optimus.buildtool.compilers.RegexScanner
 import optimus.buildtool.dependencies.MultiSourceDependencies
 import optimus.buildtool.files.Directory
@@ -38,7 +39,7 @@ import optimus.buildtool.format.WarningOverride
 import optimus.buildtool.format.WorkspaceDefinition
 import optimus.buildtool.format.WorkspaceStructure
 import optimus.buildtool.format.docker.DockerStructure
-import optimus.buildtool.resolvers.IvyResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.trace.FindObtFiles
 import optimus.buildtool.trace.LoadConfig
 import optimus.buildtool.trace.MessageTrace
@@ -65,13 +66,14 @@ import scala.collection.immutable.SortedMap
     val externalDependencies: ExternalDependencies,
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val globalExcludes: Seq[Exclude],
-    val ivyResolvers: Seq[IvyResolver],
+    val depMetadataResolvers: Seq[DependencyMetadataResolver],
     val scopeDefinitions: Map[ScopeId, ScopeDefinition],
     val messages: Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]],
     val appValidator: AppValidator,
     val runConfSubstitutionsValidator: RunConfSubstitutionsValidator,
     val dockerStructure: DockerStructure,
-    val workspaceStructure: WorkspaceStructure
+    val workspaceStructure: WorkspaceStructure,
+    val regexConfig: RegexConfiguration
 ) extends ScopeConfigurationSourceBase
     with DockerConfigurationSupport {
 
@@ -130,6 +132,7 @@ import scala.collection.immutable.SortedMap
     case p =>
       workspaceSrcRoot.resolveDir(p.elements.mkString("/"))
   }
+  @node override def globalRules: Seq[CodeFlaggingRule] = regexConfig.rules
 }
 
 @entity object ObtConfig {
@@ -141,7 +144,8 @@ import scala.collection.immutable.SortedMap
       workspaceSrcRoot: WorkspaceSourceRoot,
       configParams: Map[String, String],
       cppOsVersions: Seq[String],
-      useMavenLibs: Boolean = false
+      useMavenLibs: Boolean = false,
+      errorReporter: Option[ErrorReporter] = None
   ): ObtConfig =
     ObtTrace.traceTask(ScopeId.RootScopeId, LoadConfig) {
       val configSrcRoot =
@@ -218,16 +222,20 @@ import scala.collection.immutable.SortedMap
             externalDependencies = allExternalDependencies,
             nativeDependencies = ws.dependencies.jvmDependencies.nativeDependencies,
             globalExcludes = ws.dependencies.jvmDependencies.globalExcludes.toIndexedSeq,
-            ivyResolvers = IvyResolver.loadIvyConfig(directoryFactory, workspaceSrcRoot, ws.resolvers),
+            depMetadataResolvers =
+              DependencyMetadataResolver.loadResolverConfig(directoryFactory, workspaceSrcRoot, ws.resolvers),
             scopeDefinitions = ws.scopes,
             messages = Converter.toObt(problems) ++ rulesMessages,
             appValidator = ws.appValidator,
             runConfSubstitutionsValidator = ws.runConfSubstitutionsValidator,
             dockerStructure = ws.dockerStructure,
-            workspaceStructure = ws.structure
+            workspaceStructure = ws.structure,
+            regexConfig = ws.globalRules.rules.getOrElse(RegexConfiguration.Empty)
           )
         case Failure(problems) =>
-          throw new IllegalArgumentException(s"Failed to load obt configuration:\n\t${problems.mkString("\n\t")}")
+          val e = new IllegalArgumentException(s"Failed to load obt configuration:\n\t${problems.mkString("\n\t")}")
+          errorReporter.foreach(_.writeErrorReport(e))
+          throw e
       }
     }
 

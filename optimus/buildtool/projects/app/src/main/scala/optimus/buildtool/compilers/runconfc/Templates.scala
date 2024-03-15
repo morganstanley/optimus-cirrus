@@ -12,12 +12,12 @@
 package optimus.buildtool.compilers.runconfc
 
 import java.nio.file.Paths
-
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.runconf.compile.InputFile
 import optimus.buildtool.runconf.plugins.ScriptTemplates
-import optimus.buildtool.scope.sources.RunconfCompilationSources.appScriptsFolderName
+import optimus.buildtool.scope.sources.RunconfCompilationSources.globalAppScriptsFolderName
+import optimus.buildtool.scope.sources.RunconfCompilationSources.localAppScriptsFolderName
 import optimus.platform._
 
 import scala.collection.immutable.Seq
@@ -64,23 +64,20 @@ object Templates {
     templateSpec == disabledTemplateSpec || templateSpec.isEmpty
 
   def potentialLocationsFromScopeConfigDir: Seq[RelativePath] =
-    Seq(RelativePath(Paths.get(appScriptsFolderName)))
+    Seq(RelativePath(Paths.get(globalAppScriptsFolderName)), RelativePath(Paths.get(localAppScriptsFolderName)))
 
   @node def getTemplateDescriptions(
       templates: Seq[InputFile],
       runConfName: String,
       scriptTemplates: ScriptTemplates,
-      useDefaultTemplates: Boolean = true): Seq[Either[TemplateDescription, CompilationMessage]] = {
+      useDefaultTemplates: Boolean = true): Seq[Either[TemplateDescription, Seq[CompilationMessage]]] = {
     val supportedTemplates = Templates.defaultTemplates(templates)
     val combinedTemplates: Map[String, String] =
       (if (useDefaultTemplates) defaultScriptTemplates else Map.empty[String, String]) ++ scriptTemplates.templates
     combinedTemplates.toMap.map {
       case (platform, templateSpec) if isDisabledTemplate(templateSpec) =>
         // Disabled use-case
-        Right(
-          CompilationMessage.message(
-            s"RunConf '$runConfName': skipping template '$platform' generation since it is marked as disabled",
-            CompilationMessage.Info))
+        Right(Nil)
 
       case (platform, templateResourceName)
           if supportedTemplates.exists(_.name == platform) && templateResourceName == defaultTemplateSpec =>
@@ -97,17 +94,19 @@ object Templates {
                 .copy(templateInput = template))
           case None =>
             Right(
-              CompilationMessage.message(
-                s"RunConf '$runConfName': template '$templateResourceName' cannot be found in the sources (src/$appScriptsFolderName, src/<meta>/<bundle>/projects/<project>/$appScriptsFolderName)",
+              Seq(CompilationMessage.message(
+                s"RunConf '$runConfName': template '$templateResourceName' cannot be found in the sources " +
+                  s"(src/$globalAppScriptsFolderName, src/<meta>/<bundle>/projects/<project>/$localAppScriptsFolderName)",
                 CompilationMessage.Error
-              ))
+              )))
         }
 
       case (customUseCase, _) =>
         Right(
-          CompilationMessage.message(
-            s"RunConf '$runConfName': custom template '$customUseCase' generation is not supported",
-            CompilationMessage.Error))
+          Seq(
+            CompilationMessage.message(
+              s"RunConf '$runConfName': custom template '$customUseCase' generation is not supported",
+              CompilationMessage.Error)))
     }.toList
   }
 }

@@ -15,6 +15,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.Artifact.InternalArtifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.ProcessorArtifactType
@@ -29,6 +30,7 @@ import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.trace.OpenApiApp
 import optimus.buildtool.utils.Utils
 import optimus.exceptions.RTException
+import optimus.graph.AsyncProfilerIntegration
 import optimus.platform._
 import optimus.platform.obt.openapi.OpenApiSpecBuilder
 import optimus.platform.util.Log
@@ -60,7 +62,7 @@ import scala.jdk.CollectionConverters._
       scope: CompilationScope,
       javaAndScalaSources: JavaAndScalaCompilationSources): Inputs = {
 
-    val fingerprintHash = ScopeProcessor.computeFingerprintHash(
+    val fingerprint = ScopeProcessor.computeFingerprintHash(
       s"${name}_${targetClass.name}", // this will change if the name of the target class changes
       templateContent = None, // We don't really have a template file, just a target class
       templateHeaderContent = None,
@@ -75,7 +77,7 @@ import scala.jdk.CollectionConverters._
     OpenApiProcessor.Inputs(
       name,
       installLocation,
-      fingerprintHash,
+      fingerprint,
       targetClass,
       configuration
     )
@@ -114,7 +116,7 @@ object OpenApiProcessor extends Log {
   final case class Inputs(
       processorName: String,
       installLocation: RelativePath,
-      fingerprintHash: String,
+      fingerprint: FingerprintArtifact,
       targetClass: FileAsset,
       configuration: Map[String, String]
   ) extends ScopeProcessor.Inputs
@@ -153,6 +155,9 @@ object OpenApiProcessor extends Log {
       case InternalArtifact(EntityAgentPathingArtifactId, p: PathingArtifact) => p
     }.singleDistinct
 
+    // Shut off async-profiler to avoid multi-class-loader problems
+    val disableAP = s"-D${AsyncProfilerIntegration.apEnabledProperty}=false"
+
     val id = OpenApiCmdId(scopeId, name)
     val logFile = id.logFile(logDir)
     val (durationInNanos, (_, outputContent)) = AdvancedUtils.timed {
@@ -164,7 +169,7 @@ object OpenApiProcessor extends Log {
             classpathArtifacts = Seq(pathingArtifact, buildtoolRestPathingArtifact),
             javaAgentArtifacts = Seq(entityAgent),
             // a fairly small environment should be sufficient
-            javaOpts = Seq("-Doptimus.gthread.ideal=2", javaMemoryStr),
+            javaOpts = Seq("-Doptimus.gthread.ideal=2", javaMemoryStr, disableAP),
             mainClass = OpenApiSpecBuilder.getClass.getName.stripSuffix("$"),
             mainClassArgs = Seq("--target", targetClass.name, "--outputFile", outputFile.pathString)
           )

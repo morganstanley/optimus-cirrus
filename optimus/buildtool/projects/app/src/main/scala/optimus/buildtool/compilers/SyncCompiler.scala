@@ -15,6 +15,7 @@ import java.util.UUID
 import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ClassFileArtifact
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.compilers.SyncCompiler.Inputs
 import optimus.buildtool.config.JavacConfiguration
@@ -58,7 +59,7 @@ private[buildtool] trait SyncCompiler {
 private[buildtool] object SyncCompiler {
   final case class Inputs(
       sourceFiles: SortedMap[SourceUnitId, HashedContent],
-      fingerprintHash: String,
+      fingerprint: FingerprintArtifact,
       bestPreviousAnalysis: Hide[Option[AnalysisArtifact]],
       outPath: JarAsset,
       signatureOutPath: Option[JarAsset],

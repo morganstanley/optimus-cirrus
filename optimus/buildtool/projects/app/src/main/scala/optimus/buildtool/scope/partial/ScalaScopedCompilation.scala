@@ -12,7 +12,6 @@
 package optimus.buildtool.scope.partial
 
 import optimus.buildtool.app.IncrementalMode
-import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType.ScalaAnalysis
 import optimus.buildtool.artifacts.ClassFileArtifact
@@ -41,7 +40,7 @@ import scala.collection.immutable.Seq
   private[partial] val scalacInputsN: NodeFunction0[SyncCompiler.Inputs] = asNode(() => scalacInputs)
 
   @node private def scalacInputs: SyncCompiler.Inputs = {
-    val fingerprintHash = compilationInputsHash
+    val fingerprint = compilationFingerprint
     val id = sources.id
 
     val bestPreviousAnalysis = analysisLocator.flatMap { locator =>
@@ -54,7 +53,7 @@ import scala.collection.immutable.Seq
     }
     val incremental = bestPreviousAnalysis.isDefined
     val signatureOutPath =
-      if (config.usePipelining) Some(pathBuilder.signatureOutPath(id, fingerprintHash, incremental))
+      if (config.usePipelining) Some(pathBuilder.signatureOutPath(id, fingerprint.hash, incremental))
       else None
 
     /**
@@ -63,9 +62,9 @@ import scala.collection.immutable.Seq
      */
     SyncCompiler.Inputs(
       sourceFiles = compilationSources,
-      fingerprintHash = fingerprintHash,
+      fingerprint = fingerprint,
       bestPreviousAnalysis = Hide(bestPreviousAnalysis),
-      outPath = pathBuilder.scalaOutPath(id, fingerprintHash, incremental),
+      outPath = pathBuilder.scalaOutPath(id, fingerprint.hash, incremental),
       signatureOutPath = signatureOutPath,
       scalacConfig = config.scalacConfig,
       javacConfig = config.javacConfig,
@@ -118,22 +117,13 @@ import scala.collection.immutable.Seq
       case x => x
     }
 
-  @node def analysis: Seq[Artifact] = analysisWithLocator.analysis
+  @node def analysis: Seq[Artifact] =
+    analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).analysis
 
-  @node def locator: Seq[Artifact] = analysisWithLocator.locator.toIndexedSeq
+  @node def locator: Seq[Artifact] =
+    analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).locator.toIndexedSeq
 
   @node protected def scalaAnalysis: Seq[Artifact] = compile(AT.ScalaAnalysis, None)(scalac.analysis(id, scalacInputsN))
-
-  @node def analysisWithLocator: AnalysisWithLocator = {
-    val locator = analysisLocator.flatMap { l =>
-      // Save locators for a good build even if we got a cache hit, to ensure we
-      // capture the current commit hash and build time.
-      if (scalaAnalysis.exists(_.isInstanceOf[AnalysisArtifact]))
-        l.saveLocator(id, AT.ScalaAnalysis, pathBuilder, sources.compilationInputsHash)
-      else None
-    }
-    AnalysisWithLocator(scalaAnalysis, locator)
-  }
 
 }
 

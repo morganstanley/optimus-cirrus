@@ -20,13 +20,15 @@ import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
 import optimus.buildtool.format.ResultSeq
 import optimus.buildtool.format.Success
+import optimus.buildtool.format.SuccessSeq
 import optimus.buildtool.format.TopLevelConfig
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 object PythonDependenciesLoader {
 
   private[buildtool] val Dependencies = "dependencies"
-  private[buildtool] val Path = "path"
+  private[buildtool] val PythonPath = "path"
   private[buildtool] val Python = "python"
   private[buildtool] val Reason = "reason"
   private[buildtool] val Variants = "variants"
@@ -78,7 +80,7 @@ object PythonDependenciesLoader {
     def loadPython(config: Config): Result[Option[PythonDefinition]] =
       Result.tryWith(origin, config) {
         val version = config.getString(Version)
-        val path = config.getString(Path)
+        val path = config.getString(PythonPath)
         val venvPack = config.getString(VenvPack)
         Success(PythonDefinition(version, path, venvPack, None))
       } match {
@@ -118,32 +120,38 @@ object PythonDependenciesLoader {
   }
 
   def loadAllDependencies(config: Config, origin: ObtFile): Result[Seq[PythonDependency]] = {
-    def withPath[A](config: Config, path: String)(f: Config => A): Option[A] = {
+    def withPath[A](config: Config, path: String)(f: Config => Result[A]): Result[Option[A]] = {
       if (config.hasPath(path)) {
         val theConfig = config.getConfig(path)
-        Some(f(theConfig))
-      } else None
+        (f(theConfig)).map(Some(_))
+      } else Success(None)
     }
 
     def loadPypiDef(name: String, depConfig: Config, origin: ObtFile): Result[Option[PythonDependencyDefinition]] =
       Result.tryWith(origin, depConfig) {
-        val definition = withPath(depConfig, ModuleType.PyPi.label) { pypiConfig =>
+        withPath(depConfig, ModuleType.PyPi.label) { pypiConfig =>
           val pypiName = pypiConfig.keySet.head
           val version = pypiConfig.getConfig(pypiName).getString(Version)
-          PythonDependencyDefinition(name, pypiName, version, None)
+          Success(PythonDependencyDefinition(name, pypiName, version, None))
         }
-        Success(definition)
       }
 
     def loadAfsDef(name: String, depConfig: Config, origin: ObtFile): Result[Option[PythonAfsDependencyDefinition]] =
       Result.tryWith(origin, depConfig) {
-        val definition = withPath(depConfig, ModuleType.Afs.label) { afsConfig =>
-          val meta = afsConfig.keySet.head
-          val project = afsConfig.getConfig(meta).keySet.head
-          val version = afsConfig.getConfig(meta).getConfig(project).getString(Version)
-          PythonAfsDependencyDefinition(name, meta, project, version, None)
+        withPath(depConfig, ModuleType.Afs.label) { afsConfig =>
+          val res = for {
+            (meta, metaConfig) <- ResultSeq(afsConfig.nested(origin))
+            (project, projectConfig) <- ResultSeq(metaConfig.nested(origin))
+            version = projectConfig.getString(Version)
+          } yield PythonAfsDependencyDefinition(name, meta, project, version, None)
+          res.value
+            .withProblems { deps =>
+              if (deps.size != 1)
+                Seq(origin.errorAt(afsConfig.root, s"Expected a single dependency but got ${deps.size}"))
+              else Nil
+            }
+            .map(_.head)
         }
-        Success(definition)
       }
 
     final case class VariantConfig(name: String, reason: String, version: String) {
@@ -163,26 +171,25 @@ object PythonDependenciesLoader {
         origin: ObtFile,
         pypiDef: Option[PythonDependencyDefinition],
         afsDef: Option[PythonAfsDependencyDefinition]): Result[Seq[PythonDependency]] =
-      Result.tryWith(origin, depConfig) {
-        val result = withPath(depConfig, Variants) { variantsConfig =>
-          val deps: ResultSeq[Seq[PythonDependency]] = for {
-            (variantName, variantConfig) <- ResultSeq(variantsConfig.nested(origin))
-            (sourceName, sourceConfig) <- ResultSeq(variantConfig.nested(origin))
-            variant <- ResultSeq.single(loadVariantConf(variantName, sourceConfig))
-            afs =
-              if (sourceName == ModuleType.Afs.label)
-                afsDef.map(afs => afs.copy(variant = Some(variant.variant), version = variant.version))
-              else None
-            pypi =
-              if (sourceName == ModuleType.PyPi.label)
-                pypiDef.map(pypi => pypi.copy(variant = Some(variant.variant), version = variant.version))
-              else None
-          } yield Seq(afs, pypi).flatten
-
-          deps.value.map(seqseq => seqseq.flatten)
+      Result
+        .tryWith(origin, depConfig) {
+          withPath(depConfig, Variants) { variantsConfig =>
+            val deps: ResultSeq[PythonDependency] = for {
+              (variantName, variantConfig) <- ResultSeq(variantsConfig.nested(origin))
+              (sourceName, sourceConfig) <- ResultSeq(variantConfig.nested(origin))
+              variant <- ResultSeq.single(loadVariantConf(variantName, sourceConfig))
+              dep <- SuccessSeq(
+                if (sourceName == ModuleType.Afs.label)
+                  afsDef.map(afs => afs.copy(variant = Some(variant.variant), version = variant.version)).to(Seq)
+                else if (sourceName == ModuleType.PyPi.label)
+                  pypiDef.map(pypi => pypi.copy(variant = Some(variant.variant), version = variant.version)).to(Seq)
+                else Nil
+              )
+            } yield dep
+            deps.value
+          }
         }
-        result.getOrElse(Success(Seq.empty))
-      }
+        .map(_.getOrElse(Nil))
 
     def loadDependency(label: String, config: Config): Result[Seq[PythonDependency]] = {
       val definitions = for {
@@ -190,7 +197,7 @@ object PythonDependenciesLoader {
         afs <- loadAfsDef(label, config, origin)
         variants <- loadVariants(config, origin, pypi, afs)
 
-      } yield variants ++ Seq(pypi, afs).flatten
+      } yield variants ++ pypi ++ afs
 
       definitions.withProblems(config.checkExtraProperties(origin, Keys.pythonDependencyLevel))
     }

@@ -88,8 +88,8 @@ object RTList {
 
   // Returns true if it was previously uncached
   private[exceptions] def setAsRT(t: Throwable): Boolean = {
-    val wasNotCached = isRTCache.getIfPresent(t)eq null
-    if(wasNotCached) isRTCache.put(t, true)
+    val wasNotCached = isRTCache.getIfPresent(t) eq null
+    if (wasNotCached) isRTCache.put(t, true)
     wasNotCached
   }
   // weakKeys means that identity equality is used

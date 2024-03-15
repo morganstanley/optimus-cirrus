@@ -15,6 +15,7 @@ import java.nio.file.Path
 import com.typesafe.config.Config
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
+import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
 import optimus.buildtool.compilers.StaticRunscriptCompilationBindingSources
 import optimus.buildtool.compilers.cpp.CppUtils
@@ -138,7 +139,7 @@ private[sources] final case class HashedRunconfSources(
     installVersion: String,
     allSourceSubstitutions: Seq[RunConfSourceSubstitution],
     allBlockedSubstitutions: Seq[RunConfSourceSubstitution],
-    fingerprintHash: String
+    fingerprint: FingerprintArtifact
 ) extends HashedSources {
   override def generatedSourceArtifacts: Seq[Artifact] = Nil
 }
@@ -150,7 +151,8 @@ object RunconfCompilationSources {
   // compilation (so that we're sure what we hashed is what we compiled)
   hashedSources.setCustomCache(reallyBigCache)
 
-  val appScriptsFolderName: String = "appscripts"
+  val globalAppScriptsFolderName: String = "config/appscripts"
+  val localAppScriptsFolderName: String = "appscripts"
   val obtConfigFilesWeCareAbout: Seq[String] =
     "stratosphere.conf" :: List(ApplicationValidation, WorkspaceConfig, RunConfSubstitutions).map(_.path.toString)
 
@@ -304,11 +306,13 @@ object RunconfCompilationSources {
         s"[InstallVersion]${_installVersion}"
     }
 
-    val inputsFingerprint: Seq[String] =
+    val inputsFingerprint: Seq[String] = if (containsRunconf(sourceFileContent._2.keys)) {
+      // No point hashing if we've got no runconfs
       (sourceFileContent match {
         case (tpe, content) =>
           scope.fingerprint(content, tpe)
       }) ++ anythingThatMattersNotFromRunConfHashes
+    } else Nil
 
     val fingerprintHash = scope.hasher.hashFingerprint(inputsFingerprint, ArtifactType.RunconfFingerprint)
 
@@ -328,7 +332,7 @@ object RunconfCompilationSources {
       installVersion = _installVersion,
       allSourceSubstitutions = allSourceSubstitutions,
       allBlockedSubstitutions = allBlockedSubstitutions,
-      fingerprintHash = fingerprintHash
+      fingerprint = fingerprintHash
     )
   }
 
@@ -347,6 +351,8 @@ object RunconfCompilationSources {
   }
 
   // Excludes case where there is only the common runconfs
-  @node def containsRunconf: Boolean =
-    hashedSources.sourceFiles.keys.exists(_.suffix == RunConfFile.extension)
+  @node def containsRunconf: Boolean = containsRunconf(hashedSources.sourceFiles.keys)
+
+  private def containsRunconf(sourceFiles: Iterable[SourceUnitId]): Boolean =
+    sourceFiles.exists(_.suffix == RunConfFile.extension)
 }

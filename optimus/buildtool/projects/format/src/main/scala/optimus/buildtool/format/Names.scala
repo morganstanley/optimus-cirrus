@@ -14,28 +14,28 @@ package optimus.buildtool.format
 object Names {
 
   // bundles files
-  val modulesRoot = "modulesRoot"
+  val ModulesRoot = "modulesRoot"
 
-  val forbiddenDependencies = "forbiddenDependencies"
-  val name = "name"
-  val configurations = "configurations"
-  val allowedIn = "allowedIn"
-  val allowedPatterns = "allowedPatterns"
-  val internalOnly = "internalOnly"
-  val externalOnly = "externalOnly"
+  val ForbiddenDependencies = "forbiddenDependencies"
+  val Name = "name"
+  val Configurations = "configurations"
+  val AllowedIn = "allowedIn"
+  val AllowedPatterns = "allowedPatterns"
+  val InternalOnly = "internalOnly"
+  val ExternalOnly = "externalOnly"
 
   // conf.obt
-  val scalaHomePath = "scalaHomePath"
-  val javaHomePath = "javaHomePath"
+  val ScalaHomePath = "scalaHomePath"
+  val JavaHomePath = "javaHomePath"
 
   // stratosphere.conf
-  val workspace = "workspace"
-  val javaProject = "javaProject"
-  val javaVersion = "javaVersion"
-  val stratosphereVersion = "stratosphereVersion"
-  val obtVersion = "obt-version"
-  val scalaSourceCompatibility = "scalaSourceCompatibility"
-  val scalaVersion = "scalaVersion"
-  val javaOptionFiltering = "javaOptionFiltering"
+  val Workspace = "workspace"
+  val JavaProject = "javaProject"
+  val JavaVersion = "javaVersion"
+  val StratosphereVersion = "stratosphereVersion"
+  val ObtVersion = "obt-version"
+  val ScalaSourceCompatibility = "scalaSourceCompatibility"
+  val ScalaVersion = "scalaVersion"
+  val JavaOptionFiltering = "javaOptionFiltering"
 
 }

@@ -17,8 +17,10 @@ import optimus.buildtool.scope.ScopedCompilation
 
 object ScopeFilter {
   def apply(s: String): ScopeFilter = s.toLowerCase match {
-    case "cpp"  => CppScopeFilter
-    case "none" => NoFilter
+    case "cpp"      => CppScopeFilter
+    case "electron" => ElectronFilter
+    case "python"   => PythonScopeFilter
+    case "none"     => NoFilter
   }
 }
 
@@ -36,5 +38,12 @@ object CppScopeFilter extends ScopeFilter {
 
   private def isDefined(cfg: Option[CppBuildConfiguration]): Boolean =
     cfg.exists(_.toolchain != CppToolchain.NoToolchain)
+}
 
+object ElectronFilter extends ScopeFilter {
+  override def apply(scope: ScopedCompilation): Boolean = scope.config.electronConfig.isDefined
+}
+
+object PythonScopeFilter extends ScopeFilter {
+  override def apply(scope: ScopedCompilation): Boolean = scope.config.pythonConfig.isDefined
 }
