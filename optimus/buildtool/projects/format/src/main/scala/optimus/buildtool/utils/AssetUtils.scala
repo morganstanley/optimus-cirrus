@@ -40,6 +40,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import com.sun.management.UnixOperatingSystemMXBean
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JsonAsset
@@ -48,6 +49,7 @@ import org.slf4j.LoggerFactory.getLogger
 import java.nio.file.LinkOption
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributeView
+import java.util.jar.JarFile
 import scala.collection.mutable
 import scala.ref.SoftReference
 import scala.util.Success
@@ -458,4 +460,46 @@ object AssetUtils {
     sb.append("\n")
     jsonIn(sb)
   }
+
+  private def assetIsValid(asset: Asset)(f: Asset => Boolean): Boolean =
+    try {
+      if (asset.exists) f(asset) else false
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"""|failed to verify file is readable or not! ${asset.pathString}
+                     |${StackUtils.multiLineStacktrace(e)}""".stripMargin)
+        false
+    }
+
+  def isJarReadable(jar: Path): Boolean = isJarReadable(Asset(jar))
+
+  def isJarReadable(jar: Asset): Boolean = assetIsValid(jar) { jar =>
+    val jarFile = new JarFile(jar.path.toFile)
+    try jarFile.entries.hasMoreElements
+    finally jarFile.close()
+  }
+
+  def isTextContentReadable(text: Asset): Boolean = isTarJsonReadable(text, isZip = false)
+
+  def isTarJsonReadable(tarOrCompressedJson: Asset, isZip: Boolean = true): Boolean =
+    assetIsValid(tarOrCompressedJson) { file =>
+      val fs = Files.newInputStream(file.path)
+      val bss = new BufferedInputStream(fs)
+      if (isZip) try {
+        val gzipIn = new GZIPInputStream(bss)
+        val res = gzipIn.available() > 0
+        gzipIn.close()
+        res
+      } finally {
+        bss.close()
+        fs.close()
+      }
+      else
+        try bss.available() > 0
+        finally {
+          bss.close()
+          fs.close()
+        }
+    }
+
 }

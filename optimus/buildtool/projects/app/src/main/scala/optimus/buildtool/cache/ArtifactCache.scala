@@ -14,8 +14,17 @@ package optimus.buildtool.cache
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.resolvers.RemoteDownloadTracker
+import optimus.buildtool.trace.ObtTrace
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
+import org.slf4j.LoggerFactory.getLogger
+
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.compat._
+import scala.collection.mutable
+import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
 
 sealed abstract class CacheMode(val read: Boolean, val write: Boolean, val forceWrite: Boolean = false)
 object CacheMode {
@@ -24,6 +33,37 @@ object CacheMode {
   case object WriteOnly extends CacheMode(read = false, write = true)
   case object ForceWrite extends CacheMode(read = true, write = true, forceWrite = true)
   case object ForceWriteOnly extends CacheMode(read = false, write = true, forceWrite = true)
+  def unapply(cacheMode: CacheMode): Option[(Boolean, Boolean, Boolean)] = {
+    Some((cacheMode.read, cacheMode.write, cacheMode.forceWrite))
+  }
+}
+
+object RemoteArtifactCacheTracker extends RemoteDownloadTracker {
+  private val log = getLogger(this.getClass)
+
+  private val _corruptedFiles: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
+
+  def addCorruptedFile(cacheKey: String, id: ScopeId): Boolean = {
+    val msg = s"[$id] corrupted file found for remote cache: $cacheKey"
+    ObtTrace.warn(msg)
+    log.warn(msg)
+    _corruptedFiles.add(cacheKey)
+  }
+
+  def corruptedFiles: Set[String] = _corruptedFiles.toSet
+
+  def clean(): Unit = {
+    _corruptedFiles.clear()
+  }
+
+  def summary: Seq[String] = {
+    val files: Seq[String] = corruptedFiles.to(Seq).sorted
+    val summaryLines: Seq[String] =
+      if (files.nonEmpty) s"Downloaded ${files.size} corrupted files in this build:" +: files
+      else Nil
+    summaryLines
+  }
+
 }
 
 @entity trait ArtifactCache {
@@ -64,8 +104,7 @@ trait HasArtifactStore {
   )(
       computer: NodeFunction0[Option[B#A]]
   ): Option[B#A] = {
-    val stored = store.get(id, fingerprintHash, tpe, discriminator)
-    val read = if (cacheMode.read) stored else None
+    val read: Option[B#A] = if (cacheMode.read) store.get(id, fingerprintHash, tpe, discriminator) else None
     val ret = read match {
       case None =>
         computer() // no artifact found in cache
@@ -74,9 +113,20 @@ trait HasArtifactStore {
       case a =>
         a // we've got a non-erroneous artifact
     }
-    // even in write-only mode, don't write if it already exists
-    if (cacheMode.write && (stored != ret || cacheMode.forceWrite))
+
+    val shouldWrite = cacheMode match {
+      case CacheMode(true, true, forceWrite) if forceWrite || ret != read => true
+      case CacheMode(false, true, forceWrite) // even in write-only mode, don't write if it already exists
+          if forceWrite || (ret.nonEmpty && store.check(id, Set(fingerprintHash), tpe, discriminator).isEmpty) =>
+        true
+      case _ => // write == false
+        false
+    }
+    if (shouldWrite) {
+      log.trace(s"${store.getClass.getName}:$cacheMode PUT $id:$tpe:$discriminator:$fingerprintHash")
       ret.foreach(a => store.put(tpe)(id, fingerprintHash, discriminator, a))
+    }
+
     ret
   }
 

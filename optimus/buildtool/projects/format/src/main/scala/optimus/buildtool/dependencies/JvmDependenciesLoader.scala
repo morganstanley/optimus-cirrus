@@ -27,8 +27,7 @@ import optimus.buildtool.format.MavenDefinition.loadMavenDefinition
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.OrderingUtils
 import optimus.buildtool.format.ProjectProperties
-import optimus.buildtool.format.ResolverDefinition
-import optimus.buildtool.format.ResolverDefinition.ResolverType
+import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.format.Result
 import optimus.buildtool.format.ResultSeq
 import optimus.buildtool.format.Success
@@ -45,6 +44,7 @@ object JvmDependenciesLoader {
   private[buildtool] val Configuration = "configuration"
   private[buildtool] val Configurations = "configurations"
   private[buildtool] val IvyConfigurations = "ivyConfigurations"
+  private[buildtool] val IvyConfiguration = "ivyConfiguration"
   private[buildtool] val ContainsMacros = "containsMacros"
   private[buildtool] val Classifier = "classifier"
   private[buildtool] val Dependencies = "dependencies"
@@ -75,19 +75,23 @@ object JvmDependenciesLoader {
       kind: Kind,
       obtFile: ObtFile,
       isMaven: Boolean,
-      loadedResolvers: Seq[ResolverDefinition],
+      loadedResolvers: ResolverDefinitions,
       loadedVariantsConfig: Option[Config] = None,
       isExtraLib: Boolean = false,
-      scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
+      scalaMajorVersion: Option[String] = None,
+      isMultiSourceScalaLib: Boolean = false): Result[Seq[DependencyDefinition]] =
     Result.tryWith(obtFile, dependenciesConfig) {
       val dependencies = for {
         (groupName, groupConfig) <- ResultSeq(dependenciesConfig.nested(obtFile))
         (depName, dependencyConfig) <- ResultSeq(groupConfig.nested(obtFile))
+        isScalaLib = isMultiSourceScalaLib || dependencyConfig.optionalBoolean("scala").contains(true)
         loadResult = loadLibrary(
-          scalaMajorVersion match { // apply scala maven lib name when "scala = true"
-            case Some(scalaMajorVer) if isMaven => mavenScalaLibName(depName, scalaMajorVer)
-            case _                              => depName
-          },
+          if (isScalaLib)
+            scalaMajorVersion match { // apply scala maven lib name when "scala = true"
+              case Some(scalaMajorVer) if isMaven => mavenScalaLibName(depName, scalaMajorVer)
+              case _                              => depName
+            }
+          else depName,
           groupName,
           dependencyConfig,
           kind,
@@ -96,7 +100,7 @@ object JvmDependenciesLoader {
           loadedResolvers,
           loadedVariantsConfig,
           isExtraLib,
-          scalaMajorVersion
+          if (isScalaLib) scalaMajorVersion else None
         )
         dep <- ResultSeq(loadResult)
       } yield dep
@@ -104,20 +108,37 @@ object JvmDependenciesLoader {
       dependencies.value.withProblems(deps => OrderingUtils.checkOrderingIn(obtFile, deps))
     }
 
-  def readExcludes(config: Config, file: ObtFile): Result[Seq[Exclude]] = {
+  def readExcludes(config: Config, file: ObtFile, allowIvyConfiguration: Boolean = false): Result[Seq[Exclude]] = {
     file.tryWith {
       if (config.hasPath(Excludes)) {
         val excludeList = config.getList(Excludes).asScala.toList
         val excludeResults: Seq[Result[Exclude]] = excludeList.map {
           case obj: ConfigObject =>
             val excludeConf: Config = obj.toConfig
+
+            val ivyConfiguration = excludeConf.optionalString(IvyConfiguration)
+            val (allowedKeys, ivyWarning, ivyConfigurationToUse) =
+              if (allowIvyConfiguration) (Keys.excludesWithIvyConfig, Nil, ivyConfiguration)
+              else if (ivyConfiguration.isDefined) {
+                val warning =
+                  file.warningAt(
+                    obj,
+                    s"'$IvyConfiguration' is only supported for global $Excludes, not local $Excludes")
+                (Keys.excludesConfig, Seq(warning), None)
+              } else (Keys.excludesConfig, Nil, None)
+
             val exclude =
-              Exclude(group = excludeConf.optionalString(Group), name = excludeConf.optionalString(Name))
+              Exclude(
+                group = excludeConf.optionalString(Group),
+                name = excludeConf.optionalString(Name),
+                ivyConfiguration = ivyConfigurationToUse)
 
             Success(exclude)
               .withProblems(
-                excludeConf.checkExtraProperties(file, Keys.excludesConfig) ++
+                excludeConf.checkExtraProperties(file, allowedKeys) ++ ivyWarning ++
+                  // we always require at least one of group or name to be present
                   excludeConf.checkEmptyProperties(file, Keys.excludesConfig))
+
           case other => file.failure(other, s""""$Excludes" element is not an object""")
         }
 
@@ -133,7 +154,7 @@ object JvmDependenciesLoader {
       kind: Kind,
       obtFile: ObtFile,
       isMaven: Boolean,
-      loadedResolvers: Seq[ResolverDefinition],
+      loadedResolvers: ResolverDefinitions,
       loadedVariantsConfig: Option[Config] = None,
       isExtraLib: Boolean = false,
       scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
@@ -154,8 +175,8 @@ object JvmDependenciesLoader {
         }
 
       def loadVersion(obtFile: ObtFile, config: Config): Option[String] = {
-        val depVersion = // allow no version config for multiSource afs dependencies
-          if (!isMaven && obtFile.path == JvmDependenciesConfig.path) config.optionalString(Version)
+        val depVersion = // allow no version config for multiSource dependencies
+          if (obtFile.path == JvmDependenciesConfig.path) config.optionalString(Version)
           else Some(config.getString(Version))
         if (isMaven) depVersion
         else
@@ -173,11 +194,12 @@ object JvmDependenciesLoader {
           predefinedResolvers: Option[Seq[String]]): Result[Seq[String]] = Result.tryWith(obtFile, config) {
         val (validNames, invalidNames) = predefinedResolvers match {
           case Some(userDefined) =>
-            val (validNames, invalidNames) = userDefined.partition(str => loadedResolvers.exists(r => r.name == str))
+            val (validNames, invalidNames) =
+              userDefined.partition(str => loadedResolvers.allResolvers.exists(r => r.name == str))
             (validNames, invalidNames)
           case None =>
-            val preDefinedIvyRepos = loadedResolvers.filter(_.tpe == ResolverType.Ivy)
-            val preDefinedMavenRepos = loadedResolvers.filter(_.tpe == ResolverType.Maven)
+            val preDefinedIvyRepos = loadedResolvers.defaultIvyResolvers
+            val preDefinedMavenRepos = loadedResolvers.defaultMavenResolvers
             if (isMaven && preDefinedMavenRepos.nonEmpty) (preDefinedMavenRepos.map(_.name), Nil)
             else (preDefinedIvyRepos.map(_.name), Nil)
         }
@@ -189,41 +211,41 @@ object JvmDependenciesLoader {
         for {
           artifactExcludes <- readExcludes(fullConfig, obtFile)
           artifacts <- loadArtifacts(fullConfig)
-          (version, isDisabled) = loadVersion(obtFile, fullConfig) match {
-            case Some(ver) => (ver, false)
-            case None      => ("", true)
-          }
+          version = loadVersion(obtFile, fullConfig).getOrElse("")
           predefinedResolvers = config.optionalStringList(Resolvers)
           resolvers <- loadResolvers(obtFile, config, predefinedResolvers)
         } yield DependencyDefinition(
-          group,
-          if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
-          version,
-          kind,
-          fullConfig.stringOrDefault(Configuration, default = "runtime"),
-          config.optionalString(Classifier),
-          artifactExcludes,
-          None,
-          resolvers,
-          fullConfig.booleanOrDefault(Transitive, default = true),
-          fullConfig.booleanOrDefault(Force, default = false),
-          config.origin().lineNumber(),
-          fullConfig.stringOrDefault(KeySuffix, default = ""),
-          fullConfig.booleanOrDefault(ContainsMacros, default = false),
-          fullConfig.booleanOrDefault(IsScalacPlugin, default = false),
-          artifacts,
+          group = group,
+          name = if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
+          version = version,
+          kind = kind,
+          configuration = fullConfig.stringOrDefault(Configuration, default = if (isMaven) "" else "runtime"),
+          classifier = config.optionalString(Classifier),
+          excludes = artifactExcludes,
+          variant = None,
+          resolvers = resolvers,
+          transitive = fullConfig.booleanOrDefault(Transitive, default = true),
+          force = fullConfig.booleanOrDefault(Force, default = false),
+          line = config.origin().lineNumber(),
+          keySuffix = fullConfig.stringOrDefault(KeySuffix, default = ""),
+          containsMacros = fullConfig.booleanOrDefault(ContainsMacros, default = false),
+          isScalacPlugin = fullConfig.booleanOrDefault(IsScalacPlugin, default = false),
+          ivyArtifacts = artifacts,
           isMaven = isMaven,
-          isDisabled = isDisabled,
           isExtraLib = isExtraLib
         )
-      }.withProblems(fullConfig.checkExtraProperties(obtFile, Keys.dependencyDefinition))
+      }
 
       val defaultLib = loadBaseLibrary(config)
+        .withProblems(config.checkExtraProperties(obtFile, Keys.dependencyDefinition))
 
       def loadVariant(variant: Config, name: String): Result[DependencyDefinition] = {
         val reason = if (variant.hasPath(Reason)) variant.getString(Reason) else ""
         val variantReason = Variant(name, reason)
-        loadBaseLibrary(variant.withFallback(config)).map(_.copy(variant = Some(variantReason)))
+
+        loadBaseLibrary(variant.withFallback(config))
+          .map(_.copy(variant = Some(variantReason)))
+          .withProblems(variant.checkExtraProperties(obtFile, Keys.variantDefinition))
       }
 
       val variantsConfigs =
@@ -233,18 +255,11 @@ object JvmDependenciesLoader {
               val sourcedConfig = if (isMaven) config.getObject("maven").toConfig else config.getObject("afs").toConfig
               loadVariant(sourcedConfig, name)
             }
+          case None if !config.hasPath(Variants) => Success(Nil)
           case None =>
-            if (!config.hasPath(Variants)) Success(Nil)
-            else {
-              Result.traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
-                loadVariant(config, name)
-              }
+            Result.traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
+              loadVariant(config, name)
             }
-            if (!config.hasPath(Variants)) Success(Nil)
-            else
-              Result.traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
-                loadVariant(config, name)
-              }
         }
       val configurationVariants =
         if (!config.hasPath(Configurations)) Success(Nil)
@@ -381,7 +396,8 @@ object JvmDependenciesLoader {
       depsConfig: Config,
       obtFile: ObtFile,
       isMavenConfig: Boolean,
-      loadedResolvers: Seq[ResolverDefinition] = Nil): Result[Seq[DependencyDefinition]] =
+      loadedResolvers: ResolverDefinitions,
+      scalaMajorVersion: Option[String]): Result[Seq[DependencyDefinition]] =
     if (depsConfig.hasPath(ExtraLibs)) {
       val extraLibOccurrences = depsConfig.getObject(ExtraLibs).toConfig
       loadLocalDefinitions(
@@ -390,14 +406,16 @@ object JvmDependenciesLoader {
         obtFile,
         isMavenConfig,
         loadedResolvers = loadedResolvers,
-        isExtraLib = true)
+        isExtraLib = true,
+        scalaMajorVersion = scalaMajorVersion
+      )
     } else Success(Nil)
 
   private def loadMultiSourceDeps(
       singleSourceDep: Option[JvmDependencies],
       jvmDepsConfig: Config,
       obtFile: ObtFile,
-      loadedResolvers: Seq[ResolverDefinition],
+      loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]): Result[Option[MultiSourceDependencies]] =
     singleSourceDep match {
       case Some(singleSource) =>
@@ -425,12 +443,12 @@ object JvmDependenciesLoader {
       useMavenLibs: Boolean,
       isMavenConfig: Boolean,
       singleSourceDep: Option[JvmDependencies],
-      loadedResolvers: Seq[ResolverDefinition],
+      loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]
   ): Result[JvmDependencies] = {
     val resolvedConfig = config.resolve()
     for {
-      globalExcludes <- readExcludes(config, obtFile)
+      globalExcludes <- readExcludes(config, obtFile, allowIvyConfiguration = true)
       localDefinitions <-
         if (singleSourceDep.isDefined) Success(Nil)
         else
@@ -439,8 +457,9 @@ object JvmDependenciesLoader {
             LocalDefinition,
             obtFile,
             isMavenConfig,
-            loadedResolvers)
-      extraLibDefinitions <- loadExtraLibs(resolvedConfig, obtFile, isMavenConfig)
+            loadedResolvers,
+            scalaMajorVersion = scalaMajorVersion)
+      extraLibDefinitions <- loadExtraLibs(resolvedConfig, obtFile, isMavenConfig, loadedResolvers, scalaMajorVersion)
       mavenDefs <- loadMavenDefinition(config, isMavenConfig, useMavenLibs)
       nativeDeps <- loadNativeDeps(resolvedConfig, obtFile)
       all = localDefinitions ++ extraLibDefinitions
@@ -469,7 +488,7 @@ object JvmDependenciesLoader {
       loader: ObtFile.Loader,
       useMavenLibs: Boolean,
       scalaMajorVersion: Option[String],
-      loadedResolvers: Seq[ResolverDefinition] = Nil): Result[JvmDependencies] = {
+      loadedResolvers: ResolverDefinitions): Result[JvmDependencies] = {
 
     def getCentralDependencies(
         topLevelConfig: TopLevelConfig,

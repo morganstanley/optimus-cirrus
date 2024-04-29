@@ -13,6 +13,7 @@ package optimus.stratosphere.artifactory
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.stratosphere.filesanddirs.PropertiesUtils
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -32,37 +33,32 @@ final case class Credential(host: String, user: String, password: String) {
 object Credential {
   private val log = getLogger(this.getClass)
 
-  val empty: Credential = Credential("", "", "")
-
   def toHttpBasicAuth(user: String, password: String): String =
     s"Basic ${Base64.getEncoder.encodeToString(s"$user:$password".getBytes(StandardCharsets.UTF_8))}"
 
-  def fromPropertiesFile(file: Path): Credential = {
-    val props = new Properties
-    val stream = Files.newInputStream(file)
-    try props.load(stream)
-    finally stream.close()
-    fromProperties(props)
-  }
+  def fromPropertiesFile(file: Path): Option[Credential] =
+    if (Files.notExists(file)) None
+    else Some(fromProperties(PropertiesUtils.fromPath(file)))
 
   def fromProperties(props: Properties): Credential = Credential(
     host = props.getProperty("host"),
     user = props.getProperty("user"),
     password = props.getProperty("password"))
 
-  def fromJfrogConfFile(file: Path): Credential = {
+  def fromJfrogConfFile(file: Path): Option[Credential] = {
     if (!file.toFile.exists()) {
       log.warn(s"Credential file $file not found!")
-      empty
+      None
     } else {
       val objMapper = new ObjectMapper()
       val fileString = Files.readString(file)
       val artifactoryStr = objMapper.readTree(fileString).get("artifactory").get(0)
-      Credential(
-        host = new URI(artifactoryStr.get("url").asText()).toURL.getHost,
-        user = artifactoryStr.get("user").asText(),
-        password = artifactoryStr.get("password").asText()
-      )
+      Some(
+        Credential(
+          host = new URI(artifactoryStr.get("url").asText()).toURL.getHost,
+          user = artifactoryStr.get("user").asText(),
+          password = artifactoryStr.get("password").asText()
+        ))
     }
   }
 

@@ -16,9 +16,9 @@ import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationMigration
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.sparse.SparseUtils
+import optimus.stratosphere.updater.GitUpdater
 import optimus.stratosphere.utils.GitUtils
 import optimus.stratosphere.utils.IntervalPrinter.timeThis
-import optimus.stratosphere.utils.RemoteUrl
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -189,16 +189,17 @@ class CatchUp(
 
   private def prepareRemoteForCatchup(): String = {
     val catchupRemoteName = ws.catchUp.remote.name
-    val catchupRemoteUrl = RemoteUrl(ws.catchUp.remote.url)
 
-    val catchupRemote = gitUtil.allRemotes().find(_.name == catchupRemoteName)
+    val catchupRemoteUrl = GitUpdater.catchupRemoteUrl(ws)
+    val currentCatchupRemote = gitUtil.remoteUrl(catchupRemoteName)
 
-    catchupRemote match {
-      case Some(remote) =>
-        if (remote.remoteUrl != catchupRemoteUrl) {
+    currentCatchupRemote match {
+      case Some(remoteUrl) =>
+        if (remoteUrl != catchupRemoteUrl) {
           Try(gitUtil.setRemote(catchupRemoteName, catchupRemoteUrl)) match {
             case Success(_) =>
-              logger.info(s"Catchup remote '$remoteName' url updated to '${catchupRemoteUrl.url}'")
+              logger.info(
+                s"Catchup remote '$remoteName' url updated from ${remoteUrl.url} to '${catchupRemoteUrl.url}'")
             case Failure(ex) =>
               throw new StratosphereException(
                 s"Catchup remote '$remoteName' url cannot be updated. Please contact ${ws.internal.helpMailGroup}",
@@ -231,7 +232,7 @@ class CatchUp(
     runFetchIfNeeded(remoteName)
 
     // We only set tracking once if remote was missing and was just created
-    if (catchupRemote.isEmpty) {
+    if (currentCatchupRemote.isEmpty) {
       val defaultBranch = ws.catchUp.defaultBranch
       if (Try(gitUtil.setUpstream(catchupRemoteName, defaultBranch, defaultBranch)).isSuccess) {
         logger.info(s"'$defaultBranch' branch set to track '$catchupRemoteName' remote.")

@@ -72,7 +72,7 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
     }
   }
 
-  @async override protected def write[A <: CachedArtifactType](
+  @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     // no put required - compiler job will automatically place artifacts in the correct location
     val path = artifact.path

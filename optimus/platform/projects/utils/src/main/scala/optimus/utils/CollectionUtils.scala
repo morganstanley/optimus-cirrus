@@ -19,6 +19,7 @@ import optimus.scalacompat.collection.BuildFrom
 
 import scala.collection.SeqLike
 import scala.collection.immutable.Seq
+import scala.collection.immutable.TreeMap
 import scala.collection.mutable.ListBuffer
 import scala.util._
 
@@ -196,6 +197,13 @@ object CollectionUtils extends CollectionUtils {
       }
       vectorBuilder.result()
     }
+
+    def distinctByOrderingFavouringLastEncountered(implicit O: Ordering[A]): Seq[A] = {
+      // Use of TreeMap[A, A].values favours the last encountered equivalent element in the data. The previous
+      // implementation that used TreeSet favoured the last encountered Tenor due to a bug in Scala 2.12
+      // which was fixed on 2.13.
+      (TreeMap[A, A]()(O) ++ as.map(x => (x, x))).values.toVector
+    }
   }
 
   class ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](underlying: Repr[T]) {
@@ -245,6 +253,28 @@ trait CollectionUtils {
   implicit def traversable2ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](
       t: Repr[T]
   ): ExtraTraversableOps2[T, Repr] = new ExtraTraversableOps2[T, Repr](t)
+
+  implicit class DoubleIterableOps(private val it: Iterable[Double]) {
+    def compensatedSum: Double = {
+      var sum = 0d
+      var c = 0d
+      val itr = it.iterator
+      while (itr.hasNext) {
+        val d = itr.next()
+        val y = d - c
+        val t = sum + y
+        c = (t - sum) - y
+        sum = t
+      }
+      sum
+    }
+
+    def sortedSum: Double = {
+      val a = it.toArray
+      java.util.Arrays.sort(a)
+      a.sum
+    }
+  }
 
   implicit class TraversableTuple2Ops[A, B](iterable: Traversable[(A, B)]) {
     def toSingleMap: Map[A, B] = iterable.groupBy(_._1).map { case (k, kvs) =>

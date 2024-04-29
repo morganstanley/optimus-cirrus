@@ -32,6 +32,7 @@ class PostTyperCodingStandardsComponent(
   import PostTyperCodingStandardsComponent._
   lazy val appClass = rootMirror.getRequiredClass("scala.App")
   lazy val optimusAppClass = rootMirror.getClassIfDefined("optimus.platform.OptimusApp")
+  lazy val jdkCollectionConverters = rootMirror.getModuleIfDefined("scala.jdk.CollectionConverters")
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit): Unit = {
@@ -170,6 +171,15 @@ class PostTyperCodingStandardsComponent(
           case dd: DefDef =>
             checkDefDef(dd)
             super.traverse(tree)
+          case imp: Import if imp.expr.symbol == jdkCollectionConverters =>
+            imp.selectors.filter(_.name != nme.WILDCARD).foreach { sel =>
+              alarm(
+                Scala213MigrationMessages.COLLECTION_CONVERTER_IMPORT_MUST_BE_WILDCARD,
+                imp.pos.withPoint(sel.namePos))
+              ()
+            }
+            super.traverse(tree)
+
           case _ => super.traverse(tree)
         }
       finally {

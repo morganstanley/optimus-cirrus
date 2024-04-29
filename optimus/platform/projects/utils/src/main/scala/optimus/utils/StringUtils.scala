@@ -11,6 +11,8 @@
  */
 package optimus.utils
 
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import scala.util.Try
 
 trait OptimusStringUtils {
@@ -34,5 +36,30 @@ trait OptimusStringUtils {
   object IntParsable {
     def unapply(candidate: String): Option[Int] = Try { candidate.toInt } toOption
   }
+
+}
+
+object OptimusStringUtils extends OptimusStringUtils {
+  def detectCharset(a: Array[Byte]): Charset = {
+    if (a.length < 4)
+      throw new IllegalArgumentException("Cannot detect encoding with < 4 octets")
+    // JSON is Unicode-encoded, so we can detect the charset by looking at
+    // the first four octets (see RFC4627, Section 3)
+    if (a(0) == 0) {
+      if (a(1) == 0) Charset.forName("UTF-32BE")
+      else StandardCharsets.UTF_16BE
+    } else {
+      if (a(1) != 0) StandardCharsets.UTF_8
+      else {
+        if (a(2) == 0) Charset.forName("UTF-32LE")
+        else StandardCharsets.UTF_16LE
+      }
+    }
+  }
+
+  def charsetAwareToString(a: Array[Byte]): String = new String(a, detectCharset(a))
+  def charsetAwareToString(a: Array[Byte], allowDefault: Boolean): String =
+    if (allowDefault && a.length < 4) new String(a)
+    else new String(a, detectCharset(a))
 
 }

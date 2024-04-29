@@ -31,10 +31,18 @@ object ModuleType {
   def resolve(label: String): Option[ModuleType] = Seq(Afs, PyPi).find(_.label == label)
 }
 
+object PythonConfiguration {
+  final case class OverriddenCommands(
+      pythonVenvCmd: Option[String],
+      pipInstallCmd: Option[String]
+  )
+}
+
 final case class PythonConfiguration(
     python: PythonDefinition,
     libs: Set[PythonDependency],
-    moduleType: ModuleType
+    moduleType: ModuleType,
+    overriddenCommands: PythonConfiguration.OverriddenCommands
 ) {
   def afsDependencies: Set[PythonAfsDependencyDefinition] = libs.collect {
     case dep @ PythonAfsDependencyDefinition(_, _, _, _, _, _) => dep

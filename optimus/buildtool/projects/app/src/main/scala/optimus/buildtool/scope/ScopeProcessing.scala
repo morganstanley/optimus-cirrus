@@ -33,40 +33,42 @@ import scala.collection.immutable.Seq
   @node def process(pathingArtifact: PathingArtifact): Seq[Artifact] = {
     scope.config.processorConfig.apar.flatMap { case (processorType, cfg) =>
       val processor = processors.getOrElse(processorType, noProcessor(processorType.name))
-      val dependencyArtifacts = processor.dependencies(scope)
-      val dependencyErrors = Artifact.onlyErrors(dependencyArtifacts)
-      val templateFile = scope.config.paths.absScopeRoot.resolveFile(cfg.templateFile)
-      val templateHeaderFile =
-        cfg.templateHeaderFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
-      val templateFooterFile =
-        cfg.templateFooterFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
-      val objectsFile = cfg.objectsFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
-      dependencyErrors.getOrElse {
-        val inputs = processor.inputs(
-          cfg.name,
-          templateFile,
-          templateHeaderFile,
-          templateFooterFile,
-          objectsFile,
-          cfg.installLocation,
-          cfg.configuration,
-          scope,
-          javaAndScalaSources
-        )
-        val fingerprint = inputs().fingerprint
-        val fingerprintHash = fingerprint.hash
-        val tpe = processor.artifactType
-        scope.cached(tpe, Some(cfg.name), fingerprintHash) {
-          val outputJar =
-            scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false).asJar
-          val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
-          log.info(s"[${scope.id}:$tpeStr] Starting processing task ${cfg.name}")
-          val artifact = processor.processInputs(scope.id, inputs, pathingArtifact, dependencyArtifacts, outputJar)
-          if (!artifact.exists(_.hasErrors)) log.info(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name}")
-          else Utils.FailureLog.error(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name} with errors")
-          artifact
-        } :+ fingerprint
-      }
+      val tpe = processor.artifactType
+      if (ScopedCompilation.generate(tpe)) {
+        val dependencyArtifacts = processor.dependencies(scope)
+        val dependencyErrors = Artifact.onlyErrors(dependencyArtifacts)
+        val templateFile = scope.config.paths.absScopeRoot.resolveFile(cfg.templateFile)
+        val templateHeaderFile =
+          cfg.templateHeaderFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
+        val templateFooterFile =
+          cfg.templateFooterFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
+        val objectsFile = cfg.objectsFile.map(relativePath => scope.config.paths.absScopeRoot.resolveFile(relativePath))
+        dependencyErrors.getOrElse {
+          val inputs = processor.inputs(
+            cfg.name,
+            templateFile,
+            templateHeaderFile,
+            templateFooterFile,
+            objectsFile,
+            cfg.installLocation,
+            cfg.configuration,
+            scope,
+            javaAndScalaSources
+          )
+          val fingerprint = inputs().fingerprint
+          val fingerprintHash = fingerprint.hash
+          scope.cached(tpe, Some(cfg.name), fingerprintHash) {
+            val outputJar =
+              scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false).asJar
+            val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
+            log.info(s"[${scope.id}:$tpeStr] Starting processing task ${cfg.name}")
+            val artifact = processor.processInputs(scope.id, inputs, pathingArtifact, dependencyArtifacts, outputJar)
+            if (!artifact.exists(_.hasErrors)) log.info(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name}")
+            else Utils.FailureLog.error(s"[${scope.id}:$tpeStr] Completing processing task ${cfg.name} with errors")
+            artifact
+          } :+ fingerprint
+        }
+      } else Nil
     }
   }
 

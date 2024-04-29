@@ -45,10 +45,11 @@ public class NodeTaskTransformer implements ClassFileTransformer {
       properties.add("Id");
       properties.add("SelfPlusANCTime");
     }
-    if (DiagnosticSettings.traceTweaksEnabled) properties.add("TweakInfection");
+    if (DiagnosticSettings.parseBooleanWithDefault(
+        System.getProperty(EntityAgent.injectTweakFields), false)) properties.add("TweakInfection");
     if (DiagnosticSettings.awaitStacks) {
-      properties.add("Enqueuer");
-      properties.add("EnqueuerStackHash");
+      properties.add("Launcher");
+      properties.add("LauncherStackHash");
     }
 
     ClassReader crSource = new ClassReader(bytes);

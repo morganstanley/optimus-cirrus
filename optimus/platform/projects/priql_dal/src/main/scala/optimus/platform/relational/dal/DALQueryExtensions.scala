@@ -12,14 +12,11 @@
 package optimus.platform.relational.dal
 
 import java.time.Instant
-
 import optimus.platform._
 import optimus.platform.dal.BitemporalSpaceResolver
 import optimus.platform.dal.EntityResolverReadImpl
-import optimus.platform._
 import optimus.platform.dsi.Feature
 import optimus.platform.dsi.expressions.DeltaUpdate
-import optimus.platform.relational.PriqlSettings
 import optimus.platform.relational.RelationalUnsupportedException
 import optimus.platform.relational.dal.deltaquery.DALEntityBitemporalSpaceProvider
 import optimus.platform.relational.dal.deltaquery.EntityBitemporalSpaceProviderFinder
@@ -31,6 +28,7 @@ import optimus.platform.storable.EntityChange
 import optimus.platform.storable.ReferenceHolder
 import optimus.platform.dsi.bitemporal.EntityClassQuery
 import optimus.platform.dsi.bitemporal.EventClassQuery
+import optimus.platform.relational.dal.core.DALExecutionProvider
 
 trait DALQueryExtensions {
   private def resolver = EvaluationContext.entityResolver.asInstanceOf[EntityResolverReadImpl]
@@ -54,13 +52,13 @@ trait DALQueryExtensions {
       query.element match {
         case e: EventMultiRelation[_] =>
           if (e.entitledOnly)
-            throw new RelationalUnsupportedException(core.DALExecutionProvider.entitledOnlyUnsupportedForCount)
+            throw new RelationalUnsupportedException(DALExecutionProvider.entitledOnlyUnsupportedForCount)
           val eventClassName = e.classInfo.runtimeClass.getName
           resolver.countGroupings(EventClassQuery(eventClassName), e.getReadTxTime)
         case d: DALProvider =>
           if (d.entitledOnly)
-            throw new RelationalUnsupportedException(core.DALExecutionProvider.entitledOnlyUnsupportedForCount)
-          val dsiAt = core.DALExecutionProvider.dalTemporalContext(d.dalApi.loadContext, d.classInfo.runtimeClass, None)
+            throw new RelationalUnsupportedException(DALExecutionProvider.entitledOnlyUnsupportedForCount)
+          val dsiAt = DALExecutionProvider.dalTemporalContext(d.dalApi.loadContext, d.classInfo.runtimeClass, None)
           resolver.countGroupings(EntityClassQuery(d.classInfo.runtimeClass.getName), dsiAt.readTxTime)
         case _ =>
           throw new IllegalArgumentException("nonTemporalCount must be used right after 'from' clause.")

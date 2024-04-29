@@ -18,6 +18,7 @@ import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.BreadcrumbLevel.Level
 import optimus.breadcrumbs.Breadcrumbs.SetupFlags
+import optimus.breadcrumbs.Breadcrumbs.knownSource
 import optimus.breadcrumbs.BreadcrumbsSendLimit.LimitByKey
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs._
@@ -42,12 +43,13 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.{ArrayList => jArrayList}
-import java.util.{List => jList}
-import java.util.{Map => jMap}
+import java.util.{ ArrayList => jArrayList }
+import java.util.{ List => jList }
+import java.util.{ Map => jMap }
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+import optimus.scalacompat.collection._
 
 object BreadcrumbConsts {
   val CrumbBundle = "_crumbs" // compressed, encoded stream of serialized crumbs
@@ -135,7 +137,9 @@ object Breadcrumbs {
 
   private val defaultResources = PropertyUtils.get(resourceName, "deferred")
 
-  def getCounts: Map[Crumb.Source, Int] = impl.getCounts
+  private[breadcrumbs] val knownSource = new ConcurrentHashMap[Crumb.Source, Crumb.Source]()
+
+  def getCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.count.get)
 
   val queueLength: Int =
     if (defaultResources == "none" || defaultResources == "off") 1 else PropertyUtils.get(queueLengthName, 10000)
@@ -524,23 +528,13 @@ abstract class BreadcrumbsPublisher extends Filterable {
 
   protected def warning: Option[ThrottledWarnOrDebug] = None
 
-  private val countBySource = new ConcurrentHashMap[Crumb.Source, Int]()
-
-  private def addBySource(src: Crumb.Source, n: Int) = {
-    countBySource.compute(
-      src,
-      (_, i) => {
-        if (Objects.isNull(i)) n
-        else i + n
-      })
-  }
-
   final protected[breadcrumbs] def send(c: Crumb): Boolean = {
     if (c.source.isShutdown) false
     else if (c.uuid.base.length > 0) {
       val cs = Breadcrumbs.replicate(c)
       val source = c.source
-      val count = addBySource(source, cs.size)
+      val count = source.count.addAndGet(cs.size)
+      knownSource.put(source, source)
       if (source.maxCrumbs < 1 || count <= source.maxCrumbs)
         Breadcrumbs.replicate(c).forall(sendInternal)
       else {
@@ -553,8 +547,6 @@ abstract class BreadcrumbsPublisher extends Filterable {
       false
     }
   }
-
-  def getCounts: Map[Crumb.Source, Int] = countBySource.asScala.toMap
 
   final protected[breadcrumbs] def send(
       uuid: ChainedID,
@@ -873,6 +865,7 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
     try {
       val record = new ProducerRecord[String, String](topicMapper.topicForCrumb(c).topic, c.asJSON.toString())
       producer.foreach(_.send(record, CompletionCallback))
+      c.source.kafkaCount.incrementAndGet()
       true
     } catch {
       case t: Throwable =>

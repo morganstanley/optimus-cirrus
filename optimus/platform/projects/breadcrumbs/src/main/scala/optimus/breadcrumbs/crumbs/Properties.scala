@@ -705,7 +705,7 @@ object Properties extends KnownProperties {
   val rootUuid = prop[String]
   val appPrint = prop[String]
   val engPrint = prop[String]
-  val publisherId =prop[String]
+  val publisherId = prop[String]
   val invocationStyle = prop[String]
   val gsfControllerId = prop[String]
   val gsfEngineId = prop[String]
@@ -779,12 +779,18 @@ object Properties extends KnownProperties {
   val obtTaskEnd = prop[Instant]
   val obtTaskDuration = prop[Duration]
   val obtTaskCmd = prop[String]
+  val obtTaskCategory = prop[String]
+  val obtTaskLog = prop[String]
   val obtTaskExitCode = propI
   val obtTaskState = prop[String]
   val obtTaskTryCount = propI
   val obtTaskMaxTryCount = propI
   val obtUploadHost = prop[String]
   val obtUploadTargetDir = prop[String]
+
+  val obtRegexRuleInputSize = propI
+  val obtRegexPatternInputSize = propI
+  val obtRegexTotalScopesScanned = propI
 
   // pgo group validation properties
   val pgoDiff = prop[Seq[Map[String, String]]]
@@ -830,6 +836,8 @@ object Properties extends KnownProperties {
   val smplCacheTime = propL
   val smplOHSampling = propL
   val smplOHInstrum = propL
+  val samplingPauseTime = propL
+  val crumbplexerIgnore = prop[String]
 
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
@@ -984,6 +992,7 @@ object Properties extends KnownProperties {
   val appRelease = prop[String]
   val appReleaseLink = prop[String]
   val appGroup = prop[String]
+  val appGridEngineName = prop[String]
 
   val snapshotType = prop[String]
   val snapshotName = prop[String]

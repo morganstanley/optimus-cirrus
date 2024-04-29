@@ -17,6 +17,7 @@ import optimus.stratosphere.utils.MemSize
 
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.Instant
 import java.time.{Duration => JDuration}
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
@@ -106,6 +107,10 @@ trait LowerPriorityImplicits {
 
   implicit def regexExtractor: Extractor[Regex] = new Extractor[Regex] {
     override def extract(config: Config, property: String): Regex = config.getString(property).r
+  }
+
+  implicit def instantExtractor: Extractor[Instant] = new Extractor[Instant] {
+    override def extract(config: Config, property: String): Instant = Instant.ofEpochMilli(config.getLong(property))
   }
 
 }

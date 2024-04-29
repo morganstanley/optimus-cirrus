@@ -179,7 +179,7 @@ abstract class MapOptionHandler[KeyType, ValueType](
     extends OneArgumentOptionHandler[Map[KeyType, ValueType]](parser, option, setter) {
   override def parse(arg: String): Map[KeyType, ValueType] = {
     arg
-      .split(",")
+      .split(delimiter)
       .map(keyValuePair =>
         keyValuePair.split(":") match {
           case Array(key: String, value: String) =>
@@ -191,6 +191,7 @@ abstract class MapOptionHandler[KeyType, ValueType](
   }
   def convertKey(s: String): KeyType
   def convertValue(s: String): ValueType
+  def delimiter: String = ","
 }
 
 abstract class TypedEnumerationOptionHandler[E <: Enumeration](e: E)(

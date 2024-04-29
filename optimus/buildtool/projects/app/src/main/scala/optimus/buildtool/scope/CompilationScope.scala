@@ -176,13 +176,13 @@ import scala.collection.immutable.SortedMap
 
   @node def scalaInputArtifacts: Seq[Artifact] =
     upstream.signaturesForOurCompiler ++
-      upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies.result.resolvedArtifacts)
+      upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies)
 
   @node def pluginArtifacts: Seq[Seq[ClassFileArtifact]] = {
     // 1. resolve the set of class jars which directly contain plugins
     val inputArtifacts = (
       upstream.pluginsForOurCompiler ++
-        upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies.result.resolvedArtifacts)
+        upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies)
     ).collect {
       // for internal deps strip out messages, non-plugin artifacts (eg. java class jars) etc.
       // for external deps strip out any non-plugin artifacts
@@ -211,7 +211,7 @@ import scala.collection.immutable.SortedMap
           // get the runtime classpath for each internal plugin jar
           factory.lookupScope(scopeId).toIndexedSeq.apar.flatMap { s =>
             s.runtimeArtifacts.all.collectAll[ClassFileArtifact] ++
-              s.runtimeDependencies.transitiveExternalDependencies.result.resolvedArtifacts
+              s.runtimeDependencies.transitiveExternalDependencies
           }
         case c @ ExternalClassFileArtifact(_: PathedExternalArtifactId, _) =>
           Seq(c)

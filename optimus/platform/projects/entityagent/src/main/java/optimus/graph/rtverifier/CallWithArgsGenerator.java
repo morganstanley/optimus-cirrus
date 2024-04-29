@@ -75,7 +75,7 @@ public class CallWithArgsGenerator implements Opcodes {
   private static void generateFields(ClassWriter cw, int access, Type originalOwner, Type[] args) {
     // We generate the field original to hold the instance of the class only if the method is
     // non-static
-    if (!CommonAdapter.hasStaticAccess(access)) generatePrivateField(cw, "original", originalOwner);
+    if (!CommonAdapter.isStatic(access)) generatePrivateField(cw, "original", originalOwner);
 
     for (int i = 0; i < args.length; i++) {
       generatePrivateField(cw, "arg" + i, args[i]);
@@ -99,7 +99,7 @@ public class CallWithArgsGenerator implements Opcodes {
     var argSlot = 1;
 
     // We assign original only if the method is non-static
-    if (!CommonAdapter.hasStaticAccess(access))
+    if (!CommonAdapter.isStatic(access))
       argSlot += assignField(mv, cwaClass, argSlot, "original", originalOwner);
 
     for (int i = 0; i < args.length; i++) {
@@ -114,7 +114,7 @@ public class CallWithArgsGenerator implements Opcodes {
   public static String getCtrDescriptor(int access, Type originalOwner, Type[] args) {
     var argsToPass = args;
     // We need to also prepend the instance of the class if the method is non-static
-    if (!CommonAdapter.hasStaticAccess(access)) {
+    if (!CommonAdapter.isStatic(access)) {
       argsToPass = new Type[args.length + 1];
       argsToPass[0] = originalOwner;
       System.arraycopy(args, 0, argsToPass, 1, args.length);
@@ -185,7 +185,7 @@ public class CallWithArgsGenerator implements Opcodes {
     mv.visitCode();
 
     // We put the class instance into the stack if the method is non-static
-    if (!CommonAdapter.hasStaticAccess(access)) {
+    if (!CommonAdapter.isStatic(access)) {
       mv.loadThis();
       mv.getField(cwaClass, "original", originalOwner);
     }

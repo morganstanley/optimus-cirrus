@@ -34,8 +34,10 @@ import optimus.platform._
       throw new IllegalArgumentException(msg)
     }
     imageDefs.apar.map { imageDef =>
-      val scopeIds = dockerRelevantScopeIds(imageDef.scopes.apar.flatMap(resolveScopes).toSet)
-      DockerImage(outputDir, tag, dockerStructure.configuration.defaults, imageDef, scopeIds)
+      val scopeIds = imageDef.scopes.apar.flatMap(resolveScopes).toSet
+      val relevantScopeIds = dockerRelevantScopeIds(scopeIds)
+
+      DockerImage(outputDir, tag, dockerStructure.configuration.defaults, imageDef, scopeIds, relevantScopeIds)
     }
   }
 
@@ -56,14 +58,15 @@ import optimus.platform._
  * State of a docker image, which be resolved from image definition in 'docker.obt'
  * @param location
  *   resolved location for this docker image name string, for example: optimus/dist-infra
- * @param scopeIds
+ * @param relevantScopeIds
  *   resolved docker relevant ScopeIds
  * @param extraImages
  *   external images that we are going to pull and include as part of our tar
  */
 final case class DockerImage(
     location: ImageLocation,
-    scopeIds: Set[ScopeId],
+    directScopeIds: Set[ScopeId],
+    relevantScopeIds: Set[ScopeId],
     extraImages: Set[ExtraImageDefinition],
     baseImage: Option[ImageLocation])
 
@@ -73,10 +76,11 @@ object DockerImage {
       tag: String,
       defaults: DockerDefaults,
       imgDef: ImageDefinition,
-      scopeIds: Set[ScopeId]): DockerImage = {
+      directScopeIds: Set[ScopeId],
+      relevantScopeIds: Set[ScopeId]): DockerImage = {
     val imageLocation =
       ImageLocation.File(outputDir.resolveFile(s"${imgDef.name}.tar").path, s"${imgDef.name}:$tag")
     val baseImage = imgDef.baseImage.orElse(defaults.baseImage).map(ImageLocation.parse(_, defaults.registry))
-    DockerImage(imageLocation, scopeIds, imgDef.extraImages, baseImage)
+    DockerImage(imageLocation, directScopeIds, relevantScopeIds, imgDef.extraImages, baseImage)
   }
 }

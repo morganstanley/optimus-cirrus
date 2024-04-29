@@ -26,6 +26,12 @@ private class CancellationException extends CompileCancelled {
   override def arguments(): Array[String] = Array.empty
 }
 
+object NullLogger extends SbtLogger {
+  override def trace(t: => Throwable): Unit = ()
+  override def success(message: => String): Unit = ()
+  override def log(level: Level.Value, message: => String): Unit = ()
+}
+
 object ZincLogger {
   private val slog = msjava.slf4jutils.scalalog.getLogger(this)
 }

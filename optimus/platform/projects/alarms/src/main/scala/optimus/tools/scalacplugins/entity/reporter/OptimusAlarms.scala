@@ -35,7 +35,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       20515,
       OptimusPhases.APICHECK,
-      "Incorrect usage of %s.  You probably should not be using it at all."
+      "Incorrect usage of %s. You probably should not be using it at all."
     )
 
   val NOWARN = error1(20516, OptimusPhases.APICHECK, "Illegal use of @nowarn: %s")
@@ -114,10 +114,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // val NO_INDEX_ON_EVENT_TRAIT = error0(1010, OptimusPhases.ADJUST_AST, "Unsupported indexes on event traits")
   // val NO_EVENT_INDEX_OVERRIDE = error0(1011, OptimusPhases.ADJUST_AST, "Unsupported overriding indexed/key fields")
   val NO_PRIVATE_EVENT_INDEX = error0(21012, OptimusPhases.ADJUST_AST, "Unsupported indexes on private event fields")
-  val UNKNOWN_PARAM_OF_INDEXED =
-    error1(21013, OptimusPhases.ADJUST_AST, "Unknown named parameter of @indexed annotation: %s")
-  val UNNAMED_PARAM_OF_INDEXED =
-    error0(21014, OptimusPhases.ADJUST_AST, "@indexed definition must use named arguments in annotation")
   // TODO (OPTIMUS-37938): move this to refchecks or somewhere so it can support @nowarn
   val NO_INDEX_OVERRIDE = warning0(21015, OptimusPhases.ADJUST_AST, "Unsupported overriding indexed/key fields")
   val NON_STORED_KEY_INDEX =
@@ -160,10 +156,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val VAR_IN_ENTITY = error1(21303, OptimusPhases.ADJUST_AST, "Illegal var in %s definition.")
   val ENTITY_WITH_CASE_CLASS = error0(21304, OptimusPhases.ADJUST_AST, "Illegal @entity case class")
   val METHOD_LOCAL_ENTITY = error0(21305, OptimusPhases.ADJUST_AST, "Illegal method-local @entity definition.")
-  val UNKNOWN_PARAM_OF_ENTITY =
-    error1(21306, OptimusPhases.ADJUST_AST, "Unknown named parameter of @entity annotation: %s")
-  val UNNAMED_PARAM_OF_ENTITY =
-    error0(21307, OptimusPhases.ADJUST_AST, "@entity definition must use named arguments in annotation")
   val ENTITY_OBJ_WITH_SCHEMA_VERSION =
     error0(21308, OptimusPhases.ADJUST_AST, "@entity object can't have schemaVersion")
   val TRANSIENT_ENTITY_WITH_SCHEMA_VERSION =
@@ -175,16 +167,12 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val STORED_ENTITY_WITH_ARGUMENT =
     error0(21313, OptimusPhases.ADJUST_AST, "@stored can't have arguments if used with @entity")
   val NO_MULTIPLE_INDEX =
-    error1(21315, OptimusPhases.ADJUST_AST, "val or def %s cannot have multiple @key and @indexed annotations")
+    error1(21315, OptimusPhases.ADJUST_AST, "val or def %s cannot have both @key and @indexed annotations")
   // removed:
   //   val STORED_ENTITY_WITH_RECURSIVE_BOUNDED_GENERIC_TYPE =
   //     errorOptional0(21316, OptimusPhases.ADJUST_AST, "Generic @stored @entity cannot take recursive type boundary")
   //   val EVENT_WITH_RECURSIVE_BOUNDED_GENERIC_TYPE =
   //     error0(21317, OptimusPhases.ADJUST_AST, "Generic @event cannot take recursive type boundary")
-  val UNKNOWN_PARAM_OF_STORED =
-    error1(21318, OptimusPhases.ADJUST_AST, "Unknown named parameter of @stored annotation: %s")
-  val UNNAMED_PARAM_OF_STORED =
-    error0(21319, OptimusPhases.ADJUST_AST, "@stored definition must use named arguments in annotation")
   val ILLEGAL_IMPLICIT =
     error1(
       21320,
@@ -201,13 +189,6 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val METHOD_LOCAL_EVENT = error0(21505, OptimusPhases.ADJUST_AST, "Illegal method-local @event definition.")
   val CONTAINED_EVENT_WITH_KEY_INDEX =
     error0(21506, OptimusPhases.REF_CHECKS, "@event(contained=true) must not contain @key/@indexed fields")
-  val UNKNOWN_PARAM_OF_EVENT =
-    error1(21507, OptimusPhases.ADJUST_AST, "Unknown named parameter of @event annotation: %s")
-  val UNNAMED_PARAM_OF_EVENT = error0(
-    21508,
-    OptimusPhases.ADJUST_AST,
-    "@event definition must use named arguments in annotation (contained or projected)"
-  )
   val ABSTRACT_CONTAINED_EVENT = error0(
     21509,
     OptimusPhases.ADJUST_AST,
@@ -682,7 +663,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     OptimusPhases.NODE_LIFT,
     "Error transforming in %s: %s"
   ) // remove such kind of error? throw exception instead?
-  val LIFT_NONTWEAK = error1(26051, OptimusPhases.NODE_LIFT, "%s is not tweakable")
+  val LIFT_NONTWEAK = error1(26051, OptimusPhases.NODE_LIFT, "%s is not a tweakable node")
   val LIFT_NONNODE = error2(26052, OptimusPhases.NODE_LIFT, "%s.%s is not a @node")
   val LIFT_NONPROP =
     error2(26053, OptimusPhases.NODE_LIFT, "%s.%s is not a property node (it must be declared in an entity)")
@@ -691,8 +672,16 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODELIFT_UNSUPPORT = error1(26101, OptimusPhases.NODE_LIFT, "nodeLift: Unsupported construct %s")
   val USE_TWEAK_OPT_DIRECT = error0(26102, OptimusPhases.NODE_LIFT, "tweak operator cant be used directly")
   val CAN_CONVERT_TO_BYVALUE =
-    error1(26103, OptimusPhases.NODE_LIFT, "byValue() can not be used, did you mean byName()? %s")
+    error0(26103, OptimusPhases.NODE_LIFT, "byValue() can not be used, did you mean byName()?")
 
+  // special error code for Value2TweakTarget since this implicit nodelift is sometimes invoked in unexpected places and
+  // this can be quite confusing
+  val NODELIFT_UNEXPECTED_VALUE2TT = error1(
+    26104,
+    OptimusPhases.NODE_LIFT,
+    "the value2TweakTarget implicit conversion applied unexpectedly to %s. Most common cause is trying to " +
+      "call a method on a type that doesn't have that method"
+  )
   // optimus_generatenodemethods phase errors
   val GENERATENODES_TRANSFORM_ERROR =
     error1(
@@ -810,6 +799,20 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       OptimusPhases.EXPORTINFO,
       "This Catalog/Owner %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
     )
+
+  val INCORRECT_PACKAGE_META_DEFINITION =
+    error1(
+      29202,
+      OptimusPhases.EXPORTINFO,
+      "The @meta annotation on a package %s, needs to either include only the owner or if catalog needs to be passed to it; The catalog used should only be an OptOuts Catalog"
+    )
+
+  val OWNER_ONLY_META_DEFINITION =
+    error1(
+      29203,
+      OptimusPhases.EXPORTINFO,
+      "The storable annotated with @meta %s, needs a Catalog; The Owner object can be omitted at the discretion of the developer, usually owners are set by annotating a package"
+    )
 }
 
 object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusPluginAlarmHelper {
@@ -833,7 +836,7 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
   val DEPRECATING_NEW = warning2(10504, OptimusPhases.APICHECK, "%s is deprecated (in new/modified files): %s")
 
   val INCORRECT_ADVANCED_USAGE_LIGHT =
-    warning1(10510, OptimusPhases.APICHECK, "Incorrect usage of %s.  You probably should not be using it at all.")
+    warning1(10510, OptimusPhases.APICHECK, "Incorrect usage of %s. You probably should not be using it at all.")
 
   val AUTO_ASYNC_OFF = info0(10553, OptimusPhases.AUTOASYNC, "Not asyncing collection, due to asyncOff request.")
   val ASYNC_CONTAINS_INCOMPATIBLE =

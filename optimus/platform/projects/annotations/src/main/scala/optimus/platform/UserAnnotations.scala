@@ -19,13 +19,6 @@ import scala.annotation._
  *   http://optimusdoc/BasicAnnotations
  */
 @getter
-class scenarioIndependent extends StaticAnnotation
-
-/**
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-@getter
 class siRhs extends StaticAnnotation
 
 /**
@@ -57,26 +50,6 @@ class entersGraph extends StaticAnnotation
 class asyncOff extends Annotation
 
 /**
- * Mark the annotated class an entity. Or the annotated trait for use as an entity interface or mixin.
- *
- * This annotation is processed at compile time by the Optimus 'entity' scalac plugin. Used lower-case name to avoid
- * collision between annotation and regular class names (esp for Entity).
- *
- * An @stored @entity class is rewritten to extend an Entity base, and Entity member annotations will be processed.
- *
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-class entity(schemaVersion: Int /* = 0 */ ) extends StaticAnnotation { // Defaults filled in via compiler plugin.  Not specifying here since it helps fail-fast when it's not in use.
-  /**
-   * This constructor is removed by the staging plugin and exists only to improve the IntelliJ presentation compiler
-   * experience
-   */
-  @staged def this(schemaVersion: Int = 0, fakeParamForIntellij: Boolean = true) =
-    this(schemaVersion)
-}
-
-/**
  * @see
  *   http://optimusdoc/BasicAnnotations
  */
@@ -85,46 +58,10 @@ class key extends StaticAnnotation
 
 /**
  * @see
- *   http://optimusdoc/BasicAnnotations
- */
-@getter
-class indexed(
-    val unique: Boolean /* = false */,
-    val queryable: Boolean /* = true */,
-    val queryByEref: Boolean /* = false*/ )
-    extends StaticAnnotation { // Defaults filled in via compiler plugin.
-  /**
-   * This constructor is removed by the staging plugin and exists only to improve the IntelliJ presentation compiler
-   * experience
-   */
-  @staged def this(
-      unique: Boolean = false,
-      queryable: Boolean = false,
-      queryByEref: Boolean = false,
-      fakeParamForIntellij: Boolean = true) =
-    this(unique, queryable, queryByEref)
-}
-
-/**
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-@field
-class stored(val childToParent: Boolean = false, val projected: Boolean = false, val fullTextSearch: Boolean = false)
-    extends StaticAnnotation
-
-/**
- * @see
  *   http://optimusdoc/InterAnnotations
  */
 @field
 class backed extends Annotation
-
-/**
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-class embeddable(projected: Boolean = false) extends StaticAnnotation
 
 /**
  * applied to case classes A @stable case class has a cached eagerly generated hashcode and an equals method that makes
@@ -140,16 +77,6 @@ class stable extends StaticAnnotation
  * applies to @stable/@embeddable constructor parameters - exclude this parameter from equals/hashcode calculations
  */
 class notPartOfIdentity extends StaticAnnotation
-
-/**
- * Contained modifier is intended for the use of low-latency publishing
- * @see
- *   http://optimusdoc/BasicAnnotations
- */
-class event(val projected: Boolean /* = false */, val contained: Boolean /* = false */ ) extends StaticAnnotation {
-  @staged def this(projected: Boolean = false, contained: Boolean = false, fakeParamForIntellij: Boolean = true) =
-    this(projected, contained)
-}
 
 /**
  * This annotation explicitly excludes one constructor parameter from the copy method we generate, and can make a
@@ -204,19 +131,21 @@ final case class nodeDebug(dir: String)
 /**
  * Trait Utils used by the meta annotation below
  */
+// docs-snippet:OwnershipDefinition
 final case class MetadataOwner(
     captain: String,
     additionalCaptains: Set[String],
     marshal: String,
     additionalMarshals: Set[String])
+object MetadataOwner {
+  def apply(captain: String, marshal: String): MetadataOwner =
+    MetadataOwner(captain, Set.empty[String], marshal, Set.empty[String])
+}
+// docs-snippet:OwnershipDefinition
 trait DalMetadata
 trait OptOut extends DalMetadata
 trait OwnershipMetadata {
   val owner: MetadataOwner
-}
-object MetadataOwner {
-  def apply(captain: String, marshal: String): MetadataOwner =
-    MetadataOwner(captain, Set.empty[String], marshal, Set.empty[String])
 }
 
 /**
@@ -228,8 +157,11 @@ class meta(
     val owner: OwnershipMetadata,
     /** Catalog - an object that extends DalMetadata */
     val catalog: DalMetadata
-) extends StaticAnnotation
+) extends StaticAnnotation {
 // docs-snippet:MetaDeclaration
+  def this(owner: OwnershipMetadata) = this(owner = owner, catalog = null)
+  def this(catalog: DalMetadata) = this(owner = null, catalog = catalog)
+}
 
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it
 // doesn't actually get compiled, and if it did it wouldn't do anything.

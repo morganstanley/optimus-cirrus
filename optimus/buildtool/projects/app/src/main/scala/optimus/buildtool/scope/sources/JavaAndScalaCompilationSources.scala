@@ -47,7 +47,7 @@ private[sources] final case class HashedJavaAndScalaSources(
     // as the content that we hash. hashedSources is part of the reallyBigCache to ensure they don't get evicted mid-build.
     val sourceFileContent = source.content
 
-    val externalDeps = scope.upstream.allCompileDependencies.apar.map(_.transitiveExternalDependencies)
+    val externalDeps = scope.upstream.allCompileDependencies.apar.flatMap(_.resolution)
 
     val compilationInputsFingerprint: Seq[String] = {
       val sourceFingerprints = source.fingerprint

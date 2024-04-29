@@ -47,6 +47,9 @@ final case class ConditionalDefaults(
         checkExclude(id)
     }
   }
+
+  def isForbiddenDependencyConditional: Boolean =
+    defaults.depsAndSources.exists { case (_, scopeDefinition) => scopeDefinition.forbiddenDependencies.nonEmpty }
 }
 
 final case class ScopeDefaults(
@@ -60,10 +63,9 @@ final case class ScopeDefaults(
       mavenDefinition: Option[MavenDefinition],
       mavenLibs: Boolean
   ): InheritableScopeDefinition = {
-
     val all = depsAndSources.getOrElse("all", InheritableScopeDefinition.empty)
     val combinedParent = conditionals.foldLeft(all) { (parent, conditional) =>
-      if (conditional.appliesTo(id, mavenDefinition, mavenLibs))
+      if (conditional.appliesTo(id, mavenDefinition, mavenLibs) || conditional.isForbiddenDependencyConditional)
         conditional.defaults.forScope(id, mavenDefinition, mavenLibs).withParent(parent)
       else parent
     }

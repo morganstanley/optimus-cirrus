@@ -158,6 +158,13 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
       StagingPhase.POST_TYPER_STANDARDS,
       "For cross-building with Scala 2.13, using `.par` requires adding `import optimus.scalacompat.collection.ParCollectionConverters._`"
     )
+
+  val COLLECTION_CONVERTER_IMPORT_MUST_BE_WILDCARD =
+    warning0(
+      20016,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "To ensure cross-compilability with Scala 2.12 and 2.13, only wildcard import from scala.jdk.CollectionConverters is allowed."
+    )
 }
 
 object StagingErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {

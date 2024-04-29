@@ -15,17 +15,20 @@ import optimus.buildtool.artifacts.CompilationMessage.Severity
 import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.dependencies.PythonDependencyDefinition
+import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.files.Directory
+import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform.async
 import optimus.platform.entity
 import optimus.platform.node
 import optimus.platform.util.Log
+import optimus.stratosphere.artifactory.ArtifactoryToolDownloader
 
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.sys.process.Process
@@ -41,34 +44,43 @@ object AsyncVenvCommandRunner extends Log {
       venvCache: Directory,
       credentialFile: String): Seq[CompilationMessage] = {
 
-    import VenvUtils._
     import VenvCacher._
+    import VenvUtils._
 
     if (pythonConfig.isArtifactory) createRequirements(sandboxBuild, pythonConfig)
-    val setupMessages = {
-      val cmd = setupCommands
-      if (cmd.nonEmpty) {
-        launch("setupUser", cmd.mkString(" && "), sandboxBuild, Seq.empty) {
-          case out if out.contains("ERROR:") =>
-            CompilationMessage(None, out, Severity.Error)
-        }
-      } else Seq()
-    }
 
     val venvDir = sandboxBuild.resolveDir(venvName)
-    val cacheMessages = ensureCacheExists(pythonConfig.python, pipCache, venvCache, credentialFile)
+    val cacheMessages =
+      ensureCacheExists(pythonConfig.overriddenCommands, pythonConfig.python, pipCache, venvCache, credentialFile)
     copyCache(pythonConfig.python, venvCache, venvDir)
+
+    def injectVars(cmd: String): String = cmd
+      .replace(VenvDir, venvDir.pathString)
+      .replace(PipCacheDir, pipCache.pathString)
+      .replace(SitePackagesDir, sandboxBuild.resolveDir(sitePackages(venvName, pythonConfig)).pathString)
 
     val commands = Seq(
       prerequisites(credentialFile) ++
-        (if (pythonConfig.isArtifactory) installLibs(venvName, pipCache) else Seq())
+        (if (pythonConfig.isArtifactory)
+           Seq(
+             pythonConfig.overriddenCommands.pipInstallCmd
+               .map(injectVars)
+               .getOrElse(installLibs(venvName, pipCache)))
+         else Nil)
     ).flatten.mkString(" && ")
 
-    launchWithPython(pythonConfig.python, "Venv", commands, sandboxBuild) ++ cacheMessages ++ setupMessages
+    launchWithPython(pythonConfig.python, "Venv", commands, sandboxBuild) ++ cacheMessages
   }
 }
 
 object VenvUtils extends Log {
+  private[buildtool] val VenvCacheDir = "{venvCacheDir}"
+  private[buildtool] val VenvDir = "{venvDir}"
+  private[buildtool] val SitePackagesDir = "{sitePackagesDir}"
+  private[buildtool] val PipCacheDir = "{pipCacheDir}"
+  private[buildtool] val CacheVenvName = "{cacheVenvName}"
+  private[buildtool] val TmpCacheVenvName = "{tmpCacheVenvName}"
+
   @async def launchWithPython(
       python: PythonDefinition,
       prefix: String,
@@ -129,13 +141,12 @@ object VenvUtils extends Log {
     messages.toIndexedSeq
   }
 
-  def rmVenv(dir: String): Seq[String] =
-    if (Utils.isWindows) Seq(s"rmdir /s /q $dir")
-    else Seq(s"rm -r -f $dir")
-  def venvPack(venvPath: String, to: String, python: PythonDefinition, pipCache: Directory): Seq[String] = Seq(
-    s"${scripts(venvPath)}python -m pip --disable-pip-version-check install venv-pack2==${python.venvPack} --cache-dir ${pipCache.path}",
-    s"${scripts(venvPath)}venv-pack -p $venvPath -o $to"
-  )
+  def pythonVenv(tmpVenvName: String, venvName: String, python: PythonDefinition, pipCache: Directory): String = Seq(
+    s"python -m venv --system-site-packages --copies $tmpVenvName",
+    s"${scripts(tmpVenvName)}python -m pip --disable-pip-version-check install venv-pack2==${python.venvPack} --cache-dir ${pipCache.path}",
+    s"${scripts(tmpVenvName)}venv-pack -p $tmpVenvName -o $venvName"
+  ).mkString("&&")
+
   private def scripts(venvPath: String): String =
     if (Utils.isWindows) s"$venvPath\\Scripts\\"
     else s"$venvPath/bin/"
@@ -146,31 +157,21 @@ object VenvUtils extends Log {
     val requirements = sandboxBuild.resolveFile("requirements.txt")
     Files.writeString(requirements.path, pythonConfig.artifactoryDependencies.map(libDefinition).mkString("\n"))
   }
-  def setupCommands: Seq[String] = {
-    if (OsUtils.isWindows) {
-      Seq.empty
-    } else
-      Seq(
-        "export HOME=/var/tmp/$USER",
-        "module load msde/artifactory-eng-tools/prod",
-        "module load sec/openssl/1.1.1",
-        "setup_user -cli pypi"
-      )
-  }
   def prerequisites(credentialFile: String): Seq[String] = {
-    if (OsUtils.isWindows) {
+    val setEnv = if (OsUtils.isWindows) "set" else "export"
+    val pipSetup = {
       if (Files.exists(Paths.get(credentialFile))) {
-        Seq(s"set PIP_CONFIG_FILE=$credentialFile")
+        Seq(s"$setEnv ${ArtifactoryToolDownloader.PipConfigFile}=$credentialFile")
       } else {
-        log.warn("PIP_CONFIG_FILE not set; Pypi Artifactory access may fail")
+        log.warn(s"${ArtifactoryToolDownloader.PipConfigFile} not set; Pypi Artifactory access may fail")
         Seq.empty
       }
-    } else
-      Seq("export HOME=/var/tmp/$USER")
+    }
+    val homeSetup = if (OsUtils.isWindows) Seq.empty else Seq("export HOME=/var/tmp/$USER")
+    pipSetup ++ homeSetup
   }
-  def installLibs(venvPath: String, pipCache: Directory): Seq[String] =
-    Seq(
-      s"${scripts(venvPath)}python -m pip --disable-pip-version-check install -r requirements.txt --cache-dir ${pipCache.path}")
+  def installLibs(venvPath: String, pipCache: Directory): String =
+    s"${scripts(venvPath)}python -m pip --disable-pip-version-check install -r requirements.txt --cache-dir ${pipCache.path}"
 
   def sitePackages(venv: String, pythonConfig: PythonConfiguration): String =
     if (OsUtils.isWindows) s"$venv/Lib/site-packages"
@@ -204,6 +205,7 @@ object VenvUtils extends Log {
   }
 
   @async private def create(
+      overriddenCmds: OverriddenCommands,
       python: PythonDefinition,
       pipCache: Directory,
       venvCache: Directory,
@@ -212,26 +214,40 @@ object VenvUtils extends Log {
 
     val cacheVenvName = cacheName(python)
     val tmpCacheVenvName = cacheVenvName + "-tmp"
+    val tmpCacheDir = venvCache.resolveDir(tmpCacheVenvName)
+
+    def injectVars(cmd: String): String = {
+      cmd
+        .replace(TmpCacheVenvName, tmpCacheVenvName)
+        .replace(CacheVenvName, cacheVenvName)
+        .replace(PipCacheDir, pipCache.pathString)
+        .replace(VenvCacheDir, venvCache.pathString)
+    }
+
     val cmds = Seq(
       prerequisites(credentialFile) ++
-        Seq(s"python -m venv --system-site-packages --copies $tmpCacheVenvName") ++
-        venvPack(tmpCacheVenvName, cacheVenvName, python, pipCache) ++
-        rmVenv(tmpCacheVenvName)
+        Seq(
+          overriddenCmds.pythonVenvCmd
+            .map(injectVars)
+            .getOrElse(pythonVenv(tmpCacheVenvName, cacheVenvName, python, pipCache)))
     ).flatten.mkString(" && ")
 
-    launchWithPython(python, "Venv", cmds, venvCache)
+    val result = launchWithPython(python, "Venv", cmds, venvCache)
+    AssetUtils.recursivelyDelete(tmpCacheDir)
+    result
   }
 
   /* node is used here in order to synchronize async calls,
      we have to make sure that 2 processes aren't creating the same cache in the same time */
   @node def ensureCacheExists(
+      overriddenCmds: OverriddenCommands,
       forPython: PythonDefinition,
       pipCache: Directory,
       venvCacheDir: Directory,
       credentialFile: String): Seq[CompilationMessage] = {
     if (!cacheExists(forPython, venvCacheDir))
-      create(forPython, pipCache, venvCacheDir, credentialFile)
-    else Seq()
+      create(overriddenCmds, forPython, pipCache, venvCacheDir, credentialFile)
+    else Nil
   }
 
   import optimus.buildtool.cache.NodeCaching.reallyBigCache

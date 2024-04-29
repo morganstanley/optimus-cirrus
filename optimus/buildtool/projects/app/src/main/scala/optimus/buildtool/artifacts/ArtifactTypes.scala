@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.artifacts
 
+import optimus.buildtool.cache.RemoteArtifactCacheTracker.addCorruptedFile
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
@@ -20,9 +22,13 @@ import optimus.buildtool.files.JsonAsset
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace.CompileOnlyResolve
 import optimus.buildtool.trace.CompileResolve
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.ResolveTrace
 import optimus.buildtool.trace.RuntimeResolve
 import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.AssetUtils.isJarReadable
+import optimus.buildtool.utils.AssetUtils.isTarJsonReadable
 import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
@@ -46,6 +52,26 @@ trait ArtifactType {
 
 sealed trait CachedArtifactType extends ArtifactType {
   type A <: PathedArtifact
+
+  def isReadable(a: Asset): Boolean
+
+  // should check downloaded assets from remote store
+  @node def fromRemoteAsset(
+      downloadedAsset: Option[FileAsset],
+      id: ScopeId,
+      keyStr: String,
+      stat: ObtStats.Cache): Option[A] =
+    downloadedAsset match {
+      case Some(a) =>
+        if (isReadable(a)) Some(fromAsset(id, a))
+        else {
+          addCorruptedFile(keyStr, id)
+          ObtTrace.addToStat(stat.Corrupted, 1)
+          None // when remote cache not readable, auto recompile it locally
+        }
+      case _ => None
+    }
+
   @node def fromAsset(id: ScopeId, a: Asset): A
   // by default, artifacts are not incremental
   @node def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): A = fromAsset(id, a)
@@ -53,7 +79,9 @@ sealed trait CachedArtifactType extends ArtifactType {
 
 sealed trait ResolutionArtifactType extends CachedArtifactType {
   type A = ResolutionArtifact
-  override val suffix = "rgz"
+  override val suffix = RgzExt
+
+  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ResolutionArtifact = {
     import JsonImplicits._
     val json = JsonAsset(a.path)
@@ -84,6 +112,9 @@ trait FingerprintArtifactType extends ArtifactType {
 
 trait GeneratedSourceArtifactType extends CachedArtifactType {
   type A = GeneratedSourceArtifact
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): GeneratedSourceArtifact = {
     val sourceJar = JarAsset(a.path)
     val fs = JarUtils.jarFileSystem(sourceJar)
@@ -103,27 +134,26 @@ trait GeneratedSourceArtifactType extends CachedArtifactType {
       )
     } asyncFinally fs.close()
   }
-
-  override val suffix = "jar"
 }
 
 trait InternalClassFileArtifactType extends CachedArtifactType {
   type A = InternalClassFileArtifact
+  override val suffix = JarExt
 
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): InternalClassFileArtifact =
     fromAsset(id, a, incremental = false)
-
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): InternalClassFileArtifact = {
     val file = JarAsset(a.path)
     InternalClassFileArtifact.create(InternalArtifactId(id, this, None), file, hash(file), incremental = incremental)
   }
-  override val suffix = "jar"
 }
 
 trait MessageArtifactType extends CachedArtifactType {
   type A = CompilerMessagesArtifact
-  override val suffix = "mgz"
+  override val suffix = MgzExt
 
+  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): CompilerMessagesArtifact =
     MessageArtifactType.fromUnwatchedPath(a.path).watchForDeletion()
 }
@@ -151,8 +181,9 @@ object MessageArtifactType {
 
 trait AnalysisArtifactType extends CachedArtifactType {
   type A = AnalysisArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
 
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): AnalysisArtifact =
     AnalysisArtifact.create(InternalArtifactId(id, this, None), JarAsset(a.path), incremental)
   @node override def fromAsset(id: ScopeId, a: Asset): AnalysisArtifact = fromAsset(id, a, incremental = false)
@@ -160,8 +191,9 @@ trait AnalysisArtifactType extends CachedArtifactType {
 
 trait SignatureArtifactType extends CachedArtifactType {
   type A = SignatureArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
 
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): SignatureArtifact = {
     val file = JarAsset(a.path)
     SignatureArtifact.create(InternalArtifactId(id, this, None), file, hash(file), incremental)
@@ -171,7 +203,8 @@ trait SignatureArtifactType extends CachedArtifactType {
 
 trait PathingArtifactType extends ArtifactType {
   type A = PathingArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
   @node def fromAsset(id: ScopeId, a: Asset): PathingArtifact = {
     val file = JarAsset(a.path)
     PathingArtifact.create(id, file, hash(file))
@@ -180,7 +213,9 @@ trait PathingArtifactType extends ArtifactType {
 
 trait CppArtifactType extends CachedArtifactType {
   type A = InternalCppArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): InternalCppArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -203,7 +238,9 @@ trait CppArtifactType extends CachedArtifactType {
 
 trait ElectronArtifactType extends CachedArtifactType {
   type A = ElectronArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ElectronArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -217,7 +254,9 @@ trait ElectronArtifactType extends CachedArtifactType {
 
 trait PythonArtifactType extends CachedArtifactType {
   type A = PythonArtifact
-  override val suffix = "tar.gz"
+  override val suffix = TarGzExt
+
+  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): PythonArtifact = {
     TarUtils
       .readFileInTarGz(a.path, CachedMetadata.MetadataFile)
@@ -238,7 +277,9 @@ trait PythonArtifactType extends CachedArtifactType {
 
 trait CompiledRunconfArtifactType extends CachedArtifactType {
   type A = CompiledRunconfArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): CompiledRunconfArtifact = {
     val file = JarAsset(a.path)
     CompiledRunconfArtifact.create(id, file, hash(file))
@@ -247,7 +288,9 @@ trait CompiledRunconfArtifactType extends CachedArtifactType {
 
 trait GenericFilesArtifactType extends CachedArtifactType {
   type A = GenericFilesArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): GenericFilesArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -261,7 +304,9 @@ trait GenericFilesArtifactType extends CachedArtifactType {
 
 trait ProcessorArtifactType extends CachedArtifactType {
   type A = ProcessorArtifact
-  override val suffix = "jar"
+  override val suffix = JarExt
+
+  override def isReadable(a: Asset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ProcessorArtifact = {
     val file = JarAsset(a.path)
     val md = Jars.withJar(file) { root =>
@@ -371,6 +416,8 @@ object ArtifactType {
       with CachedArtifactType {
     private val HashRegex = s".*\\.(HASH[^.]*)\\.fingerprint".r
     override type A = FingerprintArtifact with PathedArtifact
+
+    override def isReadable(a: Asset): Boolean = AssetUtils.isTextContentReadable(a)
     @node def fromAsset(id: ScopeId, a: Asset): FingerprintArtifact with PathedArtifact = {
       val fingerprint = Files.readAllLines(a.path).asScala.to(Seq)
       // slightly hacky
@@ -432,7 +479,9 @@ object ArtifactType {
   add(RuntimeResolution)
   case object Locator extends BaseArtifactType("locator") with CachedArtifactType {
     type A = LocatorArtifact
-    override val suffix = "json"
+    override val suffix = JsonExt
+
+    override def isReadable(a: Asset): Boolean = isTarJsonReadable(a, isZip = false)
     @node override def fromAsset(id: ScopeId, a: Asset): LocatorArtifact = {
       val locatorFile = JsonAsset(a.path)
       import JsonImplicits._
@@ -450,7 +499,9 @@ object ArtifactType {
   add(Locator)
   case object RootLocator extends BaseArtifactType("root-locator") with CachedArtifactType {
     type A = RootLocatorArtifact
-    override val suffix = "idz"
+    override val suffix = IdzExt
+
+    override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
     @node override def fromAsset(id: ScopeId, a: Asset): RootLocatorArtifact = {
       val locatorFile = JsonAsset(a.path)
       import JsonImplicits._

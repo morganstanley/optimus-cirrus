@@ -14,6 +14,7 @@ package optimus.buildtool.format
 import optimus.buildtool.dependencies.JvmDependenciesLoader._
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.NoAfs
 
 import scala.collection.immutable
 
@@ -61,7 +62,8 @@ object Keys {
       "installSources",
       "requiredAppScripts",
       "bundle",
-      "includeInClassBundle"
+      "includeInClassBundle",
+      "forbiddenDependencies"
     )
   val regexDefinition = KeySet("rules")
   val scopeDefinition = KeySet(
@@ -156,7 +158,8 @@ object Keys {
 
   val bundleDefinition = KeySet("modulesRoot", Names.ForbiddenDependencies)
 
-  val forbiddenDependencyKeys = KeySet(
+  // TODO (OPTIMUS-65072): Delete legacy forbidden dependency keys
+  val legacyForbiddenDependencyKeys = KeySet(
     Names.Name,
     Names.Configurations,
     Names.AllowedIn,
@@ -164,31 +167,36 @@ object Keys {
     Names.InternalOnly,
     Names.ExternalOnly)
 
+  val forbiddenDependencyKeys = KeySet("dependency", "dependency-regex", "configurations", "allowed-in")
+  val dependencyAllowedInKeys = KeySet("ids", "patterns")
+
   // dependencies file
   val dependenciesFile =
     KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs)
   val artifactConfig = KeySet("type", "ext")
-  val dependencyDefinition =
+
+  private val commonDependencyDefinition =
     KeySet(
       Version,
-      Configuration,
-      Names.Configurations,
-      Classifier,
       Excludes,
+      Configuration,
       "transitive",
       Force,
       ContainsMacros,
       IsScalacPlugin,
       Artifacts,
-      "reason",
       "keySuffix",
-      Variants,
-      Resolvers,
       Names.Name // be used for maven lib name override
     )
+
+  val dependencyDefinition = commonDependencyDefinition ++
+    KeySet(Variants, Names.Configurations, Resolvers, Classifier)
+  val variantDefinition = commonDependencyDefinition ++ KeySet("reason")
+
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
-  val jvmDependencyDefinition = KeySet(Maven, Afs, Variants, "scala", IvyConfigurations)
-  val excludesConfig = KeySet("group", "name")
+  val jvmDependencyDefinition = KeySet(Maven, Afs, NoAfs, Variants, "scala", IvyConfigurations)
+  val excludesConfig = KeySet(Group, Name)
+  val excludesWithIvyConfig = KeySet(Group, Name, IvyConfiguration)
 
   // resolvers file
   val resolversFile =
@@ -249,5 +257,5 @@ object Keys {
   val pythonDependencyLevel = KeySet(Afs, "pypi", Variants)
   val pythonDefinition = KeySet(Version, Variants, "path", "venv-pack")
   val pythonVariant = pythonDefinition ++ KeySet("reason")
-  val pythonObtFile = KeySet("libs", "variant", "type")
+  val pythonObtFile = KeySet("libs", "variant", "type", "pythonVenvCmd", "pipInstallCmd")
 }

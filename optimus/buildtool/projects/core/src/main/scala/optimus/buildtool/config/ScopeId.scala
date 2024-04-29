@@ -131,7 +131,7 @@ final case class PartialScopeId(
 }
 
 object PartialScopeId {
-  val RootPartialScopeId = PartialScopeId(Some(""), Some(""), Some(""), Some(""))
+  val RootPartialScopeId: PartialScopeId = PartialScopeId(Some(""), Some(""), Some(""), Some(""))
 }
 
 object RelaxedIdString {
@@ -189,7 +189,9 @@ object ModuleId {
   }
 }
 
-final case class MetaBundle(meta: String, bundle: String) extends ParentId with HasMetaBundle {
+final case class MetaBundle(meta: String, bundle: String, eonId: Option[String]) extends ParentId with HasMetaBundle {
+  def isEqual(from: MetaBundle): Boolean = this.meta == from.meta && this.bundle == from.bundle
+  def toStringWithEonId: String = s"$meta.$bundle:${eonId.getOrElse("none")}"
   def fullMeta: MetaId = MetaId(meta)
   def module(name: String): ModuleId = ModuleId(meta, bundle, name)
   override def elements: Seq[String] = Seq(meta, bundle)
@@ -206,6 +208,9 @@ object MetaBundle {
     case _ =>
       throw new IllegalArgumentException(s"Expected a string of form '<meta>.<bundle>' but found '$str'")
   }
+
+  def apply(meta: String, bundle: String, eonId: Option[String] = None): MetaBundle =
+    new MetaBundle(meta, bundle, eonId)
 
 }
 

@@ -95,8 +95,8 @@ class LocationUploader(
     // reusing the same log file for each location uploader
     // strip out LD_PRELOAD since we don't want/need that for the upload command (and it can cause problems for
     // cygwin-based apps on windows)
-    BackgroundProcessBuilder(id, logFile, fullCmd, env, Seq("LD_PRELOAD"))
-      .buildWithRetry(RootScopeId, category, useCrumbs, defaultProps)(
+    BackgroundProcessBuilder(id, logFile, fullCmd, env, Seq("LD_PRELOAD"), useCrumbs = useCrumbs)
+      .buildWithRetry(RootScopeId, category, sendCrumbs = true, defaultProps)(
         maxRetry = maxRetry,
         msDelay = 1000,
         lastLogLines = 20,

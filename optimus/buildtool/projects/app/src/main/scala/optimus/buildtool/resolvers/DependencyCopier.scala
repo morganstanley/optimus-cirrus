@@ -81,7 +81,7 @@ import java.util.concurrent.TimeUnit
   }
 
   @node def atomicallyDepCopyFileIfMissing(depFile: FileAsset): FileAsset = depFile match {
-    case http: BaseHttpAsset => atomicallyCopyOverHttp(http)
+    case http: BaseHttpAsset => atomicallyCopyOverHttp(http, retryIntervalSeconds)
     case d                   => atomicallyCopyOverAfs(d)
   }
 
@@ -129,7 +129,8 @@ import java.util.concurrent.TimeUnit
       localPath: Path,
       stream: InputStream,
       headerInfo: HttpHeaderInfo,
-      retry: Int): Unit =
+      retry: Int,
+      retryIntervalSeconds: Int): Unit =
     ObtTrace.traceTask(RootScopeId, DownloadRemoteUrl(httpAsset.url)) {
       try {
         Files.createDirectories(localPath.getParent)
@@ -146,7 +147,7 @@ import java.util.concurrent.TimeUnit
             Files.deleteIfExists(localPath)
             retryWarningMsg(retry, maxRetry, httpAsset.url, e, "download")
             Thread.sleep(TimeUnit.SECONDS.toMillis(retryIntervalSeconds))
-            downloadHttpAsset(httpAsset, localPath, None, retry - 1)
+            downloadHttpAsset(httpAsset, localPath, None, retry - 1, retryIntervalSeconds)
           } else throw getHttpException(httpAsset, maxRetry, e)
       } finally stream.close()
     }
@@ -155,10 +156,12 @@ import java.util.concurrent.TimeUnit
       httpAsset: BaseHttpAsset,
       localPath: Path,
       openedHttp: Option[HttpProbingResponse],
-      retry: Int): Unit = {
+      retry: Int,
+      retryIntervalSeconds: Int): Unit = {
     val workingHttpResponse = openedHttp.getOrElse(getHttpAssetResponse(httpAsset, maxDownloadSeconds))
     workingHttpResponse.inputStream match {
-      case Right(stream) => downloadUrlFromStream(httpAsset, localPath, stream, workingHttpResponse.headerInfo, retry)
+      case Right(stream) =>
+        downloadUrlFromStream(httpAsset, localPath, stream, workingHttpResponse.headerInfo, retry, retryIntervalSeconds)
       case Left(unableGetHttpStream) =>
         skipCopyMissingFileMsg(httpAsset, unableGetHttpStream.toString)
         throw unableGetHttpStream
@@ -167,6 +170,7 @@ import java.util.concurrent.TimeUnit
 
   @node def atomicallyCopyOverHttp(
       httpAsset: BaseHttpAsset,
+      retryIntervalSeconds: Int,
       isMarker: Boolean = false,
       openedHttp: Option[HttpProbingResponse] = None): httpAsset.LocalAsset = {
     // even if depCopy is disabled we still need to copy HTTP Jars locally, so use tempDir instead
@@ -187,7 +191,7 @@ import java.util.concurrent.TimeUnit
           true
         } else {
           val (durationInNanos, _) = AdvancedUtils.timed {
-            downloadHttpAsset(httpAsset, tmp, openedHttp, maxRetry)
+            downloadHttpAsset(httpAsset, tmp, openedHttp, maxRetry, retryIntervalSeconds)
           }
           // add non-unzip repo lib .jar download trace
           val urlStr = httpAsset.url.toString

@@ -133,20 +133,20 @@ import scala.collection.immutable.Seq
             val sparseScopeDeps =
               config.internalCompileDependencies.apar.flatMap(sparseScopeDependencies(_, scopeConfigSource)).distinct
 
-            val externalDepArtifacts = builder.factory
+            val resolutions = builder.factory
               .lookupScope(id)
               .to(Seq)
               .apar
               .flatMap(_.allCompileDependencies)
               .apar
-              .map(_.transitiveExternalDependencies)
+              .flatMap(_.resolution)
 
-            val externalDeps = externalDepArtifacts.apar.flatMap { resolution =>
+            val externalDeps = resolutions.apar.flatMap { resolution =>
               val deps = resolution.result.resolvedArtifacts
               deps.apar.map(dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing)
             }
             val scopeInfo = ResolvedScopeInformation(config, local, localScopeDeps, sparseScopeDeps, externalDeps)
-            Some(id -> (externalDepArtifacts, scopeInfo))
+            Some(id -> (resolutions, scopeInfo))
           } else None
         }(Map.breakOut)
       }
@@ -248,11 +248,11 @@ object JsonImplicits {
     override def read(json: JsValue): ProcessorType = ProcessorType(json.convertTo[String])
   }
 
-  implicit val ExcludeFormat: RootJsonFormat[Exclude] = jsonFormat2(Exclude.apply)
+  implicit val ExcludeFormat: RootJsonFormat[Exclude] = jsonFormat3(Exclude.apply)
   implicit val VariantFormat: RootJsonFormat[Variant] = jsonFormat3(Variant.apply)
   implicit val IvyArtifactFormat: RootJsonFormat[IvyArtifact] = jsonFormat3(IvyArtifact.apply)
 
-  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat19(
+  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat18(
     DependencyDefinition.apply)
   implicit val NativeDependencyDefinitionFormat: RootJsonFormat[NativeDependencyDefinition] = jsonFormat4(
     NativeDependencyDefinition.apply)
@@ -262,7 +262,7 @@ object JsonImplicits {
   implicit val RunConfConfigurationFormat: RootJsonFormat[RunConfConfiguration[RelativePath]] = jsonFormat2(
     RunConfConfiguration.apply[RelativePath])
   implicit val AgentConfigurationFormat: RootJsonFormat[AgentConfiguration] = jsonFormat2(AgentConfiguration.apply)
-  implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat2(MetaBundle.apply)
+  implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat3(MetaBundle.apply)
 
   implicit val PatternFormat: JsonFormat[Pattern] = new JsonFormat[Pattern] {
     override def write(obj: Pattern): JsValue = (obj.regex.regex, obj.exclude, obj.message).toJson
@@ -364,7 +364,10 @@ object JsonImplicits {
 
   implicit val pythonDefinitionFormat: RootJsonFormat[PythonDefinition] = jsonFormat4(PythonDefinition.apply)
 
-  implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat3(PythonConfiguration.apply)
+  implicit val pythonOverriddenCommandsFormat: RootJsonFormat[PythonConfiguration.OverriddenCommands] = jsonFormat2(
+    PythonConfiguration.OverriddenCommands.apply)
+
+  implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat4(PythonConfiguration.apply)
 
   implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat16(ScopeConfiguration.apply)
 

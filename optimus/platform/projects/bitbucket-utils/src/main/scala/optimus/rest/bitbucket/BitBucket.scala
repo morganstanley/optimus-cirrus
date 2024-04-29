@@ -163,10 +163,13 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     }
   }
 
-  def annotateCommit(commit: String, payload: String): Unit = {
+  def annotateCommit[A: JsonWriter](commit: String, payload: A): Unit = {
     val url = apiGetBuildStatus(commit)
-    handleErrors { postWithoutResponse(url, Some(payload)) }
+    handleErrors { postWithoutResponse(url, Some(payload.toJson.toString)) }
   }
+
+  def getAnnotations(commit: String): Seq[BuildStatus] =
+    queryPaged[BuildStatus, BuildStatuses](apiGetBuildStatus(commit))
 
   /** Wraps generic UnsuccessfulRestCall responses in sub-classes of [[BitBucketException]]. */
   private def handleErrors[A](code: => A): A =

@@ -11,6 +11,7 @@
  */
 package optimus.stratosphere.utils
 
+import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
 import java.nio.file.Path
@@ -80,7 +81,15 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def writeCommitGraph(): String = runGit("commit-graph", "write", "--reachable")
 
-  def originRemoteUrl(): RemoteUrl = RemoteUrl(runGit("config", "remote.origin.url"))
+  def originRemoteUrl(): RemoteUrl = remoteUrl("origin").get
+
+  def remoteUrl(remoteName: String): Option[RemoteUrl] =
+    Try(runGit("config", s"remote.$remoteName.url")) match {
+      case Success(url) => Some(RemoteUrl(url))
+      // if remote does not exist process will return exit code 1
+      case Failure(_: StratosphereException) => None
+      case Failure(throwable)                => throw throwable
+    }
 
   def allRemoteUrls(): Seq[RemoteUrl] = allRemotes().map(_.remoteUrl)
 

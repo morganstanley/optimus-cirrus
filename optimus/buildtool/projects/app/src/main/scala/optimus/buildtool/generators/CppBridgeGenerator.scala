@@ -50,7 +50,7 @@ import scala.collection.immutable.SortedMap
   override type Inputs = CppBridgeGenerator.Inputs
 
   @node override def dependencies(scope: CompilationScope): Seq[Artifact] =
-    scope.upstream.allCompileDependencies.apar.map(_.transitiveExternalDependencies) ++
+    scope.upstream.allCompileDependencies.apar.flatMap(_.resolution) ++
       scope.upstream.signaturesForOurCompiler
 
   @node override protected def _inputs(
@@ -77,7 +77,8 @@ import scala.collection.immutable.SortedMap
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
     val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
-      scope.upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies.result.resolvedArtifacts)
+      scope.upstream.allCompileDependencies.apar
+        .flatMap(_.transitiveExternalDependencies)
 
     CppBridgeGenerator.Inputs(
       name,

@@ -15,6 +15,7 @@ object Names {
 
   // bundles files
   val ModulesRoot = "modulesRoot"
+  val EonId = "eonId"
 
   val ForbiddenDependencies = "forbiddenDependencies"
   val Name = "name"

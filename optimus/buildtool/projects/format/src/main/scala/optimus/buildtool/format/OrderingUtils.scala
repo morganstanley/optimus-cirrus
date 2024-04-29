@@ -47,6 +47,7 @@ object OrderingUtils {
       .to(Seq)
   }
 
+  // TODO (OPTIMUS-65072): Delete legacy check for forbidden dependencies
   def checkForbiddenDependencies(
       obtFile: ObtFile,
       bundles: Seq[Bundle],

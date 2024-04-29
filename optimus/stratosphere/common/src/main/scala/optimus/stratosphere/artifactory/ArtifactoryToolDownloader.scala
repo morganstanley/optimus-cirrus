@@ -35,9 +35,14 @@ import scala.util.Using
 import scala.util.matching.Regex
 
 object ArtifactoryToolDownloader {
-  private val sfxNoProgressDialogAttribute: String = """Progress="no"
+  val PipConfigFile = "PIP_CONFIG_FILE"
+  private val SfxNoProgressDialogAttribute: String = """Progress="no"
                                                        |""".stripMargin
-  private val extractionFlag: String = "--explode"
+  private val ExtractionFlag: String = "--explode"
+  private val Jfrog = "jfrog"
+  private val Pypi = "pypi"
+
+  private val maxRetry: Int = 1
 
   def installedTools(stratoWorkspace: StratoWorkspaceCommon): Seq[String] =
     for {
@@ -54,7 +59,7 @@ object ArtifactoryToolDownloader {
       // .resolve("") is required to add the trailing '/'
       "HOME" -> stratoWorkspace.internal.jfrog.home.getParent.resolve("").toString,
       "JFROG_CLI_HOME_DIR" -> stratoWorkspace.internal.jfrog.home.resolve("").toString,
-      "PIP_CONFIG_FILE" -> stratoWorkspace.internal.pypi.configFile.toFile.toString,
+      PipConfigFile -> stratoWorkspace.internal.pypi.configFile.toFile.toString,
       // setup_user does not like proxies
       "HTTPS_PROXY" -> "",
       "https_proxy" -> "",
@@ -63,24 +68,36 @@ object ArtifactoryToolDownloader {
     )
 
   def presetArtifactoryCredentials(stratoWorkspace: StratoWorkspaceCommon): Unit = {
+
+    def failedMsg(key: String) = s"Setting up $key artifactory credentials failed"
+
     val jfrogConfigFile = stratoWorkspace.internal.jfrog.configFile
     val pypiConfigFile = stratoWorkspace.internal.pypi.configFile
     lazy val credentials = Credential.fromJfrogConfFile(jfrogConfigFile)
     lazy val artifactoryUrl = stratoWorkspace.internal.tools.artifactoryUrl
-    if (!jfrogConfigFile.exists() || jfrogConfigFile.toFile.length() == 0 || !artifactoryUrl.contains(credentials.host))
+
+    if (
+      !jfrogConfigFile.exists() || jfrogConfigFile.toFile.length() == 0 || !credentials.exists(c =>
+        artifactoryUrl.contains(c.host))
+    )
       try {
         ArtifactoryToolDownloader.setupJfrogUser(stratoWorkspace)
       } catch {
-        case NonFatal(_) => stratoWorkspace.log.warning("Setting up jfrog artifactory credentials failed")
+        case NonFatal(e) =>
+          val msg = failedMsg(Jfrog)
+          stratoWorkspace.log.warning(msg)
+          stratoWorkspace.log.debug(msg, e)
       }
     if (!pypiConfigFile.exists() || pypiConfigFile.toFile.length() == 0)
       try {
         ArtifactoryToolDownloader.setupPypiUser(stratoWorkspace)
       } catch {
-        case NonFatal(_) => stratoWorkspace.log.warning("Setting up pypi artifactory credentials failed")
+        case NonFatal(e) =>
+          val msg = failedMsg(Pypi)
+          stratoWorkspace.log.warning(msg)
+          stratoWorkspace.log.debug(msg, e)
       }
-    else
-      stratoWorkspace.log.debug("Artifactory credentials already present")
+    else stratoWorkspace.log.debug("Artifactory credentials already present")
   }
 
   def setupUser(stratoWorkspace: StratoWorkspaceCommon): String = {
@@ -89,30 +106,37 @@ object ArtifactoryToolDownloader {
     jfrogResult + pypiResult
   }
 
-  private def setupJfrogUser(stratoWorkspace: StratoWorkspaceCommon) = {
-    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.jfrogArtifactorySetupCmd
-    stratoWorkspace.log.info("Setting up jfrog artifactory configuration")
-    setupGenericUser(setupUserCommand, stratoWorkspace.internal.jfrog.configFile, stratoWorkspace)
+  private def setupCredentialInfo(key: String) = s"Setting up $key artifactory configuration"
+
+  private def setupJfrogUser(stratoWorkspace: StratoWorkspaceCommon): String = {
+    stratoWorkspace.log.info(setupCredentialInfo(Jfrog))
+    setupGenericUser(
+      stratoWorkspace.internal.tools.jfrogArtifactorySetupCmd,
+      stratoWorkspace.internal.jfrog.configFile,
+      stratoWorkspace)
   }
 
-  private def setupPypiUser(stratoWorkspace: StratoWorkspaceCommon) = {
-    val setupUserCommand: Seq[String] = stratoWorkspace.internal.tools.pypiArtifactorySetupCmd
-    stratoWorkspace.log.info("Setting up pypi artifactory configuration")
-    setupGenericUser(setupUserCommand, stratoWorkspace.internal.pypi.configFile, stratoWorkspace)
+  def setupPypiUser(stratoWorkspace: StratoWorkspaceCommon): String = {
+    stratoWorkspace.log.info(setupCredentialInfo(Pypi))
+    setupGenericUser(
+      stratoWorkspace.internal.tools.pypiArtifactorySetupCmd,
+      stratoWorkspace.internal.pypi.configFile,
+      stratoWorkspace)
   }
 
   private def setupGenericUser(
       setupUserCommand: Seq[String],
       configFile: Path,
-      stratoWorkspace: StratoWorkspaceCommon) = {
+      stratoWorkspace: StratoWorkspaceCommon,
+      retry: Int = maxRetry): String = {
     val output =
       new CommonProcess(stratoWorkspace).runAndWaitFor(setupUserCommand, env = artifactoryCliEnv(stratoWorkspace))
 
-    if (!configFile.exists()) {
-      throw new StratosphereException(s"Setting up artifactory configuration failed:\n$output")
-    }
-
-    output
+    if (!configFile.exists() && retry < 1) {
+      throw new StratosphereException(
+        s"Setting up artifactory configuration failed, tried ${maxRetry + 1} times:\n$output")
+    } else if (configFile.exists()) output
+    else setupGenericUser(setupUserCommand, configFile, stratoWorkspace, retry - 1)
   }
 
   def downloadArtifact(
@@ -144,7 +168,7 @@ object ArtifactoryToolDownloader {
 
     def downloadFromJfrog(): String = {
       val jfrogCommand: Seq[String] = stratoWorkspace.internal.tools.jfrogCmd
-      val extractParams = if (extract) Seq(extractionFlag) else Seq()
+      val extractParams = if (extract) Seq(ExtractionFlag) else Seq()
       val apiKeyParams = Seq("--apikey", fetchApiKey())
       val jfrogDownloadCommand = jfrogCommand ++ extractParams ++ apiKeyParams ++ Seq(artifactoryLocation, downloadTo)
       val output =
@@ -206,8 +230,8 @@ object ArtifactoryToolDownloader {
       val endOfPropertiesIndex = content.indexOfSlice(target)
       out.write(content.slice(0, endOfPropertiesIndex))
       // if doesn't already contain progress=no, add it
-      if (content.slice(0, endOfPropertiesIndex).indexOfSlice(sfxNoProgressDialogAttribute.getBytes) == -1) {
-        out.write(sfxNoProgressDialogAttribute.getBytes)
+      if (content.slice(0, endOfPropertiesIndex).indexOfSlice(SfxNoProgressDialogAttribute.getBytes) == -1) {
+        out.write(SfxNoProgressDialogAttribute.getBytes)
       }
 
       // write the remaining

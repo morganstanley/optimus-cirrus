@@ -27,6 +27,7 @@ import optimus.buildtool.artifacts.Severity
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader
 import optimus.buildtool.builders.reporter.MessageReporter
+import optimus.buildtool.cache.RemoteArtifactCacheTracker
 import optimus.buildtool.compilers.CompilationException
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
@@ -108,7 +109,8 @@ class StandardBuilder(
     defaultPostBuilder: PostBuilder = PostBuilder.zero,
     messageReporter: Option[MessageReporter] = None,
     assetUploader: Option[AssetUploader] = None,
-    uploadSources: Boolean = true
+    uploadSources: Boolean = true,
+    minimalInstallScopes: Option[Set[ScopeId]] = None
 ) extends Builder {
 
   @async override final def build(
@@ -120,8 +122,22 @@ class StandardBuilder(
 
   protected val log: Logger = getLogger(this)
 
-  @node private def scopedCompilations(scopeIds: Set[ScopeId]): Seq[ScopedCompilation] =
-    scopeIds.apar.flatMap(factory.lookupScope).filter(scopeFilter(_)).toIndexedSeq.sortBy(_.id.properPath)
+  @node private def scopedCompilations(scopeIds: Set[ScopeId]): Seq[ScopedCompilation] = {
+    val directScopes = scopeIds.apar.flatMap(factory.lookupScope)
+    val scopes = if (scopeFilter == NoFilter) {
+      directScopes
+    } else {
+      // if we've got a scope filter, we actually want to apply it to the transitive runtime scopes rather than
+      // just the direct scopes, so resolve those first. Note that transitiveScopes is a Set, so duplicates will
+      // automatically be removed.
+      val transitiveScopes = directScopes.apar.flatMap { s =>
+        s.allCompileDependencies.apar.flatMap(_.transitiveScopeDependencies) ++
+          s.runtimeDependencies.transitiveScopeDependencies
+      }
+      (directScopes ++ transitiveScopes).filter(scopeFilter(_))
+    }
+    scopes.toIndexedSeq.sortBy(_.id.properPath)
+  }
 
   @async final private def buildScopes(
       scopedCompilations: Seq[ScopedCompilation],
@@ -199,7 +215,18 @@ class StandardBuilder(
               val compiledScopeIds = Artifact.scopeIds(compiledArtifacts).toSet
               // Note: We deliberately exclude `compiledScopeIds` here since if we've explicitly built them
               // then we don't need to build their pathing jars again
-              val bundleScopes = factory.scopeConfigSource.pathingBundles(compiledScopeIds) -- compiledScopeIds
+              val bundleScopes = {
+                val compiledPathingBundles = factory.scopeConfigSource.pathingBundles(compiledScopeIds)
+                minimalInstallScopes match {
+                  case Some(minimal) =>
+                    // when --minimal, we only includes direct bundle=true modules artifacts in related pathing jars
+                    // since we won't install transitive modules app scripts, install trans-bundle pathing jar here for
+                    // runtime usages(/bin dir) doesn't make any sense
+                    factory.scopeConfigSource.pathingBundles(minimal).intersect(compiledPathingBundles)
+                  case None => compiledPathingBundles
+                }
+              } -- compiledScopeIds
+              // search all bundle=true modules as additional build targets to generate bundle artifacts
               val bundleCompilations = bundleScopes.toSeq.apar.flatMap(factory.lookupScope)
               val bundleArtifacts = bundleCompilations.apar.flatMap { sc =>
                 val scopeId = sc.id
@@ -258,7 +285,9 @@ class StandardBuilder(
 
       if (res.successful) logTimings(durationMillis, timingListener)
       logCacheDetails()
-      log.debug(DependencyDownloadTracker.summary.mkString("\n\t"))
+      DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty)(s =>
+        log.debug(s))
+      RemoteArtifactCacheTracker.summaryThenClean(RemoteArtifactCacheTracker.corruptedFiles.nonEmpty)(s => log.warn(s))
       messageReporter.foreach(_.writeReports(res))
       log.info(Utils.LogSeparator)
       onBuildEnd.foreach(_())

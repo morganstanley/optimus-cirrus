@@ -19,6 +19,7 @@ import optimus.stratosphere.utils.MemUnit
 import org.fusesource.jansi.Ansi.Color
 
 import java.nio.file.Path
+import java.time.Instant
 import java.time.{Duration => JDuration}
 import scala.annotation.implicitNotFound
 import scala.collection.immutable.Seq
@@ -133,8 +134,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def licenseServer: String = self.select("intellij.license-server")
     def linuxJcefSandbox: Boolean = self.select("intellij.linux-jcef-sandbox")
     def migrateSettings: Boolean = self.select("intellij.migrate-settings")
-    def pythonPluginVersion: String = self.select("intellij.pythonPluginVersion")
-    def scalaPluginVersion: String = self.select("intellij.scalaPluginVersion")
+    def pythonPluginVersion: String = self.select("intellij.plugins.python.version")
+    def scalaPluginVersion: String = self.select("intellij.plugins.scala.version")
     def ultimate: Boolean = self.select("intellij.ultimate")
     def version: String = self.select("intellij.version")
 
@@ -186,6 +187,13 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         "-")
     }
 
+    object gateway {
+      object client {
+        def path: String = self.select("intellij.gateway.client.path")
+        def version: String = self.select("intellij.gateway.client.version")
+      }
+    }
+
     object plugins {
       def artifactoryDir: String = self.select("intellij.plugins.artifactory-dir")
 
@@ -216,6 +224,12 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def default: Seq[String] =
           self.select[Option[Seq[String]]]("intellij.test.vmoptions.default").getOrElse(Seq.empty)
       }
+    }
+
+    object lastUsage {
+      def deletionGracePeriod: FiniteDuration = self.select("intellij.last-usage.deletion-grace-period")
+      def ofVersion(version: String): Option[Instant] =
+        self.select(s"intellij.last-usage.version.${version.replace(".", "_")}")
     }
   }
 
@@ -253,6 +267,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def execExt: String = self.select("internal.files.exec-ext")
       def stratosphere: String = self.select("internal.files.stratosphere")
       def ideaExecutable: String = self.select("internal.files.idea-executable")
+      def ideaServerExecutable: String = self.select("internal.files.idea-server-executable")
       def ideaScript: String = self.select("internal.files.idea-script")
       def fsNotifierExecutable: String = self.select("internal.files.fs-notifier-executable")
       def vmOptionsProperties: String = self.select("internal.files.vm-options-properties")

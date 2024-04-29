@@ -11,14 +11,7 @@
  */
 package optimus.buildtool.utils
 
-import optimus.buildtool.config.StratoConfig
-
-import java.io.InputStream
-import java.nio.file.Path
-import java.nio.file.attribute.BasicFileAttributes
-import java.util.Collections
 import optimus.buildtool.files.Directory
-import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.files.ReactiveDirectory
@@ -27,32 +20,42 @@ import optimus.git.diffparser.DiffParser
 import optimus.platform._
 import optimus.platform.util.Log
 import optimus.stratosphere.bootstrap.GitProcess
-import optimus.stratosphere.config.CustomWorkspace
 import optimus.stratosphere.config.StratoWorkspace
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.lib.StoredConfig
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.storage.file.FileBasedConfig
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.treewalk.TreeWalk
+import org.eclipse.jgit.util.FS
 
-import scala.jdk.CollectionConverters._
+import java.io.InputStream
+import java.nio.file.Files
+import java.nio.file.PathMatcher
+import java.util.Collections
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 
 @entity class GitUtils(
     gitDir: Directory,
-    reflog: ReactiveDirectory
+    reflogDir: ReactiveDirectory,
+    configDir: ReactiveDirectory,
+    sparseCheckoutDir: ReactiveDirectory
 ) {
+  import GitUtils._
 
   val repo: Repository = new FileRepositoryBuilder().setGitDir(gitDir.path.toFile).build
   val git = new Git(repo)
 
-  @node final def declareVersionDependence(): Unit = reflog.declareVersionDependence()
+  @node final def declareReflogVersionDependence(): Unit = reflogDir.declareVersionDependence()
 
   @node def file(path: String): GitFile = {
     val repo = git.getRepository
@@ -63,25 +66,71 @@ import scala.sys.process.ProcessLogger
   }
 
   @node def commit(revStr: String): RevCommit = {
-    declareVersionDependence()
+    declareReflogVersionDependence()
     val repo = git.getRepository
     val walk = new RevWalk(repo)
-    walk.parseCommit(repo.resolve(Constants.HEAD))
+    walk.parseCommit(repo.resolve(revStr))
+  }
+
+  @node def mergedConfig: StoredConfig = {
+    // note that getConfig will automatically reload the config if the files have changed but we must declare dependence
+    // so that this node is invalidated in cache
+    configDir.declareVersionDependence()
+    log.info("Loading git config via jgit")
+    val mainConfig = git.getRepository.getConfig
+    // jgit doesn't seem to handle the worktreeConfig logic internally
+    if (repo.getConfig.getBoolean("extensions", "worktreeConfig", false)) {
+      val configWorktreeFile = configDir.resolveFile(ConfigWorktreeFile).path.toFile
+      log.info(s"Loading ${configWorktreeFile} (because extensions.worktreeConfig = true)")
+      val mergedConfig = new FileBasedConfig(mainConfig, configWorktreeFile, FS.DETECTED)
+      mergedConfig.load()
+      mergedConfig
+    } else mainConfig
+  }
+
+  @node def isSparseCheckoutEnabled: Boolean =
+    mergedConfig.getBoolean("core", "sparsecheckout", false)
+
+  @node def local(dir: Directory): Boolean = sparseMatcher.forall(m => m.local(dir)) // default to `true`
+
+  @node private[utils] def sparseMatcher: Option[GitSparseMatcher] = {
+    if (isSparseCheckoutEnabled) {
+      sparseCheckoutDir.declareVersionDependence()
+      val sparseFile = sparseCheckoutDir.resolveFile(SparseCheckoutFile)
+      log.info(s"Loading ${sparseFile.path}")
+      // we've declared version dependence, so this is safe here
+      if (sparseFile.existsUnsafe) {
+        val configLines = Files.readAllLines(sparseFile.path).asScala.to(Seq)
+        log.info(s"Read ${configLines.size} lines from ${sparseFile.path}")
+        Some(GitSparseMatcher(gitDir.parent, configLines))
+      } else {
+        log.warn(s"sparsecheckout was enabled in git but ${sparseFile.path} was not present")
+        None
+      }
+    } else {
+      log.info("sparsecheckout mode was not enabled in git")
+      None
+    }
   }
 }
 
 object GitUtils extends Log {
-  private case object HeadFilter extends PathFilter {
+  private val ConfigWorktreeFile = "config.worktree"
+  private val ConfigFile = "config"
+  private val SparseCheckoutFile = "sparse-checkout"
 
-    override def apply(pathString: String, attrs: BasicFileAttributes): Boolean =
-      attrs.isRegularFile && pathString.endsWith("HEAD")
-    override def apply(path: Path, attrs: BasicFileAttributes): Boolean = attrs.isRegularFile && path.endsWith("HEAD")
-  }
-
+  @scenarioIndependent @node private def filteredDirectory(
+      dir: Directory,
+      directoryFactory: LocalDirectoryFactory,
+      filenames: String*) =
+    directoryFactory.lookupDirectory(dir.path, Directory.fileNamePredicate(filenames: _*), maxDepth = 1)
   @scenarioIndependent
   @node def apply(gitDir: Directory, directoryFactory: LocalDirectoryFactory): GitUtils = {
-    val reflog = directoryFactory.lookupDirectory(gitDir.resolveDir("logs").path, HeadFilter, maxDepth = 1)
-    GitUtils(gitDir, reflog)
+    val reflogDir = filteredDirectory(gitDir.resolveDir("logs"), directoryFactory, Constants.HEAD)
+    // note that ConfigFile is loaded implicitly by jgit so we must watch it too
+    val configDir = filteredDirectory(gitDir, directoryFactory, ConfigFile, ConfigWorktreeFile)
+    val sparseCheckoutDir = filteredDirectory(gitDir.resolveDir("info"), directoryFactory, SparseCheckoutFile)
+    GitUtils(gitDir, reflogDir = reflogDir, configDir = configDir, sparseCheckoutDir = sparseCheckoutDir)
   }
 
   @scenarioIndependent
@@ -109,10 +158,8 @@ final case class GitFile(path: String, repo: Repository, fileId: ObjectId) {
   def exists: Boolean = fileId != ObjectId.zeroId
 }
 
-final case class NativeGitUtils(workspaceSourceRoot: Directory) extends Log {
-  val gitProcess = new GitProcess(
-    StratoWorkspace(CustomWorkspace(workspaceSourceRoot.parent.path), StratoConfig.stratoLogger).config,
-  )
+final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorkspace) extends Log {
+  val gitProcess = new GitProcess(ws.config)
 
   def diffFiles(from: String): Set[FileAsset] = {
     val lines = execute("-C", workspaceSourceRoot.pathString, "diff", "--name-only", from)
@@ -152,4 +199,29 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory) extends Log {
     }
     output.toIndexedSeq
   }
+}
+
+@entity class GitSparseMatcher(workspaceSourceRoot: Directory, private[utils] val config: Seq[String]) {
+  // Patterns is ordered by most to least-specific (ie. in the opposite order to git config;
+  // this means the first one to match wins
+  private val patterns: Seq[(PathMatcher, Boolean)] = {
+    // Note that we don't use `pathString` here since we don't want a leading '/' to be converted to '//' on linux
+    val rootStr = workspaceSourceRoot.path.toString.replace('\\', '/')
+    config.map { c =>
+      val (raw, include) = if (c.startsWith("!")) (c.substring(1), false) else (c, true)
+      val glob = if (raw.endsWith("/")) s"$rootStr$raw**" else s"$rootStr$raw"
+      val pm = workspaceSourceRoot.fileSystem.getPathMatcher(s"glob:$glob")
+      (pm, include)
+    }.reverse
+  }
+
+  @node def local(dir: Directory): Boolean =
+    patterns
+      .collectFirst {
+        // matching globs are file-based by virtue of the "**" suffix, so test against a dummy file within the
+        // directory
+        case (pm, include) if pm.matches(dir.resolveFile("dummy").path) =>
+          include
+      }
+      .getOrElse(true)
 }

@@ -49,7 +49,7 @@ import scala.collection.immutable.Seq
   type Inputs <: ScopeProcessor.Inputs
 
   @node def dependencies(scope: CompilationScope): Seq[Artifact] =
-    scope.upstream.allCompileDependencies.apar.map(_.transitiveExternalDependencies) ++
+    scope.upstream.allCompileDependencies.apar.flatMap(_.resolution) ++
       scope.upstream.signaturesForOurCompiler
 
   // Returned as a NodeFunction0 to prevent Inputs (which will often contain full sources) being inadvertently

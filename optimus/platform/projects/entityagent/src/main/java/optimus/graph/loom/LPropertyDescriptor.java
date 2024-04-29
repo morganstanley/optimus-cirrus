@@ -12,16 +12,40 @@
 package optimus.graph.loom;
 
 import java.lang.invoke.MethodType;
+import java.util.Arrays;
 import java.util.Objects;
+import org.objectweb.asm.tree.ClassNode;
 
 public class LPropertyDescriptor {
+  private static final Object _descriptorLock = new Object();
+  private static int descriptorsCount = 1;
+  private static LPropertyDescriptor[] descriptors = new LPropertyDescriptor[1024];
+
+  static {
+    var clsName = LPropertyDescriptor.class.getName();
+    descriptors[0] = new LPropertyDescriptor(clsName, "ctor", "LPropertyDescriptor.java", 26, -1);
+  }
+
   public final String className;
   public final String methodName;
+  public String source;
+  public int lineNumber;
   public MethodType methodType;
+  public final int localID;
 
   public LPropertyDescriptor(String className, String methodName) {
     this.className = className;
     this.methodName = methodName;
+    this.localID = -1;
+  }
+
+  public LPropertyDescriptor(
+      String className, String methodName, String source, int lineNumber, int localID) {
+    this.className = className;
+    this.methodName = methodName;
+    this.source = source;
+    this.lineNumber = lineNumber;
+    this.localID = localID;
   }
 
   @Override
@@ -35,5 +59,26 @@ public class LPropertyDescriptor {
   @Override
   public int hashCode() {
     return Objects.hash(className, methodName);
+  }
+
+  public static int register(ClassNode cls, String methodName, int lineNumber, int localID) {
+    return register(cls.name, methodName, cls.sourceFile, lineNumber, localID);
+  }
+
+  private static int register(
+      String className, String methodName, String source, int lineNumber, int localID) {
+    synchronized (_descriptorLock) {
+      var id = descriptorsCount;
+      if (descriptorsCount >= descriptors.length)
+        descriptors = Arrays.copyOf(descriptors, descriptors.length * 2);
+      var cleanName = className.replace('/', '.');
+      var desc = new LPropertyDescriptor(cleanName, methodName, source, lineNumber, localID);
+      descriptors[descriptorsCount++] = desc;
+      return id;
+    }
+  }
+
+  public static LPropertyDescriptor get(int id) {
+    return descriptors[id];
   }
 }

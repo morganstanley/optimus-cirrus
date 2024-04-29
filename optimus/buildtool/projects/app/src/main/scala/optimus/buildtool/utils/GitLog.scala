@@ -18,6 +18,7 @@ import java.time.Instant
 import optimus.buildtool.files.Directory
 import optimus.buildtool.trace.ObtTrace
 import optimus.platform._
+import optimus.stratosphere.config.StratoWorkspace
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ObjectId
@@ -44,7 +45,8 @@ trait FileDiff {
   def contains(filePath: String, startLine: Int, endLine: Int): Boolean
 }
 
-class GitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, baseline: String) extends FileDiff {
+class GitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, ws: StratoWorkspace, baseline: String)
+    extends FileDiff {
   private lazy val files: Set[String] = {
     val m = utils.diffFiles(baseline)
     GitLog.log.debug(s"${m.size} modified files since baseline $baseline:\n\t${m.map(_.pathString).mkString("\n\t")}")
@@ -77,10 +79,10 @@ object GitLog {
   @scenarioIndependent @node def apply(
       utils: GitUtils,
       workspaceSourceRoot: Directory,
+      stratoWorkspace: StratoWorkspace,
       descriptionFilter: String = DefaultDescriptionFilter, // String here since Regexes don't have stable equality
       commitLength: Int
-  ): GitLog = GitLogImpl(utils, workspaceSourceRoot, descriptionFilter.r, commitLength)
-
+  ): GitLog = GitLogImpl(utils, workspaceSourceRoot, stratoWorkspace, descriptionFilter.r, commitLength)
 }
 
 @entity trait GitLog {
@@ -101,16 +103,17 @@ object GitLog {
 @entity class GitLogImpl private[utils] (
     utils: GitUtils,
     workspaceSourceRoot: Directory,
+    stratoWorkspace: StratoWorkspace,
     descriptionFilter: Regex,
     commitLength: Int
 ) extends GitLog {
 
   // triggering the configured credentials here
   private val credentials = new UsernamePasswordCredentialsProvider("", "")
-  private val native = NativeGitUtils(workspaceSourceRoot)
+  private val native = NativeGitUtils(workspaceSourceRoot, stratoWorkspace)
 
   @node def diff(oldRef: String, newRef: String): Seq[DiffEntry] = {
-    utils.declareVersionDependence()
+    utils.declareReflogVersionDependence()
     utils.git.diff
       .setOldTree(prepareTreeParser(oldRef))
       .setNewTree(prepareTreeParser(newRef))
@@ -132,7 +135,7 @@ object GitLog {
   }
 
   @node def recentHeads: Seq[Commit] = {
-    utils.declareVersionDependence()
+    utils.declareReflogVersionDependence()
     val (gitTime, commits) = AdvancedUtils.timed {
       val walk = new RevWalk(utils.repo)
       utils.git.reflog.call
@@ -152,7 +155,7 @@ object GitLog {
   }
 
   @node def recentCommits(from: String): Seq[Commit] = {
-    utils.declareVersionDependence()
+    utils.declareReflogVersionDependence()
     try {
       val (gitTime, commits) = AdvancedUtils.timed {
         if (descriptionFilter.regex == "localtest") {
@@ -242,7 +245,7 @@ object GitLog {
 
   // Diff between the baseline of `from` and current working tree
   @async @impure def modifiedFiles(from: String): Option[FileDiff] = baselineHash(from).map { hash =>
-    new GitFileDiff(native, workspaceSourceRoot, hash)
+    new GitFileDiff(native, workspaceSourceRoot, stratoWorkspace, hash)
   }
 
   @async @impure def reportTagMovingForward(tagName: String, dir: Directory): Unit = {

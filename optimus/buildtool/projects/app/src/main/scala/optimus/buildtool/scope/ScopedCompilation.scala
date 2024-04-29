@@ -12,6 +12,7 @@
 package optimus.buildtool.scope
 
 import optimus.buildtool.app.IncrementalMode
+import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ArtifactType.PathingFingerprint
@@ -90,6 +91,15 @@ import optimus.platform.annotations.alwaysAutoAsyncArgs
 import scala.collection.immutable.Seq
 import scala.collection.compat._
 
+object ScopedCompilation {
+  private val artifactFilter: Option[Set[ArtifactType]] = sys.props.get("optimus.buildtool.artifacts").map { s =>
+    s.split(",").filter(_ != NoneArg).map(ArtifactType.parse).toSet
+  }
+
+  // Default to true if artifactFilter is `None`
+  def generate(at: ArtifactType): Boolean = artifactFilter.forall(_.contains(at))
+}
+
 /**
  * An artifact source which generates artifacts by compiling folders of source code (after first compiling or retrieving
  * required upstream artifacts). This is the main expression of the "compilation graph" within OBT.
@@ -108,10 +118,11 @@ trait ScopedCompilation {
 
   @node def runConfigurations: Seq[RunConf]
   @node def runconfArtifacts: Seq[Artifact]
-
+  @node def regexMessageArtifacts: Seq[Artifact]
   @node def runtimeArtifacts: Artifacts
   @node def allArtifacts: Artifacts
   @node def bundlePathingArtifacts(compiledArtifacts: Seq[Artifact]): Seq[Artifact]
+
 }
 
 /**
@@ -215,6 +226,8 @@ trait CompilationNode extends ScopedCompilation {
     (runconf.runConfArtifacts, Nil)
   }
 
+  @node def regexMessageArtifacts: Seq[Artifact] = regexMessages.messages
+
   @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact] =
     distinctArtifacts("cpp artifacts for downstreams") {
       apar(
@@ -229,19 +242,22 @@ trait CompilationNode extends ScopedCompilation {
     }
 
   @node def runtimeArtifacts: Artifacts = distinct("runtime artifacts", track = true) {
-    apar(signatureErrorsOr(pathingArtifact +: ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
+    apar(signatureErrorsOr(pathingArtifact.to(Seq) ++ ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
   }
 
-  @node private def pathingArtifact: PathingArtifact =
-    pathingArtifactWithFingerprint._1
+  @node private def pathingArtifact: Option[PathingArtifact] =
+    pathingArtifactWithFingerprint.map(_._1)
 
   @node private def pathingArtifacts: Seq[Artifact] = {
-    val (pa, fa) = pathingArtifactWithFingerprint
-    Seq(pa, fa)
+    val (pa, fa) = pathingArtifactWithFingerprint.unzip
+    (pa ++ fa).to(Seq)
   }
 
-  @node private def pathingArtifactWithFingerprint: (PathingArtifact, FingerprintArtifact) =
+  @node private def pathingArtifactWithFingerprint: Option[(PathingArtifact, FingerprintArtifact)] =
     buildPathingArtifact(ourRuntimeArtifacts ++ upstream.artifactsForOurRuntime)
+
+  @node private def sourceFingerprint =
+    if (ScopedCompilation.generate(AT.SourceFingerprint)) Some(sources.compilationFingerprint) else None
 
   @node def allArtifacts: Artifacts = distinct("total artifacts", track = true, includeFingerprints = true) {
     // we include the compile and runtime dependencies artifacts because these may contain errors about resolution
@@ -252,14 +268,14 @@ trait CompilationNode extends ScopedCompilation {
             if (config.usePipelining) signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis
             else Nil
           } ++ scala.analysis ++ scala.locator ++ java.analysis ++ java.locator ++
-          processing.process(pathingArtifact)
+          pathingArtifact.map(processing.process).getOrElse(Nil)
       } ++
         cpp.artifacts ++
         python.artifacts ++
         web.artifacts ++
         electron.artifacts ++
         sourcePackaging.packagedSources ++
-        Seq(sources.compilationFingerprint) ++
+        sourceFingerprint ++
         // always copy generated sources and regex messages (among others) so that we can make use of
         // them even if we've got signature errors
         jvmSources.generatedSourceArtifacts ++
@@ -275,8 +291,8 @@ trait CompilationNode extends ScopedCompilation {
     val artifactsForBundle = compiledArtifacts.collect {
       case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) => a
     }
-    val (pa, fa) = buildPathingArtifact(artifactsForBundle)
-    Seq(pa, fa)
+    val (pa, fa) = buildPathingArtifact(artifactsForBundle).unzip
+    (pa ++ fa).to(Seq)
   } else Nil
 
   // noinspection ScalaUnusedSymbol
@@ -339,12 +355,14 @@ trait CompilationNode extends ScopedCompilation {
       runconf.runConfArtifacts ++ runconf.messages ++
       genericFiles.files
 
-  @node private def buildPathingArtifact(allRuntimeArtifacts: Seq[Artifact]): (PathingArtifact, FingerprintArtifact) = {
+  @node private def buildPathingArtifact(
+      allRuntimeArtifacts: Seq[Artifact]
+  ): Option[(PathingArtifact, FingerprintArtifact)] = if (ScopedCompilation.generate(AT.Pathing)) {
     val internalClassFileArtifacts = allRuntimeArtifacts.collect { case c: ClassFileArtifact =>
       c
     }
     val externalClassFileArtifacts =
-      runtimeDependencies.transitiveExternalDependencies.result.resolvedArtifacts.apar.map { a =>
+      runtimeDependencies.transitiveExternalDependencies.apar.map { a =>
         scope.dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(a)
       }
     val classFileArtifacts = internalClassFileArtifacts ++ externalClassFileArtifacts
@@ -405,7 +423,7 @@ trait CompilationNode extends ScopedCompilation {
     val preloadReleaseFallbackPaths = fallbackPaths(preloadReleaseLibs)
     val preloadDebugFallbackPaths = fallbackPaths(preloadDebugLibs)
 
-    val moduleLoads = runtimeDependencies.transitiveExternalDependencies.result.moduleLoads
+    val moduleLoads = runtimeDependencies.resolution.map(_.result.moduleLoads).getOrElse(Nil)
 
     val (premainOption, filteredArtifacts) = config.agentConfig
       .map { a =>
@@ -450,8 +468,8 @@ trait CompilationNode extends ScopedCompilation {
     AssetUtils.atomicallyWriteIfMissing(jarPath) { tmpName =>
       ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), manifest) }
     }
-    (AT.Pathing.fromAsset(id, jarPath), pathingFingerprint)
-  }
+    Some((AT.Pathing.fromAsset(id, jarPath), pathingFingerprint))
+  } else None
 
   @node def runConfigurations: Seq[RunConf] = runconf.runConfigurations
 

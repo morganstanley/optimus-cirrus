@@ -12,10 +12,13 @@
 package optimus.stratosphere.scheddel.impl
 
 import optimus.stratosphere.filesanddirs.PathsOpts._
+import optimus.stratosphere.utils.DateTimeUtils
 import optimus.stratosphere.utils.DateTimeUtils._
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import scala.util.Try
 
 final case class RenameResult(path: Path, renamed: Try[Path])
@@ -41,4 +44,17 @@ object FileRenamer {
     }
   }
 
+  def hasSuffixForRemoval(srcPath: Path): Boolean = {
+    if (!Files.exists(srcPath)) false
+    else {
+      val suffixPattern = DateTimeUtils.Patterns.fileDateTimeUpToMillisSuffix
+      val suffix = srcPath.name.takeRight(suffixPattern.length)
+      try {
+        DateTimeFormatter.ofPattern(suffixPattern).parse(suffix)
+        true
+      } catch {
+        case e: DateTimeParseException => false
+      }
+    }
+  }
 }

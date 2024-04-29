@@ -141,7 +141,7 @@ class ArchiveInstaller(installer: Installer) extends Log {
       }
       .map(_.id)
     val upstreamArchiveExternalDeps = upstreamArchives.apar.flatMap { s =>
-      s.runtimeDependencies.transitiveExternalDependencies.result.resolvedArtifacts
+      s.runtimeDependencies.transitiveExternalDependencies
     }
 
     val (archiveContent, internalDeps) = classFileArtifacts
@@ -153,7 +153,7 @@ class ArchiveInstaller(installer: Installer) extends Log {
       .partition { a =>
         a.id.scopeId == scopeId && a.id.tpe == ArtifactType.ArchiveContent
       }
-    val externalDeps = scope.runtimeDependencies.transitiveExternalDependencies.result.resolvedArtifacts
+    val externalDeps = scope.runtimeDependencies.transitiveExternalDependencies
       .filter { a =>
         !upstreamArchiveExternalDeps.contains(a)
       }

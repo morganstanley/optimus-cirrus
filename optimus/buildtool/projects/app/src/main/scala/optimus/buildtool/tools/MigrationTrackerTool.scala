@@ -38,7 +38,7 @@ class MigrationTrackerTool extends OptimusBuildToolCmdLine {
 }
 
 private[buildtool] object MigrationTrackerTool extends MigrationTrackerToolT {
-  def indent: Int = 12
+  def indent: Int = 8
 }
 
 private[buildtool] trait TrackerToolParams {
@@ -60,6 +60,7 @@ private[buildtool] trait MigrationTrackerToolT
     tq + s + tq
   }
   def indent: Int
+  def yamlIndent: Int = 12
 
   private def toFrontierRegex(scopeId: ScopeId) = tripleQuote(scopeId.elements.mkString("\\."))
 
@@ -67,11 +68,25 @@ private[buildtool] trait MigrationTrackerToolT
     val impl: OptimusBuildToolImpl = OptimusBuildToolImpl(cmdLine, NoBuildInstrumentation)
     val helper = MigrationTrackerHelper(impl.obtConfig.scopeDefinitions)
 
+    // Other scala scopes that are frontiers themselves
+    // These might be getting picked up transitively by the current scala frontier, but I'm not actually sure
+    val excludedModules: Seq[String] =
+      Seq(
+        "artifactory_frontier",
+        "artifactory_sdlc_test",
+        "scala_2_13_frontier_werr", // just to be safe..
+        "stratosphere-all",
+        // used by stratosphere-all, but explicitly claiming it will never have an effect on scala consumer scopes
+        "py-scripts",
+        // not actually an important scala scope; this pulls in all test scopes, both java and scala alike
+        "unit_test_collector",
+      )
+
     val frontierId = impl.obtConfig.scope(frontierScope)
     val frontierIds = (
       if (cmdLine.useMavenLibs) helper.transitiveInternalDeps(frontierId) - frontierId
       else helper.transitiveInternalDeps(frontierId)
-    ).filterNot(_.module == "scala_2_13_frontier")
+    ).filterNot(_.module == "scala_2_13_frontier").filterNot(id => excludedModules.contains(id.module))
 
     if (cmdLine.rewriteFrontier) {
 
@@ -80,16 +95,16 @@ private[buildtool] trait MigrationTrackerToolT
       val frontierObt = cmdLine.workspaceSourceRoot.resolveFile(frontierObtFile)
       val stratoRules = rulesYaml.map(f => cmdLine.workspaceSourceRoot.resolveFile(f))
       val indentationStr = " " * indent
-      var yamlEntryMarker = "- ^"
+      val yamlIndentationStr = " " * yamlIndent
+      val yamlEntryMarker = "- ^"
 
-      def rewrite(file: FileAsset, snippet: String): Unit = {
+      def rewrite(file: FileAsset, snippet: String, indentStr: String): Unit = {
         val content = Files.readString(file.path)
         val startMarker = "##GENERATED_START##"
         val endMarker = "##GENERATED_END##"
         val regex = s"(?ms)${Regex.quote(startMarker)}.*${Regex.quote(endMarker)}"
-        val updated = content.replaceAll(
-          regex,
-          Regex.quoteReplacement(startMarker + "\n" + snippet + "\n" + indentationStr + endMarker))
+        val updated =
+          content.replaceAll(regex, Regex.quoteReplacement(startMarker + "\n" + snippet + "\n" + indentStr + endMarker))
         if (updated != content) {
           log.info("Updated " + file.path.toAbsolutePath.toString)
           Files.writeString(file.path, updated)
@@ -98,15 +113,22 @@ private[buildtool] trait MigrationTrackerToolT
         }
       }
 
-      rewrite(frontierObt, frontierEntries.map(toFrontierRegex).map(indentationStr + _).mkString(",\n"))
+      rewrite(frontierObt, frontierEntries.map(toFrontierRegex).map(indentationStr + _).mkString(",\n"), indentationStr)
       stratoRules.foreach { f =>
         val frontierFiles = frontierObtFile +: frontierEntries.apar.flatMap(id => scopeRoot(id, impl))
-        rewrite(f, (frontierFiles.distinct.map(indentationStr + yamlEntryMarker + _).mkString("\n")))
+        rewrite(
+          f,
+          frontierFiles.distinct.map(yamlIndentationStr + yamlEntryMarker + _).mkString("\n"),
+          yamlIndentationStr)
       }
     } else {
       val separatorStr = "=" * 6
-      val allIds = allFrontierScope.fold(impl.obtConfig.compilationScopeIds)(f =>
+      val absolutelyAllIds = allFrontierScope.fold(impl.obtConfig.compilationScopeIds)(f =>
         helper.transitiveInternalDeps(impl.obtConfig.scope(f)))
+      val allIds = absolutelyAllIds.filterNot(id => excludedModules.contains(id.module))
+      if (absolutelyAllIds != allIds) {
+        log.warn(s"Filtered full list of scopes down: ${allIds.size}/${absolutelyAllIds.size}")
+      }
       log.info(separatorStr)
       logCounts("modules", frontierIds.size, allIds.size)
       val allLocMap = allIds.apar.map(id => (id, helper.idLoc(id))).toMap

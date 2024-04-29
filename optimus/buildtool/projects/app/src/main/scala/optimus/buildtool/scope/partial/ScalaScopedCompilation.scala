@@ -14,7 +14,6 @@ package optimus.buildtool.scope.partial
 import optimus.buildtool.app.IncrementalMode
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType.ScalaAnalysis
-import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.SyncCompiler
@@ -108,14 +107,7 @@ import scala.collection.immutable.Seq
 
   @node def messages: Seq[Artifact] = compile(AT.ScalaMessages, None)(Some(scalac.messages(id, scalacInputsN)))
 
-  @node def classes: Seq[Artifact] =
-    compile(AT.Scala, None)(scalac.classes(id, scalacInputsN)).apar.map {
-      // Cached artifacts don't know if they contain plugins or macros, so we need to update them here. This
-      // can be removed if the cached artifacts are changed to include that information.
-      case c: ClassFileArtifact =>
-        c.copy(containsPlugin = config.containsPlugin, containsOrUsedByMacros = config.containsMacros)
-      case x => x
-    }
+  @node def classes: Seq[Artifact] = compile(AT.Scala, None)(scalac.classes(id, scalacInputsN))
 
   @node def analysis: Seq[Artifact] =
     analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).analysis

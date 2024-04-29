@@ -27,7 +27,7 @@ trait MultiLevelStoreTrait extends ArtifactStore {
       discriminator: Option[String]): Option[A#A] =
     underlying.get(id, fingerprintHash, tpe, discriminator) orElse next.get(id, fingerprintHash, tpe, discriminator)
 
-  @async override protected def write[A <: CachedArtifactType](
+  @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     underlying.put(tpe)(id, fingerprintHash, discriminator, artifact)
     next.put(tpe)(id, fingerprintHash, discriminator, artifact)

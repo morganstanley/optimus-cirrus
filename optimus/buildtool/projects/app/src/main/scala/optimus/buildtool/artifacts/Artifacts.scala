@@ -412,7 +412,7 @@ object InternalClassFileArtifact {
     )
 
   @node override def contentsHash: String = {
-    if (!assumedImmutable) ExternalClassFileArtifact.witnessMutableExternalArtifactState()
+    if (!assumedImmutable) ExternalClassFileArtifact.witnessMutableExternalArtifactState(file.path)
     Hashing.hashFileOrDirectoryContent(file, assumedImmutable = assumedImmutable)
   }
 
@@ -527,8 +527,8 @@ object InternalClassFileArtifact {
    */
   @node(tweak = true) private def mutableExternalArtifactVersion: Int = 1
 
-  @node def witnessMutableExternalArtifactState(): Unit = {
-    ObtTrace.setStat(ObtStats.MutableExternalDependencies, 1) // 1 == true
+  @node def witnessMutableExternalArtifactState(externalPath: Path): Unit = {
+    ObtTrace.addToStat(ObtStats.MutableExternalDependencies, Set(externalPath))
     // just read the value to establish a dependency
     assert(mutableExternalArtifactVersion > 0)
   }

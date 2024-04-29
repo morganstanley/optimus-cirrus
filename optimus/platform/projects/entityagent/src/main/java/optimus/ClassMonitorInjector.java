@@ -523,11 +523,10 @@ public class ClassMonitorInjector implements ClassFileTransformer {
             .map(ClassMonitorInjector::constructDependencyName)
             .collect(Collectors.toSet());
 
-    classesFromExemptedPackages.forEach(
-        usedClassesCopy::add); // collection addAll has a bug, please to do not use
-    usedClasses
-        .keySet()
-        .forEach(usedClassesCopy::add); // collection addAll has a bug, please to do not use
+    // collection addAll has a bug, please to do not use
+    classesFromExemptedPackages.forEach(usedClassesCopy::add);
+    // collection addAll has a bug, please to do not use
+    usedClasses.keySet().forEach(usedClassesCopy::add);
     if (showTopN > NOT_COUNTING_HITS) {
       List<Map.Entry<String, Integer>> sortedUsage =
           usedClasses.entrySet().stream()
@@ -553,8 +552,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
 
     // Delayed capture and reset -- MUST BE LAST THING TO DO BEFORE RETURNING!!!
     List<String> internalEventsCopy = new ArrayList<>();
-    internalEvents.forEach(
-        internalEventsCopy::add); // collection addAll has a bug, please to do not use
+    // collection addAll has a bug, please to do not use
+    internalEvents.forEach(internalEventsCopy::add);
     if (clearInternalState) {
       internalEvents.clear();
     }
@@ -748,6 +747,7 @@ public class ClassMonitorInjector implements ClassFileTransformer {
       new ConcurrentHashMap<>();
 
   public static ClassFileTransformer instance(ClassLoader host) {
+    if (host == null) return null;
     return cachedInjectors.computeIfAbsent(
         host,
         k -> {

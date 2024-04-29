@@ -32,11 +32,21 @@ object AsyncNpmCommandRunner extends Log {
   private val dangerousCmds: Seq[String] =
     Seq("mkdir", "rmdir", "cp", "mv", "rm", "touch", "mkfs", "mkswap", "tar", "untar", "dd", "zip")
 
-  @async private def runWebProcess(cmd: String, logFile: FileAsset, sandboxSrc: Directory, id: ScopeId): Unit = {
+  @async private def runWebProcess(
+      cmd: String,
+      logFile: FileAsset,
+      sandboxSrc: Directory,
+      id: ScopeId,
+      useCrumbs: Boolean): Unit = {
     val cmds =
       if (Utils.isWindows) Seq("cmd.exe", "/c", cmd)
       else Seq("ksh", "-c", cmd)
-    BackgroundProcessBuilder(BackgroundCmdId("Web"), logFile, cmds, workingDir = Some(sandboxSrc))
+    BackgroundProcessBuilder(
+      BackgroundCmdId("Web"),
+      logFile,
+      cmds,
+      workingDir = Some(sandboxSrc),
+      useCrumbs = useCrumbs)
       .buildWithRetry(id, NpmCommand)(
         maxRetry = 3, // retry 3 times to prevent maven server setup unstable issue
         msDelay = 0,
@@ -52,7 +62,8 @@ object AsyncNpmCommandRunner extends Log {
       npmBuildCommands: Seq[String],
       sandboxSrc: Directory,
       pnpmStoreDir: Directory,
-      logFile: FileAsset): Seq[CompilationMessage] = {
+      logFile: FileAsset,
+      useCrumbs: Boolean): Seq[CompilationMessage] = {
     ObtTrace.info(s"[${id.toString}] Downloading npm remote artifacts from maven server")
     val userCmd = npmBuildCommands
       .map(c =>
@@ -65,7 +76,7 @@ object AsyncNpmCommandRunner extends Log {
       .replace("{pnpmVersion}", pnpmVersion)
       .replace("{pnpmStoreDir}", pnpmStoreDir.pathString)
       .replace("{userCmd}", userCmd)
-    runWebProcess(cmd, logFile, sandboxSrc, id)
+    runWebProcess(cmd, logFile, sandboxSrc, id, useCrumbs)
     val warnCmds = dangerousCmds.collect { case dangerousCmd if cmd.contains(dangerousCmd) => s"'$dangerousCmd'" }
     if (warnCmds.isEmpty) Seq(CompilationMessage.info(cmd))
     else

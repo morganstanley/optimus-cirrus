@@ -19,6 +19,7 @@ import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.format.Bundle
 import optimus.buildtool.trace.CategoryTrace
 import optimus.buildtool.trace.InstallBuildPropertiesFiles
 import optimus.buildtool.trace.InstallBuildPropertiesRootFile
@@ -43,12 +44,15 @@ class BuildPropertiesInstaller(
 
   @async override def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
     val metaBundles = installable.metaBundles.to(Seq)
+    val metaBundlesWithEonId: Seq[Bundle] = metaBundles.apar.flatMap(scopeConfigSource.bundleConfiguration)
     val content = Seq(
       s"obt-version=${versionConfig.obtVersion}",
       s"scala-version=${versionConfig.scalaVersion}",
       s"install-version=${versionConfig.installVersion}",
       s"stratosphere-version=${versionConfig.stratosphereVersion}"
-    ) :+ s"bundles=${metaBundles.map(_.properPath).sorted.mkString(",")}"
+    ) :+
+      s"bundles=${metaBundles.map(_.properPath).sorted.mkString(",")}" :+
+      s"bundlesWithEonId=${metaBundlesWithEonId.filter(p => p.id.eonId.isDefined).map(i => i.id.toStringWithEonId).sorted.mkString(",")}"
     val contentHash = Hashing.hashStrings(content)
 
     installable.metaBundles.apar

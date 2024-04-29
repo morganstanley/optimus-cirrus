@@ -18,6 +18,7 @@ import java.nio.file.Paths
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
+import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.NonReactiveDirectoryFactory
 import optimus.buildtool.files.RelativePath
@@ -319,7 +320,8 @@ object CommitSplit extends OptimusApp[CommitSplitCmdLine] {
       .find(srcPath, NonReactiveDirectoryFactory)
       .getOrElse(throw new IllegalArgumentException(s"Unable to find .git directory in $srcPath"))
     val git = gitUtils.git
-    val gitLog = GitLog(gitUtils, srcPath, commitLength = 3)
+    val ws = StratoConfig.stratoWorkspace(srcPath.parent)
+    val gitLog = GitLog(gitUtils, srcPath, ws, commitLength = 3)
     log.info("Checking for local changes...")
     if (!git.status.call.isClean) {
       throw new IllegalStateException("You have local changes. Please commit or revert them first")

@@ -73,7 +73,8 @@ object AsyncWebCompilerImpl {
 @entity private[buildtool] class AsyncWebCompilerImpl(
     pnpmStoreDir: Directory,
     sandboxFactory: SandboxFactory,
-    logDir: Directory)
+    logDir: Directory,
+    useCrumbs: Boolean)
     extends AsyncWebCompiler {
   // one log file per scopeID, only be used for load debugging msg
   private def webCmdLogFile(logDir: Directory, id: ScopeId): FileAsset =
@@ -115,7 +116,8 @@ object AsyncWebCompilerImpl {
                 npmBuildCommands,
                 sandbox.sourceDir,
                 pnpmStoreDir,
-                logFile
+                logFile,
+                useCrumbs
               )
               BackgroundProcessBuilder
                 .lastLogLines(logFile, 500)

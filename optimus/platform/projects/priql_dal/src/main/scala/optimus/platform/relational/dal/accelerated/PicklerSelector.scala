@@ -241,6 +241,7 @@ object PicklerSelector {
     case _: CovariantSet[_]        => covariantSetPickler(pickler)
     case _: List[_]                => listPickler(pickler)
     case _: ImmutableArray[_]      => iarrayPickler(pickler)
+    case _: Vector[_]              => vectorPickler(pickler)
     case _: IndexedSeq[_]          => indexedSeqPickler(pickler)
     case _: immutable.Seq[_]       => iseqPickler(pickler)
     case _: Seq[_]                 => seqPickler(pickler)

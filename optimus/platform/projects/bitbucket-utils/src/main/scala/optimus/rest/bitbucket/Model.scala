@@ -398,6 +398,22 @@ object BitBucketError extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[BitBucketError] = jsonFormat3(BitBucketError.apply)
 }
 
+final case class BuildStatus(
+    state: BitBucketBuildStates.StashBuildState,
+    key: String,
+    name: String,
+    url: String,
+    description: String,
+    dateAdded: Long)
+object BuildStatus extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[BuildStatus] = jsonFormat6(BuildStatus.apply)
+}
+final case class BuildStatuses(isLastPage: Boolean, values: Seq[BuildStatus], nextPageStart: Option[Int])
+    extends Paged[BuildStatus]
+object BuildStatuses extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[BuildStatuses] = jsonFormat3(BuildStatuses.apply)
+}
+
 object PRAction extends Enumeration {
   type PRAction = Value
   val Approved: PRAction = Value("APPROVED")

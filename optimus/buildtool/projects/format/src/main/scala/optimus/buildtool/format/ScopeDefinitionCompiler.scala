@@ -28,6 +28,7 @@ import optimus.buildtool.config.CppToolchain
 import optimus.buildtool.config.Dependencies
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyId
+import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.Id
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
@@ -42,6 +43,7 @@ import optimus.buildtool.dependencies.CentralDependencies
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.format.Keys.KeySet
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
 import org.slf4j.LoggerFactory.getLogger
@@ -126,8 +128,23 @@ class ScopeDefinitionCompiler(
     }
   }
 
+  private def getScopeDefaultsFromBundleDefaults(
+      bundleDefaults: Map[MetaBundle, ScopeDefaults],
+      keyWithoutEonId: MetaBundle): ScopeDefaults = {
+    val keyWithEonId: Option[MetaBundle] =
+      bundleDefaults.keySet.find(_.isEqual(keyWithoutEonId))
+    keyWithEonId.map(bundleDefaults(_)) match {
+      case Some(value) => value
+      case None =>
+        throw new Exception(s"No ScopeDefaults found for MetaBundle ${if (keyWithEonId.isDefined) {
+            val meta = keyWithEonId.get
+            meta.bundle + ":" + meta.eonId
+          } else { "None:None" }}")
+    }
+  }
+
   def compile(workspaceSrcRoot: Directory): Result[Map[ScopeId, ScopeDefinition]] = {
-    val bundleDefaults = for {
+    val bundleDefaults: Result[Map[MetaBundle, ScopeDefaults]] = for {
       workspaceDefaults <- loadDefaults(WorkspaceDefaults, ScopeDefaults.empty)
       bundleDefaults <- loadBundleDefaults(workspaceDefaults)
     } yield bundleDefaults
@@ -135,7 +152,8 @@ class ScopeDefinitionCompiler(
     val scopes = for {
       defaults <- ResultSeq.single(bundleDefaults)
       module <- ResultSeq(Success(structure.modules.values.to(Seq)))
-      scope <- ResultSeq(loadScopes(module, defaults(module.id.metaBundle), workspaceSrcRoot))
+      scopeDefaults = getScopeDefaultsFromBundleDefaults(defaults, module.id.metaBundle)
+      scope <- ResultSeq(loadScopes(module, scopeDefaults, workspaceSrcRoot))
     } yield scope
 
     val allScopes = for {
@@ -271,28 +289,39 @@ class ScopeDefinitionCompiler(
         }
         .map(_.to(Seq))
 
-    import scala.jdk.CollectionConverters._
-
     val conditionals =
       if (!cfg.hasPath("conditionals")) Success(Nil)
-      else {
-        Result.unwrap(
-          for {
-            (name, config) <- ResultSeq(cfg.getConfig("conditionals").resolve().nested(file))
-            defaults <- ResultSeq.single(loadDefaultsFromConfig(file)(config.getConfig("configuration")))
-          } yield ConditionalDefaults(
-            name,
-            config.getStringList("ids").asScala.to(Seq).map(id => Id.parse(id)),
-            defaults,
-            config.hasPath("exclude") && config.getBoolean("exclude")
-          )
-        )
-      }
+      else
+        Result.sequence {
+          val configurations = cfg.getConfig("conditionals").resolve().nested(file).getOrElse(Seq.empty)
+          configurations.map { case (name, config) =>
+            val conditionalDefaults = for {
+              defaults <- loadDefaultsFromConfig(file)(config.getConfig("configuration"))
+            } yield loadConditional(config, name, defaults)
+
+            // ids is a required field unless forbiddenDependencies are defined
+            if (config.nestedKeyConfigOrEmpty(file, config, "forbiddenDependencies").nonEmpty) {
+              config.optionalValue("ids") match {
+                case None => conditionalDefaults
+                case Some(confValue) =>
+                  conditionalDefaults.withProblems(
+                    Seq(
+                      file.errorAt(confValue, "Invalid keys: pick only one between 'ids' and 'forbiddenDependencies'")))
+              }
+            } else conditionalDefaults.withProblems(config.checkEmptyProperties(file, KeySet("ids")))
+          }
+        }
 
     for {
       ds <- allDepsAndSources
       c <- conditionals
     } yield ScopeDefaults(ds.toMap, c.to(Seq).sortBy(_.name))
+  }
+
+  private def loadConditional(config: Config, name: String, defaults: ScopeDefaults): ConditionalDefaults = {
+    val ids = config.stringListOrEmpty("ids").map(id => Id.parse(id))
+    val exclude = config.hasPath("exclude") && config.getBoolean("exclude")
+    ConditionalDefaults(name, ids, defaults, exclude)
   }
 
   private def loadDefaults(file: ObtFile, parent: ScopeDefaults): Result[ScopeDefaults] =
@@ -352,6 +381,8 @@ class ScopeDefinitionCompiler(
               if (fromMavenLibs) mavenDepNotDefined(id)
               else if (centralDependencies.jvmDependencies.mavenDepsByKey.contains(id))
                 mavenDepNotAllowed(id, centralDependencies.jvmDependencies.mavenDepsByKey(id).head.line)
+              else if (centralDependencies.jvmDependencies.noVersionDependenciesMap.contains(id))
+                noVersionDepNotAllowed(id, centralDependencies.jvmDependencies.noVersionDependenciesMap(id).head.line)
               else depNotDefined(id)
 
             error(msg, loc)
@@ -481,6 +512,7 @@ class ScopeDefinitionCompiler(
         extensionsConf <- ExtensionConfigurationCompiler.load(config, origin)
         postInstallApps <- loadPostInstallApps(config, origin)
         (extraLibs, extraRels) <- loadScopeDeps(origin, "extraLibs", config)
+        forbiddenDependencies <- loadForbiddenDependencies(config, origin)
       } yield {
         val archiveContentRoots = config.seqOrEmpty("archiveContents")
         val scope = InheritableScopeDefinition(
@@ -513,7 +545,8 @@ class ScopeDefinitionCompiler(
           includeInClassBundle = config.optionalBoolean("includeInClassBundle"),
           mavenOnly = config.optionalBoolean("mavenOnly"),
           relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
-          extraLibs = extraLibs
+          extraLibs = extraLibs,
+          forbiddenDependencies = forbiddenDependencies
         ).withParent(parent)
 
         origin match {
@@ -993,6 +1026,13 @@ class ScopeDefinitionCompiler(
     }
   }
 
+  private def loadForbiddenDependencies(
+      config: Config,
+      origin: ObtFile): Result[Seq[ForbiddenDependencyConfiguration]] =
+    if (config.hasPath("forbiddenDependencies")) {
+      ForbiddenDependencyConfigurationCompiler.loadForbiddenDependencies(config, origin)
+    } else Success(Seq.empty)
+
   private def loadWarnings(compiler: String, config: Config, origin: ObtFile): Result[WarningsConfiguration] = {
     if (config.hasPath(compiler)) {
       WarningsConfiguration.load(config.getConfig(compiler), origin)
@@ -1043,6 +1083,9 @@ object ScopeDefinitionCompiler {
     s"dependency $id at ${MavenDependenciesConfig.path.pathString}:$line shouldn't be used in afs project libs"
 
   private[buildtool] def depNotDefined(id: String): String = s"Dependency $id is not defined"
+
+  private[buildtool] def noVersionDepNotAllowed(id: String, line: Int): String =
+    s"dependency $id at ${JvmDependenciesConfig.path.pathString}:$line shouldn't be used directly, it's the transitive mapping rule without version."
 
   def asJson(sd: ScopeDefinition): JsObject = {
     val cfg = Map(

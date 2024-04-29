@@ -72,7 +72,8 @@ object AsyncElectronCompilerImpl {
 @entity private[buildtool] class AsyncElectronCompilerImpl(
     pnpmStoreDir: Directory,
     sandboxFactory: SandboxFactory,
-    logDir: Directory)
+    logDir: Directory,
+    useCrumbs: Boolean)
     extends AsyncElectronCompiler {
 
   // one log file per scopeID, only be used for load debugging msg
@@ -112,7 +113,8 @@ object AsyncElectronCompilerImpl {
                 npmBuildCommands,
                 sandbox.sourceDir,
                 pnpmStoreDir,
-                logFile
+                logFile,
+                useCrumbs
               )
               BackgroundProcessBuilder
                 .lastLogLines(logFile, 500)

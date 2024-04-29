@@ -26,6 +26,7 @@ import optimus.buildtool.files.ReactiveDirectory
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.AppValidator
+import optimus.buildtool.format.Bundle
 import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Message
 import optimus.buildtool.format.ObtFile
@@ -40,6 +41,7 @@ import optimus.buildtool.format.WorkspaceDefinition
 import optimus.buildtool.format.WorkspaceStructure
 import optimus.buildtool.format.docker.DockerStructure
 import optimus.buildtool.resolvers.DependencyMetadataResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolvers
 import optimus.buildtool.trace.FindObtFiles
 import optimus.buildtool.trace.LoadConfig
 import optimus.buildtool.trace.MessageTrace
@@ -66,7 +68,7 @@ import scala.collection.immutable.SortedMap
     val externalDependencies: ExternalDependencies,
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val globalExcludes: Seq[Exclude],
-    val depMetadataResolvers: Seq[DependencyMetadataResolver],
+    val depMetadataResolvers: DependencyMetadataResolvers,
     val scopeDefinitions: Map[ScopeId, ScopeDefinition],
     val messages: Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]],
     val appValidator: AppValidator,
@@ -91,6 +93,9 @@ import scala.collection.immutable.SortedMap
     val scopeDef = scopeDefinitions(id)
     ScopeDefinition.jarConfigurationFor(scopeDef, versionConfig)
   }
+
+  @node override def bundleConfiguration(metaBundle: MetaBundle): Option[Bundle] =
+    workspaceStructure.bundles.find(_.id.isEqual(metaBundle))
 
   // Note: We can only include a scope in the class bundle if:
   // - it's a main scope (otherwise test discovery on the jar will pick up the test for all the scopes in the bundle)
@@ -198,20 +203,17 @@ import scala.collection.immutable.SortedMap
           val allExternalDependencies: ExternalDependencies = {
             val loadedMultiSourceDeps =
               ws.dependencies.jvmDependencies.multiSourceDependencies.getOrElse(MultiSourceDependencies(Seq.empty))
-            val (disabledAfsMappedDeps, enabledAfsMappedDeps) =
-              loadedMultiSourceDeps.multiSourceDeps.map(_.asExternalDependency).partition(_.definition.isDisabled)
+            val afsMappedDeps = loadedMultiSourceDeps.multiSourceDeps.map(_.asExternalDependency)
             val unmappedAfsDeps =
-              ws.dependencies.jvmDependencies.dependencies
-                .map(ExternalDependency(_, Nil)) ++ loadedMultiSourceDeps.afsOnlyDeps.map(_.asExternalDependency)
-            val unmappedMavenDeps = ws.dependencies.jvmDependencies.mavenDependencies.map(ExternalDependency(_, Nil))
-            val mappedMavenDeps = (disabledAfsMappedDeps ++ enabledAfsMappedDeps)
-              .flatMap(_.equivalents)
-              .distinct
-              .map(ExternalDependency(_, Nil))
-            val mixModeMavenDeps = loadedMultiSourceDeps.mavenOnlyDeps.map(_.asExternalDependency)
+              ws.dependencies.jvmDependencies.dependencies ++ loadedMultiSourceDeps.afsOnlyDeps.map(_.definition)
+            val unmappedMavenDeps = ws.dependencies.jvmDependencies.mavenDependencies
+            val mappedMavenDeps = afsMappedDeps.flatMap(_.equivalents).distinct
+            val mixModeMavenDeps = mappedMavenDeps ++ loadedMultiSourceDeps.mavenOnlyDeps.map(_.definition)
+            // only be used for transitive mapping without forced version
+            val noVersionMavenDeps = loadedMultiSourceDeps.noVersionMavenDeps.map(_.definition)
 
-            val allAfs = AfsDependencies(unmappedAfsDeps, disabledAfsMappedDeps, enabledAfsMappedDeps)
-            val allMaven = MavenDependencies(unmappedMavenDeps, mappedMavenDeps, mixModeMavenDeps)
+            val allAfs = AfsDependencies(unmappedAfsDeps, afsMappedDeps)
+            val allMaven = MavenDependencies(unmappedMavenDeps, mixModeMavenDeps, noVersionMavenDeps)
             ExternalDependencies(allAfs, allMaven)
           }
 

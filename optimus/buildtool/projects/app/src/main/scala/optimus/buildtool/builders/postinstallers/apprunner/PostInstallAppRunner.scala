@@ -33,6 +33,16 @@ import optimus.platform.util.Log
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
+object PostInstallAppRunner {
+  // OPTIMUS-49684: OBT environment variables that are not forwarded to the postinstall app
+  // We specifically clean those variables because they will be set by the runconf for the PostInstallApp and should
+  // never inherit the values from the OBT runconf.
+  private val unsafeEnvVariables = Seq("JAVA_OPTS", "JAVA_HOME", "CLASSPATH", "OPTIMUSAPP_OPTS", "LD_PRELOAD")
+
+  // TODO (OPTIMUS-65156): Remove when elf parsing issues are understood.
+  private val extraEnvVariables = Map("OPTIMUS_SAMPLING" -> "false")
+}
+
 /**
  * Runs applications for a specific scope after its installation. This is a "hack" that should be carefully used and
  * only for apps that are not RT.
@@ -44,17 +54,15 @@ class PostInstallAppRunner(
     installVersion: String,
     logDir: Directory,
     latestCommit: Option[Commit],
-    bundleClassJars: Boolean
+    bundleClassJars: Boolean,
+    useCrumbs: Boolean
 ) extends PostInstaller
     with Log {
-  // OPTIMUS-49684: OBT environment variables that are not forwarded to the postinstall app
-  //
-  // We specifically clean those variables because they will be set by the runconf for the PostInstallApp and should
-  // never inherit the values from the OBT runconf.
-  private val unsafeEnvVariables = Seq("JAVA_OPTS", "JAVA_HOME", "CLASSPATH", "OPTIMUSAPP_OPTS", "LD_PRELOAD")
+  import PostInstallAppRunner._
 
-  private val pathBuilder = InstallPathBuilder.dev(installDir, installVersion)
   protected val isWindows = Utils.isWindows
+  
+  private val pathBuilder = InstallPathBuilder.dev(installDir, installVersion)
 
   private val args: Seq[String] = Seq(
     "--installDir",
@@ -145,7 +153,13 @@ class PostInstallAppRunner(
     val id = BackgroundAppId(scopeId, appName)
     log.info(s"[$id] Starting...")
     val (durationInNanos, _) = AdvancedUtils.timed {
-      BackgroundProcessBuilder(id, id.logFile(logDir), cmd, envVariablesToClean = unsafeEnvVariables)
+      BackgroundProcessBuilder(
+        id,
+        id.logFile(logDir),
+        cmd,
+        envVariablesToClean = unsafeEnvVariables,
+        envVariablesToAdd = extraEnvVariables,
+        useCrumbs = useCrumbs)
         .build(scopeId, PostInstallApp(appName), lastLogLines = 30)
     }
     log.info(s"[$id] Completed in ${Utils.durationString(durationInNanos / 1000000L)}")

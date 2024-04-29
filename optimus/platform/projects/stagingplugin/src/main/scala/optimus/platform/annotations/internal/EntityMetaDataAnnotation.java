@@ -21,32 +21,32 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 public @interface EntityMetaDataAnnotation {
-  int slotNumber();
 
-  boolean explicitSlotNumber();
+  int slotNumber() default 0;
 
-  boolean isStorable();
+  boolean explicitSlotNumber() default false;
 
-  boolean isTrait();
+  boolean isStorable() default false;
 
-  boolean isObject();
+  boolean isTrait() default false;
 
-  boolean projected();
+  boolean isObject() default false;
 
-  boolean fullTextSearch();
+  boolean projected() default false;
+
+  boolean fullTextSearch() default false;
 
   // these fields are in line with the attribute names
   // if we add/modify fields in this annotation then we need to keep this is step
-  // additionally the code that generates this annotation in OptimusNames, AdjustAst should be kept
-  // in line
-  // this is also parsed in code, so MetaDataReader and EntityHierarchyManager will need
-  // corresponding changes
+  // additionally the code that generates this annotation in OptimusNames,
+  // AdjustAst should be kept in line this is also parsed in code,
+  // so MetaDataReader and EntityHierarchyManager will need corresponding changes
 
-  public static String name_slotNumber = "slotNumber";
-  public static String name_explicitSlotNumber = "explicitSlotNumber";
-  public static String name_isStorable = "isStorable";
-  public static String name_isTrait = "isTrait";
-  public static String name_isObject = "isObject";
-  public static String name_projected = "projected";
-  public static String name_fullTextSearch = "fullTextSearch";
+  String name_slotNumber = "slotNumber";
+  String name_explicitSlotNumber = "explicitSlotNumber";
+  String name_isStorable = "isStorable";
+  String name_isTrait = "isTrait";
+  String name_isObject = "isObject";
+  String name_projected = "projected";
+  String name_fullTextSearch = "fullTextSearch";
 }

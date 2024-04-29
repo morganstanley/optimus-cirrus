@@ -21,7 +21,6 @@ import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.Properties.obtCategory
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -30,6 +29,7 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.IncrementalArtifact
 import optimus.buildtool.cache.ArtifactStoreBase
 import optimus.buildtool.artifacts.CompilationMessage.Warning
+import optimus.buildtool.cache.ComparableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -52,6 +52,7 @@ import scala.annotation.tailrec
 object SilverKingStore extends Log {
 
   object Config {
+    // TODO (OPTIMUS-64537): change prefix after cut-over
     private val prefix = SilverKingStoreConfig.prefix
 
     // defaults to "external"
@@ -140,7 +141,8 @@ class SilverKingStore private[cache] (
     distributedSwitch: Variable[Map[OperationType, String]],
     failureSwitch: MaxFailuresReadWriteSwitch
 ) extends ArtifactStoreBase
-    with RemoteAssetStore {
+    with RemoteAssetStore
+    with ComparableArtifactStore {
   import SilverKingStore._
   import SilverKingStore.Connection._
   import OperationType._
@@ -227,9 +229,8 @@ class SilverKingStore private[cache] (
     val key = ArtifactKey(id, fingerprintHash, tpe, discriminator, artifactVersion)
     // Safe to set incremental=false here, since we don't allow incremental artifacts in SK
     val asset = pathBuilder.outputPathFor(key.id, key.fingerprintHash, key.tpe, key.discriminator, incremental = false)
-
     val storedAsset = _get(key, ArtifactCacheTraceType(tpe), asset)
-    storedAsset.map(tpe.fromAsset(id, _))
+    tpe.fromRemoteAsset(storedAsset, id, key.toString, stat)
   }
 
   @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = {
@@ -310,7 +311,7 @@ class SilverKingStore private[cache] (
       checkedArtifact.nonEmpty
     }
 
-  @async override protected def write[A <: CachedArtifactType](
+  @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     artifact match {
       case _ if !writeArtifacts =>

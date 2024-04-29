@@ -11,12 +11,18 @@
  */
 package optimus.buildtool.config
 
+import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.files.Asset
 
 import scala.collection.immutable.Seq
 
 final case class Variant(name: String, reason: String, configurationOnly: Boolean = false)
-final case class Exclude(group: Option[String], name: Option[String])
+final case class Exclude(
+    group: Option[String],
+    name: Option[String],
+    // Only used when resolving from ivy and only supported for global excludes.
+    // Not written into published ivy files, and ignored completely for maven deps.
+    ivyConfiguration: Option[String] = None)
 final case class IvyArtifact(name: String, tpe: String, ext: String)
 
 sealed trait Kind
@@ -42,7 +48,7 @@ final case class DependencyDefinition(
     name: String,
     version: String,
     kind: Kind,
-    configuration: String = "runtime",
+    configuration: String = DefaultConfiguration,
     classifier: Option[String] = None,
     excludes: Seq[Exclude] = Nil,
     variant: Option[Variant] = None,
@@ -55,9 +61,11 @@ final case class DependencyDefinition(
     isScalacPlugin: Boolean = false,
     ivyArtifacts: Seq[IvyArtifact] = Nil,
     isMaven: Boolean = false,
-    isDisabled: Boolean = false,
     isExtraLib: Boolean = false // for metadata generation only
 ) extends OrderedElement {
+
+  def noVersion: Boolean = version.isEmpty
+
   def gradleKey = s"$group:$name:${variant.fold("default")(_ => version)}"
 
   def key: String = path.mkString(".")
@@ -113,6 +121,7 @@ final case class NativeDependencyDefinition(
 
 object DependencyDefinition {
   val ScalaId = DependencyId("ossscala", "scala")
+  val DefaultConfiguration = "runtime"
 }
 
 final case class DependencyDefinitions(directIds: Seq[DependencyDefinition], indirectIds: Seq[DependencyDefinition]) {
@@ -127,39 +136,27 @@ object ExternalDependencies {
 }
 
 final case class ExternalDependencies(afsDependencies: AfsDependencies, mavenDependencies: MavenDependencies) {
-  val multiSourceDependencies: Seq[ExternalDependency] =
-    afsDependencies.disabledAfsMappedDeps ++ afsDependencies.enabledAfsMappedDeps
-  val allExternalDependencies: Seq[ExternalDependency] =
-    afsDependencies.allAfsDeps ++ mavenDependencies.allMavenDeps
-  val definitions: Seq[DependencyDefinition] = allExternalDependencies.map(_.definition).toIndexedSeq
-  // be used for direct mapping
-  val afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
+  val multiSourceDependencies: Seq[ExternalDependency] = afsDependencies.afsMappedDeps
+  val definitions: Seq[DependencyDefinition] =
+    (afsDependencies.allAfsDeps ++ mavenDependencies.allMavenDeps).toIndexedSeq
+  // be used for afs to maven mapping
+  def afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
     multiSourceDependencies.map(d => d.definition -> d.equivalents).toMap
 }
 
 object AfsDependencies {
-  def empty: AfsDependencies = AfsDependencies(Nil, Nil, Nil)
+  def empty: AfsDependencies = AfsDependencies(Nil, Nil)
 }
 
 /**
  * loaded afs dependencies in *dependencies.obt files
  * @param unmappedAfsDeps
  *   only afs dependency be defined
- * @param disabledAfsMappedDeps
- *   both afs{} maven{} be defined, but no .version in afs{} definition
- * @param enabledAfsMappedDeps
+ * @param afsMappedDeps
  *   both afs{} maven{} be defined
  */
-final case class AfsDependencies(
-    unmappedAfsDeps: Seq[ExternalDependency],
-    disabledAfsMappedDeps: Seq[ExternalDependency],
-    enabledAfsMappedDeps: Seq[ExternalDependency]) {
-  val allAfsDeps: Seq[ExternalDependency] = unmappedAfsDeps ++ disabledAfsMappedDeps ++ enabledAfsMappedDeps
-  val allAfsDisabledMavenDefinitions: Seq[DependencyDefinition] = disabledAfsMappedDeps.flatMap(_.equivalents)
-  val allMixModeAllowedCoursierKey: Seq[DependencyCoursierKey] = (disabledAfsMappedDeps ++ enabledAfsMappedDeps).map {
-    d =>
-      DependencyCoursierKey(d.definition.group, d.definition.name, d.definition.configuration, d.definition.version)
-  }
+final case class AfsDependencies(unmappedAfsDeps: Seq[DependencyDefinition], afsMappedDeps: Seq[ExternalDependency]) {
+  val allAfsDeps: Seq[DependencyDefinition] = unmappedAfsDeps ++ afsMappedDeps.map(_.definition)
 }
 
 object MavenDependencies {
@@ -170,19 +167,21 @@ object MavenDependencies {
  * loaded maven dependencies in *dependencies.obt files
  * @param unmappedMavenDeps
  *   loaded from maven-dependencies.obt and should only be used in 'mavenLibs = []'
- * @param mappedMavenDeps
- *   both afs{} maven{} be defined
  * @param mixModeMavenDeps
  *   only maven{} be defined, open for all modules
+ * @param noVersionMavenDeps
+ *   transitive maven deps not allowed be directly used in codetree, without version num: maven.foo.bar{}
  */
 final case class MavenDependencies(
-    unmappedMavenDeps: Seq[ExternalDependency],
-    mappedMavenDeps: Seq[ExternalDependency],
-    mixModeMavenDeps: Seq[ExternalDependency]) {
-  val allMavenDeps: Seq[ExternalDependency] = unmappedMavenDeps ++ mappedMavenDeps ++ mixModeMavenDeps
-  val allMavenOnlyDefinitions: Seq[DependencyDefinition] = mixModeMavenDeps.map(_.definition)
-  val allMixModeAllowedCoursierKey: Seq[DependencyCoursierKey] = (mappedMavenDeps ++ mixModeMavenDeps).map { d =>
-    DependencyCoursierKey(d.definition.group, d.definition.name, d.definition.configuration, d.definition.version)
+    unmappedMavenDeps: Seq[DependencyDefinition],
+    mixModeMavenDeps: Seq[DependencyDefinition],
+    noVersionMavenDeps: Seq[DependencyDefinition]) {
+  val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixModeMavenDeps
+  // be used by transitive mapping validation
+  val allMappedMavenCoursierKey: Seq[DependencyCoursierKey] = {
+    (noVersionMavenDeps ++ mixModeMavenDeps).map { d =>
+      DependencyCoursierKey(d.group, d.name, d.configuration, d.version)
+    }
   }
 }
 

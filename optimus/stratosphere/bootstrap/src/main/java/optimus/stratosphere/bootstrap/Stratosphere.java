@@ -115,6 +115,10 @@ public class Stratosphere {
     try {
       String command = (args.length > 0) ? args[0] : "";
       return runCommand(command, args);
+    } catch (RecoverableStratosphereException e) {
+      System.err.println("[ERROR] " + e.getMessage());
+      System.err.println(System.lineSeparator() + Messages.recoverableErrorMessage());
+      return FAILURE;
     } catch (StratosphereException se) {
       System.err.println(baseFailureMessage);
       System.err.println(se.getMessage());
@@ -132,7 +136,7 @@ public class Stratosphere {
   }
 
   private static int runCommand(String command, String[] args) throws Exception {
-    Path workspace = WorkspaceRoot.findOldOrNew();
+    Path workspace = WorkspaceRoot.find();
     final Config config = StratosphereConfig.loadFromCurrentDir();
     final List<String> commandsToRunWithSnapshotInfra =
         config.getStringList("internal.commands-to-run-with-snapshot-infra");

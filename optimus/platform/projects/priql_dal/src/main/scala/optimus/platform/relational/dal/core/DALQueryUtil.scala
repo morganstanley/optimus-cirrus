@@ -157,7 +157,7 @@ trait DALQueryUtil {
                | Entity: $e""".stripMargin.replaceAll("\n", "")
           )
       case _: OptimusEntity if !allowHeapEntity =>
-        // we have to support heap entity for historical reason, e.g. @stored @entity case object New
+        // we have to support heap entity for historical reason, e.g. @stored @entity object New
         throw new RelationalUnsupportedException("Cannot query heap entity on server side.")
       case _ =>
     }

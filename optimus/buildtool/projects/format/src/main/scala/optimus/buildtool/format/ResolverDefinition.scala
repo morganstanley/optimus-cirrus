@@ -19,6 +19,7 @@ import optimus.buildtool.format.ResolverDefinition.ResolverType
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.collection.compat._
+import scala.util.control.NonFatal
 
 final case class ResolverDefinition(
     name: String,
@@ -32,7 +33,6 @@ object ResolverDefinition {
   object ResolverType {
     case object Maven extends ResolverType
     case object Ivy extends ResolverType
-    case object Other extends ResolverType
   }
 
   private[buildtool] val Artifacts = "artifacts"
@@ -42,8 +42,6 @@ object ResolverDefinition {
   private[buildtool] val Root = "root"
   private[buildtool] val IvyResolvers = "ivy-resolvers"
   private[buildtool] val MavenResolvers = "maven-resolvers"
-  private[buildtool] val MavenUnzipResolvers = "maven-unzip-resolvers"
-  private[buildtool] val OtherResolvers = "other-resolvers"
 
   private[buildtool] val noMetadataMsg = s"no $Ivys or $Poms pattern predefined!"
   private[buildtool] val noArtifactsMsg = s"no $Artifacts pattern predefined!"
@@ -69,53 +67,73 @@ object ResolverDefinition {
       val artifactPattern = loadListWithRoot(Artifacts)
       val line = config.root().origin().lineNumber()
 
-      // allow user put variables in artifacts and metadata, should be warnings
-      val warnings =
-        Seq(
-          configWarning(noArtifactsMsg, artifactPattern.isEmpty, line),
-          configWarning(noMetadataMsg, metadataPatterns.isEmpty, line)
-        ).flatten
-
       Success(
         ResolverDefinition(config.getString(Name), metadataTpe, metadataPatterns, artifactPattern, line),
         config.checkExtraProperties(ResolverConfig, Keys.resolversFile)
-      ).withProblems(warnings)
+      )
     }
 
-  private def parseResolvers(config: Config): Result[Seq[ResolverDefinition]] = Result.tryWith(ResolverConfig, config) {
+  private def parseResolvers(config: Config): Result[ResolverDefinitions] = Result.tryWith(ResolverConfig, config) {
 
-    def loadResolversList(key: String, tpe: ResolverType): Result[Seq[ResolverDefinition]] =
+    def loadResolversList(key: String, allResolvers: Seq[ResolverDefinition]): Seq[ResolverDefinition] = {
+      val nameList: Seq[String] =
+        if (config.hasPath(key))
+          config.getList(key).asScala.map(_.asInstanceOf[ConfigObject].toConfig.getString("name")).toIndexedSeq
+        else Nil
+
+      nameList.flatMap(n => allResolvers.find(_.name == n))
+    }
+
+    def loadAllPredefinedResolvers: Result[Seq[ResolverDefinition]] =
       Result
-        .traverse(if (config.hasPath(key)) config.getList(key).asScala.to(Seq) else Nil) { cfgValue =>
-          parseResolver(cfgValue.asInstanceOf[ConfigObject].toConfig, tpe)
+        .traverse(
+          config.keySet
+            .to(Seq)
+            .filter { k =>
+              try {
+                config.getConfig(k).hasPath("name")
+              } catch {
+                case NonFatal(e) => false
+              }
+            }
+        ) { onDemandRepoName =>
+          val repoConfig = config.getConfig(onDemandRepoName)
+          parseResolver(repoConfig, if (repoConfig.hasPath(Ivys)) ResolverType.Ivy else ResolverType.Maven)
         }
         .map(_.to(Seq).filter(res => res.artifactPatterns.nonEmpty && res.metadataPatterns.nonEmpty))
+        .withProblems { results =>
+          results
+            .groupBy(_.name)
+            .filter(_._2.size > 1)
+            .flatMap { case (name, configs) =>
+              val msg = s"Resolver name must be unique, '$name' is used at ${configs.map(_.line)}"
+              configs.map(conf => Error(msg, ResolverConfig, conf.line))
+            }
+            .to(Seq)
+        }
 
     for {
-      ivyResolvers <- loadResolversList(IvyResolvers, ResolverType.Ivy)
-      mavenResolvers <- loadResolversList(MavenResolvers, ResolverType.Maven)
-      // TODO (OPTIMUS-58907): remove MavenUnzipResolvers after next obt release
-      mavenUnzipResolvers <- loadResolversList(MavenUnzipResolvers, ResolverType.Other)
-      otherResolvers <- loadResolversList(OtherResolvers, ResolverType.Other)
-    } yield ivyResolvers ++ mavenResolvers ++ mavenUnzipResolvers ++ otherResolvers
+      allResolvers <- loadAllPredefinedResolvers
+      ivyResolvers = loadResolversList(IvyResolvers, allResolvers)
+      mavenResolvers = loadResolversList(MavenResolvers, allResolvers)
+    } yield ResolverDefinitions(ivyResolvers, mavenResolvers, allResolvers.diff(ivyResolvers ++ mavenResolvers))
   }
 
-  def load(loader: ObtFile.Loader): Result[Seq[ResolverDefinition]] =
+  def load(loader: ObtFile.Loader): Result[ResolverDefinitions] =
     ResolverConfig.tryWith {
-      val resolvers = for {
+      for {
         config <- loader(ResolverConfig)
         resolver <- parseResolvers(config)
       } yield resolver
-
-      resolvers.withProblems { results =>
-        results
-          .groupBy(_.name)
-          .filter(_._2.size > 1)
-          .flatMap { case (name, configs) =>
-            val msg = s"Resolver name must be unique, '$name' is used at ${configs.map(_.line)}"
-            configs.map(conf => Error(msg, ResolverConfig, conf.line))
-          }
-          .to(Seq)
-      }
     }
+}
+
+final case class ResolverDefinitions(
+    defaultIvyResolvers: Seq[ResolverDefinition],
+    defaultMavenResolvers: Seq[ResolverDefinition],
+    onDemandResolvers: Seq[ResolverDefinition]
+) { def allResolvers: Seq[ResolverDefinition] = defaultIvyResolvers ++ defaultMavenResolvers ++ onDemandResolvers }
+
+object ResolverDefinitions {
+  val empty: ResolverDefinitions = ResolverDefinitions(Nil, Nil, Nil)
 }

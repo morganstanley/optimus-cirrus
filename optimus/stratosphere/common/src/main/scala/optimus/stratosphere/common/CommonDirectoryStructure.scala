@@ -118,6 +118,8 @@ class CommonDirectoryStructure(
 
   val toolsDir: Path = stratosphereHiddenDir.resolve("tools")
 
+  val ideClientStoreDir: Path = toolsDir.resolve("gateway_client")
+
   // <STRATOSPHERE_HOME>/.stratosphere/depcopy
   val depcopyDir: Path = stratosphereHiddenDir.resolve("depcopy")
 

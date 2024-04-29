@@ -184,6 +184,13 @@ public class StratosphereConfig {
       // resolving to have stratosphereSrcDir, we need it to add sysloc property
       tmpResolvedConfig = config.resolve(allowUnresolved);
 
+      FsCampus fsCampus =
+          new FsCampus(
+              Paths.get(tmpResolvedConfig.getString("stratosphereSrcDir")).resolve("config"));
+      updateProperty("region.default", fsCampus.getValue());
+      updateProperty("region.reports", fsCampus.getAlternativeMapping("report-upload"));
+      updateProperty("region.obt-dht", fsCampus.getAlternativeMapping("obt-dht"));
+
       if (StratosphereChannelsConfig.shouldUseStratosphereChannels(
           tmpResolvedConfig, stratosphereInfraOverride)) {
         Channel selectedChannel = StratosphereChannelsConfig.selectChannel(tmpResolvedConfig);
@@ -202,11 +209,6 @@ public class StratosphereConfig {
           updateProperty("stratosphereVersionSymlink", stratosphereVersion);
         }
       }
-
-      FsCampus fsCampus =
-          new FsCampus(Paths.get(tmpResolvedConfig.getString("stratosphereSrcDir")));
-      updateProperty("sysloc", fsCampus.getValue());
-      updateProperty("syslocNoZn", fsCampus.getValueNoZn());
 
       if (workspaceRoot != null) {
         if (config.hasPath("profile")) {

@@ -41,21 +41,20 @@ class JvmDependencies(
 
   private def byMultiSourceKey(deps: Seq[MultiSourceDependency]) = byKey(deps.map(_.definition))
 
+  private def multiSourceDepsMap(deps: Seq[MultiSourceDependency]) = {
+    // name + afs name + maven names
+    byName(deps) ++ byMultiSourceKey(deps) ++ byKey(deps.flatMap(_.maven))
+  }
+
   // from jvm-dependencies.obt
   private val loadedMultiSourceDeps = multiSourceDependencies.getOrElse(MultiSourceDependencies(Nil))
 
   // mixed mode dependencies could be used for any modules
-  val multiSourceDepsByName: Map[String, Seq[DependencyDefinition]] = byName(loadedMultiSourceDeps.multiSourceDeps)
-  val mixedModeAfsDepsByKey: Map[String, Seq[DependencyDefinition]] = byMultiSourceKey(
+  val multiSourceDepsMap: Map[String, Seq[DependencyDefinition]] = multiSourceDepsMap(
     loadedMultiSourceDeps.multiSourceDeps)
-  val mixedModeMavenDepsByKey: Map[String, Seq[DependencyDefinition]] = byKey(
-    loadedMultiSourceDeps.multiSourceDeps.flatMap(_.maven))
-  val mavenOnlyDepsByName: Map[String, Seq[DependencyDefinition]] =
-    loadedMultiSourceDeps.mavenOnlyDeps.map(d => d.name -> d.maven).toMap.withDefaultValue(Seq())
-  val mavenOnlyDepsByKey: Map[String, Seq[DependencyDefinition]] =
-    byKey(loadedMultiSourceDeps.mavenOnlyDeps.flatMap(_.maven))
+  val mavenOnlyDepsMap: Map[String, Seq[DependencyDefinition]] = multiSourceDepsMap(loadedMultiSourceDeps.mavenOnlyDeps)
   val allMixedModeDependenciesMap: Map[String, Seq[DependencyDefinition]] =
-    mavenOnlyDepsByKey ++ mavenOnlyDepsByName ++ mixedModeAfsDepsByKey ++ mixedModeMavenDepsByKey ++ multiSourceDepsByName
+    mavenOnlyDepsMap ++ multiSourceDepsMap
 
   // afs dependencies
   val jvmAfsDepsByName: Map[String, Seq[DependencyDefinition]] = byName(loadedMultiSourceDeps.afsDefinedDeps)
@@ -75,6 +74,10 @@ class JvmDependencies(
     dependenciesAfsByKey ++ jvmAfsDepsByName ++ jvmAfsDepsByKey ++ allMixedModeDependenciesMap
   val mavenOnlyModulesDependenciesMap: Map[String, Seq[DependencyDefinition]] =
     mavenDepsByKey ++ jvmMavenDepsByKey ++ allMixedModeDependenciesMap
+
+  // transitive mapping rules without version, can't be directly used in codetree
+  val noVersionDependenciesMap: Map[String, Seq[DependencyDefinition]] =
+    multiSourceDepsMap(loadedMultiSourceDeps.noVersionMavenDeps)
 
   def ++(buildDeps: JvmDependencies): JvmDependencies = {
     def merge[T](a: Seq[T], b: Seq[T]): Seq[T] = (a ++ b).toList.distinct

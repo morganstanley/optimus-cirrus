@@ -52,7 +52,7 @@ object AsyncPythonCompiler {
 }
 
 @entity trait AsyncPythonCompiler {
-  @node def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): PythonArtifact
+  @node def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): Option[PythonArtifact]
 }
 
 @entity private[buildtool] class AsyncPythonCompilerImpl(
@@ -60,13 +60,19 @@ object AsyncPythonCompiler {
     venvCache: Directory,
     sandboxFactory: SandboxFactory,
     logDir: Directory,
-    credentialFile: String)
+    credentialFile: String,
+    pythonEnabled: NodeFunction0[Boolean])
     extends AsyncPythonCompiler {
 
   private def venvLogFile(logDir: Directory, id: ScopeId): FileAsset =
     logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$id.venvCmd.log")
 
-  @node override def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): PythonArtifact = {
+  @node override def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): Option[PythonArtifact] = {
+    if (OsUtils.isWindows && !pythonEnabled()) None
+    else Some(buildArtifact(scopeId, inputs))
+  }
+
+  @node private def buildArtifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): PythonArtifact = {
     val resolvedInputs = inputs()
     import resolvedInputs._
 

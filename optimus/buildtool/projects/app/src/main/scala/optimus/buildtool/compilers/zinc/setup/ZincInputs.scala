@@ -58,8 +58,6 @@ import xsbti.VirtualFile
 import xsbti.VirtualFileRef
 import xsbti.compile._
 
-import scala.compat.java8.OptionConverters._
-
 final case class Jars(
     signatureJar: Option[PathPair],
     signatureAnalysisJar: Option[PathPair],
@@ -105,7 +103,7 @@ class ZincInputs(
       inputClasspath: Seq[PathedArtifact],
       previousSignatureAnalysisJar: Option[JarAsset],
       jars: Jars,
-      analysisStore: AnalysisStore,
+      previousAnalysis: Option[AnalysisContents],
       analysisMappingTrace: MappingTrace,
       classFileManager: ClassFileManager,
       invalidationProfiler: ZincInvalidationProfiler,
@@ -168,7 +166,6 @@ class ZincInputs(
     val classpath = classpathDetails.map(_.file)
     log.trace(s"${prefix}Input classpath:\n  ${classpath.mkString("\n  ")}")
 
-    val previousAnalysis = analysisStore.get.asScala
     val previousResult = previousAnalysis match {
       case Some(a) =>
         log.debug(s"${prefix}Loaded previous analysis $a")

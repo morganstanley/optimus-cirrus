@@ -17,9 +17,7 @@ import coursier.util.Xml.Node
 import CoursierInterner.interned
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.buildtool.config.DependencyCoursierKey
 import optimus.buildtool.config.DependencyDefinition
-import optimus.buildtool.config.Exclude
 
 /**
  * Copy of coursier.ivy.IvyXml (which sadly isn't extensible) with some minor changes to support AFS Ivy.
@@ -55,7 +53,14 @@ private[resolvers] object MsIvyXml {
   def mappings(mapping: String): Seq[(String, String)] =
     mapping.split(';').toList.flatMap { m =>
       val (froms, tos) = m.split("->", 2) match {
-        case Array(from)     => (from, s"default($from)")
+        // when the mapping is just "from" instead of "from->to":
+        // - mainline Coursier does (from, "default(compile)"), with a comment noting that it's probably wrong
+        // - we used to do (from, s"default($from)"), but that means "use default, or fallback to $from if missing"
+        // - the ivy file spec says "from" means "from->from", so that's what we do now (we do this mostly so that
+        //   we can handle configuration-based exclusions without having to guess at what that config mapping will be)
+        //
+        // n.b. there are also a load of other special cases in the ivy spec, but presumably they don't matter to us
+        case Array(from)     => (from, from)
         case Array(from, to) => (from, to)
       }
 
@@ -67,8 +72,7 @@ private[resolvers] object MsIvyXml {
 
   private def dependencies(
       node: Node,
-      loadedExcludes: Map[DependencyCoursierKey, Seq[Exclude]],
-      afsGroupNameToMavenMap: Map[(String, String), Seq[DependencyDefinition]]): Seq[(Configuration, Dependency)] =
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]): Seq[(Configuration, Dependency)] =
     node.children
       .filter(_.label == "dependency")
       .flatMap { node =>
@@ -95,33 +99,28 @@ private[resolvers] object MsIvyXml {
           (fromConf, toConf) <- mappings(rawConf)
           attr = node.attributesFromNamespace(attributesNamespace)
         } yield {
-          val coursierExcludes = allConfsExcludes ++ excludes.getOrElse(fromConf, Set.empty)
-          val obtExcludes = loadedExcludes
-            .getOrElse(DependencyCoursierKey(org, name, fromConf, version), Nil)
-            .map { e =>
-              (Organization(e.group.getOrElse("*")), ModuleName(e.name.getOrElse("*")))
-            }
-            .toSet
+          val allExcludes = allConfsExcludes ++ excludes.getOrElse(fromConf, Set.empty)
           val transitive = node.attribute("transitive").toOption match {
             case Some("false") => false
             case _             => true
           }
           val unmappedModule = Module(Organization(org), ModuleName(name), attr.toMap)
           // try transitive maven dependency mapping
-          val mappedMavenDeps: Seq[(Module, String)] =
-            MavenUtils.applyTransitiveMapping(org, name, attr, afsGroupNameToMavenMap)
+          val mappedMavenDeps: Seq[TransitiveMappedResult] =
+            MavenUtils.applyTransitiveMapping(org, name, fromConf, attr, afsToMavenMap)
           val resolvedDeps =
-            if (mappedMavenDeps.nonEmpty) mappedMavenDeps else Seq((unmappedModule, version))
-          resolvedDeps.map { case (mappedModule, mappedVersion) =>
-            Configuration(fromConf) -> interned(
+            if (mappedMavenDeps.nonEmpty) mappedMavenDeps
+            else Seq(TransitiveMappedResult(unmappedModule, version, toConf))
+          resolvedDeps.map { case resolvedDep =>
+            Configuration(if (mappedMavenDeps.nonEmpty) resolvedDep.configuration else fromConf) -> interned(
               Dependency(
-                mappedModule,
-                mappedVersion,
-                Configuration(toConf),
-                coursierExcludes ++ obtExcludes,
+                resolvedDep.module,
+                resolvedDep.version,
+                Configuration(resolvedDep.configuration),
+                allExcludes,
                 Attributes(
-                  Type(mappedModule.attributes.getOrElse("type", "")),
-                  Classifier(mappedModule.attributes.getOrElse("classifier", ""))),
+                  Type(resolvedDep.module.attributes.getOrElse("type", "")),
+                  Classifier(resolvedDep.module.attributes.getOrElse("classifier", ""))),
                 optional = false,
                 transitive = transitive
               ))
@@ -147,8 +146,7 @@ private[resolvers] object MsIvyXml {
   def project(
       node: Node,
       version: String,
-      excludes: Map[DependencyCoursierKey, Seq[Exclude]],
-      afsGroupNameToMavenMap: Map[(String, String), Seq[DependencyDefinition]]): Either[String, Project] =
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]): Either[String, Project] =
     for {
       infoNode <- node.children
         .find(_.label == "info")
@@ -163,7 +161,7 @@ private[resolvers] object MsIvyXml {
         .find(_.label == "dependencies")
 
       val dependencies0 =
-        dependenciesNodeOpt.map(dependencies(_, excludes, afsGroupNameToMavenMap)).getOrElse(Nil)
+        dependenciesNodeOpt.map(dependencies(_, afsToMavenMap)).getOrElse(Nil)
 
       val dependenciesByConf = dependencies0.groupBy(_._1)
 
@@ -201,23 +199,6 @@ private[resolvers] object MsIvyXml {
         .attribute("publication")
         .toOption
         .flatMap(parseDateTime)
-
-      // checking unused excludes
-      dependenciesByConf.foreach { case (conf, deps) =>
-        val transitiveConfigsDepsList: Seq[Dependency] =
-          configurations0Map.getOrElse(conf, List.empty).flatMap(dependenciesByConf.getOrElse(_, Seq.empty).map(_._2))
-        val allDeps: Seq[Dependency] = deps.map(_._2) ++ transitiveConfigsDepsList
-        val depsOrgNameList: Seq[(String, String)] = allDeps.map { d =>
-          (d.module.organization.value, d.module.name.value)
-        }
-        val key = DependencyCoursierKey(module.organization.value, module.name.value, conf.value, version)
-        excludes.getOrElse(key, Seq.empty).foreach { e =>
-          val excludeOrg = e.group.getOrElse("")
-          val excludeName = e.name.getOrElse("")
-          if (!depsOrgNameList.contains((excludeOrg, excludeName)))
-            log.warn(s"[${key.displayName}] Unused excludes '$excludeOrg:$excludeName' detected!")
-        }
-      }
 
       Project(
         module,

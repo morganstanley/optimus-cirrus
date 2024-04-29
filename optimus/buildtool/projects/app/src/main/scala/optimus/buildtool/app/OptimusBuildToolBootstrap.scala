@@ -65,8 +65,9 @@ object OptimusBuildToolBootstrap extends Log {
   def initializeCrumbs(
       enableCrumbs: Boolean,
       obtBenchmarkScenario: Option[String] = None,
-      sendLongTermBreadcrumbs: Boolean = false
-  ): Unit =
+      sendLongTermBreadcrumbs: Boolean = false,
+      additionalBenchmarkData: Seq[Properties.Elem[_]] = Nil
+  ): Seq[String] = {
     if (enableCrumbs) {
       BreadcrumbsSetup.initializeBreadcrumbsEnv(ZkEnv.qa, "obt", "OptimusBuildTool", Flags.DoNotInitializeEnv)
 
@@ -94,18 +95,33 @@ object OptimusBuildToolBootstrap extends Log {
         v <- Option(System.getenv(k))
       } yield k -> v
 
-      val elems = Seq(
-        Properties.sysEnv -> niceEnv.toMap,
-        Properties.obtCategory -> "BuildEnvironment") ++ obtBenchmarkScenario.map(Properties.obtBenchmarkScenario -> _)
+      val elems =
+        Seq(Properties.sysEnv -> niceEnv.toMap, Properties.obtCategory -> "BuildEnvironment") ++ obtBenchmarkScenario
+          .map(Properties.obtBenchmarkScenario -> _) ++ additionalBenchmarkData
 
-      Breadcrumbs.info(
+      val sent = Breadcrumbs.info(
         ChainedID.root,
         PropertiesCrumb(
           _,
           ObtCrumbSource,
           if (sendLongTermBreadcrumbs) CrumbHints.LongTerm else Set.empty[CrumbHint],
-          elems: _*)
+          elems: _*))
+
+      Seq(
+        s"enableCrumbs: $enableCrumbs",
+        s"obtBenchmarkScenario: $obtBenchmarkScenario",
+        s"sendLongTermBreadcrumbs: $sendLongTermBreadcrumbs",
+        s"ChainedID.root: ${ChainedID.root}",
+        s"Breadcrumbs sent: $sent"
+      )
+    } else {
+      Seq(
+        s"enableCrumbs: $enableCrumbs",
+        s"obtBenchmarkScenario: $obtBenchmarkScenario",
+        s"sendLongTermBreadcrumbs: $sendLongTermBreadcrumbs",
+        "Breadcrumbs not sent due to false enableCrumbs"
       )
     }
+  }
 
 }

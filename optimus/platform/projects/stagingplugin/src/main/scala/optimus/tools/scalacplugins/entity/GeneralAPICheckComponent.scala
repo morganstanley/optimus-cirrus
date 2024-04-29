@@ -11,8 +11,6 @@
  */
 package optimus.tools.scalacplugins.entity
 
-import optimus.tools.scalacplugins.entity.reporter.OptimusAlarms
-
 import java.util.regex.PatternSyntaxException
 import optimus.tools.scalacplugins.entity.reporter.OptimusErrors
 import optimus.tools.scalacplugins.entity.reporter.OptimusNonErrorMessages
@@ -43,7 +41,7 @@ class GeneralAPICheckComponent(
     }
   }
 
-  lazy val NowarnAnnotation = rootMirror.getRequiredClass("scala.annotation.nowarn")
+  private lazy val NowarnAnnotation = rootMirror.getRequiredClass("scala.annotation.nowarn")
 
   object CollectNoWarns {
     private val ValueName = newTermName("value")
@@ -106,17 +104,15 @@ class GeneralAPICheckComponent(
       case _ =>
         super.traverse(tree)
     }
-    def complainAboutUnused() = unusedNoWarn.values.foreach { case (pos, msg) =>
+    def complainAboutUnused(): Unit = unusedNoWarn.values.foreach { case (pos, msg) =>
       alarm(OptimusNonErrorMessages.UNUSED_NOWARN, pos, msg)
     }
   }
 
-  abstract class AbstractAPICheck(noWarns: CollectNoWarns) extends Traverser {
+  abstract class AbstractAPICheck extends Traverser {
     import global._
-    import noWarns._
     lazy val DeprecatingAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecating")
     lazy val DeprecatingNewAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecatingNew")
-    lazy val AllowedInAnnotation = rootMirror.getRequiredClass("optimus.graph.allowedIn")
 
     var inPattern: Boolean = false
     @inline final def savingInPattern[A](value: Boolean)(body: => A): A = {
@@ -140,7 +136,7 @@ class GeneralAPICheckComponent(
     def preTraverse(tree: Tree): Boolean // return true if should continue
     def checkUndesiredProperties(sym: Symbol, pos: Position): Unit
 
-    final override def traverse(tree: Tree) = pathed(tree)(visit)
+    final override def traverse(tree: Tree): Unit = pathed(tree)(visit)
 
     private def visit(tree: Tree): Unit = {
       val sym = tree.symbol
@@ -150,19 +146,19 @@ class GeneralAPICheckComponent(
       if (preTraverse(tree)) tree match {
 
         case CaseDef(pat, guard, body) =>
-          val pat1 = savingInPattern(true) {
+          savingInPattern(value = true) {
             traverse(pat)
           }
           traverse(guard)
           traverse(body)
 
         case LabelDef(_, _, rhs) if treeInfo.hasSynthCaseSymbol(tree) =>
-          savingInPattern(true) {
+          savingInPattern(value = true) {
             traverse(rhs)
           }
 
         case Apply(fun, args) if fun.symbol.isLabel && treeInfo.isSynthCaseSymbol(fun.symbol) =>
-          savingInPattern(false) {
+          savingInPattern(value = false) {
             // https://github.com/scala/bug/issues/7756 If we were in a translated pattern, we can now switch out of
             // pattern mode, as the label apply signals that we are in the user-supplied code in the case body.
             //
@@ -204,15 +200,15 @@ class GeneralAPICheckComponent(
       }
     }
 
-    private def doTypeTraversal(tree: Tree)(f: Type => Unit) = if (!inPattern) tree.tpe foreach f
+    private def doTypeTraversal(tree: Tree)(f: Type => Unit): Unit = if (!inPattern) tree.tpe foreach f
 
-    private def checkSelect(tree: Select) = {
+    private def checkSelect(tree: Select): Unit = {
       val sym = tree.symbol
 
       checkUndesiredProperties(sym, tree.pos)
     }
 
-    private def checkTypeRef(tp: Type, tree: Tree) = tp match {
+    private def checkTypeRef(tp: Type, tree: Tree): Unit = tp match {
       case TypeRef(pre, sym, args) =>
         tree match {
           // https://github.com/scala/bug/issues/7783 don't warn about inferred types in first case
@@ -222,12 +218,12 @@ class GeneralAPICheckComponent(
       case _ =>
     }
 
-    private def checkAnnotations(tpes: List[Type], tree: Tree) = tpes foreach { tp =>
+    private def checkAnnotations(tpes: List[Type], tree: Tree): Unit = tpes foreach { tp =>
       checkTypeRef(tp, tree)
     }
 
     private def applyRefchecksToAnnotations(tree: Tree): Unit = {
-      def applyChecks(annots: List[AnnotationInfo]) = {
+      def applyChecks(annots: List[AnnotationInfo]): Unit = {
         checkAnnotations(annots map (_.atp), tree)
         traverseTrees(annots flatMap (_.args))
       }
@@ -259,13 +255,13 @@ class GeneralAPICheckComponent(
 
   }
 
-  class GeneralAPICheck(noWarns: CollectNoWarns) extends AbstractAPICheck(noWarns) {
+  class GeneralAPICheck(noWarns: CollectNoWarns) extends AbstractAPICheck {
 
     import noWarns._
 
     private val ScopeExtractor = ".*\\(SCOPE=([\\w\\-\\.]+)\\).*".r
 
-    val scopeId = settings.defines.value.collectFirst {
+    val scopeId: Option[String] = settings.defines.value.collectFirst {
       case s if s.startsWith("-DscopeId=") => s.substring("-DscopeId=".length)
     }
 
