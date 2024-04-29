@@ -45,7 +45,7 @@ sealed abstract class InstallPathBuilder(
       .resolveDir(installVersion)
 
   def getMavenPath(classJar: JarAsset, disted: Boolean = false): Option[JarAsset] = classJar.pathString match {
-    case NamingConventions.DepCopyMavenRoot(relativePath) =>
+    case NamingConventions.DepCopyMavenRoot(_, relativePath) =>
       // put into sharable MetaBundle dir for AFS release
       if (disted) Some(dirForDist(mavenReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath))
       else Some(libDir(mavenReleaseMetaBundle).resolveJar(relativePath))

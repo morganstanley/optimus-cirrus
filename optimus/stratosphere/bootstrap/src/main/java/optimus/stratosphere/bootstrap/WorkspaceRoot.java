@@ -17,35 +17,27 @@ import java.nio.file.Paths;
 
 public class WorkspaceRoot {
   public static final String STRATOSPHERE_CONFIG_FILE = "stratosphere.conf";
+  private static final String SRC_DIR = "src";
 
   public static Path find() {
-    return find(STRATOSPHERE_CONFIG_FILE, getCurrentDir());
+    return find(Paths.get("").toAbsolutePath());
   }
 
-  public static Path findIn(Path path) {
-    return find(STRATOSPHERE_CONFIG_FILE, path);
-  }
-
-  public static Path findOldOrNew() {
-    return find(STRATOSPHERE_CONFIG_FILE, getCurrentDir());
-  }
-
-  private static Path getCurrentDir() {
-    return Paths.get("").toAbsolutePath();
-  }
-
-  private static Path find(String fileName, Path currentDir) {
-    while (currentDir != null) {
-      Path srcDir = currentDir.resolve("src");
-      Path versionDescriptor = srcDir.resolve(fileName);
-
-      if (Files.exists(versionDescriptor)) {
+  public static Path find(Path currentDir) {
+    if (currentDir == null) {
+      return null;
+    }
+    Path srcDir = currentDir.resolve(SRC_DIR);
+    if (Files.exists(srcDir)) {
+      if (Files.exists(srcDir.resolve(STRATOSPHERE_CONFIG_FILE))) {
         return currentDir;
-      } else {
-        currentDir = currentDir.getParent();
+      } else if (SparseUtils.isConfigCorrupted(srcDir)) {
+        throw new RecoverableStratosphereException(
+            "Detected malformed sparse configuration. Run following commands to recover:\n\n"
+                + "git sparse-checkout disable\n"
+                + "stratosphere sparse refresh");
       }
     }
-
-    return null;
+    return find(currentDir.getParent());
   }
 }

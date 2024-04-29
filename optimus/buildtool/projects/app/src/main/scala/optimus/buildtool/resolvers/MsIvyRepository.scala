@@ -16,9 +16,7 @@ import coursier.ivy._
 import coursier.util.Artifact
 import coursier.util.EitherT
 import coursier.util.Monad
-import optimus.buildtool.config.DependencyCoursierKey
 import optimus.buildtool.config.DependencyDefinition
-import optimus.buildtool.config.Exclude
 import optimus.buildtool.utils.PathUtils
 import optimus.platform.util.xml.UnsafeXML
 import optimus.platform._
@@ -35,7 +33,7 @@ import scala.util.Try
  *
  * TODO (OPTIMUS-26823): Remove the code duplication
  */
-private[resolvers] final case class MsIvyRepository(
+@stable private[resolvers] final case class MsIvyRepository(
     ivyPattern: Pattern,
     artifactPatterns: Seq[Pattern],
     changing: Option[Boolean],
@@ -47,8 +45,7 @@ private[resolvers] final case class MsIvyRepository(
     authentication: Option[Authentication],
     hasMeta: Boolean,
     fileSystem: FileSystem,
-    excludes: Map[DependencyCoursierKey, Seq[Exclude]],
-    afsGroupNameToMavenMap: Map[(String, String), Seq[DependencyDefinition]]
+    afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
 ) extends Repository {
 
   import MsIvyRepository._
@@ -328,7 +325,7 @@ private[resolvers] final case class MsIvyRepository(
           xml <- Try(UnsafeXML(disallowDoctypeDecl = false).loadString(compatibility.xmlPreprocess(ivy)))
             .fold(t => Left(t.getMessage), e => Right(compatibility.xmlFromElem(e)))
           _ <- if (xml.label == "ivy-module") Right(()) else Left("Module definition not found")
-          proj <- MsIvyXml.project(xml, version, excludes, afsGroupNameToMavenMap)
+          proj <- MsIvyXml.project(xml, version, afsToMavenMap)
         } yield proj
       })
     } yield {
@@ -374,8 +371,7 @@ private[resolvers] object MsIvyRepository {
       dropInfoAttributes: Boolean = false,
       authentication: Option[Authentication] = None,
       fileSystem: FileSystem = FileSystems.getDefault,
-      excludes: Map[DependencyCoursierKey, Seq[Exclude]] = Map.empty,
-      afsGroupNameToMavenMap: Map[(String, String), Seq[DependencyDefinition]] = Map.empty
+      afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] = Map.empty
   ): Either[String, MsIvyRepository] =
     for {
       ivyPropertiesPattern <- PropertiesPattern.parse(ivyPatternStr)
@@ -400,7 +396,6 @@ private[resolvers] object MsIvyRepository {
       authentication,
       hasMeta = containsMetaProj(ivyPatternStr) || artifactPatternStrs.exists(containsMetaProj),
       fileSystem,
-      excludes,
       afsGroupNameToMavenMap
     )
 

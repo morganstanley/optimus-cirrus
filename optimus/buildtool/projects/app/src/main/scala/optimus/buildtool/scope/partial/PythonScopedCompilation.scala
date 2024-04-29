@@ -50,5 +50,5 @@ import scala.collection.immutable.Seq
     )
   }
 
-  @node def artifacts: Seq[Artifact] = compile(ArtifactType.Python, None)(Some(compiler.artifact(id, compilerInputsN)))
+  @node def artifacts: Seq[Artifact] = compile(ArtifactType.Python, None)(compiler.artifact(id, compilerInputsN))
 }

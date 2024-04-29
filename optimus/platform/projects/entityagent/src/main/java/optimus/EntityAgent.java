@@ -19,13 +19,13 @@ import java.lang.instrument.Instrumentation;
 import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarFile;
 
 import optimus.debug.InstrumentationConfig;
 import optimus.debug.InstrumentationInjector;
+import optimus.graph.loom.LoomInjector;
 import optimus.graph.DiagnosticSettings;
 import optimus.graph.LockInjector;
 import optimus.graph.chaos.ChaosMonkeyInjector;
@@ -49,6 +49,12 @@ public class EntityAgent {
   private static final ConcurrentHashMap<String, ClassFileTransformer> customTransformers =
       new ConcurrentHashMap<>();
   private static final String VERSION_STRING = "Entity Agent(v8)";
+
+  public static final String injectTweakFields = "optimus.profile.tweakFieldsInjected";
+
+  static {
+    if (DiagnosticSettings.traceTweaksEnabled) System.setProperty(injectTweakFields, "true");
+  }
 
   /** Write to stdout. */
   public static void logMsg(String msg) {
@@ -87,6 +93,7 @@ public class EntityAgent {
     OptimusTestWorkerClientInjector optimusTestWorkerClientInjector =
         new OptimusTestWorkerClientInjector();
     InstrumentationInjector instrInjector = new InstrumentationInjector();
+    LoomInjector loomInjector = new LoomInjector();
     HotCodeReplaceTransformer hotCodeReplaceTransformer =
         new HotCodeReplaceTransformer(instrumentation);
     CleanerInjector cleanerInjector = new CleanerInjector();
@@ -125,9 +132,15 @@ public class EntityAgent {
             safeTransform(chaosInjector, loader, clsName, clsRedefined, domain, transformed);
       }
 
-      if (InstrumentationConfig.isEnabled() & canTransformCoreClasses)
+      if (InstrumentationConfig.isEnabled() & canTransformCoreClasses) {
         transformed =
             safeTransform(instrInjector, loader, clsName, clsRedefined, domain, transformed);
+      }
+
+      if (DiagnosticSettings.loomTransformations) {
+        transformed =
+            safeTransform(loomInjector, loader, clsName, clsRedefined, domain, transformed);
+      }
 
       ClassFileTransformer cft = customTransformers.get(clsName);
 
@@ -274,7 +287,6 @@ public class EntityAgent {
     logMsg(
         "supports "
             + (instrumentation.isRetransformClassesSupported() ? "retransform " : " ")
-            + new Date()
             + " trace: "
             + DiagnosticSettings.traceAvailable
             + " isClassMonitorEnabled: "

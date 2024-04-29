@@ -11,18 +11,6 @@
  */
 package optimus.buildtool.utils
 
-import java.io._
-import java.lang.management.ManagementFactory
-import java.net.URI
-import java.nio.charset.StandardCharsets
-import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file._
-import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.attribute.PosixFilePermission
-import java.nio.file.attribute.PosixFilePermissions
-import java.{util => ju}
-import java.util.{Collections, Set => JSet}
-import optimus.stratosphere.bootstrap.WorkspaceRoot
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.artifacts.Artifact
@@ -32,8 +20,8 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NamingConventions.incrString
-import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Directory.NoFilter
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files._
@@ -43,16 +31,28 @@ import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.exceptions.RTExceptionTrait
 import optimus.graph.FlowControlException
 import optimus.platform._
+import optimus.scalacompat.collection._
+import optimus.stratosphere.bootstrap.WorkspaceRoot
 import optimus.utils.ErrorIgnoringFileVisitor
 import xsbti.VirtualFile
 
+import java.io._
+import java.lang.management.ManagementFactory
+import java.net.URI
+import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file._
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.attribute.PosixFilePermissions
+import java.util.Collections
+import java.util.{Set => JSet}
+import java.{util => ju}
+import scala.annotation.tailrec
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.control.NonFatal
-import optimus.scalacompat.collection._
-
-import scala.annotation.tailrec
-import scala.collection.compat._
 
 /**
  * Utility methods for dealing with files
@@ -421,7 +421,7 @@ import scala.collection.compat._
       case (Some(ws), None)      => (ws, ws.resolveDir("src"))
       case (None, Some(src))     => (src.parent, src)
       case (None, None) =>
-        val ws = Option(WorkspaceRoot.findIn(pwd))
+        val ws = Option(WorkspaceRoot.find(pwd))
           .map(Directory(_))
           .getOrElse(fail(s"Cannot infer the src directory from the current working directory ($pwd)"))
         (ws, ws.resolveDir("src"))
@@ -570,6 +570,10 @@ import scala.collection.compat._
     val secs = millis / 1000.0 % 60
     val mins = millis / 60000
     if (mins > 0) f"$mins%,dm${secs.toInt}%ds" else if (secs >= 1.0) f"$secs%.3gs" else s"${millis}ms"
+  }
+
+  def durationStringNanos(nanos: Long): String = {
+    durationString(nanos / 1000000L)
   }
 
   @tailrec def rootCause(t: Throwable): Throwable = t.getCause match {

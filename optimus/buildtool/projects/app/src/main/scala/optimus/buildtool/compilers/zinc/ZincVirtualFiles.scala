@@ -149,9 +149,9 @@ private[zinc] class ObtZincFileConverter(
   @node def hashLibraryNode(library: Path): Stamp = {
     // TODO (OPTIMUS-38945): We should use OBT's artifact hashes here.
     // They should be added to the SimpleVirtualFile, but we need a lot of plumbing to get there
-    if (Hashing.isAssumedImmutable(JarAsset(library))) zeroStamp
+    if (Hashing.isAssumedImmutable(JarAsset.resolve(library))) zeroStamp
     else {
-      ExternalClassFileArtifact.witnessMutableExternalArtifactState()
+      ExternalClassFileArtifact.witnessMutableExternalArtifactState(library)
       if (Files.exists(library)) FarmHash.ofPath(library)
       else zeroStamp
     }

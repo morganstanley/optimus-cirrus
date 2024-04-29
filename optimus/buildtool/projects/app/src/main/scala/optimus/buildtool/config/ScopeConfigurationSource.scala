@@ -12,6 +12,7 @@
 package optimus.buildtool.config
 
 import optimus.buildtool.files.Directory
+import optimus.buildtool.format.Bundle
 import optimus.buildtool.format.PostInstallApp
 import optimus.platform._
 
@@ -36,6 +37,7 @@ import scala.collection.immutable.Set
   @node def tryResolveScopes(partialId: String): Option[Set[ScopeId]]
   @node def local(id: ScopeId): Boolean
   @node def scopeConfiguration(id: ScopeId): ScopeConfiguration
+  @node def bundleConfiguration(metaBundle: MetaBundle): Option[Bundle]
   @node def jarConfiguration(id: ScopeId, versionConfig: VersionConfiguration): JarConfiguration
   @node def copyFilesConfiguration(id: ScopeId): Option[CopyFilesConfiguration]
   def archiveConfiguration(id: ScopeId): Option[ArchiveConfiguration]

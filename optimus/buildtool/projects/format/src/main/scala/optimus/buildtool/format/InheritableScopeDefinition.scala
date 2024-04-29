@@ -19,6 +19,7 @@ import optimus.buildtool.config.CppToolchain
 import optimus.buildtool.config.Dependencies
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.ExtensionConfiguration
+import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScalacConfiguration
 import optimus.buildtool.config.ScopeId
@@ -85,7 +86,8 @@ final case class InheritableScopeDefinition(
     includeInClassBundle: Option[Boolean],
     mavenOnly: Option[Boolean],
     relationships: Seq[ScopeRelationship],
-    extraLibs: DualDependencies
+    extraLibs: DualDependencies,
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration]
 ) {
   def withParent(parent: InheritableScopeDefinition): InheritableScopeDefinition = {
     InheritableScopeDefinition(
@@ -117,7 +119,8 @@ final case class InheritableScopeDefinition(
       includeInClassBundle = includeInClassBundle.orElse(parent.includeInClassBundle),
       mavenOnly = mavenOnly.orElse(parent.mavenOnly),
       relationships = relationships ++ parent.relationships,
-      extraLibs = extraLibs ++ parent.extraLibs
+      extraLibs = extraLibs ++ parent.extraLibs,
+      forbiddenDependencies = forbiddenDependencies ++ parent.forbiddenDependencies
     )
   }
 
@@ -157,7 +160,8 @@ object InheritableScopeDefinition {
     includeInClassBundle = None,
     mavenOnly = None,
     relationships = Nil,
-    extraLibs = DualDependencies.empty
+    extraLibs = DualDependencies.empty,
+    forbiddenDependencies = Nil
   )
 }
 

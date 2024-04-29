@@ -71,18 +71,31 @@ object NamingConventions {
   val MavenUploadDirectory = "packages/maven/com/ms"
   val MavenCIScope = "optimus/codetree"
   val MavenInstallScope = "main"
+  // TODO (OPTIMUS-58921): remove this hardcoded string root once we removed duplications from optimus/artifactory-deps
+  // keep in sync with resolvers.obt artifactoryRepo, this will excludes intellij generic-3rdparty-local libs
   val MavenUrlRoot = s".com/$ArtifactoryStr/maven"
   // keep in sync with PathingJarsGetter.scala:isExternalJar at 192
   val MavenDepsCentralMeta = "optimus"
   val MavenDepsCentralBundle = "artifactory-deps"
   val MavenLibsKey = "mavenLibs"
-  val MavenUnzipFileKey = ".tar.gz"
+
+  val JarExt = "jar"
+  val ZipExt = "zip"
+  val TarGzExt = "tar.gz"
+  // json files
+  val JsonExt = "json"
+  val IdzExt = "idz"
+  val RgzExt = "rgz"
+  val MgzExt = "mgz"
+
+  // unzip maven repo exts
+  val UnzipMavenRepoExts = Seq(ZipExt, TarGzExt)
 
   // These are a bit hacky, since they assume a certain format of the dep copy directory
   val DepCopyDistRoot: Regex = ".*/\\.stratosphere/depcopy/dist/(.*)".r
   val MsjavaCopyRoot: Regex = ".*/\\.stratosphere/msjava/(.*)".r
   val OssjavaCopyRoot: Regex = ".*/\\.stratosphere/ossjava/(.*)".r
-  val DepCopyMavenRoot: Regex = ".*/\\.stratosphere/depcopy/https?/(.*)".r
+  val DepCopyMavenRoot: Regex = ".*/\\.stratosphere/depcopy/(https?)/(.*)".r
 
   // These are common zinc flags
   val pluginFlag = "-Xplugin:"

@@ -21,8 +21,8 @@ import java.lang.annotation.Target;
  *
  * @see http://optimusdoc/BasicAnnotations
  */
-@Retention(RetentionPolicy.CLASS)
-@Target({ElementType.METHOD})
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.CONSTRUCTOR})
 public @interface node {
 
   /* It indicates if the value is tweakable */

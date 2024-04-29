@@ -13,9 +13,26 @@ package optimus.stratosphere.repository
 
 import optimus.stratosphere.utils.RemoteUrl
 
-object RepositoryLocation {
+sealed abstract class RepositoryLocation(val remoteUrl: RemoteUrl, val local: Boolean) {
 
-  def getProjectRepository(remoteUrl: RemoteUrl): ProjectRepository = {
+  protected val codetreeRepo = "codetree"
+
+  final def bitbucketProject: String = remoteUrl.projectKey
+
+  final def repoName: String = remoteUrl.repoName
+}
+
+/** A link to a project on bitbucket, for example OPTIMUS_CODETREE/codetree. */
+final case class ProjectRepository(meta: String, project: String, name: String, override val remoteUrl: RemoteUrl)
+    extends RepositoryLocation(remoteUrl, local = false) {
+
+  lazy val isCodetree: Boolean =
+    meta == "optimus" && project == codetreeRepo && repoName == codetreeRepo
+}
+
+object ProjectRepository {
+  def apply(remoteUrl: RemoteUrl): ProjectRepository = {
+    require(!remoteUrl.isFork, s"RemoteUrl is a fork, cannot be used to infer the project!")
     // Retrieves appropriate parts from url like:
     // http://username@company.com/atlassian-stash/scm/PROJECT_NAME/REPO_NAME.git
     val Array(metaProjectWithUnderscore, repositoryDotGit, _*) = remoteUrl.url.split("/").takeRight(2)
@@ -25,12 +42,8 @@ object RepositoryLocation {
   }
 }
 
-sealed abstract class RepositoryLocation(val remoteUrl: RemoteUrl, val local: Boolean) {
-  def repoName: String = remoteUrl.repoName
-}
+/** A link to a private fork on Bitbucket. */
+final case class PrivateFork(override val remoteUrl: RemoteUrl) extends RepositoryLocation(remoteUrl, local = false)
 
-final case class ProjectRepository(meta: String, project: String, name: String, override val remoteUrl: RemoteUrl)
-    extends RepositoryLocation(remoteUrl, local = false)
-
-final case class RawRepository(override val remoteUrl: RemoteUrl, override val local: Boolean)
-    extends RepositoryLocation(remoteUrl, local)
+/** A link to a local directory. Used mostly in testing or for reference repositories. */
+final case class LocalRepository(override val remoteUrl: RemoteUrl) extends RepositoryLocation(remoteUrl, local = true)

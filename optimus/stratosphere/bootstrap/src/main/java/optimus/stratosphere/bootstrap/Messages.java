@@ -20,6 +20,7 @@ import com.typesafe.config.ConfigFactory;
  */
 public class Messages {
   private static String baseMessage = "Starting stratosphere failed.";
+  private static String recoverableErrorMessage = "";
   private static String existenceMessagePrefix =
       "Version of stratosphere used in this workspace no longer exists at: ";
   private static String existenceMessageSuffix = ".";
@@ -32,6 +33,8 @@ public class Messages {
                 .getResourceAsStream("internal/optimus/stratosphere/bootstrap/messages.conf"))) {
       Config config = ConfigFactory.parseReader(confReader);
       baseMessage = config.getString("optimus.stratosphere.bootstrap.messages.baseMessage");
+      recoverableErrorMessage =
+          config.getString("optimus.stratosphere.bootstrap.messages.recoverableErrorMessage");
       existenceMessagePrefix =
           config.getString("optimus.stratosphere.bootstrap.messages.existenceMessagePrefix");
       existenceMessageSuffix =
@@ -44,6 +47,10 @@ public class Messages {
 
   public static String baseFailureMessage() {
     return baseMessage;
+  }
+
+  public static String recoverableErrorMessage() {
+    return recoverableErrorMessage;
   }
 
   public static String noLongerExistsMessage(Path infraPath) {

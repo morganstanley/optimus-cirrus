@@ -12,6 +12,7 @@
 package optimus.buildtool.resolvers
 
 import optimus.buildtool.config.NamingConventions._
+import optimus.buildtool.trace.ObtStat
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.Utils
@@ -20,9 +21,21 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-object DependencyDownloadTracker {
+trait RemoteDownloadTracker {
+  def summaryThenClean(condition: Boolean)(logPrint: String => Unit): Unit = {
+    if (condition) logPrint(summary.mkString("\n\t"))
+    clean()
+  }
+
+  def summary: Seq[String]
+  def clean(): Unit
+}
+
+object DependencyDownloadTracker extends RemoteDownloadTracker {
   private val slowestFilesPrintNum = 10
+
   private val _downloadedHttpFiles: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
+  private val _downloadRetries: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
   private val _brokenFiles: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
   private val _brokenMetadata: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
   private val _failedMetadata: mutable.Set[String] = ConcurrentHashMap.newKeySet[String]().asScala
@@ -31,9 +44,9 @@ object DependencyDownloadTracker {
     ConcurrentHashMap.newKeySet[(String, Long)]().asScala
   private val _fetchDuration: mutable.Set[(String, Long)] = ConcurrentHashMap.newKeySet[(String, Long)]().asScala
 
-  // setters
   def clean(): Unit = {
     _downloadedHttpFiles.clear()
+    _downloadRetries.clear()
     _brokenFiles.clear()
     _brokenMetadata.clear()
     _failedMetadata.clear()
@@ -41,28 +54,20 @@ object DependencyDownloadTracker {
     _failedDownloadDuration.clear()
     _fetchDuration.clear()
   }
-  def addHttpFile(url: String): Boolean = {
-    ObtTrace.addToStat(ObtStats.MavenDownloads, 1)
-    _downloadedHttpFiles.add(url)
-  }
-  def addBrokenFile(path: String): Boolean = {
-    ObtTrace.addToStat(ObtStats.MavenCorruptedJar, 1)
-    _brokenFiles.add(path)
-  }
-  def addBrokenMetadata(name: String): Boolean = {
-    ObtTrace.addToStat(ObtStats.CoursierCorruptedMetadata, 1)
-    _brokenMetadata.add(name)
-  }
-  def addFailedMetadata(name: String): Boolean = {
-    ObtTrace.addToStat(ObtStats.CoursierFetchFailure, 1)
-    _failedMetadata.add(name)
-  }
+
+  // setters
+  def addHttpFile(url: String): Boolean = _downloadedHttpFiles.add(url)
+  def addRetry(msg: String): Boolean = _downloadRetries.add(msg)
+  def addBrokenFile(path: String): Boolean = _brokenFiles.add(path)
+  def addBrokenMetadata(name: String): Boolean = _brokenMetadata.add(name)
+  def addFailedMetadata(name: String): Boolean = _failedMetadata.add(name)
   def addDownloadDuration(url: String, duration: Long): Boolean = _downloadDuration.add(url, duration)
   def addFailedDownloadDuration(url: String, duration: Long): Boolean = _failedDownloadDuration.add(url, duration)
   def addFetchDuration(name: String, duration: Long): Boolean = _fetchDuration.add(name, duration)
 
   // getters
   def downloadedHttpFiles: Set[String] = _downloadedHttpFiles.toSet
+  def downloadRetries: Set[String] = _downloadRetries.toSet
   def brokenFiles: Set[String] = _brokenFiles.toSet
   def brokenMetadata: Set[String] = _brokenMetadata.toSet
   def failedMetadata: Set[String] = _failedMetadata.toSet
@@ -83,6 +88,8 @@ object DependencyDownloadTracker {
         s"($index) $msgKey '$f' in ${timeStr(t)}"
       }
   } else Nil
+
+  private def addSizeToStat(stat: ObtStat, strs: Set[String]) = if (strs.nonEmpty) ObtTrace.addToStat(stat, strs.size)
 
   // remote dependency download summary msg
   def summary: Seq[String] = {
@@ -121,10 +128,16 @@ object DependencyDownloadTracker {
       ObtTrace.addToStat(ObtStats.TotalDepFailedDownloadTime, totalFailedDownloadTime)
       ObtTrace.addToStat(ObtStats.TotalDepFetchTime, totalFetchTime)
     }
+    addSizeToStat(ObtStats.MavenDownloads, downloadedHttpFiles)
+    addSizeToStat(ObtStats.MavenDownloadRetries, downloadRetries)
+    addSizeToStat(ObtStats.MavenCorruptedJar, brokenFiles)
+    addSizeToStat(ObtStats.CoursierCorruptedMetadata, brokenMetadata)
+    addSizeToStat(ObtStats.CoursierFetchFailure, failedMetadata)
 
     val summaryLines = Seq(
       "Dependency Download Summary:",
       s"total downloaded http&https files: ${downloadedHttpFiles.size}(jars: ${downloadedJars.size}, poms: ${downloadedPoms.size}, docs: ${downloadedDocs.size}, sources: ${downloadedSrcs.size})",
+      if (downloadRetries.nonEmpty) s"retries: ${downloadRetries.size}" else "",
       s"total download time: ${timeStr(totalDownloadTime)}(jars: ${timeStr(jarsTime.values.sum)}, poms: ${timeStr(
           pomsTime.values.sum)}, docs: ${timeStr(docsTime.values.sum)}, sources: ${timeStr(srcsTime.values.sum)})",
     ) ++ slowestDownloads ++
@@ -132,7 +145,6 @@ object DependencyDownloadTracker {
       Seq(s"total fetch time: ${timeStr(totalFetchTime)}") ++ slowestFetches ++
       brokenFilesMsg ++ brokenMetadataMsg ++ failedMetadataMsg
 
-    clean() // be ready for next build
     summaryLines
   }
 }

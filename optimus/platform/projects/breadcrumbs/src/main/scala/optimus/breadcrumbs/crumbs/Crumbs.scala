@@ -307,8 +307,7 @@ class DiagPropertiesCrumb(uuid: ChainedID, source: Crumb.Source, jsonProperties:
       uuid,
       source,
       Map.empty[String, String],
-      jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"),
-      CrumbHints.Diagnostics) {
+      jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"),      CrumbHints.Diagnostics) {
   override def flags: Set[CrumbFlag] = source.flags + CrumbFlag.DoNotReplicate
 }
 
@@ -523,7 +522,17 @@ object Crumb {
     @volatile final private var _shutdown = false
     final def shutdown(): Unit = _shutdown = true
     final def isShutdown: Boolean = _shutdown
+    final private[breadcrumbs] val kafkaCount = new AtomicInteger(0)
+    final private[breadcrumbs] val count = new AtomicInteger(0)
+    final def getCount: Int = count.get()
+    final def getKafkaCount: Int = count.get()
+    final override def equals(obj: Any): Boolean = obj match {
+      case s: AnyRef => s eq this
+      case _         => false
+    }
+    final override def hashCode(): Int = System.identityHashCode(this)
   }
+
   trait DalSource extends Source { require(name.startsWith("DAL")) }
   object OptimusSource extends Source { override val name: String = Headers.DefaultSource }
   object RuntimeSource extends Source { override val name = "RT" }

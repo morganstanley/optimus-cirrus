@@ -49,6 +49,7 @@ import org.objectweb.asm.Type.{BOOLEAN => AsmBoolean}
 import org.objectweb.asm.Type.{LONG => AsmLong}
 import org.objectweb.asm.Type.{OBJECT => AsmObject}
 import org.objectweb.asm.{Type => AsmType}
+import com.typesafe.config.ConfigFactory
 
 import scala.reflect.runtime.universe._
 import scala.tools.nsc.plugins.Plugin
@@ -143,7 +144,8 @@ object ScalaCompilerUtils {
       "alarms" -> classOf[OptimusPhaseInfo],
       "spray_json" -> classOf[JsValue],
       "scala_compat" -> classOf[CanEqual], // java jar
-      "scala_compat" -> Class.forName("optimus.scalacompat.collection.package$") // scala jar
+      "scala_compat" -> Class.forName("optimus.scalacompat.collection.package$"), // scala jar
+      "typesafeconfig" -> classOf[ConfigFactory]
     ).map { case (name, clazz) =>
       Option(GraphSettings.pluginPathFromLibPath(GraphSettings.entityPluginPath, name))
         .orElse(findPathJar(clazz))

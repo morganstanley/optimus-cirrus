@@ -11,8 +11,9 @@
  */
 package optimus.buildtool.app
 
-import optimus.buildtool.cache.silverking.SilverKingCacheProvider
+import optimus.buildtool.cache.silverking.CacheProvider
 import optimus.buildtool.compilers.zinc.RootLocatorReader
+import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.files.NonReactiveDirectoryFactory
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.utils.CompilePathBuilder
@@ -22,7 +23,7 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.platform._
 import optimus.platform.dal.config.DalEnv
 
-class CatchUpAppCmdLine extends OptimusAppCmdLine with GitCmdLine with SkCmdLine with WorkspaceCmdLine {
+class CatchUpAppCmdLine extends OptimusAppCmdLine with GitCmdLine with RemoteStoreCmdLine with WorkspaceCmdLine {
   import org.kohsuke.{args4j => args}
 
   @args.Option(name = "--gitRecurse", required = false, usage = "Recursively walk the full catchup history")
@@ -38,16 +39,19 @@ class CatchUpAppCmdLine extends OptimusAppCmdLine with GitCmdLine with SkCmdLine
  */
 object CatchUpApp extends OptimusApp[CatchUpAppCmdLine] {
   override val dalLocation = DalEnv("none")
+
   @entersGraph override def run(): Unit = {
+    OptimusBuildToolBootstrap.initializeCrumbs(true, None, false)
     if (!new CatchUpApp(cmdLine).run(cmdLine.ref, cmdLine.gitRecurse)) setReturnCode(1)
   }
 }
 
-class CatchUpApp(cmdLine: GitCmdLine with SkCmdLine with WorkspaceCmdLine) extends util.Log {
+class CatchUpApp(cmdLine: GitCmdLine with RemoteStoreCmdLine with WorkspaceCmdLine) extends util.Log {
   import cmdLine._
 
   // noinspection ConvertibleToMethodValue
   @async def run(ref: String, recurse: Boolean): Boolean = {
+
     catchup(ref, recurse) match {
       case Some(lines) => lines.foreach(log.info(_)); true
       case None        => false
@@ -58,13 +62,14 @@ class CatchUpApp(cmdLine: GitCmdLine with SkCmdLine with WorkspaceCmdLine) exten
     val srcRoot = WorkspaceSourceRoot(workspaceSourceRoot)
     val outputDir = cmdLine.outputDir.asDirectory.getOrElse(workspaceRoot.resolveDir("build_obt"))
     val pathBuilder = CompilePathBuilder(outputDir)
-    val skCaches = SilverKingCacheProvider(cmdLine, cmdLine.artifactVersion, pathBuilder)
+    val ws = StratoConfig.stratoWorkspace(workspaceRoot)
+    val remoteCaches = CacheProvider(cmdLine, cmdLine.artifactVersion, pathBuilder, ws)
     for {
       git <- GitUtils.find(srcRoot, NonReactiveDirectoryFactory).orTap {
         log.error(s"No git found in $srcRoot -- are you in a workspace?")
       }
-      gitLog = GitLog(git, workspaceSourceRoot, cmdLine.gitFilterRe, cmdLine.gitLength)
-      rootLocatorCache <- skCaches.remoteRootLocatorCache.orTap {
+      gitLog = GitLog(git, workspaceSourceRoot, ws, cmdLine.gitFilterRe, cmdLine.gitLength)
+      rootLocatorCache <- remoteCaches.remoteRootLocatorCache.orTap {
         log.error(s"Cannot find root-locator cache at $silverKing")
       }
     } yield {

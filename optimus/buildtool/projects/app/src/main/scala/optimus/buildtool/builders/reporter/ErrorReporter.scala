@@ -12,6 +12,7 @@
 package optimus.buildtool.builders.reporter
 
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.builders.BuildResult.CompletedBuildResult
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -36,13 +37,18 @@ class ErrorReporter(errorsDir: Directory) {
   def writeErrorReport(exception: Throwable, fileName: String = HtmlReporter.DefaultName): Unit = {
     val htmlReportFile = FileAsset(errorsDir.path.resolve(fileName))
     if (!htmlReportFile.exists) { // only write exception error report when build errors not exists
+      val msgPosition: MessagePosition = exception.getStackTrace.headOption match {
+        case Some(h) => MessagePosition(h.getFileName, h.getLineNumber)
+        case None    => MessagePosition(exception.getMessage)
+      }
+
       val exceptionErrorMsg: Seq[(ScopeId, Seq[CompilationMessage])] =
         Seq(
           (
             ScopeId.RootScopeId,
             Seq(
               CompilationMessage(
-                None,
+                Some(msgPosition),
                 StackUtils.multiLineStacktrace(exception),
                 CompilationMessage.Error
               ))))

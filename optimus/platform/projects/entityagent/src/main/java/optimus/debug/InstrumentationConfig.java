@@ -680,7 +680,8 @@ public class InstrumentationConfig {
       BiPredicate<String, Integer> methodPredicate,
       String newBase,
       MethodRef prefix,
-      MethodRef suffix) {
+      MethodRef suffix,
+      MethodRef suffixOnException) {
     // This shouldn't happen very often
     if (multiClsPatches.stream().anyMatch(c -> id.equals(c.id))) return;
     var clsPatch = new ClassPatch();
@@ -694,6 +695,10 @@ public class InstrumentationConfig {
     clsPatch.allMethodsPatch.suffix = suffix;
     clsPatch.allMethodsPatch.passLocalValue = true;
     clsPatch.allMethodsPatch.suffixWithReturnValue = true;
+    if (suffixOnException != null) {
+      clsPatch.allMethodsPatch.suffixOnException = suffixOnException;
+      clsPatch.allMethodsPatch.wrapWithTryCatch = true;
+    }
     multiClsPatches.add(clsPatch);
   }
 

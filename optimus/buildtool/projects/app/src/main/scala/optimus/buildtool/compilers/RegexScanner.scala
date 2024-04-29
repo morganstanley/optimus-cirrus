@@ -72,7 +72,11 @@ import scala.collection.immutable.SortedMap
       val applicableRules = RegexScanner.applicableRules(id, rules, scopeId)
       // TODO (OPTIMUS-42169): this probably could be made faster / less memory-intensive by running the regexen
       // over the entire file and then computing an index range -> line number mapping rather than splitting into lines
-      scanLines(id, content.utf8ContentAsString.split('\n').zipWithIndex.toIndexedSeq, applicableRules)
+      val fileContent = content.utf8ContentAsString
+      val relevantRules = getRelevantRules(fileContent, applicableRules)
+      if (relevantRules.nonEmpty) {
+        scanLines(id, fileContent.split('\n').zipWithIndex.toIndexedSeq, relevantRules)
+      } else Nil
     }
   }
 
@@ -147,6 +151,12 @@ object RegexScanner {
         case None => rule matchesFile fileName
       })
   }
+
+  @node private def getRelevantRules(content: String, rules: Seq[CodeFlaggingRule]): Seq[CodeFlaggingRule] =
+    rules.filter { rule =>
+      val (excludes, includes) = rule.regexes.partition(_.exclude)
+      includes.exists(p => p.regex.findFirstMatchIn(content).isDefined)
+    }
 
   def scanLines(
       id: SourceUnitId,

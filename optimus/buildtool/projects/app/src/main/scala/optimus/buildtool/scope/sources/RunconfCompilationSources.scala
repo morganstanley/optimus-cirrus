@@ -238,7 +238,7 @@ object RunconfCompilationSources {
     val upstreamDebugPreload = upstreamPreload(debug = true)
 
     val transitiveJniPaths = scope.upstream.runtimeDependencies.transitiveJniPaths
-    val transitiveModuleLoads = scope.upstream.runtimeDependencies.transitiveExternalDependencies.result.moduleLoads
+    val transitiveModuleLoads = scope.upstream.runtimeDependencies.resolution.map(_.result.moduleLoads).getOrElse(Nil)
 
     val allSourceSubstitutions =
       // Excludes hardcoded obt substitution from the workspace

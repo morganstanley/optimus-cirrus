@@ -33,7 +33,7 @@ import coursier.util.Sync
 
 import java.net.URL
 import optimus.buildtool.cache.RemoteAssetStore
-import optimus.buildtool.config.NamingConventions.MavenUnzipFileKey
+import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
 import optimus.buildtool.resolvers.MavenUtils._
 import optimus.platform._
 import optimus.stratosphere.artifactory.Credential
@@ -113,7 +113,7 @@ private[resolvers] final case class UnzipFileRepository(
       Right(artifact)))(Left(_))
 
   @entersGraph def downloadUnzipUrl(rawUrl: URL, isZip: Boolean = false): Either[String, Artifact] = {
-    val isMarker = isZip || rawUrl.toString.endsWith(MavenUnzipFileKey)
+    val isMarker = isZip || UnzipMavenRepoExts.exists(ext => rawUrl.toString.endsWith(s".$ext"))
     val url = if (isMarker) new URI(rawUrl.toString + ".marker").toURL() else rawUrl
     val foundArtifact = Artifact(url.toString).withAuthentication(authentication)
     // The order of checking is 1. local disk, 2. SK, 3. maven
@@ -147,7 +147,7 @@ private[resolvers] final case class UnzipFileRepository(
       None,
       Nil,
       Info(
-        s"jar file inside $MavenUnzipFileKey file",
+        s"jar file inside maven zipped file",
         "",
         Nil,
         Nil,

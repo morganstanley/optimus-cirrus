@@ -17,7 +17,9 @@ import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.logger.CustomProcessLogger
+import optimus.stratosphere.logger.Logger
 import optimus.stratosphere.utils.IntervalPrinter.timeThis
+import optimus.utils.ExitCode
 
 import java.io.File
 import java.nio.file.Path
@@ -46,6 +48,26 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
   def runIntellij(sourceDir: Path): Try[Int] =
     runStratosphereCommand("ide")(sourceDir, stratoWorkspace.log.info)
 
+  def runIntellijClient(): Int = {
+    val cmdLine: List[String] = List(stratoWorkspace.intellijDirectoryStructure.intellijClientExecutable.getFullPath)
+    val processBuilder = addJavaToPath(new ProcessBuilder(cmdLine.asJava))
+    processBuilder.start()
+    ExitCode.Success
+  }
+
+  def runIntellijServer(processBuilder: ProcessBuilder, verboseLogging: Boolean = false)(implicit log: Logger): Int = {
+    val joinLinkPrefix: String = "Join link"
+    log.highlight("Starting in Gateway server mode")
+    val processLogger = ProcessLogger(line =>
+      if (verboseLogging) {
+        log.info(line)
+      } else if (line.startsWith(joinLinkPrefix)) {
+        log.highlight(line)
+        log.info("Server is running in background...")
+      })
+    ScalaProcess(processBuilder).run(processLogger).exitValue()
+  }
+
   def runStratosphereCommand(
       cmd: String*)(sourceDir: Path, log: String => Unit, additionalEnv: Map[String, String] = Map.empty): Try[Int] = {
     runCommandFromStratosphereBin("stratosphere", cmd.to(Seq))(sourceDir, log, additionalEnv)
@@ -57,7 +79,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
     val exec = stratosphereInfra.resolve("bin").resolve(s"stratosphere${OsSpecific.shellExt}")
 
     // Launch a console so that user can see something is happening. Installing new IntelliJ may take a while.
-    val pre = if (OsSpecific.isWindows) CommonProcess.preamble.toArray :+ "start" else Array.empty
+    val pre: Array[String] = if (OsSpecific.isWindows) CommonProcess.preamble.toArray :+ "start" else Array.empty
 
     new ProcessBuilder((pre ++ Array(exec.toAbsolutePath.toString) ++ args): _*).directory(dir).start()
   }

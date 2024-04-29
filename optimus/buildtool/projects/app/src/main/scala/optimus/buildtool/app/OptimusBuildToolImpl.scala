@@ -12,26 +12,18 @@
 package optimus.buildtool
 package app
 
-import java.io.InputStream
-import java.io.OutputStream
-import java.nio.file.FileSystems
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
 import optimus.buildtool.app.OptimusBuildToolCmdLineT._
 import optimus.buildtool.artifacts._
 import optimus.buildtool.bsp.BuildServerProtocolServer
 import optimus.buildtool.builders._
 import optimus.buildtool.builders.postbuilders.DocumentationInstaller
 import optimus.buildtool.builders.postbuilders.PostBuilder
+import optimus.buildtool.builders.postbuilders.codereview.CodeReviewSettings
 import optimus.buildtool.builders.postbuilders.installer.BundleFingerprintsCache
 import optimus.buildtool.builders.postbuilders.installer.Installer
-import optimus.buildtool.builders.postbuilders.codereview.CodeReviewSettings
+import optimus.buildtool.builders.postbuilders.metadata.MetadataSettings
 import optimus.buildtool.builders.postbuilders.sourcesync.CppSourceSync
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
-import optimus.buildtool.builders.postbuilders.metadata.MetadataSettings
 import optimus.buildtool.builders.postinstallers.PostInstaller
 import optimus.buildtool.builders.postinstallers.apprunner.PostInstallAppRunner
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader
@@ -48,13 +40,11 @@ import optimus.buildtool.cache.MultiLevelStore
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteAssetStore
-import optimus.buildtool.cache.SimpleArtifactCache
-import optimus.buildtool.cache.silverking.SilverKingCacheProvider
-import optimus.buildtool.cache.silverking.SilverKingStore
+import optimus.buildtool.cache.silverking.CacheProvider
 import optimus.buildtool.compilers.AsyncCppCompilerImpl
+import optimus.buildtool.compilers.AsyncElectronCompilerImpl
 import optimus.buildtool.compilers.AsyncJavaCompiler
 import optimus.buildtool.compilers.AsyncJmhCompilerImpl
-import optimus.buildtool.compilers.AsyncElectronCompilerImpl
 import optimus.buildtool.compilers.AsyncPythonCompilerImpl
 import optimus.buildtool.compilers.AsyncRunConfCompilerImpl
 import optimus.buildtool.compilers.AsyncScalaCompiler
@@ -71,8 +61,9 @@ import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.compilers.zinc.ZincInstallationLocator
-import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.DockerImage
+import optimus.buildtool.config.ExternalDependencies
+import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ObtConfig
@@ -95,13 +86,13 @@ import optimus.buildtool.generators.JaxbGenerator
 import optimus.buildtool.generators.JxbGenerator
 import optimus.buildtool.generators.ProtobufGenerator
 import optimus.buildtool.generators.ScalaxbGenerator
+import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.processors.FreemarkerProcessor
 import optimus.buildtool.processors.OpenApiProcessor
 import optimus.buildtool.processors.VelocityProcessor
-import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.resolvers.CoursierArtifactResolver
 import optimus.buildtool.resolvers.DependencyCopier
-import optimus.buildtool.resolvers.DependencyMetadataResolver
+import optimus.buildtool.resolvers.DependencyMetadataResolvers
 import optimus.buildtool.resolvers.WebDependencyResolver
 import optimus.buildtool.resolvers.WebScopeInfo
 import optimus.buildtool.rubbish.ArtifactRecency
@@ -118,8 +109,18 @@ import optimus.buildtool.utils._
 import optimus.graph.Settings
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.platform._
+import optimus.stratosphere.artifactory.ArtifactoryToolDownloader
 import optimus.stratosphere.artifactory.Credential
+import optimus.stratosphere.config.StratoWorkspace
 
+import java.io.InputStream
+import java.io.OutputStream
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -244,6 +245,8 @@ object OptimusBuildToolImpl {
   private val depCopyRoot = cmdLine.depCopyDir.asDirectory.getOrElse {
     workspaceRoot.parent.resolveDir(".stratosphere").resolveDir("depcopy")
   }
+  val venvCacheDir: Directory = depCopyRoot.resolveDir("venv-cache")
+  val pipCacheDir: Directory = depCopyRoot.resolveDir("pip-cache")
 
   private val depCopyFileSystemAsset = Utils.isWindows && cmdLine.depCopyDir != NoneArg
 
@@ -265,7 +268,7 @@ object OptimusBuildToolImpl {
     else None
 
   @node @scenarioIndependent protected def gitLog: Option[GitLog] =
-    gitUtils.map(u => GitLog(u, workspaceSourceRoot, cmdLine.gitFilterRe, cmdLine.gitLength))
+    gitUtils.map(u => GitLog(u, workspaceSourceRoot, stratoWorkspace(), cmdLine.gitFilterRe, cmdLine.gitLength))
 
   @node private def latestCommit: Option[Commit] = gitLog.flatMap(_.HEAD)
 
@@ -275,17 +278,20 @@ object OptimusBuildToolImpl {
     if (cmdLine.allowSparse) gitUtils.map(u => GitSourceFolderFactory(u))
     else None
 
-  @node @scenarioIndependent private[buildtool] def directoryFactory =
-    gitSourceFolderFactory
-      .map(gsff => MultiLevelDirectoryFactory(localDirectoryFactory, Seq(localDirectoryFactory, gsff)))
-      .getOrElse(localDirectoryFactory)
+  @node @scenarioIndependent private[buildtool] def directoryFactory = (gitUtils, gitSourceFolderFactory) match {
+    case (Some(utils), Some(gsff)) =>
+      GitAwareDirectoryFactory(utils, localDirectoryFactory, gsff)
+    case _ =>
+      localDirectoryFactory
+  }
 
   @node @scenarioIndependent private def pathBuilder = CompilePathBuilder(outputDir)
 
   @node @scenarioIndependent def mischiefOpts: MischiefOptions =
     MischiefOptions.load(workspaceSrcRoot = workspaceSourceRoot)
 
-  @node @scenarioIndependent private[buildtool] def skCaches = SilverKingCacheProvider(cmdLine, version, pathBuilder)
+  @node @scenarioIndependent private[buildtool] def remoteCaches =
+    CacheProvider(cmdLine, version, pathBuilder, stratoWorkspace())
 
   @node @scenarioIndependent private def combined(
       caches: Seq[ArtifactCache with HasArtifactStore]
@@ -327,14 +333,15 @@ object OptimusBuildToolImpl {
     scalaLibPath.listFiles.filter(isScalaJar).map(_.asJar)
   }
 
-  @node private def dependencyMetadataResolvers: Seq[DependencyMetadataResolver] = obtConfig.depMetadataResolvers
+  @node private def dependencyMetadataResolvers: DependencyMetadataResolvers = obtConfig.depMetadataResolvers
 
   @node def scalaVersionConfig: ScalaVersionConfig =
     ScalaVersionConfig(globalConfig.scalaVersion, scalaLibPath, scalaJars)
 
   @node @scenarioIndependent protected def rubbishTidyer: Option[RubbishTidyer] =
     cmdLine.maxBuildDirSize.map { maxSizeMegabytes =>
-      val gitLog = gitUtils.map(u => GitLog(u, workspaceSourceRoot, commitLength = cmdLine.gitPinDepth))
+      val gitLog =
+        gitUtils.map(u => GitLog(u, workspaceSourceRoot, stratoWorkspace(), commitLength = cmdLine.gitPinDepth))
       val freeDiskSpaceTriggerBytes = cmdLine.freeDiskSpaceTriggerMb.map(_.toLong << 20L)
       new RubbishTidyerImpl(maxSizeMegabytes.toLong << 20L, freeDiskSpaceTriggerBytes, buildDir, sandboxDir, gitLog)
     }
@@ -367,9 +374,9 @@ object OptimusBuildToolImpl {
       instrumentation = instrumentation,
       bspServer = cmdLine.bspServer,
       localArtifactStore = localStore,
-      remoteArtifactReader = skCaches.remoteBuildCache.map(_.store),
+      remoteArtifactReader = remoteCaches.remoteBuildCache.map(_.store),
       remoteArtifactWriter =
-        combined(skCaches.remoteBuildCache.to(Seq) ++ skCaches.remoteBuildDualWriteCache.to(Seq)).map(_.store),
+        combined(remoteCaches.remoteBuildCache.to(Seq) ++ remoteCaches.remoteBuildDualWriteCache.to(Seq)).map(_.store),
       classLoaderCaches = ZincClassLoaderCaches,
       scalacProfileDir = scalacProfileDir,
       strictErrorTolerance = cmdLine.zincStrictMapping,
@@ -403,28 +410,33 @@ object OptimusBuildToolImpl {
     )
   }
 
-  @node @scenarioIndependent private def credentials: Seq[Credential] = {
+  @node @scenarioIndependent private def stratoWorkspace(): StratoWorkspace =
+    StratoConfig.stratoWorkspace(workspaceRoot)
+
+  @node @scenarioIndependent private def credentials: Seq[Credential] =
     if (cmdLine.credentialFiles == NoneArg) {
-      Seq(Credential.empty)
-    } else if (CoursierArtifactResolver.Config.mavenOffline) {
-      log.warn(s"[Maven Offline Mode Start] Try fetch url files from local disk and SilverKing: ${cmdLine.silverKing}")
-      Seq(Credential.empty) // mock credential, simulate offline scenario by url refuse access.
-    } else {
-      cmdLine.credentialFiles.split(",").toIndexedSeq.filter(_.trim.nonEmpty).map { p =>
-        if (p.contains("jfrog-cli.conf")) Credential.fromJfrogConfFile(Paths.get(p))
-        else if (Files.notExists(Paths.get(p))) {
-          log.warn(s"Maven credential file not found: $p, obt would try fetch from SilverKing: ${cmdLine.silverKing}")
-          if (cmdLine.silverKing == NoneArg)
-            log.warn(s"Silverking ${cmdLine.silverKing} not found, maven fetch may failed.")
-          Credential.empty
-        } else Credential.fromPropertiesFile(Paths.get(p))
+      val ws = stratoWorkspace()
+      def existCredentialFile: Option[Credential] = Credential.fromJfrogConfFile(ws.internal.jfrog.configFile)
+      existCredentialFile match {
+        case Some(file) => Seq(file)
+        case None =>
+          log.warn(s"No credential files defined! obt will try generate one now")
+          ArtifactoryToolDownloader.presetArtifactoryCredentials(ws)
+          existCredentialFile.to(Seq)
       }
-    }
-  }
+    } else
+      cmdLine.credentialFiles
+        .split(",")
+        .toIndexedSeq
+        .filter(_.trim.nonEmpty)
+        .flatMap { p =>
+          if (p.contains("jfrog-cli.conf")) Credential.fromJfrogConfFile(Paths.get(p))
+          else Credential.fromPropertiesFile(Paths.get(p))
+        }
 
   // This is used for maven url file cache into silverking.
   @node @scenarioIndependent private def remoteAssetStore: RemoteAssetStore =
-    skCaches.remoteBuildCache.map(_.store).getOrElse(NoOpRemoteAssetStore)
+    remoteCaches.remoteBuildCache.map(_.store).getOrElse(NoOpRemoteAssetStore)
 
   @node @scenarioIndependent private def dependencyCopier = {
     DependencyCopier(depCopyRoot, credentials, remoteAssetStore, depCopyFileSystemAsset)
@@ -434,17 +446,34 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def rootFingerprintHasher =
     FingerprintHasher(ScopeId.RootScopeId, pathBuilder, fsCache.store, None, mischief = false)
 
-  @node def dependencyResolver: CoursierArtifactResolver =
-    externalDependencyResolver(dependencyMetadataResolvers)
+  @node def dependencyResolver: CoursierArtifactResolver = externalDependencyResolver(dependencyMetadataResolvers)
 
-  @node private def externalDependencyResolver(resolvers: Seq[DependencyMetadataResolver]): CoursierArtifactResolver =
+  @node private def validateCredentials(
+      loaded: Seq[Credential],
+      externalDependencies: ExternalDependencies): Seq[Credential] = {
+    val mavenLibs = externalDependencies.mavenDependencies.allMavenDeps
+    val withMavenLibs = mavenLibs.nonEmpty
+    val withRemoteCache = remoteCaches.remoteBuildCache.nonEmpty
+    val withLocalCache =
+      Files.exists(depCopyRoot.resolveDir("https").path) || Files.exists(depCopyRoot.resolveDir("http").path)
+
+    if (withMavenLibs && loaded.isEmpty && !withRemoteCache && !withLocalCache)
+      throw new IllegalArgumentException(
+        s"Build failed: no credential and cache available, unable to download ${mavenLibs.size} maven libraries!")
+    else if (withMavenLibs && loaded.isEmpty && (withRemoteCache || withLocalCache))
+      log.warn(
+        s"Maven server offline mode: no credential found! maven libs: ${mavenLibs.size}, local cache: $withLocalCache, remote cache: $withRemoteCache")
+    loaded
+  }
+
+  @node private def externalDependencyResolver(resolvers: DependencyMetadataResolvers): CoursierArtifactResolver =
     CoursierArtifactResolver(
       resolvers = resolvers,
       externalDependencies = obtConfig.externalDependencies,
       dependencyCopier = dependencyCopier,
       dependencySource = dependencySource,
       globalExcludes = obtConfig.globalExcludes,
-      credentials = credentials,
+      credentials = validateCredentials(credentials, obtConfig.externalDependencies),
       remoteAssetStore = remoteAssetStore
     )
 
@@ -468,7 +497,11 @@ object OptimusBuildToolImpl {
     ).map(g => g.tpe -> g).toMap
 
   @node private def processors =
-    Seq(VelocityProcessor(), OpenApiProcessor(logDir), FreemarkerProcessor(), DeploymentScriptProcessor(sandboxFactory))
+    Seq(
+      VelocityProcessor(),
+      OpenApiProcessor(logDir, useCrumbs),
+      FreemarkerProcessor(),
+      DeploymentScriptProcessor(sandboxFactory))
       .map(g => g.tpe -> g)
       .toMap
 
@@ -480,15 +513,16 @@ object OptimusBuildToolImpl {
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
     AsyncPythonCompilerImpl(
-      depCopyRoot.resolveDir("pip-cache"),
-      depCopyRoot.resolveDir("venv-cache"),
+      pipCacheDir,
+      venvCacheDir,
       sandboxFactory,
       logDir,
-      cmdLine.pypiCredentials)
+      cmdLine.pypiCredentials,
+      asNode(() => globalConfig.pythonEnabled))
   @node @scenarioIndependent private def webCompiler =
-    AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir)
+    AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node @scenarioIndependent private def electronCompiler =
-    AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir)
+    AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node private def stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
   @node private def runconfCompiler =
     AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig)
@@ -504,15 +538,19 @@ object OptimusBuildToolImpl {
   @node private def localStore = MultiLevelStore(freezerCache.store, fsCache.store)
 
   @node private def buildCache = {
-    val caches = skCaches.remoteBuildCache match {
-      case Some(skCache) =>
+    val caches = remoteCaches.remoteBuildCache match {
+      case Some(remoteCache) =>
         if (cmdLine.silverKingWritable) {
           // If we've enabled silverking writes, then write to SK even if we've found it in our
           // filesystem cache. Among other benefits, this works around a bug that can cause artifacts not to
           // be written to SK if they've been written to the filesystem as a side-effect of compiling for a different
           // artifact type.
-          skCaches.remoteBuildDualWriteCache.to(Seq) ++ Seq(skCache, fsCache)
-        } else Seq(fsCache, skCache)
+          Seq(
+            remoteCaches.remoteBuildDualWriteCache,
+            remoteCaches.writeOnlyRemoteBuildCache,
+            Some(fsCache),
+            remoteCaches.readOnlyRemoteBuildCache).flatten
+        } else Seq(fsCache, remoteCache)
       case None =>
         Seq(fsCache)
     }
@@ -535,12 +573,17 @@ object OptimusBuildToolImpl {
       cmdLine.scopesToBuild.apar.flatMap(obtConfig.resolveScopes(_)) ++ scopesFromImages ++ warScopes
   }
 
+  @node private[buildtool] def minimalInstallScopes: Option[Set[ScopeId]] =
+    if (cmdLine.minimalInstall)
+      Some(scopesToInclude -- scopesFromImages ++ predefinedDockerImages.flatten(_.directScopeIds))
+    else None
+
   @node private[buildtool] def scopes: Set[ScopeId] = {
     val scopesToExclude = cmdLine.scopesToExclude.apar.flatMap(obtConfig.resolveScopes(_))
     scopesToInclude -- scopesToExclude
   }
 
-  @node private def scopesFromImages: Set[ScopeId] = predefinedDockerImages.flatten(_.scopeIds)
+  @node private def scopesFromImages: Set[ScopeId] = predefinedDockerImages.flatten(_.relevantScopeIds)
 
   @node private def predefinedDockerImages: Set[DockerImage] =
     if (cmdLine.imagesToBuild.nonEmpty) {
@@ -807,10 +850,14 @@ object OptimusBuildToolImpl {
           success = result.successful
           if (success && cmdLine.writeRootLocator) {
             require(cmdLine.silverKingWritable, "You must use --silverKingWritable")
-            writeRootLocator(skCaches.remoteBuildCache, skCaches.remoteRootLocatorCache, "write", cmdLine.gitTag)
             writeRootLocator(
-              skCaches.remoteBuildDualWriteCache,
-              skCaches.remoteRootLocatorDualWriteCache,
+              remoteCaches.remoteBuildCache,
+              remoteCaches.remoteRootLocatorCache,
+              "write",
+              cmdLine.gitTag)
+            writeRootLocator(
+              remoteCaches.remoteBuildDualWriteCache,
+              remoteCaches.remoteRootLocatorDualWriteCache,
               "dual-write"
             )
           }
@@ -819,7 +866,7 @@ object OptimusBuildToolImpl {
         localStore.flush(cacheFlushTimeout)
       } thenFinally {
         if (success && cmdLine.writeRootLocator)
-          (skCaches.remoteRootLocatorCache ++ skCaches.remoteRootLocatorDualWriteCache).foreach(
+          (remoteCaches.remoteRootLocatorCache ++ remoteCaches.remoteRootLocatorDualWriteCache).foreach(
             _.store.flush(cacheFlushTimeout)
           )
       } asyncFinally {
@@ -833,7 +880,7 @@ object OptimusBuildToolImpl {
   }
 
   @async private def writeRootLocator(
-      buildCache: Option[SimpleArtifactCache[SilverKingStore]],
+      buildCache: Option[CacheProvider.RemoteArtifactCache],
       rootLocatorCache: Option[HasArtifactStore],
       writeType: String,
       tagName: Option[String] = None
@@ -873,7 +920,7 @@ object OptimusBuildToolImpl {
       workspace = workspace,
       builder = asNode(() =>
         standardBuilder(
-          Some(asAsync.apply0(skCaches.remoteBuildCache.foreach(_.store.logStatus()))),
+          Some(asAsync.apply0(remoteCaches.remoteBuildCache.foreach(_.store.logStatus()))),
           Some(asAsync.apply0(buildCache.store.flush(cacheFlushTimeout))),
           extraBspPostBuilders
         )),
@@ -891,7 +938,7 @@ object OptimusBuildToolImpl {
       scalaVersionConfig = asNode(() => scalaVersionConfig),
       pythonEnabled = asNode(() => globalConfig.pythonEnabled),
       extractVenvs = asNode(() => globalConfig.extractVenvs),
-      depMetadataResolvers = asNode(() => dependencyMetadataResolvers),
+      depMetadataResolvers = asNode(() => dependencyMetadataResolvers.allResolvers),
       directoryFactory = directoryFactory,
       dependencyCopier = dependencyCopier,
       incrementalMode = cmdLine.incrementalMode,
@@ -920,7 +967,7 @@ object OptimusBuildToolImpl {
     val scopeFilter = ScopeFilter(cmdLine.scopeFilter)
 
     val backgroundBuilder = if (cmdLine.backgroundCmd != NoneArg) {
-      Some(BackgroundProcessBuilder.onDemand(logDir, cmdLine.backgroundCmd))
+      Some(BackgroundProcessBuilder.onDemand(logDir, cmdLine.backgroundCmd, useCrumbs))
     } else None
 
     val bundleFingerprintsCache = new BundleFingerprintsCache(installPathBuilder, cmdLine.verifyInstall)
@@ -964,7 +1011,8 @@ object OptimusBuildToolImpl {
             cmdLine.installVersion,
             logDir = logDir,
             latestCommit = latestCommit,
-            bundleClassJars = cmdLine.bundleClassJars
+            bundleClassJars = cmdLine.bundleClassJars,
+            useCrumbs = useCrumbs
           )
         )
       else None
@@ -1007,7 +1055,9 @@ object OptimusBuildToolImpl {
           directoryFactory = directoryFactory,
           useMavenLibs = useMavenLibs,
           dockerImageCacheDir = dockerImageCacheDir,
-          depCopyDir = depCopyRoot
+          depCopyDir = depCopyRoot,
+          useCrumbs = useCrumbs,
+          minimalInstallScopes = minimalInstallScopes
         )
       }
     }
@@ -1100,7 +1150,8 @@ object OptimusBuildToolImpl {
       onBuildEnd = onBuildEnd,
       messageReporter = Some(messageReporter),
       assetUploader = assetUploader,
-      uploadSources = cmdLine.uploadSources
+      uploadSources = cmdLine.uploadSources,
+      minimalInstallScopes = minimalInstallScopes
     )
   }
 

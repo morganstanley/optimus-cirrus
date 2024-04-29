@@ -40,7 +40,7 @@ import scala.collection.immutable.Seq
   private val inputsN = asNode(() => inputs)
   @node private def inputs: AsyncJmhCompiler.Inputs = {
     val externalArtifacts =
-      upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies.result.resolvedArtifacts)
+      upstream.allCompileDependencies.apar.flatMap(_.transitiveExternalDependencies)
     val otherArtifacts =
       upstreamArtifacts ++ externalArtifacts
     val jmhJars = {

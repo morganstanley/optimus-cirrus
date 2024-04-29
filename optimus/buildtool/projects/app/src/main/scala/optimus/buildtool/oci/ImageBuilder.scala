@@ -123,7 +123,9 @@ class ImageBuilder(
     val layersForDependencies: Int = 30,
     val useMavenLibs: Boolean,
     val dockerImageCacheDir: Directory,
-    val depCopyDir: Directory
+    val depCopyDir: Directory,
+    val useCrumbs: Boolean,
+    val minimalInstallScopes: Option[Set[ScopeId]]
 ) extends AbstractImageBuilder {
 
   override protected lazy val dynamicDependencyDetector: DynamicDependencyDetector = DynamicDependencyDetector
@@ -165,8 +167,10 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   val dockerImageCacheDir: Directory
   val depCopyDir: Directory
   val dstImage: ImageLocation = dockerImage.location
-  val relevantScopes: Set[ScopeId] = dockerImage.scopeIds
+  val relevantScopes: Set[ScopeId] = dockerImage.relevantScopeIds
   val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
+  val useCrumbs: Boolean
+  val minimalInstallScopes: Option[Set[ScopeId]]
 
   private val relevantBundles: Set[MetaBundle] = relevantScopes.map(_.metaBundle)
   private val stagingDir = Directory.temporary()
@@ -220,7 +224,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   ImageBuilder.initSpecialSystemProperties()
 
   // This part require docker daemon to download source images
-  private val dockerUtils = new DockerUtils(dockerImageCacheDir)
+  private val dockerUtils = new DockerUtils(dockerImageCacheDir, useCrumbs)
 
   private def getExtraImageNameFromCachePath(path: Path): String = {
     val imageName = "([^/]+)".r.findFirstIn(s"/$path".replace(dockerImageCacheDir.pathString, "")) match {
@@ -275,8 +279,9 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
   @async override def postProcessArtifacts(scopes: Set[ScopeId], artifacts: Seq[Artifact], successful: Boolean): Unit =
     if (successful) {
-      // add pathing bundle jars
-      val relevantMetaBundles = relevantScopes.intersect(scopes).map(_.metaBundle)
+      // add pathing bundle jars, keep in sync with StandardBuilder.scala --minimal flag logic
+      val relevantMetaBundles =
+        relevantScopes.intersect(minimalInstallScopes.getOrElse(scopes)).map(_.metaBundle)
       val transitiveScopes = Artifact.transitiveIds(scopes, artifacts)
       val relevantTransitivePathingScopes = transitiveScopes.apar.filter { s =>
         relevantMetaBundles.contains(s.metaBundle) && scopeConfigSource.scopeConfiguration(s).pathingBundle

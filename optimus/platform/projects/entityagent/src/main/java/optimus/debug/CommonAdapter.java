@@ -11,21 +11,24 @@
  */
 package optimus.debug;
 
-import org.objectweb.asm.Label;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
-import org.objectweb.asm.commons.AdviceAdapter;
-import static optimus.debug.InstrumentationConfig.MethodPatch;
 import static optimus.debug.InstrumentationConfig.FieldRef;
+import static optimus.debug.InstrumentationConfig.MethodPatch;
 import static optimus.debug.InstrumentationConfig.OBJECT_ARR_DESC;
 import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.allocateID;
 import java.util.Arrays;
 import java.util.List;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.Handle;
+import org.objectweb.asm.Label;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.commons.AdviceAdapter;
+import org.objectweb.asm.commons.Method;
 
 /** A collection of useful ASM helper functions built on top of AdviceAdapter */
-public class CommonAdapter extends AdviceAdapter {
+public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
   private int methodID; // If allocation requested
   private boolean thisIsAvailable;
 
@@ -34,6 +37,12 @@ public class CommonAdapter extends AdviceAdapter {
   private int __localValue; // When local passing is enabled this will point to a slot for local var
   private Type localValueType;
   private String localValueDesc;
+
+  public static Type[] asTypes(Class<?>[] parameterArray) {
+    var types = new Type[parameterArray.length];
+    for (int i = 0; i < parameterArray.length; i++) types[i] = Type.getType(parameterArray[i]);
+    return types;
+  }
 
   protected CommonAdapter(MethodVisitor methodVisitor, int access, String name, String descriptor) {
     super(ASM9, methodVisitor, access, name, descriptor);
@@ -44,6 +53,25 @@ public class CommonAdapter extends AdviceAdapter {
     return omv instanceof CommonAdapter
         ? (CommonAdapter) omv
         : new CommonAdapter(omv, access, name, desc);
+  }
+
+  /** visitMethod and wraps in CommonAdapter */
+  public static CommonAdapter newMethod(ClassVisitor cv, int access, String name, String desc) {
+    return newMethod(cv, access, name, desc, null, null);
+  }
+
+  /** visitMethod and wraps in CommonAdapter */
+  public static CommonAdapter newMethod(
+      ClassVisitor cv,
+      int access,
+      String name,
+      String desc,
+      String signature,
+      String[] exceptions) {
+    var mw = cv.visitMethod(access, name, desc, signature, exceptions);
+    var mv = new CommonAdapter(mw, access, name, desc);
+    mv.visitCode();
+    return mv;
   }
 
   public void resetMV(MethodVisitor newMethodVisitor) {
@@ -131,9 +159,27 @@ public class CommonAdapter extends AdviceAdapter {
     }
   }
 
+  public void loadArgsWithCast(Class<?>[] expectedArgClasses) {
+    if (expectedArgClasses.length == 0) return;
+    loadArgsWithCast(asTypes(expectedArgClasses));
+  }
+
+  public void loadArgsWithCast(Type... expectedArgTypes) {
+    if (expectedArgTypes.length == 0) return;
+    var argTypes = getArgumentTypes();
+    if (expectedArgTypes.length != argTypes.length)
+      throw new RuntimeException("Expected and actual arg types don't match!");
+    for (int i = 0; i < argTypes.length; i++) {
+      loadArg(i);
+      if (!expectedArgTypes[i].equals(argTypes[i])) {
+        unbox(expectedArgTypes[i]);
+      }
+    }
+  }
+
   protected void loadThisIfNonStatic() {
     // cannot load this for static methods!
-    if (!hasStaticAccess(methodAccess)) loadThis();
+    if (!isStatic(methodAccess)) loadThis();
   }
 
   void writeCallForward(String className, String name, int access, String desc) {
@@ -150,6 +196,11 @@ public class CommonAdapter extends AdviceAdapter {
     visitEnd();
   }
 
+  public void getThisField(String className, String fieldName, Type fieldType) {
+    loadThis();
+    visitFieldInsn(GETFIELD, className, fieldName, fieldType.getDescriptor());
+  }
+
   protected void dup(Type tpe) {
     var size = tpe.getSize();
     if (size == 0) {
@@ -162,16 +213,28 @@ public class CommonAdapter extends AdviceAdapter {
     } else throw new AssertionError();
   }
 
-  public static int invokeStaticOrVirtual(int access) {
-    return hasStaticAccess(access) ? INVOKESTATIC : INVOKEVIRTUAL;
+  public void invokeInitCtor(Type type, String desc) {
+    invokeConstructor(type, new Method("<init>", desc));
   }
 
-  public static Boolean hasStaticAccess(int access) {
+  public static int makePrivate(int access) {
+    return access & ~ACC_PUBLIC & ~ACC_PROTECTED | ACC_PRIVATE;
+  }
+
+  public static int invokeStaticOrVirtual(int access) {
+    return isStatic(access) ? INVOKESTATIC : INVOKEVIRTUAL;
+  }
+
+  public static Boolean isStatic(int access) {
     return (access & ACC_STATIC) != 0;
   }
 
   public static Boolean isCCtor(int access, String name, String desc) {
     return (access & ACC_STATIC) == ACC_STATIC && "<clinit>".equals(name) && "()V".equals(desc);
+  }
+
+  public static Boolean isInterface(int access) {
+    return (access & ACC_INTERFACE) != 0;
   }
 
   private static final List<String> packagesToIgnore =
@@ -189,5 +252,15 @@ public class CommonAdapter extends AdviceAdapter {
     }
 
     return false;
+  }
+
+  public static Handle dupNamed(Handle h, String name) {
+    return new Handle(h.getTag(), h.getOwner(), name, h.getDesc(), h.isInterface());
+  }
+
+  @Override
+  public void close() {
+    visitMaxs(0, 0);
+    visitEnd();
   }
 }

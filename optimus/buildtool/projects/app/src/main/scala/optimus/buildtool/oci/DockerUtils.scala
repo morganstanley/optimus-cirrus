@@ -29,7 +29,7 @@ import java.nio.file.Paths
 import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
-class DockerUtils(dockerImageCacheDir: Directory) extends Log {
+class DockerUtils(dockerImageCacheDir: Directory, useCrumbs: Boolean) extends Log {
   private val dockerProcessId = BackgroundCmdId("docker")
   private val logDir = dockerImageCacheDir.resolveDir("cmdLog")
   Files.createDirectories(logDir.path)
@@ -56,7 +56,7 @@ class DockerUtils(dockerImageCacheDir: Directory) extends Log {
       logFile: FileAsset = dockerCmdLogFile,
       retry: Int = 0
   ): Unit =
-    BackgroundProcessBuilder(dockerProcessId, logFile, cmds)
+    BackgroundProcessBuilder(dockerProcessId, logFile, cmds, useCrumbs = useCrumbs)
       .buildWithRetry(ScopeId.RootScopeId, DockerCommand)(maxRetry = retry, msDelay = 0, lastLogLines = 100)
 
   private def getCmdOutput(logFile: FileAsset): Seq[String] = BackgroundProcessBuilder.lastLogLines(logFile, 100)

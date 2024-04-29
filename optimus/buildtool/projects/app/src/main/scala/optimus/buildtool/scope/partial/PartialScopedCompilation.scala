@@ -15,10 +15,12 @@ import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.LocatorArtifact
 import optimus.buildtool.compilers.zinc.AnalysisLocator
 import optimus.buildtool.scope.CompilationScope
+import optimus.buildtool.scope.ScopedCompilation
 import optimus.buildtool.scope.sources.CompilationSources
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.core.needsPlugin
@@ -48,11 +50,18 @@ import scala.collection.immutable.Seq
   ): Seq[Artifact] = needsPlugin
   @node protected def compile$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
       f: NodeFunction0[Option[A#A]]
-  ): Seq[Artifact] =
-    if (containsRelevantSources) upstreamErrors.getOrElse {
-      scope.cached$NF(tpe, discriminator, fingerprint.hash)(f) :+ fingerprint
+  ): Seq[Artifact] = {
+    if (ScopedCompilation.generate(tpe) && containsRelevantSources) upstreamErrors.getOrElse {
+      scope.cached$NF(tpe, discriminator, fingerprint.hash)(f).apar.map {
+        // Cached artifacts don't know if they contain plugins or macros, so we need to update them here. This
+        // can be removed if the cached artifacts are changed to include that information.
+        case c: ClassFileArtifact =>
+          c.copy(containsPlugin = scope.config.containsPlugin, containsOrUsedByMacros = scope.config.containsMacros)
+        case x => x
+      } :+ fingerprint
     }
     else Nil
+  }
 
   override def toString: String = s"${getClass.getSimpleName}(${scope.id})"
 }

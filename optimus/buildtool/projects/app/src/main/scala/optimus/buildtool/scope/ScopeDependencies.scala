@@ -16,6 +16,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType.CompileOnlyResolution
 import optimus.buildtool.artifacts.ArtifactType.CompileResolution
 import optimus.buildtool.artifacts.ArtifactType.RuntimeResolution
+import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.ResolutionArtifact
@@ -34,6 +35,7 @@ import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.Utils.distinctLast
 import optimus.platform._
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 @entity class ScopeDependencies(
@@ -70,7 +72,7 @@ import scala.collection.immutable.Seq
 
   /** All JNI paths, both from our explicit declaration of native dependencies and from ivy files. */
   @node def transitiveJniPaths: Seq[String] =
-    transitiveExternalDependencies.result.jniPaths ++ transitiveNativeDependencies.flatMap(_.paths)
+    resolution.map(_.result.jniPaths).getOrElse(Nil) ++ transitiveNativeDependencies.flatMap(_.paths)
 
   @node def transitiveExtraFiles: Seq[Asset] = transitiveNativeDependencies.flatMap(_.extraPaths)
 
@@ -85,29 +87,32 @@ import scala.collection.immutable.Seq
     )
   }
 
-  @node def transitiveExternalArtifacts: Seq[Artifact] = Seq(transitiveExternalDependencies, externalInputsHash)
+  @node def transitiveExternalArtifacts: Seq[Artifact] = resolution.to(Seq) ++
+    (if (ScopedCompilation.generate(tpe.fingerprintType)) Some(externalInputsHash) else None)
 
-  @node def transitiveExternalDependencies: ResolutionArtifact = {
-    val fingerprintHash = externalInputsHash
-    val result = cache.getOrCompute[ResolutionArtifactType](id, tpe, None, fingerprintHash.hash) {
-      ObtTrace.traceTask(id, tpe.category) {
-        val tpeStr = tpe.name.replace('-', ' ')
-        log.info(s"[$id] Starting $tpeStr")
-        val resolved = externalDependencyResolver.resolveDependencies(transitiveExternalDependencyIds)
+  @node def resolution: Option[ResolutionArtifact] =
+    if (ScopedCompilation.generate(tpe)) {
+      val fingerprintHash = externalInputsHash
+      cache.getOrCompute[ResolutionArtifactType](id, tpe, None, fingerprintHash.hash) {
+        ObtTrace.traceTask(id, tpe.category) {
+          val tpeStr = tpe.name.replace('-', ' ')
+          log.info(s"[$id] Starting $tpeStr")
+          val resolved = externalDependencyResolver.resolveDependencies(transitiveExternalDependencyIds)
 
-        val artifact = ResolutionArtifact.create(
-          InternalArtifactId(id, tpe, None),
-          resolved,
-          pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None, incremental = false).asJson,
-          tpe.category)
-        artifact.storeJson()
-        log.info(s"[$id] Completed $tpeStr")
-        Some(artifact)
+          val artifact = ResolutionArtifact.create(
+            InternalArtifactId(id, tpe, None),
+            resolved,
+            pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None, incremental = false).asJson,
+            tpe.category)
+          artifact.storeJson()
+          log.info(s"[$id] Completed $tpeStr")
+          Some(artifact)
+        }
       }
-    }
-    // (should never get None because if it was missing in cache we compute it)
-    result.getOrElse(throw new IllegalStateException("Resolution didn't exist"))
-  }
+    } else None
+
+  @node def transitiveExternalDependencies: Seq[ExternalClassFileArtifact] =
+    resolution.map(_.result.resolvedArtifacts).getOrElse(Nil)
 
   @node private def internalDependencyIds: Seq[ScopeId] = dependencies.internal
 
@@ -126,5 +131,5 @@ object ScopeDependencies {
   import optimus.buildtool.cache.NodeCaching.reallyBigCache
 
   // avoiding resolving external dependencies multiple times as this could make our build slower than necessary
-  transitiveExternalDependencies.setCustomCache(reallyBigCache)
+  resolution.setCustomCache(reallyBigCache)
 }

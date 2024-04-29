@@ -13,12 +13,15 @@ package optimus.buildtool.cache
 
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.files.FileAsset
 import optimus.platform._
+
+import java.net.URL
 
 @entity object EmptyCache extends SimpleArtifactCache(EmptyStore)
 
-object EmptyStore extends SearchableArtifactStore {
-  @async override protected def write[A <: CachedArtifactType](
+object EmptyStore extends SearchableArtifactStore with ComparableArtifactStore {
+  @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A
   )(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A =
     artifact
@@ -39,4 +42,9 @@ object EmptyStore extends SearchableArtifactStore {
     Set.empty
   override def flush(timeoutMillis: Long): Unit = ()
   @async override def close(): Unit = ()
+  @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = None
+  @async override def put(url: URL, file: FileAsset): FileAsset = file
+  @async override def check(url: URL): Boolean = false
+  override def logStatus(): Seq[String] = Seq.empty
+  override def incompleteWrites: Int = 0
 }

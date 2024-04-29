@@ -15,6 +15,7 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigValue
 import optimus.buildtool.config.ModuleType
 import optimus.buildtool.config.PythonConfiguration
+import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.dependencies.PythonDependencies
 import optimus.buildtool.dependencies.PythonDependency
@@ -32,6 +33,8 @@ object PythonConfigurationCompiler {
   private[buildtool] val Libs = "libs"
   private[buildtool] val Variant = "variant"
   private[buildtool] val Type = "type"
+  private[buildtool] val PythonVenvCmd = "pythonVenvCmd"
+  private[buildtool] val PipInstallCmd = "pipInstallCmd"
 
   def load(
       config: Config,
@@ -86,8 +89,12 @@ object PythonConfigurationCompiler {
             }
         else Set()
 
+      val pythonVenvCmd: Option[String] = pyCfg.optionalString(PythonVenvCmd)
+      val pipInstallCmd: Option[String] = pyCfg.optionalString(PipInstallCmd)
+
       if (errors.isEmpty)
-        pyDefinition.map(python => PythonConfiguration(python, libs, moduleType))
+        pyDefinition.map(python =>
+          PythonConfiguration(python, libs, moduleType, OverriddenCommands(pythonVenvCmd, pipInstallCmd)))
       else None
     }
 

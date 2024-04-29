@@ -13,7 +13,10 @@ package optimus.platform.relational.dal
 
 import optimus.entity.ClassEntityInfo
 import optimus.graph.Node
-import optimus.platform._
+import optimus.platform.BusinessEvent
+import optimus.platform.EvaluationContext
+import optimus.platform.RelationKey
+import optimus.platform.TemporalContext
 import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation
 import optimus.platform.dal.DalAPI

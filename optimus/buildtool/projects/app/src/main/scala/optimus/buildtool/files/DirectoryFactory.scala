@@ -176,3 +176,27 @@ object ScanDetails {
   override def getTweaksAndReset(): Seq[Tweak] = local.getTweaksAndReset()
   override def scanDetails: ScanDetails = local.scanDetails
 }
+
+@entity class GitAwareDirectoryFactory(
+    utils: GitUtils,
+    local: DirectoryFactory,
+    git: SourceFolderFactory
+) extends DirectoryFactory {
+  @scenarioIndependent @node override def lookupDirectory(
+      path: Path,
+      fileFilter: PathFilter,
+      dirFilter: PathFilter,
+      maxDepth: Int
+  ): ReactiveDirectory = local.lookupDirectory(path, fileFilter, dirFilter, maxDepth)
+
+  @node override def lookupSourceFolder(
+      workspaceSourceRoot: Directory,
+      sourceDir: Directory
+  ): SourceFolder =
+    if (utils.local(sourceDir)) local.lookupSourceFolder(workspaceSourceRoot, sourceDir)
+    else git.lookupSourceFolder(workspaceSourceRoot, sourceDir)
+
+  override def close(): Unit = local.close()
+  override def getTweaksAndReset(): Seq[Tweak] = local.getTweaksAndReset()
+  override def scanDetails: ScanDetails = local.scanDetails
+}

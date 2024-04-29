@@ -31,47 +31,51 @@ import scala.collection.immutable.Seq
   @node def generatedSources: Seq[Artifact] = {
     scope.config.generatorConfig.apar.flatMap { case (generatorType, cfg) =>
       val gen = sourceGenerators.getOrElse(generatorType, noGenerator(generatorType.name))
-      val dependencyErrors = Artifact.onlyErrors(gen.dependencies(scope))
-      dependencyErrors.getOrElse {
-        val inputs =
-          gen.inputs(
-            cfg.name,
-            cfg.internalTemplateFolders.apar.map { p =>
-              val d = scope.config.paths.absScopeRoot.resolveDir(p)
-              scope.directoryFactory.lookupSourceFolder(scope.config.paths.workspaceSourceRoot, d)
-            },
-            cfg.externalTemplateFolders.apar.map(scope.directoryFactory.reactive),
-            cfg.sourceFilter,
-            cfg.configuration,
-            scope
-          )
+      val tpe = gen.artifactType
+      if (ScopedCompilation.generate(tpe)) {
+        val dependencyErrors = Artifact.onlyErrors(gen.dependencies(scope))
+        dependencyErrors.getOrElse {
+          val inputs =
+            gen.inputs(
+              cfg.name,
+              cfg.internalTemplateFolders.apar.map { p =>
+                val d = scope.config.paths.absScopeRoot.resolveDir(p)
+                scope.directoryFactory.lookupSourceFolder(scope.config.paths.workspaceSourceRoot, d)
+              },
+              cfg.externalTemplateFolders.apar.map(scope.directoryFactory.reactive),
+              cfg.sourceFilter,
+              cfg.configuration,
+              scope
+            )
 
-        val tpe = gen.artifactType
-        val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
+          val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
 
-        val fingerprint = inputs().fingerprint
-        val genSources = if (gen.containsRelevantSources(inputs)) {
-          val fingerprintHash = fingerprint.hash
-          scope.cached(tpe, Some(cfg.name), fingerprint.hash) {
-            val outputJar =
-              scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false).asJar
-            log.info(s"[${scope.id}] Starting $tpeStr source generation")
-            val artifacts = gen.generateSource(scope.id, inputs, outputJar)
-            if (!artifacts.exists(_.hasErrors)) log.info(s"[${scope.id}] Completing $tpeStr source generation")
-            else Utils.FailureLog.error(s"[${scope.id}] Completing $tpeStr source generation with errors")
-            artifacts
+          val fingerprint = inputs().fingerprint
+          val genSources = if (gen.containsRelevantSources(inputs)) {
+            val fingerprintHash = fingerprint.hash
+            scope.cached(tpe, Some(cfg.name), fingerprint.hash) {
+              val outputJar =
+                scope.pathBuilder
+                  .outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false)
+                  .asJar
+              log.info(s"[${scope.id}] Starting $tpeStr source generation")
+              val artifacts = gen.generateSource(scope.id, inputs, outputJar)
+              if (!artifacts.exists(_.hasErrors)) log.info(s"[${scope.id}] Completing $tpeStr source generation")
+              else Utils.FailureLog.error(s"[${scope.id}] Completing $tpeStr source generation with errors")
+              artifacts
+            }
+          } else {
+            val messages =
+              Seq(CompilationMessage.error(s"[${scope.id}] No relevant sources found for $tpeStr source generation"))
+            Seq(
+              InMemoryMessagesArtifact(
+                InternalArtifactId(scope.id, gen.artifactType, Some(cfg.name)),
+                messages,
+                GenerateSource))
           }
-        } else {
-          val messages =
-            Seq(CompilationMessage.error(s"[${scope.id}] No relevant sources found for $tpeStr source generation"))
-          Seq(
-            InMemoryMessagesArtifact(
-              InternalArtifactId(scope.id, gen.artifactType, Some(cfg.name)),
-              messages,
-              GenerateSource))
+          genSources :+ fingerprint
         }
-        genSources :+ fingerprint
-      }
+      } else Nil
     }
   }
 

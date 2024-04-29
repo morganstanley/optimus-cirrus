@@ -34,7 +34,7 @@ final case class CustomWorkspace(root: Path) extends WorkspaceLocation(Some(root
 
 object CustomWorkspace {
   def find(in: Path): Option[CustomWorkspace] =
-    Option(WorkspaceRoot.findIn(in)).map(CustomWorkspace.apply)
+    Option(WorkspaceRoot.find(in)).map(CustomWorkspace.apply)
 }
 
 /** Search for workspace in current dir and up. Default. */
@@ -147,6 +147,8 @@ class StratoWorkspace protected (
 
   def apply(customWorkspaceLocation: WorkspaceLocation = AutoDetect): StratoWorkspace =
     StratoWorkspace(customWorkspaceLocation)
+
+  override def toString: String = s"StratoWorkspace(customWorkspaceLocation=$customWorkspaceLocation)"
 }
 
 object StratoWorkspace {

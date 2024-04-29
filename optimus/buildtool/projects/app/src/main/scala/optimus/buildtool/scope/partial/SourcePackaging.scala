@@ -51,6 +51,8 @@ import scala.collection.immutable.Seq
         .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.Sources, None, incremental = false)
         .asJar,
       sources.compilationSources,
-      Map.empty
+      Map.empty,
+      containsPlugin = scope.config.containsPlugin,
+      containsOrUsedByMacros = scope.config.containsMacros
     )
 }

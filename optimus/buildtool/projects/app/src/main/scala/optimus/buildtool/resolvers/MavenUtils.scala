@@ -15,6 +15,7 @@ import coursier.core._
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.DependencyDefinition
+import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config.MappedDependencyDefinitions
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.files.BaseHttpAsset
@@ -22,8 +23,8 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarHttpAsset
 import optimus.buildtool.resolvers.HttpResponseUtils._
-import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.utils.AssetUtils.isJarReadable
 import optimus.buildtool.utils.Hashing.hashFileContent
 import optimus.exceptions.RTException
 import optimus.platform._
@@ -35,7 +36,6 @@ import java.net.URL
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.InvalidParameterException
-import java.util.jar.JarFile
 import scala.util.control.NonFatal
 
 @entity private[buildtool] object MavenUtils {
@@ -45,10 +45,10 @@ import scala.util.control.NonFatal
   private[buildtool] val maxRetry = 1
   private[buildtool] val maxDownloadSeconds = 300
   private[buildtool] val maxSrcDocDownloadSeconds = 10
-  private[buildtool] val retryIntervalSeconds = 60
+  private[buildtool] val retryIntervalSeconds = 10
 
   def isNonUnzipLibJarFile(urlStr: String): Boolean =
-    !urlStr.contains(s"$MavenUnzipFileKey!/") && !isSrcOrDocFile(urlStr) && urlStr.endsWith(JarKey)
+    UnzipMavenRepoExts.forall(ext => !urlStr.contains(s".$ext!/")) && !isSrcOrDocFile(urlStr) && urlStr.endsWith(JarKey)
 
   def invalidUrlMsg(url: URL, e: Throwable): String = s"${e.toString.replaceAll(url.toString, "")} $url"
 
@@ -63,11 +63,13 @@ import scala.util.control.NonFatal
       depCopier: DependencyCopier,
       remoteAssetStore: RemoteAssetStore,
       isMarker: Boolean = false,
-      timeoutSec: Int = maxDownloadSeconds)(f: NodeFunction1[FileAsset, T])(r: String => T): T = {
+      timeoutSec: Int = maxDownloadSeconds,
+      retryIntervalSeconds: Int = retryIntervalSeconds)(f: NodeFunction1[FileAsset, T])(r: String => T): T = {
     val fileUrl = if (isMarker) new URI(url.toString + ".marker").toURL else url
     val urlAsset = BaseHttpAsset.httpAsset(fileUrl)
 
-    if (isMarker || checkLocalDisk(url, depCopier)) f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker))
+    if (isMarker || checkLocalDisk(url, depCopier))
+      f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker))
     else if (checkSK(url, remoteAssetStore)) {
       val depCopiedLocation = depCopier.httpLocalAsset(urlAsset)
       remoteAssetStore.get(url, depCopiedLocation) match {
@@ -77,7 +79,7 @@ import scala.util.control.NonFatal
           f(file)
         case None =>
           log.debug(s"Failed load url from SK, try download it now: $url")
-          f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker))
+          f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker))
       }
     } else { // check url, only download it when valid
       val (durationInNanos, (downloadResult, urlCode, isSuccess)) = AdvancedUtils.timed {
@@ -86,7 +88,9 @@ import scala.util.control.NonFatal
           case Right(stream) =>
             NodeTry {
               (
-                f(depCopier.atomicallyCopyOverHttp(urlAsset, isMarker, Some(probingHttpResponse))),
+                f(
+                  depCopier
+                    .atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker, Some(probingHttpResponse))),
                 probingHttpResponse.headerInfo.code,
                 true)
             } getOrRecover { case e @ RTException =>
@@ -139,19 +143,34 @@ import scala.util.control.NonFatal
     Some(localAsset).filter(checkLocalDisk)
   }
 
+  private def getMappedMavenDeps(
+      org: String,
+      name: String,
+      configuration: String,
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]): Seq[DependencyDefinition] = {
+    // if ivy configuration-level mapping not exists, then automatically apply name-level mapping
+    // example: for mapping rule "afs.bar -> maven.bar" ("afs.bar" .ivy defined configuration named "afs.bar.core")
+    // when "afs.foo" depends on "afs.bar.core", we will map "afs.bar.core" to "maven.bar" transitively
+    // and output "afs.foo -> maven.bar"
+    val configLevelMapping = MappingKey(org, name, configuration)
+    val nameLevelMapping = MappingKey(org, name, DefaultConfiguration)
+    afsToMavenMap.getOrElse(configLevelMapping, afsToMavenMap.getOrElse(nameLevelMapping, Nil))
+  }
+
   @node def applyDirectMapping(
-      afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]],
-      deps: Seq[DependencyDefinition]
+      deps: Seq[DependencyDefinition],
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
   ): MappedDependencyDefinitions = {
     import scala.collection.immutable.Seq
     import scala.collection.compat._
 
     if (deps.nonEmpty && afsToMavenMap.nonEmpty) {
-      val appliedMap: Map[DependencyDefinition, Seq[DependencyDefinition]] = deps.collect {
-        case d if afsToMavenMap.contains(d) =>
-          val MavenEquivalents = afsToMavenMap.getOrElse(d, Nil).to(Seq)
-          d -> MavenEquivalents
-      }.toMap
+      val appliedMap: Map[DependencyDefinition, Seq[DependencyDefinition]] = deps
+        .map { d =>
+          d -> getMappedMavenDeps(d.group, d.name, d.configuration, afsToMavenMap).to(Seq)
+        }
+        .toMap
+        .filter(_._2.nonEmpty)
       val mappedAfsDeps = appliedMap.keys.to(Seq)
       val unMappedAfsDeps = deps.diff(mappedAfsDeps).to(Seq)
 
@@ -162,14 +181,23 @@ import scala.util.control.NonFatal
   def applyTransitiveMapping(
       org: String,
       name: String,
+      configuration: String,
       attr: Seq[(String, String)],
-      afsToMavenMap: Map[(String, String), Seq[DependencyDefinition]]
-  ): Seq[(Module, String)] =
-    afsToMavenMap.getOrElse((org, name), Nil).map { af =>
-      (Module(Organization(af.group), ModuleName(af.name), attr.toMap), af.version)
+      afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
+  ): Seq[TransitiveMappedResult] = {
+    getMappedMavenDeps(org, name, configuration, afsToMavenMap).map { af =>
+      TransitiveMappedResult(
+        Module(Organization(af.group), ModuleName(af.name), attr.toMap),
+        af.version,
+        af.configuration)
     }
+  }
 
 }
+
+final case class MappingKey(group: String, name: String, configuration: String)
+
+final case class TransitiveMappedResult(module: Module, version: String, configuration: String)
 
 final case class AutoMappedResult(autoAfsToMavenMap: Map[Dependency, Set[Dependency]]) {
   def afs: Set[Dependency] = autoAfsToMavenMap.keySet
@@ -227,7 +255,9 @@ object HttpResponseUtils {
           .toMap
       } catch {
         case NonFatal(e) =>
-          ObtTrace.warn(s"Failed to parse http header: $url, $e")
+          val msg = s"Failed to parse http header: $url, $e"
+          ObtTrace.warn(msg)
+          log.warn(msg)
           Map.empty
       }
     HttpHeaderInfo(loadedMap)
@@ -240,13 +270,15 @@ object HttpResponseUtils {
   }
 
   def retryWarningMsg(retry: Int, maxRetry: Int, url: URL, exception: Exception, actStr: String): Unit = {
-    ObtTrace.warn(s"Retrying $actStr url $retry/$maxRetry: $url, $exception")
-    ObtTrace.addToStat(ObtStats.MavenRetry, 1)
+    val msg = s"Retrying $actStr url $retry/$maxRetry: $url, $exception"
+    ObtTrace.warn(msg)
+    log.warn(msg)
+    DependencyDownloadTracker.addRetry(msg)
   }
 
   def getHttpException(httpAsset: BaseHttpAsset, maxRetry: Int, e: Exception): RuntimeException = {
-    if (e.getMessage.contains("401")) new InvalidParameterException(s"$WrongCredMsg $e")
-    else if (e.getMessage.contains("404") || e.isInstanceOf[FileNotFoundException])
+    if (e.getMessage.contains(" 401")) new InvalidParameterException(s"$WrongCredMsg $e")
+    else if (e.getMessage.contains(" 404") || e.isInstanceOf[FileNotFoundException])
       new NoSuchElementException(e.toString)
     else new UnsupportedOperationException(s"${invalidUrlMsg(httpAsset.url, e)}, tried ${maxRetry + 1} times")
   }
@@ -269,17 +301,16 @@ object HttpResponseUtils {
     }
     val msgSuffix =
       s"$localPath, $RemoteSha256: ${headerInfo.sha256.getOrElse("")}, $LocalSha256: $localFileSha256"
-    val jarFile = new JarFile(localPath.toFile)
-    val readable =
-      try jarFile.entries.hasMoreElements
-      finally jarFile.close()
+    val readable = isJarReadable(localPath)
     if (readable && validated)
       log.debug(s"$msgPrefix valid: $msgSuffix")
     else throw new UnsupportedOperationException(s"$msgPrefix invalid! $msgSuffix")
   } catch {
     case e: Exception =>
-      ObtTrace.warn(s"Downloaded remote file broken! from ${httpAsset.url}, $RemoteSha256: ${headerInfo.sha256
-          .getOrElse("")}, ${getLocalChecksumStr(localPath, localFileSha256)}, header: $headerInfo, $e")
+      val msg = s"Downloaded remote file broken! from ${httpAsset.url}, $RemoteSha256: ${headerInfo.sha256
+          .getOrElse("")}, ${getLocalChecksumStr(localPath, localFileSha256)}, header: $headerInfo, $e"
+      ObtTrace.warn(msg)
+      log.warn(msg)
       DependencyDownloadTracker.addBrokenFile(httpAsset.url.toString)
       throw e
   }

@@ -51,7 +51,9 @@ import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.ExtraLibDefinition
 import optimus.buildtool.config.LocalDefinition
+import optimus.buildtool.config.MappedDependencyDefinitions
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
 import optimus.buildtool.dependencies.AfsSource
 import optimus.buildtool.dependencies.DependencySource
 import optimus.buildtool.dependencies.MavenSource
@@ -63,6 +65,7 @@ import optimus.core.CoreAPI
 import optimus.graph.Node
 import optimus.stratosphere.artifactory.Credential
 import org.xml.sax.SAXParseException
+import optimus.scalacompat.collection._
 
 import java.nio.file.Path
 import scala.collection.compat._
@@ -146,15 +149,10 @@ object CoursierArtifactResolver {
       d.module.name.value,
       configuration.getOrElse(d.configuration.value),
       version.getOrElse(d.version))
-
-  object Config {
-    private val prefix = "optimus.buildtool.resolvers"
-    val mavenOffline: Boolean = sys.props.get(s"$prefix.mavenOffline").exists(_.toBoolean)
-  }
 }
 
 @entity class CoursierArtifactResolver(
-    resolvers: Seq[DependencyMetadataResolver],
+    resolvers: DependencyMetadataResolvers,
     externalDependencies: ExternalDependencies,
     dependencyCopier: DependencyCopier,
     dependencySource: DependencySource,
@@ -165,26 +163,55 @@ object CoursierArtifactResolver {
 ) extends ExternalDependencyResolver(externalDependencies.definitions) {
   import CoursierArtifactResolver._
 
-  private val excludes: Map[DependencyCoursierKey, Seq[Exclude]] = dependencyDefinitions.map { d =>
-    DependencyCoursierKey(d.group, d.name, d.configuration, d.version) -> d.excludes
-  }.toMap
+  // note that ivyConfiguration exclusions aren't supported natively by Coursier (we handle them ourselves in
+  // applyExclusions instead)
+  private val (globalConfigSpecificExcludes, globalNonConfigSpecificExcludes) =
+    globalExcludes.partition(_.ivyConfiguration.isDefined)
+
+  @node private def globalCoursierExcludes = toCoursierExcludes(globalNonConfigSpecificExcludes)
+
+  @node private def dependencySpecificCoursierExcludes: Map[DependencyCoursierKey, Set[(Organization, ModuleName)]] =
+    dependencyDefinitions.apar.map { d =>
+      // note that JvmDependenciesLoader.readExcludes already checks for this and produces a nicer error - this check
+      // is mostly here in case unit tests break the rules
+      require(
+        d.excludes.forall(_.ivyConfiguration.isEmpty),
+        s"ivyConfiguration based excludes are only supported in global excludes (not in ${d.group}.${d.name})")
+
+      DependencyCoursierKey(d.group, d.name, d.configuration, d.version) -> toCoursierExcludes(d.excludes)
+    }.toMap
+
   private val defaultDefinitions: Map[Module, DependencyDefinition] = dependencyDefinitions
     .filter(_.variant.isEmpty)
     .map(d => Module(Organization(d.group), ModuleName(d.name)) -> d)
     .toMap
-  private val enabledResolversMap: Map[String, DependencyMetadataResolver] = resolvers.map(r => r.name -> r).toMap
-  private[buildtool] val predefinedResolvers: Map[Module, Seq[DependencyMetadataResolver]] =
-    dependencyDefinitions.collect {
-      case d if d.resolvers.nonEmpty =>
-        Module(Organization(d.group), ModuleName(d.name)) -> d.resolvers.map(enabledResolversMap)
+  private val availableResolversMap: Map[String, DependencyMetadataResolver] =
+    resolvers.allResolvers.map(r => r.name -> r).toMap
+  private[buildtool] val depModuleToResolversMap: Map[Module, Seq[DependencyMetadataResolver]] =
+    (dependencyDefinitions ++ externalDependencies.mavenDependencies.noVersionMavenDeps).map { d =>
+      val dependencyResolvers =
+        if (d.resolvers.nonEmpty)
+          d.resolvers.map(availableResolversMap)
+        else if (d.isMaven) {
+          resolvers.defaultMavenResolvers
+        } else resolvers.defaultIvyResolvers
+      Module(Organization(d.group), ModuleName(d.name)) -> dependencyResolvers
     }.toMap
-  private val dependencyMappingMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
-    dependencySource match {
-      case AfsSource   => Map.empty
-      case MavenSource => externalDependencies.afsToMavenMap
+  private val afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] = {
+    val dependencyMappingMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
+      dependencySource match {
+        case AfsSource   => Map.empty
+        case MavenSource => externalDependencies.afsToMavenMap
+      }
+    dependencyMappingMap.map { case (afs, maven) =>
+      MappingKey(afs.group, afs.name, afs.configuration) -> maven
     }
+  }
   private val localRepos: Seq[(String, MetadataPattern.Local)] =
-    resolvers.flatMap(_.metadataPatterns).collectAll[MetadataPattern.Local].map(p => p.urlRepoRoot -> p)
+    resolvers.defaultResolvers
+      .flatMap(_.metadataPatterns)
+      .collectAll[MetadataPattern.Local]
+      .map(p => p.urlRepoRoot -> p)
 
   private def coursierDepToDefinition(coursierDep: Dependency): DependencyDefinition = dependencyDefinitions
     .find(d => d.group == coursierDep.module.organization.value && d.name == coursierDep.module.name.value)
@@ -198,8 +225,7 @@ object CoursierArtifactResolver {
 
   @node private def generateAutoMappingRules(
       afsDeps: Set[Dependency],
-      mavenDeps: Set[Dependency],
-      autoMappingRules: Boolean = true): Option[AutoMappedResult] = if (autoMappingRules) {
+      mavenDeps: Set[Dependency]): Option[AutoMappedResult] = {
     def maybeSame(afs: String, maven: String) = afs == maven || maven.matches(s"$afs-(.*)")
     def mavenSameNames(afsName: String): Set[Dependency] =
       mavenDeps.filter(m => maybeSame(afsName, m.module.name.value))
@@ -209,7 +235,7 @@ object CoursierArtifactResolver {
     }.toMap
 
     Some(AutoMappedResult(sameNameAfsToMavenDeps))
-  } else None
+  }
 
   // note that we include all dependencyDefinitions (not just those directly used by deps) in the fingerprint because
   // any of them could affect the resolved versions of transitive dependencies, but the order doesn't matter so we
@@ -219,23 +245,34 @@ object CoursierArtifactResolver {
 
   @node private def fingerprintDependencyDefinitions(tpe: String, deps: Iterable[DependencyDefinition]): Seq[String] = {
     deps.map { d =>
-      s"$tpe-dependency-definition:${d.group}:${d.name}:${d.variant}:${d.version}:${d.configuration}:" +
-        s"resolvers=${d.resolvers.mkString(",")}:${d.ivyArtifacts.mkString(",")}:${d.excludes.mkString(",")}:" +
+      s"$tpe-dependency-definition:${d.group}:${d.name}:${d.variant}:${d.version}:configuration=${d.configuration}:" +
+        s"resolvers=${d.resolvers.mkString(",")}:ivyArtifacts=${d.ivyArtifacts.mkString(",")}:excludes=${d.excludes
+            .mkString(",")}:" +
         s"transitive=${d.transitive}:force=${d.force}:macros=${d.containsMacros}:plugin=${d.isScalacPlugin}"
     }.toIndexedSeq
   }
 
   @node private def globalExcludesFingerprint: Seq[String] =
     globalExcludes.apar
-      .map { exclude => s"global-exclude:${exclude.group.getOrElse("")}:${exclude.name.getOrElse("")}" }
+      .map { exclude =>
+        s"global-exclude:${exclude.group.getOrElse("")}:${exclude.name.getOrElse("")}:${exclude.ivyConfiguration.getOrElse("")}"
+      }
       .toIndexedSeq
       .sorted
 
   @node private def multiSourceDependenciesFingerprint: Seq[String] =
-    externalDependencies.multiSourceDependencies.apar
+    s"dependencySourceSetting=$dependencySource" +: (externalDependencies.multiSourceDependencies).apar
       .flatMap { dep =>
         fingerprintDependencyDefinitions("multi-source-afs", Seq(dep.definition)) ++
           fingerprintDependencyDefinitions("maven-equivalents", dep.equivalents.toIndexedSeq)
+      }
+      .toIndexedSeq
+      .sorted
+
+  @node private def noVersionMavenDependenciesFingerprint: Seq[String] =
+    externalDependencies.mavenDependencies.noVersionMavenDeps.apar
+      .flatMap { dep =>
+        fingerprintDependencyDefinitions("no-version-maven", Seq(dep))
       }
       .toIndexedSeq
       .sorted
@@ -245,8 +282,8 @@ object CoursierArtifactResolver {
     // their ordering affects the ordering of the output, but note that only the first variant of any given module matters
     // because subsequent ones are ignored in doResolveDependencies
     val requestedDepsFingerprint = fingerprintDependencyDefinitions("requested", distinctRequestedDeps(deps))
-    resolvers.flatMap(
-      _.fingerprint) ++ requestedDepsFingerprint ++ defaultDefinitionsFingerprint ++ globalExcludesFingerprint ++ multiSourceDependenciesFingerprint
+    resolvers.allResolvers.flatMap(
+      _.fingerprint) ++ requestedDepsFingerprint ++ defaultDefinitionsFingerprint ++ globalExcludesFingerprint ++ multiSourceDependenciesFingerprint ++ noVersionMavenDependenciesFingerprint
   }
 
   // if there are multiple (variant) definitions requested for the same module and config, the first one wins.
@@ -266,69 +303,23 @@ object CoursierArtifactResolver {
   private def toModule(d: DependencyDefinition): Module =
     coursier.Module(Organization(d.group), ModuleName(d.name))
 
-  private def getUnmappedResult(root: Dependency, resolution: Resolution, isAfs: Boolean): UnmappedResult =
-    getUnmappedResult(Seq(root), resolution, isAfs)
-
-  private def getUnmappedResult(roots: Seq[Dependency], resolution: Resolution, isAfs: Boolean): UnmappedResult = {
-    val allowedList =
-      if (isAfs) externalDependencies.afsDependencies.allMixModeAllowedCoursierKey
-      else externalDependencies.mavenDependencies.allMixModeAllowedCoursierKey
-
+  private def getUnmappedResult(resolution: Resolution): UnmappedResult = {
     // configuration should be removed from coursier dep key, it will be changed in minDependencies
     val minDepsMap: Map[DependencyCoursierKey, Dependency] =
       resolution.minDependencies.map(d => toDependencyCoursierKey(d, Some("")) -> d).toMap
 
-    def isAfsTransitiveDep(transDep: Dependency) =
-      resolution.projectCache.get((transDep.module, transDep.version)) match {
-        case Some((_: AfsArtifactSource, transProject)) => true // we shouldn't resolve anything transitively from AFS
-        case _                                          => false // unused or successfully mapped dependency
-      }
-
-    def isMapped(dep: Dependency): Boolean = allowedList.exists(_.isSameName(toDependencyCoursierKey(dep)))
+    def isMapped(dep: Dependency): Boolean = externalDependencies.mavenDependencies.allMappedMavenCoursierKey.exists(
+      _.isSameName(toDependencyCoursierKey(dep)))
 
     // only need do mapping for minimum final in used libs
     def inMinDeps(resolvedMap: Map[Dependency, scala.Seq[Dependency]]): Set[Dependency] =
       resolvedMap.flatMap { case (k, v) => minDepsMap.get(toDependencyCoursierKey(k, Some(""))) }.toSet
 
     val allUnmappedDeps: Map[Dependency, scala.Seq[Dependency]] =
-      if (isAfs)
-        resolution.finalDependenciesCache.collect {
-          case (dep, child) if !roots.contains(dep) && isAfsTransitiveDep(dep) => dep -> child.filterNot(isMapped)
-        }
-      else
-        resolution.finalDependenciesCache.collect { case (dep, child) if !isMapped(dep) => dep -> child }
+      resolution.finalDependenciesCache.collect { case (dep, child) if !isMapped(dep) => dep -> child }
     val leafs = allUnmappedDeps.filter { case (dep, child) => child.isEmpty }
 
     UnmappedResult(inMinDeps(allUnmappedDeps), inMinDeps(leafs))
-  }
-
-  /**
-   * validates that all transitive dependencies of Maven mapped AFS dependencies are also mapped
-   */
-  @node private def validateAfsMapping(
-      mappedAfsDeps: Map[DependencyDefinition, Seq[DependencyDefinition]],
-      allVersions: Map[Module, String]): Seq[CompilationMessage] = {
-    val afsCoursierCheckMap: Map[Dependency, Seq[Dependency]] =
-      mappedAfsDeps.filter(!_._1.isDisabled).apar.map { case (afs, maven) =>
-        toCoursierDep(afs, allVersions) -> maven.apar.map(toCoursierDep(_, allVersions))
-      }
-
-    afsCoursierCheckMap.apar
-      .flatMap { case (afs, mavens) =>
-        val afsRes = doResolution(Seq(afs), allVersions)
-        val unmappedAfsDeps = getUnmappedResult(afs, afsRes, isAfs = true)
-
-        if (unmappedAfsDeps.all.nonEmpty) {
-          val mavenDeps = doResolution(mavens, allVersions).minDependencies
-          val autoMappedResult = generateAutoMappingRules(unmappedAfsDeps.all, mavenDeps)
-          val afsDefinition = coursierDepToDefinition(afs)
-          val msg =
-            invalidUnmappedDepMsg(afsDefinition.line, afsDefinition.key, unmappedAfsDeps, autoMappedResult)
-          Some(CompilationMessage(None, msg, CompilationMessage.Error))
-        } else None
-      }
-      .toIndexedSeq
-      .sorted
   }
 
   /**
@@ -336,34 +327,42 @@ object CoursierArtifactResolver {
    */
   @node def validateMixModeMavenDeps(
       mixedModeMavenDeps: Seq[DependencyDefinition],
-      allVersions: Map[Module, String]): Seq[CompilationMessage] =
+      allVersions: Versions,
+      mappedResult: MappedDependencyDefinitions): Seq[CompilationMessage] =
     mixedModeMavenDeps.apar.flatMap { mixedModeMavenDep =>
       val coursierMavenDep = toCoursierDep(mixedModeMavenDep, allVersions)
       val resolution = doResolution(Seq(coursierMavenDep), allVersions)
-      val unmappedResult = getUnmappedResult(coursierMavenDep, resolution, isAfs = false)
+      val unmappedResult = getUnmappedResult(resolution)
 
       if (unmappedResult.all.nonEmpty) {
-        val msg = invalidUnmappedDepMsg(mixedModeMavenDep.line, mixedModeMavenDep.key, unmappedResult)
+        val autoMap: Option[AutoMappedResult] = {
+          val fromAfs = mappedResult.appliedAfsToMavenMap.apar
+            .collect { case (k, v) if v.contains(mixedModeMavenDep) => k }
+            .apar
+            .map(toCoursierDep(_, allVersions))
+            .to(Seq)
+          val afsDeps = doResolution(fromAfs, allVersions).dependencies
+          generateAutoMappingRules(afsDeps, unmappedResult.all)
+        }
+        val msg = invalidUnmappedDepMsg(mixedModeMavenDep.line, mixedModeMavenDep.key, unmappedResult, autoMap)
         Some(CompilationMessage(None, msg, CompilationMessage.Error))
       } else None
     }.sorted
 
-  @node private def toCoursierDeps(defs: Seq[DependencyDefinition], allVersions: Map[Module, String]): Seq[Dependency] =
+  @node private def toCoursierDeps(defs: Seq[DependencyDefinition], allVersions: Versions): Seq[Dependency] =
     defs.apar.map { d => toCoursierDep(d, allVersions) }
 
-  @node private def toCoursierDep(dep: DependencyDefinition, allVersions: Map[Module, String]): Dependency = {
+  @node private def toCoursierDep(dep: DependencyDefinition, allVersions: Versions): Dependency = {
     val module = toModule(dep)
-    val exclusions = (globalExcludes ++ dep.excludes)
-      .map(x => (Organization(x.group.getOrElse("*")), ModuleName(x.name.getOrElse("*"))))
-      .toSet
     val coursierDependency = coursier
       .Dependency(
         // tag the Module with these data so we can propagate them into the eventual ClassFileArtifact
         module = module,
-        version = allVersions.getOrElse(module, dep.version) // load predefined version in multipleSourceDeps
+        // load predefined version in multipleSourceDeps
+        version = allVersions.allVersions.getOrElse(module, dep.version)
       )
       .withConfiguration(Configuration(dep.configuration))
-      .withExclusions(exclusions)
+      .withExclusions(globalCoursierExcludes ++ toCoursierExcludes(dep.excludes))
       .withTransitive(dep.transitive)
     CoursierInterner.internedDependency(dep.classifier match {
       case Some(str) =>
@@ -372,11 +371,17 @@ object CoursierArtifactResolver {
     })
   }
 
+  @node private def toCoursierExcludes(excludes: Iterable[Exclude]): Set[(Organization, ModuleName)] =
+    excludes.apar.map(toCoursierExclude).toSet
+
+  @node private def toCoursierExclude(exclude: Exclude): (Organization, ModuleName) =
+    (Organization(exclude.group.getOrElse("*")), ModuleName(exclude.name.getOrElse("*")))
+
   @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult = {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint
     val distinctDeps = distinctRequestedDeps(deps.all).filter(_.kind != ExtraLibDefinition)
     val (mavenDeps, afsDeps) = distinctDeps.partition(_.isMaven)
-    val mappedAfsDepsResult = MavenUtils.applyDirectMapping(dependencyMappingMap, afsDeps)
+    val mappedAfsDepsResult = MavenUtils.applyDirectMapping(afsDeps, afsGroupNameToMavenMap)
     val distinctDepsWithMapping = (mappedAfsDepsResult.allDepsAfterMapping ++ mavenDeps).to(Seq)
 
     // note that requested dependencies always overwrite the defaults (only matters if they are variants requested),
@@ -384,20 +389,17 @@ object CoursierArtifactResolver {
     def groupPerModule(deps: Seq[DependencyDefinition]): Map[Module, DependencyDefinition] =
       deps.groupBy(toModule).map { case (k, vs) => k -> vs.head }
 
-    val allVersions: Map[Module, String] =
-      (defaultDefinitions ++ groupPerModule(deps.directIds)).map { case (m, d) =>
-        m -> d.version
-      }
+    val allVersions = Versions((defaultDefinitions ++ groupPerModule(deps.directIds)).mapValuesNow(_.version))
 
     // validate in used mix mode maven-only deps from jvm-dependencies.obt, ensure all transitive name already be mapped
-    val mixModeMavenDeps: Seq[DependencyDefinition] = {
-      val appliedMavenOnlyDeps = externalDependencies.mavenDependencies.allMavenOnlyDefinitions.intersect(mavenDeps)
-      val appliedAfsDisabledMavenEquivalents = mappedAfsDepsResult.appliedAfsToMavenMap.values.flatten
-        .to(Seq)
-        .intersect(externalDependencies.afsDependencies.allAfsDisabledMavenDefinitions)
-      (appliedMavenOnlyDeps ++ appliedAfsDisabledMavenEquivalents).to(Seq)
+
+    val mixModeErrors = {
+      val inUsedMixModeDeps =
+        externalDependencies.mavenDependencies.mixModeMavenDeps
+          .intersect(mavenDeps ++ mappedAfsDepsResult.allDepsAfterMapping.filter(_.isMaven))
+          .to(Seq)
+      validateMixModeMavenDeps(inUsedMixModeDeps, allVersions, mappedAfsDepsResult)
     }
-    val mixModeErrors = validateMixModeMavenDeps(mixModeMavenDeps, allVersions)
 
     val extraPublications: Map[Module, Seq[Publication]] =
       (defaultDefinitions ++ groupPerModule(distinctDepsWithMapping)).collect {
@@ -409,10 +411,6 @@ object CoursierArtifactResolver {
       }
 
     val dependencies = toCoursierDeps(distinctDepsWithMapping, allVersions)
-    val afsMappingErrors =
-      if (mappedAfsDepsResult.appliedAfsToMavenMap.nonEmpty)
-        validateAfsMapping(mappedAfsDepsResult.appliedAfsToMavenMap, allVersions)
-      else Nil
 
     val resolution = doResolution(dependencies, allVersions)
 
@@ -425,7 +423,7 @@ object CoursierArtifactResolver {
       extraPublications,
       pluginModules = declaredPluginModules,
       macroModules = macroModules,
-      mappingErrors = afsMappingErrors ++ mixModeErrors,
+      mappingErrors = mixModeErrors,
       mappedDeps = mappedAfsDepsResult.appliedAfsToMavenMap
     )
   }
@@ -436,7 +434,7 @@ object CoursierArtifactResolver {
       // we strip those out so that we can extract the hostname without URI parsing failures.
       val host = new URI(ivy.replaceAllLiterally("[", "").replaceAllLiterally("]", "")).toURL.getHost
       val credentialOption = credentials.find(_.host == host)
-      if (artifactPatterns.exists(_.contains("tar.gz!"))) {
+      if (artifactPatterns.exists(p => UnzipMavenRepoExts.exists(ext => p.contains(s".$ext!")))) {
         UnzipFileRepository
           .parse(ivy, artifactPatterns, credentialOption, remoteAssetStore, dependencyCopier)
           .toOption
@@ -451,10 +449,7 @@ object CoursierArtifactResolver {
           ivy,
           artifactPatterns,
           fileSystem = fileSystem,
-          excludes = excludes,
-          afsGroupNameToMavenMap = dependencyMappingMap.map { case (afs, maven) =>
-            (afs.group, afs.name) -> maven
-          }
+          afsGroupNameToMavenMap = afsGroupNameToMavenMap
         )
         .toOption
         .getOrElse(throw new Exception(s"failed for $ivy -> $artifactPatterns"))
@@ -462,9 +457,9 @@ object CoursierArtifactResolver {
 
   @node private def repos(module: Module): Seq[Repository] =
     for {
-      resolver <- predefinedResolvers.getOrElse(module, resolvers).apar
-      ivy <- resolver.metadataPatterns.apar
-    } yield parseRepo(ivy.urlPattern, resolver.artifactPatterns.map(_.urlPattern))
+      resolver <- depModuleToResolversMap.getOrElse(module, resolvers.defaultResolvers).apar
+      metadata <- resolver.metadataPatterns.apar
+    } yield parseRepo(metadata.urlPattern, resolver.artifactPatterns.map(_.urlPattern))
 
   private val LocalRepoUrl = new Extractor((u: String) =>
     localRepos.collectFirst { case (p, r) if u startsWith p => r })
@@ -522,14 +517,37 @@ object CoursierArtifactResolver {
           DependencyDownloadTracker.addBrokenMetadata(cleanModuleStr(module))
           Left(Seq(s"$nonParseable file: $e"))
         case NonFatal(e) =>
-          val fetchFailed = "Cousier fetch failed"
+          val fetchFailed = "Courier fetch failed"
           log.debug(s"$fetchFailed! ${StackUtils.multiLineStacktrace(e)}")
           DependencyDownloadTracker.addFailedMetadata(cleanModuleStr(module))
           Left(Seq(s"$fetchFailed with exception: $e"))
       }.value
     }
     DependencyDownloadTracker.addFetchDuration(cleanModuleStr(module), durationInNanos)
-    fetchedResult
+    fetchedResult.map { case (source, project) =>
+      val modifiedProject = project.withDependencies(project.dependencies.apar.flatMop(applyExclusions))
+      (source, modifiedProject)
+    }
+  }
+
+  @node private def applyExclusions(confToDep: (Configuration, Dependency)): Option[(Configuration, Dependency)] = {
+    val (fromConf, dep) = confToDep
+    // we handle configSpecific exclusions ourselves because Coursier doesn't support exclusion by ivy configuration
+    if (globalConfigSpecificExcludes.exists(isExcludedBy(dep, _))) None
+    else {
+      // for local exclusions, Coursier automatically propagates down exclusions from the originally requested
+      // dependency, but we also add in any exclusions specified for this dependency
+      val exclusions = dependencySpecificCoursierExcludes.getOrElse(toDependencyCoursierKey(dep), Set.empty)
+      val updatedDep = if (exclusions.nonEmpty) dep.withExclusions(exclusions ++ dep.exclusions) else dep
+      Some((fromConf, updatedDep))
+    }
+  }
+
+  private def isExcludedBy(dep: Dependency, ex: Exclude): Boolean = {
+    // n.b. Option#forall always returns true on None
+    ex.group.forall(_ == dep.module.organization.value) &&
+    ex.name.forall(_ == dep.module.name.value) &&
+    ex.ivyConfiguration.forall(_ == dep.configuration.value)
   }
 
   // it's a node so that we can cache the find across all repos - this is valuable because we'll probably request the
@@ -537,9 +555,9 @@ object CoursierArtifactResolver {
   @node private def findModuleInRepos(module: Module, version: String): Either[Seq[String], (ArtifactSource, Project)] =
     doCoursierFetch(module, version, repos(module))
 
-  @node private def doResolution(directDeps: Seq[Dependency], forceVersions: Map[Module, String]): Resolution = {
+  @node private def doResolution(directDeps: Seq[Dependency], forceVersions: Versions): Resolution = {
 
-    val res = Resolution(dependencies = directDeps.toSet.toSeq).withForceVersions(forceVersions)
+    val res = Resolution(dependencies = directDeps.toSet.toSeq).withForceVersions(forceVersions.allVersions)
 
     asyncGet(res.process.run[Node] { modulesVersions =>
       CoreAPI.nodify(modulesVersions.apar.map { case (module, version) =>
@@ -715,17 +733,21 @@ object CoursierArtifactResolver {
     // sort the remaining artifacts by path (it's arbitrary but at least it's consistent)
     // get both from resolution and coursier resolver here.
     val indirectArtifacts =
-      indirectDependencies.apar.flatMap { dependency =>
-        artifactsForDependency(resolution, dependency, extraPublications, pluginModules, macroModules).map(
-          (dependency, _))
-      }
+      indirectDependencies.apar
+        .flatMap { dependency =>
+          artifactsForDependency(resolution, dependency, extraPublications, pluginModules, macroModules).map(
+            (dependency, _))
+        }
+        .sortBy { case (dep, arts) =>
+          (dep.module.toString, arts.right.toOption.map(_.file.pathFingerprint).getOrElse(""))
+        }
     val indirectJniPaths: Seq[String] = indirectDependencies.apar.flatMap(jniPathsForDependency(resolution, _))
     val indirectModuleLoads: Seq[String] = indirectDependencies.apar.flatMap(moduleLoadsForDependency(resolution, _))
 
-    val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalClassFileArtifact, List[DependencyInfo]]
+    val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalClassFileArtifact, mutable.HashSet[DependencyInfo]]
     (directArtifacts ++ indirectArtifacts).foreach {
       case (d, Right(art)) =>
-        artifactsToDepInfos.put(art, coursierDependencyToInfo(d) :: artifactsToDepInfos.getOrElse(art, Nil))
+        artifactsToDepInfos.getOrElseUpdate(art, mutable.HashSet()) += coursierDependencyToInfo(d)
       case _ =>
     }
     val artifactsToDepInfosList = artifactsToDepInfos.toList
@@ -778,7 +800,7 @@ object CoursierArtifactResolver {
       }.toMap
 
     ResolutionResult(
-      resolvedArtifactsToDepInfos = artifactsToDepInfosList,
+      resolvedArtifactsToDepInfos = artifactsToDepInfosList.map { case (a, ds) => (a, ds.to(Seq).sortBy(_.toString)) },
       messages = errorMessages ++ conflictMessages ++ artifactMessages,
       jniPaths = allJniPaths,
       moduleLoads = allModuleLoads,
@@ -787,6 +809,9 @@ object CoursierArtifactResolver {
     )
   }
 }
+
+// wrapper so that hashcode is cached (to improve node cache performance)
+@stable final case class Versions(allVersions: Map[Module, String])
 
 @entity object CoursierInterner {
   @node def internedDependency(d: Dependency): Dependency = d

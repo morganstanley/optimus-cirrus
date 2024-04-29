@@ -57,7 +57,9 @@ import optimus.platform._
             InternalArtifactId(scopeId, artifactType, None),
             jarPath,
             hashFileOrDirectoryContent(jarPath),
-            incremental = false
+            incremental = false,
+            containsPlugin = containsPlugin,
+            containsOrUsedByMacros = containsOrUsedByMacros
           ))
       }
     } else {
@@ -72,6 +74,8 @@ private[buildtool] object JarPackager {
       artifactType: ArtifactType,
       jarPath: JarAsset,
       content: Map[SourceUnitId, HashedContent],
-      tokens: Map[String, String]
+      tokens: Map[String, String],
+      containsPlugin: Boolean,
+      containsOrUsedByMacros: Boolean
   )
 }

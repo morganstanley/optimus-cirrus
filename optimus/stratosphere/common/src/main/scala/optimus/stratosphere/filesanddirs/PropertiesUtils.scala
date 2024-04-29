@@ -31,7 +31,7 @@ object PropertiesUtils {
 
   def fromFile(file: File): Properties = fromPath(file.toPath)
 
-  def fromPath(path: Path) = fromIS(Files.newInputStream(path))
+  def fromPath(path: Path): Properties = fromIS(Files.newInputStream(path))
 
   implicit class PropOpts(properties: Properties) {
     def store(dest: Path, comment: String = ""): Unit = {

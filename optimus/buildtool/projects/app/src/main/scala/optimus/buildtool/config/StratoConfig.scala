@@ -47,6 +47,13 @@ final case class StratoConfig(
     d
   }
 
+  // we are safe to use si node here, whenever strato dirs changed the running obt bsp server will auto
+  // stopped, then obt will create another new instance to detect those changes instead of reuse in-mem cached node
+  // this node cache reuse will only for single obt instance
+  // auto stop logic is in optimus.stratosphere.jetfire.obt.ObtRunner.checkObtBspConfiguration
+  @node @scenarioIndependent def stratoWorkspace(workspaceRoot: Directory): StratoWorkspace =
+    StratoWorkspace(CustomWorkspace(workspaceRoot.path), stratoLogger)
+
   @node def load(directoryFactory: LocalDirectoryFactory, workspaceSrcRoot: Directory): StratoConfig =
     ObtTrace.traceTask(ScopeId.RootScopeId, LoadStratoConfig) {
       // Strato config is loaded from .conf files in src, src/profiles and config dirs
@@ -56,7 +63,7 @@ final case class StratoConfig(
         watchStratoDir(directoryFactory, WorkspaceLayout.Strato.profiles(workspaceSrcRoot))
       )
 
-      val ws = StratoWorkspace(CustomWorkspace(workspaceSrcRoot.parent.path), stratoLogger)
+      val ws = stratoWorkspace(workspaceSrcRoot.parent)
 
       StratoConfig(
         scalaVersion = ws.scalaVersion,

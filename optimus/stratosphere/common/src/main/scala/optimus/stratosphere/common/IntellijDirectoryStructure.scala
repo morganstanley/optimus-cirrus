@@ -15,6 +15,7 @@ import com.typesafe.config.Config
 import optimus.stratosphere.bootstrap.OsSpecific.isLinux
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
+import optimus.stratosphere.scheddel.impl.FileRenamer
 
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -52,6 +53,7 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
     ideConfigStoreDir.dir
       .listDirs()
       .filter(_.name.contains(intellijName))
+      .filterNot(FileRenamer.hasSuffixForRemoval)
       .map(_.name.drop(intellijName.length))
       .sorted
       .reverse
@@ -78,6 +80,8 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val remoteIntellijArtifactoryDir: String = artifactoryIntellijLocation.remoteLocation
 
+  val remoteIntellijClientArtifactoryDir: String = config.intellij.gateway.client.path
+
   val pluginsVersionProperties: Path = intellijPluginsDir.resolve("installedPlugins.properties")
 
   val pluginsExtensionsVersionProperties: Path = intellijPluginsDir.resolve("extendedPlugins.properties")
@@ -87,6 +91,16 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
   val firstStartMarker: Path = intellijInstallDirectory.resolve("first_start.txt")
 
   val intellijExecutable: Path = intellijBinDirectory.resolve(config.internal.files.ideaExecutable)
+
+  val ideClientInstallPath: Path = ideClientStoreDir.resolve(config.intellij.gateway.client.version)
+
+  val intellijClientExecutable: Path = ideClientInstallPath
+    .resolve("idea")
+    .resolve("code-with-me")
+    .resolve("bin")
+    .resolve("jetbrains_client64.exe")
+
+  val intellijServerExecutable: Path = intellijBinDirectory.resolve(config.internal.files.ideaServerExecutable)
 
   val intellijScript: Path = intellijBinDirectory.resolve(config.internal.files.ideaScript)
 
@@ -161,6 +175,10 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
   def intellijResource(name: String) = s"/etc/intellij/$name"
 
   def intellijBuildProjectAppMsgsFile: Path = intellijBuildDir.resolve("recompiled_msgs.txt")
+
+  def intellijVersionDir(version: String) =
+    s"$intellijName$version"
+
 }
 
 object IntellijDirectoryStructure {

@@ -41,10 +41,10 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.control.NonFatal
 
-final class BackgroundCmdException(message: String, cause: Throwable)
-    extends Exception(message, cause)
+final class BackgroundCmdException(message: String, category: AsyncCategoryTrace, cause: Throwable)
+    extends Exception(s"${category.name}: $message", cause)
     with RTExceptionTrait {
-  def this(message: String) = this(message, null)
+  def this(message: String, category: AsyncCategoryTrace) = this(message, category, null)
 }
 
 trait BackgroundBuilder {
@@ -57,7 +57,8 @@ class BackgroundProcessBuilder protected (
     cmds: Seq[String],
     envVariablesToAdd: Map[String, String],
     envVariablesToClean: Seq[String],
-    workingDir: Option[Directory]
+    workingDir: Option[Directory],
+    useCrumbs: Boolean
 ) extends BackgroundBuilder
     with Log {
 
@@ -106,20 +107,29 @@ class BackgroundProcessBuilder protected (
   ): Unit = {
     val tryCount = previousTryCount + 1
     val prettyCmd: String = cmds.mkString(" ")
+    val start = Instant.now()
+
+    def sendCrumb(exitCode: Int, start: Instant, taskLog: Option[String] = None): Unit = if (useCrumbs) {
+      val logProps: Seq[Properties.Elem[_]] = taskLog match {
+        case Some(value) =>
+          Seq(Properties.obtTaskLog -> value)
+        case None => Nil
+      }
+      val props: Seq[Properties.Elem[_]] = defaultProps ++ Seq(
+        Properties.user -> sys.props.getOrElse("user.name", "unknown"),
+        Properties.obtTaskCmd -> prettyCmd,
+        Properties.obtTaskExitCode -> exitCode,
+        Properties.obtTaskTryCount -> tryCount,
+        Properties.obtTaskMaxTryCount -> maxRetry
+      ) ++ logProps
+      val state = if (exitCode == 0) "successful" else "failure"
+      BackgroundProcessBuilder.sendCrumb(category, scopeId, start = start, state = state, props)
+    }
+
     val result: NodeResult[Int] = asyncResult {
       ObtTrace.traceTask(scopeId, category) {
-        val start = Instant.now()
         val exitCode = launchProcess()
-        if (sendCrumbs) {
-          val props: Seq[Properties.Elem[_]] = defaultProps ++ Seq(
-            Properties.obtTaskCmd -> prettyCmd,
-            Properties.obtTaskExitCode -> exitCode,
-            Properties.obtTaskTryCount -> tryCount,
-            Properties.obtTaskMaxTryCount -> maxRetry
-          )
-          val state = if (exitCode == 0) "successful" else "failure"
-          BackgroundProcessBuilder.sendCrumb(category, scopeId, start = start, state = state, props)
-        }
+        if (sendCrumbs) sendCrumb(exitCode, start)
         exitCode
       }
     }
@@ -127,9 +137,9 @@ class BackgroundProcessBuilder protected (
     result match {
       case NodeSuccess(0) => // do nothing
       case _ =>
-        val exitCodeStr = result match {
-          case NodeSuccess(exitCode) => s"(exit code: $exitCode) "
-          case _                     => ""
+        val (exitCode, exitCodeStr) = result match {
+          case NodeSuccess(exitCode) => (exitCode, s"(exit code: $exitCode) ")
+          case _                     => (1, "") // 0 -> pass, 1 -> fail
         }
         val errorMsg = s"Process failed $exitCodeStr for command: $prettyCmd"
 
@@ -159,10 +169,16 @@ class BackgroundProcessBuilder protected (
               val msgs = BackgroundProcessBuilder.lastLogLines(logFile, lastLogLines) :+
                 s"${id.description} failed, check its logs at ${logFile.pathString}. Command: $prettyCmd"
               msgs.mkString("\n", "\n", "")
-            } else "Process failed without logging"
+            } else s"Process failed without logging $exitCodeStr"
+
+          // avoid duplicated msgs, when sendCrumbs = true we already sent msg no matter it's succeed or failed
+          if (!sendCrumbs) sendCrumb(exitCode, start, Some(errorMsg))
+
           result match {
-            case NodeSuccess(_) => throw new BackgroundCmdException(errorMsg)
-            case NodeFailure(t) => throw new BackgroundCmdException(errorMsg, t)
+            case NodeSuccess(_) =>
+              throw new BackgroundCmdException(errorMsg, category)
+            case NodeFailure(t) =>
+              throw new BackgroundCmdException(errorMsg, category, t)
           }
         }
     }
@@ -175,11 +191,11 @@ object BackgroundProcessBuilder {
   private val log = getLogger(this)
   val id: BackgroundCmdId = BackgroundCmdId("background")
 
-  def onDemand(logFile: FileAsset, cmdLine: Seq[String]): BackgroundProcessBuilder =
-    apply(id, logFile, cmdLine.toIndexedSeq)
+  def onDemand(logFile: FileAsset, cmdLine: Seq[String], useCrumbs: Boolean): BackgroundProcessBuilder =
+    apply(id, logFile, cmdLine.toIndexedSeq, useCrumbs = useCrumbs)
 
-  def onDemand(logDir: Directory, cmdLine: String): BackgroundProcessBuilder =
-    apply(id, id.logFile(logDir), cmdLine.split("\\s+").toIndexedSeq)
+  def onDemand(logDir: Directory, cmdLine: String, useCrumbs: Boolean): BackgroundProcessBuilder =
+    apply(id, id.logFile(logDir), cmdLine.split("\\s+").toIndexedSeq, useCrumbs = useCrumbs)
 
   def apply(
       id: BackgroundId,
@@ -187,9 +203,10 @@ object BackgroundProcessBuilder {
       cmdLine: Seq[String],
       envVariablesToAdd: Map[String, String] = Map.empty,
       envVariablesToClean: Seq[String] = Nil,
-      workingDir: Option[Directory] = None
+      workingDir: Option[Directory] = None,
+      useCrumbs: Boolean
   ): BackgroundProcessBuilder =
-    new BackgroundProcessBuilder(id, logFile, cmdLine, envVariablesToAdd, envVariablesToClean, workingDir)
+    new BackgroundProcessBuilder(id, logFile, cmdLine, envVariablesToAdd, envVariablesToClean, workingDir, useCrumbs)
 
   def lastLogLines(outputFile: FileAsset, n: Int): Seq[String] = {
     import org.apache.commons.io.input.ReversedLinesFileReader
@@ -229,12 +246,13 @@ object BackgroundProcessBuilder {
       javaAgentArtifacts: Seq[PathingArtifact],
       javaOpts: Seq[String],
       mainClass: String,
-      mainClassArgs: Seq[String]): BackgroundProcessBuilder = {
+      mainClassArgs: Seq[String],
+      useCrumbs: Boolean): BackgroundProcessBuilder = {
     val classpathOpt = Seq("-cp", classpathArtifacts.map(_.pathString).mkString(File.pathSeparator))
     val agentOpts = javaAgentArtifacts.map(a => "-javaagent:" + a.pathString)
     val cmd: Seq[String] =
       Seq(javaExec) ++ moduleArguments ++ javaOpts ++ agentOpts ++ classpathOpt ++ Seq(mainClass) ++ mainClassArgs
-    apply(id, logFile, cmd)
+    apply(id, logFile, cmd, useCrumbs = useCrumbs)
   }
 
   private def sendCrumb(

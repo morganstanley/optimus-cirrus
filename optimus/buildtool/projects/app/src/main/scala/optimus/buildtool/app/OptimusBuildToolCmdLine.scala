@@ -191,7 +191,7 @@ private[buildtool] trait GitCmdLine { this: OptimusAppCmdLine =>
   val allowSparse = false
 }
 
-private[buildtool] trait SkCmdLine { this: OptimusAppCmdLine =>
+private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
   @args.Option(
     name = "--silverKing",
     required = false,
@@ -199,9 +199,23 @@ private[buildtool] trait SkCmdLine { this: OptimusAppCmdLine =>
     usage = "SilverKing location (defaults to SK disabled)"
   )
   val silverKing: String = NoneArg
+
+  @args.Option(
+    name = "--remoteStoreComparisonModeEnabled",
+    required = false,
+    usage = "Comparison mode [dis|en]abled for remote store (defaults to false/disabled)"
+  )
+  val comparisonMode: Boolean = false
+
+  @args.Option(
+    name = "--dhtRemoteStore",
+    required = false,
+    usage = "DHT Location (defaults to DHT disabled)"
+  )
+  val dhtRemoteStore: String = NoneArg
 }
 
-private[buildtool] trait SkWriteCmdLine extends SkCmdLine { this: OptimusAppCmdLine =>
+private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { this: OptimusAppCmdLine =>
   @args.Option(
     name = "--silverKingMode",
     required = false,
@@ -215,7 +229,6 @@ private[buildtool] trait SkWriteCmdLine extends SkCmdLine { this: OptimusAppCmdL
     name = "--silverKingWritable",
     required = false,
     aliases = Array("--skw", "--silverkingWritable"),
-    depends = Array("--silverKing"),
     usage = "Write artifacts to SilverKing (defaults to false)"
   )
   val silverKingWritable: Boolean = false
@@ -241,7 +254,7 @@ private[buildtool] class OptimusBuildToolCmdLine extends OptimusBuildToolCmdLine
 private[buildtool] trait OptimusBuildToolCmdLineT
     extends OptimusAppCmdLine
     with GitCmdLine
-    with SkWriteCmdLine
+    with RemoteStoreWriteCmdLine
     with WorkspaceCmdLine {
   import OptimusBuildToolCmdLineT.NoneArg
 
@@ -839,7 +852,7 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     required = false,
     depends = Array("--install"),
     usage =
-      "Enables a minimal install mode where app scripts of transitive dependencies are not installed (defaults to false)"
+      "Install app scripts and pathing jars only for requested scopes, excluding their transitive scope dependencies"
   )
   val minimalInstall: Boolean = false
 

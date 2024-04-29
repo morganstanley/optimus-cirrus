@@ -66,12 +66,16 @@ abstract class Logger(colors: ConsoleColors = ConsoleColors.Disabled) {
 
   def error(toLog: String): Unit = info(addColorTo(printWithIndent(toLog, ErrorMarker), colors.error))
 
-  def error(msg: String, t: Throwable): Unit = {
-    error(msg)
+  private def printStackTrace(msg: String, t: Throwable, loggerLevel: String => Unit): Unit = {
+    loggerLevel(msg)
     val byteArrayOutputStream: ByteArrayOutputStream = new ByteArrayOutputStream
     t.printStackTrace(new PrintStream(byteArrayOutputStream))
-    error(byteArrayOutputStream.toString)
+    loggerLevel(byteArrayOutputStream.toString)
   }
+
+  def error(msg: String, t: Throwable): Unit = printStackTrace(msg, t, error)
+
+  def debug(msg: String, t: Throwable): Unit = printStackTrace(msg, t, debug)
 
   def readLine(text: String, args: Any*): Option[String] = {
     info(text.format(args: _*))

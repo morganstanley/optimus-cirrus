@@ -60,9 +60,8 @@ trait ArtifactWriter {
       artifact
     }
 
-  @async protected def write[A <: CachedArtifactType](
-      tpe: A
-  )(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A
+  @async protected[buildtool] def write[A <: CachedArtifactType](
+      tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A
 
   def flush(timeoutMillis: Long): Unit
 }
@@ -101,10 +100,11 @@ trait ArtifactStoreBase extends ArtifactStore {
     logFound(id, ArtifactCacheTraceType(tpe), details)
   final def logFound(id: ScopeId, tpe: CacheTraceType, details: Seq[String]): Unit = {
     tpe match {
-      case ArtifactCacheTraceType(ArtifactType.Scala) => ObtTrace.addToStat(stat.ScalaHit, details.size)
-      case ArtifactCacheTraceType(ArtifactType.Java)  => ObtTrace.addToStat(stat.JavaHit, details.size)
-      case RemoteAssetCacheTraceType(_)               => ObtTrace.addToStat(stat.ExternalHit, details.size)
-      case _                                          => // do nothing
+      case ArtifactCacheTraceType(ArtifactType.Scala)  => ObtTrace.addToStat(stat.ScalaHit, details.size)
+      case ArtifactCacheTraceType(ArtifactType.Java)   => ObtTrace.addToStat(stat.JavaHit, details.size)
+      case ArtifactCacheTraceType(ArtifactType.Python) => ObtTrace.addToStat(stat.PythonHit, details.size)
+      case RemoteAssetCacheTraceType(_)                => ObtTrace.addToStat(stat.ExternalHit, details.size)
+      case _                                           => // do nothing
     }
     ObtTrace.addToStat(stat.Hit, details.size)
     if (details.size == 1) debug(id, s"Artifact found for $tpe: ${details.mkString("")}")

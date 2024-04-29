@@ -23,5 +23,5 @@ private[buildtool] trait MigrationTrackerToolWerrParams extends TrackerToolParam
 private[buildtool] trait MigrationTrackerToolWerrT extends MigrationTrackerToolT with MigrationTrackerToolWerrParams
 
 private[buildtool] object MigrationTrackerToolWerr extends MigrationTrackerToolWerrT {
-  def indent: Int = 12
+  def indent: Int = 8
 }

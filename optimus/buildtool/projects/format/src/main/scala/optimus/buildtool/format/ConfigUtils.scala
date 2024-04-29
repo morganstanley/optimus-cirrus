@@ -83,6 +83,14 @@ object ConfigUtils {
     def arrayOrDefaults(key: String, default: Array[String]): Array[String] =
       if (conf.hasPath(key)) conf.getStringList(key).asScala.toArray else default
 
+    def nestedKeyConfigOrEmpty(origin: ObtFile, config: Config, key: String): Seq[Config] =
+      config.optionalConfigList(key) match {
+        case Some(configs) => configs
+        case None =>
+          val nestedConfig = config.nested(origin).getOrElse(Seq.empty)
+          nestedConfig.flatMap { case (name, conf) => nestedKeyConfigOrEmpty(origin, conf, key) }
+      }
+
     def checkEmptyProperties(origin: ObtFile, expected: Keys.KeySet): Seq[Message] = {
       val validKeys = expected.all -- keys(origin).getOrElse(Nil)
       if (validKeys == expected.all) {
@@ -172,6 +180,9 @@ object ConfigUtils {
     def optionalValue(path: String): Option[ConfigValue] = if (conf.hasPath(path)) Some(conf.getValue(path)) else None
 
     def optionalConfig(path: String): Option[Config] = if (conf.hasPath(path)) Some(conf.getConfig(path)) else None
+
+    def optionalConfigList(path: String): Option[Seq[Config]] =
+      if (conf.hasPath(path)) Some(conf.getConfigList(path).asScala.to(Seq)) else None
 
     def intOrDefault(path: String, default: Int): Int =
       if (conf.hasPath(path)) conf.getInt(path) else default

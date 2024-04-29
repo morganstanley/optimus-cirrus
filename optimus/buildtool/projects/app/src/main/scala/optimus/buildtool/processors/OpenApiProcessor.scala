@@ -46,7 +46,7 @@ import scala.jdk.CollectionConverters._
  * built code in a separate JVM, so it's important that the OpenApiSpecBuilder's behavior is backward compatible the
  * currently configured OBT version.
  */
-@entity class OpenApiProcessor(logDir: Directory) extends ScopeProcessor {
+@entity class OpenApiProcessor(logDir: Directory, useCrumbs: Boolean) extends ScopeProcessor {
   override val artifactType: ProcessorArtifactType = ArtifactType.OpenApi
 
   override type Inputs = OpenApiProcessor.Inputs
@@ -99,7 +99,8 @@ import scala.jdk.CollectionConverters._
           pathingArtifact,
           dependencyArtifacts,
           logDir,
-          in
+          in,
+          useCrumbs
         )
       Right(in.installLocation -> content)
     }.getOrRecover { case ex @ RTException =>
@@ -133,7 +134,8 @@ object OpenApiProcessor extends Log {
       pathingArtifact: PathingArtifact,
       dependencyArtifacts: Seq[Artifact],
       logDir: Directory,
-      input: Inputs): String = {
+      input: Inputs,
+      useCrumbs: Boolean): String = {
     val name = input.processorName
     val targetClass = input.targetClass
     val configMemory = input.configuration.get("memory")
@@ -171,7 +173,8 @@ object OpenApiProcessor extends Log {
             // a fairly small environment should be sufficient
             javaOpts = Seq("-Doptimus.gthread.ideal=2", javaMemoryStr, disableAP),
             mainClass = OpenApiSpecBuilder.getClass.getName.stripSuffix("$"),
-            mainClassArgs = Seq("--target", targetClass.name, "--outputFile", outputFile.pathString)
+            mainClassArgs = Seq("--target", targetClass.name, "--outputFile", outputFile.pathString),
+            useCrumbs
           )
           .build(scopeId, OpenApiApp(name), lastLogLines = 20),
         try Files.readAllLines(outputFile.path).asScala.to(Seq).mkString(System.lineSeparator())

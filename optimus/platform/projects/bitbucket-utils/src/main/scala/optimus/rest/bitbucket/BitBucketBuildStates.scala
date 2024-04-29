@@ -11,6 +11,8 @@
  */
 package optimus.rest.bitbucket
 
+import spray.json._
+
 import scala.util.Try
 
 object BitBucketBuildStates extends Enumeration {
@@ -27,5 +29,15 @@ object BitBucketBuildStates extends Enumeration {
   implicit def stashBuildState2String(state: StashBuildState): String = state.toString
   implicit def string2StashBuildState(s: String): StashBuildState =
     Try(BitBucketBuildStates.withName(s.toUpperCase)).getOrElse(unknown)
+
+  implicit lazy val stashBuildStateCommonFormat: RootJsonFormat[BitBucketBuildStates.Value] =
+    new RootJsonFormat[BitBucketBuildStates.Value] {
+      override def write(obj: BitBucketBuildStates.Value): JsValue = JsString(obj)
+      override def read(json: JsValue): BitBucketBuildStates.Value = json match {
+        case JsString(txt) => BitBucketBuildStates.string2StashBuildState(txt)
+        case unknown =>
+          throw DeserializationException(s"expected string of ${BitBucketBuildStates.toString}, but got $unknown")
+      }
+    }
 
 }

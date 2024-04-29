@@ -61,7 +61,9 @@ final case class HashedResources(
       ArtifactType.Resources,
       pathBuilder.resourceOutPath(id, sources.compilationFingerprint.hash),
       sources.compilationSources,
-      scope.config.resourceTokens
+      scope.config.resourceTokens,
+      containsPlugin = scope.config.containsPlugin,
+      containsOrUsedByMacros = scope.config.containsMacros
     )
 }
 
@@ -94,6 +96,8 @@ private[scope] object ResourcePackaging {
         .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.ArchiveContent, None, incremental = false)
         .asJar,
       sources.compilationSources,
-      scope.config.resourceTokens
+      scope.config.resourceTokens,
+      containsPlugin = scope.config.containsPlugin,
+      containsOrUsedByMacros = scope.config.containsMacros
     )
 }

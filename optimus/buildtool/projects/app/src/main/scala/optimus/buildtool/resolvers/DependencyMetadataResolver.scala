@@ -17,6 +17,7 @@ import optimus.buildtool.files.SourceFolder
 import optimus.buildtool.files.SourceFolderFactory
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.ResolverDefinition
+import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.TypeClasses.StartingWith
@@ -27,56 +28,75 @@ import scala.collection.immutable.Seq
 import optimus.scalacompat.collection._
 
 object DependencyMetadataResolver {
+
+  @node private def toResolvers(
+      targets: Seq[ResolverDefinition],
+      factory: SourceFolderFactory,
+      workspaceSrcRoot: WorkspaceSourceRoot): Seq[DependencyMetadataResolver] = targets.apar.collect {
+    case defn if defn.metadataPatterns.nonEmpty && defn.artifactPatterns.nonEmpty =>
+      val InWorkspace = new StartingWith(workspaceSrcRoot.pathString + '/')
+      val metadataPatterns: IndexedSeq[MetadataPattern] =
+        defn.metadataPatterns
+          .map(PathUtils.platformIndependentString)
+          .apar
+          .map {
+            case absPattern @ InWorkspace(wsRelPattern) =>
+              // the folder we want to watch (srcDirToRepoRoot) is the one right below the first variable
+              // i.e., ws/src/optimus/platform/projects/ivy_repo_fixes/ivy-repo/[organisation]/PROJ/[module]/ivy-[revision].xml
+              // we want ws/src/optimus/platform/projects/ivy_repo_fixes/ivy-repo
+              val beginnings = List(wsRelPattern indexOf '[', wsRelPattern indexOf '(').filter(_ >= 0)
+              if (beginnings.isEmpty)
+                throw new RuntimeException(s"local metadata pattern $absPattern should have at least one variable")
+              val srcDirToRepoRoot = RelativePath(wsRelPattern take beginnings.min)
+              val folder = factory.lookupSourceFolder(workspaceSrcRoot, workspaceSrcRoot resolveDir srcDirToRepoRoot)
+              MetadataPattern.Local(
+                urlPattern = formatAsPatternURL(absPattern),
+                urlRepoRoot = formatAsPatternURL(
+                  workspaceSrcRoot.resolveDir(folder.workspaceSrcRootToSourceFolderPath).pathString + '/'
+                ),
+                relPattern = wsRelPattern,
+                contents = LocalMetadataRepo.load(folder)
+              )
+            case absPat =>
+              MetadataPattern.Remote(formatAsPatternURL(absPat))
+          }(IndexedSeq.breakOut)
+      val artifactPatterns: IndexedSeq[ArtifactPattern] =
+        defn.artifactPatterns
+          .map(PathUtils.platformIndependentString)
+          .apar
+          .map {
+            case absPattern @ InWorkspace(wsRelPattern) =>
+              ArtifactPattern.Local(formatAsPatternURL(absPattern), wsRelPattern)
+            case absPat =>
+              ArtifactPattern.Remote(formatAsPatternURL(absPat))
+          }(IndexedSeq.breakOut)
+      DependencyMetadataResolver(defn.name, metadataPatterns, artifactPatterns)
+  }
+
   @node def loadResolverConfig(
       factory: SourceFolderFactory,
       workspaceSrcRoot: WorkspaceSourceRoot,
-      defns: Seq[ResolverDefinition]): Seq[DependencyMetadataResolver] = {
-    defns.apar.collect {
-      case defn if defn.metadataPatterns.nonEmpty && defn.artifactPatterns.nonEmpty =>
-        val InWorkspace = new StartingWith(workspaceSrcRoot.pathString + '/')
-        val metadataPatterns: IndexedSeq[MetadataPattern] =
-          defn.metadataPatterns
-            .map(PathUtils.platformIndependentString)
-            .apar
-            .map {
-              case absPattern @ InWorkspace(wsRelPattern) =>
-                // the folder we want to watch (srcDirToRepoRoot) is the one right below the first variable
-                // i.e., ws/src/optimus/platform/projects/ivy_repo_fixes/ivy-repo/[organisation]/PROJ/[module]/ivy-[revision].xml
-                // we want ws/src/optimus/platform/projects/ivy_repo_fixes/ivy-repo
-                val beginnings = List(wsRelPattern indexOf '[', wsRelPattern indexOf '(').filter(_ >= 0)
-                if (beginnings.isEmpty)
-                  throw new RuntimeException(s"local metadata pattern $absPattern should have at least one variable")
-                val srcDirToRepoRoot = RelativePath(wsRelPattern take beginnings.min)
-                val folder = factory.lookupSourceFolder(workspaceSrcRoot, workspaceSrcRoot resolveDir srcDirToRepoRoot)
-                MetadataPattern.Local(
-                  urlPattern = formatAsPatternURL(absPattern),
-                  urlRepoRoot = formatAsPatternURL(
-                    workspaceSrcRoot.resolveDir(folder.workspaceSrcRootToSourceFolderPath).pathString + '/'
-                  ),
-                  relPattern = wsRelPattern,
-                  contents = LocalMetadataRepo.load(folder)
-                )
-              case absPat =>
-                MetadataPattern.Remote(formatAsPatternURL(absPat))
-            }(IndexedSeq.breakOut)
-        val artifactPatterns: IndexedSeq[ArtifactPattern] =
-          defn.artifactPatterns
-            .map(PathUtils.platformIndependentString)
-            .apar
-            .map {
-              case absPattern @ InWorkspace(wsRelPattern) =>
-                ArtifactPattern.Local(formatAsPatternURL(absPattern), wsRelPattern)
-              case absPat =>
-                ArtifactPattern.Remote(formatAsPatternURL(absPat))
-            }(IndexedSeq.breakOut)
-        DependencyMetadataResolver(defn.name, metadataPatterns, artifactPatterns)
-    }
-  }
+      defns: ResolverDefinitions): DependencyMetadataResolvers =
+    DependencyMetadataResolvers(
+      toResolvers(defns.defaultIvyResolvers, factory, workspaceSrcRoot),
+      toResolvers(defns.defaultMavenResolvers, factory, workspaceSrcRoot),
+      toResolvers(defns.onDemandResolvers, factory, workspaceSrcRoot)
+    )
 
   // coursier expects ivy or pom patterns as URLs (and we need them in platform independent format for caching)
   def formatAsPatternURL(path: String): String =
     if (NamingConventions.isHttpOrHttps(path)) path
     else PathUtils.uriString(PathUtils.platformIndependentString(path), absolute = true)
+}
+
+final case class DependencyMetadataResolvers(
+    defaultIvyResolvers: Seq[DependencyMetadataResolver],
+    defaultMavenResolvers: Seq[DependencyMetadataResolver],
+    onDemandResolvers: Seq[DependencyMetadataResolver]
+) {
+  def defaultResolvers: Seq[DependencyMetadataResolver] = defaultIvyResolvers ++ defaultMavenResolvers
+
+  def allResolvers: Seq[DependencyMetadataResolver] = defaultResolvers ++ onDemandResolvers
 }
 
 final case class DependencyMetadataResolver(

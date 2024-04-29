@@ -19,7 +19,7 @@ import java.util.regex.Pattern
 /**
  * Matcher for short repository names.
  */
-class Repository(userName: String, bitbucketHostname: String) {
+final class Repository(userName: String, bitbucketHostname: String) {
   private[repository] def privateUrl(repo: String): String =
     s"http://$userName@$bitbucketHostname/atlassian-stash/scm/~$userName/$repo.git"
 
@@ -43,9 +43,11 @@ class Repository(userName: String, bitbucketHostname: String) {
   def unapply(repoPath: String): Option[RepositoryLocation] =
     repoPath match {
       case BitbucketUrl(url) if url != null =>
-        Some(RawRepository(RemoteUrl(removeHttps(url)), local = false))
+        val remoteUrl = RemoteUrl(removeHttps(url))
+        if (remoteUrl.isFork) Some(PrivateFork(remoteUrl))
+        else Some(ProjectRepository(remoteUrl))
       case LocalRepo(path) if path != null =>
-        Some(RawRepository(RemoteUrl(path), local = true))
+        Some(LocalRepository(RemoteUrl(path)))
       case _ =>
         val elements =
           // handles "msde/train_optimus_dal/train"
@@ -54,7 +56,7 @@ class Repository(userName: String, bitbucketHostname: String) {
           else repoPath.split("_", /* limit = */ 2).flatMap(_.split("/"))
         elements match {
           case Array("private", repo @ _*) =>
-            Some(RawRepository(RemoteUrl(privateUrl(repo.mkString("_"))), local = false))
+            Some(PrivateFork(RemoteUrl(privateUrl(repo.mkString("_")))))
           case Array(project, repo) if project.nonEmpty =>
             Some(ProjectRepository(defaultMeta, project, repo, RemoteUrl(repoUrl(defaultMeta, project, repo))))
           case Array(meta, project, repo) if meta.nonEmpty =>
@@ -74,11 +76,10 @@ object Repository {
 
   def resolveRepositoryLocation(remote: String, bitbucketHostname: String): Option[RepositoryLocation] = {
     val Repo = new Repository(EnvironmentUtils.userName, bitbucketHostname)
-    val repository = remote match {
+    remote match {
       case Repo(location) => Some(location)
       case _              => None
     }
-    repository
   }
 
 }

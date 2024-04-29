@@ -153,6 +153,7 @@ final case class MavenMappingFile(pathStr: String) extends ObtFile {
   val id: WorkspaceId.type = WorkspaceId
 }
 
+// TODO (OPTIMUS-65072): Delete legacy implementation of forbidden dependencies
 final case class ForbiddenDependency(
     name: String,
     configurations: Set[String],
@@ -199,7 +200,8 @@ object WorkspaceStructure {
 
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
-    val id = MetaBundle(meta, name)
+    val eonId: Option[String] = config.optionalString(Names.EonId)
+    val id = MetaBundle(meta, name, eonId)
     val forbiddenDeps: Result[Seq[ForbiddenDependency]] =
       if (config.hasPath(Names.ForbiddenDependencies))
         Result.traverse(config.configs(Names.ForbiddenDependencies))(genForbiddenDependency)
@@ -209,6 +211,7 @@ object WorkspaceStructure {
     }
   }
 
+  // TODO (OPTIMUS-65072): Delete implementation of forbidden dependencies
   private def genForbiddenDependency(conf: Config): Result[ForbiddenDependency] = {
     val name = conf.getString(Names.Name)
     val configurations =
@@ -223,7 +226,7 @@ object WorkspaceStructure {
     val internalOnly = if (conf.hasPath(Names.InternalOnly)) conf.getBoolean(Names.InternalOnly) else false
     val externalOnly = if (conf.hasPath(Names.ExternalOnly)) conf.getBoolean(Names.ExternalOnly) else false
     Success(ForbiddenDependency(name, configurations, allowedInModules, allowedPatterns, internalOnly, externalOnly))
-      .withProblems(conf.checkExtraProperties(BundlesConfig, Keys.forbiddenDependencyKeys))
+      .withProblems(conf.checkExtraProperties(BundlesConfig, Keys.legacyForbiddenDependencyKeys))
   }
 
   private def genModule(name: String, bundle: Bundle, conf: Config) =
@@ -250,7 +253,10 @@ object WorkspaceStructure {
         })
         (bundleName, bundleConf) <- ResultSeq(moduleConf.nested(BundlesConfig))
         bundle <- ResultSeq.single(loadBundleDef(meta, bundleName, bundleConf))
-      } yield bundle -> bundleConf.withoutPath(Names.ModulesRoot).withoutPath(Names.ForbiddenDependencies)
+      } yield bundle -> bundleConf
+        .withoutPath(Names.ModulesRoot)
+        .withoutPath(Names.ForbiddenDependencies)
+        .withoutPath(Names.EonId)
 
       val globalForbiddenDependencies: Result[Seq[ForbiddenDependency]] = for {
         bundle <- bundlesFileConfig

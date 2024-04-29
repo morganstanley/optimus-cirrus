@@ -16,6 +16,8 @@ import optimus.buildtool.config.ScopeId
 
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import scala.collection.compat._
+import scala.jdk.CollectionConverters._
 
 class BuildSummaryRecorder extends DefaultObtTraceListener {
   private val log = getLogger(this)
@@ -46,13 +48,31 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
     statsSets.compute(stat, (_, current) => if (current == null) value else current ++ value)
 
   override def endBuild(success: Boolean): Boolean = {
-    if (success) {
+
+    def totalScopesSummary: String = {
       val scopes = stats.getOrDefault(ObtStats.Scopes, 0)
       val transitiveScopes = stats.getOrDefault(ObtStats.TransitiveScopes, 0)
 
+      f"\tTotal scopes: ${scopes + transitiveScopes}%,d [Direct: $scopes%,d, Transitive: $transitiveScopes%,d]"
+    }
+
+    def workspaceChangesSummary: String = {
       val changedDirectories = stats.getOrDefault(ObtStats.ModifiedDirectories, 0)
       val deletedArtifacts = stats.getOrDefault(ObtStats.DeletedArtifacts, 0)
-      val mutableExternalDeps = stats.getOrDefault(ObtStats.MutableExternalDependencies, 0) > 0
+      val mutableExternalDeps = statsSets.getOrDefault(ObtStats.MutableExternalDependencies, Set.empty).map(_.toString)
+      val numMutableExternalDeps = mutableExternalDeps.size
+
+      if (numMutableExternalDeps > 0)
+        log.debug(s"Mutable external dependencies: ${mutableExternalDeps.to(Seq).sorted.mkString(", ")}")
+
+      if (changedDirectories > 0 || deletedArtifacts > 0 || numMutableExternalDeps > 0)
+        f"\tWorkspace changes: ${changedDirectories + deletedArtifacts} [Changed directories: $changedDirectories%,d, Deleted artifacts: $deletedArtifacts%,d, Mutable external dependencies: $numMutableExternalDeps]"
+      else ""
+    }
+
+    def jvmHitsSummary: String = {
+      def jvmHits(cacheType: ObtStats.Cache): Long =
+        stats.getOrDefault(cacheType.ScalaHit, 0) + stats.getOrDefault(cacheType.JavaHit, 0)
 
       val jvmArtifacts =
         stats.getOrDefault(ObtStats.ScalaArtifacts, 0) + stats.getOrDefault(ObtStats.JavaArtifacts, 0)
@@ -61,39 +81,35 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
           statsSets.getOrDefault(ObtStats.NodeCacheJavaMiss, Set.empty).size
       val nodeCacheHits = jvmArtifacts - nodeCacheMisses
 
-      def hits(cacheType: ObtStats.Cache): Long =
-        stats.getOrDefault(cacheType.ScalaHit, 0) + stats.getOrDefault(cacheType.JavaHit, 0)
-      val filesystemHits = hits(ObtStats.FilesystemStore)
-      val skHits = hits(ObtStats.SilverKing)
+      val jvmFilesystemHits = jvmHits(ObtStats.FilesystemStore)
+      val jvmSkHits = jvmHits(ObtStats.SilverKing)
+      val jvmDhtHits = jvmHits(ObtStats.DHT)
       val zincHits = stats.getOrDefault(ObtStats.ZincCacheHit, 0)
-      // Note: We don't include node cache hits here because there's no easy way to calculate them
-      val totalCacheHits = nodeCacheHits + filesystemHits + skHits + zincHits
 
+      val jvmTotalCacheHits = nodeCacheHits + jvmFilesystemHits + jvmSkHits + zincHits + jvmDhtHits
+      f"\t\tCache hits: $jvmTotalCacheHits%,d [In-memory: $nodeCacheHits%,d, Local disk: $jvmFilesystemHits%,d, SilverKing: $jvmSkHits%,d, DHT: $jvmDhtHits%,d, Incremental: $zincHits%,d]"
+    }
+
+    def jvmScopeCompilationSummary: String = {
       val scopeCompilations = stats.getOrDefault(ObtStats.Compilations, 0)
 
-      val dueToSource = stats.getOrDefault(ObtStats.CompilationsDueToSourceChanges, 0)
-      val dueToUpstreamApi = stats.getOrDefault(ObtStats.CompilationsDueToUpstreamApiChanges, 0)
-      val dueToUpstreamAnnotation = stats.getOrDefault(ObtStats.CompilationsDueToUpstreamAnnotationChanges, 0)
-      val dueToUpstreamTraits = stats.getOrDefault(ObtStats.CompilationsDueToUpstreamTraitChanges, 0)
-      val dueToUpstreamMacros = stats.getOrDefault(ObtStats.CompilationsDueToUpstreamMacroChanges, 0)
-      val dueToExternalDeps = stats.getOrDefault(ObtStats.CompilationsDueToExternalDependencyChanges, 0)
-      val dueToJavaSigs = stats.getOrDefault(ObtStats.CompilationsDueToNonIncrementalJavaSignatures, 0)
-      val dueToUnknown = stats.getOrDefault(ObtStats.CompilationsDueToUnknownReason, 0)
-
       val causes = if (scopeCompilations > 0) {
-        val c = Seq(
-          "Source changes" -> dueToSource,
-          "Upstream API changes" -> dueToUpstreamApi,
-          "Upstream annotation changes" -> dueToUpstreamAnnotation,
-          "Upstream trait changes" -> dueToUpstreamTraits,
-          "Upstream macro changes" -> dueToUpstreamMacros,
-          "External dependency changes" -> dueToExternalDeps,
-          "Java signatures" -> dueToJavaSigs,
-          "Unknown" -> dueToUnknown
-        ).collect { case (reason, num) if num > 0 => f"$reason: $num%,d" }.mkString(", ")
+        val c = stats.asScala
+          .collect {
+            case (reason: ObtStats.CompilationReason, count) if count > 0 =>
+              reason -> count
+          }
+          .to(Seq)
+          .sortBy { case (reason, _) => reason.order }
+          .map { case (reason, count) => f"${reason.str.capitalize}: $count%,d" }
+          .mkString(", ")
         s", due to [$c]"
       } else ""
 
+      f"\t\tScope compilations: $scopeCompilations%,d$causes"
+    }
+
+    def jvmCompilationSummary: String = {
       val readFsSources = stats.getOrDefault(ObtStats.ReadFileSystemSourceFiles, 0)
       val readGitSources = stats.getOrDefault(ObtStats.ReadGitSourceFiles, 0)
       val readSources = readFsSources + readGitSources
@@ -104,44 +120,73 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
       val changedSources = addedSources + modifiedSources + removedSources
       val invalidatedSources = stats.getOrDefault(ObtStats.InvalidatedSourceFiles, 0)
       val totalSources = stats.getOrDefault(ObtStats.SourceFiles, 0)
-      val externalDependenciesChanged = statsSets.getOrDefault(ObtStats.ExternalDependencyChanges, Set.empty).size
+      val externalDependenciesChanged =
+        statsSets.getOrDefault(ObtStats.ExternalDependencyChanges, Set.empty).map(_.toString)
+      val numExternalDependenciesChanged = externalDependenciesChanged.size
 
       val compiledLines = stats.getOrDefault(ObtStats.CompiledLinesOfCode, 0)
       val totalLines = stats.getOrDefault(ObtStats.LinesOfCode, 0)
 
-      val workspaceChangesStr =
-        if (changedDirectories > 0 || deletedArtifacts > 0 || mutableExternalDeps)
-          f"Workspace changes: ${changedDirectories + deletedArtifacts} [Changed directories: $changedDirectories%,d, Deleted artifacts: $deletedArtifacts%,d, Mutable external dependencies: $mutableExternalDeps]"
-        else ""
+      if (numExternalDependenciesChanged > 0)
+        log.debug(s"Changed external dependencies: ${externalDependenciesChanged.to(Seq).sorted.mkString(", ")}")
 
       val readSourcesStr =
         if (readSources > 0)
-          f"Source files read: $readSources%,d [Local disk: $readFsSources%,d, Git: $readGitSources%,d]"
+          f"\t\tSource files read: $readSources%,d [Local disk: $readFsSources%,d, Git: $readGitSources%,d]"
         else ""
       val changedSourcesStr =
-        if (changedSources > 0) f"Source files changed: $changedSources%,d" else ""
+        if (changedSources > 0) f"\t\tSource files changed: $changedSources%,d" else ""
       val externalDependenciesChangedStr =
-        if (externalDependenciesChanged > 0) f"External dependencies changed: $externalDependenciesChanged%,d" else ""
+        if (numExternalDependenciesChanged > 0) f"\t\tExternal dependencies changed: $numExternalDependenciesChanged%,d"
+        else ""
       val invalidatedSourcesStr =
         if (invalidatedSources > 0)
-          f"Source files recompiled: $invalidatedSources%,d/$totalSources%,d (Source lines: $compiledLines%,d/$totalLines%,d)"
+          f"\t\tSource files recompiled: $invalidatedSources%,d/$totalSources%,d (Source lines: $compiledLines%,d/$totalLines%,d)"
         else ""
+
+      List(
+        readSourcesStr,
+        changedSourcesStr,
+        externalDependenciesChangedStr,
+        invalidatedSourcesStr,
+      ).filter(!_.isBlank).mkString("\n")
+    }
+
+    def pythonHitsSummary: String = {
+      def pythonHits(cacheType: ObtStats.Cache): Long =
+        stats.getOrDefault(cacheType.PythonHit, 0)
+
+      val pythonFilesystemHits = pythonHits(ObtStats.FilesystemStore)
+      val pythonSkHits = pythonHits(ObtStats.SilverKing)
+      val pythonDhtHits = pythonHits(ObtStats.DHT)
+      // Note: We don't include node cache hits here because there's no easy way to calculate them
+      val pythonTotalCacheHits = pythonFilesystemHits + pythonSkHits + pythonDhtHits
+
+      f"\t\tCache hits: $pythonTotalCacheHits%,d [Local disk: $pythonFilesystemHits%,d, SilverKing: $pythonSkHits%,d, DHT: $pythonDhtHits%,d]"
+    }
+
+    if (success) {
+      val jvmSummary =
+        s"""\tJava/Scala:
+           |$jvmHitsSummary
+           |$jvmScopeCompilationSummary
+           |$jvmCompilationSummary""".stripMargin
+
+      val pythonSummary =
+        s"""\tPython:
+           |$pythonHitsSummary""".stripMargin
 
       val msg = Seq(
         "Build Summary:",
-        f"\tTotal scopes: ${scopes + transitiveScopes}%,d [Direct: $scopes%,d, Transitive: $transitiveScopes%,d]",
-        s"\t$workspaceChangesStr",
-        "\tJava/Scala:",
-        f"\t\tCache hits: $totalCacheHits%,d [In-memory: $nodeCacheHits%,d, Local disk: $filesystemHits%,d, SilverKing: $skHits%,d, Incremental: $zincHits%,d]",
-        f"\t\tScope compilations: $scopeCompilations%,d$causes",
-        s"\t\t$readSourcesStr",
-        s"\t\t$changedSourcesStr",
-        s"\t\t$externalDependenciesChangedStr",
-        s"\t\t$invalidatedSourcesStr"
+        s"$totalScopesSummary",
+        s"$workspaceChangesSummary",
+        s"$jvmSummary",
+        s"$pythonSummary",
       ).filter(!_.isBlank).mkString("\n")
       log.info(msg)
       ObtTrace.info(msg)
     }
+
     stats.clear()
     statsSets.clear()
     true

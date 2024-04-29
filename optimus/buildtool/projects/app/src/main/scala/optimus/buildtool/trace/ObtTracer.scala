@@ -84,6 +84,7 @@ private[buildtool] object ObtStats {
   case object InstalledJars extends ObtStat
   case object InstalledWars extends ObtStat
   case object MavenDownloads extends ObtStat
+  case object MavenDownloadRetries extends ObtStat
   case object MavenRetry extends ObtStat
   case object MavenCorruptedJar extends ObtStat
   case object CoursierCorruptedMetadata extends ObtStat
@@ -98,14 +99,26 @@ private[buildtool] object ObtStats {
   case object MutableExternalDependencies extends ObtStat
 
   case object Compilations extends ObtStat
-  case object CompilationsDueToSourceChanges extends ObtStat
-  case object CompilationsDueToUpstreamApiChanges extends ObtStat
-  case object CompilationsDueToUpstreamMacroChanges extends ObtStat
-  case object CompilationsDueToUpstreamTraitChanges extends ObtStat
-  case object CompilationsDueToUpstreamAnnotationChanges extends ObtStat
-  case object CompilationsDueToExternalDependencyChanges extends ObtStat
-  case object CompilationsDueToNonIncrementalJavaSignatures extends ObtStat
-  case object CompilationsDueToUnknownReason extends ObtStat
+
+  abstract class CompilationReason(val str: String, val order: Int) extends ObtStat
+  case object CompilationsDueToSourceChanges extends CompilationReason("source changes", 1)
+  case object CompilationsDueToUpstreamApiChanges extends CompilationReason("upstream API changes", 2)
+  case object CompilationsDueToUpstreamMacroChanges extends CompilationReason("upstream macro changes", 3)
+  case object CompilationsDueToUpstreamTraitChanges extends CompilationReason("upstream trait changes", 4)
+  case object CompilationsDueToUpstreamAnnotationChanges extends CompilationReason("upstream annotation changes", 5)
+  case object CompilationsDueToExternalDependencyChanges extends CompilationReason("external dependency changes", 6)
+  case object CompilationsDueToNonIncrementalJavaSignatures
+      extends CompilationReason("non-incremental java signatures", 6)
+  case object CompilationsDueToPluginChanges extends CompilationReason("upstream compiler plugin changes", 7)
+  case object CompilationsDueToMacroClasspathChanges extends CompilationReason("upstream macro classpath changes", 8)
+  case object CompilationsDueToChangedCompilerVersion extends CompilationReason("changed compiler version", 9)
+  case object CompilationsDueToAddedCompilerOptions extends CompilationReason("added compiler options", 10)
+  case object CompilationsDueToRemovedCompilerOptions extends CompilationReason("removed compiler options", 11)
+  case object CompilationsDueToChangedCompilerOptions extends CompilationReason("changed compiler options", 12)
+  case object CompilationsDueToDiscardedAnalysis extends CompilationReason("discarded analysis", 13)
+  case object CompilationsDueToNoAnalysis extends CompilationReason("non-incremental", 14)
+  case object CompilationsDueToUnknownReason extends CompilationReason("unknown reason", 15)
+
   case object ZincCacheHit extends ObtStat
 
   case object NodeCacheScalaMiss extends ObtStat
@@ -131,9 +144,11 @@ private[buildtool] object ObtStats {
     trait CacheStat extends ObtStat {
       override def key = s"$cache$this"
     }
+    case object Corrupted extends ObtStat with CacheStat
     case object Hit extends ObtStat with CacheStat
     case object ScalaHit extends ObtStat with CacheStat
     case object JavaHit extends ObtStat with CacheStat
+    case object PythonHit extends ObtStat with CacheStat
     case object Miss extends ObtStat with CacheStat
     case object Write extends ObtStat with CacheStat
     case object ReadBytes extends ObtStat with CacheStat
@@ -143,6 +158,8 @@ private[buildtool] object ObtStats {
     case object ExternalWrite extends ObtStat with CacheStat
   }
   case object SilverKing extends Cache
+  case object DHT extends Cache
+  case object RemoteComparing extends Cache
   case object FilesystemStore extends Cache
   case object FilesystemConfig extends Cache
   case object SimpleStore extends Cache

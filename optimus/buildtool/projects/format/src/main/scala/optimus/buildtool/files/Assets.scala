@@ -254,18 +254,10 @@ final case class HttpAsset private[files] (override val url: URL) extends BaseHt
   override protected def validate(): Unit = require(validate(url))
 }
 
-object HttpAsset {
-  def apply(s: String): HttpAsset = new HttpAsset(new URI(s).toURL())
-}
-
 final case class JarHttpAsset private[files] (override val url: URL) extends BaseHttpAsset with JarAsset {
   override type LocalAsset = JarAsset
   override def asLocal(localPath: Path): JarAsset = JarAsset(localPath)
   override protected def validate(): Unit = require(isJar)
-}
-
-object JarHttpAsset {
-  def apply(s: String): JarHttpAsset = new JarHttpAsset(new URI(s).toURL())
 }
 
 final case class JarFileSystemAsset private[files] (path: Path, lastModified: Instant) extends JarAsset
@@ -273,6 +265,12 @@ final case class JarFileSystemAsset private[files] (path: Path, lastModified: In
 object JarAsset {
   def apply(file: Path): JarAsset = JarFileSystemAsset(file, Instant.EPOCH)
   def apply(url: URL): JarAsset = JarHttpAsset(url)
+  def resolve(file: Path): JarAsset = PathUtils.platformIndependentString(file) match {
+    case NamingConventions.DepCopyMavenRoot(protocol, relativePath) =>
+      JarHttpAsset(new URI(s"$protocol://$relativePath").toURL)
+    case _ =>
+      JarAsset(file)
+  }
   def timestamped(file: Path): JarAsset = JarFileSystemAsset(file, FileAsset.lastModified(file))
 }
 

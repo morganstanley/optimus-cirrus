@@ -49,7 +49,7 @@ final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, va
   override def hashCode: Int = vertexId.hashCode
   override def toString: String = repr
   def prettyPrint: String = if (this.crumbLevel == ChainedID.level) repr else s"$repr (level: $crumbLevel)"
-  def base: String = repr.replaceFirst("#[\\d#]+$", "")
+  def base: String = repr.replaceFirst("#[\\w#:]+$", "")
 
   private[optimus] def asList: JavaArrayList[String] = ChainedID.asList(this)
 

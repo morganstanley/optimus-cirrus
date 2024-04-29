@@ -45,7 +45,7 @@ object MavenTool {
   @node def runCmds(allCmd: Set[Seq[String]], outputFile: FileAsset, rootId: ScopeId, name: String): Unit = {
     allCmd.apar.foreach { cmd =>
       BackgroundProcessBuilder
-        .onDemand(outputFile, cmd)
+        .onDemand(outputFile, cmd, useCrumbs = false)
         .build(rootId, MavenApp(name), printLogLines)
     }
   }
