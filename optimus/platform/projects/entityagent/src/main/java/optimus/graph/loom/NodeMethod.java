@@ -40,7 +40,8 @@ public class NodeMethod {
   boolean trait;
   boolean asyncOnly;
 
-  String simpleGetterDesc; // null if not a simple getter, else no need to create nodeClass
+  String simpleFieldDesc; // null if not a simple field, else no need to create nodeClass
+  String simpleMethodDesc; // null if not a simple method, else no need to create nodeClass
   boolean isScenarioIndependent;
 
   public NodeMethod(ClassNode cls, String privatePrefix, MethodNode method) {
@@ -85,21 +86,28 @@ public class NodeMethod {
     }
     var newDesc = Type.getMethodDescriptor(NODE_TYPE, argTypes);
     try (var mv = newMethod(cv, newNodeMethod.access, newNodeMethod.name, newDesc)) {
-      if (NODE_DESC.equals(simpleGetterDesc)) {
+      if (NODE_DESC.equals(simpleFieldDesc)) {
         mv.loadThis();
         mv.visitMethodInsn(
             INVOKEVIRTUAL, cls.name, method.name + IMPL_SUFFIX, NODE_GETTER_DESC, isInterface);
         mv.returnValue();
         return;
       }
+      var methodToCall = method.name;
       var cmd = asyncOnly ? CMD_ASYNC : CMD_NODE; // Default....
       if (trait) cmd = asyncOnly ? CMD_ASYNC_WITH_TRAIT : CMD_NODE_WITH_TRAIT;
-      else if (simpleGetterDesc != null) cmd = CMD_NODE_ACPN;
+      else if (simpleFieldDesc != null) {
+        methodToCall = method.name + IMPL_SUFFIX;
+        cmd = CMD_NODE_ACPN;
+      } else if (simpleMethodDesc != null) {
+        methodToCall = method.name + IMPL_SUFFIX;
+        cmd = CMD_OBSERVED_VALUE_NODE;
+      }
 
       Handle orgHandle =
-          simpleGetterDesc != null
-              ? new Handle(H_INVOKESPECIAL, cls.name, method.name + IMPL_SUFFIX, method.desc, false)
-              : new Handle(H_INVOKESPECIAL, cls.name, method.name, method.desc, isInterface);
+          simpleFieldDesc != null
+              ? new Handle(H_INVOKESPECIAL, cls.name, methodToCall, method.desc, false)
+              : new Handle(H_INVOKESPECIAL, cls.name, methodToCall, method.desc, isInterface);
 
       invokeCmd(mv, cmd, orgHandle, NODE_TYPE, argNames);
     }

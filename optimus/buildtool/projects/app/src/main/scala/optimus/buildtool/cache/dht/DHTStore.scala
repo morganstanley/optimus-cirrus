@@ -88,6 +88,7 @@ object DHTStore extends Log {
   def zkClusterType(zkPath: String): ClusterType = zkPath match {
     case zkClusterTypePattern("dev") => ClusterType.Dev
     case zkClusterTypePattern("qa")  => ClusterType.QA
+    case _                           => ClusterType.Custom
   }
 
   def ZkBuilder(zkPath: String): DHTClientBuilder =

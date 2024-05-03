@@ -46,6 +46,7 @@ mischief.obt
 
 # cucumber test reports
 bdd_report.html
+/reports/cucumber/
 
 # EOF
 # See top of file for .gitignore guidelines.

@@ -121,7 +121,13 @@ import optimus.stratosphere.config.StratoWorkspace
         new ComparingArtifactStore(
           SilverKingStore(pathBuilder, config, version, cacheMode.write, offlinePuts),
           Seq(
-            new DHTStore(pathBuilder, DHTStore.zkClusterType(dht), version, cacheMode.write, DHTStore.ZkBuilder(dht))),
+            new DHTStore(
+              CompilePathBuilder(pathBuilder.outputDir.parent.resolveDir("build_obt_compare")),
+              DHTStore.zkClusterType(dht),
+              version,
+              cacheMode.write,
+              DHTStore.ZkBuilder(dht)
+            )),
           stratoWorkspace
         )
       case (sk, dht, false) if sk != NoneArg && dht != NoneArg =>

@@ -35,6 +35,7 @@ public class LoomAdapter implements Opcodes {
   private static final int LAMBDA_CANDIDATE_ACCESS = ACC_STATIC | ACC_SYNTHETIC;
 
   private final HashMap<String, String> implFieldMap = new HashMap<>();
+  private final HashMap<String, String> implMethodMap = new HashMap<>();
 
   private final ArrayList<NodeMethod> asyncMethods = new ArrayList<>();
 
@@ -58,6 +59,7 @@ public class LoomAdapter implements Opcodes {
   public void transform() {
     // Order here is important...
     parseFields();
+    parseMethods();
     findAllNodeFunctions();
     cls.methods.removeIf(this::isTransforming);
     findAllTrivialFunctions();
@@ -70,6 +72,15 @@ public class LoomAdapter implements Opcodes {
     for (var field : cls.fields) {
       var name = field.name;
       if (name.endsWith(IMPL_SUFFIX)) implFieldMap.put(stripSuffix(name, IMPL_SUFFIX), field.desc);
+    }
+  }
+
+  private void parseMethods() {
+    // Extract information about methods
+    for (var method : cls.methods) {
+      var name = method.name;
+      if (name.endsWith(IMPL_SUFFIX))
+        implMethodMap.put(stripSuffix(name, IMPL_SUFFIX), method.desc);
     }
   }
 
@@ -155,7 +166,7 @@ public class LoomAdapter implements Opcodes {
       nm.writeNodeSyncFunc(cls);
       nm.writeQueuedFunc(cls);
       nm.writeNewNodeFunc(cls);
-      if (nm.simpleGetterDesc != null) {
+      if (nm.simpleFieldDesc != null) {
         cls.methods.remove(nm.method);
       } else {
         nm.method.name = nm.method.name + LOOM_SUFFIX;
@@ -227,7 +238,8 @@ public class LoomAdapter implements Opcodes {
 
     var asyncMethod = new NodeMethod(cls, privatePrefix, method);
     asyncMethod.isScenarioIndependent = scenarioIndependent;
-    asyncMethod.simpleGetterDesc = implFieldMap.get(method.name);
+    asyncMethod.simpleFieldDesc = implFieldMap.get(method.name);
+    asyncMethod.simpleMethodDesc = implMethodMap.get(method.name);
     asyncMethod.asyncOnly = asyncOnly;
     asyncMethod.clsID = LPropertyDescriptor.register(cls, method.name, getLineNumber(method), -1);
     parseAsyncAnnotation(asyncMethod, asyncAnnotation);
