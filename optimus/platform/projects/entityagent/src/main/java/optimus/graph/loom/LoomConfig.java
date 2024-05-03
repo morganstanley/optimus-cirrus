@@ -70,6 +70,7 @@ public class LoomConfig {
   public static final String CMD_NODE_WITH_TRAIT = CMD_NODE + TRAIT_SUFFIX;
   public static final String CMD_ASYNC_WITH_TRAIT = CMD_ASYNC + TRAIT_SUFFIX;
   public static final String CMD_NODE_ACPN = "nodeACPN";
+  public static final String CMD_OBSERVED_VALUE_NODE = "nodeOVN";
   public static final String CMD_QUEUED = "queued";
   public static final String CMD_GET = "get";
   public static final String CMD_GETSI = "getSI";

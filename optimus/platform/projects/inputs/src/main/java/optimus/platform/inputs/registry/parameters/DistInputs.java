@@ -65,6 +65,9 @@ public class DistInputs {
     public static final String ReplayPersistDir = "client.replay.persistDir";
     public static final String BrokerZookeeperWaitTimeout = "broker.zookeeper.waitTimeout";
     public static final String AppInfoFile = "interop.appInfoFile";
+    public static final String SerializedDumpLocation = "dump.location";
+    public static final String DumpRequestSizeThreshold = "dump.requestSizeThreshold";
+    public static final String DumpResponseSizeThreshold = "dump.responseSizeThreshold";
   }
 
   // Environment Variables
@@ -461,6 +464,28 @@ public class DistInputs {
           SourceNames.EngineReleaseLink,
           String::toString,
           Source.fromJavaProperties(prefixed(SourceNames.EngineReleaseLink)),
+          CombinationStrategies.distCombinator());
+
+  // Large request/response dump
+  public static final ScopedSINodeInput<String> SerializedDumpLocation =
+      NodeInputs.newSerializable(
+          "SerializedDumpLocation",
+          "Location to which large objects will be saved (if dumps are enabled). It should be a network location, not a local filesystem",
+          Source.fromJavaProperties(prefixed(SourceNames.SerializedDumpLocation)),
+          CombinationStrategies.distCombinator());
+
+  public static final ScopedSINodeInput<Integer> DumpRequestSizeThreshold =
+      NodeInputs.newSerializable(
+          "DumpRequestSizeThreshold",
+          "Minimal request size to trigger dump to file",
+          Source.fromIntJavaProperties(prefixed(SourceNames.DumpRequestSizeThreshold)),
+          CombinationStrategies.distCombinator());
+
+  public static final ScopedSINodeInput<Integer> DumpResponseSizeThreshold =
+      NodeInputs.newSerializable(
+          "DumpResponseSizeThreshold",
+          "Minimal response size to trigger dump to file",
+          Source.fromIntJavaProperties(prefixed(SourceNames.DumpResponseSizeThreshold)),
           CombinationStrategies.distCombinator());
 
   private static String[] prefixed(String... properties) {

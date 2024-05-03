@@ -145,7 +145,7 @@ object MetadataOwner {
 trait DalMetadata
 trait OptOut extends DalMetadata
 trait OwnershipMetadata {
-  val owner: MetadataOwner
+  def owner: MetadataOwner
 }
 
 /**
