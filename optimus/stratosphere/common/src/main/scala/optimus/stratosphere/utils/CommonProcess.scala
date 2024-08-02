@@ -14,6 +14,7 @@ package optimus.stratosphere.utils
 import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
+import optimus.stratosphere.common.IntellijClientDirectoryStructure
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.logger.CustomProcessLogger
@@ -48,8 +49,9 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
   def runIntellij(sourceDir: Path): Try[Int] =
     runStratosphereCommand("ide")(sourceDir, stratoWorkspace.log.info)
 
-  def runIntellijClient(): Int = {
-    val cmdLine: List[String] = List(stratoWorkspace.intellijDirectoryStructure.intellijClientExecutable.getFullPath)
+  def runIntellijClient(clientVersion: String): Int = {
+    val cmdLine: List[String] = List(
+      IntellijClientDirectoryStructure(stratoWorkspace, clientVersion).intellijClientExecutable.getFullPath)
     val processBuilder = addJavaToPath(new ProcessBuilder(cmdLine.asJava))
     processBuilder.start()
     ExitCode.Success

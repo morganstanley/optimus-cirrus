@@ -14,11 +14,13 @@ package optimus.buildtool.runconf.compile
 import optimus.buildtool.config.ParentId
 import optimus.buildtool.runconf.HasScopedName
 import optimus.buildtool.runconf.Launcher
+import optimus.buildtool.runconf.plugins.JacocoOpts
 import optimus.buildtool.runconf.plugins.EnvInternal
 import optimus.buildtool.runconf.plugins.ExtraExecOpts
 import optimus.buildtool.runconf.plugins.JavaModule
 import optimus.buildtool.runconf.plugins.NativeLibraries
 import optimus.buildtool.runconf.plugins.ScriptTemplates
+import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
@@ -52,6 +54,7 @@ final case class UnresolvedRunConf(
     appendableEnv: EnvInternal,
     moduleLoads: Seq[String],
     javaModule: JavaModule,
+    strictRuntime: StrictRuntime,
     credentialGuardCompatibility: Option[Boolean],
     debugPreload: Option[Boolean],
     additionalScope: Option[String],
@@ -60,7 +63,9 @@ final case class UnresolvedRunConf(
     category: Option[String],
     groups: Set[String],
     owner: Option[String],
-    flags: Map[String, String]
+    flags: Map[String, String],
+    jacocoOpts: Option[JacocoOpts],
+    interopPython: Option[Boolean]
 ) extends HasScopedName {
   def isApp: Boolean = !isTemplate && !isTest
 }

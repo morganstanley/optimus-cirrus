@@ -78,7 +78,7 @@ sealed abstract class Crumb(
       if (v eq null) "<null>" else v
     } ++ jsonProperties.mapValuesNow(_.toString)).toMap
   final def asMap: Map[String, String] = header ++ cleanProperties ++ Map[String, String](Headers.Hints -> hintString)
-  private[breadcrumbs] def asJMap: Map[String, JsValue] = {
+  def asJMap: Map[String, JsValue] = {
     val builder = HashMap.newBuilder[String, JsValue]
     builder += J(Headers.Crumb, clazz.toJson)
     builder += J(Headers.Source, source.toString)
@@ -307,7 +307,8 @@ class DiagPropertiesCrumb(uuid: ChainedID, source: Crumb.Source, jsonProperties:
       uuid,
       source,
       Map.empty[String, String],
-      jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"),      CrumbHints.Diagnostics) {
+      jsonProperties ++ Properties.jsMap(Properties._mappend -> "append"),
+      CrumbHints.Diagnostics) {
   override def flags: Set[CrumbFlag] = source.flags + CrumbFlag.DoNotReplicate
 }
 

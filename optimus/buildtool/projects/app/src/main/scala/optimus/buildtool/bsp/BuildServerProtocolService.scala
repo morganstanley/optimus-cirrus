@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.bsp
 
-import java.nio.file.Files
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
@@ -456,9 +455,6 @@ class BuildServerProtocolService(
   override def buildTargetPythonOptions(params: PythonOptionsParams): CompletableFuture[PythonOptionsResult] = {
     in("buildTargetPythonOptions", params)
 
-    val outputBase = buildDir.resolveDir("fake-outputs")
-    if (!outputBase.exists) Files.createDirectories(outputBase.path)
-
     val cancellationScope = CancellationScope.newScope()
     cancellationScopes.add(cancellationScope)
 
@@ -467,7 +463,7 @@ class BuildServerProtocolService(
     val syncer = newSyncer(cancellationScope, listener, bspListener, rescan = false)
 
     syncer
-      .thenCompose[Seq[PythonOptionsItem]](_.pythonOptions(params.getTargets.asScala.toIndexedSeq, outputBase))
+      .thenCompose[Seq[PythonOptionsItem]](_.pythonOptions(params.getTargets.asScala.toIndexedSeq))
       .thenApply[PythonOptionsResult] { items =>
         val msg = f"Importing python configurations for ${items.size}%,d targets"
         slog.info(msg)
@@ -485,11 +481,6 @@ class BuildServerProtocolService(
   override def buildTargetScalacOptions(params: ScalacOptionsParams): CompletableFuture[ScalacOptionsResult] = {
     in("buildTargetScalacOptions", params)
 
-    // We need to create empty directories for IntelliJ
-    // TODO (OPTIMUS-31029): Use bsp to generate classpath
-    val outputBase = buildDir.resolveDir("fake-outputs")
-    if (!outputBase.exists) Files.createDirectories(outputBase.path)
-
     val cancellationScope = CancellationScope.newScope()
     cancellationScopes.add(cancellationScope)
 
@@ -499,7 +490,7 @@ class BuildServerProtocolService(
 
     syncer
       .thenCompose[Seq[ScalacOptionsItem]](
-        _.scalacOptions(params.getTargets.asScala.toIndexedSeq, outputBase)
+        _.scalacOptions(params.getTargets.asScala.toIndexedSeq)
       )
       .thenApply[ScalacOptionsResult] { items =>
         val dependencies = items.map(_.getClasspath.asScala.size).sum

@@ -13,6 +13,7 @@ package optimus.buildtool.format
 
 import com.typesafe.config.Config
 import optimus.buildtool.config.ElectronConfiguration
+import optimus.buildtool.config.NamingConventions.LibsKey
 import optimus.buildtool.config.NpmConfiguration._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 

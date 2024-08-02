@@ -462,16 +462,43 @@ object RequestingFilesFromBitBucket extends DefaultJsonProtocol with NullOptions
     jsonFormat3(RequestingFilesFromBitBucket.apply)
 }
 
-final case class FileContent(lines: Seq[FileContentLine]) {
-  override def toString: String = {
-    lines.map(_.text).mkString("\n")
-  }
-}
+final case class FileContent(isLastPage: Boolean, values: Seq[FileContentLine], nextPageStart: Option[Int])
+    extends Paged[FileContentLine]
 object FileContent extends DefaultJsonProtocol with NullOptions {
-  implicit lazy val format: RootJsonFormat[FileContent] = jsonFormat1(FileContent.apply)
+  implicit lazy val format: RootJsonFormat[FileContent] =
+    jsonFormat(FileContent.apply, "isLastPage", "lines", "nextPageStart")
 }
 
 final case class FileContentLine(text: String)
-object FileContentLine extends DefaultJsonProtocol {
-  implicit lazy val format: RootJsonFormat[FileContentLine] = jsonFormat1(FileContentLine.apply)
+object FileContentLine extends DefaultJsonProtocol with NullOptions {
+  implicit lazy val format: RootJsonFormat[FileContentLine] =
+    jsonFormat1(FileContentLine.apply)
+}
+
+final case class PrChangesDetails(isLastPage: Boolean, values: Seq[PrChangesValuesField], nextPageStart: Option[Int])
+    extends Paged[PrChangesValuesField]
+object PrChangesDetails extends DefaultJsonProtocol with NullOptions {
+  implicit lazy val format: RootJsonFormat[PrChangesDetails] = jsonFormat3(PrChangesDetails.apply)
+}
+
+final case class PrChangesValuesField(
+    path: PathComponent,
+    properties: GitChangeType,
+    srcPath: Option[SourcePathComponent])
+object PrChangesValuesField extends DefaultJsonProtocol with NullOptions {
+  implicit lazy val format: RootJsonFormat[PrChangesValuesField] = jsonFormat3(PrChangesValuesField.apply)
+}
+
+final case class PathComponent(components: Seq[String])
+object PathComponent extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[PathComponent] = jsonFormat1(PathComponent.apply)
+}
+
+final case class SourcePathComponent(components: Seq[String])
+object SourcePathComponent extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[SourcePathComponent] = jsonFormat1(SourcePathComponent.apply)
+}
+final case class GitChangeType(gitChangeType: String)
+object GitChangeType extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[GitChangeType] = jsonFormat1(GitChangeType.apply)
 }

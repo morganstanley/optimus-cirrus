@@ -40,7 +40,8 @@ import scala.collection.immutable.Seq
 
 @entity class ScopeDependencies(
     val id: ScopeId,
-    dependencies: Dependencies,
+    val mavenOnly: Boolean,
+    val dependencies: Dependencies,
     externalNativeDependencies: Seq[NativeDependencyDefinition],
     val tpe: ResolutionArtifactType,
     pathBuilder: CompilePathBuilder,
@@ -49,6 +50,9 @@ import scala.collection.immutable.Seq
     cache: ArtifactCache,
     hasher: FingerprintHasher
 ) extends HasScopeId {
+
+  private def isMavenCompatible: Boolean =
+    mavenOnly || (externalNativeDependencies.isEmpty && dependencies.hasMavenLibsOrEmpty)
 
   @node def directScopeDependencies: Seq[CompilationNode] = {
     internalDependencyIds.distinct
@@ -65,10 +69,24 @@ import scala.collection.immutable.Seq
         })
 
   @node def transitiveExternalDependencyIds: DependencyDefinitions = {
-    val upstreamExtDeps =
-      transitiveScopeDependencies.apar.flatMap(ScopeDependencies.dependencies(tpe, _).externalDependencyIds)
-    DependencyDefinitions(directIds = distinctLast(externalDependencyIds), indirectIds = distinctLast(upstreamExtDeps))
+    val upstreamExtDeps = {
+      transitiveScopeDependencies.apar.flatMap { dep =>
+        val currentUpstream = ScopeDependencies.dependencies(tpe, dep)
+        // use predefined mavenLibs=[] from maven compatible upstream module when downstream module is maven only
+        val forMavenDownstream = mavenOnly && currentUpstream.isMavenCompatible
+        currentUpstream.externalDependencyIds(forMavenDownstream)
+      }
+    }
+    DependencyDefinitions(
+      directIds = distinctLast(externalDependencyIds()),
+      indirectIds = distinctLast(upstreamExtDeps))
   }
+
+  @node def transitiveInternalDependencyIds: Seq[ScopeId] =
+    transitiveScopeDependencies.apar.flatMap(ScopeDependencies.dependencies(tpe, _).internalDependencyIds)
+
+  @node def transitiveInternalDependencyIdsAll: Seq[ScopeId] =
+    (transitiveInternalDependencyIds ++ internalDependencyIds).distinct
 
   /** All JNI paths, both from our explicit declaration of native dependencies and from ivy files. */
   @node def transitiveJniPaths: Seq[String] =
@@ -114,19 +132,27 @@ import scala.collection.immutable.Seq
   @node def transitiveExternalDependencies: Seq[ExternalClassFileArtifact] =
     resolution.map(_.result.resolvedArtifacts).getOrElse(Nil)
 
-  @node private def internalDependencyIds: Seq[ScopeId] = dependencies.internal
+  @node def internalDependencyIds: Seq[ScopeId] = dependencies.modules
 
-  @node private def externalDependencyIds: Seq[DependencyDefinition] = dependencies.external
+  /**
+   * be used for fingerprint calculation or validator only
+   * @return all predefined external dependencies in obt file (libs and mavenLibs)
+   */
+  @node def dualExternalDependencyIds: Seq[DependencyDefinition] = dependencies.dualExternalDeps
+
+  @node def externalDependencyIds(forMavenDownstream: Boolean = false): Seq[DependencyDefinition] =
+    dependencies.externalDeps(forMavenDownstream)
 
   override def toString: String = s"ScopeDependencies($id)"
 }
 
 object ScopeDependencies {
-  private def dependencies(tpe: ResolutionArtifactType, scope: CompilationNode): ScopeDependencies = tpe match {
-    // for CompileOnly, we want the transitive Compile deps NOT the transitive CompileOnly deps
-    case CompileResolution | CompileOnlyResolution => scope.upstream.compileDependencies
-    case RuntimeResolution                         => scope.runtimeDependencies
-  }
+  private def dependencies(tpe: ResolutionArtifactType, scope: CompilationNode): ScopeDependencies =
+    tpe match {
+      // for CompileOnly, we want the transitive Compile deps NOT the transitive CompileOnly deps
+      case CompileResolution | CompileOnlyResolution => scope.upstream.compileDependencies
+      case RuntimeResolution                         => scope.runtimeDependencies
+    }
 
   import optimus.buildtool.cache.NodeCaching.reallyBigCache
 

@@ -13,9 +13,6 @@ package optimus.buildtool.builders.reporter
 
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
-
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
@@ -23,6 +20,8 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import scala.xml.Elem
 
 object HtmlReporter {
@@ -99,12 +98,13 @@ object HtmlReporter {
         </p>
       </div>
 
-      val data = discrepancies.map { case (scopeId, discrepancies) =>
-        <div><h2>{scopeId}</h2>
+      val data =
+        discrepancies.toList.sortBy { case (scopeId, _) => scopeId.toString }.map { case (scopeId, discrepancies) =>
+          <div><h2>{scopeId}</h2>
           {writeSection("Unused", discrepancies, LookupDiscrepancy.Unused).getOrElse("")}
           {writeSection("Required", discrepancies, LookupDiscrepancy.Required).getOrElse("")}
-        </div>
-      }
+          </div>
+        }
 
       <div>{description} {data}</div>
     }

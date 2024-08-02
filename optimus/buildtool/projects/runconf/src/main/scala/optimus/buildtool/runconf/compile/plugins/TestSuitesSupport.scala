@@ -13,10 +13,10 @@ package optimus.buildtool.runconf.compile.plugins
 
 import java.util.Properties
 import java.util.{Map => JMap}
-
 import optimus.buildtool.runconf
 import optimus.buildtool.runconf.TestRunConf
 import optimus.buildtool.runconf.compile._
+import optimus.buildtool.runconf.compile.plugins.JacocoOptionsSupport._
 import optimus.buildtool.runconf.compile.plugins.TestSuitesSupport._
 import optimus.buildtool.runconf.compile.plugins.TreadmillOptionsSupport._
 import optimus.buildtool.runconf.compile.plugins.ExtraExecOptionsSupport._
@@ -79,7 +79,8 @@ class TestSuitesSupport(runEnv: RunEnv, sysProps: Properties) {
     RunConfSupport.names.extraExecOpts -> T.Object(T.Union(Set(T.String, T.String))),
     RunConfSupport.names.category -> T.String,
     RunConfSupport.names.owner -> T.String,
-    RunConfSupport.names.flags -> T.Object(T.Union(Set(T.String, T.String)))
+    RunConfSupport.names.flags -> T.Object(T.Union(Set(T.String, T.String))),
+    RunConfSupport.names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Integer)))
   )
 
   private val expectedProperties = expectedTypes.keySet
@@ -128,7 +129,8 @@ class TestSuitesSupport(runEnv: RunEnv, sysProps: Properties) {
             category = extractor.extractString(RunConfSupport.names.category),
             groups = extractor.extractString(RunConfSupport.names.groups).toSet,
             owner = extractor.extractString(RunConfSupport.names.owner),
-            flags = extractor.extractMap(RunConfSupport.names.flags).mapValuesNow(_.toString)
+            flags = extractor.extractMap(RunConfSupport.names.flags).mapValuesNow(_.toString),
+            jacocoOpts = extractor.extractJacocoOpts(RunConfSupport.names.jacocoOpts)
           )
         }.toMap
       }
@@ -148,7 +150,8 @@ class TestSuitesSupport(runEnv: RunEnv, sysProps: Properties) {
         merger.merge(_.category),
         merger.merge(_.groups.toIndexedSeq).toSet,
         merger.merge(_.owner),
-        merger.mergeMaps(_.flags)
+        merger.mergeMaps(_.flags),
+        mergeJacocoOpts(target.jacocoOpts, source.jacocoOpts)
       )
     }
   }

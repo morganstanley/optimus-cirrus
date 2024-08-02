@@ -68,6 +68,7 @@ import scala.collection.immutable.SortedMap
     val externalDependencies: ExternalDependencies,
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val globalExcludes: Seq[Exclude],
+    val globalSubstitutions: Seq[Substitution],
     val depMetadataResolvers: DependencyMetadataResolvers,
     val scopeDefinitions: Map[ScopeId, ScopeDefinition],
     val messages: Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]],
@@ -95,7 +96,7 @@ import scala.collection.immutable.SortedMap
   }
 
   @node override def bundleConfiguration(metaBundle: MetaBundle): Option[Bundle] =
-    workspaceStructure.bundles.find(_.id.isEqual(metaBundle))
+    workspaceStructure.bundles.find(_.id == metaBundle)
 
   // Note: We can only include a scope in the class bundle if:
   // - it's a main scope (otherwise test discovery on the jar will pick up the test for all the scopes in the bundle)
@@ -223,6 +224,7 @@ import scala.collection.immutable.SortedMap
             properties = Some(ws.config),
             externalDependencies = allExternalDependencies,
             nativeDependencies = ws.dependencies.jvmDependencies.nativeDependencies,
+            globalSubstitutions = ws.dependencies.jvmDependencies.globalSubstitutions.toIndexedSeq,
             globalExcludes = ws.dependencies.jvmDependencies.globalExcludes.toIndexedSeq,
             depMetadataResolvers =
               DependencyMetadataResolver.loadResolverConfig(directoryFactory, workspaceSrcRoot, ws.resolvers),

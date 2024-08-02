@@ -181,26 +181,10 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
   }
 
   protected override def convertToSequence(e: RelationElement): ProjectionElement = {
-    def isProjected(collectionType: TypeInfo[_]): Boolean = {
-      val shapeType = Query.findShapeType(collectionType)
-      DALProvider.isProjectedEmbeddable(shapeType.clazz)
-    }
-    def excludeVRef(p: RelationElement): RelationElement = {
-      class VRefRemover extends DbQueryTreeVisitor {
-        protected override def handleEmbeddableCaseClass(ec: EmbeddableCaseClassElement): RelationElement = {
-          new EmbeddableCaseClassElement(
-            ec.owner,
-            ec.ownerProperty,
-            ec.projectedType(),
-            ec.members.tail,
-            ec.memberNames.tail)
-        }
-      }
-      new VRefRemover().visitElement(p)
-    }
+    import DALMappingEntityFactory._
 
     e match {
-      case EmbeddableCollectionElement(info, _, foreignKey) if isProjected(info.memberType) =>
+      case EmbeddableCollectionElement(info, _, foreignKey) if isProjectedEmbeddableCollection(info.memberType) =>
         val owner = lookup.getEntity(info.reflectType)
         val embeddable = lookup.getRelatedEntity(owner, info)
         val proj = mapper.getQueryElement(embeddable, NoKey, KeyPropagationPolicy.NoKey)
@@ -217,7 +201,7 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
           NoKey,
           KeyPropagationPolicy.NoKey,
           null,
-          Some(e.projectedType().clazz),
+          viaCollection = Some(e.projectedType().clazz),
           entitledOnly = proj.entitledOnly)
 
       case FuncElement(
@@ -265,6 +249,13 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
       case _ =>
         super.convertToSequence(e)
     }
+  }
+
+  override protected def convertToLinkageProj(
+      e: RelationElement,
+      viaLinkage: Option[Class[_]]): Option[RelationElement] = {
+    val e1 = LinkageSubqueryRewriter.rewrite(mapper.mapping, language, e)
+    super.convertToLinkageProj(e1, viaLinkage)
   }
 }
 

@@ -129,7 +129,8 @@ import scala.util.control.NonFatal
   def httpLocalAsset(httpAsset: BaseHttpAsset, depCopyPath: Directory): httpAsset.LocalAsset = {
     val localRoot = depCopyPath
     val urlFilePath =
-      if (httpAsset.url.toString.contains("tar.gz!")) httpAsset.url.getPath.stripPrefix("/").replaceAll("!", "/")
+      if (UnzipMavenRepoExts.exists(ext => httpAsset.url.toString.contains(s"$ext!")))
+        httpAsset.url.getPath.stripPrefix("/").replaceAll("!", "/")
       else httpAsset.url.getPath.stripPrefix("/")
     httpAsset.asLocal(
       localRoot.path

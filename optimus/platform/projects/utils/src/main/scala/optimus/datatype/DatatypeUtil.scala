@@ -12,14 +12,19 @@
 
 package optimus.datatype
 
+import optimus.datatype.Classification.DataSubjectCategory
 import optimus.platform.metadatas.internal.PIIDetails
+
 import java.lang.reflect.Field
 
 object DatatypeUtil {
 
   def extractPiiElementsList(declaredFields: Array[Field]): Seq[PIIDetails] = {
     declaredFields.collect {
-      case field if field.getType.getInterfaces.toList.map(_.getName).contains(classOf[PIIElement].getName) =>
+      case field
+          if field.getType.getInterfaces.toList
+            .map(_.getName)
+            .contains(classOf[PIIElement[_ <: DataSubjectCategory]].getName) =>
         PIIDetails(
           field.getName,
           field.getType.getCanonicalName,

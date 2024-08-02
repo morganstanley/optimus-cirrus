@@ -542,6 +542,7 @@ object Properties extends KnownProperties {
   val gcNativeWatermark = propL
   val gcNativeHighWatermark = propL
   val gcNativeEmergencyWatermark = propL
+  val gcNativeCacheClearCount = propI
   val gcRSSLimit = propL
   val gcNativeInvocations = propL
   val gcNativeAllocAfter = propL
@@ -557,9 +558,12 @@ object Properties extends KnownProperties {
   val gcNativeCacheClearCountMain = propL
   val gcNativeCacheClearCountGlobal = propL
   val gcNativeCacheClearCountGlobalCallbacks = propL
+  val gcNativeStats = prop[Map[String, Int]]
   val gcAction = prop[String]
   val gcName = prop[String]
   val gcDuration = propL
+  val gcTotalPausesInCycle = propL
+  val gcMaxPauseInCycle = propL
   val gcCacheRemoved = propI
   val gcCacheRemaining = propI
   val gcCleanupsFired = propL
@@ -579,6 +583,8 @@ object Properties extends KnownProperties {
   val expiredMemory = propL
   val evictedCount = propL
   val evictedMemory = propL
+  val youngestEvictedAccessTime = prop[Instant]
+  val youngestEvictedCreationTime = prop[Instant]
 
   //
   val gcMinUsedHeapAfterGC = propD
@@ -630,9 +636,14 @@ object Properties extends KnownProperties {
   val profDistTasks = propI
   val profNodeExecutionTime = propL
   val profThreads = prop[Map[String, Map[String, Long]]]
+  val profCaches = prop[Map[String, Map[String, Long]]]
   val profMetricsDiff = prop[Map[String, Map[String, Array[Double]]]]
   val profSS = prop[Map[String, Array[String]]]
   val profEvictions = prop[Map[String, Long]]
+
+  val profDepTrackerTaskAdded = prop[Map[String, Int]]
+  val profDepTrackerTaskProcessed = prop[Map[String, Int]]
+
   val cardinalities = prop[Map[String, Int]]
   val cardEstimators = prop[Map[String, Array[Int]]]
 
@@ -834,11 +845,21 @@ object Properties extends KnownProperties {
   val smplTweakLookupATime = propL
   val smplTweakLookupSTime = propL
   val smplCacheTime = propL
-  val smplOHSampling = propL
-  val smplOHInstrum = propL
+  val smplOHSamplingTime = propL
+  val smplOHInstrumTime = propL
+  val smplLocalTablesTime = propL
   val samplingPauseTime = propL
   val crumbplexerIgnore = prop[String]
+  val childProcessCount = propI
+  val childProcessCPU = propD
+  val childProcessRSS = propL
+  val spInternalStats = prop[Map[String, Map[String, Double]]]
 
+  val profDmcCacheAttemptCount = propL
+  val profDmcCacheMissCount = propL
+  val profDmcCacheHitCount = propL
+  val profDmcCacheComputeCount = propL
+  val profDmcCacheDeduplicationCount = propL
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
   val profSummary = prop[Map[String, JsObject]]
@@ -846,6 +867,7 @@ object Properties extends KnownProperties {
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
   val numStacksPublished = propL
+  val numSamplesPublished = propL
   val stackElem = prop[String]
   val pTpe = prop[String]
   val jfrSize = propL
@@ -876,6 +898,9 @@ object Properties extends KnownProperties {
   val dmcClientSummary = prop[Map[String, Long]]
 
   val plugin = prop[String]
+  val totalPriceables = propI
+  val usdAverageSwaps = propI
+  val usdAverageSwapsPercentage = propD
 
   /** givenOverlay use cases */
   val currentScenario = prop[String]

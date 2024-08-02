@@ -195,3 +195,8 @@ final class DelimitedZDTOptionHandler(parser: CmdLineParser, option: OptionDef, 
   def convert(s: String): ZonedDateTime =
     if (s == "now") MicroZonedDateTime.now else ZonedDateTimeOps.parseTreatingOffsetAndZoneIdLikeJSR310(s)
 }
+
+final class YearMonthOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[YearMonth])
+    extends OneArgumentOptionHandler[YearMonth](parser, option, setter) {
+  override def parse(arg: String): YearMonth = YearMonth.parse(arg)
+}

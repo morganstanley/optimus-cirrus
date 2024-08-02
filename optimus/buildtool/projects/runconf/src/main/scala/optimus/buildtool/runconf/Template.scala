@@ -13,10 +13,12 @@ package optimus.buildtool.runconf
 import optimus.buildtool.config.ModuleId
 import optimus.buildtool.config.ParentId
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.runconf.plugins.JacocoOpts
 import optimus.buildtool.runconf.plugins.ExtraExecOpts
 import optimus.buildtool.runconf.plugins.JavaModule
 import optimus.buildtool.runconf.plugins.NativeLibraries
 import optimus.buildtool.runconf.plugins.ScriptTemplates
+import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
@@ -43,6 +45,7 @@ final case class Template(
     extractTestClasses: Boolean,
     moduleLoads: Seq[String],
     javaModule: JavaModule,
+    strictRuntime: StrictRuntime,
     scriptTemplates: ScriptTemplates,
     credentialGuardCompatibility: Boolean,
     debugPreload: Boolean,
@@ -53,7 +56,9 @@ final case class Template(
     category: Option[String],
     groups: Set[String],
     owner: Option[String],
-    flags: Map[String, String]
+    flags: Map[String, String],
+    jacocoOpts: Option[JacocoOpts],
+    interopPython: Boolean
 ) extends HasScopedName
     with HasNativeLibraries {
 
@@ -85,6 +90,7 @@ final case class Template(
           nativeLibraries = nativeLibraries,
           extractTestClasses = extractTestClasses,
           javaModule = javaModule,
+          strictRuntime = strictRuntime,
           credentialGuardCompatibility = credentialGuardCompatibility,
           debugPreload = debugPreload,
           suites = suites,
@@ -94,7 +100,9 @@ final case class Template(
           category = category,
           groups = groups,
           owner = owner,
-          flags = flags
+          flags = flags,
+          jacocoOpts = jacocoOpts,
+          interopPython = interopPython
         )
       )
     case _ =>
@@ -120,6 +128,7 @@ final case class Template(
        |  forkEvery = $forkEvery
        |  nativeLibraries = $nativeLibraries
        |  javaModule = $javaModule
+       |  strictRuntime = $strictRuntime
        |  scriptTemplates = $scriptTemplates
        |  suites = $suites
        |  treadmillOpts = $treadmillOpts
@@ -128,6 +137,7 @@ final case class Template(
        |  groups = $groups
        |  owner = $owner
        |  flags = $flags
+       |  jacocoOpts = $jacocoOpts
        |)""".stripMargin
   }
 

@@ -21,11 +21,13 @@ final case class ConditionalDefaults(
     exclude: Boolean
 ) {
 
-  private def checkMavenDef(id: ScopeId, loadedAfDef: MavenDefinition): Boolean = {
+  private def checkMavenDef(id: ScopeId, loadedAfDef: MavenDefinition, useMavenOnlyRules: Boolean): Boolean = {
     val tpe = id.tpe
     val includeTpe = loadedAfDef.includeConditionals.getOrElse(name, "")
     val excludeTpe = loadedAfDef.excludeConditionals.getOrElse(name, "")
-    if (includeTpe == tpe || includeTpe == "all") true // force af build include target Conditional for tpe
+    if (excludeTpe == MavenDefinition.MavenOnlyExcludeKey && useMavenOnlyRules)
+      false // force exclude target for mavenOnly modules
+    else if (includeTpe == tpe || includeTpe == "all") true // force af build include target Conditional for tpe
     else if (excludeTpe == tpe || excludeTpe == "all") false // force af build exclude target from tpe
     else checkExclude(id) // not covered in MavenDefinition, back to Exclude checking
   }
@@ -38,11 +40,12 @@ final case class ConditionalDefaults(
   def appliesTo(
       id: ScopeId,
       mavenDefinition: Option[MavenDefinition],
-      mavenLibs: Boolean
+      useMavenDepsRules: Boolean,
+      useMavenOnlyRules: Boolean
   ): Boolean = {
     mavenDefinition match {
-      case Some(afDef) if mavenLibs => // for maven build or mavenOnly scope
-        checkMavenDef(id, afDef)
+      case Some(afDef) if useMavenDepsRules => // for maven build or mavenOnly scope
+        checkMavenDef(id, afDef, useMavenOnlyRules)
       case _ =>
         checkExclude(id)
     }
@@ -61,12 +64,19 @@ final case class ScopeDefaults(
   def forScope(
       id: ScopeId,
       mavenDefinition: Option[MavenDefinition],
-      mavenLibs: Boolean
+      useMavenDepsRules: Boolean,
+      useMavenOnlyRules: Boolean
   ): InheritableScopeDefinition = {
     val all = depsAndSources.getOrElse("all", InheritableScopeDefinition.empty)
     val combinedParent = conditionals.foldLeft(all) { (parent, conditional) =>
-      if (conditional.appliesTo(id, mavenDefinition, mavenLibs) || conditional.isForbiddenDependencyConditional)
-        conditional.defaults.forScope(id, mavenDefinition, mavenLibs).withParent(parent)
+      if (
+        conditional.appliesTo(
+          id,
+          mavenDefinition,
+          useMavenDepsRules,
+          useMavenOnlyRules) || conditional.isForbiddenDependencyConditional
+      )
+        conditional.defaults.forScope(id, mavenDefinition, useMavenDepsRules, useMavenOnlyRules).withParent(parent)
       else parent
     }
     val combinedDefault = depsAndSources.get(id.tpe).foldRight(combinedParent) { _.withParent(_) }

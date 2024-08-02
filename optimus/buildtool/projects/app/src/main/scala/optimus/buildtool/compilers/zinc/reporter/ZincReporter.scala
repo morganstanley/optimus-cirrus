@@ -14,7 +14,6 @@ package optimus.buildtool.compilers.zinc.reporter
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilationMessage.Severity
 import optimus.buildtool.compilers.zinc.ZincLogger
-import optimus.buildtool.config.ConfigurableWarnings
 import optimus.buildtool.format.MischiefArgs
 import optimus.buildtool.format.MischiefMessage
 import sbt.internal.inc.ProblemStringFormats
@@ -41,8 +40,8 @@ class ZincReporter(val logger: ZincLogger, bspServer: Boolean) {
   /**
    * Configure an xsbti.Reporter that accumulates in this ZincReporter.
    */
-  def configure(config: ConfigurableWarnings, mischiefArgs: Option[MischiefArgs]): Reporter = {
-    val reporter = new CompilationReporter(this, new ProblemConverter(config))
+  def configure(converter: ProblemConverter, mischiefArgs: Option[MischiefArgs]): Reporter = {
+    val reporter = new CompilationReporter(this, converter)
 
     // add mischief messages if needed
     mischiefArgs.foreach(args =>

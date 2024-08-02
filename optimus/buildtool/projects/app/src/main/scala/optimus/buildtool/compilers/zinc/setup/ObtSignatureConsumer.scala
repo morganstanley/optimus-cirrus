@@ -72,7 +72,7 @@ class ObtSignatureConsumer(
       // are the leaf nodes that call this code
       val signatures = {
         // we incrementally rewrite these and it's much cheaper if they aren't compressed
-        JarUtils.stampJarWithConsistentHash(signatureJar.tempPath, compress = false)
+        JarUtils.stampJarWithConsistentHash(signatureJar.tempPath, compress = false, Some(activeTask.trace))
         signatureJar.moveTempToFinal()
         SignatureArtifact.unwatched(
           InternalArtifactId(scopeId, AT.JavaAndScalaSignatures, None),

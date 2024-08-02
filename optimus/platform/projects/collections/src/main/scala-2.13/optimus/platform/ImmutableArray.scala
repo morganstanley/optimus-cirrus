@@ -20,6 +20,7 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.hashing.MurmurHash3
 
+@SerialVersionUID(1)
 class ImmutableArray[A] private (private val as: Array[A])
     extends immutable.IndexedSeq[A]
     with immutable.IndexedSeqOps[A, immutable.IndexedSeq, collection.IndexedSeq[A]]
@@ -114,4 +115,6 @@ object ImmutableArray {
       override def addOne(e: A): this.type = { buf += e; this }
     }
   }
+
+  def applyOnUnderlying[A, B](f: Array[A] => B, a: ImmutableArray[A]): B = f(a.as)
 }

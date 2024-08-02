@@ -23,6 +23,8 @@ final case class Exclude(
     // Only used when resolving from ivy and only supported for global excludes.
     // Not written into published ivy files, and ignored completely for maven deps.
     ivyConfiguration: Option[String] = None)
+final case class GroupName(group: String, name: String)
+final case class Substitution(from: GroupName, to: GroupName)
 final case class IvyArtifact(name: String, tpe: String, ext: String)
 
 sealed trait Kind

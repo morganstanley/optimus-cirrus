@@ -76,6 +76,13 @@ import scala.collection.immutable.SortedMap
 
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
+    // we don't actually care about the compiled artifacts created, so just put them in a
+    // temporary location which we'll delete after the compile. they do need to be in the `scala` directory
+    // though otherwise PathedArtifact validation will complain.
+    val tempOutputJar = NamingConventions
+      .tempFor(scope.pathBuilder.scalaOutPath(scope.id, fingerprintHash.hash, incremental = false))
+      .asJar
+
     val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
       scope.upstream.allCompileDependencies.apar
         .flatMap(_.transitiveExternalDependencies)
@@ -84,6 +91,7 @@ import scala.collection.immutable.SortedMap
       name,
       templateContent,
       fingerprintHash,
+      tempOutputJar,
       scope.config.scalacConfig,
       scope.config.javacConfig,
       allInputArtifacts.apar.map(scope.dependencyCopier.atomicallyDepCopyArtifactsIfMissing),
@@ -105,9 +113,6 @@ import scala.collection.immutable.SortedMap
     ObtTrace.traceTask(scopeId, GenerateSource) {
       val resolvedInputs = inputs()
 
-      // we don't actually care about the compiled artifacts created, so just put them in a temporary location which
-      // we'll delete after the compile
-      val placeholderOutputJar = NamingConventions.tempFor(outputJar).asJar
       Utils.atomicallyWrite(outputJar) { tempOut =>
         val tempJar = JarAsset(tempOut)
         val tempDir = tempJar.parent.resolveDir(tempJar.name.stripSuffix(".jar"))
@@ -117,7 +122,7 @@ import scala.collection.immutable.SortedMap
 
         val msgArtifact = scalac.messages(
           scopeId.copy(tpe = s"${scopeId.tpe}-${tpe.name}"),
-          asNode(() => scalacInputs(scopeId, inputs, scalaOutDir, cppOutDir, placeholderOutputJar))
+          asNode(() => scalacInputs(scopeId, inputs, scalaOutDir, cppOutDir))
         )
 
         val artifact = GeneratedSourceArtifact.create(
@@ -138,7 +143,7 @@ import scala.collection.immutable.SortedMap
             tempDir
           )()
         } asyncFinally {
-          if (placeholderOutputJar.existsUnsafe) Files.delete(placeholderOutputJar.path)
+          if (resolvedInputs.tempOutputJar.existsUnsafe) Files.delete(resolvedInputs.tempOutputJar.path)
         }
         Some(artifact)
       }
@@ -149,8 +154,7 @@ import scala.collection.immutable.SortedMap
       scopeId: ScopeId,
       inputs: NodeFunction0[Inputs],
       scalaOutDir: Directory,
-      cppOutDir: Directory,
-      dummyOutputJar: JarAsset
+      cppOutDir: Directory
   ): SyncCompiler.Inputs = {
     val resolvedInputs = inputs()
 
@@ -167,7 +171,7 @@ import scala.collection.immutable.SortedMap
       sourceFiles = resolvedInputs.templateContent,
       fingerprint = resolvedInputs.fingerprint,
       bestPreviousAnalysis = Hide(None),
-      outPath = dummyOutputJar,
+      outPath = resolvedInputs.tempOutputJar,
       signatureOutPath = None,
       scalacConfig = scalaParams,
       javacConfig = resolvedInputs.javacConfig,
@@ -190,6 +194,7 @@ object CppBridgeGenerator {
       generatorName: String,
       templateContent: SortedMap[SourceUnitId, HashedContent],
       fingerprint: FingerprintArtifact,
+      tempOutputJar: JarAsset,
       scalacConfig: ScalacConfiguration,
       javacConfig: JavacConfiguration,
       allInputArtifacts: Seq[Artifact],

@@ -23,6 +23,7 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.{ArtifactType => AT}
+import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
 import optimus.buildtool.compilers.cpp.CppUtils
@@ -70,6 +71,7 @@ import optimus.buildtool.scope.sources.UpstreamRunconfInputs
 import optimus.buildtool.trace
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Runconf
+import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.AsyncUtils
 import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
 import optimus.buildtool.utils.HashedContent
@@ -88,6 +90,7 @@ import scala.collection.immutable.SortedMap
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import scala.util.control.NonFatal
 
 final case class RunConfCompilerOutput(
     runConfArtifact: Option[CompiledRunconfArtifact],
@@ -186,7 +189,8 @@ final class StaticRunscriptCompilationBindingSources(
 @entity final class AsyncRunConfCompilerImpl(
     obtConfig: ObtConfig,
     scalaHomePath: Directory,
-    stratoConfig: Config
+    stratoConfig: Config,
+    buildDir: Directory
 ) extends AsyncRunConfCompiler {
   val obtWorkspaceProperties: Config =
     obtConfig.properties.fold(ConfigFactory.empty)(_.config)
@@ -314,7 +318,8 @@ final class StaticRunscriptCompilationBindingSources(
       defaultJavaModule: Option[JavaModule],
       arc: AppRunConf,
       upstreamInputs: UpstreamRunconfInputs,
-      installVersion: String
+      installVersion: String,
+      pythonVenvPath: Option[Directory]
   ): Map[String, Any] = {
     import AsyncRunConfCompilerImpl.dirNameEnvVar
     import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
@@ -327,10 +332,19 @@ final class StaticRunscriptCompilationBindingSources(
     val javaHomePath = javaModule.flatMap(_.pathOption)
     // this endsWith is the one on Path not the one on String, so it matches the last path segment always
     assert(javaHomePath.forall(_.endsWith("exec")), javaHomePath.get)
-    val earlySetEnvVars: Seq[(String, String)] = Seq(
+    val earlySetEnvVarsWindows: Seq[(String, String)] = Seq(
       Some("SCALA_HOME" -> scalaHomePath.pathString),
       javaHomePath.map(path => "JAVA_HOME" -> PathUtils.platformIndependentString(path))
     ).flatten
+    val earlySetEnvVarsLinux: Seq[(String, String)] = pythonVenvPath match {
+      case Some(path) =>
+        Seq(
+          Some("SCALA_HOME" -> scalaHomePath.pathString),
+          javaHomePath.map(path => "JAVA_HOME" -> PathUtils.platformIndependentString(path)),
+          Some("PYTHONHOME" -> path.pathString),
+        ).flatten
+      case None => earlySetEnvVarsWindows
+    }
 
     val linuxDirVar = linuxShellVariableNameWrapper(dirNameEnvVar)
     val windowsDirVar = windowsBatchVariableNameWrapper(dirNameEnvVar)
@@ -416,7 +430,9 @@ final class StaticRunscriptCompilationBindingSources(
       "scopedName" -> scopedName(arc),
       "appName" -> getCustomVariableOption(arc, appNameOverride).getOrElse(
         unquote(scopedName(arc).split('.').drop(3).mkString("."))),
-      "earlySetEnvVarsBlock" -> earlySetEnvVars.asJava,
+      "earlySetEnvVarsBlock" -> earlySetEnvVarsWindows.asJava,
+      "earlySetEnvVarsBlockForWindows" -> earlySetEnvVarsWindows.asJava,
+      "earlySetEnvVarsBlockForLinux" -> earlySetEnvVarsLinux.asJava,
       "linuxJavaOpts" -> linuxJavaOpts.asJava,
       "windowsJavaOpts" -> windowsJavaOpts.asJava,
       "mainClass" -> arc.mainClass,
@@ -431,7 +447,8 @@ final class StaticRunscriptCompilationBindingSources(
       "kerberosKeytab" -> convertToLinuxVariables(getCustomVariable(arc, kerberosKeytab, "")), // Linux only
       "javaModuleSet" -> arc.javaModule.version.isDefined,
       "javaModule" -> javaModuleToLoad.mkString,
-      "credentialGuardCompatibility" -> arc.credentialGuardCompatibility
+      "credentialGuardCompatibility" -> arc.credentialGuardCompatibility,
+      "interopPython" -> arc.interopPython
     ) ++ arc.scriptTemplates.customVariables.filterNot(isSpecialPurposeCustomVariable)
   }
 
@@ -444,11 +461,12 @@ final class StaticRunscriptCompilationBindingSources(
       installVersion: String
   ): Seq[ApplicationScriptResult] = {
     runConfs.apar.collect {
-      case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe =>
+      case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe && !arc.strictRuntime.enabled.getOrElse(false) =>
+        val maybePythonVenvPath = getPythonVenv(arc, obtConfig)
         Templates.getTemplateDescriptions(templates, arc.name, arc.scriptTemplates).apar.map {
           case Left(templateDescription) =>
             val bindings =
-              contextBindings(scopeId, javaModule, arc, upstreamInputs, installVersion)
+              contextBindings(scopeId, javaModule, arc, upstreamInputs, installVersion, maybePythonVenvPath)
             val applicationScriptName =
               AsyncRunConfCompilerImpl
                 .getTemplateFilenameOverride(arc, templateDescription)
@@ -458,7 +476,7 @@ final class StaticRunscriptCompilationBindingSources(
               try {
                 Left(templateDescription.template.execute(bindings.asJava))
               } catch {
-                case t: Throwable =>
+                case NonFatal(t) =>
                   Right(Seq(CompilationMessage.error(t)))
               }
             )
@@ -558,6 +576,34 @@ final class StaticRunscriptCompilationBindingSources(
       .collect { case (arg, Failure(e)) =>
         CompilationMessage.message(s"Cannot parse '$arg': $e", CompilationMessage.Warning)
       }
+
+  @async
+  def getPythonVenv(arc: AppRunConf, obtConfig: ObtConfig): Option[Directory] = {
+    if (AsyncRunConfCompilerImpl.getInteropPython(arc)) {
+      val maybeInteropConfig = obtConfig.scopeConfiguration(arc.id).interopConfig
+      maybeInteropConfig.flatMap { interopConfig =>
+        interopConfig.pythonModule.flatMap { pyModule =>
+          if (PythonVenvExtractorPostBuilder.venvFolder(buildDir).exists) {
+            val pythonMappingLines =
+              AssetUtils.loadFileAsset(PythonVenvExtractorPostBuilder.latestVenvFile(buildDir)) { pythonMappingFile =>
+                Files.readAllLines(pythonMappingFile).asScala.to(Seq)
+              }
+
+            val scopeIdToVenv = pythonMappingLines.flatMap { line =>
+              line.split(",", 2) match {
+                case Array(scopeIdString, venvDir) => Some(scopeIdString -> venvDir)
+                case _                             => None
+              }
+            }.toMap
+
+            scopeIdToVenv.get(ScopeId(pyModule, arc.id.tpe).toString).flatMap { venvDirName =>
+              Some(PythonVenvExtractorPostBuilder.venvFolder(buildDir).resolveDir(venvDirName))
+            }
+          } else None
+        }
+      }
+    } else None
+  }
 
   @node protected def output(
       scopeId: ScopeId,
@@ -729,7 +775,11 @@ final class StaticRunscriptCompilationBindingSources(
 
   private val noPath: ConfigValue = ConfigValueFactory.fromAnyRef("")
 
-  @node def load(obtConfig: ObtConfig, scalaHomePath: Directory, stratoConfig: StratoConfig): AsyncRunConfCompiler = {
+  @node def load(
+      obtConfig: ObtConfig,
+      scalaHomePath: Directory,
+      stratoConfig: StratoConfig,
+      buildDir: Directory): AsyncRunConfCompiler = {
 
     // Ensure some level of RT-ness by not passing along paths (the format may change, so it will be a rabbit chase)
     val rtIshConfig = stratoConfig.config
@@ -739,7 +789,7 @@ final class StaticRunscriptCompilationBindingSources(
       .withValue("stratosphereSrcDir", noPath)
       .withValue("userHome", noPath)
 
-    AsyncRunConfCompilerImpl(obtConfig, scalaHomePath, rtIshConfig)
+    AsyncRunConfCompilerImpl(obtConfig, scalaHomePath, rtIshConfig, buildDir)
   }
 
   @node private[compilers] def getJavaModule(c: Config): Option[JavaModule] =
@@ -784,6 +834,7 @@ final class StaticRunscriptCompilationBindingSources(
         None
     }
   }
+  private def getInteropPython(arc: AppRunConf) = arc.interopPython
 
   output.setCustomCache(NodeCaching.reallyBigCache)
 }

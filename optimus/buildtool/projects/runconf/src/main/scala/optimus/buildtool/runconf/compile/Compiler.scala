@@ -30,8 +30,10 @@ import optimus.buildtool.config.WorkspaceId
 import optimus.buildtool.runconf.compile.RunConfSupport.names
 import optimus.buildtool.runconf.compile.plugins.DTCSupport
 import optimus.buildtool.runconf.compile.plugins.ExtraExecOptionsSupport
+import optimus.buildtool.runconf.compile.plugins.JacocoOptionsSupport
 import optimus.buildtool.runconf.compile.plugins.JavaModulesSupport
 import optimus.buildtool.runconf.compile.plugins.ScopeDependentReferences
+import optimus.buildtool.runconf.compile.plugins.StrictRuntimeSupport
 import optimus.buildtool.runconf.compile.plugins.TestSuitesSupport
 import optimus.buildtool.runconf.compile.plugins.TreadmillOptionsSupport
 import optimus.buildtool.runconf.compile.plugins.native.NativeLibrariesSupport
@@ -44,6 +46,8 @@ import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.util.Try
 import optimus.scalacompat.collection._
+
+import scala.util.control.NonFatal
 
 object Compiler {
   // Dark secret: javaOptionFiltering can also be a FQCN
@@ -60,9 +64,6 @@ object Compiler {
       externalCache: ExternalCache = NoCache,
       editedScope: Option[ParentId] = None,
       validator: Option[Validator[AppRunConf]] = None,
-      // TODO (OPTIMUS-36303): remove after tests' java version is set from runconf
-      // currently we set java version from --java-version in test-runner command line; this is that
-      reallyRealJavaVersionOverride: Option[String] = None,
       envProperties: Map[String, String] = sys.env,
       installPathOverride: Option[Path] = None,
       generateCrossPlatformEnvVars: Boolean = true,
@@ -81,7 +82,6 @@ object Compiler {
       editedScope,
       Some(sourceRoot),
       validator,
-      reallyRealJavaVersionOverride,
       generateCrossPlatformEnvVars,
       modifier,
       reportDuplicates
@@ -119,7 +119,9 @@ object Compiler {
       names.extraExecOpts -> T.Object(T.Union(Set(T.String, T.Integer))),
       names.category -> T.String,
       names.owner -> T.String,
-      names.flags -> T.Object(T.Union(Set(T.String, T.String)))
+      names.flags -> T.Object(T.Union(Set(T.String, T.String))),
+      names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Integer))),
+      names.interopPython -> T.Boolean
     )
   }
 
@@ -127,7 +129,8 @@ object Compiler {
     TestSuitesSupport.expectedProperties ++
     NativeLibrariesSupport.expectedProperties ++
     JavaModulesSupport.expectedProperties ++
-    ScriptTemplatesSupport.expectedProperties
+    ScriptTemplatesSupport.expectedProperties ++
+    StrictRuntimeSupport.expectedProperties
 
   private val forbiddenSetsOfTestProperties = Map(
     names.packageName -> Seq(names.mainClass, names.methodName)
@@ -146,7 +149,8 @@ object Compiler {
     names.extraExecOpts,
     names.category,
     names.owner,
-    names.flags
+    names.flags,
+    names.jacocoOpts
   )
 
   object defaults {
@@ -157,6 +161,7 @@ object Compiler {
     val defaultTestScopeType = "test"
     val defaultCredentialGuardCompatibility = false
     val defaultDebugPreload = false
+    val defaultInteropPython = false
   }
 
 }
@@ -173,7 +178,6 @@ class Compiler(
     editedScope: Option[ParentId],
     sourceRoot: Option[Path] = None,
     validator: Option[Validator[AppRunConf]] = None,
-    reallyRealJavaVersionOverride: Option[String] = None,
     generateCrossPlatformEnvVars: Boolean = true,
     /** Modify the runconf with the given scoped name thus. */
     modifier: Option[(ScopedName, Endo[UnresolvedRunConf])] = None,
@@ -186,6 +190,7 @@ class Compiler(
   private val dtcSupport = new DTCSupport(enableDTC, stratoConfig)
   private val testSuitesSupport = new TestSuitesSupport(runEnv, sysProps)
   private val scriptTemplatesSupport = new ScriptTemplatesSupport(runEnv)
+  private val strictRuntimeSupport = new StrictRuntimeSupport()
   private val javaModuleSupport = new JavaModulesSupport(runEnv)
 
   private val javaFiltering =
@@ -203,10 +208,10 @@ class Compiler(
         )
       )
 
-  def filterJavaRuntimeOptions(reporter: Reporter, opts: Seq[String], jvmVersionOverride: Option[String]): Seq[String] =
+  def filterJavaRuntimeOptions(reporter: Reporter, opts: Seq[String], maybeJvmVersion: Option[String]): Seq[String] =
     javaFiltering
       .map { conf =>
-        jvmVersionOverride.fold(conf)(v => conf.copy(jvmVersion = v))
+        maybeJvmVersion.fold(conf)(v => conf.copy(jvmVersion = v))
       }
       .fold(opts) { conf =>
         import conf._
@@ -229,6 +234,7 @@ class Compiler(
       modify(allRunConfs)
       val typedRunConfs = allRunConfs.filter(_.isTyped)
       reportUnknownProperties(allRunConfs)
+      reportInvalidProperties(allRunConfs)
       validateAndAssignParents(allRunConfs, typedRunConfs)
       resolveRunConfs(parsed, typedRunConfs)
       postResolveSteps(installOverride, typedRunConfs)
@@ -381,7 +387,7 @@ class Compiler(
             val problem = Problem(message, location, Level.Error)
             Left(CompileResult.fromProblem(problem))
         }
-      case unsupportedError: Throwable => throw unsupportedError
+      case NonFatal(unsupportedError) => throw unsupportedError
     }
   }
 
@@ -487,7 +493,9 @@ class Compiler(
       Typecheck.forProperties(reporter, expectedTypes, properties)
       testSuitesSupport.typecheck(properties, reporter)
       scriptTemplatesSupport.typecheck(properties, reporter)
+      strictRuntimeSupport.typecheck(properties, reporter)
       NativeLibrariesSupport.typecheck(properties, reporter)
+      JacocoOptionsSupport.typecheck(properties, reporter)
       reporter.toEither(())
     }
   }
@@ -524,6 +532,7 @@ class Compiler(
         forkEvery = extractInt(names.forkEvery),
         suites = testSuitesSupport.extractTyped(properties),
         scriptTemplates = scriptTemplatesSupport.extractTyped(properties),
+        strictRuntime = strictRuntimeSupport.extractTyped(properties),
         nativeLibraries = NativeLibrariesSupport.extractTyped(properties),
         extractTestClasses = extractBoolean(names.extractTestClasses),
         appendableEnv = extractEnvMap(names.appendableEnv),
@@ -537,7 +546,9 @@ class Compiler(
         category = extractString(names.category),
         groups = extractString(names.groups).toSet,
         owner = extractString(names.owner),
-        flags = extractMap(names.flags).mapValuesNow(_.toString)
+        flags = extractMap(names.flags).mapValuesNow(_.toString),
+        jacocoOpts = extractJacocoOpts(names.jacocoOpts),
+        interopPython = extractBoolean(names.interopPython)
       )
     }
   }
@@ -548,7 +559,17 @@ class Compiler(
       testSuitesSupport.reportUnknownProperties(conf)
       NativeLibrariesSupport.reportUnknownProperties(conf)
       scriptTemplatesSupport.reportUnknownProperties(conf)
+      strictRuntimeSupport.reportUnknownProperties(conf)
       javaModuleSupport.reportUnknownProperties(conf)
+      JacocoOptionsSupport.reportUnknownProperties(conf)
+    }
+  }
+
+  private def reportInvalidProperties(runConfs: Iterable[RunConfCompilingState]): Unit = {
+    runConfs.foreach { conf =>
+      if (conf.isTyped) {
+        JacocoOptionsSupport.reportInvalidProperties(conf)
+      }
     }
   }
 
@@ -777,6 +798,7 @@ class Compiler(
       appendableEnv = merger.merge(_.appendableEnv),
       moduleLoads = merger.mergeDistinct(_.moduleLoads),
       javaModule = javaModuleSupport.merge(target.javaModule, source.javaModule),
+      strictRuntime = strictRuntimeSupport.merge(target.strictRuntime, source.strictRuntime),
       credentialGuardCompatibility = merger.merge(_.credentialGuardCompatibility),
       debugPreload = merger.merge(_.debugPreload),
       additionalScope = merger.merge(_.additionalScope),
@@ -785,7 +807,9 @@ class Compiler(
       category = merger.merge(_.category),
       groups = merger.merge(_.groups.toIndexedSeq).toSet,
       owner = merger.merge(_.owner),
-      flags = merger.mergeMaps(_.flags)
+      flags = merger.mergeMaps(_.flags),
+      jacocoOpts = JacocoOptionsSupport.mergeJacocoOpts(target.jacocoOpts, source.jacocoOpts),
+      interopPython = merger.merge(_.interopPython)
     )
   }
 
@@ -848,6 +872,7 @@ class Compiler(
       case names.category                 => runConf.category.isDefined
       case names.owner                    => runConf.owner.isDefined
       case names.flags                    => runConf.flags.nonEmpty
+      case names.jacocoOpts               => runConf.jacocoOpts.isDefined
     }
 
     def isDefined(propertyName: String): Boolean = {
@@ -925,10 +950,12 @@ class Compiler(
       runConf.nativeLibraries,
       runConf.moduleLoads,
       runConf.javaModule,
+      runConf.strictRuntime,
       runConf.scriptTemplates,
       runConf.credentialGuardCompatibility.getOrElse(defaults.defaultCredentialGuardCompatibility),
       runConf.debugPreload.getOrElse(defaults.defaultDebugPreload),
-      runConf.additionalScope.filter(_.nonEmpty).map(ScopeId.parse)
+      runConf.additionalScope.filter(_.nonEmpty).map(ScopeId.parse),
+      runConf.interopPython.getOrElse(defaults.defaultInteropPython)
     )
   }
 
@@ -960,7 +987,10 @@ class Compiler(
       category = runConf.category,
       groups = runConf.groups,
       owner = runConf.owner,
-      flags = runConf.flags
+      flags = runConf.flags,
+      strictRuntime = runConf.strictRuntime,
+      jacocoOpts = runConf.jacocoOpts,
+      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython)
     )
   }
 
@@ -1002,7 +1032,10 @@ class Compiler(
       category = runConf.category,
       groups = runConf.groups,
       owner = runConf.owner,
-      flags = runConf.flags
+      flags = runConf.flags,
+      strictRuntime = runConf.strictRuntime,
+      jacocoOpts = runConf.jacocoOpts,
+      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython)
     )
   }
 
@@ -1052,14 +1085,12 @@ class Compiler(
   }
 
   private def normalizeJavaOpts(conf: ResolvedRunConfCompilingState): Unit = {
-    def normalize(javaOpts: Seq[String], javaVersionOverride: Option[String]): Seq[String] = {
-      val effectiveJVO = reallyRealJavaVersionOverride orElse javaVersionOverride
-      externalCache.javaOpts.cached(conf.scopedName -> effectiveJVO, javaOpts) {
+    def normalize(javaOpts: Seq[String], maybeJavaVersion: Option[String]): Seq[String] =
+      externalCache.javaOpts.cached(conf.scopedName -> maybeJavaVersion, javaOpts) {
         JavaOpts.normalize {
-          filterJavaRuntimeOptions(conf.reportWarning, javaOpts, effectiveJVO)
+          filterJavaRuntimeOptions(conf.reportWarning, javaOpts, maybeJavaVersion)
         }
       }
-    }
 
     conf.transformRunConf {
       case app: AppRunConf =>

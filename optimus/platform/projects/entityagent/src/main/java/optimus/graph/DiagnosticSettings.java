@@ -29,7 +29,6 @@ import java.util.Set;
 public class DiagnosticSettings {
   // Env variable exported by grid engine launcher script on grid engines
   private static final String IS_ON_ENGINE = "IS_ON_ENGINE"; // 1 = running on grid engine
-
   private static final String PROFILE_INSTRUMENT = "optimus.profile.instrument";
   private static final String ENABLE_XS_REPORTING = "optimus.profile.xsreporting";
   public static final String TRACE_TWEAKS = "optimus.profile.traceTweaks";
@@ -40,17 +39,12 @@ public class DiagnosticSettings {
   private static final String ENABLE_JUNIT_RUNNER_MONITOR = "optimus.monitor.junit.dynamic";
   // aka --profile-graph
   private static final String PROFILE_PROPERTY = "optimus.scheduler.profile";
-  // aka --profile-csvfolder
-  private static final String PROFILE_FOLDER_PROPERTY = "optimus.scheduler.profile.folder";
   // aka --profile-aggregation
   private static final String PROFILE_AGGREGATION_PROPERTY =
       "optimus.scheduler.profile.aggregation";
   // aka --profile-custom-metrics
   private static final String PROFILE_CUSTOM_FILTER_PROPERTY =
       "optimus.scheduler.profile.filters.custom";
-  // aka --profile-hotspot-filters
-  private static final String PROFILE_HOTSPOTS_FILTER_PROPERTY =
-      "optimus.scheduler.profile.filters.hotspots";
 
   public static final String DEBUG_PROPERTY = "optimus.scheduler.console"; // console ???
   private static final String EVALUATE_NODE_ON_TOUCH = "optimus.scheduler.evaluateNodeOnTouch";
@@ -60,6 +54,8 @@ public class DiagnosticSettings {
   private static final String CHAOS_CLASSNAME_PREFIX_EXCLUDE_PROPERTY =
       "optimus.graph.chaos.classname.prefixes" + ".exclude";
   private static final String COLLECTION_TRACE_ENABLE_PROPERTY = "optimus.graph.collection.trace";
+
+  private static final String RUN_OMAT_ENABLE_PROPERTY = "optimus.run.omat.oom";
 
   private static final String AGENT_DUMP_CLASS_PREFIX = "optimus.entityagent.dump.";
   private static final String AGENT_DUMP_LOCATION = AGENT_DUMP_CLASS_PREFIX + "location";
@@ -71,7 +67,6 @@ public class DiagnosticSettings {
       "optimus.graph.resetScenarioStackOnCompletion";
 
   private static final String USE_STRICT_MATH = "optimus.strictfp";
-
   public static final boolean enableJunitRunnerMonitorInjection;
   public static final boolean isClassMonitorEnabled;
   public static final boolean isClassMonitorOverheadTraceEnabled;
@@ -131,14 +126,15 @@ public class DiagnosticSettings {
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.accumulate.violations", false);
 
   public static final boolean loomTransformations =
-      getBoolProperty("optimus.loom.transformations", false);
+      getBoolProperty("optimus.loom.transformations", LoomDefaults.enabled);
 
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
   public static final boolean enableXSReporting;
+
   /** Collect tweaks we actually depended on */
   public static final boolean traceTweaksEnabled;
 
-  public static final boolean traceTweaksOnStart;
+  static final boolean internal_traceTweaksOnStartNoDefault;
   public static boolean traceTweaksOverflowDetected;
   /**
    * Used by graph team for testing async overloads (each will be given a unique name in profiling)
@@ -190,6 +186,9 @@ public class DiagnosticSettings {
    */
   public static final boolean enablePerNodeTPDMask = tweakUsageQWords > 0;
 
+  public static final boolean modifyScalaHashCollectionIterationOrder =
+      getBoolProperty("optimus.diagnostic.modifyScalaHashCollectionIterationOrder", false);
+
   public static final int proxyChainStackLimit =
       getIntProperty("optimus.cache.proxyChainStackLimit", 100);
   /**
@@ -216,9 +215,12 @@ public class DiagnosticSettings {
 
   public static final String
       samplingProfilerArg; // actual value of "optimus.sampling" for logging purposes mostly
-  public static final boolean samplingProfilerDefault; // default if no zk config
+  public static final boolean
+      samplingProfilerDefaultOn; // default to sampling, even if no zk config
   public static final boolean samplingProfilerStatic; // do static initialization
-  public static final boolean samplingProfilerForce; // do not turn off, irrespective of zk
+  public static final boolean samplingProfilerZkConfigurable; // configurable via zk
+  public static final boolean
+      samplingProfilerAuto; // auto-start (even if it may be turned off later by zk)
 
   public static boolean samplingAsserts = getBoolProperty("optimus.sampling.asserts", false);
 
@@ -230,6 +232,9 @@ public class DiagnosticSettings {
 
   public static double infoDumpPeriodicityHours =
       getDoubleProperty("optimus.diagnostic.dump.period.hours", 0.0);
+
+  public static int infoDumpEmergencyKillSec =
+      getIntProperty("optimus.diagnostic.dump.emergency.kill.sec", 0);
   public static boolean fullHeapDumpOnKill = getBoolProperty("optimus.diagnostic.dump.heap", false);
   public static boolean fakeOutOfMemoryErrorOnKill =
       getBoolProperty("optimus.diagnostic.dump.fake.oom", false);
@@ -272,11 +277,8 @@ public class DiagnosticSettings {
   /** Clear registry preferences before loading debugger (in case we messed them up) */
   public static final boolean diag_lustrate;
 
-  public static final String initialProfile;
-  public static final String initialProfileFolder;
   public static final String initialProfileAggregation;
   public static final String[] initialProfileCustomFilter;
-  public static final String[] initialProfileHotspotFilter;
 
   public static final boolean debugAssist;
 
@@ -287,6 +289,8 @@ public class DiagnosticSettings {
   public static final List<String> chaosClassnamePrefixExclusions;
 
   public static final boolean collectionTraceEnabled;
+
+  public static final boolean runOmatEnabled;
 
   /**
    * If enabled marks methods in optimus.graph.* as synthetic and this allows for nicer step through
@@ -483,11 +487,6 @@ public class DiagnosticSettings {
     return ManagementFactory.getRuntimeMXBean().getUptime();
   }
 
-  private static boolean existsInCmdLine(String key) {
-    String cmdLine = System.getProperty("sun.java.command");
-    return cmdLine.contains(key);
-  }
-
   //
   // Handle all initialization here to control the order and ensure that
   // temporary vars (e.g. profileString) are discarded
@@ -504,7 +503,6 @@ public class DiagnosticSettings {
       debugAssist = globalAssist && jvmHasJdwpAgent;
     }
 
-    String profileString = System.getProperty(PROFILE_PROPERTY);
     String[] graphConsoleArgs = parseStringArrayProperty(System.getProperty(DEBUG_PROPERTY));
 
     diag_showConsole =
@@ -513,13 +511,10 @@ public class DiagnosticSettings {
     diag_stopOnGraphStart = contains(graphConsoleArgs, "stop");
     diag_lustrate = contains(graphConsoleArgs, "lustrate");
 
-    initialProfile = profileString;
-    initialProfileFolder = System.getProperty(PROFILE_FOLDER_PROPERTY);
     initialProfileAggregation = System.getProperty(PROFILE_AGGREGATION_PROPERTY);
+
     initialProfileCustomFilter =
         parseStringArrayProperty(System.getProperty(PROFILE_CUSTOM_FILTER_PROPERTY), ",");
-    initialProfileHotspotFilter =
-        parseStringArrayProperty(System.getProperty(PROFILE_HOTSPOTS_FILTER_PROPERTY));
 
     evaluateNodeOnTouch = getBoolProperty(EVALUATE_NODE_ON_TOUCH, false);
     profileScenarioStackUsage = contains(graphConsoleArgs, "stackUsageOnStart");
@@ -528,11 +523,13 @@ public class DiagnosticSettings {
     traceAvailable = getBoolProperty(PROFILE_INSTRUMENT, true) || debugAssist;
     injectNodeMethods = traceAvailable && !contains(graphConsoleArgs, "nmi_off");
 
-    boolean traceNodesOnStartup =
-        existsInCmdLine("traceNodes") || "traceNodes".equalsIgnoreCase(initialProfile);
     enableXSReporting = getBoolProperty(ENABLE_XS_REPORTING, traceAvailable);
-    traceTweaksOnStart = getBoolProperty(TRACE_TWEAKS, traceNodesOnStartup);
-    traceTweaksEnabled = traceTweaksOnStart || debugAssist;
+    boolean traceNodesOnStartup =
+        System.getProperty("sun.java.command").contains("traceNodes")
+            || "traceNodes".equalsIgnoreCase(System.getProperty("optimus.scheduler.profile"));
+    internal_traceTweaksOnStartNoDefault = getBoolProperty(TRACE_TWEAKS, false);
+    traceTweaksEnabled =
+        !onGrid && (internal_traceTweaksOnStartNoDefault || debugAssist || traceNodesOnStartup);
 
     profileShowThreadSummary = getBoolProperty("optimus.profile.showThreadSummary", false);
 
@@ -560,6 +557,9 @@ public class DiagnosticSettings {
 
     // -Doptimus.graph.collection.trace=true to enable the feature
     collectionTraceEnabled = getBoolProperty(COLLECTION_TRACE_ENABLE_PROPERTY, false);
+
+    // -Doptimus.run.omat.on.panic=true to enable the feature
+    runOmatEnabled = getBoolProperty(RUN_OMAT_ENABLE_PROPERTY, false);
 
     classDumpLocation = getStringProperty(AGENT_DUMP_LOCATION, null);
     classDumpClasses = getStringPropertyAsSet(AGENT_DUMP_CLASSES);
@@ -625,22 +625,29 @@ public class DiagnosticSettings {
           || samplingProfilerArg == null
           || samplingProfilerArg.equals("false")
           || (!configurable && samplingProfilerArg.equals("config")))
-        samplingProfilerForce = samplingProfilerStatic = samplingProfilerDefault = false;
-      else {
+        samplingProfilerZkConfigurable =
+            samplingProfilerAuto = samplingProfilerStatic = samplingProfilerDefaultOn = false;
+      else if (samplingProfilerArg.equals("manual")) {
         samplingProfilerStatic = true;
-        if (samplingProfilerArg.equals("force"))
-          samplingProfilerForce = samplingProfilerDefault = true;
-        else {
-          samplingProfilerForce = false;
-          if (samplingProfilerArg.equals("config")) samplingProfilerDefault = false;
-          else if (samplingProfilerArg.equals("true")) samplingProfilerDefault = true;
-          else throw new IllegalArgumentException("sampling.profiler=false|true|force|config");
+        samplingProfilerAuto = samplingProfilerZkConfigurable = samplingProfilerDefaultOn = false;
+      } else {
+        samplingProfilerStatic = samplingProfilerAuto = true;
+        if (samplingProfilerArg.equals("force")) {
+          samplingProfilerDefaultOn = true;
+          samplingProfilerZkConfigurable = false;
+        } else {
+          samplingProfilerZkConfigurable = true;
+          if (samplingProfilerArg.equals("config")) {
+            samplingProfilerDefaultOn = false;
+          } else if (samplingProfilerArg.equals("true")) {
+            samplingProfilerDefaultOn = true;
+          } else throw new IllegalArgumentException("sampling.profiler=false|true|force|config");
         }
       }
     }
 
     // sampleCacheLookups defaults to false because it can sometimes leak memory.
-    sampleCacheLookups = parseBooleanWithDefault(envOrProp("optimus.sampling.cachelookups"), false);
+    sampleCacheLookups = parseBooleanWithDefault(envOrProp("optimus.sampling.cachelookups"), true);
 
     sampleCardinalities =
         samplingProfilerStatic

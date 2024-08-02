@@ -72,13 +72,6 @@ class MavenReserveToolCmdLine extends OptimusBuildToolCmdLine {
     usage = "Suitable eonID for your scope and transitive internal dependencies."
   )
   val eonID: String = ""
-
-  @args4j.Option(
-    name = "--contract",
-    required = true,
-    usage = "Release contract for your scope and transitive internal dependencies."
-  )
-  val contract: String = ""
 }
 
 private[buildtool] object MavenReserveTool
@@ -103,9 +96,7 @@ private[buildtool] object MavenReserveTool
         "--name",
         s"com.ms.${id.meta}.${id.bundle}:${id.module}",
         "--eon",
-        cmdLine.eonID,
-        "--contract",
-        cmdLine.contract
+        cmdLine.eonID
       )
 
     val allCmd = (transitiveIds + targetId).map(scopeIdToTrainCmd)

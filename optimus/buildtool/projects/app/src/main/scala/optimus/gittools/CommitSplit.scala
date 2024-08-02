@@ -108,7 +108,7 @@ object CommitSplit extends OptimusApp[CommitSplitCmdLine] {
 
   private implicit val moduleOrdering: Ordering[Module] = Ordering.by((m: Module) => m.id.toString)
   private val NoModuleId = ModuleId("n/a", "n/a", "n/a")
-  private val NoModule = Module(NoModuleId, RelativePath.empty, "n/a", "n/a", Nil, -1)
+  private val NoModule = Module(NoModuleId, RelativePath.empty, "n/a", "n/a", -1)
 
   @entersGraph def run(): Unit = {
     val srcPath = getSrcPath

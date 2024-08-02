@@ -191,6 +191,9 @@ public class StratosphereConfig {
       updateProperty("region.reports", fsCampus.getAlternativeMapping("report-upload"));
       updateProperty("region.obt-dht", fsCampus.getAlternativeMapping("obt-dht"));
 
+      // re-resolve to have region properties
+      tmpResolvedConfig = config.resolve(allowUnresolved);
+
       if (StratosphereChannelsConfig.shouldUseStratosphereChannels(
           tmpResolvedConfig, stratosphereInfraOverride)) {
         Channel selectedChannel = StratosphereChannelsConfig.selectChannel(tmpResolvedConfig);

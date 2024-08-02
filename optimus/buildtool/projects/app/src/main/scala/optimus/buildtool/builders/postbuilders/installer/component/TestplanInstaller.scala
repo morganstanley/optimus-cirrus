@@ -86,7 +86,7 @@ final class TestplanInstaller(
     // This file is used to scope other test types on Jenkins, for example Quick Smokes
     if (changes.isDefined) {
       val directlyChangedScopes = changes.directlyChangedScopes
-      val changedScopes = scopeConfigSource.compilationScopeIds.apar.filter(changes.scopeDependenciesChanged(_))
+      val changedScopes = scopeConfigSource.compilationScopeIds.apar.filter(changes.scopeDependenciesChanged)
       val changedModules: Set[String] = changedScopes.map(_.fullModule.toString)
       val changedModulesFile = installDir.resolveFile("changed-modules.txt")
       AssetUtils.atomicallyWrite(changedModulesFile, replaceIfExists = true, localTemp = true) { tempPath =>
@@ -101,6 +101,12 @@ final class TestplanInstaller(
       AssetUtils.atomicallyWrite(directlyChangedScopesFile, replaceIfExists = true, localTemp = true) { tempPath =>
         Files.write(tempPath, directlyChangedScopes.map(_.properPath).toSeq.sorted.mkString(",").getBytes)
       }
+
+      val changedFilesFile = installDir.resolveFile("changed-files.txt")
+      AssetUtils.atomicallyWrite(changedFilesFile, replaceIfExists = true, localTemp = true) { tempPath =>
+        Files.write(tempPath, changes.changes.get.toSeq.sorted.mkString("\n").getBytes)
+      }
+
       Seq(changedModulesFile, changedScopesFile, directlyChangedScopesFile)
     } else Nil
   }

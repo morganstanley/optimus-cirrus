@@ -60,9 +60,20 @@ trait LowerPriorityImplicits {
       config.getStringList(property).asScala.toList
   }
 
-  implicit val mapExtractor: Extractor[Map[String, String]] = new Extractor[Map[String, String]] {
+  implicit val mapStringExtractor: Extractor[Map[String, String]] = new Extractor[Map[String, String]] {
     override def extract(config: Config, property: String): Map[String, String] =
       config.getObject(property).unwrapped().asScala.mapValuesNow(_.toString).toMap
+  }
+
+  implicit def mapExtractor[A: Extractor]: Extractor[Map[String, A]] = new Extractor[Map[String, A]] {
+    override def extract(config: Config, property: String): Map[String, A] = {
+      val configAtProperty = config.getConfig(property)
+      configAtProperty
+        .entrySet()
+        .asScala
+        .map(entry => entry.getKey -> implicitly[Extractor[A]].extract(configAtProperty, entry.getKey))
+        .toMap
+    }
   }
 
   implicit val configExtractor: Extractor[Config] = new Extractor[Config] {

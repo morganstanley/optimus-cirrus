@@ -19,6 +19,7 @@ import optimus.graph.TweakTarget
 import optimus.platform.EvaluationContext
 import optimus.platform.ScenarioStack
 import optimus.platform.annotations.internal.AccelerateInfoAnnotation
+import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.annotations.internal._projected
 import optimus.platform.dsi.expressions.Embeddable
 import optimus.platform.dsi.expressions.Expression
@@ -34,10 +35,13 @@ import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.mapping.QueryBinder
 import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
+import optimus.platform.relational.data.tree.DbQueryTreeVisitor
+import optimus.platform.relational.data.tree.EmbeddableCaseClassElement
 import optimus.platform.relational.internal.RelationalUtils
 import optimus.platform.relational.tree.ConstructorDescriptor
 import optimus.platform.relational.tree.FieldDescriptor
 import optimus.platform.relational.tree.MethodDescriptor
+import optimus.platform.relational.tree.RelationElement
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.storable.EmbeddableCompanionBase
 import optimus.platform.storable.Entity
@@ -63,6 +67,32 @@ object DALMappingEntityFactory {
 
   def embeddable(owner: TypeInfo[_], property: String, embeddableType: TypeInfo[_]): DALMappingEntity = {
     DALEmbeddable(owner, property, embeddableType)
+  }
+
+  def isProjectedEmbeddableCollection(t: TypeInfo[_]): Boolean = {
+    if (t <:< classOf[Iterable[_]] && t.typeParams.size == 1) {
+      val annon = t.typeParams(0).clazz.getAnnotation(classOf[EmbeddableMetaDataAnnotation])
+      annon != null && annon.projected
+    } else false
+  }
+
+  def isEmbeddableCollection(t: TypeInfo[_]): Boolean = {
+    t <:< classOf[Iterable[_]] && t.typeParams.size == 1 &&
+    (t.typeParams(0).clazz.getAnnotation(classOf[EmbeddableMetaDataAnnotation]) ne null)
+  }
+
+  private[dal] def excludeVRef(p: RelationElement): RelationElement = {
+    class VRefRemover extends DbQueryTreeVisitor {
+      protected override def handleEmbeddableCaseClass(ec: EmbeddableCaseClassElement): RelationElement = {
+        new EmbeddableCaseClassElement(
+          ec.owner,
+          ec.ownerProperty,
+          ec.projectedType(),
+          ec.members.tail,
+          ec.memberNames.tail)
+      }
+    }
+    new VRefRemover().visitElement(p)
   }
 
   private def getAddedFieldMap(className: String): Map[String, Any] = {
@@ -298,10 +328,13 @@ object DALMappingEntityFactory {
     val mappedMemberLookup: HashMap[String, MemberInfo] =
       mappedMembers.iterator.map(t => t.name -> t).convertTo(HashMap)
     val columnMemberLookup: HashMap[String, MemberInfo] = {
+      val c2pProps = entityInfo.properties.collect { case p if p.isChildToParent => p.name } toSet
+
       mappedMembers.iterator
         .filter(m => {
-          // check childToParent flag
-          !entityInfo.properties.exists(p => p.isChildToParent && p.name == m.name)
+          // we treat childToParent & projected embeddable collection as relationship instead of column
+          !c2pProps.contains(m.name) &&
+          !isProjectedEmbeddableCollection(m.memberType)
         })
         .map(t => t.name -> t)
         .convertTo(HashMap)

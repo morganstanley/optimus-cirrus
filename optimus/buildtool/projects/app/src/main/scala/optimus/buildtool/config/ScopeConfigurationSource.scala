@@ -68,10 +68,10 @@ object ScopeConfigurationSourceBase {
   }
 
   @node override def tryResolveScopes(partialId: String): Option[Set[ScopeId]] =
-    ScopeResolver.tryResolveScopes(compilationScopeIds, partialId)
+    ScopeResolver.tryResolveScopes(compilationScopeIds, partialId, requireExactMatch = false)
 
   @node override def resolveScopes(partialId: String): Set[ScopeId] =
-    ScopeResolver.resolveScopes(compilationScopeIds, partialId)
+    ScopeResolver.resolveScopes(compilationScopeIds, partialId, requireExactMatch = false)
 
   @node override def metaBundle(id: String): MetaBundle =
     Try(MetaBundle.parse(id)) match {

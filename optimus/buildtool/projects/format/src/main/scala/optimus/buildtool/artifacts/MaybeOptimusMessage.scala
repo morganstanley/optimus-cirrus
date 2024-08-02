@@ -18,6 +18,6 @@ sealed trait MaybeOptimusMessage { val msg: String }
 final case class OptimusMessage(
     msg: String,
     alarmId: Int,
-    isSuppressed: Boolean
+    isSuppressed: Boolean // by @nowarn
 ) extends MaybeOptimusMessage
 final case class NotAnOptimusMessage(msg: String) extends MaybeOptimusMessage

@@ -12,7 +12,6 @@
 package optimus.platform.relational
 
 import optimus.platform._
-import optimus.platform._
 import optimus.platform.relational.DefaultQueryProvider._
 import optimus.platform.relational.aggregation._
 import optimus.platform.relational.inmemory.ExtensionOptimizer
@@ -21,6 +20,7 @@ import optimus.platform.relational.inmemory.MethodKeyOptimizer
 import optimus.platform.relational.inmemory.MethodPositionFinder
 import optimus.platform.relational.inmemory.ShapeToRewriter
 import optimus.platform.relational.internal.OptimusCoreAPI._
+import optimus.platform.relational.tree.MethodArgConstants._
 import optimus.platform.relational.tree._
 
 trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
@@ -36,7 +36,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
 
   def permitTableScan[T](src: Query[T])(implicit pos: MethodPosition): Query[T] = {
     val e = src.element
-    val method = new MethodElement(QueryMethod.PERMIT_TABLE_SCAN, List(MethodArg("src", e)), e.rowTypeInfo, e.key, pos)
+    val method = new MethodElement(QueryMethod.PERMIT_TABLE_SCAN, List(MethodArg(source, e)), e.rowTypeInfo, e.key, pos)
     QueryImpl[T](method, this)
   }
 
@@ -59,7 +59,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = mkProject(src.element.key.asInstanceOf[RelationKey[T]])(sourceType.cast[T], resultType)
     val method = new MethodElement(
       QueryMethod.OUTPUT,
-      List(MethodArg("src", src.element), MethodArg("f", lambda)),
+      List(MethodArg(source, src.element), MethodArg(function, lambda)),
       resultType,
       key,
       pos)
@@ -93,7 +93,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = mkProject(src.element.key.asInstanceOf[RelationKey[T]])(sourceType.cast[T], resultType)
     val method = new MethodElement(
       QueryMethod.FLATMAP,
-      List(MethodArg("src", src.element), MethodArg("f", lambda), MethodArg("conv", new ConstValueElement(conv))),
+      List(MethodArg(source, src.element), MethodArg(function, lambda), MethodArg("conv", new ConstValueElement(conv))),
       resultType,
       key,
       pos)
@@ -109,7 +109,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = src.element.key
     val method = new MethodElement(
       QueryMethod.WHERE,
-      List(MethodArg("src", src.element), MethodArg("p", lambda)),
+      List(MethodArg(source, src.element), MethodArg(predicate, lambda)),
       sourceType,
       key,
       pos)
@@ -128,7 +128,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     // pvd is used for sub-Query
     val method = new MethodElement(
       QueryMethod.GROUP_BY,
-      List(MethodArg("src", src.element), MethodArg("f", lambda), MethodArg("pvd", new ConstValueElement(this))),
+      List(MethodArg(source, src.element), MethodArg(function, lambda), MethodArg("pvd", new ConstValueElement(this))),
       typeInfo[(U, Query[T])],
       key,
       pos
@@ -145,7 +145,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val method = new MethodElement(
       QueryMethod.GROUP_BY_TYPED,
       List(
-        MethodArg("src", src.element),
+        MethodArg(source, src.element),
         MethodArg("keyType", new ConstValueElement(keyType)),
         MethodArg("valueType", new ConstValueElement(typeInfo[GroupValueType])),
         MethodArg("valueKey", new ConstValueElement(valueKey)),
@@ -172,12 +172,12 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val method = new MethodElement(
       QueryMethod.AGGREGATE_BY,
       List(
-        MethodArg("src", src.element),
+        MethodArg(source, src.element),
         MethodArg("groupKeyType", new ConstValueElement(typeInfo[GroupKeyType])),
         MethodArg("groupValueType", new ConstValueElement(typeInfo[GroupValueType])),
         MethodArg("aggregateType", new ConstValueElement(aggregateType)),
         MethodArg("valueKey", new ConstValueElement(valueKey)),
-        MethodArg("f", lambda),
+        MethodArg(function, lambda),
         MethodArg("pvd", new ConstValueElement(this))
       ),
       resultType,
@@ -197,7 +197,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
 
     val combinedConstElement = MethodArg[RelationElement]("aggregators", new ConstValueElement(aggregators))
     val methodArgs = List[MethodArg[RelationElement]](
-      MethodArg[RelationElement]("src", src.element),
+      MethodArg[RelationElement](source, src.element),
       MethodArg("groupKeyType", new ConstValueElement(typeInfo[GroupKeyType])),
       MethodArg[RelationElement]("groupValueType", new ConstValueElement(typeInfo[GroupValueType])),
       MethodArg("aggregateType", new ConstValueElement(typeInfo[AggregateType])),
@@ -217,7 +217,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val method = new MethodElement(
       QueryMethod.AGGREGATE_BY_UNTYPED,
       List(
-        MethodArg[RelationElement]("src", src.element),
+        MethodArg[RelationElement](source, src.element),
         MethodArg("groupByProperties", new ConstValueElement(groupByProperties)),
         MethodArg("untypedAggregations", new ConstValueElement(untypedAggregations))
       ),
@@ -238,7 +238,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = src.element.key
     val method = new MethodElement(
       QueryMethod.GROUP_MAP_VALUES,
-      List(MethodArg("src", src.element), MethodArg("f", lambda)),
+      List(MethodArg(source, src.element), MethodArg(function, lambda)),
       typeInfo[(T, S)],
       key,
       pos)
@@ -262,7 +262,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val resultType = typeInfo[(L, R)]
     val method = new MethodElement(
       queryMethod,
-      List(MethodArg("left", left.element), MethodArg("right", right.element)),
+      List(MethodArg(MethodArgConstants.left, left.element), MethodArg(MethodArgConstants.right, right.element)),
       resultType,
       key,
       pos)
@@ -470,7 +470,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val MethodElement(methodCode, methodArgs, _, srcKey, pos) = src.element
     if (methodCode == INNER_JOIN || methodCode == RIGHT_OUTER_JOIN)
       throw new RelationalException("withRightDefault could only be called on full-outer-join or left-outer-join")
-    if (methodArgs.exists(_.name == "rightDefault"))
+    if (methodArgs.exists(_.name == rightDefault))
       throw new RelationalException("withRightDefault already be called, it could only be called once")
 
     val left = methodArgs(0).param.asInstanceOf[MultiRelationElement]
@@ -488,12 +488,8 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
 
     val func = lambdaToFuncElement(f, bType, new Argument(leftType))
 
-    val method = new MethodElement(
-      methodCode,
-      methodArgs.:+(MethodArg[RelationElement]("rightDefault", func)),
-      resultType,
-      key,
-      pos)
+    val method =
+      new MethodElement(methodCode, methodArgs.:+(MethodArg[RelationElement](rightDefault, func)), resultType, key, pos)
     JoinQueryImpl[L, B](method, this)
   }
 
@@ -542,7 +538,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     if (methodCode == NATURAL_INNER_JOIN || methodCode == NATURAL_RIGHT_OUTER_JOIN)
       throw new RelationalException(
         "withRightDefault could only be called on natural-full-outer-join or natural-left-outer-join")
-    if (methodArgs.exists(_.name == "rightDefault"))
+    if (methodArgs.exists(_.name == rightDefault))
       throw new RelationalException("withRightDefault already be called, it could only be called once")
 
     val left = methodArgs(0).param.asInstanceOf[MultiRelationElement]
@@ -560,12 +556,8 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
       }
 
     val func = lambdaToFuncElement(f, bType, new Argument(leftType))
-    val method = new MethodElement(
-      methodCode,
-      methodArgs.:+(MethodArg[RelationElement]("rightDefault", func)),
-      resultType,
-      key,
-      pos)
+    val method =
+      new MethodElement(methodCode, methodArgs.:+(MethodArg[RelationElement](rightDefault, func)), resultType, key, pos)
     NaturalJoinQueryImpl[L, B](method, this)
   }
 
@@ -577,7 +569,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
         srcArg :: others.foldLeft(otherArgs)((args, q) => MethodArg[RelationElement]("others", q.element) :: args)
       case _ =>
         {
-          MethodArg[RelationElement]("src", src.element) +: others.map(q =>
+          MethodArg[RelationElement](source, src.element) +: others.map(q =>
             MethodArg[RelationElement]("others", q.element))
         }.toList
     }
@@ -604,7 +596,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
       case MethodElement(QueryMethod.MERGE, srcArg :: ag :: otherArgs, _, _, _) =>
         srcArg :: ag :: others.foldLeft(otherArgs)((args, q) => MethodArg[RelationElement]("others", q.element) :: args)
       case _ =>
-        MethodArg[RelationElement]("src", src.element) :: MethodArg[RelationElement](
+        MethodArg[RelationElement](source, src.element) :: MethodArg[RelationElement](
           "ag",
           ElementFactory.constant(ag)) :: others
           .map(q => MethodArg[RelationElement]("others", q.element))
@@ -620,7 +612,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val (resultType, key) = mkUnion(Seq(src.elementType, other.elementType), Seq(src.element.key, other.element.key))
     val method = new MethodElement(
       QueryMethod.DIFFERENCE,
-      List(MethodArg("src", src.element), MethodArg("other", other.element)),
+      List(MethodArg(source, src.element), MethodArg("other", other.element)),
       resultType,
       key,
       pos)
@@ -632,7 +624,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val resultType = DynamicObject.typeTag
 
     val key = mkDynamic(src.element.key.asInstanceOf[RelationKey[T]], null)(sourceType.cast[T])
-    val method = new MethodElement(QueryMethod.UNTYPE, List(MethodArg("src", src.element)), resultType, key, pos)
+    val method = new MethodElement(QueryMethod.UNTYPE, List(MethodArg(source, src.element)), resultType, key, pos)
     QueryImpl[DynamicObject](method, this)
   }
 
@@ -646,7 +638,10 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = mkDynamic(src.element.key.asInstanceOf[RelationKey[DynamicObject]], field)
     val method = new MethodElement(
       QueryMethod.EXTEND,
-      List(MethodArg("src", src.element), MethodArg("field", new ConstValueElement(field)), MethodArg("f", lambda)),
+      List(
+        MethodArg(source, src.element),
+        MethodArg("field", new ConstValueElement(field)),
+        MethodArg(function, lambda)),
       DynamicObject.typeTag,
       key,
       pos
@@ -664,7 +659,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = mkKey[U]
     val method = new MethodElement(
       QueryMethod.SHAPE,
-      List(MethodArg("src", src.element), MethodArg("f", lambda)),
+      List(MethodArg(source, src.element), MethodArg(function, lambda)),
       shapeToType,
       key,
       pos)
@@ -681,7 +676,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = mkComposite[T, U](src.element.key.asInstanceOf[RelationKey[T]])(sourceType, extensionType, resultType)
     val method = new MethodElement(
       QueryMethod.EXTEND_TYPED,
-      List(MethodArg("src", src.element), MethodArg("f", lambda)),
+      List(MethodArg(source, src.element), MethodArg(function, lambda)),
       resultType,
       key,
       pos)
@@ -697,7 +692,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val valueElement = new ConstValueElement(extVal, extensionType)
     val method = new MethodElement(
       QueryMethod.EXTEND_TYPED,
-      List(MethodArg("src", src.element), MethodArg("extVal", valueElement)),
+      List(MethodArg(source, src.element), MethodArg("extVal", valueElement)),
       resultType,
       key,
       pos)
@@ -713,7 +708,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val key = src.element.key
     val method = new MethodElement(
       QueryMethod.REPLACE,
-      List(MethodArg("src", src.element), MethodArg("f", lambda)),
+      List(MethodArg(source, src.element), MethodArg(function, lambda)),
       sourceType,
       key,
       pos)
@@ -728,7 +723,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val valueElement = new ConstValueElement(repVal, replaceType)
     val method = new MethodElement(
       QueryMethod.REPLACE,
-      List(MethodArg("src", src.element), MethodArg("repVal", valueElement)),
+      List(MethodArg(source, src.element), MethodArg("repVal", valueElement)),
       sourceType,
       key,
       pos)
@@ -748,12 +743,13 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val method = new MethodElement(
       QueryMethod.SORT,
       List(
-        MethodArg("src", src.element),
-        MethodArg("f", lambda),
+        MethodArg(source, src.element),
+        MethodArg(function, lambda),
         MethodArg("ordering", new ConstValueElement(ordering))),
       sourceType,
       key,
-      pos)
+      pos
+    )
     QueryImpl[T](method, this)
   }
 
@@ -786,7 +782,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
         val key = src.element.key
         val sourceType = src.elementType
 
-        val method = new MethodElement(QueryMethod.ARRANGE, List(MethodArg("src", src.element)), sourceType, key, pos)
+        val method = new MethodElement(QueryMethod.ARRANGE, List(MethodArg(source, src.element)), sourceType, key, pos)
         QueryImpl[T](method, this)
       } else
         throw new RelationalException(
@@ -799,7 +795,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     if (key == null || key == NoKey) {
       val sourceType = src.elementType
       val method =
-        new MethodElement(QueryMethod.TAKE_DISTINCT, List(MethodArg("src", src.element)), sourceType, key, pos)
+        new MethodElement(QueryMethod.TAKE_DISTINCT, List(MethodArg(source, src.element)), sourceType, key, pos)
       QueryImpl[T](method, this)
     } else src
   }
@@ -813,7 +809,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val method = new MethodElement(
       QueryMethod.TAKE,
       List(
-        MethodArg("src", src.element),
+        MethodArg(source, src.element),
         MethodArg("offset", new ConstValueElement(offset)),
         MethodArg("numRows", new ConstValueElement(numRows))),
       sourceType,

@@ -26,6 +26,9 @@ import scala.collection.immutable.Seq
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 import scala.util.matching.Regex
 
 /** Type magic to return Java Duration or Scala Duration but nothing else */
@@ -53,6 +56,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   def historyMerges: Seq[Config] = self.select("history-merges")
 
+  def obtDhtLocation: Option[String] = self.select("obt.dht.location")
+  def obtSilverkingLocation: Option[String] = self.select("obt.silverking-location")
+  def obtVersion: String = self.select("obt-version")
+
+  def profile: Option[String] = self.select("profile")
   def stratosphereChannel: Option[String] = self.select("stratosphereChannel")
   def stratosphereInfra: Path = self.select("stratosphereInfra")
   def stratosphereInfraOverride: Option[String] = self.select("stratosphereInfraOverride")
@@ -62,7 +70,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   def stratosphereVersion[A: Extractor]: A = self.select("stratosphereVersion")
   def stratosphereVersionSymlink: Option[String] = self.select("stratosphereVersionSymlink")
   def stratosphereWorkspace: String = self.select("stratosphereWorkspace")
-  def obtVersion: String = self.select("obt-version")
 
   def userName: String = self.select("userName")
 
@@ -130,11 +137,13 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
   object intellij {
     def attachAgent: Boolean = self.select("intellij.attach-agent")
+    def jarRepoFile: Path = self.select("intellij.jar-repo-file")
     def jdk: Option[String] = self.select("intellij.jdk")
     def licenseServer: String = self.select("intellij.license-server")
     def linuxJcefSandbox: Boolean = self.select("intellij.linux-jcef-sandbox")
     def migrateSettings: Boolean = self.select("intellij.migrate-settings")
-    def pythonPluginVersion: String = self.select("intellij.plugins.python.version")
+    def pythonCommunityPluginVersion: String = self.select("intellij.plugins.python-community.version")
+    def pythonUltimatePluginVersion: String = self.select("intellij.plugins.python-ultimate.version")
     def scalaPluginVersion: String = self.select("intellij.plugins.scala.version")
     def ultimate: Boolean = self.select("intellij.ultimate")
     def version: String = self.select("intellij.version")
@@ -169,6 +178,10 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def extraVmoptions: Seq[String] = self.select("intellij.idea64.extraVmoptions")
     }
 
+    object allowedInspections {
+      def groups: Map[String, Boolean] = self.select("intellij.allowed-inspections.groups")
+    }
+
     object jetfire {
       def path: String = self.select("intellij.jetfire.path")
     }
@@ -189,8 +202,18 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object gateway {
       object client {
-        def path: String = self.select("intellij.gateway.client.path")
-        def version: String = self.select("intellij.gateway.client.version")
+        def clientVersion(ideVersion: String): Try[String] = {
+          val versionMapping: Map[String, String] = self.select("intellij.gateway.client.versions")
+          versionMapping
+            .get(ideVersion)
+            .map(Success(_))
+            .getOrElse(Failure(new IllegalArgumentException(
+              s"No Ide Client version specified for the the provided ide version. Possible options: [${versionMapping.keys
+                  .mkString(", ")}]")))
+        }
+        def defaultVersion: String = self.select("intellij.gateway.client.default-version")
+        def path(clientVersion: String): String =
+          self.select("intellij.gateway.client.path") + clientVersion + self.select("intellij.gateway.client.suffix")
       }
     }
 
@@ -338,6 +361,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def initEnviron: String = self.select("internal.paths.init-environ")
       def javassist(version: String): String =
         self.select("internal.paths.javassist").replace("$VERSION", version)
+      def jiraProjectMapping: Path = self.select("internal.paths.jira-project-mapping")
       def proidHomes: Seq[String] = self.select("internal.paths.proid-homes")
       def python: String = self.select("internal.paths.python")
       def windowsTerminal: String = self.select("internal.paths.windows-terminal")
@@ -401,6 +425,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def gitVersion: String = self.select("internal.urls.git-version")
       def jenkinsLibrary: String = self.select("internal.urls.jenkins-library")
       def jenkinsLibraryBrowser: String = self.select("internal.urls.jenkins-library-browser")
+      def jiraBrowse: String = self.select("internal.urls.jira-browse")
       def runconfs: String = self.select("internal.urls.runconfs")
       def splunk: String = self.select("internal.urls.splunk")
       def stackoverflow: String = self.select("internal.urls.stackoverflow")
@@ -424,6 +449,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       object pcHealth {
         def check: String = self.select("internal.urls.pc-health.check")
         def credentialGuard: String = self.select("internal.urls.pc-health.credential-guard")
+        def freeSwapSpace: MemSize = self.select("internal.urls.pc-health.free-swap-space")
       }
     }
   }

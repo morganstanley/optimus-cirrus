@@ -30,6 +30,7 @@ import optimus.platform.relational.data.mapping.QueryBinder
 import optimus.platform.relational.data.mapping.QueryMapper
 import optimus.platform.relational.data.tree._
 import optimus.platform.relational.internal.RelationalUtils
+import optimus.platform.relational.tree.MethodArgConstants._
 import optimus.platform.relational.tree._
 
 /*
@@ -163,8 +164,9 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                   l.rowTypeInfo,
                   NoKey,
                   MethodPosition.unknown)
-                convertToLinkageProj(visitElement(ele), projection.viaCollection)
-
+                convertToLinkageProj(visitElement(ele), projection.viaCollection).orElse {
+                  Some(updateFuncCall(func, projection, visitElementList(args)))
+                }
               case "flatMap" =>
                 val ele = new MethodElement(
                   QueryMethod.FLATMAP,
@@ -172,8 +174,9 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                   l.rowTypeInfo,
                   NoKey,
                   MethodPosition.unknown)
-                convertToLinkageProj(visitElement(ele), projection.viaCollection)
-
+                convertToLinkageProj(visitElement(ele), projection.viaCollection).orElse {
+                  Some(updateFuncCall(func, projection, visitElementList(args)))
+                }
               case "filter" | "withFilter" =>
                 val elem = new MethodElement(
                   QueryMethod.WHERE,
@@ -181,7 +184,9 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                   l.rowTypeInfo,
                   NoKey,
                   MethodPosition.unknown)
-                convertToLinkageProj(visitElement(elem), projection.viaCollection)
+                convertToLinkageProj(visitElement(elem), projection.viaCollection).orElse {
+                  Some(updateFuncCall(func, projection, visitElementList(args)))
+                }
               case "filterNot" =>
                 val p = ElementFactory.lambda(invertTest(l.body), l.parameters)
                 val elem = new MethodElement(
@@ -190,7 +195,9 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                   l.rowTypeInfo,
                   NoKey,
                   MethodPosition.unknown)
-                convertToLinkageProj(visitElement(elem), projection.viaCollection)
+                convertToLinkageProj(visitElement(elem), projection.viaCollection).orElse {
+                  Some(updateFuncCall(func, projection, visitElementList(args)))
+                }
               case "exists" => // expand to filter(...).nonEmpty
                 val desc1 = new RuntimeMethodDescriptor(mc.method.declaringType, "filter", mc.method.declaringType)
                 val desc2 = new RuntimeMethodDescriptor(mc.method.declaringType, "nonEmpty", TypeInfo.BOOLEAN)
@@ -1059,7 +1066,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
           case _                                             => None
         }
 
-        val rightDefaultEle = others.collectFirst { case x if x.name == "rightDefault" => x.param }.getOrElse(null)
+        val rightDefaultEle = others.collectFirst { case x if x.name == rightDefault => x.param }.getOrElse(null)
         val rightDefaultLambdaOpt = rightDefaultEle match {
           case FuncElement(c: ScalaLambdaCallee[_, _], _, _) => c.lambdaElement
           case l: LambdaElement                              => Some(l)

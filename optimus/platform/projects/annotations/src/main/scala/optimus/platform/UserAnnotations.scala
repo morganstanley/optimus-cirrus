@@ -16,7 +16,7 @@ import scala.annotation._
 
 /**
  * @see
- *   http://optimusdoc/BasicAnnotations
+ *   http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @getter
 class siRhs extends StaticAnnotation
@@ -24,41 +24,41 @@ class siRhs extends StaticAnnotation
 /**
  * Mark an @node def to be evaluated (and then cached) using the initial runtime environment.
  * @see
- *   http://optimusdoc/BasicAnnotations
+ *   http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 class givenRuntimeEnv extends Annotation
 
 /**
  * Mark an @async val to be evaluated (and then stored in object memory) using an initial runtime environment.
  * @see
- *   http://optimusdoc/BasicAnnotations
+ *   http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 class givenAnyRuntimeEnv extends Annotation
 
 /**
  * Marks def as a legal entry point into the graph and turns off warning of using async function from sync context
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 class entersGraph extends StaticAnnotation
 
 /**
  * Turns off some optimizations
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 class asyncOff extends Annotation
 
 /**
  * @see
- *   http://optimusdoc/BasicAnnotations
+ *   http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @getter
 class key extends StaticAnnotation
 
 /**
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 @field
 class backed extends Annotation
@@ -82,13 +82,13 @@ class notPartOfIdentity extends StaticAnnotation
  * This annotation explicitly excludes one constructor parameter from the copy method we generate, and can make a
  * concrete type extend concrete type mask values in the constructor
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 class copyAsIs extends StaticAnnotation
 
 /**
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 class impure extends StaticAnnotation
 
@@ -119,7 +119,7 @@ case object CMUpcastDomain extends UpcastDomain {
 /**
  * mark the annotated @stored @entity class as a target for upcasting if the given domain is enabled
  * @see
- *   http://optimusdoc/InterAnnotations
+ *   http://optimusguide/OptimusAnnotations/InterAnnotations.html
  */
 sealed class upcastingTarget(val domain: UpcastDomain) extends StaticAnnotation
 

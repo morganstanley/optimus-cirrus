@@ -53,6 +53,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import java.time.Duration
+import scala.util.Failure
+import scala.util.Try
 import scala.util.Using
 
 object DHTStore extends Log {
@@ -149,15 +151,26 @@ class DHTStore(
     clientBuilder: DHTClientBuilder)
     extends ArtifactStoreBase
     with RemoteAssetStore
-    with ComparableArtifactStore {
+    with ComparableArtifactStore
+    with Log {
   import DHTStore._
   override protected def cacheType: String = s"DHT $clusterType"
   override protected def stat: ObtStats.Cache = ObtStats.DHT
   private val client: DHTClient = clientBuilder.build()
 
   private val lvClient = {
-    client.waitForConsistentRegistry(Duration.ofSeconds(10))
+    waitForConsistentRegistry(Duration.ofSeconds(System.getProperty("obt.dht.initTimeoutSeconds", "45").toInt))
     new AsyncGraphLargeValueClient(client.getModule(classOf[KVClient[KVKey]]))
+  }
+
+  private def waitForConsistentRegistry(timeout: Duration): Unit = {
+    Try {
+      client.waitForConsistentRegistry(timeout)
+    } match {
+      case Failure(e) =>
+        log.warn(s"Failed to get consistent registry for DHT after $timeout: ${e.getMessage}")
+      case _ =>
+    }
   }
 
   @async private[dht] def readAsset(path: FileAsset): Array[ByteBuffer] = {
@@ -200,6 +213,17 @@ class DHTStore(
           key.traceType,
           s"$key ($contentSize content bytes in ${durationStringNanos(timeNanos)}) (overwrote existing: $overwritten)")
         ObtTrace.addToStat(stat.WriteBytes, contentSize)
+    }
+  }
+
+  // private admin method - not meant for general use
+  @async private[dht] def _remove(key: StoredKey): Boolean = {
+    AdvancedUtils.timed {
+      lvClient.removeLarge(key.keyspace, key, key.toString)
+    } match {
+      case (timeNanos, result) =>
+        logRemoved(key.id, key.traceType, s"$key (removed=$result) in ${durationStringNanos(timeNanos)}")
+        result
     }
   }
 
@@ -291,6 +315,11 @@ class DHTStore(
     file
   }
 
+  // private admin method - not meant for general use
+  @async private[dht] def remove(url: URL): Boolean = {
+    _remove(AssetKey(url, externalArtifactVersion))
+  }
+
   @async override def check(url: URL): Boolean = {
     AdvancedUtils.timed {
       ObtTrace.traceTask(RootScopeId, Query(clusterType, RemoteAssetCacheTraceType(url)), failureSeverity = Warning) {
@@ -304,7 +333,7 @@ class DHTStore(
   }
 
   override def logStatus(): Seq[String] = Seq()
-  override def incompleteWrites: Int = 0
+  override def incompleteWrites: Int = lvClient.getFailedWrites.toInt
   @async override def close(): Unit = {
     client.shutdown(true)
   }

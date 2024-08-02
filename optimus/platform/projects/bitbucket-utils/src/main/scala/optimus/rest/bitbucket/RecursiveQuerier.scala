@@ -37,7 +37,7 @@ trait RecursiveQuerier extends RestApi {
       } else {
         val resultFetched = acc.size + response.values.size
         (response.nextPageStart, maxResults) match {
-          // only query more it there's another page AND we're not over maxResults already
+          // only query more if there's another page AND we're not over maxResults already
           case (Some(nextPageStart), maxResults) if maxResults.forall(_ >= resultFetched) =>
             query(nextPageStart, acc ++ response.values)
           // If we don't want more but there is more to have, cut off what we want

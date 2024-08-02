@@ -46,19 +46,4 @@ object OrderingUtils {
       }
       .to(Seq)
   }
-
-  // TODO (OPTIMUS-65072): Delete legacy check for forbidden dependencies
-  def checkForbiddenDependencies(
-      obtFile: ObtFile,
-      bundles: Seq[Bundle],
-      globalForbiddenDependencies: Seq[ForbiddenDependency]): Seq[Message] = {
-    def message(bundle: Bundle, forbiddenDependency: ForbiddenDependency): String =
-      s"Cannot have Forbidden Dependency defined at both the global and bundle level: '${forbiddenDependency.name}' (line: ${bundle.line} in bundle '${bundle.id}')"
-
-    for {
-      bundle <- bundles
-      dep <- bundle.forbiddenDependencies
-      if globalForbiddenDependencies.map(_.name).contains(dep.name) && !globalForbiddenDependencies.contains(dep)
-    } yield Error(message(bundle, dep), obtFile, bundle.line)
-  }
 }

@@ -26,7 +26,7 @@ import java.lang.annotation.Target;
  * <p>An @stored @entity class is rewritten to extend an Entity base, and Entity member annotations
  * will be processed.
  *
- * @see http://optimusdoc/BasicAnnotations
+ * @see http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.CONSTRUCTOR)

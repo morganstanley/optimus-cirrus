@@ -61,7 +61,7 @@ class PostInstallAppRunner(
   import PostInstallAppRunner._
 
   protected val isWindows = Utils.isWindows
-  
+
   private val pathBuilder = InstallPathBuilder.dev(installDir, installVersion)
 
   private val args: Seq[String] = Seq(
@@ -104,7 +104,7 @@ class PostInstallAppRunner(
     // We do not launch the apps if the build contains errors
     if (successful) scopeIds.foreach { id =>
       val dependencies = scopeConfigSource.scopeConfiguration(id).dependencies
-      val upstreams = dependencies.compileDependencies.internal ++ dependencies.runtimeDependencies.internal
+      val upstreams = dependencies.compileDependencies.modules ++ dependencies.runtimeDependencies.modules
       Tracker.scheduleForProcessing(id, upstreams.toSet.asJava)
       // if we've got class jar bundling, then we can't trigger post install apps until the build has completed
       if (!bundleClassJars) triggerPostInstallApps()

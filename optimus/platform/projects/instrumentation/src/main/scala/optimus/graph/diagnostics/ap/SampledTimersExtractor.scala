@@ -38,6 +38,8 @@ sealed abstract class SampledTimers {
   // overheads
   def overheadSampling: Long
   def overheadInstrum: Long
+
+  def localTables: Long
 }
 
 trait TimerExtractor {
@@ -52,6 +54,7 @@ trait TimerExtractor {
   private val samplingAndAp: Predicate[String] = (f: String) =>
     f.startsWith("optimus/graph/diagnostics/ap") || f.startsWith("optimus/graph/diagnostics/sampling")
   private val instrumentation: Predicate[String] = _.startsWith("java/lang/instrument")
+  private val localTables: Predicate[String] = _.startsWith("optimus/graph/OGLocalTables.forAllRemovables")
 
   private val analysers = Array(
     matcher(ogscRun or ogscRunAndWait)(_.graphTime += _),
@@ -61,7 +64,8 @@ trait TimerExtractor {
     matcher(twkAsyncResolve)(_.tweakLookupAsync += _),
     matcher(twkSyncResolve)(_.tweakLookupSync += _),
     matcher(samplingAndAp)(_.overheadSampling += _),
-    matcher(instrumentation)(_.overheadInstrum += _)
+    matcher(instrumentation)(_.overheadInstrum += _),
+    matcher(localTables)(_.localTables += _)
   )
 
   def newRecording: Recording = new MutableRecordingState
@@ -97,6 +101,8 @@ object TimerExtractor {
 
     var overheadSampling = 0L
     var overheadInstrum = 0L
+
+    var localTables = 0L
 
     override def result(): SampledTimers = this
   }

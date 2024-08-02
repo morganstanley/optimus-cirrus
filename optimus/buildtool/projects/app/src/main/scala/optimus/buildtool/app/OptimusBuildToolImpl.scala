@@ -40,6 +40,7 @@ import optimus.buildtool.cache.MultiLevelStore
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteAssetStore
+import optimus.buildtool.cache.silverking.CacheOperationRecorder
 import optimus.buildtool.cache.silverking.CacheProvider
 import optimus.buildtool.compilers.AsyncCppCompilerImpl
 import optimus.buildtool.compilers.AsyncElectronCompilerImpl
@@ -59,13 +60,13 @@ import optimus.buildtool.compilers.zinc.AnalysisLocatorImpl
 import optimus.buildtool.compilers.zinc.RootLocatorWriter
 import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
+import optimus.buildtool.compilers.zinc.ZincClasspathResolver
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
-import optimus.buildtool.compilers.zinc.ZincInstallationLocator
 import optimus.buildtool.config.DockerImage
 import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.MetaBundle
-import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.RunConfConfiguration
 import optimus.buildtool.config.ScalaVersionConfig
@@ -83,9 +84,11 @@ import optimus.buildtool.files._
 import optimus.buildtool.generators.CppBridgeGenerator
 import optimus.buildtool.generators.FlatbufferGenerator
 import optimus.buildtool.generators.JaxbGenerator
+import optimus.buildtool.generators.JsonSchemaGenerator
 import optimus.buildtool.generators.JxbGenerator
 import optimus.buildtool.generators.ProtobufGenerator
 import optimus.buildtool.generators.ScalaxbGenerator
+import optimus.buildtool.generators.ZincGenerator
 import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.processors.FreemarkerProcessor
 import optimus.buildtool.processors.OpenApiProcessor
@@ -117,7 +120,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.FileSystems
 import java.nio.file.Files
-import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -148,6 +150,7 @@ object OptimusBuildToolImpl {
   // parameters for maven
   private val useMavenLibs = cmdLine.useMavenLibs
   private val generatePoms = cmdLine.generatePoms
+  private val enableMappingValidation = cmdLine.enableMappingValidation
   private val dependencySource: DependencySource = cmdLine.dependencySource match {
     case "maven" => MavenSource
     case "afs"   => AfsSource
@@ -170,14 +173,14 @@ object OptimusBuildToolImpl {
   private val outputDir: Directory = buildDir.resolveDir(version)
   private val installDir: Directory = cmdLine.installDir.asDirectory.getOrElse(buildDir.parent.resolveDir("install"))
   private val sandboxDir: Directory =
-    cmdLine.sandboxDir.asDirectory.getOrElse(buildDir.resolveDir(NamingConventions.Sandboxes))
+    cmdLine.sandboxDir.asDirectory.getOrElse(buildDir.resolveDir(Sandboxes))
   private val dockerImageCacheDir = buildDir.resolveDir("docker_cache")
 
   private val traceRecorder = new TraceRecorder(cmdLine.traceFile.asDirectory)
   private val timingsRecorder = new TimingsRecorder(logDir)
   val countingTrace = new CountingTrace(Some(cmdLine.statusIntervalSec))
   private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = useCrumbs)
-  private val buildSummaryRecorder = new BuildSummaryRecorder
+  private val buildSummaryRecorder = new BuildSummaryRecorder(cmdLine.statsDir.asDirectory)
 
   private val memoryThrottle = MemoryThrottle.fromConfigStringOrSysProp(cmdLine.memConfig.nonEmptyOption)
   private val baseListeners = timingsRecorder :: traceRecorder :: countingTrace :: longRunningTraceListener ::
@@ -205,7 +208,7 @@ object OptimusBuildToolImpl {
   private val cppOsVersions =
     if (cmdLine.cppOsVersions.isEmpty) {
       if (cmdLine.cppOsVersion != NoneArg) Seq(cmdLine.cppOsVersion)
-      else Seq(OsUtils.Linux7Version, OsUtils.Linux6Version, OsUtils.WindowsVersion)
+      else Seq(OsUtils.Linux7Version, OsUtils.Linux8Version, OsUtils.WindowsVersion)
     } else if (cmdLine.cppOsVersions == Seq(NoneArg)) Nil
     else cmdLine.cppOsVersions
 
@@ -290,8 +293,10 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent def mischiefOpts: MischiefOptions =
     MischiefOptions.load(workspaceSrcRoot = workspaceSourceRoot)
 
+  private val cacheOperationRecorder = new CacheOperationRecorder
+
   @node @scenarioIndependent private[buildtool] def remoteCaches =
-    CacheProvider(cmdLine, version, pathBuilder, stratoWorkspace())
+    CacheProvider(cmdLine, version, pathBuilder, stratoWorkspace(), cacheOperationRecorder)
 
   @node @scenarioIndependent private def combined(
       caches: Seq[ArtifactCache with HasArtifactStore]
@@ -349,10 +354,15 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def zincAnalysisCache =
     new ZincAnalysisCache(cmdLine.zincAnalysisCacheSize, instrumentation)
 
-  @node private def underlyingCompilerFactory: ZincCompilerFactory = {
-    val (zincPath: Path, zincVersion: String) =
-      ZincInstallationLocator.inferZincPathAndVersion(Option(cmdLine.zincPathAndVersion))
+  @node private def zincResolver: ZincClasspathResolver = new ZincClasspathResolver(
+    workspaceRoot,
+    dependencyResolver,
+    dependencyCopier,
+    obtConfig.externalDependencies,
+    scalaVersionConfig.scalaMajorVersion
+  )
 
+  @node private def underlyingCompilerFactory: ZincCompilerFactory = {
     val interfaceDir = cmdLine.zincInterfaceDir.asDirectory.getOrElse {
       buildDir.resolveDir("zincCompilerInterface")
     }
@@ -360,8 +370,7 @@ object OptimusBuildToolImpl {
     ZincCompilerFactory(
       jdkPath = globalConfig.javaPath,
       scalaConfig = scalaVersionConfig,
-      zincPath = zincPath,
-      zincVersion = zincVersion,
+      zincLocator = zincResolver,
       workspaceRoot = workspaceRoot,
       buildDir = outputDir,
       interfaceDir = interfaceDir,
@@ -473,8 +482,10 @@ object OptimusBuildToolImpl {
       dependencyCopier = dependencyCopier,
       dependencySource = dependencySource,
       globalExcludes = obtConfig.globalExcludes,
+      globalSubstitutions = obtConfig.globalSubstitutions,
       credentials = validateCredentials(credentials, obtConfig.externalDependencies),
-      remoteAssetStore = remoteAssetStore
+      remoteAssetStore = remoteAssetStore,
+      enableMappingValidation = enableMappingValidation
     )
 
   @node private def webDependencyResolver: WebDependencyResolver = {
@@ -492,8 +503,10 @@ object OptimusBuildToolImpl {
       FlatbufferGenerator(workspaceSourceRoot),
       JaxbGenerator(directoryFactory, workspaceSourceRoot),
       JxbGenerator(workspaceSourceRoot),
+      JsonSchemaGenerator(directoryFactory, workspaceRoot),
       ProtobufGenerator(workspaceSourceRoot),
-      ScalaxbGenerator(workspaceSourceRoot)
+      ScalaxbGenerator(workspaceSourceRoot),
+      ZincGenerator(zincResolver, depCopyRoot)
     ).map(g => g.tpe -> g).toMap
 
   @node private def processors =
@@ -525,7 +538,7 @@ object OptimusBuildToolImpl {
     AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node private def stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
   @node private def runconfCompiler =
-    AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig)
+    AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig, buildDir)
   @node @scenarioIndependent private def resourcePackager = JarPackager()
   @node @scenarioIndependent private def regexScanner = RegexScanner()
   @node @scenarioIndependent private def genericFilesPackager = GenericFilesPackager(cmdLine.installVersion)
@@ -540,7 +553,7 @@ object OptimusBuildToolImpl {
   @node private def buildCache = {
     val caches = remoteCaches.remoteBuildCache match {
       case Some(remoteCache) =>
-        if (cmdLine.silverKingWritable) {
+        if (cmdLine.remoteCacheWritable) {
           // If we've enabled silverking writes, then write to SK even if we've found it in our
           // filesystem cache. Among other benefits, this works around a bug that can cause artifacts not to
           // be written to SK if they've been written to the filesystem as a side-effect of compiling for a different
@@ -627,7 +640,7 @@ object OptimusBuildToolImpl {
           directoryFactory.lookupSourceFolder(
             workspaceSourceRoot,
             scopeConfig.absScopeConfigDir.copy(
-              dirFilter = Not(Directory.fileNamePredicate(NamingConventions.GeneratedObt)),
+              dirFilter = Not(Directory.fileNamePredicate(GeneratedObt)),
               maxDepth = 1 // condition is to have a .runconf file in the scope root, otherwise we report nothing
             )
           )
@@ -675,7 +688,8 @@ object OptimusBuildToolImpl {
                 localArtifactStore = underlyingCompilerFactory.localArtifactStore,
                 remoteArtifactReader = underlyingCompilerFactory.remoteArtifactReader,
                 remoteArtifactWriter = underlyingCompilerFactory.remoteArtifactWriter,
-                suppressPersistentStore = mischiefScope(id)
+                suppressPersistentStore = mischiefScope(id),
+                additionalDiscriminator = cmdLine.locatorSuffix
               )),
             incrementalMode = cmdLine.incrementalMode,
             processors = processors,
@@ -849,7 +863,7 @@ object OptimusBuildToolImpl {
           val result = builder.build(scopes, modifiedFiles = modifiedFiles)
           success = result.successful
           if (success && cmdLine.writeRootLocator) {
-            require(cmdLine.silverKingWritable, "You must use --silverKingWritable")
+            require(cmdLine.remoteCacheWritable, "You must use --remoteCacheWritable")
             writeRootLocator(
               remoteCaches.remoteBuildCache,
               remoteCaches.remoteRootLocatorCache,

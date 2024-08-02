@@ -17,9 +17,12 @@ import com.google.common.annotations.VisibleForTesting
 import com.google.common.hash.Hashing
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
+import optimus.graph.AwaitStackManagement
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
 import optimus.graph.diagnostics.sampling.TimedStack
@@ -32,20 +35,119 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.matching.Regex
 import optimus.scalacompat.collection._
+import optimus.utils.PropertyUtils
+import optimus.utils.MiscUtils.Endoish._
 
+import java.util.Objects
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.util.Random
+import scala.util.control.NonFatal
 
-object StackAnalysis extends Log {
-  private val doAbbreviateFrames = DiagnosticSettings.getBoolProperty("optimus.async.profiler.abbreviate", true)
+object StackAnalysis {
+
+  final case class SharedStack(weight: Double, hashId: String, frames: Seq[String])
+
+  private val stackCrumbCount = new AtomicLong(0)
+  private[diagnostics] def numStacksPublished: Long = stackCrumbCount.get()
+
+  // Split off count bit
+  // "foo;bar;wiz 37" => ("foo;bar;wiz", 37)
+  @VisibleForTesting
+  private[diagnostics] def splitStackLine(stackLine: String): (String, Long) = {
+    var i = stackLine.length - 1
+    // step backwards past trailing spaces
+    while (i > 0 && stackLine(i) == ' ') { i -= 1 }
+    val endNum = i + 1 // presumably end of counter bit
+    // step backwards past counter
+    while (i > 0 && stackLine(i) >= '0' && stackLine(i) <= '9') { i -= 1 }
+    val beginNum = i + 1
+    if (beginNum >= endNum || beginNum <= 3) return ("", 0)
+    while (i > 0 && stackLine(i) == ' ') { i -= 1 }
+    val endStack = i + 1
+    if (endStack <= 3) return ("", 0)
+    val n = stackLine.substring(beginNum, endNum).toLong
+    // remove spaces
+    i = 0
+    val sb = new StringBuilder()
+    while (i < endStack) {
+      val c = stackLine.charAt(i)
+      if (c != ' ') sb += c
+      i += 1
+    }
+    val stack = sb.toString()
+    (stack, n)
+  }
+
+  private[diagnostics] def stackLineToTimedStack(stackLine: String): TimedStack = {
+    val (stack, count) = splitStackLine(stackLine)
+    TimedStack(stack.split(';'), count)
+  }
+
+  final case class StackData private (
+      tpe: String,
+      total: Long,
+      self: Long,
+      hashId: String,
+      last: String,
+      folded: String)
+
+  final case class StacksAndTimers(stacks: Seq[StackData], timers: SampledTimers, dtStopped: Long = 0L)
+  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording.result()) }
+
+  // Java20 likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
+  val lambdaRe = "[\\$\\d\\.]*0x\\w+\\.".r
+  val lambdaPrefixSearch = ".0x"
+  val lambdaSubstitute = "\\$0x1a3bda\\." // escapes, since will be used in regex method
+  def undisambiguateLambda(frame0: String): String =
+    if (frame0.contains(lambdaPrefixSearch))
+      lambdaRe.replaceAllIn(frame0, lambdaSubstitute)
+    else frame0
+
+  private val CUSTOM_EVENT_PREFIX = "[custom="
+  private val STACK_ID_PREFIX = "[sid="
+  def customEventFrame(event: String) = s"[custom=$event]"
+
+  private val ignoredPrefixes =
+    Seq(
+      STACK_ID_PREFIX,
+      CUSTOM_EVENT_PREFIX,
+      "Profiler::",
+      "ObjectSampler::",
+      "MemAllocator::",
+      "optimus.graph.AsyncProfilerIntegration",
+      "Jvmti")
+  private def ignoreFrame(frame: String): Boolean = {
+    ignoredPrefixes.exists(frame.startsWith(_))
+  }
+
+  private def looksLikeGCStack(stack: Array[String]) = stack.exists { frame =>
+    frame.contains("GCTaskThr") || frame.contains("__clone") || frame.contains("thread_native_entry")
+  }
+
+  private def looksLikeJITStack(stack: Array[String]) = stack.exists { frame =>
+    frame.contains("Compile:") || frame.contains("CompileBroker::")
+  }
+
+}
+
+class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String, String] = Map.empty) extends Log {
+  import StackAnalysis._
+
+  val propertyUtils = new PropertyUtils(properties)
+
+  val doAbbreviateFrames = propertyUtils.get("optimus.async.profiler.abbreviate", true)
   // Fully qualified class names are abbreviated to a maximum of N successive lower-case letters:
-  private val camelHumpWidth = DiagnosticSettings.getIntProperty("optimus.async.profiler.hump.width", 2)
-  private val frameNameCacheSize = DiagnosticSettings.getIntProperty("optimus.async.profiler.frame.cache.size", 1000000)
-  private val stackCacheSize = DiagnosticSettings.getIntProperty("optimus.async.profiler.stack.cache.size", 100000)
-  private val stackCacheExpireAfterSec =
-    DiagnosticSettings.getIntProperty("optimus.async.profiler.stack.cache.expire.sec", 3600)
-  private val thumbprintDimensionBits = DiagnosticSettings.getIntProperty("optimus.async.profiler.thumbprint", 3)
-  private val thumbprintDimension = 1 << thumbprintDimensionBits
-  private val maxFrames = DiagnosticSettings.getIntProperty("optimus.async.profiler.stack.maxframes", 250)
+  val camelHumpWidth = propertyUtils.get("optimus.async.profiler.hump.width", 2)
+  val frameNameCacheSize = propertyUtils.get("optimus.async.profiler.frame.cache.size", 1000000)
+  val stackCacheSize = propertyUtils.get("optimus.async.profiler.stack.cache.size", 100000)
+  val stackCacheExpireAfterSec =
+    propertyUtils.get("optimus.async.profiler.stack.cache.expire.sec", 3600)
+  val thumbprintDimensionBits = propertyUtils.get("optimus.async.profiler.thumbprint", 3)
+  val thumbprintDimension = 1 << thumbprintDimensionBits
+  val maxFrames = propertyUtils.get("optimus.async.profiler.stack.maxframes", 250)
+
+  val trackLiveMemory = propertyUtils.get("optimus.async.profiler.track.live.memory", true)
 
   private val stackToHashCache =
     Caffeine
@@ -53,7 +155,6 @@ object StackAnalysis extends Log {
       .maximumSize(stackCacheSize)
       .build[Seq[String], String]()
 
-  private final case class SharedStack(weight: Double, hashId: String, frames: Seq[String])
   private val apSidToStack: Cache[java.lang.Long, SharedStack] =
     Caffeine
       .newBuilder()
@@ -80,13 +181,15 @@ object StackAnalysis extends Log {
       .maximumSize(stackCacheSize)
       .build[(ChainedID, String), JLong]()
 
-  private[diagnostics] final case class CleanName private (name: String, id: Long, flags: Int) {
+  private[diagnostics] final class CleanName private (val name: String, val id: Long, val flags: Int) {
     import CleanName._
     def isFree: Boolean = (flags & FREE) == FREE
 
-    def rootNode = new StackNode(this, 0)
+    override def toString: String = s"($name, $id)"
 
+    def rootNode = new StackNode(this, 0)
   }
+
   private object CleanName {
     val FREE = 1
     val LIVE = 2
@@ -94,7 +197,7 @@ object StackAnalysis extends Log {
       Caffeine.newBuilder().maximumSize(frameNameCacheSize).build[String, CleanName]
     private val localFrameIds = new AtomicLong(0)
     private def apply(name: String, flags: Int): CleanName = {
-      CleanName(name, localFrameIds.incrementAndGet(), flags)
+      new CleanName(name, localFrameIds.incrementAndGet(), flags)
     }
 
     def cleanName(frame: String): CleanName = cleanName(frame, false, doAbbreviateFrames, 0)
@@ -170,15 +273,6 @@ object StackAnalysis extends Log {
   }
   import CleanName.cleanName
 
-  // Java20 likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
-  val lambdaRe = "[\\$\\d\\.]*0x\\w+\\.".r
-  val lambdaPrefixSearch = ".0x"
-  val lambdaSubstitute = "\\$0x1a3bda\\." // escapes, since will be used in regex method
-  def undisambiguateLambda(frame0: String): String =
-    if (frame0.contains(lambdaPrefixSearch))
-      lambdaRe.replaceAllIn(frame0, lambdaSubstitute)
-    else frame0
-
   private val abbreviateError = cleanName("ERROR")
 
   /*
@@ -195,8 +289,6 @@ object StackAnalysis extends Log {
 
   private val dims = (0 until thumbprintDimension).map(d => s"d$d")
 
-  private val stackCrumbCount = new AtomicLong(0)
-  private[diagnostics] def numStacksPublished: Long = stackCrumbCount.get()
   // Return a token representing an entire stack
   private def stackMemoize(rootUuids: Seq[ChainedID], frames: Seq[String]): String = {
     if (frames.size == 0)
@@ -223,50 +315,19 @@ object StackAnalysis extends Log {
 
         stackPublicationTime.put((uuid, sid), tSec)
         stackCrumbCount.incrementAndGet()
-        Breadcrumbs(
-          uuid,
-          PropertiesCrumb(
-            _,
-            SamplingProfilerSource,
-            Properties.engineId -> ChainedID.root ::
-              Properties.pSID -> sid ::
-              // Re-assemble collapsed stack for ease of splunking
-              Properties.profCollapsed -> frames.filter(_.nonEmpty).mkString(";") ::
-              Properties.stackThumb -> thumbPrint ::
-              Properties.dedupKey -> dedup :: Version.properties
-          )
-        )
+        val elems = Properties.engineId -> ChainedID.root ::
+          Properties.pSID -> sid ::
+          // Re-assemble collapsed stack for ease of splunking
+          Properties.profCollapsed -> frames.filter(_.nonEmpty).mkString(";") ::
+          Properties.stackThumb -> thumbPrint ::
+          Properties.dedupKey -> dedup :: Version.properties
+        crumbConsumer match {
+          case Some(f) => f(PropertiesCrumb(uuid, SamplingProfilerSource, elems))
+          case None    => Breadcrumbs(uuid, PropertiesCrumb(_, SamplingProfilerSource, elems))
+        }
       }
     }
     sid
-  }
-
-  // Split off count bit
-  // "foo;bar;wiz 37" => ("foo;bar;wiz", 37)
-  @VisibleForTesting
-  private[diagnostics] def splitStackLine(stackLine: String): (String, Long) = {
-    var i = stackLine.length - 1
-    // step backwards past trailing spaces
-    while (i > 0 && stackLine(i) == ' ') { i -= 1 }
-    val endNum = i + 1 // presumably end of counter bit
-    // step backwards past counter
-    while (i > 0 && stackLine(i) >= '0' && stackLine(i) <= '9') { i -= 1 }
-    val beginNum = i + 1
-    if (beginNum >= endNum || beginNum <= 3) return ("", 0)
-    while (i > 0 && stackLine(i) == ' ') { i -= 1 }
-    val endStack = i + 1
-    if (endStack <= 3) return ("", 0)
-    val n = stackLine.substring(beginNum, endNum).toLong
-    // remove spaces
-    i = 0
-    val sb = new StringBuilder()
-    while (i < endStack) {
-      val c = stackLine.charAt(i)
-      if (c != ' ') sb += c
-      i += 1
-    }
-    val stack = sb.toString()
-    (stack, n)
   }
 
   // Get snapshot of top n stacks, fixing up A-P's rather verbose formatting
@@ -360,20 +421,25 @@ object StackAnalysis extends Log {
         val toAdd = self
 
         for (k <- kidsArr) {
-          val incr = if (sum > 0) { (k.total * toAdd) / sum }
-          else {
-            // This branch should never happen... but this is going into prod, and we care about prod not randomly dying
-            // due to errors in instrumentation code.
-            if (DiagnosticSettings.samplingAsserts) assert(false, s"total weight of children was ${sum}")
-            toAdd / kidsArr.length
-          }
+          val incr =
+            if (sum > 0) {
+              // The conversion to double is there to avoid overflow in the total * toAdd multiplication. Due to
+              // numerical imprecision, we have to make sure that self time is == 0 by the end of the pruning.
+              k.total.toDouble * toAdd.toDouble / sum.toDouble
+            }.toLong
+            else {
+              // This branch should never happen... but this is going into prod, and we care about prod not randomly dying
+              // due to errors in instrumentation code.
+              if (DiagnosticSettings.samplingAsserts) assert(false, s"total weight of children was ${sum}")
+              toAdd / kidsArr.length
+            }
           k.self += incr
           k.total += incr
           self -= incr
         }
 
         if (DiagnosticSettings.samplingAsserts)
-          assert(self / (1.0 * toAdd) < 1e-3, s"still had significant ${self} counts left after incr children")
+          assert(self >= -toAdd, s"self count $self should remain (mostly) positive")
 
         // Adjust the time of the last child to account for division errors
         kidsArr.head.self += self
@@ -387,16 +453,22 @@ object StackAnalysis extends Log {
     }
 
     def assertConsistentTimes(): Unit = {
-      def times = s"\nTIMES: self: ${self}, total ${total}, children: [${kids.values.map(_.total).mkString(", ")}]"
+      def times = s"\n$cn TIMES: self: ${self}, total ${total}, children: [${kids.values.map(_.total).mkString(", ")}]"
       assert(self >= 0L, s"negative self time ${times}")
       assert(total >= 0L, s"negative total time ${times}")
       assert(total == self + kids.valuesIterator.map(_.total).sum, s"total time inconsistent ${times}")
     }
 
     def traverse(f: StackNode => Unit): Unit = {
-      f(this)
-      val it = kids.valuesIterator
-      while (it.hasNext) it.next().traverse(f)
+      @tailrec def traverseImpl(stack: mutable.ArrayStack[StackNode], f: StackNode => Unit): Unit = {
+        if (stack.isEmpty) return
+        val n = stack.pop()
+        f(n)
+        stack ++= n.kids.valuesIterator
+        traverseImpl(stack, f)
+      }
+
+      traverseImpl(mutable.ArrayStack(this), f)
     }
 
     def leaves: Seq[StackNode] = {
@@ -456,31 +528,6 @@ object StackAnalysis extends Log {
     else i
   }
 
-  private val CUSTOM_EVENT_PREFIX = "[custom="
-  private val STACK_ID_PREFIX = "[sid="
-  def customEventFrame(event: String) = s"[custom=$event]"
-
-  private val ignoredPrefixes =
-    Seq(
-      STACK_ID_PREFIX,
-      CUSTOM_EVENT_PREFIX,
-      "Profiler::",
-      "ObjectSampler::",
-      "MemAllocator::",
-      "optimus.graph.AsyncProfilerIntegration",
-      "Jvmti")
-  private def ignoreFrame(frame: String): Boolean = {
-    ignoredPrefixes.exists(frame.startsWith(_))
-  }
-
-  private def looksLikeGCStack(stack: Array[String]) = stack.exists { frame =>
-    frame.contains("GCTaskThr") || frame.contains("__clone") || frame.contains("thread_native_entry")
-  }
-
-  private def looksLikeJITStack(stack: Array[String]) = stack.exists { frame =>
-    frame.contains("Compile:") || frame.contains("CompileBroker::")
-  }
-
   // Convert a list of stacks as semi-colon-delimited frame names into tree form, with the root frame
   // at the base, and leaf nodes representing innermost frames. This is essentially what every flamegraph
   // visualizer does.  Since async-profiler doesn't natively have a nice way to differentiate different kinds of
@@ -494,7 +541,7 @@ object StackAnalysis extends Log {
     // Subsequently, it's just 123.
     val memo = mutable.HashMap.empty[Int, String] // dictionary scope is the dump (not global)
     def unmemoize(name: String): String = {
-      if (!name.head.isDigit) return name
+      if (name.isEmpty || !name.head.isDigit) return name
       try {
         val sep = name.indexOf("=")
         if (sep < 0)
@@ -530,6 +577,16 @@ object StackAnalysis extends Log {
         }
       }
 
+    def getSID(frame: String): Long = if (frame.startsWith(STACK_ID_PREFIX)) {
+      val b = frame.indexOf("]")
+      if (b > STACK_ID_PREFIX.size) try {
+        frame.substring(STACK_ID_PREFIX.size, b).toLong
+      } catch {
+        case _: Exception => 0L
+      }
+      else 0L
+    } else 0L
+
     def incorporateFrames(frames: Array[String], count: Long): Unit = {
       // Update sampled event counts (but only for normal everyday frames!)
       if (frames.length > 0 && !frames(0).startsWith(CUSTOM_EVENT_PREFIX))
@@ -538,18 +595,33 @@ object StackAnalysis extends Log {
       // climb from root, looking for name match
       val i0 = firstUserFrame(frames)
       if (frames.size > i0) {
+
         val last = frames.last
-        val apsid: Long = if (last.startsWith(STACK_ID_PREFIX)) {
-          val b = last.indexOf("]") - 1 // drop last digit, since this is unsigned long
-          if (b > STACK_ID_PREFIX.size) try {
-            last.substring(STACK_ID_PREFIX.size, b).toLong
-          } catch {
-            case e: Exception => 0L
-          }
-          else 0L
-        } else 0L
+        val apsid = getSID(last) // If last (inner-most) frame is a stack id, extract it.
         val maxDepth = Math.min(frames.size - i0, maxFrames)
-        var s = getRoot(frames.head)
+
+        // If first (outer-most) frame is a stack id, then look for a saved stack to graft
+        // ourselves onto.
+        val graftSID = getSID(frames.head)
+
+        // If the first frame specified a stack id, then the root will be determined by the next
+        // frame.
+        var s = getRoot(frames(if (graftSID == 0) 0 else 1))
+
+        // Insert the saved stack
+        if (graftSID > 0) {
+          // Saved stacks are inner-most first:
+          val graftStack = AwaitStackManagement.awaitStack(graftSID)
+          if (Objects.nonNull(graftStack)) {
+            var i = graftStack.size() - 1
+            while (i >= 0) {
+              val f = graftStack.get(i)
+              i -= 1
+              if (!ignoreFrame(f))
+                s = s.getOrCreateChildNode(cleanName(f))
+            }
+          }
+        }
 
         // Below, we walk each collapsed frame and add it to the tree. The free events have frames that look like
         //   Free -> [sid=...]  bytes free-ed
@@ -584,7 +656,7 @@ object StackAnalysis extends Log {
       }
     }
     presplit.foreach { case TimedStack(frames, count) =>
-      incorporateFrames(frames, count)
+      incorporateFrames(frames.map(unmemoize), count)
     }
 
     if (DiagnosticSettings.samplingAsserts) stackTypeToRoot.valuesIterator.foreach(assertTreesAreConsistent)
@@ -677,7 +749,7 @@ object StackAnalysis extends Log {
       }
     }
     mergeDfs(liveRoot, allocRoot)
-    log.info(s"Merged $merged allocations, added $added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
+    log.debug(s"Merged $merged allocations, added $added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
   }
   private def mergeFreesIntoLive(liveTracking: LiveTracking, freeRoot: StackNode): Unit = {
     val liveNodes = liveTracking.nodes
@@ -696,7 +768,7 @@ object StackAnalysis extends Log {
         }
       }
     }
-    log.info(s"Merged $merged frees, freed=$free, missing=$missing")
+    log.debug(s"Merged $merged frees, freed=$free, missing=$missing")
   }
 
   private val memEpsilon = 100
@@ -715,7 +787,7 @@ object StackAnalysis extends Log {
       } else 0L
     }
     cleanDfs(liveRoot)
-    log.info(s"Dropped $dropped live nodes, apsids=${liveNodes.size}")
+    log.debug(s"Dropped $dropped live nodes, apsids=${liveNodes.size}")
   }
 
   /**
@@ -726,23 +798,25 @@ object StackAnalysis extends Log {
       rootIds: Seq[ChainedID],
       collapsedFormatDump: String,
       preSplitStacks: Iterable[TimedStack],
-      nmax: Int): StacksAndTimers = {
-    if (collapsedFormatDump.isEmpty) StacksAndTimers.empty
+      nmax: Int): StacksAndTimers = try {
+    if (collapsedFormatDump.isEmpty && preSplitStacks.isEmpty) StacksAndTimers.empty
     else {
       val (roots0: Map[String, StackNode], events) = buildStackTrees(collapsedFormatDump, preSplitStacks)
 
       // Update live view
-      roots0.get("Alloc").foreach(mergeAllocationsIntoLive(heapTracking, _))
-      roots0.get("AllocNative").foreach(mergeAllocationsIntoLive(nativeTracking, _))
-      roots0.get("Free").foreach(mergeFreesIntoLive(heapTracking, _))
-      roots0.get("FreeNative").foreach(mergeFreesIntoLive(nativeTracking, _))
-      cleanLive(heapTracking)
-      cleanLive(nativeTracking)
-      heapTracking.backup()
-      nativeTracking.backup()
+      if (trackLiveMemory) {
+        roots0.get("Alloc").foreach(mergeAllocationsIntoLive(heapTracking, _))
+        roots0.get("AllocNative").foreach(mergeAllocationsIntoLive(nativeTracking, _))
+        roots0.get("Free").foreach(mergeFreesIntoLive(heapTracking, _))
+        roots0.get("FreeNative").foreach(mergeFreesIntoLive(nativeTracking, _))
+        cleanLive(heapTracking)
+        cleanLive(nativeTracking)
+        heapTracking.backup()
+        nativeTracking.backup()
+      }
 
       // Add live view to roots, and remove Free stub
-      val roots = roots0 + heapTracking.elem + nativeTracking.elem - "Free" - "FreeNative"
+      val roots = roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - "Free" - "FreeNative")
       if (DiagnosticSettings.samplingAsserts) roots.valuesIterator.foreach(assertTreesAreConsistent)
 
       // Post process trees, prune leaves etc
@@ -767,18 +841,23 @@ object StackAnalysis extends Log {
       nativeTracking.restore()
       StacksAndTimers(stackData, events)
     }
+  } catch {
+    case NonFatal(e) =>
+      val wrapped = new RuntimeException(
+        s"""|An error occurred in StackAnalysis while parsing this collapsed dump:
+            |${collapsedFormatDump}""".stripMargin,
+        e
+      ).fillInStackTrace()
+      wrapped.printStackTrace()
+      throw wrapped
   }
 
   private def folded(frames: Iterable[String], weight: Long): String = frames.mkString(";") + " " + weight
 
-  final case class StackData private (
-      tpe: String,
-      total: Long,
-      self: Long,
-      hashId: String,
-      last: String,
-      folded: String)
+  private val rng = new Random(0)
+  def extraTreeAssertions[T](m: Map[T, StackNode]): Unit = {
+    for ((_, n) <- m) pruneLeaves(n, rng.nextInt(100))
+    m.valuesIterator.foreach(assertTreesAreConsistent)
+  }
 
-  final case class StacksAndTimers(stacks: Seq[StackData], timers: SampledTimers, dtStopped: Long = 0L)
-  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording.result()) }
 }

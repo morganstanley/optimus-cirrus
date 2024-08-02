@@ -102,6 +102,14 @@ class FullTextSearchFormatter extends DALFormatter {
     val args = visitElementList(func.arguments).map(getExpression)
     if (declType <:< classOf[String]) {
       ExpressionElement(Function(s"text.${desc.name}", inst :: args))
+    } else if (declType <:< classOf[Iterable[_]]) {
+      val newArgs = if (desc.name == "contains") args.collect {
+        case RichConstant(value, typeInfo, _) =>
+          RichConstant(Seq(value), new TypeInfo[Seq[_]](Seq(classOf[Seq[_]]), Nil, Nil, Seq(typeInfo)))
+        case t => t
+      }
+      else args
+      ExpressionElement(Function(s"collection.${desc.name}", inst :: newArgs))
     } else if (declType <:< DALProvider.EntityRefType)
       ExpressionElement(Function(s"convert.${desc.name}", args))
     else
@@ -229,6 +237,10 @@ object DALFullTextSearchLanguage {
   }
 
   val supportedType: Set[Class[_]] = Set(
+    classOf[Int],
+    classOf[Float],
+    classOf[Long],
+    classOf[Double],
     classOf[String],
     classOf[ZonedDateTime],
     classOf[LocalDate],

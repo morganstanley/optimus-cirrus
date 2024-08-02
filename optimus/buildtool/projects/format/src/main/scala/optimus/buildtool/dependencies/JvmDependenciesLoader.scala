@@ -23,6 +23,7 @@ import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Keys
 import optimus.buildtool.format.Message
 import optimus.buildtool.format.JvmDependenciesConfig
+import optimus.buildtool.format.Keys.substitutionsConfig
 import optimus.buildtool.format.MavenDefinition.loadMavenDefinition
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.OrderingUtils
@@ -59,6 +60,7 @@ object JvmDependenciesLoader {
   private[buildtool] val Name = "name"
   private[buildtool] val NativeDependencies = "nativeDependencies"
   private[buildtool] val Resolvers = "resolvers"
+  private[buildtool] val Substitutions = "substitutions"
 
   private val Ext = "ext"
   private val KeySuffix = "keySuffix"
@@ -143,6 +145,31 @@ object JvmDependenciesLoader {
         }
 
         Result.sequence(excludeResults)
+      } else Success(Nil)
+    }
+  }
+
+  def readSubstitutions(config: Config, file: ObtFile): Result[Seq[Substitution]] = {
+    file.tryWith {
+      if (config.hasPath(Substitutions)) {
+        val subsList = config.getList(Substitutions).asScala.toList
+        val subsResults: Seq[Result[Substitution]] = subsList.map {
+          case obj: ConfigObject =>
+            val subsConf: Config = obj.toConfig
+            val substitution = {
+              val fromGroup = subsConf.getString(s"fromGroup")
+              val fromName = subsConf.getString(s"fromName")
+              val toGroup = subsConf.getString(s"toGroup")
+              val toName = subsConf.getString(s"toName")
+              Substitution(GroupName(fromGroup, fromName), GroupName(toGroup, toName))
+            }
+            Success(substitution)
+              .withProblems(
+                subsConf.checkExtraProperties(file, substitutionsConfig) ++
+                  subsConf.checkEmptyProperties(file, substitutionsConfig))
+          case other => file.failure(other, s""""$Substitutions" element is not an object""")
+        }.distinct
+        Result.sequence(subsResults)
       } else Success(Nil)
     }
   }
@@ -449,6 +476,7 @@ object JvmDependenciesLoader {
     val resolvedConfig = config.resolve()
     for {
       globalExcludes <- readExcludes(config, obtFile, allowIvyConfiguration = true)
+      globalSubstitutions <- readSubstitutions(config, obtFile)
       localDefinitions <-
         if (singleSourceDep.isDefined) Success(Nil)
         else
@@ -478,6 +506,7 @@ object JvmDependenciesLoader {
       nativeDependencies = nativeDeps,
       groups = groups,
       globalExcludes = globalExcludes,
+      globalSubstitutions = globalSubstitutions,
       mavenDefinition = Option(mavenDefs),
       scalaMajorVersion
     )

@@ -16,6 +16,7 @@ import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyGroup
 import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.NativeDependencyDefinition
+import optimus.buildtool.config.Substitution
 import optimus.buildtool.dependencies.JvmDependenciesLoader.mavenScalaLibName
 import optimus.buildtool.format.MavenDefinition
 
@@ -29,6 +30,7 @@ class JvmDependencies(
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val groups: Seq[DependencyGroup],
     val globalExcludes: Seq[Exclude],
+    val globalSubstitutions: Seq[Substitution],
     val mavenDefinition: Option[MavenDefinition],
     val scalaMajorVersion: Option[String]
 ) {
@@ -95,6 +97,7 @@ class JvmDependencies(
       this.nativeDependencies ++ buildDeps.nativeDependencies,
       merge(this.groups, buildDeps.groups),
       merge(this.globalExcludes, buildDeps.globalExcludes),
+      merge(this.globalSubstitutions, buildDeps.globalSubstitutions),
       if (hasAfDefinition(this)) this.mavenDefinition
       else if (hasAfDefinition(buildDeps)) buildDeps.mavenDefinition
       else None,
@@ -144,6 +147,7 @@ object JvmDependencies {
       nativeDependencies: Map[String, NativeDependencyDefinition],
       groups: Seq[DependencyGroup],
       globalExcludes: Seq[Exclude],
+      globalSubstitutions: Seq[Substitution],
       mavenDefinition: Option[MavenDefinition],
       scalaMajorVersion: Option[String]): JvmDependencies =
     new JvmDependencies(
@@ -153,8 +157,9 @@ object JvmDependencies {
       nativeDependencies,
       groups,
       globalExcludes,
+      globalSubstitutions,
       mavenDefinition,
       scalaMajorVersion)
 
-  val empty: JvmDependencies = apply(Seq.empty, Seq.empty, None, Map.empty, Seq.empty, Seq.empty, None, None)
+  val empty: JvmDependencies = apply(Seq.empty, Seq.empty, None, Map.empty, Seq.empty, Seq.empty, Seq.empty, None, None)
 }

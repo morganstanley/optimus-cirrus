@@ -161,6 +161,38 @@ class DALMapper(m: DALMapping, t: QueryTranslator) extends BasicMapper(m, t) {
         KeyPropagationPolicy.NoKey,
         aggregator,
         entitledOnly = proj1.entitledOnly)
+    } else if (isProjectedEmbeddableCollection(member.memberType)) {
+      val memberElem = getMemberElement(
+        root,
+        entity,
+        MemberInfo(entity.projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType))
+      val embeddable = mapping.getRelatedEntity(entity, member)
+      val proj = getQueryElement(embeddable, NoKey, KeyPropagationPolicy.NoKey)
+      val relatedMemberElem = getMemberElement(
+        proj.projector,
+        embeddable,
+        MemberInfo(embeddable.projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType))
+      val where = ElementFactory.equal(relatedMemberElem, memberElem)
+
+      val newAlias = new TableAlias()
+      val pc =
+        ColumnProjector.projectColumns(
+          translator.language,
+          excludeVRef(proj.projector),
+          null,
+          newAlias,
+          proj.select.alias)
+      val sel = new SelectElement(newAlias, pc.columns, proj.select, where, null, null, null, null, false, false)
+
+      val unbound = new ProjectionElement(
+        sel,
+        pc.projector,
+        NoKey,
+        KeyPropagationPolicy.NoKey,
+        null,
+        viaCollection = Some(member.memberType.clazz),
+        entitledOnly = proj.entitledOnly)
+      UnusedColumnRemover.remove(mapping, RelationshipBinder.bind(this, unbound))
     } else {
       // c2p (child-to-parent) linkage
       val relatedEntity = mapping.getRelatedEntity(entity, member)
@@ -200,7 +232,7 @@ class DALMapper(m: DALMapping, t: QueryTranslator) extends BasicMapper(m, t) {
           NoKey,
           KeyPropagationPolicy.NoKey,
           null,
-          Some(member.memberType.clazz),
+          viaCollection = Some(member.memberType.clazz),
           entitledOnly = proj1.entitledOnly)
       UnusedColumnRemover.remove(mapping, RelationshipBinder.bind(this, unbound))
     }
@@ -240,11 +272,6 @@ class DALMapper(m: DALMapping, t: QueryTranslator) extends BasicMapper(m, t) {
       columnName: String,
       info: ColumnInfo,
       defaultValue: Option[Any]): RelationElement = {
-
-    def isEmbeddableCollection(t: TypeInfo[_]): Boolean = {
-      t <:< classOf[Iterable[_]] && t.typeParams.size == 1 &&
-      (t.typeParams(0).clazz.getAnnotation(classOf[EmbeddableMetaDataAnnotation]) ne null)
-    }
 
     if (memberType.clazz == classOf[Option[_]]) {
       defaultValue.foreach(v => {

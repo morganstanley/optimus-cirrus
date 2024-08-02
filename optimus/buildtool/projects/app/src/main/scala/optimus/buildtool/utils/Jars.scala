@@ -36,6 +36,8 @@ import optimus.buildtool.config.JarConfiguration
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.TaskTrace
 import optimus.buildtool.utils.JarUtils.jarFileSystem
 import optimus.buildtool.utils.JarUtils.nme
 import optimus.platform._
@@ -46,6 +48,8 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.util.Using
+import scala.util.control.NonFatal
 
 class MismatchedManifestException(val key: AnyRef, val manifests: Seq[jar.Manifest], val values: Seq[AnyRef])
     extends IllegalArgumentException(
@@ -184,7 +188,9 @@ object Jars {
     // because we are using this methods to update jars, we make sure not to lock the file.
     val manifestJar = new JarInputStream(Files.newInputStream(inputJar.path, StandardOpenOption.READ))
     try Option(manifestJar.getManifest)
-    finally manifestJar.close()
+    catch {
+      case NonFatal(e) => throw new IllegalStateException(s"read manifest from jar file failed! ${inputJar.path}", e)
+    } finally manifestJar.close()
   }
 
   /** Creates a new targetJar and copies the files from sourceJars into it. Optimizes the case of only one sourceJar */
@@ -192,7 +198,9 @@ object Jars {
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       manifest: Option[jar.Manifest] = None,
-      compress: Boolean): Long = {
+      compress: Boolean,
+      extraFiles: Seq[ExtraInJarFile] = Nil
+  ): Long = {
     if (sourceJars.size == 1 && manifest.isEmpty && !compress) {
       // optimize case of exactly one input
       val one = sourceJars.head.path
@@ -202,7 +210,7 @@ object Jars {
       // for zero or more than one input, first merge the manifests (if any), then write the jar
       val manifests = manifest ++ sourceJars.flatMap(readManifestJar)
       val mergedManifest = mergeManifests(manifests.toList)
-      mergeAndHashJarContentGivenManifest(sourceJars, targetJar, mergedManifest, compress)
+      mergeAndHashJarContentGivenManifest(sourceJars, targetJar, mergedManifest, compress, extraFiles)
     }
   }
 
@@ -210,12 +218,13 @@ object Jars {
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       manifest: Option[jar.Manifest] = None,
-      compress: Boolean
+      compress: Boolean,
+      extraFiles: Seq[ExtraInJarFile] = Nil
   ): Long = {
     val countingStream = new CountingOutputStream(Files.newOutputStream(targetJar.path))
     try {
       val outputJar = () => new ConsistentlyHashedJarOutputStream(countingStream, manifest, compress)
-      mergeContent(sourceJars, outputJar, Map.empty)(_ => ())
+      mergeJarContent(sourceJars, outputJar, Map.empty, extraFiles)(_ => ())
     } finally countingStream.close()
     countingStream.bytesWritten
   }
@@ -227,13 +236,14 @@ object Jars {
       compress: Boolean
   )(extraJarContent: EnhancedJarOutputStream => Unit): Unit = {
     val outputJar = () => new UnhashedJarOutputStream(Files.newOutputStream(targetJar.path), None, compress)
-    mergeContent(sourceJars, outputJar, tokens)(extraJarContent)
+    mergeJarContent(sourceJars, outputJar, tokens)(extraJarContent)
   }
 
-  private def mergeContent(
+  private def mergeJarContent(
       sourceJars: Seq[JarAsset],
       outputJar: () => EnhancedJarOutputStream,
-      tokens: Map[String, String]
+      tokens: Map[String, String],
+      extraFiles: Seq[ExtraInJarFile] = Nil
   )(extraJarContent: EnhancedJarOutputStream => Unit): Unit = {
     val allFiles = mutable.Buffer[(String, JarAsset)]()
     val metadataContents = mutable.Map[String, Seq[String]]()
@@ -241,32 +251,36 @@ object Jars {
     val output = outputJar()
     try {
       sourceJars.foreach { j =>
-        val inputJar = JarUtils.jarFileSystem(j)
         try {
-          val stream = Files.walk(inputJar.getPath("/"))
-          try {
-            stream.forEach { p =>
-              val name = p.toString.stripPrefix("/")
-              if (Files.isRegularFile(p)) {
-                if (MetaDataFiles.metadataFileNames.contains(name)) {
-                  val existingContent = metadataContents.getOrElse(name, Nil)
-                  metadataContents += name -> (existingContent :+ Files.readString(p))
-                } else if (p.startsWith("/META-INF/services")) {
-                  val existingContent = servicesContents.getOrElse(name, Nil)
-                  servicesContents += name -> (existingContent :+ Files.readString(p))
-                } else if (
-                  // manifest and hash are (re)generated automatically by the CHJOS so we exclude them here
-                  name != JarFile.MANIFEST_NAME && name != Hashing.optimusHashPath && name != Hashing.optimusPerEntryHashPath
-                ) {
-                  allFiles.append((name, j))
-                  val target = RelativePath(name)
-                  if (tokens.isEmpty) output.copyInFile(p, target)
-                  else output.writeFile(Files.readString(p), target, tokens)
+          Using.resource(JarUtils.jarFileSystem(j)) { inputJar =>
+            Using.resource(Files.walk(inputJar.getPath("/"))) { stream =>
+              stream.forEach { p =>
+                val name = p.toString.stripPrefix("/")
+                if (Files.isRegularFile(p)) {
+                  if (MetaDataFiles.metadataFileNames.contains(name)) {
+                    val existingContent = metadataContents.getOrElse(name, Nil)
+                    metadataContents += name -> (existingContent :+ Files.readString(p))
+                  } else if (p.startsWith("/META-INF/services")) {
+                    val existingContent = servicesContents.getOrElse(name, Nil)
+                    servicesContents += name -> (existingContent :+ Files.readString(p))
+                  } else if (
+                    // manifest and hash are (re)generated automatically by the CHJOS so we exclude them here
+                    name != JarFile.MANIFEST_NAME && name != Hashing.optimusHashPath && name != Hashing.optimusPerEntryHashPath &&
+                    // if we've specified any extra files to write, then they'll overwrite the versions in the source jars
+                    !extraFiles.exists { case ExtraInJarFile(path, _) => path.pathString == name }
+                  ) {
+                    allFiles.append((name, j))
+                    val target = RelativePath(name)
+                    if (tokens.isEmpty) output.copyInFile(p, target)
+                    else output.writeFile(Files.readString(p), target, tokens)
+                  }
                 }
               }
             }
-          } finally stream.close()
-        } finally inputJar.close()
+          }
+        } catch {
+          case NonFatal(e) => throw new IllegalStateException(s"read content from jar file failed! ${j.path}", e)
+        }
       }
       metadataContents.foreach { case (name, contents) =>
         val content = mergeMetadata(contents)
@@ -277,6 +291,7 @@ object Jars {
         val target = RelativePath(name)
         output.writeFile(contents.mkString("\n"), target)
       }
+      extraFiles.foreach { case ExtraInJarFile(path, content) => output.writeFile(content, path) }
       extraJarContent(output)
     } finally {
       try output.close()
@@ -320,7 +335,8 @@ object Jars {
     s"[${contents.map(c => c.trim().stripPrefix("[").stripSuffix("]")).mkString(",\n")}]"
   }
 
-  def stampJarWithConsistentHash(jarAsset: JarAsset, compress: Boolean): Unit = {
+  def stampJarWithConsistentHash(jarAsset: JarAsset, compress: Boolean, trace: Option[TaskTrace]): Unit = {
+    trace.foreach(_.addToStat(ObtStats.StampedJars, 1))
     val manifest = readManifestJar(jarAsset).filterNot(_.getMainAttributes.isEmpty)
     AssetUtils.atomicallyWrite(jarAsset, replaceIfExists = true) { temp =>
       mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), manifest, compress)
@@ -401,3 +417,5 @@ private class CountingOutputStream(out: OutputStream) extends FilterOutputStream
     count += len
   }
 }
+
+final case class ExtraInJarFile(inJarPath: RelativePath, content: String)

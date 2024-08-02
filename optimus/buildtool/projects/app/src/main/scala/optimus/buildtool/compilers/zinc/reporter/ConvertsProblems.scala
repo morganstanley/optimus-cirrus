@@ -17,4 +17,5 @@ import xsbti.Problem
 
 trait ConvertsProblems {
   def apply(raisedAt: Severity, problem: Problem): CompilationMessage
+  def reapply(prevMessage: CompilationMessage): CompilationMessage
 }

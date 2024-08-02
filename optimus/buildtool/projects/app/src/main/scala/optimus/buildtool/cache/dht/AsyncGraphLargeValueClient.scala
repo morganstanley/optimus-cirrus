@@ -17,22 +17,26 @@ import optimus.dht.client.api.kv.KVClient.Callback
 import optimus.dht.client.api.kv.KVKey
 import optimus.dht.client.api.kv.KVLargeEntry
 import optimus.dht.client.api.kv.KVLargeValue
+import optimus.dht.client.api.servers.ServerConnectionState
 import optimus.dht.client.api.transport.OperationDetails
 import optimus.dht.common.api.Keyspace
 import optimus.graph.Node
 import optimus.graph.NodePromise
+import optimus.platform._
 import optimus.platform.annotations.nodeSync
-import optimus.platform.async
 import optimus.platform.util.Log
 
 import java.lang
 import java.util
+import java.util.concurrent.atomic.AtomicLong
 import scala.jdk.CollectionConverters._
-import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
 class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
+  private val failedWrites: AtomicLong = new AtomicLong(0)
+  def getFailedWrites: Long = failedWrites.get()
+
   private def _contains(keyspace: Keyspace, keys: Set[KVKey], correlationName: String)(
       f: Try[Option[Set[KVKey]]] => Unit): Unit = {
     kvClient.batchContains(
@@ -49,7 +53,7 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
         }
         override def errors(keys: util.List[KVKey], exception: Exception, opDetails: OperationDetails): Unit = {
           log.error(s"DHT CHECK $correlationName: ERROR: ${exception.getMessage}")
-          f(Failure(exception))
+          f(Success(None))
         }
       }
     )
@@ -67,8 +71,27 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
           f(Success(result.booleanValue()))
         }
         override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
-          log.error(s"DHT PUT $correlationName: ERROR: ${exception.getMessage}")
-          f(Failure(exception))
+          log.warn(s"DHT PUT $correlationName: ERROR: ${exception.getMessage}", exception)
+          failedWrites.incrementAndGet()
+          f(Success(false)) // TODO (OPTIMUS-66613) implement retry logic
+        }
+      }
+    )
+  }
+
+  private def _removeLarge(keyspace: Keyspace, entry: KVKey, correlationName: String)(f: Try[Boolean] => Unit): Unit = {
+    kvClient.remove(
+      keyspace,
+      entry,
+      correlationName,
+      new Callback[lang.Boolean] {
+        override def result(result: lang.Boolean, opDetails: OperationDetails): Unit = {
+          log.debug(s"DHT REMOVE $correlationName. Result: ${result.booleanValue()}")
+          f(Success(result.booleanValue()))
+        }
+        override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
+          log.warn(s"DHT REMOVE $correlationName: ERROR: ${exception.getMessage}", exception)
+          f(Success(false))
         }
       }
     )
@@ -88,7 +111,15 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
         }
         override def error(exception: Throwable, opDetails: OperationDetails): Unit = {
           log.error(s"DHT GET $correlationName: ERROR: ${exception.getMessage}")
-          f(Failure(exception))
+          if (opDetails.server != null) {
+            opDetails.server.state() match {
+              case ServerConnectionState.DISCONNECTED =>
+                log.error(s"Server ${opDetails.server().cloudName()} is disconnected")
+              case s =>
+                log.error(s"Server ${opDetails.server().cloudName()} is $s")
+            }
+          }
+          f(Success(None))
         }
       }
     )
@@ -100,6 +131,10 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
 
   @async def putLarge(keyspace: Keyspace, entry: KVLargeEntry[KVKey], correlationName: String): Boolean = {
     impl(this._putLarge(keyspace, entry, correlationName))
+  }
+
+  @async def removeLarge(keyspace: Keyspace, entry: KVKey, correlationName: String): Boolean = {
+    impl(this._removeLarge(keyspace, entry, correlationName))
   }
 
   @async def contains(keyspace: Keyspace, keys: Set[KVKey], correlationName: String): Option[Set[KVKey]] = {

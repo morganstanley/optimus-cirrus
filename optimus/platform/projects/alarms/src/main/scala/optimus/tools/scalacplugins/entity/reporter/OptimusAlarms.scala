@@ -13,11 +13,12 @@ package optimus.tools.scalacplugins.entity.reporter
 
 import optimus.tools.scalacplugins.entity.OptimusPhaseInfo
 import optimus.tools.scalacplugins.entity.OptimusPhases
+import optimus.tools.scalacplugins.entity.StagingPhase
 
 object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   // api check
   val DEPRECATING_USAGE =
-    error1(20510, OptimusPhases.APICHECK, "Usage @deprecating(\"msg\", \"optimus.platform.Foo,optimus.dal\"): %s")
+    error1(20510, StagingPhase.GENERAL_API_CHECK, "Usage @deprecating(\"suggestion\"): %s")
   val AT_NODE_NOT_SUPPORTED_FOR_CONSTRUCTORS =
     error0(20511, OptimusPhases.APICHECK, "@node or @async annotation not supported on constructors")
   // following alarm is to prevent usage of JSR310 outside of the cases where we have to convert to/from JSR310 at
@@ -38,7 +39,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       "Incorrect usage of %s. You probably should not be using it at all."
     )
 
-  val NOWARN = error1(20516, OptimusPhases.APICHECK, "Illegal use of @nowarn: %s")
+  val NOWARN = error1(20516, StagingPhase.GENERAL_API_CHECK, "Illegal use of @nowarn: %s")
 
   // auto async
   val UNABLE_TO_PARALLELIZE_COLLECTION =
@@ -109,6 +110,13 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     OptimusPhases.ADJUST_AST,
     "Unsupported entry in @key/@index def specification. Expected: identifier, found: %s"
   )
+
+  val INVALID_TYPE_ANNOTATION = error1(
+    210010,
+    OptimusPhases.ADJUST_AST,
+    "Invalid type annotation %s. Only the lambda's return type can be @node annotated!")
+  val INVALID_TYPE_ANNOTATION_WITH_HINT =
+    error2(210011, OptimusPhases.ADJUST_AST, "Invalid type annotation %s. HINT: Did you mean %s ?")
 
   // These rules have either been removed or made more general - old values kept as comments for documentation purposes
   // val NO_INDEX_ON_EVENT_TRAIT = error0(1010, OptimusPhases.ADJUST_AST, "Unsupported indexes on event traits")
@@ -465,7 +473,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       22007,
       OptimusPhases.REF_CHECKS,
       "The term %s is not valid on the RHS of an @indexed def. For more information " +
-        "see http://codetree-docs/optimus/docs/OptimusCoreDAL/DalIndexing.html#rules-for-indexes"
+        "see http://optimusguide/OptimusCoreDAL/DalIndexing.html#rules-for-indexes"
     )
   val NONTWEAK_OVERRIDE_TWEAK =
     error2(22100, OptimusPhases.REF_CHECKS, "Illegal nontweakable override of tweakable property %s.%s")
@@ -819,24 +827,27 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   val INTERNAL_COMPILE_INFO = info1(10000, OptimusPhases.APICHECK, "Compilation information: %s")
   val UNUSED_ALSO_SET = error2(10409, OptimusPhases.REF_CHECKS, "Unused also-set %s, %s")
-  val DEPRECATING = warning2(10500, OptimusPhases.APICHECK, "%s is deprecated: %s")
-  val DEPRECATING_LIGHT = warning2(10501, OptimusPhases.APICHECK, "%s is deprecated: %s")
+  val DEPRECATING = warning2(10500, StagingPhase.GENERAL_API_CHECK, "%s is deprecated: %s")
+  val DEPRECATING_LIGHT = warning2(10501, StagingPhase.GENERAL_API_CHECK, "%s is deprecated: %s")
 
-  val UNUSED_NOWARN = error1(10502, OptimusPhases.APICHECK, "Unused or redundant @nowarn: %s")
+  val UNUSED_NOWARN = error1(10502, StagingPhase.GENERAL_API_CHECK, "Unused or redundant @nowarn: %s")
   val NOWARN_DEPRECATION =
     warning2(
       10503,
-      OptimusPhases.APICHECK,
+      StagingPhase.GENERAL_API_CHECK,
       "Suppressing a deprecation warning for %s. Please contact owners of the %s scope for reviews.")
 
   // Note that this is marked as new: in workspace.obt so only affects new/modified files. Also note that to suppress
   // it you need to use @nowarn("msg=10500") not 10504. This is intentional because we expect things to be marked as
   // @deprecatingNew only briefly (to avoid merge races) and then to be marked as @deprecating, and we don't want to
   // have to update the @nowarns from 10504 to 10500
-  val DEPRECATING_NEW = warning2(10504, OptimusPhases.APICHECK, "%s is deprecated (in new/modified files): %s")
+  val DEPRECATING_NEW = warning2(10504, StagingPhase.GENERAL_API_CHECK, "%s is deprecated (in new/modified files): %s")
 
   val INCORRECT_ADVANCED_USAGE_LIGHT =
     warning1(10510, OptimusPhases.APICHECK, "Incorrect usage of %s. You probably should not be using it at all.")
+
+  val SCALA_JAVA_DEPRECATED =
+    warning1(10511, StagingPhase.GENERAL_API_CHECK, "Instead of @%s, use @optimus.platform.annotations.deprecating")
 
   val AUTO_ASYNC_OFF = info0(10553, OptimusPhases.AUTOASYNC, "Not asyncing collection, due to asyncOff request.")
   val ASYNC_CONTAINS_INCOMPATIBLE =
@@ -900,7 +911,7 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     info0(
       10578,
       OptimusPhases.AUTOASYNC,
-      "Potentially unused @givenAnyRuntimeEnv. See http://codetree-docs/optimus/docs/CoreAnnotations/AnnotationGivenAnyRuntimeEnv.html for details."
+      "Potentially unused @givenAnyRuntimeEnv. See http://optimusguide/CoreAnnotations/AnnotationGivenAnyRuntimeEnv.html for details."
     )
 
   val ARTIFACT_ASYNC_CLOSURE =
@@ -969,13 +980,15 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
 
   // async graph phase warnings
   val CALL_ON_GRAPH_IN_CTOR =
-    warning0(17000, OptimusPhases.ASYNC_GRAPH, "Cannot call onto graph from object constructor")
+    warning1(17000, OptimusPhases.ASYNC_GRAPH, "Cannot call onto graph from object constructor via: %s")
+  val CALL_ON_GRAPH_IN_CTOR_SUPER =
+    warning1(17007, OptimusPhases.ASYNC_GRAPH, "Cannot call onto graph from object constructor super class via: %s")
   val CALL_ASYNC_FROM_SYNC =
     warning1(
       17001,
       OptimusPhases.ASYNC_GRAPH,
       "Calling async function %s from sync context. " +
-        "This causes sync stacks, which can have a severe performance impact. See the documentation here: http://codetree-docs/optimus/docs/OptimusNodes/SyncStacks.html. " +
+        "This causes sync stacks, which can have a severe performance impact. See the documentation here: http://optimusguide/OptimusNodes/SyncStacks.html. " +
         "Use @entersGraph ONLY if this is a legitimate graph entry point (not reachable from @node/@async). Otherwise, fix " +
         "the sync stack by adding @node or @async, or contact the graph team for help."
     )

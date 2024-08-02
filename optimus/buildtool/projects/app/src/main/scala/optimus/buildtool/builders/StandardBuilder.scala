@@ -191,7 +191,13 @@ class StandardBuilder(
                   // by multiple direct scopes).
                   postBuilder.postProcessScopeArtifacts(scopeId, as.all)
                   as
-                }.valueOrElse(e => throw new RuntimeException(s"Failed to build $scopeId", e))
+                }.valueOrElse { e =>
+                  val exceptionScopeId = e match {
+                    case ce: CompilationException => ce.scopeId
+                    case _                        => scopeId
+                  }
+                  throw new RuntimeException(s"Failed to build $exceptionScopeId", e)
+                }
 
                 // Make this a def so we can call it (and add to completedScopes) at the point of logging
                 def progress = {
@@ -380,7 +386,8 @@ class StandardBuilder(
   private def logCacheDetails(): Unit = {
     val caches = Caches.allCaches()
     val cacheDetails = caches.map { c =>
-      val evictions = EvictionReason.values().map(r => r -> c.profNumEvictions(r)).collect {
+      val counters = c.getCountersSnapshot
+      val evictions = EvictionReason.values().map(r => r -> counters.numEvictions(r)).collect {
         case (r, n) if n > 0 =>
           s"$r ($n)"
       }

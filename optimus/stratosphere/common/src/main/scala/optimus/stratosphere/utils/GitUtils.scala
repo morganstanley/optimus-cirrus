@@ -14,6 +14,7 @@ package optimus.stratosphere.utils
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
+import java.net.URI
 import java.nio.file.Path
 import java.nio.file.Paths
 import scala.collection.compat._
@@ -28,6 +29,13 @@ final case class RemoteUrl(url: String) {
   def repoName: String = url.split('/').last.trim.stripSuffix(".git")
   def isFork: Boolean = url.contains("~") // [...]/scm/upstream_repo/repo.git versus [...]/scm/~user_id/repo.git
   def projectKey: String = url.split("/").takeRight(2).head
+
+  def isSameRepo(other: RemoteUrl): Boolean = {
+    val uri = new URI(url)
+    val otherUri = new URI(other.url)
+    uri.getHost == otherUri.getHost && uri.getPath == otherUri.getPath
+  }
+
 }
 
 final case class RemoteSpec(name: String, remoteUrl: RemoteUrl, originUrl: Option[RemoteUrl] = None) {

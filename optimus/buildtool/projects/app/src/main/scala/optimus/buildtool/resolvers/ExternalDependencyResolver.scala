@@ -25,7 +25,7 @@ import scala.collection.immutable.Seq
   val (extraLibsDefinitions, dependencyDefinitions) = loadedDefinitions.partition(_.isExtraLib)
 
   @node def fingerprintDependencies(deps: Seq[DependencyDefinition]): Seq[String]
-  @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult
+  @node def resolveDependencies(deps: DependencyDefinitions, predefined: Boolean = true): ResolutionResult
 }
 
 @entity object ExternalDependencyResolver {

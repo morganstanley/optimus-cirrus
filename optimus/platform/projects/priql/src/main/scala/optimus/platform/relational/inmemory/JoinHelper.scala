@@ -19,6 +19,7 @@ import optimus.platform.relational.tree._
 import optimus.platform._
 import com.google.common.collect.ArrayListMultimap
 import optimus.platform.relational.inmemory.IterableProvider.NodeOrFunc
+import optimus.platform.relational.tree.MethodArgConstants.rightDefault
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -263,7 +264,7 @@ object JoinHelper {
         }
       case Right(rightType) =>
         val fOption =
-          findFuncElement(arguments, "rightDefault").map(f => FuncElement.convertFuncElementToLambda(f))
+          findFuncElement(arguments, rightDefault).map(f => FuncElement.convertFuncElementToLambda(f))
         fOption.getOrElse {
           methodCode match {
             case NATURAL_FULL_OUTER_JOIN | NATURAL_LEFT_OUTER_JOIN =>

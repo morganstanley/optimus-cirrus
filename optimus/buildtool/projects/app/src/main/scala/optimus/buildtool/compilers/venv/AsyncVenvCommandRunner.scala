@@ -159,16 +159,12 @@ object VenvUtils extends Log {
   }
   def prerequisites(credentialFile: String): Seq[String] = {
     val setEnv = if (OsUtils.isWindows) "set" else "export"
-    val pipSetup = {
-      if (Files.exists(Paths.get(credentialFile))) {
-        Seq(s"$setEnv ${ArtifactoryToolDownloader.PipConfigFile}=$credentialFile")
-      } else {
-        log.warn(s"${ArtifactoryToolDownloader.PipConfigFile} not set; Pypi Artifactory access may fail")
-        Seq.empty
-      }
+    if (Files.exists(Paths.get(credentialFile))) {
+      Seq(s"$setEnv ${ArtifactoryToolDownloader.PipConfigFile}=$credentialFile")
+    } else {
+      log.warn(s"${ArtifactoryToolDownloader.PipConfigFile} not set; Pypi Artifactory access may fail")
+      Seq.empty
     }
-    val homeSetup = if (OsUtils.isWindows) Seq.empty else Seq("export HOME=/var/tmp/$USER")
-    pipSetup ++ homeSetup
   }
   def installLibs(venvPath: String, pipCache: Directory): String =
     s"${scripts(venvPath)}python -m pip --disable-pip-version-check install -r requirements.txt --cache-dir ${pipCache.path}"

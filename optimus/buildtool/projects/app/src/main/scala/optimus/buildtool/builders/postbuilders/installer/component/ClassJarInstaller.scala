@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component
 
+import optimus.buildtool.artifacts.ArtifactType
+
 import java.nio.file.Files
 import java.util.jar
 import optimus.buildtool.builders.postbuilders.installer.BatchInstallableArtifacts
@@ -20,20 +22,33 @@ import optimus.buildtool.builders.postbuilders.installer.ManifestResolver
 import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
 import optimus.buildtool.builders.postbuilders.installer.BundleInstallJar
 import optimus.buildtool.builders.postbuilders.installer.ScopeInstallJar
+import optimus.buildtool.builders.postbuilders.installer.component.MavenInstaller.installMavenJars
+import optimus.buildtool.compilers.zinc.ZincInstallationLocator.InJarZincDepsFilePaths
 import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
+import optimus.buildtool.files.RelativePath
+import optimus.buildtool.generators.GeneratorType
+import optimus.buildtool.generators.ZincGenerator.ZincGeneratorName
 import optimus.buildtool.trace.InstallBundleJar
 import optimus.buildtool.trace.InstallJar
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.ExtraInJarFile
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
+import optimus.buildtool.utils.PathUtils
 import optimus.platform._
 import optimus.platform.util.Log
 
+import java.nio.file.FileSystems
+import java.nio.file.Paths
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.util.control.NonFatal
 
 class ClassJarInstaller(
     installer: Installer,
@@ -47,7 +62,40 @@ class ClassJarInstaller(
   @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
     installJars(installable.includedScopeArtifacts)
 
-  @async private def installJars(includedScopeArtifacts: Seq[ScopeArtifacts]) = {
+  private def zincDepsFiles(id: ScopeId, zincGeneratorResource: Option[JarAsset]): Seq[ExtraInJarFile] =
+    zincGeneratorResource match {
+      case Some(zincRes) =>
+        try {
+          InJarZincDepsFilePaths
+            .map { case (fileName, path) =>
+              val localZincDeps = AssetUtils
+                .readFileLinesInJarAsset(zincRes, path)
+                .map { localDep => JarAsset(Paths.get(localDep)) }
+                .to(Seq)
+              // zinc deps may not be used as dependency, so we have to install them here
+              val localDepCopiedMavenZincDeps = localZincDeps.filter(pathBuilder.getMavenPath(_).isDefined)
+              installMavenJars(id, pathBuilder, localDepCopiedMavenZincDeps)
+              val distZincDepsAbsPaths =
+                pathBuilder
+                  .locationIndependentClasspath(id, localZincDeps, Map.empty, includeRelativePaths = true)
+                  .map {
+                    strPath => // remove uri path file:// prefix which not suitable for zinc pathString runtime usages
+                      PathUtils.platformIndependentString(
+                        PathUtils.uriToPath(strPath, FileSystems.getDefault).normalize())
+                  }
+                  .distinct
+                  .sorted
+              // override original zinc deps file
+              ExtraInJarFile(RelativePath(fileName), distZincDepsAbsPaths.mkString("\n"))
+            }
+            .to(Seq)
+        } catch {
+          case NonFatal(e) => throw new Exception(s"OBT zinc libs installation failed! ${zincRes.pathString}", e)
+        }
+      case None => Nil
+    }
+
+  @async private def installJars(includedScopeArtifacts: Seq[ScopeArtifacts]): Seq[JarAsset] = {
     val artifacts =
       if (generatePoms) includedScopeArtifacts.filter(_.scopeId.tpe == NamingConventions.MavenInstallScope)
       else includedScopeArtifacts
@@ -57,6 +105,13 @@ class ClassJarInstaller(
         case ScopeInstallJar(jar)
             if scopeArtifacts.classJars.nonEmpty && (!sparseOnly || !scopeConfigSource.local(scopeId)) =>
           val classJars = scopeArtifacts.classJars
+          val zincGeneratorResource =
+            if (
+              scopeConfigSource.scopeConfiguration(scopeId).generatorConfig.exists { case (g, _) =>
+                g == GeneratorType(ZincGeneratorName)
+              }
+            ) classJars.find(_.parent.name == ArtifactType.Resources.name)
+            else None
           val installJar =
             if (generatePoms)
               pathBuilder.mavenDir(scopeId).resolveJar(s"${scopeId.module}-${installer.installVersion}.jar")
@@ -68,7 +123,8 @@ class ClassJarInstaller(
           bundleFingerprints(scopeId).writeIfChanged(installJar, hash) {
             ObtTrace.withTraceTask(scopeId, InstallJar) { trace =>
               Files.createDirectories(installJar.parent.path)
-              val bytesWritten = writeClassJar(classJars, manifest, installJar)
+              val bytesWritten =
+                writeClassJar(classJars, manifest, installJar, zincDepsFiles(scopeId, zincGeneratorResource))
               trace.addToStat(ObtStats.InstalledJarBytes, bytesWritten)
             }
           }

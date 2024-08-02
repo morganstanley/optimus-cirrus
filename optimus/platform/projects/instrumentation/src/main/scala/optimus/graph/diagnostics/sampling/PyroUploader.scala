@@ -192,6 +192,7 @@ object PyroUploader extends Log {
       .addParameter("format", format)
       .addParameter("from", from.toString)
       .addParameter("until", until.toString)
+      .addParameter("sampleRate", GHz) // samples are reported in ns
 
     if (!pyroLatestVersion) {
       val bytes = metricTpe.exists { t => t.startsWith("Alloc") || t.startsWith("Free") || t.startsWith("Live") }
@@ -199,7 +200,6 @@ object PyroUploader extends Log {
       uriBuilder.applyIf(bytes)(_.addParameter("units", "bytes"))
       uriBuilder
         .applyIf(doAverage)(_.addParameter("aggregationType", "avg"))
-        .addParameter("sampleRate", GHz) // samples are reported in ns
     }
 
     uriBuilder.build()
@@ -215,13 +215,17 @@ class PyroUploader(
     extends Log {
   import PyroUploader._
 
-  id match {
-    case None =>
-      log.info(
-        s"Root keys: ${ChainedID.root}=${approxId(AppKey, ChainedID.root)} ${ChainedID.root}=${approxId(EngineKey, ChainedID.root)}")
-    case Some(id) =>
-      log.info(s"Root keys: $id=${approxId(AppKey, id)}")
+  def logRootKey(): Unit = {
+    id match {
+      case None =>
+        log.info(
+          s"Root keys: ${ChainedID.root}=${approxId(AppKey, ChainedID.root)} ${ChainedID.root}=${approxId(EngineKey, ChainedID.root)}")
+      case Some(id) =>
+        log.info(s"Root keys: $id=${approxId(AppKey, id)}")
+    }
   }
+
+  logRootKey()
 
   private val enqueued = new AtomicInteger(0)
   private val discarded = new AtomicInteger(0)
@@ -429,10 +433,12 @@ class PyroUploader(
       try {
         log.info(s"Uploading snapshot $upload, size=$size")
         val postRequest = upload.request
-        val getReq = new HttpGet(request.getURI.toString)
-        getReq.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
-        getReq.addHeader(HttpHeaders.ACCEPT, "*/*")
-        oidcHttpClient.execute(getReq) // needed to initialize the oidc oauth
+        if (!pyroLatestVersion) {
+          val getReq = new HttpGet(request.getURI.toString)
+          getReq.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
+          getReq.addHeader(HttpHeaders.ACCEPT, "*/*")
+          oidcHttpClient.execute(getReq) // needed to initialize the oidc oauth
+        }
         response = oidcHttpClient.execute(postRequest)
       } catch {
         case e: Exception =>

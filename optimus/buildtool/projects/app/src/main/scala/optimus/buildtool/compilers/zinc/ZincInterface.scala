@@ -22,17 +22,19 @@ import xsbti.compile.ClasspathOptionsUtil
 
 object ZincInterface extends Log {
 
+  val ZincInterfaceFilePrefix = "compilerInterface"
+
   def getInterfaceJar(
       interfaceDir: Directory,
       scalaInstance: => ScalaInstance,
-      zincClasspath: => Seq[JarAsset],
       zincVersion: String,
+      zincClasspath: Seq[JarAsset],
       onStartCompilation: => Unit
   ): JarAsset = synchronized {
     // the interface classes vary if they are compiled with a different ScalaC version and if they were compiled from
     // different Zinc sources so we include both versions in the cached file name.
     val targetJar =
-      interfaceDir.resolveJar(s"compilerInterface-scala-${scalaInstance.actualVersion}-zinc-$zincVersion.jar")
+      interfaceDir.resolveJar(s"$ZincInterfaceFilePrefix-scala-${scalaInstance.actualVersion}-zinc-$zincVersion.jar")
 
     if (!targetJar.existsUnsafe) {
       onStartCompilation
@@ -41,7 +43,8 @@ object ZincInterface extends Log {
       val sourceJars = zincClasspath.filter(_.name.endsWith("-sources.jar"))
       val interfaceJars = zincClasspath.filter(_.name.contains("interface"))
       if (sourceJars.isEmpty)
-        throw new RuntimeException(s"Missing source jars for compiler interface while building $targetJar")
+        throw new RuntimeException(
+          s"Missing source jars for compiler interface while building $targetJar with: ${zincClasspath.map(_.pathString).mkString("\n", "\n", "\n")} ")
       if (interfaceJars.isEmpty)
         throw new RuntimeException(s"Missing interface jars for compiler interface while building $targetJar")
 

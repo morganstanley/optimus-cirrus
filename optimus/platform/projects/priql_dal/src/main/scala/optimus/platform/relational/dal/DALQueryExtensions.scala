@@ -41,7 +41,7 @@ trait DALQueryExtensions {
       query.provider.createQuery(method)
     }
 
-    def fullTextSearchOnly(implicit pos: MethodPosition): Query[T] = {
+    @impure @async def fullTextSearchOnly(implicit pos: MethodPosition): Query[T] = {
       val src = query.element
       val method =
         new MethodElement(DALQueryMethod.FullTextSearchOnly, List(MethodArg("src", src)), src.rowTypeInfo, src.key, pos)

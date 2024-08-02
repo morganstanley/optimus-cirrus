@@ -68,7 +68,7 @@ private[buildtool] object JsonImplicits {
       override def read(json: JsValue): Severity = Severity.parse(json.convertTo[String])
       override def write(severity: Severity): JsString = JsString(severity.toString)
     }
-  implicit val CompilationMessageFormatter: RootJsonFormat[CompilationMessage] = jsonFormat6(CompilationMessage.apply)
+  implicit val CompilationMessageFormatter: RootJsonFormat[CompilationMessage] = jsonFormat7(CompilationMessage.apply)
   implicit val ExternalIdFormatter: RootJsonFormat[ExternalId] = jsonFormat3(ExternalId.apply)
   implicit val InternalDependencyLookupFormatter: RootJsonFormat[DependencyLookup[ScopeId]] = jsonFormat2(
     DependencyLookup.apply[ScopeId])

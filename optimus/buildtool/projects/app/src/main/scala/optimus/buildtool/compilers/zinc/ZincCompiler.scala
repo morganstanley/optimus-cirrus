@@ -28,6 +28,7 @@ import optimus.buildtool.compilers.SyncCompiler
 import optimus.buildtool.compilers.SyncCompiler.Inputs
 import optimus.buildtool.compilers.Task
 import optimus.buildtool.compilers.zinc.mappers.MappingTrace
+import optimus.buildtool.compilers.zinc.reporter.ProblemConverter
 import optimus.buildtool.compilers.zinc.reporter.ZincReporter
 import optimus.buildtool.compilers.zinc.setup.ClassAnalysisStore
 import optimus.buildtool.compilers.zinc.setup.Jars
@@ -55,6 +56,7 @@ import sbt.internal.inc.IncrementalCompilerImpl
 import sbt.internal.inc.ZincInvalidationProfiler
 import sbt.internal.prof.Zprof.ZincRun
 import xsbti.compile.AnalysisContents
+
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.compat.java8.OptionConverters._
@@ -159,7 +161,8 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
       )
       val lookupTracker = if (settings.zincTrackLookups) Some(new LookupTracker) else None
       val zincInputs = new ZincInputs(settings, scopeId, traceType, inputs, activeTask, lookupTracker)
-      val compilationReporter = reporter.configure(zincInputs.resolveWarnings, inputs.mischief)
+      val problemConverter = new ProblemConverter(zincInputs.resolveWarnings)
+      val compilationReporter = reporter.configure(problemConverter, inputs.mischief)
 
       val compilerInputs = zincInputs.create(
         incrementalCompiler = incrementalCompiler,
@@ -177,16 +180,22 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
 
       if (traceType == Java) activeTask.trace.reportProgress("java")
       else activeTask.trace.reportProgress("starting compiler")
-      val compileResult = Try {
-        val result = incrementalCompiler.compile(compilerInputs, zincLogger)
+      val compileResult =
+        try {
+          val result = incrementalCompiler.compile(compilerInputs, zincLogger)
 
-        if (result.hasModified) {
-          val analysisContents = AnalysisContents.create(result.analysis(), result.setup())
-          activeTask.trace.reportProgress(s"storing ${traceType.name} final analysis")
-          classAnalysisStore.set(analysisContents)
+          if (result.hasModified) {
+            val analysisContents = AnalysisContents.create(result.analysis(), result.setup())
+            activeTask.trace.reportProgress(s"storing ${traceType.name} final analysis")
+            classAnalysisStore.set(analysisContents)
+          }
+          Success(result)
+        } catch {
+          case NonFatal(e) => Failure(e)
+          // this can happen when Zinc tries to analyse a library class which transitively depends on a missing class.
+          // we want to treat this as a normal exception rather than crashing out so that get better diagnostics.
+          case e: NoClassDefFoundError => Failure(e)
         }
-        result
-      }
 
       // should always have exactly one runProfile because the invalidationProfiler is either freshly created
       // or else is wrapping the underlying one - see ZincCompileSetup
@@ -216,7 +225,7 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
 
       val newMessages = compileResult match {
         case Failure(e) =>
-          val msgRoot = s"Failed to compile ${jars.outputJar.tempPath.pathString} with Zinc compiler"
+          val msgRoot = s"Failed to compile scope $scopeId (${jars.outputJar.tempPath.pathString}) with Zinc compiler"
           val msg = s"$prefix$msgRoot"
           log.debug(msg, e)
           val freeDiskSpaceBytes = Utils.freeSpaceBytes(jars.outputJar.tempPath)
@@ -274,7 +283,7 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
           reporter.messages
       }
 
-      val messages = Messages.messages(newMessages, previousMessages, classFileManager.staleSources)
+      val messages = Messages.messages(newMessages, previousMessages, problemConverter, classFileManager.staleSources)
       activeTask.trace.publishMessages(messages)
 
       // Intellij needs to associate source file location with the location of the message artifact.  There's no
@@ -344,7 +353,9 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
             // note that we don't compress, because this jar is likely to later get passed in for another Zinc compilation
             // and then come back here again (slightly modified), and this repeated rewriting process is far more
             // efficient on non-compressed jars. We do compress in InstallingBuilder
-            utils.Jars.stampJarWithConsistentHash(jars.outputJar.tempPath, compress = false)
+            if (!profiler.hasNoSourceInvalidations(cycles, compileResult.toOption)) {
+              utils.Jars.stampJarWithConsistentHash(jars.outputJar.tempPath, compress = false, Some(activeTask.trace))
+            }
             jars.outputJar.moveTempToFinal()
             // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput` or
             // `doCompilation(...).watchForDeletion()` in `AsyncJavaCompiler.output`

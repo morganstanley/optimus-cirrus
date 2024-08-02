@@ -23,9 +23,13 @@ import optimus.stratosphere.utils.CommonProcess
 import optimus.stratosphere.utils.ConfigUtils
 import optimus.stratosphere.utils.RemoteUrl
 
+import java.net.InetAddress
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util
+import scala.util.Failure
+import scala.util.Try
+import scala.util.Success
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
@@ -48,8 +52,6 @@ object GitUpdater {
     val catchUpRemoteUrl = ws.catchUp.remote.url
     val configuredCatchUpRemoteUrl: String =
       (ws.git.useUpdatedFetchSettings, urlContainsUsername(catchUpRemoteUrl)) match {
-        // updated settings, username in url
-        case (true, true) => removeUsernameFromUrl(catchUpRemoteUrl)
         // old style settings, no username in url
         case (false, false) => addUsernameToRemoteUrl(ws)
         // url style already matches settings style
@@ -67,14 +69,11 @@ object GitUpdater {
   private def addUsernameToUrl(username: String, url: String): String =
     url.replaceFirst("http://", s"http://$username@")
 
-  private def removeUsernameFromUrl(url: String): String =
-    url.replaceFirst(s"""http://\\w+@""", "http://")
-
-  val NamePattern: Regex = """(?s).*Name:\s+([^\n\r]+)[\r\n]+.*""".r
   val ConfigPattern: Regex = """(\S+)\s+(.*)""".r
   val UserInURLPattern: Regex = """http://\w+@\w.*""".r
   val ExtraHeaderConfigRegex = "http\\..*\\.extraHeader"
   val InsteadOfConfigRegex = "url\\..*\\.insteadOf"
+  val EmptyAuthRegex = "http\\..*\\.emptyAuth"
 }
 
 class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
@@ -101,7 +100,7 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     runGitIgnoreExit("config", "--get-regexp", regexp).linesIterator.toSeq
   }
 
-  private def getAndModifyGitConfig(regexp: String)(
+  private def getAndModifyGitConfig(regexp: String, ignoreExit: Boolean = false)(
       mapper: (String, String) => (String, String),
       filter: (String, String) => Boolean = (_, _) => true): Unit = {
     val result = getGitConfig(regexp).collect {
@@ -109,7 +108,9 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
           if bitbucketInstances.exists(i => configValue.contains(i)) && filter(configKey, configValue) =>
         mapper(configKey, configValue)
     }
-    result.foreach { case (key, value) => runGit("config", key, value) }
+    result.foreach { case (key, value) =>
+      if (ignoreExit) runGitIgnoreExit("config", key, value) else runGit("config", key, value)
+    }
   }
 
   def reportResolutionFailures(value: Map[String, String]): Unit = {
@@ -126,38 +127,52 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     stratoWorkspace.log.info("Updating Bitbucket host mappings...")
     removeInsteadOfs()
     removeExtraHeaders()
-    val resolved: Map[String, String] = bitbucketInstances.collect { instance =>
-      new CommonProcess(stratoWorkspace).runAndWaitFor(Seq("nslookup", instance)) match {
-        case NamePattern(name) => (instance, name)
+    removeEmptyAuth()
+    val resolved: Map[String, String] = bitbucketInstances.flatMap { instance =>
+      Try {
+        val addr = InetAddress.getByName(instance)
+        addr.getCanonicalHostName
+      } match {
+        case Success(name) => Some((instance, name))
+        case Failure(e) =>
+          stratoWorkspace.log.debug(s"""failed to resolve stash instance to name: $instance""", e)
+          None
       }
     }.toMap
-    stratoWorkspace.log.debug(s"""resolved stash instances to names: ${resolved.toString}""")
+    stratoWorkspace.log.debug(s"""resolved stash instances to names: ${resolved.mkString(",")}""")
     reportResolutionFailures(resolved)
     val configureRepositoryCommands: Seq[Seq[String]] = resolved.flatMap { case (instance, name) =>
       Seq(
-        Seq("config", s"""url."http://${name}".insteadOf""", s"""http://${instance}"""),
-        Seq("config", s"http.http://$name.extraHeader", s"Host: $instance")
+        Seq("config", s"url.http://$name.insteadOf", s"http://$instance"),
+        // slash at the end is intentional - we don't want multiple mappings under the same key
+        Seq("config", s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
+        Seq("config", s"http.http://$name.extraHeader", s"Host: $instance"),
+        Seq("config", s"http.http://$name.emptyAuth", s"true")
       )
     }.toSeq
     configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
-    // emptyAuth
-    runGit("config", "http.emptyAuth", "true")
   }
 
-  private def unsetConfig(keyRegex: String): Unit = getAndModifyGitConfig(keyRegex) { (configKey, configValue) =>
-    ("--unset", configKey)
+  private def unsetConfig(keyRegex: String): Unit = getAndModifyGitConfig(keyRegex, ignoreExit = true) {
+    (configKey, _) => ("--unset", configKey)
   }
 
   private def removeInsteadOfs(): Unit = unsetConfig(InsteadOfConfigRegex)
 
   private def removeExtraHeaders(): Unit = unsetConfig(ExtraHeaderConfigRegex)
 
+  private def removeEmptyAuth(): Unit = {
+    runGitIgnoreExit("config", "--unset", "http.emptyAuth") // TODO (OPTIMUS-67266): remove after deployment
+    getGitConfig(EmptyAuthRegex).collect { case ConfigPattern(key, _) =>
+      runGitIgnoreExit("config", "--unset", key)
+    }
+  }
+
   def doRevertToOldFetchConfig(): Unit = {
     // unset all custom settings for instances we care about
     removeInsteadOfs()
     removeExtraHeaders()
-    // emptyAuth
-    runGitIgnoreExit("config", "--unset", "http.emptyAuth")
+    removeEmptyAuth()
   }
 
   def doAddUserNamesToBitbucketRemotes(): Unit =
@@ -166,17 +181,10 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
       filter = (_, value) => !urlContainsUsername(value) // only add usernames to remotes that don't already have them
     )
 
-  def doRemoveUserPrefixFromFetchUrl(): Unit =
-    getAndModifyGitConfig("remote\\..+\\.url")(
-      mapper = (configKey, value) => (configKey, removeUsernameFromUrl(value)),
-      filter = (_, value) => urlContainsUsername(value) // only remove usernames from remotes that have them
-    )
-
   def applyFetchConfig(): Unit = {
     if (OsSpecific.isWindows) {
       if (stratoWorkspace.git.useUpdatedFetchSettings) {
         doUpdateFetchSettings()
-        doRemoveUserPrefixFromFetchUrl()
       } else {
         doRevertToOldFetchConfig()
         doAddUserNamesToBitbucketRemotes()

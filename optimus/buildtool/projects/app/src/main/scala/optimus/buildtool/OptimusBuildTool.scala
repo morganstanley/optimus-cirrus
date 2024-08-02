@@ -11,22 +11,20 @@
  */
 package optimus.buildtool
 
-import optimus.buildtool.app.CatchUpApp
-
-import java.io.PrintStream
-import java.nio.file._
 import optimus.buildtool.app.NoBuildInstrumentation
-import optimus.buildtool.app.OptimusBuildToolCmdLine
 import optimus.buildtool.app.OptimusBuildToolAppBase
 import optimus.buildtool.app.OptimusBuildToolBootstrap
+import optimus.buildtool.app.OptimusBuildToolCmdLine
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.app.OptimusBuildToolImpl
 import optimus.buildtool.builders.reporter.ErrorReporter
 import optimus.buildtool.files.Directory
-import optimus.platform._
 import optimus.platform.OptimusApp.ExitHandler
+import optimus.platform._
 import org.fusesource.jansi.AnsiConsole
 
+import java.io.PrintStream
+import java.nio.file._
 import scala.util.control.NonFatal
 
 private[buildtool] object OptimusBuildTool
@@ -36,19 +34,21 @@ private[buildtool] object OptimusBuildTool
   val originalStdOut: PrintStream = System.out
   val originalStdErr: PrintStream = System.err
 
-  val DefaultArtifactVersionNumber = "1.35"
+  val DefaultArtifactVersionNumber = "1.38"
 
   override protected def parseCmdline(args: Array[String], exitHandler: ExitHandler): Unit = {
     super.parseCmdline(args, exitHandler)
 
+    val logDir = if (cmdLine.bspServer) cmdLine.logDir.resolve("bsp") else cmdLine.logDir
+
     // Run this code as early as possible. Because we're modifying the log destination after startup,
     // we'll unfortunately end up with a (hopefully empty) logfile in the default destination (generally
     // %TEMP%/obt).
-    OptimusBuildToolBootstrap.initLogging(Directory(cmdLine.logDir), cmdLine.debug, cmdLine.bspDebug)
+    OptimusBuildToolBootstrap.initLogging(Directory(logDir), cmdLine.debug, cmdLine.bspDebug)
 
     if (cmdLine.bspServer) {
       def printStream(name: String) = {
-        val fileStream = Files.newOutputStream(cmdLine.logDir.resolve(name))
+        val fileStream = Files.newOutputStream(logDir.resolve(name))
         new PrintStream(fileStream)
       }
 
@@ -69,14 +69,8 @@ private[buildtool] object OptimusBuildTool
         cmdLine.breadcrumbs,
         if (cmdLine.obtBenchmarkScenario != NoneArg) Some(cmdLine.obtBenchmarkScenario) else None,
         cmdLine.sendLongTermBreadcrumbs)
-      /* short-circuits: setting nobuild immediately exits while passing --printBestCachedGitCommitsForBranch runs
-       * CatchupApp instead of OBT
-       */
       val buildOk =
-        if (cmdLine.printBestCachedGitCommitsForBranch.nonEmpty) {
-          new CatchUpApp(cmdLine).run(cmdLine.printBestCachedGitCommitsForBranch, recurse = false)
-          true
-        } else if (cmdLine.scopesToBuild == Set("nobuild")) true
+        if (cmdLine.scopesToBuild == Set("nobuild")) true
         else {
           val impl = OptimusBuildToolImpl(cmdLine, NoBuildInstrumentation, Some(errorReporter))
           impl.start()

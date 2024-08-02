@@ -56,7 +56,7 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
   static final String nodeTraceCls = "optimus/graph/NodeTrace";
 
   private boolean seenCCtor;
-  private String className;
+  private final String className;
 
   NodeMethodsInjectorAdapter(String className, ClassVisitor cv) {
     super(ASM9, cv);
@@ -118,7 +118,7 @@ class NodeMethodsInjectorAdapter extends ClassVisitor implements Opcodes {
 }
 
 class CtorMethodVisitor extends MethodVisitor implements Opcodes {
-  private String className;
+  private final String className;
 
   CtorMethodVisitor(String className, MethodVisitor mv) {
     super(ASM9, mv);

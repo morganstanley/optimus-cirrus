@@ -32,6 +32,10 @@ public class OsSpecific {
 
   public static final String platformString = isWindows ? "windows" : "linux";
 
+  // This one seems like it can vary by specific version of OS and/or the underlying sub-process
+  // invocation
+  public static final int commandLengthLimit = isWindows ? 2047 : Integer.MAX_VALUE;
+
   public static final String[] fileHandleLimit(Integer n, String execV2Path) {
     return isWindows ? new String[0] : new String[] {execV2Path, "-l", "N=" + n};
   }

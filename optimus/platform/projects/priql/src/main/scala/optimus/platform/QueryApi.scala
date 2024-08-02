@@ -17,6 +17,7 @@ import optimus.platform.storable.EntityCompanionBase
 import optimus.platform.relational.tree.MethodPosition
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.relational.{KeyPropagationPolicy => KeyPolicy, _}
+import optimus.platform.relational.dal.streams.EventProvider
 
 trait QueryApi {
   def fromWithKey[T, F[_ <: T]](src: F[T], key: RelationKey[T], policy: KeyPolicy = KeyPolicy.EntityAndDimensionOnly)(
@@ -25,6 +26,14 @@ trait QueryApi {
       itemType: TypeInfo[T],
       pos: MethodPosition): Query[T] = {
     conv.convert(src, if (key eq null) NoKey else key, ProviderWithKeyPropagationPolicy(policy))(itemType, pos)
+  }
+
+  // private[optimus] while streams is still in development
+  private[optimus] def events[T <: Entity](
+      src: EntityCompanionBase[T])(implicit itemType: TypeInfo[T], pos: MethodPosition): Query[T] = {
+    val key = KeyPolicy.NoKey.mkKey[T]
+    val provider = EventProvider(src.info, itemType, key, pos)
+    QueryProvider.NoKey.createQuery(provider)
   }
 
   // Helper overload for Scala 2.13.

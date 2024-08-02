@@ -13,6 +13,7 @@ package optimus.buildtool.compilers.zinc.setup
 
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.MessageArtifactType
+import optimus.buildtool.compilers.zinc.reporter.ProblemConverter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.PathUtils
 import xsbti.VirtualFileRef
@@ -26,6 +27,7 @@ object Messages {
   def messages(
       newMessages: Seq[CompilationMessage],
       prevMessages: Option[FileAsset],
+      converter: ProblemConverter,
       staleSources: Seq[VirtualFileRef]
   ): Seq[CompilationMessage] = {
 
@@ -45,9 +47,9 @@ object Messages {
         }
         prevMessages.iterator.collect {
           // Remove messages for files we just compiled, as well as any module-wide messages.
-          case m @ CompilationMessage(Some(pos), _, _, _, _, _)
+          case m @ CompilationMessage(Some(pos), _, _, _, _, _, _)
               if !stalePaths.contains(pos.filepath) && !pos.filepath.endsWith("/") =>
-            m
+            converter.reapply(m) // update the message in case warnings config has changed
         }
       }
       .getOrElse(Iterator.empty)

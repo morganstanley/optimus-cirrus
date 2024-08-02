@@ -20,7 +20,7 @@ import java.lang.annotation.Target;
  * Prevents the tweaking of a node, and also prevents the node calling any other nodes that may be
  * tweaked (i.e., nodes that are not `scenarioIndependent`).
  *
- * @see http://optimusdoc/BasicAnnotations
+ * @see http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @Retention(RetentionPolicy.CLASS)
 @Target({ElementType.METHOD})

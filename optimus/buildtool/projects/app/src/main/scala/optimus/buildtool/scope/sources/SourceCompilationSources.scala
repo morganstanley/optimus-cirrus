@@ -12,6 +12,7 @@
 package optimus.buildtool.scope.sources
 
 import optimus.buildtool.artifacts.ArtifactType
+import optimus.buildtool.artifacts.ArtifactType.Zinc
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
 import optimus.buildtool.cache.NodeCaching.optimizerCache
 import optimus.buildtool.config.ScopeId
@@ -62,7 +63,8 @@ import scala.collection.immutable.SortedMap
     val generatedSources = sourceGeneration.generatedSources
     ObtTrace.traceTask(id, HashSources) {
       val generatedSourceContent = generatedSources.apar.collect { case s: GeneratedSourceArtifact =>
-        s"Generated:${s.tpe.name}" -> s.hashedContent(SourceFolder.isScalaOrJavaSourceFile)
+        s"Generated:${s.tpe.name}" -> (if (s.tpe == Zinc) s.hashedContent(SourceFolder.isTxtFile)
+                                       else s.hashedContent(SourceFolder.isScalaOrJavaSourceFile))
       }
 
       val staticSourceContent = staticContent

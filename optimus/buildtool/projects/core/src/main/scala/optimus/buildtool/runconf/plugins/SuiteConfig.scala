@@ -23,5 +23,6 @@ final case class SuiteConfig(
     category: Option[String],
     groups: Set[String],
     owner: Option[String],
-    flags: Map[String, String]
+    flags: Map[String, String],
+    jacocoOpts: Option[JacocoOpts]
 )

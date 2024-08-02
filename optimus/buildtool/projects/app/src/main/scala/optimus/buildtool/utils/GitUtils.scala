@@ -162,8 +162,12 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorksp
   val gitProcess = new GitProcess(ws.config)
 
   def diffFiles(from: String): Set[FileAsset] = {
-    val lines = execute("-C", workspaceSourceRoot.pathString, "diff", "--name-only", from)
-    lines.filter(!_.startsWith("warning: ")).map(l => workspaceSourceRoot.resolveFile(l)).toSet
+    val linesModified = execute("-C", workspaceSourceRoot.pathString, "diff", "--name-only", from)
+    val linesUntracked = execute("-C", workspaceSourceRoot.pathString, "ls-files", "--others", "--exclude-standard")
+    (linesModified ++ linesUntracked)
+      .filter(!_.startsWith("warning: "))
+      .map(l => workspaceSourceRoot.resolveFile(l))
+      .toSet
   }
 
   private[utils] def analyzeDiffOutput(output: Seq[String]): Map[FileAsset, Set[Int]] = {

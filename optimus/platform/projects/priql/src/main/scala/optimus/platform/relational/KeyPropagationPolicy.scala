@@ -12,12 +12,13 @@
 package optimus.platform.relational
 
 import optimus.entity.EntityInfoRegistry
-import optimus.platform.relational.internal.RelationalTreeUtils
 import optimus.platform._
-import optimus.platform.{NoKey => NK, _}
-import optimus.platform.relational.tree.{TypeInfo, typeInfo}
+import optimus.platform.relational.internal.RelationalTreeUtils
+import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.relational.tree.typeInfo
 import optimus.platform.storable.Entity
 import optimus.platform.storable.Storable
+import optimus.platform.{NoKey => NK}
 
 /**
  * This trait defines the rules to propagate relation key, used as a mixin for DefaultQueryProvider

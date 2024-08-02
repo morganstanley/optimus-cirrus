@@ -22,10 +22,11 @@ private[buildtool] class ZincClassLoaderCaches {
   lazy val classLoaderCache = Some(new ClassLoaderCache(null: ClassLoader))
 
   private val classLoaders: ConcurrentHashMap[Seq[File], ClassLoader] = new ConcurrentHashMap
-  def classLoaderFor(scalaClasspath: Seq[File]): ClassLoader =
+
+  // null by default, so it's not parented to the current classloader, because we want isolation
+  def classLoaderFor(scalaClasspath: Seq[File], parent: ClassLoader = null): ClassLoader =
     classLoaders.computeIfAbsent(
       scalaClasspath,
-      // pass null so it's not parented to the current classloader, because we want isolation
-      cp => new URLClassLoader(scalaClasspath.map(_.toURI.toURL).toArray, null)
+      cp => new URLClassLoader(scalaClasspath.map(_.toURI.toURL).toArray, parent)
     )
 }

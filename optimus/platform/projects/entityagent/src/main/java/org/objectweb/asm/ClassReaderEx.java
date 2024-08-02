@@ -45,16 +45,17 @@ public class ClassReaderEx extends ClassReader {
         return true;
       }
 
-      currentOffset = skipElementValues(currentOffset);
+      currentOffset = skipElementValues(currentOffset, true);
     }
     return false;
   }
 
-  private int skipElementValues(int currentOffset) {
+  private int skipElementValues(int currentOffset, boolean named) {
     int numElementValuePairs = readUnsignedShort(currentOffset);
     currentOffset += 2;
     while (numElementValuePairs-- > 0) {
-      currentOffset = skipElementValue(currentOffset + 2);
+      var skipName = named ? 2 : 0;
+      currentOffset = skipElementValue(currentOffset + skipName);
     }
     return currentOffset;
   }
@@ -65,9 +66,9 @@ public class ClassReaderEx extends ClassReader {
       case 'e': // enum_const_value
         return currentOffset + 5;
       case '@': // annotation_value
-        return skipElementValues(currentOffset + 3);
+        return skipElementValues(currentOffset + 3, true);
       case '[': // array_value
-        return skipElementValues(currentOffset + 1);
+        return skipElementValues(currentOffset + 1, false);
       default:
         return currentOffset + 3;
     }

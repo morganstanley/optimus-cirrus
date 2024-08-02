@@ -26,7 +26,8 @@ import optimus.stratosphere.config.StratoWorkspace
     cmdLine: CacheProvider.CacheCmdLine,
     defaultVersion: String,
     pathBuilder: CompilePathBuilder,
-    stratoWorkspace: StratoWorkspace
+    stratoWorkspace: StratoWorkspace,
+    cacheOperationRecorder: CacheOperationRecorder
 ) {
   import CacheProvider._
   private def isEnabled[T](sk: String): Boolean = sk != OptimusBuildToolCmdLineT.NoneArg
@@ -35,16 +36,16 @@ import optimus.stratosphere.config.StratoWorkspace
   private val writeCmdLine = PartialFunction.condOpt(cmdLine) { case wcl: RemoteStoreWriteCmdLine => wcl }
 
   private val defaultCacheMode: CacheMode = writeCmdLine.fold[CacheMode](CacheMode.ReadOnly) { cmdLine =>
-    if (cmdLine.silverKingMode == NoneArg) {
-      if (cmdLine.silverKingForceWrite) CacheMode.ForceWrite
-      else if (cmdLine.silverKingWritable) CacheMode.ReadWrite
+    if (cmdLine.remoteCacheMode == NoneArg) {
+      if (cmdLine.remoteCacheForceWrite) CacheMode.ForceWrite
+      else if (cmdLine.remoteCacheWritable) CacheMode.ReadWrite
       else CacheMode.ReadOnly
-    } else if (cmdLine.silverKingMode == "readWrite") CacheMode.ReadWrite
-    else if (cmdLine.silverKingMode == "readOnly") CacheMode.ReadOnly
-    else if (cmdLine.silverKingMode == "writeOnly") CacheMode.WriteOnly
-    else if (cmdLine.silverKingMode == "forceWrite") CacheMode.ForceWrite
-    else if (cmdLine.silverKingMode == "forceWriteOnly") CacheMode.ForceWriteOnly
-    else throw new IllegalArgumentException(s"Unrecognized cache mode: ${cmdLine.silverKingMode}")
+    } else if (cmdLine.remoteCacheMode == "readWrite") CacheMode.ReadWrite
+    else if (cmdLine.remoteCacheMode == "readOnly") CacheMode.ReadOnly
+    else if (cmdLine.remoteCacheMode == "writeOnly") CacheMode.WriteOnly
+    else if (cmdLine.remoteCacheMode == "forceWrite") CacheMode.ForceWrite
+    else if (cmdLine.remoteCacheMode == "forceWriteOnly") CacheMode.ForceWriteOnly
+    else throw new IllegalArgumentException(s"Unrecognized cache mode: ${cmdLine.remoteCacheMode}")
   }
 
   @node @scenarioIndependent private[buildtool] def remoteBuildCache: Option[RemoteArtifactCache] =
@@ -68,7 +69,7 @@ import optimus.stratosphere.config.StratoWorkspace
 
   @node @scenarioIndependent def remoteBuildDualWriteCache: Option[RemoteArtifactCache] = writeCmdLine.flatMap {
     cmdLine =>
-      val cacheMode = if (cmdLine.silverKingForceWrite) CacheMode.ForceWriteOnly else CacheMode.WriteOnly
+      val cacheMode = if (cmdLine.remoteCacheForceWrite) CacheMode.ForceWriteOnly else CacheMode.WriteOnly
       if (isEnabled(cmdLine.silverKingDualWrite)) {
         Some(getCache("build (dual write)", cacheMode = cacheMode, silverKing = cmdLine.silverKingDualWrite))
       } else None
@@ -112,22 +113,28 @@ import optimus.stratosphere.config.StratoWorkspace
       case (sk, NoneArg, _) if sk != NoneArg =>
         val config = SilverKingConfig(silverKing)
         log.info(s"Using silverking $cacheType cache at $config")
-        SilverKingStore(pathBuilder, config, version, cacheMode.write, offlinePuts)
+        SilverKingStore(pathBuilder, config, version, cacheMode.write, offlinePuts, cacheOperationRecorder)
       case (sk, dht, true) if sk != NoneArg && dht != NoneArg =>
         val config = SilverKingConfig(silverKing)
         log.info(s"Using silverking $cacheType cache at $config")
         log.info(s"Using DHT $cacheType cache at $dht")
         log.info(s"Comparison mode enabled, using ComparingArtifactStore")
         new ComparingArtifactStore(
-          SilverKingStore(pathBuilder, config, version, cacheMode.write, offlinePuts),
+          new DHTStore(
+            pathBuilder,
+            DHTStore.zkClusterType(dht),
+            version,
+            cacheMode.write,
+            DHTStore.ZkBuilder(dht)
+          ),
           Seq(
-            new DHTStore(
+            SilverKingStore(
               CompilePathBuilder(pathBuilder.outputDir.parent.resolveDir("build_obt_compare")),
-              DHTStore.zkClusterType(dht),
+              config,
               version,
               cacheMode.write,
-              DHTStore.ZkBuilder(dht)
-            )),
+              offlinePuts),
+          ),
           stratoWorkspace
         )
       case (sk, dht, false) if sk != NoneArg && dht != NoneArg =>

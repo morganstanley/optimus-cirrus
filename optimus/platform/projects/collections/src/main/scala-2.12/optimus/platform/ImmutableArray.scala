@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 import scala.util.hashing.MurmurHash3
 import scala.collection.compat.Factory
 
+@SerialVersionUID(1)
 class ImmutableArray[A] private (private val as: Array[A])
     extends immutable.IndexedSeq[A]
     with GenericTraversableTemplate[A, collection.IndexedSeq]
@@ -102,4 +103,6 @@ object ImmutableArray {
   implicit def factoryToCBF[T: ClassTag, Node[_]](
       factory: ImmutableArray.type
   ): CanBuildFrom[ImmutableArray[Node[T]], T, ImmutableArray[T]] = canBuildFrom
+
+  def applyOnUnderlying[A, B](f: Array[A] => B, a: ImmutableArray[A]): B = f(a.as)
 }

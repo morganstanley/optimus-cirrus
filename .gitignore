@@ -14,6 +14,7 @@
 .attach_pid*
 .idea
 /.shelf/
+docs/css/overridesIJ23.css
 
 # VSCode
 *.code-workspace
@@ -23,6 +24,7 @@
 # Python
 .mypy_cache/
 *.pyc
+*.egg-info/
 
 # Stratosphere - human-generated
 *.local.runconf
@@ -31,6 +33,7 @@ profiles/*local.conf
 # Used when project is imported from bsp
 .bsp
 generated-obt
+generated-annoproc
 stale_outputs_checked
 /test-output/
 

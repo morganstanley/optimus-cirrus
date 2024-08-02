@@ -41,7 +41,7 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
             parentNames = convertTo[List[String]](jsObject, "parentNames", Nil),
             piiElements = convertTo[Seq[PIIDetails]](jsObject, "piiElements", Seq.empty)
           )
-        case other ⇒ deserializationError("Cannot deserialize EntityBaseMetaData: invalid input. Raw input: " + other)
+        case other => deserializationError("Cannot deserialize EntityBaseMetaData: invalid input. Raw input: " + other)
       }
     }
 
@@ -72,9 +72,10 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
               packageName = packageName.convertTo[String],
               isTrait = convertTo(jsObject, "isTrait", default = false),
               isObject = convertTo(jsObject, "isObject", default = false),
-              parentNames = convertTo[List[String]](jsObject, "parentNames", Nil)
+              parentNames = convertTo[List[String]](jsObject, "parentNames", Nil),
+              embeddablePiiElements = convertTo[Seq[PIIDetails]](jsObject, "piiElements", Seq.empty)
             )
-          case other ⇒
+          case other =>
             deserializationError("Cannot deserialize EmbeddableBaseMetaData: invalid input. Raw input: " + other)
         }
       }
@@ -86,6 +87,7 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
           skipIfDefault(obj.isTrait, default = false).map("isTrait" -> _.toJson),
           skipIfDefault(obj.isObject, default = false).map("isObject" -> _.toJson),
           skipIfDefault(obj.parentNames, Nil).map("parentNames" -> _.toJson),
+          skipIfDefault(obj.embeddablePiiElements, Nil).map("piiElements" -> _.toJson),
         ).flatten: _*
       )
     }
@@ -102,7 +104,7 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
             isObject = convertTo(jsObject, "isObject", default = false),
             parentNames = convertTo[List[String]](jsObject, "parentNames", Nil)
           )
-        case other ⇒ deserializationError("Cannot deserialize EventBaseMetaData: invalid input. Raw input: " + other)
+        case other => deserializationError("Cannot deserialize EventBaseMetaData: invalid input. Raw input: " + other)
       }
     }
 
@@ -133,7 +135,7 @@ object MetaJsonProtocol extends DefaultJsonProtocol {
             isTrait = convertTo(jsObject, "isTrait", default = false),
             parentNames = convertTo[List[String]](jsObject, "parentNames", Nil)
           )
-        case other ⇒ deserializationError("Cannot deserialize MetaBaseMetaData: invalid input. Raw input: " + other)
+        case other => deserializationError("Cannot deserialize MetaBaseMetaData: invalid input. Raw input: " + other)
       }
     }
 

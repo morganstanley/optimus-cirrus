@@ -214,7 +214,6 @@ object AsyncJmhCompiler {
       val outSources = sandbox.outputDir("output-sources")
       val outResources = sandbox.outputDir("output-resources")
 
-      val javaExec = s"${sys.props("java.home")}${File.separator}bin${File.separator}java"
       val jmhClasspath = jmhGenClasspath.mkString(File.pathSeparator)
       val jmhMain = "org.openjdk.jmh.generators.bytecode.JmhBytecodeGenerator"
       val jmhArgs = List(inClasses.pathString, outSources.pathString, outResources.pathString, "reflection")
@@ -223,7 +222,7 @@ object AsyncJmhCompiler {
       Files.write(argFile.path, ("-cp" :: jmhClasspath :: jmhMain :: jmhArgs).asJava)
       val outFile = sandbox.outputFile("log.out")
       val errFile = sandbox.outputFile("log.err")
-      val proc = new ProcessBuilder(javaExec, s"@${argFile.path.toString}")
+      val proc = new ProcessBuilder(Utils.javaExecutable, s"@${argFile.path.toString}")
         .directory(sandbox.root.path.toFile)
         .redirectOutput(outFile.path.toFile)
         .redirectError(errFile.path.toFile)
@@ -350,7 +349,7 @@ object AsyncJmhCompilerImpl {
 
             // we don't incrementally rewrite these jars at the moment, so might as well compress to save disk space
             if (!msgArtifacts.hasErrors)
-              Jars.stampJarWithConsistentHash(JarAsset(tempOut), compress = true)
+              Jars.stampJarWithConsistentHash(JarAsset(tempOut), compress = true, Some(taskTrace))
 
             msgArtifacts
           }

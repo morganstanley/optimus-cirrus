@@ -11,13 +11,19 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component
 
-import java.nio.file.Files
+import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints
+import optimus.buildtool.builders.postbuilders.installer.BundleFingerprints.HashFlagStr
 
+import java.nio.file.Files
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
+import optimus.buildtool.config.MetaBundle
+import optimus.buildtool.config.NamingConventions.MavenDepsCentralBundle
+import optimus.buildtool.config.NamingConventions.MavenDepsCentralMeta
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.InstallJar
 import optimus.buildtool.trace.ObtTrace
@@ -30,6 +36,8 @@ import scala.collection.immutable.Seq
 class MavenInstaller(installer: Installer) extends ComponentInstaller {
   import installer._
   override val descriptor = "maven jars"
+  val mavenFingerprints: BundleFingerprints = bundleFingerprints(
+    MetaBundle(MavenDepsCentralMeta, MavenDepsCentralBundle))
 
   @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
     installMavenJars(
@@ -42,12 +50,6 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
       includedScopeArtifacts: Seq[ScopeArtifacts]
   ): Seq[JarAsset] = {
     val installJarMapping = InstallJarMapping(allScopeArtifacts)
-
-    def copyFile(scopeId: ScopeId, copyFrom: JarAsset, copyTo: JarAsset) = ObtTrace.traceTask(scopeId, InstallJar) {
-      Files.createDirectories(copyTo.parent.path)
-      // the maven artifacts are immutable, we shouldn't copy them more than once to prevent file lock on windows
-      AssetUtils.atomicallyCopy(copyFrom, copyTo, replaceIfExists = false)
-    }
 
     includedScopeArtifacts.apar.flatMap {
       case scopeArtifacts: ScopeArtifacts =>
@@ -64,13 +66,32 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
         mavenAssetOption match {
           case None => Seq.empty
           case Some(artiFiles) =>
-            artiFiles.flatMap { case (copyFrom, copyTo) =>
-              copyFile(scopeId, copyFrom, copyTo)
-              Seq(copyTo)
+            artiFiles.apar.flatMap { case (copyFrom, copyTo) =>
+              // fingerprints.txt is loaded to memory when initialize mavenFingerprints, so we are fine to check same
+              // jar hash exists or not multiple times. And we can use @HASH without suffix string for RT maven libs
+              mavenFingerprints.writeIfChanged(copyTo, HashFlagStr) {
+                MavenInstaller.copyFile(scopeId, copyFrom, copyTo)
+                Seq(copyTo)
+              }
             }
         }
       case _ => None
     }
   }
 
+}
+
+object MavenInstaller {
+
+  private[installer] def copyFile(scopeId: ScopeId, copyFrom: JarAsset, copyTo: JarAsset): Unit =
+    ObtTrace.traceTask(scopeId, InstallJar) {
+      Files.createDirectories(copyTo.parent.path)
+      // the maven artifacts are immutable, we shouldn't copy them more than once to prevent file lock on windows
+      AssetUtils.atomicallyCopy(copyFrom, copyTo, replaceIfExists = false)
+    }
+
+  def installMavenJars(scopeId: ScopeId, pathBuilder: InstallPathBuilder, jars: Seq[JarAsset]): Unit =
+    jars.foreach { jar =>
+      pathBuilder.getMavenPath(jar).map(to => copyFile(scopeId, jar, to))
+    }
 }

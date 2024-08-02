@@ -11,10 +11,11 @@
  */
 package optimus.utils
 
-object WarningsReportHeaders {
+private[optimus] object WarningsReportHeaders {
   val SEVERITY_HEADER = "Alarm Type"
   val ID_HEADER = "ID"
   val SOURCE_PATH_HEADER = "Source Path"
   val SOURCE_COL_HEADER = "Source"
   val MESSAGE_HEADER = "Message"
+  val LINE_HEADER = "Line"
 }

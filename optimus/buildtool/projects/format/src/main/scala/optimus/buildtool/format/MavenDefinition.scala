@@ -14,17 +14,15 @@ package optimus.buildtool.format
 import ConfigUtils._
 import com.typesafe.config.Config
 
-final case class MavenDefinition(
-    useMavenLibs: Boolean,
-    includeConditionals: Map[String, String],
-    excludeConditionals: Map[String, String]) {
+final case class MavenDefinition(includeConditionals: Map[String, String], excludeConditionals: Map[String, String]) {
   def isEmpty: Boolean = includeConditionals.isEmpty && excludeConditionals.isEmpty
 }
 
 object MavenDefinition {
   private val ReleaseKey = "release-"
+  private[buildtool] val MavenOnlyExcludeKey = "maven-only-exclude"
 
-  def empty: MavenDefinition = MavenDefinition(useMavenLibs = false, Map.empty, Map.empty)
+  def empty: MavenDefinition = MavenDefinition(Map.empty, Map.empty)
 
   def loadMavenDefinition(depCfg: Config, isMavenCfg: Boolean, useMavenLibs: Boolean): Result[MavenDefinition] = if (
     isMavenCfg
@@ -49,10 +47,8 @@ object MavenDefinition {
       }
 
     for {
-      includesOld <- loadConditionals("mavenIncludes")
       includes <- loadConditionals("mavenIncludes")
-      excludesOld <- loadConditionals("mavenExcludes")
       excludes <- loadConditionals("mavenExcludes")
-    } yield MavenDefinition(useMavenLibs, includes ++ includesOld, excludes ++ excludesOld)
+    } yield MavenDefinition(includes, excludes)
   } else Success(MavenDefinition.empty)
 }

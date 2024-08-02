@@ -53,7 +53,7 @@ final case class WarningsConfiguration(
   def fingerprint: Seq[String] = Seq(asJson.toString())
 
   // sorted and distinct-ed for fingerprinting
-  private def overridesStrings = overrides.map(_.original).distinct.sorted
+  private def overridesStrings = allOverrides.map(_.original).distinct.sorted
 
   def optimusIdsFor(tag: Tag): Set[Int] =
     (overrides.iterator ++ inheritedOverrides.iterator)
@@ -71,7 +71,7 @@ final case class WarningsConfiguration(
 
     val jsonMap: Seq[(String, JsValue)] =
       maybe(fatalWarningsName, fatalWarnings.map(JsBoolean(_))) ++
-        maybe(overridesName, if (overrides.nonEmpty) Some(JsArray(overridesStrings.map(JsString(_)))) else None)
+        maybe(overridesName, if (allOverrides.nonEmpty) Some(JsArray(overridesStrings.map(JsString(_)))) else None)
 
     JsObject(jsonMap: _*)
   }
@@ -129,6 +129,7 @@ object WarningsConfiguration {
         .withProblems(warnConf.checkExtraProperties(origin, Keys.warnings))
         .withProblems(unparsed.map(str =>
           origin.errorAt(warnConf.getValue(overridesName), s"Invalid warning override ${str}")))
+
     } else Success(WarningsConfiguration.empty)
   }
 }

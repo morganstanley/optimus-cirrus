@@ -17,7 +17,6 @@ import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace.AsyncCategoryTrace
 import optimus.buildtool.trace.CategoryTrace
 import optimus.buildtool.trace.LongRunningTraceListener
@@ -31,7 +30,6 @@ import optimus.platform.util.ProcessEnvironment.moduleArguments
 
 import java.io.File
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
 import java.time.{Instant, Duration => JDuration}
 import scala.annotation.tailrec
 import scala.collection.compat._
@@ -234,11 +232,6 @@ object BackgroundProcessBuilder {
     }
   }
 
-  private val javaExec: String = {
-    val execFile = RelativePath(s"bin/java${if (Utils.isWindows) ".exe" else ""}")
-    Directory(Paths.get(sys.props("java.home"))).resolveFile(execFile).pathString
-  }
-
   def java(
       id: BackgroundId,
       logFile: FileAsset,
@@ -251,7 +244,8 @@ object BackgroundProcessBuilder {
     val classpathOpt = Seq("-cp", classpathArtifacts.map(_.pathString).mkString(File.pathSeparator))
     val agentOpts = javaAgentArtifacts.map(a => "-javaagent:" + a.pathString)
     val cmd: Seq[String] =
-      Seq(javaExec) ++ moduleArguments ++ javaOpts ++ agentOpts ++ classpathOpt ++ Seq(mainClass) ++ mainClassArgs
+      Seq(Utils.javaExecutable) ++ moduleArguments ++ javaOpts ++ agentOpts ++ classpathOpt ++ Seq(
+        mainClass) ++ mainClassArgs
     apply(id, logFile, cmd, useCrumbs = useCrumbs)
   }
 

@@ -81,6 +81,7 @@ object OptimusBuildToolBootstrap extends Log {
         "BUILD_TAG",
         "JENKINS_INSTANCE",
         "BRANCH_TO_BUILD",
+        "PROFILE",
         "PULL_REQUEST_ID",
         "ID_KVM",
         "SYS_LOC",

@@ -24,6 +24,7 @@ final case class CompilationMessage(
     pos: Option[MessagePosition],
     msg: String,
     severity: CompilationMessage.Severity,
+    originalSeverity: CompilationMessage.Severity,
     alarmId: Option[String],
     isSuppressed: Boolean = false,
     isNew: Boolean = false
@@ -68,8 +69,24 @@ object CompilationMessage {
 
   def apply(pos: Option[MessagePosition], msg: String, severity: Severity): CompilationMessage = {
     val alarmId = extractAlarmId(msg)
-    apply(pos, msg, severity, alarmId)
+    apply(pos, msg, severity, severity, alarmId)
   }
+
+  def apply(
+      pos: Option[MessagePosition],
+      msg: String,
+      severity: CompilationMessage.Severity,
+      alarmId: Option[String]
+  ): CompilationMessage = apply(pos, msg, severity, severity, alarmId, isSuppressed = false, isNew = false)
+
+  def apply(
+      pos: Option[MessagePosition],
+      msg: String,
+      severity: CompilationMessage.Severity,
+      alarmId: Option[String],
+      isSuppressed: Boolean,
+      isNew: Boolean
+  ): CompilationMessage = apply(pos, msg, severity, severity, alarmId, isSuppressed, isNew)
 
   // example of an Optimus alert: '[SUPPRESSED] Optimus: (12345) danger! danger!'
   private val alarmIdExtractor = """Optimus: \((\d+)\)""".r

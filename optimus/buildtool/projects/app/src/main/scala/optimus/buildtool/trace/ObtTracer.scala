@@ -81,6 +81,7 @@ private[buildtool] object ObtStats {
   case object Errors extends ObtStat
   case object Warnings extends ObtStat
   case object Info extends ObtStat
+  case object StampedJars extends ObtStat
   case object InstalledJars extends ObtStat
   case object InstalledWars extends ObtStat
   case object MavenDownloads extends ObtStat

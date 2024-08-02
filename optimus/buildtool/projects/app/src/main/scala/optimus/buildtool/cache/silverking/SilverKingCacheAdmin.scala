@@ -212,8 +212,16 @@ object SilverKingCacheAdmin extends OptimusApp[SilverKingCacheAdminCmdLine] with
   }
 
   @async def invalidate(ops: SilverKingOperations, key: ArtifactKey): Unit = {
-    log.info(s"Invalidating cached artifact for key: $key")
-    ops.invalidateArtifact(key)
-    log.info("Invalidate complete")
+    log.info(s"Getting cached artifact for key: $key")
+
+    ops.getArtifact(key) match {
+      case Some(content) =>
+        log.info(s"[before invalidation] Query result: $content")
+        log.info(s"Invalidating cached artifact for key: $key")
+        ops.invalidateArtifact(key)
+        log.info("Invalidate complete")
+      case None =>
+        log.error(s"Failed to find any entry, so nothing to invalidate, for key: $key")
+    }
   }
 }

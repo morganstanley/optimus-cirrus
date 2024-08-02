@@ -224,12 +224,11 @@ final class RubbishTidyerImpl(
       val withPin = {
         val all = rubbish
           .map { r =>
-            commitArtifacts
-              .get(r.file)
-              .map(pinWeight => r.copy(weight = pinWeight))
-              .getOrElse(r.copy(weight = 0)) // with weight 0 (the default)
+            val weight = commitArtifacts.getOrElse(r.file, 0) // weight 0 is the default
+            r.copy(weight = weight)
           }
-        (if (includePinned) all else all.filter(_.weight == 0))
+        log.debug(s"All files by weight: \n\t${countByWeight(all).mkString("\n\t")}")
+        if (includePinned) all else all.filter(_.weight == 0)
       }.sorted.reverse // from most to least rubbishness
 
       var taken = 0L
@@ -249,16 +248,19 @@ final class RubbishTidyerImpl(
       log.info(f"Selected ${result.size}%,d pieces of rubbish (total ${bytesToString(
           taken)}, oldest ${oldest.lastModified}, newest ${newest.lastModified})")
 
-      val byWeight =
-        result.groupBy(_.weight).map { case (w, rs) => w -> rs.size }.to(Seq).sorted.reverse
-      val byWeightStr = byWeight.map { case (w, size) => s"Weight $w: $size" }
-      log.debug(s"Rubbish files by weight: \n\t${byWeightStr.mkString("\n\t")}")
+      log.debug(s"Rubbish files by weight: \n\t${countByWeight(result).mkString("\n\t")}")
 
       result
     } else {
       log.info(s"Nothing to tidy")
       Nil
     }
+  }
+
+  private def countByWeight(files: Seq[Rubbish]): Seq[String] = {
+    val byWeight =
+      files.groupBy(_.weight).map { case (w, rs) => w -> rs.size }.to(Seq).sorted.reverse
+    byWeight.map { case (w, size) => s"Weight $w: $size" }
   }
 
   override protected def rubbish: Seq[Rubbish] = select()

@@ -13,7 +13,7 @@ package optimus.platform.debugger
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
+import com.fasterxml.jackson.module.scala.ScalaObjectMapper
 
 /**
  * A class used to serialize data about methods which are used to restart optimus nodes in the IJ debugger.

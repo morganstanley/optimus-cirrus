@@ -14,7 +14,6 @@ package optimus.buildtool.format
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValue
-import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
 import optimus.buildtool.config.NamingConventions
@@ -27,9 +26,7 @@ import optimus.buildtool.format.ConfigUtils._
 import optimus.platform._
 
 import java.nio.file.Path
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
-import scala.util.matching.Regex
 import scala.collection.compat._
 
 sealed trait ObtFile {
@@ -137,12 +134,11 @@ final case class Module(
     path: RelativePath,
     owner: String,
     owningGroup: String,
-    forbiddenDependencies: Seq[ForbiddenDependency],
     line: Int
 ) extends ObtFile
     with OrderedElement
 
-final case class Bundle(id: MetaBundle, modulesRoot: String, forbiddenDependencies: Seq[ForbiddenDependency], line: Int)
+final case class Bundle(id: MetaBundle, eonId: Option[String], modulesRoot: String, line: Int)
     extends ObtFile
     with OrderedElement {
   def path: RelativePath = RelativePath(s"${id.meta}/${id.bundle}/bundle.obt")
@@ -151,34 +147,6 @@ final case class Bundle(id: MetaBundle, modulesRoot: String, forbiddenDependenci
 final case class MavenMappingFile(pathStr: String) extends ObtFile {
   val path: RelativePath = RelativePath(pathStr)
   val id: WorkspaceId.type = WorkspaceId
-}
-
-// TODO (OPTIMUS-65072): Delete legacy implementation of forbidden dependencies
-final case class ForbiddenDependency(
-    name: String,
-    configurations: Set[String],
-    private val allowedInModules: Set[String],
-    private val allowedPatterns: Set[Regex],
-    internalOnly: Boolean,
-    externalOnly: Boolean) {
-
-  private val regex = name.r
-
-  def matchesExternalDep(dep: DependencyDefinition): Boolean = {
-    def configMatch = configurations.isEmpty || configurations.contains(dep.configuration)
-    !internalOnly && configMatch && regex.findFirstMatchIn(dep.key).isDefined
-  }
-
-  def matchesInternalDep(key: String, module: String): Boolean = {
-    def keyMatch = key.startsWith(name) || module.endsWith(name)
-    !externalOnly && keyMatch
-  }
-
-  def isAllowedIn(moduleName: String): Boolean =
-    allowedInModules.contains(moduleName) || allowedPatterns.exists(_.pattern.matcher(moduleName).find)
-
-  /** For use in global-level forbidden dependencies. */
-  def isAllowedIn(module: ModuleId): Boolean = isAllowedIn(module.properPath)
 }
 
 final case class WorkspaceStructure(name: String, bundles: Seq[Bundle], modules: Map[ModuleId, Module]) {
@@ -201,32 +169,8 @@ object WorkspaceStructure {
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
     val eonId: Option[String] = config.optionalString(Names.EonId)
-    val id = MetaBundle(meta, name, eonId)
-    val forbiddenDeps: Result[Seq[ForbiddenDependency]] =
-      if (config.hasPath(Names.ForbiddenDependencies))
-        Result.traverse(config.configs(Names.ForbiddenDependencies))(genForbiddenDependency)
-      else Success(Seq.empty)
-    forbiddenDeps.map { fds =>
-      Bundle(id, modulesRoot, fds, config.origin().lineNumber())
-    }
-  }
-
-  // TODO (OPTIMUS-65072): Delete implementation of forbidden dependencies
-  private def genForbiddenDependency(conf: Config): Result[ForbiddenDependency] = {
-    val name = conf.getString(Names.Name)
-    val configurations =
-      if (conf.hasPath(Names.Configurations)) conf.getStringList(Names.Configurations).asScala.toSet
-      else Set.empty[String]
-    val allowedInModules =
-      if (conf.hasPath(Names.AllowedIn)) conf.getStringList(Names.AllowedIn).asScala.toSet
-      else Set.empty[String]
-    val allowedPatterns: Set[Regex] =
-      if (conf.hasPath(Names.AllowedPatterns)) conf.getStringList(Names.AllowedPatterns).asScala.map(_.r).toSet
-      else Set.empty[Regex]
-    val internalOnly = if (conf.hasPath(Names.InternalOnly)) conf.getBoolean(Names.InternalOnly) else false
-    val externalOnly = if (conf.hasPath(Names.ExternalOnly)) conf.getBoolean(Names.ExternalOnly) else false
-    Success(ForbiddenDependency(name, configurations, allowedInModules, allowedPatterns, internalOnly, externalOnly))
-      .withProblems(conf.checkExtraProperties(BundlesConfig, Keys.legacyForbiddenDependencyKeys))
+    val id = MetaBundle(meta, name)
+    Success(Bundle(id, eonId, modulesRoot, config.origin().lineNumber()))
   }
 
   private def genModule(name: String, bundle: Bundle, conf: Config) =
@@ -237,7 +181,6 @@ object WorkspaceStructure {
           path = RelativePath(s"${bundle.modulesRoot}/$name/$name.obt"),
           owner = conf.getString("owner"),
           owningGroup = conf.getString("group"),
-          forbiddenDependencies = bundle.forbiddenDependencies.filterNot(fd => fd.isAllowedIn(moduleName = name)),
           line = conf.root().origin().lineNumber()
         )
       }
@@ -258,14 +201,6 @@ object WorkspaceStructure {
         .withoutPath(Names.ForbiddenDependencies)
         .withoutPath(Names.EonId)
 
-      val globalForbiddenDependencies: Result[Seq[ForbiddenDependency]] = for {
-        bundle <- bundlesFileConfig
-        dep <-
-          if (bundle.hasPath(Names.ForbiddenDependencies))
-            Result.traverse(bundle.configs(Names.ForbiddenDependencies))(genForbiddenDependency)
-          else Success(Nil)
-      } yield dep
-
       val modules: ResultSeq[Module] = for {
         (bundle, bundleConfig) <- bundleAndModulesConf
         (name, moduleConfig) <- ResultSeq(bundleConfig.nested(BundlesConfig))
@@ -277,26 +212,17 @@ object WorkspaceStructure {
       val workspaceStructure: Result[WorkspaceStructure] = for {
         bmc <- bundleAndModulesConf.value
         mods <- modules.value
-        globalForbiddenDeps <- globalForbiddenDependencies
       } yield WorkspaceStructure(
         name,
         bmc.map { case (bundle, _) => bundle },
-        mods.map { module =>
-          module.id -> module.copy(forbiddenDependencies =
-            globalForbiddenDeps.filterNot(fd => fd.isAllowedIn(module.id)) ++ module.forbiddenDependencies)
-        }.toMap
+        mods.map { module => module.id -> module }.toMap
       )
 
       workspaceStructure.withProblems { ws =>
         val bundleOrderingsErrors = OrderingUtils.checkOrderingIn(BundlesConfig, ws.bundles)
         val moduleOrderingsErrors =
           OrderingUtils.checkOrderingIn(BundlesConfig, ws.modules.values.to(Seq))
-        val forbiddenDependencyErrors =
-          OrderingUtils.checkForbiddenDependencies(
-            BundlesConfig,
-            ws.bundles,
-            globalForbiddenDependencies.getOrElse(Seq.empty))
-        bundleOrderingsErrors ++ moduleOrderingsErrors ++ forbiddenDependencyErrors
+        bundleOrderingsErrors ++ moduleOrderingsErrors
       }
     }
 
