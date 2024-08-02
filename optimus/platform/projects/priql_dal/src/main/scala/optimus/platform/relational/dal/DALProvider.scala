@@ -37,6 +37,7 @@ import optimus.platform.relational.dal.deltaquery.DALEntityBitemporalSpaceReduce
 import optimus.platform.relational.dal.fullTextSearch.FullTextSearchOnlyReducer
 import optimus.platform.relational.dal.sampling.DALSamplingReducer
 import optimus.platform.relational.dal.serialization.DALFrom
+import optimus.platform.relational.dal.streams.ProviderWithEntityInfo
 import optimus.platform.relational.data.DataProvider
 import optimus.platform.relational.data.FieldReader
 import optimus.platform.relational.data.QueryCommand
@@ -69,7 +70,8 @@ class DALProvider(
     with ArrangedSource
     with StorableClassElement
     with QueryBuilderConvertible
-    with EntitledOnlySupport {
+    with EntitledOnlySupport
+    with ProviderWithEntityInfo {
   import PriqlSettings._
 
   override def getProviderName = "DALProvider"
@@ -87,14 +89,18 @@ class DALProvider(
     def mkDALRegisteredIndexReducer = new core.DALRegisteredIndexReducer(this)
     def mkDALRegisteredIndexReferenceReducer = new core.DALRegisteredIndexReferenceReducer(this)
     def mkDALFullTextSearchReducer = new fullTextSearch.DALFullTextSearchReducer(this)
+    def mkDALFullTextSearchReferenceReducer = new fullTextSearch.DALFullTextSearchReferenceReducer(this)
     category match {
       case ExecutionCategory.Execute if enableProjectedPriql && enableFullTextSearchPriql =>
         List(mkAccReducer, mkDALFullTextSearchReducer, mkDALReducer)
-      case ExecutionCategory.Execute if enableProjectedPriql      => List(mkAccReducer, mkDALReducer)
-      case ExecutionCategory.Execute if enableFullTextSearchPriql => List(mkDALFullTextSearchReducer, mkDALReducer)
-      case ExecutionCategory.Execute                              => List(wrapped(mkAccReducer), mkDALReducer)
+      case ExecutionCategory.Execute if enableProjectedPriql => List(mkAccReducer, mkDALReducer)
+      case ExecutionCategory.Execute if enableFullTextSearchPriql =>
+        List(mkDALFullTextSearchReducer, mkAccReducer, mkDALReducer)
+      case ExecutionCategory.Execute => List(wrapped(mkAccReducer), mkDALReducer)
       case ExecutionCategory.ExecuteReference if enableProjectedPriql =>
         List(mkAccReferenceReducer, mkDALReferenceReducer)
+      case ExecutionCategory.ExecuteReference if enableFullTextSearchPriql =>
+        List(mkDALFullTextSearchReferenceReducer, wrapped(mkAccReferenceReducer), mkDALReferenceReducer)
       case ExecutionCategory.ExecuteReference =>
         List(wrapped(mkAccReferenceReducer), mkDALReferenceReducer)
       case ExecutionCategory.QueryEntityBitemporalSpace => List(mkDeltaReducer)
@@ -104,12 +110,7 @@ class DALProvider(
     }
   }
 
-  override def prettyPrint(indent: Int, out: StringBuilder): Unit = {
-    indentAndStar(indent, out)
-    out ++= serial + " Provider:" + " '" + getProviderName + "' " + "of" + " type " + rowTypeInfo.runtimeClass.getName + "\n"
-  }
-
-  def classInfo = classEntityInfo
+  def classInfo: ClassEntityInfo = classEntityInfo
 
   override def makeKey(newKey: RelationKey[_]) =
     new DALProvider(classEntityInfo, rowTypeInfo, newKey, pos, dalApi, canBeProjected, canBeFullTextSearch, keyPolicy)

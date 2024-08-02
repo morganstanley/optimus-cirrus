@@ -53,6 +53,7 @@ import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.scope.partial.ArchivePackaging
 import optimus.buildtool.scope.partial.CppScopedCompilation
 import optimus.buildtool.scope.partial.ElectronScopedCompilation
+import optimus.buildtool.scope.partial.ConfigurationMessagesScopedCompilation
 import optimus.buildtool.scope.partial.GenericFilesScopedCompilation
 import optimus.buildtool.scope.partial.JavaScopedCompilation
 import optimus.buildtool.scope.partial.JmhScopedCompilation
@@ -74,6 +75,7 @@ import optimus.buildtool.scope.sources.SourceCompilationSources
 import optimus.buildtool.scope.sources.ArchivePackageSources
 import optimus.buildtool.scope.sources.CppCompilationSources
 import optimus.buildtool.scope.sources.ElectronCompilationSources
+import optimus.buildtool.scope.sources.ConfigurationMessagesCompilationSources
 import optimus.buildtool.scope.sources.PythonCompilationSources
 import optimus.buildtool.scope.sources.WebCompilationSources
 import optimus.buildtool.trace.ObtTrace
@@ -163,7 +165,8 @@ trait CompilationNode extends ScopedCompilation {
     genericFiles: GenericFilesScopedCompilation,
     regexMessages: RegexMessagesScopedCompilation,
     processing: ScopeProcessing,
-    strictEmptySources: Boolean
+    strictEmptySources: Boolean,
+    configurationValidationMessages: ConfigurationMessagesScopedCompilation
 ) extends CompilationNode {
 
   override def id: ScopeId = scope.id
@@ -280,6 +283,7 @@ trait CompilationNode extends ScopedCompilation {
         // them even if we've got signature errors
         jvmSources.generatedSourceArtifacts ++
         regexMessages.messages ++
+        configurationValidationMessages.messages ++
         allDependencies.apar.flatMap(_.transitiveExternalArtifacts) :+
         scopeMessages,
       upstream.allUpstreamArtifacts
@@ -559,6 +563,17 @@ private[buildtool] object ScopedCompilationImpl {
     val regexSources = RegexMessagesCompilationSources(scope, sources, resourceSources, globalRules)
     val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, regexScanner, globalRules)
 
+    val forbiddenDependencies = scope.config.forbiddenDependencies
+    val allDependencies = scope.upstream.allCompileDependencies :+ scope.upstream.runtimeDependencies
+    val configurationSources =
+      ConfigurationMessagesCompilationSources(
+        scope,
+        allDependencies,
+        forbiddenDependencies,
+        scope.externalDependencyResolver)
+    val configurationMessages =
+      ConfigurationMessagesScopedCompilation(scope, configurationSources, forbiddenDependencies, allDependencies)
+
     val runconfSources = RunconfCompilationSources(
       runconfc.obtWorkspaceProperties,
       runconfc.runConfSubstitutionsValidator,
@@ -592,7 +607,8 @@ private[buildtool] object ScopedCompilationImpl {
       genericFiles,
       regexMessages,
       processing,
-      strictEmptySources = strictEmptySources
+      strictEmptySources = strictEmptySources,
+      configurationMessages
     )
   }
 

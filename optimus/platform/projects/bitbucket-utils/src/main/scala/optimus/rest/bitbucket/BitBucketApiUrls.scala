@@ -22,28 +22,28 @@ trait BitBucketApiUrls {
   protected def apiRepoUrl(project: String, repo: String): String =
     apiUrl("api", s"projects/$project/repos/$repo")
 
-  protected def apiPrUrl(project: String, repo: String, prNumber: Int): String =
+  protected def apiPrUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber"
 
-  protected def apiPrBlockerCommentsUrl(project: String, repo: String, prNumber: Int): String =
+  protected def apiPrBlockerCommentsUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiPrUrl(project, repo, prNumber)}/blocker-comments"
 
-  protected def apiPrBlockerCommentUpdateUrl(project: String, repo: String, prNumber: Int, taskId: Int): String =
+  protected def apiPrBlockerCommentUpdateUrl(project: String, repo: String, prNumber: Long, taskId: Int): String =
     s"${apiPrBlockerCommentsUrl(project, repo, prNumber)}/$taskId"
 
   protected def apiPrActivitesUrl(project: String, repo: String): String =
     s"${apiRepoUrl(project, repo)}/pull-requests"
 
-  protected def apiPrActivitiesByPrUrl(project: String, repo: String, prNumber: Int): String =
+  protected def apiPrActivitiesByPrUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiPrActivitesUrl(project, repo)}/$prNumber/activities"
 
-  protected def apiPrCommentsUrl(project: String, repo: String, prNumber: Int): String =
+  protected def apiPrCommentsUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments"
 
-  protected def apiPrCommentsByCommitIdUrl(project: String, repo: String, prNumber: Int, commentId: Int): String =
+  protected def apiPrCommentsByCommitIdUrl(project: String, repo: String, prNumber: Long, commentId: Int): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments/$commentId"
 
-  protected def apiTasksUrl(project: String, repo: String, prNumber: Int): String = apiUrl("api", "blocker-comments")
+  protected def apiTasksUrl(project: String, repo: String, prNumber: Long): String = apiUrl("api", "blocker-comments")
 
   protected def apiListFilesUrl(
       project: String,
@@ -79,4 +79,7 @@ trait BitBucketApiUrls {
 
   protected def apiGetBuildStatus(commitId: String): String =
     apiUrl("build-status", s"commits/$commitId")
+
+  protected def apiPrChangeDetails(project: String, repo: String, prNumber: Long): String =
+    s"${apiPrUrl(project, repo, prNumber)}/changes"
 }

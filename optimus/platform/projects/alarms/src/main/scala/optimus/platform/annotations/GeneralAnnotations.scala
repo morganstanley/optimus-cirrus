@@ -18,7 +18,8 @@ import scala.annotation.meta.getter
 import scala.annotation.meta.setter
 
 /**
- * It's similar to the Scala deprecated annotation which is used to mark a deprecated definition.
+ * This annotation is used to mark a deprecated definition. It should be used in Optimus code instead of Scala's
+ * built-in `@deprecated`. See http://codetree-docs/optimus/docs/CodeStandards/WarningsAndDeprecations.md
  * @param suggestion
  *   Informative message suggesting an alternative.
  */
@@ -26,9 +27,18 @@ import scala.annotation.meta.setter
 class deprecating(suggestion: String) extends StaticAnnotation
 
 /**
- * same as @deprecating but will only be fatal in new/modified files (used to avoid merge race condition when merging
- * PRs which mark commonly used APIs as deprecating)
+ * This annotation is the same as [[deprecating]] but will only be fatal in new/modified files.
+ * This is helpful for deprecating a widely used definition, to avoid merge race conditions or avoid
+ * having to update all uses in codetree at once.
+ * See http://codetree-docs/optimus/docs/CodeStandards/WarningsAndDeprecations.md
  */
+@getter @setter @beanGetter @beanSetter
 class deprecatingNew(suggestion: String) extends StaticAnnotation
 
+/**
+ * This is an internal annotation, don't use it in source code. Use [[deprecating]] / [[deprecatingNew]] instead.
+ *
+ * Optimus adds the `@discouraged` annotation to certain library symbols, such as `view` on Scala collections.
+ * Usages of these symbols trigger a warning (id 10006, DISCOURAGED_CONSTRUCT).
+ */
 class discouraged(discouragedThing: String, reason: String) extends StaticAnnotation

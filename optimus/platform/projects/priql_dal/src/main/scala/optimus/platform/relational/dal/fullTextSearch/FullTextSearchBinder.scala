@@ -57,8 +57,8 @@ class FullTextSearchBinder(mapper: QueryMapper, root: RelationElement) extends D
         }
       case FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement) =>
         mc.method.name match {
-          case "isAfter"  => ElementFactory.lessThan(c, v)
-          case "isBefore" => ElementFactory.greaterThan(c, v)
+          case "isAfter"  => ElementFactory.greaterThan(c, v)
+          case "isBefore" => ElementFactory.lessThan(c, v)
           case "isEqual"  => ElementFactory.equal(c, v)
           case _          => fn
         }

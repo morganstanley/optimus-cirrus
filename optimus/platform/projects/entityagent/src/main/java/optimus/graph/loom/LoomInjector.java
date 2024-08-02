@@ -13,6 +13,8 @@ package optimus.graph.loom;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.security.ProtectionDomain;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassReaderEx;
@@ -35,10 +37,10 @@ public class LoomInjector implements ClassFileTransformer {
     if (crSource == null) return bytes;
 
     var cls = new ClassNode();
-    crSource.accept(cls, ClassReader.SKIP_FRAMES);
+    crSource.accept(cls, 0);
     var adapter = new LoomAdapter(cls);
     adapter.transform();
-    ClassWriter cw = new ClassWriter(crSource, ClassWriter.COMPUTE_FRAMES);
+    var cw = new ClassWriter(crSource, ClassWriter.COMPUTE_MAXS);
     cls.accept(cw);
     return cw.toByteArray();
   }

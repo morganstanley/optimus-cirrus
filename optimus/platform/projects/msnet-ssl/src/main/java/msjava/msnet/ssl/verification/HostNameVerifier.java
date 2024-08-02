@@ -18,12 +18,11 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.naming.InvalidNameException;
@@ -38,7 +37,7 @@ class HostNameVerifier {
   private static final Logger LOGGER = LoggerFactory.getLogger(CertificateVerifier.class);
 
   static boolean verifyHostname(String hostName, Certificate[] certs) throws CertificateException {
-    Set<String> allowedHostNames = getAllowedServerNames(convertToJavaX509Certificates(certs));
+    List<String> allowedHostNames = getAllowedServerNames(convertToJavaX509Certificates(certs));
     if (LOGGER.isTraceEnabled()) {
       LOGGER.trace(
           "Comparing received hostname {} with certificate host names {}",
@@ -46,14 +45,27 @@ class HostNameVerifier {
           allowedHostNames);
     }
 
-    boolean hostNameMatches =
-        allowedHostNames.contains(hostName)
-            || (!hostName.endsWith(".") && allowedHostNames.contains(hostName + "."));
-    if (!hostNameMatches) {
-      LOGGER.warn("The host name '{}' is not a legit host name of a server.", hostName);
+    for (String allowedHostName : allowedHostNames) {
+      // we only support *.domain.com wildcards, we don't support a*z.domain.com
+      // per RFC6125 6.4.3 we are not required to support the latter to be compliant
+      if (allowedHostName.startsWith("*.")) {
+        String allowedDomain = allowedHostName.substring(1);
+        // *.domain.com should not match foo.bar.domain.com
+        if (hostName.endsWith(allowedDomain)
+            && hostName.indexOf('.') == hostName.length() - allowedDomain.length()) {
+          return true;
+        }
+      } else if (allowedHostName.equals(hostName)) {
+        return true;
+      }
     }
 
-    return hostNameMatches;
+    LOGGER.warn(
+        "The host name '{}' does not match any of the names specified in the received certificate - {} .",
+        hostName,
+        allowedHostNames);
+
+    return false;
   }
 
   public static X509Certificate[] convertToJavaX509Certificates(Certificate[] certs)
@@ -76,9 +88,9 @@ class HostNameVerifier {
     }
   }
 
-  private static Set<String> getAllowedServerNames(X509Certificate[] certs)
+  private static List<String> getAllowedServerNames(X509Certificate[] certs)
       throws CertificateParsingException {
-    Set<String> allowedSubjectAlternativeNames = new HashSet<>();
+    List<String> allowedSubjectAlternativeNames = new ArrayList<>();
     for (X509Certificate cert : certs) {
       allowedSubjectAlternativeNames.addAll(getSubjectAlternativeNames(cert));
       getCommonName(cert).ifPresent(allowedSubjectAlternativeNames::add);

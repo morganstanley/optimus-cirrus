@@ -18,11 +18,12 @@ import akka.http.scaladsl.model.HttpHeader
 import akka.http.scaladsl.model.HttpRequest
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.Uri
-import akka.http.scaladsl.settings.ConnectionPoolSettings
 import akka.http.scaladsl.settings.ClientConnectionSettings
+import akka.http.scaladsl.settings.ConnectionPoolSettings
 
 import scala.collection.immutable
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 // Should be extended to customize to your needs
 abstract class AbstractHttpClient(rootUri: Uri)(implicit actorSystem: ActorSystem) {
@@ -73,11 +74,15 @@ abstract class AbstractHttpClient(rootUri: Uri)(implicit actorSystem: ActorSyste
       pathQueryFragmentOrUri: String, // You do not need the specify the schema and authority as it is already provided in rootUri
       modifier: HttpRequest => HttpRequest = identity,
       settingsOverride: Option[ConnectionPoolSettings] = None): Future[HttpResponse] = {
-    val uri: Uri = {
-      val asUri = Uri(pathQueryFragmentOrUri)
-      if (asUri.isRelative) asUri.withAuthority(rootUri.authority).withScheme(rootUri.scheme) else asUri
+    try {
+      val uri: Uri = {
+        val asUri = Uri(pathQueryFragmentOrUri)
+        if (asUri.isRelative) asUri.withAuthority(rootUri.authority).withScheme(rootUri.scheme) else asUri
+      }
+      inspect(rootUri, pathQueryFragmentOrUri, uri)
+      singleRequest(modifier(HttpRequest.apply(uri = uri)), settingsOverride)
+    } catch {
+      case NonFatal(e) => Future.failed(e)
     }
-    inspect(rootUri, pathQueryFragmentOrUri, uri)
-    singleRequest(modifier(HttpRequest.apply(uri = uri)), settingsOverride)
   }
 }

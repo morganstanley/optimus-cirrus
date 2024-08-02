@@ -19,9 +19,9 @@ import java.util.regex.Pattern
 /**
  * Matcher for short repository names.
  */
-final class Repository(userName: String, bitbucketHostname: String) {
+final class Repository(userName: String, bitbucketHostname: String, useUnpatchedGit: Boolean) {
   private[repository] def privateUrl(repo: String): String =
-    s"http://$userName@$bitbucketHostname/atlassian-stash/scm/~$userName/$repo.git"
+    s"http://$usernamePrefix$bitbucketHostname/atlassian-stash/scm/~$userName/$repo.git"
 
   private val defaultMeta = "optimus"
 
@@ -33,17 +33,22 @@ final class Repository(userName: String, bitbucketHostname: String) {
   private val LocalRepo = s"^(|$windowsLocalRepo|$linuxLocalRepo)$$".r
 
   private def repoUrl(meta: String, project: String, repo: String): String =
-    s"http://$userName@$bitbucketHostname/atlassian-stash/scm/${meta}_$project/$repo.git"
+    s"http://$usernamePrefix$bitbucketHostname/atlassian-stash/scm/${meta}_$project/$repo.git"
 
-  // https does not work with Kerberos, we need http instead
-  private def removeHttps(url: String): String = url.replace("https://", "http://")
+  private def sanitizeUrl(url: String): String = {
+    // https does not work with Kerberos, we need http instead
+    val result = url.replace("https://", "http://")
+    if (useUnpatchedGit) result.replaceFirst("http://\\w+@", "http://") else result
+  }
+
+  private def usernamePrefix = if (useUnpatchedGit) "" else s"$userName@"
 
   def unapply(remoteUrl: RemoteUrl): Option[RepositoryLocation] = unapply(remoteUrl.url)
 
   def unapply(repoPath: String): Option[RepositoryLocation] =
     repoPath match {
       case BitbucketUrl(url) if url != null =>
-        val remoteUrl = RemoteUrl(removeHttps(url))
+        val remoteUrl = RemoteUrl(sanitizeUrl(url))
         if (remoteUrl.isFork) Some(PrivateFork(remoteUrl))
         else Some(ProjectRepository(remoteUrl))
       case LocalRepo(path) if path != null =>
@@ -74,8 +79,11 @@ final class Repository(userName: String, bitbucketHostname: String) {
 
 object Repository {
 
-  def resolveRepositoryLocation(remote: String, bitbucketHostname: String): Option[RepositoryLocation] = {
-    val Repo = new Repository(EnvironmentUtils.userName, bitbucketHostname)
+  def resolveRepositoryLocation(
+      remote: String,
+      bitbucketHostname: String,
+      useUnpatchedGit: Boolean): Option[RepositoryLocation] = {
+    val Repo = new Repository(EnvironmentUtils.userName, bitbucketHostname, useUnpatchedGit)
     remote match {
       case Repo(location) => Some(location)
       case _              => None

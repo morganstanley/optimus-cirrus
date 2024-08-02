@@ -77,7 +77,9 @@ object NamingConventions {
   // keep in sync with PathingJarsGetter.scala:isExternalJar at 192
   val MavenDepsCentralMeta = "optimus"
   val MavenDepsCentralBundle = "artifactory-deps"
+  val MavenOnlyKey = "mavenOnly"
   val MavenLibsKey = "mavenLibs"
+  val LibsKey = "libs"
 
   val JarExt = "jar"
   val ZipExt = "zip"
@@ -153,7 +155,7 @@ object NamingConventions {
   def isHttpOrHttps(url: String): Boolean =
     url.startsWith(NamingConventions.HttpPrefix) || url.startsWith(NamingConventions.HttpsPrefix)
 
-  private def toPathingJarName(baseName: String): String =
+  private[buildtool] def toPathingJarName(baseName: String): String =
     s"$baseName-runtimeAppPathing.jar"
 
   def pathingJarName(scopeId: ScopeId): String = toPathingJarName(baseNameForScope(scopeId))

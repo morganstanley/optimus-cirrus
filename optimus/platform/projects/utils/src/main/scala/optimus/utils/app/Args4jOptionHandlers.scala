@@ -100,6 +100,7 @@ trait Args4jOptionHandlers {
   type LocalTimeOptionOptionHandler = optimus.utils.app.LocalTimeOptionOptionHandler
   type LongOptionOptionHandler = optimus.utils.app.LongOptionOptionHandler
   type MapOptionHandler[KeyType, ValueType] = optimus.utils.app.MapOptionHandler[KeyType, ValueType]
+  type TypedSetOptionHandler[T] = optimus.utils.app.TypedSetOptionHandler[T]
   type OptionOptionHandler[A] = optimus.utils.app.OptionOptionHandler[A]
   type PathOptionOptionHandler = optimus.utils.app.PathOptionOptionHandler
   type PeriodOptionHandler = optimus.utils.app.PeriodOptionHandler
@@ -120,6 +121,7 @@ trait Args4jOptionHandlers {
   type TypedEnumerationOptionHandler[E <: Enumeration] = optimus.utils.app.TypedEnumerationOptionHandler[E]
   type URIOptionOptionHandler = optimus.utils.app.URIOptionOptionHandler
   type WhitespaceDelimitedStringOptionHandler = optimus.utils.app.WhitespaceDelimitedStringOptionHandler
+  type YearMonthOptionHandler = optimus.utils.app.YearMonthOptionHandler
   type ZoneIdOptionHandler = optimus.utils.app.ZoneIdOptionHandler
   type ZonedDateTimeOptionHandler = optimus.utils.app.ZonedDateTimeOptionHandler
   type ZonedDateTimeOptionOptionHandler = optimus.utils.app.ZonedDateTimeOptionOptionHandler
@@ -191,6 +193,14 @@ abstract class MapOptionHandler[KeyType, ValueType](
   }
   def convertKey(s: String): KeyType
   def convertValue(s: String): ValueType
+  def delimiter: String = ","
+}
+
+abstract class TypedSetOptionHandler[T](parser: CmdLineParser, option: OptionDef, setter: Setter[Set[T]])
+    extends OneArgumentOptionHandler[Set[T]](parser, option, setter) {
+
+  override def parse(arg: String): Set[T] = arg.split(delimiter).iterator.map(convert).toSet
+  def convert(s: String): T
   def delimiter: String = ","
 }
 

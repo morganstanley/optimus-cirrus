@@ -12,11 +12,13 @@
 package optimus.buildtool.runconf.compile
 
 import optimus.buildtool.runconf.compile.plugins.ExtraExecOptionsSupport
+import optimus.buildtool.runconf.compile.plugins.JacocoOptionsSupport
 
 import java.lang.{Boolean => JBoolean}
 import java.util.{List => JList}
 import java.util.{Map => JMap}
 import optimus.buildtool.runconf.compile.plugins.TreadmillOptionsSupport
+import optimus.buildtool.runconf.plugins.JacocoOpts
 import optimus.buildtool.runconf.plugins.EnvInternal
 import optimus.buildtool.runconf.plugins.ExtraExecOpts
 import optimus.buildtool.runconf.plugins.TreadmillOpts
@@ -64,6 +66,15 @@ private[compile] class PropertyExtractor(val properties: RawProperties) extends 
     val extraExecOptsMap = extractMap(key)
     if (extraExecOptsMap.nonEmpty) {
       Some(ExtraExecOptionsSupport.extract(extraExecOptsMap))
+    } else {
+      None
+    }
+  }
+
+  def extractJacocoOpts(key: String): Option[JacocoOpts] = {
+    val jacocoOptsMap = extractMap(key)
+    if (jacocoOptsMap.nonEmpty) {
+      Some(JacocoOptionsSupport.extract(jacocoOptsMap))
     } else {
       None
     }

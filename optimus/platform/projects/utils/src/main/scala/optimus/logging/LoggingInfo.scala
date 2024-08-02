@@ -99,6 +99,7 @@ object LoggingInfo {
   lazy val appVersion = Option(System.getProperty("optimus.ui.appver")).getOrElse("")
   lazy val os = Option(System.getProperty("os.name")).getOrElse("")
   lazy val tmId = sys.env.getOrElse("TREADMILL_INSTANCEID", "")
+  lazy val isWindows = os.toLowerCase.contains("windows")
 }
 
 object HardwareInfo {

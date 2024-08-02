@@ -11,6 +11,8 @@
  */
 package optimus.stratosphere.filesanddirs
 
+import com.opencsv.CSVParserBuilder
+import com.opencsv.CSVReaderBuilder
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigRenderOptions
 import optimus.stratosphere.bootstrap.StratosphereException
@@ -20,6 +22,7 @@ import optimus.stratosphere.utils.Text._
 import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
@@ -103,8 +106,11 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
 
   private def buffer(bytes: Array[Byte]): ByteBuffer = ByteBuffer.wrap(bytes)
 
-  def write(content: String): Path = writeLock() { c =>
-    c.write(buffer(content.getBytes(StandardCharsets.UTF_8)))
+  def write(content: String): Path =
+    write(content, StandardCharsets.UTF_8)
+
+  def write(content: String, charset: Charset): Path = writeLock() { c =>
+    c.write(buffer(content.getBytes(charset)))
     path
   }
 
@@ -153,6 +159,15 @@ class PlainFileOpts private[filesanddirs] (path: Path) extends PathsOpts(path: P
   def content(): Option[String] = if (exists()) Some(getContent()) else None
 
   def contentLines(): List[String] = readLock { Files.readAllLines(path, StandardCharsets.UTF_8).asScala.toList }
+
+  def contentAsCsv(separator: Char = ','): Seq[Seq[String]] =
+    new CSVReaderBuilder(Files.newBufferedReader(path))
+      .withCSVParser(new CSVParserBuilder().withSeparator(separator).build())
+      .build()
+      .readAll()
+      .asScala
+      .toList
+      .map(_.toList)
 
   def changeContent(f: String => String): Option[Path] = content().map(f(_)).map(write(_))
 

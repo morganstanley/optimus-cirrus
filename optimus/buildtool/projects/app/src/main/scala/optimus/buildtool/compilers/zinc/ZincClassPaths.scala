@@ -25,7 +25,7 @@ object ZincClassPaths {
 
   private val zincVersionRequiredIfStartingWith =
     "compiler-bridge" :: "minimalaggregate" :: "zinc" :: "compiler-interface" :: Nil
-  private val sourceRequiredFor = "compiler-bridge"
+  private[buildtool] val sourceRequiredFor = "compiler-bridge"
   private val versionTag = "_\\d+(\\.\\d+)+(-M\\d+)?$".r
   def skipForZincRun(name: String): Boolean = name.startsWith("compiler-interface")
 
@@ -33,6 +33,11 @@ object ZincClassPaths {
   def zincClassPath(zincHome: Path, zincVersion: String, scalaVersion: String, forZincRun: Boolean): Seq[JarAsset] = {
     val jars = mutable.Buffer[JarAsset]()
     val zincVersionTag = ("-" + zincVersion + "(-|\\.)").r
+
+    def skipFileWhen(name: String) = {
+      if (scalaVersion != "2.11") !name.endsWith(scalaVersion)
+      else name.startsWith(s"${sourceRequiredFor}_2.12") || !(name.endsWith("2.12") || name.endsWith(scalaVersion))
+    }
 
     assert(versionTag.findFirstMatchIn(s"_$scalaVersion").isDefined, s"Scala version $scalaVersion not of form X.XX")
     Files.walkFileTree(
@@ -43,7 +48,7 @@ object ZincClassPaths {
           val name = dir.getFileName.toString
           if (forZincRun && skipForZincRun(name))
             FileVisitResult.SKIP_SUBTREE
-          else if (versionTag.findFirstMatchIn(name).isDefined && !name.endsWith(scalaVersion))
+          else if (versionTag.findFirstMatchIn(name).isDefined && skipFileWhen(name))
             FileVisitResult.SKIP_SUBTREE
           else
             FileVisitResult.CONTINUE

@@ -13,7 +13,6 @@ package optimus.buildtool.compilers.zinc
 
 import java.io.File
 import java.io.InputStream
-import java.nio.file.Path
 import java.util.Properties
 import optimus.buildtool.app.BuildInstrumentation
 import optimus.buildtool.cache.ArtifactReader
@@ -31,6 +30,7 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform.AdvancedUtils.Throttle
+import optimus.platform.entersGraph
 import sbt.internal.inc._
 import xsbti.VirtualFile
 import xsbti.compile.IncOptions
@@ -42,8 +42,7 @@ import scala.util.control.NonFatal
 private[buildtool] final case class ZincCompilerFactory(
     jdkPath: Directory,
     scalaConfig: ScalaVersionConfig,
-    zincPath: Path,
-    zincVersion: String,
+    zincLocator: ZincInstallationLocator,
     workspaceRoot: Directory,
     buildDir: Directory,
     interfaceDir: Directory,
@@ -68,6 +67,10 @@ private[buildtool] final case class ZincCompilerFactory(
     sizeThrottle: Option[Throttle]
 ) extends SyncCompilerFactory {
 
+  private[zinc] val zincClasspathForInterfaceJar = getZincClasspath
+
+  private[zinc] val zincVersion = ZincInstallationLocator.zincRuntimeVersion
+
   private[zinc] lazy val scalaClassPath: Seq[JarAsset] =
     StaticLibraryConfig.scalaJarNamesForZinc.map(n => scalaConfig.scalaLibPath.resolveJar(n))
 
@@ -79,13 +82,13 @@ private[buildtool] final case class ZincCompilerFactory(
     Seq(jdkPath, toolsJar, jceJar, rtJar).filter(_.existsUnsafe).map(j => SimpleVirtualFile(j.path))
   }
 
+  // get zinc jars at the beginning for each build
+  @entersGraph private def getZincClasspath: Seq[JarAsset] = zincLocator.getZincJars
+
   def coreClasspath: Seq[VirtualFile] = jvmJars ++ scalaClassPath.map { j =>
     assert(j.existsUnsafe, s"$j does not exist")
     SimpleVirtualFile(j.path)
   }
-
-  private[zinc] lazy val zincClassPathForInterfaceJar =
-    ZincClassPaths.zincClassPath(zincPath, zincVersion, scalaConfig.scalaMajorVersion, forZincRun = false)
 
   override def fingerprint(traceType: MessageTrace): Seq[String] = {
     val scalalib = scalaConfig.scalaLibPath
@@ -112,6 +115,12 @@ private[buildtool] final case class ZincCompilerFactory(
         throw new RuntimeException(s"""Couldn't find $baseJarName jar.
                                       |Scala classpath: ${scalaClasspath.mkString(":")}""".stripMargin)
       )
+
+  private def readScalaVersion(scalaClasspath: Seq[File]): String = {
+    val scalaCompiler = findScalaJar("scala-compiler", scalaClasspath)
+    readScalaVersion(scalaCompiler)
+  }
+
   private def readScalaVersion(compilerJar: File): String = {
     var input: InputStream = null
     try {
@@ -127,24 +136,60 @@ private[buildtool] final case class ZincCompilerFactory(
   }
 
   private[zinc] def getScalaInstance(scalaClasspath: Seq[File]): ScalaInstance = {
-    val scalaCompiler = findScalaJar("scala-compiler", scalaClasspath)
-    val scalaVersion = readScalaVersion(scalaCompiler)
-    val scalaLibrary = findScalaJar("scala-library", scalaClasspath)
-    val classLoader =
-      classLoaderCaches.classLoaderFor(scalaClasspath.filterNot(_.getName.startsWith("scala-library")))
-    val scalaCompilerLoader = classLoaderCaches.classLoaderFor(Seq(scalaCompiler))
-    val scalaLibraryLoader = classLoaderCaches.classLoaderFor(Seq(scalaLibrary))
-    val jars = scalaClasspath.distinct
-    new ScalaInstance(
-      version = scalaVersion,
-      loader = classLoader,
-      loaderCompilerOnly = scalaCompilerLoader,
-      loaderLibraryOnly = scalaLibraryLoader,
-      libraryJars = Array(scalaLibrary),
-      compilerJars = Array(scalaCompiler),
-      allJars = jars.toArray,
-      explicitActual = Option(scalaVersion)
-    )
+    val scalaVersion = readScalaVersion(scalaClasspath)
+    val scalaInstanceProvider =
+      if (scalaVersion.startsWith("2.11"))
+        new Scala211InstanceProvider(scalaClasspath, scalaVersion)
+      else
+        new DefaultScalaInstanceProvider(scalaClasspath, scalaVersion)
+    scalaInstanceProvider.get
+  }
+
+  private abstract class ScalaInstanceProvider(scalaClasspath: Seq[File], scalaVersion: String) {
+
+    protected val scalaCompiler: File = findScalaJar("scala-compiler", scalaClasspath)
+    protected val scalaLibrary: File = findScalaJar("scala-library", scalaClasspath)
+
+    protected def classLoader: ClassLoader
+    protected def scalaCompilerLoader: ClassLoader
+
+    def get: ScalaInstance = {
+      val scalaLibraryLoader = classLoaderCaches.classLoaderFor(Seq(scalaLibrary))
+      val jars = scalaClasspath.distinct
+      new ScalaInstance(
+        version = scalaVersion,
+        loader = classLoader,
+        loaderCompilerOnly = scalaCompilerLoader,
+        loaderLibraryOnly = scalaLibraryLoader,
+        libraryJars = Array(scalaLibrary),
+        compilerJars = Array(scalaCompiler),
+        allJars = jars.toArray,
+        explicitActual = Option(scalaVersion)
+      )
+    }
+  }
+
+  private class Scala211InstanceProvider(classpath: Seq[File], scalaVersion: String)
+      extends ScalaInstanceProvider(classpath, scalaVersion) {
+
+    protected def classLoader: ClassLoader =
+      classLoaderCaches.classLoaderFor(classpath, parent = getClass.getClassLoader.getParent)
+
+    protected def scalaCompilerLoader: ClassLoader = {
+      val scalaReflect = findScalaJar("scala-reflect", classpath)
+      classLoaderCaches.classLoaderFor(Seq(scalaCompiler, scalaLibrary, scalaReflect))
+    }
+
+  }
+
+  private class DefaultScalaInstanceProvider(classpath: Seq[File], scalaVersion: String)
+      extends ScalaInstanceProvider(classpath, scalaVersion) {
+
+    protected def classLoader: ClassLoader =
+      classLoaderCaches.classLoaderFor(classpath.filterNot(_.getName.startsWith("scala-library")))
+
+    protected def scalaCompilerLoader: ClassLoader =
+      classLoaderCaches.classLoaderFor(Seq(scalaCompiler))
   }
 
 }

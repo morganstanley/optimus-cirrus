@@ -12,6 +12,7 @@
 package optimus.buildtool.compilers.zinc.reporter
 
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.MaybeOptimusMessage
 import optimus.buildtool.artifacts.Severity
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.NotAnOptimusMessage
@@ -29,6 +30,22 @@ class ProblemConverter(val config: ConfigurableWarnings) extends ConvertsProblem
     val rawMsg = problem.message()
     val parsedMessage = OptimusMessageParser.parse(rawMsg)
     val pos = MessagePosition(problem.position())
+    convert(raisedAt, pos, parsedMessage)
+  }
+
+  def reapply(prevMessage: CompilationMessage): CompilationMessage = {
+    val parsedMessage = prevMessage.alarmId match {
+      case Some(id) => OptimusMessage(prevMessage.msg, id.toInt, prevMessage.isSuppressed)
+      case None     => NotAnOptimusMessage(prevMessage.msg)
+    }
+    convert(prevMessage.originalSeverity, prevMessage.pos, parsedMessage)
+  }
+
+  private def convert(
+      raisedAt: Severity,
+      pos: Option[MessagePosition],
+      parsedMessage: MaybeOptimusMessage
+  ): CompilationMessage = {
     val (isNew, newSeverity) = config.isNewOrFatal(raisedAt, parsedMessage) match {
       // new warning fatal-ness is determined downstream, once we know which files were modified.
       case NewWarning  => (true, raisedAt)
@@ -39,9 +56,9 @@ class ProblemConverter(val config: ConfigurableWarnings) extends ConvertsProblem
 
     parsedMessage match {
       case NotAnOptimusMessage(msg) =>
-        CompilationMessage(pos, msg, newSeverity, None, false, isNew)
+        CompilationMessage(pos, msg, newSeverity, raisedAt, None, isSuppressed = false, isNew = isNew)
       case OptimusMessage(msg, alarmId, isSuppressed) =>
-        CompilationMessage(pos, msg, newSeverity, Some(alarmId.toString), isSuppressed, isNew)
+        CompilationMessage(pos, msg, newSeverity, raisedAt, Some(alarmId.toString), isSuppressed, isNew)
     }
   }
 }

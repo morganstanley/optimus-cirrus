@@ -120,9 +120,9 @@ private[this] object CompilationMessageCsvWriter extends SimpleCsvWriter[ScopedC
       "Module" -> { _.scopeId.module },
       "Scope" -> { _.scopeId.tpe },
       "Filename" -> { _.msg.pos.map(p => Pathed.name(p.filepath)) },
-      "Line" -> { _.msg.pos.map(_.startLine) },
+      LINE_HEADER -> { _.msg.pos.map(_.startLine) },
       "Column" -> { _.msg.pos.map(_.startColumn) },
-      "Message" -> { m => StringUtils.abbreviate(m.msg.msg, "...", 500) },
+      MESSAGE_HEADER -> { m => StringUtils.abbreviate(m.msg.msg, "...", 500) },
       "Clickable Reference" -> { _.msg.pos.map(p => s".(${Pathed.name(p.filepath)}:${p.startLine})") },
       SOURCE_COL_HEADER -> { _.msg.pos.map(p => FilenameUtils.getExtension(p.filepath)) },
       "Owner" -> { _.owner }

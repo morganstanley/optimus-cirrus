@@ -217,7 +217,7 @@ private[collection] final class OptimusArraySeq[+T] private (
     None
   }
 
-  override def collect[B](pf: PartialFunction[T, B]): OptimusArraySeq[B] = {
+  override def collect[B](pf: PartialFunction[T, B]): OptimusSeq[B] = {
     OptimusSeq
       .withSharedBuilder[B] { b =>
         var index = 0
@@ -229,7 +229,6 @@ private[collection] final class OptimusArraySeq[+T] private (
           index += 1
         }
       }
-      .asInstanceOf[OptimusArraySeq[B]]
   }
   // extension methods
   override def mapWithIndex[B](f: (T, Int) => B): OptimusSeq[B] = {

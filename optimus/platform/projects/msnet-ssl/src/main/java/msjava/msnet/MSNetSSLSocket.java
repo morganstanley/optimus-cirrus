@@ -88,7 +88,12 @@ public class MSNetSSLSocket extends MSNetTCPSocket {
     // if we read something from the socket, try to decrypt it and store correct size of decrypted
     // message
     if (readBytes) {
-      decryptAndUpdateIOResult(tmpReadBuffer, destBuffer, result);
+      try {
+        decryptAndUpdateIOResult(tmpReadBuffer, destBuffer, result);
+      } catch (IllegalStateException e) {
+        result.setException(
+            new MSNetException("SSLEngine fail to decrypt the message, need reconnect", e));
+      }
     }
     return result;
   }
@@ -113,8 +118,13 @@ public class MSNetSSLSocket extends MSNetTCPSocket {
     MSNetIOStatus status = new MSNetIOStatus();
 
     for (MSNetTCPSocketBuffer unencryptedBuf : bufs) {
-      copyAndEncrypt(unencryptedBuf, encryptedBufferToWrite);
-      status = writeBuffer(encryptedBufferToWrite);
+      try {
+        copyAndEncrypt(unencryptedBuf, encryptedBufferToWrite);
+        status = writeBuffer(encryptedBufferToWrite);
+      } catch (IllegalStateException e) {
+        status.setException(
+            new MSNetException("SSLEngine fail to encrypt the message, need reconnect", e));
+      }
 
       boolean fullyWritten = encryptedBufferToWrite.size() == 0;
       if (fullyWritten) {

@@ -31,8 +31,7 @@ import optimus.buildtool.config.DependencyId
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.Id
 import optimus.buildtool.config.MetaBundle
-import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.config.NamingConventions.MavenReleaseFrontier
+import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScalacConfiguration
 import optimus.buildtool.config.ScopeConfiguration
@@ -46,6 +45,7 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.format.Keys.KeySet
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory.getLogger
 import spray.json._
 
@@ -58,8 +58,9 @@ import scala.collection.mutable
 final case class CustomScopesDefinition(include: Seq[Regex], exclude: Seq[Regex], compile: Boolean, id: ScopeId)
     extends (ScopeId => Boolean) {
   def apply(scopeId: ScopeId): Boolean = {
-    val included = id != scopeId && (include.isEmpty || include.exists(_.unapplySeq(scopeId.properPath).isDefined))
-    included && exclude.forall(_.unapplySeq(scopeId.properPath).isEmpty)
+    val properPath = scopeId.properPath
+    val included = id != scopeId && (include.isEmpty || include.exists(_.unapplySeq(properPath).isDefined))
+    included && exclude.forall(_.unapplySeq(properPath).isEmpty)
   }
 }
 
@@ -72,8 +73,6 @@ class ScopeDefinitionCompiler(
     useMavenLibs: Boolean = false
 ) {
   import ScopeDefinitionCompiler._
-
-  private val log = getLogger(this.getClass)
 
   private def expandParents(scopes: Map[ScopeId, ScopeDefinition]): Result[Map[ScopeId, ScopeDefinition]] = {
     val problems = List.newBuilder[Message]
@@ -91,12 +90,12 @@ class ScopeDefinitionCompiler(
         val cfg = scope.configuration
         val newCompile = cfg.compileDependencies
           .copy(
-            internal = valid.map(_.id) ++ cfg.compileDependencies.internal
+            modules = valid.map(_.id) ++ cfg.compileDependencies.modules
           )
           .distinct
         val newRuntime = cfg.runtimeDependencies
           .copy(
-            internal = valid.map(_.id) ++ cfg.runtimeDependencies.internal
+            modules = valid.map(_.id) ++ cfg.runtimeDependencies.modules
           )
           .distinct
         val newDeps = cfg.dependencies.copy(compileDependencies = newCompile, runtimeDependencies = newRuntime)
@@ -128,21 +127,6 @@ class ScopeDefinitionCompiler(
     }
   }
 
-  private def getScopeDefaultsFromBundleDefaults(
-      bundleDefaults: Map[MetaBundle, ScopeDefaults],
-      keyWithoutEonId: MetaBundle): ScopeDefaults = {
-    val keyWithEonId: Option[MetaBundle] =
-      bundleDefaults.keySet.find(_.isEqual(keyWithoutEonId))
-    keyWithEonId.map(bundleDefaults(_)) match {
-      case Some(value) => value
-      case None =>
-        throw new Exception(s"No ScopeDefaults found for MetaBundle ${if (keyWithEonId.isDefined) {
-            val meta = keyWithEonId.get
-            meta.bundle + ":" + meta.eonId
-          } else { "None:None" }}")
-    }
-  }
-
   def compile(workspaceSrcRoot: Directory): Result[Map[ScopeId, ScopeDefinition]] = {
     val bundleDefaults: Result[Map[MetaBundle, ScopeDefaults]] = for {
       workspaceDefaults <- loadDefaults(WorkspaceDefaults, ScopeDefaults.empty)
@@ -152,8 +136,7 @@ class ScopeDefinitionCompiler(
     val scopes = for {
       defaults <- ResultSeq.single(bundleDefaults)
       module <- ResultSeq(Success(structure.modules.values.to(Seq)))
-      scopeDefaults = getScopeDefaultsFromBundleDefaults(defaults, module.id.metaBundle)
-      scope <- ResultSeq(loadScopes(module, scopeDefaults, workspaceSrcRoot))
+      scope <- ResultSeq(loadScopes(module, defaults(module.id.metaBundle), workspaceSrcRoot))
     } yield scope
 
     val allScopes = for {
@@ -209,9 +192,8 @@ class ScopeDefinitionCompiler(
       id -> scopeDef.copy(
         configuration = scopeDef.configuration.copy(
           dependencies = scopeDef.configuration.dependencies.copy(
-            compileDependencies = compileDeps.copy(internal = (compileDeps.internal ++ mainScope).distinct),
-            runtimeDependencies =
-              runtimeDeps.copy(internal = (runtimeDeps.internal ++ mainScope ++ testWorker).distinct)
+            compileDependencies = compileDeps.copy(modules = (compileDeps.modules ++ mainScope).distinct),
+            runtimeDependencies = runtimeDeps.copy(modules = (runtimeDeps.modules ++ mainScope ++ testWorker).distinct)
           )
         ),
         relationships = (scopeDef.relationships ++ mainRels ++ testWorkerRels).distinct
@@ -224,32 +206,54 @@ class ScopeDefinitionCompiler(
     relationships
       .flatMap { case (sourceId, rel) =>
         val source = scopes(sourceId)
+
         def mavenOnly(scope: ScopeDefinition): Boolean = scope.configuration.flags.mavenOnly
-        def mavenCompatible(scope: ScopeDefinition): Boolean = scope.id == testworkerScope || {
-          val deps = scope.configuration.dependencies
-          val allDepsWithoutNative =
-            deps.compileDependencies ++ deps.compileOnlyDependencies ++ deps.runtimeDependencies
-          val transitiveIds = allDepsWithoutNative.internal
-          val allExternalLibsCompatible =
-            deps.externalNativeDependencies.isEmpty && (allDepsWithoutNative.external.isEmpty ||
-              allDepsWithoutNative.externalIsMaven)
-          val transitiveIdsCompatible =
-            if (transitiveIds.isEmpty) true
-            else {
-              val searchedMap = mutable.Map[ScopeId, Boolean]()
-              transitiveIds.foreach { id =>
-                searchedMap.getOrElseUpdate(
-                  id, {
-                    val newSearch = scopes(id)
-                    newSearch != scope && mavenCompatible(newSearch)
-                  })
-              }
-              searchedMap.values.forall(_ == true)
+
+        def mavenCompatible(scope: ScopeDefinition): Boolean = {
+
+          // check all transitive modules also provided mavenLibs =[]
+          def transitiveMavenCompatibleOrEmpty: Boolean = {
+            val deps = scope.configuration.dependencies
+            val allDepsWithoutNative =
+              deps.compileDependencies ++ deps.compileOnlyDependencies ++ deps.runtimeDependencies
+            val transitiveIds = allDepsWithoutNative.modules
+            val allExternalLibsCompatible =
+              deps.externalNativeDependencies.isEmpty && allDepsWithoutNative.hasMavenLibsOrEmpty
+
+            if (!allExternalLibsCompatible) {
+              val nativeInfo =
+                if (deps.externalNativeDependencies.isEmpty) ""
+                else s"native deps: ${deps.externalNativeDependencies.map(_.name).mkString(", ")}"
+              val depsInfo =
+                if (allDepsWithoutNative.hasMavenLibsOrEmpty) ""
+                else s"predefined libs: ${allDepsWithoutNative.dualExternalDeps.map(_.key).mkString(", ")}"
+              log.warn(s"${scope.id} is not maven compatible! $nativeInfo $depsInfo")
             }
-          transitiveIdsCompatible && allExternalLibsCompatible
+
+            val transitiveIdsCompatible =
+              if (transitiveIds.isEmpty) true
+              else {
+                val searchedMap = mutable.Map[ScopeId, Boolean]()
+                transitiveIds.foreach { id =>
+                  searchedMap.getOrElseUpdate(
+                    id, {
+                      val newSearch = scopes(id)
+                      newSearch != scope && mavenCompatible(newSearch)
+                    })
+                }
+                searchedMap.values.forall(_ == true)
+              }
+
+            transitiveIdsCompatible && allExternalLibsCompatible
+          }
+
+          scope.configuration.flags.mavenOnly || transitiveMavenCompatibleOrEmpty
         }
+
         def javaRel(d: ScopeDefinition): Int = d.configuration.javacConfig.release
+
         def error(msg: String) = Error(msg, rel.origin, rel.line)
+
         scopes.get(rel.target) match {
           case None if modules.contains(rel.target.fullModule) =>
             Seq(error(s"Module ${rel.target.fullModule} exists but scope ${rel.target} does not"))
@@ -257,9 +261,14 @@ class ScopeDefinitionCompiler(
             Seq(error(s"Module ${rel.target.fullModule} does not exist"))
           case Some(target) if !target.configuration.open =>
             Seq(error(invalidDependencyMsg(target.id.toString, "is not open", sourceId.toString)))
-          case Some(target) if mavenOnly(source) && !mavenOnly(target) && !mavenCompatible(target) =>
-            Seq(error(invalidDependencyMsg(target.id.toString, "is not mavenOnly", sourceId.toString)))
-          // special case: allow maven release frontier depends on mavenOnly modules
+          case Some(target) if mavenOnly(source) && !mavenCompatible(target) =>
+            val listLoadedLibs = target.configuration.dependencies.allExternal.listExternalLibs()
+            val msg =
+              if (!mavenOnly(target))
+                s"is not maven compatible(both libs & mavenLibs defined): $listLoadedLibs"
+              else "is not mavenOnly"
+            Seq(error(invalidDependencyMsg(target.id.toString, msg, sourceId.toString)))
+          // TODO (OPTIMUS-58917): clean up special case that allow maven release frontier depends on mavenOnly modules
           case Some(target) if (!mavenOnly(source) && source.id.module != MavenReleaseFrontier) && mavenOnly(target) =>
             Seq(error(invalidDependencyMsg(target.id.toString, "is mavenOnly", sourceId.toString)))
           case Some(target) if javaRel(source) < javaRel(target) =>
@@ -339,31 +348,51 @@ class ScopeDefinitionCompiler(
     Success(all.toMap).withProblems(problems.result())
   }
 
-  def processStringList(config: Config, name: String, error: (String, Int) => Unit)(op: (String, Int) => Unit): Unit =
-    if (config.hasPath(name)) config.getList(name).forEach { value =>
-      val line = value.origin().lineNumber()
-      value.unwrapped() match {
-        case id: String =>
-          op(id, line)
-        case _ =>
-          error(s"Dependencies should be defined as strings, but got: ${value.valueType()}", line)
+  def processDependencyList(
+      config: Config,
+      name: String,
+      error: (String, Int) => Unit,
+      allowUnorderedDependencies: Boolean
+  )(op: (String, Int) => Unit): Unit =
+    if (config.hasPath(name)) {
+      val originalList = config.getList(name).asScala.flatMap { value =>
+        val line = value.origin().lineNumber()
+        value.unwrapped() match {
+          case id: String =>
+            Some((id, line))
+          case _ =>
+            error(s"Dependencies should be defined as strings, but got: ${value.valueType()}", line)
+            None
+        }
+      }
+
+      if (allowUnorderedDependencies) {
+        originalList.foreach { case (id, line) => op(id, line) }
+      } else {
+        val sortedList = originalList.sorted
+        originalList.zip(sortedList).foreach { case ((origId, line), (sortedId, _)) =>
+          if (origId == sortedId) op(origId, line)
+          else error(s"Dependency $origId is not in correct alphabetical order at line", line)
+        }
       }
     }
 
   private def loadScopeDeps(
       origin: ObtFile,
       dependencyType: String, // eg. "compile", "runtime"
-      config: Config
-  ): Result[(DualDependencies, Seq[ScopeRelationship])] = if (config.hasPath(dependencyType)) {
+      config: Config,
+      parent: InheritableScopeDefinition,
+      allowUnorderedDependencies: Boolean
+  ): Result[(Dependencies, Seq[ScopeRelationship])] = if (config.hasPath(dependencyType)) {
     val problems = Array.newBuilder[Message]
 
     def error(msg: String, line: Int): Unit = problems += Error(msg, origin, line)
 
     def getJvmLibs(libsType: String): Seq[DependencyDefinition] = {
       val libs = Array.newBuilder[DependencyDefinition]
-      val fromMavenLibs = libsType.contains(NamingConventions.MavenLibsKey)
+      val fromMavenLibs = libsType.contains(MavenLibsKey)
 
-      processStringList(config, libsType, error) { (id, loc) =>
+      processDependencyList(config, libsType, error, allowUnorderedDependencies) { (id, loc) =>
         centralDependencies.jvmDependencies.forId(id, fromMavenLibs) match {
           case loadedDeps if loadedDeps.nonEmpty =>
             if (!fromMavenLibs) libs ++= loadedDeps
@@ -391,11 +420,19 @@ class ScopeDefinitionCompiler(
       libs.result().to(Seq)
     }
 
+    // if parent tpe is mavenOnly or current tpe is mavenOnly, for example all.mavenOnly with main.compile.libs
+    val mavenOnly = parent.mavenOnly.getOrElse(false) || config.optionalBoolean(MavenOnlyKey).getOrElse(false)
+    val hasLibsKey = config.getObject(dependencyType).toString.contains(LibsKey)
+
+    // we don't allow mavenOnly module define libs=[] in their obt file or from global workspace.obt file
+    if (mavenOnly && hasLibsKey)
+      error(s"cannot use libs[] with mavenOnly=true!", config.getConfig(dependencyType).origin().lineNumber())
+
     val dependencyIds = Array.newBuilder[ScopeId]
     val relationships = Seq.newBuilder[ScopeRelationship]
     // back compat
     val key = if (config.hasPath(s"$dependencyType.scopes")) s"$dependencyType.scopes" else s"$dependencyType.modules"
-    processStringList(config, key, error) { (path, line) =>
+    processDependencyList(config, key, error, allowUnorderedDependencies) { (path, line) =>
       val id = ScopeDefinition.loadScopeId(path)
       dependencyIds += id
       relationships += ScopeRelationship(id, origin, line)
@@ -410,63 +447,22 @@ class ScopeDefinitionCompiler(
           case _         => Keys.scopeDepsTemplate
         }
 
-    val dependencies = DualDependencies(
-      internal = dependencyIds.result().to(Seq),
-      afs = getJvmLibs(s"$dependencyType.libs"),
-      maven = getJvmLibs(s"$dependencyType.${NamingConventions.MavenLibsKey}")
+    val dependencies = Dependencies(
+      modules = dependencyIds.result().to(Seq),
+      libs = getJvmLibs(s"$dependencyType.$LibsKey"),
+      mavenLibs = getJvmLibs(s"$dependencyType.$MavenLibsKey")
     )
 
     val extraLibs = {
-      val loaded = getJvmLibs(s"$dependencyType.${NamingConventions.ExtraLibsKey}")
+      val loaded = getJvmLibs(s"$dependencyType.$ExtraLibsKey")
       val (mavenExtraLibs, afsExtraLibs) = loaded.partition(_.isMaven)
-      DualDependencies(Nil, afs = afsExtraLibs, maven = mavenExtraLibs)
+      Dependencies(Nil, libs = afsExtraLibs, mavenLibs = mavenExtraLibs)
     }
 
     Success((dependencies ++ extraLibs, relationships.result()))
       .withProblems(problems.result().to(Seq))
       .withProblems(config.getObject(dependencyType).toConfig.checkExtraProperties(origin, keysToUse))
-  } else Success((DualDependencies.empty, Nil))
-
-  private def checkForbiddenDeps(
-      id: ScopeId,
-      scope: InheritableScopeDefinition,
-      forbiddenDeps: Seq[ForbiddenDependency]
-  ): Unit = {
-    val allInternal = (scope.compile.internal ++ scope.compileOnly.internal ++ scope.runtime.internal).distinct
-    ensureInternalDepsAllowed(id, allInternal, forbiddenDeps)
-    val allExternal = (scope.compile.allExternal ++ scope.compileOnly.allExternal ++ scope.runtime.allExternal).distinct
-    ensureExternalDepsAllowed(id, allExternal, forbiddenDeps)
-  }
-
-  private def ensureInternalDepsAllowed(
-      id: ScopeId,
-      internalDeps: Seq[ScopeId],
-      forbiddenDeps: Seq[ForbiddenDependency]
-  ): Seq[ScopeId] = {
-    val invalidDeps = internalDeps.filter { d =>
-      forbiddenDeps.exists(_.matchesInternalDep(key = d.properPath, module = d.module))
-    }
-    if (invalidDeps.nonEmpty) {
-      val msg = s"Forbidden internal dependencies detected for $id: ${invalidDeps.mkString(", ")}"
-      log.error(s"[$id] $msg")
-      throw new IllegalStateException(msg)
-    }
-    internalDeps
-  }
-
-  private def ensureExternalDepsAllowed(
-      id: ScopeId,
-      externalDeps: Seq[DependencyDefinition],
-      forbiddenDeps: Seq[ForbiddenDependency]
-  ): Seq[DependencyDefinition] = {
-    val invalidDeps = externalDeps.filter(d => forbiddenDeps.exists(_.matchesExternalDep(d)))
-    if (invalidDeps.nonEmpty) {
-      val msg = s"Forbidden external dependencies detected for $id: ${invalidDeps.map(_.key).mkString(", ")}"
-      log.error(s"[$id] $msg")
-      throw new IllegalStateException(msg)
-    }
-    externalDeps
-  }
+  } else Success((Dependencies.empty, Nil))
 
   // Optimistically assume this is correct
   private[this] val testworkerScope = ScopeId.parse("optimus.buildtool.testworker.main")
@@ -480,11 +476,12 @@ class ScopeDefinitionCompiler(
 
       // maven usages should not force to use native dependencies
       val deps = Array.newBuilder[NativeDependencyDefinition]
-      if (!useMavenLibs) processStringList(config, "native", error) { (id, loc) =>
-        centralDependencies.jvmDependencies.nativeDependencies.get(id) match {
-          case Some(dep) => deps += dep
-          case None      => error(s"Native dependency $id is not defined.", loc)
-        }
+      if (!useMavenLibs) processDependencyList(config, "native", error, allowUnorderedDependencies = true) {
+        (id, loc) =>
+          centralDependencies.jvmDependencies.nativeDependencies.get(id) match {
+            case Some(dep) => deps += dep
+            case None      => error(s"Native dependency $id is not defined.", loc)
+          }
       }
       Success(deps.result().to(Seq)).withProblems(problems.result().to(Seq))
     } else Success(Nil)
@@ -497,12 +494,22 @@ class ScopeDefinitionCompiler(
       parent: InheritableScopeDefinition
   ): Result[InheritableScopeDefinition] =
     Result.tryWith(origin, config) {
+      val scopeAllowUnorderedDependencies = config.optionalBoolean("allowUnorderedDependencies")
+      val allowUnorderedDependencies =
+        scopeAllowUnorderedDependencies
+          .orElse(parent.allowUnorderedDependencies)
+          .getOrElse(true)
       for {
-        (compileDeps, compileRels) <- loadScopeDeps(origin, "compile", config)
-        (compileOnlyDeps, compileOnlyRels) <- loadScopeDeps(origin, "compileOnly", config)
-        (runtimeDeps, runtimeRels) <- loadScopeDeps(origin, "runtime", config)
-        (webDeps, webRels) <- loadScopeDeps(origin, "web", config)
-        (electronDeps, electronRels) <- loadScopeDeps(origin, "electron", config)
+        (compileDeps, compileRels) <- loadScopeDeps(origin, "compile", config, parent, allowUnorderedDependencies)
+        (compileOnlyDeps, compileOnlyRels) <- loadScopeDeps(
+          origin,
+          "compileOnly",
+          config,
+          parent,
+          allowUnorderedDependencies)
+        (runtimeDeps, runtimeRels) <- loadScopeDeps(origin, "runtime", config, parent, allowUnorderedDependencies)
+        (webDeps, webRels) <- loadScopeDeps(origin, "web", config, parent, allowUnorderedDependencies)
+        (electronDeps, electronRels) <- loadScopeDeps(origin, "electron", config, parent, allowUnorderedDependencies)
         nativeDeps <- loadNativeDeps(origin, config)
         scalacConf <- loadScalac(config, origin)
         javacConf <- loadJavac(config, origin)
@@ -511,11 +518,12 @@ class ScopeDefinitionCompiler(
         copyFilesConf <- CopyFilesConfigurationCompiler.load(config, origin)
         extensionsConf <- ExtensionConfigurationCompiler.load(config, origin)
         postInstallApps <- loadPostInstallApps(config, origin)
-        (extraLibs, extraRels) <- loadScopeDeps(origin, "extraLibs", config)
+        (extraLibs, extraRels) <- loadScopeDeps(origin, "extraLibs", config, parent, allowUnorderedDependencies)
         forbiddenDependencies <- loadForbiddenDependencies(config, origin)
+        interopConf <- InteropConfigurationCompiler.load(config, origin)
       } yield {
         val archiveContentRoots = config.seqOrEmpty("archiveContents")
-        val scope = InheritableScopeDefinition(
+        InheritableScopeDefinition(
           compile = compileDeps ++ webDeps ++ electronDeps,
           compileOnly = compileOnlyDeps,
           runtime = runtimeDeps,
@@ -543,20 +551,30 @@ class ScopeDefinitionCompiler(
           installAppScripts = config.optionalBoolean("requiredAppScripts"),
           bundle = config.optionalBoolean("bundle"),
           includeInClassBundle = config.optionalBoolean("includeInClassBundle"),
-          mavenOnly = config.optionalBoolean("mavenOnly"),
+          mavenOnly = config.optionalBoolean(MavenOnlyKey),
+          allowUnorderedDependencies = scopeAllowUnorderedDependencies,
           relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
           extraLibs = extraLibs,
-          forbiddenDependencies = forbiddenDependencies
+          forbiddenDependencies = forbiddenDependencies,
+          interop = interopConf
         ).withParent(parent)
-
-        origin match {
-          case m: Module => checkForbiddenDeps(m.id.scope(tpe), scope, m.forbiddenDependencies)
-          case _         => // do nothing
-        }
-        scope
       }
 
     }
+
+  private def checkDefaults(
+      id: ScopeId,
+      module: Module,
+      scopeDefaults: InheritableScopeDefinition,
+      mavenOnly: Boolean): Seq[Error] = {
+    val allExternalDeps = scopeDefaults.allExternalDependencies
+    if (mavenOnly && allExternalDeps.withLibs) {
+      val msg =
+        s"MavenOnly module $id cannot depend on defaults ${allExternalDeps.listExternalLibs(false)} " +
+          s"(in ${WorkspaceDefaults.path.pathString} or bundle.obt)"
+      Seq(Error(msg, module))
+    } else Nil
+  }
 
   private def loadScopes(
       module: Module,
@@ -573,22 +591,25 @@ class ScopeDefinitionCompiler(
 
         val res = for {
           (tpe, config) <- ResultSeq(config.withoutPath("all").resolve().nested(module))
-          mavenOnly = config.optionalBoolean("mavenOnly").contains(true)
+          mavenOnly = config.optionalBoolean(MavenOnlyKey).contains(true)
           scopeId = module.id.scope(tpe)
+          scopeDefaults =
+            finalDefaults.forScope(
+              scopeId,
+              centralDependencies.jvmDependencies.mavenDefinition,
+              useMavenDepsRules = useMavenLibs || mavenOnly,
+              useMavenOnlyRules = mavenOnly
+            )
           cs <- ResultSeq.single(loadCustomScopesDefinitions(scopeId, config))
           scope <- ResultSeq.single(
             loadScope(
               module,
               tpe,
               config,
-              finalDefaults.forScope(
-                scopeId,
-                centralDependencies.jvmDependencies.mavenDefinition,
-                useMavenLibs || mavenOnly
-              ),
+              scopeDefaults,
               workspaceSrcRoot,
               cs
-            ))
+            ).withProblems(checkDefaults(scopeId, module, scopeDefaults, mavenOnly)))
         } yield scope
 
         res.value
@@ -676,20 +697,17 @@ class ScopeDefinitionCompiler(
 
     def allDependencies(
         defn: InheritableScopeDefinition,
-        containsMacros: Boolean,
-        mavenOnly: Boolean
+        containsMacros: Boolean
     ): AllDependencies = {
       val tagAsMacroDependencyIfNeeded: Dependencies => Dependencies =
         if (containsMacros) d => d.externalMap(_.copy(containsMacros = true)) else identity
+      val mavenDef = centralDependencies.jvmDependencies.mavenDefinition
       AllDependencies(
-        compileDependencies = tagAsMacroDependencyIfNeeded(
-          defn.compile.distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly)),
-        compileOnlyDependencies =
-          defn.compileOnly.distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly),
-        runtimeDependencies =
-          (defn.runtime ++ defn.compile).distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly),
+        compileDependencies = tagAsMacroDependencyIfNeeded(defn.compile.distinct),
+        compileOnlyDependencies = defn.compileOnly.distinct,
+        runtimeDependencies = (defn.runtime ++ defn.compile).distinct,
         externalNativeDependencies = defn.native,
-        extraLibs = defn.extraLibs.distinct.dependencies(centralDependencies.jvmDependencies, mavenOnly = false)
+        extraLibs = defn.extraLibs.distinct
       )
     }
 
@@ -709,12 +727,26 @@ class ScopeDefinitionCompiler(
         pythonConfiguration <- PythonConfigurationCompiler.load(config, module, centralDependencies.pythonDependencies)
         electronConfiguration <- ElectronConfigurationCompiler.load(config, module)
         javacConfig <- resolvedConfiguration.javac.resolve(scopeId, module, centralDependencies.jdkDependencies)
+        interopConfiguration <- InteropConfigurationCompiler.load(config, module)
       } yield {
         val configFile = module.path
         val moduleRoot = configFile.parent
         val scopeRoot = resolvedConfiguration.rawRoot.map(moduleRoot.resolvePath).getOrElse(moduleRoot)
+        val loadedModules = structure.modules.values
         // back compat
-        val targetBundles = config.seqOrEmpty("targetBundles").map(MetaBundle.parse)
+        val unparsedTargetBundles: Seq[String] = config.seqOrEmpty("targetBundles")
+        val targetBundles = unparsedTargetBundles
+          .flatMap(b =>
+            b.split("\\.") match {
+              case Array(meta) =>
+                loadedModules.filter(_.id.meta == meta).map(_.id.metaBundle)
+              case Array(meta, bundle) =>
+                if (unparsedTargetBundles.contains(meta))
+                  log.warn(s"[$scopeId] Duplicate targetBundles '$b': '$meta' already specified")
+                Seq(MetaBundle(meta, bundle))
+              case _ => throw new IllegalArgumentException(s"[$scopeId] Bundle '$b' could not be parsed")
+            })
+          .distinct
 
         val List(containsPlugin, definesMacros, containsMacros, jmh) =
           List("isCompilerPlugin", "hasMacros", "implementsMacros", "jmh").map {
@@ -722,7 +754,6 @@ class ScopeDefinitionCompiler(
           }
 
         val mavenOnly = resolvedConfiguration.mavenOnly.getOrElse(false)
-        val mavenLibs = useMavenLibs || mavenOnly
 
         val scopePaths = ScopePaths(
           workspaceSrcRoot,
@@ -744,9 +775,8 @@ class ScopeDefinitionCompiler(
           containsMacros = containsMacros,
           jmh = jmh,
           javaOnly = !resolvedConfiguration.compile
-            .dependencies(centralDependencies.jvmDependencies, mavenLibs)
-            .external
-            .exists(_.isScalaSdk),
+            .externalDeps(useMavenLibs)
+            .exists(dep => if (mavenOnly) "scala-library" == dep.name else dep.isScalaSdk),
           usePipelining = resolvedConfiguration.usePipelining.getOrElse(true),
           empty = resolvedConfiguration.empty.getOrElse(false),
           installSources = resolvedConfiguration.installSources.getOrElse(false),
@@ -762,7 +792,7 @@ class ScopeDefinitionCompiler(
           resourceTokens = resolvedConfiguration.resourceTokens,
           runConfConfig = None,
           sourceExclusionsStr = config.seqOrEmpty("sourceExcludes"),
-          dependencies = allDependencies(resolvedConfiguration, containsMacros, mavenLibs),
+          dependencies = allDependencies(resolvedConfiguration, containsMacros),
           scalacConfig = resolvedConfiguration.scalac,
           javacConfig = javacConfig,
           cppConfigs = cppConfiguration,
@@ -771,7 +801,10 @@ class ScopeDefinitionCompiler(
           electronConfig = electronConfiguration,
           agentConfig = agentConf,
           targetBundles = targetBundles,
-          processorConfig = processorConfiguration
+          processorConfig = processorConfiguration,
+          interopConfig = interopConfiguration,
+          forbiddenDependencies = resolvedConfiguration.forbiddenDependencies,
+          useMavenLibs = useMavenLibs
         )
         ScopeDefinition(
           id = scopeId,
@@ -925,8 +958,8 @@ class ScopeDefinitionCompiler(
 
           val linkerFlags =
             resolve(_.stringListOrEmpty("linkerFlags")).map(CppToolchainStructure.parseLinkerFlag).toSet
-          val isMavenOnly = resolveOpt(_.optionalBoolean("mavenOnly")).contains(true)
-          val dependenciesKey = if (isMavenOnly) NamingConventions.MavenLibsKey else "libs"
+          val isMavenOnly = resolveOpt(_.optionalBoolean(MavenOnlyKey)).contains(true)
+          val dependenciesKey = if (isMavenOnly) MavenLibsKey else LibsKey
           val libs = resolve(_.stringListOrEmpty(dependenciesKey))
           val libPath = resolve(_.stringListOrEmpty("libPath").map(p => Directory(PathUtils.get(p))))
           val systemLibs = resolve(_.stringListOrEmpty("systemLibs").map(p => FileAsset(PathUtils.get(p))))
@@ -1072,6 +1105,7 @@ class ScopeDefinitionCompiler(
 }
 
 object ScopeDefinitionCompiler {
+  private val log: Logger = getLogger(this.getClass)
 
   private[buildtool] def invalidDependencyMsg(target: String, reason: String, source: String, explain: String = "") =
     s"Scope $target $reason, so it cannot be a dependency of $source $explain"
@@ -1087,11 +1121,11 @@ object ScopeDefinitionCompiler {
   private[buildtool] def noVersionDepNotAllowed(id: String, line: Int): String =
     s"dependency $id at ${JvmDependenciesConfig.path.pathString}:$line shouldn't be used directly, it's the transitive mapping rule without version."
 
-  def asJson(sd: ScopeDefinition): JsObject = {
+  def asJson(sd: ScopeDefinition, useMavenLibs: Boolean): JsObject = {
     val cfg = Map(
-      "compile" -> asJson(sd.configuration.compileDependencies),
-      "compileOnly" -> asJson(sd.configuration.compileOnlyDependencies),
-      "runtime" -> asJson(sd.configuration.runtimeDependencies),
+      "compile" -> asJson(sd.configuration.compileDependencies, useMavenLibs),
+      "compileOnly" -> asJson(sd.configuration.compileOnlyDependencies, useMavenLibs),
+      "runtime" -> asJson(sd.configuration.runtimeDependencies, useMavenLibs),
       "native" -> JsArray(sd.configuration.externalNativeDependencies.map(_.name).map(JsString.apply): _*),
       "sources" -> JsArray(sd.configuration.paths.sources.map(s => JsString(s.pathString)): _*),
       "sourceExcludes" -> JsArray(sd.configuration.sourceExclusions.map(r => JsString(r.pattern.pattern)): _*),
@@ -1116,10 +1150,12 @@ object ScopeDefinitionCompiler {
     JsObject(sd.id.tpe -> JsObject(cfg))
   }
 
-  private def asJson(deps: Dependencies): JsObject = {
+  private def asJson(deps: Dependencies, useMavenLibs: Boolean): JsObject = {
     def asJsonScope(list: Seq[ScopeId]) = JsArray(list.map(id => asJson(id)): _*)
     def asJsonDependency(list: Seq[DependencyId]) = JsArray(list.map(id => asJson(id)): _*)
-    JsObject("scopes" -> asJsonScope(deps.internal), "libs" -> asJsonDependency(deps.external.map(_.id)))
+    JsObject(
+      "scopes" -> asJsonScope(deps.modules),
+      LibsKey -> asJsonDependency(deps.externalDeps(useMavenLibs).map(_.id)))
   }
 
   private val jdWriter: JsonWriter[JarDefinition] = {

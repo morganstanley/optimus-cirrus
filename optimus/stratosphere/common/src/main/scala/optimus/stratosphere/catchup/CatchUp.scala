@@ -123,7 +123,7 @@ class CatchUp(
       val mergeRebaseMsg =
         if (isMerge) s"Do you want to merge changes from $branchToUse' into your local '$currBranch' branch anyway?"
         else s"Do you want to rebase your '$currBranch' branch on top of '$branchToUse' branch anyway?"
-      val questionMsg = s"You have ${otherFiles.size} uncommited file(s). $mergeRebaseMsg"
+      val questionMsg = s"You have ${otherFiles.size} uncommitted file(s). $mergeRebaseMsg"
       if (!doUserConfirm(questionMsg)) abort("Abort requested by user", abortedByUser = true)
     }
   }

@@ -20,6 +20,7 @@ import optimus.platform.relational._
 import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.dal.accelerated.DALAccExecutionProvider
 import optimus.platform.relational.dal.core.DALReferenceReducer.DALReferenceMapping
+import optimus.platform.relational.dal.fullTextSearch.FullTextSearchExecutionProvider
 import optimus.platform.relational.dal.internal.RawReferenceKey
 import optimus.platform.relational.data.Aggregator
 import optimus.platform.relational.data.DataProvider
@@ -171,7 +172,8 @@ object DALReferenceReducer {
               case x => x // empty ScalaTypeMultiRelation
             }
           }
-        case p: DALAccExecutionProvider[_] => p
+        case p: DALAccExecutionProvider[_]         => p
+        case p: FullTextSearchExecutionProvider[_] => p
         case _ =>
           throw new RelationalUnsupportedException("DAL reference query requires whole query to run on the server side")
       }

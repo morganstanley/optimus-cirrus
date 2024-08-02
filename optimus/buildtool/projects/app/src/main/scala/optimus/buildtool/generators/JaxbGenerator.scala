@@ -249,7 +249,7 @@ import scala.xml.InputSource
             validatedTemplateFiles
               .flatMap { f =>
                 val args = Seq("-autoNameResolution") ++
-                  pkgs.flatMap(p => Seq("-p", s"$p")) ++
+                  (pkgs ++ pkg.toSeq).flatMap(p => Seq("-p", s"$p")) ++
                   Seq("-d", outputDir.pathString, PathUtils.mappedUriString(f.path))
 
                 val wsdlToJava = new WSDLToJava(args.toArray)

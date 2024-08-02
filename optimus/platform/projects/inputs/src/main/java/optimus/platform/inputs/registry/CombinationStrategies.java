@@ -67,6 +67,7 @@ public class CombinationStrategies {
       myMap.put(LoaderSource.SYSTEM_PROPERTIES, 6);
       myMap.put(LoaderSource.ENVIRONMENT_VARIABLES, 5);
       myMap.put(LoaderSource.CODE, 4);
+      myMap.put(LoaderSource.FILE, 2);
       return myMap;
     }
 

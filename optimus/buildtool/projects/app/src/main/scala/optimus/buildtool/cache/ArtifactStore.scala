@@ -127,6 +127,12 @@ trait ArtifactStoreBase extends ArtifactStore {
     debug(id, s"Artifact written for $tpe: $detail")
   }
 
+  final def logRemoved(id: ScopeId, tpe: CachedArtifactType, detail: String): Unit =
+    logWritten(id, ArtifactCacheTraceType(tpe), detail)
+  final def logRemoved(id: ScopeId, tpe: CacheTraceType, detail: String): Unit = {
+    debug(id, s"Artifact removed for $tpe: $detail")
+  }
+
   final def debug(msg: => String): Unit = log.debug(s"$cacheType: $msg")
   final def debug(id: ScopeId, msg: => String): Unit = log.debug(s"[$id] $cacheType: $msg")
 

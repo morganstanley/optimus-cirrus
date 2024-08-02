@@ -27,9 +27,12 @@ object EnvironmentUtils {
   private def system =
     ManagementFactory.getOperatingSystemMXBean.asInstanceOf[com.sun.management.OperatingSystemMXBean]
 
-  def getTotalPhysicalMemorySize: MemSize = MemSize.of(system.getTotalPhysicalMemorySize)
+  // note that OperatingSystemMXBean#getTotal/FreePhysicalMemorySize is deprecated but getTotal/MemorySize is
+  // documented to return the same value
+  def getTotalPhysicalMemorySize: MemSize = MemSize.of(system.getTotalMemorySize)
+  def getFreePhysicalMemorySize: MemSize = MemSize.of(system.getFreeMemorySize)
 
-  def getFreePhysicalMemorySize: MemSize = MemSize.of(system.getFreePhysicalMemorySize)
+  def getFreeSwapMemorySize: MemSize = MemSize.of(system.getFreeSwapSpaceSize)
 
   def availableProcessors(): Int = Runtime.getRuntime.availableProcessors()
 

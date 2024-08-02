@@ -13,17 +13,20 @@ package optimus.platform.relational.dal.accelerated
 
 import optimus.platform.dsi.expressions.ConvertOps
 import optimus.platform.relational.RelationalException
+import optimus.platform.relational.dal.core.SpecialElementRewriter
 import optimus.platform.relational.data.DbQueryTreeReducerBase._
 import optimus.platform.relational.data.FieldReader
 import optimus.platform.relational.data.language.QueryLanguage
+import optimus.platform.relational.data.mapping.QueryMapping
 import optimus.platform.relational.data.translation.ColumnProjector
 import optimus.platform.relational.data.translation.SingletonProjectionRewriter.ColumnMapper
+import optimus.platform.relational.data.translation.UnusedColumnRemover
 import optimus.platform.relational.data.tree.ColumnInfo.ColumnInfoImpl
 import optimus.platform.relational.data.tree._
 import optimus.platform.relational.tree._
 
 // This class is to rewrite Projection with linkage collection type in projector to Scalar subquery in Select.
-class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryTreeVisitor {
+class LinkageSubqueryRewriter private (mapping: QueryMapping, language: QueryLanguage) extends DbQueryTreeVisitor {
   // This is to mark if the projection is in top level.
   private var isTopLevel = true
   // The currentSelect may be rewritten to select aggregation of c2p (child-to-parent) field.
@@ -39,10 +42,12 @@ class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryT
       proj.viaCollection match {
         case Some(linkageCls) =>
           require(proj.aggregator == null)
+          val newProj =
+            UnusedColumnRemover.remove(mapping, SpecialElementRewriter.rewrite(proj)).asInstanceOf[ProjectionElement]
           // Rewrite currentSelect to select tuple of selected columns.
           val newAlias = new TableAlias
           currentSelect = addRedundantSelect(currentSelect, newAlias)
-          val source = ColumnMapper.map(proj.select, newAlias, currentSelect.alias).asInstanceOf[SelectElement]
+          val source = ColumnMapper.map(newProj.select, newAlias, currentSelect.alias).asInstanceOf[SelectElement]
           val (aggregatedColumn, columnName) = getAggregatedColumn(source.columns)
           val aggSource = aggregateSelect(source, aggregatedColumn, columnName)
           val pe = new ScalarElement(TypeInfo(linkageCls, aggregatedColumn.rowTypeInfo), aggSource)
@@ -52,7 +57,7 @@ class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryT
             currentSelect.columns,
             currentSelect.alias,
             newAlias,
-            proj.select.alias)
+            newProj.select.alias)
           currentSelect = new SelectElement(
             currentSelect.alias,
             pc.columns,
@@ -66,7 +71,7 @@ class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryT
             currentSelect.reverse
           )
 
-          (proj.projector, pc.projector) match {
+          (newProj.projector, pc.projector) match {
             case (_: ColumnElement, _) => pc.projector
             case (de: DALHeapEntityElement, c: ColumnElement) =>
               new ColumnElement(TypeInfo(linkageCls, de.rowTypeInfo), c.alias, c.name, c.columnInfo)
@@ -80,10 +85,10 @@ class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryT
               val newAggColumn = new ColumnElement(aggColumn.rowTypeInfo, aggColumn.alias, aggColumn.name, colInfo)
 
               val param = ElementFactory.parameter("t", FieldReader.TYPE)
-              val body = new ProjectorRewriter(param, source.columns).visitElement(proj.projector)
+              val body = new ProjectorRewriter(param, source.columns).visitElement(newProj.projector)
               val lambda = ElementFactory.lambda(body, Seq(param))
 
-              generateMapFunc(lambda, newAggColumn, TypeInfo(linkageCls, proj.rowTypeInfo))
+              generateMapFunc(lambda, newAggColumn, TypeInfo(linkageCls, newProj.rowTypeInfo))
 
             case (_, e) => throw new RelationalException(s"Unexpected aggregated column: $e")
           }
@@ -174,8 +179,8 @@ class LinkageSubqueryRewriter private (language: QueryLanguage) extends DbQueryT
 }
 
 object LinkageSubqueryRewriter {
-  def rewrite(mapper: QueryLanguage, e: RelationElement): RelationElement = {
-    new LinkageSubqueryRewriter(mapper).visitElement(e)
+  def rewrite(m: QueryMapping, l: QueryLanguage, e: RelationElement): RelationElement = {
+    new LinkageSubqueryRewriter(m, l).visitElement(e)
   }
 }
 

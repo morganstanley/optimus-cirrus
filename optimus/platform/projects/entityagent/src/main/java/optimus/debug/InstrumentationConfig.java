@@ -295,7 +295,7 @@ public class InstrumentationConfig {
     }
   }
 
-  static class MethodPatch {
+  public static class MethodPatch {
     public final MethodRef from;
     public MethodRef prefix;
     public MethodRef suffix;
@@ -312,9 +312,10 @@ public class InstrumentationConfig {
     // suffix
     boolean suffixWithID;
     boolean suffixWithThis;
-    boolean suffixWithReturnValue; // calls suffix, then it returns the original value
+    public boolean suffixWithReturnValue; // passes the return value to suffix (and by default returns that value)
+    public boolean suffixReplacesReturnValue; // patched method will returns whatever suffix returns
     boolean suffixWithArgs;
-    boolean noArgumentBoxing;
+    public boolean noArgumentBoxing; // if true, arguments (and return value) are passed using specific types; if false, arguments are passed in Object[] (and return value is Object)
     boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception
     // thrown
     FieldRef storeToField;
@@ -534,7 +535,7 @@ public class InstrumentationConfig {
     return methodPatch;
   }
 
-  static MethodPatch addSuffixCall(MethodRef from, MethodRef to) {
+  public static MethodPatch addSuffixCall(MethodRef from, MethodRef to) {
     var methodPatch = putIfAbsentMethodPatch(from);
     methodPatch.suffix = to;
     return methodPatch;

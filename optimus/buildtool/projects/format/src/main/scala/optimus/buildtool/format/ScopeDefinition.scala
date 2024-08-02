@@ -60,7 +60,9 @@ final case class ScopeDefinition(
 object ScopeDefinition {
   private val formatter = ObtFileFormatter("  ", ModuleFormatterSettings)
   def prettyPrint(scopes: Seq[ScopeDefinition]): String = {
-    val configs = scopes.map(s => ScopeDefinitionCompiler.asJson(s).prettyPrint).map(ConfigFactory.parseString)
+    val configs = scopes
+      .map(s => ScopeDefinitionCompiler.asJson(s, s.configuration.useMavenLibs).prettyPrint)
+      .map(ConfigFactory.parseString)
     formatter.formatConfig(configs.foldLeft(ConfigFactory.empty())(_ withFallback _))
   }
 

@@ -12,6 +12,7 @@
 package optimus.stratosphere.artifactory
 
 import akka.http.scaladsl.model.Uri
+import com.typesafe.config.ConfigFactory
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
@@ -40,6 +41,7 @@ object ArtifactoryToolDownloader {
                                                        |""".stripMargin
   private val ExtractionFlag: String = "--explode"
   private val Jfrog = "jfrog"
+  private val JarRepo = "jar-repo"
   private val Pypi = "pypi"
 
   private val maxRetry: Int = 1
@@ -73,6 +75,7 @@ object ArtifactoryToolDownloader {
 
     val jfrogConfigFile = stratoWorkspace.internal.jfrog.configFile
     val pypiConfigFile = stratoWorkspace.internal.pypi.configFile
+    val jarRepoFile = stratoWorkspace.intellij.jarRepoFile
     lazy val credentials = Credential.fromJfrogConfFile(jfrogConfigFile)
     lazy val artifactoryUrl = stratoWorkspace.internal.tools.artifactoryUrl
 
@@ -85,6 +88,18 @@ object ArtifactoryToolDownloader {
       } catch {
         case NonFatal(e) =>
           val msg = failedMsg(Jfrog)
+          stratoWorkspace.log.warning(msg)
+          stratoWorkspace.log.debug(msg, e)
+      }
+    if (
+      (!jarRepoFile.exists() || jarRepoFile.toFile.length() == 0) && jfrogConfigFile
+        .exists() && jfrogConfigFile.toFile.length() > 0
+    )
+      try {
+        ArtifactoryToolDownloader.setupRemoteJarRepo(jfrogConfigFile, jarRepoFile)
+      } catch {
+        case NonFatal(e) =>
+          val msg = failedMsg(JarRepo)
           stratoWorkspace.log.warning(msg)
           stratoWorkspace.log.debug(msg, e)
       }
@@ -137,6 +152,26 @@ object ArtifactoryToolDownloader {
         s"Setting up artifactory configuration failed, tried ${maxRetry + 1} times:\n$output")
     } else if (configFile.exists()) output
     else setupGenericUser(setupUserCommand, configFile, stratoWorkspace, retry - 1)
+  }
+
+  private def setupRemoteJarRepo(jfrogConfigFile: Path, jarRepoFile: Path): Unit = {
+    val jfrogCfg = ConfigFactory.parseFile(jfrogConfigFile.toFile)
+    val artifactoryCfg = jfrogCfg.getConfigList("artifactory").get(0)
+    val url = artifactoryCfg.getString("url")
+    val user = artifactoryCfg.getString("user")
+    val password = artifactoryCfg.getString("password")
+    val xml = s"""<?xml version="1.0" encoding="UTF-8"?>
+                 |<project version="4">
+                 |  <component name="RemoteRepositoriesConfiguration">
+                 |    <remote-repository>
+                 |      <option name="id" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
+                 |      <option name="name" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
+                 |      <option name="url" value="https://$user:$password@$url/maven-all-local-only/" />
+                 |    </remote-repository>
+                 |  </component>
+                 |</project>""".stripMargin
+    Files.createDirectories(jarRepoFile.getParent)
+    jarRepoFile.file.write(xml)
   }
 
   def downloadArtifact(

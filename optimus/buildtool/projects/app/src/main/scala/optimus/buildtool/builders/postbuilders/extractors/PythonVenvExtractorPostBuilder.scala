@@ -23,16 +23,29 @@ import optimus.stratosphere.filesanddirs.Unzip
 import java.io.PrintWriter
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.collection.immutable.Seq
 import scala.util.Random
 import scala.jdk.CollectionConverters._
 
+object PythonVenvExtractorPostBuilder {
+  private[buildtool] def venvFolder(buildDir: Directory): Directory = buildDir.resolveDir("venvs")
+  private[buildtool] def mappingFile(buildDir: Directory): FileAsset =
+    venvFolder(buildDir).resolveFile("venv-mapping.txt")
+  private[buildtool] def latestVenvFile(buildDir: Directory): FileAsset =
+    venvFolder(buildDir).resolveFile("latest-venvs.txt")
+}
+
 class PythonVenvExtractorPostBuilder(buildDir: Directory) extends FilteredPostBuilder {
-  private val venvFolder: Directory = buildDir.resolveDir("venvs")
-  private val mappingFile: FileAsset = venvFolder.resolveFile("venv-mapping.txt")
+  private val venvFolder: Directory = PythonVenvExtractorPostBuilder.venvFolder(buildDir)
+  private val mappingFile: FileAsset = PythonVenvExtractorPostBuilder.mappingFile(buildDir)
+  private val latestVenvFile: FileAsset = PythonVenvExtractorPostBuilder.latestVenvFile(buildDir)
+
   private val mapping: ConcurrentHashMap[(ScopeId, String), Directory] =
     new ConcurrentHashMap(loadMappingsFile().asJava)
+  private val latestVenvs: AtomicReference[LatestVenvs] =
+    new AtomicReference[LatestVenvs](LatestVenvs.load(latestVenvFile))
 
   @async override protected def postProcessFilteredScopeArtifacts(id: ScopeId, artifacts: Seq[Artifact]): Unit = {
     artifacts.foreach {
@@ -42,9 +55,12 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory) extends FilteredPostBu
           Files.createDirectories(venvExtractionDest.path)
           Unzip.extract(pythonArtifact.file.path.toFile, venvExtractionDest.path.toFile)
         }
+        latestVenvs.getAndUpdate(old => old.update(pythonArtifact, venvExtractionDest.path))
+
       case _ => None
     }
     writeMappingsFile()
+    latestVenvs.get().writeToFile(latestVenvFile)
   }
 
   def venvLocation(id: ScopeId, artifactHash: String): Directory =

@@ -95,9 +95,7 @@ object SafeTransformer {
       forwards: Transformer.Direction,
       inverse: Transformer.Direction,
       addedFields: Map[String, Any],
-      renamedFields: Map[String, String],
-      operations: Int = 1,
-      inverseOperations: Int = 1)(implicit config: TransformerConfiguration): SafeTransformer = {
+      renamedFields: Map[String, String])(implicit config: TransformerConfiguration): SafeTransformer = {
     val t = new SafeTransformer(fromRftShape, toRftShape, forwards, inverse, addedFields, renamedFields, 1, 1)
     config.configure(t)
     t
@@ -122,10 +120,8 @@ object UnsafeTransformer {
       fromRftShape: RftShape,
       toRftShape: RftShape,
       forwards: Transformer.Direction,
-      inverse: Transformer.Direction,
-      operations: Int = 1,
-      inverseOperations: Int = 1)(implicit config: TransformerConfiguration): UnsafeTransformer = {
-    val t = new UnsafeTransformer(fromRftShape, toRftShape, forwards, inverse, operations, inverseOperations)
+      inverse: Transformer.Direction)(implicit config: TransformerConfiguration): UnsafeTransformer = {
+    val t = new UnsafeTransformer(fromRftShape, toRftShape, forwards, inverse, 1, 1)
     config.configure(t)
     t
   }

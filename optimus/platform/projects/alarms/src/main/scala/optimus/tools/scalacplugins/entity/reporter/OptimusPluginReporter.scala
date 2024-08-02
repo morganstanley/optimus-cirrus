@@ -45,13 +45,9 @@ trait OptimusPluginReporter {
     }
   }
 
-  private def dedup[A <: OptimusAlarmBuilder](already: mutable.Set[(Int, Position)], a: A, pos: Position): Boolean = {
-    if (already.contains((a.id.sn, pos)))
-      false
-    else {
-      already += ((a.id.sn, pos))
-      true
-    }
+  private def dedup[A <: OptimusAlarmBuilder, E](elements: mutable.Set[E], elem: E): Boolean = {
+    // REMINDER: Set.add(...) returns true if the element was not yet present in the set, false otherwise
+    elements.add(elem)
   }
 
   // override for forcing suppression when testing
@@ -97,10 +93,20 @@ trait OptimusPluginReporter {
   def alarm(builder: OptimusAlarmBuilder5, pos: Position, arg1: Any, arg2: Any, arg3: Any, arg4: Any, arg5: Any): Unit =
     alarm(builder(arg1, arg2, arg3, arg4, arg5), pos)
 
-  def alarmDedup(builder: OptimusAlarmBuilder0, pos: Position, alarmed: mutable.Set[(Int, Position)]): Unit =
-    if (dedup(alarmed, builder, pos)) {
-      alarm(builder(), pos)
-    }
+  def alarmDedup(builder: OptimusAlarmBuilder0, pos: Position, alarmed: mutable.Set[(Int, Position)]): Unit = {
+    if (dedup(alarmed, builder.id.sn -> pos)) alarm(builder(), pos)
+  }
+
+  def alarmDedup(
+      builder: OptimusAlarmBuilder2,
+      pos: Position,
+      arg1: Any,
+      arg2: Any,
+      alarmed: mutable.Set[(Int, Position, Any, Any)]): Unit = {
+    // using String for arg1 and arg2 as Any may not have a good equality definition!
+    val elem = (builder.id.sn, pos, arg1.toString, arg2.toString)
+    if (dedup(alarmed, elem)) alarm(builder(arg1, arg2), pos)
+  }
 
   def internalErrorAbort(pos: Position, msg: String): Nothing = {
     global.reporter.error(pos, s"Optimus internal error. Please contact the graph team: $msg")
@@ -125,5 +131,8 @@ trait OptimusPluginReporter {
 object OptimusPluginReporter {
   val PerRunReporting_isSuppressed: jlr.Method = reflect.ensureAccessible {
     classOf[Reporting#PerRunReporting].getDeclaredMethod("isSuppressed", classOf[Reporting.Message])
+  }
+  val PerRunReporting_suppressions: jlr.Method = reflect.ensureAccessible {
+    classOf[Reporting#PerRunReporting].getDeclaredMethod("suppressions")
   }
 }

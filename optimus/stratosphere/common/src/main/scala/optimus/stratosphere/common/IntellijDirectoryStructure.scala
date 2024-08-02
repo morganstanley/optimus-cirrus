@@ -80,8 +80,6 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val remoteIntellijArtifactoryDir: String = artifactoryIntellijLocation.remoteLocation
 
-  val remoteIntellijClientArtifactoryDir: String = config.intellij.gateway.client.path
-
   val pluginsVersionProperties: Path = intellijPluginsDir.resolve("installedPlugins.properties")
 
   val pluginsExtensionsVersionProperties: Path = intellijPluginsDir.resolve("extendedPlugins.properties")
@@ -91,14 +89,6 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
   val firstStartMarker: Path = intellijInstallDirectory.resolve("first_start.txt")
 
   val intellijExecutable: Path = intellijBinDirectory.resolve(config.internal.files.ideaExecutable)
-
-  val ideClientInstallPath: Path = ideClientStoreDir.resolve(config.intellij.gateway.client.version)
-
-  val intellijClientExecutable: Path = ideClientInstallPath
-    .resolve("idea")
-    .resolve("code-with-me")
-    .resolve("bin")
-    .resolve("jetbrains_client64.exe")
 
   val intellijServerExecutable: Path = intellijBinDirectory.resolve(config.internal.files.ideaServerExecutable)
 
@@ -153,6 +143,8 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val trustedPathsSettings: Path = intellijConfigOptionsDir.resolve("trusted-paths.xml")
 
+  val proxySettings: Path = intellijConfigOptionsDir.resolve("proxy.settings.xml")
+
   val intellijCodeStylesDir: Path = intellijInstanceConfigDir.resolve("codestyles")
 
   val intelliStylesheetsDir: Path = intellijInstanceConfigDir.resolve("styles")
@@ -162,6 +154,11 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
   val intellijOptimusCodeStyle: Path = intellijCodeStylesDir.resolve("Optimus _default_.xml")
 
   val intellijMergedOverridesStylesheet: Path = intelliStylesheetsDir.resolve("overrides.css")
+
+  val intellijMergedOverridesStylesheetInsideProject: Path = sourcesDirectory
+    .resolve("docs")
+    .resolve("css")
+    .resolve("overridesIJ23.css")
 
   /** Intended to store exported selected files from configuration to be able to import them to other workspaces. */
   val commonIntellijConfigStore: Path =

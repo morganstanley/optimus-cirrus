@@ -19,6 +19,7 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.JsonAsset
+import optimus.buildtool.generators.ZincGenerator.ZincGeneratorName
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.trace.CompileOnlyResolve
 import optimus.buildtool.trace.CompileResolve
@@ -34,6 +35,7 @@ import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.TarUtils
+import optimus.core.utils.RuntimeMirror
 import optimus.platform._
 import spray.json.JsonParser
 
@@ -41,7 +43,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
-import scala.collection.mutable
+import scala.reflect.runtime.universe._
 import scala.jdk.CollectionConverters._
 
 trait ArtifactType {
@@ -53,7 +55,7 @@ trait ArtifactType {
 sealed trait CachedArtifactType extends ArtifactType {
   type A <: PathedArtifact
 
-  def isReadable(a: Asset): Boolean
+  def isReadable(a: FileAsset): Boolean
 
   // should check downloaded assets from remote store
   @node def fromRemoteAsset(
@@ -67,6 +69,7 @@ sealed trait CachedArtifactType extends ArtifactType {
         else {
           addCorruptedFile(keyStr, id)
           ObtTrace.addToStat(stat.Corrupted, 1)
+          AssetUtils.safeDelete(a)
           None // when remote cache not readable, auto recompile it locally
         }
       case _ => None
@@ -81,7 +84,7 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
   type A = ResolutionArtifact
   override val suffix = RgzExt
 
-  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ResolutionArtifact = {
     import JsonImplicits._
     val json = JsonAsset(a.path)
@@ -114,7 +117,7 @@ trait GeneratedSourceArtifactType extends CachedArtifactType {
   type A = GeneratedSourceArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): GeneratedSourceArtifact = {
     val sourceJar = JarAsset(a.path)
     val fs = JarUtils.jarFileSystem(sourceJar)
@@ -140,7 +143,7 @@ trait InternalClassFileArtifactType extends CachedArtifactType {
   type A = InternalClassFileArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): InternalClassFileArtifact =
     fromAsset(id, a, incremental = false)
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): InternalClassFileArtifact = {
@@ -153,7 +156,7 @@ trait MessageArtifactType extends CachedArtifactType {
   type A = CompilerMessagesArtifact
   override val suffix = MgzExt
 
-  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): CompilerMessagesArtifact =
     MessageArtifactType.fromUnwatchedPath(a.path).watchForDeletion()
 }
@@ -183,7 +186,7 @@ trait AnalysisArtifactType extends CachedArtifactType {
   type A = AnalysisArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): AnalysisArtifact =
     AnalysisArtifact.create(InternalArtifactId(id, this, None), JarAsset(a.path), incremental)
   @node override def fromAsset(id: ScopeId, a: Asset): AnalysisArtifact = fromAsset(id, a, incremental = false)
@@ -193,7 +196,7 @@ trait SignatureArtifactType extends CachedArtifactType {
   type A = SignatureArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): SignatureArtifact = {
     val file = JarAsset(a.path)
     SignatureArtifact.create(InternalArtifactId(id, this, None), file, hash(file), incremental)
@@ -215,7 +218,7 @@ trait CppArtifactType extends CachedArtifactType {
   type A = InternalCppArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): InternalCppArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -240,7 +243,7 @@ trait ElectronArtifactType extends CachedArtifactType {
   type A = ElectronArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ElectronArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -256,7 +259,7 @@ trait PythonArtifactType extends CachedArtifactType {
   type A = PythonArtifact
   override val suffix = TarGzExt
 
-  override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): PythonArtifact = {
     TarUtils
       .readFileInTarGz(a.path, CachedMetadata.MetadataFile)
@@ -279,7 +282,7 @@ trait CompiledRunconfArtifactType extends CachedArtifactType {
   type A = CompiledRunconfArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): CompiledRunconfArtifact = {
     val file = JarAsset(a.path)
     CompiledRunconfArtifact.create(id, file, hash(file))
@@ -290,7 +293,7 @@ trait GenericFilesArtifactType extends CachedArtifactType {
   type A = GenericFilesArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): GenericFilesArtifact = {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
@@ -306,7 +309,7 @@ trait ProcessorArtifactType extends CachedArtifactType {
   type A = ProcessorArtifact
   override val suffix = JarExt
 
-  override def isReadable(a: Asset): Boolean = isJarReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ProcessorArtifact = {
     val file = JarAsset(a.path)
     val md = Jars.withJar(file) { root =>
@@ -319,97 +322,76 @@ trait ProcessorArtifactType extends CachedArtifactType {
 }
 
 object ArtifactType {
-
   abstract class BaseArtifactType(val name: String) extends ArtifactType
 
-  private val parseMap = new mutable.HashMap[String, ArtifactType]
-  private def add(a: BaseArtifactType): Unit = {
-    parseMap += (a.name -> a)
+// Backward compatibility (needed for root locators)
+  private val additionalTypesMap =
+    Map(
+      "pickles" -> JavaAndScalaSignatures,
+      "early-messages" -> SignatureMessages,
+      "early-analysis" -> SignatureAnalysis,
+      "analysis" -> ScalaAnalysis)
+  // automatically get all obt artifact types in this object by scala runtime reflection
+  private[buildtool] lazy val parseMap: Map[String, ArtifactType] = {
+    val mirror = RuntimeMirror.mirrorForClass(this.getClass)
+    val runtimeArtifactTypesMap = mirror.mirror
+      .classSymbol(this.getClass)
+      .info
+      .members
+      .collect { case obj: ModuleSymbol =>
+        val foundType: ArtifactType = mirror.moduleByName(obj.fullName, this.getClass).asInstanceOf[ArtifactType]
+        foundType.name -> foundType
+      }
+      .toMap
+    runtimeArtifactTypesMap ++ additionalTypesMap
   }
-  def parse(name: String): ArtifactType = parseMap(name)
   lazy val known: Seq[ArtifactType] = parseMap.values.toIndexedSeq
+
+  def parse(name: String): ArtifactType = parseMap(name)
 
   case object Sources extends BaseArtifactType("sources") with InternalClassFileArtifactType {
     override val suffix = "src.jar"
   }
-  add(Sources)
-
   case object CppBridge extends BaseArtifactType("cpp-bridge") with GeneratedSourceArtifactType
-  add(CppBridge)
   case object ProtoBuf extends BaseArtifactType("protobuf") with GeneratedSourceArtifactType
-  add(ProtoBuf)
   case object Jaxb extends BaseArtifactType("jaxb") with GeneratedSourceArtifactType
-  add(Jaxb)
+  case object JsonSchema extends BaseArtifactType("json-schema") with GeneratedSourceArtifactType
   case object Scalaxb extends BaseArtifactType("scalaxb") with GeneratedSourceArtifactType
-  add(Scalaxb)
   case object Jxb extends BaseArtifactType("jxb") with GeneratedSourceArtifactType
-  add(Jxb)
   case object FlatBuffer extends BaseArtifactType("flatbuffer") with GeneratedSourceArtifactType
-  add(FlatBuffer)
-
+  case object Zinc extends BaseArtifactType(ZincGeneratorName) with GeneratedSourceArtifactType
   case object Scala extends BaseArtifactType("scala") with InternalClassFileArtifactType
-  add(Scala)
   case object Java extends BaseArtifactType("java") with InternalClassFileArtifactType
-  add(Java)
   case object Jmh extends BaseArtifactType("jmh") with InternalClassFileArtifactType
-  add(Jmh)
   case object Resources extends BaseArtifactType("resources") with InternalClassFileArtifactType
-  add(Resources)
   case object ArchiveContent extends BaseArtifactType("archive-content") with InternalClassFileArtifactType
-  add(ArchiveContent)
-
   case object JavaMessages extends BaseArtifactType("java-messages") with MessageArtifactType
-  add(JavaMessages)
   case object RegexMessages extends BaseArtifactType("regex-messages") with MessageArtifactType
-  add(RegexMessages)
   case object ScalaMessages extends BaseArtifactType("scala-messages") with MessageArtifactType
-  add(ScalaMessages)
   case object JmhMessages extends BaseArtifactType("jmh-messages") with MessageArtifactType
-  add(JmhMessages)
   case object ConfigMessages extends BaseArtifactType("config-messages") with MessageArtifactType
-  add(ConfigMessages)
   case object DuplicateMessages extends BaseArtifactType("duplicate-messages") with MessageArtifactType
-  add(DuplicateMessages)
-
+  case object ValidationMessages extends BaseArtifactType("validation-messages") with MessageArtifactType
   case object ScalaAnalysis extends BaseArtifactType("scala-analysis") with AnalysisArtifactType
-  add(ScalaAnalysis)
   case object JavaAnalysis extends BaseArtifactType("java-analysis") with AnalysisArtifactType
-  add(JavaAnalysis)
-
   case object JavaAndScalaSignatures extends BaseArtifactType("signatures") with SignatureArtifactType
-  add(JavaAndScalaSignatures)
   case object SignatureMessages extends BaseArtifactType("signature-messages") with MessageArtifactType
-  add(SignatureMessages)
   case object SignatureAnalysis extends BaseArtifactType("signature-analysis") with AnalysisArtifactType
-  add(SignatureAnalysis)
-
   case object Pathing extends BaseArtifactType("pathing") with PathingArtifactType
-  add(Pathing)
-
   case object Cpp extends BaseArtifactType("cpp") with CppArtifactType
-  add(Cpp)
-
   case object Electron extends BaseArtifactType("electron") with ElectronArtifactType
-  add(Electron)
-
   case object Python extends BaseArtifactType("python") with PythonArtifactType
-  add(Python)
-
   case object CompiledRunconf extends BaseArtifactType("runconf") with CompiledRunconfArtifactType
-  add(CompiledRunconf)
   case object CompiledRunconfMessages extends BaseArtifactType("runconf-messages") with MessageArtifactType
-  add(CompiledRunconfMessages)
   case object GenericFiles extends BaseArtifactType("generic-files") with GenericFilesArtifactType
-  add(GenericFiles)
-
   case object RegexMessagesFingerprint
       extends BaseArtifactType("regex-messages-fingerprint")
       with FingerprintArtifactType
-  add(RegexMessagesFingerprint)
+  case object ValidationMessagesFingerprint
+      extends BaseArtifactType("validation-messages-fingerprint")
+      with FingerprintArtifactType
   case object StructureFingerprint extends BaseArtifactType("structure-fingerprint") with FingerprintArtifactType
-  add(StructureFingerprint)
   case object GenerationFingerprint extends BaseArtifactType("generation-fingerprint") with FingerprintArtifactType
-  add(GenerationFingerprint)
   case object CompilationFingerprint
       extends BaseArtifactType("compilation-fingerprint")
       with FingerprintArtifactType
@@ -417,7 +399,7 @@ object ArtifactType {
     private val HashRegex = s".*\\.(HASH[^.]*)\\.fingerprint".r
     override type A = FingerprintArtifact with PathedArtifact
 
-    override def isReadable(a: Asset): Boolean = AssetUtils.isTextContentReadable(a)
+    override def isReadable(a: FileAsset): Boolean = AssetUtils.isTextContentReadable(a)
     @node def fromAsset(id: ScopeId, a: Asset): FingerprintArtifact with PathedArtifact = {
       val fingerprint = Files.readAllLines(a.path).asScala.to(Seq)
       // slightly hacky
@@ -428,60 +410,42 @@ object ArtifactType {
       FingerprintArtifact.create(InternalArtifactId(id, this, None), FileAsset(a.path), fingerprint, hash)
     }
   }
-  add(CompilationFingerprint)
   case object ResourceFingerprint extends BaseArtifactType("resource-fingerprint") with FingerprintArtifactType
-  add(ResourceFingerprint)
   case object SourceFingerprint extends BaseArtifactType("source-fingerprint") with FingerprintArtifactType
-  add(SourceFingerprint)
   case object ArchiveFingerprint extends BaseArtifactType("archive-fingerprint") with FingerprintArtifactType
-  add(ArchiveFingerprint)
   case object CompileResolutionFingerprint
       extends BaseArtifactType("compile-resolution-fingerprint")
       with FingerprintArtifactType
-  add(CompileResolutionFingerprint)
   case object CompileOnlyResolutionFingerprint
       extends BaseArtifactType("compile-only-resolution-fingerprint")
       with FingerprintArtifactType
-  add(CompileOnlyResolutionFingerprint)
   case object RuntimeResolutionFingerprint
       extends BaseArtifactType("runtime-resolution-fingerprint")
       with FingerprintArtifactType
-  add(RuntimeResolutionFingerprint)
   case object PathingFingerprint extends BaseArtifactType("pathing-fingerprint") with FingerprintArtifactType
-  add(PathingFingerprint)
   case object CppFingerprint extends BaseArtifactType("cpp-fingerprint") with FingerprintArtifactType
-  add(CppFingerprint)
   case object PythonFingerprint extends BaseArtifactType("python-fingerprint") with FingerprintArtifactType
-  add(PythonFingerprint)
   case object RunconfFingerprint extends BaseArtifactType("runconf-fingerprint") with FingerprintArtifactType
-  add(RunconfFingerprint)
   case object GenericFilesFingerprint extends BaseArtifactType("generic-files-fingerprint") with FingerprintArtifactType
-  add(GenericFilesFingerprint)
   case object WebFingerprint extends BaseArtifactType("web-fingerprint") with FingerprintArtifactType
-  add(WebFingerprint)
   case object ElectronFingerprint extends BaseArtifactType("electron-fingerprint") with FingerprintArtifactType
-  add(WebFingerprint)
-
   case object CompileResolution extends BaseArtifactType("compile-resolution") with ResolutionArtifactType {
     override def fingerprintType: FingerprintArtifactType = CompileResolutionFingerprint
     override def category: ResolveTrace = CompileResolve
   }
-  add(CompileResolution)
   case object CompileOnlyResolution extends BaseArtifactType("compile-only-resolution") with ResolutionArtifactType {
     override def fingerprintType: FingerprintArtifactType = CompileOnlyResolutionFingerprint
     override def category: ResolveTrace = CompileOnlyResolve
   }
-  add(CompileOnlyResolution)
   case object RuntimeResolution extends BaseArtifactType("runtime-resolution") with ResolutionArtifactType {
     override def fingerprintType: FingerprintArtifactType = RuntimeResolutionFingerprint
     override def category: ResolveTrace = RuntimeResolve
   }
-  add(RuntimeResolution)
   case object Locator extends BaseArtifactType("locator") with CachedArtifactType {
     type A = LocatorArtifact
     override val suffix = JsonExt
 
-    override def isReadable(a: Asset): Boolean = isTarJsonReadable(a, isZip = false)
+    override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a, isZip = false)
     @node override def fromAsset(id: ScopeId, a: Asset): LocatorArtifact = {
       val locatorFile = JsonAsset(a.path)
       import JsonImplicits._
@@ -496,12 +460,11 @@ object ArtifactType {
       )
     }
   }
-  add(Locator)
   case object RootLocator extends BaseArtifactType("root-locator") with CachedArtifactType {
     type A = RootLocatorArtifact
     override val suffix = IdzExt
 
-    override def isReadable(a: Asset): Boolean = isTarJsonReadable(a)
+    override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
     @node override def fromAsset(id: ScopeId, a: Asset): RootLocatorArtifact = {
       val locatorFile = JsonAsset(a.path)
       import JsonImplicits._
@@ -509,24 +472,9 @@ object ArtifactType {
       RootLocatorArtifact.create(locatorFile, cached.commitHash, cached.artifactVersion)
     }
   }
-  add(RootLocator)
-
   case object Velocity extends BaseArtifactType("velocity") with ProcessorArtifactType
-  add(Velocity)
-
   case object DeploymentScript extends BaseArtifactType("deployment-script") with ProcessorArtifactType
-  add(DeploymentScript)
-
   case object Freemarker extends BaseArtifactType("freemarker") with ProcessorArtifactType
-  add(Freemarker)
   case object ProcessingFingerprint extends BaseArtifactType("processing-fingerprint") with FingerprintArtifactType
-  add(ProcessingFingerprint)
   case object OpenApi extends BaseArtifactType("openapi") with ProcessorArtifactType
-  add(OpenApi)
-
-  // Backward compatibility (needed for root locators)
-  parseMap.put("pickles", JavaAndScalaSignatures)
-  parseMap.put("early-messages", SignatureMessages)
-  parseMap.put("early-analysis", SignatureAnalysis)
-  parseMap.put("analysis", ScalaAnalysis)
 }

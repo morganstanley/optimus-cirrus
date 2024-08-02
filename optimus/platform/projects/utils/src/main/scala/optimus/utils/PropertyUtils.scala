@@ -11,8 +11,7 @@
  */
 package optimus.utils
 
-object PropertyUtils {
-
+class PropertyUtils(overrides: Map[String, String]) {
   // Check in order:
   // 1. FOO_BAR_BAZ
   // 2. OPTIMUS_DIST_FOO_BAR_BAZ
@@ -27,7 +26,7 @@ object PropertyUtils {
   def getDouble(k: String, default: => Double): Double = get(k).map(_.toDouble).getOrElse(default)
   def getLong(k: String, default: => Long): Long = get(k).map(_.toLong).getOrElse(default)
   def get(k: String, default: => String): String = get(k).getOrElse(default)
-  def get(k: String, overrides: Map[String, String] = Map.empty): Option[String] = {
+  def get(k: String): Option[String] = {
     overrides.get(k) orElse {
       // FOO_BAR_BAZ
       Option(System.getenv(asEnv(k)))
@@ -41,11 +40,16 @@ object PropertyUtils {
     }
   }
 
+  def get(k: String, overrides0: Map[String, String]): Option[String] = overrides0.get(k) orElse (get(k))
+
   private def parseBoolean(value: String): Boolean =
     if (value.length == 0) true
     else if ("1" == value || "true" == value) true
     else if ("0" == value || "false" == value) false
     else throw new IllegalArgumentException(s"Can't parse >>$value<< to boolean.")
+}
+
+object PropertyUtils extends PropertyUtils(Map.empty) {
 
   def propertyMap(orig: Map[String, String], overridess: String*): Map[String, String] = {
     orig ++ propertyMap(overridess: _*)

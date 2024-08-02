@@ -127,7 +127,7 @@ object FullTextSearchExecutionProvider {
         // Get pickled value using pickler
         val v = PropertyMapOutputStream.pickledValue(c.value, pickler)
 
-        Constant(v, typeCode(c.value))
+        Constant(v, typeCode(v))
       }
     }
   }

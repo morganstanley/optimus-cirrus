@@ -19,6 +19,7 @@ import static org.objectweb.asm.Opcodes.*;
 import optimus.debug.CommonAdapter;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Handle;
+import org.objectweb.asm.Label;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -35,13 +36,14 @@ public class NodeMethod {
   public MethodNode queuedMethod;
   public MethodNode newNodeMethod;
   public int clsID;
+  public int lineNumber; // first line number found in the bytecode
 
   // @node(exposeArgTypes = true)/@async(exposeArgTypes = true) needs to inherit this trait
   boolean trait;
   boolean asyncOnly;
 
-  String simpleFieldDesc; // null if not a simple field, else no need to create nodeClass
-  String simpleMethodDesc; // null if not a simple method, else no need to create nodeClass
+  String implFieldDesc; // null if not a simple ($impl) field, else no need to create nodeClass
+  String implMethodDesc; // null if not a simple ($impl) method, else no need to create nodeClass
   boolean isScenarioIndependent;
 
   public NodeMethod(ClassNode cls, String privatePrefix, MethodNode method) {
@@ -72,6 +74,7 @@ public class NodeMethod {
 
     var desc = Type.getMethodDescriptor(returnType, argTypes);
     try (var mv = newMethod(cv, org.access, org.name, desc)) {
+      mv.visitLineNumber(lineNumber, new Label());
       var newNodeDesc = Type.getMethodDescriptor(NODE_TYPE, argTypes);
       var newNodeName = newNodeMethod.name;
       var handle = new Handle(H_INVOKESPECIAL, cls.name, newNodeName, newNodeDesc, isInterface);
@@ -86,29 +89,24 @@ public class NodeMethod {
     }
     var newDesc = Type.getMethodDescriptor(NODE_TYPE, argTypes);
     try (var mv = newMethod(cv, newNodeMethod.access, newNodeMethod.name, newDesc)) {
-      if (NODE_DESC.equals(simpleFieldDesc)) {
+      if (NODE_DESC.equals(implFieldDesc) || NODE_GETTER_DESC.equals(implMethodDesc)) {
         mv.loadThis();
+        var instr = NODE_DESC.equals(implFieldDesc) ? INVOKEVIRTUAL : INVOKEINTERFACE;
         mv.visitMethodInsn(
-            INVOKEVIRTUAL, cls.name, method.name + IMPL_SUFFIX, NODE_GETTER_DESC, isInterface);
+            instr, cls.name, method.name + IMPL_SUFFIX, NODE_GETTER_DESC, isInterface);
         mv.returnValue();
         return;
       }
-      var methodToCall = method.name;
+      var needsImplSuffix = implFieldDesc != null || implMethodDesc != null;
+      var methodToCall = needsImplSuffix ? method.name + IMPL_SUFFIX : method.name;
       var cmd = asyncOnly ? CMD_ASYNC : CMD_NODE; // Default....
       if (trait) cmd = asyncOnly ? CMD_ASYNC_WITH_TRAIT : CMD_NODE_WITH_TRAIT;
-      else if (simpleFieldDesc != null) {
-        methodToCall = method.name + IMPL_SUFFIX;
-        cmd = CMD_NODE_ACPN;
-      } else if (simpleMethodDesc != null) {
-        methodToCall = method.name + IMPL_SUFFIX;
-        cmd = CMD_OBSERVED_VALUE_NODE;
-      }
+      else if (implFieldDesc != null) cmd = CMD_NODE_ACPN;
+      else if (implMethodDesc != null) cmd = CMD_OBSERVED_VALUE_NODE;
+      var handleIsInterface = implFieldDesc == null && isInterface;
 
       Handle orgHandle =
-          simpleFieldDesc != null
-              ? new Handle(H_INVOKESPECIAL, cls.name, methodToCall, method.desc, false)
-              : new Handle(H_INVOKESPECIAL, cls.name, methodToCall, method.desc, isInterface);
-
+          new Handle(H_INVOKESPECIAL, cls.name, methodToCall, method.desc, handleIsInterface);
       invokeCmd(mv, cmd, orgHandle, NODE_TYPE, argNames);
     }
   }

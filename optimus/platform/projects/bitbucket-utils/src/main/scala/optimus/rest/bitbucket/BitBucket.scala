@@ -24,10 +24,10 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     with RestApi
     with RecursiveQuerier {
 
-  def getPrData(project: String, repo: String, prNumber: Int): PrData =
+  def getPrData(project: String, repo: String, prNumber: Long): PrData =
     handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)).withInstance(instance) }
 
-  def getBasePrData(project: String, repo: String, prNumber: Int): BasePrData =
+  def getBasePrData(project: String, repo: String, prNumber: Long): BasePrData =
     handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)) }
 
   def getRecentPrData(project: String, repo: String, quantityWanted: Int = 500): Seq[BasePrData] = {
@@ -211,10 +211,18 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       project: String,
       repo: String,
       browsePath: String,
-      branchOption: Option[String] // if none, branch will be set to default branch
-  ): FileContent = {
-    handleErrors(get[FileContent](apiBrowseUrl(project, repo, browsePath, branchOption)))
+      branchOption: Option[String], // if none, branch will be set to default branch
+      maxExpectedData: Option[Int] = None,
+      expectedPageSize: Int = 10000 // expected page size in a recursive call
+  ): Seq[FileContentLine] = {
+    queryPaged[FileContentLine, FileContent](
+      apiBrowseUrl(project, repo, browsePath, branchOption),
+      maxExpectedData,
+      expectedPageSize)
   }
+
+  def getPrChanges(project: String, repo: String, prNumber: Long): Seq[PrChangesValuesField] =
+    queryPaged[PrChangesValuesField, PrChangesDetails](apiPrChangeDetails(project, repo, prNumber))
 }
 
 sealed trait BitBucketException {

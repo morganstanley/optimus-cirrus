@@ -241,7 +241,7 @@ class JsonParser(input: ParserInput) {
       val preamble =
         if (hint ne null) hint
         else
-          "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusdoc/GraphConfig"
+          "ParsingException might be caused by old-style config. Please see details for the new config at http://optimusguide/OptimusGraphTooling/GraphConfig.html"
       val unexpected =
         if (errorChar != EOI) {
           val c = if (Character.isISOControl(errorChar)) "\\u%04x" format errorChar.toInt else errorChar.toString

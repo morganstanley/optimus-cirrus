@@ -31,7 +31,8 @@ public class LPropertyDescriptor {
   public String source;
   public int lineNumber;
   public MethodType methodType;
-  public final int localID;
+  public final int localID; // Number of the lambda method in the bytecode (serialization)
+  public int profileID; // See getProfileID. Assigned in core
 
   public LPropertyDescriptor(String className, String methodName) {
     this.className = className;

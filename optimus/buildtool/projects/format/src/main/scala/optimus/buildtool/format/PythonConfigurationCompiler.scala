@@ -14,6 +14,7 @@ package optimus.buildtool.format
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigValue
 import optimus.buildtool.config.ModuleType
+import optimus.buildtool.config.NamingConventions.LibsKey
 import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.dependencies.PythonDefinition
@@ -30,7 +31,6 @@ object PythonConfigurationCompiler {
   val lacksPythonVersion =
     s"""Python version not defined"""
 
-  private[buildtool] val Libs = "libs"
   private[buildtool] val Variant = "variant"
   private[buildtool] val Type = "type"
   private[buildtool] val PythonVenvCmd = "pythonVenvCmd"
@@ -79,9 +79,9 @@ object PythonConfigurationCompiler {
       val pyDefinition = pythonDefinition(pyVersion)
 
       val libs: Set[PythonDependency] =
-        if (pyCfg.hasPath(Libs))
+        if (pyCfg.hasPath(LibsKey))
           pyCfg
-            .getList(Libs)
+            .getList(LibsKey)
             .asScala
             .toSet
             .flatMap { configValue: ConfigValue =>

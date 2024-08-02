@@ -29,30 +29,19 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
       scopeConfigSource: ScopeConfigurationSource,
       ignoredPaths: Seq[String]
   ): Changes = {
-    val changes = git.map(g => changedScopes(g, scopeConfigSource, ignoredPaths))
+    val changes = git.map(g => changedPaths(g, ignoredPaths))
     Changes(changes, scopeConfigSource)
   }
 
-  @node private def changedScopes(
-      git: GitLog,
-      scopeConfigSource: ScopeConfigurationSource,
-      ignoredPaths: Seq[String]): Set[ScopeId] = {
+  @node private def changedPaths(git: GitLog, ignoredPaths: Seq[String]): Set[Path] = {
     val ignoredPatterns = ignoredPaths.map(_.r.pattern)
-    val paths = git
+    git
       .diff("HEAD^1", "HEAD")
       .map { entry =>
         Paths.get(if (entry.getChangeType == ChangeType.DELETE) entry.getOldPath else entry.getNewPath)
       }
       .filterNot(p => ignoredPatterns.exists(_.matcher(p.toString).matches))
-      // optimization for huge PRs, map to parent dir to get the # of entries lower
-      .map(path => Option(path.getParent).getOrElse(Paths.get("")))
-      .distinct
-
-    paths.apar.flatMap { path =>
-      val scopes = pathToScopes(path, scopeConfigSource)
-      log.debug(s"${prefix}Mapped $path to $scopes")
-      scopes
-    }.toSet
+      .toSet
   }
 
   @node private def pathToScopes(path: Path, scopeConfigSource: ScopeConfigurationSource): Set[ScopeId] = {
@@ -82,10 +71,24 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
 }
 
 @entity final class Changes private (
-    changes: Option[Set[ScopeId]],
+    private[installer] val changes: Option[Set[Path]],
     scopeConfigSource: ScopeConfigurationSource
 ) {
-  changes.foreach(c => log.debug(s"Changed scopes: $c"))
+  @node def changesAsScopes: Option[Set[ScopeId]] =
+    changes
+      .map {
+        // optimization for huge PRs, map to parent dir to get the # of entries lower
+        _.apar.map(path => Option(path.getParent).getOrElse(Paths.get("")))
+      }
+      .map { paths =>
+        paths.apar.flatMap { path =>
+          val scopes = Changes.pathToScopes(path, scopeConfigSource)
+          log.debug(s"${Changes.prefix}Mapped $path to $scopes")
+          scopes
+        }
+      }
+
+  changes.foreach(c => log.debug(s"Changed file paths: $c"))
 
   def isDefined: Boolean = changes.isDefined
 
@@ -103,14 +106,14 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
     else None
   }
 
-  @node def directlyChangedScopes: Set[ScopeId] = changes.getOrElse(Set.empty)
+  @node def directlyChangedScopes: Set[ScopeId] = changesAsScopes.getOrElse(Set.empty)
 
   @node private def taskDependenciesChanged(task: TestplanTask, includedRunconfs: Set[RunConf]): Boolean = {
     val scope = includedRunconfs.find(_.runConfId.moduleScoped == task.moduleScoped).map(_.runConfId.scope)
     scope.exists(scopeDependenciesChanged)
   }
 
-  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = changes.forall { c =>
+  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = changesAsScopes.forall { c =>
     val allDeps = dependencies(scopeId)
     allDeps.intersect(c).nonEmpty
   }

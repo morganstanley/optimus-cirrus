@@ -82,15 +82,17 @@ class LookupReporter(config: ObtConfig) {
       internals: Seq[DependencyLookup.Internal],
       externals: Seq[DependencyLookup.External]): Seq[LookupDiscrepancy] = {
     val (scopeNotUsed, scopeNotSet) = {
-      val asConfig = (config.compileDependencies.internal ++ config.compileOnlyDependencies.internal).toSet
+      val asConfig = (config.compileDependencies.modules ++ config.compileOnlyDependencies.modules).toSet
       val actually = internals.map(_.into).toSet - id // we don't care if we have to use the current scope
       ((asConfig -- actually).toList, (actually -- asConfig).toList)
     }
 
     val (externalNotUsed, externalNotSet) = {
-      val asConfig = (config.compileDependencies.external ++ config.compileOnlyDependencies.external).map { defn =>
-        ExternalId(defn.group, defn.name, defn.version)
-      }.toSet
+      val asConfig =
+        (config.compileDependencies.externalDeps(config.useMavenLibs) ++ config.compileOnlyDependencies.externalDeps(
+          config.useMavenLibs)).map { defn =>
+          ExternalId(defn.group, defn.name, defn.version)
+        }.toSet
       val actually = externals.map(_.into).toSet
       ((asConfig -- actually).toList, (actually -- asConfig).toList)
     }

@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.format
 
+import optimus.buildtool.config.NamingConventions.LibsKey
+import optimus.buildtool.config.NamingConventions.MavenOnlyKey
 import optimus.buildtool.dependencies.JvmDependenciesLoader._
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
@@ -35,7 +37,7 @@ object Keys {
   // module and bundle file
   val inheritableScopeDefinition =
     KeySet(
-      "mavenOnly",
+      MavenOnlyKey,
       "docs",
       "root",
       "extends",
@@ -83,11 +85,12 @@ object Keys {
     "cpp",
     "web",
     "python",
-    "electron"
+    "electron",
+    "interop"
   ) ++
     inheritableScopeDefinition
   val jarDefinition = KeySet("manifest")
-  val scopeDepsTemplate = KeySet("scopes", /*back compat*/ "modules", "libs", "mavenLibs")
+  val scopeDepsTemplate = KeySet("scopes", /*back compat*/ "modules", LibsKey, "mavenLibs")
   val scopeDeps = scopeDepsTemplate ++ KeySet("customScopes", /*back compat*/ "customModules")
 
   val generator = KeySet("type", "templates", "files", "includes", "excludes", "configuration")
@@ -107,7 +110,7 @@ object Keys {
       "compileHeader",
       "precompiledHeader",
       "compilerArgs",
-      "libs",
+      LibsKey,
       "libPath",
       "systemLibs",
       "linkerFlags",
@@ -138,9 +141,9 @@ object Keys {
 
   val archiveProperties = KeySet("type", "tokens", "excludes")
 
-  val webProperties = KeySet("mode", "libs", "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
+  val webProperties = KeySet("mode", LibsKey, "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
   val electronProperties =
-    KeySet("executables", "mode", "libs", "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
+    KeySet("executables", "mode", LibsKey, "mavenLibs", "npmCommandTemplate", "npmBuildCommands")
 
   val postInstallApp = KeySet("name", "args", "afterInstall")
 
@@ -167,12 +170,13 @@ object Keys {
     Names.InternalOnly,
     Names.ExternalOnly)
 
-  val forbiddenDependencyKeys = KeySet("dependency", "dependency-regex", "configurations", "allowed-in")
+  val forbiddenDependencyKeys =
+    KeySet("dependencyId", "dependencyRegex", "configurations", "transitive", "isExternal", "allowedIn")
   val dependencyAllowedInKeys = KeySet("ids", "patterns")
 
   // dependencies file
   val dependenciesFile =
-    KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs)
+    KeySet(Dependencies, Excludes, Substitutions, NativeDependencies, Groups, ExtraLibs)
   val artifactConfig = KeySet("type", "ext")
 
   private val commonDependencyDefinition =
@@ -195,6 +199,7 @@ object Keys {
 
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
   val jvmDependencyDefinition = KeySet(Maven, Afs, NoAfs, Variants, "scala", IvyConfigurations)
+  val substitutionsConfig = KeySet(s"fromGroup", s"fromName", s"toGroup", s"toName")
   val excludesConfig = KeySet(Group, Name)
   val excludesWithIvyConfig = KeySet(Group, Name, IvyConfiguration)
 
@@ -215,7 +220,7 @@ object Keys {
 
   // maven setup in maven-dependencies.obt
   val mavenDependenciesFile =
-    KeySet("dependencies", "mavenExcludes", "mavenIncludes", "extraLibs")
+    KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes, Substitutions)
   val mavenDefinition = KeySet("all", "main", "test", "release-main", "release-test", "release-all")
 
   // cpp toolchain file
@@ -253,9 +258,11 @@ object Keys {
     MischiefStructure.invalidateOnly
   )
 
+  val interopObtFile = KeySet("py-module", "jvm-module")
+
   val pythonTopLevel = KeySet("python", Dependencies)
   val pythonDependencyLevel = KeySet(Afs, "pypi", Variants)
   val pythonDefinition = KeySet(Version, Variants, "path", "venv-pack")
   val pythonVariant = pythonDefinition ++ KeySet("reason")
-  val pythonObtFile = KeySet("libs", "variant", "type", "pythonVenvCmd", "pipInstallCmd")
+  val pythonObtFile = KeySet(LibsKey, "variant", "type", "pythonVenvCmd", "pipInstallCmd")
 }

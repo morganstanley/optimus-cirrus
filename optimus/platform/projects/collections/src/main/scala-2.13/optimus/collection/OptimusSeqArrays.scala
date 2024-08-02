@@ -435,7 +435,7 @@ private[collection] final class OptimusArraysSeq[+T] private (
     None
   }
 
-  override def collect[B](pf: PartialFunction[T, B]): OptimusArraySeq[B] = {
+  override def collect[B](pf: PartialFunction[T, B]): OptimusSeq[B] = {
     OptimusSeq
       .withSharedBuilder[B] { b =>
         val marker = collectMarker[T, B]
@@ -452,7 +452,6 @@ private[collection] final class OptimusArraysSeq[+T] private (
           arrayIndex += 1
         }
       }
-      .asInstanceOf[OptimusArraySeq[B]]
   }
   // extension methods
   /** similar to .zipWithIndex.map, but without the tupling */

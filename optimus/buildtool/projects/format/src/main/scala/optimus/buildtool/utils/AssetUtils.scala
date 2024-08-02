@@ -40,9 +40,9 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import com.sun.management.UnixOperatingSystemMXBean
 import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.JsonAsset
 import org.slf4j.LoggerFactory.getLogger
 
@@ -50,10 +50,15 @@ import java.nio.file.LinkOption
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributeView
 import java.util.jar.JarFile
+import scala.collection.compat._
+import scala.collection.immutable.Seq
 import scala.collection.mutable
+import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.ref.SoftReference
 import scala.util.Success
 import scala.util.Try
+import scala.util.Using
 import scala.util.control.NonFatal
 
 object AssetUtils {
@@ -101,6 +106,15 @@ object AssetUtils {
       Some(atomicallyWrite(targetFile)(fn))
     } else None
 
+  // deletes without throwing for temp files
+  def safeDelete(asset: FileAsset): Unit = {
+    try Files.deleteIfExists(asset.path)
+    catch {
+      case NonFatal(t) =>
+        log.debug(s"deletion of intermediary file failed", t)
+    }
+  }
+
   /**
    * Atomically moves source to target. If the target already exists, then if replaceIfExists is true we replace it,
    * else if replaceIfExists is false we do nothing.
@@ -113,14 +127,6 @@ object AssetUtils {
       backupPrevious: Boolean = false,
       sourceMustExist: Boolean = false
   ): Boolean = {
-    // deletes without throwing for temp files
-    def safeDelete(asset: FileAsset): Unit = {
-      try Files.deleteIfExists(asset.path)
-      catch {
-        case NonFatal(t) =>
-          log.debug(s"deletion of intermediary file failed", t)
-      }
-    }
 
     def atomicMove(
         src: FileAsset,
@@ -224,9 +230,11 @@ object AssetUtils {
     try f(file.path)
     catch {
       case NonFatal(t) =>
-        log.warn(s"Failed to load $file")
         throw new IllegalStateException(s"Failed to load ${file.pathString}", t)
     }
+
+  def loadFileAssetToLines(file: FileAsset): Seq[String] =
+    loadFileAsset(file)(p => Files.readAllLines(p).asScala.to(Seq))
 
   def loadFileAssetToString(file: FileAsset): String = loadFileAsset(file)(p => Files.readString(p))
 
@@ -421,7 +429,7 @@ object AssetUtils {
       js.convertTo[T]
     } catch {
       case t: Throwable =>
-        throw new IllegalArgumentException(s"Failed to read json from ${file.path}", t)
+        throw new IllegalStateException(s"Failed to read json from ${file.path}", t)
     } finally {
       if (zIn ne null) zIn.close()
     }
@@ -461,27 +469,51 @@ object AssetUtils {
     jsonIn(sb)
   }
 
-  private def assetIsValid(asset: Asset)(f: Asset => Boolean): Boolean =
+  private def assetIsValid(asset: FileAsset)(f: FileAsset => Boolean): Boolean =
     try {
       if (asset.exists) f(asset) else false
     } catch {
       case NonFatal(e) =>
-        log.warn(s"""|failed to verify file is readable or not! ${asset.pathString}
-                     |${StackUtils.multiLineStacktrace(e)}""".stripMargin)
-        false
+        log.debug(s"failed to verify file is readable or not! ${asset.pathString}", e)
+        if (StackUtils.multiLineStacktrace(e).contains("used by another process"))
+          true // skip locked file optimistically
+        else false
     }
 
-  def isJarReadable(jar: Path): Boolean = isJarReadable(Asset(jar))
-
-  def isJarReadable(jar: Asset): Boolean = assetIsValid(jar) { jar =>
-    val jarFile = new JarFile(jar.path.toFile)
-    try jarFile.entries.hasMoreElements
-    finally jarFile.close()
+  def readInputStreamLines(input: InputStream): Seq[String] = try {
+    Source.fromInputStream(input).getLines().to(Seq)
+  } catch {
+    case NonFatal(e) =>
+      throw new IllegalStateException(s"can't read InputStream $input", e)
   }
 
-  def isTextContentReadable(text: Asset): Boolean = isTarJsonReadable(text, isZip = false)
+  def readFileLinesInJarAsset(jar: JarAsset, filePath: String): Seq[String] = try {
+    Using.resource(JarUtils.jarFileSystem(jar)) { jarFs =>
+      val jarRoot = Directory.root(jarFs)
+      val file = jarRoot.resolveFile(filePath)
+      Files.readAllLines(file.path).asScala.to(Seq)
+    }
+  } catch {
+    case NonFatal(e) =>
+      throw new IllegalStateException(s"can't read file $filePath in ${jar.pathString}", e)
+  }
 
-  def isTarJsonReadable(tarOrCompressedJson: Asset, isZip: Boolean = true): Boolean =
+  def isJarReadable(jar: Path): Boolean = isJarReadable(FileAsset(jar))
+
+  def isJarReadable(jar: FileAsset): Boolean = assetIsValid(jar) { jar =>
+    val jarFile = new JarFile(jar.path.toFile)
+    try {
+      val entires = jarFile.entries
+      while (entires.hasMoreElements) {
+        entires.nextElement().getName // scanning all entries name in downloaded remote cache jar
+      }
+      true
+    } finally jarFile.close()
+  }
+
+  def isTextContentReadable(text: FileAsset): Boolean = isTarJsonReadable(text, isZip = false)
+
+  def isTarJsonReadable(tarOrCompressedJson: FileAsset, isZip: Boolean = true): Boolean =
     assetIsValid(tarOrCompressedJson) { file =>
       val fs = Files.newInputStream(file.path)
       val bss = new BufferedInputStream(fs)

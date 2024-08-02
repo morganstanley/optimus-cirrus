@@ -20,7 +20,6 @@ import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.Properties.obtCategory
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -111,7 +110,8 @@ object SilverKingStore extends Log {
       config: SilverKingConfig,
       artifactVersion: String,
       writeArtifacts: Boolean,
-      offlinePuts: Boolean = true
+      offlinePuts: Boolean = true,
+      cacheOperationRecorder: CacheOperationRecorder = new CacheOperationRecorder
   ): SilverKingStore = {
     val clusterType = ClusterType.forLookup(config)
     val connector = new Connector(() => SilverKingOperationsImpl(config, clusterType), clusterType)
@@ -124,6 +124,7 @@ object SilverKingStore extends Log {
       artifactVersion,
       writeArtifacts = writeArtifacts,
       offlinePuts = offlinePuts,
+      cacheOperationRecorder = cacheOperationRecorder,
       connector,
       distributedSwitch,
       failuresSwitch
@@ -137,6 +138,7 @@ class SilverKingStore private[cache] (
     artifactVersion: String,
     writeArtifacts: Boolean,
     offlinePuts: Boolean,
+    cacheOperationRecorder: CacheOperationRecorder,
     connector: Connector,
     distributedSwitch: Variable[Map[OperationType, String]],
     failureSwitch: MaxFailuresReadWriteSwitch
@@ -209,16 +211,9 @@ class SilverKingStore private[cache] (
 
   private val pendingWrites = new PendingWrites
 
-  private val _incompleteReads = new AtomicInteger(0)
-  def incompleteReads: Int = _incompleteReads.get
-
-  private val _incompleteWrites = new AtomicInteger(0)
-  def incompleteWrites: Int = _incompleteWrites.get
-
-  private def recordIncomplete(opType: OperationType): Unit = opType match {
-    case Read  => _incompleteReads.incrementAndGet()
-    case Write => _incompleteWrites.incrementAndGet()
-  }
+  def incompleteReads: Int = cacheOperationRecorder.incompleteReads
+  override def incompleteWrites: Int = cacheOperationRecorder.incompleteWrites
+  private def recordIncomplete(opType: OperationType): Unit = cacheOperationRecorder.recordIncomplete(opType)
 
   @async override def get[A <: CachedArtifactType](
       id: ScopeId,

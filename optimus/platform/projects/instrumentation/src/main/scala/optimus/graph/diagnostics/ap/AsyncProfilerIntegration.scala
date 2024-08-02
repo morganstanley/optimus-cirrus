@@ -18,6 +18,7 @@ import java.time.Instant
 import one.profiler.AsyncProfiler
 import one.profiler.Counter
 import optimus.graph.diagnostics.ap.StackAnalysis
+import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
 import optimus.logging.LoggingInfo
 import optimus.platform.util.Log
 import optimus.logging.Pid
@@ -49,6 +50,7 @@ object AsyncProfilerIntegration extends Log {
 
   val TestingEvent: CustomEventType = CustomEventType("Testing", "TestValue")
   val FullWaitEvent: CustomEventType = CustomEventType("FullWait", "NS")
+
   private def addCustomEvents(): Unit = {
     TestingEvent.add()
     FullWaitEvent.add()
@@ -138,10 +140,10 @@ object AsyncProfilerIntegration extends Log {
     }
   }
 
-  def cpuProfilingEnabled(logLevel: String): Boolean = ensureLoadedIfEnabled() && {
+  lazy val cpuProfilingEnabled: Boolean = ensureLoadedIfEnabled() && {
     try {
-      profiler.execute(s"start,event=cpu,loglevel=$logLevel")
-      profiler.execute("stop,loglevel=$logLevel")
+      profiler.execute(s"start,event=cpu,loglevel=${AsyncProfilerSampler.apLogLevel}")
+      profiler.execute(s"stop,loglevel=${AsyncProfilerSampler.apLogLevel}")
       true
     } catch {
       case e: IllegalStateException if e.getMessage.contains("access to perf events") =>
@@ -153,6 +155,12 @@ object AsyncProfilerIntegration extends Log {
         false
     }
   }
+
+  def containerSafeEvent(e0: String): String = if (e0.contains("cpu") && !cpuProfilingEnabled) {
+    val e = e0.replaceAll("\\bcpu\\b", "itimer")
+    log.warn(s"Changing event $e0 to $e")
+    e
+  } else e0
 
   private val commandLock = new Object
   def command(cmd: String): String = commandLock.synchronized {
@@ -173,7 +181,7 @@ object AsyncProfilerIntegration extends Log {
             log.error("Attempting to stop profiling when not profiling")
           profiling = false
         }
-        log.info(s"async-profiler: $ret")
+        log.debug(s"async-profiler: $ret")
         ret
       } catch {
         case NonFatal(e) =>
@@ -423,33 +431,11 @@ object AsyncProfilerIntegration extends Log {
     }
   }
 
-  def dumpCollapsed(): String = {
-    if (ensureLoadedIfEnabled()) {
-      profiler.dumpCollapsed(Counter.TOTAL)
-    } else
-      "unavailable"
-  }
-
   def dumpMemoized(): String = {
     if (ensureLoadedIfEnabled()) {
       profiler.execute("collapsed,memoframes,total")
     } else
       "unavailable"
-  }
-
-  def dumpTraces(n: Int): String = {
-    if (ensureLoadedIfEnabled())
-      profiler.dumpTraces(n)
-    else
-      "unavailable"
-  }
-
-  // Get snapshot of top n stacks, fixing up A-P's rather verbose formatting
-  def getStacks(n: Int): Seq[(Double, String)] = {
-    if (ensureLoadedIfEnabled()) {
-      val dump = profiler.dumpTraces(n)
-      StackAnalysis.splitTraces(dump)
-    } else Nil
   }
 
   def recordCustomEvent(etype: CustomEventType, valueD: Double, valueL: Long, ptr: Long): Unit = {
@@ -483,6 +469,9 @@ object AsyncProfilerIntegration extends Log {
 
   def saveAwaitFrames(ids: Array[Long], nids: Int): Long =
     if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.saveAwaitFrames(2, ids, nids)
+
+  def externalContext(ctx: Long, shmPath: String): Unit =
+    if (ensureLoadedIfEnabled()) profiler.externalContext(ctx, shmPath)
 
   lazy val overflowMarker: Long = saveString("OverflowMarker")
   lazy val errorMarker: Long = saveString("ErrorMarker")
@@ -666,7 +655,7 @@ private[graph] class RecordingStateMachine(
     try {
       while (true) {
         current.tick()
-        log.info(s"Sampling wait woke up: current state: $current, messages: ${messageQueue}")
+        log.debug(s"Sampling wait woke up: current state: $current, messages: ${messageQueue}")
 
         message =
           if (messageQueue.nonEmpty) messageQueue.dequeue()

@@ -17,7 +17,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * @see http://optimusdoc/BasicAnnotations
+ * @see http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.CONSTRUCTOR)

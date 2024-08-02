@@ -21,10 +21,12 @@ import scala.collection.immutable.Seq
 
 object ForbiddenDependencyConfigurationCompiler {
   private val forbiddenDependenciesKey = "forbiddenDependencies"
-  private val dependencyKey = "dependency"
-  private val dependencyRegexKey = "dependency-regex"
+  private val dependencyIdKey = "dependencyId"
+  private val dependencyRegexKey = "dependencyRegex"
   private val configurationsKey = "configurations"
-  private val allowedInKey = "allowed-in"
+  private val transitiveKey = "transitive"
+  private val isExternalKey = "isExternal"
+  private val allowedInKey = "allowedIn"
   private val idsKey = "ids"
   private val patternsKey = "patterns"
 
@@ -45,24 +47,29 @@ object ForbiddenDependencyConfigurationCompiler {
     Result
       .tryWith(origin, config) {
         for {
-          dependency <- Success(config.optionalString(dependencyKey))
+          dependencyId <- Success(config.optionalString(dependencyIdKey))
           dependencyRegex <- Success(config.optionalString(dependencyRegexKey))
           configurations <- Success(config.stringListOrEmpty(configurationsKey))
+          transitive <- Success(config.booleanOrDefault(transitiveKey, default = false))
+          isExternal <- Success(config.booleanOrDefault(isExternalKey, default = false))
           allowedInIds <- loadAllowedIn(config, idsKey)
           allowedInPatterns <- loadAllowedIn(config, patternsKey)
         } yield {
           ForbiddenDependencyConfiguration(
-            dependency.map(d => RelaxedScopeIdString.asPartial(d)),
+            dependencyId,
             dependencyRegex,
             configurations,
+            transitive,
+            isExternal,
             allowedInIds.map(d => RelaxedScopeIdString.asPartial(d)),
             allowedInPatterns
           )
         }
       }
       .withProblems(
-        config.checkExclusiveProperties(origin, KeySet(dependencyKey, dependencyRegexKey)) ++
-          config.checkEmptyProperties(origin, KeySet(dependencyKey, dependencyRegexKey)) ++
+        config.checkExclusiveProperties(origin, KeySet(dependencyIdKey, dependencyRegexKey)) ++
+          config.checkEmptyProperties(origin, KeySet(dependencyIdKey, dependencyRegexKey)) ++
+          isExternalFlagRequiredCheck(origin, config) ++
           config.checkExtraProperties(origin, Keys.forbiddenDependencyKeys) ++ config
             .optionalConfig(allowedInKey)
             .map(c => c.checkExtraProperties(origin, Keys.dependencyAllowedInKeys))
@@ -70,4 +77,21 @@ object ForbiddenDependencyConfigurationCompiler {
 
   private def loadAllowedIn(config: Config, key: String): Result[Seq[String]] =
     Success(config.optionalConfig(allowedInKey).map(c => c.stringListOrEmpty(key)).getOrElse(Seq.empty))
+
+  private def isExternalFlagRequiredCheck(origin: ObtFile, config: Config): Option[Message] =
+    if (config.hasPath(dependencyIdKey) && config.hasPath(isExternalKey))
+      Some(
+        origin.errorAt(
+          v = config.getValue(isExternalKey),
+          msg =
+            s"Redundant '$isExternalKey' key, Forbidden dependencies defined using '$dependencyIdKey' will always be internal"
+        ))
+    else if (config.hasPath(dependencyRegexKey) && !config.hasPath(isExternalKey))
+      Some(
+        origin.errorAt(
+          v = config.root(),
+          msg =
+            s"Missing '$isExternalKey' key. Forbidden dependencies defined using '$dependencyRegexKey' must specify if external"
+        ))
+    else None
 }

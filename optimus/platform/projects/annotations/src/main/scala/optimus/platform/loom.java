@@ -33,4 +33,14 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.TYPE)
-public @interface loom {}
+public @interface loom {
+
+  // used by entityplugin to track all calls to @nodeSync (but not @async!) functions
+  @SuppressWarnings("unused")
+  String[] nodes() default {};
+
+  // used by entityplugin to track all @nodeLift params (as they will be converted to anonymous
+  // functions)
+  @SuppressWarnings("unused")
+  String[] lambdas() default {};
+}

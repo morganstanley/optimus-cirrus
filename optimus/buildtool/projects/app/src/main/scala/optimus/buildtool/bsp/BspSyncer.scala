@@ -11,45 +11,31 @@
  */
 package optimus.buildtool.bsp
 
-import java.nio.file.Files
-import java.util.concurrent.CompletableFuture
 import ch.epfl.scala.bsp4j._
-import optimus.buildtool.artifacts.ExternalClassFileArtifact
-import optimus.buildtool.artifacts.PythonArtifact
+import optimus.buildtool.artifacts._
+import optimus.buildtool.builders.BuildResult
 import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
-import optimus.buildtool.config._
-import optimus.buildtool.files.Directory
-import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.Pathed
-import optimus.buildtool.files.RelativePath
-import optimus.buildtool.format.JsonSupport
 import optimus.buildtool.config.NamingConventions._
-import optimus.buildtool.trace.BuildTargetPythonOptions
-import optimus.buildtool.trace.BuildTargetScalacOptions
-import optimus.buildtool.trace.BuildTargetSources
-import optimus.buildtool.trace.BuildTargets
-import optimus.buildtool.trace.ObtTraceListener
-import optimus.buildtool.utils.EmptyFileDiff
-import optimus.buildtool.utils.OsUtils
-import optimus.buildtool.utils.PathUtils
-import optimus.buildtool.utils.Utils
+import optimus.buildtool.config._
+import optimus.buildtool.files.{Directory, JarAsset, Pathed, RelativePath}
+import optimus.buildtool.format.JsonSupport
+import optimus.buildtool.trace._
+import optimus.buildtool.utils.{EmptyFileDiff, OsUtils, PathUtils, Utils}
 import optimus.graph.CancellationScope
+import optimus.platform._
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.util.Log
-import optimus.platform._
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import org.eclipse.lsp4j.jsonrpc.messages.ResponseError
-import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode
+import org.eclipse.lsp4j.jsonrpc.messages.{ResponseError, ResponseErrorCode}
 
-import java.nio.file.Path
-import java.nio.file.Paths
+import java.nio.file.{Files, Path, Paths}
+import java.util.concurrent.CompletableFuture
 import scala.annotation.tailrec
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-
 object BspSyncer {
   private final case class ScopeInfo(
       name: String,
@@ -67,14 +53,31 @@ class BspSyncer(
 ) extends Log {
   import BspSyncer._
   import BuildServerProtocolService.translateException
-  import service._
   import service.Ops._
+  import service._
 
   private val isWindows = OsUtils.isWindows(osVersion)
 
   val pythonVenvExtractor = new PythonVenvExtractorPostBuilder(service.buildDir)
 
   def buildTargets(buildSparseScopes: Boolean): CompletableFuture[Seq[BuildTarget]] = run[Seq[BuildTarget]] {
+    def failOnPythonBuild(result: BuildResult): Unit = {
+      val failureScopes = result.artifacts.filter(_.hasErrors)
+      bspListener.error(
+        s"Python build failed for ${failureScopes.size} scope(s): ${failureScopes.map(_.id).mkString(", ")}")
+
+      val errorMsgs: Seq[String] = result.messageArtifacts.filter(_.hasErrors).flatMap { messageArtifact =>
+        messageArtifact.messages.collect {
+          case m if m.severity == Severity.Error =>
+            val pos = m.pos.fold("")(p => s"${p.filepath}:${p.startLine}") // Intellij-friendly format (for copy-paste)
+            s"[${messageArtifact.id}] $pos: ${m.msg}"
+        }
+      }
+      errorMsgs.foreach(bspListener.error)
+
+      throw new RuntimeException(s"Python build failed for scopes: ${failureScopes.map(_.id).mkString("\n")}")
+    }
+
     val structure = structureBuilder.structure
 
     val sparseScopes = structure.scopes.values.flatMap(_.sparseInternalCompileDependencies).toSet
@@ -89,6 +92,8 @@ class BspSyncer(
 
     val pythonArtifactHashMap: Map[ScopeId, String] = if (pythonScopes.nonEmpty && structure.extractVenvs) {
       val results = builder().build(pythonScopes, pythonVenvExtractor, modifiedFiles = Some(EmptyFileDiff))
+      if (!results.successful) failOnPythonBuild(results)
+
       results.artifacts.collect { case pythonArtifact: PythonArtifact =>
         pythonArtifact.scopeId -> pythonArtifact.inputsHash
       }.toMap
@@ -259,9 +264,7 @@ class BspSyncer(
     }
   }.whenComplete((_, _) => bspListener.ensureDiagnosticsReported(Nil))
 
-  def pythonOptions(
-      targets: Seq[BuildTargetIdentifier],
-      fakeOutputs: Directory): CompletableFuture[Seq[PythonOptionsItem]] = {
+  def pythonOptions(targets: Seq[BuildTargetIdentifier]): CompletableFuture[Seq[PythonOptionsItem]] = {
     run {
       listener.traceTask(ScopeId.RootScopeId, BuildTargetPythonOptions) {
         for {
@@ -274,10 +277,6 @@ class BspSyncer(
             // TODO (OPTIMUS-61423): Implement the classpath logic from scalacOptions() for pythonpaths
             // only will matter for internal deps and maybe for depcopied external libs.
 
-            // we need to create empty directories for IntelliJ
-            val buildDir = fakeOutputs.resolveDir(scopeId.toString)
-            if (!buildDir.exists) Files.createDirectory(buildDir.path)
-
             val options = new PythonOptionsItem(
               target,
               // TODO (OPTIMUS-61422): replace Nil with interpreter options if we have any, from structure.resolvedScope
@@ -289,10 +288,7 @@ class BspSyncer(
       }
     }.whenComplete((_, _) => bspListener.ensureDiagnosticsReported(Nil))
   }
-  def scalacOptions(
-      targets: Seq[BuildTargetIdentifier],
-      fakeOutputs: Directory
-  ): CompletableFuture[Seq[ScalacOptionsItem]] = run {
+  def scalacOptions(targets: Seq[BuildTargetIdentifier]): CompletableFuture[Seq[ScalacOptionsItem]] = run {
     val structure = structureBuilder.structure
 
     listener.traceTask(ScopeId.RootScopeId, BuildTargetScalacOptions) {
@@ -301,7 +297,7 @@ class BspSyncer(
         scopeId <- target.asScopeId
       } yield {
         if (scopeId == ScopeId.RootScopeId)
-          new ScalacOptionsItem(target, Nil.asJava, Nil.asJava, intellijFriendlyURI(fakeOutputs))
+          new ScalacOptionsItem(target, Nil.asJava, Nil.asJava, PathUtils.mappedUriString(buildDir.path))
         else {
           val resolvedScope = structure.scopes(scopeId)
 
@@ -311,10 +307,6 @@ class BspSyncer(
               intellijFriendlyURI(jar, alwaysIncludeSources = true)
             }
           val externalClasspath = resolvedScope.externalCompileDependencies.map(intellijFriendlyURI)
-
-          // we need to create empty directories for IntelliJ
-          val buildDir = fakeOutputs.resolveDir(scopeId.toString)
-          if (!buildDir.exists) Files.createDirectory(buildDir.path)
 
           new ScalacOptionsItem(
             target,
@@ -355,7 +347,8 @@ class BspSyncer(
     (pythonConfig, scalaConfig, javaConfig) match {
       case (Some(pythonCfg), _, _) if pythonEnabled =>
         val interpreter: Path = if (extractVenvs) {
-          val hash = pythonArtifactHashMap(scopeId)
+          val hash = pythonArtifactHashMap
+            .getOrElse(scopeId, throw new RuntimeException(s"Unable to locate venv for scope ${scopeId}"))
           val venv: Path = pythonVenvExtractor
             .venvLocation(scopeId, hash)
             .path

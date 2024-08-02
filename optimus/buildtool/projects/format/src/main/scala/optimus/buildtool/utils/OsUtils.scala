@@ -21,12 +21,15 @@ object OsUtils {
 
   val Linux6Version = "linux-el6.x86_64"
   val Linux7Version = "linux-el7.x86_64"
+  val Linux8Version = "linux-el8_9.x86_64"
   val WindowsVersion = "windows-10.0"
 
   val Linux6SysName: String =
     sys.props.get("optimus.buildtool.sysName.linux6").getOrElse("x86_64.linux.2.6.glibc.2.12")
   val Linux7SysName: String =
     sys.props.get("optimus.buildtool.sysName.linux7").getOrElse("x86_64.linux.2.6.glibc.2.17")
+  val Linux8SysName: String =
+    sys.props.get("optimus.buildtool.sysName.linux8").getOrElse("x86_64.linux.2.6.glibc.2.28")
   val WindowsSysName: String =
     sys.props.get("optimus.buildtool.sysName.windows").getOrElse("x86_64.nt.win10")
 
@@ -56,6 +59,7 @@ object OsUtils {
 
   def exec: String = OsUtils.osVersion match {
     case OsUtils.WindowsVersion => OsUtils.WindowsSysName
+    case OsUtils.Linux8Version  => OsUtils.Linux8SysName
     case OsUtils.Linux7Version  => OsUtils.Linux7SysName
     case OsUtils.Linux6Version  => OsUtils.Linux6SysName
     case x                      => throw new IllegalArgumentException(s"Unrecognized OS version: $x")

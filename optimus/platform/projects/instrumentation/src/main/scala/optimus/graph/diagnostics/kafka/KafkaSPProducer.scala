@@ -39,7 +39,7 @@ object KafkaSPProducer extends Log {
 
   val messageCallback: Callback = (record: RecordMetadata, exception: Exception) => {
     import record._
-    log.info(s"Message sent. Topic:$topic Partition: $partition Offset: $offset")
+    log.debug(s"Message sent. Topic:$topic Partition: $partition Offset: $offset")
     if (exception != null) log.error(s"Encountered exception: ${exception.getMessage}")
   }
 

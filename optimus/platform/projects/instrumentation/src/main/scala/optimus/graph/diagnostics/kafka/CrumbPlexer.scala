@@ -11,6 +11,7 @@
  */
 package optimus.graph.diagnostics.kafka
 
+import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import kafka.zk.KafkaZkClient
@@ -242,7 +243,7 @@ trait CrumbRecordParser {
           error(msg, "", t)
           true
         } else {
-          logger.info(msg)
+          logger.debug(msg)
           false
         }
         if (elapsedMs > maxLastFailedParseWaitMs * 2) {
@@ -266,7 +267,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     parser.parseArgument(args: _*)
   } catch {
     case e: CmdLineException =>
-      logger.info(e.getMessage)
+      logger.error(e.getMessage)
       usage()
       System.exit(1)
   }
@@ -454,9 +455,30 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
 
   private val totalSkipped = new AtomicLong(0)
   private val ignored = new AtomicLong(0)
+  private val deduplicated = new AtomicLong(0)
   private var printed = 0L
   private var continue = true
   private var badUuids = 0L
+
+  private val dedupCache = Caffeine.newBuilder().maximumSize(1000 * 1000).build[String, Object]()
+  private val dummy = new Object
+  def isDuplicate(string2JsValue: Map[String, JsValue]): Boolean = {
+    getAs[String](string2JsValue, "dedupKey") match {
+      case None => false // if there isn't a dedupKey at all, assume not a duplicate
+      case Some(dedupKey) =>
+        var ret = true;
+        dedupCache.get(
+          dedupKey,
+          { _ =>
+            // This closure only runs if the key wasn't found.
+            ret = false
+            dummy
+          })
+        if (ret)
+          deduplicated.incrementAndGet()
+        ret
+    }
+  }
 
   private val threads = consumers.map { consumer =>
     new Thread {
@@ -487,7 +509,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                   uuidFull <- getAs[String](stringToJsValue, "uuid")
                     .flatMap(uuidRegex.unapplySeq)
                     .flatMap(_.headOption);
-                  tCrumb <- getAs[Long](stringToJsValue, "t")
+                  tCrumb <- getAs[Long](stringToJsValue, "t") if !isDuplicate(stringToJsValue)
                 ) {
                   val rootUuid = uuidFull.split("#").head
                   if (rootUuid.length == 0) {
@@ -561,7 +583,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       val fe @ FileEntry(uuid, f, tPrinted, tFlushed) = i.next().getValue
       val dt = t - tPrinted
       if (dt > closeAfterMs) {
-        logger.info(s"$poolId Closing $uuid dt=$dt")
+        logger.debug(s"$poolId Closing $uuid dt=$dt")
         f.flush()
         f.close()
         nClosed += 1
@@ -615,7 +637,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
                   val fe @ FileEntry(_, f, _, _) = files.computeIfAbsent(
                     uuid,
                     { _ =>
-                      logger.info(s"$poolId $partition $uuid")
+                      logger.debug(s"$poolId $partition $uuid")
                       FileEntry(uuid, new PrintWriter(new FileWriter(plexDir.resolve(uuidPath).toFile, true)), t, t - 1)
                     })
                   if (asJson) f.println /* deliberately printing to file */ (prefix + m.toJson.toString)
@@ -648,7 +670,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
               val count = rootUuids.size
               rootUuids.clear()
               info(
-                s"$poolId printed=$printed skipped=$totalSkipped ignored=$ignored misparsed=$parseErrors badUuids=$badUuids qs=${queue.size} dtCrumb=${tnow - tCrumb} dtKafka=${tnow - tKafka} dtQueue=${tnow - tEnqueued} roots=$count")
+                s"$poolId printed=$printed skipped=$totalSkipped ignored=$ignored deduplicated=$deduplicated misparsed=$parseErrors badUuids=$badUuids qs=${queue.size} dtCrumb=${tnow - tCrumb} dtKafka=${tnow - tKafka} dtQueue=${tnow - tEnqueued} roots=$count")
             }
           }
           if (waitAfterComplete > 0 && getAs[String](m, "event").contains(Events.AppCompleted.name)) {

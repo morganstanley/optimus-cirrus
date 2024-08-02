@@ -19,7 +19,7 @@ import java.lang.annotation.Target;
 /**
  * Contained modifier is intended for the use of low-latency publishing.
  *
- * @see http://optimusdoc/BasicAnnotations
+ * @see http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.CONSTRUCTOR)

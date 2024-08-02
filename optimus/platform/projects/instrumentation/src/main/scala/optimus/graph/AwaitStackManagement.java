@@ -133,6 +133,32 @@ public class AwaitStackManagement {
   private static Cache<String, String> frameNameInterner =
       Caffeine.newBuilder().maximumSize(10 * 1000).build();
 
+  private static class StackKey {
+    final long hash;
+    final String extraMods;
+
+    StackKey(long hash, String extraMods) {
+      this.hash = hash;
+      this.extraMods = extraMods;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      StackKey stackKey = (StackKey) o;
+      return hash == stackKey.hash && extraMods.equals(stackKey.extraMods);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(hash, extraMods);
+    }
+  }
+
+  private static Cache<StackKey, ArrayList<String>> awaitStackCache =
+      Caffeine.newBuilder().maximumSize(10 * 1000).build();
+
   private static String frameName(Awaitable awaitable) {
     return frameName(awaitable, "");
   }
@@ -284,58 +310,67 @@ public class AwaitStackManagement {
     } while (n != null && len <= MAX_CHAIN_IDX);
   }
 
+  public static ArrayList<String> awaitStack(long hash) {
+    if (hash == 0) return null;
+    else return awaitStackCache.getIfPresent(new StackKey(hash, ""));
+  }
+
   // The logic is similar to maybeSaveAwaitStacks above, but attempts at refactoring them to share
   public static ArrayList<String> awaitStack(Awaitable awaitable) {
     return awaitStack(awaitable, "");
   }
 
   public static ArrayList<String> awaitStack(Awaitable awaitable, String extraMods) {
-    ArrayList<String> ret = new ArrayList<>();
-    Awaitable n = awaitable;
-    String prevName = frameName(awaitable, extraMods);
-    ret.add(prevName);
-    n = n.getLauncher();
-    while (Objects.nonNull(n)) {
-      long h = n.getLauncherStackHash();
-      String name;
-      Awaitable parent = n.getLauncher();
-      // The proxy name is the same, except already terminating in "~$"
-      while (parent != null && parent != n && parent.elideChildFrame()) {
-        n = parent;
-        parent = n.getLauncher();
-      }
-      boolean isJavaCallBoundary = (h & 1L) == 1L;
-      // skip over repeated entries, since chains can be very long
-      int recursion = 0;
-      while ((name = frameName(n)).equals(prevName)
-          && parent != null
-          && parent != n
-          && !isJavaCallBoundary) {
-        recursion++;
-        n = parent;
-        parent = n.getLauncher();
-        h = n.getLauncherStackHash();
-        isJavaCallBoundary = (h & 1L) == 1L;
-      }
-      if (recursion > 0) {
-        if (recursion > 1) ret.add(elisionName(recursion - 1));
-        ret.add(prevName);
-      }
-      prevName = name;
-      ret.add(name);
-      if (isJavaCallBoundary) ret.add("[java]");
+    return awaitStackCache.get(
+        new StackKey(awaitable.stackId(), extraMods),
+        k -> {
+          ArrayList<String> ret = new ArrayList<>();
+          Awaitable n = awaitable;
+          String prevName = frameName(awaitable, extraMods);
+          ret.add(prevName);
+          n = n.getLauncher();
+          while (Objects.nonNull(n)) {
+            long h = n.getLauncherStackHash();
+            String name;
+            Awaitable parent = n.getLauncher();
+            // The proxy name is the same, except already terminating in "~$"
+            while (parent != null && parent != n && parent.elideChildFrame()) {
+              n = parent;
+              parent = n.getLauncher();
+            }
+            boolean isJavaCallBoundary = (h & 1L) == 1L;
+            // skip over repeated entries, since chains can be very long
+            int recursion = 0;
+            while ((name = frameName(n)).equals(prevName)
+                && parent != null
+                && parent != n
+                && !isJavaCallBoundary) {
+              recursion++;
+              n = parent;
+              parent = n.getLauncher();
+              h = n.getLauncherStackHash();
+              isJavaCallBoundary = (h & 1L) == 1L;
+            }
+            if (recursion > 0) {
+              if (recursion > 1) ret.add(elisionName(recursion - 1));
+              ret.add(prevName);
+            }
+            prevName = name;
+            ret.add(name);
+            if (isJavaCallBoundary) ret.add("[java]");
 
-      if (parent == n) {
-        ret.add("[infinite]");
-        n = null;
-      } else if (ret.size() == MAX_CHAIN_IDX) {
-        ret.add(overflowName);
-        n = null;
-      } else {
-        n = parent;
-      }
-    }
-    return ret;
+            if (parent == n) {
+              ret.add("[infinite]");
+              n = null;
+            } else if (ret.size() == MAX_CHAIN_IDX) {
+              ret.add(overflowName);
+              n = null;
+            } else {
+              n = parent;
+            }
+          }
+          return ret;
+        });
   }
 
   private void maybeClearSavedAwaitStacks() {
@@ -439,7 +474,8 @@ public class AwaitStackManagement {
   private static final long baseStackHash = mix(TestableClock.nanoTime());
   private static final long javaCallStackHash = ~baseStackHash;
 
-  public static void setLaunchData(Awaitable fromTask, Awaitable toTask, boolean inJavaStack) {
+  public static void setLaunchData(
+      Awaitable fromTask, Awaitable toTask, boolean inJavaStack, int implFlags) {
     if (Objects.isNull(fromTask)) return; // redundant, but might be called from cache methods
     Awaitable fromUnder = fromTask.underlyingAwaitable();
     if (DiagnosticSettings.repairLauncherChain && fromUnder == toTask) fromUnder = fromTask;
@@ -451,6 +487,6 @@ public class AwaitStackManagement {
     if (inJavaStack) {
       hash = combine(hash, javaCallStackHash) | 1L; // java boundary stack hashes are odd
     } else hash &= ~1L; // normal hashes are even
-    toTask.setLaunchData(fromUnder, hash);
+    toTask.setLaunchData(fromUnder, hash, implFlags);
   }
 }

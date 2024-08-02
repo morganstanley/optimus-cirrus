@@ -18,6 +18,7 @@ import optimus.buildtool.format.docker.ImageLocation
 import optimus.buildtool.utils.BlockingQueue
 import org.slf4j.LoggerFactory
 
+import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
 /** A façade over Jib's APIs so we can make (trivial) assertions about the results thereof. */
@@ -29,8 +30,32 @@ trait ImageBuilderDelegate[Result] {
 
 object ImageBuilderDelegate {
   private val log = LoggerFactory.getLogger(getClass)
+  private val maxRetry = 2
+  private val retryIntervalSeconds = 10
+
+  // jib is rely on commons-compress TarArchiveOutputStream:closeArchiveEntry & write, it will throw when input file
+  // changed during the docker build. For some non-RT external dependencies files we should catch this and retry
+  private[buildtool] val tarExceptionsWhenFileChanged: Seq[String] =
+    Seq("bytes exceeds size in header", "which is not the record size of", "bytes specified in the header were written")
+
+  private[buildtool] def fileChangedMsg(name: String) = s"Files have changed during the docker build for image $name"
 
   type Result = (List[FileEntriesLayer], List[(String, String)])
+
+  private[buildtool] def outputTarRetryIfFileChanged[T](
+      toName: String,
+      retry: Int = maxRetry,
+      retryIntervalSeconds: Int = retryIntervalSeconds)(f: => T): T =
+    try f
+    catch {
+      // This could happen if files changed while building the layers and tar
+      case NonFatal(ex) if tarExceptionsWhenFileChanged.exists(ex.getMessage.contains) =>
+        if (retry > 0) {
+          log.warn(s"Retrying $retry/$maxRetry: ${fileChangedMsg(toName)}", ex)
+          Thread.sleep(TimeUnit.SECONDS.toMillis(retryIntervalSeconds))
+          outputTarRetryIfFileChanged(toName, retry - 1)(f)
+        } else throw new Exception(s"Retried $maxRetry times: ${fileChangedMsg(toName)}", ex)
+    }
 
   /** Create an [[ImageBuilderDelegate]] which stores the provided file layers and env variables in a list. */
   def mock: ImageBuilderDelegate[Result] =
@@ -75,16 +100,7 @@ object ImageBuilderDelegate {
         jib.containerize(containerizer)
       }
 
-      try buildLayersAndTar
-      catch {
-        // This could happen if files changed while building the layers and tar
-        case NonFatal(ex) if ex.getMessage.contains("bytes exceeds size in header") =>
-          log.warn(
-            s"Files have changed during the docker build for image ${to.name}. Let's trying again before giving up...",
-            ex)
-          buildLayersAndTar
-      }
-
+      outputTarRetryIfFileChanged(to.name)(buildLayersAndTar)
     }
   }
 

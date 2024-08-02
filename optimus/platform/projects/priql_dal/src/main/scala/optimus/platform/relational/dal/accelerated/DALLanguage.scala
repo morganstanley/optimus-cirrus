@@ -169,7 +169,7 @@ private class DALDialect(lan: QueryLanguage, tran: QueryTranslator) extends Quer
   override def translate(e: RelationElement): RelationElement = {
     // The element is visited and rewritten for several times so we define it as var.
     var ele = UnusedColumnRemover.remove(translator.mapping, e)
-    ele = LinkageSubqueryRewriter.rewrite(language, ele)
+    ele = LinkageSubqueryRewriter.rewrite(translator.mapping, language, ele)
     ele = super.translate(ele)
     ele = new EntityRefConverter().visitElement(ele)
     RedundantLeftJoinRemover.remove(ele)

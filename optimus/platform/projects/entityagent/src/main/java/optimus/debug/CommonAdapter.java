@@ -139,14 +139,24 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
   }
 
   protected String dupReturnValueOrNullForVoid(int opcode, boolean boxValueTypes) {
-    if (opcode == RETURN) visitInsn(ACONST_NULL);
-    else if (opcode == ARETURN || opcode == ATHROW) dup();
+    if (opcode == RETURN) {
+      // if you're boxing arguments then you're presumably being general about which method you're
+      // patching, but if you're not then you are patching a specific signature, in which case
+      // why would you want to be passed a void return value?
+      if (!boxValueTypes)
+        throw new IllegalArgumentException(
+            "It doesn't make sense to pass a known void return value as an argument to a patch!");
+      visitInsn(ACONST_NULL);
+    } else if (opcode == ARETURN || opcode == ATHROW) dup();
     else {
       if (opcode == LRETURN || opcode == DRETURN) dup2(); // double/long take two slots
       else dup();
       if (boxValueTypes) valueOf(Type.getReturnType(this.methodDesc));
     }
-    return OBJECT_DESC; // TODO (OPTIMUS-53248): For non-boxing case return proper descriptor
+    // n.b. non-primitives will be passed as Object when boxing is enabled, since you're presumably
+    // trying to use a signature-agnostic patch method.
+    if (boxValueTypes) return OBJECT_DESC;
+    else return Type.getReturnType(this.methodDesc).getDescriptor();
   }
 
   protected String loadArgsInlineOrAsArray(MethodPatch patch) {
@@ -201,6 +211,13 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     visitFieldInsn(GETFIELD, className, fieldName, fieldType.getDescriptor());
   }
 
+  /** Almost the same as valueOf() call by VOID gets converted BoxedUnit.UNIT */
+  public void valueOfForScala(Type type) {
+    if (type == Type.VOID_TYPE)
+      visitFieldInsn(GETSTATIC, "scala/runtime/BoxedUnit", "UNIT", "Lscala/runtime/BoxedUnit;");
+    else super.valueOf(type);
+  }
+
   protected void dup(Type tpe) {
     var size = tpe.getSize();
     if (size == 0) {
@@ -251,6 +268,18 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
       if (className.startsWith(pkg)) return true;
     }
 
+    return false;
+  }
+
+  /** Matched arguments of 2 descriptors without allocating anything */
+  public static boolean sameArguments(String desc1, String desc2) {
+    var minLen = Math.min(desc1.length(), desc2.length());
+    for (int i = 0; i < minLen; i++) {
+      var ch1 = desc1.charAt(i);
+      var ch2 = desc2.charAt(i);
+      if (ch1 != ch2) return false;
+      if (ch1 == ')') return true;
+    }
     return false;
   }
 

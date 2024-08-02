@@ -34,7 +34,7 @@ object DependencyGraph { // TODO (OPTIMUS-47584): remove in favor of dependicon
     def toForward(get: ScopeDefinition => Dependencies): Map[ScopeId, Set[ScopeId]] =
       scopes
         .map { case (id, mdef) =>
-          id -> (get(mdef).internal.toSet - id)
+          id -> (get(mdef).modules.toSet - id)
         }
         .withDefaultValue(Set.empty)
 

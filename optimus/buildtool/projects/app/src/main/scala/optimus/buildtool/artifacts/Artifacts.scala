@@ -38,12 +38,14 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.PathUtils
+import optimus.buildtool.utils.OptimusBuildToolAssertions
 import optimus.platform._
 
 import java.nio.file.Path
 import java.time.Instant
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 /** Represents a concrete artifact set produced by a compilation or from an external library */
 @entity private[buildtool] sealed trait Artifact {
@@ -71,6 +73,14 @@ private[buildtool] object PathedArtifact {
 
 @entity private[buildtool] sealed trait PathedArtifact extends Artifact with Pathed with PathedEntity {
   import PathedArtifact._
+
+  if (OptimusBuildToolAssertions.enabled) validate()
+
+  protected def validate(): Unit = id match {
+    case InternalArtifactId(_, tpe, _) =>
+      require(path.iterator.asScala.exists(_.toString == tpe.name), s"Invalid path $pathString for artifact type $tpe")
+    case _ => ()
+  }
 
   // don't store artifacts with errors (to prevent unexpected transient errors being cached on disk)
   protected val storeWithErrors: Boolean = false

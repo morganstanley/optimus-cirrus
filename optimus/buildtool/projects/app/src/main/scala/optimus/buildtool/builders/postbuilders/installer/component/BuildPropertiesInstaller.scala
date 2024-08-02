@@ -45,6 +45,12 @@ class BuildPropertiesInstaller(
   @async override def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
     val metaBundles = installable.metaBundles.to(Seq)
     val metaBundlesWithEonId: Seq[Bundle] = metaBundles.apar.flatMap(scopeConfigSource.bundleConfiguration)
+    val eonIdListStr = metaBundlesWithEonId
+      .collect { case Bundle(id, Some(eonId), _, _) =>
+        s"${id.properPath}:$eonId"
+      }
+      .sorted
+      .mkString(",")
     val content = Seq(
       s"obt-version=${versionConfig.obtVersion}",
       s"scala-version=${versionConfig.scalaVersion}",
@@ -52,7 +58,7 @@ class BuildPropertiesInstaller(
       s"stratosphere-version=${versionConfig.stratosphereVersion}"
     ) :+
       s"bundles=${metaBundles.map(_.properPath).sorted.mkString(",")}" :+
-      s"bundlesWithEonId=${metaBundlesWithEonId.filter(p => p.id.eonId.isDefined).map(i => i.id.toStringWithEonId).sorted.mkString(",")}"
+      s"bundlesWithEonId=${eonIdListStr}"
     val contentHash = Hashing.hashStrings(content)
 
     installable.metaBundles.apar

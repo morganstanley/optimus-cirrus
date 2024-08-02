@@ -14,6 +14,7 @@ package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties
@@ -50,21 +51,35 @@ trait SamplerProvider {
   val priority: Int = Int.MaxValue
 }
 
-class SamplingProfiler private (
+class SamplingProfiler private[diagnostics] (
     private val ownerId: ChainedID,
-    intervalSec: Int,
-    val spKafkaProducer: Option[SamplingProfilingKafkaConfig]
+    crumbConsumer: Option[Crumb => Unit] = None,
+    properties: Map[String, String] = Map.empty
 ) extends Log {
   import SamplingProfiler._
 
-  log.info(s"Starting SamplingProfiler $ownerId interval=$intervalSec")
+  private val schedulerCounters = ServiceLoaderUtils.all[SchedulerCounter]
+
+  private val stackSamplers = ServiceLoaderUtils.all[StackSampler]
+
+  private val samplerProviders = ServiceLoaderUtils.all[SamplerProvider].sortBy(_.priority)
+
+  val Name = "SamplingProfiler"
+
+  val propertyUtils = new PropertyUtils(properties)
+
+  val periodSec = propertyUtils.get("optimus.sampling.sec", 60)
+  private val spoofRoot = propertyUtils.get("optimus.sampling.rootids", true)
+  private val cleanupWaitMs = propertyUtils.get("optimus.sampling.wait.ms", 5000)
+
+  log.info(s"Starting SamplingProfiler $ownerId period=$periodSec")
 
   private val sp = this
 
   // called for side effects
   private val pulserInstance = "SP" + numPulsers.incrementAndGet()
 
-  private val samplingPeriodMs = 1000L * intervalSec
+  private val samplingPeriodMs = 1000L * periodSec
   private val waiter = new Object
 
   // The following are guarded by waiter
@@ -137,7 +152,7 @@ class SamplingProfiler private (
     )
 
     if (asyncProfiler)
-      ss += new AsyncProfilerSampler(sp, stackSamplers)
+      ss += new AsyncProfilerSampler(sp, stackSamplers, crumbConsumer)
 
     // Most of the samplers
     samplerProviders.foreach { provider =>
@@ -158,129 +173,137 @@ class SamplingProfiler private (
 
   private val numCores = Runtime.getRuntime.availableProcessors()
   private val numThreads = schedulerCounters.flatMap(_.numThreads).sum
+  private val staticElems: Elems =
+    profStatsType -> Name ::
+      cpuCores -> numCores ::
+      idealThreads -> numThreads ::
+      engineRoot -> ChainedID.root.base ::
+      Version.properties
 
   private val osBean: OperatingSystemMXBean = DefensiveManagementFactory.getOperatingSystemMXBean()
 
   private val samplingThread = new Thread {
     override def run(): Unit = {
-      val staticElems: Elems =
-        profStatsType -> "SamplingProfiler" ::
-          cpuCores -> numCores ::
-          idealThreads -> numThreads ::
-          engineRoot -> ChainedID.root.base ::
-          Version.properties
-      import optimus.scalacompat.collection._
-      def publish(): Unit = {
-        val destinations = if (spoofRoot) publishAppInstances else Seq(defaultAppInstance)
-        var isCanonical = true
-
-        val pulseTimeData = snapTimeMs -> _currentSnapTime ::
-          snapPeriod -> _actualPeriodMs ::
-          snapTimeUTC -> Instant.ofEpochMilli(_currentSnapTime).toString ::
-          snapEpochId -> (_currentSnapTime.toDouble / samplingPeriodMs + 0.5).toLong :: Elems.Nil;
-
-        destinations.foreach { appInstance =>
-          val id = appInstance.rootId
-
-          val identificationData = appPrint -> PyroUploader.approxId(AppKey, id) ::
-            engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root) ::
-            appId -> appInstance.appId :: staticElems
-
-          // Each sampler returns its crumb source, plus a list of batches to publish.  We'll publish all the
-          // 1st batch elems together, then all the 2nd, etc.
-          val samplerResults: Seq[Map[Source, List[Elems]]] = samplers.map(_.elemss(id))
-
-          // Group map by source.
-          val batchesBySource = new util.HashMap[Source, Seq[List[Elems]]]()
-          for {
-            s2ess: Map[Source, List[Elems]] <- samplerResults
-            (source, elemss) <- s2ess
-          } batchesBySource.merge(source, Seq(elemss), _ ++ _)
-
-          batchesBySource.asScala
-            .foreach { case (source, b) =>
-              var batchesForAllSamplers: Seq[List[Elems]] = b
-              var iBatch = 0
-              while (batchesForAllSamplers.nonEmpty) {
-                iBatch += 1
-                // Pull off the first batch for each sampler
-                val (batch: Seq[Elems], rest) = batchesForAllSamplers.collect { case elems :: rest =>
-                  (elems, rest)
-                }.unzip
-
-                if (batch.nonEmpty) {
-
-                  val pulseData: Elems = pulseTimeData ::: Elems(batch.toSeq: _*) // toSeq required by scala 2.13
-
-                  val toPublish: Elems =
-                    isCanonical.thenSome(canonicalPub -> true) :: snapBatch -> iBatch ::
-                      pulse -> pulseData :: identificationData
-
-                  if (isCanonical)
-                    log.info(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
-                  Breadcrumbs.info(id, PropertiesCrumb(_, source, toPublish))
-
-                }
-                batchesForAllSamplers = rest.filter(_.nonEmpty)
-              }
-
-            }
-          isCanonical = false
-        }
-        Breadcrumbs.flush()
-      }
-
-      def snap(): Unit = {
-        _currentSnapTime = System.currentTimeMillis()
-        _actualPeriodMs = _currentSnapTime - _previousSnapTime
-        val ss = samplersLock.synchronized(samplers)
-        ss.foreach(_.snap())
-        _nSnaps += 1 // 0 based
-        _previousSnapTime = _currentSnapTime
-      }
-
-      {
-        // Don't wait if we're shutting down, or we got a request to snap/publish
-        // immediately.
-        def shouldWait = _stillPulsing && !_snapAndPublishImmediately
-        do {
-          snap()
-          // Next snap at the next multiple of intervalMs since the epoch
-          val nextSampleAt = ((_currentSnapTime + samplingPeriodMs / 2) / samplingPeriodMs + 1) * samplingPeriodMs
-          // Actual publication occurs at some random time between now and then so all engines aren't publishing simultaneously
-          val publishAt = _currentSnapTime +
-            (Random.nextDouble() * 0.9 * (nextSampleAt - _currentSnapTime)).toLong
-          waiter.synchronized {
-            var t = System.currentTimeMillis()
-            while (t < publishAt && shouldWait) {
-              waiter.wait(publishAt - t)
-              t = System.currentTimeMillis()
-            }
-          }
-          publish()
-          val doSnapNow = waiter.synchronized {
-            var t = System.currentTimeMillis()
-            while (t < nextSampleAt && shouldWait) {
-              waiter.wait(nextSampleAt - t)
-              t = System.currentTimeMillis()
-            }
-            // This flag will be set if we need to snap immediately for any reason, whether
-            // because we're shutting down, or due to activity (e.g. a dist completion)
-            // necessitating a snap now.
-            _snapAndPublishImmediately
-          }
-          if (doSnapNow) {
-            snap()
-            publish()
-            waiter.synchronized {
-              _snapAndPublishImmediately = false
-              waiter.notify()
-            }
-          }
-        } while (_stillPulsing)
-      }
+      runSamplingThread()
       log.info(s"Exiting $this")
     }
+  }
+
+  private def runSamplingThread(): Unit = {
+    // Don't wait if we're shutting down, or we got a request to snap/publish
+    // immediately.
+    def shouldWait: Boolean = _stillPulsing && !_snapAndPublishImmediately
+
+    do {
+      snap()
+      // Next snap at the next multiple of intervalMs since the epoch
+      val nextSampleAt = ((_currentSnapTime + samplingPeriodMs / 2) / samplingPeriodMs + 1) * samplingPeriodMs
+      // Actual publication occurs at some random time between now and then so all engines aren't publishing simultaneously
+      val publishAt = _currentSnapTime +
+        (Random.nextDouble() * 0.9 * (nextSampleAt - _currentSnapTime)).toLong
+      waiter.synchronized {
+        var t = System.currentTimeMillis()
+        while (t < publishAt && shouldWait) {
+          waiter.wait(publishAt - t)
+          t = System.currentTimeMillis()
+        }
+      }
+      publish()
+      val doSnapNow = waiter.synchronized {
+        var t = System.currentTimeMillis()
+        while (t < nextSampleAt && shouldWait) {
+          waiter.wait(nextSampleAt - t)
+          t = System.currentTimeMillis()
+        }
+        // This flag will be set if we need to snap immediately for any reason, whether
+        // because we're shutting down, or due to activity (e.g. a dist completion)
+        // necessitating a snap now.
+        _snapAndPublishImmediately
+      }
+      if (doSnapNow) {
+        log.info(s"Triggering off-cycle snap and publish.")
+        snap()
+        publish()
+        waiter.synchronized {
+          _snapAndPublishImmediately = false
+          waiter.notify()
+        }
+      }
+    } while (_stillPulsing)
+  }
+
+  private[sampling] def publish(): Unit = {
+    val destinations = if (spoofRoot) publishAppInstances else Seq(defaultAppInstance)
+    var isCanonical = true
+
+    val pulseTimeData = snapTimeMs -> _currentSnapTime ::
+      snapPeriod -> _actualPeriodMs ::
+      snapTimeUTC -> Instant.ofEpochMilli(_currentSnapTime).toString ::
+      snapEpochId -> (_currentSnapTime.toDouble / samplingPeriodMs + 0.5).toLong :: Elems.Nil;
+
+    destinations.foreach { appInstance =>
+      val id = appInstance.rootId
+
+      val identificationData = appPrint -> PyroUploader.approxId(AppKey, id) ::
+        engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root) ::
+        appId -> appInstance.appId :: staticElems
+
+      // Each sampler returns its crumb source, plus a list of batches to publish.  We'll publish all the
+      // 1st batch elems together, then all the 2nd, etc.
+      val samplerResults: Seq[Map[Source, List[Elems]]] = samplers.map(_.elemss(id))
+
+      // Group map by source.
+      val batchesBySource = new util.HashMap[Source, Seq[List[Elems]]]()
+      for {
+        s2ess: Map[Source, List[Elems]] <- samplerResults
+        (source, elemss) <- s2ess
+      } batchesBySource.merge(source, Seq(elemss), _ ++ _)
+
+      batchesBySource.asScala
+        .foreach { case (source, b) =>
+          var batchesForAllSamplers: Seq[List[Elems]] = b
+          var iBatch = 0
+          while (batchesForAllSamplers.nonEmpty) {
+            iBatch += 1
+            // Pull off the first batch for each sampler
+            val (batch: Seq[Elems], rest) = batchesForAllSamplers.collect { case elems :: rest =>
+              (elems, rest)
+            }.unzip
+
+            if (batch.nonEmpty) {
+
+              val pulseData: Elems = pulseTimeData ::: Elems(batch.toSeq: _*) // toSeq required by scala 2.13
+
+              val toPublish: Elems =
+                isCanonical.thenSome(canonicalPub -> true) :: snapBatch -> iBatch ::
+                  pulse -> pulseData :: identificationData
+
+              if (isCanonical)
+                log.debug(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
+              crumbConsumer match {
+                case Some(consumer) =>
+                  consumer(PropertiesCrumb(id, source, toPublish))
+                case None =>
+                  Breadcrumbs.info(id, PropertiesCrumb(_, source, toPublish))
+              }
+            }
+            batchesForAllSamplers = rest.filter(_.nonEmpty)
+          }
+
+        }
+      isCanonical = false
+    }
+    if (!crumbConsumer.isDefined)
+      Breadcrumbs.flush()
+  }
+
+  private def snap(): Unit = {
+    _currentSnapTime = System.currentTimeMillis()
+    _actualPeriodMs = _currentSnapTime - _previousSnapTime
+    val ss = samplersLock.synchronized(samplers)
+    ss.foreach(_.snap())
+    _nSnaps += 1 // 0 based
+    _previousSnapTime = _currentSnapTime
   }
 
   def snapAndPublish(msSinceLastSnap: Long): Unit = {
@@ -312,7 +335,7 @@ class SamplingProfiler private (
   }
 
   sys.addShutdownHook { shutdown(cleanupWaitMs) }
-  samplingThread.setName("SamplingProfiler" + samplingThread.getId)
+  samplingThread.setName(Name + samplingThread.getId)
   samplingThread.setDaemon(true)
   samplingThread.start()
   def stillPulsing: Boolean = _stillPulsing && samplingThread.isAlive
@@ -322,8 +345,10 @@ class SamplingProfiler private (
 object SamplingProfiler extends Log {
 
   import scala.reflect.runtime
-  val configurable = DiagnosticSettings.samplingProfilerStatic && !DiagnosticSettings.samplingProfilerForce
   @volatile private[diagnostics] var configured = false
+
+  // minimum publication interval in the presence of "activity" (e.g. a distributed task completion)
+  private val activityIntervalMs = PropertyUtils.get("optimus.sampling.activity.sec", 30) * 1000L
 
   val NANOSPERMILLI = 1000 * 1000L
   val MILLION = 1000 * 1000L
@@ -332,18 +357,8 @@ object SamplingProfiler extends Log {
   def nanosToMillis(ns: Long) = ns / NANOSPERMILLI
 
   def ensureLoadedIfEnabled(): Unit = {}
-  private val auto = DiagnosticSettings.samplingProfilerStatic
-  private var enabled = auto
-  private val intervalSec = PropertyUtils.get("optimus.sampling.sec", 60)
-  private val activityIntervalMs = PropertyUtils.get("optimus.sampling.activity.sec", 30) * 1000L
-  private val spoofRoot = PropertyUtils.get("optimus.sampling.rootids", true)
-  private val cleanupWaitMs = PropertyUtils.get("optimus.sampling.wait.ms", 5000)
-
-  private val schedulerCounters = ServiceLoaderUtils.all[SchedulerCounter]
-
-  private val stackSamplers = ServiceLoaderUtils.all[StackSampler]
-
-  private val samplerProviders = ServiceLoaderUtils.all[SamplerProvider].sortBy(_.priority)
+  private val auto = DiagnosticSettings.samplingProfilerAuto
+  private var enabled = DiagnosticSettings.samplingProfilerStatic
 
   private val configTimeoutSec = DiagnosticSettings.getLongProperty("optimus.sampling.config.timeout.sec", 15)
 
@@ -374,7 +389,7 @@ object SamplingProfiler extends Log {
   private def start(): Option[SamplingProfiler] = this.synchronized {
     if (enabled) {
       _instance orElse {
-        val sp = new SamplingProfiler(ChainedID.root, intervalSec, None)
+        val sp = new SamplingProfiler(ChainedID.root)
         startUnconfiguredTimer()
         _instance = Some(sp)
         _instance
@@ -389,7 +404,9 @@ object SamplingProfiler extends Log {
    * shutdown.
    */
   private def startUnconfiguredTimer(): Unit = this.synchronized {
-    if (configurable && !DiagnosticSettings.samplingProfilerDefault && !configured && !unconfiguredTimerStarted) {
+    if (
+      DiagnosticSettings.samplingProfilerZkConfigurable && !DiagnosticSettings.samplingProfilerDefaultOn && !configured && !unconfiguredTimerStarted
+    ) {
       unconfiguredTimerStarted = true;
       val timer = new Timer(true)
       timer.schedule(
@@ -427,9 +444,6 @@ object SamplingProfiler extends Log {
 
   def activity(): Unit = instance().foreach(_.snapAndPublish(activityIntervalMs))
 
-  // Report the numeric difference between the latest and previous value
-  def MINUS[N](implicit num: Numeric[N]) = (prev: Option[N], v: N) => prev.fold(num.zero)(p => num.minus(v, p))
-
   // Report the latest snapped value
   def LATEST[A]: (Option[A], A) => A = (_: Option[A], v: A) => v
 
@@ -438,6 +452,45 @@ object SamplingProfiler extends Log {
 
   // for testing
   def NOPUB: Any => Elems = (v: Any) => Elems.Nil
+
+  final class Util(sp: SamplingProfiler) {
+    object Snap {
+      // Create a simple scalar sampler that publishes to a single key.
+      def apply[N](snapper: Boolean => N, key: Key[N]): Sampler[N, N] = new Sampler(sp, snapper, LATEST[N], PUB(key))
+
+      // Create an almost-simple-sampler with just one callback that produces Elems ready
+      // for publication.
+      def apply(snapper: Boolean => Elems) =
+        new Sampler[Elems, Elems](sp, snapper, LATEST[Elems], (elems, _) => elems)
+    }
+
+    trait Minus[N] {
+      def minus(a: N, b: N): N
+    }
+
+    implicit def numericMinus[N: Numeric]: Minus[N] = new Minus[N] {
+      val num = implicitly[Numeric[N]]
+      def minus(a: N, b: N) = num.minus(a, b)
+    }
+
+    implicit def mapMinus[K, V: Minus]: Minus[Map[K, V]] = new Minus[Map[K, V]] {
+      val num = implicitly[Minus[V]]
+      def minus(a: Map[K, V], b: Map[K, V]): Map[K, V] = {
+        val keys = a.keySet
+        keys.map { k =>
+          k -> b.get(k).fold(a(k))(bv => num.minus(a(k), bv))
+        }.toMap
+      }
+    }
+
+    // Report the numeric difference between the latest and previous value
+    def MINUS[N](implicit num: Minus[N]) = (prev: Option[N], v: N) => prev.fold(v)(p => num.minus(v, p))
+
+    // Simple snap, publishing difference from previous numeric value to a single property
+    def Diff[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
+      new Sampler(sp, snapper, MINUS(num), PUB(key))
+    }
+  }
 
   /**
    * @param snapper
@@ -508,6 +561,12 @@ object SamplingProfiler extends Log {
                 stackTrace -> Exceptions.minimizeTrace(t, 10, 3))
             )
             enabled = false
+            try {
+              shutdown()
+            } catch {
+              case NonFatal(t) =>
+                log.warn(s"Error shutting down sampler $this", t)
+            }
         }
       }
     }

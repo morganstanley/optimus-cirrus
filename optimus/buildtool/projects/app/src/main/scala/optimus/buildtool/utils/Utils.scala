@@ -259,6 +259,8 @@ import scala.util.control.NonFatal
 
   def isWindows: Boolean = OsUtils.isWindows
 
+  def executable(cmd: String): String = if (OsUtils.isWindows) s"$cmd.exe" else cmd
+
   final case class ProcessDetails(pid: String, host: String)
   private val processDetails = ManagementFactory.getRuntimeMXBean.getName.split("@") match {
     case Array(pid, host) => Some(ProcessDetails(pid, host))
@@ -545,6 +547,8 @@ import scala.util.control.NonFatal
   val javaClassVersionTag = s"java.class.version=$javaClassVersion"
   val javaSpecVersion: String = System.getProperty("java.specification.version")
   val javaSpecVersionTag = s"java.specification.version=$javaSpecVersion"
+
+  val javaExecutable: String = Utils.executable(s"$javaHome/bin/java")
 
   def generatePropertiesFileContent(props: Map[String, String]): String = {
     import scala.jdk.CollectionConverters._

@@ -19,10 +19,10 @@ import java.lang.annotation.Target;
 /**
  * Marks a def/val as referentially transparent.
  *
- * @see http://optimusdoc/BasicAnnotations
+ * @see http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.CONSTRUCTOR})
+@Target({ElementType.CONSTRUCTOR, ElementType.METHOD, ElementType.TYPE})
 public @interface node {
 
   /* It indicates if the value is tweakable */

@@ -15,7 +15,7 @@ import optimus.breadcrumbs.ChainedID;
 
 trait AwaitableContext;
 
- trait Awaitable {
+trait Awaitable {
   def getId: Int
   def ID: ChainedID
   def toSimpleName: String
@@ -27,10 +27,12 @@ trait AwaitableContext;
   def launch(awaitableContext: AwaitableContext): Unit
   def getProfileId: Int
 
+  // Lose a bit of resolution to keep IDs prettier and avoid having to deal with dashes
+  def stackId: Long = Math.abs(getLauncherStackHash)
   def getLauncherStackHash: Long
   def getLauncher: Awaitable
 
-  def setLaunchData(awaitable: Awaitable, hash: Long): Unit
+  def setLaunchData(awaitable: Awaitable, hash: Long, implFlags: Int): Unit
 
   def elideChildFrame: Boolean
 

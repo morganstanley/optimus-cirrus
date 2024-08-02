@@ -24,4 +24,5 @@ import xsbti.Problem
 object NoOpConverter extends ConvertsProblems {
   override def apply(raisedAt: Severity, problem: Problem): CompilationMessage =
     CompilationMessage(MessagePosition(problem.position()), problem.message(), raisedAt)
+  override def reapply(prevMessage: CompilationMessage): CompilationMessage = prevMessage
 }

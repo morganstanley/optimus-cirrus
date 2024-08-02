@@ -43,31 +43,55 @@ private[buildtool] final case class RunConfConfiguration[A](
     runConfFolder: A
 )
 
+/**
+ * loaded dependencies from module .obt file
+ * @param modules internal scopeIds defined in "modules=[]"
+ * @param libs external libs(could be maven or afs) defined in "libs=[]"
+ * @param mavenLibs maven libs defined in "mavenLibs=[]"
+ */
 private[buildtool] final case class Dependencies(
-    internal: Seq[ScopeId],
-    externalAfs: Seq[DependencyDefinition],
-    externalMaven: Seq[DependencyDefinition]) {
-  val external: Seq[DependencyDefinition] = externalAfs ++ externalMaven
+    modules: Seq[ScopeId],
+    // prevent use these directly
+    private val libs: Seq[DependencyDefinition],
+    private val mavenLibs: Seq[DependencyDefinition]
+) {
+  // default dependencies in used for current scope compile
+  def externalDeps(useMavenLibsFromDualLibsModule: Boolean = false): Seq[DependencyDefinition] =
+    if (useMavenLibsFromDualLibsModule || libs.isEmpty) mavenLibs else libs
+  // for fingerprint
+  val dualExternalDeps: Seq[DependencyDefinition] = (libs ++ mavenLibs).distinct
+
+  def listExternalLibs(withMavenLibs: Boolean = true): String = {
+    val libsMsg = s"libs=[${libs.map(_.key).sorted.mkString(", ")}]"
+    val mavenLibsMsg = if (withMavenLibs) s", mavenLibs=[${mavenLibs.map(_.key).mkString(", ")}]" else ""
+    s"$libsMsg$mavenLibsMsg"
+  }
+
+  def toJsonInput: (Seq[ScopeId], Seq[DependencyDefinition], Seq[DependencyDefinition]) =
+    (modules, libs, mavenLibs)
 
   def withParent(parent: Dependencies): Dependencies = parent ++ this
-  def externalIsMaven: Boolean = externalMaven.nonEmpty && externalAfs.isEmpty
+
+  def isEmpty: Boolean = mavenLibs.isEmpty && libs.isEmpty
+
+  def withLibs: Boolean = libs.nonEmpty
+
+  def hasMavenLibsOrEmpty: Boolean = mavenLibs.nonEmpty || isEmpty
+
   def externalMap(f: DependencyDefinition => DependencyDefinition): Dependencies =
-    this.copy(externalAfs = this.externalAfs.map(f), externalMaven = this.externalMaven.map(f))
+    this.copy(libs = this.libs.map(f), mavenLibs = this.mavenLibs.map(f))
+
   def ++(other: Dependencies): Dependencies = Dependencies(
-    internal ++ other.internal,
-    externalAfs ++ other.externalAfs,
-    externalMaven ++ other.externalMaven
+    modules ++ other.modules,
+    libs ++ other.libs,
+    mavenLibs ++ other.mavenLibs
   )
-  def distinct: Dependencies = Dependencies(internal.distinct, externalAfs.distinct, externalMaven.distinct)
+
+  def distinct: Dependencies = Dependencies(modules.distinct, libs.distinct, mavenLibs.distinct)
 }
 
 private[buildtool] object Dependencies {
   val empty: Dependencies = Dependencies(Nil, Nil, Nil)
-
-  def apply(internal: Seq[ScopeId], external: Seq[DependencyDefinition]): Dependencies = {
-    val (af, afs) = external.partition(_.isMaven)
-    Dependencies(internal, afs, af)
-  }
 }
 
 private[buildtool] final case class AllDependencies(
@@ -78,7 +102,8 @@ private[buildtool] final case class AllDependencies(
     extraLibs: Dependencies
 ) {
   def allInternal: Seq[ScopeId] =
-    compileDependencies.internal ++ compileOnlyDependencies.internal ++ runtimeDependencies.internal
+    compileDependencies.modules ++ compileOnlyDependencies.modules ++ runtimeDependencies.modules
+  def allExternal: Dependencies = (compileDependencies ++ compileOnlyDependencies ++ runtimeDependencies).distinct
   // OBT doesn't add compile dependencies to runtime dependencies; that's our job
   def appendCompile(deps: Dependencies): AllDependencies = {
     val cd = (compileDependencies ++ deps).distinct
@@ -172,7 +197,10 @@ private[buildtool] final case class ScopeConfiguration(
     electronConfig: Option[ElectronConfiguration],
     agentConfig: Option[AgentConfiguration],
     targetBundles: Seq[MetaBundle],
-    processorConfig: Seq[(ProcessorType, ProcessorConfiguration)]
+    processorConfig: Seq[(ProcessorType, ProcessorConfiguration)],
+    interopConfig: Option[InteropConfiguration],
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
+    useMavenLibs: Boolean // global setting to force scope use mavenLibs instead of libs
 ) {
 
   def absResourceRoots: Seq[Directory] = paths.absResourceRoots
@@ -201,10 +229,10 @@ private[buildtool] final case class ScopeConfiguration(
   def runtimeDependencies: Dependencies = dependencies.runtimeDependencies
   def externalNativeDependencies: Seq[NativeDependencyDefinition] = dependencies.externalNativeDependencies
 
-  def internalCompileDependencies: Seq[ScopeId] = compileDependencies.internal
-  def externalCompileDependencies: Seq[DependencyDefinition] = compileDependencies.external
-  def internalRuntimeDependencies: Seq[ScopeId] = runtimeDependencies.internal
-  def externalRuntimeDependencies: Seq[DependencyDefinition] = runtimeDependencies.external
+  def internalCompileDependencies: Seq[ScopeId] = compileDependencies.modules
+  def externalCompileDependencies: Seq[DependencyDefinition] = compileDependencies.externalDeps(useMavenLibs)
+  def internalRuntimeDependencies: Seq[ScopeId] = runtimeDependencies.modules
+  def externalRuntimeDependencies: Seq[DependencyDefinition] = runtimeDependencies.externalDeps(useMavenLibs)
 
   def cppConfig(osVersion: String): CppConfiguration = {
     val cppConfigMap = cppConfigs.map(c => c.osVersion -> c).toMap

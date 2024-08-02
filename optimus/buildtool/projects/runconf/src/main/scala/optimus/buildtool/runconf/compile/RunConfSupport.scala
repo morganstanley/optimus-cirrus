@@ -69,6 +69,10 @@ object RunConfSupport {
       val userName = "USER_NAME"
     }
 
+    object jacocoOptions {
+      val minCoveragePct = "minCoveragePct"
+    }
+
     val scope = "scope"
     // Backward-compatible version of "scope"
     val moduleName = "moduleName"
@@ -100,5 +104,7 @@ object RunConfSupport {
     val groups = "groups"
     val owner = "owner"
     val flags = "flags"
+    val jacocoOpts = "jacoco"
+    val interopPython = "interopPython"
   }
 }

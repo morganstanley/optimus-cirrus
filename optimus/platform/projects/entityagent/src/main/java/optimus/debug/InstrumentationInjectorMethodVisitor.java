@@ -158,12 +158,20 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
 
     if (patch.suffixWithArgs) descriptor += loadArgsInlineOrAsArray(patch);
 
-    descriptor += ")V";
+    if (patch.suffixReplacesReturnValue) {
+      if (patch.noArgumentBoxing) descriptor += ")" + Type.getReturnType(methodDesc).getDescriptor();
+      else descriptor += ")" + OBJECT_DESC;
+    } else descriptor += ")V";
 
     // If descriptor was supplied just use that
     if (patch.suffix.descriptor != null) descriptor = patch.suffix.descriptor;
 
     mv.visitMethodInsn(INVOKESTATIC, patch.suffix.cls, patch.suffix.method, descriptor, false);
+
+    // n.b. unbox does a checkcast if the return type is non-primitive, so this handles both
+    // primitive and non-primitive cases
+    if (patch.suffixReplacesReturnValue && !patch.noArgumentBoxing)
+      unbox(Type.getReturnType(methodDesc));
   }
 
   @Override

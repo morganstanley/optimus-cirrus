@@ -12,6 +12,7 @@
 package optimus.buildtool.format
 
 import com.typesafe.config.Config
+import optimus.buildtool.config.NamingConventions.LibsKey
 import optimus.buildtool.config.NpmConfiguration._
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.WebConfiguration

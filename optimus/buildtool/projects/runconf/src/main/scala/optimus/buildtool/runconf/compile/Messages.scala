@@ -42,6 +42,10 @@ private[compile] object Messages {
     s"Unknown property '$name'"
   }
 
+  def invalidPropertyValue(expected: String, actual: String): String = {
+    s"Invalid value. Expected '$expected' but found '$actual'"
+  }
+
   val selfInheritance = "Run configuration inherits from itself"
 
   def noSuchRunConf(name: String): String = {

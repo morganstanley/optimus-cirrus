@@ -84,7 +84,8 @@ case class EmbeddableBaseMetaData(
     packageName: String,
     isTrait: Boolean,
     isObject: Boolean,
-    parentNames: List[String])
+    parentNames: List[String],
+    embeddablePiiElements: Seq[PIIDetails])
     extends BaseMetaData {
 
   def flags: Byte = {

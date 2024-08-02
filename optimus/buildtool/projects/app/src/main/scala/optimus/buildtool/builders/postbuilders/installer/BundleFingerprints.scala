@@ -220,6 +220,7 @@ sealed class BundleFingerprints(
 object BundleFingerprints extends Log {
   private val Filename = "fingerprints.txt"
   private val ContainerSeparator = "!" // this matches JarFileSystem for consistency, but doesn't need to
+  val HashFlagStr: String = NamingConventions.HASH
 
   def load(pathBuilder: InstallPathBuilder, metaBundle: MetaBundle, verifyInstall: Boolean): BundleFingerprints =
     ObtTrace.traceTask(RootScopeId, InstallLoadState(metaBundle)) {
@@ -228,7 +229,7 @@ object BundleFingerprints extends Log {
 
       // the line here is not necessary be 'filename@hashcode', could also be 'someDir/@subDir/filename@hashcode`
       def splitHashString(line: String): Option[(String, String)] = {
-        val hashFlag = s"@${NamingConventions.HASH}"
+        val hashFlag = s"@$HashFlagStr"
         val lastHashFlagIndex = line.lastIndexOf(hashFlag)
         if (lastHashFlagIndex >= 0) {
           val (nameWithFlag, hash) = line.splitAt(lastHashFlagIndex + 1)

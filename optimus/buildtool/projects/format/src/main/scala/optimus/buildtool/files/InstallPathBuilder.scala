@@ -17,10 +17,13 @@ import java.nio.file.{Files, Path}
 import optimus.buildtool.config.{MetaBundle, NamingConventions, ScopeId}
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
+import optimus.buildtool.utils.StackUtils
 import org.slf4j.LoggerFactory.getLogger
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.util.Properties
+import scala.util.control.NonFatal
 
 /* Create with factory methods in companion object please */
 sealed abstract class InstallPathBuilder(
@@ -72,7 +75,7 @@ sealed abstract class InstallPathBuilder(
       scopeId: ScopeId,
       classpath: Seq[JarAsset],
       installJarMapping: Map[JarAsset, (ScopeId, JarAsset)],
-      includeRelativePaths: Boolean = true
+      includeRelativePaths: Boolean = true,
   ): Seq[String] = {
     def isLocalOrInSameDir(localPath: RelativePath) =
       installVersion == NamingConventions.LocalVersion || localPath.parentOption.contains(RelativePath.empty)
@@ -282,9 +285,40 @@ object InstallPathBuilder {
 
   /** This one infers the version. */
   def runtime(installDir: Directory): InstallPathBuilder = {
-    val root = inferInstallRoot(installDir)
-    val version = inferVersion(root, installDir)
-    log.info(s"Inferred root '$root' and version '$version' from $installDir for the installation.")
+    // We want to resolve symlinks defined in the context of Continuous Integration and quality assurance
+    // (i.e. latest build, current QA release, etc.
+    def resolveSymLinkButNotMountPoint(resolved: Directory, original: Directory): (Boolean, Directory) = {
+      val resolvedPath = resolved.path
+      val originalPath = original.path
+      val differentPaths = resolvedPath != originalPath
+      val symLinkResolved =
+        if (Properties.isLinux) {
+          // We want a difference, so long as the roots are the same, otherwise we deem it a mount point, which
+          // cannot be passed on to other nodes in a cluster (e.g. computation grid)
+          differentPaths && resolvedPath.getNameCount > 0 && originalPath.getNameCount > 0 && resolvedPath
+            .getName(0) == originalPath.getName(0)
+        } else {
+          differentPaths
+        }
+      (symLinkResolved, if (symLinkResolved) resolved else original)
+    }
+
+    val (symLinkResolved, realInstallDir) =
+      resolveSymLinkButNotMountPoint(
+        try {
+          Directory(installDir.path.toRealPath())
+        } catch {
+          case NonFatal(e) =>
+            log.warn(s"Unable find real path for $installDir: ${StackUtils.multiLineStacktrace(e)}")
+            installDir
+        },
+        original = installDir
+      )
+    if (symLinkResolved)
+      log.info(s"Symlink path found: $installDir -> $realInstallDir")
+    val root = inferInstallRoot(realInstallDir)
+    val version = inferVersion(root, realInstallDir)
+    log.info(s"Inferred root '$root' and version '$version' from $realInstallDir for the installation.")
     if (root.isChildOf(NamingConventions.AfsDist))
       dist(version)
     else
@@ -346,7 +380,7 @@ object InstallPathBuilder {
       (0 until upToIndex.min(installLocation.path.getNameCount)).map(installLocation.path.getName)
     def buildPath(parts: Seq[Path]): Path = {
       val root = installLocation.path.getRoot
-      log.info(s"Building path from root $root with (${parts.map(_.toString).mkString(", ")})")
+      log.debug(s"Building path from root $root with (${parts.map(_.toString).mkString(", ")})")
       parts.foldLeft(root) { case (acc, name) => acc.resolve(name) }
     }
 

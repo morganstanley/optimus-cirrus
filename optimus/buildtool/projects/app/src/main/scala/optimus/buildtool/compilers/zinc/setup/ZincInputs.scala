@@ -322,8 +322,8 @@ class ZincInputs(
     val interfaceJar = ZincInterface.getInterfaceJar(
       settings.interfaceDir,
       scalaInstance,
-      settings.zincClassPathForInterfaceJar,
       settings.zincVersion,
+      settings.zincClasspathForInterfaceJar,
       activeTask.trace.reportProgress("compiling zinc interface")
     )
     val classpathOptions = ClasspathOptionsUtil.javac( /*compiler =*/ false)
@@ -343,34 +343,46 @@ class ZincInputs(
   }
 
   private def scalacOptions(signatureJar: Option[PathPair]): Seq[String] = {
+    val scalacArgsProvider =
+      if (settings.scalaConfig.scalaVersion.startsWith("2.11")) Scalac211ArgsProvider
+      else DefaultScalaArgsProvider
 
-    val signatureArgs = signatureJar
-      .map { j =>
-        // not using platform independent path because Zinc rewrites this path and // confuses it
-        Seq("-Ypickle-java", pickleWriteFlag, j.tempPath.path.toString)
-      }
-      .getOrElse(Nil)
+    val scalacArgs = scalacArgsProvider.get(signatureJar)
+    log.debug(s"${prefix}Compiler args:\n  ${scalacArgs.mkString("\n  ")}")
+    scalacArgs
+  }
 
-    val pluginPathArgs = obtInputs.pluginArtifacts.map { as =>
+  private trait ScalacArgsProvider {
+
+    def get(signatureJar: Option[PathPair]): Seq[String] = List(
+      signatureArgs(signatureJar),
+      pluginPathArgs,
+      outlineArgs,
+      miscParams,
+      profilerArgs,
+      mandatoryArgs,
+    ).flatten
+
+    def signatureArgs(signatureJar: Option[PathPair]): Seq[String] =
+      signatureJar
+        .map { j =>
+          // not using platform independent path because Zinc rewrites this path and // confuses it
+          Seq("-Ypickle-java", pickleWriteFlag, j.tempPath.path.toString)
+        }
+        .getOrElse(Nil)
+
+    def pluginPathArgs: Seq[String] = obtInputs.pluginArtifacts.map { as =>
       as.map(_.pathString).distinct.mkString(pluginFlag, File.pathSeparator, "")
     }
 
-    val outlineArgs =
+    def outlineArgs: Seq[String] =
       if (obtInputs.outlineTypesOnly)
         "-Youtline" :: "-Ystop-after:signaturer" :: "-Ymacro-expand:none" :: Nil
       else Nil
 
-    val cachedClasspathArgs = if (settings.cachePluginAndMacroClassLoaders) {
-      val macroClasspath = obtInputs.inputArtifacts.distinct.collect {
-        case c: ClassFileArtifact if c.containsOrUsedByMacros => c.file.pathString
-      }
-      "-Ycache-plugin-class-loader:always" :: "-Ycache-macro-class-loader:always" ::
-        macroFlag :: macroClasspath.mkString(File.pathSeparator) :: Nil
-    } else Nil
+    def miscParams: Seq[String] = obtInputs.scalacConfig.resolvedOptions
 
-    val miscParams = obtInputs.scalacConfig.resolvedOptions
-
-    val profilerArgs = settings.scalacProfileDir match {
+    def profilerArgs: Seq[String] = settings.scalacProfileDir match {
       case Some(profilerDir) =>
         val profileDestination = profilerDir.path.resolve(s"$scopeId.csv")
         Seq("-Yprofile-enabled", "-Yprofile-destination", profileDestination.toString)
@@ -381,24 +393,34 @@ class ZincInputs(
     // important, because without it we see symbols from OBT's version of codetree, not the version of codetree that
     // we are currently compiling. Note that the IsolatedScalaCompilerClient and Zinc's own classloader isolation
     // isn't sufficient to prevent that leakage. In particular this was causing problems with entityagent symbols.
-    val mandatoryArgs = "-usejavacp:false" ::
+    def mandatoryArgs: Seq[String] = "-usejavacp:false" :: Nil
+
+  }
+
+  private object Scalac211ArgsProvider extends ScalacArgsProvider {
+    override def signatureArgs(signatureJar: Option[PathPair]): Seq[String] = Nil
+  }
+
+  private object DefaultScalaArgsProvider extends ScalacArgsProvider {
+
+    override def get(signatureJar: Option[PathPair]): Seq[String] =
+      super.get(signatureJar) ++ cachedClasspathArgs ++ release
+
+    override def mandatoryArgs: Seq[String] = super.mandatoryArgs ++
       // since we hash and repack the jars, we don't want Scalac to waste time compressing them
-      "-Yjar-compression-level" :: Deflater.NO_COMPRESSION.toString :: Nil
+      Seq("-Yjar-compression-level", Deflater.NO_COMPRESSION.toString)
 
-    val scalacArgs = List(
-      signatureArgs,
-      pluginPathArgs,
-      outlineArgs,
-      miscParams,
-      // we pass the java -release parameter to scalac too so that scala code has the same restrictions on jdk api usage
-      List("-release", obtInputs.javacConfig.release.toString),
-      cachedClasspathArgs,
-      mandatoryArgs,
-      profilerArgs
-    ).flatten
-    log.debug(s"${prefix}Compiler args:\n  ${scalacArgs.mkString("\n  ")}")
+    def cachedClasspathArgs: Seq[String] = if (settings.cachePluginAndMacroClassLoaders) {
+      val macroClasspath = obtInputs.inputArtifacts.distinct.collect {
+        case c: ClassFileArtifact if c.containsOrUsedByMacros => c.file.pathString
+      }
+      "-Ycache-plugin-class-loader:always" :: "-Ycache-macro-class-loader:always" ::
+        macroFlag :: macroClasspath.mkString(File.pathSeparator) :: Nil
+    } else Nil
 
-    scalacArgs
+    // we pass the java -release parameter to scalac too so that scala code has the same restrictions on jdk api usage
+    def release: Seq[String] = Seq("-release", obtInputs.javacConfig.release.toString)
+
   }
 
   // Generally java opts are to be set in workspace.obt.

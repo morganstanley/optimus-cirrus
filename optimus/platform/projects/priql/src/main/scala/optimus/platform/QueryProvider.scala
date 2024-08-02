@@ -331,12 +331,13 @@ object QueryProvider {
       val method = new MethodElement(
         QueryMethod.SORT,
         List(
-          MethodArg("src", src.element),
-          MethodArg("f", lambda),
+          MethodArg(MethodArgConstants.source, src.element),
+          MethodArg(MethodArgConstants.function, lambda),
           MethodArg("ordering", new ConstValueElement(ordering))),
         sourceType,
         NK,
-        pos)
+        pos
+      )
       QueryProvider.NoKey.createQuery[T](method)
     }
   }
@@ -349,21 +350,23 @@ object QueryProvider {
  * will be in 'nodeFunc'.
  */
 final case class Lambda1[-T1, +R] private (
-    val func: Option[T1 => R],
-    val nodeFunc: Option[T1 => Node[R]],
-    val lambda: Option[() => Try[LambdaElement]] = None) {
-  def hasNodeFunc = nodeFunc.isDefined
-  def hasFunc = func.isDefined
-  def hasLambda = lambda.isDefined
+    func: Option[T1 => R],
+    nodeFunc: Option[T1 => Node[R]],
+    lambda: Option[() => Try[LambdaElement]] = None) {
+  def hasNodeFunc: Boolean = nodeFunc.isDefined
+  def hasFunc: Boolean = func.isDefined
+  def hasLambda: Boolean = lambda.isDefined
 }
 object Lambda1 {
-  def create[T1, R](@assumeParallelizableInClosure f: T1 => R, lambda: Option[() => Try[LambdaElement]]) = {
+  def create[T1, R](
+      @assumeParallelizableInClosure f: T1 => R,
+      lambda: Option[() => Try[LambdaElement]]): Lambda1[T1, R] = {
     Lambda1(Some(f), None, lambda)
   }
 
   def create[T1, R](
       @assumeParallelizableInClosure f: NodeFunction1[T1, R],
-      lambda: Option[() => Try[LambdaElement]]) = {
+      lambda: Option[() => Try[LambdaElement]]): Lambda1[T1, R] = {
     val nf = f match {
       case x: NodeFunction1Impl[T1, R] => x.vn
       case _                           => OptimusCoreAPI.liftNode((t: T1) => f(t))
@@ -377,21 +380,23 @@ object Lambda1 {
  * will be in 'nodeFunc'.
  */
 final case class Lambda2[-T1, -T2, +R](
-    val func: Option[(T1, T2) => R],
-    val nodeFunc: Option[(T1, T2) => Node[R]],
-    val lambda: Option[() => Try[LambdaElement]] = None) {
-  def hasNodeFunc = nodeFunc.isDefined
-  def hasFunc = func.isDefined
-  def hasLambda = lambda.isDefined
+    func: Option[(T1, T2) => R],
+    nodeFunc: Option[(T1, T2) => Node[R]],
+    lambda: Option[() => Try[LambdaElement]] = None) {
+  def hasNodeFunc: Boolean = nodeFunc.isDefined
+  def hasFunc: Boolean = func.isDefined
+  def hasLambda: Boolean = lambda.isDefined
 }
 object Lambda2 {
-  def create[T1, T2, R](@assumeParallelizableInClosure f: (T1, T2) => R, lambda: Option[() => Try[LambdaElement]]) = {
+  def create[T1, T2, R](
+      @assumeParallelizableInClosure f: (T1, T2) => R,
+      lambda: Option[() => Try[LambdaElement]]): Lambda2[T1, T2, R] = {
     Lambda2(Some(f), None, lambda)
   }
 
   def create[T1, T2, R](
       @assumeParallelizableInClosure f: NodeFunction2[T1, T2, R],
-      lambda: Option[() => Try[LambdaElement]]) = {
+      lambda: Option[() => Try[LambdaElement]]): Lambda2[T1, T2, R] = {
     val nf = f match {
       case x: NodeFunction2Impl[T1, T2, R] => x.vn
       case _                               => OptimusCoreAPI.liftNode((t1: T1, t2: T2) => f(t1, t2))

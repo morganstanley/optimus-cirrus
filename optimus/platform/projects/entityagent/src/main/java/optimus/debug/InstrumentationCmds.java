@@ -15,6 +15,7 @@ import static optimus.EntityAgent.logException;
 import static optimus.debug.InstrumentationConfig.*;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
@@ -79,43 +80,56 @@ public class InstrumentationCmds {
     if (DiagnosticSettings.instrumentationCache != null) {
       for (var function : DiagnosticSettings.instrumentationCache) cache(function);
     }
-    if (DiagnosticSettings.enableRTVerifier || DiagnosticSettings.instrumentationConfig != null)
-      loadAndParseConfig();
+    loadAndParseConfig();
   }
 
   private static void loadAndParseConfig() {
     try {
-      List<String> lines = null;
+      if (DiagnosticSettings.enableRTVerifier) parseAndApplyConfig(readResource("rt_verifier.sc"));
+
+      if (DiagnosticSettings.modifyScalaHashCollectionIterationOrder)
+        parseAndApplyConfig(readResource("modify_scala212_hash_improver.sc"));
+
+      // custom config goes last so it can overwrite settings if desired
       if (DiagnosticSettings.instrumentationConfig != null)
-        lines = Files.readAllLines(Paths.get(DiagnosticSettings.instrumentationConfig));
-      else if (DiagnosticSettings.enableRTVerifier) {
-        try (var resource = ClassLoader.getSystemResourceAsStream("rt_verifier.sc")) {
-          assert resource != null;
-          var reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8));
-          lines = reader.lines().collect(Collectors.toList());
-        }
-      }
+        parseAndApplyConfig(
+            Files.readAllLines(Paths.get(DiagnosticSettings.instrumentationConfig)));
 
-      if (lines == null) return;
-
-      boolean inComment = false; // Reading lines between /* and */
-      for (String line : lines) {
-        if (line.startsWith("import ") || line.startsWith("//")) continue;
-        if (line.startsWith("/*")) {
-          inComment = true;
-          continue;
-        }
-        if (inComment && line.endsWith("*/")) {
-          inComment = false;
-          continue;
-        }
-        var parser = new ScalaWorksheetAlmostParser(line);
-        parser.parse();
-        parser.invoke();
-      }
     } catch (Exception e) {
       logException("error while loading config:", e);
     }
+  }
+
+  private static boolean parseAndApplyConfig(List<String> lines)
+      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    if (lines == null) return true;
+
+    boolean inComment = false; // Reading lines between /* and */
+    for (String line : lines) {
+      if (line.startsWith("import ") || line.startsWith("//")) continue;
+      if (line.startsWith("/*")) {
+        inComment = true;
+        continue;
+      }
+      if (inComment && line.endsWith("*/")) {
+        inComment = false;
+        continue;
+      }
+      var parser = new ScalaWorksheetAlmostParser(line);
+      parser.parse();
+      parser.invoke();
+    }
+    return false;
+  }
+
+  private static List<String> readResource(String filename) throws IOException {
+    List<String> lines;
+    try (var resource = ClassLoader.getSystemResourceAsStream(filename)) {
+      assert resource != null;
+      var reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8));
+      lines = reader.lines().collect(Collectors.toList());
+    }
+    return lines;
   }
 
   /**
@@ -468,5 +482,29 @@ public class InstrumentationCmds {
     suffix.suffixWithReturnValue = true;
     suffix.suffixWithArgs = true;
     suffix.noArgumentBoxing = true;
+  }
+
+  /**
+   * Scala 2.13 has new implementations of HashSet and HashMap which give different iteration order
+   * to those in Scala 2.12. In order to facilitate easy testing and debugging of hash iteration
+   * order problems without fully recompiling to 2.13, this modification will alter the Scala 2.12
+   * hash ordering (not to match 2.13, but to be different from normal 2.12).
+   */
+  public static void modifyScala212HashImprover(String cls) {
+    var suffix =
+        addSuffixCall(
+            InstrumentationConfig.asMethodRef(cls, "improve"),
+            InstrumentationConfig.asMethodRef(HashImproverModification.class, "modify"));
+    // our patch will take the return value of improve and return a replacement return value,
+    // without boxing
+    suffix.suffixWithReturnValue = true;
+    suffix.suffixReplacesReturnValue = true;
+    suffix.noArgumentBoxing = true;
+  }
+
+  public static final class HashImproverModification {
+    public static int modify(int hcode) {
+      return ~hcode;
+    }
   }
 }

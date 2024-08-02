@@ -91,10 +91,10 @@ trait TypeClasses {
   private val Wildcard = "(.*)\\*".r
 
   implicit class FieldFilter[F[a] <: TraversableLike[a, F[a]], T](private val scopes: F[T]) {
-    def fieldFilter(field: T => String, matchStr: Option[String]): F[T] = {
+    def fieldFilter(field: T => String, matchStr: Option[String], requireExactMatch: Boolean = false): F[T] = {
       def matchingScopes(str: String, wildcard: Boolean): F[T] = {
         val perfectMatches = scopes.filter(s => field(s) == str)
-        if (!wildcard && perfectMatches.nonEmpty) perfectMatches
+        if (!wildcard && (requireExactMatch || perfectMatches.nonEmpty)) perfectMatches
         else scopes.filter(s => field(s).startsWith(str))
       }
       matchStr match {

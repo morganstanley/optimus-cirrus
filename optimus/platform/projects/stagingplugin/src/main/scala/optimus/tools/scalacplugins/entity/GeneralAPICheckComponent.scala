@@ -11,17 +11,22 @@
  */
 package optimus.tools.scalacplugins.entity
 
-import java.util.regex.PatternSyntaxException
 import optimus.tools.scalacplugins.entity.reporter.OptimusErrors
 import optimus.tools.scalacplugins.entity.reporter.OptimusNonErrorMessages
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 
 import scala.collection.mutable
+import scala.reflect.internal.util.SourceFile
 import scala.tools.nsc.Global
 import scala.tools.nsc.Phase
+import scala.tools.nsc.Reporting.MessageFilter.MessagePattern
+import scala.tools.nsc.Reporting.Suppression
 import scala.tools.nsc.plugins.PluginComponent
 import scala.util.matching.Regex
 
+// `GeneralAPICheckComponent` runs in both the staging and the entity plugin, so its checks are also applied in
+// modules that don't use the entity plugin.
+// The subclass `OptimusAPICheckComponent` performs optimus specific checks and is only added to the entity plugin.
 class GeneralAPICheckComponent(
     val pluginData: PluginData,
     val global: Global,
@@ -33,86 +38,95 @@ class GeneralAPICheckComponent(
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit): Unit = {
-      val nw = new CollectNoWarns(
-        unit,
-        Set(OptimusNonErrorMessages.DEPRECATING.id.sn, OptimusNonErrorMessages.DEPRECATING_LIGHT.id.sn))
+      val nw = new CollectNoWarnsWithFilters(unit, Set(DeprecatingId, DeprecatingLightId))
       (new GeneralAPICheck(nw)).traverse(unit.body)
       nw.complainAboutUnused()
     }
   }
 
   private lazy val NowarnAnnotation = rootMirror.getRequiredClass("scala.annotation.nowarn")
+  private val NowarnFilterOptimus = """^msg=(\d{5})(?:\s+(.*))?$""".r
+  private val NowarnFilterOptimusMsg = """^(\d{5})\s+(.*)$""".r
+  private val DeprecatingId = OptimusNonErrorMessages.DEPRECATING.id.sn
+  private val DeprecatingLightId = OptimusNonErrorMessages.DEPRECATING_LIGHT.id.sn
 
-  object CollectNoWarns {
+  object CollectNoWarnsWithFilters {
     private val ValueName = newTermName("value")
-    private val NoWarnMessage = "^msg=(\\d\\d\\d\\d\\d)\\s(.*)$".r
+    case class OptimusNowarnWithFilters(id: Int, start: Int, end: Int, nowarnPos: Position, filter: Regex) {
+      def matchesPos(pos: Position): Boolean =
+        pos.isDefined && start <= pos.start && pos.end <= end
+    }
   }
 
-  class CollectNoWarns(unit: CompilationUnit, noWarnsFor: Int => Boolean) extends Traverser {
+  // used to collect and handle `@nowarn("msg=10500 fqn.Pattern")` which silences the warning
+  // only if the deprecated symbol's name matches the pattern
+  // `nowarnsFor` selects the handled message ids (e.g. 10500, 10501)
+  class CollectNoWarnsWithFilters(unit: CompilationUnit, noWarnsFor: Set[Int]) {
+    import CollectNoWarnsWithFilters._
     import global._
-    import CollectNoWarns._
-    val unusedNoWarn = mutable.HashMap.empty[Regex, (Position, String)]
-    val posNoWarnAB = mutable.ArrayBuffer.empty[((Int, Position), (String, Regex))]
-    val symNoWarn = mutable.HashMap.empty[(Int, Symbol), (String, Regex)]
-    val nowarnPositions = mutable.HashSet.empty[Position] // so we can check for duplicates created for destructuring
 
-    traverse(unit.body)
-    val posNoWarn = posNoWarnAB.toSeq // for the benefit of scala 2.13
+    private val compilerSuppressions = OptimusPluginReporter.PerRunReporting_suppressions
+      .invoke(global.runReporting)
+      .asInstanceOf[mutable.LinkedHashMap[SourceFile, mutable.ListBuffer[Suppression]]]
 
-    override def traverse(tree: Tree): Unit = tree match {
-      case md: MemberDef if md.hasSymbolField && md.symbol.hasAnnotation(NowarnAnnotation) =>
-        val annots = md.symbol.annotations.filter(_.matches(NowarnAnnotation))
-        annots.foreach { a =>
-          // The nowarn argument will either be an ordinal string or a (lone) member of a key-value map
-          val arg0 = a.stringArg(0) orElse a.assocs.collectFirst { case (ValueName, LiteralAnnotArg(Constant(value))) =>
-            value.toString
-          }
-          if (!arg0.exists(a => a.startsWith("msg=") || a.startsWith("cat=")))
-            alarm(OptimusErrors.NOWARN, a.pos, "missing restriction pattern (eg. msg=12345 or cat=CATEGORY)")
-          arg0.foreach {
-            case NoWarnMessage(id, nws) if noWarnsFor(id.toInt) =>
-              try {
-                val nwx =
-                  nws
-                    .split("\\s+")
-                    .
-                    // allow an arbitrary number of $something at the end
-                    map(s => "^" + s + "(\\$.*)*$")
-                    .
-                    // group together in an OR list
-                    mkString("(", "|", ")")
-                    .r
-                val v = (nws, nwx)
-                val i = id.toInt
-                unusedNoWarn += nwx -> (a.pos, nws)
-                nowarnPositions += a.pos
-                val pos = md.pos
-                symNoWarn += ((i, md.symbol) -> v)
-                if (md.symbol.companion != NoSymbol)
-                  symNoWarn += ((i, md.symbol.companion) -> v)
-                if (pos.isDefined)
-                  posNoWarnAB += (i, pos) -> v
-              } catch {
-                case p: PatternSyntaxException =>
-                  alarm(OptimusErrors.NOWARN, a.pos, s"Illegal deprecation specification ${p.getPattern}")
-              }
+    private val nowarns = mutable.ArrayBuffer.empty[OptimusNowarnWithFilters]
+    private val unusedNoWarn = mutable.HashMap.empty[Regex, (Position, String)]
+
+    collect()
+
+    private def collect(): Unit = {
+      val sups = compilerSuppressions.getOrElse(unit.source, Nil).toList
+      for (sup <- sups; filter <- sup.filters) filter match {
+        case MessagePattern(r) =>
+          r.regex match {
+            case NowarnFilterOptimusMsg(id, nameFilters) if noWarnsFor(id.toInt) =>
+              val filterRegex =
+                nameFilters
+                  .split("\\s+")
+                  // allow an arbitrary number of $something at the end
+                  .map(s => "^" + s + "(\\$.*)*$")
+                  // group together in an OR list
+                  .mkString("(", "|", ")")
+                  .r
+              unusedNoWarn += filterRegex -> (sup.annotPos, nameFilters)
+              nowarns += OptimusNowarnWithFilters(id.toInt, sup.start, sup.end, sup.annotPos, filterRegex)
+
             case _ =>
           }
-        }
 
-        super.traverse(md)
-      case _ =>
-        super.traverse(tree)
+        case _ =>
+      }
     }
+
+    // (matchingPositionAndRegex, matchingPositionOnly)
+    def matchingSuppressions(
+        callerPos: Position,
+        calleeSym: Symbol): (List[OptimusNowarnWithFilters], List[OptimusNowarnWithFilters]) = {
+      val matchingPos = nowarns.filter(_.matchesPos(callerPos)).toList
+      val res = matchingPos.partition(_.filter.findFirstIn(calleeSym.fullName).isDefined)
+      res._1.foreach(sup => unusedNoWarn -= sup.filter)
+      res
+    }
+
+    def matches(callerPos: Position, calleeSym: Symbol) = matchingSuppressions(callerPos, calleeSym)._1.nonEmpty
+
     def complainAboutUnused(): Unit = unusedNoWarn.values.foreach { case (pos, msg) =>
       alarm(OptimusNonErrorMessages.UNUSED_NOWARN, pos, msg)
     }
   }
 
+  // Extractor for Apply and TypeApply. Applied.unapply matches any tree, not just applications
+  object Application {
+    def unapply(t: GenericApply): Some[(Tree, List[Tree], List[List[Tree]])] = {
+      val applied = treeInfo.dissectApplied(t)
+      Some((applied.core, applied.targs, applied.argss))
+    }
+  }
+
+  // Traversal to perform checks on symbols (abstract `checkUndesiredProperties` method), similar to the compiler's
+  // RefChecks.
   abstract class AbstractAPICheck extends Traverser {
     import global._
-    lazy val DeprecatingAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecating")
-    lazy val DeprecatingNewAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecatingNew")
 
     var inPattern: Boolean = false
     @inline final def savingInPattern[A](value: Boolean)(body: => A): A = {
@@ -135,6 +149,8 @@ class GeneralAPICheckComponent(
 
     def preTraverse(tree: Tree): Boolean // return true if should continue
     def checkUndesiredProperties(sym: Symbol, pos: Position): Unit
+    def checkAnnotationProperties(ann: AnnotationInfo, annotated: Option[Symbol]): Unit = ()
+    def checkCompanionApply(classSym: Symbol): Boolean = false
 
     final override def traverse(tree: Tree): Unit = pathed(tree)(visit)
 
@@ -173,18 +189,36 @@ class GeneralAPICheckComponent(
           // https://github.com/scala/bug/issues/7716 Don't refcheck the tpt of the synthetic val that holds the selector.
           traverse(rhs)
 
-        case tpt @ TypeTree() =>
+        case TypeTree() =>
           val existentialParams = new mutable.ListBuffer[Symbol]
-          doTypeTraversal(tree) {
-            case tp @ ExistentialType(tparams, tpe) =>
-              existentialParams ++= tparams
-            case tp: TypeRef =>
-              val tpWithWildcards = deriveTypeWithWildcards(existentialParams.toList)(tp)
-              checkTypeRef(tpWithWildcards, tree)
-            case _ =>
+          object check extends TypeTraverser {
+            def traverse(tp: Type): Unit = tp match {
+              case _: MethodType if inPattern =>
+              // `case Some(x)` becomes `TypeTree((v: T): Some[T])(x @ _)`
+              // don't traverse the method type
+              case tp @ ExistentialType(tparams, tpe) =>
+                existentialParams ++= tparams
+                mapOver(tp)
+              case tp: TypeRef =>
+                val tpWithWildcards = deriveTypeWithWildcards(existentialParams.toList)(tp)
+                checkTypeRef(tpWithWildcards, tree)
+                mapOver(tp)
+              case _ =>
+                mapOver(tp)
+            }
           }
+          check(tree.tpe)
+
         case Ident(name) =>
           checkUndesiredProperties(sym, tree.pos)
+
+        case Application(fun @ Select(mod, nme.apply), targs, argss)
+            if mod.symbol != null && mod.symbol.isModule && fun.symbol != null && fun.symbol.isSynthetic &&
+              checkCompanionApply(mod.symbol.companionClass) =>
+          checkUndesiredProperties(mod.symbol.companionClass, tree.pos)
+          traverse(mod)
+          traverseTrees(targs)
+          traverseTreess(argss)
 
         case x @ Select(qual, _) =>
           checkSelect(x)
@@ -192,6 +226,7 @@ class GeneralAPICheckComponent(
             case NoPosition => checkUndesiredProperties(qual.symbol, x.pos)
             case _          => pathed(x)(super.traverse)
           }
+
         case _: Import =>
         // let it slide here, since we'll generate an error when it's used
 
@@ -199,8 +234,6 @@ class GeneralAPICheckComponent(
           pathed(tree)(super.traverse)
       }
     }
-
-    private def doTypeTraversal(tree: Tree)(f: Type => Unit): Unit = if (!inPattern) tree.tpe foreach f
 
     private def checkSelect(tree: Select): Unit = {
       val sym = tree.symbol
@@ -223,15 +256,16 @@ class GeneralAPICheckComponent(
     }
 
     private def applyRefchecksToAnnotations(tree: Tree): Unit = {
-      def applyChecks(annots: List[AnnotationInfo]): Unit = {
+      def applyChecks(annots: List[AnnotationInfo], annotated: Option[Symbol] = None): Unit = {
         checkAnnotations(annots map (_.atp), tree)
         traverseTrees(annots flatMap (_.args))
+        annots.foreach(checkAnnotationProperties(_, annotated))
       }
 
       tree match {
         case m: MemberDef =>
           val sym = m.symbol
-          applyChecks(sym.annotations)
+          applyChecks(sym.annotations, annotated = Some(sym))
 
         case tpt @ TypeTree() =>
           if (tpt.original != null) {
@@ -243,11 +277,13 @@ class GeneralAPICheckComponent(
             }
           }
 
-          doTypeTraversal(tree) {
+          // similar to what the compiler does in RefChecks.applyRefchecksToAnnotations
+          if (!inPattern) tree.tpe.foreach {
             case tp: AnnotatedType =>
               applyChecks(tp.annotations)
-            case tp =>
+            case _ =>
           }
+
         case _ =>
 
       }
@@ -255,9 +291,16 @@ class GeneralAPICheckComponent(
 
   }
 
-  class GeneralAPICheck(noWarns: CollectNoWarns) extends AbstractAPICheck {
+  // API checks to run in the staging plugin (GeneralAPICheckComponent)
+  class GeneralAPICheck(noWarns: CollectNoWarnsWithFilters) extends AbstractAPICheck {
+    lazy val DeprecatingAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecating")
+    lazy val DeprecatingNewAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.deprecatingNew")
 
-    import noWarns._
+    lazy val scalaDeprecated = rootMirror.requiredClass[scala.deprecated]
+    lazy val javaDeprecated = rootMirror.requiredClass[java.lang.Deprecated]
+
+    def isDeprecatingOrNew(sym: Symbol): Boolean =
+      sym.annotations.exists(a => a.matches(DeprecatingAnnotation) || a.matches(DeprecatingNewAnnotation))
 
     private val ScopeExtractor = ".*\\(SCOPE=([\\w\\-\\.]+)\\).*".r
 
@@ -265,12 +308,10 @@ class GeneralAPICheckComponent(
       case s if s.startsWith("-DscopeId=") => s.substring("-DscopeId=".length)
     }
 
-    override def preTraverse(tree: global.Tree): Boolean = {
-      checkDeprecatingAnnotationFormat(tree)
-      true
-    }
+    def preTraverse(tree: global.Tree): Boolean = true
 
-    private val DepId = OptimusNonErrorMessages.DEPRECATING.id.sn
+    override def checkCompanionApply(classSym: Symbol): Boolean = isDeprecatingOrNew(classSym)
+
     def checkUndesiredProperties(calleeSym: Symbol, callerPos: Position): Unit = {
       // If symbol is deprecated, and the point of reference is not enclosed
       // in a deprecated member issue a warning.
@@ -281,100 +322,122 @@ class GeneralAPICheckComponent(
         annInfo.stringArg(0) match {
           case Some(msg) =>
             val typeAndFullName = s"${calleeSym.kindString} ${calleeSym.fullName}"
-            val noWarnRegexes: Seq[(Regex, Position)] = {
-              posNoWarn.collect {
-                case ((DepId, p), (_, r)) if p.includes(callerPos) => (r, p)
-              } ++
-                path.collect {
-                  case callerTree: MemberDef
-                      if callerTree.hasSymbolField && symNoWarn.contains((DepId, callerTree.symbol)) =>
-                    (symNoWarn((DepId, callerTree.symbol))._2, callerTree.pos)
-                }
-            }.distinct
-            // Check for a match now, so we can record that the nowarn was used, even we don't emit a deprecating warning.
-            // We're allowing redundant nowarns along the traversal path (hence fold rather than exists), because they're awfully common.
-            val matchedNowarnPositions = noWarnRegexes.collect {
-              case (r, p) if r.findFirstIn(calleeSym.fullName).isDefined =>
-                unusedNoWarn -= r
-                p
-            }
-            val matched = matchedNowarnPositions.nonEmpty
+            val (matching, matchingPosOnly) = noWarns.matchingSuppressions(callerPos, calleeSym)
             if (
+              currentOwner.isSynthetic ||
               currentOwner.ownerChain
-                .exists(x => x.hasAnnotation(DeprecatingAnnotation) || x.companion.hasAnnotation(DeprecatingAnnotation))
+                .exists(x => isDeprecatingOrNew(x) || isDeprecatingOrNew(x.companion))
             ) {
               alarm(
                 OptimusNonErrorMessages.DEPRECATING_LIGHT,
                 callerPos,
                 typeAndFullName,
-                msg + "  (accessed within another deprecated method)"
+                msg + " (accessed within another deprecated definition)"
               )
-            } else if (noWarnRegexes.isEmpty) {
+            } else if (matching.nonEmpty) {
+              // note that the @nowarn would be for DEPRECATING 10500 but we still honor it for DEPRECATING_NEW -
+              // see comment on DEPRECATING_NEW for rationale
+              alarm(OptimusNonErrorMessages.DEPRECATING_LIGHT, callerPos, typeAndFullName, msg)
+              val contactInfo = msg match {
+                case ScopeExtractor(id) => s"[$id]"
+                case _                  => "appropriate"
+              }
+              matching.foreach { sup =>
+                alarm(OptimusNonErrorMessages.NOWARN_DEPRECATION, sup.nowarnPos, typeAndFullName, contactInfo)
+              }
+            } else {
+              val suffix =
+                if (matchingPosOnly.isEmpty) " (no appropriate @nowarn found)"
+                else " (@nowarn was found but didn't match or was malformed)"
               if (deprecatingNew.nonEmpty) {
-                // note that the @nowarn would be for DEPRECATING 10500 but we still honor it for DEPRECATING_NEW -
-                // see comment on DEPRECATING_NEW for rationale
                 alarm(
                   OptimusNonErrorMessages.DEPRECATING_NEW,
                   callerPos,
                   typeAndFullName,
-                  msg + " (no appropriate @nowarn found)"
+                  msg + suffix
                 )
               } else {
                 alarm(
                   OptimusNonErrorMessages.DEPRECATING,
                   callerPos,
                   typeAndFullName,
-                  msg + " (no appropriate @nowarn found)"
+                  msg + suffix
                 )
               }
-            } else if (matched) {
-              alarm(OptimusNonErrorMessages.DEPRECATING_LIGHT, callerPos, typeAndFullName, msg)
-              val contactInfo = msg match {
-                case ScopeExtractor(id) => s"[$id]"
-                case _                  => "appropriate"
-              }
-              matchedNowarnPositions.foreach { p =>
-                alarm(OptimusNonErrorMessages.NOWARN_DEPRECATION, p, typeAndFullName, contactInfo)
-              }
-            } else {
-              alarm(
-                OptimusNonErrorMessages.DEPRECATING,
-                callerPos,
-                typeAndFullName,
-                msg + " (@nowarn was found but didn't match or was malformed))"
-              )
             }
           case _ =>
             alarm(
               OptimusErrors.DEPRECATING_USAGE,
               callerPos,
-              s"$calleeSym was missing compile time literal `suggestion` argument."
+              s"the annotation on $calleeSym does not have a constant `suggestion` argument."
             )
         }
       }
     }
 
-    private def checkDeprecatingAnnotationFormat(tree: Tree): Unit = {
-      tree match {
-        case deftree: DefTree if tree.hasSymbolField =>
-          val sym = deftree.symbol
-          // Add scopeId to deprecation if set
-          List(DeprecatingAnnotation, DeprecatingNewAnnotation).foreach { anno =>
-            sym.getAnnotation(anno).foreach { deprecation =>
-              if (!deprecation.stringArg(0).exists(_.length > 0))
-                alarm(OptimusErrors.DEPRECATING_USAGE, tree.pos, "Missing compile time literal `suggestion` argument.")
-              else
+    override def checkAnnotationProperties(ann: AnnotationInfo, annotated: Option[Symbol]): Unit = {
+      def checkNowarn(ann: AnnotationInfo): Unit = {
+        val arg = ann.stringArg(0) orElse ann.assocs.collectFirst { case (_, LiteralAnnotArg(Constant(value))) =>
+          value.toString
+        }
+        def default =
+          "nowarn requires a message filter (`msg=regex` or `cat=CATEGORY` for compiler warnings, `msg=12345` for optimus warnings)"
+        val diag = arg match {
+          case Some(NowarnFilterOptimus(id, fqns)) =>
+            val idi = id.toInt
+            val hasFqns = fqns != null && !fqns.isEmpty
+            if (idi == DeprecatingId || idi == OptimusErrors.INCORRECT_ADVANCED_USAGE.id.sn) {
+              if (!hasFqns)
+                s"""@nowarn with msg=$idi requires a pattern matching the full name of the deprecating symbols, e.g., @nowarn("msg=$idi optimus.OldThing")"""
+              else ""
+            } else if (idi == DeprecatingLightId || idi == OptimusNonErrorMessages.DEPRECATING_NEW.id.sn) {
+              s"""to silence warnings for usages of @deprecating or @deprecatingNew symbols, use @nowarn("msg=$DeprecatingId optimus.OldThing")"""
+            } else if (hasFqns)
+              s"""To silence optimus warnings, use @nowarn("msg=$idi") with only the ID in the `msg` filter"""
+            else ""
+
+          case Some(msg) =>
+            if (msg.startsWith("cat=") || msg.startsWith("msg=")) ""
+            else default
+
+          case None =>
+            default
+        }
+        if (!diag.isEmpty)
+          alarm(OptimusErrors.NOWARN, ann.pos, diag)
+      }
+
+      def checkDeprecating(ann: AnnotationInfo, sym: Option[Symbol]): Unit = {
+        sym match {
+          case None =>
+            alarm(
+              OptimusErrors.DEPRECATING_USAGE,
+              ann.pos,
+              "Only definitions (classes, methods, etc) can be annotated `@deprecating`.")
+          case Some(s) =>
+            ann.stringArg(0) match {
+              case None | Some("") =>
+                alarm(
+                  OptimusErrors.DEPRECATING_USAGE,
+                  ann.pos,
+                  "the `suggestion` needs to be a non-empty string constant.")
+              case Some(arg) =>
                 scopeId.foreach { sid =>
-                  val arg0 = deprecation.stringArg(0).get
-                  val newArg0 = Literal(Constant(s"$arg0 (SCOPE=$sid)"))
-                  val newArgs = newArg0 :: deprecation.args.tail
-                  sym.removeAnnotation(anno)
-                  sym.addAnnotation(anno, newArgs)
+                  // add (SCOPE=scope.id) to the message to tell who maintains the deprecated definition
+                  val newArg = Literal(Constant(s"$arg (SCOPE=$sid)"))
+                  val newArgs = newArg :: ann.args.tail
+                  s.removeAnnotation(ann.symbol)
+                  s.addAnnotation(ann.symbol, newArgs)
                 }
             }
-          }
-        case _ =>
+        }
       }
+
+      if (ann.matches(NowarnAnnotation)) checkNowarn(ann)
+      else if (ann.matches(DeprecatingAnnotation) || ann.matches(DeprecatingNewAnnotation))
+        checkDeprecating(ann, annotated)
+      else if (ann.matches(scalaDeprecated) || ann.matches(javaDeprecated))
+        alarm(OptimusNonErrorMessages.SCALA_JAVA_DEPRECATED, ann.pos, ann.symbol.name.toString)
     }
   }
 }

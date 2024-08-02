@@ -96,6 +96,10 @@ object ScopeId {
       case JsString(str) => parse(str)
     }
   }
+
+  def apply(moduleId: ModuleId, tpe: String): ScopeId = {
+    ScopeId(moduleId.meta, moduleId.bundle, moduleId.module, tpe)
+  }
 }
 
 /** An extractor for ScopeIds from Strings */
@@ -187,11 +191,13 @@ object ModuleId {
     case m: ModuleId => m
     case _           => throw new RuntimeException(s"Invalid module id: ${elements.mkString(".")}")
   }
+  def parseOpt(str: String): Option[ModuleId] = str match {
+    case ModuleIdFormat(meta, bundle, module) => Some(ModuleId(meta, bundle, module))
+    case _                                    => None
+  }
 }
 
-final case class MetaBundle(meta: String, bundle: String, eonId: Option[String]) extends ParentId with HasMetaBundle {
-  def isEqual(from: MetaBundle): Boolean = this.meta == from.meta && this.bundle == from.bundle
-  def toStringWithEonId: String = s"$meta.$bundle:${eonId.getOrElse("none")}"
+final case class MetaBundle(meta: String, bundle: String) extends ParentId with HasMetaBundle {
   def fullMeta: MetaId = MetaId(meta)
   def module(name: String): ModuleId = ModuleId(meta, bundle, name)
   override def elements: Seq[String] = Seq(meta, bundle)
@@ -209,8 +215,8 @@ object MetaBundle {
       throw new IllegalArgumentException(s"Expected a string of form '<meta>.<bundle>' but found '$str'")
   }
 
-  def apply(meta: String, bundle: String, eonId: Option[String] = None): MetaBundle =
-    new MetaBundle(meta, bundle, eonId)
+  def apply(meta: String, bundle: String): MetaBundle =
+    new MetaBundle(meta, bundle)
 
 }
 

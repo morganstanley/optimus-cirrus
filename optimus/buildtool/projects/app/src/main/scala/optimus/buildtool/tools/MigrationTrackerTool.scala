@@ -44,7 +44,7 @@ private[buildtool] object MigrationTrackerTool extends MigrationTrackerToolT {
 private[buildtool] trait TrackerToolParams {
   val frontierScope = "optimus.onboarding.scala_2_13_frontier.main"
   val frontierObtFile = "optimus/onboarding/projects/scala_2_13_frontier/scala_2_13_frontier.obt"
-  val rulesYaml = Option("auto-build-rules/strato-rules.yaml")
+  val rulesYaml = Option("auto-build-rules/scala-213-rules.yaml")
   val allFrontierScope: Option[String] = None
 }
 
@@ -80,18 +80,33 @@ private[buildtool] trait MigrationTrackerToolT
         "py-scripts",
         // not actually an important scala scope; this pulls in all test scopes, both java and scala alike
         "unit_test_collector",
+        "launcher",
+        "launcher_utils",
+
+        // TODO (OPTIMUS-65598): Tests tests fail in CI due to a known limitation
+        // around python scripts in "minimal upload" mode used for the Scala 2.13 build.
+        // Test infra can't run these on Scala 2.13 due to some issue with
+        "hypo",
+        "app_calcbuilder_test",
+        "app_simple_smoke_test",
+        "python_interop",
       )
 
     val frontierId = impl.obtConfig.scope(frontierScope)
     val frontierIds = (
       if (cmdLine.useMavenLibs) helper.transitiveInternalDeps(frontierId) - frontierId
       else helper.transitiveInternalDeps(frontierId)
-    ).filterNot(_.module == "scala_2_13_frontier").filterNot(id => excludedModules.contains(id.module))
+    ).filterNot(id => excludedModules.contains(id.module) || id.module.endsWith("_bundle"))
 
     if (cmdLine.rewriteFrontier) {
 
       import Ordering.Implicits._
-      val frontierEntries = frontierIds.toVector.sortBy(_.elements)
+
+      val frontierEntries = {
+        if (cmdLine.useMavenLibs) frontierIds
+        else // only include scopes that actually contain .scala files in the frontier.
+          frontierIds.apar.filter(helper.idHasScala)
+      }.toVector.sortBy(_.elements)
       val frontierObt = cmdLine.workspaceSourceRoot.resolveFile(frontierObtFile)
       val stratoRules = rulesYaml.map(f => cmdLine.workspaceSourceRoot.resolveFile(f))
       val indentationStr = " " * indent
@@ -133,10 +148,12 @@ private[buildtool] trait MigrationTrackerToolT
       logCounts("modules", frontierIds.size, allIds.size)
       val allLocMap = allIds.apar.map(id => (id, helper.idLoc(id))).toMap
       val frontierLocMap = allLocMap.filter(x => frontierIds.contains(x._1))
-      val (doneFileCount, doneLineCount) = helper.sumCounts(frontierLocMap.values.toVector)
-      val (allFileCount, allLineCount) = helper.sumCounts(allLocMap.values.toVector)
-      logCounts("files", doneFileCount, allFileCount)
-      logCounts("lines", doneLineCount, allLineCount)
+      val doneLangFileLines = helper.sumCounts(frontierLocMap.values.toVector)
+      val allLangFileLines = helper.sumCounts(allLocMap.values.toVector)
+      logCounts("scala files", doneLangFileLines.scala.files, allLangFileLines.scala.files)
+      logCounts("java files", doneLangFileLines.java.files, allLangFileLines.java.files)
+      logCounts("scala lines", doneLangFileLines.scala.lines, allLangFileLines.scala.lines)
+      logCounts("java lines", doneLangFileLines.java.lines, allLangFileLines.java.lines)
       log.info(separatorStr)
 
       val doneMainIds = frontierIds.filter(_.isMain)
@@ -148,20 +165,20 @@ private[buildtool] trait MigrationTrackerToolT
 
       val nextModules = (allIds -- frontierIds).toSeq.apar
         .filter { id => helper.directInternalDeps(id).subsetOf(frontierIds) }
-        .sortBy { x => (!isTestish(x), x.metaBundle.toString, allLocMap(x)) }
+        .sortBy { x => (!isTestish(x), x.metaBundle.toString, allLocMap(x).scala.lines) }
 
       log.info(s"Next modules to migrate (${nextModules.size}):${nextModules.apar
-          .map(id => s"\n${toFrontierRegex(id)}, # ${helper.idLoc(id)._2} loc")
+          .map(id => s"\n${toFrontierRegex(id)}, # ${helper.idLoc(id).scala.lines} scala loc")
           .mkString}")
       log.info(separatorStr)
       val csv = allIds.toVector
         .sortBy(_.tuple)
         .iterator
         .map { x =>
-          s"${x.meta},${x.bundle},${x.module},${x.tpe},${allLocMap(x)._2},${frontierIds.contains(x)}"
+          s"${x.meta},${x.bundle},${x.module},${x.tpe},${allLocMap(x).scala.lines},${frontierIds.contains(x)}"
         }
         .mkString("\n")
-      log.info("meta,bundle,module,tpe,loc,migrated\n" + csv)
+      log.info("meta,bundle,module,tpe,scala_loc,migrated\n" + csv)
     }
   }
 
@@ -190,12 +207,17 @@ private[buildtool] trait MigrationTrackerToolT
     Set(id) ++ directInternalDeps(id).apar.flatMap(transitiveInternalDeps)
   }
 
-  @node def idLoc(id: ScopeId): (Int, Long) = {
-    sumCounts(definitions(id).configuration.paths.absSourceRoots.apar.map(dirLoc))
+  @node def idLoc(id: ScopeId): LangFilesLines = {
+    LangFilesLines(idLocForExtension(id, "scala"), idLocForExtension(id, "java"))
+  }
+  @node def idLocForExtension(id: ScopeId, extension: String): FilesLines = {
+    definitions(id).configuration.paths.absSourceRoots.apar
+      .map(dir => dirLoc(dir, extension))
+      .foldLeft(FilesLines.empty)(_ + _)
   }
 
-  @node def dirLoc(src: Directory): (Int, Long) = sumCounts(
-    findSourceFiles(src, "scala").apar.map(f => (1, fileLoc(f))))
+  @node def dirLoc(src: Directory, extension: String): FilesLines =
+    findSourceFiles(src, extension).apar.map(f => FilesLines(1, fileLoc(f))).foldLeft(FilesLines.empty)(_ + _)
 
   @node def fileLoc(file: FileAsset): Long = IO.using(Files.lines(file.path))(_.count())
 
@@ -203,7 +225,7 @@ private[buildtool] trait MigrationTrackerToolT
     definitions(id).configuration.paths.absSourceRoots.apar.exists(dirHasScala)
 
   @node def dirHasScala(src: Directory): Boolean = findSourceFiles(src, "scala").nonEmpty
-  @node def dirHasJasn(src: Directory): Boolean = findSourceFiles(src, "java").nonEmpty
+  @node def dirHasJava(src: Directory): Boolean = findSourceFiles(src, "java").nonEmpty
 
   @node def findSourceFiles(src: Directory, extension: String): Seq[FileAsset] = {
     if (Files.isDirectory(src.path)) { // e.g. scala_compat has no src/main/scala only scala-2.12/2.13
@@ -211,6 +233,19 @@ private[buildtool] trait MigrationTrackerToolT
     } else Nil
   }
 
-  def sumCounts(xs: IterableOnce[(Int, Long)]): (Int, Long) =
-    xs.iterator.foldLeft((0, 0L)) { case ((a1, a2), (b1, b2)) => (a1 + b1, a2 + b2) }
+  def sumCounts(xs: IterableOnce[LangFilesLines]): LangFilesLines =
+    xs.iterator.foldLeft(LangFilesLines.empty)(_ + _)
+}
+
+final case class FilesLines(files: Int, lines: Long) {
+  def +(other: FilesLines): FilesLines = FilesLines(files + other.files, lines + other.lines)
+}
+object FilesLines {
+  val empty = FilesLines(0, 0)
+}
+final case class LangFilesLines(scala: FilesLines, java: FilesLines) {
+  def +(other: LangFilesLines): LangFilesLines = LangFilesLines(scala + other.scala, java + other.java)
+}
+object LangFilesLines {
+  val empty = LangFilesLines(FilesLines.empty, FilesLines.empty)
 }

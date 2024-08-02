@@ -12,11 +12,13 @@
 package optimus.buildtool.runconf
 
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.runconf.plugins.JacocoOpts
 import optimus.buildtool.runconf.plugins.ExtraExecOpts
 import optimus.buildtool.utils.CrossPlatformSupport._
 import optimus.buildtool.runconf.plugins.JavaModule
 import optimus.buildtool.runconf.plugins.NativeLibraries
 import optimus.buildtool.runconf.plugins.ScriptTemplates
+import optimus.buildtool.runconf.plugins.StrictRuntime
 import optimus.buildtool.runconf.plugins.SuiteConfig
 import optimus.buildtool.runconf.plugins.TreadmillOpts
 
@@ -46,6 +48,8 @@ sealed trait RunConf extends HasNativeLibraries {
   def credentialGuardCompatibility: Boolean
   def debugPreload: Boolean
   def additionalScope: Option[ScopeId]
+  def strictRuntime: StrictRuntime
+  def interopPython: Boolean
 
   def tpe: RunConfType // this can be made more "type safe" with lots of magic but I trust that we can keep it straight
 
@@ -90,10 +94,12 @@ final case class AppRunConf(
     nativeLibraries: NativeLibraries,
     moduleLoads: Seq[String],
     javaModule: JavaModule,
+    strictRuntime: StrictRuntime,
     scriptTemplates: ScriptTemplates,
     credentialGuardCompatibility: Boolean,
     debugPreload: Boolean,
-    additionalScope: Option[ScopeId]
+    additionalScope: Option[ScopeId],
+    interopPython: Boolean
 ) extends RunConf {
   def modifyStrings(modify: String => String): AppRunConf = {
     copy(
@@ -124,10 +130,12 @@ final case class AppRunConf(
        |  launcher = $launcher
        |  nativeLibraries = $nativeLibraries
        |  javaModule = $javaModule
+       |  strictRuntime = $strictRuntime
        |  scriptTemplates = $scriptTemplates
        |  credentialGuardCompatibility = $credentialGuardCompatibility
        |  debugPreload = $debugPreload
        |  additionalScope = $additionalScope
+       |  interopPython = $interopPython
        |)""".stripMargin
   }
 
@@ -154,6 +162,7 @@ final case class TestRunConf(
     nativeLibraries: NativeLibraries,
     extractTestClasses: Boolean,
     javaModule: JavaModule,
+    strictRuntime: StrictRuntime,
     credentialGuardCompatibility: Boolean,
     debugPreload: Boolean,
     suites: Map[String, SuiteConfig],
@@ -163,7 +172,9 @@ final case class TestRunConf(
     category: Option[String],
     groups: Set[String],
     owner: Option[String],
-    flags: Map[String, String]
+    flags: Map[String, String],
+    jacocoOpts: Option[JacocoOpts],
+    interopPython: Boolean
 ) extends RunConf {
 
   def modifyStrings(modify: String => String): TestRunConf = {
@@ -195,6 +206,7 @@ final case class TestRunConf(
        |  nativeLibraries = $nativeLibraries
        |  extractTestClasses = $extractTestClasses
        |  javaModule = $javaModule
+       |  strictRuntime = $strictRuntime
        |  credentialGuardCompatibility = $credentialGuardCompatibility
        |  debugPreload = $debugPreload
        |  suites = $suites
@@ -203,6 +215,8 @@ final case class TestRunConf(
        |  category = $category
        |  owner = $owner
        |  flags = $flags
+       |  jacocoOpts: $jacocoOpts
+       |  interopPython = $interopPython
        |)""".stripMargin
   }
 }

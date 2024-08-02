@@ -13,6 +13,7 @@ package optimus.stratosphere.config
 
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigValueFactory
+import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.WorkspaceRoot
 import optimus.stratosphere.bootstrap.config.StratosphereConfig
 import optimus.stratosphere.common.CommonDirectoryStructure
@@ -123,6 +124,8 @@ class StratoWorkspaceCommon protected (val customWorkspaceLocation: WorkspaceLoc
       !Files.exists(directoryStructure.sourcesDirectory)
 
   final def hasGitInWorkspace: Boolean = git.usedInWorkspace && directoryStructure.gitDirectory.exists()
+
+  final def useUnpatchedGit: Boolean = OsSpecific.isWindows && git.useUpdatedFetchSettings
 
   final def select[A: Extractor](name: String): A = implicitly[Extractor[A]].extract(config, name)
 

@@ -320,7 +320,17 @@ object CompilationScope {
     val hasher = FingerprintHasher(id, pathBuilder, cache.store, factory.freezeHash, mischief.nonEmpty)
 
     def mkScopeDeps(tpe: ResolutionArtifactType, deps: Dependencies, nativeDeps: Seq[NativeDependencyDefinition]) =
-      ScopeDependencies(id, deps, nativeDeps, tpe, pathBuilder, externalDependencyResolver, factory, cache, hasher)
+      ScopeDependencies(
+        id,
+        config.flags.mavenOnly,
+        deps,
+        nativeDeps,
+        tpe,
+        pathBuilder,
+        externalDependencyResolver,
+        factory,
+        cache,
+        hasher)
 
     val compileDependencies = mkScopeDeps(CompileResolution, config.compileDependencies, Nil)
     val compileOnlyDependencies = mkScopeDeps(CompileOnlyResolution, config.compileOnlyDependencies, Nil)

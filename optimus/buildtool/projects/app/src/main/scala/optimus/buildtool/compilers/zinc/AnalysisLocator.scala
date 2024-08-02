@@ -60,9 +60,19 @@ final case class AnalysisLocatorImpl(
     localArtifactStore: SearchableArtifactStore,
     remoteArtifactReader: Option[ArtifactReader],
     remoteArtifactWriter: Option[ArtifactWriter],
-    suppressPersistentStore: Boolean = false)
-    extends AnalysisLocator {
+    suppressPersistentStore: Boolean = false,
+    additionalDiscriminator: Option[String]
+) extends AnalysisLocator {
   import AnalysisLocatorImpl.log
+
+  /**
+   * avoid full recompile from different scala version builds
+   * obt only recompile java/scala related artifacts when scala version changed and will reuse npm/python/cpp artifacts.
+   * @param analysisType
+   * @return use scala version as suffix, for example: build_obt/1.35/locators/scala-analysis_2.13
+   */
+  private def analysisTypeWithDiscriminator(analysisType: AnalysisArtifactType): Option[String] =
+    Some(additionalDiscriminator.fold(analysisType.name)(suffix => s"${analysisType.name}_$suffix"))
 
   /*
   A locator comprises a commit hash (if git is enabled) for the current workspace, together with a timestamp for the build
@@ -88,7 +98,7 @@ final case class AnalysisLocatorImpl(
         case Some(commit) => s"$commit.$artifactHash"
         case None         => artifactHash
       }
-      val discriminator = Some(analysisType.name)
+      val discriminator = analysisTypeWithDiscriminator(analysisType)
       val locatorFile = pathBuilder
         .outputPathFor(id, localHash, ArtifactType.Locator, discriminator, incremental = false)
         .asJson
@@ -159,7 +169,7 @@ final case class AnalysisLocatorImpl(
       otherRequiredTypes: Seq[CachedArtifactType],
       optionalTypes: Seq[CachedArtifactType]
   ): Option[AnalysisArtifact] = {
-    val discriminator = Some(analysisType.name)
+    val discriminator = analysisTypeWithDiscriminator(analysisType)
     // sort the local locators in reverse timestamp order, so that we preferentially use
     // recent locators over older ones
     val allLocalLocators =
@@ -210,7 +220,8 @@ final case class AnalysisLocatorImpl(
             allLocalLocatorsByCommitHash,
             remoteHashes,
             otherRequiredTypes,
-            optionalTypes
+            optionalTypes,
+            discriminator
           )
           lookup.findAnalysis(availableHashes)
         }
@@ -326,7 +337,8 @@ private[zinc] class LookupByTimestamp(
     optionalTypes: Seq[CachedArtifactType]
 ) extends AnalysisLookup(localArtifactStore, remoteArtifactStore, id, analysisType, otherRequiredTypes, optionalTypes) {
 
-  @async def findAnalysis: Option[AnalysisArtifact] = findAnalysis(allLocalLocators, "local")
+  @async def findAnalysis: Option[AnalysisArtifact] =
+    findAnalysis(allLocalLocators, "local")
 }
 
 object LookupByCommit {
@@ -338,7 +350,8 @@ object LookupByCommit {
       allLocalLocatorsByCommitHash: Map[String, Seq[LocatorArtifact]],
       remoteCommitHashes: Set[String],
       otherRequiredTypes: Seq[CachedArtifactType],
-      optionalTypes: Seq[CachedArtifactType]
+      optionalTypes: Seq[CachedArtifactType],
+      discriminator: Option[String]
   ): LookupByCommit =
     new LookupByCommit(
       localStore,
@@ -348,7 +361,8 @@ object LookupByCommit {
       allLocalLocatorsByCommitHash,
       remoteCommitHashes,
       otherRequiredTypes,
-      optionalTypes
+      optionalTypes,
+      discriminator
     )
 }
 private[zinc] class LookupByCommit(
@@ -359,7 +373,8 @@ private[zinc] class LookupByCommit(
     allLocalLocatorsByCommitHash: Map[String, Seq[LocatorArtifact]],
     remoteCommitHashes: Set[String],
     otherRequiredTypes: Seq[CachedArtifactType],
-    optionalTypes: Seq[CachedArtifactType]
+    optionalTypes: Seq[CachedArtifactType],
+    discriminator: Option[String]
 ) extends AnalysisLookup(localArtifactStore, remoteArtifactStore, id, analysisType, otherRequiredTypes, optionalTypes) {
 
   @async def findAnalysis(commits: Seq[String]): Option[AnalysisArtifact] =
@@ -371,7 +386,8 @@ private[zinc] class LookupByCommit(
         val analysis = analysisForLocalLocators orElse {
           if (remoteCommitHashes.contains(head)) {
             remoteArtifactStore.flatMap { store =>
-              val remoteLocator = store.get(id, head, ArtifactType.Locator, Some(analysisType.name))
+              // get remote locator artifact with scala version suffix
+              val remoteLocator = store.get(id, head, ArtifactType.Locator, discriminator)
               remoteLocator.flatMap(analysisForLocator(_, "remote"))
             }
           } else None

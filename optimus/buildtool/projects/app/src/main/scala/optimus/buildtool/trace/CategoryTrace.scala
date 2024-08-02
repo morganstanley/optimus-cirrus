@@ -83,6 +83,7 @@ object MessageTrace {
   add(Runconf)
   add(ProcessScope)
   add(RegexCodeFlagging)
+  add(ConfigurationValidation)
 }
 
 private[buildtool] sealed trait ResolveTrace extends SingletonCategoryTrace
@@ -176,6 +177,7 @@ private[buildtool] case object Jmh
 private[buildtool] case object Runconf extends SingletonCategoryTrace with MessageTrace
 private[buildtool] case object Pathing extends SingletonCategoryTrace with MessageTrace
 private[buildtool] case object Validation extends SingletonCategoryTrace with MessageTrace
+private[buildtool] case object ConfigurationValidation extends SingletonCategoryTrace with MessageTrace
 
 private[buildtool] case object ProcessScope extends MessageTrace
 

@@ -13,13 +13,15 @@ package optimus.buildtool.trace
 
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.files.Directory
 
+import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
 
-class BuildSummaryRecorder extends DefaultObtTraceListener {
+class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTraceListener {
   private val log = getLogger(this)
 
   val stats = new ConcurrentHashMap[ObtStat, Long]()
@@ -37,6 +39,18 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
       BuildSummaryRecorder.this.addToStat(stat, value)
   }
 
+  def storeStats(): Unit = {
+    import spray.json._, DefaultJsonProtocol._
+
+    outputDir.foreach { dir =>
+      val preparedStats = stats.asScala.toMap.map { case (k, v) => k.key -> v }
+      val file = dir.resolveFile(s"obt-stats-${System.currentTimeMillis()}.json").asJson
+      log.info(s"Writing OBT stats to $file")
+      if (!dir.existsUnsafe) Files.createDirectory(dir.path)
+      Files.write(file.path, preparedStats.toJson.prettyPrint.getBytes)
+    }
+  }
+
   override def startTask(scopeId: ScopeId, category: CategoryTrace, time: Instant): TaskTrace = BuildSummaryTaskTrace
 
   override def supportsStats: Boolean = true
@@ -48,6 +62,8 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
     statsSets.compute(stat, (_, current) => if (current == null) value else current ++ value)
 
   override def endBuild(success: Boolean): Boolean = {
+
+    storeStats()
 
     def totalScopesSummary: String = {
       val scopes = stats.getOrDefault(ObtStats.Scopes, 0)
@@ -79,7 +95,8 @@ class BuildSummaryRecorder extends DefaultObtTraceListener {
       val nodeCacheMisses =
         statsSets.getOrDefault(ObtStats.NodeCacheScalaMiss, Set.empty).size +
           statsSets.getOrDefault(ObtStats.NodeCacheJavaMiss, Set.empty).size
-      val nodeCacheHits = jvmArtifacts - nodeCacheMisses
+      // node cache hits is inexact, but at least make sure we don't report negative hits
+      val nodeCacheHits = math.max(jvmArtifacts - nodeCacheMisses, 0)
 
       val jvmFilesystemHits = jvmHits(ObtStats.FilesystemStore)
       val jvmSkHits = jvmHits(ObtStats.SilverKing)

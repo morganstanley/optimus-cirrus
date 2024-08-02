@@ -39,7 +39,6 @@ object NpmConfiguration {
   }
 
   private[buildtool] val ModeKey = "mode"
-  private[buildtool] val LibsKey = "libs"
   private[buildtool] val MavenKey = NamingConventions.MavenLibsKey
   private[buildtool] val NpmCommandTemplateKey = "npmCommandTemplate"
   private[buildtool] val NpmBuildCommandsKey = "npmBuildCommands"

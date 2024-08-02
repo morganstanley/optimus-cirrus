@@ -19,6 +19,7 @@ import com.opencsv.ICSVParser
 import com.opencsv.ICSVWriter
 import optimus.logging.LoggingInfo
 import optimus.platform.IO.usingQuietly
+import optimus.platform.util.Log
 
 import java.io.BufferedReader
 import java.io.FileInputStream
@@ -37,10 +38,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.zip.ZipFile
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.util.control.NonFatal
 
-object FileUtils {
+object FileUtils extends Log {
+
+  def ensureInitialized(): Unit = {}
 
   def getCSVReader(filename: String, separator: Char): CSVReader = {
     new CSVReaderBuilder(new BufferedReader(new InputStreamReader(new FileInputStream(filename))))
@@ -132,10 +137,50 @@ object FileUtils {
 
   private val formatter = DateTimeFormatter.ofPattern("YYYY-MM-DD_HHmmss").withZone(ZoneId.systemDefault)
 
-  def tmpPath(prefix: String, suffix: String = "log"): Path = {
+  def tmpPath(prefix: String): Path = {
+    tmpPathWithSuffixOption(prefix, None)
+  }
+
+  def tmpPath(prefix: String, suffix: String): Path = {
+    tmpPathWithSuffixOption(prefix, Some(suffix))
+  }
+
+  def tmpPathWithSuffixOption(prefix: String, suffix: Option[String]): Path = {
     val safeTime = formatter.format(Instant.now)
-    val safePath = s"$prefix-${LoggingInfo.getHost}-${LoggingInfo.pid}-$safeTime.$suffix"
+    val safePath = {
+      val p = s"$prefix-${LoggingInfo.getHost}-${LoggingInfo.pid}-$safeTime"
+      suffix match {
+        case Some(s) => p + s".$s"
+        case None    => p
+      }
+    }
     diagnosticDumpDir.resolve(safePath)
+  }
+
+  private def deleteRecursively(path: Path): Unit =
+    if (Files.exists(path)) try {
+      log.info(s"Deleting temporary $path")
+      Files
+        .walk(path)
+        .iterator()
+        .asScala
+        .toSeq
+        .reverse
+        .foreach(Files.deleteIfExists)
+    } catch {
+      case NonFatal(e) => log.warn(s"Failed to delete $path", e)
+    }
+
+  private val toDelete = mutable.HashSet.empty[Path]
+
+  def deleteOnExit(path: Path): Path = synchronized {
+    toDelete += path
+    path
+  }
+
+  sys.addShutdownHook {
+    val dirs = this.synchronized(toDelete.toList)
+    dirs.foreach(deleteRecursively)
   }
 
 }

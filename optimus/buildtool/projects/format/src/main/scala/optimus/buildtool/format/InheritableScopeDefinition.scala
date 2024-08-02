@@ -17,50 +17,23 @@ import optimus.buildtool.config.CppConfiguration.LinkerFlag
 import optimus.buildtool.config.CppConfiguration.OutputType
 import optimus.buildtool.config.CppToolchain
 import optimus.buildtool.config.Dependencies
-import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.ExtensionConfiguration
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
+import optimus.buildtool.config.InteropConfiguration
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScalacConfiguration
-import optimus.buildtool.config.ScopeId
-import optimus.buildtool.dependencies.JvmDependencies
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 
 import scala.collection.immutable.Seq
 
-final case class DualDependencies(
-    internal: Seq[ScopeId],
-    afs: Seq[DependencyDefinition],
-    maven: Seq[DependencyDefinition]) {
-  def withParent(parent: DualDependencies): DualDependencies = parent ++ this
-
-  def ++(other: DualDependencies): DualDependencies = DualDependencies(
-    internal ++ other.internal,
-    afs ++ other.afs,
-    maven ++ other.maven
-  )
-
-  def dependencies(jvmDependencies: JvmDependencies, mavenOnly: Boolean): Dependencies =
-    if (mavenOnly || jvmDependencies.mavenDefinition.exists(_.useMavenLibs))
-      Dependencies(internal, Seq.empty, maven)
-    else Dependencies(internal, afs, Seq.empty)
-
-  def allExternal: Seq[DependencyDefinition] = afs ++ maven
-
-  def distinct: DualDependencies = DualDependencies(internal.distinct, afs.distinct, maven.distinct)
-}
-object DualDependencies {
-  val empty: DualDependencies = DualDependencies(Nil, Nil, Nil)
-}
-
 final case class PostInstallApp(name: String, args: Seq[String], afterInstall: Boolean)
 
 final case class InheritableScopeDefinition(
-    compile: DualDependencies,
-    compileOnly: DualDependencies,
-    runtime: DualDependencies,
+    compile: Dependencies,
+    compileOnly: Dependencies,
+    runtime: Dependencies,
     native: Seq[NativeDependencyDefinition],
     rawRoot: Option[String],
     sourcesRoots: Seq[String],
@@ -85,10 +58,14 @@ final case class InheritableScopeDefinition(
     bundle: Option[Boolean],
     includeInClassBundle: Option[Boolean],
     mavenOnly: Option[Boolean],
+    allowUnorderedDependencies: Option[Boolean],
     relationships: Seq[ScopeRelationship],
-    extraLibs: DualDependencies,
-    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration]
+    extraLibs: Dependencies,
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
+    interop: Option[InteropConfiguration]
 ) {
+  def allExternalDependencies: Dependencies = (compile ++ compileOnly ++ runtime ++ extraLibs).distinct
+
   def withParent(parent: InheritableScopeDefinition): InheritableScopeDefinition = {
     InheritableScopeDefinition(
       compile = compile.withParent(parent.compile),
@@ -118,9 +95,11 @@ final case class InheritableScopeDefinition(
       bundle = bundle.orElse(parent.bundle),
       includeInClassBundle = includeInClassBundle.orElse(parent.includeInClassBundle),
       mavenOnly = mavenOnly.orElse(parent.mavenOnly),
+      allowUnorderedDependencies = allowUnorderedDependencies.orElse(parent.allowUnorderedDependencies),
       relationships = relationships ++ parent.relationships,
       extraLibs = extraLibs ++ parent.extraLibs,
-      forbiddenDependencies = forbiddenDependencies ++ parent.forbiddenDependencies
+      forbiddenDependencies = forbiddenDependencies ++ parent.forbiddenDependencies,
+      interop = interop
     )
   }
 
@@ -132,9 +111,9 @@ final case class InheritableScopeDefinition(
 }
 object InheritableScopeDefinition {
   val empty: InheritableScopeDefinition = InheritableScopeDefinition(
-    compile = DualDependencies.empty,
-    compileOnly = DualDependencies.empty,
-    runtime = DualDependencies.empty,
+    compile = Dependencies.empty,
+    compileOnly = Dependencies.empty,
+    runtime = Dependencies.empty,
     native = Nil,
     rawRoot = None,
     sourcesRoots = Nil,
@@ -159,9 +138,11 @@ object InheritableScopeDefinition {
     bundle = None,
     includeInClassBundle = None,
     mavenOnly = None,
+    allowUnorderedDependencies = None,
     relationships = Nil,
-    extraLibs = DualDependencies.empty,
-    forbiddenDependencies = Nil
+    extraLibs = Dependencies.empty,
+    forbiddenDependencies = Nil,
+    interop = None
   )
 }
 

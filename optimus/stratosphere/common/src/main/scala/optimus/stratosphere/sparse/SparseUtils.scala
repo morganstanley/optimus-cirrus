@@ -12,10 +12,12 @@
 package optimus.stratosphere.sparse
 
 import optimus.stratosphere.bootstrap.GitProcess
+import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.updater.GitUpdater
+import optimus.stratosphere.utils.CollectionUtils
 import optimus.stratosphere.utils.GitUtils
 import optimus.stratosphere.utils.MemUnit
 
@@ -23,6 +25,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -56,8 +59,8 @@ trait SparseUtils {
             }
           case (profiles, scopes) if append =>
             SparseProfile.custom(
-              (currentConfig.profile.toSet.flatMap((p: SparseProfile) => p.scopes) ++ scopes).toSet,
-              (currentConfig.profile.toSet.flatMap((p: SparseProfile) => p.subProfiles) ++ profiles).toSet
+              currentConfig.profile.toSet.flatMap((p: SparseProfile) => p.scopes) ++ scopes,
+              currentConfig.profile.toSet.flatMap((p: SparseProfile) => p.subProfiles) ++ profiles
             )
           case (profiles, scopes) =>
             SparseProfile.custom(scopes.toSet, profiles.toSet)
@@ -74,7 +77,7 @@ trait SparseUtils {
     }
   }
 
-  def partitionProfilesAndScopes(scopesOrProfiles: Seq[String]): (Seq[String], Seq[String]) = {
+  private def partitionProfilesAndScopes(scopesOrProfiles: Seq[String]): (Seq[String], Seq[String]) = {
     val (scopes, profiles) = scopesOrProfiles.partition(_.contains("."))
     (profiles, scopes)
   }
@@ -132,7 +135,7 @@ trait SparseUtils {
     }
   }
 
-  protected def printCurrentProfile()(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
+  private def printCurrentProfile()(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
     val config = SparseConfiguration.load()
     config.profile.foreach { currentProfile =>
       if (currentProfile.isCustomProfile) {
@@ -178,7 +181,7 @@ trait SparseUtils {
       try {
         stashAddress.foreach(address => runGitCmd("stash", "pop", address))
       } catch {
-        case NonFatal(e) =>
+        case NonFatal(_) =>
           // If we failed it might be good idea to rename that stash entry to not try again next time.
           // Unfortunately there is no simple way to do it without restashing.
           ws.log.info("  Restoring stashed files from git failed, skipping...")
@@ -283,6 +286,7 @@ trait SparseUtils {
       stratoWorkspace: StratoWorkspaceCommon): Unit = {
     val currentConfig = SparseConfiguration.load()
 
+    stratoWorkspace.log.debug(s"Reloaded sparse config: $currentConfig")
     stratoWorkspace.log.info("Updating set of opened scopes/profiles. Please wait, it can take a moment...")
 
     if (!GitProcess.isSparseReady(stratoWorkspace.config))
@@ -296,18 +300,56 @@ trait SparseUtils {
     val dirsToOpen = newProfile.listAllRelativeDirs()
 
     backupIgnoredFiles(dirsToOpen)
-    runSparseCmd("set" +: dirsToOpen.map(_.toString).toSeq: _*)
+    if (OsSpecific.isWindows) {
+      runSparseWindowsCmd(dirsToOpen)
+    } else {
+      runSparseCmd("set" +: dirsToOpen.map(_.toString).toSeq: _*)
+    }
     if (forceReapply) runSparseCmd("reapply")
 
     SparseConfiguration(isEnabled = true, Some(newProfile)).save()
     printCurrentProfile()
   }
 
+  private def runSparseWindowsCmd(dirsToOpen: Set[Path])(implicit stratoWorkspace: StratoWorkspaceCommon): Boolean = {
+    // Be conservative in case of longer length limit from the eventual git sub-process invocation
+    val estimatedGitCommandLength = 200
+    val maxCommandLimit = OsSpecific.commandLengthLimit - estimatedGitCommandLength
+
+    val estimatedSparseCommandLength =
+      dirsToOpen.map(_.toString.length).sum + dirsToOpen.size + estimatedGitCommandLength
+
+    val dirsToOpenStrings = dirsToOpen.map(_.toString).to(Seq).sorted
+
+    stratoWorkspace.log.debug(s"command length: $estimatedSparseCommandLength (${dirsToOpenStrings.mkString(",")}")
+    if (estimatedSparseCommandLength > maxCommandLimit) {
+      stratoWorkspace.log.warning(
+        s"Detected long list of paths to checkout (${dirsToOpenStrings.size}). Due to windows command length limits, batching the command into smaller commands. This may take longer..")
+
+      val groupedPaths = CollectionUtils.splitByLength(dirsToOpenStrings, maxCommandLimit)
+
+      val firstPaths +: restPaths = groupedPaths
+
+      if (runSparseCmd("set" +: firstPaths: _*)) {
+        val results = restPaths.takeWhile { paths =>
+          runSparseCmd("add" +: paths: _*)
+        }
+        results.length == restPaths.length
+      } else {
+        // don't run the rest of the commands
+        false
+      }
+    } else {
+      stratoWorkspace.log.debug(s"sparse command seems within windows length limits: $estimatedSparseCommandLength")
+      runSparseCmd("set" +: dirsToOpenStrings: _*)
+    }
+  }
+
   protected def runGitCmd(args: String*)(implicit stratoWorkspace: StratoWorkspaceCommon): String = {
     GitUtils(stratoWorkspace).runGit(args: _*)
   }
 
-  protected def runSparseCmd(args: String*)(implicit stratoWorkspace: StratoWorkspaceCommon): Boolean = {
+  private def runSparseCmd(args: String*)(implicit stratoWorkspace: StratoWorkspaceCommon): Boolean = {
     Try(runGitCmd("sparse-checkout" +: args: _*)).isSuccess
   }
 

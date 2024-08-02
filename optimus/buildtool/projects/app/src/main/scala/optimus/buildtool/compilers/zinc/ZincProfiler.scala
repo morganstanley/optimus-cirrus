@@ -62,6 +62,9 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
 
   private val prefix = Utils.logPrefix(scopeId, traceType)
 
+  def hasNoSourceInvalidations(cycles: Seq[Zprof.CycleInvalidation], compileResult: Option[CompileResult]): Boolean =
+    cycles.isEmpty && compileResult.isDefined // Cycles are often empty if the build failed
+
   def logAndTraceProfileStats(
       compileResult: Option[CompileResult],
       activeTask: Task,
@@ -152,12 +155,10 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
     // warnings/errors are captured as part of trace completion
     tracer.setStat(ObtStats.Info, messages.count(_.severity == CompilationMessage.Info))
 
-    if (cycles.isEmpty) {
-      if (compileResult.isDefined) { // Cycles are often empty if the build failed
-        val msg = s"${prefix}No source invalidations"
-        log.info(msg)
-        ObtTrace.info(msg)
-      }
+    if (hasNoSourceInvalidations(cycles, compileResult)) {
+      val msg = s"${prefix}No source invalidations"
+      log.info(msg)
+      ObtTrace.info(msg)
     } else {
       val analysisStr = reason match {
         case Some((r @ ObtStats.CompilationsDueToNoAnalysis, _)) => s" (${r.str})"
@@ -316,7 +317,7 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
    */
   private def republishSlowCompilationWarnings(messages: Seq[CompilationMessage]): Seq[Double] = {
     messages.collect {
-      case CompilationMessage(pos, msg @ ThresholdProfiler.MessageString(_, durationInSecs), _, _, _, _) =>
+      case CompilationMessage(pos, msg @ ThresholdProfiler.MessageString(_, durationInSecs), _, _, _, _, _) =>
         val posStr = pos.map(p => s"${p.filepath.split("/").last}:${p.startLine}").getOrElse("?:?")
         val str = s"$prefix$msg ($posStr)"
         log.warn(s"$prefix$msg")

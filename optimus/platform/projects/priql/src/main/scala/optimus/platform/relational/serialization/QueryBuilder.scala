@@ -18,6 +18,7 @@ import optimus.platform.relational._
 import optimus.platform.relational.aggregation.Aggregator
 import optimus.platform.relational.aggregation.UntypedAggregation
 import optimus.platform.relational.inmemory.JoinHelper
+import optimus.platform.relational.tree.MethodArgConstants.rightDefault
 import optimus.platform.relational.tree._
 
 trait QueryBuilderConvertible {
@@ -696,7 +697,7 @@ object QueryBuilder {
     val rightMultiKey = findFuncElement(args, "rightMultiKey").map(_.callee)
 
     val leftDefaultFunc = findFuncElement(args, "leftDefault")
-    val rightDefaultFunc = findFuncElement(args, "rightDefault")
+    val rightDefaultFunc = findFuncElement(args, rightDefault)
 
     val joinBuilder = ofJoin[L, R](method)
 
@@ -732,7 +733,7 @@ object QueryBuilder {
     val args = method.methodArgs
 
     val leftDefaultFunc = findFuncElement(args, "leftDefault")
-    val rightDefaultFunc = findFuncElement(args, "rightDefault")
+    val rightDefaultFunc = findFuncElement(args, rightDefault)
 
     val joinBuilder = ofJoin[L, R](method)
 

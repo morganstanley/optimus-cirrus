@@ -113,6 +113,18 @@ import scala.collection.immutable.Seq
     val builder = underlyingBuilder()
     val rawScalaConfig = scalaVersionConfig()
 
+    val errors = builder.factory.globalMessages.filter(_.hasErrors)
+    if (errors.nonEmpty) {
+      val messages = errors.flatMap(_.messages.filter(_.isError))
+      val messageStrings = messages.map { m =>
+        m.pos match {
+          case Some(p) => s"${m.msg} [${p.filepath}:${p.startLine}]"
+          case None    => m.msg
+        }
+      }
+      throw new IllegalArgumentException(s"Configuration error(s):\n  ${messageStrings.mkString("\n  ")}")
+    }
+
     // Depcopy all scala lib jars (class, source and javadoc) so they're available for use in the bundle structure.
     // This will generally be a superset of `rawScalaConfig.scalaJars`, which we also depcopy below.
     val scalaLibPath = dependencyCopier.depCopyDirectoryIfMissing(rawScalaConfig.scalaLibPath)
@@ -251,6 +263,7 @@ object JsonImplicits {
   implicit val ExcludeFormat: RootJsonFormat[Exclude] = jsonFormat3(Exclude.apply)
   implicit val VariantFormat: RootJsonFormat[Variant] = jsonFormat3(Variant.apply)
   implicit val IvyArtifactFormat: RootJsonFormat[IvyArtifact] = jsonFormat3(IvyArtifact.apply)
+  implicit val ModuleIdFormat: RootJsonFormat[ModuleId] = jsonFormat3(ModuleId.apply)
 
   implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat18(
     DependencyDefinition.apply)
@@ -262,7 +275,7 @@ object JsonImplicits {
   implicit val RunConfConfigurationFormat: RootJsonFormat[RunConfConfiguration[RelativePath]] = jsonFormat2(
     RunConfConfiguration.apply[RelativePath])
   implicit val AgentConfigurationFormat: RootJsonFormat[AgentConfiguration] = jsonFormat2(AgentConfiguration.apply)
-  implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat3(MetaBundle.apply)
+  implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat2(MetaBundle.apply)
 
   implicit val PatternFormat: JsonFormat[Pattern] = new JsonFormat[Pattern] {
     override def write(obj: Pattern): JsValue = (obj.regex.regex, obj.exclude, obj.message).toJson
@@ -300,8 +313,8 @@ object JsonImplicits {
 
   implicit val PrecompiledHeaderFormat: RootJsonFormat[PrecompiledHeader] = jsonFormat3(PrecompiledHeader.apply)
 
-  // Dependencies.apply is customized for two args and the default .apply used three args, which would confuse
-  // write.toJson at runtime then get bsp failures. Therefore we have to define a new JsonFormat with read & write
+  // Dependencies.apply is customized with private args, which would confuse write.toJson at runtime then
+  // get bsp failures. Therefore we have to define a new JsonFormat with read & write
   implicit val DependenciesFormat: JsonFormat[Dependencies] =
     new JsonFormat[Dependencies] {
       override def read(json: JsValue): Dependencies = {
@@ -309,7 +322,7 @@ object JsonImplicits {
           json.convertTo[(Seq[ScopeId], Seq[DependencyDefinition], Seq[DependencyDefinition])]
         Dependencies(internal, externalAfs, externalMaven)
       }
-      override def write(obj: Dependencies): JsValue = (obj.internal, obj.externalAfs, obj.externalMaven).toJson
+      override def write(obj: Dependencies): JsValue = obj.toJsonInput.toJson
     }
   implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat5(AllDependencies.apply)
   implicit val InheritableWarningsConfigFormat: JsonFormat[WarningsConfiguration] =
@@ -328,11 +341,19 @@ object JsonImplicits {
   implicit val ElectronConfigurationFormat: RootJsonFormat[ElectronConfiguration] = jsonFormat5(
     ElectronConfiguration.apply)
 
+  implicit val PartialScopeIdFormat: RootJsonFormat[PartialScopeId] = jsonFormat4(PartialScopeId.apply)
+
+  implicit val ForbiddenDependencyConfigurationFormat: RootJsonFormat[ForbiddenDependencyConfiguration] = jsonFormat7(
+    ForbiddenDependencyConfiguration.apply)
+
   implicit val ProcessorConfigurationFormat: RootJsonFormat[ProcessorConfiguration] = jsonFormat7(
     ProcessorConfiguration.apply)
 
   implicit val ScopePathsFormat: RootJsonFormat[ScopePaths] = jsonFormat10(ScopePaths.apply)
   implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat12(ScopeFlags.apply)
+
+  implicit val interopConfigurationFormat: RootJsonFormat[InteropConfiguration] = jsonFormat2(
+    InteropConfiguration.apply)
 
   implicit val pythonVariant: RootJsonFormat[PythonDependencies.Variant] = jsonFormat2(PythonDependencies.Variant.apply)
 
@@ -369,7 +390,7 @@ object JsonImplicits {
 
   implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat4(PythonConfiguration.apply)
 
-  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat16(ScopeConfiguration.apply)
+  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat19(ScopeConfiguration.apply)
 
   implicit val ExternalClassFileArtifactFormat: JsonFormat[ExternalClassFileArtifact] =
     new JsonFormat[ExternalClassFileArtifact] {

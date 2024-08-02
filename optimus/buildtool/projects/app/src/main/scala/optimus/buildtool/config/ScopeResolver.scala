@@ -15,9 +15,12 @@ import optimus.platform._
 import optimus.buildtool.utils.TypeClasses._
 
 @entity object ScopeResolver {
-  @node def resolveScopes(compilationScopeIds: Set[ScopeId], partialId: String): Set[ScopeId] = {
+  @node def resolveScopes(
+      compilationScopeIds: Set[ScopeId],
+      partialId: String,
+      requireExactMatch: Boolean): Set[ScopeId] = {
     val Seq(meta, bundle, module, tpe) = RelaxedIdString.parts(partialId)
-    val scopes = tryResolveScopes(compilationScopeIds, partialId)
+    val scopes = tryResolveScopes(compilationScopeIds, partialId, requireExactMatch)
 
     scopes.getOrElse {
       throw new IllegalArgumentException(
@@ -26,14 +29,17 @@ import optimus.buildtool.utils.TypeClasses._
     }
   }
 
-  @node def tryResolveScopes(compilationScopeIds: Set[ScopeId], partialId: String): Option[Set[ScopeId]] = {
+  @node def tryResolveScopes(
+      compilationScopeIds: Set[ScopeId],
+      partialId: String,
+      requireExactMatch: Boolean): Option[Set[ScopeId]] = {
     val Seq(meta, bundle, module, tpe) = RelaxedIdString.parts(partialId)
 
     val scopes = compilationScopeIds
-      .fieldFilter(_.meta, meta)
-      .fieldFilter(_.bundle, bundle)
-      .fieldFilter(_.module, module)
-      .fieldFilter(_.tpe, tpe)
+      .fieldFilter(_.meta, meta, requireExactMatch)
+      .fieldFilter(_.bundle, bundle, requireExactMatch)
+      .fieldFilter(_.module, module, requireExactMatch)
+      .fieldFilter(_.tpe, tpe, requireExactMatch)
 
     if (scopes.isEmpty) None else Some(scopes)
   }

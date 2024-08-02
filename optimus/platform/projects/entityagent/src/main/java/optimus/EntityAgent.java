@@ -50,12 +50,6 @@ public class EntityAgent {
       new ConcurrentHashMap<>();
   private static final String VERSION_STRING = "Entity Agent(v8)";
 
-  public static final String injectTweakFields = "optimus.profile.tweakFieldsInjected";
-
-  static {
-    if (DiagnosticSettings.traceTweaksEnabled) System.setProperty(injectTweakFields, "true");
-  }
-
   /** Write to stdout. */
   public static void logMsg(String msg) {
     if (!silent) {

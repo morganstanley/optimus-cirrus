@@ -28,6 +28,7 @@ import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import scala.collection.immutable.Seq
 import scala.util.Properties.{isWin => isWindows}
+import scala.util.Try
 
 class GenericRunnerInstaller(
     fingerprints: BundleFingerprintsCache,
@@ -95,19 +96,25 @@ class GenericRunnerInstaller(
            |""".stripMargin.trim
     }
 
-    @node private def genericRunnerAppDir: Directory =
-      config.genericRunnerAppDirOverride
-        .orElse { sys.env.get("APP_DIR").map(p => Directory(Paths.get(p))) }
-        .getOrElse {
-          val alternative = install.binDir(mp)
-          log.warn(s"No OptimusAppRunner binary path: runner will point to ${alternative.pathString}")
-          alternative
-        }
+    @node private def genericRunnerAppDir: Directory = {
+      val runnerInstallPath =
+        config.genericRunnerAppDirOverride
+          .orElse { sys.env.get("APP_DIR").map(p => Directory(Paths.get(p))) }
+          .getOrElse {
+            val alternative = install.binDir(mp)
+            log.warn(s"No OptimusAppRunner binary path: runner will point to ${alternative.pathString}")
+            alternative
+          }
+
+      // Do away with symlinks when we generate the bin/run[.bat] scripts
+      // We want to stabilize the OBT release we are referencing to
+      Try(Directory(runnerInstallPath.path.toRealPath().toAbsolutePath)).toOption.getOrElse(runnerInstallPath)
+    }
   }
 }
 
 object GenericRunnerInstaller {
   final val ScriptName = "run"
-  final val RunnerName = ".app-runner"
+  final val RunnerName = "app-runner"
   final val FingerprintKey = "GenericRunnerScript" // our content is our fingerprint
 }

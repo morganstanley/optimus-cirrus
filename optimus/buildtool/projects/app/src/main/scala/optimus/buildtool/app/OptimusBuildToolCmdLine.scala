@@ -12,10 +12,6 @@
 package optimus.buildtool
 package app
 
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.time.Duration
-import java.{util => ju}
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader.UploadFormat
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
@@ -23,12 +19,16 @@ import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.Directory
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
-import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.platform._
+import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.rest.bitbucket.MergeCommitUtils
 import optimus.utils.Args4JOptionHandlers.DelimitedStringOptionHandler
 import org.kohsuke.{args4j => args}
 
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.time.Duration
+import java.{util => ju}
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
@@ -92,11 +92,26 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   val outputDir: String = ""
 
   @args.Option(
+    name = "--reportDir",
+    required = false,
+    aliases = Array("--buildReportDir"),
+    usage = "Build report output directory (defaults to <workspace root>/build_obt/.build-report)"
+  )
+  val buildReportDir: String = ""
+
+  @args.Option(
     name = "--dependencySource",
     required = false,
-    usage = "jvm dependencies mapping preferred source. One of 'afs' or 'maven' (defaults to 'afs')"
+    usage = "jvm dependencies mapping preferred source. One of 'afs' or 'maven' (defaults to 'maven')"
   )
-  val dependencySource: String = "afs"
+  val dependencySource: String = "maven"
+
+  @args.Option(
+    name = "--enableMappingValidation",
+    required = false,
+    usage = "Validate jvm dependencies mapping rules (defaults to true)"
+  )
+  val enableMappingValidation: Boolean = true
 
   @args.Option(
     name = "--useMavenLibs",
@@ -129,6 +144,14 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   val artifactVersionSuffix: String = ""
 
   @args.Option(
+    name = "--locatorSuffix",
+    required = false,
+    handler = classOf[StringOptionOptionHandler],
+    usage = "Suffix to append to artifact locators (defaults to none)"
+  )
+  val locatorSuffix: Option[String] = None
+
+  @args.Option(
     name = "--logDir",
     required = false,
     usage = "Directory to which to write logs (defaults to workspace/logs/obt)"
@@ -139,7 +162,7 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   lazy val (workspaceRoot, workspaceSourceRoot): (Directory, Directory) =
     Utils.resolveWorkspaceAndSrcRoots(workspaceDir.asDirectory, sourceDir.asDirectory)
   lazy val buildDir: Directory = outputDir.asDirectory.getOrElse(workspaceRoot.resolveDir("build_obt"))
-  lazy val reportDir: Directory = buildDir.resolveDir(".build-report")
+  lazy val reportDir: Directory = buildReportDir.asDirectory.getOrElse(buildDir.resolveDir(".build-report"))
   lazy val errorsDir: Directory = reportDir.resolveDir("compilation-errors")
 
   // Non-@Option vals need to be lazy so that they pick up the fully initialized state of this class
@@ -217,30 +240,29 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
 
 private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { this: OptimusAppCmdLine =>
   @args.Option(
-    name = "--silverKingMode",
+    name = "--remoteCacheMode",
     required = false,
-    aliases = Array("--skMode"),
-    depends = Array("--silverKing"),
-    usage = "SilverKing mode. Available modes: readWrite, readOnly, writeOnly, forceWrite, forceWriteOnly"
+    aliases = Array("--skMode", "--silverKingMode"),
+    usage = "Remote cache mode. Available modes: readWrite, readOnly, writeOnly, forceWrite, forceWriteOnly"
   )
-  val silverKingMode: String = NoneArg
+  val remoteCacheMode: String = NoneArg
 
   @args.Option(
-    name = "--silverKingWritable",
+    name = "--remoteCacheWritable",
     required = false,
-    aliases = Array("--skw", "--silverkingWritable"),
+    aliases = Array("--skw", "--silverkingWritable", "--silverKingWritable"),
     usage = "Write artifacts to SilverKing (defaults to false)"
   )
-  val silverKingWritable: Boolean = false
+  val remoteCacheWritable: Boolean = false
 
   @args.Option(
-    name = "--silverKingForceWrite",
+    name = "--remoteCacheForceWrite",
     required = false,
-    aliases = Array("--skfw"),
+    aliases = Array("--skfw", "--silverKingForceWrite"),
     depends = Array("--silverKing", "--silverKingWritable"),
     usage = "Force writing of artifacts to SilverKing even on cache hits (defaults to false)"
   )
-  val silverKingForceWrite: Boolean = false
+  val remoteCacheForceWrite: Boolean = false
 
   @args.Option(
     name = "--silverKingDualWrite",
@@ -292,6 +314,13 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     usage = "Trace file directory (defaults to not writing trace files)"
   )
   val traceFile: String = ""
+
+  @args.Option(
+    name = "--statsDir",
+    required = false,
+    usage = "OBT stats directory (defaults to not writing OBT stats)"
+  )
+  val statsDir: String = ""
 
   @args.Option(
     name = "--cacheClassloaders",
@@ -584,14 +613,6 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     if (rebuild) IncrementalMode(ZincIncrementalMode.None, defaultUseIncrementalArtifacts = false)
     else IncrementalMode(zincIncrementalMode, defaultUseIncrementalArtifacts = true)
 
-  // e.g. //path/to/msde/PROJ/zinc/2019.01.14-1-1.2.x-ms/zinc
-  @args.Option(
-    name = "--zincPathAndVersion",
-    required = false,
-    usage = "/path/to/zinc/install:ZINCVERSION"
-  )
-  val zincPathAndVersion: String = null
-
   @args.Option(name = "--zincAnalysisCacheSize", required = false, usage = "Zinc analysis cache size (defaults to 50)")
   val zincAnalysisCacheSize = 50
 
@@ -689,10 +710,6 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     usage = "Write breadcrumbs with build information (defaults to true)"
   )
   val breadcrumbs = true
-
-  // TODO (OPTIMUS-31637): remove this when strato uses CatchupApp
-  @args.Option(name = "--printBestCachedGitCommitsForBranch", required = false, usage = "Used by 'strato catchup'")
-  val printBestCachedGitCommitsForBranch: String = ""
 
   /**
    * OBT will write a "RootLocator" which indicates that
