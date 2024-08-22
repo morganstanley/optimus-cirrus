@@ -21,6 +21,7 @@ import static optimus.graph.loom.LoomConfig.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import optimus.graph.loom.compiler.LCompiler;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
@@ -41,6 +42,7 @@ public class LoomAdapter implements Opcodes {
   private final HashMap<String, String> implMethodMap = new HashMap<>();
 
   private final ArrayList<NodeMethod> asyncMethods = new ArrayList<>();
+  private final ArrayList<TransformableMethod> lambdaMethods = new ArrayList<>();
 
   private static class ReplacedBSM {
     InvokeDynamicInsnNode indy;
@@ -74,8 +76,10 @@ public class LoomAdapter implements Opcodes {
   /* caller, lambdas */
   private final HashSet<String> lambdaCalls = new HashSet<>();
 
-  private final ClassNode cls;
+  public final ClassNode cls;
   private final String privatePrefix;
+
+  private CompilerArgs classCompilerArgs = CompilerArgs.Default;
 
   public LoomAdapter(ClassNode cls) {
     this.cls = cls;
@@ -89,6 +93,7 @@ public class LoomAdapter implements Opcodes {
     findImplFields();
     findImplMethods();
     findAllNodeFunctions();
+    transformNodeFunctions();
     cls.methods.removeIf(this::isTransforming);
     findAllTrivialFunctions();
     implementDeserializeLLambda();
@@ -108,7 +113,8 @@ public class LoomAdapter implements Opcodes {
             else if (name.equals(LoomLambdasParam)) lambdaCalls.addAll(value);
           }
         }
-      }
+      } else if (CompilerAnnotation.equals(ann.desc))
+        classCompilerArgs = CompilerArgs.parse(ann, classCompilerArgs);
     }
   }
 
@@ -141,7 +147,16 @@ public class LoomAdapter implements Opcodes {
     for (var method : cls.methods) {
       var asyncMethod = methodAsync(method);
       if (asyncMethod != null) asyncMethods.add(asyncMethod);
+      else if (lambdaCalls.contains(method.name)) {
+        var hasNodeCalls = makesNodeCalls(method);
+        lambdaMethods.add(new TransformableMethod(method, classCompilerArgs, hasNodeCalls));
+      }
     }
+  }
+
+  private void transformNodeFunctions() {
+    for (var method : asyncMethods) if (!method.asyncOnly) LCompiler.transform(method, this);
+    for (var method : lambdaMethods) LCompiler.transform(method, this);
   }
 
   private void findAllTrivialFunctions() {
@@ -191,7 +206,15 @@ public class LoomAdapter implements Opcodes {
     }
   }
 
-  private boolean isNodeCall(MethodInsnNode methodInsn) {
+  private boolean makesNodeCalls(MethodNode method) {
+    for (var instruction : method.instructions) {
+      if (instruction instanceof MethodInsnNode && isNodeCall((MethodInsnNode) instruction))
+        return true;
+    }
+    return false;
+  }
+
+  public boolean isNodeCall(MethodInsnNode methodInsn) {
     return nodeCalls.containsKey(new LNodeCall(methodInsn.owner, methodInsn.name));
   }
 
@@ -261,6 +284,7 @@ public class LoomAdapter implements Opcodes {
 
       nm.writeQueuedFunc(cls);
       nm.writeNewNodeFunc(cls);
+
       if (nm.implFieldDesc != null) {
         cls.methods.remove(nm.method);
       } else {
@@ -316,6 +340,8 @@ public class LoomAdapter implements Opcodes {
     var asyncOnly = false;
     var scenarioIndependent = false;
 
+    var compilerArgs = classCompilerArgs;
+
     for (var ann : annotations) {
       if (NodeAnnotation.equals(ann.desc)) {
         asyncAnnotation = ann;
@@ -324,11 +350,14 @@ public class LoomAdapter implements Opcodes {
         asyncOnly = true;
       } else if (ScenarioIndependentAnnotation.equals(ann.desc)) {
         scenarioIndependent = true;
+      } else if (CompilerAnnotation.equals(ann.desc)) {
+        compilerArgs = CompilerArgs.parse(ann, compilerArgs);
       }
     }
     if (asyncAnnotation == null) return null;
 
-    var asyncMethod = new NodeMethod(cls, privatePrefix, method);
+    var hasNodeCalls = makesNodeCalls(method);
+    var asyncMethod = new NodeMethod(cls, privatePrefix, method, compilerArgs, hasNodeCalls);
     asyncMethod.isScenarioIndependent = scenarioIndependent;
     asyncMethod.implFieldDesc = implFieldMap.get(method.name);
     asyncMethod.implMethodDesc = implMethodMap.get(method.name);

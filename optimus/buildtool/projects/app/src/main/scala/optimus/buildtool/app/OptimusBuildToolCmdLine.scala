@@ -100,14 +100,7 @@ private[buildtool] trait WorkspaceCmdLine extends InstallDirCmdLine {
   val buildReportDir: String = ""
 
   @args.Option(
-    name = "--dependencySource",
-    required = false,
-    usage = "jvm dependencies mapping preferred source. One of 'afs' or 'maven' (defaults to 'maven')"
-  )
-  val dependencySource: String = "maven"
-
-  @args.Option(
-    name = "--enableMappingValidation",
+    name = "--checkMapping",
     required = false,
     usage = "Validate jvm dependencies mapping rules (defaults to true)"
   )

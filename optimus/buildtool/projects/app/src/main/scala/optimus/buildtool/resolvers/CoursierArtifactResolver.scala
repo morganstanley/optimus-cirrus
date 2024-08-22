@@ -56,9 +56,6 @@ import optimus.buildtool.config.MappedDependencyDefinitions
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NamingConventions.UnzipMavenRepoExts
 import optimus.buildtool.config.Substitution
-import optimus.buildtool.dependencies.AfsSource
-import optimus.buildtool.dependencies.DependencySource
-import optimus.buildtool.dependencies.MavenSource
 import optimus.buildtool.format.JvmDependenciesConfig
 import optimus.buildtool.resolvers.MavenUtils.downloadUrl
 import optimus.buildtool.resolvers.MavenUtils.maxSrcDocDownloadSeconds
@@ -85,7 +82,8 @@ object NativeIvyConstants {
 object CoursierArtifactResolver {
   private implicit val graphAdaptor: CoursierGraphAdaptor.type = CoursierGraphAdaptor
   private val JvmDependenciesFilePathStr = JvmDependenciesConfig.path.toString
-  private val mavenDefaultConfigs = Seq(Configuration.compile, Configuration.default, Configuration.defaultCompile)
+  private val mavenDefaultConfigs =
+    Seq(Configuration.compile, Configuration.default, Configuration.defaultCompile, Configuration.runtime)
   private[buildtool] val ObtMavenDefaultConfig = ""
 
   private def jvmDepMsg(line: Int) = s"$JvmDependenciesFilePathStr:$line -"
@@ -138,15 +136,17 @@ object CoursierArtifactResolver {
 
   def cleanModuleStr(module: Module): String = s"${module.organization.value}:${module.name.value}"
 
+  def getConfig(config: Configuration, isMaven: Boolean) =
+    if (isMaven && mavenDefaultConfigs.contains(config)) ObtMavenDefaultConfig else config.value
+
   def coursierDependencyToInfo(d: Dependency, isMaven: Boolean): DependencyInfo = {
-    val config =
-      if (isMaven && mavenDefaultConfigs.contains(d.configuration)) ObtMavenDefaultConfig else d.configuration.value
+    val config = getConfig(d.configuration, isMaven)
     DependencyInfo(cleanModuleStr(d.module), config, d.version)
   }
 
-  def definitionToInfo(d: DependencyDefinition): DependencyInfo =
-    DependencyInfo(s"${d.group}:${d.name}", d.configuration, d.version)
-
+  def definitionToInfo(d: DependencyDefinition): DependencyInfo = {
+    DependencyInfo(s"${d.group}:${d.name}", getConfig(Configuration(d.configuration), d.isMaven), d.version)
+  }
   def toDependencyCoursierKey(
       d: Dependency,
       configuration: Option[String] = None,
@@ -162,7 +162,6 @@ object CoursierArtifactResolver {
     resolvers: DependencyMetadataResolvers,
     externalDependencies: ExternalDependencies,
     dependencyCopier: DependencyCopier,
-    dependencySource: DependencySource,
     globalExcludes: Seq[Exclude] = Nil,
     globalSubstitutions: Seq[Substitution] = Nil,
     fileSystem: FileSystem = FileSystems.getDefault,
@@ -206,16 +205,11 @@ object CoursierArtifactResolver {
         } else resolvers.defaultIvyResolvers
       Module(Organization(d.group), ModuleName(d.name)) -> dependencyResolvers
     }.toMap
-  private val afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] = {
-    val dependencyMappingMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
-      dependencySource match {
-        case AfsSource   => Map.empty
-        case MavenSource => externalDependencies.afsToMavenMap
-      }
-    dependencyMappingMap.map { case (afs, maven) =>
+  private val afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] =
+    externalDependencies.afsToMavenMap.map { case (afs, maven) =>
       MappingKey(afs.group, afs.name, afs.configuration) -> maven
     }
-  }
+
   private val localRepos: Seq[(String, MetadataPattern.Local)] =
     resolvers.defaultResolvers
       .flatMap(_.metadataPatterns)
@@ -270,10 +264,12 @@ object CoursierArtifactResolver {
       .sorted
 
   @node private def multiSourceDependenciesFingerprint: Seq[String] =
-    s"dependencySourceSetting=$dependencySource" +: (externalDependencies.multiSourceDependencies).apar
+    externalDependencies.multiSourceDependencies.apar
       .flatMap { dep =>
         fingerprintDependencyDefinitions("multi-source-afs", Seq(dep.definition)) ++
-          fingerprintDependencyDefinitions("maven-equivalents", dep.equivalents.toIndexedSeq)
+          fingerprintDependencyDefinitions(
+            "maven-equivalents",
+            dep.equivalents.toIndexedSeq) :+ s"enableValidation: $enableMappingValidation"
       }
       .toIndexedSeq
       .sorted
@@ -381,10 +377,20 @@ object CoursierArtifactResolver {
   }
 
   @node private def toCoursierExcludes(excludes: Iterable[Exclude]): Set[(Organization, ModuleName)] =
-    excludes.apar.map(toCoursierExclude).toSet
+    excludes.apar.flatMap(toCoursierExclude).toSet
 
-  @node private def toCoursierExclude(exclude: Exclude): (Organization, ModuleName) =
-    (Organization(exclude.group.getOrElse("*")), ModuleName(exclude.name.getOrElse("*")))
+  @node private def toCoursierExclude(exclude: Exclude): Set[(Organization, ModuleName)] = {
+    val originalExclude = Set((Organization(exclude.group.getOrElse("*")), ModuleName(exclude.name.getOrElse("*"))))
+    exclude match {
+      case Exclude(Some(group), Some(name), config) => // should include mapped dependency
+        val mappedExcludes =
+          MavenUtils.applyTransitiveMapping(group, name, config.getOrElse(""), Nil, afsGroupNameToMavenMap)
+        mappedExcludes.map { e =>
+          (e.module.organization, e.module.name)
+        }.toSet ++ originalExclude
+      case _ => originalExclude
+    }
+  }
 
   @node def resolveDependencies(deps: DependencyDefinitions, doValidation: Boolean = true): ResolutionResult = {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint

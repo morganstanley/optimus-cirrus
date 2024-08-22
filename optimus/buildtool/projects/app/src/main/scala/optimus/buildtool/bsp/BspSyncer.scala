@@ -14,6 +14,7 @@ package optimus.buildtool.bsp
 import ch.epfl.scala.bsp4j._
 import optimus.buildtool.artifacts._
 import optimus.buildtool.builders.BuildResult
+import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
 import optimus.buildtool.config.NamingConventions._
@@ -61,10 +62,9 @@ class BspSyncer(
   val pythonVenvExtractor = new PythonVenvExtractorPostBuilder(service.buildDir)
 
   def buildTargets(buildSparseScopes: Boolean): CompletableFuture[Seq[BuildTarget]] = run[Seq[BuildTarget]] {
-    def failOnPythonBuild(result: BuildResult): Unit = {
+    def handleBuildFailure(result: BuildResult): Unit = {
       val failureScopes = result.artifacts.filter(_.hasErrors)
-      bspListener.error(
-        s"Python build failed for ${failureScopes.size} scope(s): ${failureScopes.map(_.id).mkString(", ")}")
+      bspListener.error(s"Build failed for ${failureScopes.size} scope(s): ${failureScopes.map(_.id).mkString(", ")}")
 
       val errorMsgs: Seq[String] = result.messageArtifacts.filter(_.hasErrors).flatMap { messageArtifact =>
         messageArtifact.messages.collect {
@@ -75,29 +75,35 @@ class BspSyncer(
       }
       errorMsgs.foreach(bspListener.error)
 
-      throw new RuntimeException(s"Python build failed for scopes: ${failureScopes.map(_.id).mkString("\n")}")
+      throw new RuntimeException(s"Build failed for scopes: ${failureScopes.map(_.id).mkString("\n")}")
     }
 
     val structure = structureBuilder.structure
 
-    val sparseScopes = structure.scopes.values.flatMap(_.sparseInternalCompileDependencies).toSet
-    // pass an empty diff here since we know that for sparse scopes we have no local changes
-    if (buildSparseScopes && sparseScopes.nonEmpty)
-      builder().build(sparseScopes, installerFactory(None), modifiedFiles = Some(EmptyFileDiff))
+    val (sparseScopesToBuild, sparseInstallers) =
+      if (buildSparseScopes)
+        (structure.scopes.values.flatMap(_.sparseInternalCompileDependencies).toSet, Seq(installerFactory(None)))
+      else (Set.empty[ScopeId], Nil)
+    val (pythonScopesToBuild, pythonInstallers) =
+      if (structure.pythonEnabled && structure.extractVenvs)
+        (
+          structure.scopes.filter { case (_, scopeInfo) => scopeInfo.config.pythonConfig.isDefined }.keySet,
+          Seq(pythonVenvExtractor))
+      else (Set.empty[ScopeId], Nil)
 
-    val pythonScopes =
-      if (structure.pythonEnabled)
-        structure.scopes.filter { case (_, scopeInfo) => scopeInfo.config.pythonConfig.isDefined }.keySet
-      else Set.empty[ScopeId]
-
-    val pythonArtifactHashMap: Map[ScopeId, String] = if (pythonScopes.nonEmpty && structure.extractVenvs) {
-      val results = builder().build(pythonScopes, pythonVenvExtractor, modifiedFiles = Some(EmptyFileDiff))
-      if (!results.successful) failOnPythonBuild(results)
+    val scopesToBuild = sparseScopesToBuild ++ pythonScopesToBuild
+    val installers = sparseInstallers ++ pythonInstallers
+    val pythonArtifactHashMap: Map[ScopeId, String] = if (scopesToBuild.nonEmpty) {
+      // pass an empty diff here since we know that for sparse scopes we have no local changes
+      listener.startBuild()
+      val results = builder().build(scopesToBuild, PostBuilder.merge(installers), modifiedFiles = Some(EmptyFileDiff))
+      listener.endBuild(results.successful)
+      if (!results.successful) handleBuildFailure(results)
 
       results.artifacts.collect { case pythonArtifact: PythonArtifact =>
         pythonArtifact.scopeId -> pythonArtifact.inputsHash
       }.toMap
-    } else Map.empty[ScopeId, String]
+    } else Map.empty
 
     listener.traceTask(ScopeId.RootScopeId, BuildTargets) {
       writeVsCodeConfig(structure)

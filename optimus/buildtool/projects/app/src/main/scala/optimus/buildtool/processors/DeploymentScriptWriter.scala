@@ -11,29 +11,42 @@
  */
 package optimus.buildtool.processors
 
+import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.builders.BackgroundCmdId
+import optimus.buildtool.builders.BackgroundProcessBuilder
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.trace.DeploymentScriptCommand
 import optimus.buildtool.utils.OsUtils
-import optimus.platform.util.Log
+import optimus.platform._
 
-import scala.sys.process._
+import java.nio.file.Files
+import scala.collection.immutable.Seq
 import scala.util._
 
 final case class DeploymentResponse(response: String)
 final case class DeploymentException(msg: String) extends RuntimeException(msg)
 
-class DeploymentScriptWriter extends Log {
+object DeploymentScriptWriter extends DeploymentScriptWriter {
+  private val log = getLogger(this)
+  private val id = BackgroundCmdId("DeploymentScriptWriter")
+}
+
+class DeploymentScriptWriter {
+  import DeploymentScriptWriter._
 
   val cmdPrefix: Seq[String] = if (OsUtils.isWindows) Seq("cmd", "/k") else Seq("sh", "-c")
   val cmdSeparator: String = if (OsUtils.isWindows) "&&" else ";"
 
-  protected def runCmdString(cmd: String): Try[String] = {
-    val fullCommand = cmdPrefix :+ cmd
-    log.info(s"Executing command: ${fullCommand.mkString(" ")}")
-    val builder = stringSeqToProcess(fullCommand)
-    Try(builder.!!)
-  }
+  @async protected def runCmdString(cmd: String, scopeId: ScopeId, logFile: FileAsset): Try[String] =
+    asyncResult {
+      BackgroundProcessBuilder(id, logFile, cmdPrefix :+ cmd, useCrumbs = false)
+        .build(scopeId, DeploymentScriptCommand, lastLogLines = 100)
+
+      Files.readString(logFile.path)
+    }.toTry
 
   private val executable: String = StaticConfig.string("deploymentScriptExecutable")
 
@@ -41,26 +54,25 @@ class DeploymentScriptWriter extends Log {
     s"$executable generate deploy --file ${templateFile.pathString} --params-file ${paramsFile.pathString} --output-dir ${outputDir.pathString} --verify"
 
   private def handleCmdResponse(response: String): Try[DeploymentResponse] = {
-
     if (response.contains("[ERROR]")) {
-      log.error(s"Command returned a non-zero value, error details: $response")
+      log.error(s"Command returned an ERROR in the log; error details: $response")
       Failure(DeploymentException(response))
     } else Success(DeploymentResponse(response))
   }
 
-  def generateDeploymentScripts(
+  @async def generateDeploymentScripts(
       templateFile: FileAsset,
       paramsFile: FileAsset,
-      outputDir: Directory): Try[DeploymentResponse] = {
+      outputDir: Directory,
+      scopeId: ScopeId,
+      logFile: FileAsset): Try[DeploymentResponse] = {
 
     val commands: Seq[String] =
       Seq(generateCommand(templateFile, paramsFile, outputDir))
 
     for {
-      cmdResponse <- runCmdString(commands.mkString(cmdSeparator))
+      cmdResponse <- runCmdString(commands.mkString(cmdSeparator), scopeId, logFile)
       deploymentResponse <- handleCmdResponse(cmdResponse)
     } yield deploymentResponse
-
   }
-
 }

@@ -138,6 +138,24 @@ class RelativeInstallPathBuilder(override protected val installVersion: String) 
       branch: String
   ): RelativePath = InstallPathBuilder.pathForMetaBundle(metaBundle, installVersion, leaf, branch)
 
+  def locationIndependentJar(scopeId: ScopeId, targetScopeId: ScopeId, jarName: String): Seq[String] = {
+    val scopeBinPath = binDir(scopeId)
+    val localPath =
+      scopeBinPath.relativize(dirForMetaBundle(targetScopeId.metaBundle, leaf = "lib"))
+    val jarLocalPath = s"${localPath.pathString}/$jarName.jar"
+
+    if (installVersion == NamingConventions.LocalVersion || targetScopeId.metaBundle == scopeId.metaBundle) {
+      // no need to add a disted path when doing a local install or if it's in the same metabundle as the script
+      Seq(jarLocalPath)
+    } else {
+      // two paths needed here - one for an install locally (or to NFS) and one for AFS
+      val distedPath = dirForDist(targetScopeId.metaBundle, leaf = "lib").pathString
+      val jarDistedPath = s"$distedPath/$jarName.jar"
+      // this order is needed [SEE_AGENT_PATHS]
+      Seq(jarLocalPath, jarDistedPath)
+    }
+  }
+
   def locationIndependentNativePath(
       scopeId: ScopeId,
       nativeScopeDeps: Seq[ScopeId],

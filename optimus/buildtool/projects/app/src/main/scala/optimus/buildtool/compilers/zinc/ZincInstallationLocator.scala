@@ -37,7 +37,7 @@ import scala.util.control.NonFatal
 object ZincInstallationLocator {
   private val log = getLogger(getClass)
   private[buildtool] val InJarZincDepsFilePaths: Map[String, String] =
-    scalaVersions.map(sVer => zincDepsFileName(sVer) -> zincDepsFilePath(sVer)).toMap
+    ScalaVersions.map(sVer => zincDepsFileName(sVer) -> zincDepsFilePath(sVer)).toMap
 
   private def zincRuntimeJarPath: Path = Utils.findJar(classOf[sbt.internal.inc.InvalidationProfiler])
 
@@ -130,7 +130,7 @@ class ZincClasspathResolver(
     extends ZincInstallationLocator(scalaMajorVersion) {
 
   private[buildtool] def findZincDep(group: String, name: String): Seq[DependencyDefinition] = {
-    val allScalaVerNames = scalaVersions.map(sVer => s"${name}_$sVer")
+    val allScalaVerNames = ScalaVersions.map(sVer => s"${name}_$sVer")
     // search the predefined zinc
     allScalaVerNames
       .flatMap { n => externalDeps.mavenDependencies.allMavenDeps.find { d => d.group == group && d.name == n } }

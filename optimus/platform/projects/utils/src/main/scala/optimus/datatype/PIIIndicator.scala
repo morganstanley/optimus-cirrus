@@ -47,14 +47,12 @@ object Classification {
 final case class AccountNumber[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "AccountNumber PII Element"
 }
+
 final case class BiometricInformation[T <: DataSubjectCategory](override val sensitiveValue: String)
     extends PIIElement[T] {
   override def maskedValue = "BiometricInformation PII Element"
 }
 
-final case class BusinessName[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
-  override def maskedValue = "Business Name PII Element"
-}
 final case class City[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "City PII Element"
 }
@@ -66,29 +64,28 @@ final case class Cookie[T <: DataSubjectCategory](override val sensitiveValue: S
 final case class Country[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Country PII Element"
 }
+
 // regex-ignore-line persistent exception for PII Element for Open source
 final case class CreditCardNumber[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
 // regex-ignore-line persistent exception for PII Element for Open source
   override def maskedValue = "Credit Card Number PII Element"
 }
+
 final case class CriminalBackground[T <: DataSubjectCategory](override val sensitiveValue: String)
     extends PIIElement[T] {
   override def maskedValue = "Criminal Background PII Element"
 }
+
 final case class CVV[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "CVV PII Element"
 }
+
 final case class DateOfBirth[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Date Of Birth PII Element"
 }
+
 final case class DebitCardNumber[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Debit Card Number PII Element"
-}
-// regex-ignore-line persistent exception for PII Element for Open source
-final case class DebitCreditCardNumbers[T <: DataSubjectCategory](override val sensitiveValue: String)
-    extends PIIElement[T] {
-// regex-ignore-line persistent exception for PII Element for Open source
-  override def maskedValue = "Debit/Credit Card Numbers PII Element"
 }
 
 final case class DeviceFingerprint[T <: DataSubjectCategory](override val sensitiveValue: String)
@@ -182,26 +179,16 @@ final case class Password[T <: DataSubjectCategory](override val sensitiveValue:
   override def maskedValue = "Password PII Element"
 }
 
-final case class PhoneFaxNumber[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
-  override def maskedValue = "Phone & Fax Number PII Element"
-}
-
 final case class PhoneNumber[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Phone Number PII Element"
 }
+
 final case class Pin[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "PIN PII Element"
 }
 
-final case class PinPassword[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
-  override def maskedValue = "PIN/Password PII Element"
-}
 final case class PlaceOfBirth[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Place of Birth PII Element"
-}
-
-final case class PlatingFields[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
-  override def maskedValue = "Plating Fields PII Element"
 }
 
 final case class PoliticalOpinions[T <: DataSubjectCategory](override val sensitiveValue: String)
@@ -231,30 +218,38 @@ final case class SecurityQuestionAndAnswer[T <: DataSubjectCategory](override va
     extends PIIElement[T] {
   override def maskedValue = "Security Question and Answer PII Element"
 }
+
 final case class SexualOrientationSexLife[T <: DataSubjectCategory](override val sensitiveValue: String)
     extends PIIElement[T] {
   override def maskedValue = "Sexual Orientation/ Sex Life PII Element"
 }
+
 final case class ShortName[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "Short Name PII Element"
 }
+
 final case class State[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "State PII Element"
 }
+
 final case class StreetAddressPOBox[T <: DataSubjectCategory](override val sensitiveValue: String)
     extends PIIElement[T] {
   override def maskedValue = "Street Address/ PO Box PII Element"
 }
+
 final case class TaxID[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "TaxID PII Element"
 }
+
 final case class TradeUnionMembership[T <: DataSubjectCategory](override val sensitiveValue: String)
     extends PIIElement[T] {
   override def maskedValue = "Trade Union Membership PII Element"
 }
+
 final case class UserID[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "User ID PII Element"
 }
+
 final case class ZipPostalCode[T <: DataSubjectCategory](override val sensitiveValue: String) extends PIIElement[T] {
   override def maskedValue = "ZIP/ Postal Code PII Element"
 }

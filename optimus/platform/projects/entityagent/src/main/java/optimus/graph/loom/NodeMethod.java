@@ -24,10 +24,9 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 
-public class NodeMethod {
+public class NodeMethod extends TransformableMethod {
 
   private final ClassNode cls;
-  final MethodNode method;
   final String cleanName; // Unmangled name (gets mangled when private function is accessed
   private final Type returnType; // Computed in ctor
   private final Type[] argTypes; // Computed in ctor
@@ -46,9 +45,19 @@ public class NodeMethod {
   String implMethodDesc; // null if not a simple ($impl) method, else no need to create nodeClass
   boolean isScenarioIndependent;
 
-  public NodeMethod(ClassNode cls, String privatePrefix, MethodNode method) {
+  @Override
+  public String toString() {
+    return this.getClass().getSimpleName() + ":" + cleanName;
+  }
+
+  public NodeMethod(
+      ClassNode cls,
+      String privatePrefix,
+      MethodNode method,
+      CompilerArgs cArgs,
+      boolean hasNodeCalls) {
+    super(method, cArgs, hasNodeCalls);
     this.cls = cls;
-    this.method = method;
     this.cleanName = stripPrefix(method.name, privatePrefix);
     this.isInterface = CommonAdapter.isInterface(cls.access);
     this.argTypes = Type.getArgumentTypes(method.desc);

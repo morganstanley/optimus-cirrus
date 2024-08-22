@@ -13,7 +13,6 @@ package optimus.buildtool.builders
 
 // N.B. we're using Java Futures because that's what the BSP library wants, and it's easier not to fight with it
 import java.util.concurrent.CompletableFuture
-
 import optimus.buildtool.app.MischiefOptions
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -23,11 +22,13 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.ObtTraceListener
 import optimus.buildtool.trace.ScanFilesystem
 import optimus.buildtool.trace.TidyRubbish
+import optimus.core.needsPlugin
 import optimus.graph.CancellationScope
 import optimus.graph.tracking.DependencyTracker
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.util.Log
 import optimus.platform._
+import optimus.platform.annotations.alwaysAutoAsyncArgs
 
 import scala.collection.immutable.Seq
 import scala.util.Failure
@@ -123,19 +124,24 @@ class TrackedWorkspace(
     p.future
   }
 
-  @entersGraph @closuresEnterGraph private def withContext[A](
+  @alwaysAutoAsyncArgs private def withContext[A](
       cancelScope: CancellationScope,
       listener: ObtTraceListener
   )(
       subtask: => A
-  ): A = {
-    asyncResult(cancelScope) {
-      ObtTrace.withListener(listener) {
-        track {
-          subtask
-        }
+  ): A = needsPlugin
+
+  @entersGraph @closuresEnterGraph private def withContext$NF[A](
+      cancelScope: CancellationScope,
+      listener: ObtTraceListener
+  )(
+      subtask: NodeFunction0[A]
+  ): A = asyncResult(cancelScope) {
+    ObtTrace.withListener(listener) {
+      track {
+        subtask()
       }
-    }.value
-  }
+    }
+  }.value
 
 }

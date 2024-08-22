@@ -839,15 +839,7 @@ object Properties extends KnownProperties {
   val hotspotChildNodeLookupCount = propI
   val hotspotChildNodeLookupTime = propL
 
-  val smplEverything = propL
-  val smplGraphTime = propL
-  val smplSyncStackTime = propL
-  val smplTweakLookupATime = propL
-  val smplTweakLookupSTime = propL
-  val smplCacheTime = propL
-  val smplOHSamplingTime = propL
-  val smplOHInstrumTime = propL
-  val smplLocalTablesTime = propL
+  val smplTimes = prop[Map[String, Long]]
   val samplingPauseTime = propL
   val crumbplexerIgnore = prop[String]
   val childProcessCount = propI

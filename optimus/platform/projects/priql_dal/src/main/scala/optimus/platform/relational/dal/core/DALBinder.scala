@@ -206,45 +206,43 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
   }
 
   override protected def bindAggregate(func: FuncElement, mc: MethodCallee): RelationElement = {
-    def canBeAggregate(c: ColumnElement, shapeType: TypeInfo[_]): Boolean = {
-      c.columnInfo match {
-        case i: IndexColumnInfo if i.columnType == ColumnType.Index =>
-          i.storableClass == shapeType.clazz
-        case _ =>
-          false
-      }
+    import QueryMethod.WHERE
+    require(mc.method.name == "count")
+
+    val lambdaOpt = func.arguments match {
+      case (f @ FuncElement(_: ScalaLambdaCallee[_, _], _, _)) :: _ => Some(f)
+      case (l: LambdaElement) :: _                                  => Some(l)
+      case _                                                        => None
     }
-    // it must be count
-    val src = func.instance
+
+    val (src, newFuncArgs) = lambdaOpt map { l =>
+      val shapeType = Query.findShapeType(func.instance)
+      val where = new MethodElement(
+        WHERE,
+        List(MethodArg("src", func.instance), MethodArg("p", l)),
+        shapeType,
+        NoKey,
+        MethodPosition.unknown)
+      (where, func.arguments.tail)
+    } getOrElse { (func.instance, func.arguments) }
+
     val source = super.visitElement(src)
     val projection = convertToSequence(source)
     if ((projection eq null) || (projection.select.take ne null) || (func ne root)) {
-      updateFuncCall(func, source, func.arguments)
+      updateFuncCall(func, source, newFuncArgs)
     } else {
-      val shouldContinue = projection.select.where match {
-        case null => true
-        case BinaryExpressionElement(EQ, c: ColumnElement, _, _) =>
-          canBeAggregate(c, projection.rowTypeInfo)
-        case BinaryExpressionElement(EQ, _, c: ColumnElement, _) =>
-          canBeAggregate(c, projection.rowTypeInfo)
-        case _ => false
-      }
-      if (shouldContinue) {
-        val s = projection.select
-        val aggElem = new AggregateElement(mc.resType, mc.method.name, Nil, false)
-        val columns = List(ColumnDeclaration("", aggElem))
-        val newSel = new SelectElement(s.alias, columns, s.from, s.where, null, null, null, null, false, false)
-        val aggregator = Aggregator.getHeadAggregator(mc.resType)
-        new ProjectionElement(
-          newSel,
-          new ColumnElement(mc.resType, s.alias, "", ColumnInfo.Calculated),
-          NoKey,
-          projection.keyPolicy,
-          aggregator,
-          entitledOnly = projection.entitledOnly)
-      } else {
-        updateFuncCall(func, source, func.arguments)
-      }
+      val s = projection.select
+      val aggElem = new AggregateElement(mc.resType, mc.method.name, Nil, false)
+      val columns = List(ColumnDeclaration("", aggElem))
+      val newSel = new SelectElement(s.alias, columns, s.from, s.where, null, null, null, null, false, false)
+      val aggregator = Aggregator.getHeadAggregator(mc.resType)
+      new ProjectionElement(
+        newSel,
+        new ColumnElement(mc.resType, s.alias, "", ColumnInfo.Calculated),
+        NoKey,
+        projection.keyPolicy,
+        aggregator,
+        entitledOnly = projection.entitledOnly)
     }
   }
 

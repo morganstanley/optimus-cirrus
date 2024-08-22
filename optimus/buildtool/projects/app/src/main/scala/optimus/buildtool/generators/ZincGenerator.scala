@@ -73,7 +73,7 @@ import scala.collection.immutable.Seq
     val zincJars: Map[String, Seq[JarAsset]] =
       zincInputs.name match {
         case Some(zincName) =>
-          scalaVersions.apar.map { scalaVer =>
+          ScalaVersions.apar.map { scalaVer =>
             // these are dep copied jars, when install the class jar we will convert them to disted paths
             val zincJars = zincResolver.resolveZincJars(scalaVer, zincInputs.group, zincInputs.name, zincInputs.version)
             zincDepsFileName(scalaVer) -> zincJars
@@ -114,7 +114,7 @@ import scala.collection.immutable.Seq
 }
 
 object ZincGenerator extends Log {
-  val scalaVersions = Seq("2.11", "2.12", "2.13")
+  val ScalaVersions = Seq("2.11", "2.12", "2.13")
   val ZincGeneratorName = "zinc"
   val ZincSourceDir = "src"
 

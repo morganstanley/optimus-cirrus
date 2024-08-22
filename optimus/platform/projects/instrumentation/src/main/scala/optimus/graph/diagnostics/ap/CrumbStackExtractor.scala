@@ -16,7 +16,8 @@ import optimus.breadcrumbs.crumbs.Properties.MapStringToJsonOps
 import optimus.breadcrumbs.crumbs.Properties
 import spray.json._
 import DefaultJsonProtocol._
-import optimus.breadcrumbs.crumbs.Properties.Elems
+import optimus.breadcrumbs.crumbs.Crumb
+import optimus.graph.diagnostics.ap.CrumbStackExtractor.CrumbMap
 import optimus.platform.util.Log
 import optimus.utils.CountLogger
 
@@ -24,6 +25,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.MatchResult
 import java.util.regex.Pattern
 import java.util
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.immutable
 import scala.jdk.CollectionConverters._
 
 object CrumbStackExtractor extends Log {
@@ -120,17 +124,44 @@ object CrumbStackExtractor extends Log {
   private lazy val splitter = Pattern.compile("[^\\W_]+")
   private lazy val loremized = new ConcurrentHashMap[String, String]()
 
+  class CrumbConsumer(throwOnInconsistency: Boolean = true) extends Function1[Crumb, Unit] {
+    private val crumbsRef = new AtomicReference[List[Crumb]](List.empty)
+    override def apply(crumb: Crumb): Unit = {
+      crumbsRef.updateAndGet(crumb :: _)
+    }
+    def crumbs: Seq[Crumb] = crumbsRef.get()
+    def samples: Seq[Sample] = {
+      val crumbs = crumbsRef.get()
+      val extractor = new CrumbStackExtractor(throwOnInconsistency = throwOnInconsistency)
+      val crumbsMap = crumbs.map(_.asJMap)
+      val samples = crumbsMap.map(extractor.crumbToSamples).flatten
+      crumbsMap.foreach(extractor.incorporateFrames(_, true))
+      samples
+    }
+  }
+
 }
 
-class CrumbStackExtractor(anonymize: Boolean = false, throwOnInconsistency: Boolean = false) {
+class CrumbStackExtractor(
+    anonymize: Boolean = false,
+    throwOnInconsistency: Boolean = false,
+    withVerboseLabels: Boolean = false,
+    crumbFilter: CrumbMap => Boolean = _ => true) {
   import CrumbStackExtractor._
 
   val speedscope = new Speedscope(cleanLambdas = true)
   val sid2frames = new ConcurrentHashMap[String, Seq[Int]]
 
-  def results: (util.Map[String, Seq[Int]], Speedscope) = (sid2frames, speedscope)
+  private val knownSIDs = ConcurrentHashMap.newKeySet[String]()
+  private val interner = new ConcurrentHashMap[AnyRef, AnyRef]
+  private def intern[T <: AnyRef](t: T): T = interner.computeIfAbsent(t, identity[AnyRef]).asInstanceOf[T]
 
-  def numStacks: Int = sid2frames.size
+  private val ignored = new AtomicInteger(0)
+
+  def info =
+    s"interned=${interner.size}, sids=${knownSIDs.size}, ignored=${ignored.get()}, distinctStacks=${sid2frames.size()}"
+
+  def results: (util.Map[String, Seq[Int]], Speedscope) = (sid2frames, speedscope)
 
   private def processFrame(fqmn: String): String =
     if (!anonymize || fqmn.matches("\\w+")) fqmn
@@ -145,41 +176,46 @@ class CrumbStackExtractor(anonymize: Boolean = false, throwOnInconsistency: Bool
       splitter.matcher(fqmn).replaceAll { mr: MatchResult => f(mr.group(0)) }
     }
 
-  def crumbToSamples(crumb: CrumbMap, hosts: Seq[String], withVerboseLabels: Boolean): Iterable[Sample] =
-    for {
-      pulse <- crumb.getAsMap(Properties.pulse).toIterable
-      rid <- crumb.getAs[String]("uuid").toIterable
-      stacks <- pulse.getAsSeqMap(Properties.profStacks).toIterable
-      tSnap <- pulse.geti(Properties.snapTimeMs)
-      host <- crumb.getAs[String]("host").toIterable
-      snapPeriod <- pulse.geti(Properties.snapPeriod)
-      stack <- stacks
-      total <- stack.get(Properties.pTot)
-      tpe <- stack.get(Properties.pTpe)
-      sid <- stack.get(Properties.pSID)
-      if hosts.isEmpty || hosts.contains(host)
-    } yield {
-      val aid = (crumb.getKey(Properties.appId) orElse pulse.getKey(Properties.appIds).flatMap(_.headOption))
-        .getOrElse("UnknownApp")
-      val cores = pulse.getKeyOrElse(Properties.cpuCores, 1)
-      val cpu = pulse.getKeyOrElse(Properties.profJvmCPULoad, 0.0)
-      val work = pulse.getKeyOrElse(Properties.profWorkThreads, 1).toDouble
-      val extraLabelsMap =
-        if (withVerboseLabels) {
-          val gsfEng = crumb.getKey(Properties.gsfEngineId)
-          gsfEng.map(eng => Map(Properties.gsfEngineId.name -> eng)).getOrElse(Map.empty[String, String])
-        } else Map.empty[String, String]
+  def crumbToSamples(crumb: CrumbMap): Iterable[Sample] = {
+    if (!crumbFilter(crumb)) {
+      ignored.incrementAndGet()
+      Iterable.empty
+    } else
+      for {
+        pulse <- crumb.getAsMap(Properties.pulse).toIterable
+        rid <- crumb.getAs[String]("uuid").toIterable
+        stacks <- pulse.getAsSeqMap(Properties.profStacks).toIterable
+        tSnap <- pulse.geti(Properties.snapTimeMs)
+        snapPeriod <- pulse.geti(Properties.snapPeriod)
+        stack <- stacks
+        total <- stack.get(Properties.pTot)
+        tpe <- stack.get(Properties.pTpe)
+        sid <- stack.get(Properties.pSID)
+      } yield {
+        val aid = (crumb.getKey(Properties.appId) orElse pulse.getKey(Properties.appIds).flatMap(_.headOption))
+          .getOrElse("UnknownApp")
+        val cores = pulse.getKeyOrElse(Properties.cpuCores, 1)
+        val cpu = pulse.getKeyOrElse(Properties.profJvmCPULoad, 0.0)
+        val work = pulse.getKeyOrElse(Properties.profWorkThreads, 1).toDouble
+        val extraLabelsMap =
+          if (withVerboseLabels) {
+            val gsfEng = crumb.getKey(Properties.gsfEngineId)
+            gsfEng.fold(Map.empty[String, String])(eng => Map(Properties.gsfEngineId.name -> intern(eng)))
+          } else Map.empty[String, String]
 
-      val key = SampleKey(
-        stackType = tpe,
-        tStart = tSnap - snapPeriod,
-        tSnap = tSnap,
-        rootId = rid.takeWhile(_ != '#'),
-        appId = aid,
-        extraLabels = extraLabelsMap)
-      val load = LoadData(cpu, work / cores)
-      Sample(key = key, stackValue = total, stackId = sid, loadData = load, extractor = this)
-    }
+        val key = SampleKey(
+          stackType = intern(tpe),
+          tStart = tSnap - snapPeriod,
+          tSnap = tSnap,
+          rootId = intern(rid.takeWhile(_ != '#')),
+          appId = intern(aid),
+          extraLabels = extraLabelsMap)
+        val load = LoadData(cpu, work / cores).round(10)
+        val isid = intern(sid)
+        knownSIDs.add(isid)
+        Sample(key = intern(key), stackValue = total, stackId = isid, loadData = intern(load), extractor = this)
+      }
+  }
 
   private def collapsed2Frames(collapsed: String): Seq[Int] =
     collapsed
@@ -189,10 +225,10 @@ class CrumbStackExtractor(anonymize: Boolean = false, throwOnInconsistency: Bool
 
   def frames(sid: String): Option[Iterable[String]] = Option(sid2frames.get(sid)).map(speedscope.frames)
 
-  def incorporateFrames(crumb: CrumbMap): Unit = for {
+  def incorporateFrames(crumb: CrumbMap, includeUnknown: Boolean = true): Unit = for {
     sid <- crumb.get(Properties.pSID)
     collapsed <- crumb.get(Properties.profCollapsed)
-  } {
+  } if (includeUnknown || knownSIDs.contains(sid)) {
     if (throwOnInconsistency) {
       sid2frames.compute(
         sid,

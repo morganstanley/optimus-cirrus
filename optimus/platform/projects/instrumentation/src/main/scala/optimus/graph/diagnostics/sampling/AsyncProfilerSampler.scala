@@ -20,8 +20,7 @@ import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.graph.AsyncProfilerIntegration
 import optimus.utils.PropertyUtils
 import optimus.breadcrumbs.crumbs.Properties._
-import optimus.graph.AwaitStackManagement
-import optimus.graph.Awaitable
+import optimus.scalacompat.collection._
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.ap.SampledTimers
 import optimus.graph.diagnostics.ap.StackAnalysis.StackData
@@ -183,17 +182,8 @@ class AsyncProfilerSampler(
     Elems(profStacks -> sds.map(sd => Elems(pTpe -> sd.tpe, pTot -> sd.total, pSlf -> sd.self, pSID -> sd.hashId)))
 
   private def timersToElems(sd: SampledTimers): Elems = {
-    import sd._
     Elems(
-      smplEverything -> everything / NANOSPERMILLI,
-      smplGraphTime -> graphTime / NANOSPERMILLI,
-      smplSyncStackTime -> syncStackTime / NANOSPERMILLI,
-      smplCacheTime -> cacheTime / NANOSPERMILLI,
-      smplTweakLookupATime -> tweakLookupAsync / NANOSPERMILLI,
-      smplTweakLookupSTime -> tweakLookupSync / NANOSPERMILLI,
-      smplOHSamplingTime -> overheadSampling / NANOSPERMILLI,
-      smplOHInstrumTime -> overheadInstrum / NANOSPERMILLI,
-      smplLocalTablesTime -> localTables / NANOSPERMILLI
+      smplTimes -> sd.samples.mapValuesNow(_ / NANOSPERMILLI)
     )
   }
   override protected def elemss(data: StacksAndTimers, id: ChainedID): Map[Source, List[Elems]] = {
@@ -216,7 +206,7 @@ object AsyncProfilerSampler extends Log {
   private val apPeriod = PropertyUtils.get("optimus.sampling.stacks.nsnaps", 1)
   private val uploadJfr = pyroUrl.nonEmpty && PropertyUtils.get("optimus.sampling.pyro.jfr", false)
   val stacksToSplunk = PropertyUtils.get("optimus.sampling.stacks.splunk", !pyroUrl.nonEmpty)
-  val numPrunedStacks = PropertyUtils.get("optimus.sampling.stacks", if (stacksToSplunk) 20 else 100)
+  val numPrunedStacks = PropertyUtils.get("optimus.sampling.stacks", 100)
   private val uploadFolded = pyroUrl.nonEmpty && !uploadJfr
   private val saveJfr = PropertyUtils.get("optimus.sampling.jfr", false)
   val enableKafkaStackPublication = PropertyUtils.get("optimus.sampling.kafka.upload", false)
@@ -225,7 +215,7 @@ object AsyncProfilerSampler extends Log {
   val allowChildProfiling = PropertyUtils.get("optimus.sampling.profile.child", false)
 
   // Allocation every (1M - 1)B, contention every 99ms second. The choice of one less than
-  // a power of 2 for allocation sampling is probably useless, based on the random algorithm in
+  // a power of 2 for allocation sampling is probably useless, based on documentation for the random algorithm in
   // https://github.com/openjdk/jdk/blob/b92de54a81a4037a5396509d41de57323212639c/src/hotspot/share/runtime/threadHeapSampler.cpp
   private val spDefaults =
     s"await=${DiagnosticSettings.awaitStacks}" +

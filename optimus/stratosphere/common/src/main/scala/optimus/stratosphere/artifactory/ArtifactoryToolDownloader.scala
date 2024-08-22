@@ -12,6 +12,7 @@
 package optimus.stratosphere.artifactory
 
 import akka.http.scaladsl.model.Uri
+import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
@@ -25,6 +26,7 @@ import spray.json._
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileNotFoundException
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
@@ -155,21 +157,24 @@ object ArtifactoryToolDownloader {
   }
 
   private def setupRemoteJarRepo(jfrogConfigFile: Path, jarRepoFile: Path): Unit = {
-    val jfrogCfg = ConfigFactory.parseFile(jfrogConfigFile.toFile)
-    val artifactoryCfg = jfrogCfg.getConfigList("artifactory").get(0)
-    val url = artifactoryCfg.getString("url")
-    val user = artifactoryCfg.getString("user")
-    val password = artifactoryCfg.getString("password")
-    val xml = s"""<?xml version="1.0" encoding="UTF-8"?>
-                 |<project version="4">
-                 |  <component name="RemoteRepositoriesConfiguration">
-                 |    <remote-repository>
-                 |      <option name="id" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
-                 |      <option name="name" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
-                 |      <option name="url" value="https://$user:$password@$url/maven-all-local-only/" />
-                 |    </remote-repository>
-                 |  </component>
-                 |</project>""".stripMargin
+    val jfrogCfg: Config = ConfigFactory.parseFile(jfrogConfigFile.toFile)
+    val artifactoryCfg: Config = jfrogCfg.getConfigList("artifactory").get(0)
+    val uri: URI = new URI(artifactoryCfg.getString("url"))
+    val portSuffix: String = if (uri.getPort > -1) s":${uri.getPort}" else ""
+    val url: String = s"${uri.getHost}${portSuffix}${uri.getPath}"
+    val user: String = artifactoryCfg.getString("user")
+    val password: String = artifactoryCfg.getString("password")
+    val xml: String =
+      s"""<?xml version="1.0" encoding="UTF-8"?>
+         |<project version="4">
+         |  <component name="RemoteRepositoriesConfiguration">
+         |    <remote-repository>
+         |      <option name="id" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
+         |      <option name="name" value="07e6f448-0934-470b-9c89-bffa7e442ba6" />
+         |      <option name="url" value="${uri.getScheme}://$user:$password@${url}maven-all-local-only/" />
+         |    </remote-repository>
+         |  </component>
+         |</project>""".stripMargin
     Files.createDirectories(jarRepoFile.getParent)
     jarRepoFile.file.write(xml)
   }

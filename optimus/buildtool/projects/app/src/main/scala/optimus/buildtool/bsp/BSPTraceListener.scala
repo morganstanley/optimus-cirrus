@@ -36,6 +36,9 @@ import ch.epfl.scala.bsp4j.TaskId
 import ch.epfl.scala.bsp4j.TaskProgressParams
 import ch.epfl.scala.bsp4j.TaskStartParams
 import ch.epfl.scala.bsp4j.TextDocumentIdentifier
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.AppenderBase
+import ch.qos.logback.{classic => logback}
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.MessagesArtifact
@@ -54,6 +57,7 @@ import optimus.buildtool.trace.TaskTrace
 import optimus.buildtool.trace.TraceFilter
 import optimus.buildtool.utils.FileDiff
 import optimus.utils.CollectionUtils._
+import org.slf4j
 
 import java.util.Timer
 import java.util.TimerTask
@@ -89,6 +93,18 @@ private[bsp] class BSPSessionTraceListener(
   }
 
   private var currentListener: Option[BSPTraceListener] = None
+
+  def registerErrorListener(): Unit = slf4j.LoggerFactory.getILoggerFactory match {
+    case lc: logback.LoggerContext =>
+      val appender = new AppenderBase[ILoggingEvent]() {
+        override def append(event: ILoggingEvent): Unit =
+          if (event.getLevel == logback.Level.ERROR)
+            error(event.getMessage)
+      }
+
+      lc.getLogger(slf4j.Logger.ROOT_LOGGER_NAME).addAppender(appender)
+      appender.start()
+  }
 
   def forBuildId(id: String): BSPTraceListener = forBuildId(Some(id))
 

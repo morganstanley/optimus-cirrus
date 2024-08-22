@@ -11,21 +11,20 @@
  */
 package optimus.buildtool.trace
 
+import com.sun.management.OperatingSystemMXBean
+import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.app.OptimusBuildToolBootstrap
+import optimus.buildtool.config.ScopeId
+import optimus.buildtool.files.Directory
+import spray.json.DefaultJsonProtocol._
+import spray.json._
+
+import java.lang.management.ManagementFactory
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
 import java.time.Instant
 import java.util.Timer
 import java.util.TimerTask
-
-import msjava.slf4jutils.scalalog.getLogger
-import optimus.buildtool.app.OptimusBuildToolBootstrap
-import optimus.buildtool.config.ScopeId
-import optimus.buildtool.files.Directory
-import optimus.graph.diagnostics.DefensiveManagementFactory
-import spray.json.DefaultJsonProtocol._
-import spray.json._
-
-import scala.annotation.nowarn
 import scala.io.Source
 
 object TimingsRecorder {
@@ -97,10 +96,10 @@ object TimingsRecorder {
     protected[trace] val traces = List.newBuilder[Snap]
 
     private def snapTimerTask(): TimerTask = new TimerTask() {
-      val osBean = DefensiveManagementFactory.getOperatingSystemMXBean()
+      val osBean = ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
 
       override def run(): Unit = {
-        @nowarn("cat=deprecation") val load = osBean.getSystemCpuLoad()
+        val load = osBean.getCpuLoad()
         // could add memory usage etc here
         traces += Snap(toEpocMicro(Instant.now()), load * 100.0)
       }

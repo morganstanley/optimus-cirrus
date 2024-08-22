@@ -59,7 +59,7 @@ public class InstrumentationConfig {
 
   private static final String ENTITY_TYPE = "optimus/platform/storable/Entity";
   private static final String SS_TYPE = "optimus/platform/ScenarioStack";
-  private static final String OGSC_TYPE = "optimus/graph/OGSchedulerContext";
+  public static final String OGSC_TYPE = "optimus/graph/OGSchedulerContext";
   public static final String IS = "optimus/graph/InstrumentationSupport";
   static final String CACHED_VALUE_TYPE = "optimus/graph/InstrumentationSupport$CachedValue";
   private static final String IMC_TYPE = "optimus/debug/InstrumentedModuleCtor";
@@ -312,10 +312,14 @@ public class InstrumentationConfig {
     // suffix
     boolean suffixWithID;
     boolean suffixWithThis;
-    public boolean suffixWithReturnValue; // passes the return value to suffix (and by default returns that value)
+    public boolean
+        suffixWithReturnValue; // passes the return value to suffix (and by default returns that
+    // value)
     public boolean suffixReplacesReturnValue; // patched method will returns whatever suffix returns
     boolean suffixWithArgs;
-    public boolean noArgumentBoxing; // if true, arguments (and return value) are passed using specific types; if false, arguments are passed in Object[] (and return value is Object)
+    public boolean
+        noArgumentBoxing; // if true, arguments (and return value) are passed using specific types;
+    // if false, arguments are passed in Object[] (and return value is Object)
     boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception
     // thrown
     FieldRef storeToField;

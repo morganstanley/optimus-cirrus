@@ -48,7 +48,7 @@ import scala.util.Random
 
 object PyroUploader extends Log {
   private val queueLength = PropertyUtils.get("pyro.queue.length", 10)
-  private val randomDelayMs = PropertyUtils.get("pyro.upload.random.delay.ms", 100)
+  private val randomDelayMs = PropertyUtils.get("pyro.upload.random.delay.ms", 10)
   private val tries = PropertyUtils.get("pyro.upload.retries", 1)
   private val backoffDelayMinMs: Int = PropertyUtils.get("pyro.upload.backoff.min.ms", 1000)
   private val backoffDelayMaxMs: Int = PropertyUtils.get("pyro.upload.backoff.max.ms", 60000)
@@ -211,8 +211,9 @@ class PyroUploader(
     pyroLatestVersion: Boolean = false,
     withExtraLabels: Boolean = false,
     id: Option[ChainedID] = None,
-    dryRun: Boolean = false)
-    extends Log {
+    dryRun: Boolean = false,
+    nThreads: Int = 1
+) extends Log {
   import PyroUploader._
 
   def logRootKey(): Unit = {
@@ -374,29 +375,33 @@ class PyroUploader(
   private def delay(ms: Long): Unit = {
     continueTimer.await(ms, TimeUnit.MILLISECONDS)
   }
-  private val doneLatch = new CountDownLatch(1)
+  private val activeThreads = new CountDownLatch(nThreads)
   private var backoffMs = backoffDelayMinMs
-  private val thread = new Thread {
-    override def run(): Unit = {
-      while (true) {
-        queue.take() match {
-          case Done =>
-            doneLatch.countDown()
-            return
-          case p: Payload =>
-            upload(p)
+
+  for (i <- 1 to nThreads) {
+    val thread = new Thread {
+      override def run(): Unit = {
+        while (true) {
+          queue.take() match {
+            case Done =>
+              queue.add(Done)
+              activeThreads.countDown()
+              return
+            case p: Payload =>
+              upload(p)
+          }
         }
+        activeThreads.countDown()
       }
     }
+    thread.setDaemon(true)
+    thread.setName(s"PyroUploader$i")
+    thread.start()
   }
-
-  thread.setDaemon(true)
-  thread.setName("PyroUploader")
-  thread.start()
 
   def shutdown(timeout: Int = 100): Unit = {
     enqueue(Done)
-    doneLatch.await(timeout, TimeUnit.SECONDS)
+    activeThreads.await(timeout, TimeUnit.SECONDS)
   }
 
   private def warn(text: String): Unit = {
@@ -411,10 +416,12 @@ class PyroUploader(
     val d = backoffMs + Random.nextInt(randomDelayMs)
     warn(s"$text; delaying $d ms")
     delay(d)
-    backoffMs *= 2
-    if (backoffMs > backoffDelayMaxMs) backoffMs = backoffDelayMaxMs
+    synchronized {
+      backoffMs *= 2
+      if (backoffMs > backoffDelayMaxMs) backoffMs = backoffDelayMaxMs
+    }
   }
-  private def resetBackoff(): Unit = {
+  private def resetBackoff(): Unit = synchronized {
     backoffMs = backoffDelayMinMs
   }
 

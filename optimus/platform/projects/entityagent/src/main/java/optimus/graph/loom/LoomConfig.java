@@ -24,6 +24,12 @@ public class LoomConfig {
   public static final String LoomNodesParam = "nodes";
   public static final String LoomLambdasParam = "lambdas";
 
+  public static final String CompilerAnnotation = "Loptimus/platform/compiler;";
+  public static final String CompilerLevelParam = "level";
+  public static final String CompilerDebugParam = "debug";
+  public static final String CompilerEnqueueEarlierParam = "enqueueEarlier";
+  public static final String CompilerQueueSizeSensitiveParam = "queueSizeSensitive";
+
   public static final String NodeAnnotation = "Loptimus/platform/node;";
   public static final String AsyncAnnotation = "Loptimus/platform/async;";
   public static final String ExposeArgTypesParam = "exposeArgTypes";
@@ -32,6 +38,7 @@ public class LoomConfig {
       "Loptimus/platform/scenarioIndependent;";
 
   public static final String LOOM_SUFFIX = "$_";
+  public static final String PLAIN_SUFFIX = "__";
   public static final String NEW_NODE_SUFFIX = "$newNode";
   public static final String QUEUED_SUFFIX = "$queued";
   public static final String IMPL_SUFFIX = "$impl";

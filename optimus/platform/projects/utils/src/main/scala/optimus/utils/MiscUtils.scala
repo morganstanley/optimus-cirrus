@@ -373,12 +373,12 @@ class Squelch(maxPerMinute: Int) {
 /**
  * Utility class for periodically logging while we perform some large number of tasks.
  */
-class CountLogger(label: String, intervalMs: Long, log: slf4j.Logger) {
+class CountLogger(label: => String, intervalMs: Long, log: slf4j.Logger) {
 
-  def this(label: String, intervalMs: Long, log: scalalog.Logger) =
+  def this(label: => String, intervalMs: Long, log: scalalog.Logger) =
     this(label, intervalMs, log.javaLogger)
 
-  def this(label: String, intervalMs: Long) =
+  def this(label: => String, intervalMs: Long) =
     this(label, intervalMs, scalalog.getLogger(classOf[CountLogger]).javaLogger)
 
   log.info(s"$label...")
@@ -393,13 +393,13 @@ class CountLogger(label: String, intervalMs: Long, log: slf4j.Logger) {
     t = System.currentTimeMillis()
     if (t > tPrint) {
       tPrint = t + intervalMs
-      log.info(s"$label n=$n elapsed=${elapsed}s rate=${rate}/s)")
+      log.info(s"${label} n=$n elapsed=${elapsed}s rate=${rate}/s)")
     }
   }
   def apply(): Unit = apply(1)
   def done(): Int = synchronized {
     t = System.currentTimeMillis()
-    log.info(s"$label complete, n=$n, elapsed=${elapsed}s, rate=${rate}/s")
+    log.info(s"${label} complete, n=$n, elapsed=${elapsed}s, rate=${rate}/s")
     n
   }
 }

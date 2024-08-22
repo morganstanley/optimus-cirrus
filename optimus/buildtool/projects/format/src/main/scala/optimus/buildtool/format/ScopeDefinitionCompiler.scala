@@ -369,11 +369,20 @@ class ScopeDefinitionCompiler(
       if (allowUnorderedDependencies) {
         originalList.foreach { case (id, line) => op(id, line) }
       } else {
+        val distintDependencies = originalList.toMap.toSet
+
+        if (originalList.size != distintDependencies.size)
+          originalList.zip(distintDependencies).foreach { case ((origId, line1), (sortedId, line2)) =>
+            if (origId == sortedId && line1 != line2)
+              error(s"Dependency $origId is present multiple times", 0)
+          }
+
         val sortedList = originalList.sorted
         originalList.zip(sortedList).foreach { case ((origId, line), (sortedId, _)) =>
           if (origId == sortedId) op(origId, line)
-          else error(s"Dependency $origId is not in correct alphabetical order at line", line)
+          else error(s"Dependency $origId is not in correct alphabetical order", 0)
         }
+
       }
     }
 
@@ -494,10 +503,10 @@ class ScopeDefinitionCompiler(
       parent: InheritableScopeDefinition
   ): Result[InheritableScopeDefinition] =
     Result.tryWith(origin, config) {
-      val scopeAllowUnorderedDependencies = config.optionalBoolean("allowUnorderedDependencies")
+      val scopeAllowUnorderedDependencies = config.optionalBoolean("allowUnorderedAndDuplicateDependencies")
       val allowUnorderedDependencies =
         scopeAllowUnorderedDependencies
-          .orElse(parent.allowUnorderedDependencies)
+          .orElse(parent.allowUnorderedAndDuplicateDependencies)
           .getOrElse(true)
       for {
         (compileDeps, compileRels) <- loadScopeDeps(origin, "compile", config, parent, allowUnorderedDependencies)
@@ -552,7 +561,7 @@ class ScopeDefinitionCompiler(
           bundle = config.optionalBoolean("bundle"),
           includeInClassBundle = config.optionalBoolean("includeInClassBundle"),
           mavenOnly = config.optionalBoolean(MavenOnlyKey),
-          allowUnorderedDependencies = scopeAllowUnorderedDependencies,
+          allowUnorderedAndDuplicateDependencies = scopeAllowUnorderedDependencies,
           relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
           extraLibs = extraLibs,
           forbiddenDependencies = forbiddenDependencies,

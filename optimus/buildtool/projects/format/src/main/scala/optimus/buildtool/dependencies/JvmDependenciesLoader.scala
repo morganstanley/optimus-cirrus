@@ -12,6 +12,7 @@
 package optimus.buildtool.dependencies
 
 import com.typesafe.config._
+import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config._
 import optimus.buildtool.files.Asset
 import optimus.buildtool.format.MavenDependenciesConfig
@@ -78,7 +79,6 @@ object JvmDependenciesLoader {
       obtFile: ObtFile,
       isMaven: Boolean,
       loadedResolvers: ResolverDefinitions,
-      loadedVariantsConfig: Option[Config] = None,
       isExtraLib: Boolean = false,
       scalaMajorVersion: Option[String] = None,
       isMultiSourceScalaLib: Boolean = false): Result[Seq[DependencyDefinition]] =
@@ -100,7 +100,6 @@ object JvmDependenciesLoader {
           obtFile,
           isMaven,
           loadedResolvers,
-          loadedVariantsConfig,
           isExtraLib,
           if (isScalaLib) scalaMajorVersion else None
         )
@@ -182,7 +181,6 @@ object JvmDependenciesLoader {
       obtFile: ObtFile,
       isMaven: Boolean,
       loadedResolvers: ResolverDefinitions,
-      loadedVariantsConfig: Option[Config] = None,
       isExtraLib: Boolean = false,
       scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
     Result.tryWith(obtFile, config) {
@@ -246,7 +244,8 @@ object JvmDependenciesLoader {
           name = if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
           version = version,
           kind = kind,
-          configuration = fullConfig.stringOrDefault(Configuration, default = if (isMaven) "" else "runtime"),
+          configuration =
+            fullConfig.stringOrDefault(Configuration, default = if (isMaven) "" else DefaultConfiguration),
           classifier = config.optionalString(Classifier),
           excludes = artifactExcludes,
           variant = None,
@@ -275,19 +274,6 @@ object JvmDependenciesLoader {
           .withProblems(variant.checkExtraProperties(obtFile, Keys.variantDefinition))
       }
 
-      val variantsConfigs =
-        loadedVariantsConfig match {
-          case Some(multiSourceVariants) =>
-            Result.traverse(multiSourceVariants.nested(obtFile)) { case (name, config) =>
-              val sourcedConfig = if (isMaven) config.getObject("maven").toConfig else config.getObject("afs").toConfig
-              loadVariant(sourcedConfig, name)
-            }
-          case None if !config.hasPath(Variants) => Success(Nil)
-          case None =>
-            Result.traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
-              loadVariant(config, name)
-            }
-        }
       val configurationVariants =
         if (!config.hasPath(Configurations)) Success(Nil)
         else {
@@ -296,6 +282,13 @@ object JvmDependenciesLoader {
             defaultLib.map(_.copy(configuration = config, variant = Some(variant)))
           }
         }
+
+      val variantsConfigs =
+        if (!config.hasPath(Variants)) Success(Nil)
+        else
+          Result.traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
+            loadVariant(config, name)
+          }
 
       for {
         dl <- defaultLib

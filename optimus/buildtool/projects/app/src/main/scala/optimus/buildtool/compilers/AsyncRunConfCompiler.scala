@@ -279,15 +279,16 @@ final class StaticRunscriptCompilationBindingSources(
       upstreamScopes: Seq[ScopeId],
       javaOpts: Seq[String],
       agents: Seq[ModuleRef]
-  ): Seq[String] = {
-    agents.apar
-      .filter { agent =>
-        // Skip agent if not in its runtime dependencies
-        upstreamScopes.exists {
+  ): Seq[(String, Seq[ScopeId])] = {
+    val agentAndScopeId = agents.apar
+      .map { agent => // Skip agent if not in its runtime dependencies
+        val scopeIdsWithAgent = upstreamScopes.filter {
           _.properPath == s"$agent.main"
         }
+        (agent, scopeIdsWithAgent)
       }
-      .flatMap { agent =>
+      .filter(_._2.nonEmpty)
+      .flatMap { case (agent, scopeIds) =>
         val pathComponents = agent.split('.')
         val agentName = pathComponents.last
         require(!agentName.endsWith(".jar"))
@@ -295,9 +296,10 @@ final class StaticRunscriptCompilationBindingSources(
         if (isAlreadyDefined) {
           None
         } else {
-          Some(agentName)
+          Some((agentName, scopeIds))
         }
       }
+    agentAndScopeId
   }
 
   @node private def computePathingJarName(scopeId: ScopeId, arc: AppRunConf): String = {
@@ -393,12 +395,19 @@ final class StaticRunscriptCompilationBindingSources(
     )
 
     val additionalAgents = getAdditionalAgentNames(upstreamInputs.upstreamScopes, arc.javaOpts, arc.agents)
-    require(additionalAgents.forall(!_.endsWith(".jar")))
-    val linuxJavaOpts = arc.javaOptsForLinux ++
-      additionalAgents.map(agentName => s"-javaagent:${linuxShellVariableNameWrapper("APP_DIR")}/../lib/$agentName.jar")
-    val windowsJavaOpts = arc.javaOptsForWindows ++
-      additionalAgents.map(agentName =>
-        s"-javaagent:${windowsBatchVariableNameWrapper("APP_DIR")}/../lib/$agentName.jar")
+    require(additionalAgents.forall(!_._1.endsWith(".jar")))
+
+    val agentsJarPaths = additionalAgents
+      .flatMap { case (agent, scopeIds) =>
+        pathBuilder.locationIndependentJar(scopeId, scopeIds.head, agent)
+      }
+
+    val linuxAgentsJarPaths = agentsJarPaths.map(agentJarPath =>
+      if (agentJarPath.startsWith("..")) s"$linuxDirVar/$agentJarPath" else agentJarPath)
+    val windowsAgentsJarPaths = agentsJarPaths.map(_.replace('/', '\\'))
+
+    val linuxJavaOpts = arc.javaOptsForLinux
+    val windowsJavaOpts = arc.javaOptsForWindows
 
     def packageEnvVars(env: Map[String, String]): Seq[(String, String)] =
       env.toIndexedSeq.filterNot(AsyncRunConfCompilerImpl.isEmptyAllocOpts).sortBy(_._1)
@@ -434,6 +443,8 @@ final class StaticRunscriptCompilationBindingSources(
       "earlySetEnvVarsBlockForWindows" -> earlySetEnvVarsWindows.asJava,
       "earlySetEnvVarsBlockForLinux" -> earlySetEnvVarsLinux.asJava,
       "linuxJavaOpts" -> linuxJavaOpts.asJava,
+      "linuxAgentsJarPaths" -> linuxAgentsJarPaths.asJava,
+      "windowsAgentsJarPaths" -> windowsAgentsJarPaths.asJava,
       "windowsJavaOpts" -> windowsJavaOpts.asJava,
       "mainClass" -> arc.mainClass,
       "mainClassArgs" -> mainClassArgs.asJava,

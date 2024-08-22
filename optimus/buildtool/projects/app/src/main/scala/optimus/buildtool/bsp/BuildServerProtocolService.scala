@@ -261,6 +261,7 @@ class BuildServerProtocolService(
 
   override def onConnectWithClient(buildClient: BuildClient): Unit = {
     bspSessionListener = new BSPSessionTraceListener(buildClient, converter, workspaceSourceRoot, traceFilter)
+    bspSessionListener.registerErrorListener()
   }
 
   override def buildInitialize(params: InitializeBuildParams): CompletableFuture[InitializeBuildResult] = {
@@ -289,14 +290,24 @@ class BuildServerProtocolService(
     in("onBuildInitialized")
     slog.info(s"Connected to Intellij!")
     sessionInitialized = true
+    Runtime.getRuntime.addShutdownHook(new Thread() {
+      override def run(): Unit = {
+        shutdown()
+        exit()
+      }
+    })
   }
 
   override def buildShutdown(): CompletableFuture[Object] = {
     in("buildShutdown")
     bspSessionListener.info(s"Shutdown requested by client")
-    bspSessionListener.cancelHeartbeat()
+    shutdown()
     cancelAll(bspSessionListener)
     CompletableFuture.completedFuture("")
+  }
+
+  private def shutdown(): Unit = if (bspSessionListener != null) {
+    bspSessionListener.cancelHeartbeat()
   }
 
   override def buildTargetCompile(compileParams: CompileParams): CompletableFuture[CompileResult] = {
@@ -391,7 +402,12 @@ class BuildServerProtocolService(
   override def onBuildExit(): Unit = {
     in("onBuildExit")
     bspSessionListener.info("Exit requested by client")
-    bspSessionListener.info("Shutting down service")
+    exit()
+    bspSessionListener = null
+  }
+
+  private def exit(): Unit = if (bspSessionListener != null) {
+    bspSessionListener.info("Shutting down OBT server")
     listening.foreach(_.cancel(true))
   }
 
