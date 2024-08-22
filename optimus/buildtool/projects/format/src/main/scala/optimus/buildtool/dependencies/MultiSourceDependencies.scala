@@ -39,7 +39,8 @@ final case class MultiSourceDependency(
 
   private def mavenDefinition: DependencyDefinition = maven match {
     case Seq(mavenAlone) => mavenAlone // for maven-only mixed mode definitions
-    case multipleMaven if maven.size > 1 => // prevent user define multiple maven deps when afs{} is empty
+    case multipleMaven
+        if maven.count(_.variant.isEmpty) > 1 => // prevent user define multiple maven deps when afs{} is empty
       val linesStr = maven.map { d => s"'${d.key}' at line ${d.line}" }.mkString(", ")
       throw new IllegalArgumentException(
         s"[${MultiSourceDependenciesLoader.jvmPathStr}] '$name' without afs definition is not allowed to define multiple maven definitions: $linesStr")
@@ -68,31 +69,19 @@ final case class MultiSourceDependency(
   override def id: DependencyId = DependencyId(group = "obt.jvm.loaded", name = name)
 }
 
-sealed trait DependencySource {
-  val name: String
-  override def toString: String = name
-}
-object DependencySource {
-  val values: Seq[DependencySource] = Seq(AfsSource, MavenSource)
-}
-case object AfsSource extends DependencySource { override val name = "afs" }
-case object MavenSource extends DependencySource { override val name = "maven" }
-
 object MultiSourceDependency {
+  private[buildtool] val VersionedAfsError =
+    "afs version shouldn't be defined! All usages will be replaced by mapped maven version."
   private[buildtool] val MultipleAfsError = "only one afs dependency should be defined!"
   private[buildtool] def NoMavenVariantError(name: String) = s"'$name' no maven equivalent variant found!"
   private[buildtool] val NoVersionError = "maven version must be defined in order to map afs dependency!"
   private[buildtool] def emptyDepError(name: String) = s"'$name' is empty!"
 
-  private def getMavenVariant(afs: DependencyDefinition, maven: Seq[DependencyDefinition]): Seq[DependencyDefinition] =
-    maven
-      .filter { d => d.variant.map(_.name).getOrElse("") == afs.variant.map(_.name).getOrElse("afs") }
-
   def apply(
       obtFile: ObtFile,
       confValue: ConfigValue,
       name: String,
-      afsDeps: Seq[DependencyDefinition],
+      afsDep: Option[DependencyDefinition],
       mavenDeps: Seq[DependencyDefinition],
       ivyCfgsMap: Map[DependencyDefinition, Seq[DependencyDefinition]],
       line: Int): Result[Seq[MultiSourceDependency]] = {
@@ -101,7 +90,16 @@ object MultiSourceDependency {
       MultiSourceDependency(s"$name.${ivy.configuration}", Some(ivy), equivalents, ivy.line)
     }
 
-    if (afsDeps.isEmpty)
+    def getMavenVariants(mavenVariants: Seq[DependencyDefinition]) =
+      mavenVariants.map { d =>
+        val nameWithVariant = d.variant match {
+          case Some(mavenVar) => s"$name.variants.${mavenVar.name}" // for example: foo.variants.bar
+          case None           => name
+        }
+        MultiSourceDependency(nameWithVariant, None, Seq(d), line)
+      }
+
+    def getMavenDependencies =
       mavenDeps match { // maven only
         case empty if mavenDeps.isEmpty => emptyError
         case mavenCfgs
@@ -114,24 +112,26 @@ object MultiSourceDependency {
               else name
             MultiSourceDependency(nameWithConfig, None, Seq(d), line)
           })
+        case mavenLibsWithVariants
+            if mavenDeps.map(d => d.group + d.name).distinct.size == 1 && mavenDeps.count(
+              _.variant.isEmpty) == 1 && mavenDeps.exists(_.variant.isDefined) =>
+          Success(getMavenVariants(mavenLibsWithVariants))
         case _ => Success(Seq(MultiSourceDependency(name, None, mavenDeps, line)))
       }
-    else
-      Result
-        .sequence(afsDeps.map {
-          case afsOnly if mavenDeps.isEmpty && afsOnly.noVersion => emptyError
-          case afsVariant if afsVariant.variant.isDefined =>
-            val mavenVariant = getMavenVariant(afsVariant, mavenDeps)
-            if (mavenVariant.nonEmpty)
-              Success(MultiSourceDependency(name, Some(afsVariant), mavenVariant, line))
-            else Failure(Seq(obtFile.errorAt(confValue, NoMavenVariantError(afsVariant.key))))
-          case afs =>
-            if (mavenDeps.exists(_.version.isEmpty))
-              Failure(Seq(obtFile.errorAt(confValue, NoVersionError)))
-            else if (afsDeps.filterNot(_.variant.isDefined).size == 1)
-              Success(MultiSourceDependency(name, Some(afs), mavenDeps.filterNot(_.variant.isDefined), line))
-            else Failure(Seq(obtFile.errorAt(confValue, MultipleAfsError)))
-        })
-        .map(_ ++ loadedIvyCfgs)
+
+    afsDep match {
+      case Some(afs) =>
+        if (mavenDeps.isEmpty) emptyError
+        else if (mavenDeps.exists(_.version.isEmpty))
+          Failure(Seq(obtFile.errorAt(confValue, NoVersionError)))
+        else {
+          val (mavenVariants, mavenLibs) = mavenDeps.partition(_.variant.isDefined)
+          val mapped = MultiSourceDependency(name, Some(afs), mavenLibs, line)
+          val notMapped = getMavenVariants(mavenVariants) // variants only be used for forced version
+          Success(notMapped ++ loadedIvyCfgs :+ mapped)
+        }
+      case None => getMavenDependencies
+    }
+
   }
 }

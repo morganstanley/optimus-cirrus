@@ -74,7 +74,7 @@ object Templates {
     val supportedTemplates = Templates.defaultTemplates(templates)
     val combinedTemplates: Map[String, String] =
       (if (useDefaultTemplates) defaultScriptTemplates else Map.empty[String, String]) ++ scriptTemplates.templates
-    combinedTemplates.toMap.map {
+    combinedTemplates.map {
       case (platform, templateSpec) if isDisabledTemplate(templateSpec) =>
         // Disabled use-case
         Right(Nil)

@@ -13,8 +13,6 @@ package optimus.graph.loom;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.VarHandle;
 import java.security.ProtectionDomain;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassReaderEx;
@@ -23,6 +21,8 @@ import org.objectweb.asm.tree.ClassNode;
 
 /** In doubt see: var byteCode = BiopsyLab.byteCodeAsString(cw.toByteArray()); */
 public class LoomInjector implements ClassFileTransformer {
+
+  public static ClassNodeReporter classNodeReporter; // for test-only purposes!
 
   @Override
   public byte[] transform(
@@ -42,6 +42,10 @@ public class LoomInjector implements ClassFileTransformer {
     adapter.transform();
     var cw = new ClassWriter(crSource, ClassWriter.COMPUTE_MAXS);
     cls.accept(cw);
+
+    // used for testing purposes only!
+    if (classNodeReporter != null) classNodeReporter.report(cls);
+
     return cw.toByteArray();
   }
 

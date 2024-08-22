@@ -76,9 +76,6 @@ import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.config.StaticLibraryConfig.scalaJarNamesForZinc
 import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.config.VersionConfiguration
-import optimus.buildtool.dependencies.AfsSource
-import optimus.buildtool.dependencies.DependencySource
-import optimus.buildtool.dependencies.MavenSource
 import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files._
 import optimus.buildtool.generators.CppBridgeGenerator
@@ -151,13 +148,6 @@ object OptimusBuildToolImpl {
   private val useMavenLibs = cmdLine.useMavenLibs
   private val generatePoms = cmdLine.generatePoms
   private val enableMappingValidation = cmdLine.enableMappingValidation
-  private val dependencySource: DependencySource = cmdLine.dependencySource match {
-    case "maven" => MavenSource
-    case "afs"   => AfsSource
-    case unsupported =>
-      throw new IllegalArgumentException(
-        s"unsupported source '$unsupported' detected! should be either 'maven' or 'afs'")
-  }
 
   private val useCrumbs = cmdLine.breadcrumbs
   private val version: String =
@@ -480,7 +470,6 @@ object OptimusBuildToolImpl {
       resolvers = resolvers,
       externalDependencies = obtConfig.externalDependencies,
       dependencyCopier = dependencyCopier,
-      dependencySource = dependencySource,
       globalExcludes = obtConfig.globalExcludes,
       globalSubstitutions = obtConfig.globalSubstitutions,
       credentials = validateCredentials(credentials, obtConfig.externalDependencies),
@@ -514,7 +503,7 @@ object OptimusBuildToolImpl {
       VelocityProcessor(),
       OpenApiProcessor(logDir, useCrumbs),
       FreemarkerProcessor(),
-      DeploymentScriptProcessor(sandboxFactory))
+      DeploymentScriptProcessor(sandboxFactory, logDir))
       .map(g => g.tpe -> g)
       .toMap
 

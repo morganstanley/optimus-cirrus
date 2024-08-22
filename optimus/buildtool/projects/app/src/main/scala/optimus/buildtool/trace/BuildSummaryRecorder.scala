@@ -14,6 +14,9 @@ package optimus.buildtool.trace
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
+import optimus.buildtool.utils.Utils
+import optimus.graph.GCMonitor
+import optimus.graph.GCMonitor.CumulativeGCStats
 
 import java.nio.file.Files
 import java.time.Instant
@@ -24,8 +27,11 @@ import scala.jdk.CollectionConverters._
 class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTraceListener {
   private val log = getLogger(this)
 
+  @volatile private var startTime: Instant = _
   val stats = new ConcurrentHashMap[ObtStat, Long]()
   val statsSets = new ConcurrentHashMap[ObtStat, Set[_]]()
+  private val gcMonitor = GCMonitor.instance
+  private val GcMonitorConsumerName = "OptimusBuildTool"
 
   object BuildSummaryTaskTrace extends DefaultTaskTrace {
     override def supportsStats: Boolean = BuildSummaryRecorder.this.supportsStats
@@ -37,6 +43,13 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       BuildSummaryRecorder.this.addToStat(stat, value)
     override def addToStat(stat: ObtStat, value: Set[_]): Unit =
       BuildSummaryRecorder.this.addToStat(stat, value)
+  }
+
+  override def startBuild(): Unit = {
+    startTime = patch.MilliInstant.now
+    stats.clear()
+    statsSets.clear()
+    gcMonitor.snapAndResetStats(GcMonitorConsumerName)
   }
 
   def storeStats(): Unit = {
@@ -64,6 +77,9 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
   override def endBuild(success: Boolean): Boolean = {
 
     storeStats()
+
+    val endTime = patch.MilliInstant.now
+    val durationMillis = endTime.toEpochMilli - startTime.toEpochMilli
 
     def totalScopesSummary: String = {
       val scopes = stats.getOrDefault(ObtStats.Scopes, 0)
@@ -182,6 +198,19 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       f"\t\tCache hits: $pythonTotalCacheHits%,d [Local disk: $pythonFilesystemHits%,d, SilverKing: $pythonSkHits%,d, DHT: $pythonDhtHits%,d]"
     }
 
+    def gcSummary: String = {
+      val gcStats = gcMonitor.snapAndResetStats(GcMonitorConsumerName)
+      if (gcStats != CumulativeGCStats.empty) {
+        val gcDurationMillis = gcStats.duration
+        val gcPercent = gcDurationMillis * 100.0 / durationMillis
+        f"""\tMin Heap: ${gcStats.minAfter}%,.0fMB, Max Heap: ${gcStats.maxAfter}%,.0fMB
+           |\tGarbage Collections: ${gcStats.nMinor + gcStats.nMajor}%,d [Duration: ${Utils.durationString(
+            gcDurationMillis)} ($gcPercent%,.1f%%), Major: ${gcStats.nMajor}%,d, Minor: ${gcStats.nMinor}%,d]""".stripMargin
+      } else {
+        "Garbage Collections: 0"
+      }
+    }
+
     if (success) {
       val jvmSummary =
         s"""\tJava/Scala:
@@ -199,13 +228,12 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
         s"$workspaceChangesSummary",
         s"$jvmSummary",
         s"$pythonSummary",
+        gcSummary
       ).filter(!_.isBlank).mkString("\n")
       log.info(msg)
       ObtTrace.info(msg)
     }
 
-    stats.clear()
-    statsSets.clear()
     true
   }
 }

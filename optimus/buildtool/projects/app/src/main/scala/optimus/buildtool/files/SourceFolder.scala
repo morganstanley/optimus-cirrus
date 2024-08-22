@@ -93,7 +93,6 @@ import optimus.scalacompat.collection._
 }
 
 object SourceFolder {
-  val isTxtFile: FileFilter = Directory.fileExtensionPredicate("txt")
   val isScalaOrJavaSourceFile: FileFilter = Directory.fileExtensionPredicate("java", "scala")
   private val isCppSourceFile: FileFilter = Directory.caseInsensitiveFileExtensionPredicate("cpp", "c")
   val isCppHeaderFile: FileFilter = Directory.caseInsensitiveFileExtensionPredicate("h")

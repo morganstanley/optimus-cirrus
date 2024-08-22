@@ -124,7 +124,7 @@ public class SpinningTransferQueue<E> extends AbstractQueue<E>
    * from a pointer to the initial node; CASing the item of the
    * first unmatched node on match and CASing the next field of the
    * trailing node on appends. (Plus some special-casing when
-   * initially empty).  While this would be a terrible idea in
+   * initially empty).  While this would be a terribly inefficient idea in
    * itself, it does have the benefit of not requiring ANY atomic
    * updates on head/tail fields.
    *

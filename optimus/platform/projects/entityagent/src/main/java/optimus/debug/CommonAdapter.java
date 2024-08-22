@@ -283,6 +283,25 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return false;
   }
 
+  public static String changeReturnType(String desc, String returnType) {
+    var lastBracket = desc.lastIndexOf(')');
+    if (lastBracket > 0) return desc.substring(0, lastBracket + 1) + returnType;
+    return desc;
+  }
+
+  public static String getReturnDesc(String methodDesc) {
+    var lastBracket = methodDesc.lastIndexOf(')');
+    if (lastBracket > 0) return methodDesc.substring(lastBracket + 1);
+    return methodDesc;
+  }
+
+  /** Strip L and ; */
+  public static String descToClass(String returnType) {
+    if (returnType.startsWith("L") && returnType.endsWith(";"))
+      return returnType.substring(1, returnType.length() - 1);
+    else return returnType;
+  }
+
   public static Handle dupNamed(Handle h, String name) {
     return new Handle(h.getTag(), h.getOwner(), name, h.getDesc(), h.isInterface());
   }

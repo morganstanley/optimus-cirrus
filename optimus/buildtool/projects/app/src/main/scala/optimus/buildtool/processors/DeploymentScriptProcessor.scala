@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.processors
 
+import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CompilationMessage
@@ -49,7 +50,7 @@ import scala.util.Try
  * }
  * ```
  */
-@entity class DeploymentScriptProcessor(sandboxFactory: SandboxFactory) extends ScopeProcessor {
+@entity class DeploymentScriptProcessor(sandboxFactory: SandboxFactory, logDir: Directory) extends ScopeProcessor {
 
   override def artifactType: ProcessorArtifactType = ArtifactType.DeploymentScript
 
@@ -104,7 +105,7 @@ import scala.util.Try
     val validatedTemplateFile = validateFile("Template", in.workspaceSrcRoot, in.templateContent)
     val validatedParameterFile = validateFile("Parameter", in.workspaceSrcRoot, in.objectsContent)
 
-    try {
+    val r = NodeTry {
       for {
         _ <-
           if (!DeploymentScriptProcessor.isCorrectFormatForDeployInstallation(in.installLocation.pathString)) {
@@ -137,7 +138,7 @@ import scala.util.Try
           templateFile,
           parameterFile,
           outputDir,
-          new DeploymentScriptWriter
+          logDir
         ) match {
           case Success(r) =>
             log.debug(s"Command output:\n${r.response}")
@@ -147,7 +148,9 @@ import scala.util.Try
         }
 
       } yield result
-    } finally sandbox.close()
+    }
+    sandbox.close()
+    r.get
   }
 
   @node private def validateFile(
@@ -178,27 +181,20 @@ object DeploymentScriptProcessor extends Log {
 
   val DefaultFileName: String = StaticConfig.string("deploymentDefaultFileName")
 
-  private val writer = new DeploymentScriptWriter
-  def generateDeploymentFiles(
-      scopeId: ScopeId,
-      processorName: String,
-      templateFile: FileAsset,
-      parameterFile: FileAsset,
-      installLocation: Directory
-  ): Try[DeploymentResponse] =
-    generateDeploymentFiles(scopeId, processorName, templateFile, parameterFile, installLocation, writer)
-
-  def generateDeploymentFiles(
+  @async def generateDeploymentFiles(
       scopeId: ScopeId,
       processorName: String,
       templateFile: FileAsset,
       parameterFile: FileAsset,
       installLocation: Directory,
-      generator: DeploymentScriptWriter
+      logDir: Directory,
+      writer: DeploymentScriptWriter = DeploymentScriptWriter
   ): Try[DeploymentResponse] = {
+    val logFile = logDir.resolveFile(
+      s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$scopeId.deploymentScriptProcessor.log")
 
     log.info(s"Generating deployment scripts using $scopeId:$processorName")
-    generator.generateDeploymentScripts(templateFile, parameterFile, installLocation)
+    writer.generateDeploymentScripts(templateFile, parameterFile, installLocation, scopeId, logFile)
   }
 
   def isCorrectFormatForDeployInstallation(outputDir: String): Boolean = {

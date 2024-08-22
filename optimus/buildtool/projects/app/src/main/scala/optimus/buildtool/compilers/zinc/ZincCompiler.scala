@@ -234,7 +234,7 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
             log.debug(s"$prefix$msg")
           }
           val lowDiskSpace = freeDiskSpaceBytes.exists(_ < MinFreeSpaceBytes)
-          // This is pretty horrible, but unfortunately there's no good way to tell for sure if a compilation failure
+          // This is pretty hacky, but unfortunately there's no good way to tell for sure if a compilation failure
           // is RT or not. We do try though, to prevent non-RT failures being cached (either in memory or on disk).
           val probablyRt =
             !lowDiskSpace && !reporter.messages.exists(_.msg.contains("There is not enough space on the disk"))

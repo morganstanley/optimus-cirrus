@@ -169,15 +169,22 @@ class DALExecutionProvider[T](
         // .count
         if (executeOptions.entitledOnly)
           throw new RelationalUnsupportedException(entitledOnlyUnsupportedForCount)
-        val newWhere = where.map(w => ConstFormatter.format(AsyncValueEvaluator.evaluate(w), loadCtx))
-        val dsiAt = dalTemporalContext(dalApi.loadContext, entity, newWhere)
-        newWhere map {
-          case Binary(Equal, _: Property, Constant(sk: SerializedKey, _)) =>
-            Seq(resolver.count(SerializedKeyQuery(sk), dsiAt)).asInstanceOf[Iterable[T]]
-          case x =>
-            throw new RelationalUnsupportedException(s"Unexpected where expression: $x")
-        } getOrElse {
-          Seq(resolver.count(EntityClassQuery(e.name), dsiAt)).asInstanceOf[Iterable[T]]
+
+        where match {
+          case None =>
+            val dsiAt = dalTemporalContext(dalApi.loadContext, entity, None)
+            Seq(resolver.count(EntityClassQuery(e.name), dsiAt)).asInstanceOf[Iterable[T]]
+          case Some(Binary(Equal, p: Property, r @ RichConstant(_, _, Some(idx))))
+              if idx.indexed && !idx.unique && idx.storableClass == entity =>
+            ConstFormatter.format(AsyncValueEvaluator.evaluate(r), loadCtx) match {
+              case c @ Constant(sk: SerializedKey, _) =>
+                val dsiAt = dalTemporalContext(dalApi.loadContext, entity, Some(Binary(Equal, p, c)))
+                Seq(resolver.count(SerializedKeyQuery(sk), dsiAt)).asInstanceOf[Iterable[T]]
+              case x =>
+                throw new RelationalUnsupportedException(s"Unexpected where expression: ${Binary(Equal, p, x)}")
+            }
+          case _ =>
+            getViaExpression(resolver)
         }
 
       case _ =>

@@ -29,6 +29,8 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.AbstractTreeIterator
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.util.Try
@@ -45,14 +47,13 @@ trait FileDiff {
   def contains(filePath: String, startLine: Int, endLine: Int): Boolean
 }
 
-class GitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, ws: StratoWorkspace, baseline: String)
-    extends FileDiff {
-  private lazy val files: Set[String] = {
+class LazyGitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, baseline: String) extends FileDiff {
+  private val files: CompletableFuture[Set[String]] = CompletableFuture.supplyAsync { () =>
     val m = utils.diffFiles(baseline)
     GitLog.log.debug(s"${m.size} modified files since baseline $baseline:\n\t${m.map(_.pathString).mkString("\n\t")}")
     m.map(f => workspaceSourceRoot.relativize(f).pathString)
   }
-  private lazy val lines: Map[String, Set[Int]] = {
+  private val lines: CompletableFuture[Map[String, Set[Int]]] = CompletableFuture.supplyAsync { () =>
     val m = utils.diffLines(baseline)
     GitLog.log.debug(
       s"${m.flatMap(_._2).sum} modified lines in ${m.size} files since baseline $baseline:\n\t${m.keys.map(_.pathString).mkString("\n\t")}"
@@ -61,9 +62,10 @@ class GitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, ws: Str
   }
 
   // Note: These should not be marked @impure since they're called from @nodes (eg. in ZincCompiler)
-  override def contains(filePath: String): Boolean = files.contains(filePath)
+  override def contains(filePath: String): Boolean =
+    files.get(120, TimeUnit.SECONDS).contains(filePath)
   override def contains(filePath: String, startLine: Int, endLine: Int): Boolean =
-    lines.get(filePath).exists(_.exists(l => l >= startLine && l <= endLine))
+    lines.get(120, TimeUnit.SECONDS).get(filePath).exists(_.exists(l => l >= startLine && l <= endLine))
 }
 
 object EmptyFileDiff extends FileDiff {
@@ -245,7 +247,7 @@ object GitLog {
 
   // Diff between the baseline of `from` and current working tree
   @async @impure def modifiedFiles(from: String): Option[FileDiff] = baselineHash(from).map { hash =>
-    new GitFileDiff(native, workspaceSourceRoot, stratoWorkspace, hash)
+    new LazyGitFileDiff(native, workspaceSourceRoot, hash)
   }
 
   @async @impure def reportTagMovingForward(tagName: String, dir: Directory): Unit = {

@@ -122,7 +122,7 @@ import scala.collection.immutable.Seq
             resolved,
             pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None, incremental = false).asJson,
             tpe.category)
-          artifact.storeJson()
+          if (!artifact.messages.exists(_.isError)) artifact.storeJson()
           log.info(s"[$id] Completed $tpeStr")
           Some(artifact)
         }

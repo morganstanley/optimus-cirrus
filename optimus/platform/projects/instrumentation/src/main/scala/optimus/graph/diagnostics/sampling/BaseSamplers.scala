@@ -12,7 +12,6 @@
 package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
 import optimus.breadcrumbs.crumbs.Properties.Key
-import optimus.graph.diagnostics.DefensiveManagementFactory
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.SamplingProfiler._
 import optimus.graph.diagnostics.ap.StackAnalysis
@@ -115,7 +114,8 @@ class BaseSamplers extends SamplerProvider {
 
   override val priority: Int = 0
 
-  private val osBean: OperatingSystemMXBean = DefensiveManagementFactory.getOperatingSystemMXBean()
+  private val osBean: OperatingSystemMXBean =
+    ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
 
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]] = {
     val util = new Util(sp)

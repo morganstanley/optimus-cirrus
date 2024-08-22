@@ -21,7 +21,13 @@ import scala.collection.compat._
 object JavaOpts {
 
   private val WithMemoryParam = """(-X.*?)\d+[gGmMkK]""".r
-  private val GCFlags = Set("-XX:+UseSerialGC", "-XX:+UseParallelGC", "-XX:+USeParNewGC", "-XX:+UseG1GC")
+  private val GCFlags = Set(
+    "-XX:+UseSerialGC",
+    "-XX:+UseParallelGC",
+    "-XX:+USeParNewGC",
+    "-XX:+UseG1GC",
+    "-XX:+UseShenandoahGC",
+    "-XX:+UseZGC")
   private val WithEqParam = """(-.*?)=.*""".r
   private val XXFlag = """-XX:[+\-](\w+)""".r
   private val OtherXXOption = """-XX:.*""".r

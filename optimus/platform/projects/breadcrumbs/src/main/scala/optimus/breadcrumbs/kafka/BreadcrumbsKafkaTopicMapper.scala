@@ -11,15 +11,14 @@
  */
 package optimus.breadcrumbs.kafka
 
-import java.util.{Map => jMap}
-
+import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.Crumb.Headers
 import optimus.breadcrumbs.kafka.KafkaTopicProperty.CrumbHintProperty
 import optimus.breadcrumbs.kafka.KafkaTopicProperty.CrumbSourceProperty
 import optimus.breadcrumbs.kafka.KafkaTopicProperty.CrumbTypeProperty
-import org.apache.log4j.Logger.getLogger
 
+import java.util.{ Map => jMap }
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 
@@ -87,7 +86,7 @@ private[breadcrumbs] object BreadcrumbsKafkaTopicMapper {
     BreadcrumbsKafkaTopicMappingKey(Headers.Source, CrumbSourceProperty),
     BreadcrumbsKafkaTopicMappingKey(Headers.Crumb, CrumbTypeProperty)
   )
-  private val log = msjava.slf4jutils.scalalog.getLogger(this.getClass)
+  private val log = getLogger(this.getClass)
 }
 private[breadcrumbs] class BreadcrumbsKafkaTopicMapper(topicsMap: Seq[KafkaTopicMapping])
     extends BreadcrumbsKafkaTopicMapperT {

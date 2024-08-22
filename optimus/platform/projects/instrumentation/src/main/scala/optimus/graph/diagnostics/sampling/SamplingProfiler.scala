@@ -23,19 +23,17 @@ import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.AsyncProfilerIntegration
 import optimus.graph.DiagnosticSettings
 import optimus.graph.Exceptions
-import optimus.graph.diagnostics.DefensiveManagementFactory
 import optimus.graph.diagnostics.sampling.PyroUploader.AppKey
 import optimus.graph.diagnostics.sampling.PyroUploader.EngineKey
-import optimus.graph.diagnostics.kafka.SamplingProfilingKafkaConfig
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
-import optimus.utils.MiscUtils.ThenSome
 import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
 import optimus.platform.util.Version
+import optimus.utils.MiscUtils.ThenSome
 import optimus.utils.PropertyUtils
 
-import scala.jdk.CollectionConverters._
+import java.lang.management.ManagementFactory
 import java.time.Instant
 import java.util
 import java.util.Objects
@@ -43,6 +41,7 @@ import java.util.Timer
 import java.util.TimerTask
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
 
@@ -180,7 +179,8 @@ class SamplingProfiler private[diagnostics] (
       engineRoot -> ChainedID.root.base ::
       Version.properties
 
-  private val osBean: OperatingSystemMXBean = DefensiveManagementFactory.getOperatingSystemMXBean()
+  private val osBean: OperatingSystemMXBean =
+    ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
 
   private val samplingThread = new Thread {
     override def run(): Unit = {
@@ -343,8 +343,6 @@ class SamplingProfiler private[diagnostics] (
 }
 
 object SamplingProfiler extends Log {
-
-  import scala.reflect.runtime
   @volatile private[diagnostics] var configured = false
 
   // minimum publication interval in the presence of "activity" (e.g. a distributed task completion)
@@ -606,7 +604,10 @@ object SamplingProfiler extends Log {
   object SchedulerCounts {
     def empty = SchedulerCounts(0, 0, 0)
   }
-  final case class LoadData(cpuLoad: Double, graphUtilization: Double)
+
+  final case class LoadData(cpuLoad: Double, graphUtilization: Double) {
+    def round(n: Int) = LoadData((cpuLoad * n).round.toDouble / n, (graphUtilization * n).round.toDouble / n)
+  }
 
   trait SchedulerCounter {
     def getCounts: SchedulerCounts

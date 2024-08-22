@@ -270,6 +270,9 @@ private[buildtool] object DockerCommand extends AsyncCategoryTrace {
 private[buildtool] object NpmCommand extends AsyncCategoryTrace {
   override def scenario(scopeId: ScopeId): Option[String] = Some(s"${categoryName}_$scopeId")
 }
+private[buildtool] object DeploymentScriptCommand extends AsyncCategoryTrace {
+  override def scenario(scopeId: ScopeId): Option[String] = Some(s"${categoryName}_$scopeId")
+}
 
 private[buildtool] case object GitDiff extends SingletonCategoryTrace
 

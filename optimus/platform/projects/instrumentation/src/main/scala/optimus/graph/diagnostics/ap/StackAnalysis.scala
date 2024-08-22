@@ -93,7 +93,7 @@ object StackAnalysis {
       folded: String)
 
   final case class StacksAndTimers(stacks: Seq[StackData], timers: SampledTimers, dtStopped: Long = 0L)
-  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording.result()) }
+  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording) }
 
   // Java20 likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
   val lambdaRe = "[\\$\\d\\.]*0x\\w+\\.".r
@@ -127,6 +127,38 @@ object StackAnalysis {
 
   private def looksLikeJITStack(stack: Array[String]) = stack.exists { frame =>
     frame.contains("Compile:") || frame.contains("CompileBroker::")
+  }
+  private class Unmemoizer() extends Function1[String, String] {
+    val memo: mutable.HashMap[Int, String] = mutable.HashMap.empty
+    // The first time "myFrameName" is encountered, it looks like
+    //    123=myFrameName
+    // Subsequently, it's just 123.
+    def apply(name: String): String = {
+      if (name.isEmpty || !name.head.isDigit) return name
+      try {
+        val sep = name.indexOf("=")
+        if (sep < 0)
+          return memo(name.toInt)
+        val i = name.substring(0, sep).toInt
+        val realName = name.substring(sep + 1)
+        memo.put(i, realName)
+        realName
+      } catch {
+        case _: Exception => name
+      }
+    }
+  }
+
+  def decryptDump(dump: String): String = {
+    val unmemoizer = new Unmemoizer
+    dump
+      .split("\n")
+      .map(_.split(" "))
+      .collect { case Array(stacks, count) =>
+        val stack = stacks.split(";").map(unmemoizer).mkString(";")
+        s"$stack $count"
+      }
+      .mkString("\n")
   }
 
 }
@@ -536,24 +568,7 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
   private[diagnostics] def buildStackTrees(
       dump: String,
       presplit: Iterable[TimedStack] = Iterable.empty): (Map[String, StackNode], SampledTimers) = {
-    // The first time "myFrameName" is encountered, it looks like
-    //    123=myFrameName
-    // Subsequently, it's just 123.
-    val memo = mutable.HashMap.empty[Int, String] // dictionary scope is the dump (not global)
-    def unmemoize(name: String): String = {
-      if (name.isEmpty || !name.head.isDigit) return name
-      try {
-        val sep = name.indexOf("=")
-        if (sep < 0)
-          return memo(name.toInt)
-        val i = name.substring(0, sep).toInt
-        val realName = name.substring(sep + 1)
-        memo.put(i, realName)
-        realName
-      } catch {
-        case _: Exception => name
-      }
-    }
+    val unmemoize = new Unmemoizer()
     val stackTypeToRoot = mutable.HashMap.empty[String, StackNode]
     val execRoot = new StackNode(cleanName("root"))
     stackTypeToRoot += "cpu" -> execRoot
@@ -645,7 +660,8 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
         val (stack, count) = splitStackLine(stackLine)
         if (count > 0) {
           val frames = stack.split(';').map(unmemoize)
-          // Assume nobody wants to know about the internals of the JVM
+          // Aggregate all JIT frames into a single leaf to avoid unnecessary noise in result (we're not trying to
+          // analyse the JIT)
           if (looksLikeJITStack(frames)) {
             compiler.add(count)
           } else if (looksLikeGCStack(frames))
@@ -660,7 +676,7 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
     }
 
     if (DiagnosticSettings.samplingAsserts) stackTypeToRoot.valuesIterator.foreach(assertTreesAreConsistent)
-    (stackTypeToRoot.toMap, rec.result())
+    (stackTypeToRoot.toMap, rec)
   }
 
   private[diagnostics] def pruneLeaves(root: StackNode, n: Int): Seq[StackNode] = {

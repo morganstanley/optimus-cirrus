@@ -25,6 +25,8 @@ Jerry Junhao Ying ([@enjoysoft](http://github.com/enjoysoft))
 
 Nolita Ebama-Mpeta ([@musinoli](http://github.com/musinoli))
 
+Peter Fraenkel ([@pnf](http://github.com/pnf))
+
 Robert Tarsi
 
 Sarthak Banerjee ([@sarthakbanerjee](http://github.com/sarthakbanerjee))

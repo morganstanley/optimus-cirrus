@@ -25,6 +25,7 @@ import java.util.Optional;
 import optimus.graph.DiagnosticSettings;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.util.ASMifier;
 import org.objectweb.asm.util.Textifier;
 import org.objectweb.asm.util.TraceClassVisitor;
@@ -57,17 +58,25 @@ public class BiopsyLab {
 
   public static String byteCodeAsAsm(byte[] bytes) {
     StringWriter writer = new StringWriter();
-    TraceClassVisitor traceClassVisitor =
-        new TraceClassVisitor(null, new ASMifier(), new PrintWriter(writer));
+    var traceClassVisitor = new TraceClassVisitor(null, new ASMifier(), new PrintWriter(writer));
     new ClassReader(bytes).accept(traceClassVisitor, 0);
     return writer.toString();
   }
 
+  /** Very useful function when debugging asm codegen */
+  @SuppressWarnings("unused")
   public static String byteCodeAsString(byte[] bytes) {
     StringWriter writer = new StringWriter();
-    TraceClassVisitor traceClassVisitor =
-        new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
+    var traceClassVisitor = new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
     new ClassReader(bytes).accept(traceClassVisitor, 0);
+    return writer.toString();
+  }
+
+  public static String byteCodeAsString(MethodNode mn) {
+    StringWriter writer = new StringWriter();
+    var traceClassVisitor = new TraceClassVisitor(null, new Textifier(), new PrintWriter(writer));
+    mn.accept(traceClassVisitor);
+    traceClassVisitor.visitEnd(); // Flush
     return writer.toString();
   }
 

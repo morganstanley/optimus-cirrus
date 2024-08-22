@@ -17,6 +17,7 @@ import optimus.buildtool.dependencies.JvmDependenciesLoader._
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.NoAfs
+import optimus.buildtool.format.MavenDefinition.MavenOnlyExcludeKey
 
 import scala.collection.immutable
 
@@ -221,7 +222,8 @@ object Keys {
   // maven setup in maven-dependencies.obt
   val mavenDependenciesFile =
     KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes, Substitutions)
-  val mavenDefinition = KeySet("all", "main", "test", "release-main", "release-test", "release-all")
+  val mavenDefinition =
+    KeySet("all", "main", "test", "release-main", "release-test", "release-all", MavenOnlyExcludeKey)
 
   // cpp toolchain file
   val cppToolchain = KeySet(

@@ -13,4 +13,7 @@ package optimus.testidle;
 
 public class TestIdle {
   public static final String monitorIdlePropertyName = "optimus.test.idle.monitor.minutes";
+  public static final int monitorIdleMinutesDefault = 1;
+  public static final String monitorIdleRepeatPropertyName = "optimus.test.idle.repeat.minutes";
+  public static final int monitorIdleRepeatMinutesDefault = 5;
 }

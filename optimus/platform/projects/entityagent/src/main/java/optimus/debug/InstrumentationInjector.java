@@ -181,8 +181,12 @@ public class InstrumentationInjector implements ClassFileTransformer {
     // Scala objects are singleton in nature, therefore they always have a stable equality
     if (crSource.getClassName().endsWith("$")) return false;
 
+    var superName = crSource.getSuperName();
+    // java/lang/Object has superName set to null!
+    if (superName == null) return false;
+
     // Only class with base class Object should be patched
-    if (!crSource.getSuperName().equals(OBJECT_TYPE.getInternalName())) return false;
+    if (!superName.equals(OBJECT_TYPE.getInternalName())) return false;
 
     return !CommonAdapter.isThirdPartyOwned(loader, className);
   }

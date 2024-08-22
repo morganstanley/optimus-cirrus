@@ -146,11 +146,12 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         Seq("config", s"url.http://$name.insteadOf", s"http://$instance"),
         // slash at the end is intentional - we don't want multiple mappings under the same key
         Seq("config", s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
-        Seq("config", s"http.http://$name.extraHeader", s"Host: $instance"),
-        Seq("config", s"http.http://$name.emptyAuth", s"true")
+        Seq("config", s"http.http://$name.extraHeader", s"Host: $instance")
       )
     }.toSeq
     configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
+    // emptyAuth
+    runGit("config", "http.emptyAuth", "true")
   }
 
   private def unsetConfig(keyRegex: String): Unit = getAndModifyGitConfig(keyRegex, ignoreExit = true) {
@@ -162,7 +163,8 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
   private def removeExtraHeaders(): Unit = unsetConfig(ExtraHeaderConfigRegex)
 
   private def removeEmptyAuth(): Unit = {
-    runGitIgnoreExit("config", "--unset", "http.emptyAuth") // TODO (OPTIMUS-67266): remove after deployment
+    runGitIgnoreExit("config", "--unset", "http.emptyAuth")
+    // TODO (OPTIMUS-67266): remove after deployment
     getGitConfig(EmptyAuthRegex).collect { case ConfigPattern(key, _) =>
       runGitIgnoreExit("config", "--unset", key)
     }

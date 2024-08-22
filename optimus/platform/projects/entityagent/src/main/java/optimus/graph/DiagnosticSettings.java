@@ -128,6 +128,17 @@ public class DiagnosticSettings {
   public static final boolean loomTransformations =
       getBoolProperty("optimus.loom.transformations", LoomDefaults.enabled);
 
+  public static final int loomCompilerLevel = getIntProperty("optimus.loom.compiler.level", 0);
+
+  public static final boolean loomCompilerDebug =
+      getBoolProperty("optimus.loom.compiler.debug", false);
+
+  public static final boolean loomCompilerEnqueueEarlier =
+      getBoolProperty("optimus.loom.compiler.enqueueEarlier", false);
+
+  public static final boolean loomCompilerQueueSizeSensitive =
+      getBoolProperty("optimus.loom.compiler.queueSizeSensitive", false);
+
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
   public static final boolean enableXSReporting;
 

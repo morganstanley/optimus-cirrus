@@ -11,116 +11,74 @@
  */
 package optimus.graph.diagnostics.ap
 
-import java.util.function.Predicate
+import optimus.platform.util.Log
+import optimus.platform.util.ServiceLoaderUtils
+import optimus.utils.StringPredicate
 
-object SampledTimersExtractor extends TimerExtractor {
-  sealed trait Recording {
-    def result(): SampledTimers
-  }
+sealed trait SampledTimers {
+  def samples: Map[String, Long]
 }
 
-sealed abstract class SampledTimers {
-  // All counts, useful as a normalization
-  def everything: Long
-
-  // All graph work, like profGraphCpuTime
-  def graphTime: Long
-
-  def syncStackTime: Long
-
-  // All cache lookups, like profCacheTime, but cpu-based
-  def cacheTime: Long
-
-  // Async and sync tweak resolution
-  def tweakLookupAsync: Long
-  def tweakLookupSync: Long
-
-  // overheads
-  def overheadSampling: Long
-  def overheadInstrum: Long
-
-  def localTables: Long
+trait FrameMatcherProvider extends Log {
+  def frameMatchers: Seq[SampledTimersExtractor.FrameMatcher]
 }
 
-trait TimerExtractor {
-  import SampledTimersExtractor._
-  import TimerExtractor._
-
-  private val ogscRun: Predicate[String] = "optimus/graph/OGSchedulerContext.run".equals
-  private val ogscRunAndWait: Predicate[String] = "optimus/graph/OGSchedulerContext.runAndWait".equals
-  private val ncCacheLookup: Predicate[String] = _.startsWith("optimus/graph/cache/NodeCache$.cacheLookup")
-  private val twkAsyncResolve: Predicate[String] = "optimus/graph/TwkResolver.asyncResolve".equals
-  private val twkSyncResolve: Predicate[String] = "optimus/graph/TwkResolver.syncResolve".equals
-  private val samplingAndAp: Predicate[String] = (f: String) =>
-    f.startsWith("optimus/graph/diagnostics/ap") || f.startsWith("optimus/graph/diagnostics/sampling")
-  private val instrumentation: Predicate[String] = _.startsWith("java/lang/instrument")
-  private val localTables: Predicate[String] = _.startsWith("optimus/graph/OGLocalTables.forAllRemovables")
-
-  private val analysers = Array(
-    matcher(ogscRun or ogscRunAndWait)(_.graphTime += _),
-    // looking for a run() followed by a runAndWait()
-    matcher(ogscRun or ogscRunAndWait, ogscRunAndWait)(_.syncStackTime += _),
-    matcher(ncCacheLookup)(_.cacheTime += _),
-    matcher(twkAsyncResolve)(_.tweakLookupAsync += _),
-    matcher(twkSyncResolve)(_.tweakLookupSync += _),
-    matcher(samplingAndAp)(_.overheadSampling += _),
-    matcher(instrumentation)(_.overheadInstrum += _),
-    matcher(localTables)(_.localTables += _)
+object DefaultFrameMatchers extends FrameMatcherProvider {
+  import optimus.utils.StringTyping._
+  private val samplingAndAp =
+    startsWith("optimus/graph/diagnostics/ap") or startsWith("optimus/graph/diagnostics/sampling")
+  private val instrumentation = startsWith("java/lang/instrument")
+  override def frameMatchers: Seq[SampledTimersExtractor.FrameMatcher] = Seq(
+    SampledTimersExtractor.matcher("samplingOH", samplingAndAp),
+    SampledTimersExtractor.matcher("instrumOH", instrumentation)
   )
-
-  def newRecording: Recording = new MutableRecordingState
-
-  def analyse(rec: Recording, frames: Array[String], count: Long): Unit = {
-    val state = Array.fill(analysers.length)(0)
-    val mut = rec match { case mut: MutableRecordingState => mut }
-    mut.everything += count
-
-    for (f <- frames) {
-      for (i <- analysers.indices) {
-        if (state(i) >= 0) {
-          state(i) = analysers(i).test(f, state(i))
-          if (state(i) == DONE) { analysers(i).update(mut, count) }
-        }
-      }
-    }
-  }
 }
 
-object TimerExtractor {
-  import SampledTimersExtractor.Recording
+object SampledTimersExtractor extends Log {
 
-  private final class MutableRecordingState extends SampledTimers with Recording {
+  final private class MutableRecordingState(analyers: IndexedSeq[FrameMatcher]) extends SampledTimers {
     var everything = 0L
-
-    var graphTime = 0L
-    var syncStackTime = 0L
-
-    var cacheTime = 0L
-    var tweakLookupAsync = 0L
-    var tweakLookupSync = 0L
-
-    var overheadSampling = 0L
-    var overheadInstrum = 0L
-
-    var localTables = 0L
-
-    override def result(): SampledTimers = this
+    val counts = Array.fill(analyers.length)(0L)
+    override def samples: Map[String, Long] =
+      analyers.zip(counts).map { case (a, c) => a.name -> c }.toMap + ("everything" -> everything)
   }
 
-  private type Update = (MutableRecordingState, Long) => Unit
   private val DONE = -1
 
   /**
    * Update a count for every stack that matches the ordered sequence of predicates in `pred`.
    */
-  final private case class FrameMatcher(pred: Array[Predicate[String]], update: Update) {
+  final case class FrameMatcher(name: String, pred: Array[StringPredicate]) {
     def test(frame: String, step: Int): Int = {
       if (pred(step).test(frame)) {
         if (step == pred.length - 1) DONE
         else step + 1
       } else step
     }
+    override def toString: String = s"FrameMatcher($name, ${pred.mkString(", ")})"
   }
 
-  private def matcher(preds: Predicate[String]*)(update: Update) = FrameMatcher(preds.toArray, update)
+  def matcher(name: String, preds: StringPredicate*): FrameMatcher = FrameMatcher(name, preds.toArray)
+
+  private val analysers = (ServiceLoaderUtils
+    .all[FrameMatcherProvider]
+    .flatMap(_.frameMatchers) ++ DefaultFrameMatchers.frameMatchers).toArray
+
+  log.info(s"Installing analysers: ${analysers.mkString(", ")}")
+
+  def newRecording: SampledTimers = new MutableRecordingState(analysers)
+
+  def analyse(rec: SampledTimers, frames: Array[String], count: Long): Unit = {
+    val state = Array.fill(analysers.length)(0)
+    val mut = rec match { case mut: MutableRecordingState => mut }
+    mut.everything += count
+    for (f <- frames) {
+      for (i <- analysers.indices) {
+        if (state(i) >= 0) {
+          state(i) = analysers(i).test(f, state(i))
+          if (state(i) == DONE) { mut.counts(i) += count }
+        }
+      }
+    }
+  }
 }
