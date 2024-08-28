@@ -19,6 +19,7 @@ import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.Awaitable
 import optimus.graph.DiagnosticSettings
+import optimus.graph.Launchable
 import optimus.graph.TestableClock
 import optimus.platform.util.Log
 import optimus.utils.OptimusStringUtils
@@ -73,7 +74,7 @@ object TaskTracker extends Log with OptimusStringUtils {
   }
 
   private object TInfo extends OptimusStringUtils {
-    def apply(ntsk: Awaitable): TInfo =
+    def apply(ntsk: Launchable): TInfo =
       TInfo(
         id = ntsk.getId,
         ref = new NRef(ntsk),
@@ -145,7 +146,7 @@ object TaskTracker extends Log with OptimusStringUtils {
       numLost = 0
     ))
 
-  def activate(ntsk: Awaitable): Unit = if (enabled) {
+  def activate(ntsk: Launchable): Unit = if (enabled) {
     val ti = TInfo(ntsk)
     state.updateAndGet { c =>
       val ret = c.copy(
@@ -160,7 +161,7 @@ object TaskTracker extends Log with OptimusStringUtils {
   }
 
   // Returns the deactivated item, if indeed there was one.
-  def deactivate(ntsk: Awaitable): Unit = deactivate(ntsk.getId)
+  def deactivate(ntsk: Launchable): Unit = deactivate(ntsk.getId)
   private def deactivate(i: Int): Unit = if (enabled) {
     state
       .updateAndGet { c =>

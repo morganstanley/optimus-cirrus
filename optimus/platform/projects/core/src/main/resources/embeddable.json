@@ -1,0 +1,23 @@
+[
+  {
+    "fullClassName": "optimus.observability.JobConfiguration",
+    "packageName": "optimus.observability",
+    "isTrait": true,
+    "parentNames": [
+      "java.lang.Object",
+      "optimus.platform.storable.Embeddable"
+    ]
+  },
+  {
+    "fullClassName": "optimus.observability.MissingJobConfiguration$",
+    "packageName": "optimus.observability",
+    "isObject": true,
+    "parentNames": [
+      "java.lang.Object",
+      "optimus.observability.JobConfiguration",
+      "scala.Product",
+      "scala.Serializable",
+      "optimus.platform.storable.Embeddable"
+    ]
+  }
+]

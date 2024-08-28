@@ -1,0 +1,79 @@
+<html>
+<!--
+Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.-->
+<head>
+    <title>Profiler Summary</title>
+    <link rel="stylesheet" type="text/css" href="gridprofiler.css">
+    <script src="gridprofiler_result.js"></script>
+    <script src="gridprofiler_result_lc.js"></script>
+    <script src="gridprofiler_result_hotspots.js"></script>
+    <script src="gridprofiler_result_rtv.js"></script>
+    <script src="internal/gridprofiler_rtv_categories.js"></script>
+    <script src="gridprofiler.js"></script>
+</head>
+<body>
+<h3>Profiler Summary</h3>
+<p>Hover over each metric for a description</p>
+<div class="twikiTwoColumns" id="tables">
+</div>
+
+<div id="hotspots_header">
+
+    <hr class="separator">
+    <h3>Hotspots</h3>
+    <table class="tableStyle">
+        <thead><tr><th>Property Name</th><th>Self</th><th>Post-Complete</th><th>Hits</th><th>Misses</th><th>Benefit</th></tr></thead>
+        <tbody id="hotspots_body"></tbody>
+    </table>
+</div>
+
+<div id="lost_cc_header">
+    <hr class="separator">
+
+    <div id="lost_cc_css_div">
+        <h3>Lost Concurrency Due to Sync Stacks<sup title="Click on table row to copy stacktrace to clipboard" style="font-size: small">*</sup></h3>
+        <table class="tableStyle">
+            <thead><tr><th></th><th>Plugin</th><th>Count</th><th>Stack Trace</th></tr></thead>
+            <tbody id="lost_cc_css"></tbody>
+        </table>
+    </div>
+
+    <div id="lost_cc_ncl_div">
+        <h3>Lost Batching Opportunities Due to Limited Sequence Operations<sup title="Click on table row to copy stacktrace to clipboard" style="font-size: small">*</sup></h3>
+        <table class="tableStyle">
+            <thead><tr><th>Plugin</th><th>Count</th><th>Sequence</th></tr></thead>
+            <tbody id="lost_cc_ncl"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="rtv_header">
+    <hr class="separator">
+
+    <h3>RT Violations</h3>
+    <p>RT Violations have been found in the following scopes and applets. Please, select the ones you are interested in:</p>
+    <div>
+        <input type="button" onclick="setAllRTVOwners(true); generateRTVTables()" value="Select All"/>
+        <input type="button" onclick="setAllRTVOwners(false); generateRTVTables()" value="Deselect All"/>
+        <br><br>
+        <div class="rtv_owners" id="rtv_owners_checkboxes"></div>
+    </div>
+    <div id="rtv_tables"></div>
+</div>
+
+<script>
+ loadTables("tables")
+ loadHotspots()
+ loadLostConcurrences()
+ loadRTViolations()
+</script>
+</body>
+</html>

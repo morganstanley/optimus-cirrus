@@ -45,12 +45,13 @@ import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.DependencyCoursierKey
 import optimus.buildtool.config.DependencyDefinition
+import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.Exclude
 import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.ExtraLibDefinition
-import optimus.buildtool.config.GroupName
+import optimus.buildtool.config.GroupNameConfig
 import optimus.buildtool.config.LocalDefinition
 import optimus.buildtool.config.MappedDependencyDefinitions
 import optimus.buildtool.config.NamingConventions
@@ -87,6 +88,14 @@ object CoursierArtifactResolver {
   private[buildtool] val ObtMavenDefaultConfig = ""
 
   private def jvmDepMsg(line: Int) = s"$JvmDependenciesFilePathStr:$line -"
+
+  private[buildtool] def realConfigurationStr(rawConfiguration: String): String = {
+    val configurationRegex = "^default[(](.+)[)]$".r
+    configurationRegex.findFirstMatchIn(rawConfiguration) match {
+      case Some(configuration) => configuration.group(1)
+      case None                => rawConfiguration
+    }
+  }
 
   private[buildtool] def coursierDepToNameString(d: Dependency, withVersion: Boolean = false): String = {
     def toDepString(str: String) = if (str.contains(".")) s""""$str"""" else str
@@ -380,16 +389,29 @@ object CoursierArtifactResolver {
     excludes.apar.flatMap(toCoursierExclude).toSet
 
   @node private def toCoursierExclude(exclude: Exclude): Set[(Organization, ModuleName)] = {
-    val originalExclude = Set((Organization(exclude.group.getOrElse("*")), ModuleName(exclude.name.getOrElse("*"))))
-    exclude match {
-      case Exclude(Some(group), Some(name), config) => // should include mapped dependency
-        val mappedExcludes =
-          MavenUtils.applyTransitiveMapping(group, name, config.getOrElse(""), Nil, afsGroupNameToMavenMap)
-        mappedExcludes.map { e =>
-          (e.module.organization, e.module.name)
-        }.toSet ++ originalExclude
-      case _ => originalExclude
+
+    def getMappedExcludes(f: MappingKey => Boolean) = afsGroupNameToMavenMap
+      .collect { case (k, v) if f(k) => v.map(d => (Organization(d.group), ModuleName(d.name))) }
+      .flatten
+      .toSet
+    def getMappedSubstitutions(f: Substitution => Boolean) = globalSubstitutions.collect {
+      case s if f(s) => (Organization(s.to.group), ModuleName(s.to.name))
     }
+
+    val originalExclude = Set((Organization(exclude.group.getOrElse("*")), ModuleName(exclude.name.getOrElse("*"))))
+    val mappedExcludes = exclude match {
+      case Exclude(Some(group), Some(name), Some(cfg)) =>
+        getMappedExcludes(k => k.group == group && k.name == name && k.configuration == cfg) ++
+          getMappedSubstitutions(s =>
+            s.from.group == group && s.from.name == name && s.from.config.getOrElse("") == cfg)
+      case Exclude(Some(group), Some(name), None) =>
+        getMappedExcludes(k => k.group == group && k.name == name) ++
+          getMappedSubstitutions(s => s.from.group == group && s.from.name == name)
+      case Exclude(Some(group), None, None) => getMappedExcludes(k => k.group == group)
+      case Exclude(None, Some(name), None)  => getMappedExcludes(k => k.name == name)
+      case _                                => Set.empty
+    }
+    originalExclude ++ mappedExcludes
   }
 
   @node def resolveDependencies(deps: DependencyDefinitions, doValidation: Boolean = true): ResolutionResult = {
@@ -552,7 +574,8 @@ object CoursierArtifactResolver {
       // for local exclusions, Coursier automatically propagates down exclusions from the originally requested
       // dependency, but we also add in any exclusions specified for this dependency
       val exclusions = dependencySpecificCoursierExcludes.getOrElse(toDependencyCoursierKey(dep), Set.empty)
-      val updatedDep = if (exclusions.nonEmpty) dep.withExclusions(exclusions ++ dep.exclusions) else dep
+      val allExclusions = exclusions ++ dep.exclusions
+      val updatedDep = if (exclusions.nonEmpty) dep.withExclusions(allExclusions) else dep
       Some((fromConf, updatedDep))
     }
   }
@@ -569,14 +592,19 @@ object CoursierArtifactResolver {
   @node private def findModuleInRepos(module: Module, version: String): Either[Seq[String], (ArtifactSource, Project)] =
     doCoursierFetch(module, version, repos(module))
 
-  @node private def substitutionsMap(forceVersions: Versions): Map[GroupName, Dependency] = {
-    def getDepByGroupName(gn: GroupName): DependencyDefinition = {
-      externalDependencies.definitions
-        .find(d => d.group == gn.group && d.name == gn.name)
-        .getOrThrow(s"Invalid substitutions detected! ${gn.group}.${gn.name}")
-    }
+  @node private def substitutionsMap(forceVersions: Versions): Map[GroupNameConfig, Dependency] = {
+    def getDepDef(gn: GroupNameConfig): DependencyDefinition = externalDependencies.mavenDependencies.mixModeMavenDeps
+      .find { d =>
+        gn.config match {
+          case Some(cfg) => d.group == gn.group && d.name == gn.name && d.configuration == cfg // cfg level mapping
+          case None      => d.group == gn.group && d.name == gn.name // group/name level mapping
+        }
+      }
+      .getOrThrow(
+        s"Invalid substitutions detected! ${gn.group}.${gn.name}.${gn.config.getOrElse(DefaultConfiguration)}")
+
     globalSubstitutions.apar.map { case Substitution(from, to) =>
-      from -> toCoursierDep(getDepByGroupName(to), forceVersions)
+      from -> toCoursierDep(getDepDef(to), forceVersions)
     }.toMap
   }
 
@@ -584,9 +612,19 @@ object CoursierArtifactResolver {
     val mapTo = substitutionsMap(forceVersions)
     val res = Resolution(dependencies = directDeps.toSet.toSeq)
       .withForceVersions(forceVersions.allVersions)
-      .withMapDependencies(Some { fromDep =>
-        mapTo.getOrElse(GroupName(fromDep.module.organization.value, fromDep.module.name.value), fromDep)
-      })
+      .withMapDependencies(
+        Some { fromDep =>
+          val nameLevel =
+            mapTo.getOrElse(GroupNameConfig(fromDep.module.organization.value, fromDep.module.name.value), fromDep)
+          val cfgThenNameLevel = mapTo.getOrElse(
+            GroupNameConfig(
+              fromDep.module.organization.value,
+              fromDep.module.name.value,
+              Some(realConfigurationStr(fromDep.configuration.value))),
+            nameLevel)
+          cfgThenNameLevel
+        }
+      )
 
     asyncGet(res.process.run[Node] { modulesVersions =>
       CoreAPI.nodify(modulesVersions.apar.map { case (module, version) =>

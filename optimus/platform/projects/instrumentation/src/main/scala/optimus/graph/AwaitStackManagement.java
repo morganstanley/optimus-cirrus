@@ -91,7 +91,7 @@ public class AwaitStackManagement {
     if (AsyncProfilerIntegration.ensureLoadedIfEnabled()) {
       runChainMethodID =
           AsyncProfilerIntegration.getMethodID(
-              AwaitStackManagement.class, "runChain", "(Loptimus/graph/Awaitable;)V");
+              AwaitStackManagement.class, "runChain", "(Loptimus/graph/Launchable;)V");
       overflowMarker = AsyncProfilerIntegration.saveString(overflowName);
     }
   }
@@ -236,12 +236,12 @@ public class AwaitStackManagement {
     return false;
   }
 
-  public void maybeSaveAwaitStack(Awaitable awaitable) {
+  public void maybeSaveAwaitStack(Launchable launchable) {
     if (savedIfNecessary) return;
 
     // If sampling occurred, will have been set to our taskId
     long signal = U.getLong(awaitData + 8);
-    if (signal != awaitable.getId()) return;
+    if (signal != launchable.getId()) return;
 
     savedIfNecessary = true;
 
@@ -249,7 +249,7 @@ public class AwaitStackManagement {
     // contain multiple
     // such stacks, separated by java frames, which are indicated by a bit in the hash.
     int i = 0, len = 0;
-    Awaitable n = awaitable;
+    Awaitable n = launchable;
     long prevName = 0;
     do {
       long h = n.getLauncherStackHash();
@@ -392,9 +392,9 @@ public class AwaitStackManagement {
   // This gets called before every awaitable is run.  It does only writes into thread-specific
   // memory
   // and in particular no JNI.
-  private void beforeRun(Awaitable awaitable, long insertionID) {
-    long hash = awaitable.getLauncherStackHash();
-    int taskId = awaitable.getId();
+  private void beforeRun(Launchable launchable, long insertionID) {
+    long hash = launchable.getLauncherStackHash();
+    int taskId = launchable.getId();
     int a = 0;
     // If we're sampled, a-p will put this taskId into the next field.
     putAwaitData(a++, taskId);
@@ -417,8 +417,8 @@ public class AwaitStackManagement {
     savedIfNecessary = false;
   }
 
-  private void afterRun(Awaitable awaitable) {
-    maybeSaveAwaitStack(awaitable);
+  private void afterRun(Launchable launchable) {
+    maybeSaveAwaitStack(launchable);
     irh -= 1;
     int a = 0;
     if (irh >= 0 && irh < MAX_AWAIT_STACKS) {
@@ -433,12 +433,12 @@ public class AwaitStackManagement {
     savedIfNecessary = false;
   }
 
-  void runChain(Awaitable awaitable) {
-    beforeRun(awaitable, runChainMethodID);
+  void runChain(Launchable launchable) {
+    beforeRun(launchable, runChainMethodID);
     try {
-      awaitable.launch(ec);
+      launchable.launch(ec);
     } finally {
-      afterRun(awaitable);
+      afterRun(launchable);
     }
   }
 

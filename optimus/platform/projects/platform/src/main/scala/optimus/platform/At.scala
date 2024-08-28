@@ -11,9 +11,6 @@
  */
 package optimus.platform
 
-import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZonedDateTime
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.Partition
@@ -21,17 +18,21 @@ import optimus.graph.DiagnosticSettings
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerContext
 import optimus.graph.SchedulerPlugin
-import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.graph.diagnostics.gridprofiler.CustomRegressionMetrics
+import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.graph.diagnostics.messages.BookmarkCounter
 import optimus.platform.internal.TemporalSource
+import optimus.platform.relational._
+import optimus.platform.relational.namespace.Namespace
 import optimus.platform.storable.Storable
 import optimus.platform.temporalSurface.FixedBranchTemporalContext
 import optimus.platform.temporalSurface.TemporalSurfaceDefinition.FixedBranchContext
 import optimus.platform.temporalSurface.TemporalSurfaceDefinition.FixedLeafSurface
 import optimus.platform.temporalSurface.TemporalSurfaceMatchers
-import optimus.platform.relational._
-import optimus.platform.relational.namespace.Namespace
+
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZonedDateTime
 
 object At {
   type GetTimeMap = AsyncFunction2[Set[Partition], Boolean, Map[Partition, Instant]]
@@ -78,12 +79,14 @@ object At {
     }
   }
 
-  @async private def graphChecksForServerTime[T](f: => T, default: T): T = {
+  @async private def graphChecksForServerTime[T](f: AsyncFunction0[T], default: T): T = {
     EvaluationContext.verifyOffGraph(ignoreNonCaching = true, beNice = !optimus.graph.Settings.strictAtNow)
-    if (!EvaluationContext.isInitialised) {
+    if (EvaluationContext.isInitialised) {
+      f.apply()
+    } else {
       log.error("Calling without initialized EvaluationContext.  This will change to throw an Exception soon.")
       default
-    } else f
+    }
   }
 
   // At.now needs to be aware of any writing taking place in any partition even through it returns the LSQT of Default
@@ -97,7 +100,7 @@ object At {
       waitForMaxCatchup: Boolean): Instant = {
     val timeMap = getTimeMap(Set(DefaultPartition), waitForMaxCatchup)
     graphChecksForServerTime(
-      {
+      asAsync { () =>
         timeMap.getOrElse(
           DefaultPartition, {
             log.error(
@@ -118,7 +121,7 @@ object At {
     val partition = pMap.partitionForType(manifest[E].runtimeClass.getName)
     val timeMap = getTimeMap(Set(partition), false)
     graphChecksForServerTime(
-      {
+      asAsync { () =>
         timeMap.getOrElse(
           partition,
           throw new IllegalArgumentException(s"Cannot find partition $partition in map $timeMap fetched from broker."))
@@ -156,7 +159,7 @@ object At {
 
     asAsync { vt: Option[Instant] =>
       graphChecksForServerTime(
-        {
+        asAsync { () =>
           val pMap = DAL.resolver.partitionMap
           val surfaces = {
             val defaultLsqt = timeMap.getOrElse(DefaultPartition, throwOnMissing(DefaultPartition))
@@ -164,7 +167,7 @@ object At {
               val lsqt = timeMap.getOrElse(partition, throwOnMissing(partition))
               types.toSeq.map { typeRef =>
                 FixedLeafSurface(
-                  TemporalSurfaceMatchers.forQuery(from(Namespace(typeRef, true))),
+                  TemporalSurfaceMatchers.forQuery(from(Namespace(typeRef, includesSubPackage = true))),
                   vt.getOrElse(lsqt),
                   lsqt)
               }
