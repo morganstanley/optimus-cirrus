@@ -158,9 +158,11 @@ object JvmDependenciesLoader {
             val substitution = {
               val fromGroup = subsConf.getString(s"fromGroup")
               val fromName = subsConf.getString(s"fromName")
+              val fromConfig = subsConf.optionalString(s"fromConfig")
               val toGroup = subsConf.getString(s"toGroup")
               val toName = subsConf.getString(s"toName")
-              Substitution(GroupName(fromGroup, fromName), GroupName(toGroup, toName))
+              val toConfig = subsConf.optionalString(s"toConfig")
+              Substitution(GroupNameConfig(fromGroup, fromName, fromConfig), GroupNameConfig(toGroup, toName, toConfig))
             }
             Success(substitution)
               .withProblems(
@@ -523,6 +525,7 @@ object JvmDependenciesLoader {
 
       val (checkingKeys, isMavenConfig) = topLevelConfig match {
         case MavenDependenciesConfig => (Keys.mavenDependenciesFile, true)
+        case JvmDependenciesConfig   => (Keys.jvmDependenciesFile, false)
         case _                       => (Keys.dependenciesFile, false)
       }
 

@@ -19,3 +19,11 @@ main {
     ]
   }
 }
+
+test {
+  compile {
+    libs = [
+      ossjava.junit
+    ]
+  }
+}

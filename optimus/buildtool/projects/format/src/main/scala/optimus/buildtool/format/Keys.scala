@@ -177,7 +177,10 @@ object Keys {
 
   // dependencies file
   val dependenciesFile =
-    KeySet(Dependencies, Excludes, Substitutions, NativeDependencies, Groups, ExtraLibs)
+    KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs)
+  val mavenDependenciesFile =
+    KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes)
+  val jvmDependenciesFile = KeySet(Dependencies, Excludes, Substitutions, ExtraLibs)
   val artifactConfig = KeySet("type", "ext")
 
   private val commonDependencyDefinition =
@@ -219,9 +222,6 @@ object Keys {
   val dockerDefaults = KeySet("registry", "baseImage")
   val imageDefinition = KeySet("scopes", "extraImages", "baseImage")
 
-  // maven setup in maven-dependencies.obt
-  val mavenDependenciesFile =
-    KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes, Substitutions)
   val mavenDefinition =
     KeySet("all", "main", "test", "release-main", "release-test", "release-all", MavenOnlyExcludeKey)
 

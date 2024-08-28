@@ -9,8 +9,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform.debugger
+package optimus.graph;
 
-import com.sun.jdi.ObjectReference
-
-final case class OptimusNodeFrame(stackElem: StackElemData, jdiReference: ObjectReference)
+public final class TweakFlags {
+  public static final int none = 0;
+  public static final int alwaysInvalidateTrack = 1;
+  public static final int dupAllowed = 2;
+  public static final int keepLazyEval = 4;
+  public static final int withPrivateCacheOnUse = 8;
+  public static final int internal = 16;
+}

@@ -13,11 +13,18 @@ package optimus.rest.bitbucket
 
 import optimus.rest.Urls
 
+/**
+ * For the API related URLs.
+ *
+ * For the non-API-related, see [[BitbucketUrls]].
+ */
 trait BitBucketApiUrls {
   protected def instance: String
 
   protected def apiUrl(apiName: String, apiResource: String) =
     s"http://$instance/atlassian-stash/rest/$apiName/1.0/$apiResource"
+
+  protected def apiUsersUrl: String = apiUrl("api", "users")
 
   protected def apiRepoUrl(project: String, repo: String): String =
     apiUrl("api", s"projects/$project/repos/$repo")
@@ -31,11 +38,11 @@ trait BitBucketApiUrls {
   protected def apiPrBlockerCommentUpdateUrl(project: String, repo: String, prNumber: Long, taskId: Int): String =
     s"${apiPrBlockerCommentsUrl(project, repo, prNumber)}/$taskId"
 
-  protected def apiPrActivitesUrl(project: String, repo: String): String =
+  protected def apiPrsUrl(project: String, repo: String): String =
     s"${apiRepoUrl(project, repo)}/pull-requests"
 
-  protected def apiPrActivitiesByPrUrl(project: String, repo: String, prNumber: Long): String =
-    s"${apiPrActivitesUrl(project, repo)}/$prNumber/activities"
+  protected def apiPrActivitiesUrl(project: String, repo: String, prNumber: Long): String =
+    s"${apiPrsUrl(project, repo)}/$prNumber/activities"
 
   protected def apiPrCommentsUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments"

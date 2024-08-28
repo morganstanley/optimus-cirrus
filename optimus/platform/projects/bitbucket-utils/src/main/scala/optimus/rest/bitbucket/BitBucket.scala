@@ -31,7 +31,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)) }
 
   def getRecentPrData(project: String, repo: String, quantityWanted: Int = 500): Seq[BasePrData] = {
-    val url = s"${apiPrActivitesUrl(project, repo)}?state=ALL"
+    val url = s"${apiPrsUrl(project, repo)}?state=ALL"
     queryPaged[BasePrData, PagedPrDataRequest](url, Some(quantityWanted))
   }
 
@@ -42,12 +42,12 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       state: String,
       max: Option[Int]): Seq[BasePrData] = {
     val refhead = s"refs/heads/release/$branch"
-    val url = s"${apiPrActivitesUrl(project, repo)}?state=$state&at=$refhead"
+    val url = s"${apiPrsUrl(project, repo)}?state=$state&at=$refhead"
     queryPaged[BasePrData, PagedPrDataRequest](url, max, 500)
   }
 
   def getPrActivities(project: String, repo: String, prNumber: Int): Seq[PrActivity] =
-    queryPaged[PrActivity, ActivityRequest](apiPrActivitiesByPrUrl(project, repo, prNumber))
+    queryPaged[PrActivity, ActivityRequest](apiPrActivitiesUrl(project, repo, prNumber))
 
   def addComment(project: String, repo: String, prNumber: Int, text: String, parentId: Option[String] = None): Int = {
     val postUrl = apiPrCommentsUrl(project, repo, prNumber)

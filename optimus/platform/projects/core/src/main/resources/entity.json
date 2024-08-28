@@ -1,0 +1,29 @@
+[
+  {
+    "fullClassName": "optimus.platform.storable.Entity",
+    "packageName": "optimus.platform.storable",
+    "isStorable": true,
+    "isAbstract": true,
+    "isObject": false,
+    "isTrait": true,
+    "slotNumber": 0,
+    "explicitSlotNumber": false,
+    "parentNames": [
+      "optimus.platform.storable.Storable",
+      "java.io.Serializable"
+    ]
+  },
+  {
+    "fullClassName": "optimus.platform.storable.EntityImpl",
+    "packageName": "optimus.platform.storable",
+    "isStorable": true,
+    "isAbstract": true,
+    "isObject": false,
+    "isTrait": false,
+    "slotNumber": 0,
+    "explicitSlotNumber": false,
+    "parentNames": [
+      "optimus.platform.storable.Entity"
+    ]
+  }
+]

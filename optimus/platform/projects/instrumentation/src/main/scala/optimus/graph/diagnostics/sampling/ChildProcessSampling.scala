@@ -16,6 +16,7 @@ import optimus.utils.PropertyUtils
 import optimus.breadcrumbs.crumbs.Properties._
 import optimus.graph.AwaitStackManagement
 import optimus.graph.Awaitable
+import optimus.graph.Launchable
 import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.logging.Pid
 import optimus.platform.util.Log
@@ -153,12 +154,12 @@ object ChildProcessSampling extends Log {
     Option(childId2Tag.get(id)).foreach(shmpath => AsyncProfilerIntegration.externalContext(ctx, shmpath))
   }
 
-  def setChildContext(childId: Int, awaitable: Awaitable): Unit = if (
-    allowChildProfiling && AsyncProfilerIntegration.ensureLoadedIfEnabled() && awaitable.getLauncherStackHash != 0
+  def setChildContext(childId: Int, launchable: Launchable): Unit = if (
+    allowChildProfiling && AsyncProfilerIntegration.ensureLoadedIfEnabled() && launchable.getLauncherStackHash != 0
   ) {
     // Ensure that the stack is cached by id
-    AwaitStackManagement.awaitStack(awaitable)
-    setChildContext(childId, awaitable.stackId)
+    AwaitStackManagement.awaitStack(launchable)
+    setChildContext(childId, launchable.stackId)
   }
 
 }

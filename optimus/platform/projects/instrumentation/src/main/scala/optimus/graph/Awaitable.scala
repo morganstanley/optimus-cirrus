@@ -15,27 +15,36 @@ import optimus.breadcrumbs.ChainedID;
 
 trait AwaitableContext;
 
+/**
+ * Contains the minimal interface required to implement the chaining part of the await stack.
+ *
+ * Importantly, something that HasAwaitInfo is not necessarily launchable.
+ */
 trait Awaitable {
+  // internal state of the awaitable
+  def getProfileId: Int
+  def getLauncherStackHash: Long
+  def getLauncher: Awaitable
+  def setLaunchData(awaitable: Awaitable, hash: Long, implFlags: Int): Unit
+
+  // some properties related to displaying the stacks
+  def underlyingAwaitable: Awaitable
+  def elideChildFrame: Boolean
+  def flameFrameName(extraMods: String): String
+
+  // Lose a bit of resolution to keep IDs prettier and avoid having to deal with dashes
+  def stackId: Long = Math.abs(getLauncherStackHash)
+}
+
+/**
+ * A Launchable is an Awaitable that can be sampled by async profiler when launched.
+ */
+trait Launchable extends Awaitable {
   def getId: Int
   def ID: ChainedID
   def toSimpleName: String
   def getAppId: Option[String]
   def tagString: Option[String]
 
-  def flameFrameName(extraMods: String): String
-
   def launch(awaitableContext: AwaitableContext): Unit
-  def getProfileId: Int
-
-  // Lose a bit of resolution to keep IDs prettier and avoid having to deal with dashes
-  def stackId: Long = Math.abs(getLauncherStackHash)
-  def getLauncherStackHash: Long
-  def getLauncher: Awaitable
-
-  def setLaunchData(awaitable: Awaitable, hash: Long, implFlags: Int): Unit
-
-  def elideChildFrame: Boolean
-
-  def underlyingAwaitable: Awaitable
-
 }

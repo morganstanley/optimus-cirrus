@@ -11,14 +11,33 @@
  */
 package optimus.platform.debugger
 
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.ScalaObjectMapper
-import optimus.platform.debugger.StackElemType.StackElemType
 
 object StackElemType extends Enumeration {
   type StackElemType = Value
-  val node, jvm = Value
+  val node, jvm, ec = Value
+
+  /**
+   * IDE plugin's version can be older than the version of codetree that is currently under debugging. It is then
+   * possible to produce new StackElem that have a type which is not in our enum values. We use this "unknown" type to
+   * cover those cases.
+   *
+   * This requires a custom deserializer.
+   */
+  val unknown = Value
+
+  class StackElemTypeDeser extends StdDeserializer[StackElemType](classOf[StackElemType]) {
+    override def deserialize(p: JsonParser, ctxt: DeserializationContext): StackElemType = {
+      try { p.readValueAs(classOf[StackElemType]) }
+      catch { case _: NoSuchElementException => unknown }
+    }
+  }
 }
 
 final case class StackElemData(
@@ -26,7 +45,8 @@ final case class StackElemData(
     methodRawName: String,
     methodDisplayName: String,
     lineNum: Int,
-    elemType: StackElemType
+    @JsonDeserialize(using = classOf[StackElemType.StackElemTypeDeser])
+    elemType: StackElemType.StackElemType
 )
 
 object StackElemData {

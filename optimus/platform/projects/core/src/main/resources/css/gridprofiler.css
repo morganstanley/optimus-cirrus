@@ -1,0 +1,77 @@
+.tableStyle tr:nth-child(even){
+  background: rgba(240, 240, 240, 0.5);
+}
+.tableStyle tr:hover {
+  background-color: cornsilk;
+  box-shadow: 2px 2px 50px rgba(0, 0, 0, 0.2)
+}
+.tableStyle th {
+  font-weight: bold;
+  text-align: left;
+  padding: 2px 4px;
+}
+.tableStyle td {
+  padding: 2px 4px;
+}
+.tableStyle {
+  break-inside: avoid;
+  font-family: calibri;
+  border-collapse: collapse;
+  border-color: lightgray;
+  border-spacing: 2px;
+  border-style: solid;
+  border-width: 1;
+}
+.innerTableStyle {
+  break-inside: avoid;
+  font-family: calibri;
+  border-collapse: collapse;
+}
+h3, p {
+  font-family: calibri;
+  font-variant: all-small-caps
+}
+.twikiTwoColumns {
+  columns: 2 300px;
+  column-gap: 4em;
+  column-rule: 1px solid #e2e2e2;
+  display: inline-block;
+}
+.highlight {
+ outline: thin solid red
+}
+hr.separator {
+  border-style: dotted;
+  border-color: lightgray;
+}
+.frameStyle {
+  font-variant: inherit;
+  text-align: left;
+  font-size: 14px;
+  margin: 0px;
+}
+.hide {
+  display: none;
+}
+.show {
+  display: table-row;
+}
+.toggleBtn {
+  border: 0;
+  cursor: pointer;
+  font-size: 18px;
+  outline: 0;
+}
+button[aria-expanded="true"] {
+  transform: rotate(90deg);
+  -ms-transform: rotate(90deg);
+  -webkit-transform: rotate(90deg);
+}
+.rtv_owners {
+  font-family: calibri;
+  display: grid;
+  grid-auto-flow: column;
+}
+.description {
+  font-variant: initial;
+}
