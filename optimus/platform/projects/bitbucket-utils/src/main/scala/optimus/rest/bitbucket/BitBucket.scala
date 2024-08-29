@@ -46,10 +46,10 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     queryPaged[BasePrData, PagedPrDataRequest](url, max, 500)
   }
 
-  def getPrActivities(project: String, repo: String, prNumber: Int): Seq[PrActivity] =
+  def getPrActivities(project: String, repo: String, prNumber: Long): Seq[PrActivity] =
     queryPaged[PrActivity, ActivityRequest](apiPrActivitiesUrl(project, repo, prNumber))
 
-  def addComment(project: String, repo: String, prNumber: Int, text: String, parentId: Option[String] = None): Int = {
+  def addComment(project: String, repo: String, prNumber: Long, text: String, parentId: Option[String] = None): Int = {
     val postUrl = apiPrCommentsUrl(project, repo, prNumber)
     val data = AddComment(text, parentId.map(Parent.apply))
     post[Id](postUrl, Some(data.toJson.toString())).id
@@ -58,7 +58,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
   def updateComment(
       project: String,
       repo: String,
-      prNumber: Int,
+      prNumber: Long,
       commentId: Int,
       version: Int,
       newText: String): Int = {
@@ -73,13 +73,13 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       .find(activity => activity.comment.exists(_.text.contains(commentId)))
       .flatMap(_.comment)
 
-  def findCommentById(project: String, repo: String, prNumber: Int, commentId: Int): Option[PrComment] =
+  def findCommentById(project: String, repo: String, prNumber: Long, commentId: Int): Option[PrComment] =
     Try(get[PrComment](apiPrCommentsByCommitIdUrl(project, repo, prNumber, commentId))).toOption
 
   def addOrUpdateComment(
       project: String,
       repo: String,
-      prNumber: Int,
+      prNumber: Long,
       newText: String,
       existingComment: Option[PrComment]
   ): CommentUpdate = {
@@ -96,19 +96,19 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     }
   }
 
-  def getBlockerComment(project: String, repo: String, prNumber: Int, commentId: Int): PrBlockerComment =
+  def getBlockerComment(project: String, repo: String, prNumber: Long, commentId: Int): PrBlockerComment =
     get[PrBlockerComment](apiPrBlockerCommentUpdateUrl(project, repo, prNumber, commentId))
 
-  def addTasks(project: String, repo: String, prNumber: Int, tasks: Seq[String], commentId: Int): Seq[PrTask] =
+  def addTasks(project: String, repo: String, prNumber: Long, tasks: Seq[String], commentId: Int): Seq[PrTask] =
     tasks.map(t => addTask(project, repo, prNumber, t, commentId))
 
-  def addTask(project: String, repo: String, prNumber: Int, text: String, commentId: Int): PrTask = {
+  def addTask(project: String, repo: String, prNumber: Long, text: String, commentId: Int): PrTask = {
     val postUrl = apiPrBlockerCommentsUrl(project, repo, prNumber)
     val data = AddTask(text, Anchor(commentId, "COMMENT"))
     post[PrTask](postUrl, Some(data.toJson.toString))
   }
 
-  def updateTask(project: String, repo: String, prNumber: Int, state: String, taskId: Int): Int = {
+  def updateTask(project: String, repo: String, prNumber: Long, state: String, taskId: Int): Int = {
     val version = getBlockerComment(project, repo, prNumber, taskId).version
     val updateUrl = apiPrBlockerCommentUpdateUrl(project, repo, prNumber, taskId)
 
@@ -119,10 +119,10 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
   private def projectUrl(project: String, repo: String): String =
     s"http://$instance/atlassian-stash/projects/$project/repos/$repo"
 
-  def prWebpage(project: String, repo: String, prNumber: Int, subUrl: String = ""): String =
+  def prWebpage(project: String, repo: String, prNumber: Long, subUrl: String = ""): String =
     s"${projectUrl(project, repo)}/pull-requests/$prNumber/$subUrl"
 
-  def htmlPrLink(project: String, repo: String, prNumber: Int, subUrl: String = ""): String =
+  def htmlPrLink(project: String, repo: String, prNumber: Long, subUrl: String = ""): String =
     s"""<a href="${prWebpage(project, repo, prNumber, subUrl)}" target="_blank">PR#$prNumber</a>"""
 
   def fileWebPage(
@@ -143,7 +143,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       branchOption: Option[String] = None): BrowseData =
     get[BrowseData](apiBrowseUrl(project, repo, browsePath, branchOption))
 
-  def getAllCommitsByPrNumber(project: String, repo: String, prNumber: Int): Seq[CommitId] =
+  def getAllCommitsByPrNumber(project: String, repo: String, prNumber: Long): Seq[CommitId] =
     queryPaged[CommitId, CommitActivityRequest](apiGetAllCommitsByPrUrl(project, repo, prNumber))
 
   def getChangedFilesByCommitId(project: String, repo: String, commitId: String): Seq[CommitFile] =

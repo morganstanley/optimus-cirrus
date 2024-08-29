@@ -252,12 +252,13 @@ object ConfigMetricsDiff extends App {
         testNodeMap +=
           (propertyName ->
             CacheMetrics(
-              cacheTime.toDouble,
-              cacheHits.toDouble,
-              cacheMisses.toDouble,
-              evictions.toDouble,
-              selfTime.toDouble,
-              ancTime.toDouble))
+              cacheTime = cacheTime.toDouble,
+              cacheHits = cacheHits.toDouble,
+              cacheMisses = cacheMisses.toDouble,
+              evictions = evictions.toDouble,
+              selfTime = selfTime.toDouble,
+              totalTime = selfTime.toDouble + ancTime.toDouble
+            ))
       } catch {
         case e: Exception =>
           log.warn(s"Could not parse file ${file}", e)

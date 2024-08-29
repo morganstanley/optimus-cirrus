@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified"
+           xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="metroplex" type="metroplexType"/>
+  <xs:complexType name="serversType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:string" name="supported_regions" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+        </xs:complexType>
+  <xs:complexType name="kafkaType">
+    <xs:sequence>
+      <xs:element type="xs:string" name="security_protocol"/>
+      <xs:element type="xs:string" name="sasl_kerberos_service_name"/>
+      <xs:element type="serversType" name="bootstrap_servers" maxOccurs="unbounded" minOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="kafka_stream">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element type="stream" name="stream" maxOccurs="unbounded" minOccurs="1"/>
+      </xs:sequence>
+    </xs:complexType>
+    <xs:unique name="uniqueTopic">
+      <xs:selector xpath="stream"/>
+      <xs:field xpath="@topic"/>
+    </xs:unique>
+  </xs:element>
+  <xs:complexType name="stream">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:string" name="id" use="required"/>
+        <xs:attribute type="xs:string" name="region" use="required"/>
+        <xs:attribute type="xs:string" name="entity" use="required"/>
+        <xs:attribute type="xs:string" name="topic" use="required"/>
+        <xs:attribute type="xs:string" name="reconSoapServer"/>
+        <xs:attribute type="xs:int" name="parallelProcessingBatchSize"/>
+        <xs:attribute type="xs:string" name="zoneId"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="metroplexType">
+    <xs:sequence>
+      <xs:element type="kafkaType" name="kafka"/>
+      <xs:element ref="kafka_stream"/>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

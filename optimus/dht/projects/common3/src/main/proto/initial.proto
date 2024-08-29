@@ -1,0 +1,63 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+option java_package = "optimus.dht.common.internal.transport.generated";
+option java_outer_classname = "InitialProto2";
+
+message ModuleProtocolVersion {
+  optional fixed32 moduleId = 1;
+  optional fixed32 protocolVersion = 2;
+  optional string moduleCodeVersion = 3;
+}
+
+message InitialClientMessage {
+
+  optional string clientUniqueId = 1;
+  optional string clientCodeVersion = 2;
+  optional string clientFQDN = 3;
+  optional int64 clientPID = 6;
+  optional string clientCloudName = 4;
+  repeated ModuleProtocolVersion moduleVersions = 5;
+
+}
+
+message InitialServerMessage {
+
+  optional string serverUniqueId = 1;
+  optional string serverCodeVersion = 2;
+  optional string serverFQDN = 3;
+  optional int64 serverPID = 8;
+  optional string serverCloudName = 4;
+  optional bool completed = 5;
+  optional string fault = 6;
+  repeated ModuleProtocolVersion moduleVersions = 7;
+
+}
+
+message SingleModuleExchange {
+
+  optional int32 moduleId = 1;
+  optional bytes payload = 2;
+  optional bool finished = 3;
+  optional bool unsupported = 4;
+  optional string failedReason = 5;
+
+}
+
+message ModuleExchangeMessage {
+
+  repeated SingleModuleExchange messages = 1;
+  optional bool completed = 2;
+  optional string fault = 3;
+  
+}
+
+

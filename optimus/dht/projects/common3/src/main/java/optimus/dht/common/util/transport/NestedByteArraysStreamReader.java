@@ -1,0 +1,59 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package optimus.dht.common.util.transport;
+
+import io.netty.buffer.ByteBuf;
+import optimus.dht.common.util.ArrayUtil;
+
+public class NestedByteArraysStreamReader implements RawStreamReader {
+
+  private final byte[][] arrays;
+  private final long size;
+
+  private long remaining;
+  private int currentArray;
+  private int currentPositionInArray;
+
+  public NestedByteArraysStreamReader(byte[][] arrays) {
+    this.arrays = arrays;
+    this.size = ArrayUtil.totalSize(arrays);
+    this.remaining = size;
+  }
+
+  @Override
+  public long size() {
+    return size;
+  }
+
+  @Override
+  public long remaining() {
+    return remaining;
+  }
+
+  @Override
+  public void read(ByteBuf buf, int length) {
+    int remainingToRead = length;
+    while (remainingToRead > 0) {
+      int toRead = Math.min(remainingToRead, arrays[currentArray].length - currentPositionInArray);
+      buf.readBytes(arrays[currentArray], currentPositionInArray, toRead);
+
+      remainingToRead -= toRead;
+      remaining -= toRead;
+      currentPositionInArray += toRead;
+
+      if (currentPositionInArray == arrays[currentArray].length) {
+        ++currentArray;
+        currentPositionInArray = 0;
+      }
+    }
+  }
+}

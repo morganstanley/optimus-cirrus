@@ -113,7 +113,7 @@ object CacheAnaysisDiffUtils {
     cacheMisses = Double.MinValue,
     evictions = Double.MinValue,
     selfTime = Double.MinValue,
-    ancTime = Double.MinValue
+    totalTime = Double.MinValue
   )
   private[optimus] val defaultCacheMetricDiff = CacheMetricDiffSummary(
     percentageChangeCacheTime = Double.MinValue,
@@ -125,7 +125,7 @@ object CacheAnaysisDiffUtils {
     percentageChangeTotalTime = Double.MinValue
   )
   private[optimus] def getDiffSummaryWithMinValue(diff: DiffSummary): DiffSummary = DiffSummary(
-    percentageChangeWallTime = diff.percentageChangeEngineWallTime,
+    percentageChangeWallTime = diff.percentageChangeWallTime,
     percentageChangeCpuTime = diff.percentageChangeCpuTime,
     percentageChangeCacheTime = diff.percentageChangeCacheTime,
     percentageChangeMaxHeap = Double.MinValue,
@@ -176,6 +176,13 @@ object CacheAnaysisDiffUtils {
   }
   def formatPercentage(number: Double): java.lang.Double = {
     if (number == Double.MinValue) null else number * 100
+  }
+  def formatBooleanToNumber(boolOpt: Option[Boolean]): java.lang.Double = {
+    // option.map.getOrElse(null) for some reason doesn't work
+    boolOpt match {
+      case Some(bool) => if (bool) 1.0 else 0.0
+      case None       => null
+    }
   }
   def formatValue(value: Long): java.lang.Double =
     if (value == Long.MinValue) null else value.toDouble

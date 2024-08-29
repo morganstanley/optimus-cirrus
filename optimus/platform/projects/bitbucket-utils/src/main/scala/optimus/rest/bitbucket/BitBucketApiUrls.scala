@@ -81,7 +81,7 @@ trait BitBucketApiUrls {
       commitId: String): String =
     s"${apiBrowseUrl(project, repo, filePath, branchOption = None)}?size=true&at=$commitId"
 
-  protected def apiGetAllCommitsByPrUrl(project: String, repo: String, prNumber: Int): String =
+  protected def apiGetAllCommitsByPrUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiPrUrl(project, repo, prNumber)}/commits"
 
   protected def apiGetBuildStatus(commitId: String): String =

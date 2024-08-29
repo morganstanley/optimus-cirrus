@@ -73,7 +73,6 @@ object GitUpdater {
   val UserInURLPattern: Regex = """http://\w+@\w.*""".r
   val ExtraHeaderConfigRegex = "http\\..*\\.extraHeader"
   val InsteadOfConfigRegex = "url\\..*\\.insteadOf"
-  val EmptyAuthRegex = "http\\..*\\.emptyAuth"
 }
 
 class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
@@ -162,13 +161,8 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
 
   private def removeExtraHeaders(): Unit = unsetConfig(ExtraHeaderConfigRegex)
 
-  private def removeEmptyAuth(): Unit = {
+  private def removeEmptyAuth(): Unit =
     runGitIgnoreExit("config", "--unset", "http.emptyAuth")
-    // TODO (OPTIMUS-67266): remove after deployment
-    getGitConfig(EmptyAuthRegex).collect { case ConfigPattern(key, _) =>
-      runGitIgnoreExit("config", "--unset", key)
-    }
-  }
 
   def doRevertToOldFetchConfig(): Unit = {
     // unset all custom settings for instances we care about
