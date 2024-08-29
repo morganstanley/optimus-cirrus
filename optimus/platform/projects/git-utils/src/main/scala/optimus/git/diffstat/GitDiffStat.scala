@@ -18,7 +18,7 @@ import optimus.git.diffparser.model.LineType
 import scala.util.matching.Regex
 
 object GitDiffStat {
-  def fromParsedDiffs(id: String, diffs: Seq[Diff]): GitDiffStat = {
+  def fromParsedDiffs(id: Long, diffs: Seq[Diff]): GitDiffStat = {
     // construct bundle diffs
     val fromDiffs = BundleDiffStat.fromDiffs(diffs)
     val bundleDiffStats = fromDiffs.foldLeft(Map.empty[String, BundleDiffStat]) {
@@ -52,7 +52,7 @@ object GitDiffStat {
 
 }
 final case class GitDiffStat(
-    changeId: String,
+    changeId: Long,
     linesAdded: Int,
     linesRemoved: Int,
     filesAdded: Int,

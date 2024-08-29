@@ -1,0 +1,17 @@
+[
+  {
+    "fullClassName": "optimus.platform.BusinessEvent",
+    "packageName": "optimus.platform",
+    "isObject": false,
+    "isTrait": true,
+    "parentNames": ["optimus.platform.storable.Storable"]
+  }
+  ,
+  {
+    "fullClassName": "optimus.platform.BusinessEventImpl",
+    "packageName": "optimus.platform",
+    "isObject": false,
+    "isTrait": false,
+    "parentNames": ["optimus.platform.BusinessEvent"]
+  }
+]

@@ -62,13 +62,12 @@ final case class CacheMetrics(
     cacheMisses: Double,
     evictions: Double,
     selfTime: Double,
-    ancTime: Double) {
+    totalTime: Double) {
 
   val cacheHitRatio = {
     val totalRequests = cacheHits + cacheMisses
     if (totalRequests > 0) cacheHits / totalRequests else 0
   }
-  val totalTime = selfTime + ancTime
 }
 
 final case class CacheMetricDiffSummary(
@@ -271,7 +270,8 @@ final case class EffectSummary(
     nodeName: Option[String],
     before: ConfigMetrics,
     after: ConfigMetrics,
-    diffs: DiffSummary)
+    diffs: DiffSummary,
+    isBeforeDisabledCache: Option[Boolean] = None)
 
 object EffectSummary {
   def fromNodeCacheEffectSummary(
@@ -279,7 +279,8 @@ object EffectSummary {
       nodeName: Option[String],
       before: CacheMetrics,
       after: CacheMetrics,
-      diffs: CacheMetricDiffSummary) = {
+      diffs: CacheMetricDiffSummary,
+      isBeforeDisabledCache: Option[Boolean] = None) = {
     val defaultConfigMetrics = ConfigMetrics(
       wallTime = Long.MinValue,
       cpuTime = Long.MinValue,
@@ -335,7 +336,13 @@ object EffectSummary {
       percentageChangeDalRequests = Double.MinValue,
       percentageChangeEngineWallTime = Double.MinValue
     )
-    EffectSummary(testName, nodeName, beforeConfigMetrics, afterConfigMetrics, diffsSummary)
+    EffectSummary(
+      testName,
+      nodeName,
+      beforeConfigMetrics,
+      afterConfigMetrics,
+      diffsSummary,
+      isBeforeDisabledCache = isBeforeDisabledCache)
   }
 
 }

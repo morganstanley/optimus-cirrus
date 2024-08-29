@@ -112,7 +112,8 @@ object CacheAnalysisTool extends App {
       case Some(appletMap) =>
         appletMap.map { case (applet, tests) =>
           val testMap = tests.map(test => test -> combinedTestMap.getOrElse(test, List.empty)).toMap
-          applet -> OverallPgoEffect(None, testMap)
+          val appletSummary = getAppletSummaryFromTests(true, testMap)
+          applet -> OverallPgoEffect(appletSummary, testMap)
         }
       case None => Map(unknownApplet -> OverallPgoEffect(None, combinedTestMap))
     }
@@ -261,43 +262,93 @@ object CacheAnalysisTool extends App {
     AppletToTestMapAndGlobalPnti(appletToTestPntiMap.mapValuesNow(_.toMap).toMap, globalPnti)
   }
 
+  // ---------------------- Helper Functions For PGO Estimation (Start) -------------------------//
+
   @async def getAppletPntiMapIfEnableAppletGrouping(
       enableAppletGrouping: Boolean,
-      perAppletMergedPnti: Seq[PNodeTaskInfo]) = {
+      perAppletMergedPnti: Seq[PNodeTaskInfo]): Option[Map[String, PntiWithPgoDecision]] = {
     if (enableAppletGrouping) {
       val appletPntiPgoDecisionMap =
-        perAppletMergedPnti.apar.map(pnti => pnti.fullName() -> pgoWouldDisableCache(pnti)).toMap
+        getPntiPGODecisionMap(perAppletMergedPnti)
       Some(appletPntiPgoDecisionMap)
     } else
       None
   }
 
-  @async def getPGODrsTableContent(
-      profilerDirName: String,
-      profilerDir: String,
-      enableAppletGrouping: Boolean): Map[String, OverallPgoEffect] = {
-    val fileWalkResult =
-      mergingPntiInFileWalking(profilerDirName, profilerDir, enableAppletGrouping)
-    val (appletToPerTestMergedPntis, globalMergedPnti) = (fileWalkResult.appletToTestMap, fileWalkResult.globalPntis)
-    // (pntiName -> (pnti, Boolean: disable cache = true; false otherwise))
-    val pntiGlobalMap =
-      globalMergedPnti.apar.map(pnti => pnti.fullName() -> PntiWithPgoDecision(pnti, pgoWouldDisableCache(pnti))).toMap
+  /** pntiName -> (pnti, Boolean: disable cache = true; false otherwise) */
+  @async def getPntiPGODecisionMap(pntis: Seq[PNodeTaskInfo]) =
+    pntis.apar.map(pnti => pnti.fullName() -> PntiWithPgoDecision(pnti, pgoWouldDisableCache(pnti))).toMap
 
+  private[optimus] def mergePntiFromTestToPntiMap(testToPntiMap: Map[String, Seq[PNodeTaskInfo]]): Seq[PNodeTaskInfo] =
+    combinePNTIs(testToPntiMap.values.toSeq.flatten).values.toSeq
+
+  @async def getGlobalOrFixedAppletPGODecisionMap(
+      specifiedApplet: String,
+      globalMergedPnti: Seq[PNodeTaskInfo],
+      appletToPerTestMergedPntis: AppletToTestPntiMap): Map[String, PntiWithPgoDecision] = {
+    if (specifiedApplet.isEmpty) {
+      getPntiPGODecisionMap(globalMergedPnti)
+    } else {
+      val mergedPntisForApplet = appletMergedPntis(specifiedApplet, appletToPerTestMergedPntis)
+      getPntiPGODecisionMap(mergedPntisForApplet)
+    }
+  }
+
+  @async def appletMergedPntis(
+      appletName: String,
+      appletToPerTestMergedPntis: AppletToTestPntiMap): Seq[PNodeTaskInfo] = {
+    appletToPerTestMergedPntis
+      .get(appletName)
+      .map { testToPntiMap => mergePntiFromTestToPntiMap(testToPntiMap) }
+      .getOrElse(Seq.empty)
+  }
+
+  @async def getTableResultFromAppletMap(
+      appletToPerTestMergedPntis: AppletToTestPntiMap,
+      enableAppletGrouping: Boolean,
+      showAppletMergedRawData: Boolean,
+      pntiPGODecisionsMap: Map[String, PntiWithPgoDecision]): Map[String, OverallPgoEffect] = {
     appletToPerTestMergedPntis.apar.map { case (appletName, perTestMergedPntiMap) =>
-      val perAppletMergedPnti = combinePNTIs(perTestMergedPntiMap.values.toSeq.flatten).values.toSeq
-      // Option of map of (pntiName -> Boolean: disable cache or not by applet pgo) if enable applet grouping
-      val appletPntiMap: Option[Map[String, Boolean]] =
+      val perAppletMergedPnti = mergePntiFromTestToPntiMap(perTestMergedPntiMap)
+      // Option of map of (pntiName -> (pnti, Boolean: disable cache or not by applet pgo)) if enable applet grouping
+      val appletPntiMap: Option[Map[String, PntiWithPgoDecision]] =
         getAppletPntiMapIfEnableAppletGrouping(enableAppletGrouping, perAppletMergedPnti)
 
       // test -> (testLevelEffectSummary + discrepancyNodesEffectSummary)
       val testMap: Map[String, List[EffectSummary]] = perTestMergedPntiMap.apar.map {
         case (testName, perTestMergedPnti) =>
-          getTestAndNodesSummary(testName, perTestMergedPnti, appletPntiMap, pntiGlobalMap)
+          getTestAndNodesSummary(
+            testName,
+            perTestMergedPnti,
+            appletPntiMap,
+            pntiPGODecisionsMap,
+            showAppletMergedRawData)
       }
       val appletSummary: Option[EffectSummary] = getAppletSummaryFromTests(enableAppletGrouping, testMap)
       appletName -> OverallPgoEffect(appletSummary, testMap)
     }
+  }
 
+  // ---------------------- Helper Functions For PGO Estimation (End ) -------------------------//
+
+  @async def getPGODrsTableContent(
+      profilerDirName: String,
+      profilerDir: String,
+      enableAppletGrouping: Boolean,
+      showAppletMergedRawData: Boolean = false,
+      specifiedApplet: String = ""): Map[String, OverallPgoEffect] = {
+    val fileWalkResult =
+      mergingPntiInFileWalking(profilerDirName, profilerDir, enableAppletGrouping)
+    val (appletToPerTestMergedPntis, globalMergedPnti) = (fileWalkResult.appletToTestMap, fileWalkResult.globalPntis)
+
+    val pntiPGODecisionsMap: Map[String, PntiWithPgoDecision] =
+      getGlobalOrFixedAppletPGODecisionMap(specifiedApplet, globalMergedPnti, appletToPerTestMergedPntis)
+
+    getTableResultFromAppletMap(
+      appletToPerTestMergedPntis - specifiedApplet,
+      enableAppletGrouping,
+      showAppletMergedRawData,
+      pntiPGODecisionsMap)
   }
 
   private def getAppletSummaryFromTests(
@@ -306,40 +357,77 @@ object CacheAnalysisTool extends App {
     if (enableAppletGrouping) {
       // test summary is always the first element in the list
       val allTestSummaries = testMap.values.map(x => x.head).toList
-      val beforeConfigByAppletPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.before)
-      val afterConfigByGlobalPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.after)
-      val diffSummary = MetricDiff(beforeConfigByAppletPgo, afterConfigByGlobalPgo).summary
-      // Set min value for metrics information we do not have, so can be shown null on UI
-      val diffWithMinValue = getDiffSummaryWithMinValue(diffSummary)
-      Some(
-        EffectSummary(
-          testName = "",
-          nodeName = None,
-          before = beforeConfigByAppletPgo,
-          after = afterConfigByGlobalPgo,
-          diffs = diffWithMinValue))
+      if (allTestSummaries.length == 1) {
+        val testSummary = allTestSummaries.head
+        // I noticed if applet just contains 1 test, the diffSummary calculated below using beforeConfig and afterConfig
+        // for the applet summary metric can deviate from the only test summary it contains by 0.001,
+        // when it should be equal to test summary,
+        // therefore setting them equal to each other here
+        Some(
+          EffectSummary(
+            testName = "",
+            nodeName = None,
+            before = testSummary.before,
+            after = testSummary.after,
+            diffs = testSummary.diffs))
+      } else {
+        val beforeConfigByAppletPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.before)
+        val afterConfigByGlobalPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.after)
+        val diffSummary = MetricDiff(beforeConfigByAppletPgo, afterConfigByGlobalPgo).summary
+        // Set min value for metrics information we do not have, so can be shown null on UI
+        val diffWithMinValue = getDiffSummaryWithMinValue(diffSummary)
+        Some(
+          EffectSummary(
+            testName = "",
+            nodeName = None,
+            before = beforeConfigByAppletPgo,
+            after = afterConfigByGlobalPgo,
+            diffs = diffWithMinValue))
+      }
     } else None
   }
 
+  private def getPntiWithAppletOrTestPgoDecision(
+      pnti: PNodeTaskInfo,
+      appletPntiMap: Option[Map[String, PntiWithPgoDecision]],
+      showAppletMergedRawData: Boolean) = {
+    appletPntiMap match {
+      case Some(appletMap) => // meaning running per applet pgo
+        val pntiWithAppletDecision = appletMap.get(pnti.fullName())
+        pntiWithAppletDecision
+          .map { appletMergedPnti => // pnti is found in appletPntiMap
+            if (showAppletMergedRawData) appletMergedPnti
+            else PntiWithPgoDecision(pnti, appletMergedPnti.pgoWouldDisableCache) // showing per test merged aw data
+          }
+          .getOrElse(
+            PntiWithPgoDecision(pnti, pgoWouldDisableCache(pnti))
+          ) // deals with if pnti not found, should never happen
+      case None => PntiWithPgoDecision(pnti, pgoWouldDisableCache(pnti)) // meaning running per test pgo
+    }
+  }
   @async def getTestAndNodesSummary(
       testName: String,
       perTestMergedPnti: Seq[PNodeTaskInfo],
-      appletPntiMap: Option[Map[String, Boolean]],
-      pntiGlobalMap: Map[String, PntiWithPgoDecision]): (String, List[EffectSummary]) = {
+      appletPntiMap: Option[Map[String, PntiWithPgoDecision]],
+      pntiPGODecisionsMap: Map[String, PntiWithPgoDecision],
+      showAppletMergedRawData: Boolean = false): (String, List[EffectSummary]) = {
     val ncTestPntiByGlobal, cTestPntiByGlobal, ncTestPntiByApplet, cTestPntiByApplet =
       mutable.ArrayBuffer[PNodeTaskInfo]()
-    val discrepancyNodes = mutable.ArrayBuffer[(PNodeTaskInfo, PNodeTaskInfo)]()
+    val discrepancyNodes = mutable.ArrayBuffer[(PntiWithPgoDecision, PntiWithPgoDecision)]()
 
     perTestMergedPnti.foreach { pnti =>
       // if we care about applet grouping, else we care only test pgo decision
-      val appletOrTestPgoWouldDisable =
-        appletPntiMap.map(appletMap => appletMap(pnti.fullName())).getOrElse(pgoWouldDisableCache(pnti))
-      val pntiWithGlobalPgoDecision = pntiGlobalMap(pnti.fullName())
+      val pntiWithAppletOrTestPgoDecision: PntiWithPgoDecision =
+        getPntiWithAppletOrTestPgoDecision(pnti, appletPntiMap, showAppletMergedRawData)
+
+      // This is the pgo decision we compare with, global PGO decision or fixed applet decision
+      val pntiWithComparisonPgoDecision =
+        pntiPGODecisionsMap.getOrElse(pnti.fullName(), pntiWithAppletOrTestPgoDecision)
       // categorising pnti into don't cache or cache by applet and global pgo decision
       // and get nodes where decisions differ: applet pgo decision says don't cache, global's says cache
-      (appletOrTestPgoWouldDisable, pntiWithGlobalPgoDecision.pgoWouldDisableCache) match {
+      (pntiWithAppletOrTestPgoDecision.pgoWouldDisableCache, pntiWithComparisonPgoDecision.pgoWouldDisableCache) match {
         case (true, false) =>
-          val x = (pnti, pntiWithGlobalPgoDecision.pnti)
+          val x = (pntiWithAppletOrTestPgoDecision, pntiWithComparisonPgoDecision)
           discrepancyNodes += x
           cTestPntiByGlobal += pnti
           ncTestPntiByApplet += pnti
@@ -350,6 +438,8 @@ object CacheAnalysisTool extends App {
           cTestPntiByApplet += pnti
           cTestPntiByGlobal += pnti
         case (false, true) =>
+          val x = (pntiWithAppletOrTestPgoDecision, pntiWithComparisonPgoDecision)
+          discrepancyNodes += x
           cTestPntiByApplet += pnti
           ncTestPntiByGlobal += pnti
       }
@@ -372,17 +462,21 @@ object CacheAnalysisTool extends App {
    * in 0ms and lose precision, so for discrepancy nodes we convert to ms on UI side,
    * and keep them in ns here
    */
-  @async def getDiscrepancyNodesSummary(testName: String, discrepancyNodes: Seq[(PNodeTaskInfo, PNodeTaskInfo)]) =
+  @async def getDiscrepancyNodesSummary(
+      testName: String,
+      discrepancyNodes: Seq[(PntiWithPgoDecision, PntiWithPgoDecision)]) =
     discrepancyNodes.apar.map { case (beforeNode, afterNode) =>
-      val beforeCacheMetrics = getCacheMetricsFromPnti(beforeNode)
-      val afterCacheMetrics = getCacheMetricsFromPnti(afterNode)
+      val beforeCacheMetrics = getCacheMetricsFromPnti(beforeNode.pnti)
+      val afterCacheMetrics = getCacheMetricsFromPnti(afterNode.pnti)
       val diff = CacheMetricDiff(beforeCacheMetrics, afterCacheMetrics)
       EffectSummary.fromNodeCacheEffectSummary(
         testName,
-        Some(beforeNode.fullName()),
+        Some(beforeNode.pnti.fullName()),
         beforeCacheMetrics,
         afterCacheMetrics,
-        diff.summary)
+        diff.summary,
+        isBeforeDisabledCache = Some(beforeNode.pgoWouldDisableCache)
+      )
     }
 
   private def getTopLevelSummary(
@@ -412,9 +506,8 @@ object CacheAnalysisTool extends App {
       cacheHits = cachedNodes.map(_.cacheHit).sum.toDouble,
       cacheMisses = cachedNodes.map(_.cacheMiss).sum.toDouble,
       evictions = cachedNodes.map(_.evicted).sum.toDouble,
-      // workaround to calculate total time
-      selfTime = increasedTotalTime,
-      ancTime = cachedNodes.map(_.ancAndSelfTime / 1e6).sum,
+      selfTime = cachedNodes.map(_.selfTime / 1e6).sum,
+      totalTime = cachedNodes.map(_.ancAndSelfTime / 1e6).sum + increasedTotalTime,
     )
   }
   @async def writeSummaryReport(
@@ -508,7 +601,9 @@ object CacheAnalysisTool extends App {
       val appletNamesPaths = resultsGroupedPaths(appletInfoFileName)
       val testsWithAppletMap = parseAndGetAppletNameMap(appletNamesPaths)
       val testsWithoutApplet = allTestNames.filterNot(testsWithAppletMap.values.flatten.toSeq.contains(_))
-      Some(testsWithAppletMap ++ Map(unknownApplet -> testsWithoutApplet))
+      if (testsWithoutApplet.isEmpty)
+        Some(testsWithAppletMap)
+      else Some(testsWithAppletMap ++ Map(unknownApplet -> testsWithoutApplet))
     } else None
   }
   @async def parseAndGetAppletNameMap(groupedPaths: Map[String, Seq[String]]): AppletToTestMapping = {
@@ -716,7 +811,7 @@ object CacheAnalysisTool extends App {
     cacheMisses = pnti.cacheMiss.toDouble,
     evictions = pnti.evicted.toDouble,
     selfTime = pnti.selfTime.toDouble,
-    ancTime = pnti.ancSelfTime().toDouble
+    totalTime = pnti.ancAndSelfTime.toDouble
   )
   final case class PntiWithPgoDecision(
       pnti: PNodeTaskInfo,

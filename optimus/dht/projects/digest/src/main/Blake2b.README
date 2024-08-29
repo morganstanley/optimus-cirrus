@@ -1,0 +1,8 @@
+Blake2b implementation is based on excellent work at https://github.com/alphazero/Blake2b, which was placed in public domain worldwide.
+
+Blake2bSafe is based on the default branch and commit 59d2c8a0efc0f4708ce2cc3b8e049f1b97918bd0 (23th August 2018).
+https://github.com/alphazero/Blake2b/commit/59d2c8a0efc0f4708ce2cc3b8e049f1b97918bd0
+Blake2bUnsafe is based on unsafe branch and commit ea2e468b511217513e1bcb143375c7154921931a (23th August 2018).
+https://github.com/alphazero/Blake2b/commit/ea2e468b511217513e1bcb143375c7154921931a
+
+The only changes from the original are package and interface names and javadoc error fix.

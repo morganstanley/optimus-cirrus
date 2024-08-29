@@ -1,0 +1,80 @@
+/*
+ * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+ * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+option java_package = "optimus.dht.common.internal.transport.generated";
+option java_outer_classname = "KeyValueProto2V1";
+
+message KeyspaceAttributeMessage {
+  optional string key = 1;
+  optional string value = 2;
+}
+
+message KeyspaceMessage {
+  optional string name = 1;
+  optional string allocation = 2;
+  repeated KeyspaceAttributeMessage attributes = 3;
+}
+
+message KeyEntryMessage {
+  optional bytes keyHash = 1;
+  optional int64 keyLength = 2;
+}
+
+message ValueEntryMessage {
+  optional int64 expiry = 1;
+  optional string entryInfo = 2;
+  optional int64 valueLength = 3;
+}
+
+// Used for GET, REMOVE, CONTAINS
+message KeyOnlyRequestMessage {
+  optional int64  requestId = 1;
+  optional KeyspaceMessage keyspace = 2;
+  optional string correlationName = 3;
+  repeated KeyEntryMessage keys = 4;
+}
+
+message KeyAndValueMessage {
+  optional KeyEntryMessage key= 1;
+  optional ValueEntryMessage value = 2;
+}
+
+// USED for PUT
+message PutRequestMessage {
+  optional int64  requestId = 1;
+  optional KeyspaceMessage keyspace = 2;
+  optional string correlationName = 3;
+  repeated KeyAndValueMessage values = 4;
+}
+
+message RemoveTransientKeyspaceRequestMessage {
+  optional int64 requestId = 1;
+  optional KeyspaceMessage keyspace = 2;
+  optional string correlationName = 3;
+}
+
+message ErrorDetailsMessage {
+  optional string errorCode = 1;
+  optional string errorText = 2;
+}
+
+message ValueResponseMessage {
+  optional int64 requestId = 1;
+  optional ErrorDetailsMessage errorDetails = 2;
+  repeated ValueEntryMessage values = 3;
+}
+
+message GenericResponseMessage {
+  optional int64 requestId = 1;
+  optional ErrorDetailsMessage errorDetails = 2;
+  repeated bool response = 3;
+}
+

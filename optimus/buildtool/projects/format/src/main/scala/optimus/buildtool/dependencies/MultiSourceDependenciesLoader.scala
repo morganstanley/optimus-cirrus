@@ -12,6 +12,7 @@
 package optimus.buildtool.dependencies
 
 import com.typesafe.config._
+import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
 import optimus.buildtool.dependencies.JvmDependenciesLoader.loadLocalDefinitions
@@ -201,31 +202,56 @@ object MultiSourceDependenciesLoader {
         config: Config,
         name: String,
         baseAfsDep: DependencyDefinition,
-        loadedIvyConfigsRes: Result[Seq[IvyConfigurationMapping]]) = for {
-      loadedIvyConfigs <- loadedIvyConfigsRes
-    } yield {
-      val allMapping = loadedIvyConfigs :+ IvyConfigurationMapping(baseAfsDep, baseMavenLibs, Nil)
-      val afsConfigLib = getAfsConfigDep(name, baseAfsDep, config.origin().lineNumber())
-      val configNameToMavenLibs = allMapping.map { case IvyConfigurationMapping(afs, maven, _) =>
-        afs.configuration -> maven
-      }.toMap
-      val configNameToExtended: Map[String, Seq[String]] = allMapping.map {
-        case IvyConfigurationMapping(afs, _, extended) =>
-          afs.configuration -> extended.filterNot(_ == afs.configuration) // ignore self extends
-      }.toMap
+        loadedIvyConfigsRes: Result[Seq[IvyConfigurationMapping]])
+        : Result[(DependencyDefinition, Seq[DependencyDefinition])] = {
 
-      def expand(cfgName: String, checked: Set[String]): Set[String] = {
-        val extended: Seq[String] = configNameToExtended(cfgName)
-        if (checked.contains(cfgName)) Set.empty
-        else extended.flatMap(expand(_, checked + cfgName)).toSet + cfgName
+      def expandDepsFromCfg(
+          cfgName: String,
+          checked: Set[String],
+          errors: Seq[Error],
+          configNameToExtends: Map[String, Seq[String]]): (Seq[String], Seq[Error]) = {
+        val (extended, failure) = configNameToExtends.get(cfgName) match {
+          case Some(res) => (res, Seq.empty)
+          case None =>
+            val msg =
+              s"ivy config '$cfgName' not exists! at ${JvmDependenciesConfig.path.name}:${config.origin().lineNumber()} $IvyConfigurations '$name'"
+            (Nil, Set(obtFile.errorAt(config.getValue(Extends), msg)))
+        }
+        if (checked.contains(cfgName)) (Seq.empty, errors ++ failure)
+        else {
+          val result = extended.map(expandDepsFromCfg(_, checked + cfgName, errors ++ failure, configNameToExtends))
+          (result.flatMap(_._1) :+ cfgName, result.flatMap(_._2) ++ failure)
+        }
       }
 
-      val extendedMavenLibs = if (config.hasPath(Extends)) {
-        val extendsList = config.getStringList(Extends).asScala.toSet + name
-        val allExtended: Set[String] = extendsList.flatMap(expand(_, Set.empty))
-        allExtended.flatMap(configNameToMavenLibs).to(Seq)
-      } else configNameToMavenLibs(name)
-      afsConfigLib -> extendedMavenLibs
+      def extendedMavenLibsResult(
+          configNameToMavenLibs: Map[String, Seq[DependencyDefinition]],
+          configNameToExtends: Map[String, Seq[String]]): Result[Seq[DependencyDefinition]] = {
+
+        if (config.hasPath(Extends)) {
+          val extendsList = (config.getStringList(Extends).asScala.to(Seq) :+ name).distinct
+          val (allExtended, extendErrors): (Set[String], Set[Error]) = {
+            val result = extendsList.map(expandDepsFromCfg(_, Set.empty, Seq.empty, configNameToExtends))
+            (result.flatMap(_._1).toSet, result.flatMap(_._2).toSet)
+          }
+          if (extendErrors.isEmpty) Success(allExtended.flatMap(configNameToMavenLibs).to(Seq))
+          else Failure(extendErrors.to(Seq))
+        } else Success(configNameToMavenLibs(name))
+      }
+
+      for {
+        loadedIvyConfigs <- loadedIvyConfigsRes
+        allMapping = loadedIvyConfigs :+ IvyConfigurationMapping(baseAfsDep, baseMavenLibs, Nil)
+        afsConfigLib = getAfsConfigDep(name, baseAfsDep, config.origin().lineNumber())
+        configNameToMavenLibs = allMapping.map { case IvyConfigurationMapping(afs, maven, _) =>
+          afs.configuration -> maven
+        }.toMap
+        configNameToExtended: Map[String, Seq[String]] = allMapping.map {
+          case IvyConfigurationMapping(afs, _, extended) =>
+            afs.configuration -> extended.filterNot(_ == afs.configuration) // ignore self extends
+        }.toMap
+        extendedMavenLibs <- extendedMavenLibsResult(configNameToMavenLibs, configNameToExtended)
+      } yield afsConfigLib -> extendedMavenLibs
     }
 
     val res: Result[Seq[(DependencyDefinition, Seq[DependencyDefinition])]] = baseAfsDepOpt match {
@@ -294,7 +320,10 @@ object MultiSourceDependenciesLoader {
 
       multiSourceDeps
         .map(loaded => loaded.foldLeft(MultiSourceDependencies(Nil))(_ ++ _))
-        .withProblems(deps => OrderingUtils.checkOrderingIn(obtFile, deps.loaded))
+        .withProblems { deps =>
+          val (ivyConfigs, jvmDeps) = deps.loaded.partition(_.afs.exists(_.configuration != DefaultConfiguration))
+          OrderingUtils.checkOrderingIn(obtFile, ivyConfigs) ++ OrderingUtils.checkOrderingIn(obtFile, jvmDeps)
+        }
     }
 }
 
