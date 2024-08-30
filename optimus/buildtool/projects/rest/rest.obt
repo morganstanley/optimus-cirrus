@@ -10,9 +10,9 @@
 main {
   compile {
     modules = [
-      optimus.platform.entityagent
-      optimus.platform.utils,
-      optimus.platform.platform
+      optimus.platform.entityagent,
+      optimus.platform.platform,
+      optimus.platform.utils
     ]
 
     libs = [
