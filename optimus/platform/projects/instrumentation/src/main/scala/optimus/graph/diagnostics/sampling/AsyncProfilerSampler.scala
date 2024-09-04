@@ -13,8 +13,6 @@ package optimus.graph.diagnostics.sampling
 import SamplingProfiler.SamplerTrait
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
-import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
-import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.graph.AsyncProfilerIntegration
@@ -27,6 +25,8 @@ import optimus.graph.diagnostics.ap.StackAnalysis.StackData
 import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.ap.StackAnalysis.StacksAndTimers
 import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
+import optimus.graph.diagnostics.sampling.SamplingProfiler.periodSamplesSource
+import optimus.graph.diagnostics.sampling.SamplingProfiler.stackDataSource
 import optimus.logging.Pid
 import optimus.platform.util.Log
 import optimus.utils.FileUtils
@@ -191,8 +191,8 @@ class AsyncProfilerSampler(
       numSamplesPublished -> data.stacks.size :: samplingPauseTime -> data.dtStopped / NANOSPERMILLI :: timersToElems(
         data.timers)
     Map(
-      ProfilerSource -> (profElems :: Nil),
-      SamplingProfilerSource -> data.stacks.grouped(40).map(stackToElems).toList
+      periodSamplesSource -> (profElems :: Nil),
+      stackDataSource -> data.stacks.grouped(40).map(stackToElems).toList
     )
   }
 

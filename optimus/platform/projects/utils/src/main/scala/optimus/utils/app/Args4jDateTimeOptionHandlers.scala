@@ -46,7 +46,10 @@ trait PeriodParsing {
 }
 
 trait DurationParsing {
-  protected def parseAsDuration(arg: String): Duration = Duration.parse(arg)
+  protected def parseAsDuration(arg: String): Duration = (arg.toUpperCase: Seq[Char]) match {
+    case Seq('P', _) => Duration.parse(arg)
+    case _           => Duration.parse("P" + arg)
+  }
 }
 
 final class PeriodOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Period])

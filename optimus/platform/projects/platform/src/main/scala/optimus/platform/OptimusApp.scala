@@ -16,6 +16,7 @@ import msjava.tools.util.MSProcess
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs._
 import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
+import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.crumbs.{Properties => BCProps}
 import optimus.config.OptconfProvider
@@ -690,7 +691,7 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       id,
       PropertiesCrumb(
         _,
-        RuntimeSource,
+        RuntimeSource + SamplingProfilerSource,
         propertyMap
       )
     )
@@ -705,7 +706,7 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
         id,
         PropertiesCrumb(
           _,
-          RuntimeSource,
+          RuntimeSource + SamplingProfilerSource,
           BCProps.cpuInfo -> HardwareInfo.cpuInfo,
           BCProps.memInfo -> HardwareInfo.memInfo
         )

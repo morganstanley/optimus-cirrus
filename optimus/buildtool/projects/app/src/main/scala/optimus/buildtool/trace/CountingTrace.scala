@@ -111,8 +111,6 @@ private[buildtool] final class CountingTrace(statusIntervalSec: Option[Int] = No
   override def startTask(scopeId: ScopeId, category: CategoryTrace, time: Instant): TaskTrace =
     new CountingTaskTrace(scopeId, category, time)
 
-  override def startBuild(): Unit = counts.clear()
-
   def anomalies: Seq[(String, Boolean)] = {
     counts.asScala.flatMap { case (c, s) =>
       s.flatMap { case (id, (running, ran)) =>
@@ -132,6 +130,7 @@ private[buildtool] final class CountingTrace(statusIntervalSec: Option[Int] = No
   override def endBuild(success: Boolean): Boolean = {
     val as = anomalies
     if (as.nonEmpty) log.error(s"CountingTrace detected anomalies in the build:\n${as.map(_._1).mkString("\n")}")
+    counts.clear()
     as.collect {
       case (a, strict) if strict => a
     }.isEmpty

@@ -15,6 +15,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
+import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.builders.StandardBuilder
 import optimus.buildtool.compilers.cpp.CppFileCompiler.PrecompiledHeader
 import optimus.buildtool.config.CppConfiguration.CompilerFlag
@@ -113,17 +114,7 @@ import scala.collection.immutable.Seq
     val builder = underlyingBuilder()
     val rawScalaConfig = scalaVersionConfig()
 
-    val errors = builder.factory.globalMessages.filter(_.hasErrors)
-    if (errors.nonEmpty) {
-      val messages = errors.flatMap(_.messages.filter(_.isError))
-      val messageStrings = messages.map { m =>
-        m.pos match {
-          case Some(p) => s"${m.msg} [${p.filepath}:${p.startLine}]"
-          case None    => m.msg
-        }
-      }
-      throw new IllegalArgumentException(s"Configuration error(s):\n  ${messageStrings.mkString("\n  ")}")
-    }
+    checkForErrors(builder.factory.globalMessages)
 
     // Depcopy all scala lib jars (class, source and javadoc) so they're available for use in the bundle structure.
     // This will generally be a superset of `rawScalaConfig.scalaJars`, which we also depcopy below.
@@ -152,6 +143,8 @@ import scala.collection.immutable.Seq
               .flatMap(_.allCompileDependencies)
               .apar
               .flatMap(_.resolution)
+
+            checkForErrors(resolutions)
 
             val externalDeps = resolutions.apar.flatMap { resolution =>
               val deps = resolution.result.resolvedArtifacts
@@ -199,6 +192,19 @@ import scala.collection.immutable.Seq
     } else Nil
   }
 
+  private def checkForErrors(artifacts: Seq[Artifact]): Unit = {
+    val errorArtifacts = artifacts.collectInstancesOf[MessagesArtifact].filter(_.hasErrors)
+    if (errorArtifacts.nonEmpty) {
+      val messages = errorArtifacts.flatMap(_.messages.filter(_.isError))
+      val messageStrings = messages.map { m =>
+        m.pos match {
+          case Some(p) => s"${m.msg} [${p.filepath}:${p.startLine}]"
+          case None    => m.msg
+        }
+      }
+      throw new IllegalArgumentException(s"Configuration error(s):\n  ${messageStrings.mkString("\n  ")}")
+    }
+  }
 }
 
 final case class WorkspaceStructure(

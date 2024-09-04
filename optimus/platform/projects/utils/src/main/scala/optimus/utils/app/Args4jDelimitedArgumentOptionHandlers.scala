@@ -25,6 +25,7 @@ import java.nio.file.Paths
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.regex.Pattern
 import scala.util.Try
 
 /*
@@ -226,4 +227,14 @@ final class DelimitedStringDateOptionSetHandler(
     val strDateSet = strSet.map(_.split(":"))
     strDateSet.map(x => (x.head, LocalDate.parse(x.tail.head)))
   }
+}
+
+final class DoublePipeDelimitedStringOptionHandler(
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Seq[String]])
+    extends OneArgumentOptionHandler[Seq[String]](parser, option, setter) {
+  override def parse(arg: String): Seq[String] =
+    if (arg == "NO_ARG") Seq.empty else arg.split(Pattern.quote("||")).map(convert)
+  def convert(s: String): String = s
 }

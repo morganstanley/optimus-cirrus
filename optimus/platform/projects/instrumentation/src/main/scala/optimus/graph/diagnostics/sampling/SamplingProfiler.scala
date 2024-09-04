@@ -16,6 +16,7 @@ import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
+import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties._
@@ -345,6 +346,9 @@ class SamplingProfiler private[diagnostics] (
 object SamplingProfiler extends Log {
   @volatile private[diagnostics] var configured = false
 
+  val stackDataSource: Crumb.Source = SamplingProfilerSource
+  val periodSamplesSource: Crumb.Source = SamplingProfilerSource + ProfilerSource
+
   // minimum publication interval in the presence of "activity" (e.g. a distributed task completion)
   private val activityIntervalMs = PropertyUtils.get("optimus.sampling.activity.sec", 30) * 1000L
 
@@ -512,7 +516,7 @@ object SamplingProfiler extends Log {
     override protected def snap(firstTime: Boolean): T = snapper(firstTime)
     override protected def transform(prev: Option[T], curr: T): V = process(prev, curr)
     override protected def elemss(result: V, id: ChainedID): Map[Source, List[Elems]] =
-      Map(ProfilerSource -> (publish(result, id) :: Nil))
+      Map(periodSamplesSource -> (publish(result, id) :: Nil))
 
     def this(owner: SamplingProfiler, snapper: Boolean => T, process: (Option[T], T) => V, publish: V => Elems) =
       this(owner, snapper, process, (v: V, _: ChainedID) => publish(v))

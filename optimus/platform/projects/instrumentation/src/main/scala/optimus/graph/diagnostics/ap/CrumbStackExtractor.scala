@@ -35,7 +35,11 @@ object CrumbStackExtractor extends Log {
   type CrumbMap = Map[String, JsValue]
   type Sid2Frames = util.Map[String, Seq[Int]]
 
-  val ProfStacks = "profStacks"
+  private val q = "\""
+  private val ProfStacksMarker = s"$q${Properties.profStacks.name}$q:[{"
+  def likelyStacksSample(s: String): Boolean = s.contains(ProfStacksMarker)
+  private val ProfCollapsedMarker = s"$q${Properties.profCollapsed}$q:$q"
+  def likelyStacksFrames(s: String): Boolean = s.contains(ProfCollapsedMarker)
 
   final case class FullSampleData(
       source: String,

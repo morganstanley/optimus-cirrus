@@ -161,7 +161,8 @@ trait RootEventCause extends EventCause {
 
   private var error: Throwable = _
   private[optimus] def foldError(e: Throwable): Throwable = synchronized {
-    if (error != null) e.addSuppressed(error)
+    // addSuppressed throws on null exception or on x.addSuppressed(x)
+    if ((error != null) && (error ne e)) e.addSuppressed(error)
     error = e
     e
   }

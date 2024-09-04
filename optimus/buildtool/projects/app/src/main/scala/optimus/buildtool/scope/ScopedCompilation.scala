@@ -371,6 +371,11 @@ trait CompilationNode extends ScopedCompilation {
       }
     val classFileArtifacts = internalClassFileArtifacts ++ externalClassFileArtifacts
 
+    val scopeClassFileArtifacts = internalClassFileArtifacts.collect {
+      case c @ InternalClassFileArtifact(InternalArtifactId(scopeId, _, _), _) if scopeId == id =>
+        c
+    }
+
     val extraFiles = runtimeDependencies.transitiveExtraFiles
 
     val externalJniPaths = runtimeDependencies.transitiveJniPaths.distinct
@@ -447,6 +452,7 @@ trait CompilationNode extends ScopedCompilation {
       .mkString(" ")
     val manifest = Jars.updateManifest(
       Jars.createPathingManifest(filteredArtifacts.map(_.path), premainOption),
+      JarUtils.nme.ClassJar -> scopeClassFileArtifacts.map(_.pathString).mkString(";"),
       JarUtils.nme.ExtraFiles -> extraFiles.map(_.pathString).mkString(";"),
       JarUtils.nme.ExternalJniPath -> externalJniPaths.mkString(";"),
       JarUtils.nme.JniScopes -> jniScopes.map(_.properPath).mkString(";"),

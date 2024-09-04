@@ -20,7 +20,9 @@ import optimus.buildtool.utils.AssetUtils
 import org.slf4j.LoggerFactory.getLogger
 
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
+import scala.util
 import scala.util.Try
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -32,32 +34,35 @@ object OutputMappings {
   private val log = getLogger(this.getClass)
   private val separator = File.pathSeparator
 
+  private val currentMappings = new ConcurrentHashMap[FileAsset, Try[Map[String, Seq[String]]]]()
+
   def readClasspathPlain(path: Path): Try[Map[String, Seq[String]]] = readClasspathPlain(FileAsset(path))
 
-  def readClasspathPlain(file: FileAsset): Try[Map[String, Seq[String]]] = Try {
-    val lines =
-      try {
-        Files
-          .readAllLines(file.path)
-          .asScala
-      } catch {
-        // this is the only exception that it makes sense to catch here, as we call this function when we update the
-        // (potentially inexistent) classpath mapping file. Other issues (invalid path, permissions etc) are bubbled up.
-        case e: NoSuchFileException =>
-          log.debug(s"No such file ${file.pathString}")
-          Buffer.empty
-      }
-    lines
-      .flatMap(line => {
-        line.split("\t") match {
-          case Array(a, b) => Some(a -> b.split(separator).to(Seq))
-          case _ =>
-            log.warn(s"Invalid mapping entry: '$line'")
-            None
+  def readClasspathPlain(file: FileAsset): Try[Map[String, Seq[String]]] =
+    Try {
+      val lines =
+        try {
+          Files
+            .readAllLines(file.path)
+            .asScala
+        } catch {
+          // this is the only exception that it makes sense to catch here, as we call this function when we update the
+          // (potentially inexistent) classpath mapping file. Other issues (invalid path, permissions etc) are bubbled up.
+          case e: NoSuchFileException =>
+            log.debug(s"No such file ${file.pathString}")
+            Buffer.empty
         }
-      })
-      .toMap
-  }
+      lines
+        .flatMap(line => {
+          line.split("\t") match {
+            case Array(a, b) => Some(a -> b.split(separator).to(Seq))
+            case _ =>
+              log.warn(s"Invalid mapping entry: '$line'")
+              None
+          }
+        })
+        .toMap
+    }
 
   def updateClasspathPlain(file: FileAsset, updatedMappings: Map[String, Seq[String]]): Unit = {
     val previousMappings: Map[String, Seq[String]] = readClasspathPlain(file)
@@ -65,7 +70,7 @@ object OutputMappings {
         log.warn("Could not read previous plain mapping file")
         Map.empty
       }
-    val newMapping: Map[String, Seq[String]] = (previousMappings ++ updatedMappings)
+    val newMapping: Map[String, Seq[String]] = previousMappings ++ updatedMappings
     val content = newMapping
       .map { case (k, vs) =>
         s"$k\t${vs.mkString(separator)}"
@@ -77,5 +82,6 @@ object OutputMappings {
     AssetUtils.atomicallyWrite(file, replaceIfExists = true) { p =>
       Files.write(p, content)
     }
+    currentMappings.put(file, util.Success(newMapping))
   }
 }
