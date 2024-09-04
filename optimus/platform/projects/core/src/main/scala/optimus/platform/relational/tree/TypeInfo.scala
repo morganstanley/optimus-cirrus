@@ -397,7 +397,7 @@ object TypeInfo {
       val created = createNormalized[A with B](
         a.concreteClass.orElse(b.concreteClass).toSeq ++ Set(a, b).flatMap(_.interfaces).toSeq,
         Set(a, b).flatMap(_.pureStructuralMethods).toSeq,
-        a.primaryConstructorParams,
+        a.concreteClass.map(_ => a.primaryConstructorParams).getOrElse(b.primaryConstructorParams),
         List(a, b).flatMap(_.typeParams)
       )
 

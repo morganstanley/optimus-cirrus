@@ -21,6 +21,7 @@ import optimus.breadcrumbs.Breadcrumbs.SetupFlags
 import optimus.breadcrumbs.Breadcrumbs.knownSource
 import optimus.breadcrumbs.BreadcrumbsSendLimit.LimitByKey
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
+import optimus.breadcrumbs.crumbs.Crumb.MultiSource
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.filter._
 import optimus.breadcrumbs.kafka.BreadcrumbsKafkaTopicMapper
@@ -43,9 +44,9 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import java.util.{ ArrayList => jArrayList }
-import java.util.{ List => jList }
-import java.util.{ Map => jMap }
+import java.util.{ArrayList => jArrayList}
+import java.util.{List => jList}
+import java.util.{Map => jMap}
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -250,7 +251,7 @@ object Breadcrumbs {
 
   def currentRegisteredInterests: Map[String, Map[String, (Int, ChainedID)]] = interests.toMap
 
-  private[breadcrumbs] def replicate(c: Crumb): Iterable[Crumb] = {
+  private[breadcrumbs] def replicateToUuids(c: Crumb): Iterable[Crumb] = {
     if (c.flags.contains(CrumbFlag.DoNotReplicateOrAnnotate)) {
       List(c)
     } else {
@@ -528,22 +529,30 @@ abstract class BreadcrumbsPublisher extends Filterable {
 
   protected def warning: Option[ThrottledWarnOrDebug] = None
 
-  final protected[breadcrumbs] def send(c: Crumb): Boolean = {
-    if (c.source.isShutdown) false
-    else if (c.uuid.base.length > 0) {
-      val cs = Breadcrumbs.replicate(c)
-      val source = c.source
-      val count = source.count.addAndGet(cs.size)
-      knownSource.put(source, source)
-      if (source.maxCrumbs < 1 || count <= source.maxCrumbs)
-        Breadcrumbs.replicate(c).forall(sendInternal)
-      else {
-        source.shutdown()
-        false
+  final protected[breadcrumbs] def send(crumb: Crumb): Boolean = {
+    if (crumb.source.isShutdown) false
+    else if (crumb.uuid.base.length > 0) {
+      def sendCrumbsForOneSource(c: Crumb) = {
+        val cReplicated = Breadcrumbs.replicateToUuids(c)
+        val s = c.source
+        val count = s.count.addAndGet(cReplicated.size)
+        knownSource.put(s, s)
+        if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
+          cReplicated.forall(sendInternal)
+        else {
+          s.shutdown()
+          false
+        }
+      }
+      crumb.source match {
+        case ms: MultiSource =>
+          ms.sources.forall(s => sendCrumbsForOneSource(new WithSource(crumb, s)))
+        case _ =>
+          sendCrumbsForOneSource(crumb)
       }
     } else {
       Breadcrumbs.log
-        .warn(s"Not sending crumb with empty uuid base: $c", new IllegalArgumentException("Empty UUID base"))
+        .warn(s"Not sending crumb with empty uuid base: $crumb", new IllegalArgumentException("Empty UUID base"))
       false
     }
   }

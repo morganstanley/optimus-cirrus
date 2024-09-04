@@ -15,7 +15,7 @@ import scala.jdk.CollectionConverters._
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
-
+import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 
@@ -52,6 +52,8 @@ object ArgumentPublisher {
       .map(_.reverse)
   }
 
+  val crumbSource = RuntimeSource + SamplingProfilerSource
+
   private def publish(argType: String, args: Iterable[String], maxCharCount: Int): Unit = {
     val batches = batchTokens(args, maxCharCount)
     batches.zipWithIndex.foreach { case (batch, i: Int) =>
@@ -59,7 +61,7 @@ object ArgumentPublisher {
         ChainedID.root,
         PropertiesCrumb(
           _,
-          RuntimeSource,
+          crumbSource,
           Properties.crumbType -> "CommandLine" ::
             Properties.argsType -> argType ::
             Properties.args -> batch ::

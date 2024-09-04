@@ -5,7 +5,13 @@ If you would like to be mentioned, please contact the internal Optimus group (if
 
 ---
 
+Abhijith Sabu Mathew
+
 Adam Fitzgerald ([@afitz](http://github.com/afitz))
+
+Alina Zhu
+
+Ammar Bharmal ([@ammarbharmal](https://github.com/ammarbharmal))
 
 Andrew Brett ([@ephemerist](http://github.com/ephemerist))
 
@@ -17,11 +23,19 @@ Cyrus Lyons ([@cbwl](http://github.com/cbwl))
 
 Daniela Sfregola ([@DanielaSfregola](http://github.com/DanielaSfregola))
 
+David Blake
+
 Gjeta Gjyshinca
+
+Grant Digby
 
 Harrison Houghton ([@hrhino](http://github.com/hrhino))
 
 Jerry Junhao Ying ([@enjoysoft](http://github.com/enjoysoft))
+
+Leo Liang ([@teemoleo](http://github.com/teemoleo))
+
+Martin Leduc ([@m2leduc](http://github.com/@m2leduc))
 
 Nolita Ebama-Mpeta ([@musinoli](http://github.com/musinoli))
 
@@ -36,3 +50,5 @@ Tony Lam ([@calltl](http://github.com/calltl))
 Valerie Saunders Duncan ([@ms-valerie](http://github.com/ms-valerie))
 
 Diyu Liang ([@vincentdyleung](http://github.com/vincentdyleung))
+
+Winwill Costan

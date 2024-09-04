@@ -108,6 +108,14 @@ sealed abstract class Crumb(
   private[breadcrumbs] def withProperties(elems: Elem[_]*) = new WithProperties(this, Elems(elems: _*))
 }
 
+private[breadcrumbs] class WithSource(crumb: Crumb, source: Crumb.Source)
+    extends Crumb(crumb.uuid, source, crumb.hints) {
+  private[breadcrumbs] override def clazz = crumb.clazz
+  override val t: Long = crumb.t
+  private[breadcrumbs] override def stringProperties: Map[String, String] = crumb.stringProperties
+  private[breadcrumbs] override def jsonProperties: Map[String, JsValue] = crumb.jsonProperties
+}
+
 private[breadcrumbs] class WithReplicaFrom(uuid: ChainedID, crumb: Crumb)
     extends Crumb(uuid, crumb.source, crumb.hints) {
   private[breadcrumbs] override def clazz = crumb.clazz
@@ -531,7 +539,15 @@ object Crumb {
       case s: AnyRef => s eq this
       case _         => false
     }
+    private[breadcrumbs] def sources: Seq[Source] = Seq(this)
     final override def hashCode(): Int = System.identityHashCode(this)
+    def +(that: Source): MultiSource = new MultiSource(sources ++ that.sources)
+  }
+
+  class MultiSource private[Crumb] (override private[breadcrumbs] val sources: Seq[Source]) extends Source {
+    override val name: String = sources.map(_.name).mkString("+")
+    override val flags: CrumbFlags = sources.map(_.flags).reduce(_ ++ _)
+    override val maxCrumbs: Int = sources.map(_.maxCrumbs).min
   }
 
   trait DalSource extends Source { require(name.startsWith("DAL")) }
@@ -543,7 +559,6 @@ object Crumb {
     override val name: String = "PROF"
     override val flags = Set(CrumbFlag.DoNotReplicate)
   }
-
   object SamplingProfilerSource extends Crumb.Source {
     override val name: String = "SP"
     override val flags = Set(CrumbFlag.DoNotReplicate)

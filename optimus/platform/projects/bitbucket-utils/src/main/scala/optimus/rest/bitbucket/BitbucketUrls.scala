@@ -24,12 +24,12 @@ final case class BitbucketUrls(host: String) {
   def browseFile(
       project: String,
       repo: String,
-      filePath: Option[String] = None,
-      atRef: Option[String] = None,
-      lineRange: Option[String] = None): String = {
-    val filePart = if (filePath.nonEmpty) s"/$filePath" else ""
-    val commitPart = atRef.map(commit => s"?at=$commit").getOrElse("")
-    val lineRangePart = lineRange.map(range => s"#$range").getOrElse("")
+      maybeFilePath: Option[String] = None,
+      maybeAtRef: Option[String] = None,
+      maybeLineRange: Option[String] = None): String = {
+    val filePart = maybeFilePath.map(filePath => s"/$filePath").getOrElse("")
+    val commitPart = maybeAtRef.map(commit => s"?at=$commit").getOrElse("")
+    val lineRangePart = maybeLineRange.map(range => s"#$range").getOrElse("")
     s"${basePath(project, repo)}/browse$filePart$commitPart$lineRangePart"
   }
 

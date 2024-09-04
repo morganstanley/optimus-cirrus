@@ -212,7 +212,7 @@ class PyroUploader(
     withExtraLabels: Boolean = false,
     id: Option[ChainedID] = None,
     dryRun: Boolean = false,
-    nThreads: Int = 1
+    nUploadThreads: Int = 1
 ) extends Log {
   import PyroUploader._
 
@@ -369,16 +369,16 @@ class PyroUploader(
       canonical = canonical),
     blocking)
 
-  private val oidcHttpClient = HttpClientOIDC.create()
+  private val oidcHttpClient = HttpClientOIDC.create(nThreads = 2 * (nUploadThreads + 1))
   private val continueTimer = new CountDownLatch(1)
   private def continue = continueTimer.getCount > 0
   private def delay(ms: Long): Unit = {
     continueTimer.await(ms, TimeUnit.MILLISECONDS)
   }
-  private val activeThreads = new CountDownLatch(nThreads)
+  private val activeThreads = new CountDownLatch(nUploadThreads)
   private var backoffMs = backoffDelayMinMs
 
-  for (i <- 1 to nThreads) {
+  for (i <- 1 to nUploadThreads) {
     val thread = new Thread {
       override def run(): Unit = {
         while (true) {
@@ -462,7 +462,8 @@ class PyroUploader(
             val body = response.getEntity()
             val content = Option(body).fold("<empty>")(_.toString)
             errors.incrementAndGet()
-            backoff(s"PyroUploader: Error uploading snapshot $upload ($size): $content")
+            backoff(
+              s"PyroUploader: Error uploading snapshot code=$code status=${response.getStatusLine} $upload ($size): $content")
           }
           response.close()
           response = null

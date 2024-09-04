@@ -23,6 +23,7 @@ import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.impl.client.DefaultConnectionKeepAliveStrategy
 import org.apache.http.impl.client.HttpClients
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
 import org.apache.http.message.BasicHeader
 import org.apache.http.protocol.HttpContext
 import org.springframework.http.HttpHeaders
@@ -34,7 +35,7 @@ object HttpClientOIDC {
   {
     MSKerberosConfiguration.setClientConfiguration()
   }
-  def create(connectionTimeout: Int = 30000): CloseableHttpClient = {
+  def create(connectionTimeout: Int = 30000, nThreads: Int = 2): CloseableHttpClient = {
     val credentialsProvider = new BasicCredentialsProvider
     credentialsProvider.setCredentials(
       new AuthScope(null, -1, null),
@@ -53,12 +54,17 @@ object HttpClientOIDC {
         .setConnectionRequestTimeout(connectionTimeout)
         .build
 
+    val poolingManager = new PoolingHttpClientConnectionManager
+    poolingManager.setMaxTotal(nThreads)
+    poolingManager.setDefaultMaxPerRoute(nThreads)
+
     val httpClientBuilder =
       HttpClients.custom
         .setDefaultRequestConfig(requestConfig)
         .addInterceptorFirst(httpRequestInterceptor)
         .setDefaultCredentialsProvider(credentialsProvider)
         .setKeepAliveStrategy(keepAliveStrategy)
+        .setConnectionManager(poolingManager)
 
     httpClientBuilder.build()
   }

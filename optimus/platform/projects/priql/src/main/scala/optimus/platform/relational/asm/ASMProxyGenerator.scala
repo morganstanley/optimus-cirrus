@@ -75,7 +75,15 @@ final class ASMProxyGenerator(mainType: TypeInfo[_], extType: TypeInfo[_]) exten
     result.toList
   }
 
-  val baseCtorParams = concreteType.primaryConstructorParams.map(t => Type.getDescriptor(t._2)).mkString("")
+  val baseCtorParams = {
+    concreteType.concreteClass.foreach { c =>
+      require(
+        c.getConstructors.exists(_.getParameterCount == concreteType.primaryConstructorParams.size),
+        s"Invalid primaryConstructorParams ${concreteType.primaryConstructorParams.map(_._2).mkString("(", ", ", ")")} from $concreteType"
+      )
+    }
+    concreteType.primaryConstructorParams.map(t => Type.getDescriptor(t._2)).mkString("")
+  }
   val ctorDesc = s"($majorMainBaseDesc$majorExtBaseDesc$baseCtorParams)V"
   val allFields = Seq(mainType, extType).flatMap(_.propertyNames).distinct
   val finalFields: Set[String] = List(mainType, extType)

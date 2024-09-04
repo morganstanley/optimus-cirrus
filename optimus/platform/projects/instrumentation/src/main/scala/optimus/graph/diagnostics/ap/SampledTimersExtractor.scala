@@ -60,11 +60,13 @@ object SampledTimersExtractor extends Log {
 
   def matcher(name: String, preds: StringPredicate*): FrameMatcher = FrameMatcher(name, preds.toArray)
 
-  private val analysers = (ServiceLoaderUtils
-    .all[FrameMatcherProvider]
-    .flatMap(_.frameMatchers) ++ DefaultFrameMatchers.frameMatchers).toArray
-
-  log.info(s"Installing analysers: ${analysers.mkString(", ")}")
+  lazy private val analysers = {
+    val as = (ServiceLoaderUtils
+      .all[FrameMatcherProvider]
+      .flatMap(_.frameMatchers) ++ DefaultFrameMatchers.frameMatchers).toArray
+    log.info(s"Installing analysers: ${as.mkString(", ")}")
+    as
+  }
 
   def newRecording: SampledTimers = new MutableRecordingState(analysers)
 

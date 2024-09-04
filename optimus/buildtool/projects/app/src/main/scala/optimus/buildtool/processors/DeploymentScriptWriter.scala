@@ -37,7 +37,7 @@ object DeploymentScriptWriter extends DeploymentScriptWriter {
 class DeploymentScriptWriter {
   import DeploymentScriptWriter._
 
-  val cmdPrefix: Seq[String] = if (OsUtils.isWindows) Seq("cmd", "/k") else Seq("sh", "-c")
+  val cmdPrefix: Seq[String] = if (OsUtils.isWindows) Seq("cmd", "/c") else Seq("sh", "-c")
   val cmdSeparator: String = if (OsUtils.isWindows) "&&" else ";"
 
   @async protected def runCmdString(cmd: String, scopeId: ScopeId, logFile: FileAsset): Try[String] =
@@ -66,10 +66,8 @@ class DeploymentScriptWriter {
       outputDir: Directory,
       scopeId: ScopeId,
       logFile: FileAsset): Try[DeploymentResponse] = {
-
     val commands: Seq[String] =
       Seq(generateCommand(templateFile, paramsFile, outputDir))
-
     for {
       cmdResponse <- runCmdString(commands.mkString(cmdSeparator), scopeId, logFile)
       deploymentResponse <- handleCmdResponse(cmdResponse)
