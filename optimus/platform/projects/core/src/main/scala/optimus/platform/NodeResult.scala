@@ -378,21 +378,9 @@ sealed trait NodeTry[+T] {
   def get$queued: Node[T]
   def get$withNode: T
 
-  @nodeSync
-  @nodeSyncLift
-  @scenarioIndependentTransparent
   def toOption: Option[T]
-  def toOption$withNode: Option[T]
-  def toOption$queued: Node[Option[T]]
-  def toOption$newNode: Node[Option[T]]
 
-  @nodeSync
-  @nodeSyncLift
-  @scenarioIndependentTransparent
   def toTry: Try[T]
-  def toTry$withNode: Try[T]
-  def toTry$queued: Node[Try[T]]
-  def toTry$newNode: Node[Try[T]]
 
   @nodeSync
   @nodeSyncLift
@@ -542,58 +530,13 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
     node
   }
 
-  @nodeSync
-  @nodeSyncLift
-  @scenarioIndependentTransparent
-  def toOption: Option[T] = toOption$withNode
-  def toOption$withNode: Option[T] = toOption$newNode.get
-  def toOption$queued: Node[Option[T]] = toOption$newNode.enqueue
-  def toOption$newNode: Node[Option[T]] =
-    new toWrapperNode(
-      node,
-      new WrapperBuilder[T, Option[T]] {
-        override def success(t: T): Option[T] = Some(t)
-        override def failure(t: Throwable): Option[T] = None
-        override def info: NodeTaskInfo = NodeTaskInfo.ToOption
-      }
-    )
-
-  @nodeSync
-  @nodeSyncLift
-  @scenarioIndependentTransparent
-  def toTry: Try[T] = toTry$withNode
-  def toTry$withNode: Try[T] = toTry$newNode.get
-  def toTry$queued: Node[Try[T]] = toTry$newNode.enqueue
-  def toTry$newNode: Node[Try[T]] =
-    new toWrapperNode(
-      node,
-      new WrapperBuilder[T, Try[T]] {
-        override def success(t: T): Try[T] = Success(t)
-        override def failure(t: Throwable): Try[T] = Failure(t)
-        override def info: NodeTaskInfo = NodeTaskInfo.ToTry
-      }
-    )
-
-  /** Helper to generalise toOption and toTry */
-  private trait WrapperBuilder[TT, R] {
-    def success(t: TT): R
-    def failure(t: Throwable): R
-    def info: NodeTaskInfo
+  def toOption: Option[T] = {
+    if (node.isDoneWithResult) Some(node.result) else None
   }
 
-  /** Helper to generalise toOption and toTry */
-  private final class toWrapperNode[TT, R](node: Node[TT], builder: WrapperBuilder[TT, R]) extends CN[R] {
-    override def executionInfo: NodeTaskInfo = builder.info
-    override def run(ec: OGSchedulerContext): Unit = {
-      combineInfoExceptException(node, ec)
-      if (node.isDoneWithResult)
-        this.completeWithResult(builder.success(node.result), ec)
-      else
-        node.exception match {
-          case ContainsRTException(e) => this.completeWithResult(builder.failure(e), ec)
-          case _                      => this.completeWithException(node.exception, ec)
-        }
-    }
+  def toTry: Try[T] = {
+    if (node.isDoneWithResult) Success(node.result)
+    else Failure(node.exception())
   }
 
   @nodeSync

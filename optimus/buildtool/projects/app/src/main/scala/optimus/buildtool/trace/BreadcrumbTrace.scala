@@ -35,6 +35,7 @@ import optimus.platform.util.Version
 import optimus.scalacompat.collection._
 import optimus.utils.CollectionUtils._
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 
@@ -46,8 +47,11 @@ final case class Progress(name: String, time: Instant, progress: Double)
 
 trait StatsHolder extends ObtStatsHolder {
   private val stats = mutable.HashMap.empty[ObtStat, Long]
-  private[trace] def getStats = synchronized(stats.toMap)
-  private[trace] def getStat(stat: ObtStat) = synchronized(stats.get(stat))
+  private val statsSets = mutable.HashMap.empty[ObtStat, mutable.Set[Any]]
+  private[trace] def getStats: Map[ObtStat, Long] =
+    synchronized(stats.toMap ++ statsSets.map { case (k, v) => (k, v.size.toLong) })
+  private[trace] def getStat(stat: ObtStat): Option[Long] =
+    synchronized(stats.get(stat) orElse statsSets.get(stat).map(_.size.toLong))
 
   override def setStat(obtStat: ObtStat, value: Long): Unit = synchronized {
     stats += obtStat -> value
@@ -56,6 +60,12 @@ trait StatsHolder extends ObtStatsHolder {
     stats += (obtStat -> (stats.get(obtStat) match {
       case Some(v0) => v0 + value
       case _        => value
+    }))
+  }
+  override def addToStat(obtStat: ObtStat, value: Set[_]): Unit = synchronized {
+    statsSets += (obtStat -> (statsSets.get(obtStat) match {
+      case Some(v0) => v0 ++= value
+      case _        => value.to(mutable.Set).asInstanceOf[mutable.Set[Any]]
     }))
   }
   override def supportsStats: Boolean = true

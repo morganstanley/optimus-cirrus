@@ -43,8 +43,10 @@ final case class Host(underlying: String) extends AnyVal {
   def toStringNoSuffix(): String = underlying.stripSuffix(Host.msHostSuffix)
 }
 object Host {
-  private val config = ConfigFactory.load("properties.conf")
-  private final val msHostSuffix = config.getString("ms-host-suffix")
+  private final val msHostSuffix = {
+    val config = ConfigFactory.parseResourcesAnySyntax(getClass().getClassLoader(), "properties.conf")
+    config.getString("ms-host-suffix")
+  }
 }
 
 final case class Port(underlying: String) extends AnyVal {

@@ -25,7 +25,7 @@ class NodeCounterPlugin extends SchedulerPlugin {
   override def adapt(n: NodeTask, ec: OGSchedulerContext): Boolean = {
     val tag = n.scenarioStack().findPluginTag(NodeCounterPlugin.TagKey)
     if (tag.nonEmpty) {
-      tag.get.find(v => v._1.getPlugin == this).map(z => z._2.incrementAndGet())
+      tag.get.find(v => v._1.getPlugin(n.scenarioStack()) == this).map(z => z._2.incrementAndGet())
     }
     counter.incrementAndGet()
     false

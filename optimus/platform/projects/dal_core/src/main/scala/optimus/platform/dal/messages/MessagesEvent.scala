@@ -54,12 +54,12 @@ object MessagesEvent {
   // used by DAL.publishTransactions API
   final case class MessagesTransactionNotification(
       streamId: String,
-      className: String,
+      className: String, // BusinessEvent className
       payload: SerializedUpsertableTransaction,
       commitId: Long,
       pubReqId: String
   ) extends StreamNotificationEvent {
-    def classNames: Seq[String] = payload.putEvent.bes.flatMap(_.puts.map(_.ent.className))
+    def classNames: Seq[String] = payload.topLevelSerializedEntityClassNames
   }
 
   final case class MessagesStreamDisconnect(streamId: String, error: Throwable) extends StreamEvent

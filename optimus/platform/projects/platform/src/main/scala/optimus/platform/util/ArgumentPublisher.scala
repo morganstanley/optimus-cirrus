@@ -17,6 +17,7 @@ import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
 import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 
 import java.lang.management.ManagementFactory
@@ -31,6 +32,10 @@ object ArgumentPublisher {
     System.getenv().asScala.collect {
       case (k, v) if interesting.exists(k.contains(_)) => s"$k=$v"
     }
+  }
+
+  private def extracted: Iterable[String] = Version.properties.toMap.map { case (k, v) =>
+    s"$k=$v"
   }
 
   // Divides the list of tokens into batches such that the sum of the lengths in each
@@ -54,7 +59,9 @@ object ArgumentPublisher {
 
   val crumbSource = RuntimeSource + SamplingProfilerSource
 
-  private def publish(argType: String, args: Iterable[String], maxCharCount: Int): Unit = {
+  private val maxCharCount = 5000
+
+  private def publish(argType: String, args: Iterable[String]): Unit = {
     val batches = batchTokens(args, maxCharCount)
     batches.zipWithIndex.foreach { case (batch, i: Int) =>
       Breadcrumbs.info(
@@ -65,16 +72,16 @@ object ArgumentPublisher {
           Properties.crumbType -> "CommandLine" ::
             Properties.argsType -> argType ::
             Properties.args -> batch ::
-            Properties.batchId -> (i + 1) ::
-            Version.properties
+            Properties.batchId -> (i + 1) :: Elems.Nil
         )
       )
     }
   }
 
   def publishArgs(programArgs: Iterable[String]): Unit = {
-    publish("java", javaOpts, 5000)
-    publish("optimus", programArgs, 5000)
-    publish("optimusenv", optimusEnv, 5000)
+    publish("java", javaOpts)
+    publish("optimus", programArgs)
+    publish("optimusenv", optimusEnv)
+    publish("extracted", extracted)
   }
 }

@@ -12,9 +12,9 @@
 package optimus.platform.util
 
 import java.lang.reflect.Modifier
-
 import optimus.platform._
 import optimus.platform.annotations.handle
+import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.storable.Entity
 
 import scala.reflect.runtime.currentMirror
@@ -24,6 +24,18 @@ object ClassUtils {
 
   def classSymbol(cls: Class[_]): ClassSymbol = currentMirror.classSymbol(cls)
   def classToType(cls: Class[_]): Type = classSymbol(cls).toType
+  def classToTypeInfo(cls: Class[_]): TypeInfo[_] = typeToTypeInfo(classToType(cls))
+  def typeToClass(tp: Type): Class[_] = currentMirror.runtimeClass(tp)
+  def typeToTypeInfo(tp: Type): TypeInfo[_] = {
+    val runtimeTypes = tp match {
+      case RefinedType(parents, _)                          => parents
+      case t: TypeRef if !t.sym.isClass && t.sym.isAbstract => Seq(definitions.ObjectTpe)
+      case t                                                => Seq(t)
+    }
+    val classes = runtimeTypes.map(t => currentMirror.runtimeClass(t))
+    val typeParams = tp.typeArgs.map(typeToTypeInfo)
+    TypeInfo(classes, Nil, Nil, typeParams)
+  }
 
   def isJavaEnum(cls: Class[_]): Boolean = classOf[Enum[_]].isAssignableFrom(cls) || cls.isEnum
   def isScalaEnum(cls: Class[_]): Boolean = classOf[Enumeration#Value].isAssignableFrom(cls)

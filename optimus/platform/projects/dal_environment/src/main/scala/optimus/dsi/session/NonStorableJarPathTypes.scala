@@ -22,7 +22,7 @@ private[optimus] trait JarPathT {
 }
 
 private[optimus] object JarPathT {
-  val config = ConfigFactory.load("properties.conf")
+  val config = ConfigFactory.parseResourcesAnySyntax(getClass().getClassLoader(), "properties.conf")
 
   val MprPathBaseDir = config.getString("paths.mpr-path-base-dir")
   private val mprPathPatternStr = config.getString("paths.mpr-path-pattern")

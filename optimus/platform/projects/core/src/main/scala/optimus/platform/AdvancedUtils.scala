@@ -1394,7 +1394,8 @@ object AdvancedUtils {
               node.continueWith(this, eq)
             } else {
               log.debug(s"Delaying ${runNF.debugIdx}")
-              val promise = NodePromise.createWithSpecificQueue[Unit](NodeTaskInfo.Delay, eq, scenarioStack())
+              val promise =
+                NodePromise.createWithSpecificScheduler[Unit](NodeTaskInfo.Delay, eq.scheduler, scenarioStack())
               CoreAPI.delayPromise(promise, timerIntervalMs, TimeUnit.MILLISECONDS)
               delayNode = promise.node
               delayNode.continueWith(this, eq)

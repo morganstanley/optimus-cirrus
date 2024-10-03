@@ -15,7 +15,7 @@ package app
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader.UploadFormat
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
-import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.files.Directory
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
@@ -23,6 +23,9 @@ import optimus.platform._
 import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.rest.bitbucket.MergeCommitUtils
 import optimus.utils.Args4JOptionHandlers.DelimitedStringOptionHandler
+import optimus.utils.MemSize
+import optimus.utils.MemUnit
+import optimus.utils.app.MemSizeOptionHandler
 import org.kohsuke.{args4j => args}
 
 import java.nio.file.Path
@@ -46,8 +49,8 @@ private[buildtool] trait InstallDirCmdLine {
   )
   val installDir: String = ""
 
-  lazy val onAfs: Boolean = installDir.startsWith(NamingConventions.AfsDistStr) ||
-    installDir.startsWith(NamingConventions.AfsDistStr drop 1) // drop the leading '/', just in case
+  lazy val onAfs: Boolean = installDir.startsWith(AfsNamingConventions.AfsDistStr) ||
+    installDir.startsWith(AfsNamingConventions.AfsDistStr drop 1) // drop the leading '/', just in case
 
   @args.Option(name = "--installVersion", required = false, usage = "Install version (defaults to local)")
   val installVersion: String = "local"
@@ -252,10 +255,28 @@ private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { th
     name = "--remoteCacheForceWrite",
     required = false,
     aliases = Array("--skfw", "--silverKingForceWrite"),
-    depends = Array("--silverKing", "--silverKingWritable"),
+    depends = Array("--silverKingWritable"),
     usage = "Force writing of artifacts to SilverKing even on cache hits (defaults to false)"
   )
   val remoteCacheForceWrite: Boolean = false
+
+  @args.Option(
+    name = "--crossRegionReadThroughDHTLocations",
+    required = false,
+    handler = classOf[DelimitedStringOptionHandler],
+    usage =
+      "DHT locations (comma delimited) for cross-region read-through after write to current region (defaults to none)"
+  )
+  val crossRegionReadThroughDHTLocations: Seq[String] = Seq.empty
+
+  @args.Option(
+    name = "--crossRegionDHTSizeThreshold",
+    handler = classOf[MemSizeOptionHandler],
+    required = false,
+    usage =
+      "Threshold for cross-region read-through after write to current region (defaults to 100MB).  Artifacts larger than threshold value will be read through DHT from the remote DHTs."
+  )
+  val crossRegionDHTSizeThreshold: MemSize = MemSize.of(100, MemUnit.MB)
 
   @args.Option(
     name = "--silverKingDualWrite",
@@ -649,17 +670,17 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     name = "--maxNumZincs",
     required = false,
     usage =
-      "Deprecated: Maximum number of concurrently running Zinc compilers or -1 if unlimited (defaults to unlimited)."
+      "Deprecated: Maximum number of concurrently running Zinc compilers or 0 if unlimited (defaults to unlimited)."
   )
-  val maxNumZincs: Int = -1
+  val maxNumZincs: Int = 0
 
   @args.Option(
     name = "--maxZincCompileBytes",
     required = false,
     usage =
-      "Maximum size of source code to compile concurrently using Zinc compilers or -1 if unlimited (defaults to unlimited)."
+      "If positive, maximum size of source code to compile concurrently using Zinc compilers; if negative, maxHeap/-maxZincCompileBytes or 0 if unlimited (defaults to unlimited)."
   )
-  val maxZincCompileBytes: Int = -1
+  val maxZincCompileBytes: Int = 0
 
   @args.Option(
     name = "--backgroundCmd",
@@ -869,7 +890,15 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   @args.Option(
     name = "--pypiCredentials",
     required = false,
-    usage = "Location of the cached pip.ini credential file to load, used by Pypi Artifactory"
+    usage = "Location of the cached pip.ini credential file to load, used by pip to connect to Pypi Artifactory"
   )
   val pypiCredentials: String = NoneArg
+
+  // TODO (OPTIMUS-68785): this flag will be used when we merge this obt <> thin-pyapp integration, remove this comment after the merge
+  @args.Option(
+    name = "--pypiUvCredentials",
+    required = false,
+    usage = "Location of the cached uv.toml credential file to load, used by uv to connect to Pypi Artifactory"
+  )
+  val pypiUvCredentials: String = NoneArg
 }

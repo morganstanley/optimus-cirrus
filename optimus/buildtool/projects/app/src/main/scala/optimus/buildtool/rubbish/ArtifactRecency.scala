@@ -25,6 +25,7 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.GitLog
 import optimus.platform._
 
+import java.time.Instant
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.HashMap
 import scala.collection.immutable.Seq
@@ -40,18 +41,19 @@ final class ArtifactRecency(buildDir: Directory, gitLog: GitLog) extends PostBui
   @async override def postProcessArtifacts(scopes: Set[ScopeId], artifacts: Seq[Artifact], successful: Boolean): Unit =
     markRecent(artifacts)
 
-  @async def markRecent(artifacts: Seq[Artifact]): Unit = ObtTrace.traceTask(ScopeId.RootScopeId, MarkRecentArtifacts) {
-    // doing something like `artifacts.foreach(_.path.lastAccess = now)` takes > 1 second on Windows
-    val newPaths = artifacts
-      .collect { case p: PathedArtifact => (p.id, p) }
-      .collect { case (id: InternalArtifactId, p) => (id, p.path) }
+  @async def markRecent(artifacts: Seq[Artifact]): Unit =
+    ObtTrace.traceTask(ScopeId.RootScopeId, MarkRecentArtifacts) {
+      // doing something like `artifacts.foreach(_.path.lastAccess = now)` takes > 1 second on Windows
+      val newPaths = artifacts
+        .collect { case p: PathedArtifact => (p.id, p) }
+        .collect { case (id: InternalArtifactId, p) => (id, p.path) }
 
-    gitLog.HEAD.foreach { HEAD =>
-      val clogFile = forCommit(HEAD.hash, buildDir)
-      val oldClog = readLog(clogFile)
-      writeLog(clogFile) { updateLog(oldClog, newPaths) }
+      gitLog.HEAD.foreach { HEAD =>
+        val clogFile = forCommit(HEAD.hash, buildDir)
+        val oldClog = readLog(clogFile)
+        writeLog(clogFile) { updateLog(oldClog, newPaths) }
+      }
     }
-  }
 }
 
 /**
@@ -155,15 +157,17 @@ private[rubbish] object CommitLog {
 
   /** Delete all commit log files not in the reflog according to `git` */
   @entersGraph
-  def tidy(buildDir: Directory, git: GitLog): Unit = {
+  def tidy(buildDir: Directory, git: GitLog): Seq[StoredArtifact] = {
     val recentCommits = git.recentHeads.map(_.hash).toSet
     val logDir = buildDir resolveDir DirName
     if (logDir.exists) {
       val logEntries = Files.list(logDir.path).iterator.asScala.toList
-      logEntries.foreach { logEntry =>
-        if (!recentCommits.contains(logEntry.getFileName.toString))
+      logEntries.flatMap { logEntry =>
+        if (!recentCommits.contains(logEntry.getFileName.toString)) {
           Files.delete(logEntry)
+          Some(StoredArtifact(logEntry, 0, Instant.EPOCH))
+        } else None
       }
-    }
+    } else Nil
   }
 }

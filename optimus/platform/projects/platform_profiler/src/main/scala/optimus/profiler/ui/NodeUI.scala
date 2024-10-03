@@ -37,6 +37,7 @@ import optimus.graph.JMXConnection
 import optimus.graph.NodeTrace
 import optimus.graph.OGSchedulerTimes
 import optimus.graph.OGTrace
+import optimus.graph.diagnostics.Debugger
 import optimus.graph.diagnostics.SchedulerProfileEntry
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.graph.diagnostics.trace.OGEventsObserver
@@ -137,8 +138,15 @@ object NodeUI {
         val subMenu = addToMenu.addMenu(mode.title, startProfiler(mode), enable = true)
         subMenu.setToolTipText(mode.description)
       }
-      menu.addSeparator()
-      menu.add(advModes)
+
+      Debugger.registerAdvancedCommandChangedCallback(b =>
+        if (b) {
+          menu.addSeparator()
+          menu.add(advModes)
+        } else {
+          menu.remove(advModes)
+          menu.remove(menu.getComponentCount - 1)
+        })
 
       OGTrace.registerOnTraceModeChanged((prevMode, newMode) =>
         NodeUI.invokeLater(onTraceModeChanged(prevMode, newMode)))

@@ -16,7 +16,6 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -29,10 +28,12 @@ import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.jar.Attributes;
 import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
@@ -181,21 +182,25 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   public static final String CMI_ERROR = "[CMI:error]";
   public static final String CMI_WARN = "[CMI:warn]";
   public static final String CMI_INFO = "[CMI:info]";
-  private static final Path localJarPathPrefix;
-  private static final Path rejectedLocalJarPathPrefix;
+  private static final Path workspaceRootPath;
+  private static final Path rejectedIntellijInstallPath;
+  private static final String artifactsVersion;
 
   static {
-    Path prefix;
-    Path rejectedPrefix;
+    Path root;
+    Path rejectedRoot; // Reject IntelliJ's jars
     try {
-      prefix = getCodetreeArtifactPrefix();
-      rejectedPrefix = prefix != null ? prefix.resolve("ide_config") : prefix;
+      root = getWorkspaceRoot();
+      rejectedRoot = root != null ? root.resolve("ide_config") : root;
     } catch (Throwable t) {
-      prefix = null;
-      rejectedPrefix = null;
+      root = null;
+      rejectedRoot = null;
     }
-    localJarPathPrefix = prefix;
-    rejectedLocalJarPathPrefix = rejectedPrefix;
+    workspaceRootPath = root;
+    rejectedIntellijInstallPath = rejectedRoot;
+
+    Optional<String> maybeArtifactsVersion = getBuildArtifactsVersion();
+    artifactsVersion = maybeArtifactsVersion.orElse("local");
   }
 
   public ClassMonitorInjector() {
@@ -225,11 +230,14 @@ public class ClassMonitorInjector implements ClassFileTransformer {
         statistics.failures.get());
   }
 
-  private static Path getCodetreeArtifactPrefix() throws MalformedURLException, URISyntaxException {
-    URL resourceURL =
-        ClassMonitorInjector.class
-            .getClassLoader()
-            .getResource(constructDependencyName(ClassMonitorInjector.class.getName()));
+  private static URL getReferenceClassUrl() {
+    return ClassMonitorInjector.class
+        .getClassLoader()
+        .getResource(constructDependencyName(ClassMonitorInjector.class.getName()));
+  }
+
+  public static Path getWorkspaceRoot() throws URISyntaxException {
+    URL resourceURL = getReferenceClassUrl();
     if (resourceURL != null) {
       Path thisJarPath = Paths.get(new URI(resourceURL.getPath().split("!")[0]));
       boolean isBuildDirJar = thisJarPath.getFileName().toString().contains("HASH");
@@ -239,6 +247,24 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     }
     // null otherwise as we can do the check using manifest values
     return null;
+  }
+
+  private static Optional<String> getBuildArtifactsVersion() {
+    URL resourceURL = getReferenceClassUrl();
+    if (resourceURL != null) {
+      try (JarInputStream jarstream = new JarInputStream(resourceURL.openStream())) {
+        Manifest manifest = jarstream.getManifest();
+        if (manifest != null) {
+          // We are likely from AFS or NFS
+          return Optional.ofNullable(
+              manifest.getMainAttributes().getValue("Specification-Version"));
+        }
+        // build_obt artifacts do not have manifests
+      } catch (IOException e) {
+        // Best effort check
+      }
+    }
+    return Optional.empty();
   }
 
   // When a class is loaded, it means it was truly needed.
@@ -720,13 +746,16 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   }
 
   public static boolean isOptimusJar(URL jarfileURL) {
-
-    if (localJarPathPrefix == null) { // not local obt, we can rely on presence of manifest
+    if (workspaceRootPath == null) { // not local obt, we can rely on presence of manifest
       try (JarInputStream jarstream = new JarInputStream(jarfileURL.openStream())) {
         Manifest manifest = jarstream.getManifest();
         if (manifest != null) {
-          String obtVersion = manifest.getMainAttributes().getValue("Buildtool-Version");
-          return obtVersion != null;
+          Attributes mainAttributes = manifest.getMainAttributes();
+          String obtVersion = mainAttributes.getValue("Buildtool-Version"); // may be null
+          String specVersion = mainAttributes.getValue("Specification-Version"); // may be null
+          // We want to ensure that OBT-built jars that are dependencies to this build/release
+          // are not considered part of the tested build artifacts.
+          return obtVersion != null && artifactsVersion.equals(specVersion);
         }
       } catch (IOException e) {
         // Best effort check
@@ -735,8 +764,8 @@ public class ClassMonitorInjector implements ClassFileTransformer {
     } else {
       try {
         Path jarPath = Paths.get(jarfileURL.toURI());
-        return jarPath.startsWith(localJarPathPrefix)
-            && !jarPath.startsWith(rejectedLocalJarPathPrefix);
+        return jarPath.startsWith(workspaceRootPath)
+            && !jarPath.startsWith(rejectedIntellijInstallPath);
       } catch (URISyntaxException e) {
         return false;
       }

@@ -22,14 +22,15 @@ import java.nio.file.Files
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTraceListener {
   private val log = getLogger(this)
 
   @volatile private var startTime: Instant = _
-  val stats = new ConcurrentHashMap[ObtStat, Long]()
-  val statsSets = new ConcurrentHashMap[ObtStat, Set[_]]()
+  private val stats = new ConcurrentHashMap[ObtStat, Long]()
+  private val statsSets = new ConcurrentHashMap[ObtStat, mutable.Set[Any]]()
   private val gcMonitor = GCMonitor.instance
   private val GcMonitorConsumerName = "OptimusBuildTool"
 
@@ -72,7 +73,9 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
   override def addToStat(stat: ObtStat, value: Long): Unit =
     stats.compute(stat, (_, current) => current + value)
   override def addToStat(stat: ObtStat, value: Set[_]): Unit =
-    statsSets.compute(stat, (_, current) => if (current == null) value else current ++ value)
+    statsSets.compute(
+      stat,
+      (_, current) => if (current == null) value.to(mutable.Set).asInstanceOf[mutable.Set[Any]] else current ++= value)
 
   override def endBuild(success: Boolean): Boolean = {
 
@@ -91,7 +94,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
     def workspaceChangesSummary: String = {
       val changedDirectories = stats.getOrDefault(ObtStats.ModifiedDirectories, 0)
       val deletedArtifacts = stats.getOrDefault(ObtStats.DeletedArtifacts, 0)
-      val mutableExternalDeps = statsSets.getOrDefault(ObtStats.MutableExternalDependencies, Set.empty).map(_.toString)
+      val mutableExternalDeps = stringsInSet(ObtStats.MutableExternalDependencies)
       val numMutableExternalDeps = mutableExternalDeps.size
 
       if (numMutableExternalDeps > 0)
@@ -102,6 +105,11 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       else ""
     }
 
+    def sizeOfSet(stat: ObtStat): Int =
+      Option(statsSets.get(stat)).map(_.size).getOrElse(0)
+    def stringsInSet(stat: ObtStat): Set[String] =
+      Option(statsSets.get(stat)).map(_.map(_.toString).toSet).getOrElse(Set.empty)
+
     def jvmHitsSummary: String = {
       def jvmHits(cacheType: ObtStats.Cache): Long =
         stats.getOrDefault(cacheType.ScalaHit, 0) + stats.getOrDefault(cacheType.JavaHit, 0)
@@ -109,8 +117,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       val jvmArtifacts =
         stats.getOrDefault(ObtStats.ScalaArtifacts, 0) + stats.getOrDefault(ObtStats.JavaArtifacts, 0)
       val nodeCacheMisses =
-        statsSets.getOrDefault(ObtStats.NodeCacheScalaMiss, Set.empty).size +
-          statsSets.getOrDefault(ObtStats.NodeCacheJavaMiss, Set.empty).size
+        sizeOfSet(ObtStats.NodeCacheScalaMiss) + sizeOfSet(ObtStats.NodeCacheJavaMiss)
       // node cache hits is inexact, but at least make sure we don't report negative hits
       val nodeCacheHits = math.max(jvmArtifacts - nodeCacheMisses, 0)
 
@@ -144,7 +151,9 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
 
     def jvmCompilationSummary: String = {
       val readFsSources = stats.getOrDefault(ObtStats.ReadFileSystemSourceFiles, 0)
+      val readDistinctFsSources = sizeOfSet(ObtStats.ReadDistinctFileSystemSourceFiles)
       val readGitSources = stats.getOrDefault(ObtStats.ReadGitSourceFiles, 0)
+      val readDistinctGitSources = sizeOfSet(ObtStats.ReadDistinctGitSourceFiles)
       val readSources = readFsSources + readGitSources
 
       val addedSources = stats.getOrDefault(ObtStats.AddedSourceFiles, 0)
@@ -153,8 +162,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       val changedSources = addedSources + modifiedSources + removedSources
       val invalidatedSources = stats.getOrDefault(ObtStats.InvalidatedSourceFiles, 0)
       val totalSources = stats.getOrDefault(ObtStats.SourceFiles, 0)
-      val externalDependenciesChanged =
-        statsSets.getOrDefault(ObtStats.ExternalDependencyChanges, Set.empty).map(_.toString)
+      val externalDependenciesChanged = stringsInSet(ObtStats.ExternalDependencyChanges)
       val numExternalDependenciesChanged = externalDependenciesChanged.size
 
       val compiledLines = stats.getOrDefault(ObtStats.CompiledLinesOfCode, 0)
@@ -165,7 +173,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
 
       val readSourcesStr =
         if (readSources > 0)
-          f"\t\tSource files read: $readSources%,d [Local disk: $readFsSources%,d, Git: $readGitSources%,d]"
+          f"\t\tSource files read: $readSources%,d [Local disk: $readFsSources%,d ($readDistinctFsSources%,d distinct), Git: $readGitSources%,d ($readDistinctGitSources%,d distinct)]"
         else ""
       val changedSourcesStr =
         if (changedSources > 0) f"\t\tSource files changed: $changedSources%,d" else ""

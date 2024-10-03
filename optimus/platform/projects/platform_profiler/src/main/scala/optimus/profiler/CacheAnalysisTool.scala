@@ -16,18 +16,15 @@ import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.configmetrics.CacheMetricDiff
 import optimus.graph.diagnostics.configmetrics.CacheMetrics
 import optimus.graph.diagnostics.configmetrics.ConfigMetrics
-import optimus.graph.diagnostics.configmetrics.ConfigMetricsStrings.configFileExtension
 import optimus.graph.diagnostics.configmetrics.EffectSummary
 import optimus.graph.diagnostics.configmetrics.MetricDiff
-import optimus.graph.diagnostics.configmetrics.ThresholdDiffSummary
-import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils.copyFileFromResources
-import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils.hotspotsFileName
 import optimus.graph.diagnostics.pgo.Profiler.combinePNTIs
 import optimus.graph.diagnostics.pgo.Profiler.pgoWouldDisableCache
 import optimus.platform.AsyncImplicits._
 import optimus.platform.async
 import optimus.profiler.CacheAnaysisDiffUtils._
 import optimus.profiler.ConfigMetricsDiff.fileNameToAppletNames
+import optimus.profiler.ConfigMetricsDiff.filenameToConfigMetrics
 import optimus.profiler.MergeTraces.mergeTraces
 import optimus.profiler.RegressionsConfigApps.extractTestAndFileName
 import optimus.profiler.RegressionsConfigApps.profilerDirName
@@ -36,14 +33,12 @@ import optimus.utils.ErrorIgnoringFileVisitor
 import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
 
-import java.lang.{StringBuilder => JStringBuilder}
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 /**
  * This app takes a path to a root directory containing the output for the original run of the regressions,
@@ -77,7 +72,6 @@ object CacheAnalysisTool extends App {
       System.exit(1)
   }
 
-  private lazy val prefix = "optconfEffect"
   lazy val unknownApplet = "unknown"
 
   @async def getComparisonDrsTableContent(
@@ -85,50 +79,51 @@ object CacheAnalysisTool extends App {
       secondProfilerDirName: String,
       firstProfilerDir: String,
       secondProfilerDir: String,
-      enforceWithConfComparison: Boolean = false,
       enableAppletGrouping: Boolean): Map[String, OverallPgoEffect] = {
 
-    val ((combinedSummaryCommon, combinedSummaryDistinct), appletToTestMap) = combineAndWriteSummary(
+    val (nodeSummaryByApplet, summaryByTest) = combineAndWriteSummary(
       firstProfilerDirName,
       secondProfilerDirName,
       firstProfilerDir,
       secondProfilerDir,
-      enforceWithConfComparison,
       enableAppletGrouping)
 
-    val combinedTestToNodesMap = combinedSummaryCommon.map { case (test, testAndNodesEffectSummary) =>
-      val (testSummary, commonNodeSummary) =
-        (testAndNodesEffectSummary.testSummary, testAndNodesEffectSummary.nodesSummaries)
-      val distinctNodes = combinedSummaryDistinct(test).nodesSummaries
-      test -> (testSummary +: (commonNodeSummary ++ distinctNodes))
-    }
-
-    appletToPgoEffect(combinedTestToNodesMap, appletToTestMap)
+    appletToPgoEffect(nodeSummaryByApplet, summaryByTest, enableAppletGrouping)
   }
-  private def appletToPgoEffect(
-      combinedTestMap: Map[String, List[EffectSummary]],
-      appletToTestMap: Option[Map[String, Set[String]]]): Map[String, OverallPgoEffect] = {
-    appletToTestMap match {
-      case Some(appletMap) =>
-        appletMap.map { case (applet, tests) =>
-          val testMap = tests.map(test => test -> combinedTestMap.getOrElse(test, List.empty)).toMap
-          val appletSummary = getAppletSummaryFromTests(true, testMap)
-          applet -> OverallPgoEffect(appletSummary, testMap)
-        }
-      case None => Map(unknownApplet -> OverallPgoEffect(None, combinedTestMap))
+
+  @async def appletToPgoEffect(
+      nodeSummaryByApplet: Map[String, TestToEffectSummariesMap],
+      summaryByTest: Map[String, EffectSummary],
+      enableAppletGrouping: Boolean): Map[String, OverallPgoEffect] = {
+    nodeSummaryByApplet.apar.map { case (applet, testToNodesMap) =>
+      val testAndNodeSummary = combineTestAndNodeSummary(testToNodesMap, summaryByTest)
+      val appletSummary = getAppletSummaryFromTests(enableAppletGrouping, testAndNodeSummary, ifNeedMinValue = false)
+      applet -> OverallPgoEffect(appletSummary, testAndNodeSummary)
     }
   }
 
+  @async def combineTestAndNodeSummary(
+      testToNodeSummary: TestToEffectSummariesMap,
+      summaryByTest: Map[String, EffectSummary]): TestToEffectSummariesMap =
+    testToNodeSummary.apar.map { case (test, nodeSummary) =>
+      val testSummary = summaryByTest(test)
+      test -> (testSummary +: nodeSummary)
+    }
+
+  // ------------------------Helper FUnctions for File Walk Algorithm (start) -----------------//
   def updatePerTestPntisAndGlobalPntis(
       testName: String,
       allTestsNames: Set[String],
       path: String,
       globalPnti: Seq[PNodeTaskInfo],
+      enableGlobalPnti: Boolean,
       testToMergedPntiMap: Map[String, Seq[PNodeTaskInfo]]) = {
     val updatedAllTestNames = allTestsNames + testName
     val testPnti = mergeTraces(Seq(path), combinePntis)._1
-    val prevGlobalPnti = globalPnti
-    val updatedGlobalPnti = combinePNTIs(prevGlobalPnti ++ testPnti).values.toSeq
+    val updatedGlobalPnti: Seq[PNodeTaskInfo] = if (enableGlobalPnti) {
+      val prevGlobalPnti = globalPnti
+      combinePNTIs(prevGlobalPnti ++ testPnti).values.toSeq
+    } else Seq.empty
     val updatedPerTestPnti = if (testToMergedPntiMap.contains(testName)) {
       val prevMergedPnti = testToMergedPntiMap(testName)
       combinePNTIs(prevMergedPnti ++ testPnti).values.toSeq
@@ -188,14 +183,38 @@ object CacheAnalysisTool extends App {
     updatedAppletMap.toMap
   }
 
+  def getFinalAppletToTestPntiMap(
+      enableAppletGrouping: Boolean,
+      allTestsNames: Set[String],
+      testsWithApplet: Set[String],
+      testToMergedPntiMap: Map[String, Seq[PNodeTaskInfo]],
+      appletToTestPntiMap: Map[String, Map[String, Seq[PNodeTaskInfo]]]): AppletToTestPntiMap = {
+    // if no applet grouping
+    if (!enableAppletGrouping) {
+      Map(unknownApplet -> testToMergedPntiMap)
+    } else { // with applet grouping
+      mergeAppletAndPerTestPntis(allTestsNames, testsWithApplet, testToMergedPntiMap, appletToTestPntiMap)
+    }
+  }
+  // ------------------------Helper Functions for File Walk Algorithm (end) ^ -----------------//
+
+  /**
+   * File walk algorithm that are used in both comparison regressions and PGO estimation
+   * If enableAppletGrouping = true, parses appletInfo.csv;
+   * If enableGlobalPnti = true, then combines all pntis from all ogtrace files (used in PGO estimation;
+   * If enableTestConfigMEtrics = true, parses configMetrics.csv to get test summary (used in comparison)
+   */
   def mergingPntiInFileWalking(
       profilerDirName: String,
       profilerDir: String,
-      enableAppletGrouping: Boolean): AppletToTestMapAndGlobalPnti = {
+      enableAppletGrouping: Boolean,
+      enableGlobalPnti: Boolean,
+      enableTestConfigMetrics: Boolean): (AppletToTestMapAndGlobalPnti, Option[TestToConfigMetrics]) = {
     val appletToTestPntiMap: mutable.Map[String, mutable.Map[String, Seq[PNodeTaskInfo]]] = mutable.Map()
     val testToMergedPntiMap: mutable.Map[String, Seq[PNodeTaskInfo]] = mutable.Map()
     var globalPnti: Seq[PNodeTaskInfo] = Seq.empty
     val testsWithApplet, allTestsNames: mutable.Set[String] = mutable.Set()
+    val testToConfigMetrics: mutable.Map[String, ConfigMetrics] = mutable.Map()
     val path = Paths.get(profilerDir)
 
     /** replace the old appletToTestPnti map with the content from the immutable updatedMap */
@@ -216,50 +235,49 @@ object CacheAnalysisTool extends App {
               log.info(s"Found ogtrace file $fileName for test $testName")
               val (updatedAllTestNames, updatedPerTestPnti, updatedGlobalPnti) =
                 updatePerTestPntisAndGlobalPntis(
-                  testName,
-                  allTestsNames.toSet,
-                  path,
-                  globalPnti,
-                  testToMergedPntiMap.toMap)
+                  testName = testName,
+                  allTestsNames = allTestsNames.toSet,
+                  path = path,
+                  globalPnti = globalPnti,
+                  enableGlobalPnti = enableGlobalPnti,
+                  testToMergedPntiMap = testToMergedPntiMap.toMap
+                )
               allTestsNames.clear()
               allTestsNames ++= updatedAllTestNames
               testToMergedPntiMap(testName) = updatedPerTestPnti
               globalPnti = updatedGlobalPnti
             case _ =>
           }
-          if (enableAppletGrouping) {
-            // extract applet info
-            extractTestAndFileName(path, ".csv", profilerDirName) match {
-              case Some((testName, fileName)) if isRequiredFile(fileName, appletInfoFileName) =>
-                log.info(s"Found applet file for test $testName")
-                val (updatedTestsWithApplet, updatedAppletMap) = updateAppletToTestMap(
-                  testName,
-                  path,
-                  testsWithApplet.toSet,
-                  appletToTestPntiMap.mapValuesNow(_.toMap).toMap)
-                testsWithApplet.clear()
-                testsWithApplet ++= updatedTestsWithApplet
-                replaceAppletMap(updatedAppletMap)
-              case _ =>
-            }
-          } // don't do anything if not enable applet grouping
+          // extract applet info, test config metrics if needed
+          extractTestAndFileName(path, csvFileExtension, profilerDirName) match {
+            case Some((testName, fileName)) if enableAppletGrouping && isRequiredFile(fileName, appletInfoFileName) =>
+              log.info(s"Found applet file for test $testName")
+              val (updatedTestsWithApplet, updatedAppletMap) = updateAppletToTestMap(
+                testName,
+                path,
+                testsWithApplet.toSet,
+                appletToTestPntiMap.mapValuesNow(_.toMap).toMap)
+              testsWithApplet.clear()
+              testsWithApplet ++= updatedTestsWithApplet
+              replaceAppletMap(updatedAppletMap)
+            case Some((testName, fileName)) if enableTestConfigMetrics && isConfigMetricsCsv(fileName) =>
+              log.info(s"Found config metrics csv for test $testName")
+              val configMetrics = filenameToConfigMetrics(Seq(Paths.get(path)), profilerDirName)
+              testToConfigMetrics ++= configMetrics
+            case _ =>
+          }
           FileVisitResult.CONTINUE
         }
       }
     )
-    // if no applet grouping
-    if (!enableAppletGrouping) {
-      appletToTestPntiMap += (unknownApplet -> mutable.Map())
-      appletToTestPntiMap(unknownApplet) = testToMergedPntiMap
-    } else { // with applet grouping
-      val updatedMap = mergeAppletAndPerTestPntis(
-        allTestsNames.toSet,
-        testsWithApplet.toSet,
-        testToMergedPntiMap.toMap,
-        appletToTestPntiMap.mapValuesNow(_.toMap).toMap)
-      replaceAppletMap(updatedMap)
-    }
-    AppletToTestMapAndGlobalPnti(appletToTestPntiMap.mapValuesNow(_.toMap).toMap, globalPnti)
+    val finalAppletToTestPntiMap = getFinalAppletToTestPntiMap(
+      enableAppletGrouping,
+      allTestsNames.toSet,
+      testsWithApplet.toSet,
+      testToMergedPntiMap.toMap,
+      appletToTestPntiMap.mapValuesNow(_.toMap).toMap)
+    val finalTestToConfigMetrics = if (enableTestConfigMetrics) Some(testToConfigMetrics.toMap) else None
+    (AppletToTestMapAndGlobalPnti(finalAppletToTestPntiMap, globalPnti), finalTestToConfigMetrics)
   }
 
   // ---------------------- Helper Functions For PGO Estimation (Start) -------------------------//
@@ -324,7 +342,8 @@ object CacheAnalysisTool extends App {
             pntiPGODecisionsMap,
             showAppletMergedRawData)
       }
-      val appletSummary: Option[EffectSummary] = getAppletSummaryFromTests(enableAppletGrouping, testMap)
+      val appletSummary: Option[EffectSummary] =
+        getAppletSummaryFromTests(enableAppletGrouping, testMap, ifNeedMinValue = true)
       appletName -> OverallPgoEffect(appletSummary, testMap)
     }
   }
@@ -337,8 +356,14 @@ object CacheAnalysisTool extends App {
       enableAppletGrouping: Boolean,
       showAppletMergedRawData: Boolean = false,
       specifiedApplet: String = ""): Map[String, OverallPgoEffect] = {
-    val fileWalkResult =
-      mergingPntiInFileWalking(profilerDirName, profilerDir, enableAppletGrouping)
+    val (fileWalkResult, _) =
+      mergingPntiInFileWalking(
+        profilerDirName,
+        profilerDir,
+        enableAppletGrouping,
+        enableGlobalPnti = true,
+        enableTestConfigMetrics = false
+      ) // care about global pnti, don't care about test config metrics
     val (appletToPerTestMergedPntis, globalMergedPnti) = (fileWalkResult.appletToTestMap, fileWalkResult.globalPntis)
 
     val pntiPGODecisionsMap: Map[String, PntiWithPgoDecision] =
@@ -351,9 +376,15 @@ object CacheAnalysisTool extends App {
       pntiPGODecisionsMap)
   }
 
+  /**
+   * Summing over test effectSummaries to work out applet effectSummary, for PGO estimation some fields are kept null
+   * for unavailable info such as max heap, dal requests, so need min value to represent those fields.
+   * For comparison where test summaries are grabbed from config metrics csv, no null fields are needed
+   */
   private def getAppletSummaryFromTests(
       enableAppletGrouping: Boolean,
-      testMap: Map[String, List[EffectSummary]]): Option[EffectSummary] = {
+      testMap: Map[String, List[EffectSummary]],
+      ifNeedMinValue: Boolean): Option[EffectSummary] = {
     if (enableAppletGrouping) {
       // test summary is always the first element in the list
       val allTestSummaries = testMap.values.map(x => x.head).toList
@@ -371,18 +402,13 @@ object CacheAnalysisTool extends App {
             after = testSummary.after,
             diffs = testSummary.diffs))
       } else {
-        val beforeConfigByAppletPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.before)
-        val afterConfigByGlobalPgo = getConfigSumFromTestSummaries(allTestSummaries, s => s.after)
-        val diffSummary = MetricDiff(beforeConfigByAppletPgo, afterConfigByGlobalPgo).summary
+        val beforeConfig = getConfigSumFromTestSummaries(allTestSummaries, s => s.before, ifNeedMinValue)
+        val afterConfig = getConfigSumFromTestSummaries(allTestSummaries, s => s.after, ifNeedMinValue)
+        val diffSummary = MetricDiff(beforeConfig, afterConfig).summary
         // Set min value for metrics information we do not have, so can be shown null on UI
-        val diffWithMinValue = getDiffSummaryWithMinValue(diffSummary)
+        val diffConfig = if (ifNeedMinValue) getDiffSummaryWithMinValue(diffSummary) else diffSummary
         Some(
-          EffectSummary(
-            testName = "",
-            nodeName = None,
-            before = beforeConfigByAppletPgo,
-            after = afterConfigByGlobalPgo,
-            diffs = diffWithMinValue))
+          EffectSummary(testName = "", nodeName = None, before = beforeConfig, after = afterConfig, diffs = diffConfig))
       }
     } else None
   }
@@ -397,7 +423,7 @@ object CacheAnalysisTool extends App {
         pntiWithAppletDecision
           .map { appletMergedPnti => // pnti is found in appletPntiMap
             if (showAppletMergedRawData) appletMergedPnti
-            else PntiWithPgoDecision(pnti, appletMergedPnti.pgoWouldDisableCache) // showing per test merged aw data
+            else PntiWithPgoDecision(pnti, appletMergedPnti.pgoWouldDisableCache) // showing per test merged raw data
           }
           .getOrElse(
             PntiWithPgoDecision(pnti, pgoWouldDisableCache(pnti))
@@ -413,7 +439,7 @@ object CacheAnalysisTool extends App {
       showAppletMergedRawData: Boolean = false): (String, List[EffectSummary]) = {
     val ncTestPntiByGlobal, cTestPntiByGlobal, ncTestPntiByApplet, cTestPntiByApplet =
       mutable.ArrayBuffer[PNodeTaskInfo]()
-    val discrepancyNodes = mutable.ArrayBuffer[(PntiWithPgoDecision, PntiWithPgoDecision)]()
+    val discrepancyNodes = mutable.ArrayBuffer[ComparisonNodes]()
 
     perTestMergedPnti.foreach { pnti =>
       // if we care about applet grouping, else we care only test pgo decision
@@ -427,8 +453,9 @@ object CacheAnalysisTool extends App {
       // and get nodes where decisions differ: applet pgo decision says don't cache, global's says cache
       (pntiWithAppletOrTestPgoDecision.pgoWouldDisableCache, pntiWithComparisonPgoDecision.pgoWouldDisableCache) match {
         case (true, false) =>
-          val x = (pntiWithAppletOrTestPgoDecision, pntiWithComparisonPgoDecision)
-          discrepancyNodes += x
+          discrepancyNodes += ((
+            Some(pntiWithAppletOrTestPgoDecision),
+            Some(pntiWithComparisonPgoDecision)): ComparisonNodes)
           cTestPntiByGlobal += pnti
           ncTestPntiByApplet += pnti
         case (true, true) =>
@@ -438,8 +465,9 @@ object CacheAnalysisTool extends App {
           cTestPntiByApplet += pnti
           cTestPntiByGlobal += pnti
         case (false, true) =>
-          val x = (pntiWithAppletOrTestPgoDecision, pntiWithComparisonPgoDecision)
-          discrepancyNodes += x
+          discrepancyNodes += ((
+            Some(pntiWithAppletOrTestPgoDecision),
+            Some(pntiWithComparisonPgoDecision)): ComparisonNodes)
           cTestPntiByApplet += pnti
           ncTestPntiByGlobal += pnti
       }
@@ -462,21 +490,29 @@ object CacheAnalysisTool extends App {
    * in 0ms and lose precision, so for discrepancy nodes we convert to ms on UI side,
    * and keep them in ns here
    */
-  @async def getDiscrepancyNodesSummary(
-      testName: String,
-      discrepancyNodes: Seq[(PntiWithPgoDecision, PntiWithPgoDecision)]) =
-    discrepancyNodes.apar.map { case (beforeNode, afterNode) =>
-      val beforeCacheMetrics = getCacheMetricsFromPnti(beforeNode.pnti)
-      val afterCacheMetrics = getCacheMetricsFromPnti(afterNode.pnti)
-      val diff = CacheMetricDiff(beforeCacheMetrics, afterCacheMetrics)
-      EffectSummary.fromNodeCacheEffectSummary(
-        testName,
-        Some(beforeNode.pnti.fullName()),
-        beforeCacheMetrics,
-        afterCacheMetrics,
-        diff.summary,
-        isBeforeDisabledCache = Some(beforeNode.pgoWouldDisableCache)
-      )
+  @async def getDiscrepancyNodesSummary(testName: String, discrepancyNodes: Seq[ComparisonNodes]) =
+    discrepancyNodes.apar.map { case (before, after) =>
+      (before, after) match {
+        case (Some(beforeNode), Some(afterNode)) =>
+          val beforeCacheMetrics = getCacheMetricsFromPnti(beforeNode.pnti)
+          val afterCacheMetrics = getCacheMetricsFromPnti(afterNode.pnti)
+          val diff = CacheMetricDiff(beforeCacheMetrics, afterCacheMetrics)
+          EffectSummary.fromNodeCacheEffectSummary(
+            testName,
+            Some(beforeNode.pnti.fullName()),
+            beforeCacheMetrics,
+            afterCacheMetrics,
+            diff.summary,
+            isBeforeDisabledCache = Some(beforeNode.pgoWouldDisableCache)
+          )
+        case (Some(beforeNode), _) =>
+          val beforeCacheMetrics = getCacheMetricsFromPnti(beforeNode.pnti)
+          combineCacheMetricsForDistinctNode(testName, beforeNode.pnti.fullName(), Some(beforeCacheMetrics), None)
+        case (_, Some(afterNode)) =>
+          val afterCacheMetrics = getCacheMetricsFromPnti(afterNode.pnti)
+          combineCacheMetricsForDistinctNode(testName, afterNode.pnti.fullName(), None, Some(afterCacheMetrics))
+        case (_, _) => combineCacheMetricsForDistinctNode(testName, "", None, None)
+      }
     }
 
   private def getTopLevelSummary(
@@ -510,115 +546,105 @@ object CacheAnalysisTool extends App {
       totalTime = cachedNodes.map(_.ancAndSelfTime / 1e6).sum + increasedTotalTime,
     )
   }
-  @async def writeSummaryReport(
-      firstProfilerDirName: String,
-      secondProfilerDirName: String,
-      firstProfilerDir: String,
-      secondProfilerDir: String,
-      defaultFilePath: String,
-      enforceWithConfComparison: Boolean): Unit = {
 
-    val (combinedSummary, _) = combineAndWriteSummary(
-      firstProfilerDirName,
-      secondProfilerDirName,
-      firstProfilerDir,
-      secondProfilerDir,
-      enforceWithConfComparison,
-      false)
+  private def combineTestToConfigMetrics(beforeResults: TestToConfigMetrics, afterResults: TestToConfigMetrics)
+      : (Map[String, ConfigMetrics], Map[String, ConfigMetrics], Map[String, MetricDiff]) = {
+    val testsToCompare = getTestsToCompare(afterResults.keySet, beforeResults.keySet)
+    val after = afterResults.filterKeysNow(testsToCompare.contains)
+    val before = beforeResults.filterKeysNow(testsToCompare.contains)
+    val diffs = testsToCompare.map { test => test -> MetricDiff(before(test), after(test)) }.toMap
 
-    writeHtmlReport(combinedSummary, defaultFilePath)
+    (before, after, diffs)
   }
+
+  def filterMap(
+      commonApplets: Set[String],
+      originalMap: AppletToTestPntiMap,
+      secondMap: AppletToTestPntiMap): (AppletToTestPntiMap, AppletToTestPntiMap) = {
+    val filteredMap1: mutable.Map[String, Map[String, Seq[PNodeTaskInfo]]] = mutable.Map()
+    val filteredMap2: mutable.Map[String, Map[String, Seq[PNodeTaskInfo]]] = mutable.Map()
+    commonApplets.foreach { applet =>
+      val testMap1 = originalMap(applet)
+      val testMap2 = secondMap(applet)
+      val commonTests = testMap1.keySet.intersect(testMap2.keySet)
+      filteredMap1(applet) = testMap1.filter { case (test, _) => commonTests.contains(test) }
+      filteredMap2(applet) = testMap2.filter { case (test, _) => commonTests.contains(test) }
+    }
+    (filteredMap1.toMap, filteredMap2.toMap)
+  }
+
+  @async def combineNodeStats(
+      testName: String,
+      beforeHotspotsNodes: Seq[PNodeTaskInfo],
+      afterHotspotsNodes: Seq[PNodeTaskInfo]): List[EffectSummary] = {
+    val allNodes = mutable.ArrayBuffer[ComparisonNodes]()
+    // hotspots nodes are all cached
+    val beforeNodeMap =
+      beforeHotspotsNodes.apar.map(x => x.fullName() -> PntiWithPgoDecision(x, pgoWouldDisableCache = false)).toMap
+    val afterNodeMap =
+      afterHotspotsNodes.apar.map(x => x.fullName() -> PntiWithPgoDecision(x, pgoWouldDisableCache = false)).toMap
+    val allNodeName = beforeNodeMap.keySet.union(afterNodeMap.keySet)
+    allNodeName.foreach { nodeName =>
+      allNodes += ((beforeNodeMap.get(nodeName), afterNodeMap.get(nodeName)): ComparisonNodes)
+    }
+    getDiscrepancyNodesSummary(testName, allNodes).toList
+  }
+
+  @async def filterAndCombineNodeStats(
+      beforeAppletToPerTestHotspots: AppletToTestPntiMap,
+      afterAppletToPerTestHotspots: AppletToTestPntiMap): Map[String, TestToEffectSummariesMap] = {
+    val appletsToCompare = getTestsToCompare(beforeAppletToPerTestHotspots.keySet, afterAppletToPerTestHotspots.keySet)
+    log.info(s"Found ${appletsToCompare.size} common applets")
+    val after = afterAppletToPerTestHotspots.filterKeysNow(appletsToCompare.contains)
+    val before = beforeAppletToPerTestHotspots.filterKeysNow(appletsToCompare.contains)
+
+    val (filteredBefore, filteredAfter) = filterMap(appletsToCompare, before, after)
+    filteredBefore.apar.map { case (applet, beforeTestToPntis) =>
+      val afterTestToPntis = filteredAfter(applet)
+      val testToNodeSummary = beforeTestToPntis.apar.map { case (testName, beforeNodes) =>
+        val afterNodes = afterTestToPntis(testName)
+        val nodeSummary = combineNodeStats(testName, beforeNodes, afterNodes)
+        testName -> nodeSummary
+      }
+      applet -> testToNodeSummary
+    }
+  }
+
   @async def combineAndWriteSummary(
       firstProfilerDirName: String,
       secondProfilerDirName: String,
       firstProfilerDir: String,
       secondProfilerDir: String,
-      enforceWithConfComparison: Boolean,
-      enableAppletGrouping: Boolean): (
-      (Map[String, TestAndNodesEffectSummary], Map[String, TestAndNodesEffectSummary]),
-      Option[Map[String, Set[String]]]) = {
-    val (beforeAllPaths, afterAllPaths) =
-      findCorrespondingMultipleFiles(
-        firstProfilerDirName,
-        secondProfilerDirName,
-        firstProfilerDir,
-        secondProfilerDir,
-        enforceWithConfComparison,
-        enableAppletGrouping)
+      enableAppletGrouping: Boolean): (Map[String, TestToEffectSummariesMap], Map[String, EffectSummary]) = {
 
-    val (beforeConfigMetrics, afterConfigMetrics) =
-      (beforeAllPaths(configFileExtension), afterAllPaths(configFileExtension))
-    val (beforeHotspots, afterHotspots) = (beforeAllPaths(hotspotsFileName), afterAllPaths(hotspotsFileName))
+    val (beforeAppletToPerTestHotspots, beforeTestConfigMetrics) =
+      mergingPntiInFileWalking(
+        firstProfilerDirName,
+        firstProfilerDir,
+        enableAppletGrouping,
+        enableGlobalPnti = false,
+        enableTestConfigMetrics = true)
+    val (afterAppletToPerTestHotspots, afterTestConfigMetrics) =
+      mergingPntiInFileWalking(
+        secondProfilerDirName,
+        secondProfilerDir,
+        enableAppletGrouping,
+        enableGlobalPnti = false,
+        enableTestConfigMetrics = true)
 
     val (beforeByTest, afterByTest, diffsByTest) =
-      parseAndCombineConfigMetrics(firstProfilerDirName, secondProfilerDirName, beforeConfigMetrics, afterConfigMetrics)
-
-    val (beforeByNode, afterByNode, diffsByNode) =
-      parseAndCombineNodeStats(firstProfilerDirName, secondProfilerDirName, beforeHotspots, afterHotspots)
-
-    val appletToTestMap = getAppletToTestMap(enableAppletGrouping, diffsByTest.keySet, beforeAllPaths)
-
-    val summaryByTest = beforeByTest.keys.map { testName =>
+      combineTestToConfigMetrics(beforeTestConfigMetrics.get, afterTestConfigMetrics.get)
+    val summaryByTest = beforeByTest.keys.apar.map { testName =>
       testName -> combineMetrics(testName, None, beforeByTest, afterByTest, diffsByTest)
     } toMap
 
-    val summaryByTestNode = beforeByNode.keys.map { testName =>
-      val beforeNodeMap = beforeByNode(testName)
-      val afterNodeMap = afterByNode(testName)
-      val commonNodeMap = beforeNodeMap.keySet.intersect(afterNodeMap.keySet)
-      val distinctBeforeNodeMap = beforeNodeMap -- commonNodeMap
-      val distinctAfterNodeMap = afterNodeMap -- commonNodeMap
-      val commonNodeSummaryList = commonNodeMap.map { nodeName =>
-        combineCacheMetrics(testName, nodeName, beforeByNode, afterByNode, diffsByNode)
-      }.toList
-      val distinctBeforeNodeSummaryList = distinctBeforeNodeMap.map { case (nodeName, cacheMetrics) =>
-        combineCacheMetricsForDistinctNode(testName, nodeName, Some(cacheMetrics), None)
-      }.toList
-      val distinctAfterNodeSummaryList = distinctAfterNodeMap.map { case (nodeName, cacheMetrics) =>
-        combineCacheMetricsForDistinctNode(testName, nodeName, None, Some(cacheMetrics))
-      }.toList
-      testName -> (commonNodeSummaryList, distinctBeforeNodeSummaryList ++ distinctAfterNodeSummaryList)
-    } toMap
+    val nodeSummaryByApplet = filterAndCombineNodeStats(
+      beforeAppletToPerTestHotspots.appletToTestMap,
+      afterAppletToPerTestHotspots.appletToTestMap)
 
-    val combinedSummaryCommon = summaryByTest
-      .map { case (testName, summary) =>
-        val (commonNodesSummary, distinctNodesSummary) = summaryByTestNode(testName)
-        testName -> TestAndNodesEffectSummary(summary, commonNodesSummary)
-      }
-    val combinedSummaryDistinct = summaryByTest
-      .map { case (testName, summary) =>
-        val (commonNodesSummary, distinctNodesSummary) = summaryByTestNode(testName)
-        testName -> TestAndNodesEffectSummary(summary, distinctNodesSummary)
-      }
+    (nodeSummaryByApplet, summaryByTest)
+  }
 
-    ((combinedSummaryCommon, combinedSummaryDistinct), appletToTestMap)
-  }
-  @async def getAppletToTestMap(
-      enableAppletGrouping: Boolean,
-      allTestNames: Set[String],
-      resultsGroupedPaths: GroupedFilePathsMapByFileFilter) = {
-    if (enableAppletGrouping) {
-      val appletNamesPaths = resultsGroupedPaths(appletInfoFileName)
-      val testsWithAppletMap = parseAndGetAppletNameMap(appletNamesPaths)
-      val testsWithoutApplet = allTestNames.filterNot(testsWithAppletMap.values.flatten.toSeq.contains(_))
-      if (testsWithoutApplet.isEmpty)
-        Some(testsWithAppletMap)
-      else Some(testsWithAppletMap ++ Map(unknownApplet -> testsWithoutApplet))
-    } else None
-  }
-  @async def parseAndGetAppletNameMap(groupedPaths: Map[String, Seq[String]]): AppletToTestMapping = {
-    // Seq of (applet, tests)
-    val result = groupedPaths.apar
-      .map { case (test, appletFilePaths) =>
-        val appletNames = appletNamesFromFiles(appletFilePaths)
-        appletNames.apar.map(_ -> test)
-      }
-      .toSeq
-      .flatten
-
-    val resultGroupedByApplet = result.groupBy(_._1) // e.g. Map(applet1 -> Seq((applet1, test1), (applet1, test2))
-    resultGroupedByApplet.mapValuesNow(_.map(_._2).toSet) // e.g. Map(applet1 -> Set(test1, test2))
-  }
   private def combineMetrics(
       test: String,
       nodeName: Option[String],
@@ -638,17 +664,7 @@ object CacheAnalysisTool extends App {
       afterMetricsWithTimeInMilliSecond,
       diffMetrics.summary)
   }
-  private def combineCacheMetrics(
-      testName: String,
-      nodeName: String,
-      before: Map[String, Map[String, CacheMetrics]],
-      after: Map[String, Map[String, CacheMetrics]],
-      diffs: Map[String, Map[String, CacheMetricDiff]]): EffectSummary = {
-    val beforeMetrics = before(testName)(nodeName)
-    val afterMetrics = after(testName)(nodeName)
-    val diffMetrics = diffs(testName)(nodeName)
-    EffectSummary.fromNodeCacheEffectSummary(testName, Some(nodeName), beforeMetrics, afterMetrics, diffMetrics.summary)
-  }
+
   private def combineCacheMetricsForDistinctNode(
       testName: String,
       nodeName: String,
@@ -679,125 +695,6 @@ object CacheAnalysisTool extends App {
           defaultCacheMetricDiff)
     }
   }
-  private def parseAndCombineConfigMetrics(
-      beforeProfilerDirName: String,
-      afterProfilerDirName: String,
-      beforeResultsGroupedPaths: Map[String, Seq[String]],
-      afterResultsGroupedPaths: Map[String, Seq[String]])
-      : (Map[String, ConfigMetrics], Map[String, ConfigMetrics], Map[String, MetricDiff]) = {
-    val afterResults = metricsFromFiles(afterResultsGroupedPaths.values.flatten.toSeq, afterProfilerDirName)
-    val beforeResults = metricsFromFiles(beforeResultsGroupedPaths.values.flatten.toSeq, beforeProfilerDirName)
-    val testsToCompare = getTestsToCompare(afterResults.keySet, beforeResults.keySet)
-    val after = afterResults.filterKeysNow(testsToCompare.contains)
-    val before = beforeResults.filterKeysNow(testsToCompare.contains)
-    val diffs = testsToCompare.map { test => test -> MetricDiff(before(test), after(test)) }.toMap
-
-    (before, after, diffs)
-  }
-  private def parseAndCombineNodeStats(
-      beforeProfilerDirName: String,
-      afterProfilerDirName: String,
-      beforeResultsGroupedPaths: Map[String, Seq[String]],
-      afterResultsGroupedPaths: Map[String, Seq[String]]): (
-      Map[String, Map[String, CacheMetrics]],
-      Map[String, Map[String, CacheMetrics]],
-      Map[String, Map[String, CacheMetricDiff]]) = {
-    val afterResults = cacheMetricsFromFiles(afterResultsGroupedPaths.values.flatten.toSeq, afterProfilerDirName)
-    val beforeResults = cacheMetricsFromFiles(beforeResultsGroupedPaths.values.flatten.toSeq, beforeProfilerDirName)
-    val testsToCompare = getTestsToCompare(afterResults.keySet, beforeResults.keySet)
-    val after = afterResults.filterKeysNow(testsToCompare.contains)
-    val before = beforeResults.filterKeysNow(testsToCompare.contains)
-
-    def filterNodeMap(map1: Map[String, CacheMetrics], map2: Map[String, CacheMetrics]): Map[String, CacheMetrics] = {
-      val commonKeys = map1.keySet.intersect(map2.keySet)
-      val commonNodes = map1.filterKeysNow(commonKeys)
-      commonNodes
-    }
-
-    val filteredBefore = before.map { case (test, nodeMap) => test -> filterNodeMap(nodeMap, after(test)) }
-    val filteredAfter = after.map { case (test, nodeMap) => test -> filterNodeMap(nodeMap, filteredBefore(test)) }
-
-    val diffs = testsToCompare.map { test =>
-      val nodeMap = filteredBefore(test)
-      val nodeCacheMetricMap = nodeMap.map { case (nodeName, cacheMetric) =>
-        nodeName -> CacheMetricDiff(cacheMetric, filteredAfter(test)(nodeName))
-      }
-      test -> nodeCacheMetricMap
-    }.toMap
-
-    (before, after, diffs)
-  }
-  private def writeHtmlReport(
-      contentForJs: (Map[String, TestAndNodesEffectSummary], Map[String, TestAndNodesEffectSummary]),
-      rootDir: String): Unit = {
-    val htmlReportDir = Paths.get(rootDir).resolve("html-report")
-    Files.createDirectories(htmlReportDir)
-    def write(filename: String, data: String): Unit = {
-      val absolutePath = htmlReportDir.resolve(filename).toAbsolutePath
-      try {
-        Files.write(absolutePath, data.getBytes)
-        log.info(s"Wrote effect summary data at $absolutePath")
-      } catch {
-        case NonFatal(ex) =>
-          log.warn(s"Could not write file at $absolutePath", ex)
-      }
-    }
-    val htmlResources = "html" :: "css" :: "js" :: Nil
-    htmlResources.foreach { resource =>
-      copyFileFromResources(htmlReportDir.resolve(s"$prefix.$resource"), s"/$resource/$prefix.$resource")
-    }
-
-    val (commonNodesContent, distinctNodesContent) = contentForJs
-    write(s"${prefix}_result.js", optconfEffectJsContent("cacheConfigImpactDiff", commonNodesContent))
-    write(s"${prefix}_result_extra.js", optconfEffectJsContent("cacheConfigImpactDiffExtra", distinctNodesContent))
-
-    val htmlLocation = htmlReportDir.resolve(prefix).toString.replace('\\', '/')
-    log.info(s"See profiling report at file:///${htmlLocation}.html")
-  }
-  private def optconfEffectJsContent(contentName: String, tests: Map[String, TestAndNodesEffectSummary]): String = {
-    // Option tuple arguments: number, ifCheckExceed
-    val threshold = ThresholdDiffSummary(
-      acceptWallTimeChange = None,
-      acceptCpuTimeChange = Some(10, true),
-      acceptCacheTimeChange = Some(10, true),
-      acceptMaxHeapChange = Some(10, true),
-      acceptCacheHitsChange = Some(0, false), // if cache hits fewer than before then not acceptable
-      acceptCacheMissesChange = Some(0, true), // if cache misses more than before then not acceptable
-      acceptCacheHitRatioChange = None,
-      acceptEvictionsChange = None,
-      acceptDalRequestsChange = None,
-      acceptEngineWallTimeChange = None
-    )
-    val sb = new JStringBuilder
-    sb.append(s"${contentName} = [")
-    tests.foreach { case (test, testAndNodesEffectSummary) =>
-      val (testSummary, nodesSummary) =
-        (testAndNodesEffectSummary.testSummary, testAndNodesEffectSummary.nodesSummaries)
-      sb.append("\n{ testName: \'")
-      sb.append(testSummary.testName)
-      sb.append("\', before: ")
-      sb.append(testSummary.before.toJson())
-      sb.append(",\n  after: ")
-      sb.append(testSummary.after.toJson())
-      sb.append(",\n  diff: ")
-      sb.append(threshold.applyThresholdAndToString(testSummary.diffs))
-      sb.append(",\n nodes: [ ")
-      nodesSummary.foreach { node =>
-        sb.append("{ nodeName: \'")
-        sb.append(node.nodeName.getOrElse(""))
-        sb.append("\', before: ")
-        sb.append(node.before.toJson())
-        sb.append(",\n  after: ")
-        sb.append(node.after.toJson())
-        sb.append(",\n  diff: ")
-        sb.append(threshold.applyThresholdAndToString(node.diffs))
-        sb.append("},\n")
-      }
-      sb.append("]},")
-    }
-    sb.append("]\n")
-    sb.toString
-  }
 
   private[optimus] def isRequiredFile(fileName: String, requiredContainedName: String): Boolean =
     fileName.contains(requiredContainedName)
@@ -819,12 +716,13 @@ object CacheAnalysisTool extends App {
   )
   final case class OverallPgoEffect(
       appletSummary: Option[EffectSummary],
-      testToNodesMap: Map[String, List[EffectSummary]]
+      testToNodesMap: TestToEffectSummariesMap
   )
   final case class AppletToTestMapAndGlobalPnti(appletToTestMap: AppletToTestPntiMap, globalPntis: Seq[PNodeTaskInfo])
-  final case class TestAndNodesEffectSummary(testSummary: EffectSummary, nodesSummaries: List[EffectSummary])
   type AppletToTestPntiMap = Map[String, Map[String, Seq[PNodeTaskInfo]]]
-  type AppletToTestMapping = Map[String, Set[String]]
+  type TestToConfigMetrics = Map[String, ConfigMetrics]
+  type TestToEffectSummariesMap = Map[String, List[EffectSummary]]
+  type ComparisonNodes = (Option[PntiWithPgoDecision], Option[PntiWithPgoDecision])
 
   getPGODrsTableContent(profilerDirName, cmdLine.rootDir, true)
 }

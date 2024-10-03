@@ -13,7 +13,7 @@ package optimus.stratosphere.config
 
 import com.typesafe.config.Config
 import optimus.scalacompat.collection._
-import optimus.stratosphere.utils.MemSize
+import optimus.utils.MemSize
 
 import java.nio.file.Path
 import java.nio.file.Paths

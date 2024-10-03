@@ -103,7 +103,7 @@ class TemporalSurfaceDALAccessTracePlugin(next: SchedulerPlugin) extends Tempora
       scope.recorder.recordDalAccess(n, ec)
       TemporalContextTrace.traceDalAccess(scope, n)
     }
-    next.adapt(n, ec)
+    next.readapt(n, ec)
   }
 }
 object DataAccessTrace {

@@ -22,12 +22,8 @@ import optimus.graph.diagnostics.SchedulerProfileEntry
 import optimus.graph.diagnostics.messages.AccumulatedValue
 import optimus.graph.diagnostics.messages.Accumulating
 import optimus.graph.diagnostics.messages.AllOGCounters
-import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.breadcrumbs.crumbs.Properties._
 import optimus.graph.diagnostics.sampling.Cardinality.LogLogCounter
-import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
-import optimus.graph.diagnostics.sampling.SamplingProfiler.Sampler
-import optimus.graph.diagnostics.sampling.SamplingProfiler.nanosToMillis
 import optimus.graph.tracking.DependencyTrackerQueue.QueueStats
 import optimus.graph.tracking.DependencyTrackerRoot
 
@@ -92,28 +88,28 @@ class GraphSamplers extends SamplerProvider {
     )
 
     import optimus.graph.PluginType
-    final case class PluginCounts(
-        inFlight: Map[String, Long],
-        starts: Map[String, Long],
+    final case class PluginData(
+        // Counts that strictly increase over the life of the process and can be diffed around intervals,
+        // which in turn can be summed in dashboards.
+        cumulativeCounts: Map[String, Map[String, Long]],
+        // Snapshots cannot sensibly be summed over multiple intervals
+        snapShots: Map[String, Map[String, Long]],
         fullWaitTimes: Map[String, Long])
 
     // Number of nodes started during period, and number of nodes currently waiting
-    ss += new Sampler[PluginType.PluginTracker, PluginCounts](
+    ss += new Sampler[PluginType.PluginTracker, PluginData](
       sp,
       snapper = (_: Boolean) => PluginType.snapAggregatePluginCounts(),
       process = { (prevOpt: Option[PluginType.PluginTracker], curr: PluginType.PluginTracker) =>
         prevOpt.fold {
-          PluginCounts(curr.starts.toMap, curr.inFlight.toMap, curr.fullWaitTimes.toMap.mapValuesNow(nanosToMillis))
+          PluginData(curr.cumulativeCounts, curr.snapCounts, curr.fullWaitTimes.toMap)
         } { prev =>
-          val starts = curr.starts.snap().getSafe
-          starts.accumulate(prev.starts, -1)
-          val fullWaitTimes = curr.fullWaitTimes.snap().getSafe
-          fullWaitTimes.accumulate(prev.fullWaitTimes, -1)
-          PluginCounts(starts.toMap, curr.inFlight.toMap, fullWaitTimes.toMap.mapValuesNow(nanosToMillis))
+          val diff = curr.diff(prev)
+          PluginData(diff.cumulativeCounts, curr.snapCounts, diff.fullWaitTimes.toMap)
         }
       },
       publish = { pc =>
-        Elems(pluginInFlight -> pc.inFlight, pluginStarts -> pc.starts, pluginFullWaitTimes -> pc.fullWaitTimes)
+        Elems(pluginCounts -> pc.cumulativeCounts, pluginSnaps -> pc.snapShots, pluginFullWaitTimes -> pc.fullWaitTimes)
       }
     )
 
@@ -130,11 +126,22 @@ class GraphSamplers extends SamplerProvider {
           k.name -> Math.round(v).toInt
         }
 
-        val estimators = cardinalitiesMap.map { case (k, v) =>
-          k.name -> v.estimators
+        // In json estimators will look like, e.g., "vref" : { "0" : 37, "1" : .... }, which will make it a lot easier to compute maximum in splunk
+        val estimators: Map[String, Map[String, Int]] = cardinalitiesMap.map { case (k, v) =>
+          k.name -> v.estimators.zipWithIndex.map { case (v, i) =>
+            i.toString -> v
+          }.toMap
         }
 
-        Elems(cardinalities -> m, cardEstimators -> estimators)
+        val raw: Map[String, Long] = cardinalitiesMap.map { case (k, v) =>
+          k.name -> v.withDuplicates
+        }
+
+        val alphaNumerators: Map[String, Double] = cardinalitiesMap.map { case (k, v) =>
+          k.name -> v.numerator
+        }
+
+        Elems(cardEstimated -> m, cardRaw -> raw, cardNumerator -> alphaNumerators, cardEstimators -> estimators)
       }
     )
 

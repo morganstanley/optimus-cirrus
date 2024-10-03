@@ -79,24 +79,26 @@ object AsyncCollectionHelpers extends AsyncCollectionHelpers
 class AsyncIterableMarker[A, CC <: Iterable[A]](private val c: CC with IterableLike[A, CC]) extends AnyVal {
   def asyncOff: CC with IterableLike[A, CC] = c
   @nowarn("msg=10500 optimus.platform.Async.seq")
-  def aseq = Async.seq[A, CC](c)
+  def aseq: asyncSeq[A, CC] = Async.seq[A, CC](c)
   @nowarn("msg=10500 optimus.platform.Async.seq")
-  def aseq(marker: ProgressMarker) = Async.seq[A, CC](c, marker)
+  def aseq(marker: ProgressMarker): asyncSeq[A, CC] = Async.seq[A, CC](c, marker)
   @nowarn("msg=10500 optimus.platform.Async.par")
-  def apar = Async.par[A, CC](c)
+  def apar: asyncPar[A, CC] = Async.par[A, CC](c)
   // reason is documentation only ATM
   @nowarn("msg=10500 optimus.platform.Async.par")
-  def apar(parallelGraphCallWithoutNodesReason: String) = Async.par[A, CC](c)
+  def apar(parallelGraphCallWithoutNodesReason: String): asyncPar[A, CC] = Async.par[A, CC](c)
   @nowarn("msg=10500 optimus.platform.Async.parImp")
-  def apar(maxConcurrency: Int) = Async.parImp[A, CC](c, maxConcurrency)
+  def apar(maxConcurrency: Int): asyncPar[A, CC] = Async.parImp[A, CC](c, maxConcurrency)
   @nowarn("msg=10500 optimus.platform.Async.par")
-  def apar(marker: ProgressMarker, maxConcurrency: Int = Int.MaxValue) = Async.par[A, CC](c, marker, maxConcurrency)
+  def apar(marker: ProgressMarker, maxConcurrency: Int = Int.MaxValue): asyncPar[A, CC] =
+    Async.par[A, CC](c, marker, maxConcurrency)
   @nowarn("msg=10500 optimus.platform.Async.parCustom")
-  def apar(runtimeChecks: Boolean) = Async.parCustom[A, CC](c, Async.DefaultConcurrency, runtimeChecks)
+  def apar(runtimeChecks: Boolean): asyncPar[A, CC] = Async.parCustom[A, CC](c, Async.DefaultConcurrency, runtimeChecks)
   @nowarn("msg=10500 optimus.platform.Async.parCustom")
-  def apar(maxConcurrency: Int, runtimeChecks: Boolean) = Async.parCustom[A, CC](c, maxConcurrency, runtimeChecks)
+  def apar(maxConcurrency: Int, runtimeChecks: Boolean): asyncPar[A, CC] =
+    Async.parCustom[A, CC](c, maxConcurrency, runtimeChecks)
   @nowarn("msg=10500 optimus.platform.Async.seq")
-  def asyncSequential = Async.seq(c)
+  def asyncSequential: asyncSeq[A, Iterable[A]] = Async.seq(c)
 
   def pipeline = new AsyncPipeline(c)
 
@@ -121,7 +123,7 @@ class asyncAlwaysUnique extends annotation.StaticAnnotation
 
 object Async {
 
-  // Suppress for scope of import.
+  // noinspection ScalaUnusedSymbol (Suppress for scope of import (if imported) See AutoAsyncComponent.scala)
   object suppressInlining
 
   final val DefaultConcurrency = Int.MaxValue
@@ -158,6 +160,7 @@ final class OptAsync[A](val c: Option[A]) {
   @nodeSyncLift
   @scenarioIndependentTransparent
   def collectPF[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectPF$withNode(pf)
+  // noinspection ScalaUnusedSymbol
   def collectPF$queued[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] = collectPF$newNode(pf).enqueue
   def collectPF$withNode[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectPF$newNode(pf).get
   private[this] def collectPF$newNode[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] =
@@ -214,7 +217,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
 
   // See what goes wrong if we allow Streams through
   // val doSync = runtimeCheck && (c.isInstanceOf[IterableView[_,_]] || c.isInstanceOf[Stream[_]])
-  val doSync = runtimeCheck && (optimus.scalacompat.collection.isView(c))
+  val doSync: Boolean = runtimeCheck && optimus.scalacompat.collection.isView(c)
 
   @nodeSync
   @nodeSyncLift
@@ -241,6 +244,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   private[optimus] def mapPrelifted[B, That](f: A => Node[B])(implicit cbf: BuildFrom[CC, B, That]): That =
     map$queued(f).get
+  // noinspection ScalaUnusedSymbol
   private[optimus] def mapPrelifted$queued[B, That](f: A => Node[B])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
     map$queued(f)
 
@@ -249,6 +253,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def partitionMap[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => B)(implicit
       cbf: BuildFrom[CC, B, That]): That = partitionMap$withNode(p)(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def partitionMap$queued[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => Node[B])(implicit
       cbf: BuildFrom[CC, B, That]): Node[That] = partitionMap$newNode(p)(f).enqueue
   def partitionMap$withNode[P, B, That](p: (() => Option[A]) => P)(@nodeLift f: P => Node[B])(implicit
@@ -274,6 +279,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   def mapWithRethrow[B, That](@nodeLift f: A => B)(
       @nodeLift processExceptions: Iterable[(A, NodeResult[B])] => Option[String])(implicit
       cbf: BuildFrom[CC, B, That]): That = mapWithRethrow$withNode(toNodeFactory(f))(toNodeFactory(processExceptions))
+  // noinspection ScalaUnusedSymbol
   def mapWithRethrow$queued[B, That](f: A => Node[B])(
       processExceptions: Iterable[(A, NodeResult[B])] => Node[Option[String]])(implicit
       cbf: BuildFrom[CC, B, That]): Node[That] = mapWithRethrow$newNode(f)(processExceptions).enqueue
@@ -331,6 +337,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   private[optimus] def flatMapPrelifted[B, That](f: A => Node[GenTraversableOnce[B]])(implicit
       cbf: BuildFrom[CC, B, That]): That = needsPlugin
+  // noinspection ScalaUnusedSymbol
   private[optimus] def flatMapPrelifted$queued[B, That](f: A => Node[GenTraversableOnce[B]])(implicit
       cbf: BuildFrom[CC, B, That]): Node[That] = flatMap$queued(f)
 
@@ -366,6 +373,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def foreach[U](@nodeLift f: A => U): Unit = foreach$withNode { toNodeFactory(f) }
+  // noinspection ScalaUnusedSymbol
   def foreach$queued[U](f: A => Node[U]): Node[Unit] = foreach$newNode[U](f).enqueue
   def foreach$withNode[U](f: A => Node[U]): Unit = foreach$newNode[U](f).get
   final private[this] def foreach$newNode[U](f: A => Node[U]): Node[Unit] =
@@ -373,7 +381,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode[Unit](c.foreach(f(_)))
     else
       new CommutativeAggregatorNode[U, Unit](workMarker, maxConcurrency, -1) {
-        private val i = c.iterator
+        private[this] val i = c.iterator
         override def hasNextIteration: Boolean = i.hasNext
         override def nextIteration: Iteration = new Iteration(f(i.next()))
         override def consumeIteration(i: Iteration): Unit = ()
@@ -398,8 +406,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
       class FoldLeft(var r: B, val iterator: Iterator[A]) extends SequenceNode[B, B](workMarker, 1, -1) {
         override def sequenceExecutionInfo: SequenceNodeTaskInfo = NodeTaskInfo.FoldLeft
         override def getFinalResult: B = r
-        override def consumeIteration(i: Iteration): Unit =
-          r = i.node.result // We are only called with node holding onto result
+        override def consumeIteration(i: Iteration): Unit = r = i.node.result
         override def nextIteration = new Iteration(op(r, iterator.next()))
         override def hasNextIteration: Boolean = iterator.hasNext
       }
@@ -420,7 +427,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.filter(f(_).get))
     else
       new ConverterSequenceNode2[A, Boolean, CC](c, f, NodeTaskInfo.Filter, workMarker, maxConcurrency) {
-        val builder: mutable.Builder[A, CC] = newBuilder
+        private[this] val builder: mutable.Builder[A, CC] = newBuilder
         override def getFinalResult: CC = builder.result()
         override def consume(b: Boolean, org: A): Unit = if (b) builder += org
       }
@@ -429,6 +436,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def filterNot(@nodeLift f: A => Boolean): CC = filterNot$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def filterNot$queued(f: A => Node[Boolean]): Node[CC] = filterNot$newNode(f).enqueue
   def filterNot$withNode(f: A => Node[Boolean]): CC = filterNot$newNode(f).get
   final private[this] def filterNot$newNode(f: A => Node[Boolean]): Node[CC] =
@@ -436,7 +444,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.filterNot(f(_).get))
     else
       new ConverterSequenceNode2[A, Boolean, CC](c, f, NodeTaskInfo.Filter, workMarker, maxConcurrency) {
-        private val builder = newBuilder
+        private[this] val builder = newBuilder
         override def getFinalResult: CC = builder.result()
         override def consume(b: Boolean, org: A): Unit = if (!b) builder += org
       }
@@ -455,8 +463,10 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def flatMop[B, That](@nodeLift f: A => Option[B])(implicit cbf: BuildFrom[CC, B, That]): That = needsPlugin
+  // noinspection ScalaUnusedSymbol
   def flatMop$queued[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
     flatMop$newNode(f).enqueue
+  // noinspection ScalaUnusedSymbol
   def flatMop$withNode[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]): That =
     flatMop$newNode(f).get
   final private[this] def flatMop$newNode[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]) =
@@ -483,7 +493,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.groupBy(f(_).get))
     else
       new ConverterSequenceNode2[A, K, Map[K, CC]](c, f, NodeTaskInfo.GroupBy, workMarker, maxConcurrency) {
-        val builder = mutable.Map.empty[K, Builder[A, CC]]
+        private[this] val builder = mutable.Map.empty[K, Builder[A, CC]]
         override def getFinalResult: Map[K, CC] = {
           // convert those mutable builders back to immutable CCs
           val b = immutable.Map.newBuilder[K, CC]
@@ -500,6 +510,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def groupByStable[K](@nodeLift f: A => K): Seq[(K, Seq[A])] = groupByStable$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def groupByStable$queued[K](f: A => Node[K]): Node[Seq[(K, Seq[A])]] = groupByStable$newNode(f).enqueue
   def groupByStable$withNode[K](f: A => Node[K]): Seq[(K, Seq[A])] = groupByStable$newNode(f).get
   final private[this] def groupByStable$newNode[K](f: A => Node[K]): Node[Seq[(K, Seq[A])]] =
@@ -507,7 +518,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.groupByStable(f(_).get))
     else
       new ConverterSequenceNode2[A, K, Seq[(K, Seq[A])]](c, f, NodeTaskInfo.GroupBy, workMarker, maxConcurrency) {
-        val builder = mutable.LinkedHashMap.empty[K, Builder[A, Seq[A]]]
+        private[this] val builder = mutable.LinkedHashMap.empty[K, Builder[A, Seq[A]]]
         override def getFinalResult: Seq[(K, Seq[A])] = {
           val b = immutable.Vector.newBuilder[(K, Seq[A])]
           b.sizeHint(builder.size)
@@ -522,6 +533,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def partition(@nodeLift f: A => Boolean): (CC, CC) = partition$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def partition$queued(f: A => Node[Boolean]): Node[(CC, CC)] = partition$newNode(f).enqueue
   def partition$withNode(f: A => Node[Boolean]): (CC, CC) = partition$newNode(f).get
   final private[this] def partition$newNode(f: A => Node[Boolean]) =
@@ -539,6 +551,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def forall(@nodeLift f: A => Boolean): Boolean = forall$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def forall$queued(f: A => Node[Boolean]): Node[Boolean] = forall$newNode(f).enqueue
   def forall$withNode(f: A => Node[Boolean]): Boolean = forall$newNode(f).get
   final private[this] def forall$newNode(f: A => Node[Boolean]) =
@@ -546,10 +559,10 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.forall(f(_).get))
     else
       new ConverterSequenceNode[A, Boolean, Boolean](c, f, NodeTaskInfo.ForAll, workMarker, maxConcurrency) {
-        var r = true
+        private[this] var r = true
         override def consume(k: Boolean): Unit = if (!k) r = false // Once 1 was set to false the result is false
-        override def getFinalResult: Boolean = r
-        override def hasNextIteration: Boolean = r && super.hasNextIteration // Short-circuit iterations
+        override def stopConsuming: Boolean = !r
+        override def getFinalResult: Boolean = r // Short-circuit iterations
       }
 
   @nodeSync
@@ -563,15 +576,16 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.find(f(_).get))
     else // Predicates may be parallelized, but we will return entry corresponding to the first True.
       new ConverterSequenceNode2[A, Boolean, Option[A]](c, f, NodeTaskInfo.Find, workMarker, maxConcurrency) {
-        var r: Option[A] = None
+        private[this] var r: Option[A] = None
         override def consume(b: Boolean, a: A): Unit = if (b && r.isEmpty) r = Some(a)
+        override def stopConsuming: Boolean = r.nonEmpty // Short-circuit iterations
         override def getFinalResult: Option[A] = r
-        override def hasNextIteration: Boolean = r.isEmpty && super.hasNextIteration // Short-circuit iterations
       }
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
   def exists(@nodeLift f: A => Boolean): Boolean = exists$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def exists$queued(f: A => Node[Boolean]): Node[Boolean] = exists$newNode(f).enqueue
   def exists$withNode(f: A => Node[Boolean]): Boolean = exists$newNode(f).get
   final private[this] def exists$newNode(f: A => Node[Boolean]) =
@@ -579,10 +593,10 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else if (doSync) new AlreadyCompletedNode(c.exists(f(_).get))
     else
       new ConverterSequenceNode[A, Boolean, Boolean](c, f, NodeTaskInfo.Exists, workMarker, maxConcurrency) {
-        var r = false
+        private[this] var r = false
         override def consume(k: Boolean): Unit = if (k) r = true // Once 1 was set to false the result is false
+        override def stopConsuming: Boolean = r // Short-circuit iterations
         override def getFinalResult: Boolean = r
-        override def hasNextIteration: Boolean = !r && super.hasNextIteration // Short-circuit iterations
       }
 
   protected def newBuilder: Builder[A, CC] = {
@@ -600,6 +614,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def collectPF[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): That =
     collectPF$withNode(pf)
+  // noinspection ScalaUnusedSymbol
   def collectPF$queued[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
     collectPF$newNode(pf).enqueue
   def collectPF$withNode[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): That =
@@ -621,6 +636,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def collectFirstPF[B](pf: OptimusPartialFunction[A, B]): Option[B] = collectFirstPF$withNode(pf)
+  // noinspection ScalaUnusedSymbol
   def collectFirstPF$queued[B](pf: OptimusPartialFunction[A, B]): Node[Option[B]] =
     collectFirstPF$newNode(pf).enqueue
   def collectFirstPF$withNode[B](pf: OptimusPartialFunction[A, B]): Option[B] =
@@ -637,15 +653,17 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
         var res = Option.empty[B]
         override def getFinalResult: Option[B] = res
         override def consume(b: Option[B]): Unit = if (res.isEmpty) res = b
-        override def hasNextIteration: Boolean = res.isEmpty && super.hasNextIteration
+        override def stopConsuming: Boolean = res.nonEmpty
       }
 
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
   def sortBy[B](@nodeLift f: A => B)(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): CC = needsPlugin
+  // noinspection ScalaUnusedSymbol
   def sortBy$queued[B](f: A => Node[B])(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): Node[CC] =
     sortBy$newNode(f).enqueue
+  // noinspection ScalaUnusedSymbol
   def sortBy$withNode[B](f: A => Node[B])(implicit ev: CC <:< SeqLike[A, CC], ord: Ordering[B]): CC =
     sortBy$newNode(f).get
   final private[this] def sortBy$newNode[B](
@@ -665,6 +683,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def minBy[B: Ordering](@nodeLift f: A => B): A = minBy$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def minBy$queued[B: Ordering](f: A => Node[B]): Node[A] = minBy$newNode(f).enqueue
   def minBy$withNode[B: Ordering](f: A => Node[B]): A = minBy$newNode(f).get
   final private[this] def minBy$newNode[B](f: A => Node[B])(implicit ord: Ordering[B]): Node[A] =
@@ -690,6 +709,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def maxBy[B: Ordering](@nodeLift f: A => B): A = maxBy$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def maxBy$queued[B: Ordering](f: A => Node[B]): Node[A] = maxBy$newNode(f).enqueue
   def maxBy$withNode[B: Ordering](f: A => Node[B]): A = maxBy$newNode(f).get
   final private[this] def maxBy$newNode[B](f: A => Node[B])(implicit ord: Ordering[B]): Node[A] =
@@ -715,6 +735,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def count(@nodeLift p: A => Boolean): Int = count$withNode(toNodeFactory(p))
+  // noinspection ScalaUnusedSymbol
   def count$queued(p: A => Node[Boolean]): Node[Int] = count$newNode(p).enqueue
   def count$withNode(p: A => Node[Boolean]): Int = count$newNode(p).get
   final private[this] def count$newNode(f: A => Node[Boolean]): Node[Int] =
@@ -723,7 +744,6 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     else
       new ConverterSequenceNode[A, Boolean, Int](c, f, NodeTaskInfo.Count, workMarker, maxConcurrency) {
         private[this] var count = 0
-
         override def consume(elem: Boolean): Unit = { if (elem) count += 1 }
         override def getFinalResult: Int = count
       }
@@ -732,6 +752,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     @nodeSyncLift
     @scenarioIndependentTransparent
     final def map(@nodeLift f: A => B): That = needsPlugin
+    // noinspection ScalaUnusedSymbol
     final def map$queued(f: A => Node[B]): Node[That] = AsyncBase.this.map$newNode(f)(bf).enqueue
     final def map$withNode(f: A => Node[B]): That = AsyncBase.this.map$newNode(f)(bf).get
 
@@ -739,6 +760,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     @nodeSyncLift
     @scenarioIndependentTransparent
     def flatMap(@nodeLift f: A => GenTraversableOnce[B]): That = needsPlugin
+    // noinspection ScalaUnusedSymbol
     def flatMap$queued(@nodeLift f: A => Node[GenTraversableOnce[B]]): Node[That] =
       AsyncBase.this.flatMap$newNode(f)(bf).enqueue
     def flatMap$withNode(f: A => Node[GenTraversableOnce[B]]): That = AsyncBase.this.flatMap$newNode(f)(bf).get
@@ -756,6 +778,7 @@ trait AsyncMapBase[K, V, CC <: Map[K, V] with MapLike[K, V, CC]] { base: AsyncBa
   @scenarioIndependentTransparent
   final def transform[W, That](@nodeLift f: (K, V) => W)(implicit cbf: BuildFrom[CC, (K, W), That]): That =
     transform$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   final def transform$queued[W, That](f: (K, V) => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): Node[That] =
     transform$newNode(f)(cbf).enqueue
   final def transform$withNode[W, That](f: (K, V) => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): That =
@@ -786,6 +809,7 @@ trait AsyncMapBase[K, V, CC <: Map[K, V] with MapLike[K, V, CC]] { base: AsyncBa
   @scenarioIndependentTransparent
   final def transformValues[W, That](@nodeLift f: V => W)(implicit cbf: BuildFrom[CC, (K, W), That]): That =
     transformValues$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   final def transformValues$queued[W, That](f: V => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): Node[That] =
     transform$newNode((_, v) => f(v), NodeTaskInfo.TransformValues)(cbf).enqueue
   final def transformValues$withNode[W, That](f: V => Node[W])(implicit cbf: BuildFrom[CC, (K, W), That]): That =
@@ -813,6 +837,7 @@ class asyncPar[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def withFilter(@nodeLift f: A => Boolean): asyncPar[A, CC] = withFilter$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def withFilter$queued(f: A => Node[Boolean]): Node[asyncPar[A, CC]] = withFilter$newNode(f).enqueue
   def withFilter$withNode(f: A => Node[Boolean]): asyncPar[A, CC] = withFilter$newNode(f).get
   final private[this] def withFilter$newNode(f: A => Node[Boolean]): Node[asyncPar[A, CC]] = {
@@ -858,6 +883,7 @@ sealed class asyncSeq[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def withFilter(@nodeLift f: A => Boolean): CC = withFilter$withNode(toNodeFactory(f))
+  // noinspection ScalaUnusedSymbol
   def withFilter$queued(f: A => Node[Boolean]): Node[CC] = withFilter$newNode(f).enqueue
   def withFilter$withNode(f: A => Node[Boolean]): CC = withFilter$newNode(f).get
   final private[this] def withFilter$newNode(f: A => Node[Boolean]) =

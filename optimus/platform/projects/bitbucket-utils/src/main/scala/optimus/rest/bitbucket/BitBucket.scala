@@ -23,7 +23,6 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     extends BitBucketApiUrls
     with RestApi
     with RecursiveQuerier {
-
   def getPrData(project: String, repo: String, prNumber: Long): PrData =
     handleErrors { get[BasePrData](apiPrUrl(project, repo, prNumber)).withInstance(instance) }
 
@@ -61,10 +60,45 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       prNumber: Long,
       commentId: Int,
       version: Int,
-      newText: String): Int = {
-    val putUrl = apiPrCommentsByCommitIdUrl(project, repo, prNumber, commentId)
+      newText: String
+  ): Int = {
+    val putUrl = apiPrCommentsByCommentIdUrl(project, repo, prNumber, commentId)
     val data = UpdateComment(newText, version)
     put[Id](putUrl, Some(data.toJson.toString())).id
+  }
+
+  private def updateCommentThreadState(
+      project: String,
+      repo: String,
+      prNumber: Long,
+      commentId: Int,
+      version: Int,
+      threadResolved: Boolean
+  ): Int = {
+    val putUrl = apiPrCommentsByCommentIdUrl(project, repo, prNumber, commentId)
+    val data = UpdateCommentThreadState(threadResolved, version)
+    put[Id](putUrl, Some(data.toJson.toString())).id
+  }
+
+  def reopenCommentThread(
+      project: String,
+      repo: String,
+      prNumber: Long,
+      commentId: Int,
+      version: Int
+  ): Int = {
+    val msg = "[AutoBuild] Comment thread has been reopened.\n" +
+      "\n- Please do not resolve AutoBuild-related comments as this breaks the tooling" +
+      "\n- Resolving comments is a different operation from signing off on open tasks" +
+      "\n- Resolving user comments is fine, such as part of the code review process"
+    updateCommentThreadState(project, repo, prNumber, commentId, version, threadResolved = false)
+    addComment(
+      project,
+      repo,
+      prNumber,
+      msg,
+      Some(commentId.toString)
+    )
   }
 
   def findCommentById(commentsOnPr: Seq[PrActivity], commentId: String): Option[PrComment] =
@@ -74,7 +108,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       .flatMap(_.comment)
 
   def findCommentById(project: String, repo: String, prNumber: Long, commentId: Int): Option[PrComment] =
-    Try(get[PrComment](apiPrCommentsByCommitIdUrl(project, repo, prNumber, commentId))).toOption
+    Try(get[PrComment](apiPrCommentsByCommentIdUrl(project, repo, prNumber, commentId))).toOption
 
   def addOrUpdateComment(
       project: String,
@@ -88,6 +122,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
         if (existingComment.text != newText) {
           val version = existingComment.version
           val commentId = existingComment.id
+          if (existingComment.isThreadResolved) reopenCommentThread(project, repo, prNumber, commentId, version)
           UpdatedComment(updateComment(project, repo, prNumber, commentId, version, newText))
         } else
           NotUpdatedComment(existingComment.id)

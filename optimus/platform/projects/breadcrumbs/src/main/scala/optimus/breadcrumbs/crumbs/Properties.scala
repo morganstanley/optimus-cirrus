@@ -397,6 +397,7 @@ object Properties extends KnownProperties {
     @varargs def apply(ess: ElemOrElems*): Elems =
       new Elems(ess.foldLeft(List.empty[Elem[_]]) {
         case (acc, e: Elem[_]) => e :: acc
+        case (acc, Elems.Nil)  => acc
         case (acc, es: Elems)  => es.m ::: acc
       })
   }
@@ -410,6 +411,8 @@ object Properties extends KnownProperties {
     def toJson(a: A): JsValue
     def maybe(b: Boolean, a: => A): Option[Elem[A]] = if (b) Some(Elem(this, a)) else None
     def maybe(p: A => Boolean, a: A): Option[Elem[A]] = if (p(a)) Some(Elem(this, a)) else None
+    def maybe(o: Option[A]): Option[Elem[A]] = o.map(Elem(this, _))
+    def nonNull(o: A): Option[Elem[A]] = if (Objects.nonNull(o)) Some(Elem(this, o)) else None
   }
 
   class UntypedProperty(val name: String, src: Option[String]) extends Key[String] {
@@ -644,12 +647,15 @@ object Properties extends KnownProperties {
   val profDepTrackerTaskAdded = prop[Map[String, Int]]
   val profDepTrackerTaskProcessed = prop[Map[String, Int]]
 
-  val cardinalities = prop[Map[String, Int]]
-  val cardEstimators = prop[Map[String, Array[Int]]]
+  val cardEstimated = prop[Map[String, Int]]
+  val cardRaw = prop[Map[String, Long]]
+  val cardNumerator = prop[Map[String, Double]]
+  val cardEstimators = prop[Map[String, Map[String, Int]]]
 
   val profStallTime = propL
-  val pluginInFlight = prop[Map[String, Long]]
-  val pluginStarts = prop[Map[String, Long]]
+  val pluginCounts = prop[Map[String, Map[String, Long]]]
+  val pluginSnaps = prop[Map[String, Map[String, Long]]]
+  val pluginStateTimes = prop[Map[String, Map[String, Long]]]
   val pluginFullWaitTimes = prop[Map[String, Long]]
   val pluginStallTimes = prop[Map[String, Long]]
   val profDALBatches = propI

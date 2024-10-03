@@ -49,7 +49,7 @@ public class RemovableLocalTables extends IndexedArrayList.IndexedItem {
 
   protected static void incorporateExpunged(RemovableLocalTables expungee) {
     expungeSink.evictionCounter.add(expungee.evictionCounter);
-    expungeSink.pluginTracker.accumulate(expungee.pluginTracker);
+    expungeSink.pluginTracker.accumulate(expungee.pluginTracker, 1);
     expungeSink.cardinalities.add(expungee.cardinalities);
     expungee.knownStackRecorders.expungeTo(expungeSink.knownStackRecorders);
   }

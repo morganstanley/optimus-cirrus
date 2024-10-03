@@ -42,10 +42,12 @@ private[buildtool] object MigrationTrackerTool extends MigrationTrackerToolT {
 }
 
 private[buildtool] trait TrackerToolParams {
-  val frontierScope = "optimus.onboarding.scala_2_13_frontier.main"
-  val frontierObtFile = "optimus/onboarding/projects/scala_2_13_frontier/scala_2_13_frontier.obt"
-  val rulesYaml = Option("auto-build-rules/scala-213-rules.yaml")
+  val frontierScope: String = "optimus.onboarding.scala_2_13_frontier.main"
+  val frontierObtFile: Option[String] = Option(
+    "optimus/onboarding/projects/scala_2_13_frontier/scala_2_13_frontier.obt")
+  val rulesYaml: Option[String] = Option("auto-build-rules/scala-213-rules.yaml")
   val allFrontierScope: Option[String] = None
+  val obtFileOnly: Boolean = false
 }
 
 private[buildtool] trait MigrationTrackerToolT
@@ -107,7 +109,7 @@ private[buildtool] trait MigrationTrackerToolT
         else // only include scopes that actually contain .scala files in the frontier.
           frontierIds.apar.filter(helper.idHasScala)
       }.toVector.sortBy(_.elements)
-      val frontierObt = cmdLine.workspaceSourceRoot.resolveFile(frontierObtFile)
+      val frontierObt = frontierObtFile.map(f => cmdLine.workspaceSourceRoot.resolveFile(f))
       val stratoRules = rulesYaml.map(f => cmdLine.workspaceSourceRoot.resolveFile(f))
       val indentationStr = " " * indent
       val yamlIndentationStr = " " * yamlIndent
@@ -128,9 +130,12 @@ private[buildtool] trait MigrationTrackerToolT
         }
       }
 
-      rewrite(frontierObt, frontierEntries.map(toFrontierRegex).map(indentationStr + _).mkString(",\n"), indentationStr)
+      frontierObt.foreach { f =>
+        rewrite(f, frontierEntries.map(toFrontierRegex).map(indentationStr + _).mkString(",\n"), indentationStr)
+      }
       stratoRules.foreach { f =>
-        val frontierFiles = frontierObtFile +: frontierEntries.apar.flatMap(id => scopeRoot(id, impl))
+        val frontierFiles =
+          frontierObtFile.toSeq ++ frontierEntries.apar.flatMap(id => scopeRoot(id, impl, obtFileOnly))
         rewrite(
           f,
           frontierFiles.distinct.map(yamlIndentationStr + yamlEntryMarker + _).mkString("\n"),
@@ -182,15 +187,24 @@ private[buildtool] trait MigrationTrackerToolT
     }
   }
 
-  @node def scopeRoot(scopeId: ScopeId, impl: OptimusBuildToolImpl): Seq[String] = {
+  @node def scopeRoot(scopeId: ScopeId, impl: OptimusBuildToolImpl, configFileOnly: Boolean): Seq[String] = {
     val idPaths = impl.obtConfig.scopeConfiguration(scopeId).paths
-    val root = idPaths.scopeRoot
-    val matchesAFile = Files.isDirectory(root.path) && Files.walk(root.path).iterator().asScala.exists { path =>
-      Files.isRegularFile(path) && !path.toString.contains("generated-obt")
+    val configFile = idPaths.configurationFile.toString
+
+    if (configFileOnly) {
+      Seq(configFile)
+    } else {
+      val root = idPaths.scopeRoot
+      val matchesAFile = Files.isDirectory(root.path) && IO.using(Files.walk(root.path)) { rootPath =>
+        rootPath.iterator().asScala.exists { path =>
+          Files.isRegularFile(path) && !path.toString.contains("generated-obt")
+        }
+      }
+      if (matchesAFile) // source code changes and scopeId .obt file changes
+        Seq(root.toString + "/.*", configFile)
+      else Seq.empty
     }
-    if (matchesAFile) // source code changes and scopeId .obt file changes
-      Seq(root.toString + "/.*", idPaths.configurationFile.toString)
-    else Seq.empty
+
   }
 
   def logCounts(label: String, done: Long, all: Long): Unit =

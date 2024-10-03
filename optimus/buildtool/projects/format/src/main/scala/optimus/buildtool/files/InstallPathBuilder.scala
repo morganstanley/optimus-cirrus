@@ -12,14 +12,17 @@
 package optimus.buildtool.files
 
 import optimus.buildtool.config
-
-import java.nio.file.{Files, Path}
-import optimus.buildtool.config.{MetaBundle, NamingConventions, ScopeId}
+import optimus.buildtool.config.AfsNamingConventions
+import optimus.buildtool.config.MetaBundle
+import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.StackUtils
 import org.slf4j.LoggerFactory.getLogger
 
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.util.Properties
@@ -354,7 +357,7 @@ object InstallPathBuilder {
 
   def inferVersion(installRoot: Directory, installDir: Directory): String = {
     // Not using NamingConventions.MsDist here since it prevents testing on different filesystems
-    val msDist = Directory(installDir.fileSystem.getPath(NamingConventions.AfsDistStr))
+    val msDist = Directory(installDir.fileSystem.getPath(AfsNamingConventions.AfsDistStr))
     if (installDir isChildOf msDist) {
       try msDist.relativize(installDir).path.getName(3).toString
       catch {
@@ -410,7 +413,7 @@ object InstallPathBuilder {
     log.debug(
       s"We decomposed $installLocation into [${parts.mkString(", ")}] from ${installLocation.path.getRoot} and reassembled as $pathToInstallCommon"
     )
-    if (pathToInstallCommon.startsWith(NamingConventions.AfsDistStr) && parts.size >= thisOSPartsForAfsRoot) {
+    if (pathToInstallCommon.startsWith(AfsNamingConventions.AfsDistStr) && parts.size >= thisOSPartsForAfsRoot) {
       Directory(buildPath(getParts(thisOSPartsForAfsRoot)))
     } else if (
       pathToInstallCommon.endsWith(NamingConventions.InstallPattern) &&

@@ -48,7 +48,9 @@ private[optimus] object GraphEvents {
       event: Events.EventVal,
       stallTime: Long,
       stallSource: SchedulerStallSource): Unit = {
-    val stallInfos = stallSource.awaitedTaskInfosEndOfChain.map(s => GraphStallInfo(s, s.name))
+    val stallInfos = stallSource.awaitedTasks.map { at =>
+      GraphStallInfo(Option(at.endOfChainPlugin()), at.endOfChainTaskInfo())
+    }
     val requestsStallInfo =
       stallInfos.flatMap(s => s.requestsStallInfo.map(ReasonRequestsStallInfo(s.pluginType.name, _)))
     if (requestsStallInfo.nonEmpty) {

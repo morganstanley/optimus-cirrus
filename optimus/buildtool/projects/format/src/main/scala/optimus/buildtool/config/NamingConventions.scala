@@ -20,17 +20,11 @@ import optimus.buildtool.files.FileAsset
 import scala.util.matching.Regex
 
 object NamingConventions {
+  import AfsNamingConventions._
 
   val ConfigPrefix = "optimus.buildtool"
 
-  val AfsRootStr = StaticConfig.string("afsRoot")
-  val AfsRootStrWindows = AfsRootStr.replace('/', '\\')
-
-  val AfsDistStr = s"${AfsRootStr}dist/"
-  lazy val AfsDist = Directory(Paths.get(AfsDistStr))
-
-  val AfsRootMapping = StaticConfig.string("afsRootMapping")
-  val AfsRootMappingWindows = AfsRootMapping.replace('/', '\\')
+  lazy val AfsDist: Directory = Directory(Paths.get(AfsDistStr))
 
   val MsWebDependencyMeta = "@morgan-stanley/"
   val MsWebDependencyDefaultMeta = "npm"

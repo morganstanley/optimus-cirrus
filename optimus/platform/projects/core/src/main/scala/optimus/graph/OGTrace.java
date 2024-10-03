@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 import msjava.slf4jutils.scalalog.Logger;
@@ -259,14 +260,17 @@ public class OGTrace {
   public static void completed(EvaluationQueue eq, NodeTask task) {
     if (Settings.allowTestableClock)
       OGTrace.publishEvent(task.getId(), ProfiledEvent.NODE_COMPLETED);
-    if (task.hasPluginType())
-      task.executionInfo().reportingPluginType().decrementInFlightTaskCount(eq);
+    var pt = task.getReportingPluginType();
+    if (Objects.nonNull(pt)) pt.decrementInFlightTaskCount(eq);
     observer.completed(eq, task);
   }
 
-  public static void adapted(OGSchedulerContext ec, PluginType pluginType, NodeTask ntsk) {
-    pluginType.recordLaunch(ec.prfCtx, ntsk);
-    observer.adapted(ec, pluginType);
+  public static void adapted(OGSchedulerContext ec, NodeTask ntsk) {
+    var pt = ntsk.getReportingPluginType();
+    if (Objects.nonNull(pt)) {
+      pt.recordLaunch(ec, ntsk);
+      observer.adapted(ec, pt);
+    }
   }
 
   public static void evict(EvictionReason reason, long num) {

@@ -57,6 +57,7 @@ import optimus.buildtool.compilers.cpp.CppCompilerFactory
 import optimus.buildtool.compilers.cpp.CppCompilerFactoryImpl
 import optimus.buildtool.compilers.runconfc.Templates
 import optimus.buildtool.compilers.zinc.AnalysisLocatorImpl
+import optimus.buildtool.compilers.zinc.CompilerThrottle
 import optimus.buildtool.compilers.zinc.RootLocatorWriter
 import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
@@ -120,6 +121,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.Deflater
 import scala.annotation.tailrec
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -182,14 +184,6 @@ object OptimusBuildToolImpl {
   private val dockerDir = cmdLine.dockerDir.asDirectory.getOrElse(workspaceRoot.resolveDir("docker-out"))
 
   private val cacheFlushTimeout = 60000 // ms
-
-  private val zincInstanceThrottle =
-    if (cmdLine.maxNumZincs > 0) Some(new AdvancedUtils.Throttle(cmdLine.maxNumZincs))
-    else None
-
-  private val zincSizeThrottle =
-    if (cmdLine.maxZincCompileBytes > 0) Some(new AdvancedUtils.Throttle(cmdLine.maxZincCompileBytes))
-    else None
 
   private def gbString(bytes: Long): String = {
     f"${bytes * 1.0 / (1024 * 1024 * 1024)}%,.1f"
@@ -352,6 +346,8 @@ object OptimusBuildToolImpl {
     scalaVersionConfig.scalaMajorVersion
   )
 
+  private val compilerThrottle = new CompilerThrottle(cmdLine.maxZincCompileBytes, cmdLine.maxNumZincs)
+
   @node private def underlyingCompilerFactory: ZincCompilerFactory = {
     val interfaceDir = cmdLine.zincInterfaceDir.asDirectory.getOrElse {
       buildDir.resolveDir("zincCompilerInterface")
@@ -381,8 +377,7 @@ object OptimusBuildToolImpl {
       strictErrorTolerance = cmdLine.zincStrictMapping,
       zincTrackLookups = cmdLine.zincTrackLookups,
       depCopyFileSystemAsset = depCopyFileSystemAsset,
-      instanceThrottle = zincInstanceThrottle,
-      sizeThrottle = zincSizeThrottle
+      compilerThrottle = compilerThrottle
     )
   }
 
@@ -589,6 +584,9 @@ object OptimusBuildToolImpl {
 
   @node private def predefinedDockerImages: Set[DockerImage] =
     if (cmdLine.imagesToBuild.nonEmpty) {
+      if (OsUtils.isWindows) {
+        throw new IllegalStateException("Building a docker image from Windows not supported. Please use a unix machine")
+      }
       obtConfig.parseImages(dockerDir, cmdLine.imagesToBuild, cmdLine.imageTag)
     } else Set.empty
 
@@ -621,7 +619,20 @@ object OptimusBuildToolImpl {
 
     @node override def lookupScope(id: ScopeId): Option[CompilationNode] = {
       if (scopeConfigSource.compilationScopeIds.contains(id)) ObtTrace.traceTask(id, InitializeScope) {
-        val scopeConfig = scopeConfigSource.scopeConfiguration(id)
+        val scopeConfig0 = scopeConfigSource.scopeConfiguration(id)
+
+        // Temporary workaround to differentiate compressed and uncompressed jars
+        // that will be removed once we deploy incremental jar compression
+        val scopeConfig = {
+          val additionalJarCompressionFlag =
+            if (Jars.incrementalHashingEnabled || scalaVersionConfig.scalaVersion.startsWith("2.11")) Nil
+            else Seq("-Yjar-compression-level", Deflater.NO_COMPRESSION.toString)
+
+          val updatedScalaConfig =
+            scopeConfig0.scalacConfig.copy(scopeConfig0.scalacConfig.options ++ additionalJarCompressionFlag)
+          scopeConfig0.copy(scalacConfig = updatedScalaConfig)
+        }
+
         val runConfConfig = RunConfConfiguration(
           asSourceFolders(scopeConfig.absScopeConfigDir, Templates.potentialLocationsFromScopeConfigDir) ++
             asSourceFolders(scopeConfig.absScopeConfigDir.parent, Templates.potentialLocationsFromScopeConfigDir) ++
@@ -767,7 +778,10 @@ object OptimusBuildToolImpl {
     } else if (cmdLine.interactive) {
       buildInteractive()
     } else {
-      rubbishTidyer.foreach(_.tidy())
+      rubbishTidyer.foreach { t =>
+        val artifacts = t.storedArtifacts
+        t.tidy(artifacts, Nil)
+      }
       build()._1
     }
   }
@@ -1126,10 +1140,12 @@ object OptimusBuildToolImpl {
             dependencyResolver = dependencyResolver,
             webDependencyResolver = webDependencyResolver,
             installDir = installDir,
+            dockerDir = dockerDir,
             installVersion = cmdLine.installVersion,
             leafDir = RelativePath(StaticConfig.string("metadataLeaf")),
             buildId = cmdLine.buildId,
-            generatePoms = generatePoms
+            generatePoms = generatePoms,
+            images = predefinedDockerImages
           )
         )
       } else None

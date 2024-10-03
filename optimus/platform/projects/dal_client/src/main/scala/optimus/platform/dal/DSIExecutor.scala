@@ -85,7 +85,7 @@ object DALDSIExecutor extends DSIExecutor {
   }
 
   @async def executeQuery(dsi: DSI, cmd: ReadOnlyCommand): Result = {
-    val res = asyncResult { doExecuteQuery(dsi, cmd) }
+    val res = asyncResult(EvaluationContext.cancelScope) { doExecuteQuery(dsi, cmd) }
 
     if (res.hasException) {
       val e = res.exception

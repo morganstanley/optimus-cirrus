@@ -18,7 +18,7 @@ class MavenTrackerTool extends MigrationTrackerTool {
 
 private[buildtool] trait MavenTrackerParams extends TrackerToolParams {
   override val frontierScope = s"optimus.onboarding.$MavenReleaseFrontier.main"
-  override val frontierObtFile = s"optimus/onboarding/projects/$MavenReleaseFrontier/$MavenReleaseFrontier.obt"
+  override val frontierObtFile = Some(s"optimus/onboarding/projects/$MavenReleaseFrontier/$MavenReleaseFrontier.obt")
   override val rulesYaml = Some("auto-build-rules/obt-rules.yaml")
 }
 

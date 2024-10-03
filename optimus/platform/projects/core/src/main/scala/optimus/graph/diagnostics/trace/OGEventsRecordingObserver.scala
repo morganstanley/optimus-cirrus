@@ -22,10 +22,8 @@ import optimus.platform.EvaluationQueue
 abstract class OGEventsRecordingObserverBase protected (config: RecordingConfig)
     extends OGEventsHotspotsObserver
     with OGEventsTimeLineObserverImpl {
-  override def title: String = "Recording"
-  override def description: String = "Record to a trace file, no processing"
-
-  override def includeInUI: Boolean = true
+  override def description: String = RecordingConfig.description(config.storeHashes)
+  override def includeInUI: Boolean = false
   override def supportsReadingFromFile: Boolean = true
   override def supportsProfileBlocks: Boolean = false
   override def recordLostConcurrency: Boolean = false
@@ -92,13 +90,18 @@ private[trace] final case class RecordingConfig(storeHashes: Boolean)
 private[trace] object RecordingConfig {
   val default: RecordingConfig = RecordingConfig(storeHashes = false)
   val hashedValues: RecordingConfig = RecordingConfig(storeHashes = true)
+
+  private[trace] def description(hashes: Boolean): String =
+    s"Record to a trace file${if (hashes) " (with hashes)" else ""}, no processing"
 }
 
 class OGEventsRecordingObserver private[trace] extends OGEventsRecordingObserverBase {
   override def name: String = "recording"
+  override def title: String = "Recording"
 }
 
 class OGEventsRecordingObserverWithHashes private[trace]
     extends OGEventsRecordingObserverBase(RecordingConfig.hashedValues) {
   override def name: String = "recordingWithHashes"
+  override def title: String = "Recording with hashes"
 }

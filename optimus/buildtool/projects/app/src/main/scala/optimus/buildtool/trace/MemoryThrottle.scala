@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.utils.Utils
 import optimus.platform._
 
 import scala.jdk.CollectionConverters._
@@ -31,18 +32,26 @@ object MemoryThrottle {
   private def memoryBeans =
     ManagementFactory.getMemoryPoolMXBeans.asScala.toIndexedSeq.filter(_.getType == MemoryType.HEAP)
   private def getUsages: Seq[MemoryUsage] = memoryBeans.map(_.getUsage)
-  abstract private class Mem(freeMb: Long) {
+  abstract private class Mem(val freeMb: Long) {
     def >=(l: Long) = freeMb >= l
     def <(l: Long) = freeMb < l
     def toString: String
   }
-  private def getFree = {
+  private def getFreeHeap = {
     val usages = getUsages
-    val max = usages.map(_.getMax).sum / (1024L * 1024L) // MB
-    val used = usages.map(_.getUsed).sum / (1024L * 1024L) // MB
+    val max = Utils.byteToMB(usages.map(_.getMax).sum)
+    val used = Utils.byteToMB(usages.map(_.getUsed).sum)
     val freeMemMb: Long = max - used
     new Mem(freeMemMb) {
-      override def toString = s"free=$freeMemMb max=$max used=$used: ${usages.mkString(";")}"
+      override def toString = s"Heap: free=$freeMemMb max=$max used=$used: ${usages.mkString(";")}"
+    }
+  }
+
+  private val osBean = ManagementFactory.getOperatingSystemMXBean.asInstanceOf[com.sun.management.OperatingSystemMXBean]
+  private def getFreeRam = {
+    val freeRamMb = Utils.byteToMB(osBean.getFreeMemorySize)
+    new Mem(freeRamMb) {
+      override def toString = s"RAM: free=$freeRamMb"
     }
   }
 
@@ -56,8 +65,15 @@ object MemoryThrottle {
       .flatMap { config =>
         try {
           val nums = config.split(',').map(_.toInt)
-          log.debug(s"Configuring memory: ${nums.mkString(",")}")
           val Array(freeMemGbDelay, freeMemGbGC, delaySec, maxDelays) = nums
+          log.debug(
+            s"""Creating memory throttle:
+               |\tFree heap delay threshold: ${freeMemGbDelay}GB
+               |\tFree heap GC threshold: ${freeMemGbGC}GB
+               |\tDelay time: ${delaySec}s
+               |\tMax delays before timeout: $maxDelays""".stripMargin
+          )
+
           val minFreeMbDelay = 1024L * freeMemGbDelay
           val minFreeMbGC = 1024L * freeMemGbGC
           val memDelayMillis = 1000L * delaySec
@@ -85,7 +101,7 @@ class MemoryThrottle(minFreeMbDelay: Long, minFreeMbGC: Long, memDelayMillis: Lo
   private val numGCs: AtomicInteger = new AtomicInteger(0)
 
   @async override def throttleIfLowMem$NF[T](id: ScopeId)(fn: NodeFunction0[T]): T = {
-    var free = getFree
+    var free = getFreeHeap
     def info(more: String) = s"[$id] $more $free"
 
     if (free >= minFreeMbDelay && free >= minFreeMbGC) {
@@ -119,7 +135,7 @@ class MemoryThrottle(minFreeMbDelay: Long, minFreeMbGC: Long, memDelayMillis: Lo
           log.warn(info(s"Delaying $memDelayMillis (n=$nDelay)"))
           numDelays.incrementAndGet()
           delay(memDelayMillis)
-          free = getFree
+          free = getFreeHeap
           if (free >= minFreeMbDelay) {
             continue = false
             trace.end(true)

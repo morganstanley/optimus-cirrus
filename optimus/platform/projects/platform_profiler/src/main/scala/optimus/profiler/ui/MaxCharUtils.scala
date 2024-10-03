@@ -51,7 +51,7 @@ private[ui] object MaxCharUtils {
   }
 
   /** Returns formatted full string and shortened string */
-  def shortenText(hb: HtmlBuilder, maxChars: Int): (String, String) = {
+  def shortenText(hb: HtmlBuilder, maxChars: Int): String = {
     // Because some of our char count is eaten up by HTML wrapping, we set minimum to 1000 to avoid confusing people
     val fullString = hb.toStringWithLineBreaks
     val abbreviationLink =
@@ -59,8 +59,8 @@ private[ui] object MaxCharUtils {
 
     val actualMax = if (maxChars < maxCharsMinimum) maxCharsMinimum else maxChars
     if (fullString.length > actualMax) {
-      (fullString, shortenTextHelper(fullString, maxChars) + abbreviationLink)
-    } else (fullString, fullString)
+      shortenTextHelper(fullString, maxChars) + abbreviationLink
+    } else fullString
   }
 
   private def errorDialog(): Unit =

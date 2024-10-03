@@ -178,7 +178,8 @@ public class OGSchedulerLostConcurrency {
     }
   }
 
-  static void reportPossibleLostConcurrency(NodeTask ntsk, PluginType pluginType) {
+  static void reportPossibleLostConcurrency(NodeTask ntsk) {
+    PluginType pluginType = ntsk.getReportingPluginType();
     if (ntsk.scenarioStack().hasFlag(IN_NON_CONCURRENT_SEQ)) {
       ntsk.scenarioStack()
           .findPluginTag(nonConcurrentLoopKey)

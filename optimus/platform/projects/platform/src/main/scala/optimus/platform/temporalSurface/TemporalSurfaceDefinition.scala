@@ -245,24 +245,19 @@ object TemporalSurfaceDefinition {
         sourceLocation: SourceLocation): TickableTemporalContext =
       trackingScenario.createTickableBranchTemporalContext(TemporalSurfaceMatchers.allScope, nodes, tag, sourceLocation)
 
-    def apply(
-        start: Instant,
-        firstType: EntityCompanionBase[_],
-        otherTypes: EntityCompanionBase[_]*): TickableTemporalContext =
-      apply(start, TimeInterval.Infinity, firstType, otherTypes: _*)
+    def apply(start: Instant, firstType: EntityCompanionBase[_], otherTypes: EntityCompanionBase[_]*)(implicit
+        sourceLocation: SourceLocation): TickableTemporalContext =
+      apply(start, TimeInterval.Infinity, firstType, otherTypes: _*)(sourceLocation)
 
-    def apply(
-        start: Instant,
-        endTt: Instant,
-        firstType: EntityCompanionBase[_],
-        otherTypes: EntityCompanionBase[_]*): TickableTemporalContext = {
+    def apply(start: Instant, endTt: Instant, firstType: EntityCompanionBase[_], otherTypes: EntityCompanionBase[_]*)(
+        implicit sourceLocation: SourceLocation): TickableTemporalContext = {
 
       val types: Seq[EntityCompanionBase[_]] = otherTypes :+ firstType
 
       TickableBranchContext(
         TemporalSurfaceMatchers.matchersByPartition(types).map(m => TickableLeafSurface(m, start, endTt, None)).toList
           ::: FixedLeafSurface(TemporalSurfaceMatchers.all, start, start) :: Nil
-      )
+      )(sourceLocation)
     }
   }
 

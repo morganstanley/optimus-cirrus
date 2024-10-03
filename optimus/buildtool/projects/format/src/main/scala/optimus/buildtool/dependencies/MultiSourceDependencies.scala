@@ -93,7 +93,7 @@ object MultiSourceDependency {
     def getMavenVariants(mavenVariants: Seq[DependencyDefinition]) =
       mavenVariants.map { d =>
         val nameWithVariant = d.variant match {
-          case Some(mavenVar) => s"$name.variants.${mavenVar.name}" // for example: foo.variants.bar
+          case Some(mavenVar) => s"$name.variant.${mavenVar.name}" // for example: foo.variant.bar
           case None           => name
         }
         MultiSourceDependency(nameWithVariant, None, Seq(d), line)

@@ -83,6 +83,11 @@ final class SimpleInstantOptionHandler(parser: CmdLineParser, option: OptionDef,
   override def convert(s: String): Instant = stringToInstant(s)
 }
 
+final class IsoInstantOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Instant]])
+    extends OptionOptionHandler[Instant](parser, option, setter) {
+  override def convert(s: String): Instant = Instant.parse(s)
+}
+
 final class BooleanOptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[Boolean]])
     extends OptionOptionHandler[Boolean](parser, option, setter) {
   override def convert(s: String): Boolean = s.toBoolean

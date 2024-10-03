@@ -10,8 +10,11 @@
  * limitations under the License.
  */
 package optimus.platform
+
 import optimus.config.RuntimeComponents
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.graph.NodeTask
+import optimus.graph.NodeTaskInfo
 import optimus.platform.dal.EntityResolver
 import optimus.platform.inputs.loaders.FrozenNodeInputMap
 import optimus.platform.inputs.loaders.OptimusNodeInputStorage
@@ -47,11 +50,12 @@ class FullySpecifiedScenarioState private[optimus /*platform*/ ] (
 /** UntweakedScenarioState */
 class UntweakedScenarioState private[optimus] (
     override val environment: RuntimeEnvironment,
+    val scopedConfiguration: Map[NodeTaskInfo, ScopedSchedulerPlugin],
     val inputs: FrozenNodeInputMap)
     extends ScenarioState {
 
   override private[optimus] lazy val scenarioStack: ScenarioStack =
-    ScenarioStack.newRoot(environment, inputs, uniqueID = false)
+    ScenarioStack.newRoot(environment, inputs, scopedConfiguration, uniqueID = false)
   private[optimus] def initialRuntimeScenarioStack(requeryTime: Boolean) =
     scenarioStack.initialRuntimeScenarioStack(requeryTime)
 }
@@ -65,7 +69,7 @@ object ScenarioState {
 
 object UntweakedScenarioState {
   def apply(env: RuntimeEnvironment) =
-    new UntweakedScenarioState(env, OptimusNodeInputStorage.loadScopedState)
+    new UntweakedScenarioState(env, null, OptimusNodeInputStorage.loadScopedState)
   def apply(config: RuntimeComponents, entityResolver: EntityResolver): UntweakedScenarioState =
     apply(new RuntimeEnvironment(config, entityResolver))
 

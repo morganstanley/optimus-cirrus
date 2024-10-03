@@ -14,7 +14,6 @@ package silverking
 
 import optimus.buildtool.app.OptimusBuildToolCmdLineT
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
-import optimus.buildtool.app.RemoteStoreCmdLine
 import optimus.buildtool.app.RemoteStoreWriteCmdLine
 import optimus.buildtool.cache.CacheMode
 import optimus.buildtool.cache.dht.DHTStore
@@ -95,12 +94,39 @@ import optimus.stratosphere.config.StratoWorkspace
       } else None
   }
 
+  @node @scenarioIndependent private def getCrossRegionPopulatingCache(
+      store: ComparableArtifactStore,
+      cacheMode: CacheMode,
+      version: String): RemoteArtifactCache = {
+    val forcedReadThroughStores: Set[DHTStore] = cmdLine.crossRegionReadThroughDHTLocations.apar
+      .withFilter(!_.equalsIgnoreCase(NoneArg))
+      .map { location =>
+        new DHTStore(
+          pathBuilder,
+          DHTStore.zkClusterType(location),
+          version,
+          writeArtifacts = false,
+          DHTStore.ZkBuilder(location))
+      }
+      .toSet
+    if (forcedReadThroughStores.nonEmpty) {
+      RemoteReadThroughTriggeringArtifactCache(
+        store,
+        forcedReadThroughStores,
+        cmdLine.crossRegionDHTSizeThreshold.bytes,
+        cacheMode)
+    } else {
+      SimpleArtifactCache(store, cacheMode)
+    }
+  }
+
   @node @scenarioIndependent private def getCache(
       cacheType: String,
       cacheMode: CacheMode = defaultCacheMode,
       version: String = defaultVersion,
       silverKing: String = cmdLine.silverKing,
-      offlinePuts: Boolean = true
+      dht: String = cmdLine.dhtRemoteStore,
+      offlinePuts: Boolean = true,
   ): RemoteArtifactCache = {
 
     val store: ComparableArtifactStore = (silverKing, cmdLine.dhtRemoteStore, cmdLine.comparisonMode) match {
@@ -144,7 +170,7 @@ import optimus.stratosphere.config.StratoWorkspace
         log.info(s"SilverKing and DHT remote stores enabled without comparison mode, using DualStore")
         throw new UnsupportedOperationException("Not implemented yet, specify --comparisonMode")
     }
-    SimpleArtifactCache(store, cacheMode)
+    getCrossRegionPopulatingCache(store, cacheMode, version)
   }
 
 }
@@ -152,7 +178,7 @@ import optimus.stratosphere.config.StratoWorkspace
 object CacheProvider {
   type RemoteArtifactCache =
     SimpleArtifactCache[ComparableArtifactStore]
-  type CacheCmdLine = RemoteStoreCmdLine
+  type CacheCmdLine = RemoteStoreWriteCmdLine
   // making sure we keep the Silverking caches internal information around to decide if we can write root locators
   `getCache`.setCustomCache(NodeCaching.reallyBigCache)
 }

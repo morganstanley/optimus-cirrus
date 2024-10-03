@@ -47,7 +47,7 @@ trait BitBucketApiUrls {
   protected def apiPrCommentsUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments"
 
-  protected def apiPrCommentsByCommitIdUrl(project: String, repo: String, prNumber: Long, commentId: Int): String =
+  protected def apiPrCommentsByCommentIdUrl(project: String, repo: String, prNumber: Long, commentId: Int): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments/$commentId"
 
   protected def apiTasksUrl(project: String, repo: String, prNumber: Long): String = apiUrl("api", "blocker-comments")

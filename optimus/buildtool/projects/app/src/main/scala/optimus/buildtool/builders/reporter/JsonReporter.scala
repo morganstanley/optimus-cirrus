@@ -32,6 +32,8 @@ import optimus.platform._
 import optimus.platform.util.Log
 import spray.json._
 
+import optimus.scalacompat.collection._
+
 class JsonReporter(
     obtConfig: ObtConfig,
     codeReviewSettings: Option[CodeReviewSettings],
@@ -49,6 +51,7 @@ class JsonReporter(
     val scopeIds = buildResult.scopeIds
     metadataSettings.toSeq.apar.flatMap { settings =>
       val isMavenRelease = settings.generatePoms
+      val isDocker = settings.images.nonEmpty
       val scopeConfigurations: Map[ScopeId, ScopeConfiguration] =
         if (isMavenRelease) {
           scopeIds
@@ -68,6 +71,17 @@ class JsonReporter(
           val metaBundleReport = MetaBundleReport(settings, mavenBundle, id, config)
           val file = writeJsonFile(metadataDir, metaBundleReport, s"$mavenBundle-metadata.json")
           log.info(s"Metadata for maven lib $mavenBundle generated - see ${file.pathString}")
+          file
+        }
+      } else if (isDocker) {
+        settings.images.toIndexedSeq.apar.map { image =>
+          val imageScopes = scopeConfigurations.filterKeysNow(image.relevantScopeIds.contains)
+          val Array(meta, bundle) = image.location.repo.split("/", 2)
+          val dockerBundle = MetaBundle(meta, bundle)
+          val metadataDir = settings.dockerDir.resolveDir(dockerBundle.meta)
+          val metaBundleReport = MetaBundleReport(settings, dockerBundle, imageScopes)
+          val file = writeJsonFile(metadataDir, metaBundleReport, s"${dockerBundle.bundle}-metadata.json")
+          log.info(s"Metadata for image $dockerBundle generated - see ${file.pathString}")
           file
         }
       } else {

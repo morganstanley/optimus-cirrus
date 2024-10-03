@@ -137,7 +137,7 @@ object SchedulerDiagnosticUtils {
           if (ctx.awaitedTask != null)
             endOfWaitChainIsAdapted(ctx)
           else false
-        endOfChainInfo.hasPlugin || adaptedExistsInWaitChain
+        ctx.awaitedTaskPluginEndOfChain != null || adaptedExistsInWaitChain
       })
     }
   }

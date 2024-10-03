@@ -36,6 +36,7 @@ import optimus.platform.relational.inmemory.IterableSource
 import optimus.platform.relational.tree.ExecuteOptions
 import optimus.platform.relational.tree.QueryExplainItem
 import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.storable.SerializedKey
 import optimus.platform.temporalSurface.impl.TemporalContextImpl
 import optimus.platform.temporalSurface.operations.QueryByClass
 
@@ -158,6 +159,7 @@ object DALAccExecutionProvider {
 
     protected override def visitRichConstant(c: RichConstant): Expression = {
       if (c.value == null) Constant(c.value, TypeCode.None)
+      else if (c.value.isInstanceOf[SerializedKey]) Constant(c.value, TypeCode.SerializedKey)
       else {
         val underlyingValue = OptionElement.underlyingValue(c.value)
         checkLoadContext(underlyingValue, loadContext, false)

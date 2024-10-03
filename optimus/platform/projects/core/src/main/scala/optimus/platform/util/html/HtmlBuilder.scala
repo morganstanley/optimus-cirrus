@@ -12,6 +12,7 @@
 package optimus.platform.util.html
 
 import optimus.core.SparseBitSet
+import optimus.core.TPDMask
 import optimus.graph.DiagnosticSettings
 import optimus.graph.NodeTrace
 import optimus.platform.Tweak
@@ -20,6 +21,7 @@ import optimus.platform.util.PrettyStringBuilder
 import scala.collection.mutable.ListBuffer
 
 class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boolean = false) {
+  var tpdMask: TPDMask = _
   var infectionSet: SparseBitSet = _
   def hasInfectionSet: Boolean =
     NodeTrace.traceTweaks.getValue && (infectionSet ne null) && !DiagnosticSettings.traceTweaksOverflowDetected

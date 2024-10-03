@@ -73,6 +73,7 @@ private[buildtool] object ObtStats {
   case object DurationMs extends ObtStat
   case object AllocatedBytes extends ObtStat
   case object InstalledJarBytes extends ObtStat
+  case object WrittenClassJars extends ObtStat
   case object Scopes extends ObtStat
   case object TransitiveScopes extends ObtStat
   case object PythonScopes extends ObtStat
@@ -138,7 +139,9 @@ private[buildtool] object ObtStats {
   case object FileSystemSourceFolder extends ObtStat
   case object GitSourceFolder extends ObtStat
   case object ReadFileSystemSourceFiles extends ObtStat
+  case object ReadDistinctFileSystemSourceFiles extends ObtStat
   case object ReadGitSourceFiles extends ObtStat
+  case object ReadDistinctGitSourceFiles extends ObtStat
 
   trait Cache {
     private val cache = this.toString

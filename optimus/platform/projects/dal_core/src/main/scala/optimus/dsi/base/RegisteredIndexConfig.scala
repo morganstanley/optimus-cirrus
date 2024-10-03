@@ -40,6 +40,7 @@ class RegisteredIndexConfigProperties {
 
 private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => new RegisteredIndexConfigProperties()) {
 
+  val regIndexWriteCrumbStr = "RegisteredIndexWrite"
   val EnableProp: String = "optimus.dal.registered.indexes.enable"
   val EntitiesListCompressionTypeProp: String =
     "optimus.dal.registered.indexes.entitiesListCompressionType"

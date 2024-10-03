@@ -53,7 +53,7 @@ private[graph] class JobPlugin extends SchedulerPlugin {
 
   def adapt(n: NodeTask, ec: OGSchedulerContext): Boolean =
     subPlugin match {
-      case _: JobFriendlySchedulerPlugin if subPlugin.adapt(n, ec) =>
+      case _: JobFriendlySchedulerPlugin if subPlugin.readapt(n, ec) =>
         // do nothing because it is the responsibility of the plugin to later call back
         // into @job tracking code
         true
@@ -66,7 +66,7 @@ private[graph] class JobPlugin extends SchedulerPlugin {
               // to OGSchedulerContext, and need to fetch our current one
               val ec = OGSchedulerContext.current()
               // handing back to the scheduler a previously adapted node is the only legit use case of `markAsRunnableAndEnqueue`
-              if (!hasSubPlugin || !subPlugin.adapt(n, ec)) ec.scheduler.markAsRunnableAndEnqueue(n)
+              if (!hasSubPlugin || !subPlugin.readapt(n, ec)) ec.scheduler.markAsRunnableAndEnqueue(n)
             }
             // deal explicitly with failures at the @job decorator level,
             rn.continueWith(

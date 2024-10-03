@@ -12,13 +12,14 @@
 package optimus.config
 
 import java.time.Instant
+import optimus.config.scoped.ScopedSchedulerPlugin
+import optimus.graph.NodeTaskInfo
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.dal.EntityResolver
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.UntweakedScenarioState
 import optimus.platform.ScenarioState
-import optimus.platform.UntweakedScenarioState
 import optimus.platform.inputs.loaders.FrozenNodeInputMap
 
 abstract class RuntimeComponents(final val runtimeConfig: RuntimeConfiguration) {
@@ -26,8 +27,10 @@ abstract class RuntimeComponents(final val runtimeConfig: RuntimeConfiguration) 
   def createRuntime(): RuntimeEnvironment
 
   /** Returns env as scenario state */
-  private[optimus] final def createUntweakedScenarioState(localInputs: FrozenNodeInputMap): UntweakedScenarioState =
-    new UntweakedScenarioState(createRuntime(), localInputs)
+  private[optimus] final def createUntweakedScenarioState(
+      localInputs: FrozenNodeInputMap,
+      scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin]): UntweakedScenarioState =
+    new UntweakedScenarioState(createRuntime(), scopedPlugins, localInputs)
 
   /** Returns env as scenario state */
   final def createUntweakedScenarioState(): UntweakedScenarioState = ScenarioState(createRuntime())

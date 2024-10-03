@@ -19,7 +19,7 @@ import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.updater.GitUpdater
 import optimus.stratosphere.utils.CollectionUtils
 import optimus.stratosphere.utils.GitUtils
-import optimus.stratosphere.utils.MemUnit
+import optimus.utils.MemUnit
 
 import java.nio.file.Path
 import java.nio.file.Paths

@@ -39,6 +39,7 @@ import scala.util.matching.Regex
 
 object ArtifactoryToolDownloader {
   val PipConfigFile = "PIP_CONFIG_FILE"
+  val UvConfigFile = "UV_CONFIG_FILE"
   private val SfxNoProgressDialogAttribute: String = """Progress="no"
                                                        |""".stripMargin
   private val ExtractionFlag: String = "--explode"
@@ -64,6 +65,7 @@ object ArtifactoryToolDownloader {
       "HOME" -> stratoWorkspace.internal.jfrog.home.getParent.resolve("").toString,
       "JFROG_CLI_HOME_DIR" -> stratoWorkspace.internal.jfrog.home.resolve("").toString,
       PipConfigFile -> stratoWorkspace.internal.pypi.configFile.toFile.toString,
+      UvConfigFile -> stratoWorkspace.internal.pypi.uvConfigFile.toFile.toString,
       // setup_user does not like proxies
       "HTTPS_PROXY" -> "",
       "https_proxy" -> "",
@@ -77,6 +79,7 @@ object ArtifactoryToolDownloader {
 
     val jfrogConfigFile = stratoWorkspace.internal.jfrog.configFile
     val pypiConfigFile = stratoWorkspace.internal.pypi.configFile
+    val uvConfigFile = stratoWorkspace.internal.pypi.uvConfigFile
     val jarRepoFile = stratoWorkspace.intellij.jarRepoFile
     lazy val credentials = Credential.fromJfrogConfFile(jfrogConfigFile)
     lazy val artifactoryUrl = stratoWorkspace.internal.tools.artifactoryUrl
@@ -105,7 +108,10 @@ object ArtifactoryToolDownloader {
           stratoWorkspace.log.warning(msg)
           stratoWorkspace.log.debug(msg, e)
       }
-    if (!pypiConfigFile.exists() || pypiConfigFile.toFile.length() == 0)
+    if (
+      !pypiConfigFile.exists() || pypiConfigFile.toFile.length() == 0 || !uvConfigFile
+        .exists() || uvConfigFile.toFile.length() == 0
+    )
       try {
         ArtifactoryToolDownloader.setupPypiUser(stratoWorkspace)
       } catch {

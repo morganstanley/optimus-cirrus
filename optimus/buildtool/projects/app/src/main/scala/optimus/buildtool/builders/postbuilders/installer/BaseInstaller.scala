@@ -31,7 +31,7 @@ import optimus.buildtool.files.Asset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.utils.AssetUtils
-import optimus.buildtool.utils.ExtraInJarFile
+import optimus.buildtool.utils.ExtraInJar
 import optimus.buildtool.utils.Jars
 import optimus.platform._
 import optimus.platform.util.Log
@@ -113,14 +113,14 @@ trait BaseInstaller { this: PostBuilder with Log =>
       classJars: Seq[JarAsset],
       manifest: jar.Manifest,
       installJar: JarAsset,
-      extraFiles: Seq[ExtraInJarFile] = Nil
+      extraFiles: Seq[ExtraInJar] = Nil
   ): Long = {
     // Note: we backup the previous classjar when we write to ensure that any processes running off the previous
     // jar will still be able to classload. This is particularly useful in hot code replace mode, since it prevents
     // a race between replacing the old jar with the new jar and loading new classes.
     AssetUtils.atomicallyWrite(installJar, replaceIfExists = true, localTemp = true, backupPrevious = true) { tempJar =>
       // since this is our final output (which will get distributed to AFS or wherever), we definitely want to compress it
-      Jars.mergeJarContentAndManifests(classJars, JarAsset(tempJar), Some(manifest), compress = true, extraFiles)
+      Jars.mergeManifestsThenMergeJarContent(classJars, JarAsset(tempJar), Some(manifest), compress = true, extraFiles)
     }
   }
 
@@ -131,7 +131,7 @@ trait BaseInstaller { this: PostBuilder with Log =>
     // a race between replacing the old jar with the new jar and loading new classes.
     AssetUtils.atomicallyWrite(installJar, replaceIfExists = true, localTemp = true, backupPrevious = true) { tempJar =>
       // since this is our final output (which will get distributed to AFS or wherever), we definitely want to compress it
-      Jars.mergeJarContentAndManifests(classJars, JarAsset(tempJar), None, compress = true)
+      Jars.mergeManifestsThenMergeJarContent(classJars, JarAsset(tempJar), None, compress = true)
     }
   }
 }

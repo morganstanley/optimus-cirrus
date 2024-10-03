@@ -24,7 +24,7 @@ import optimus.debug.InstrumentationConfig
 import optimus.graph.DiagnosticSettings
 import optimus.graph.Exceptions
 import optimus.graph.NodeTask
-import optimus.graph.NodeTaskInfo
+import optimus.graph.OGSchedulerContext
 import optimus.graph.diagnostics.rtverifier.Violation
 import optimus.logging.LoggingInfo
 import optimus.platform.EvaluationContext
@@ -34,6 +34,8 @@ import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
 import optimus.platform.temporalSurface.operations.TemporalSurfaceQueryWithClass
 import optimus.platform.util.{Version => V}
 import optimus.ui.ScenarioReference
+import optimus.utils.MiscUtils.NullCandy._
+import optimus.utils.MacroUtils.SourceLocation
 
 object GraphDiagnosticsSource extends Source {
   override val name = "GD"
@@ -63,6 +65,8 @@ object MonitoringBreadcrumbs {
   import MonitoringBreadcrumbsPublisher._
   // Make it slightly harder to call Breadcrumbs methods directly by mistake
   val Breadcrumbs = "do not call directly"
+
+  private def toPublishLoc(sl: SourceLocation) = PublishLocation(sl.sourceName, sl.line, -1)
 
   def OnceByAppId(ntsk: NodeTask): OnceByKey = {
     OnceBy("appId", getAppId(ntsk).getOrElse("unknown"))
@@ -179,25 +183,34 @@ object MonitoringBreadcrumbs {
   private def exceptionToReport(exception: Throwable): Throwable =
     if (exception ne null) exception else new Exception("GraphFatalException")
 
+  private[optimus] def sendGraphFatalErrorCrumb(reason: String): Unit = {
+    warn(OnceBy(reason), P.event -> "setGraphFatalError" :: P.reason -> reason :: V.properties)
+  }
+
   private[optimus] def sendGraphFatalErrorCrumb(
       reason: String,
-      info: NodeTaskInfo,
+      ntsk: NodeTask,
       exception: Throwable,
       logFile: String,
       logMsg: String): Unit = {
-    val stackTrace = Exceptions.minimizeTrace(exceptionToReport(exception), 10, 3)
-    val nti = if (info ne null) info.toString else "None"
-    val pluginName = if ((info ne null) && (info.getPlugin ne null)) info.getPlugin.pluginType.toString else "None"
+
+    val stackTrace = exception.nonNull(e => Exceptions.minimizeTrace(exceptionToReport(e), 10, 3))
+
+    val nti: Option[String] = ntsk.nonNull(_.info).map(_.toString)
+    val pluginName: Option[String] =
+      (ntsk.nonNull(_.getReportingPluginType) orElse (ntsk.nonNull &? (_.getPlugin) &? (_.pluginType))).map(_.toString)
     warn(
       OnceBySourceLoc,
       P.event -> "fatalGraphEx" ::
         P.reason -> reason ::
-        P.node -> nti ::
-        P.plugin -> pluginName ::
-        P.stackTrace -> stackTrace ::
-        P.exception -> exception ::
-        P.logMsg -> logMsg ::
-        P.logFile -> logFile :: V.properties
+        P.node.maybe(nti) ::
+        Option(ntsk).map(P.nodeStack -> _.simpleChain()) ::
+        P.plugin.maybe(pluginName) ::
+        P.stackTrace.maybe(stackTrace) ::
+        P.exception.nonNull(exception) ::
+        P.logMsg.nonNull(logMsg) ::
+        P.logFile.nonNull(logFile) ::
+        V.properties
     )
   }
 
@@ -216,11 +229,28 @@ object MonitoringBreadcrumbs {
         V.properties)
   }
 
-  private[optimus] def sendTrackingTemporalContextTurnedOn(fromInvalidAssert: Boolean): Unit =
-    sendWithStackAsProperties(
-      OnceBySourceLoc,
-      if (fromInvalidAssert) "temporalContextTrackingFailedAssertion" else "temporalContextNeedsTracking",
-      EvaluationContext.currentNode)
+  private[optimus] def sendTrackingTemporalContextInvalidAssertion(): Unit = {
+    sendWithStackAsProperties(OnceBySourceLoc, "temporalContextTrackingFailedAssertion", EvaluationContext.currentNode)
+  }
+
+  private[optimus] def sendTrackingTemporalContextTurnedOn(loc: SourceLocation): Unit = {
+    val key = OnceBySourceLoc(toPublishLoc(loc)) // we publish once per source location *for the reactive binding*
+
+    val nodeInfos = for {
+      node <- Option(OGSchedulerContext.current()).map(_.getCurrentNodeTask)
+      info <- Option(node.info)
+    } yield P.node -> info.toString ::
+      P.nodeStack -> node.waitersToNodeStack(false, true, false, -1) ::
+      Elems.Nil
+
+    val props: Elems = P.event -> "temporalContextNeedsTracking" ::
+      P.file -> loc.sourceName ::
+      P.methodName -> loc.method ::
+      P.line -> loc.line ::
+      P.stackTrace -> Thread.currentThread().getStackTrace.map(_.toString) ::
+      nodeInfos.getOrElse(Elems.Nil) ::: V.properties
+    warn(key, props)
+  }
 
   private[optimus] def sendBadSchedulerStateCrumb(schedulerState: String): Unit =
     warn(OnceByCrumbEquality, P.event -> "BadSchedulerState" :: P.schedulerState -> schedulerState :: V.properties)
@@ -252,12 +282,8 @@ object MonitoringBreadcrumbs {
   }
 
   /** send a breadcrumb when a batcher batches an XS node */
-  private var batchingCrumbSent = false
   private[optimus] def sendBatchingInsideXSCallStackCrumb(node: NodeTask): Unit = synchronized {
-    if (!batchingCrumbSent) {
-      batchingCrumbSent = true
-      sendWithStackAsProperties(OnceBySourceLoc, "batchingInsideXSCallStack", node)
-    }
+    sendWithStackAsProperties(OnceBySourceLoc, "batchingInsideXSCallStack", node)
   }
 
   def sendCriticalSyncStackCrumb(nodeStackTrace: String, count: Int): Unit =

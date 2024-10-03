@@ -516,9 +516,9 @@ class AlreadyCompletedPropertyNode[T](
 
   initAsCompleted(v)
 
-  if (propertyInfo.hasPlugin) {
+  if (propertyInfo.shouldLookupPlugin()) {
     throw new RuntimeException(
-      s"Cannot set plugin on trivial computation! Attempting to run ACPN $propertyInfo with plugin ${propertyInfo.getPlugin.getClass}")
+      s"Cannot set plugin on trivial computation! Attempting to run ACPN $propertyInfo with plugin")
   }
 
   override def getProfileId: Int = propertyInfo.profile // We want to pretend to be a different node type

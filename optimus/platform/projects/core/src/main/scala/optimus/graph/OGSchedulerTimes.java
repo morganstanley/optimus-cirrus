@@ -310,7 +310,7 @@ public class OGSchedulerTimes {
     synchronized (timeLock) {
       PluginType.Counter c = pluginStallTimes.snap();
       if (graphStallStartTime > 0 && currentGraphStallInfo != null) {
-        PluginType pt = currentGraphStallInfo.atieoc().getPluginType();
+        PluginType pt = currentGraphStallInfo.pluginType();
         c.update(pt, System.nanoTime() - graphStallStartTime);
       }
       return c;
@@ -354,7 +354,7 @@ public class OGSchedulerTimes {
 
         if (currentGraphStallInfo != null) {
           NodeTaskInfo endOfChain = currentGraphStallInfo.atieoc();
-          PluginType pluginType = endOfChain.getPluginType();
+          PluginType pluginType = currentGraphStallInfo.pluginType();
           StallDetailedTime key =
               new StallDetailedTime(pluginType, currentGraphStallInfo.syncStackPresent(), 0);
           // time is not considered in equals method so key will still match if we had an entry
@@ -369,6 +369,7 @@ public class OGSchedulerTimes {
           GridProfiler$.MODULE$.recordStallTime(
               currentGraphStallInfo.awaitedTask(),
               endOfChain,
+              currentGraphStallInfo.plugin(),
               stallTime,
               currentGraphStallInfo.name());
 

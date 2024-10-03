@@ -402,8 +402,8 @@ trait EntityResolverReadImpl { this: DSIResolver =>
 
   @node @scenarioIndependent
   private def findEntityImpl[E <: Entity](key: UniqueKey[E], tc: TemporalContext): Option[E] = {
-    @nowarn("msg=10500 optimus.core.CoreAPI.nodeResult")
-    val res = CoreAPI.nodeResult {
+    @nowarn("msg=10500 optimus.core.CoreAPI.nodeResultCurrentCS")
+    val res = CoreAPI.nodeResultCurrentCS {
       tc.dataAccess(QueryByUniqueKey(dataAccess, key, entitledOnly = false))
     }
     wrapQueryDSIException {

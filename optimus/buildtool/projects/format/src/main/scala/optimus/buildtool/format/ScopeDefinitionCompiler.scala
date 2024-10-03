@@ -369,18 +369,13 @@ class ScopeDefinitionCompiler(
       if (allowUnorderedDependencies) {
         originalList.foreach { case (id, line) => op(id, line) }
       } else {
-        val distintDependencies = originalList.toMap.toSet
-
-        if (originalList.size != distintDependencies.size)
-          originalList.zip(distintDependencies).foreach { case ((origId, line1), (sortedId, line2)) =>
-            if (origId == sortedId && line1 != line2)
-              error(s"Dependency $origId is present multiple times", 0)
-          }
-
+        val multipleDependencies = originalList.groupBy(_._1).filter(_._2.size > 1).keySet
         val sortedList = originalList.sorted
+
         originalList.zip(sortedList).foreach { case ((origId, line), (sortedId, _)) =>
-          if (origId == sortedId) op(origId, line)
-          else error(s"Dependency $origId is not in correct alphabetical order", 0)
+          if (origId != sortedId) error(s"Dependency $origId is not in correct alphabetical order", line)
+          else if (multipleDependencies.contains(origId)) error(s"Dependency $origId is present multiple times", line)
+          else op(origId, line)
         }
 
       }
@@ -431,7 +426,7 @@ class ScopeDefinitionCompiler(
 
     // if parent tpe is mavenOnly or current tpe is mavenOnly, for example all.mavenOnly with main.compile.libs
     val mavenOnly = parent.mavenOnly.getOrElse(false) || config.optionalBoolean(MavenOnlyKey).getOrElse(false)
-    val hasLibsKey = config.getObject(dependencyType).toString.contains(LibsKey)
+    val hasLibsKey = config.getObject(dependencyType).containsKey(LibsKey)
 
     // we don't allow mavenOnly module define libs=[] in their obt file or from global workspace.obt file
     if (mavenOnly && hasLibsKey)

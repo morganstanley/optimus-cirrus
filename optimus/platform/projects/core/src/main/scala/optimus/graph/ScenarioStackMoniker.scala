@@ -12,6 +12,7 @@
 package optimus.graph
 
 import optimus.dist.HasDmcBinaryIdentity
+import optimus.graph.cache.PrivateCache
 import optimus.platform.EvaluationContext
 import optimus.platform.NoOpTweakableListener
 import optimus.platform.RuntimeEnvironment
@@ -31,7 +32,7 @@ private class ActualScenarioStackMoniker(
     inputScenarios: Array[Scenario],
     initTimeScenarioPresent: Boolean,
     siParams: SIParams,
-    privateCache: (String, Boolean))
+    privateCache: PrivateCache.Moniker)
     extends ScenarioStackMoniker
     with HasDmcBinaryIdentity {
 
@@ -112,11 +113,7 @@ private[optimus] object ScenarioStackMoniker {
       if (ss.isTrackingIndividualTweakUsage)
         throw new GraphException("Cannot distribute tracking scenarios")
       val cleanedUpFlags = ss.flags & ~EvaluationState.ENGINE_PROPAGATION_CLEAR_FLAGS
-      // `cleanedUpFlags` clears up `USE_PRIVATE_CACHE` and `READ_FROM_OUTSIDE_IN_PRIVATE_CACHE`
-      // because we serialize them separately
-      val privateCache =
-        if (ss.privateCache ne null) (ss.privateCache.cache.getName, ss.privateCache.readFromGlobalFirst)
-        else null
+      val privateCache = if (ss.privateCache eq null) null else ss.privateCache.toMoniker
 
       val cacheIDArray = buildSSCacheIDArray(ss)
       val mayNeedInitTimes = !ss.isSelfOrAncestorScenarioIndependent && cacheIDArray.length > 0

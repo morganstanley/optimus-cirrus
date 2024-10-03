@@ -38,7 +38,7 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
   def getFailedWrites: Long = failedWrites.get()
 
   private def _contains(keyspace: Keyspace, keys: Set[KVKey], correlationName: String)(
-      f: Try[Option[Set[KVKey]]] => Unit): Unit = {
+      fs: Map[KVKey, Try[Option[lang.Boolean]] => Any]): Unit = {
     kvClient.batchContains(
       keyspace,
       keys.toList.asJava,
@@ -47,13 +47,14 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
         override def results(
             results: util.List[KVClient.KeyWithResult[lang.Boolean, KVKey]],
             opDetails: OperationDetails): Unit = {
-          val ret = results.asScala.collect { case r if r.result() => r.key() }.toSet
-          log.debug(s"DHT CHECK $correlationName: '$ret'")
-          f(Success(Some(ret)))
+          val ret = results.asScala
+          log.debug(s"DHT CHECK $correlationName completing for $ret")
+          ret.foreach(r => fs(r.key)(Success(Some(r.result))))
         }
         override def errors(keys: util.List[KVKey], exception: Exception, opDetails: OperationDetails): Unit = {
-          log.error(s"DHT CHECK $correlationName: ERROR: ${exception.getMessage}")
-          f(Success(None))
+          val errorKeys = keys.asScala
+          log.error(s"DHT CHECK $correlationName: ERROR: ${exception.getMessage}", exception)
+          errorKeys.foreach(k => fs(k)(Success(None)))
         }
       }
     )
@@ -138,7 +139,12 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
   }
 
   @async def contains(keyspace: Keyspace, keys: Set[KVKey], correlationName: String): Option[Set[KVKey]] = {
-    impl(this._contains(keyspace, keys, correlationName))
+    val promises = keys.map(k => k -> NodePromise[Option[lang.Boolean]]()).toMap
+    val completions = promises.map { case (k, p) => k -> (r => p.complete(r)) }
+    this._contains(keyspace, keys, correlationName)(completions)
+    val results = promises.apar.map { case (k, p) => k -> asyncGet(p.node) }
+    if (results.values.forall(_.isDefined)) Some(results.collect { case (k, r) if r.contains(true) => k }.toSet)
+    else None
   }
 
   @nodeSync

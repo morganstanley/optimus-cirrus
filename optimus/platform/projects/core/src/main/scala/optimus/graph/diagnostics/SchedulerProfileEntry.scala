@@ -20,47 +20,58 @@ import scala.jdk.CollectionConverters._
 
 // Scheduler statistics for a single thread
 final case class SchedulerProfileEntry(
-    var graphTime: Long,
-    var selfTime: Long,
-    var cacheTimeWR: Long,
-    var cacheTimeMisc: Long,
-    var spinTime: Long,
-    var waitTime: Long,
-    var cpuTime: Long
+    private var graphTimePriv: Long,
+    private var selfTimePriv: Long,
+    private var cacheTimeWRPriv: Long,
+    private var cacheTimeMiscPriv: Long,
+    private var spinTimePriv: Long,
+    private var waitTimePriv: Long,
+    private var cpuTimePriv: Long
 ) {
-  private[diagnostics] def combine(y: SchedulerProfileEntry): SchedulerProfileEntry = copy().add(y)
+  private[diagnostics] def combine(y: SchedulerProfileEntry): SchedulerProfileEntry = {
+    val entry = copy()
+    entry.mutateAdd(y)
+    entry
+  }
 
   def since(y: SchedulerProfileEntry): SchedulerProfileEntry = {
     SchedulerProfileEntry(
-      graphTime - y.graphTime,
-      selfTime - y.selfTime,
-      cacheTimeWR - y.cacheTimeWR,
-      cacheTimeMisc - y.cacheTimeMisc,
-      spinTime - y.spinTime,
-      waitTime - y.waitTime,
-      cpuTime - y.cpuTime
+      graphTimePriv - y.graphTimePriv,
+      selfTimePriv - y.selfTimePriv,
+      cacheTimeWRPriv - y.cacheTimeWRPriv,
+      cacheTimeMiscPriv - y.cacheTimeMiscPriv,
+      spinTimePriv - y.spinTimePriv,
+      waitTimePriv - y.waitTimePriv,
+      cpuTimePriv - y.cpuTimePriv
     )
   }
 
-  def add(y: SchedulerProfileEntry): SchedulerProfileEntry = {
-    graphTime += y.graphTime
-    selfTime += y.selfTime
-    cacheTimeWR += y.cacheTimeWR
-    cacheTimeMisc += y.cacheTimeMisc
-    spinTime += y.spinTime
-    waitTime += y.waitTime
-    cpuTime += y.cpuTime
-    this
+  def mutateAdd(y: SchedulerProfileEntry): Unit = {
+    graphTimePriv += y.graphTimePriv
+    selfTimePriv += y.selfTimePriv
+    cacheTimeWRPriv += y.cacheTimeWRPriv
+    cacheTimeMiscPriv += y.cacheTimeMiscPriv
+    spinTimePriv += y.spinTimePriv
+    waitTimePriv += y.waitTimePriv
+    cpuTimePriv += y.cpuTimePriv
   }
 
-  def userGraphTime: Long = graphTime - waitTime - spinTime
-  def cacheTime: Long = cacheTimeWR + cacheTimeMisc
+  def mutateAddGraphTime(t: Long): Unit = graphTimePriv += t
+
+  def graphTime: Long = graphTimePriv
+  def selfTime: Long = selfTimePriv
+  def spinTime: Long = spinTimePriv
+  def waitTime: Long = waitTimePriv
+  def cpuTime: Long = cpuTimePriv
+
+  def userGraphTime: Long = graphTimePriv - waitTimePriv - spinTimePriv
+  def cacheTime: Long = cacheTimeWRPriv + cacheTimeMiscPriv
   def idleTime: Long = 0L
   override def toString: String = {
     " Graph: " + f"${userGraphTime * 1e-6}%.2f" +
-      " CPU: " + f"${cpuTime * 1e-6}%.2f" +
-      " Wait: " + f"${waitTime * 1e-6}%.2f" +
-      " Spin: " + f"${spinTime * 1e-6}%.2f"
+      " CPU: " + f"${cpuTimePriv * 1e-6}%.2f" +
+      " Wait: " + f"${waitTimePriv * 1e-6}%.2f" +
+      " Spin: " + f"${spinTimePriv * 1e-6}%.2f"
   }
 }
 

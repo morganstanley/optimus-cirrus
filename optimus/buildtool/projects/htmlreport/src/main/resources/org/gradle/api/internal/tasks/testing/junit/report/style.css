@@ -37,18 +37,22 @@
     width: 125px;
 }
 
-#successRate, .summaryGroup {
+.successRate, .summaryGroup {
     border: solid 2px #d0d0d0;
     -moz-border-radius: 10px;
     border-radius: 10px;
 }
 
-#successRate {
+#coverageRate {
+    width: 160px;
+}
+
+.successRate {
     width: 140px;
     margin-left: 35px;
 }
 
-#successRate .percent {
+.successRate .percent {
     font-size: 180%;
 }
 
@@ -56,7 +60,7 @@
     color: #008000;
 }
 
-div.success, #successRate.success {
+div.success, .successRate.success {
     background-color: #bbd9bb;
     border-color: #008000;
 }
@@ -69,7 +73,7 @@ div.success, #successRate.success {
     color: #c09853;
 }
 
-div.failures, #successRate.failures {
+div.failures, .successRate.failures {
     background-color: #ecdada;
     border-color: #b60808;
 }

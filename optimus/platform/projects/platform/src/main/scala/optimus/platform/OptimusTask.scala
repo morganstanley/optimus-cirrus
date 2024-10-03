@@ -11,11 +11,12 @@
  */
 package optimus.platform
 
-import msjava.base.dns.MSNameServiceRegistrar
 import optimus.config.OptimusConfigurationException
 import optimus.config.RuntimeConfiguration
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils
+import optimus.graph.NodeTaskInfo
 import optimus.logging.OptimusLogging
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.annotations.deprecating
@@ -84,13 +85,18 @@ object OptimusTask extends InitSession {
       .getOrElse(Set.empty[String])
   }
 
-  private[optimus] def forceInitThread(components: RuntimeComponents): ScenarioState =
-    forceInitThread(components, defaultScopedInputs)
+  private[optimus] def forceInitThread(
+      components: RuntimeComponents,
+      scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = null): ScenarioState =
+    forceInitThread(components, defaultScopedInputs, scopedPlugins)
 
-  private def forceInitThread(components: RuntimeComponents, scopedInputs: FrozenNodeInputMap): ScenarioState = {
+  private def forceInitThread(
+      components: RuntimeComponents,
+      scopedInputs: FrozenNodeInputMap,
+      scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin]): ScenarioState = {
     // Initial GetInfo / Session establishment called during createRuntime
     // This will request the roleset if --allRoles was passed, or use the roles from the system or cmdline (if any)
-    val scenarioState = components.createUntweakedScenarioState(scopedInputs)
+    val scenarioState = components.createUntweakedScenarioState(scopedInputs, scopedPlugins)
     val runtime = scenarioState.environment
     try {
       EvaluationContext.initializeWithNewInitialTime(scenarioState)
@@ -109,18 +115,20 @@ object OptimusTask extends InitSession {
   def initThread(
       config: RuntimeConfiguration,
       asyncConfigOpt: Option[DalAsyncConfig] = None,
-      cclOverride: Option[ClassLoader] = None): ScenarioState =
-    initThread(config, asyncConfigOpt, cclOverride, defaultScopedInputs)
+      cclOverride: Option[ClassLoader] = None,
+      scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = null): ScenarioState =
+    initThread(config, asyncConfigOpt, cclOverride, defaultScopedInputs, scopedPlugins)
 
   private def initThread(
       config: RuntimeConfiguration,
       asyncConfigOpt: Option[DalAsyncConfig],
       cclOverride: Option[ClassLoader],
-      scopedInputs: FrozenNodeInputMap): ScenarioState = {
+      scopedInputs: FrozenNodeInputMap,
+      scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin]): ScenarioState = {
     if (!EvaluationContext.isInitialised) {
       val components = cclOverride.fold(new RuntimeComponents(config, asyncConfigOpt))(
         new RuntimeComponents(config, asyncConfigOpt, _))
-      forceInitThread(components, scopedInputs)
+      forceInitThread(components, scopedInputs, scopedPlugins)
     } else AdvancedUtils.currentScenarioState()
   }
 }
@@ -147,6 +155,7 @@ trait OptimusTask {
   protected def zone: DalZoneId = DalZoneId.default
   protected def rolesetMode: RolesetMode = RolesetMode.Default
   protected def sessionTokenLocation: Option[String] = None
+  protected def scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = null
 
   /** The context classloader to use for threads executing this task. Apps generally should not care about this. */
   protected def contextClassLoaderOverride: Option[ClassLoader] = None // hook for possible overrides
@@ -220,7 +229,12 @@ trait OptimusTask {
     val env =
       if (!EvaluationContext.isInitialised)
         OptimusTask.synchronized {
-          OptimusTask.initThread(runtimeConfig, asyncConfigOpt, contextClassLoaderOverride, scopedInputs.get)
+          OptimusTask.initThread(
+            runtimeConfig,
+            asyncConfigOpt,
+            contextClassLoaderOverride,
+            scopedInputs.get,
+            scopedPlugins)
         }
       else AdvancedUtils.currentScenarioState()
     env
@@ -238,7 +252,7 @@ trait OptimusTask {
     val components =
       contextClassLoaderOverride.fold(new RuntimeComponents(runtimeConfig))(
         new RuntimeComponents(runtimeConfig, asyncConfigOpt, _))
-    OptimusTask.forceInitThread(components)
+    OptimusTask.forceInitThread(components, scopedPlugins)
   }
 
   final def withOptimusRunnable(r: Runnable): Unit = {

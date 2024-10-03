@@ -37,11 +37,12 @@ import optimus.graph.cache.CacheGroupOthers
 import optimus.graph.cache.CacheGroupSiGlobal
 import optimus.graph.cache.NodeCCache
 import optimus.graph.cache.UNodeCache
-
-import java.lang.management.ManagementFactory
+import optimus.graph.diagnostics.FullObservationDiff
+import optimus.graph.diagnostics.FullObservationSnapshot
 import optimus.graph.diagnostics.GCMonitorStats
 import optimus.graph.diagnostics.GCNativeStats
 import optimus.graph.diagnostics.GCStats
+import optimus.graph.diagnostics.ObservationRegistry
 import optimus.graph.diagnostics.ThreadStatUtil
 import optimus.graph.diagnostics.ThreadStatUtil.CacheStateSummary
 import optimus.graph.diagnostics.ThreadStatUtil.CacheStats
@@ -115,7 +116,9 @@ final case class ProcessMetricsEntry(
     dist: DistEnvMetrics,
     // more JVM metrics
     threadStatesSummary: ThreadStateSummary,
-    logSize: Long
+    logSize: Long,
+    // counter-based metrics from ObservationRegistry
+    obsDiff: FullObservationDiff
 ) {
 
   def remoteWallTime: Long = dist.totalWallTimeMs
@@ -182,7 +185,8 @@ final case class ProcessMetricsEntry(
     // Distribution metrics (available by default)
     dist.combine(y.dist),
     threadStatesSummary.combine(y.threadStatesSummary),
-    logSize + y.logSize
+    logSize + y.logSize,
+    obsDiff.combine(y.obsDiff)
   )
 }
 
@@ -279,9 +283,9 @@ object ProcessMetricsEntry extends Log {
       CacheGroupOthers -> sumCounters(
         Caches.allCaches(includeSiGlobal = false, includeGlobal = false, includeCtorGlobal = false))
     )
-
+    val now = patch.MilliInstant.now
     val snapshot = ProcessMetricsSnapshot(
-      patch.MilliInstant.now,
+      now,
       // Optimus scheduler metrics (available when profileTime = true)
       OGSchedulerTimes.getInGraphWallTime,
       OGSchedulerTimes.getUnderUtilizedTime,
@@ -316,7 +320,8 @@ object ProcessMetricsEntry extends Log {
       GCMonitorStats.snap(),
       GCNativeStats.snap(),
       ThreadStatUtil.threadsSnapshot(),
-      sizeCountingFilter.getSize
+      sizeCountingFilter.getSize,
+      ObservationRegistry.instance.snapshotAll(now.toEpochMilli)
     )
     snapshot
   }
@@ -405,7 +410,8 @@ object ProcessMetricsEntry extends Log {
       clTime,
       distMetrics,
       threadSummary,
-      logSize
+      logSize,
+      ObservationRegistry.instance.diffBetween(snapAtStart.obsSnapshot, snapAtEnd.obsSnapshot)
     )
     if (start.suspended.isDefined) {
       val sus = start.suspended.get
@@ -447,7 +453,8 @@ object ProcessMetricsEntry extends Log {
     clTime = 0L,
     dist = DistEnvMetrics.empty,
     threadStatesSummary = ThreadStateSummary.empty,
-    logSize = 0L
+    logSize = 0L,
+    obsDiff = FullObservationDiff(0L, 0L, 0L, Map.empty)
   )
 
   private def setupLogSizeCountingFilter(): Unit = {
@@ -573,5 +580,7 @@ private[diagnostics] final case class ProcessMetricsSnapshot(
     gcMonitorStats: GCMonitorStats,
     gcNativeStats: GCNativeStats,
     threadStateSnapshot: ThreadStateSnapshot,
-    logSize: Long
+    logSize: Long,
+    // counter-based metrics from ObservationRegistry
+    obsSnapshot: FullObservationSnapshot
 )

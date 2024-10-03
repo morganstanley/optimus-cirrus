@@ -513,14 +513,13 @@ object GridProfiler {
     GridProfilerData.put(currentScope, currentId, Metric.DALSTATS.id, DALStatsEntry(1, results, 0))
 
   /** Note: EvaluationContext.current is not always available */
-  private[optimus] final def recordStallTime(task: NodeTask, ni: NodeTaskInfo, tm: Long, nodeName: String): Unit =
+  private[optimus] final def recordStallTime(task: NodeTask, ni: NodeTaskInfo, p: SchedulerPlugin, tm: Long, nodeName: String): Unit =
     if ((ni ne null) && (task ne null)) {
-      val plugin = ni.getPlugin
       GridProfilerData.put(
         scopeForNode(task),
         jobIdForNode(task),
         Metric.STALLTIME.id,
-        Map((if (plugin ne null) "" + plugin.getClass + " via " else "") + nodeName -> tm))
+        Map((if (p ne null) "" + p.getClass + " via " else "") + nodeName -> tm))
     }
 
   private[optimus] final def recordVTTTStack(data: Metric.VTTTStacks): Unit = {

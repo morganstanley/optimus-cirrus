@@ -78,6 +78,11 @@ final case class ResolutionResult(
  * A DependencyInfo serves as a container and used for ResolutionResult. This will save dependencies information in
  * String and finally be used for `dependency-visualiser`'s graph to generate its nodes for "OBTVisualizer.scala"
  */
-@embeddable final case class DependencyInfo @node() (module: String, config: String, version: String) {
+@embeddable final case class DependencyInfo @node() (
+    module: String,
+    config: String,
+    version: String,
+    isMaven: Boolean) {
+  def noVersionName: String = s"$module:$config"
   override def toString: String = s"$module:$config.$version"
 }

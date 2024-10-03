@@ -489,16 +489,9 @@ object HotspotsTable {
   }
 
   private val c_plugins = new TableColumnString[PNodeTaskInfo]("Scheduler Plugin", 300) {
-    override def valueOf(pnti: PNodeTaskInfo): String = {
-      val nodeTaskInfo = pnti.nti
-      if (nodeTaskInfo ne null) {
-        val plugin = nodeTaskInfo.getPluginType
-        if (plugin == PluginType.None) ""
-        else plugin.name
-      } else ""
-    }
+    override def valueOf(pnti: PNodeTaskInfo): String = pnti.nti.shouldLookupPlugin().toString
     override def getHeaderColor: Color = nodeInfoSectionColor
-    override def toolTip: String = " Scheduler plugin set on this property"
+    override def toolTip: String = " Whether Scheduler plugin may be set on this property"
   }
 
   private val c_minRetainedSize = new TableColumnLong[PNodeTaskInfo]("Min Retained Size", 80) {
@@ -957,8 +950,8 @@ class HotspotsTable(reader: OGTraceReader)
       )
       caching.addSeparator()
 
-      disableButton = add("Disable", enableCachePolicy(_, NCPolicy.DontCache))
-      add("Enable Default", enableCachePolicy(_, NCPolicy.Basic))
+      disableButton = add("Disable Cache", enableCachePolicy(_, NCPolicy.DontCache))
+      add("Disable XSFT/Enable Basic", enableCachePolicy(_, NCPolicy.Basic))
       xsftButton = add("Enable XSFT", enableCachePolicy(_, NCPolicy.XSFT))
       add("Enable XS", enableCachePolicy(_, NCPolicy.XS))
 

@@ -29,8 +29,7 @@ import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
-import optimus.platform.AdvancedUtils.Throttle
-import optimus.platform.entersGraph
+import optimus.platform._
 import sbt.internal.inc._
 import xsbti.VirtualFile
 import xsbti.compile.IncOptions
@@ -63,9 +62,10 @@ private[buildtool] final case class ZincCompilerFactory(
     zincOptionMutator: IncOptions => IncOptions = identity _,
     zincTrackLookups: Boolean,
     depCopyFileSystemAsset: Boolean,
-    instanceThrottle: Option[Throttle],
-    sizeThrottle: Option[Throttle]
+    compilerThrottle: CompilerThrottle
 ) extends SyncCompilerFactory {
+
+  @async override def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = compilerThrottle.throttled(sizeBytes)(f)
 
   private[zinc] val zincClasspathForInterfaceJar = getZincClasspath
 

@@ -11,6 +11,7 @@
  */
 package optimus.utils.app
 
+import optimus.utils.MemSize
 import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.OptionDef
@@ -100,6 +101,7 @@ trait Args4jOptionHandlers {
   type LocalTimeOptionOptionHandler = optimus.utils.app.LocalTimeOptionOptionHandler
   type LongOptionOptionHandler = optimus.utils.app.LongOptionOptionHandler
   type MapOptionHandler[KeyType, ValueType] = optimus.utils.app.MapOptionHandler[KeyType, ValueType]
+  type MemSizeOptionHandler = optimus.utils.app.MemSizeOptionHandler
   type TypedSetOptionHandler[T] = optimus.utils.app.TypedSetOptionHandler[T]
   type OptionOptionHandler[A] = optimus.utils.app.OptionOptionHandler[A]
   type PathOptionOptionHandler = optimus.utils.app.PathOptionOptionHandler
@@ -194,6 +196,11 @@ abstract class MapOptionHandler[KeyType, ValueType](
   def convertKey(s: String): KeyType
   def convertValue(s: String): ValueType
   def delimiter: String = ","
+}
+
+final class MemSizeOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[MemSize])
+    extends OneArgumentOptionHandler[MemSize](parser, option, setter) {
+  override def parse(arg: String): MemSize = MemSize.of(arg)
 }
 
 abstract class TypedSetOptionHandler[T](parser: CmdLineParser, option: OptionDef, setter: Setter[Set[T]])

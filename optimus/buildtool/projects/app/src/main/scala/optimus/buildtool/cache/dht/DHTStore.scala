@@ -127,16 +127,20 @@ object DHTStore extends Log {
   }
 
   private def debugString(keys: Set[StoredKey]): String = {
-    (keys.head match {
-      case ArtifactKey(id, _, tpe, discriminator, version) => s"Artifact:$id:$tpe:$discriminator:$version"
-      case AssetKey(_, version)                            => s"$version"
-      case _                                               => ""
-    }) + keys
-      .map {
-        case k: ArtifactKey => k.fingerprintHash
-        case k: AssetKey    => k.url.toString
-      }
-      .mkString(", ")
+    val suffix =
+      if (keys.size >= 3) ""
+      else
+        keys
+          .map {
+            case k: ArtifactKey => k.fingerprintHash
+            case k: AssetKey    => k.url.toString
+          }
+          .mkString(", ")
+    (keys.headOption match {
+      case Some(ArtifactKey(id, _, tpe, discriminator, version)) => s"Artifact:$id:$tpe:$discriminator:$version"
+      case Some(AssetKey(_, version))                            => s"$version"
+      case _                                                     => ""
+    }) + suffix
   }
 
   val MappedBufferThreshold: Long = 1024 * 1024 // 1MB
@@ -158,6 +162,7 @@ class DHTStore(
   override protected def stat: ObtStats.Cache = ObtStats.DHT
   private val client: DHTClient = clientBuilder.build()
 
+  override def toString: String = client.getServerConnectionsManager.toString
   private val lvClient = {
     waitForConsistentRegistry(Duration.ofSeconds(System.getProperty("obt.dht.initTimeoutSeconds", "45").toInt))
     new AsyncGraphLargeValueClient(client.getModule(classOf[KVClient[KVKey]]))

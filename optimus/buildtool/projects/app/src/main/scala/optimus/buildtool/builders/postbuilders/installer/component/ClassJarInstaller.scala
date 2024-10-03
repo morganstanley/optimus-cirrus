@@ -37,7 +37,8 @@ import optimus.buildtool.trace.InstallJar
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
-import optimus.buildtool.utils.ExtraInJarFile
+import optimus.buildtool.utils.ExtraContentInJar
+import optimus.buildtool.utils.ExtraInJar
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.PathUtils
@@ -62,7 +63,7 @@ class ClassJarInstaller(
   @async override def install(installable: InstallableArtifacts): Seq[FileAsset] =
     installJars(installable.includedScopeArtifacts)
 
-  private def zincDepsFiles(id: ScopeId, zincGeneratorResource: Option[JarAsset]): Seq[ExtraInJarFile] =
+  private def zincDepsFiles(id: ScopeId, zincGeneratorResource: Option[JarAsset]): Seq[ExtraInJar] =
     zincGeneratorResource match {
       case Some(zincRes) =>
         try {
@@ -86,7 +87,7 @@ class ClassJarInstaller(
                   .distinct
                   .sorted
               // override original zinc deps file
-              ExtraInJarFile(RelativePath(fileName), distZincDepsAbsPaths.mkString("\n"))
+              ExtraContentInJar(RelativePath(fileName), distZincDepsAbsPaths.mkString("\n"))
             }
             .to(Seq)
         } catch {

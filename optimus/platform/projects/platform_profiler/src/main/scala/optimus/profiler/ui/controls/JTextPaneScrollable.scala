@@ -11,14 +11,16 @@
  */
 package optimus.profiler.ui.controls
 
-import java.awt.datatransfer.DataFlavor
-import java.awt.datatransfer.Transferable
-import java.awt.datatransfer.UnsupportedFlavorException
+import optimus.platform.util.html.HtmlBuilder
+import optimus.platform.util.html.Link
+import optimus.profiler.ui.MaxCharUtils.fullyExpandCommand
+import optimus.profiler.ui.MaxCharUtils.shortenText
+import optimus.profiler.ui.SClipboard
+import optimus.profiler.ui.common.HasMessageBanners
+import optimus.profiler.ui.common.JPopupMenu2
 
-import javax.swing.JComponent
 import javax.swing.JScrollPane
 import javax.swing.JTextPane
-import javax.swing.TransferHandler
 import javax.swing.event.HyperlinkEvent.EventType
 import javax.swing.text.DefaultStyledDocument
 import javax.swing.text.Document
@@ -28,12 +30,6 @@ import javax.swing.text.html.HTML
 import javax.swing.text.html.HTMLDocument
 import javax.swing.text.html.HTMLEditorKit
 import javax.swing.text.html.StyleSheet
-import optimus.platform.util.html.HtmlBuilder
-import optimus.platform.util.html.Link
-import optimus.profiler.ui.MaxCharUtils.fullyExpandCommand
-import optimus.profiler.ui.MaxCharUtils.shortenText
-import optimus.profiler.ui.SClipboard
-import optimus.profiler.ui.common.HasMessageBanners
 
 /**
  * Extends default JTextPane with adding scrolling, message banners, NewLine preserving html editor Default link handler
@@ -41,8 +37,8 @@ import optimus.profiler.ui.common.HasMessageBanners
  */
 class JTextPaneScrollable extends JScrollPane {
   private val outpane = new JTextPaneEx()
-  private var fullText: String = ""
   private var linkHandlers = Map.empty[String, () => Unit] // we aggregate handlers for unique urls in GUI?
+  private var html: HtmlBuilder = new HtmlBuilder()
 
   setBorder(null)
   setViewportView(outpane)
@@ -53,8 +49,8 @@ class JTextPaneScrollable extends JScrollPane {
   /** Set editor to a given html upto the number of chars, but allows for expansion */
   def setText(hb: HtmlBuilder): Unit = setText(hb, hb.cfg.maxChars)
   def setText(hb: HtmlBuilder, maxChars: Int): Unit = {
-    val (fullText, shortened) = shortenText(hb, maxChars)
-    this.fullText = fullText
+    val shortened = shortenText(hb, maxChars)
+    this.html = hb
     outpane.setText(shortened)
     outpane.setCaretPosition(0)
 
@@ -70,18 +66,18 @@ class JTextPaneScrollable extends JScrollPane {
 
   class JTextPaneEx extends JTextPane with HasMessageBanners {
     override def createDefaultEditorKit: EditorKit = new NewLinePreservingEditorKit
-    val TextFlavor = new DataFlavor("text/plain;class=java.lang.String")
 
     init()
 
     private def init(): Unit = {
+      setComponentPopupMenu(createMenu())
       setAutoscrolls(true)
       setEditable(false)
       setContentType("text/html")
       addHyperlinkListener(e =>
         if (e.getEventType == EventType.ACTIVATED) {
           if (fullyExpandCommand.equals(e.getDescription)) {
-            this.setText(fullText)
+            this.setText(html.toStringWithLineBreaks)
           } else
             linkHandlers.get(e.getDescription) match {
               case Some(handler) if e.getDescription.startsWith("copy_") =>
@@ -94,18 +90,15 @@ class JTextPaneScrollable extends JScrollPane {
                 showMessage("Copied to Clipboard")
             }
         })
-      // custom transfer handler to preserve line breaks on copy-paste
-      setTransferHandler(new TransferHandler {
-        override def getSourceActions(c: JComponent): Int = TransferHandler.COPY_OR_MOVE
-        override def createTransferable(c: JComponent): Transferable = new Transferable {
-          override def getTransferDataFlavors = Array(TextFlavor)
-          override def isDataFlavorSupported(fl: DataFlavor): Boolean = fl == TextFlavor
-          override def getTransferData(flavor: DataFlavor): AnyRef = flavor match {
-            case TextFlavor => c.asInstanceOf[JTextPane].getSelectedText
-            case _          => throw new UnsupportedFlavorException(flavor)
-          }
-        }
-      })
+    }
+
+    private def createMenu(): JPopupMenu2 = {
+      val menu = new JPopupMenu2
+      menu.addMenu("Copy All") {
+        SClipboard.copy(html.toString, html.toPlaintext)
+        showMessage("Copied to Clipboard")
+      }
+      menu
     }
   }
 }

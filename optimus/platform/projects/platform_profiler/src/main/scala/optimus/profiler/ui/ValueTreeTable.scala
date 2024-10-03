@@ -51,6 +51,7 @@ import scala.jdk.CollectionConverters._
 import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{mutable => m}
+import scala.util.control.NonFatal
 
 class RowID(val id: Any, val defOpen: Boolean = false) extends Ordered[RowID] {
   def typePrecedence: Int = 0
@@ -127,10 +128,17 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
         }
       case v if !ValueTreeTable.showRawValues.get && v != null && ValueTreeTable.customExpander.contains(v.getClass) =>
         ValueTreeTable.customExpander(v)(v, fields)
+      case _: ScenarioStack =>
+        // ScenarioStack should always use custom expander even if (showRawValues == true)
+        ValueTreeTable.customExpander(v)(v, fields)
       case node: NodeTask =>
         ValueTreeTable.fieldExpander(node, fields)
-        if (!ValueTreeTable.showInternalValues.get)
-          fields.put(RowID("Result"), node.resultObjectEvenIfIncomplete())
+        if (!ValueTreeTable.showInternalValues.get) {
+          if (node.isDoneWithException)
+            fields.put(RowID("Exception"), node.exception())
+          else
+            fields.put(RowID("Result"), node.resultObjectEvenIfIncomplete())
+        }
       case v if (v != null) && !ValueTreeTable.ignoreClasses.contains(v.getClass) =>
         ValueTreeTable.fieldExpander(v, fields)
       case _ => /* null or one of the ignored classes */
@@ -313,11 +321,15 @@ object ValueTreeTable {
       for (fi <- 0 until flds.length) {
         val fld = flds(fi)
         if (!Modifier.isStatic(fld.getModifiers) && fld.getName != "this$0") {
-          fld.setAccessible(true)
-          val fieldValue = fld.get(v)
-          fieldValue match {
-            case acpn: AlreadyCompletedPropertyNode[_] => fields.put(RowID(fld), acpn.resultObjectEvenIfIncomplete)
-            case _                                     => fields.put(RowID(fld), fieldValue)
+          try {
+            fld.setAccessible(true)
+            val fieldValue = fld.get(v)
+            fieldValue match {
+              case acpn: AlreadyCompletedPropertyNode[_] => fields.put(RowID(fld), acpn.resultObjectEvenIfIncomplete)
+              case _                                     => fields.put(RowID(fld), fieldValue)
+            }
+          } catch {
+            case NonFatal(e) => fields.put(RowID(fld), e.getMessage)
           }
         }
       }
@@ -485,6 +497,7 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
   }
 
   /** called when Show Internal Values etc changes to re-expand the fields based on new config */
+  // noinspection ScalaUnusedSymbol
   private def refreshDisplayedFields(isSelected: Boolean): Unit =
     if (_root ne null) {
       val currentRowStates = _root.children.map(x => x.rowID -> RowState(x.open, x.diffs)).toMap

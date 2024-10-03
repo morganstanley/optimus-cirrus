@@ -834,7 +834,7 @@ public class OGSchedulerContext extends EvaluationQueue
           ntsk.replace(ntsk.scenarioStack().withScheduler(_scheduler.weakView));
 
         // only audit nodes with no plugin for now
-        if (Settings.auditing && NodeTask.isNew(prevState) && !info.hasPlugin()) {
+        if (Settings.auditing && NodeTask.isNew(prevState) && !info.shouldLookupPlugin()) {
           // this is the first time we've seen this node, let the auditor have a stab at it
           if (AuditTrace.visitBeforeRun(ntsk, this)) {
             // the auditor has taken over this node, it will reschedule it when ready
@@ -848,7 +848,7 @@ public class OGSchedulerContext extends EvaluationQueue
           ntsk.cancelInsteadOfRun(this);
         } else if (info.hasNoPlugAndNotST()) {
           // A node might pretend  be adapted...
-          if (ntsk.hasPluginType()) OGTrace.adapted(this, info.reportingPluginType(), ntsk);
+          if (ntsk.hasPluginType()) OGTrace.adapted(this, ntsk);
 
           if (DiagnosticSettings.enableRTVNodeRerunner && NodeTask.isNew(prevState))
             RTVerifierNodeRerunner$.MODULE$.testRTness(ntsk, this);
@@ -872,11 +872,13 @@ public class OGSchedulerContext extends EvaluationQueue
     // We want to read the value just once, in case it's updated concurrently
     SchedulerPlugin plugin = null;
 
-    if (info.hasPlugin() && NodeTask.isNew(prevState)) {
+    if (info.shouldLookupPlugin() && NodeTask.isNew(prevState)) {
       try {
-        ntsk.markAsAdapted(); // Speculatively mark adapted
-        plugin = info.getPlugin();
-        adapted = plugin.adapt(ntsk, this);
+        plugin = ntsk.getPlugin();
+        if (plugin != null) {
+          ntsk.markAsAdapted(); // Speculatively mark adapted
+          adapted = plugin.adaptInternal(ntsk, this);
+        }
       } catch (Throwable e) {
         // TODO (OPTIMUS-12121): Raise alert once alerter api is in place
         OGScheduler.log.error(
@@ -890,7 +892,7 @@ public class OGSchedulerContext extends EvaluationQueue
         } catch (Throwable ignored) {
         }
         MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(
-            "Exception thrown from plugin adapt method", info, e, null, null);
+            "Exception thrown from plugin adapt method", ntsk, e, null, null);
         Breadcrumbs.flush();
 
         System.exit(1);
@@ -898,9 +900,8 @@ public class OGSchedulerContext extends EvaluationQueue
     }
 
     if (adapted) {
-      PluginType pluginType = plugin.pluginType();
-      OGTrace.adapted(this, pluginType, ntsk);
-      OGSchedulerLostConcurrency.reportPossibleLostConcurrency(ntsk, pluginType);
+      OGTrace.adapted(this, ntsk);
+      OGSchedulerLostConcurrency.reportPossibleLostConcurrency(ntsk);
     } else {
       ntsk.markAsNotAdapted();
       if (info.getSingleThreaded()) {

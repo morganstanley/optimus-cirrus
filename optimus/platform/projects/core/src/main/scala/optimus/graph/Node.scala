@@ -718,7 +718,7 @@ class NodeAwaiterWithLatch(size: Int) extends NodeAwaiter() {
 class NodePromise[A] private (
     executionInfo: NodeTaskInfo,
     timeoutMillis: Option[Int],
-    eq0: EvaluationQueue,
+    scheduler0: Scheduler,
     ss0: ScenarioStack) {
   outer =>
 
@@ -727,7 +727,19 @@ class NodePromise[A] private (
   import scala.util.Try
 
   private val ss: ScenarioStack = if (ss0 ne null) ss0 else EvaluationContext.scenarioStack
-  private val scheduler = if (eq0 ne null) eq0.scheduler else EvaluationContext.scheduler
+  private val scheduler = if (scheduler0 ne null) scheduler0 else EvaluationContext.scheduler
+
+  /**
+   * Asynchronously wait for the result from this promise. If the promise was completed with an exception, this call
+   * will throw.
+   *
+   * This is the way to go back to optimus "direct-style" asynchrony.
+   */
+  @nodeSync
+  @nodeSyncLift
+  def await: A = promisedNode.await
+  def await$withNode: A = promisedNode.await$withNode
+  def await$queued: Node[A] = promisedNode.await$queued
 
   /**
    * Note that this doesn't propagate xInfo, and therefore should only be used to integrate with frameworks which don't
@@ -735,6 +747,9 @@ class NodePromise[A] private (
    */
   def complete(result: Try[A]): Boolean = promisedNode.completeWithTry(result, None)
 
+  /**
+   * Like complete, but also does a combineInfo with child.
+   */
   def completeWithChild(result: Try[A], child: NodeTask): Boolean = promisedNode.completeWithTry(result, Some(child))
 
   def node: CompletableNode[A] = promisedNode
@@ -744,14 +759,16 @@ class NodePromise[A] private (
   // so there's a possibility they'll be created on the callback thread (via a `complete` call) which
   // would result in a null EvaluationContext.scenarioStack.
   private[this] val promisedNode = new PromisedNode
+
   private[this] class PromisedNode extends CompletableNode[A] {
-    if (outer.executionInfo.hasPluginType) {
-      markAsHavingPluginType()
-      // Normally this would happen in the scheduler, but this node doesn't actually get run.
-      outer.executionInfo.reportingPluginType().recordLaunch(this)
-    }
 
     initAsRunning(ss)
+
+    if (outer.executionInfo.reportingPluginType(ss) != null) {
+      markAsHavingPluginType()
+      // Normally this would happen in the scheduler, but this node doesn't actually get run.
+      getReportingPluginType.recordLaunch(this)
+    }
 
     // if we get cancelled at any point then abort immediately
     private[this] val cancelHandler: CancellationScope => Unit = { cs =>
@@ -788,15 +805,11 @@ object NodePromise {
   def apply[A](executionInfo: NodeTaskInfo = NodeTaskInfo.Promise): NodePromise[A] =
     new NodePromise[A](executionInfo, None, null, null)
 
-  /**
-   * This is potentially dangerous, because evaluation queues are not allowed to migrate threads. You probably don't
-   * want to call this.
-   */
-  private[optimus] def createWithSpecificQueue[A](
+  private[optimus] def createWithSpecificScheduler[A](
       executionInfo: NodeTaskInfo,
-      eq: EvaluationQueue,
+      scheduler: Scheduler,
       ss: ScenarioStack): NodePromise[A] =
-    new NodePromise[A](executionInfo, None, eq, ss)
+    new NodePromise[A](executionInfo, None, scheduler, ss)
 
   def withTimeout[A](
       executionInfo: NodeTaskInfo = NodeTaskInfo.Promise,
@@ -863,7 +876,7 @@ object MarkedAsAdaptedNode {
     (pluginType, infoName),
     { case (pt, name) =>
       new NodeTaskInfo(name, 0) {
-        override def reportingPluginType(): PluginType = pt
+        override def reportingPluginType(ss: ScenarioStack): PluginType = pt
       }
     })
 }

@@ -40,12 +40,12 @@ import java.util
 import java.util.Objects
 import java.util.Timer
 import java.util.TimerTask
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
-
 trait SamplerProvider {
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]]
   val priority: Int = Int.MaxValue
@@ -159,6 +159,18 @@ class SamplingProfiler private[diagnostics] (
       ss ++= provider.provide(sp)
     }
 
+    ss += new Sampler[Seq[TopicCountSnap], Seq[TopicCountSnap]](
+      sp,
+      snapper = (_: Boolean) => topicAccumulators.values().asScala.map(_.snap).toSeq,
+      process = (prevOpt: Option[Seq[TopicCountSnap]], curr: Seq[TopicCountSnap]) =>
+        prevOpt.fold(curr)(curr.zip(_).map { case (c, p) =>
+          c - p
+        }),
+      publish = { diff =>
+        Elems(diff.map(_.elems): _*)
+      }
+    )
+
     // This sampler must come last
     ss += new Sampler(
       sp,
@@ -172,11 +184,11 @@ class SamplingProfiler private[diagnostics] (
   }
 
   private val numCores = Runtime.getRuntime.availableProcessors()
-  private val numThreads = schedulerCounters.flatMap(_.numThreads).sum
+  private def numThreads = schedulerCounters.flatMap(_.numThreads).sum
   private val staticElems: Elems =
     profStatsType -> Name ::
       cpuCores -> numCores ::
-      idealThreads -> numThreads ::
+      engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root) ::
       engineRoot -> ChainedID.root.base ::
       Version.properties
 
@@ -246,8 +258,7 @@ class SamplingProfiler private[diagnostics] (
       val id = appInstance.rootId
 
       val identificationData = appPrint -> PyroUploader.approxId(AppKey, id) ::
-        engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root) ::
-        appId -> appInstance.appId :: staticElems
+        appId -> appInstance.appId :: idealThreads -> numThreads :: staticElems
 
       // Each sampler returns its crumb source, plus a list of batches to publish.  We'll publish all the
       // 1st batch elems together, then all the 2nd, etc.
@@ -341,6 +352,11 @@ class SamplingProfiler private[diagnostics] (
   samplingThread.start()
   def stillPulsing: Boolean = _stillPulsing && samplingThread.isAlive
 
+}
+
+trait SchedulerCounter {
+  def getCounts: SamplingProfiler.SchedulerCounts
+  def numThreads: Option[Int]
 }
 
 object SamplingProfiler extends Log {
@@ -613,9 +629,53 @@ object SamplingProfiler extends Log {
     def round(n: Int) = LoadData((cpuLoad * n).round.toDouble / n, (graphUtilization * n).round.toDouble / n)
   }
 
-  trait SchedulerCounter {
-    def getCounts: SchedulerCounts
-    def numThreads: Option[Int]
+  // Generic facility for accumulating and publishing data like
+  //  Properties.pluginTimes -> {Adapted -> { DAL -> 36, Pluggy -> 100}, Inflight -> { DAL -> ...
+  private type TopicCountMap = Map[String, Map[String, Long]]
+
+  private[SamplingProfiler] final case class TopicCountSnap private[SamplingProfiler] (
+      property: Key[TopicCountMap],
+      map: TopicCountMap) {
+    def elems: Elems = if (map.size > 0) Elems(property -> map) else Elems.Nil
+    def -(other: TopicCountSnap): TopicCountSnap = {
+      assert(property == other.property, "Internal sampling profiler error")
+      TopicCountSnap(property, diff(map, other.map))
+    }
   }
 
+  final class TopicAccumulator private[SamplingProfiler] (property: Key[TopicCountMap]) {
+    private val topics = new ConcurrentHashMap[String, ConcurrentHashMap[String, Long]]()
+    def accumulate(topic: String, key: String, value: Long): Unit = {
+      val map = topics.computeIfAbsent(topic, _ => new ConcurrentHashMap[String, Long]())
+      map.merge(key, value, _ + _)
+    }
+    private[SamplingProfiler] def snap: TopicCountSnap = {
+      val m = topics.asScala.map { case (topic, map) =>
+        topic -> map.asScala.toMap
+      }.toMap
+      TopicCountSnap(property, m)
+    }
+  }
+
+  private val topicAccumulators = new ConcurrentHashMap[Key[TopicCountMap], TopicAccumulator]()
+
+  // Get/register a new topic accumulator
+  def topicAccumulator(key: Key[TopicCountMap]): TopicAccumulator =
+    topicAccumulators.computeIfAbsent(key, _ => new TopicAccumulator(key))
+
+  private def diff(
+      a: Map[String, Map[String, Long]],
+      b: Map[String, Map[String, Long]]): Map[String, Map[String, Long]] = {
+    a.map { case (topic, ma) =>
+      b.get(topic) match {
+        case None => topic -> ma.filter(_._2 > 0L)
+        case Some(mb) =>
+          topic -> {
+            ma.map { case (key, va) =>
+              key -> (va - mb.getOrElse(key, 0L))
+            }.filter(_._2 > 0L)
+          }
+      }
+    }.filter(_._2.size > 0)
+  }
 }

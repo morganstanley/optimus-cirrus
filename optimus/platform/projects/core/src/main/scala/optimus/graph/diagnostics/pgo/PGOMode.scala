@@ -21,14 +21,17 @@ import optimus.platform.inputs.registry.ProcessGraphInputs
 import scala.collection.mutable
 
 object PGOMode {
-  def fromUIOptions(autoSuggestDisableCache: Boolean): Seq[PGOMode] =
-    autoSuggestDisableCache match {
-      case true  => Seq(DisableCache)
-      case false => Seq.empty[PGOMode]
+  def fromUIOptions(autoSuggestDisableCache: Boolean, autoSuggestDisableXSFT: Boolean): Seq[PGOMode] =
+    (autoSuggestDisableCache, autoSuggestDisableXSFT) match {
+      case (true, true)   => Seq(DisableCache, DisableXSFT)
+      case (true, false)  => Seq(DisableCache)
+      case (false, true)  => Seq(DisableXSFT)
+      case (false, false) => Seq.empty[PGOMode]
     }
 
-  /** Currently only three modes are supported for auto-pgo. Names match command line argument values for --pgo-mode */
+  /** Currently four modes are supported for auto-pgo. Names match command line argument values for --pgo-mode */
   def fromName(name: String): PGOMode = name.toLowerCase match {
+    case "disablexsft"                                      => DisableXSFT
     case "disablecache"                                     => DisableCache
     case "tweakusage" | "suggestxsft"                       => SuggestXSFT
     case "tweakusagewithdependencies" | "tweakdependencies" => TweakDependencies
@@ -45,11 +48,12 @@ object PGOMode {
       alreadyApplied: Set[PGOMode],
       externallyConfigureCache: Boolean) = {
     // You should never apply another cache policy if the cache policy exists in the first place.
-    val alreadyHasCachePolicy = alreadyApplied.exists(p => p == DisableCache || p == SuggestXSFT || p == SuggestXS)
+    val alreadyHasCachePolicy =
+      alreadyApplied.exists(p => p == DisableCache || p == SuggestXSFT || p == SuggestXS || p == DisableXSFT)
     targetMode match {
-      case DisableCache            => !externallyConfigureCache && !alreadyHasCachePolicy
-      case SuggestXS | SuggestXSFT => !alreadyHasCachePolicy
-      case _                       => true
+      case DisableCache | DisableXSFT => !externallyConfigureCache && !alreadyHasCachePolicy
+      case SuggestXS | SuggestXSFT    => !alreadyHasCachePolicy
+      case _                          => true
     }
   }
 }
@@ -60,7 +64,7 @@ sealed trait PGOMode {
    * Generate key-value entries for optconf file to represent this config. Most modes just generate one pair, see
    * TweakDependencies for the exception
    */
-  def optconf(pnti: PNodeTaskInfo): Seq[(String, String)]
+  def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)]
 
   /**
    * either manually configure (usually reading flags) or auto-configure (based on profiling data and AutoPGOThresholds
@@ -111,7 +115,7 @@ sealed trait PGOMode {
 case object DisableCache extends PGOMode {
   override def priority: Int = 3
 
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val key = NCPolicy.DontCache.optconfName
     val value = s""""cachePolicy": "${NCPolicy.DontCache}""""
     Seq((key, value))
@@ -202,7 +206,7 @@ case object DisableCache extends PGOMode {
 case object SuggestXS extends PGOMode {
   override def priority: Int = 2
 
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val key = NCPolicy.XS.optconfName
     val value = s""""cachePolicy": "${NCPolicy.XS}""""
     Seq((key, value))
@@ -217,7 +221,7 @@ case object SuggestXS extends PGOMode {
 case object SuggestXSFT extends PGOMode {
   override def priority: Int = 1
 
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val key = NCPolicy.XSFT.optconfName
     val value = s""""cachePolicy": "${NCPolicy.XSFT}""""
     Seq((key, value))
@@ -236,7 +240,7 @@ case object SuggestXSFT extends PGOMode {
 
   /** if default policy is XSFT, then this shouldn't do anything special */
   override def manualConfigure(pnti: PNodeTaskInfo): Boolean =
-    !ProcessGraphInputs.EnableXSFT.currentValueOrThrow() && pnti.cachePolicy == NCPolicy.XSFT.favorReuseName
+    !ProcessGraphInputs.EnableXSFT.currentValueOrThrow() && pnti.cachePolicy == NCPolicy.XSFT.policyName
 
   override def isExternallyConfigurable: Boolean = true
   override def isUIConfigurable: Boolean = true
@@ -245,9 +249,39 @@ case object SuggestXSFT extends PGOMode {
     if (DiagnosticSettings.explainPgoDecision) CacheFilterTweakUsageDecision.add(pnti, "XSFTEnabled")
 }
 
+case object DisableXSFT extends PGOMode {
+  override def priority: Int = 1
+
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+    val key = NCPolicy.Basic.optconfName
+    val value = s""""cachePolicy": "${NCPolicy.Basic}""""
+    Seq((key, value))
+  }
+
+  // Decides if cache policy should be basic, returns true if not a poison cache & cacheable &
+  // cache hit == trivial hit & cache would not be disabled
+  override def autoConfigure(pnti: PNodeTaskInfo, cfg: AutoPGOThresholds): Boolean = {
+    pnti.hasCollectedDependsOnTweakMask && cacheConfigIsApplicableFor(pnti) &&
+    pnti.cacheHit == pnti.cacheHitTrivial &&
+    !DisableCache.autoConfigure(pnti, cfg) // don't write the ones that would end up with disabled cache
+  }
+
+  /** don't ever try to disable XSFT on non-cacheable nodes */
+  private def cacheConfigIsApplicableFor(pnti: PNodeTaskInfo): Boolean = pnti.getCacheable
+
+  override def manualConfigure(pnti: PNodeTaskInfo): Boolean =
+    if (pnti.nti != null) pnti.nti.cachePolicy == NCPolicy.Basic else false
+
+  override def isExternallyConfigurable: Boolean = true
+  override def isUIConfigurable: Boolean = true
+
+  override def report(pnti: PNodeTaskInfo, wasManual: Boolean, cfg: AutoPGOThresholds): Unit =
+    if (DiagnosticSettings.explainPgoDecision) CacheFilterTweakUsageDecision.add(pnti, "XSFTDisabled")
+}
+
 /* show the actual dependencies on a node and corresponding tweak ids */
 case object TweakDependencies extends PGOMode {
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val entries = mutable.ArrayBuffer[(String, String)]()
     if (hasTweakDependenciesWorthWriting(pnti)) {
       val encodedMask = pnti.tweakDependencies.stringEncoded // [CONSIDER_REMAP_COMPRESS_ID_MASKS]
@@ -278,7 +312,7 @@ case object TweakDependencies extends PGOMode {
 }
 
 case object NativeMemory extends PGOMode {
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val key = "gcnative"
     val value = """"gcnative": true"""
     Seq((key, value))
@@ -288,7 +322,7 @@ case object NativeMemory extends PGOMode {
 }
 
 case object LocalCacheSlot extends PGOMode {
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val localCacheSlot = if (pnti.nti ne null) pnti.nti.localCacheSlot.toString else "null"
     val key = s"local$localCacheSlot"
     val value = s""""localSlot": $localCacheSlot"""
@@ -303,7 +337,7 @@ case object LocalCacheSlot extends PGOMode {
 }
 
 case object SyncID extends PGOMode {
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val syncId = if (pnti.nti ne null) pnti.nti.syncID.toString else "null"
     val key = s"sync$syncId"
     val value = s""""syncId": $syncId"""
@@ -314,7 +348,7 @@ case object SyncID extends PGOMode {
 }
 
 case object Untracked extends PGOMode {
-  override def optconf(pnti: PNodeTaskInfo): Seq[(String, String)] = {
+  override def optconfString(pnti: PNodeTaskInfo): Seq[(String, String)] = {
     val key = "untracked"
     val value = """"trackForInvalidation": false"""
     Seq((key, value))

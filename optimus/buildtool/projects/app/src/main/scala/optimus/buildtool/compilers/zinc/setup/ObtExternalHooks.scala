@@ -16,7 +16,7 @@ import java.nio.file.Paths
 import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import optimus.buildtool.artifacts.AnalysisArtifact
-import optimus.buildtool.artifacts.Artifact.InternalArtifact
+import optimus.buildtool.artifacts.Artifact.InternalPathedArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifactType
 import optimus.buildtool.compilers.SyncCompiler.PathPair
@@ -62,8 +62,8 @@ class ObtExternalHooks(
     fingerprintHash: String,
     outputJar: PathPair,
     classType: InternalClassFileArtifactType,
-    pathToInternalClassJar: Map[Path, InternalArtifact],
-    classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact],
+    pathToInternalClassJar: Map[Path, InternalPathedArtifact],
+    classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact],
     classFileManager: ClassFileManager,
     invalidationProfiler: ZincInvalidationProfiler,
     invalidateOnly: Option[MischiefInvalidator],
@@ -95,7 +95,7 @@ class ObtExternalHooks(
       else
         pathToInternalClassJar
           .get(p)
-          .map { case InternalArtifact(id, a) =>
+          .map { case InternalPathedArtifact(id, a) =>
             MappingTrace.provenance(id, a)
           }
           .getOrElse("")
@@ -108,20 +108,22 @@ class ObtExternalLookup(
     analysisMappingTrace: MappingTrace,
     sources: Seq[VirtualSourceFile],
     classpath: Seq[VirtualFile],
-    pathToInternalClassJar: Map[Path, InternalArtifact],
-    classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact],
+    pathToInternalClassJar: Map[Path, InternalPathedArtifact],
+    classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact],
     invalidateOnly: Option[MischiefInvalidator],
     lookupTracker: Option[LookupTracker]
 ) extends ExternalLookup {
 
   private val currentClasspathForComparison = classpath.map(f => sanitizePath(f.id)).toSet
 
-  private val classIdToAnalysis = classJarToAnalysis.map { case (InternalArtifact(id, _), analysis) => id -> analysis }
+  private val classIdToAnalysis = classJarToAnalysis.map { case (InternalPathedArtifact(id, _), analysis) =>
+    id -> analysis
+  }
   private val pathStrToInternalClassJar =
     pathToInternalClassJar.map { case (p, a) => PathUtils.platformIndependentString(p) -> a }
 
   private object ArtifactFromClasspath {
-    def unapply(file: VirtualFileRef): Option[InternalArtifact] = pathStrToInternalClassJar.get(file.id)
+    def unapply(file: VirtualFileRef): Option[InternalPathedArtifact] = pathStrToInternalClassJar.get(file.id)
   }
 
   private def sanitizePath(pathStr: String): String = pathStr.replaceFirst("^M:/", "//ms/")
@@ -201,7 +203,7 @@ class ObtExternalLookup(
           // Class was found on the classpath, and we know where its analysis ought to live.  If we don't find the
           // fqcn there, it's not going to be available anywhere, so we return definitively unavailable rather
           // than unknown as we did above.
-          case Some(ArtifactFromClasspath(InternalArtifact(id, a))) =>
+          case Some(ArtifactFromClasspath(InternalPathedArtifact(id, a))) =>
             val api =
               if (unchanged(MappingTrace.provenance(id, a))) prevApis.get(binaryClassName)
               else lookInUpstreamAnalysis(id)

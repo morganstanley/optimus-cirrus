@@ -10,8 +10,8 @@
  * limitations under the License.
  */
 package optimus.buildtool.dependencies
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.ModuleType
-import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.OsUtils
 
@@ -97,7 +97,7 @@ final case class PythonAfsDependencyDefinition(
     variant: Option[PythonDependencies.Variant],
     sourceType: String = ModuleType.Afs.label)
     extends PythonDependency {
-  def path: String = s"${NamingConventions.AfsRootStr}dist/$meta/PROJ/$project/$version/lib"
+  def path: String = s"${AfsNamingConventions.AfsRootStr}dist/$meta/PROJ/$project/$version/lib"
 }
 
 object PythonDependencies {

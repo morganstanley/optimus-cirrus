@@ -168,7 +168,8 @@ object JvmDependenciesLoader {
               .withProblems(
                 subsConf.checkExtraProperties(file, substitutionsConfig) ++
                   subsConf.checkEmptyProperties(file, substitutionsConfig))
-          case other => file.failure(other, s""""$Substitutions" element is not an object""")
+          case other =>
+            file.failure(other, s""""$Substitutions" element is not an object""")
         }.distinct
         Result.sequence(subsResults)
       } else Success(Nil)
@@ -468,7 +469,6 @@ object JvmDependenciesLoader {
       loadedResolvers: ResolverDefinitions,
       scalaMajorVersion: Option[String]
   ): Result[JvmDependencies] = {
-    val resolvedConfig = config.resolve()
     for {
       globalExcludes <- readExcludes(config, obtFile, allowIvyConfiguration = true)
       globalSubstitutions <- readSubstitutions(config, obtFile)
@@ -476,21 +476,21 @@ object JvmDependenciesLoader {
         if (singleSourceDep.isDefined) Success(Nil)
         else
           loadLocalDefinitions(
-            resolvedConfig.getObject(Dependencies).toConfig,
+            config.getObject(Dependencies).toConfig,
             LocalDefinition,
             obtFile,
             isMavenConfig,
             loadedResolvers,
             scalaMajorVersion = scalaMajorVersion)
-      extraLibDefinitions <- loadExtraLibs(resolvedConfig, obtFile, isMavenConfig, loadedResolvers, scalaMajorVersion)
+      extraLibDefinitions <- loadExtraLibs(config, obtFile, isMavenConfig, loadedResolvers, scalaMajorVersion)
       mavenDefs <- loadMavenDefinition(config, isMavenConfig, useMavenLibs)
-      nativeDeps <- loadNativeDeps(resolvedConfig, obtFile)
+      nativeDeps <- loadNativeDeps(config, obtFile)
       all = localDefinitions ++ extraLibDefinitions
       deps <- checkSingleSourceDeps(all, obtFile)
       groups <- loadGroups(config, deps, obtFile)
       multiSourceDependencies <- loadMultiSourceDeps(
         singleSourceDep,
-        resolvedConfig,
+        config,
         obtFile,
         loadedResolvers,
         scalaMajorVersion)
@@ -533,7 +533,7 @@ object JvmDependenciesLoader {
         for {
           conf <- loader(topLevelConfig)
           deps <- resolveFromConfig(
-            conf.withFallback(centralConfiguration.config),
+            conf.withFallback(centralConfiguration.config).resolve(),
             topLevelConfig,
             useMavenLibs,
             isMavenConfig,

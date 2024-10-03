@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import optimus.buildtool.config.DockerImage
 import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.InstallPathBuilder
@@ -27,7 +28,9 @@ final case class MetadataSettings(
     obtVersion: String,
     javaVersion: String,
     buildId: String,
-    generatePoms: Boolean
+    generatePoms: Boolean,
+    dockerDir: Directory,
+    images: Set[DockerImage]
 )
 
 object MetadataSettings {
@@ -37,10 +40,12 @@ object MetadataSettings {
       dependencyResolver: ExternalDependencyResolver,
       webDependencyResolver: WebDependencyResolver,
       installDir: Directory,
+      dockerDir: Directory,
       installVersion: String,
       leafDir: RelativePath,
       buildId: String,
-      generatePoms: Boolean): MetadataSettings = {
+      generatePoms: Boolean,
+      images: Set[DockerImage]): MetadataSettings = {
     val javaVersion =
       Seq(stratoConfig.config.getString("javaProject"), stratoConfig.config.getString("javaShortVersion")).mkString("-")
     val obtVersion = stratoConfig.config.getString("obt-version")
@@ -54,7 +59,9 @@ object MetadataSettings {
       obtVersion,
       javaVersion,
       buildId,
-      generatePoms
+      generatePoms,
+      dockerDir,
+      images
     )
   }
 }

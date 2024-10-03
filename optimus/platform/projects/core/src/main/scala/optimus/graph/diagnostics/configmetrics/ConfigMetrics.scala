@@ -371,17 +371,8 @@ object ConfigMetricsStrings {
   val evictionsCrumb = "evictions"
   val dalRequestsCrumb = "dal_req"
   val enginesWallTimeCrumb = "engine_wall"
-  val headerNames: Array[String] = Array(
-    wallTime,
-    cpuTime,
-    cacheTime,
-    maxHeap,
-    cacheHits,
-    cacheMisses,
-    cacheHitRatio,
-    evictions,
-    dalRequests,
-    enginesWallTime)
+  val headerNames: Array[String] =
+    Array(wallTime, cpuTime, cacheTime, maxHeap, cacheHits, cacheMisses, evictions, dalRequests, enginesWallTime)
 }
 
 object MetricDiff {

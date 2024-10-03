@@ -13,6 +13,7 @@ package optimus.buildtool.builders
 
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.config._
+import optimus.buildtool.rubbish.StoredArtifacts
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.FileDiff
 import optimus.graph.CancellationScope
@@ -30,9 +31,22 @@ class TrackingBuilder(
   ): BuildResult = {
     val cancellationScope = CancellationScope.newScope()
     val listener = ObtTrace.current
-    workspace.rescan(cancellationScope, listener).thenCompose { _ =>
+    val rescan = workspace.rescan(cancellationScope, listener)
+
+    val previousArtifacts = rescan.thenCompose { detectedChanges =>
+      if (detectedChanges) workspace.previousArtifacts(cancellationScope, listener)
+      else TrackedWorkspace.completed(StoredArtifacts.empty)
+    }
+
+    val buildResult = rescan.thenCompose { _ =>
       workspace.run(cancellationScope, listener)(underlyingBuilder().build(scopesToBuild, postBuilder, modifiedFiles))
     }
+
+    TrackedWorkspace.combine(buildResult, previousArtifacts) { (res, prev) =>
+      workspace.tidyRubbish(cancellationScope, listener)(prev, res.artifactPaths)
+    }
+
+    buildResult
   }.get()
 
 }

@@ -23,8 +23,8 @@ import optimus.graph.Scheduler.ContextSnapshot
 import optimus.graph.diagnostics.ProfilerUIControl
 import optimus.graph.diagnostics.StallDetector
 import optimus.graph.diagnostics.rtverifier.RTVerifier
-import optimus.graph.diagnostics.sampling.SamplingProfiler.SchedulerCounter
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SchedulerCounts
+import optimus.graph.diagnostics.sampling.SchedulerCounter
 import optimus.platform.annotations.nodeLift
 import optimus.platform.annotations.nodeLiftByName
 import optimus.platform.annotations.nodeSync
@@ -164,14 +164,16 @@ private object PT {
  *      that can lead to a memory leak Note - atieoc = awaitedTaskInfoEndOfChain
  */
 final case class SchedulerStallSource(
-    awaitedTasks: Array[NodeTask],
-    awaitedTaskInfosEndOfChain: Array[NodeTaskInfo],
+    awaitedTasks: Array[OGScheduler.AwaitedTasks],
     syncStackPresent: Boolean) {
+  private def sample = awaitedTasks.head
   // We pick any ctx because we want stall times to add up and don't want to double report
-  def awaitedTask: NodeTask = awaitedTasks.head
-  def atieoc: NodeTaskInfo = awaitedTaskInfosEndOfChain.head
+  def awaitedTask: NodeTask = sample.task()
+  def atieoc: NodeTaskInfo = sample.endOfChainTaskInfo()
+  def plugin: SchedulerPlugin = sample.endOfChainPlugin()
+  def pluginType: PluginType = sample.endOfChainPluginType()
   def name: String = atieoc.name()
-  def jobTaskId: Option[JobTaskIdTag] = awaitedTasks.collectFirst { case PT(tag) => tag }
+  def jobTaskId: Option[JobTaskIdTag] = awaitedTasks.map(_.task).collectFirst { case PT(tag) => tag }
 }
 
 abstract class Scheduler extends EvaluationQueue {

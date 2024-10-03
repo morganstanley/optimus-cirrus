@@ -41,10 +41,31 @@ object NodeCache {
    * cache, the SI and pinfo custom cache are all correctly obeyed.
    */
   def lookupAndInsert[R](info: NTI, pnode: PN[R], privateCache: PrivateCache, ec: OGSC): PN[R] = {
-    if (privateCache != null) {
-      val found =
-        if (privateCache.readFromGlobalFirst) getCacheForInfo(info).getIfPresent(info, pnode, null)
-        else null
+    if (privateCache ne null) {
+      val found = {
+        // We always insert in this private cache, but we try to read from other caches first. We read in order from
+        // the closest cache scopes to the outermost, and then maybe read from global caches.
+        var found: PN[R] = null
+        var current = privateCache.readFrom // start at parent of current
+
+        while ((found eq null) && (current ne null)) {
+          val cache = current match {
+            case pc: PrivateCache =>
+              current = pc.readFrom
+              pc.cache
+            case PrivateCache.NoOtherCache =>
+              current = null
+              null
+            case PrivateCache.GlobalCaches =>
+              current = null
+              getCacheForInfo(info)
+          }
+
+          found = if (cache ne null) cache.getIfPresent(info, pnode, null) else null
+        }
+
+        found
+      }
       if (found == null) NodeCache.cacheLookup(privateCache.cache, info, pnode, ec) else found
     } else NodeCache.cacheLookup(getCacheForInfo(info), info, pnode, ec)
   }

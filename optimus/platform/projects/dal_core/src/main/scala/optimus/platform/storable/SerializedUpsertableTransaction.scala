@@ -24,6 +24,7 @@ final case class SerializedUpsertableTransaction(
   /**
    * Transaction must comply to specific constraints so it can be used via DAL.publishTransaction.
    *   - contains single newEvent {} block
+   *   - if BusinessEvent-only message then it must be heap event
    *   - only DAL.upsert commands supported
    *     - no DAL.put command
    *     - no DAL.invalidate command
@@ -38,6 +39,11 @@ final case class SerializedUpsertableTransaction(
     )
 
     val businessEvent = putEvent.bes.head // we expect single one, see above require
+
+    require(
+      writeBusinessEvent.state == EventStateFlag.NEW_EVENT || topLevelSerializedEntityClassNames.nonEmpty,
+      expectationMessage("BusinessEvent must be heap instance OR transaction must contain DAL.upsert(s)")
+    )
 
     // Keys for BusinessEvent should not contain @indexed (unique = true) properties
     businessEvent.evt.keys.foreach { key =>

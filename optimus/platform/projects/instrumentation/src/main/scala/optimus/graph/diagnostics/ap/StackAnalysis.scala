@@ -40,7 +40,6 @@ import optimus.utils.MiscUtils.Endoish._
 
 import java.util.Objects
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.Random
 import scala.util.control.NonFatal
 
@@ -50,6 +49,10 @@ object StackAnalysis {
 
   private val stackCrumbCount = new AtomicLong(0)
   private[diagnostics] def numStacksPublished: Long = stackCrumbCount.get()
+  // Fully qualified class names are abbreviated to a maximum of N successive lower-case letters:
+  val camelHumpWidth: Int = PropertyUtils.get("optimus.async.profiler.hump.width", 2)
+  val frameNameCacheSize: Int = PropertyUtils.get("optimus.async.profiler.frame.cache.size", 1000000)
+  val doAbbreviateFrames: Boolean = PropertyUtils.get("optimus.async.profiler.abbreviate", true)
 
   // Split off count bit
   // "foo;bar;wiz 37" => ("foo;bar;wiz", 37)
@@ -161,60 +164,13 @@ object StackAnalysis {
       .mkString("\n")
   }
 
-}
-
-class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String, String] = Map.empty) extends Log {
-  import StackAnalysis._
-
-  val propertyUtils = new PropertyUtils(properties)
-
-  val doAbbreviateFrames = propertyUtils.get("optimus.async.profiler.abbreviate", true)
-  // Fully qualified class names are abbreviated to a maximum of N successive lower-case letters:
-  val camelHumpWidth = propertyUtils.get("optimus.async.profiler.hump.width", 2)
-  val frameNameCacheSize = propertyUtils.get("optimus.async.profiler.frame.cache.size", 1000000)
-  val stackCacheSize = propertyUtils.get("optimus.async.profiler.stack.cache.size", 100000)
-  val stackCacheExpireAfterSec =
-    propertyUtils.get("optimus.async.profiler.stack.cache.expire.sec", 3600)
-  val thumbprintDimensionBits = propertyUtils.get("optimus.async.profiler.thumbprint", 3)
-  val thumbprintDimension = 1 << thumbprintDimensionBits
-  val maxFrames = propertyUtils.get("optimus.async.profiler.stack.maxframes", 250)
-
-  val trackLiveMemory = propertyUtils.get("optimus.async.profiler.track.live.memory", true)
-
-  private val stackToHashCache =
-    Caffeine
-      .newBuilder()
-      .maximumSize(stackCacheSize)
-      .build[Seq[String], String]()
-
-  private val apSidToStack: Cache[java.lang.Long, SharedStack] =
-    Caffeine
-      .newBuilder()
-      .maximumSize(stackCacheSize)
-      .build[java.lang.Long, SharedStack]()
-
-  private val hashing = Hashing.murmur3_128()
-  private def stackToHash(stack: Seq[String]): String = stackToHashCache.get(
-    stack,
-    stack => {
-      val hasher = hashing.newHasher()
-      stack.foreach(s => {
-        hasher.putString(s, StandardCharsets.UTF_8)
-        hasher.putChar(';') // to disambiguate frame1frame2 from frame1;frame2
-      })
-      "S_" + hasher.hash().toString
-    }
-  )
-
-  import java.lang.{Long => JLong}
-  private val stackPublicationTime =
-    Caffeine
-      .newBuilder()
-      .maximumSize(stackCacheSize)
-      .build[(ChainedID, String), JLong]()
-
-  private[diagnostics] final class CleanName private (val name: String, val id: Long, val flags: Int) {
+  private[diagnostics] final class CleanName private (
+      val name: String,
+      val id: Long,
+      val flags: Int,
+      val predMask: Long) {
     import CleanName._
+
     def isFree: Boolean = (flags & FREE) == FREE
 
     override def toString: String = s"($name, $id)"
@@ -228,8 +184,11 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
     private val frameNameCache =
       Caffeine.newBuilder().maximumSize(frameNameCacheSize).build[String, CleanName]
     private val localFrameIds = new AtomicLong(0)
-    private def apply(name: String, flags: Int): CleanName = {
-      new CleanName(name, localFrameIds.incrementAndGet(), flags)
+
+    private val abbreviateError = CleanName("ERROR", flags = 0, predMask = 0L)
+
+    private def apply(name: String, flags: Int, predMask: Long): CleanName = {
+      new CleanName(name, localFrameIds.incrementAndGet(), flags, predMask)
     }
 
     def cleanName(frame: String): CleanName = cleanName(frame, false, doAbbreviateFrames, 0)
@@ -239,8 +198,9 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
 
     def cleanName(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, flags: Int): CleanName = {
       def clean(frame0: String, hasFrameNum: Boolean, abbreviate: Boolean): CleanName = {
-        var i = 0
+        val predMask: Long = StringPredicate.getMaskForAllPredicates(frame0)
 
+        var i = 0
         val frame = undisambiguateLambda(frame0)
 
         val length = frame.size
@@ -261,13 +221,13 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
         }
 
         if (!abbreviate)
-          CleanName(frame.substring(i, methodEnd).replaceAllLiterally("/", "."), flags)
+          CleanName(frame.substring(i, methodEnd).replaceAllLiterally("/", "."), flags, predMask)
         else {
           // method starts at the last separator
           var methodStart = methodEnd - 1
           while (methodStart >= i && frame(methodStart) != '.' && frame(methodStart) != '/') { methodStart -= 1 }
           if (methodStart < i)
-            return CleanName(frame.substring(i, methodEnd), flags)
+            return CleanName(frame.substring(i, methodEnd), flags, predMask)
 
           val method = {
             if (methodStart == methodEnd - 1) ""
@@ -295,7 +255,7 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
             sb.toString
           } else ""
           val shortened = pack + method
-          CleanName(shortened, flags)
+          CleanName(shortened, flags, predMask)
         }
       }
 
@@ -303,75 +263,10 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
     }
 
   }
-  import CleanName.cleanName
 
-  private val abbreviateError = cleanName("ERROR")
+  private final case class StackNodeState(kids: mutable.LongMap[StackNode], total: Long, self: Long)
 
-  /*
-   *  Return abbreviated frame and the (original) frame's hash
-   *    fully.qualified.ClassName.method(possibly, args)
-   * becomes
-   *    ("f.q.ClNa.method", 12345)
-   */
-  @VisibleForTesting
-  private[diagnostics] def cleanFrameNameForTestingOnly(
-      frame0: String,
-      hasFrameNum: Boolean, // i.e. prepended with something like [31] by async-profiler
-      abbreviate: Boolean): CleanName = cleanName(frame0, hasFrameNum, abbreviate, 0)
-
-  private val dims = (0 until thumbprintDimension).map(d => s"d$d")
-
-  // Return a token representing an entire stack
-  private def stackMemoize(rootUuids: Seq[ChainedID], frames: Seq[String]): String = {
-    if (frames.size == 0)
-      return "EMPTY"
-
-    val tSec = System.currentTimeMillis() / 1000
-    val sid = stackToHash(frames)
-
-    val publishTo = rootUuids.filter { uuid =>
-      tSec - stackPublicationTime.get((uuid, sid), _ => 1L) > stackCacheExpireAfterSec
-    }
-
-    if (AsyncProfilerSampler.stacksToSplunk && publishTo.nonEmpty) {
-      val printvec = new Array[Int](thumbprintDimension)
-      frames.foreach { f =>
-        printvec(f.hashCode & (thumbprintDimension - 1)) += 1
-      }
-      val thumbPrint = dims.zip(printvec).toMap
-
-      publishTo.foreach { uuid =>
-        // deduplication key assures that we publish for each relevant root uuid and not more infrequently
-        // than once ever stackCacheExpirySec
-        val dedup = s"$sid:${tSec / stackCacheExpireAfterSec}:${uuid.base}"
-
-        stackPublicationTime.put((uuid, sid), tSec)
-        stackCrumbCount.incrementAndGet()
-        val elems = Properties.engineId -> ChainedID.root ::
-          Properties.pSID -> sid ::
-          // Re-assemble collapsed stack for ease of splunking
-          Properties.profCollapsed -> frames.filter(_.nonEmpty).mkString(";") ::
-          Properties.stackThumb -> thumbPrint ::
-          Properties.dedupKey -> dedup :: Version.properties
-        crumbConsumer match {
-          case Some(f) => f(PropertiesCrumb(uuid, SamplingProfilerSource, elems))
-          case None    => Breadcrumbs(uuid, PropertiesCrumb(_, SamplingProfilerSource, elems))
-        }
-      }
-    }
-    sid
-  }
-
-  // Get snapshot of top n stacks, fixing up A-P's rather verbose formatting
-  private val Samples: Regex = "---.*, (\\d+) sample.*".r
-  def splitTraces(dump: String): Seq[(Double, String)] = {
-    dump.split("\n\n").map(_.split("\n").toSeq).toSeq.collect {
-      case Samples(n) +: frames if frames.nonEmpty =>
-        n.toDouble -> stackMemoize(Seq(ChainedID.root), frames.map(cleanName(_, hasFrameNum = true).name))
-    }
-  }
-
-  // In this implementation, each node is identified by an id unique to the frame name, plus a link to its
+  // Each node is identified by an id unique to the frame name, plus a link to its
   // parent on the tree.  This is a more conventional approach for representing flame graphs.
   private[diagnostics] final class StackNode(val cn: CleanName, val depth: Int) {
     def id: Long = cn.id
@@ -381,9 +276,8 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
     private[StackAnalysis] var total = 0L
     private[StackAnalysis] var self = 0L
 
-    private case class state(kids: mutable.LongMap[StackNode], total: Long, self: Long)
-    private var _backup: state = null
-    private def backup(): Unit = _backup = state(kids.clone(), total, self)
+    private var _backup: StackNodeState = null
+    private def backup(): Unit = _backup = StackNodeState(kids.clone(), total, self)
     private def restore(): Unit = {
       kids = _backup.kids
       total = _backup.total
@@ -537,6 +431,120 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
 
   }
 
+}
+
+class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String, String] = Map.empty) extends Log {
+  import StackAnalysis._
+
+  val propertyUtils = new PropertyUtils(properties)
+
+  val stackCacheSize = propertyUtils.get("optimus.async.profiler.stack.cache.size", 100000)
+  val stackCacheExpireAfterSec =
+    propertyUtils.get("optimus.async.profiler.stack.cache.expire.sec", 3600)
+  val thumbprintDimensionBits = propertyUtils.get("optimus.async.profiler.thumbprint", 3)
+  val thumbprintDimension = 1 << thumbprintDimensionBits
+  val maxFrames = propertyUtils.get("optimus.async.profiler.stack.maxframes", 250)
+
+  val trackLiveMemory = propertyUtils.get("optimus.async.profiler.track.live.memory", true)
+
+  private val stackToHashCache =
+    Caffeine
+      .newBuilder()
+      .maximumSize(stackCacheSize)
+      .build[Seq[String], String]()
+
+  private val apSidToStack: Cache[java.lang.Long, SharedStack] =
+    Caffeine
+      .newBuilder()
+      .maximumSize(stackCacheSize)
+      .build[java.lang.Long, SharedStack]()
+
+  private val hashing = Hashing.murmur3_128()
+  private def stackToHash(stack: Seq[String]): String = stackToHashCache.get(
+    stack,
+    stack => {
+      val hasher = hashing.newHasher()
+      stack.foreach(s => {
+        hasher.putString(s, StandardCharsets.UTF_8)
+        hasher.putChar(';') // to disambiguate frame1frame2 from frame1;frame2
+      })
+      "S_" + hasher.hash().toString
+    }
+  )
+
+  import java.lang.{Long => JLong}
+  private val stackPublicationTime =
+    Caffeine
+      .newBuilder()
+      .maximumSize(stackCacheSize)
+      .build[(ChainedID, String), JLong]()
+
+  import CleanName.cleanName
+
+  /*
+   *  Return abbreviated frame and the (original) frame's hash
+   *    fully.qualified.ClassName.method(possibly, args)
+   * becomes
+   *    ("f.q.ClNa.method", 12345)
+   */
+  @VisibleForTesting
+  private[diagnostics] def cleanFrameNameForTestingOnly(
+      frame0: String,
+      hasFrameNum: Boolean, // i.e. prepended with something like [31] by async-profiler
+      abbreviate: Boolean): CleanName = cleanName(frame0, hasFrameNum, abbreviate, 0)
+
+  private val dims = (0 until thumbprintDimension).map(d => s"d$d")
+
+  // Return a token representing an entire stack
+  private def stackMemoize(rootUuids: Seq[ChainedID], frames: Seq[String]): String = {
+    if (frames.size == 0)
+      return "EMPTY"
+
+    val tSec = System.currentTimeMillis() / 1000
+    val sid = stackToHash(frames)
+
+    val publishTo = rootUuids.filter { uuid =>
+      tSec - stackPublicationTime.get((uuid, sid), _ => 1L) > stackCacheExpireAfterSec
+    }
+
+    if (AsyncProfilerSampler.stacksToSplunk && publishTo.nonEmpty) {
+      val printvec = new Array[Int](thumbprintDimension)
+      frames.foreach { f =>
+        printvec(f.hashCode & (thumbprintDimension - 1)) += 1
+      }
+      val thumbPrint = dims.zip(printvec).toMap
+
+      publishTo.foreach { uuid =>
+        // deduplication key assures that we publish for each relevant root uuid and not more infrequently
+        // than once ever stackCacheExpirySec
+        val dedup = s"$sid:${tSec / stackCacheExpireAfterSec}:${uuid.base}"
+
+        stackPublicationTime.put((uuid, sid), tSec)
+        stackCrumbCount.incrementAndGet()
+        val elems = Properties.engineId -> ChainedID.root ::
+          Properties.pSID -> sid ::
+          // Re-assemble collapsed stack for ease of splunking
+          Properties.profCollapsed -> frames.filter(_.nonEmpty).mkString(";") ::
+          Properties.stackThumb -> thumbPrint ::
+          Properties.dedupKey -> dedup :: Version.properties
+        crumbConsumer match {
+          case Some(f) => f(PropertiesCrumb(uuid, SamplingProfilerSource, elems))
+          case None    => Breadcrumbs(uuid, PropertiesCrumb(_, SamplingProfilerSource, elems))
+        }
+      }
+    }
+    sid
+  }
+
+  // Get snapshot of top n stacks, fixing up A-P's rather verbose formatting
+  private val Samples: Regex = "---.*, (\\d+) sample.*".r
+  def splitTraces(dump: String): Seq[(Double, String)] = {
+    dump.split("\n\n").map(_.split("\n").toSeq).toSeq.collect {
+      case Samples(n) +: frames if frames.nonEmpty =>
+        n.toDouble -> stackMemoize(Seq(ChainedID.root), frames.map(cleanName(_, hasFrameNum = true).name))
+    }
+  }
+
   private[diagnostics] def assertTreesAreConsistent(root: StackNode): Unit = {
     @tailrec def walk(done: Set[StackNode], todo: List[StackNode]): Unit = {
       todo match {
@@ -603,9 +611,12 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
     } else 0L
 
     def incorporateFrames(frames: Array[String], count: Long): Unit = {
+
+      val cleanNames = frames.map(cleanName(_))
+
       // Update sampled event counts (but only for normal everyday frames!)
       if (frames.length > 0 && !frames(0).startsWith(CUSTOM_EVENT_PREFIX))
-        SampledTimersExtractor.analyse(rec, frames, count)
+        SampledTimersExtractor.analyse(rec, cleanNames, count)
 
       // climb from root, looking for name match
       val i0 = firstUserFrame(frames)
@@ -628,10 +639,10 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
           // Saved stacks are inner-most first:
           val graftStack = AwaitStackManagement.awaitStack(graftSID)
           if (Objects.nonNull(graftStack)) {
-            var i = graftStack.size() - 1
-            while (i >= 0) {
-              val f = graftStack.get(i)
-              i -= 1
+            var j = graftStack.size() - 1
+            while (j >= 0) {
+              val f = graftStack.get(j)
+              j -= 1
               if (!ignoreFrame(f))
                 s = s.getOrCreateChildNode(cleanName(f))
             }
@@ -647,9 +658,9 @@ class StackAnalysis(crumbConsumer: Option[Crumb => Unit], properties: Map[String
         var i = i0
         while (i < maxDepth) {
           val f = frames(i)
-          i += 1
           if (isCustomFree || !ignoreFrame(f))
-            s = s.getOrCreateChildNode(cleanName(f))
+            s = s.getOrCreateChildNode(cleanNames(i))
+          i += 1
         }
         s.add(count, apsid)
       }

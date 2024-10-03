@@ -13,8 +13,10 @@ package optimus.graph
 
 import optimus.breadcrumbs.ChainedID
 import optimus.config.RuntimeComponents
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.core.MonitoringBreadcrumbs
 import optimus.graph.cache.NodeCCache
+import optimus.graph.cache.PrivateCache
 import optimus.graph.cache.UNodeCache
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.RuntimeEnvironmentKnownNames._
@@ -33,19 +35,27 @@ import java.util.concurrent.ConcurrentMap
  * ScenarioStack should touch this class!!!!!!!!!!!
  */
 private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
-  def apply(env: RuntimeEnvironment, inputs: FrozenNodeInputMap, uniqueID: Boolean = false): ScenarioStackShared = {
+  def apply(
+      env: RuntimeEnvironment,
+      inputs: FrozenNodeInputMap,
+      scopedConfiguration: Map[NodeTaskInfo, ScopedSchedulerPlugin],
+      uniqueID: Boolean = false): ScenarioStackShared = {
     val trackingID =
       if (env != RuntimeEnvironment.minimal && env.config != null && env.config.envName != EnvNone)
         env.config.runtimeConfig.rootID
       else ChainedID.create()
-    val siParams = SIParams(nodeInputs = inputs, parentTrackingNodeID = ChainedID.root, trackingNodeID = trackingID)
-    apply(env, siParams, privateCache = null, uniqueID = uniqueID)
+    val siParams = SIParams(
+      nodeInputs = inputs,
+      parentTrackingNodeID = ChainedID.root,
+      trackingNodeID = trackingID,
+      scopedPlugins = scopedConfiguration)
+    apply(env, siParams, privateCacheMoniker = null, uniqueID = uniqueID)
   }
 
   private[optimus] def apply(
       env: RuntimeEnvironment,
       siParams: SIParams,
-      privateCache: (String, Boolean),
+      privateCacheMoniker: PrivateCache.Moniker,
       uniqueID: Boolean): ScenarioStackShared = {
     val cacheID =
       if (uniqueID) SSCacheID.newUnique()
@@ -58,9 +68,10 @@ private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
       ssShared = ssShared,
       siParams = siParams)
 
-    if (privateCache ne null) {
-      val (privateCacheName, readFromOutside) = privateCache
-      ss = ss.withPrivateProvidedCache(createPrivateCache(privateCacheName), readFromOutside)
+    if (privateCacheMoniker ne null) {
+      ss = ss.withPrivateProvidedCache(
+        createPrivateCache(privateCacheMoniker.cache),
+        privateCacheMoniker.readFromGlobalCaches)
     }
 
     ssShared.setScenarioStack(ss) // Link up shared state to scenario stack

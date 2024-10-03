@@ -17,11 +17,14 @@ import optimus.buildtool.app.MischiefOptions
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.DirectoryFactory
+import optimus.buildtool.rubbish.StoredArtifacts
 import optimus.buildtool.rubbish.RubbishTidyer
+import optimus.buildtool.trace.FindArtifacts
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.ObtTraceListener
 import optimus.buildtool.trace.ScanFilesystem
 import optimus.buildtool.trace.TidyRubbish
+import optimus.buildtool.utils.Utils
 import optimus.core.needsPlugin
 import optimus.graph.CancellationScope
 import optimus.graph.tracking.DependencyTracker
@@ -30,6 +33,7 @@ import optimus.platform.util.Log
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
+import java.nio.file.Path
 import scala.collection.immutable.Seq
 import scala.util.Failure
 import scala.util.Success
@@ -56,9 +60,10 @@ class TrackedWorkspace(
     rubbishTidyer: Option[RubbishTidyer],
     mischiefOptions: MischiefOptions
 ) extends Log {
+  import Utils._
   import TrackedWorkspace._
 
-  def rescan(cancelScope: CancellationScope, listener: ObtTraceListener): CompletableFuture[Unit] = {
+  def rescan(cancelScope: CancellationScope, listener: ObtTraceListener): CompletableFuture[Boolean] = {
     val tweaks = run(cancelScope, listener) {
       val (scanTime, scanTweaks) = ObtTrace.traceTask(RootScopeId, ScanFilesystem) {
         AdvancedUtils.timed(directoryFactory.getTweaksAndReset())
@@ -69,34 +74,63 @@ class TrackedWorkspace(
       ObtTrace.info(scanMsg)
       log.info(scanMsg)
 
-      // we skip scanning for rubbish if we're not compiling (makes repeat tests ever so slightly faster)
-      val rubbishTweaks =
-        if (scanTweaks.isEmpty) Nil
-        else
-          rubbishTidyer match {
-            case Some(t) =>
-              val (rubbishTime, rubbish) = ObtTrace.traceTask(RootScopeId, TidyRubbish) {
-                AdvancedUtils.timed(t.tidy())
-              }
-              if (rubbish.sizeBytes > 0) {
-                val rubbishMsg =
-                  f"Deleted ${rubbish.tweaks.size}%,d pieces of rubbish (total size ${rubbish.sizeBytes >> 20}%,dMB) in ${rubbishTime / 1.0e6}%,.1fms"
-                ObtTrace.info(rubbishMsg)
-                log.info(rubbishMsg)
-              }
-              rubbish.tweaks
-            case None => Nil
-          }
-
       val mischiefTweaks = mischiefOptions.configAsTweaks()
 
-      // We always assume that mutable external artifacts may have changed. Usually there aren't any so this
-      // costs us nothing (and if there are any we just pay the cost to rehash them)
-      ExternalClassFileArtifact.updateMutableExternalArtifactState() ++
-        scanTweaks ++ rubbishTweaks ++ mischiefTweaks
+      (
+        // We always assume that mutable external artifacts may have changed. Usually there aren't any so this
+        // costs us nothing (and if there are any we just pay the cost to rehash them)
+        ExternalClassFileArtifact.updateMutableExternalArtifactState() ++ scanTweaks ++ mischiefTweaks,
+        scanTweaks.nonEmpty
+      )
     }
 
-    tweaks.thenCompose(addResolvedTweaks)
+    tweaks.thenCompose { case (ts, workspaceChanged) => addResolvedTweaks(ts).thenApply(_ => workspaceChanged) }
+  }
+
+  def previousArtifacts(
+      cancelScope: CancellationScope,
+      listener: ObtTraceListener): CompletableFuture[StoredArtifacts] =
+    run(cancelScope, listener) {
+      rubbishTidyer match {
+        case Some(t) =>
+          val (findTime, artifacts) = ObtTrace.traceTask(RootScopeId, FindArtifacts) {
+            AdvancedUtils.timed(t.storedArtifacts)
+          }
+          val totalSize = artifacts.artifacts.map(_.size).sum
+          val findMsg =
+            f"Found ${artifacts.artifacts.size}%,d stored artifacts (${bytesToString(
+                totalSize)} total size, ${bytesToString(artifacts.toTidyBytes)} to be deleted) in ${findTime / 1.0e6}%,.1fms"
+          ObtTrace.info(findMsg)
+          log.info(findMsg)
+          artifacts
+        case None => StoredArtifacts.empty
+      }
+    }
+
+  def tidyRubbish(
+      cancelScope: CancellationScope,
+      listener: ObtTraceListener
+  )(
+      artifacts: StoredArtifacts,
+      excludedPaths: Seq[Path]
+  ): CompletableFuture[Unit] = {
+    run(cancelScope, listener) {
+      rubbishTidyer match {
+        case Some(t) =>
+          val (tidyTime, rubbish) = ObtTrace.traceTask(RootScopeId, TidyRubbish) {
+            AdvancedUtils.timed(t.tidy(artifacts, excludedPaths))
+          }
+          val rubbishMsg =
+            if (rubbish.sizeBytes > 0)
+              f"Deleted ${rubbish.artifacts.size}%,d pieces of rubbish (total size ${bytesToString(
+                  rubbish.sizeBytes)}) in ${tidyTime / 1.0e6}%,.1fms"
+            else "No rubbish deleted"
+          ObtTrace.info(rubbishMsg)
+          log.info(rubbishMsg)
+          rubbish.tweaks
+        case None => Nil
+      }
+    }.thenCompose(addResolvedTweaks)
   }
 
   def addTweaks(cancelScope: CancellationScope, listener: ObtTraceListener)(

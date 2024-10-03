@@ -17,6 +17,7 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.gradle.api.Action;
+import org.gradle.api.tasks.testing.TestResult.ResultType;
 import org.gradle.internal.ErroringAction;
 import org.gradle.internal.html.SimpleHtmlWriter;
 import org.gradle.reporting.ReportRenderer;
@@ -193,16 +194,37 @@ abstract class PageRenderer<T extends CompositeTestResults> extends TabbedPageRe
         htmlWriter.startElement("td");
         htmlWriter
             .startElement("div")
-            .attribute("class", "infoBox " + results.getStatusClass())
+            .attribute("class", "infoBox " + results.getStatusClass() + " successRate")
             .attribute("id", "successRate");
         htmlWriter
             .startElement("div")
             .attribute("class", "percent")
             .characters(results.getFormattedSuccessRate())
             .endElement();
-        htmlWriter.startElement("p").characters("successful").endElement();
+        htmlWriter.startElement("p").characters("successful tests").endElement();
         htmlWriter.endElement();
         htmlWriter.endElement();
+        if (!results.getCoverageResultType().equals(ResultType.SKIPPED)) {
+          htmlWriter.startElement("td");
+          htmlWriter
+              .startElement("div")
+              .attribute("class", "infoBox " + results.getCoverageStatusClass() + " successRate")
+              .attribute("id", "coverageRate");
+          htmlWriter
+              .startElement("div")
+              .attribute("class", "percent")
+              .characters(results.getFormattedActualCoverageRate())
+              .endElement();
+          htmlWriter.startElement("p").characters("actual coverage").endElement();
+          htmlWriter
+              .startElement("a")
+              .attribute("href", results.getCoverageLink())
+              .attribute("target", "_blank")
+              .characters("expected: " + results.getFormattedExpectedCoverageRate())
+              .endElement();
+          htmlWriter.endElement();
+          htmlWriter.endElement();
+        }
         htmlWriter.endElement();
         htmlWriter.endElement();
         htmlWriter.endElement();

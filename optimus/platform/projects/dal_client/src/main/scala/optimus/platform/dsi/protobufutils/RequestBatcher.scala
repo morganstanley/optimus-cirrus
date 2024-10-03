@@ -246,11 +246,11 @@ object ClientRequestBatcher extends Log {
     }
   }
 
-  sendWrites_info.setPlugin(batchSenderPlugin)
   send_info.setPlugin(batchSenderPlugin)
+  sendWrites_info.setPlugin(batchSenderPlugin)
   if (Settings.traceTemporalSurfaceCommands) {
-    send_info.setPlugin(new TemporalSurfaceDALAccessTracePlugin(send_info.getPlugin))
-    sendWrites_info.setPlugin(new TemporalSurfaceDALAccessTracePlugin(sendWrites_info.getPlugin))
+    send_info.setPlugin(new TemporalSurfaceDALAccessTracePlugin(batchSenderPlugin))
+    sendWrites_info.setPlugin(new TemporalSurfaceDALAccessTracePlugin(batchSenderPlugin))
   }
 
 }

@@ -37,6 +37,7 @@ import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.rubbish.ArtifactRecency
+import optimus.buildtool.rubbish.StoredArtifacts
 import optimus.buildtool.scope.FingerprintHasher
 import optimus.buildtool.trace.BreadcrumbTraceListener
 import optimus.buildtool.trace.BuildTargetPythonOptions
@@ -60,6 +61,7 @@ import optimus.graph.NodeTask
 import optimus.graph.PropertyNode
 import optimus.platform._
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
@@ -150,6 +152,8 @@ class BuildServerProtocolService(
   import BuildServerProtocolService._
   import TrackedWorkspace._
 
+  private val initialBuild = new AtomicReference(true)
+
   private[bsp] object Ops {
     // The extra '/?' is a workaround for dodgy targets of the form
     // "obt://codetree1//optimus/platform/dal_core/main"
@@ -215,34 +219,6 @@ class BuildServerProtocolService(
   // hanging around waiting forever
   @volatile private var sessionInitialized: Boolean = false
   def isSessionInitialized: Boolean = sessionInitialized
-
-  private def newBuilder(
-      cancellationScope: CancellationScope,
-      listener: ObtTraceListener,
-      bspListener: BSPTraceListener,
-      rescan: Boolean = true
-  ): CompletableFuture[BspBuilder] = {
-
-    val scan =
-      if (rescan) workspace.rescan(cancellationScope, listener)
-      else CompletableFuture.completedFuture(())
-
-    scan.thenApply(_ => new BspBuilder(this, cancellationScope, listener, bspListener))
-  }
-
-  private def newSyncer(
-      cancellationScope: CancellationScope,
-      listener: ObtTraceListener,
-      bspListener: BSPTraceListener,
-      rescan: Boolean
-  ): CompletableFuture[BspSyncer] = {
-
-    val scan =
-      if (rescan) workspace.rescan(cancellationScope, listener)
-      else CompletableFuture.completedFuture(())
-
-    scan.thenApply(_ => new BspSyncer(this, cancellationScope, listener, bspListener, osVersion))
-  }
 
   private[bsp] def cancelAll(tracer: ObtLogger): Unit = {
     val msg = "Cancelling all scopes"
@@ -323,10 +299,18 @@ class BuildServerProtocolService(
 
     val id = compileParams.getOriginId
     val (listener, bspListener) = buildListeners(id)
+    val builder = new BspBuilder(this, cancellationScope, listener, bspListener)
 
-    val builder = newBuilder(cancellationScope, listener, bspListener)
+    val rescan = workspace.rescan(cancellationScope, listener)
 
     val modifiedFiles = this.modifiedFiles(cancellationScope, listener)
+
+    val previousArtifacts = rescan.thenCompose { detectedChanges =>
+      // Always run cleanup on the first build, since we don't know whether there have been changes
+      // since the last build or not
+      if (initialBuild.getAndSet(false) || detectedChanges) workspace.previousArtifacts(cancellationScope, listener)
+      else completed(StoredArtifacts.empty)
+    }
 
     val targets = compileParams.getTargets.asScala.toIndexedSeq
     slog.debug(s"Compilation targets: ${targets.map(_.getUri).mkString(", ")}")
@@ -338,8 +322,8 @@ class BuildServerProtocolService(
     val incremental = args.get("incremental").forall(_.toBoolean) // default to true
     val installDir = args.get("installDir").map(s => Directory(workspaceRoot.path.getFileSystem.getPath(s)))
 
-    val buildResult: CompletableFuture[BuildResult] = combine(builder, modifiedFiles) { (b, filesAndLines) =>
-      b.compile(id, targets, incremental, installDir, filesAndLines)
+    val buildResult: CompletableFuture[BuildResult] = combine(rescan, modifiedFiles) { (_, filesAndLines) =>
+      builder.compile(id, targets, incremental, installDir, filesAndLines)
     }
 
     val compileResult: CompletableFuture[CompileResult] = buildResult.thenApply { br =>
@@ -363,8 +347,15 @@ class BuildServerProtocolService(
       compileResult
     }
 
-    builder
-      .thenCompose(notifyOnChangedHash(_, args, compileResult, bspListener))
+    // Tidy up old artifacts, ensuring we don't pick any that were generated/used by this build
+    combine(buildResult, previousArtifacts) { (res, prev) =>
+      if (prev.artifacts.nonEmpty) workspace.tidyRubbish(cancellationScope, listener)(prev, res.artifactPaths)
+      else completed(())
+    }
+
+    // Don't notify that workspace refresh is needed until compilation has completed normally
+    compileResult
+      .thenCompose(_ => notifyOnChangedHash(builder, args, bspListener))
       .whenComplete((_, _) => cancellationScopes.remove(cancellationScope))
 
     compileResult
@@ -373,30 +364,23 @@ class BuildServerProtocolService(
   private def notifyOnChangedHash(
       builder: BspBuilder,
       args: Map[String, String],
-      compilation: CompletableFuture[_],
       bspListener: BSPTraceListener
-  ): CompletableFuture[Unit] = {
-    val fut = if (enableConfigHashCheck) {
-      args.get(BuildServerProtocolService.ConfigHash).filter(_ != "unknown").map { previousHash =>
-        val hash: CompletableFuture[String] = builder.configHash
+  ): CompletableFuture[Unit] = args.get(BuildServerProtocolService.ConfigHash) match {
+    case Some(previousHash) if enableConfigHashCheck && previousHash != "unknown" =>
+      val hash: CompletableFuture[String] = builder.configHash
 
-        // Don't notify that workspace refresh is needed until both hash calculation and
-        // compilation have completed normally
-        compilation.thenCombine[String, Unit](
-          hash,
-          (_, latestHash) => {
-            if (previousHash != latestHash) {
-              slog.warn(s"Config hash has changed ($previousHash -> $latestHash). Workspace refresh needed.")
-              bspListener.warn(
-                "Workspace structure has changed: use 'Stratosphere' > 'Import Workspace' to update it."
-              )
-              bspListener.buildTargetsChanged()
-            }
-          }
-        )
+      hash.thenApply { latestHash =>
+        if (previousHash != latestHash) {
+          slog.warn(s"Config hash has changed ($previousHash -> $latestHash). Workspace refresh needed.")
+          bspListener.warn(
+            "Workspace structure has changed: use 'Stratosphere' > 'Import Workspace' to update it."
+          )
+          bspListener.buildTargetsChanged()
+        }
+        ()
       }
-    } else None
-    fut.getOrElse(CompletableFuture.completedFuture(()))
+    case _ =>
+      completed(())
   }
 
   override def onBuildExit(): Unit = {
@@ -420,11 +404,13 @@ class BuildServerProtocolService(
     cancellationScopes.add(cancellationScope)
 
     val (listener, bspListener, breadcrumbListener) = syncListeners(BuildTargets)
-    val syncer = newSyncer(cancellationScope, listener, bspListener, rescan = true)
+    val syncer = new BspSyncer(this, cancellationScope, listener, bspListener, osVersion)
 
-    syncer
-      .thenCompose[Seq[BuildTarget]](
-        _.buildTargets(buildSparseScopes = BuildServerProtocolService.buildSparseScopesOnImport))
+    val rescan = workspace.rescan(cancellationScope, listener)
+
+    rescan
+      .thenCompose[Seq[BuildTarget]](_ =>
+        syncer.buildTargets(buildSparseScopes = BuildServerProtocolService.buildSparseScopesOnImport))
       .thenApply[WorkspaceBuildTargetsResult] { targets =>
         listener.addToStat(ObtStats.Scopes, targets.size)
         val msg = f"Importing ${targets.size}%,d build targets"
@@ -447,12 +433,10 @@ class BuildServerProtocolService(
 
     val (listener, bspListener, breadcrumbListener) = syncListeners(BuildTargetSources)
     listener.addToStat(ObtStats.Scopes, params.getTargets.size)
-    val syncer = newSyncer(cancellationScope, listener, bspListener, rescan = false)
+    val syncer = new BspSyncer(this, cancellationScope, listener, bspListener, osVersion)
 
     syncer
-      .thenCompose[Seq[SourcesItem]](
-        _.sources(params.getTargets.asScala.toIndexedSeq)
-      )
+      .sources(params.getTargets.asScala.toIndexedSeq)
       .thenApply[SourcesResult] { items =>
         val sourceFolders = items.map(_.getSources.size).sum
         listener.addToStat(ObtStats.Sync.SourceFolders, sourceFolders)
@@ -476,10 +460,10 @@ class BuildServerProtocolService(
 
     val (listener, bspListener, breadcrumbListener) = syncListeners(BuildTargetPythonOptions)
     listener.addToStat(ObtStats.PythonScopes, params.getTargets.size)
-    val syncer = newSyncer(cancellationScope, listener, bspListener, rescan = false)
+    val syncer = new BspSyncer(this, cancellationScope, listener, bspListener, osVersion)
 
     syncer
-      .thenCompose[Seq[PythonOptionsItem]](_.pythonOptions(params.getTargets.asScala.toIndexedSeq))
+      .pythonOptions(params.getTargets.asScala.toIndexedSeq)
       .thenApply[PythonOptionsResult] { items =>
         val msg = f"Importing python configurations for ${items.size}%,d targets"
         slog.info(msg)
@@ -502,12 +486,10 @@ class BuildServerProtocolService(
 
     val (listener, bspListener, breadcrumbListener) = syncListeners(BuildTargetScalacOptions)
     listener.addToStat(ObtStats.ScalacScopes, params.getTargets.size)
-    val syncer = newSyncer(cancellationScope, listener, bspListener, rescan = false)
+    val syncer = new BspSyncer(this, cancellationScope, listener, bspListener, osVersion)
 
     syncer
-      .thenCompose[Seq[ScalacOptionsItem]](
-        _.scalacOptions(params.getTargets.asScala.toIndexedSeq)
-      )
+      .scalacOptions(params.getTargets.asScala.toIndexedSeq)
       .thenApply[ScalacOptionsResult] { items =>
         val dependencies = items.map(_.getClasspath.asScala.size).sum
         listener.addToStat(ObtStats.Sync.Dependencies, dependencies)

@@ -12,8 +12,7 @@
 package optimus.buildtool.compilers.zinc.setup
 
 import java.util.Optional
-
-import optimus.buildtool.artifacts.Artifact.InternalArtifact
+import optimus.buildtool.artifacts.Artifact.InternalPathedArtifact
 import optimus.buildtool.compilers.SyncCompiler
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.compilers.zinc.mappers.MappingTrace
@@ -42,7 +41,7 @@ class ClassAnalysisStore(
   import ClassAnalysisStore._
 
   private val tpeAndNameToLatestIncrAndHash = (inputs.inputArtifacts ++ inputs.pluginArtifacts.flatten).collect {
-    case InternalArtifact(id, a) =>
+    case InternalPathedArtifact(id, a) =>
       (id.tpe, id.scopeId.properPath) -> (MappingTrace.incr(a.path), MappingTrace.hash(a.path))
   }.toMap // we can't use toSingleMap here, because it's possible we have duplicates
 

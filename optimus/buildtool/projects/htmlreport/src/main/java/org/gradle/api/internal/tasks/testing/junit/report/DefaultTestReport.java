@@ -48,6 +48,7 @@ public class DefaultTestReport {
     resultsProvider.visitClasses(
         new Action<TestClassResult>() {
           public void execute(TestClassResult classResult) {
+            model.addCoverageResult(resultsProvider.getCoverageResult());
             model.addTestClass(classResult.getId(), classResult.getClassName());
             List<TestMethodResult> collectedResults = classResult.getResults();
             for (TestMethodResult collectedResult : collectedResults) {

@@ -78,6 +78,24 @@ public class OGLocalTables extends RemovableLocalTables {
     return getOrAcquire(null);
   }
 
+  public static void borrow(Consumer<OGLocalTables> consumer) {
+    OGLocalTables lt = getOrAcquire();
+    try {
+      consumer.accept(lt);
+    } finally {
+      lt.release();
+    }
+  }
+
+  public static void borrow(EvaluationQueue eq, Consumer<OGLocalTables> consumer) {
+    OGLocalTables lt = getOrAcquire(eq);
+    try {
+      consumer.accept(lt);
+    } finally {
+      lt.release();
+    }
+  }
+
   /** Make sure to release() after use */
   public static OGLocalTables getOrAcquire(EvaluationQueue eq) {
     OGSchedulerContext ec;
@@ -167,7 +185,7 @@ public class OGLocalTables extends RemovableLocalTables {
       synchronized (_lock) {
         activeTables.remove(lt);
         incorporateExpunged(lt);
-        schedulerTimesForRemovedThreads.add(lt.ctx.observedValuesSinceLast(0));
+        schedulerTimesForRemovedThreads.mutateAdd(lt.ctx.observedValuesSinceLast(0));
         lt.ctx.record(); // Same as above but GridProfiler keeps it separately
         pntisForRemovedThreads = merge(pntisForRemovedThreads, lt.ctx.getUnscopedPNTIs());
         Map<Integer, PNodeTaskInfoLight[]> scopedPntis = lt.ctx.getScopedPntis();
@@ -285,12 +303,12 @@ public class OGLocalTables extends RemovableLocalTables {
             if (m != null)
               // Consider: Threads with the same name!
               m.putIfAbsent(localTable.ownerName + "@" + localTable.ownerID, sinceLast);
-            total.add(sinceLast);
+            total.mutateAdd(sinceLast);
           });
 
       // make sure we account for any threads that were gc-ed
 
-      total.add(schedulerTimesForRemovedThreads);
+      total.mutateAdd(schedulerTimesForRemovedThreads);
       if (m != null) m.putIfAbsent("GCed Thread(s)", schedulerTimesForRemovedThreads);
     }
     return total;
