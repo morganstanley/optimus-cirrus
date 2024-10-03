@@ -11,24 +11,16 @@
  */
 package optimus.profiler
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.profiler.CacheAnalysisTool.isRequiredFile
 import optimus.graph.diagnostics.configmetrics.CacheMetricDiffSummary
 import optimus.graph.diagnostics.configmetrics.CacheMetrics
 import optimus.graph.diagnostics.configmetrics.ConfigMetrics
 import optimus.graph.diagnostics.configmetrics.ConfigMetricsStrings
-import optimus.graph.diagnostics.configmetrics.ConfigMetricsStrings.configFileExtension
 import optimus.graph.diagnostics.configmetrics.DiffSummary
 import optimus.graph.diagnostics.configmetrics.EffectSummary
-import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils.hotspotsFileName
-import optimus.platform.async
-import optimus.platform.AsyncImplicits._
-import optimus.profiler.ConfigMetricsDiff.fileNameToAppletNames
-import optimus.profiler.ConfigMetricsDiff.filenameToCacheMetrics
 import optimus.profiler.ConfigMetricsDiff.filenameToConfigMetrics
 import optimus.profiler.RegressionsConfigApps.Group
 import optimus.profiler.RegressionsConfigApps.TestCasesToPaths
 import optimus.profiler.RegressionsConfigApps.findGroupedFiles
-import optimus.profiler.RegressionsConfigApps.findGroupedFilesMultiple
 import optimus.profiler.RegressionsConfigApps.moduleIncluded
 
 import java.nio.file.Files
@@ -50,15 +42,10 @@ object CacheAnaysisDiffUtils {
     if (nAfter != nBefore)
       log.warn(s"Found $nAfter result files for reruns and $nBefore result files for original runs")
   }
-  private val csvFileExtension = ".csv"
+  private[optimus] val csvFileExtension = ".csv"
 
   private[optimus] def metricsFromFiles(files: Seq[String], profilerDirName: String): Map[String, ConfigMetrics] =
     filenameToConfigMetrics(files.map(Paths.get(_)), profilerDirName)
-
-  private[optimus] def cacheMetricsFromFiles(
-      files: Seq[String],
-      profilerDirName: String): Map[String, Map[String, CacheMetrics]] =
-    filenameToCacheMetrics(files.map(Paths.get(_)), profilerDirName)
 
   private[optimus] def findTests(pathStr: String): Seq[String] = {
     val path = Paths.get(pathStr)
@@ -124,6 +111,29 @@ object CacheAnaysisDiffUtils {
     percentageChangeSelfTime = Double.MinValue,
     percentageChangeTotalTime = Double.MinValue
   )
+  private[optimus] val defaultConfigMetrics = ConfigMetrics(
+    wallTime = Long.MinValue,
+    cpuTime = Long.MinValue,
+    cacheTime = Long.MinValue,
+    maxHeap = Long.MinValue,
+    cacheHits = Long.MinValue,
+    cacheMisses = Long.MinValue,
+    evictions = Long.MinValue,
+    dalRequests = Long.MinValue,
+    enginesWallTime = Long.MinValue
+  )
+  private[optimus] val defaultDiffSummary = DiffSummary(
+    percentageChangeWallTime = Double.MinValue,
+    percentageChangeCpuTime = Double.MinValue,
+    percentageChangeCacheTime = Double.MinValue,
+    percentageChangeMaxHeap = Double.MinValue,
+    percentageChangeCacheHits = Double.MinValue,
+    percentageChangeCacheMisses = Double.MinValue,
+    percentageChangeCacheHitRatio = Double.MinValue,
+    percentageChangeEvictions = Double.MinValue,
+    percentageChangeDalRequests = Double.MinValue,
+    percentageChangeEngineWallTime = Double.MinValue
+  )
   private[optimus] def getDiffSummaryWithMinValue(diff: DiffSummary): DiffSummary = DiffSummary(
     percentageChangeWallTime = diff.percentageChangeWallTime,
     percentageChangeCpuTime = diff.percentageChangeCpuTime,
@@ -138,16 +148,17 @@ object CacheAnaysisDiffUtils {
   )
   private[optimus] def getConfigSumFromTestSummaries(
       testSumamries: List[EffectSummary],
-      extractor: EffectSummary => ConfigMetrics): ConfigMetrics = ConfigMetrics(
+      extractor: EffectSummary => ConfigMetrics,
+      needMinValue: Boolean): ConfigMetrics = ConfigMetrics(
     cacheTime = testSumamries.map(extractor(_).cacheTime).sum,
     cacheHits = testSumamries.map(extractor(_).cacheHits).sum,
     cacheMisses = testSumamries.map(extractor(_).cacheMisses).sum,
     evictions = testSumamries.map(extractor(_).evictions).sum,
     wallTime = testSumamries.map(extractor(_).wallTime).sum,
     cpuTime = testSumamries.map(extractor(_).cpuTime).sum,
-    maxHeap = Long.MinValue,
-    dalRequests = Long.MinValue,
-    enginesWallTime = Long.MinValue
+    maxHeap = if (needMinValue) Long.MinValue else testSumamries.map(extractor(_).maxHeap).sum,
+    dalRequests = if (needMinValue) Long.MinValue else testSumamries.map(extractor(_).dalRequests).sum,
+    enginesWallTime = if (needMinValue) Long.MinValue else testSumamries.map(extractor(_).enginesWallTime).sum
   )
   private[optimus] def convertConfigMetricsTimeInMs(configMetric: ConfigMetrics): ConfigMetrics = ConfigMetrics(
     wallTime = (configMetric.wallTime / 1e6).toLong,
@@ -170,10 +181,6 @@ object CacheAnaysisDiffUtils {
 
   private[optimus] val appletInfoFileName = "appletInfo"
 
-  @async def appletNamesFromFiles(files: Seq[String]): Set[String] = {
-    val fileSeq = files.apar.map(Paths.get(_))
-    fileSeq.apar.flatMap(fileNameToAppletNames(_)).flatten.toSet
-  }
   def formatPercentage(number: Double): java.lang.Double = {
     if (number == Double.MinValue) null else number * 100
   }
@@ -188,41 +195,4 @@ object CacheAnaysisDiffUtils {
     if (value == Long.MinValue) null else value.toDouble
   def formatTimeNsToMs(value: Long): java.lang.Double =
     if (value == Long.MinValue) null else value / 1e6
-
-  private[optimus] def findCorrespondingMultipleFiles(
-      firstRunProfilerDirName: String,
-      profilerDirName: String,
-      firstRunRootDir: String,
-      rerunRootDir: String,
-      enforceWithConfComparison: Boolean,
-      enableAppletGrouping: Boolean): (GroupedFilePathsMapByFileFilter, GroupedFilePathsMapByFileFilter) = {
-
-    val rerunTests = findTests(rerunRootDir)
-    val beforeConfigFileNameFilter =
-      if (enforceWithConfComparison) isConfigMetricsCsvWithoutConf _ else isConfigMetricsCsv _
-    val afterConfigFileNameFilter =
-      if (enforceWithConfComparison) isConfigMetricsCsvWithConf _ else isConfigMetricsCsv _
-
-    val multipleFileFilter =
-      if (enableAppletGrouping)
-        Map(
-          hotspotsFileName -> (isRequiredFile(_, hotspotsFileName), csvFileExtension),
-          appletInfoFileName -> (isRequiredFile(_, appletInfoFileName), csvFileExtension))
-      else Map(hotspotsFileName -> (isRequiredFile(_, hotspotsFileName), csvFileExtension))
-    val beforeFileFilterMap = Map(
-      configFileExtension -> (beforeConfigFileNameFilter, csvFileExtension)
-    ) ++ multipleFileFilter
-    val afterFileFilterMap = Map(
-      configFileExtension -> (afterConfigFileNameFilter, csvFileExtension)
-    ) ++ multipleFileFilter
-    val beforeResultsGroupedPaths =
-      findGroupedFilesMultiple(firstRunRootDir, firstRunProfilerDirName, beforeFileFilterMap, includeTest(rerunTests))
-
-    val afterResultsGroupedPaths =
-      findGroupedFilesMultiple(rerunRootDir, profilerDirName, afterFileFilterMap, _ => true)
-
-    (beforeResultsGroupedPaths, afterResultsGroupedPaths)
-  }
-  type TestToFilesPathsMap = Map[String, Seq[String]]
-  type GroupedFilePathsMapByFileFilter = Map[String, TestToFilesPathsMap]
 }

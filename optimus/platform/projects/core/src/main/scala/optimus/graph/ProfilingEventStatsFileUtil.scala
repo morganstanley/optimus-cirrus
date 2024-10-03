@@ -41,7 +41,7 @@ object ProfilingEventStatsFileUtil {
 
   private def convertJsValue(value: JsValue): Any = {
     value match {
-      case JsNumber(n) => n.intValue
+      case JsNumber(n) => n.doubleValue
       case JsString(n) => n
       case _           => value
     }

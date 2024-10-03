@@ -109,8 +109,14 @@ private[buildtool] sealed trait IncrementalArtifact {
 }
 
 object Artifact {
-  final case class InternalArtifact(id: InternalArtifactId, artifact: PathedArtifact)
   object InternalArtifact {
+    def unapply(a: Artifact): Option[(InternalArtifactId, Artifact)] = a.id match {
+      case id: InternalArtifactId => Some((id, a))
+      case _                      => None
+    }
+  }
+  final case class InternalPathedArtifact(id: InternalArtifactId, artifact: PathedArtifact)
+  object InternalPathedArtifact {
     def unapply(a: Artifact): Option[(InternalArtifactId, PathedArtifact)] = (a.id, a) match {
       case (id: InternalArtifactId, pa: PathedArtifact) => Some((id, pa))
       case _                                            => None
@@ -134,7 +140,8 @@ object Artifact {
 
   def transitiveIds(directIds: Set[ScopeId], artifacts: Seq[Artifact]): Set[ScopeId] =
     artifacts.collect {
-      case InternalArtifact(InternalArtifactId(scopeId, _, _), _) if !directIds.contains(scopeId) => scopeId
+      case InternalArtifact(InternalArtifactId(scopeId, _, _), _) if !scopeId.isRoot && !directIds.contains(scopeId) =>
+        scopeId
     }.toSet
 
 }
@@ -206,6 +213,7 @@ object MessagesArtifact {
     val hash: String
 ) extends FingerprintArtifact {
   val fingerprint: Seq[String] = Nil
+  override def toString: String = s"${getClass.getSimpleName}($id, $hash)"
 }
 
 object FingerprintArtifact {

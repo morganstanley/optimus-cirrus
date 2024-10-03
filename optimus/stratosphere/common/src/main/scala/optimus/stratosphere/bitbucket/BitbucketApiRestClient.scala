@@ -79,8 +79,8 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     .factory(workspace)
     .createClient(Uri(s"http://$bitbucketHost"), "BitBucket", timeout.toMillis milliseconds, sendCrumbs = false)
 
-  private def getValues(command: String): Seq[Config] = {
-    pagedGet(command, _ => true, shouldReturnFirstFound = false)
+  private def getValues(command: String, urlParameters: (String, Any)*): Seq[Config] = {
+    pagedGet(command, _ => true, shouldReturnFirstFound = false, urlParameters: _*)
   }
 
   private def findValue(command: String)(predicate: Config => Boolean): Option[Config] = {
@@ -106,11 +106,14 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
       .filter(config => config.getString("project.type") == "PERSONAL") // all should be personal but it's for our tests
       .map(configToRemote)
 
-  def allPullRequestsIds(project: String, repository: String): Seq[Int] = {
-    getValues(s"projects/$project/repos/$repository/pull-requests").map(_.getInt("id"))
+  def allPullRequestsIds(project: String, repository: String): Seq[Long] = {
+    getValues(s"projects/$project/repos/$repository/pull-requests").map(_.getLong("id"))
   }
 
-  def lastPullRequestActivity(project: String, repository: String, pullRequestId: Int): Long = {
+  def allOpenPullRequestsOfCurrentUser(): Seq[Config] =
+    getValues("dashboard/pull-requests", "state" -> "OPEN", "role" -> "AUTHOR")
+
+  def lastPullRequestActivity(project: String, repository: String, pullRequestId: Long): Long = {
     val config = findValue(s"projects/$project/repos/$repository/pull-requests/$pullRequestId/activities")(_ => true)
     val rootDate = config.map(
       _.getLong("createdDate")
@@ -189,7 +192,7 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     httpClient.post(url, pullRequest)
   }
 
-  def pullRequest(project: String, repository: String, pullRequestId: Int): Config = {
+  def pullRequest(project: String, repository: String, pullRequestId: Long): Config = {
     httpClient.get(prepareUrl(s"projects/$project/repos/$repository/pull-requests/$pullRequestId", defaultApiName))
   }
 
@@ -307,7 +310,11 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     pullRequest.getConfigList("links.self").get(0).getString("href").split('/').drop(4).mkString("/")
   }
 
-  private def pagedGet(command: String, predicate: Config => Boolean, shouldReturnFirstFound: Boolean): Seq[Config] = {
+  private def pagedGet(
+      command: String,
+      predicate: Config => Boolean,
+      shouldReturnFirstFound: Boolean,
+      urlParameters: (String, Any)*): Seq[Config] = {
     @tailrec
     def pagedGet(
         start: Int,
@@ -315,8 +322,7 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
         predicate: Config => Boolean,
         shouldReturnFirstFound: Boolean,
         acc: Seq[Config]): Seq[Config] = {
-
-      val url = prepareUrl(command, defaultApiName, "limit" -> defaultLimit, "start" -> start)
+      val url = prepareUrl(command, defaultApiName, urlParameters ++ Seq("limit" -> defaultLimit, "start" -> start): _*)
       val result = httpClient.get(url)
       val values = result.getObjectList("values").asScala.to(Seq).map(_.toConfig).filter(predicate)
 

@@ -23,6 +23,7 @@ import optimus.graph.diagnostics.gridprofiler.GridProfilerDefaults
 import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils
 import optimus.graph.diagnostics.pgo.ConfigWriterSettings
 import optimus.graph.diagnostics.pgo.DisableCache
+import optimus.graph.diagnostics.pgo.DisableXSFT
 import optimus.graph.diagnostics.pgo.PGOMode
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.graph.diagnostics.pgo.SuggestXSFT
@@ -593,11 +594,11 @@ class MergeTracesCmdLine extends RegressionsConfigCmdLine with GroupedCmdLine {
   val pgoModes: Seq[String] = Seq("disableCache")
 
   @args4j.Option(
-    name = "--withTweakUsage",
-    usage = "Comma separated list of PGO groups that will use tweakUsage and disableCache pgo modes",
+    name = "--withDisableXSFT",
+    usage = "Comma separated list of PGO groups that will use disableXSFT and disableCache pgo modes",
     handler = classOf[DelimitedStringOptionHandler]
   )
-  val withTweakUsage: Seq[String] = Seq.empty
+  val withDisableXSFT: Seq[String] = Seq.empty
 
   @Option(
     name = "--keepUncached",
@@ -725,10 +726,10 @@ object MergeTraces extends App {
       outputDir: String,
       artifactsPath: String,
       fileName: String,
-      withTweakUsage: Seq[String]): Unit = {
+      withDisableXSFT: Seq[String]): Unit = {
     val (allProfileData, cacheNames) = mergeTraces(files)
     val outputPath = outputConfigFilePath(outputDir, artifactsPath, fileName, optconfSuffix)
-    val modes: Seq[PGOMode] = getPgoModes(fileName, withTweakUsage)
+    val modes: Seq[PGOMode] = getPgoModes(fileName, withDisableXSFT)
     GridProfilerDefaults.configurePGOModes(modes, outputPath) // [SEE_CONFIGURE_PGO]
     val settings = ConfigWriterSettings(modes)
     Profiler.autoGenerateConfigWithCacheNames(outputPath, allProfileData, cacheNames, settings, isPgoGen = true)
@@ -738,13 +739,13 @@ object MergeTraces extends App {
 
   private def getPgoModes(
       groupName: String,
-      withTweakUsage: Seq[String],
+      withDisableXSFT: Seq[String],
       defaultMode: Seq[PGOMode] = Seq.empty): Seq[PGOMode] = {
-    log.info(s"in getPgoModes: $groupName, ${withTweakUsage.mkString(",")} ")
+    log.info(s"groups that use disableXSFT + disableCache: $groupName, ${withDisableXSFT.mkString(",")} ")
     // allow to configure per group pgo modes in MergeTraces
-    if (withTweakUsage.contains(groupName)) {
-      log.info(s"Using tweakUsage,disableCache pgo modes for $groupName")
-      Seq(DisableCache, SuggestXSFT)
+    if (withDisableXSFT.contains(groupName)) {
+      log.info(s"Using disableCache,disableXSFT pgo modes for $groupName")
+      Seq(DisableCache, DisableXSFT)
     } else {
       if (defaultMode eq Seq.empty)
         cmdLine.pgoModes.map(PGOMode.fromName)
@@ -760,7 +761,7 @@ object MergeTraces extends App {
       fileName: String,
       profilerDirectoryName: String,
       cmdLineGroups: Seq[Group] = Group.defaultGroups,
-      withTweakUsage: Seq[String] = Seq.empty): Unit = {
+      withDisableXSFT: Seq[String] = Seq.empty): Unit = {
     val groups = if (cmdLineGroups.contains(Group.default)) cmdLineGroups else Group.default +: cmdLineGroups
     val testNamesToPaths =
       findGroupedFiles(rootDir, ogtraceExtension, profilerDirectoryName, moduleInGroup = moduleIncluded(groups))
@@ -778,7 +779,7 @@ object MergeTraces extends App {
       val fileNameForOutput = if (group == Group.default) fileName else name
 
       log.info(s"Merging traces in group $name from files:\n${files.mkString("\n")}")
-      mergeTracesFromFiles(files, outputDir, artifactsPath, fileNameForOutput, withTweakUsage)
+      mergeTracesFromFiles(files, outputDir, artifactsPath, fileNameForOutput, withDisableXSFT)
     }
   }
 
@@ -799,7 +800,7 @@ object MergeTraces extends App {
       rootDir: String,
       artifactsPath: String,
       groupNames: Seq[String],
-      withTweakUsage: Seq[String],
+      withDisableXSFT: Seq[String],
       profilerDirectoryName: String = "profiler"): Seq[(String, String, Seq[PNodeTaskInfo])] = {
     val groups = if (groupNames equals Seq.empty) Group.defaultGroups else getGroups(groupNames)
 
@@ -816,16 +817,16 @@ object MergeTraces extends App {
           }
 
       log.info(s"Merging traces in group $name from files:\n${files.mkString("\n")}")
-      mergeTracesFromFiles(files, name, withTweakUsage)
+      mergeTracesFromFiles(files, name, withDisableXSFT)
     })
   }
 
   private def mergeTracesFromFiles(
       files: Seq[String],
       fileName: String,
-      withTweakUsage: Seq[String]): (String, String, Seq[PNodeTaskInfo]) = {
+      withDisableXSFT: Seq[String]): (String, String, Seq[PNodeTaskInfo]) = {
     val (allProfileData, cacheNames) = MergeTraces.mergeTraces(files)
-    val modes: Seq[PGOMode] = getPgoModes(fileName, withTweakUsage, Seq(DisableCache))
+    val modes: Seq[PGOMode] = getPgoModes(fileName, withDisableXSFT, Seq(DisableCache))
     val settings = ConfigWriterSettings(modes)
     val config = Profiler.autoGenerateConfigWithCacheNames(allProfileData, cacheNames, settings, isPgoGen = true)
     (fileName, config, allProfileData)
@@ -841,6 +842,6 @@ object MergeTraces extends App {
     cmdLine.fileName,
     cmdLine.profilerDirectoryName,
     groups(cmdLine.groups, cmdLine.groupNames),
-    cmdLine.withTweakUsage
+    cmdLine.withDisableXSFT
   )
 }

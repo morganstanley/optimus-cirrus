@@ -12,7 +12,9 @@
 package optimus.core
 
 import optimus.graph.Node
+import optimus.platform.annotations.poisoned
 
 object FSM {
+  @poisoned("FSM.await calls should have been replaced by async phase - contact Optimus Graph team")
   def await[T](t: Node[T]): T = ???
 }

@@ -79,7 +79,7 @@ public class CallSiteHolder {
     return disableOpt
         || nti.isDirectlyTweakable()
         || nti.getCacheable()
-        || nti.hasPlugin()
+        || nti.shouldLookupPlugin()
         || OGTrace.observer.collectsHotspots();
   }
 }

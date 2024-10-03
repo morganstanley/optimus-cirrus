@@ -405,13 +405,12 @@ private[optimus] class ConfigWriter(
       while (it.hasNext) {
         val mode = it.next()
         if (!modesAlreadyApplied.contains(mode)) {
-          val modeApplies = {
+          val modeApplies =
             PGOMode.appliesDespitePreviouslyConfigured(mode, modesAlreadyApplied.toSet, externallyConfiguredCache)
-          }
           val configure = modeApplies && mode.configure(pnti, manualConfig, cfg.thresholds, report)
           if (configure) {
             modesAlreadyApplied += mode
-            val entries = mode.optconf(pnti)
+            val entries = mode.optconfString(pnti)
             entries.foreach { case (key, value) =>
               keys += key
               values += value
@@ -420,6 +419,10 @@ private[optimus] class ConfigWriter(
         }
       }
     }
+
+    // Firstly, apply any config from UI configurable modes (UI changes are the first to make sure they are respected)
+    if (pnti.profilerUIConfigured)
+      applyConfigFrom(uiConfigurableModes, manualConfig = true) // should be the policy user clicked + cfg.modes
 
     // If any auto-pgo modes are passed in to the ConfigWriterSettings, apply them (if caching isn't disabled)
     // it is important to run this step before adding any optconf settings to make sure we disable the cache where
@@ -430,10 +433,6 @@ private[optimus] class ConfigWriter(
     // this is applied in Debugger UI if we start the app with any optconfs passed
     if (cfg.optconfConfiguredPolicy(pnti))
       applyConfigFrom(optconfConfigurableModes, manualConfig = true)
-
-    // Finally, apply any config from UI configurable modes (UI changes are the last to make sure they are respected)
-    if (pnti.profilerUIConfigured)
-      applyConfigFrom(uiConfigurableModes, manualConfig = true)
 
     // note: referToSharedCache is true when collecting duplicated configs for pntis (see uniqueSharedConfigs) because
     // if the same cache appears in the config for more than one pnti, it is sharable.

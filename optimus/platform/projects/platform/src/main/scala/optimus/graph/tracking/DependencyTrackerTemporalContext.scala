@@ -16,12 +16,12 @@ import optimus.core.MonitoringBreadcrumbs
 import java.time.Instant
 import java.util
 import java.util.Collections
-import java.util.Objects
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.Partition
 import optimus.graph.AlreadyCompletedPropertyNode
+import optimus.graph.DiagnosticSettings
 import optimus.graph.GraphInInvalidState
 import optimus.graph.NodeKey
 import optimus.graph.NodeTaskInfo
@@ -42,7 +42,6 @@ import optimus.platform.temporalSurface.impl._
 import optimus.platform._
 import optimus.platform.reactive.pubsub.StreamManager
 import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
-
 import optimus.scalacompat.collection._
 import optimus.utils.MacroUtils.SourceLocation
 
@@ -86,6 +85,8 @@ private[optimus] sealed trait TrackingLeafTemporalSurface extends LeafTemporalSu
 }
 
 trait CanTrack {
+  private[optimus] def sourceLocation: SourceLocation // for crumb publishing
+
   // TODO (OPTIMUS-21217): This is a total hack. What we actually want is for TrackingTemporalContextImpl to
   //  disappear entirely, but this will require fairly big changes that we want to make carefully.
   //
@@ -102,20 +103,28 @@ trait CanTrack {
   // it is used to bind a true ticking query.
   def turnOnTrackingForThisContext(): Unit = synchronized {
     if (isActuallyTracking) return // already on
-    MonitoringBreadcrumbs.sendTrackingTemporalContextTurnedOn(false)
+    sendTrackingCrumb(false)
     _t = true // set to on
   }
 
   private var _t = false
-  protected def isActuallyTracking = _t
+  protected def isActuallyTracking: Boolean = _t
   protected def assertIsActuallyTracking(): Unit = {
     if (_t) return
     synchronized {
       if (_t) return
-      MonitoringBreadcrumbs.sendTrackingTemporalContextTurnedOn(true)
+      sendTrackingCrumb(true) // this never happens in practice
       _t = true
       throw new GraphInInvalidState(
         "Attempted to perform an operation that requires tracking on a temporal context in the non-tracking state")
+    }
+  }
+
+  private def sendTrackingCrumb(failedAssert: Boolean): Unit = {
+    // we don't need to send crumb from the tests in reactive-test that verify that the deprecated failure still works
+    if (failedAssert || !DiagnosticSettings.inReactiveTestSuites) {
+      if (failedAssert) MonitoringBreadcrumbs.sendTrackingTemporalContextInvalidAssertion()
+      MonitoringBreadcrumbs.sendTrackingTemporalContextTurnedOn(sourceLocation)
     }
   }
 }

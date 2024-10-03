@@ -17,10 +17,12 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.gradle.api.tasks.testing.TestResult.ResultType;
+import org.gradle.api.internal.tasks.testing.junit.result.CoverageResult;
 
 public abstract class CompositeTestResults extends TestResultModel {
   private final CompositeTestResults parent;
@@ -28,6 +30,7 @@ public abstract class CompositeTestResults extends TestResultModel {
   private final Set<TestResult> failures = new TreeSet<TestResult>();
   private final Set<TestResult> ignored = new TreeSet<TestResult>();
   private long duration;
+  private Optional<CoverageResult> coverageResult = Optional.empty();
 
   protected CompositeTestResults(CompositeTestResults parent) {
     this.parent = parent;
@@ -106,6 +109,18 @@ public abstract class CompositeTestResults extends TestResultModel {
     return ignored;
   }
 
+  public ResultType getCoverageResultType() {
+    if (coverageResult.isPresent()) {
+      if (coverageResult.get().isFailure()) {
+        return ResultType.FAILURE;
+      } else {
+        return ResultType.SUCCESS;
+      }
+    } else {
+      return ResultType.SKIPPED;
+    }
+  }
+
   @Override
   public ResultType getResultType() {
     if (!failures.isEmpty()) {
@@ -115,6 +130,55 @@ public abstract class CompositeTestResults extends TestResultModel {
       return ResultType.SKIPPED;
     }
     return ResultType.SUCCESS;
+  }
+
+  public String getFormattedExpectedCoverageRate() {
+    Number coverageRate = getExpectedCoverageRate();
+    if (coverageRate == null) return "-";
+    return coverageRate + "%";
+  }
+
+  public Number getExpectedCoverageRate() {
+    if (coverageResult.isPresent()) {
+      return coverageResult.get().getExpectedPct();
+    } else {
+      return null;
+    }
+  }
+
+  public String getCoverageLink() {
+    if (coverageResult.isPresent()) {
+      return coverageResult.get().getReportLink().get().toAbsolutePath().toString();
+    } else {
+      return "#";
+    }
+  }
+
+  public String getFormattedActualCoverageRate() {
+    Number coverageRate = getActualCoverageRate();
+    if (coverageRate == null) return "-";
+    return coverageRate + "%";
+  }
+
+  public Number getActualCoverageRate() {
+    if (coverageResult.isPresent()) {
+      return coverageResult.get().getActualPct();
+    } else {
+      return null;
+    }
+  }
+
+  public String getCoverageStatusClass() {
+    switch (getCoverageResultType()) {
+      case SUCCESS:
+        return "success";
+      case FAILURE:
+        return "failures";
+      case SKIPPED:
+        return "skipped";
+      default:
+        throw new IllegalStateException();
+    }
   }
 
   public String getFormattedSuccessRate() {
@@ -157,5 +221,10 @@ public abstract class CompositeTestResults extends TestResultModel {
     tests++;
     duration += test.getDuration();
     return test;
+  }
+
+  protected Optional<CoverageResult> addCoverage(Optional<CoverageResult> coverage) {
+    coverageResult = coverage;
+    return coverage;
   }
 }

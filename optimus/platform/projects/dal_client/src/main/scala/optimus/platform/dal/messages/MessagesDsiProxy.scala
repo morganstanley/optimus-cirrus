@@ -256,7 +256,7 @@ trait MessagesDsiProxyBase extends MessagesRetryHandler with CoreAPI {
         case ex =>
           cmds.map { c =>
             log.error(s"request ${c.logDisplay(CmdLogLevelHelper.InfoLevel)} failed!", ex)
-            MessagesErrorResult(new MessagesPublishException(ex.getMessage))
+            MessagesErrorResult(new MessagesPublishException(ex.getMessage, ex))
           }
       }
     } else res.value

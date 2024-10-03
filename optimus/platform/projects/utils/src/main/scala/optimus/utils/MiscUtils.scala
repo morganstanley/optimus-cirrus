@@ -11,8 +11,6 @@
  */
 package optimus.utils
 
-import optimus.platform.util.Log
-
 import java.util.concurrent.atomic.AtomicLong
 import org.slf4j
 import msjava.slf4jutils.scalalog
@@ -44,6 +42,25 @@ object MiscUtils {
         orHere()
       case _ =>
         orHere()
+    }
+  }
+
+  object NullCandy {
+    // Instead of
+    // if (Objects.nonNull(foo) && Objects.nonNull(foo.bar) && Objects.nonNull(foo.bar.baz)) ...
+    // you can write
+    // val bazOpt = foo.nonNull(_.bar).nonNull(_.baz)
+
+    implicit class NonEmptyOption[A <: AnyRef](val o: Option[A]) extends AnyVal {
+      def nonNull[B](f: A => B): Option[B] = o.flatMap(a => Option(f(a)))
+      def `&?`[B](f: A => B): Option[B] = nonNull(f)
+    }
+
+    implicit class NullableToOption[A <: AnyRef](val a: A) extends AnyVal {
+      def nonNull: Option[A] = Option(a)
+      def `&?` : Option[A] = nonNull
+      def nonNull[B](f: A => B): Option[B] = Option(a).flatMap(a => Option(f(a)))
+      def `&?`[B](f: A => B): Option[B] = nonNull(f)
     }
   }
 

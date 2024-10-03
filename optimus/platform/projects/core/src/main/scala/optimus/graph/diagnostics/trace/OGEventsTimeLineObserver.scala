@@ -60,7 +60,7 @@ trait OGEventsTimeLineObserverImpl extends OGEventsGlobalGraphObserver {
   override def completed(eq: EvaluationQueue, task: NodeTask): Unit = {
     super.completed(eq, task)
     var pluginType: PluginType = PluginType.None
-    if (task.executionInfo.getPlugin ne null) pluginType = task.executionInfo.getPlugin.pluginType
+    if (task.getPlugin ne null) pluginType = task.getPlugin.pluginType
     if (task.isAdapted) OGTraceCounter.adaptedChangeBy(pluginType, -1)
   }
 

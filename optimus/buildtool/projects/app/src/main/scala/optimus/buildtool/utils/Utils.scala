@@ -580,6 +580,16 @@ import scala.util.control.NonFatal
     durationString(nanos / 1000000L)
   }
 
+  private val oneMB = 1 << 20
+  def byteToMB(bytes: Long): Long = bytes >> 20
+  private val oneKB = 1 << 10
+  def byteToKB(bytes: Long): Long = bytes >> 10
+  def mbToString(mb: Long): String = bytesToString(mb << 20)
+  def bytesToString(bytes: Long): String =
+    if (math.abs(bytes) > oneMB) f"${byteToMB(bytes)}%,dMB"
+    else if (math.abs(bytes) > oneKB) f"${byteToKB(bytes)}%,dKB"
+    else f"$bytes%,dB"
+
   @tailrec def rootCause(t: Throwable): Throwable = t.getCause match {
     case null  => t
     case cause => rootCause(cause)

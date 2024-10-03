@@ -34,6 +34,7 @@ import optimus.core.ChainedNodeID
 import optimus.dal.ssl.DalSSLConfig
 import optimus.graph.DiagnosticSettings._
 import optimus.graph.Edges
+import optimus.graph.PluginType
 import optimus.graph.Settings
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.graph.diagnostics.gridprofiler.CustomRegressionMetrics
@@ -191,6 +192,11 @@ final class RequestSender(
      */
     val seqId = sequence.incrementAndGet
     val message = impl.buildMessage(seqId, rc, contextProto, clientAppIdProto, commandLocations, commandTags)
+
+    val nodes = rc.clientRequests.map(_.completable).collect { case ns: NodeWithScheduler =>
+      ns.node
+    }
+    PluginType.fire(nodes)
 
     // NB: this is about 2x faster (on my machine) than val nodeIDs = clientRequests.map(_.nodeID).toSet
     val nidArr = Array.ofDim[ChainedID](rc.clientRequests.length)

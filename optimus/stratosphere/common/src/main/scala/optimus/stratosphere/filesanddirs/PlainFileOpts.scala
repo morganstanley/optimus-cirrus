@@ -16,8 +16,8 @@ import com.opencsv.CSVReaderBuilder
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigRenderOptions
 import optimus.stratosphere.bootstrap.StratosphereException
-import optimus.stratosphere.utils.MemUnit
 import optimus.stratosphere.utils.Text._
+import optimus.utils.MemUnit
 
 import java.io._
 import java.nio.ByteBuffer

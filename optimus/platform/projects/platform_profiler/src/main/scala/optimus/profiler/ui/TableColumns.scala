@@ -165,7 +165,7 @@ object TableColumnFlags {
     new FlagBits("@", NodeTaskInfo.EXTERNALLY_CONFIGURED_CUSTOM_CACHE),
     new FlagBits("@", NodeTaskInfo.EXTERNALLY_CONFIGURED_POLICY),
     new FlagBits("UI", NodeTaskInfo.PROFILER_UI_CONFIGURED),
-    new FlagBits("+", NodeTaskInfo.HAS_PLUGIN),
+    new FlagBits("+", NodeTaskInfo.SHOULD_LOOKUP_PLUGIN),
     new FlagBits("R", NodeTaskInfo.GIVEN_RUNTIME_ENV)
   )
 }

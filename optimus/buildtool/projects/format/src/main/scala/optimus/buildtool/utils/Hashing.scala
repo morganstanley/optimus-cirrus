@@ -11,6 +11,18 @@
  */
 package optimus.buildtool.utils
 
+import com.google.common.hash
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
+import com.sun.management.ThreadMXBean
+import optimus.buildtool.config.AfsNamingConventions
+import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.files.Asset
+import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
+import org.slf4j.LoggerFactory.getLogger
+
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -27,18 +39,6 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.UserDefinedFileAttributeView
 import java.util
-
-import com.google.common.hash
-import com.google.common.hash.HashCode
-import com.google.common.hash.HashFunction
-import com.sun.management.ThreadMXBean
-import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.files.Asset
-import optimus.buildtool.files.Directory
-import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
-import org.slf4j.LoggerFactory.getLogger
-
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -217,7 +217,7 @@ object Hashing {
   private val SystemDirs = Set("//lib", "//lib64", "//usr/include", "//usr/lib", "//usr/lib64")
   def isAssumedImmutable(asset: Asset): Boolean = {
     val fingerprint = asset.pathFingerprint
-    fingerprint.startsWith(NamingConventions.AfsDistStr) || NamingConventions.isHttpOrHttps(fingerprint) ||
+    fingerprint.startsWith(AfsNamingConventions.AfsDistStr) || NamingConventions.isHttpOrHttps(fingerprint) ||
     SystemDirs.exists(asset.pathString.startsWith)
   }
 

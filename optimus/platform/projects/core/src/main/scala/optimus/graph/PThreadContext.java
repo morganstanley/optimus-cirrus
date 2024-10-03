@@ -419,7 +419,7 @@ public final class PThreadContext {
       // we ONLY pass 0 in expungeThreads, when the thread is 'out of scope' so we
       // definitely should not be currently 'running' anything
       if (currentTime == 0) panic();
-      else observed.graphTime_$eq(observed.graphTime() + (currentTime - graphEnterTime));
+      else observed.mutateAddGraphTime(currentTime - graphEnterTime);
     }
 
     if (lastObservedValues != null) return observed.since(lastObservedValues);

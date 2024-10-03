@@ -38,18 +38,15 @@ trait PeriodParsing {
     // DurationFromPeriodOptionHandler should be used.
     if (arg.contains("T"))
       throw new IllegalArgumentException("Period string needs to follow the java.time.Period format")
-    (arg.toUpperCase: Seq[Char]) match {
-      case Seq('P', _) => Period.parse(arg)
-      case _           => Period.parse("P" + arg)
-    }
+    if (arg.toUpperCase.startsWith("P")) Period.parse(arg)
+    else Period.parse("P" + arg)
   }
 }
 
 trait DurationParsing {
-  protected def parseAsDuration(arg: String): Duration = (arg.toUpperCase: Seq[Char]) match {
-    case Seq('P', _) => Duration.parse(arg)
-    case _           => Duration.parse("P" + arg)
-  }
+  protected def parseAsDuration(arg: String): Duration =
+    if (arg.toUpperCase.startsWith("P")) Duration.parse(arg)
+    else Duration.parse("P" + arg)
 }
 
 final class PeriodOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Period])

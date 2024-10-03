@@ -546,9 +546,23 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val (extraImagesPaths, depsPaths) = pathsWithBucketsToAdd.partition { depDef =>
       depDef.absFilePath.startsWith(dockerImageCacheDir.toString)
     }
-    // extraImages files should be prior than dependencies extraFiles
-    (extraImagesPaths.toSeq ++ depsPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath))).foreach { depDef =>
-      addEntryToLayer(layers.get(f"<dependencies-${depDef.bucketId}%02d>"), depDef.absFilePath, depDef.inOutputTarPath)
+    val deps = if (extraImages.nonEmpty) {
+      // instead of let Jib automatically remove duplications, it's better we drop it at the beginning
+      // so we can ensure extraImages files should be prior than dependencies native extraFiles
+      val allExtraImageInTarPaths = extraImagesPaths.map(_.inOutputTarPath)
+      val (duplicatedDeps, includedDeps) = depsPaths.partition(p => allExtraImageInTarPaths.contains(p.inOutputTarPath))
+      log.warn(
+        s"[${dockerImage.location.name}] dropped duplicated dependency ${duplicatedDeps.size} files: ${duplicatedDeps
+            .map(_.absFilePath.toString)
+            .mkString(",\n")}")
+      // extraImages files should be prior than dependencies extraFiles
+      (extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath)) ++ includedDeps.toSeq.sortBy(e =>
+        (e.bucketId, e.absFilePath)))
+    } else depsPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath))
+    deps.groupBy(f => f.bucketId).apar.foreach { case (bucketId, depDefs) => // parallel inserts for all buckets
+      depDefs.foreach { depDef => // jib will keep insert order
+        addEntryToLayer(layers.get(f"<dependencies-${bucketId}%02d>"), depDef.absFilePath, depDef.inOutputTarPath)
+      }
     }
 
     layers.asMap.asScala.toSeq.sortBy(_._1).foreach { case (_, layer) =>
@@ -593,17 +607,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val dst = absoluteUnixPath(inTarDst)
     val perms = copyPermissions(file)
     val reduced = if (stripDependencies) dependencyStripper.copyWithoutDebugSymbols(file) else None
-    val entryAlreadyInLayer = layer.build().getEntries.asScala.toSet.find { f =>
-      f.getExtractionPath.toString == inTarDst.toString
-    }
-    entryAlreadyInLayer match {
-      // instead of let Jib automatically remove duplications, it's better we drop it at the beginning
-      case Some(entry) => // so we can ensure extraImages files should be prior than dependencies native extraFiles
-        log.warn(
-          s"[${dockerImage.location.name}] dropped native dependency file: '$file', which duplicated with extraImages: ${getExtraImageNameFromCachePath(
-              entry.getSourceFile)}")
-      case _ => layer addEntry new FileEntry(reduced.getOrElse(file), dst, perms, Instant.EPOCH)
-    }
+    layer addEntry new FileEntry(reduced.getOrElse(file), dst, perms, Instant.EPOCH)
   }
 
   private def copyPermissions(srcPath: Path): FilePermissions =

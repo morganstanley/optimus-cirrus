@@ -20,6 +20,8 @@ import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.crumbs.{Properties => BCProps}
 import optimus.config.OptconfProvider
+import optimus.config.scoped.ScopedConfiguration
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.exceptions.ExceptionProxy
 import optimus.graph.AsyncProfilerIntegration
 import optimus.graph.AuxiliarySchedulerHelper
@@ -30,6 +32,7 @@ import optimus.graph.GCMonitor
 import optimus.graph.GCNative
 import optimus.graph.OGTrace
 import optimus.graph.Settings
+import optimus.graph.NodeTaskInfo
 import optimus.graph.cache.Caches
 import optimus.graph.cache.MemoryLeakCheckCacheClear
 import optimus.graph.diagnostics.InfoDumper
@@ -37,7 +40,6 @@ import optimus.graph.diagnostics.gridprofiler.AggregationType
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.graph.diagnostics.gridprofiler.GridProfilerDefaults
 import optimus.graph.diagnostics.gridprofiler.HotspotFilter
-import optimus.graph.diagnostics.gridprofiler.Level
 import optimus.graph.diagnostics.gridprofiler.Level.Level
 import optimus.graph.diagnostics.heap.HeapSampling
 import optimus.graph.diagnostics.messages.StartupEventCounter
@@ -243,6 +245,13 @@ class OptimusAppCmdLine {
     handler = classOf[ExitMode.OptionOptionHandler]
   )
   val exitMode: Option[ExitMode.Value] = None
+
+  @args4j.Option(
+    name = "--scopedConfiguration",
+    usage = "path to the scoped configuration file to be used",
+    handler = classOf[ScopedConfiguration.OptionOptionHandler]
+  )
+  val scopedConfiguration: Option[ScopedConfiguration] = None
 }
 
 object DalEnvironmentHandler {
@@ -421,6 +430,8 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       }
     DalAppId(System.getProperty("APP_NAME", cmdOrEnv))
   }
+
+  protected override def scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = cmdLine.scopedConfiguration.map(_.scopedPlugins).orNull
 
   private def setSystemPropertyOverrides(): Unit = {
     // always set this property to use non kerberos connections to zk on client side

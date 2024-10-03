@@ -12,7 +12,6 @@
 package optimus.buildtool.runconf.compile.plugins
 
 import java.nio.file.Path
-
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.compile.ExternalCache
 import optimus.buildtool.runconf.compile.Messages
@@ -22,10 +21,12 @@ import optimus.buildtool.runconf.compile.RunEnv
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValueFactory
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.HasMetaBundle
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
 
+import java.nio.file.Paths
 import scala.jdk.CollectionConverters._
 
 object ScopeDependentReferences {
@@ -55,6 +56,18 @@ object ScopeDependentReferences {
 
   private def path(group: String, value: String): String = group + "." + value
 
+  private[runconf] def installPath(root: Path, mb: MetaBundle, version: String): Path = {
+    if (AfsNamingConventions.isAfs(root)) {
+      Paths.get(AfsNamingConventions.AfsDistStr).resolve(mb.meta).resolve("PROJ").resolve(mb.bundle).resolve(version)
+    } else {
+      root
+        .resolve(mb.meta)
+        .resolve(mb.bundle)
+        .resolve(version)
+        .resolve("install")
+        .resolve("common")
+    }
+  }
 }
 
 class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
@@ -97,14 +110,14 @@ class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
     def normalizedInstallPath(mb: MetaBundle) =
       externalCache.installPath.cached(baseCacheKey, mb) {
         installOverride
-          .map(p => normalize(installPath(p, mb)))
+          .map(p => normalize(installPath(p, mb, runEnv.version)))
           .getOrElse(s"${runEnv.os.makeVar("DIRNAME")}/..")
       }
 
     def normalizedAppDir(mb: MetaBundle) =
       externalCache.appDir.cached(baseCacheKey, mb) {
         installOverride
-          .map(p => normalize(installPath(p, mb).resolve("bin")))
+          .map(p => normalize(installPath(p, mb, runEnv.version).resolve("bin")))
           .getOrElse(runEnv.os.makeVar("APP_DIR"))
       }
 
@@ -147,15 +160,6 @@ class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
 
   private def normalize(path: Path): String = {
     path.toString.replace("\\", "/")
-  }
-
-  private def installPath(root: Path, mb: MetaBundle): Path = {
-    root
-      .resolve(mb.meta)
-      .resolve(mb.bundle)
-      .resolve(runEnv.version)
-      .resolve("install")
-      .resolve("common")
   }
 
   private def placeholder(path: String): String = "###" + path + "###"

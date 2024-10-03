@@ -42,15 +42,19 @@ object OSInformation {
     sb.append('\n')
   }
 
+  private val jbin = System.getProperty("java.home") + "/bin"
+  private val jstack = s"$jbin/jstack"
+
   def dumpPidInfo(sb: java.lang.StringBuilder, pid: Long, maxHistoLength: Option[Int] = None): Unit = {
     sb.append("Collect the information about PID : " + pid + "\n")
     val commands =
       List(
         List("/usr/bin/free"),
-        List("cat", "/proc/meminfo"),
-        List("cat", s"/proc/$pid/status"),
-        List("ps", "auxfww"),
-        List("jstack", pid.toString))
+        List("/usr/bin/cat", "/proc/meminfo"),
+        List("/usr/bin/cat", s"/proc/$pid/status"),
+        List("/usr/bin/ps", "auxfww"),
+        List(jstack, pid.toString)
+      )
     commands.map(cmd => sb.append(execute(cmd)))
     dumpHisto(sb, pid, maxHistoLength)
   }

@@ -1107,7 +1107,6 @@ final case class StreamsACLsCommand(streamAppId: String, val acls: Seq[StreamsAC
 }
 
 sealed trait MessagesPublishCommandBase extends MessagesServerCommand {
-  require(classNames.nonEmpty, "MessagePublishCommand is only applicable if at least one className provided")
 
   /** Identifier for the Message sent - used in logging and crumbs. */
   def identifier: String

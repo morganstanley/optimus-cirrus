@@ -14,15 +14,16 @@ import optimus.platform.util.Log
 
 object Cardinality extends Log {
 
-  class LogLogCounter(val estimators: Array[Int]) {
+  class LogLogCounter private (val estimators: Array[Int], var withDuplicates: Long) {
     private val numHashBits = 64
     private val m = estimators.size // had better be power of 2
     private val k = Integer.numberOfTrailingZeros(m)
     assert(m == 1 << k)
 
-    def this(buckets: Int) = this(new Array[Int](1 << Math.round(Math.log(buckets) / Math.log(2)).toInt))
+    def this(buckets: Int) = this(new Array[Int](1 << Math.round(Math.log(buckets) / Math.log(2)).toInt), 0L)
 
     def add(hashedValue: Long): Unit = {
+      withDuplicates += 1
       val bucket = extractBitRange(hashedValue, 0, k - 1)
       val zeroes = Integer.numberOfTrailingZeros(extractBitRange(hashedValue, k + 1, numHashBits)) + 1
       estimators.update(bucket, Math.max(estimators(bucket), zeroes))
@@ -36,12 +37,14 @@ object Cardinality extends Log {
       (0 until m).foreach { i =>
         estimators(i) = Math.max(estimators(i), other.estimators(i))
       }
+      withDuplicates += other.withDuplicates
     }
 
-    def snap = new LogLogCounter(estimators.clone())
+    def snap = new LogLogCounter(estimators.clone(), withDuplicates)
 
     private def log2(x: Double) = Math.log(x) / Math.log(2.0)
-    private val alpha = if (k <= 4) 0.673 else if (k == 5) 0.697 else if (k == 6) 0.709 else 0.7213 / (1.0 + 1.079 / m)
+    val alpha: Double = if (k <= 4) 0.673 else if (k == 5) 0.697 else if (k == 6) 0.709 else 0.7213 / (1.0 + 1.079 / m)
+    val numerator = alpha * m * m
 
     // See https://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
     // and https://en.wikipedia.org/wiki/HyperLogLog

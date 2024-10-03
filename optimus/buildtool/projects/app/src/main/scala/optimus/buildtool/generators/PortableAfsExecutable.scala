@@ -11,8 +11,8 @@
  */
 package optimus.buildtool.generators
 
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.DependencyDefinition
-import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.utils.Utils
@@ -48,9 +48,8 @@ final case class AfsExecutable(
     executablePath: String,
     variant: Option[String]
 ) {
-  // TODO (OPTIMUS-55793) AFS roots should be read from config
   def file(version: String): FileAsset =
-    FileAsset(Paths.get(s"${NamingConventions.AfsDistStr}$metaDir/PROJ/$projectDir/$version/$executablePath"))
+    FileAsset(Paths.get(s"${AfsNamingConventions.AfsDistStr}$metaDir/PROJ/$projectDir/$version/$executablePath"))
 
   def dependencyDefinition(scope: CompilationScope): DependencyDefinition =
     scope.externalDependencyResolver.dependencyDefinitions

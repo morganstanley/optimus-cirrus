@@ -162,7 +162,7 @@ public class PNodeTaskLive extends PNodeTask {
   public String propertyCachePolicy() {
     NodeTaskInfo info = ntsk.executionInfo();
     if (info.isScenarioIndependent()) return NCPolicy.SCENARIO_INDEPENDENT_POLICY_NAME;
-    String policyName = info.cachePolicy().favorReuseName();
+    String policyName = info.cachePolicy().policyName();
     return policyName != null ? policyName : NCPolicy.DEFAULT_POLICY_NAME;
   }
 

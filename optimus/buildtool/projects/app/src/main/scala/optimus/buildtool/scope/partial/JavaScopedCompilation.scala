@@ -21,7 +21,7 @@ import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.SyncCompiler
 import optimus.buildtool.compilers.zinc.AnalysisLocator
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
-import optimus.buildtool.config.NamingConventions
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.ScalacConfiguration
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.resolvers.DependencyCopier
@@ -56,9 +56,10 @@ import scala.collection.immutable.Seq
 
   // Javac can't cope with UNC paths, so convert to mapped drive path
   private def replaceUncPath(j: JarAsset): JarAsset =
-    if (j.pathString.startsWith(NamingConventions.AfsRootStr))
+    if (j.pathString.startsWith(AfsNamingConventions.AfsRootStr))
       JarAsset(
-        j.fileSystem.getPath(j.pathString.replaceFirst(NamingConventions.AfsRootStr, NamingConventions.AfsRootMapping)))
+        j.fileSystem.getPath(
+          j.pathString.replaceFirst(AfsNamingConventions.AfsRootStr, AfsNamingConventions.AfsRootMapping)))
     else j
 }
 
@@ -76,8 +77,8 @@ import scala.collection.immutable.Seq
   @node override protected def containsRelevantSources: Boolean = sources.containsJava
 
   @node override protected def upstreamArtifacts: Seq[Artifact] = distinctLast {
-    val scalaClasses = scala.classes
-    val scalaMessages = scala.messages
+    val scalaClasses = scala.classes.filter(!_.isInstanceOf[FingerprintArtifact])
+    val scalaMessages = scala.messages.filter(!_.isInstanceOf[FingerprintArtifact])
     // if we don't have scala classes, then we don't need the signature analysis for them
     val scalaArtifacts =
       if (scalaClasses.nonEmpty && config.usePipelining) signatures.analysis ++ scalaClasses ++ scalaMessages

@@ -11,17 +11,18 @@
  */
 package optimus.buildtool.utils
 
-import java.io.IOException
-import java.net.URI
-import java.nio.file.FileSystem
-import java.nio.file.FileVisitResult
-import java.nio.file.Path
-import java.nio.file.SimpleFileVisitor
+import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.Asset
 import org.slf4j.LoggerFactory.getLogger
 
+import java.io.IOException
+import java.net.URI
+import java.nio.file.FileSystem
 import java.nio.file.FileSystems
+import java.nio.file.FileVisitResult
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -51,7 +52,7 @@ object PathUtils {
   def isDisted(asset: Asset): Boolean = isDisted(asset.pathString)
   def isDisted(path: Path): Boolean = isDisted(PathUtils.platformIndependentString(path))
   def isDisted(platformIndependentString: String): Boolean =
-    platformIndependentString.startsWith(NamingConventions.AfsDistStr)
+    platformIndependentString.startsWith(AfsNamingConventions.AfsDistStr)
 
   /**
    * Converts a path to a string representation which will parse back to an equivalent path on Linux or Windows (with
@@ -75,13 +76,13 @@ object PathUtils {
         WorkspaceIndependentPath(s, absolute = true)
       case NamingConventions.DepCopyDistRoot(mprPath) =>
         // we've got a path to an external dependency
-        WorkspaceIndependentPath(s"${NamingConventions.AfsDistStr}$mprPath", absolute = true)
+        WorkspaceIndependentPath(s"${AfsNamingConventions.AfsDistStr}$mprPath", absolute = true)
       case NamingConventions.MsjavaCopyRoot(prPath) =>
         // we've got a path to a specially-treated msjava dependency
-        WorkspaceIndependentPath(s"${NamingConventions.AfsDistStr}msjava/PROJ/$prPath", absolute = true)
+        WorkspaceIndependentPath(s"${AfsNamingConventions.AfsDistStr}msjava/PROJ/$prPath", absolute = true)
       case NamingConventions.OssjavaCopyRoot(prPath) =>
         // we've got a path to a specially-treated ossjava dependency
-        WorkspaceIndependentPath(s"${NamingConventions.AfsDistStr}ossjava/PROJ/$prPath", absolute = true)
+        WorkspaceIndependentPath(s"${AfsNamingConventions.AfsDistStr}ossjava/PROJ/$prPath", absolute = true)
       case s =>
         WorkspaceIndependentPath(s, path.isAbsolute)
     }
@@ -114,8 +115,8 @@ object PathUtils {
     val uri = uriString(path)
     // we can't use `path.startsWith(root)`, because `path.startsWith` requires at least two elements for a
     // network path and root may only be one element long, so instead we use `path.toString.startsWith(...)`
-    if (path.toString.startsWith(s"${NamingConventions.AfsRootStrWindows}"))
-      uri.replaceFirst(s"${NamingConventions.AfsRootStr}", s"/${NamingConventions.AfsRootMapping}")
+    if (path.toString.startsWith(AfsNamingConventions.AfsRootStrWindows))
+      uri.replaceFirst(AfsNamingConventions.AfsRootStr, s"/${AfsNamingConventions.AfsRootMapping}")
     else uri
   }
 
@@ -152,8 +153,8 @@ object PathUtils {
     if (isWindows && isDisted(a))
       a.path.toString
         .replaceFirst(
-          Pattern.quote(NamingConventions.AfsRootStrWindows),
-          Matcher.quoteReplacement(NamingConventions.AfsRootMappingWindows)
+          Pattern.quote(AfsNamingConventions.AfsRootStrWindows),
+          Matcher.quoteReplacement(AfsNamingConventions.AfsRootMappingWindows)
         )
     else
       a.path.toString

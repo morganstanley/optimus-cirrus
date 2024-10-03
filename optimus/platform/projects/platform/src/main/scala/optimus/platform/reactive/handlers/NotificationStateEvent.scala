@@ -117,9 +117,8 @@ case object WorkerStarted extends NotificationStateEvent with InfoEvent {
   override def toString: String =
     "Notification Stream created successfully"
 }
-// Implementation note: this event cannot be tested as on the time it is issued the reactive
-// inputbindings (include the global status one) has been stopped
-case object WorkerStopped extends NotificationStateEvent with ErrorEvent {
+
+case object WorkerStopped extends NotificationStateEvent with InfoEvent {
   override def toString: String = "Notification worker thread stopped"
 }
 

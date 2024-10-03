@@ -66,7 +66,8 @@ object Keys {
       "requiredAppScripts",
       "bundle",
       "includeInClassBundle",
-      "forbiddenDependencies"
+      "forbiddenDependencies",
+      "allowUnorderedAndDuplicateDependencies"
     )
   val regexDefinition = KeySet("rules")
   val scopeDefinition = KeySet(

@@ -350,9 +350,6 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
           if (!jars.outputJar.tempPath.existsUnsafe)
             utils.Jars.withJar(jars.outputJar.tempPath, create = true)(_ => ())
           val classes = {
-            // note that we don't compress, because this jar is likely to later get passed in for another Zinc compilation
-            // and then come back here again (slightly modified), and this repeated rewriting process is far more
-            // efficient on non-compressed jars. We do compress in InstallingBuilder
             if (!profiler.hasNoSourceInvalidations(cycles, compileResult.toOption)) {
               utils.Jars.stampJarWithConsistentHash(jars.outputJar.tempPath, compress = false, Some(activeTask.trace))
             }

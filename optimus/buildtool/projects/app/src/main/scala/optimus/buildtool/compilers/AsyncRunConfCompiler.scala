@@ -133,10 +133,13 @@ object AsyncRunConfCompiler {
 }
 
 final case class RunConfCompilationResult(
-    runConfs: Seq[RunConf],
+    rootRunConfs: Seq[RunConf],
+    localRunConfs: Seq[RunConf],
     problems: Seq[Problem],
     extraMessages: Seq[CompilationMessage])
 final case class ApplicationScriptResult(fileName: String, content: Either[String, Seq[CompilationMessage]])
+
+final case class RunConfCompileGroup(files: Seq[InputFile], isLocal: Boolean)
 
 final class StaticRunscriptCompilationBindingSources(
     obtWorkspaceProperties: Config
@@ -667,9 +670,17 @@ final class StaticRunscriptCompilationBindingSources(
       userName
     ).map(name => name -> s"$$$name").toMap ++ sys.env
     val systemProperties = System.getProperties.clone().asInstanceOf[Properties]
-    val (commonFiles, rootFiles) = files.filter(_.fileName.endsWith(RunConfFile.extension)).partition { f =>
+    val (commonFiles, allRootFiles) = files.filter(_.fileName.endsWith(RunConfFile.extension)).partition { f =>
       isCommonRunConf(f.origin)
     }
+    // Local runconf need all the other roots, but no other local.runconf.
+    // Root files need to be compiled individually
+    val (localRootFiles, rootFiles) = allRootFiles.partition { f => RunConfFile.isLocal(f.fileName) }
+    // Compile groups are bunches of root files for which the lst depends on the others
+    val compileGroups =
+      rootFiles.map(f => RunConfCompileGroup(Seq(f), isLocal = false)) ++ localRootFiles.map(f =>
+        RunConfCompileGroup(rootFiles ++ Seq(f), isLocal = true))
+
     val badReferenceMessages = blockedSubstitutions
       .map(_.expression)
       .distinct
@@ -683,17 +694,17 @@ final class StaticRunscriptCompilationBindingSources(
     // Allow duplication between common and project (e.g. ird/hedgesumo/projects/hedgesumo)
     def computeDuplicates(files: Seq[InputFile]): Map[String, Seq[InputFile]] =
       files.groupBy(_.origin.toFile.getName).filter(_._2.size > 1)
-    val duplicateFilesByName = computeDuplicates(commonFiles) ++ computeDuplicates(rootFiles)
+    val duplicateFilesByName = computeDuplicates(commonFiles) ++ computeDuplicates(allRootFiles)
     val duplicationMessages = duplicateFilesByName.map { case (name, files) =>
       CompilationMessage.error(
         s"Cannot store original .runconf files due to file name conflict: there are ${files.size} files with the name $name.")
     }
 
-    val result: RunConfCompilationResult = rootFiles
-      .map { rootFile =>
+    val resultWithDuplicatesInLocalRunConfs: RunConfCompilationResult = compileGroups
+      .map { compileGroup =>
         Try {
           RunconfCompiler.compile(
-            files = commonFiles ++ Seq(rootFile),
+            files = commonFiles ++ compileGroup.files,
             sourceRoot = workspaceSourceRoot.path,
             config = stratoConfig,
             runEnv = runEnv,
@@ -707,28 +718,41 @@ final class StaticRunscriptCompilationBindingSources(
         } match {
           case Success(CompileResult(problems, runConfs, _)) =>
             val extraWarnings = validateArguments(runConfs)
-            RunConfCompilationResult(runConfs, problems, extraWarnings)
+            if (compileGroup.isLocal)
+              RunConfCompilationResult(Seq.empty, runConfs, problems, extraWarnings)
+            else
+              RunConfCompilationResult(runConfs, Seq.empty, problems, extraWarnings)
           case Failure(e) =>
-            RunConfCompilationResult(Seq.empty, Seq.empty, Seq(CompilationMessage.error(e)))
+            RunConfCompilationResult(Seq.empty, Seq.empty, Seq.empty, Seq(CompilationMessage.error(e)))
         }
       }
-      .foldLeft(RunConfCompilationResult(Seq.empty, Seq.empty, Seq.empty)) { (acc, partialResults) =>
+      .foldLeft(RunConfCompilationResult(Seq.empty, Seq.empty, Seq.empty, Seq.empty)) { (acc, partialResults) =>
         RunConfCompilationResult(
-          acc.runConfs ++ partialResults.runConfs,
+          acc.rootRunConfs ++ partialResults.rootRunConfs,
+          acc.localRunConfs ++ partialResults.localRunConfs,
           acc.problems ++ partialResults.problems,
-          acc.extraMessages ++ partialResults.extraMessages)
+          acc.extraMessages ++ partialResults.extraMessages
+        )
       }
+    val result =
+      resultWithDuplicatesInLocalRunConfs.copy(
+        // Since we need the root files to compile the local runconf, we end up with "duplicates".
+        // We need to remove to avoid false report of actual duplicate names.
+        localRunConfs =
+          resultWithDuplicatesInLocalRunConfs.localRunConfs.diff(resultWithDuplicatesInLocalRunConfs.rootRunConfs)
+      )
 
     val applicationScripts =
       generateApplicationScripts(
         scopeId,
         templates,
         AsyncRunConfCompilerImpl.getJavaModule(obtWorkspaceProperties),
-        result.runConfs,
+        result.rootRunConfs, // We do not generate runscripts for local runconfs
         upstreamInputs,
         installVersion
       )
 
+    val allRunConfs = result.rootRunConfs ++ result.localRunConfs
     val compiledArtifact: Option[CompiledRunconfArtifact] =
       if (badReferenceMessages.nonEmpty || duplicationMessages.nonEmpty || result.extraMessages.nonEmpty)
         None
@@ -737,10 +761,10 @@ final class StaticRunscriptCompilationBindingSources(
           createJar(
             scopeId,
             commonFiles,
-            rootFiles,
+            rootFiles ++ localRootFiles,
             sourceSubstitutions,
             applicationScripts,
-            result.runConfs,
+            allRunConfs,
             outputJar
           )
         )
@@ -755,7 +779,7 @@ final class StaticRunscriptCompilationBindingSources(
           case _                                           => None
         } ++ badReferenceMessages ++ duplicationMessages
       ),
-      result.runConfs
+      allRunConfs
     )
 
     runconfTrace.complete(Try(output).map(_.messages.messages))

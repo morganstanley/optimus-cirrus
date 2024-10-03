@@ -12,6 +12,7 @@
 package optimus.platform
 
 import optimus.platform._
+import optimus.platform.annotations.deprecating
 import optimus.platform.storable.Entity
 import optimus.platform.storable.EntityCompanionBase
 import optimus.platform.relational.tree.MethodPosition
@@ -28,8 +29,8 @@ trait QueryApi {
     conv.convert(src, if (key eq null) NoKey else key, ProviderWithKeyPropagationPolicy(policy))(itemType, pos)
   }
 
-  // private[optimus] while streams is still in development
-  private[optimus] def events[T <: Entity](
+  @deprecating("OPTIMUS-69454 This is being worked on currently and should be used in known use-cases only.")
+  def events[T <: Entity](
       src: EntityCompanionBase[T])(implicit itemType: TypeInfo[T], pos: MethodPosition): Query[T] = {
     val key = KeyPolicy.NoKey.mkKey[T]
     val provider = EventProvider(src.info, itemType, key, pos)

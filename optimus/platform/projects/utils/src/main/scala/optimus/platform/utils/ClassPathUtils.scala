@@ -25,12 +25,10 @@ import java.util.regex.Pattern
 import org.slf4j.LoggerFactory.getLogger
 
 import java.net.URI
-import java.util.Properties
 import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Try
-import scala.util.matching.Regex
 
 /**
  * Utilities for extracting and expanding the current classpath
@@ -56,11 +54,10 @@ object ClassPathUtils {
   private[this] lazy val bootProperties =
     staticMethodResult[ju.Map[String, String]]("jdk.internal.misc.VM", "getSavedProperties").map(_.asScala)
 
-  lazy val applicationClasspath = readClasspathEntries(getClass.getClassLoader)
-  lazy val applicationClasspathString = applicationClasspath.mkString(File.pathSeparator)
+  lazy val applicationClasspath: Seq[Path] = readClasspathEntries(getClass.getClassLoader)
 
-  lazy val expandedApplicationClasspath = expandClasspath(applicationClasspath)
-  lazy val expandedApplicationClasspathString = expandedApplicationClasspath.mkString(File.pathSeparator)
+  lazy val expandedApplicationClasspath: Seq[Path] = expandClasspath(applicationClasspath)
+  lazy val expandedApplicationClasspathString: String = expandedApplicationClasspath.mkString(File.pathSeparator)
 
   final def readClasspathEntries(
       classLoader: ClassLoader,
@@ -128,7 +125,7 @@ object ClassPathUtils {
       // ignore directories
       if (Files.isRegularFile(file)) {
         val jar = new JarFile(file.toFile)
-        val mf = jar.getManifest()
+        val mf = jar.getManifest
 
         if (mf != null) {
           val pending = new ArrayBuffer[Path]
@@ -141,7 +138,7 @@ object ClassPathUtils {
               try {
                 val path = {
                   if (pathStr startsWith "file:/")
-                    demanglePathFromUrl(new URI(pathStr).toURL()) // handle as a URL (probably a file URL)
+                    demanglePathFromUrl(new URI(pathStr).toURL) // handle as a URL (probably a file URL)
                   else {
                     val p = file.getParent.resolve(pathStr) // probably relative (but resolving an absolute path works)
                     if (normalize) p.normalize() else p
@@ -159,8 +156,10 @@ object ClassPathUtils {
       } else log.debug(s"ignoring path as it doesn't exist ($file)")
     }
 
+    log.info("Expanding classpath")
     effectiveClassPath.addAll(classPath.asJava)
     classPath.foreach(loadClassPath)
+    log.info("Expanded classpath")
     effectiveClassPath.asScala.toSeq
   }
 

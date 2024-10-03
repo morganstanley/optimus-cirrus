@@ -12,10 +12,10 @@
 package optimus.dsi.trace
 
 import java.net.URI
-
 import optimus.breadcrumbs.BreadcrumbLevel
 import optimus.breadcrumbs.crumbs.EventCrumb
 import optimus.platform.dal.config.Host
+import optimus.platform.storable.SerializedEntity
 
 object TraceLevel {
   sealed trait Level
@@ -1200,6 +1200,23 @@ object TraceEvent {
         k -> v.toString
       }
     def totalOpCont: Int = actionToCounts.values.sum
+  }
+  // IndexWriteEvent and IndexReadEvent are used for performance comparison when read and/or write modes are set to EntityIndexMode.Dual
+  final case class IndexWriteEvent(cNameToCounts: Map[String, Int], isRegistered: Boolean) extends Event {
+    val name = s"IDX_WRITE:${cNameToCounts.keys}"
+    val level = Debug
+    val phase = Execution
+    val relevance = One
+    def totalOpCount(className: String): Int = cNameToCounts(className)
+    lazy val typeNames = cNameToCounts.keys.toSeq
+  }
+
+  final case class IndexReadEvent(typeName: SerializedEntity.TypeRef, opCount: Int, isRegistered: Boolean)
+      extends Event {
+    val name = s"IDX_READ:${typeName}"
+    val level = Debug
+    val phase = Execution
+    val relevance = One
   }
   final case class ShardReadEvent(
       uri: DbUriType,

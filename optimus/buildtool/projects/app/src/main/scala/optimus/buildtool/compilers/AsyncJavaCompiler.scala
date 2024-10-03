@@ -34,7 +34,8 @@ import scala.util.control.NonFatal
       CompilerOutput.empty(scopeId, ArtifactType.JavaMessages, outputFile(ArtifactType.JavaMessages).asJson)
     else {
       val sourceSizeBytes = sourceFiles.values.map(_.size).sum
-      compilerFactory.throttled(sourceSizeBytes)(asNode { () =>
+      // Treat java sources as 1/10 of the cost of scala sources
+      compilerFactory.throttled(sourceSizeBytes / 10)(asNode { () =>
         doCompilation(scopeId, resolvedInputs).watchForDeletion()
       })
     }

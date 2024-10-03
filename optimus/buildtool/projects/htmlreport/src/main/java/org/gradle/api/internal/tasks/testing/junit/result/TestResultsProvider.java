@@ -19,6 +19,7 @@ package org.gradle.api.internal.tasks.testing.junit.result;
 
 import java.io.Closeable;
 import java.io.Writer;
+import java.util.Optional;
 
 import org.gradle.api.Action;
 import org.gradle.api.tasks.testing.TestOutputEvent;
@@ -39,4 +40,6 @@ public interface TestResultsProvider extends Closeable {
   void visitClasses(Action<? super TestClassResult> visitor);
 
   boolean hasOutput(long id, TestOutputEvent.Destination destination);
+
+  Optional<CoverageResult> getCoverageResult();
 }

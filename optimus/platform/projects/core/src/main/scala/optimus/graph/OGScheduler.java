@@ -120,6 +120,9 @@ public class OGScheduler extends Scheduler {
     /** Five fields below are temporary variables which are available per thread during wait */
     NodeTaskInfo awaitedTaskInfoEndOfChain = NodeTaskInfo.EndOfChain; // Never null
 
+    SchedulerPlugin awaitedTaskPluginEndOfChain;
+    PluginType awaitedTaskPluginTypeEndOfChain = PluginType.None(); // Never null
+
     int awaitedTaskEndOfChainInfoID; // To connect Profiler wait screen with Debugger trace screen
     int awaitedTaskEndOfChainID; // Display task instance at the end of chain of an awaited task in
     // blocking wait
@@ -1295,6 +1298,8 @@ public class OGScheduler extends Scheduler {
       ctx.awaitedTaskInfoEndOfChain = endOfChain.executionInfo();
       ctx.awaitedTaskEndOfChainInfoID = endOfChain.getProfileId();
       ctx.awaitedTaskEndOfChainID = endOfChain.getId();
+      ctx.awaitedTaskPluginEndOfChain = endOfChain.getPlugin();
+      ctx.awaitedTaskPluginTypeEndOfChain = endOfChain.getReportingPluginType();
     }
     return ntsk;
   }
@@ -1325,7 +1330,7 @@ public class OGScheduler extends Scheduler {
           // (updateCausalityChainOnPossibleStall only runs
           // if there is no other work)
           if (waitCtx.awaitedCausalityStalledOn == PluginType.None())
-            waitCtx.awaitedCausalityStalledOn = waitCtx.awaitedTaskInfoEndOfChain.getPluginType();
+            waitCtx.awaitedCausalityStalledOn = waitCtx.awaitedTaskPluginTypeEndOfChain;
           if (!waitCtx.awaitedTask.scenarioStack().ignoreSyncStacks())
             waitCtx.awaitedCausalityNeedsReporting = true;
         }
@@ -1354,23 +1359,23 @@ public class OGScheduler extends Scheduler {
         // condition
         if (waitCtx.awaitedCausalityID > 0) { // consider adding check for other work available too
           if (waitCtx.awaitedCausalityStalledOn == PluginType.None())
-            waitCtx.awaitedCausalityStalledOn = waitCtx.awaitedTaskInfoEndOfChain.getPluginType();
+            waitCtx.awaitedCausalityStalledOn = waitCtx.awaitedTaskPluginTypeEndOfChain;
           syncStackPresent = true;
         }
       }
 
-      ArrayList<NodeTask> awaitedTasksList = new ArrayList<>(waiters.length);
-      ArrayList<NodeTaskInfo> awaitedTaskInfosEndOfChainList = new ArrayList<>(waiters.length);
+      ArrayList<AwaitedTasks> awaitedTasksList = new ArrayList<>(waiters.length);
       for (Context waitCtx : waiters) {
         if (waitCtx == null) break;
-        awaitedTasksList.add(waitCtx.awaitedTask);
-        awaitedTaskInfosEndOfChainList.add(waitCtx.awaitedTaskInfoEndOfChain);
+        awaitedTasksList.add(
+            new AwaitedTasks(
+                waitCtx.awaitedTask,
+                waitCtx.awaitedTaskInfoEndOfChain,
+                waitCtx.awaitedTaskPluginEndOfChain,
+                waitCtx.awaitedTaskPluginTypeEndOfChain));
       }
-      NodeTask[] awaitedTasks = awaitedTasksList.toArray(new NodeTask[0]);
-      NodeTaskInfo[] awaitedTaskInfosEndOfChain =
-          awaitedTaskInfosEndOfChainList.toArray(new NodeTaskInfo[0]);
-      OGTrace.schedulerStalling(
-          new SchedulerStallSource(awaitedTasks, awaitedTaskInfosEndOfChain, syncStackPresent));
+      AwaitedTasks[] awaitedTasks = awaitedTasksList.toArray(new AwaitedTasks[0]);
+      OGTrace.schedulerStalling(new SchedulerStallSource(awaitedTasks, syncStackPresent));
     }
   }
 
@@ -1919,8 +1924,7 @@ public class OGScheduler extends Scheduler {
     NodeTask awaitedTask = awaitingCtx.awaitedTask;
     if (awaitedTask == null) return;
 
-    NodeTaskInfo lastTaskInfo = awaitingCtx.awaitedTaskInfoEndOfChain;
-    SchedulerPlugin awaitingPlugin = lastTaskInfo.getPlugin();
+    SchedulerPlugin awaitingPlugin = awaitingCtx.awaitedTaskPluginEndOfChain;
     NodeTask lastTask = lastTaskInWaitingChain(awaitingCtx);
     var nodeExtraInfo = StallInfoAppender.getExtraData(lastTask);
 
@@ -1960,5 +1964,62 @@ public class OGScheduler extends Scheduler {
     PrettyStringBuilder sb = new PrettyStringBuilder();
     generateSchedulerStatus(sb, true, Integer.MAX_VALUE);
     return sb.toString();
+  }
+
+  /**
+   * A simple wrapper meant to hold information about scheduler when stalling. All `endOfChain*`
+   * parameters are taken from a sample node task that is an unfinished computation that `task`
+   * depends on. We don't hold on to the randomly selected end of chain node task itself because it
+   * might hold on to arbitrary memory.
+   */
+  public static final class AwaitedTasks {
+
+    private final NodeTask task;
+    private final NodeTaskInfo endOfChainTaskInfo;
+    private final SchedulerPlugin endOfChainPlugin;
+    private final PluginType endOfChainPluginType;
+
+    // TODO(OPTIMUS-68964) Convert to Record once Scala 2.13 is available
+    public AwaitedTasks(
+        NodeTask task,
+        NodeTaskInfo endOfChainTaskInfo,
+        SchedulerPlugin endOfChainPlugin,
+        PluginType endOfChainPluginType) {
+      this.task = task;
+      this.endOfChainTaskInfo = endOfChainTaskInfo;
+      this.endOfChainPlugin = endOfChainPlugin;
+      this.endOfChainPluginType = endOfChainPluginType;
+    }
+
+    public NodeTask task() {
+      return task;
+    }
+
+    public NodeTaskInfo endOfChainTaskInfo() {
+      return endOfChainTaskInfo;
+    }
+
+    public SchedulerPlugin endOfChainPlugin() {
+      return endOfChainPlugin;
+    }
+
+    public PluginType endOfChainPluginType() {
+      return endOfChainPluginType;
+    }
+
+    public int hashCode() {
+      return Objects.hash(task, endOfChainTaskInfo, endOfChainPlugin, endOfChainPluginType);
+    }
+
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      else if (!(o instanceof AwaitedTasks that)) return false;
+      else {
+        return Objects.equals(task, that.task)
+            && Objects.equals(endOfChainTaskInfo, that.endOfChainTaskInfo)
+            && Objects.equals(endOfChainPlugin, that.endOfChainPlugin)
+            && Objects.equals(endOfChainPluginType, that.endOfChainPluginType);
+      }
+    }
   }
 }

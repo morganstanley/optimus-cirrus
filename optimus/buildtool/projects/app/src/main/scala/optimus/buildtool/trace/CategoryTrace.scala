@@ -203,6 +203,7 @@ private[buildtool] final case class SilverkingOperation(clusterType: ClusterType
 }
 
 private[buildtool] case object ScanFilesystem extends CategoryTrace
+private[buildtool] case object FindArtifacts extends CategoryTrace
 private[buildtool] case object TidyRubbish extends CategoryTrace
 private[buildtool] case object MarkRecentArtifacts extends CategoryTrace
 private[buildtool] case object BackgroundCommand extends SingletonCategoryTrace with AsyncCategoryTrace

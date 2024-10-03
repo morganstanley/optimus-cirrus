@@ -30,8 +30,8 @@ import javax.swing.UIManager
 import optimus.profiler.MergeTraces
 
 class GroupMergeDialog {
-  private val withTweakUsageCheckBox: JCheckBox = new JCheckBox("Tweak Usage")
-  withTweakUsageCheckBox.setToolTipText("Enable XSFT caching policy")
+  private val withDisableXSFTCheckBox: JCheckBox = new JCheckBox("WithDisableXSFT")
+  withDisableXSFTCheckBox.setToolTipText("Disable XSFT")
 
   private val resourceTextField: JTextField = new JTextField(50)
   private val artifactsTextField: JTextField = new JTextField(50)
@@ -51,7 +51,7 @@ class GroupMergeDialog {
     (new JLabel("Build Artifacts:"), artifactsTextField),
     (new JLabel("Group names:"), groupNameScrollPane)
   )
-  addComponent(PGOJobPanel, withTweakUsageCheckBox, 0, 4)
+  addComponent(PGOJobPanel, withDisableXSFTCheckBox, 0, 4)
 
   def groupTracesInput(): (Option[String], Option[String], Option[Seq[String]], Option[Seq[String]]) = {
     val result: Int =
@@ -78,12 +78,12 @@ class GroupMergeDialog {
         else
           Some(Seq.empty[String])
 
-      val withTweakUsage =
-        if (withTweakUsageCheckBox.isSelected) names
+      val withDisableXSFT =
+        if (withDisableXSFTCheckBox.isSelected) names
         else
           Some(Seq.empty[String])
 
-      (rootDir, artifactsPath, names, withTweakUsage)
+      (rootDir, artifactsPath, names, withDisableXSFT)
     } else (null, null, null, null)
   }
 

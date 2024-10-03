@@ -214,6 +214,7 @@ class NodeView(withToolbar: Boolean, pref: Preferences) extends JTabbedPane with
         if (DiagnosticSettings.traceTweaksEnabled) {
           val infectionSet = review.task.getTask.getTweakInfection
           hb.infectionSet = if (infectionSet eq null) SparseBitSet.empty else infectionSet
+          hb.tpdMask = review.task.getTask.executionInfo.dependsOnTweakMask
         }
         buildUpView(hb, review, minScenarioStackDepth)
       }

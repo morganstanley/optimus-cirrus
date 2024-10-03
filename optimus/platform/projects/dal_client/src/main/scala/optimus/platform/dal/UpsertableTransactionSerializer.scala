@@ -29,6 +29,13 @@ object UpsertableTransactionSerializer extends Log {
       transaction: SerializedUpsertableTransaction
   ): DeserializedTransaction = DeserializedTransaction(deserializeTime, transaction.putEvent)
 
+  @async def deserializeBusinessEvent(
+      transaction: DeserializedTransaction
+  ): BusinessEvent =
+    EventSerializer.deserializeBusinessEvent(
+      FixedTransactionTimeContext(transaction.deserializeTime)
+    )(transaction.businessEvent)
+
   /**
    * @param serializedEntities includes all serialized entities - both Heap + Stored ones
    * @param storedEntityReferences stored entity refs based on SerializedEntities in the Txn

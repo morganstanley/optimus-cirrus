@@ -38,49 +38,33 @@ object TestMetadata extends Log {
     assert(Files.exists(f), s"$f does not exist")
   }
 
-  val regressionName: Option[String] = {
+  private def extractTestPlanField(name: String, label: String): Option[String] =
     Try {
-      System.getenv("TEST_NAME")
+      System.getenv(name)
     } match {
-      case Success(regressionName) => Some(regressionName)
+      case Success(valueOrNull) => Option(valueOrNull)
       case Failure(ex) =>
-        log.warn(s"Could not retrieve 'regression name' from system environment variable: $ex")
+        log.warn(s"Could not retrieve '$label' from environment variables: $ex")
         None
     }
-  }
 
-  val moduleGroupName: Option[String] = {
-    Try {
-      System.getenv("MODULE_GROUP_NAME")
-    } match {
-      case Success(moduleGroupName) => Option(moduleGroupName)
-      case Failure(ex) =>
-        log.warn(s"Could not retrieve 'module group name' from system environment variable: $ex")
-        None
-    }
-  }
+  val regressionName: Option[String] = extractTestPlanField("TEST_NAME", "regression name")
 
-  val moduleName: Option[String] = {
-    Try {
-      System.getenv("MODULE_NAME")
-    } match {
-      case Success(moduleName) => Option(moduleName)
-      case Failure(ex) =>
-        log.warn(s"Could not retrieve 'module name' from system environment variable: $ex")
-        None
-    }
-  }
+  val moduleGroupName: Option[String] = extractTestPlanField("MODULE_GROUP_NAME", "module group name")
+
+  val moduleName: Option[String] = extractTestPlanField("MODULE_NAME", "module name")
+
+  val testCaseName: Option[String] = extractTestPlanField("TEST_CASE_NAME", "test case")
 
   val maybeProjectName: Option[String] =
     sys.props
       .get("module.name")
       .filter(_.nonEmpty)
 
-  val projectName: String = {
+  val projectName: String =
     maybeProjectName
       .getOrElse {
         val userDir = System.getProperty("user.dir")
         Paths.get(userDir).getFileName.toString
       }
-  }
 }

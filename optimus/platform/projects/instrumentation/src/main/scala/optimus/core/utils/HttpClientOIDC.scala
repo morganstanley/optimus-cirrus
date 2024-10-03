@@ -35,7 +35,7 @@ object HttpClientOIDC {
   {
     MSKerberosConfiguration.setClientConfiguration()
   }
-  def create(connectionTimeout: Int = 30000, nThreads: Int = 2): CloseableHttpClient = {
+  def create(connectionTimeout: Int = 30000, nThreads: Int = 1): CloseableHttpClient = {
     val credentialsProvider = new BasicCredentialsProvider
     credentialsProvider.setCredentials(
       new AuthScope(null, -1, null),
@@ -54,18 +54,17 @@ object HttpClientOIDC {
         .setConnectionRequestTimeout(connectionTimeout)
         .build
 
-    val poolingManager = new PoolingHttpClientConnectionManager
-    poolingManager.setMaxTotal(nThreads)
-    poolingManager.setDefaultMaxPerRoute(nThreads)
-
     val httpClientBuilder =
       HttpClients.custom
         .setDefaultRequestConfig(requestConfig)
         .addInterceptorFirst(httpRequestInterceptor)
         .setDefaultCredentialsProvider(credentialsProvider)
         .setKeepAliveStrategy(keepAliveStrategy)
-        .setConnectionManager(poolingManager)
-
+    if (nThreads > 1) {
+      val poolingManager = new PoolingHttpClientConnectionManager
+      poolingManager.setDefaultMaxPerRoute(nThreads * 2)
+      httpClientBuilder.setConnectionManager(poolingManager)
+    }
     httpClientBuilder.build()
   }
 

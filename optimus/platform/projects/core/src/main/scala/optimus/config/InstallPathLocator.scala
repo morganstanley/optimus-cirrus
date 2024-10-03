@@ -16,10 +16,16 @@ import optimus.graph.DiagnosticSettings
 import optimus.graph.GCNative
 import optimus.platform.utils.ClassPathUtils
 
+import java.io.IOException
 import java.net.URLClassLoader
+import java.nio.file.FileVisitOption
+import java.nio.file.FileVisitResult
+import java.nio.file.FileVisitor
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.attribute.BasicFileAttributes
+import java.util
 import java.util.Properties
 import scala.util.matching.Regex
 
@@ -28,6 +34,12 @@ import scala.util.matching.Regex
  */
 object InstallPathLocator {
   private[this] val log = getLogger(getClass)
+
+  object InstallationType extends Enumeration {
+    type Type = Value
+    val SharedInstallRoot: InstallationType.Value = Value
+    val BundlesHaveSeparateInstallRoot: InstallationType.Value = Value
+  }
 
   private def libName(base: String) =
     if (DiagnosticSettings.useDebugCppAgent) s"$base-g" else base
@@ -134,7 +146,7 @@ object InstallPathLocator {
   private def enclosingJarPath(clazz: Class[_]): Path =
     Paths.get(clazz.getProtectionDomain.getCodeSource.getLocation.toURI)
 
-  def allInstalledPaths(installDir: Path): Seq[Path] = {
+  def allInstalledPaths(installDir: Path): (InstallationType.Value, Seq[Path]) = {
     val propFile = installDir.resolve("common/etc/build.properties")
     if (Files.exists(propFile)) {
       val props = new Properties
@@ -143,8 +155,8 @@ object InstallPathLocator {
       finally is.close()
 
       val bundles = props.getProperty("bundles").split(',')
-      allInstalledPaths(installDir, bundles)
-    } else Seq(installDir)
+      (InstallationType.BundlesHaveSeparateInstallRoot, allInstalledPaths(installDir, bundles))
+    } else (InstallationType.SharedInstallRoot, Seq(installDir))
   }
 
   private[config] def allInstalledPaths(installDir: Path, bundles: Seq[String]): Seq[Path] = {
@@ -158,42 +170,100 @@ object InstallPathLocator {
   }
 
   private val PathingJarSuffix = "-runtimeAppPathing.jar"
-  def classLoader(
+  def libJars(
+      installationType: InstallationType.Value,
       installDirs: Seq[Path],
       localInstallVersion: Option[String],
-      filters: Seq[JarFilter] = Nil,
-      includeDependencies: Boolean = false,
-      isolated: Boolean = true
-  ): URLClassLoader = {
-    def depFilter(jarName: String) = includeDependencies || !jarName.endsWith(PathingJarSuffix)
+      filters: Seq[JarFilter] = Nil
+  ): Array[Path] = {
+    val desiredDepth =
+      installationType match {
+        case InstallationType.BundlesHaveSeparateInstallRoot =>
+          // each meta/bundle is physically independent
+          // since we have their individual root, we don't have to dig deep to find 'lib' folders
+          2
+        case InstallationType.SharedInstallRoot =>
+          // joint install/ folder: <meta>/<bundle>/<version>/install/common/lib
+          // We have to scan deeper from the common root to find `lib` folders
+          7
+      }
 
-    val installedJars = installDirs.toArray.flatMap { d =>
-      Files
-        .find(
-          d,
-          Int.MaxValue,
-          (p, _) => {
-            val pathStr = pathString(p)
-            pathStr.endsWith(".jar") && depFilter(pathStr) &&
-            localInstallVersion.forall { v =>
-              p.getParent.endsWith(s"$v/install/common/lib")
-            } &&
-            (filters.isEmpty || filters.exists(_.include(pathStr)))
+    val desirableDirectories = Seq(localInstallVersion.getOrElse("local"), "lib", "common")
+
+    // Find install folders first, since a crawl on NFS cause cause outages at scale.
+    // Walking the file tree permits to focus on what matters, while skipping irrelevant branches.
+    val installedJarsNew =
+      installDirs.toArray.flatMap { d =>
+        var libDirs = Seq[Path]()
+        var visitedFiles = 0
+        var visitedFolders = 0
+        var skippedFolders = 0
+        val visitor = new FileVisitor[Path]() {
+          override def preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult = {
+
+            val currentDepth = dir.getNameCount - d.getNameCount
+            val name = dir.getFileName.toString
+            visitedFolders = visitedFolders + 1
+            if (dir.getParent.getFileName.toString == "common" && name != "lib") {
+              log.debug(s"Skipping $dir")
+              skippedFolders = skippedFolders + 1
+              FileVisitResult.SKIP_SUBTREE
+            } else if (desirableDirectories.contains(name) || currentDepth < desiredDepth) {
+              log.debug(s"Visiting $dir")
+              FileVisitResult.CONTINUE
+            } else {
+              log.debug(s"Skipping $dir")
+              skippedFolders = skippedFolders + 1
+              FileVisitResult.SKIP_SUBTREE
+            }
           }
-        )
-        .toArray[Path](i => Array.ofDim(i))
-    }
 
-    log.info(s"Expanding classpath of ${installedJars.size} elements")
+          override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+            val pathStr = pathString(file)
+            val desirableJar =
+              pathStr.endsWith(".jar") && (filters.isEmpty || filters.exists(_.include(pathStr)))
+            if (desirableJar) {
+              libDirs = libDirs :+ file
+            }
+            visitedFiles = visitedFiles + 1
+            FileVisitResult.CONTINUE
+          }
+
+          override def visitFileFailed(file: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
+          override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult = FileVisitResult.CONTINUE
+        }
+
+        Files.walkFileTree(d, util.EnumSet.noneOf(classOf[FileVisitOption]), desiredDepth, visitor)
+        log.debug(s"We visited $visitedFolders folders (skipped $skippedFolders) and $visitedFiles files.")
+        libDirs
+      }
+
+    log.info(s"Expanding classpath of ${installedJarsNew.length} elements")
+    installedJarsNew
+  }
+
+  def classPath(
+      installedJars: Seq[Path],
+      includeDependencies: Boolean = false
+  ): Seq[Path] = {
+    def depFilter(jarName: Path) = includeDependencies || !jarName.toString.endsWith(PathingJarSuffix)
+
+    val selectJars = installedJars.filter(depFilter)
     val classPath: Seq[Path] =
       if (includeDependencies)
         ClassPathUtils
-          .expandClasspath(installedJars, normalize = true, recurse = false)
+          .expandClasspath(selectJars, normalize = true, recurse = false)
           .filter(!_.getFileName.toString.endsWith(PathingJarSuffix))
-      else installedJars
+      else selectJars
 
     log.info(s"Classpath expanded to ${classPath.size} elements")
+    classPath
+  }
 
+  def classLoader(
+      classPath: Seq[Path],
+      isolated: Boolean = true
+  ): URLClassLoader = {
     val urls = classPath.map(_.toUri.toURL).toArray
     if (isolated) new URLClassLoader(urls, null)
     else new URLClassLoader(urls)

@@ -43,7 +43,8 @@ trait MessagesOperations { this: DSIResolver =>
     val serMsg = ContainedEventSerializer.serialize(event)
     val results = executeMessagesCommands(MessagesPublishCommand(serMsg, option) :: Nil)
     results.foreach {
-      case res: MessagesErrorResult => throw new MessagesPublishException(res.error.getMessage)
+      case MessagesErrorResult(error) =>
+        throw new MessagesPublishException(error.getMessage, error)
       case _                        =>
     }
   }

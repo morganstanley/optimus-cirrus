@@ -22,9 +22,8 @@ private[internal] object LAST extends SchedulerPlugin { def adapt(n: NodeTask, e
 object IgnoreSyncStacksPlugin {
   def installIfNeeded(nodes: NodeTaskInfo*): Unit = {
     if (Settings.syncStacksDetectionEnabled) nodes foreach { taskInfo =>
-      if (taskInfo.getPlugin == null)
-        taskInfo.setPlugin(basic)
-      else new IgnoreSyncStacksPlugin(taskInfo.getPlugin)
+      require(!taskInfo.shouldLookupPlugin(), s"There should not already be a plugin set on ${taskInfo.name}")
+      taskInfo.setPlugin(basic)
     }
   }
   private val basic = new IgnoreSyncStacksPlugin(LAST)
@@ -34,6 +33,6 @@ class IgnoreSyncStacksPlugin private (next: SchedulerPlugin) extends SchedulerPl
   def adapt(n: NodeTask, ec: OGSchedulerContext): Boolean = {
     val newStack = n.scenarioStack().ensureIgnoreSyncStack
     n.replace(newStack)
-    next.adapt(n, ec)
+    next.readapt(n, ec)
   }
 }

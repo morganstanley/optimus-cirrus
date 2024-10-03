@@ -11,6 +11,7 @@
  */
 package optimus.graph.diagnostics.sampling
 
+import optimus.breadcrumbs.crumbs.Properties
 import optimus.graph.AwaitStackManagement
 import optimus.graph.Awaitable
 import optimus.graph.NodeTask
@@ -23,6 +24,7 @@ import optimus.graph.PluginType.AdaptedNodesOfAllPlugins
 import optimus.graph.Scheduler
 import optimus.graph.Scheduler.SchedulerSnapshot
 import optimus.graph.TestableClock
+import optimus.graph.diagnostics.sampling.SamplingProfiler.TopicAccumulator
 import optimus.platform.util.Log
 
 import java.util
@@ -42,6 +44,8 @@ private[sampling] object NodeStackSampler {
   lostStack.frames.add("Lost")
   val lostHash = 705470547054L // meaningless unique id
 
+  private[sampling] val pluginStateAccumulator: TopicAccumulator =
+    SamplingProfiler.topicAccumulator(Properties.pluginStateTimes)
 }
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
@@ -52,7 +56,13 @@ class NodeStackSampler extends StackSampler with Log {
   @volatile private var targetIntervalNs = 0L
   private val pluginSampleWaiter = new Object
 
-  private val pluginStackRecorders = mutable.HashMap.empty[PluginType, StackRecorder]
+  private val Adapted = "Adapted"
+  private val Unfired = "Unfired"
+
+  private val pluginStackRecorders = mutable.HashMap.empty[(PluginType, String), StackRecorder]
+  private def getRecorder(pt: PluginType, tpe: String): StackRecorder = {
+    pluginStackRecorders.getOrElseUpdate((pt, tpe), new StackRecorder(tpe + "_" + pt.name))
+  }
 
   override def drainToIterable(sp: SamplingProfiler): Iterable[TimedStack] = { // Enqueue chains of nodes currently parked in waiting queues.
     val waitStacks = {
@@ -114,18 +124,30 @@ class NodeStackSampler extends StackSampler with Log {
                 }
               }
               if (pluginSamplingContinues) {
-                val nt = new AdaptedNodesOfAllPlugins
+                val adaptedNodes = new AdaptedNodesOfAllPlugins
                 OGLocalTables.forAllRemovables { rt =>
-                  nt.accumulate(rt.pluginTracker.adaptedNodes)
+                  adaptedNodes.accumulate(rt.pluginTracker.adaptedNodes)
                 }
-                val samples: Map[PluginType, NodeTask] = nt.randomNodes()
+                val inFlightSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomUncompletedNodes()
+                val unFiredSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomNodes(!_.pluginFired())
                 val interval = tSample - prevSample
-                val weight = (tSample - prevSample) * SamplingProfiler.NANOSPERMILLI
+                val weightMillis = (tSample - prevSample)
+                val weightNanos = weightMillis * SamplingProfiler.NANOSPERMILLI
                 BaseSamplers.accumulateStats("pluginSamplingInterval", interval)
                 pluginStackRecorders.synchronized {
-                  samples.foreach { case (pt, nt) =>
-                    val recorder = pluginStackRecorders.getOrElseUpdate(pt, new StackRecorder("Adapted_" + pt.name))
-                    recorder.record(nt, weight)
+                  inFlightSample.foreach { case (pt, (ntsk, n)) =>
+                    if (n > 0) {
+                      val recorder = getRecorder(pt, Adapted)
+                      recorder.record(ntsk, weightNanos)
+                      NodeStackSampler.pluginStateAccumulator.accumulate(Adapted, pt.name, weightMillis)
+                    }
+                  }
+                  unFiredSample.foreach { case (pt, (ntsk, n)) =>
+                    if (n > 0) {
+                      val recorder = getRecorder(pt, Unfired)
+                      recorder.record(ntsk, weightNanos)
+                      NodeStackSampler.pluginStateAccumulator.accumulate(Unfired, pt.name, weightMillis)
+                    }
                   }
                 }
               }

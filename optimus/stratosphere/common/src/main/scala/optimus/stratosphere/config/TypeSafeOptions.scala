@@ -14,8 +14,8 @@ package optimus.stratosphere.config
 import com.typesafe.config.Config
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
-import optimus.stratosphere.utils.MemSize
-import optimus.stratosphere.utils.MemUnit
+import optimus.utils.MemSize
+import optimus.utils.MemUnit
 import org.fusesource.jansi.Ansi.Color
 
 import java.nio.file.Path
@@ -186,6 +186,10 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def path: String = self.select("intellij.jetfire.path")
     }
 
+    object junit5 {
+      def enabled: Boolean = self.select("intellij.junit5.enabled")
+    }
+
     object location {
       def afs: RemoteIntellijLocation =
         new RemoteIntellijLocation(
@@ -337,7 +341,10 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
       object graphviz {
         def path: Option[String] = self.select("internal.markdown.graphviz.path")
+        def dpi: Option[Int] = self.select("internal.markdown.graphviz.dpi")
+        def enableImageLinks: Option[Boolean] = self.select("internal.markdown.graphviz.enable-image-links")
       }
+
     }
 
     object obt {
@@ -369,6 +376,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object pypi {
       def configFile: Path = self.select("internal.pypi.config-file")
+      def uvConfigFile: Path = self.select("internal.pypi.uv-config-file")
     }
 
     object repositoryMigration {

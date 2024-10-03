@@ -163,12 +163,19 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorksp
 
   def diffFiles(from: String): Set[FileAsset] = {
     val linesModified = execute("-C", workspaceSourceRoot.pathString, "diff", "--name-only", from)
+    files(linesModified)
+  }
+
+  def untrackedFiles(): Set[FileAsset] = {
     val linesUntracked = execute("-C", workspaceSourceRoot.pathString, "ls-files", "--others", "--exclude-standard")
-    (linesModified ++ linesUntracked)
+    files(linesUntracked)
+  }
+
+  private def files(lines: Seq[String]): Set[FileAsset] =
+    lines
       .filter(!_.startsWith("warning: "))
       .map(l => workspaceSourceRoot.resolveFile(l))
       .toSet
-  }
 
   private[utils] def analyzeDiffOutput(output: Seq[String]): Map[FileAsset, Set[Int]] = {
     val diffs = DiffParser.parse(output.mkString("\n")).asScala

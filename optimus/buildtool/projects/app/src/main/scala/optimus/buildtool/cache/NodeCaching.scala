@@ -20,7 +20,7 @@ object NodeCaching {
   // recompilation during a full build or incorrect hashing)
   private[buildtool] val reallyBigCache = new UNodeCache(
     name = "CacheThatShouldNotEvictAnythingEver",
-    maxSize = 50000,
+    maxSize = 100000,
     requestedConcurrency = Settings.cacheConcurrency,
     cacheBatchSize = NodeCCache.defaultCacheBatchSize,
     cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding

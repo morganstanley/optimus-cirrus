@@ -57,7 +57,7 @@ public abstract class NCPolicy implements Serializable {
   public final long clearFlags;
 
   /** Returns user filterable name for anything but default policies */
-  public String favorReuseName() {
+  public String policyName() {
     return null;
   }
 
@@ -216,6 +216,10 @@ public abstract class NCPolicy implements Serializable {
     return false;
   }
 
+  public boolean appliesToRecursive() {
+    return false;
+  }
+
   <T> LookupResult<T> alternativeLookup(
       BaseUNodeCache cache, PropertyNode<T> nkey, EvaluationQueue eq) {
     //noinspection unchecked
@@ -247,6 +251,11 @@ public abstract class NCPolicy implements Serializable {
     @Override
     public String optconfName() {
       return "default";
+    }
+
+    @Override
+    public boolean appliesToRecursive() {
+      return true;
     }
   }
 
@@ -298,10 +307,15 @@ public abstract class NCPolicy implements Serializable {
 
     @Override
     public boolean appliesToScenarioIndependent() {
-      return true;
-    } // allow disabling cache on SI nodes
+      return true; // allow disabling cache on SI nodes
+    }
 
-    // match existing name in optconf
+    @Override
+    public boolean appliesToRecursive() {
+      return true; // allow disabling cache on @recursive nodes
+    }
+
+    /** match existing name in optconf */
     @Override
     public String optconfName() {
       return "dontCache";
@@ -322,7 +336,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     @Override
-    public String favorReuseName() {
+    public String policyName() {
       return "XSFT";
     }
 
@@ -337,7 +351,7 @@ public abstract class NCPolicy implements Serializable {
     // match existing name in optconf
     @Override
     public String optconfName() {
-      return favorReuseName();
+      return policyName();
     }
 
     @Override
@@ -409,7 +423,7 @@ public abstract class NCPolicy implements Serializable {
 
     @Override
     public String optconfName() {
-      return favorReuseName();
+      return policyName();
     }
 
     XSPolicy() {
@@ -417,7 +431,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     @Override
-    public String favorReuseName() {
+    public String policyName() {
       return "XS";
     }
 

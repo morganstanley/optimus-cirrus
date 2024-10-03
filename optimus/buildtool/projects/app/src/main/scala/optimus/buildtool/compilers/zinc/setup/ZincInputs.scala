@@ -17,10 +17,10 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.Optional
 import java.util.UUID
-import java.util.zip.Deflater
 import optimus.buildtool.artifacts.AnalysisArtifact
 import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.Artifact.InternalArtifact
+import optimus.buildtool.artifacts.Artifact.InternalPathedArtifact
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.PathedArtifact
@@ -113,7 +113,7 @@ class ZincInputs(
     activeTask.trace.reportProgress(s"preparing ${traceType.name} inputs")
 
     val upstreamClassJars: Map[InternalArtifactId, PathedArtifact] = inputClasspath.collect {
-      case InternalArtifact(id, a) => id -> a
+      case InternalPathedArtifact(id, a) => id -> a
     }.toSingleMap
 
     val upstreamAnalyses: Seq[(InternalArtifactId, AnalysisArtifact)] =
@@ -121,7 +121,7 @@ class ZincInputs(
         (id, a)
       }
 
-    val classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact] = upstreamAnalyses.flatMap {
+    val classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact] = upstreamAnalyses.flatMap {
       case (analysisId, analysis) =>
         val classTypes: Seq[AT] = analysisId.tpe match {
           // we can use signature analysis for all class/signature jar types
@@ -133,7 +133,7 @@ class ZincInputs(
 
         val classJars = classTypes.flatMap { tpe =>
           val classId = InternalArtifactId(analysisId.scopeId, tpe, None)
-          upstreamClassJars.get(classId).map(InternalArtifact(classId, _))
+          upstreamClassJars.get(classId).map(InternalPathedArtifact(classId, _))
         }
 
         if (classJars.isEmpty)
@@ -237,7 +237,7 @@ class ZincInputs(
     )
   }
 
-  private def lookup(classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact]): ZincEntryLookup = {
+  private def lookup(classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact]): ZincEntryLookup = {
     val classpathToAnalysis: Map[VirtualFile, Path] = classJarToAnalysis.map { case (classJar, analysis) =>
       SimpleVirtualFile(classJar.artifact.path) -> analysis.path
     }
@@ -255,12 +255,12 @@ class ZincInputs(
       classpath: Seq[VirtualFile],
       outputJar: PathPair,
       inputClasspath: Seq[PathedArtifact],
-      classJarToAnalysis: Map[InternalArtifact, AnalysisArtifact],
+      classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact],
       lookupTracker: Option[LookupTracker]
   ): IncOptions = {
 
-    val pathToInternalClassJar = inputClasspath.collect { case InternalArtifact(id, a) =>
-      a.path -> InternalArtifact(id, a)
+    val pathToInternalClassJar = inputClasspath.collect { case InternalPathedArtifact(id, a) =>
+      a.path -> InternalPathedArtifact(id, a)
     }.toSingleMap
 
     val externalHooks = new ObtExternalHooks(
@@ -405,10 +405,6 @@ class ZincInputs(
 
     override def get(signatureJar: Option[PathPair]): Seq[String] =
       super.get(signatureJar) ++ cachedClasspathArgs ++ release
-
-    override def mandatoryArgs: Seq[String] = super.mandatoryArgs ++
-      // since we hash and repack the jars, we don't want Scalac to waste time compressing them
-      Seq("-Yjar-compression-level", Deflater.NO_COMPRESSION.toString)
 
     def cachedClasspathArgs: Seq[String] = if (settings.cachePluginAndMacroClassLoaders) {
       val macroClasspath = obtInputs.inputArtifacts.distinct.collect {

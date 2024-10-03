@@ -12,9 +12,8 @@
 package optimus.platform
 
 import java.util.concurrent.atomic.AtomicInteger
-import optimus.core.CoreHelpers
+import optimus.core._
 import optimus.platform.annotations._
-import optimus.core.log
 import optimus.graph._
 import optimus.platform.storable.Storable
 import optimus.platform.util.html._
@@ -140,9 +139,14 @@ class Tweak private[optimus] (
   def writeHtml(hb: HtmlBuilder, ignoreTracing: Boolean): HtmlBuilder = {
     hb.namedGroup("Tweak") {
       val infected = ignoreTracing || hb.displayInColour(this.id)
-      hb.buildPrettyLeaf(if (infected) TweakTargetStyle else TweakLow, target.writePrettyString _)
+      val xsftDependsOn = if (hb.tpdMask eq null) false else hb.tpdMask.intersects(target.propertyInfo.tweakMask)
+      hb.buildPrettyLeaf(
+        if (infected) TweakTargetStyle else (if (xsftDependsOn) TweakMid else TweakLow),
+        target.writePrettyString _)
 
-      hb.buildPrettyLeaf(if (infected) TweakVal else TweakLow, tweakTemplate.writePrettyString(_, this))
+      hb.buildPrettyLeaf(
+        if (infected) TweakVal else (if (xsftDependsOn) TweakMid else TweakLow),
+        tweakTemplate.writePrettyString(_, this))
       hb.removeSeparator()
 
       hb.buildLeaf(TweakLow) { sb =>

@@ -113,9 +113,40 @@ sealed trait TransactionEntitySignalAsEvent[+V] extends ReactiveEvent {
 final case class TransactionEntitySignalUpdate[+V <: Entity](
     streamId: String,
     tt: Instant,
-    data: Seq[TransactionEntityInsertedSignal[V]],
+    override val data: Seq[TransactionEntityChangedSignal[V]],
     protected[reactive] val commitId: Long
 ) extends TransactionEntitySignalAsEvent[V]
+
+/** BusinessEvent from Upsertable (delayed) Transaction. */
+sealed trait TransactionEventSignalAsEvent[+V <: BusinessEvent] extends ReactiveEvent {
+  def data: TransactionEventChangedSignal[V]
+}
+
+/**
+ * This update is from @stored @entity subscription from Upsertable (delayed) Transaction published as Message.
+ */
+final case class TransactionEventSignalUpdate[+V <: BusinessEvent](
+    streamId: String,
+    tt: Instant,
+    override val data: TransactionEventChangedSignal[V],
+    protected[reactive] val commitId: Long
+) extends TransactionEventSignalAsEvent[V]
+
+sealed trait TransactionEventChangedSignal[+V <: BusinessEvent] {
+
+  /**
+   * the identity of the value. if updates are tracked over time this can be used to identify the object e.g. of V is a
+   * Transaction Event, this would be the BusinessEventReference
+   */
+  val id: BusinessEventReference
+  protected[reactive] val commitId: Long
+}
+
+final case class TransactionEventInsertedSignal[V <: BusinessEvent](
+    id: BusinessEventReference,
+    value: V,
+    protected[reactive] val commitId: Long
+) extends TransactionEventChangedSignal[V]
 
 sealed trait TransactionEntityChangedSignal[+V] {
 

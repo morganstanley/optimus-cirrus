@@ -109,7 +109,7 @@ private[debugger] class DebuggerViewModel(val interpreter: HtmlInterpreters.Type
     }
   }
 
-  // write a tweak in the form: MyEntity ( @hashcode ).node := someValue (note that for by name lambdas someValue
+  // write a tweak in the form: MyEntity(@hashcode).node :=someValue (note that for by name lambdas someValue
   // will be printed as reference to the line of code where the tweak is defined)
   private def writeTweak(hb: HtmlBuilder, twk: PropertyNode[_], tweakTo: Option[Tweak] = None): Unit = {
     hb ++= twk.entity.getClass.getSimpleName ++= "("

@@ -15,7 +15,8 @@ class MigrationTrackerToolWerr extends MigrationTrackerTool
 
 private[buildtool] trait MigrationTrackerToolWerrParams extends TrackerToolParams {
   override val frontierScope = "optimus.onboarding.scala_2_13_frontier_werr.main"
-  override val frontierObtFile = "optimus/onboarding/projects/scala_2_13_frontier_werr/scala_2_13_frontier_werr.obt"
+  override val frontierObtFile = Some(
+    "optimus/onboarding/projects/scala_2_13_frontier_werr/scala_2_13_frontier_werr.obt")
   override val rulesYaml = None
   override val allFrontierScope: Option[String] = Some("optimus.onboarding.scala_2_13_frontier.main")
 }

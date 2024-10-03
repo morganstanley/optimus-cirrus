@@ -11,6 +11,7 @@
  */
 package optimus.platform.util
 
+import optimus.platform.ScenarioStack
 import optimus.graph.NodeTaskInfo
 import optimus.graph.PropertyInfo
 import optimus.graph.SchedulerPlugin
@@ -18,10 +19,10 @@ import optimus.graph.SchedulerPlugin
 object CachingTestUtils {
   // Watch out! If multiple tests are running the same task and the counter is only being set once in test setup,
   // this can result in flakiness if the tests are asserting counts relevant only to them without resetting in between
-  def runCount(info: PropertyInfo[_]): Int = getCount(info.getPlugin)
-  def runCount(info: NodeTaskInfo): Int = getCount(info.getPlugin)
+  def runCount(info: PropertyInfo[_]): Int = getCount(info.getPlugin_TEST_ONLY)
+  def runCount(info: NodeTaskInfo): Int = getCount(info.getPlugin_TEST_ONLY)
 
-  def resetCount(info: PropertyInfo[_]): Unit = info.getPlugin match {
+  def resetCount(info: PropertyInfo[_]): Unit = info.getPlugin_TEST_ONLY match {
     case c: NodeCounterPlugin => c.reset()
     case _                    => throw new IllegalArgumentException("Expected NodeCounterPlugin")
   }

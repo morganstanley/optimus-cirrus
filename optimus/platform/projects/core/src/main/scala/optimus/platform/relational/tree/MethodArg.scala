@@ -25,6 +25,7 @@ object MethodArgConstants {
   val function = "f"
   val predicate = "p"
   val left = "left"
+  val reduce = "reduce"
   val right = "right"
   val rightDefault = "rightDefault"
 }

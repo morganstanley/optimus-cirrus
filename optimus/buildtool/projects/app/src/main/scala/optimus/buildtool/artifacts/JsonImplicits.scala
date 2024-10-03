@@ -173,16 +173,18 @@ private[buildtool] object JsonImplicits {
     }
   }
 
-  implicit val visualiserInfoFormatter: JsonFormat[DependencyInfo] = new JsonFormat[DependencyInfo] {
-    override def write(obj: DependencyInfo): JsValue = {
-      JsString(obj.module + "," + obj.config + "," + obj.version)
+  implicit val visualizerInfoFormatter: JsonFormat[DependencyInfo] =
+    new JsonFormat[DependencyInfo] {
+      private val delimiter = ",,"
+      override def write(obj: DependencyInfo): JsValue = {
+        JsString(Seq(obj.module, obj.config, obj.version, obj.isMaven.toString).mkString(delimiter))
+      }
+      override def read(json: JsValue): DependencyInfo = {
+        val obj = json.convertTo[String]
+        val Array(module, config, version, isMaven) = obj.split(delimiter, 4)
+        DependencyInfo(module, config, version, isMaven.toBoolean)
+      }
     }
-    override def read(json: JsValue): DependencyInfo = {
-      val obj = json.convertTo[String]
-      val Array(module, config, version) = obj.split(",", 3)
-      DependencyInfo(module, config, version)
-    }
-  }
 
   implicit val CachedExternalClassFileArtifactFormatter: RootJsonFormat[ExternalClassFileArtifact.Cached] = jsonFormat8(
     ExternalClassFileArtifact.Cached.apply)

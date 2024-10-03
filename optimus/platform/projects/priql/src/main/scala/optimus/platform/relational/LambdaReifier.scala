@@ -79,7 +79,6 @@ class LambdaReifier[C <: Context](val c: C) extends AbstractLambdaReifier {
       "replaceValue",
       "arrange",
       "aggregate",
-      "reduce",
       "foldLeft",
       "pivotOn",
       "pivotOnTyped",

@@ -34,6 +34,8 @@ final case class MessagesSubscription private (
     subscriptionType: MessagesSubscription.SubscriptionType
 ) {
 
+  override def toString: String = s"MessageSubscription/$subscriptionType [id=$subId; $eventClassName]"
+
   // TODO (OPTIMUS-49663): Support client-side priql filter when subscribing to an @event(contained=true)
   def hasClientSideFilter: Boolean = false
 }

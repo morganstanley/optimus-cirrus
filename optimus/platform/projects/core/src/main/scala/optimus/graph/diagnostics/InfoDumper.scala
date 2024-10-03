@@ -46,6 +46,7 @@ import optimus.graph.Exceptions
 import optimus.graph.GCNative
 import optimus.graph.Scheduler
 import optimus.logging.LoggingInfo
+import optimus.platform.util.InfoDump
 import optimus.platform.util.Log
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
@@ -62,6 +63,33 @@ import optimus.utils.FileUtils.tmpPath
 
 import java.time.Instant
 import scala.util.Properties.isWin
+
+//noinspection ScalaUnusedSymbol // ServiceLoader
+class InfoDumper extends InfoDump {
+
+  override def kill(
+      prefix: String,
+      msgs: List[String] = Nil,
+      code: Int = -1,
+      crumbSource: Crumb.Source = Crumb.RuntimeSource,
+      exceptions: Array[Throwable] = Array.empty[Throwable]): Unit =
+    InfoDumper.kill(prefix, msgs, code, crumbSource, exceptions)
+
+  override def dump(
+      prefix: String,
+      msgs: List[String] = Nil,
+      crumbSource: Crumb.Source = Crumb.RuntimeSource,
+      id: ChainedID = ChainedID.root.child,
+      description: String = "Information",
+      heapDump: Boolean = false,
+      taskDump: Boolean = false,
+      noMore: Boolean = false,
+      exceptions: Array[Throwable] = Array.empty,
+      emergency: Boolean = false
+  ): String =
+    InfoDumper.dump(prefix, msgs, crumbSource, id, description, heapDump, taskDump, noMore, exceptions, emergency)
+
+}
 
 object InfoDumper extends Log {
 
@@ -344,8 +372,10 @@ object InfoDumper extends Log {
   def writeToTmpLog(prefix: String, crumbSource: Crumb.Source, id: ChainedID, msg: => String): Option[Path] = {
     val path: Path = tmpPath(prefix, "log")
     try {
-      io.FileUtils.write(path.toFile, msg, Charset.defaultCharset())
+      val m = msg
+      io.FileUtils.write(path.toFile, m, Charset.defaultCharset())
       dropCrumb(crumbSource, id, s"Writing diagnostics to $path", Some(path))
+      System.err.println(m) // Deliberate!
       Some(path)
     } catch {
       case NonFatal(e) =>

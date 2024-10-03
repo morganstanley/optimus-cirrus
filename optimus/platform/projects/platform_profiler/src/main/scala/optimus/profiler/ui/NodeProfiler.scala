@@ -504,11 +504,11 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
   def loadGroupAndMergeTraces(): Unit = {
     val dialog = new GroupMergeDialog()
     // TODO (OPTIMUS-65137): Initialize PgoModuleMap using pgo_modules.json in environment repo
-    val (rootDir, artifactsPath, names, withTweakUsage) = dialog.groupTracesInput()
+    val (rootDir, artifactsPath, names, withDisableXSFT) = dialog.groupTracesInput()
 
-    (rootDir, artifactsPath, names, withTweakUsage) match {
+    (rootDir, artifactsPath, names, withDisableXSFT) match {
       case (Some(rootDirVal), Some(artifactsPathVal), _, _) =>
-        loadGroupAndMergeTraces(rootDirVal, artifactsPathVal, names.get, withTweakUsage.get)
+        loadGroupAndMergeTraces(rootDirVal, artifactsPathVal, names.get, withDisableXSFT.get)
       case (null, null, null, null) => // Canceled dialog
       case (None, _, _, _) =>
         JOptionPane.showMessageDialog(
@@ -532,11 +532,11 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       rootDir: String,
       artifactsPath: String,
       names: Seq[String],
-      withTweakUsage: Seq[String]): Unit = {
+      withDisableXSFT: Seq[String]): Unit = {
     val validNames = validateGroupNames(names)
-    val mergedLN = MergeTraces.mergeJobTraces(LN_FILER + rootDir, artifactsPath, validNames, withTweakUsage)
+    val mergedLN = MergeTraces.mergeJobTraces(LN_FILER + rootDir, artifactsPath, validNames, withDisableXSFT)
     if (mergedLN.isEmpty) {
-      val mergedVI = MergeTraces.mergeJobTraces(VI_FILER + rootDir, artifactsPath, validNames, withTweakUsage)
+      val mergedVI = MergeTraces.mergeJobTraces(VI_FILER + rootDir, artifactsPath, validNames, withDisableXSFT)
       showMergedGroup(artifactsPath, mergedVI)
     } else {
       showMergedGroup(artifactsPath, mergedLN)
@@ -672,8 +672,8 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       new JCheckBox("Include Previously Configured", pref.getBoolean("ExportConfig.includePrevConfigured", true))
     val autoTrimCaches =
       new JCheckBox("Auto Suggest Trim Caches", pref.getBoolean("ExportConfig.autoTrimCaches", false))
-    val autoSuggestXSFT =
-      new JCheckBox("Auto Suggest XSFT for Nodes", pref.getBoolean("ExportConfig.autoSuggestXSFT", false))
+    val autoDisableXSFT =
+      new JCheckBox("Auto Suggest Disable XSFT for Nodes", pref.getBoolean("ExportConfig.autoDisableXSFT", false))
     val copyConfigLine =
       new JCheckBox("Copy Config Argument into Clipboard", pref.getBoolean("ExportConfig.copyArgToClipBoard", true))
     val cfg: AutoPGOThresholds = AutoPGOThresholds()
@@ -696,7 +696,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       pref.putBoolean("ExportConfig.autoDisableCaching", autoDisableCaching.isSelected)
       pref.putBoolean("ExportConfig.includePrevConfigured", includePrevDisabledCache.isSelected)
       pref.putBoolean("ExportConfig.autoTrimCaches", autoTrimCaches.isSelected)
-      pref.putBoolean("ExportConfig.autoSuggestXSFT", autoSuggestXSFT.isSelected)
+      pref.putBoolean("ExportConfig.autoDisableXSFT", autoDisableXSFT.isSelected)
       pref.putBoolean("ExportConfig.copyArgToClipBoard", copyConfigLine.isSelected)
       pref.putInt(
         "ExportConfig.cacheConfigNeverHitThreshold",
@@ -720,9 +720,9 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       "To disable caching 'Cache Benefit' must be less than 'Cache Benefit Threshold'")
     cacheConfigHitRatio.setToolTipText(
       "'Hit Ratio Threshold' indicates how low the hit ratio must be for caching to actually be disabled. Calculated as hits/(hits + misses)")
-    autoSuggestXSFT.setToolTipText("Allow XSFT to be enabled as the cache policy")
     setLayout(new BoxLayout(this, BoxLayout.Y_AXIS))
     add(autoDisableCaching)
+    add(autoDisableXSFT)
     add(autoTrimCaches)
     add(includePrevDisabledCache)
     add(copyConfigLine)
@@ -732,7 +732,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
   def cmdExportCachePropertiesFile(): Unit = {
     val options = new ExportConfigOptions(ProfilerUI.pref)
     JUIUtils.saveToFile(this, FileChooser.optConfFileChooser(options)) { file =>
-      val modes = PGOMode.fromUIOptions(options.autoDisableCaching.isSelected)
+      val modes = PGOMode.fromUIOptions(options.autoDisableCaching.isSelected, options.autoDisableXSFT.isSelected)
       val includePreviouslyConfigured = options.includePrevDisabledCache.isSelected
       val autoTrim = options.autoTrimCaches.isSelected
 

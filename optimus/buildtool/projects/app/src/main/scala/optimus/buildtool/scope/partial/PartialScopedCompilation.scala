@@ -60,7 +60,7 @@ import scala.collection.immutable.Seq
         case x => x
       } :+ fingerprint
     }
-    else Nil
+    else Seq(fingerprint)
   }
 
   override def toString: String = s"${getClass.getSimpleName}(${scope.id})"

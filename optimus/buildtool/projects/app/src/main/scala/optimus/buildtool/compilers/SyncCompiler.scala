@@ -32,7 +32,6 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hide
 import optimus.buildtool.utils.Utils
 import optimus.platform._
-import optimus.platform.AdvancedUtils.Throttle
 
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
@@ -115,17 +114,8 @@ private[buildtool] object SyncCompiler {
 }
 
 trait SyncCompilerFactory {
-  val instanceThrottle: Option[Throttle]
-  val sizeThrottle: Option[Throttle]
 
   def fingerprint(traceType: MessageTrace): Seq[String]
   def newCompiler(scopeId: ScopeId, traceType: MessageTrace): SyncCompiler
-  @async def throttled[T](weight: Int)(f: NodeFunction0NN[T]): T = instanceThrottle match {
-    case Some(it) => it(asNode(() => sizeThrottled(weight)(f)))
-    case None     => sizeThrottled(weight)(f)
-  }
-  @async private def sizeThrottled[T](weight: Int)(f: NodeFunction0NN[T]): T = sizeThrottle match {
-    case Some(st) => st(f, NodeFunction1.identity[T], nodeWeight = weight)
-    case None     => f()
-  }
+  @async def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = f()
 }

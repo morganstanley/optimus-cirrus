@@ -84,7 +84,7 @@ public class NodeTaskInfo {
   private static final long LOCAL_CACHE = 1L << 19;
   public static final long HOLDS_NATIVE = 1L << 20; // Will be released from GCNative
   public static final long SINGLE_THREADED = 1L << 21; // Switch to a single queue
-  public static final long HAS_PLUGIN = 1L << 22; // Plugin is installed
+  public static final long SHOULD_LOOKUP_PLUGIN = 1L << 22; // Plugin installed (needs lookup)
 
   // if true, then HOLDS_NATIVE (and possibly more in future) was set by heap explorer
   private static final long HEAP_EXPLORED = 1L << 23;
@@ -343,21 +343,30 @@ public class NodeTaskInfo {
         pkgName, fullName.substring(pkgName.length() + 1) + "." + _name, modifier());
   }
 
-  public final SchedulerPlugin getPlugin() {
-    return _plugin;
+  public final SchedulerPlugin getPlugin(ScenarioStack scenarioStack) {
+    SchedulerPlugin scopedPlugin = scenarioStack.siParams().resolvePlugin(this);
+    return scopedPlugin != null ? scopedPlugin : _plugin;
   }
 
-  public final PluginType getPluginType() {
-    return _plugin == null ? PluginType.None() : _plugin.pluginType();
+  /** You are <b>NOT</b> allowed to use this method. Only existing usage is allowed. */
+  public final SchedulerPlugin unsafeGetPlugin_LIKELY_TO_BE_WRONG() {
+    // the only reason why this function exists is as a temporary mechanism
+    // to move from the legacy NTI-only plugins to scoped plugins.
+    return getPlugin(ScenarioStack.constant());
   }
 
-  // Possibly overriden by fake plugins
-  public PluginType reportingPluginType() {
-    return _reportingPluginType == null ? getPluginType() : _reportingPluginType;
+  public final SchedulerPlugin getPlugin_TEST_ONLY() {
+    return unsafeGetPlugin_LIKELY_TO_BE_WRONG();
   }
 
-  public boolean hasPluginType() {
-    return _reportingPluginType != null || hasPlugin();
+  public final PluginType getPluginType(ScenarioStack scenarioStack) {
+    SchedulerPlugin plugin = getPlugin(scenarioStack);
+    return plugin == null ? PluginType.None() : plugin.pluginType();
+  }
+
+  // Possibly overridden by fake plugins
+  public PluginType reportingPluginType(ScenarioStack scenarioStack) {
+    return _reportingPluginType == null ? getPluginType(scenarioStack) : _reportingPluginType;
   }
 
   public void setPlugin(SchedulerPlugin plugin) {
@@ -373,13 +382,19 @@ public class NodeTaskInfo {
 
     if (plugin != null) {
       _plugin = plugin;
-      updateFlags(HAS_PLUGIN, true); // Turn on AFTER _plugin set
+      markAsShouldLookupPlugin(); // Turn on AFTER _plugin set
     } else {
-      updateFlags(HAS_PLUGIN, false); // Turn off the flag BEFORE resetting _plugin
+      // we do not reset the flag because it might have been set by a scoped plugin
+      // on scenario stack, so it is never safe to remove
       _plugin = null;
     }
 
     if (callSiteHolder != null) callSiteHolder.refreshTarget();
+  }
+
+  public void clearPlugin_TEST_ONLY() {
+    _plugin = null;
+    updateFlags(SHOULD_LOOKUP_PLUGIN, false);
   }
 
   protected /*[graph]*/ NodeTaskInfo setReportingPluginType(PluginType pt) {
@@ -392,8 +407,8 @@ public class NodeTaskInfo {
     return _flags;
   }
 
-  public final boolean hasPlugin() {
-    return (_flags & HAS_PLUGIN) != 0;
+  public final boolean shouldLookupPlugin() {
+    return (_flags & SHOULD_LOOKUP_PLUGIN) != 0;
   }
 
   public final boolean isStored() {
@@ -401,7 +416,7 @@ public class NodeTaskInfo {
   }
 
   final boolean hasNoPlugAndNotST() {
-    return (_flags & (HAS_PLUGIN | SINGLE_THREADED)) == 0;
+    return (_flags & (SHOULD_LOOKUP_PLUGIN | SINGLE_THREADED)) == 0;
   }
 
   final boolean atMostOneWaiter() {
@@ -439,6 +454,10 @@ public class NodeTaskInfo {
   }
 
   /** sets flag only */
+  public void markAsShouldLookupPlugin() {
+    updateFlags(SHOULD_LOOKUP_PLUGIN, true);
+  }
+
   private void markAsExternallyConfigured(long flag) {
     checkExternallyConfiguredFlag(flag);
     updateFlags(flag, 0);
@@ -447,7 +466,7 @@ public class NodeTaskInfo {
   // Cross scenario policies (XS, XSFT) require at least 2 slots for proxies otherwise we have no
   // hope of cache reuse
   private void configureSizeForCrossScenario(NodeCCache newCache) {
-    if (newCache != null && _cachePolicy.favorReuseName() != null && newCache.getMaxSize() < 2) {
+    if (newCache != null && _cachePolicy.policyName() != null && newCache.getMaxSize() < 2) {
       var msg = "Can't set custom cache of size < 2 on a cross-scenario node! Updating size to 2";
       NodeCacheInfo.log().javaLogger().warn(msg);
       newCache.setMaxSize(2);
@@ -895,18 +914,17 @@ public class NodeTaskInfo {
     if (policy == _cachePolicy) {
       return false;
     }
-    if (!isScenarioIndependent() || policy.appliesToScenarioIndependent()) { // don't downgrade SI
-      // set new flag, drop the old one
-      updateFlags(policy.associatedFlags, _cachePolicy.clearFlags);
-      _cachePolicy = policy; // set policy must be AFTER update flags
-      return true;
-    } else {
-      // this is too verbose if using NodeTrace helpers to set policies in bulk
-      if (Settings.schedulerAsserts) {
-        OGScheduler.log.warn("Incompatible NCPolicy, ignoring!");
-      }
+    if ((isScenarioIndependent() && !policy.appliesToScenarioIndependent())
+        || (isRecursive() && !policy.appliesToRecursive())) {
+      // To verbose otherwise
+      if (Settings.schedulerAsserts) OGScheduler.log.warn("Incompatible NCPolicy, ignoring!");
       return false;
     }
+
+    // set new flag, drop the old one
+    updateFlags(policy.associatedFlags, _cachePolicy.clearFlags);
+    _cachePolicy = policy; // set policy must be AFTER update flags
+    return true;
   }
 
   private void checkAndSetPolicy(String entryPoint, NCPolicy policy) {
@@ -1391,8 +1409,8 @@ public class NodeTaskInfo {
     }
 
     @Override
-    public PluginType reportingPluginType() {
-      return _source.reportingPluginType();
+    public PluginType reportingPluginType(ScenarioStack scenarioStack) {
+      return _source.reportingPluginType(scenarioStack);
     }
   }
 
@@ -1523,14 +1541,13 @@ public class NodeTaskInfo {
         sb.append(" | NodeTaskInfo.PROFILER_PROXY");
       }
     }
-    if ((flags & HAS_PLUGIN) != 0) {
+    if ((flags & SHOULD_LOOKUP_PLUGIN) != 0) {
       if (!forTest) {
         sb.append("+");
       } else {
-        sb.append(" | NodeTaskInfo.HAS_PLUGIN");
+        sb.append(" | NodeTaskInfo.SHOULD_LOOKUP_PLUGIN");
       }
     }
-
     return sb.toString();
   }
 
@@ -1599,8 +1616,8 @@ public class NodeTaskInfo {
     if ((flags & PROFILER_PROXY) != 0) {
       sb.append("~ - proxy node");
     }
-    if ((flags & HAS_PLUGIN) != 0) {
-      sb.append("+ - has plugin");
+    if ((flags & SHOULD_LOOKUP_PLUGIN) != 0) {
+      sb.append("+ - should lookup plugin");
     }
 
     sb.append("</html>");

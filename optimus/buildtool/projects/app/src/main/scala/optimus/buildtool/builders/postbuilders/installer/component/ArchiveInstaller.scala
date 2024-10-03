@@ -33,6 +33,7 @@ import optimus.buildtool.resolvers.MavenUtils
 import optimus.buildtool.trace.InstallArchive
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.ExtraFileInJar
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.PathUtils
@@ -186,33 +187,40 @@ class ArchiveInstaller(installer: Installer) extends Log {
         .replace("obt.versionId", versionId)
     }
 
+    val extraInJarFiles = {
+      val max = (internalDeps ++ externalDeps).size - 1
+      // prefix with index to prevent dupes and to ensure some level of classpath ordering
+      val copiedInternalDeps = internalDeps.zipWithIndex.map { case (a, i) =>
+        val idx = Utils.sortableInt(i, max)
+        ExtraFileInJar(RelativePath(s"$libDir/$idx-${a.id.tpe.name}-${a.file.name}"), a.path)
+      }
+      val externalOffset = internalDeps.size
+      val copiedExternalDeps = externalDeps.zipWithIndex.map { case (a, i) =>
+        val idx = Utils.sortableInt(i + externalOffset, max)
+        val filePath = a.file match {
+          case f: JarHttpAsset =>
+            MavenUtils
+              .getLocal(f, installer.depCopyRoot)
+              .getOrThrow(s"Get http file failed! it should be downloaded into local disk but not: ${f.url}")
+              .path
+          case _: JarFileSystemAsset => a.path
+        }
+        ExtraFileInJar(RelativePath(s"$libDir/$idx-${a.file.name}"), filePath)
+      }
+      copiedInternalDeps ++ copiedExternalDeps
+    }
+
     val installedArchive = bundleFingerprints(scopeId).writeIfChanged(target, hash) {
       ObtTrace.traceTask(scopeId, InstallArchive) {
         Files.createDirectories(target.parent.path)
         AssetUtils.atomicallyWrite(target, replaceIfExists = true, localTemp = true) { tempJar =>
           val jarContents = archiveContent.map(_.file)
           // since this is our final output (which will get distributed to AFS or wherever), we definitely want to compress it
-          Jars.mergeContent(jarContents, JarAsset(tempJar), resolvedTokens, compress = true) { output =>
-            val max = (internalDeps ++ externalDeps).size - 1
-            // prefix with index to prevent dupes and to ensure some level of classpath ordering
-            internalDeps.zipWithIndex.foreach { case (a, i) =>
-              val idx = Utils.sortableInt(i, max)
-              output.copyInFile(a.path, RelativePath(s"$libDir/$idx-${a.id.tpe.name}-${a.file.name}"))
-            }
-            val externalOffset = internalDeps.size
-            externalDeps.zipWithIndex.foreach { case (a, i) =>
-              val idx = Utils.sortableInt(i + externalOffset, max)
-              val filePath = a.file match {
-                case f: JarHttpAsset =>
-                  MavenUtils
-                    .getLocal(f, installer.depCopyRoot)
-                    .getOrThrow(s"Get http file failed! it should be downloaded into local disk but not: ${f.url}")
-                    .path
-                case _: JarFileSystemAsset => a.path
-              }
-              output.copyInFile(filePath, RelativePath(s"$libDir/$idx-${a.file.name}"))
-            }
-          }
+          Jars.mergeUnhashedContentGivenTokens(
+            jarContents,
+            JarAsset(tempJar),
+            extraFiles = extraInJarFiles,
+            tokens = resolvedTokens)
         }
       }
     }

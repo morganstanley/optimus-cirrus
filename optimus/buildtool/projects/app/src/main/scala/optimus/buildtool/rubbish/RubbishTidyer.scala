@@ -31,15 +31,42 @@ import optimus.utils.ErrorIgnoringFileVisitor
 import optimus.utils.MiscUtils.{NumericFoldable, OrderingChain}
 
 import scala.collection.compat._
+import scala.collection.immutable.Seq
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-trait RubbishTidyer extends Log {
+trait RubbishTidyer {
+  def storedArtifacts: StoredArtifacts
+  def tidy(
+      artifacts: StoredArtifacts,
+      excludedPaths: Seq[Path],
+      tempCutoff: Instant = Instant.now().minusSeconds(3600)
+  ): TidiedRubbish
+}
+object RubbishTidyer extends Log {
+
+  def tidyLogs(logDir: Path, maxAge: Duration): Unit = {
+    val threshold = Instant ofEpochMilli OptimusApp.startupTime minus maxAge
+    def tooOld(file: Path) = Files.getLastModifiedTime(file).toInstant isBefore threshold
+    if (Files.exists(logDir)) {
+      log.info(s"Removing OBT log files older than $threshold")
+      Files
+        .list(logDir)
+        .iterator
+        .asScala
+        .filter(tooOld)
+        .filter(Files.isRegularFile(_)) // avoid DirectoryNotEmptyException in some old workspaces
+        .foreach(Files.delete)
+    }
+  }
+}
+
+trait RubbishTidyerBase extends RubbishTidyer with Log {
+  import Utils._
+
   protected def buildDir: Directory
   protected def sandboxDir: Directory
-
-  protected def rubbish: Seq[Rubbish]
 
   protected def fallibly[A](err: => String)(delete: => A): Option[A] = {
     try Some(delete)
@@ -50,23 +77,28 @@ trait RubbishTidyer extends Log {
     }
   }
 
-  def tidy(tempCutoff: Instant = Instant.now().minusSeconds(3600)): TidiedRubbish = {
+  def tidy(
+      artifacts: StoredArtifacts,
+      excludedPaths: Seq[Path],
+      tempCutoff: Instant = Instant.now().minusSeconds(3600)
+  ): TidiedRubbish = {
     cleanTempFiles(tempCutoff)
 
+    val rubbish = select(artifacts, excludedPaths)
+
     val deleted = fallibly("tidy rubbish") {
-      val selected = rubbish
-      if (selected.nonEmpty) {
-        def rubbishString = s"Rubbish:\n\t${selected
+      if (rubbish.nonEmpty) {
+        def rubbishString = s"Rubbish:\n\t${rubbish
             .map { r =>
               s"${buildDir.path.relativize(r.file)} (${r.lastModified}/${r.weight})"
             }
             .mkString("\n\t")}"
 
         log.debug(rubbishString)
-        selected.flatMap { rubbish =>
-          fallibly(s"delete $rubbish") {
-            Files.deleteIfExists(rubbish.file)
-            rubbish
+        rubbish.flatMap { r =>
+          fallibly(s"delete $r") {
+            Files.deleteIfExists(r.file)
+            r
           }
         }
       } else Nil
@@ -78,15 +110,15 @@ trait RubbishTidyer extends Log {
       }
       val deletedSize = deleted.map(_.size).sum
       log.debug(f"Rubbish tidied, ${deleted.size} items deleted ($deletedSize%,d bytes)")
-      TidiedRubbish(tweaks, deletedSize)
+      TidiedRubbish(deleted, tweaks, deletedSize)
     } else TidiedRubbish.empty
 
-    ObtTrace.setStat(ObtStats.RubbishFiles, tidied.tweaks.size)
+    ObtTrace.setStat(ObtStats.RubbishFiles, tidied.artifacts.size)
     ObtTrace.setStat(ObtStats.RubbishSizeBytes, tidied.sizeBytes)
     tidied
   }
 
-  def cleanTempFiles(tempCutoff: Instant): Unit = {
+  private[rubbish] def cleanTempFiles(tempCutoff: Instant): Unit = {
     // because other OBT builds could be running concurrently, we give a grace period before removing temp files
     def isOld(attrs: BasicFileAttributes): Boolean = attrs.lastModifiedTime().toInstant.isBefore(tempCutoff)
 
@@ -101,128 +133,19 @@ trait RubbishTidyer extends Log {
       AssetUtils.recursivelyDelete(sandboxDir, (_, attrs) => isOld(attrs), throwOnFail = false, retainRoot = true)
     }
   }
-}
-
-/**
- * Rubbish tidying for the filesystem cache.
- *
- * If a git log is provided, the most recent commits in the reflog (exact number determined by --gitLength) are used to
- * determine a set of artifacts that ought not be deleted, in case the user is switching between branches and will
- * therefore use them again.
- */
-final class RubbishTidyerImpl(
-    maxSizeBytes: Long,
-    freeDiskSpaceTriggerBytes: Option[Long],
-    override protected val buildDir: Directory,
-    override protected val sandboxDir: Directory,
-    git: Option[GitLog]
-) extends RubbishTidyer {
-
-  private val oneMB = 1 << 20
-  private def byteToMB(bytes: Long): Long = bytes >> 20
-  private val oneKB = 1 << 10
-  private def byteToKB(bytes: Long): Long = bytes >> 10
-  private def bytesToString(bytes: Long): String =
-    if (math.abs(bytes) > oneMB) f"${byteToMB(bytes)}%,dMB"
-    else if (math.abs(bytes) > oneKB) f"${byteToKB(bytes)}%,dKB"
-    else f"$bytes%,dB"
-
-  private[rubbish] def search(): (Seq[Rubbish], Long) = {
-    // Sufficient free space where freeDiskSpaceTriggerBytes is defined and less than the current free space
-    val freeSpace = Utils.freeSpaceBytes(buildDir)
-    (freeSpace, freeDiskSpaceTriggerBytes) match {
-      case (Some(f), Some(t)) if f > t =>
-        log.debug(s"Skipping rubbish cleanup (${bytesToString(f)} is greater than trigger of ${bytesToString(t)})")
-        (Nil, 0L)
-      case _ =>
-        val rubbish = ArrayBuffer.empty[Rubbish]
-        object visitor extends ErrorIgnoringFileVisitor {
-          override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
-            rubbish += Rubbish(file, attrs)
-            FileVisitResult.CONTINUE
-          }
-        }
-        val extraInfo = freeSpace.map(f => s" (${bytesToString(f)} free disk space)").getOrElse("")
-        log.info(s"Searching for potential rubbish$extraInfo...")
-        val (time, _) = AdvancedUtils.timed {
-          IO.using(Files.list(buildDir.path))(_.iterator.asScala.toArray)
-            .filter(Files.isDirectory(_: Path))
-            .filter((p: Path) => !RubbishTidyerImpl.RootDirectoriesToSkip.contains(p.getFileName.toString))
-            .foreach((p: Path) => Files.walkFileTree(p, visitor))
-        }
-
-        val totalSize = rubbish.sumOf(_.size)
-        log.info(
-          f"Found ${rubbish.size}%,d potential pieces of rubbish (total size ${bytesToString(totalSize)}) in ${time / 1.0e6}%,.1fms"
-        )
-
-        val aboveMaxBuildDirBytes = totalSize - maxSizeBytes
-        val toDelete = (freeSpace, freeDiskSpaceTriggerBytes) match {
-          /** we want to free as much as is required to hit the trigger if possible, otherwise maxBuildDirSize */
-          case (Some(f), Some(t)) if (t - f) < aboveMaxBuildDirBytes =>
-            val belowTriggerBytes = t - f
-            log.info(s"Will attempt to free ${bytesToString(
-                belowTriggerBytes)} to bring disk free space back to ${bytesToString(t)}")
-            belowTriggerBytes
-          case _ if aboveMaxBuildDirBytes > 0 =>
-            log.info(s"Will attempt to free ${bytesToString(
-                aboveMaxBuildDirBytes)} to bring build dir size back to ${bytesToString(maxSizeBytes)}")
-            aboveMaxBuildDirBytes
-          case _ =>
-            log.info(
-              s"Build dir size (${bytesToString(totalSize)}) less than max allowed size (${bytesToString(maxSizeBytes)}). No rubbish tidying necessary.")
-            0
-        }
-        (rubbish, toDelete)
-    }
-  }
-
-  /**
-   * Load artifacts from the git log and their rubbishness weight.
-   *
-   * Unpinned artifacts have weight 0 (the default). Pinned artifacts of other heads have weight 1. Pinned artifacts of
-   * the current head have weight that depends on their pinning recency, equal to `EntriesPerArtifact + 1` for the most
-   * recent down to 2 for the least recent ones.
-   */
-  @entersGraph // it asks for git metadata, but this shouldn't be called from graph anyways
-  private[rubbish] def loadRecentCommitArtifacts(): Map[Path, Int] = {
-
-    val recentHeads = git.toList.apar.flatMap(_.recentHeads)
-    log.debug(s"Recent heads: $recentHeads")
-    val logs = recentHeads.distinct.map(commit => CommitLog.readLog(CommitLog.forCommit(commit.hash, buildDir)))
-
-    logs match {
-      case head :: rest => {
-        // top artifact of all the previous commit, unsorted
-        val other = rest
-          .flatMap(_.values.flatMap(_.headOption))
-          .distinct
-          .map(p => p -> 0)
-
-        val current = head.values
-          .flatMap(_.take(CommitLog.EntriesPerArtifact).zipWithIndex) // take is in case EntriesPerArtifact changes
-          .collect { case (p, index) =>
-            p -> (CommitLog.EntriesPerArtifact - index) // from 1 (least recent) to EntriesPerArtifact (most recent)
-          }
-
-        // with the + 1 thats 1 for every pinned artifact not in current commit, 2+ for current commit.
-        (other ++ current).toGroupedMap.map { case (k, v) => k -> (v.max + 1) }
-      }
-      case _ => Map.empty[Path, Int]
-    }
-  }
 
   /** @param includePinned will reluctantly include pinned artifacts if needed to reach size limits */
-  private[buildtool] def select(includePinned: Boolean = true): Seq[Rubbish] = {
-    val (rubbish, toTrim) = search()
-    select(rubbish, toTrim, includePinned)
-  }
-
-  private[buildtool] def select(rubbish: Seq[Rubbish], toTrim: Long, includePinned: Boolean): Seq[Rubbish] = {
-    if (toTrim > 0L) {
+  private[buildtool] def select(
+      artifacts: StoredArtifacts,
+      excludedPaths: Seq[Path],
+      includePinned: Boolean = true
+  ): Seq[StoredArtifact] = {
+    if (artifacts.toTidyBytes > 0L) {
       val commitArtifacts = loadRecentCommitArtifacts()
       val withPin = {
-        val all = rubbish
+        val all = artifacts
+          .exclude(excludedPaths)
+          .artifacts
           .map { r =>
             val weight = commitArtifacts.getOrElse(r.file, 0) // weight 0 is the default
             r.copy(weight = weight)
@@ -233,7 +156,7 @@ final class RubbishTidyerImpl(
 
       var taken = 0L
       val result = withPin.takeWhile { r =>
-        taken < toTrim && { taken += r.size; true }
+        taken < artifacts.toTidyBytes && { taken += r.size; true }
       }
 
       /**
@@ -257,26 +180,137 @@ final class RubbishTidyerImpl(
     }
   }
 
-  private def countByWeight(files: Seq[Rubbish]): Seq[String] = {
+  /**
+   * Load artifacts from the git log and their rubbishness weight.
+   *
+   * Unpinned artifacts have weight 0 (the default). Pinned artifacts of other heads have weight 1. Pinned artifacts of
+   * the current head have weight that depends on their pinning recency, equal to `EntriesPerArtifact + 1` for the most
+   * recent down to 2 for the least recent ones.
+   */
+  @entersGraph // it asks for git metadata, but this shouldn't be called from graph anyways
+  protected def loadRecentCommitArtifacts(): Map[Path, Int]
+
+  private def countByWeight(files: Seq[StoredArtifact]): Seq[String] = {
     val byWeight =
       files.groupBy(_.weight).map { case (w, rs) => w -> rs.size }.to(Seq).sorted.reverse
     byWeight.map { case (w, size) => s"Weight $w: $size" }
   }
+}
 
-  override protected def rubbish: Seq[Rubbish] = select()
+/**
+ * Rubbish tidying for the filesystem cache.
+ *
+ * If a git log is provided, the most recent commits in the reflog (exact number determined by --gitLength) are used to
+ * determine a set of artifacts that ought not be deleted, in case the user is switching between branches and will
+ * therefore use them again.
+ */
+final class RubbishTidyerImpl(
+    maxSizeBytes: Long,
+    freeDiskSpaceTriggerBytes: Option[Long],
+    override protected val buildDir: Directory,
+    override protected val sandboxDir: Directory,
+    git: Option[GitLog]
+) extends RubbishTidyerBase {
+  import Utils._
 
-  override def tidy(tempCutoff: Instant): TidiedRubbish = {
-    notifyIfBuildSizeTooLow()
+  def storedArtifacts: StoredArtifacts = {
+    // Sufficient free space where freeDiskSpaceTriggerBytes is defined and less than the current free space
+    val freeSpace = Utils.freeSpaceBytes(buildDir)
+    (freeSpace, freeDiskSpaceTriggerBytes) match {
+      case (Some(f), Some(t)) if f > t =>
+        log.debug(s"Skipping rubbish cleanup (${bytesToString(f)} is greater than trigger of ${bytesToString(t)})")
+        StoredArtifacts(Nil, 0L)
+      case _ =>
+        val artifacts = ArrayBuffer.empty[StoredArtifact]
+        object visitor extends ErrorIgnoringFileVisitor {
+          override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+            artifacts += StoredArtifact(file, attrs)
+            FileVisitResult.CONTINUE
+          }
+        }
+        val extraInfo = freeSpace.map(f => s" (${bytesToString(f)} free disk space)").getOrElse("")
+        log.info(s"Searching for potential rubbish$extraInfo...")
+        if (buildDir.exists) {
+          IO.using(Files.list(buildDir.path))(_.iterator.asScala.toArray)
+            .filter(Files.isDirectory(_: Path))
+            .filter((p: Path) => !RubbishTidyerImpl.RootDirectoriesToSkip.contains(p.getFileName.toString))
+            .foreach((p: Path) => Files.walkFileTree(p, visitor))
+        }
 
-    fallibly("clean up commit-log") {
-      // then delete any stale commit-log entries
-      git.foreach(CommitLog.tidy(buildDir, _))
+        val totalSize = artifacts.sumOf(_.size)
+        val aboveMaxBuildDirBytes = totalSize - maxSizeBytes
+        val toDelete = (freeSpace, freeDiskSpaceTriggerBytes) match {
+          /** we want to free as much as is required to hit the trigger if possible, otherwise maxBuildDirSize */
+          case (Some(f), Some(t)) if (t - f) < aboveMaxBuildDirBytes =>
+            val belowTriggerBytes = t - f
+            log.debug(s"Will attempt to free ${bytesToString(
+                belowTriggerBytes)} to bring disk free space back to ${bytesToString(t)}")
+            belowTriggerBytes
+          case _ if aboveMaxBuildDirBytes > 0 =>
+            log.debug(s"Will attempt to free ${bytesToString(
+                aboveMaxBuildDirBytes)} to bring build dir size back to ${bytesToString(maxSizeBytes)}")
+            aboveMaxBuildDirBytes
+          case _ =>
+            log.debug(
+              s"Build dir size (${bytesToString(totalSize)}) less than max allowed size (${bytesToString(maxSizeBytes)}). No rubbish tidying necessary.")
+            0
+        }
+        StoredArtifacts(artifacts.to(Seq), toDelete)
     }
-
-    super.tidy(tempCutoff)
   }
 
-  private val maxSizeMB = byteToMB(maxSizeBytes)
+  /**
+   * Load artifacts from the git log and their rubbishness weight.
+   *
+   * Unpinned artifacts have weight 0 (the default). Pinned artifacts of other heads have weight 1. Pinned artifacts of
+   * the current head have weight that depends on their pinning recency, equal to `EntriesPerArtifact + 1` for the most
+   * recent down to 2 for the least recent ones.
+   */
+  @entersGraph // it asks for git metadata, but this shouldn't be called from graph anyways
+  override protected[rubbish] def loadRecentCommitArtifacts(): Map[Path, Int] = {
+
+    val recentHeads = git.toList.apar.flatMap(_.recentHeads)
+    log.debug(s"Recent heads: $recentHeads")
+    val logs = recentHeads.distinct.map(commit => CommitLog.readLog(CommitLog.forCommit(commit.hash, buildDir)))
+
+    logs match {
+      case head :: rest =>
+        // top artifact of all the previous commit, unsorted
+        val other = rest
+          .flatMap(_.values.flatMap(_.headOption))
+          .distinct
+          .map(p => p -> 0)
+
+        val current = head.values
+          .flatMap(_.take(CommitLog.EntriesPerArtifact).zipWithIndex) // take is in case EntriesPerArtifact changes
+          .collect { case (p, index) =>
+            p -> (CommitLog.EntriesPerArtifact - index) // from 1 (least recent) to EntriesPerArtifact (most recent)
+          }
+
+        // with the + 1 thats 1 for every pinned artifact not in current commit, 2+ for current commit.
+        (other ++ current).toGroupedMap.map { case (k, v) => k -> (v.max + 1) }
+
+      case _ => Map.empty[Path, Int]
+    }
+  }
+
+  override def tidy(
+      artifacts: StoredArtifacts,
+      excludedPaths: Seq[Path],
+      tempCutoff: Instant = Instant.now().minusSeconds(3600)
+  ): TidiedRubbish = {
+    notifyIfBuildSizeTooLow()
+
+    val tidiedCommitLogs = fallibly("clean up commit-log") {
+      // then delete any stale commit-log entries
+      git.map(CommitLog.tidy(buildDir, _)).getOrElse(Nil)
+    }.getOrElse(Nil)
+
+    val tidiedRubbish = super.tidy(artifacts, excludedPaths, tempCutoff)
+    tidiedRubbish.copy(artifacts = tidiedRubbish.artifacts ++ tidiedCommitLogs)
+  }
+
+  private val maxSizeMB = Utils.byteToMB(maxSizeBytes)
   private val minRecommendedSizeMB = 7000
   private def notifyIfBuildSizeTooLow(): Unit = {
     if (maxSizeMB < minRecommendedSizeMB) {
@@ -289,41 +323,36 @@ final class RubbishTidyerImpl(
 }
 
 object RubbishTidyerImpl {
-  val RootDirectoriesToSkip = Set(CommitLog.DirName, NamingConventions.Sparse, "zincCompilerInterface")
+  val RootDirectoriesToSkip: Set[String] = Set(CommitLog.DirName, NamingConventions.Sparse, "zincCompilerInterface")
 }
 
-object RubbishTidyer extends Log {
-  def tidyLogs(logDir: Path, maxAge: Duration): Unit = {
-    val threshold = Instant ofEpochMilli OptimusApp.startupTime minus maxAge
-    def tooOld(file: Path) = Files.getLastModifiedTime(file).toInstant isBefore threshold
-    if (Files.exists(logDir)) {
-      log.info(s"Removing OBT log files older than $threshold")
-      Files
-        .list(logDir)
-        .iterator
-        .asScala
-        .filter(tooOld)
-        .filter(Files.isRegularFile(_)) // avoid DirectoryNotEmptyException in some old workspaces
-        .foreach(Files.delete)
-    }
-  }
-}
-
-final case class Rubbish(file: Path, size: Long, lastModified: Instant, weight: Int = 0)
-object Rubbish {
+final case class StoredArtifact(file: Path, size: Long, lastModified: Instant, weight: Int = 0)
+object StoredArtifact {
 
   /** Ascending order of rubbishness: pinning weight, then newest first, then smallest first. */
-  implicit val ordering: Ordering[Rubbish] =
+  implicit val ordering: Ordering[StoredArtifact] =
     Ordering
-      .by(-(_: Rubbish).weight) // higher weight == least rubbish
-      .orElseBy(-(_: Rubbish).lastModified.toEpochMilli)
-      .orElseBy((_: Rubbish).size)
+      .by(-(_: StoredArtifact).weight) // higher weight == least rubbish
+      .orElseBy(-(_: StoredArtifact).lastModified.toEpochMilli)
+      .orElseBy((_: StoredArtifact).size)
 
-  def apply(file: Path, attrs: BasicFileAttributes): Rubbish =
-    Rubbish(file, attrs.size, attrs.lastModifiedTime.toInstant)
+  def apply(file: Path, attrs: BasicFileAttributes): StoredArtifact =
+    StoredArtifact(file, attrs.size, attrs.lastModifiedTime.toInstant)
 }
 
-final case class TidiedRubbish(tweaks: Seq[Tweak], sizeBytes: Long)
+final case class StoredArtifacts(artifacts: Seq[StoredArtifact], toTidyBytes: Long) {
+  def exclude(paths: Seq[Path]): StoredArtifacts = {
+    if (paths.nonEmpty) {
+      val pathSet = paths.toSet
+      StoredArtifacts(artifacts.filter(a => !pathSet.contains(a.file)), toTidyBytes)
+    } else this
+  }
+}
+object StoredArtifacts {
+  val empty: StoredArtifacts = StoredArtifacts(Nil, 0)
+}
+
+final case class TidiedRubbish(artifacts: Seq[StoredArtifact], tweaks: Seq[Tweak], sizeBytes: Long)
 object TidiedRubbish {
-  val empty = TidiedRubbish(Nil, 0)
+  val empty: TidiedRubbish = TidiedRubbish(Nil, Nil, 0)
 }

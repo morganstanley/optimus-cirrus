@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -123,8 +124,7 @@ public abstract class NodeTask extends NodeAwaiter
   static final int STATE_STARTED = 1; // Used to call plug-ins only on the first run
   static final int STATE_NOT_RUNNABLE = 2; // If bit is clear the node is eligible to run
   // Set when node is done, almost always used with STATE_NOT_RUNNABLE
-  public static final int STATE_DONE_FLAG = 4;
-  // Done and can't run anymore
+  public static final int STATE_DONE_FLAG = 4; // Done and can't run anymore
   public static final int STATE_DONE = STATE_DONE_FLAG | STATE_NOT_RUNNABLE;
   private static final int STATE_DONE_FAILED = 8 | STATE_DONE; // Done and have exception
   // Non-RT exception present, set with DONE_FAILED
@@ -147,11 +147,12 @@ public abstract class NodeTask extends NodeAwaiter
   private static final int STATE_VISITED_GRAY = 0x8000; // Used by any graph walker
   private static final int STATE_VISITED_BLACK = 0x10000; // Used by any graph walker
   private static final int STATE_DEBUG_ENQUEUED = 0x20000; // Used by some asserts
-  // Used by scheduler when waiting for
+  // Used by scheduler when waiting for cancelled nodes to stop - see [WAIT_FOR_CANCELLED]
   private static final int STATE_WAITING_FOR_CANCELLED_NODES = 0x80000;
-  // cancelled nodes to stop - see [WAIT_FOR_CANCELLED]
+
   // The task has a plugin type only for reporting purposes
   private static final int STATE_HAS_REPORTING_PLUGIN_TYPE = 0x100000;
+  private static final int STATE_PLUGIN_FIRED = 0x200000;
 
   // Only one walker is allowed at a time
   private static final ReentrantLock _visitLock = new ReentrantLock();
@@ -596,6 +597,10 @@ public abstract class NodeTask extends NodeAwaiter
     return (state & STATE_ADAPTED) != 0;
   }
 
+  public final SchedulerPlugin getPlugin() {
+    return executionInfo().getPlugin(scenarioStack());
+  }
+
   // Is there a plugin type for any reason, whether a real plugin or just for reporting
   private static boolean hasPluginType(int state) {
     return (state & (STATE_ADAPTED | STATE_HAS_REPORTING_PLUGIN_TYPE)) != 0;
@@ -607,6 +612,31 @@ public abstract class NodeTask extends NodeAwaiter
 
   public final boolean hasPluginType() {
     return hasPluginType(_state);
+  }
+
+  public final PluginType getPluginType() {
+    return PluginType.getPluginType(this);
+  }
+
+  private static boolean pluginFired(int state) {
+    return (state & STATE_PLUGIN_FIRED) != 0;
+  }
+
+  public final boolean pluginFired() {
+    return pluginFired(_state);
+  }
+
+  public final void markPluginFired() {
+    updateState(STATE_PLUGIN_FIRED, 0);
+  }
+
+  public final PluginType getReportingPluginType() {
+    if (!hasPluginType(_state)) return PluginType.None();
+    // First check explicit instance-specific type (usually due to readapt)
+    PluginType tp = getPluginType();
+    if (tp != PluginType.None()) return tp;
+    // Fall back to NodeTaskInfo
+    return executionInfo().reportingPluginType(scenarioStack());
   }
 
   final void markAsAdapted() {
@@ -1239,6 +1269,10 @@ public abstract class NodeTask extends NodeAwaiter
   public final void setInfo(NodeExtendedInfo inf) {
     _xinfo = _xinfo.withInfo(inf);
     if (_xinfo == null) _xinfo = NullNodeExtendedInfo$.MODULE$;
+  }
+
+  public final PluginType setPluginType(PluginType pt) {
+    return PluginType.setPluginType(this, pt);
   }
 
   /** TODO (OPTIMUS-13315): MUST become internal!!!! */
@@ -1885,27 +1919,35 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   public String simpleChain() {
-    PrettyStringBuilder sb = new PrettyStringBuilder();
-    appendSimpleChain(sb);
-    return sb.toString();
+    try {
+      PrettyStringBuilder sb = new PrettyStringBuilder();
+      appendSimpleChain(sb);
+      return sb.toString();
+    } catch (Throwable t) {
+      return "Error in simpleChain: " + t;
+    }
   }
 
   private void appendSimpleChain(PrettyStringBuilder sb) {
     NodeTask tsk = this;
     while (tsk != null) {
       tsk.writePrettyString(sb);
-      Object o = tsk._waiters;
-      if (o == null || o == completed) return;
-      if (o instanceof NWList nw) {
-        while (!(o instanceof NodeTask) && nw != null) {
-          o = nw.waiter;
-          nw = nw.prev;
+      Awaitable enq = tsk.getLauncher();
+      if (Objects.nonNull(enq) && enq instanceof NodeTask) tsk = (NodeTask) enq;
+      else {
+        Object o = tsk._waiters;
+        if (o == null || o == completed) return;
+        if (o instanceof NWList nw) {
+          while (!(o instanceof NodeTask) && nw != null) {
+            o = nw.waiter;
+            nw = nw.prev;
+          }
         }
+        if (o instanceof NodeTask) {
+          tsk = (NodeTask) o;
+        } else tsk = null;
       }
-      if (o instanceof NodeTask) {
-        tsk = (NodeTask) o;
-        sb.append(" <- ");
-      } else tsk = null;
+      if (Objects.nonNull(tsk)) sb.append("<-");
     }
   }
 
@@ -2097,10 +2139,10 @@ public abstract class NodeTask extends NodeAwaiter
 
   /** If available report NodeTask specific stall information for logging otherwise null. */
   final Option<GraphStallInfo> stallInfo() {
-    if (executionInfo().hasPlugin()) {
+    if (executionInfo().shouldLookupPlugin()) {
       // if we have extra data available at NodeTask level, we don't need to print unknown reason
       // for stalling from underlying plugin
-      return executionInfo().getPlugin().graphStallInfoForTask(this.executionInfo(), this);
+      return getPlugin().graphStallInfoForTask(this.executionInfo(), this);
     } else return Option.empty();
   }
 

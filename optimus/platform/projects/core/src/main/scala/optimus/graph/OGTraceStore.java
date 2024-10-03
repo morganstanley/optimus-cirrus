@@ -496,8 +496,7 @@ public class OGTraceStore {
       String errorToReport =
           "OGTraceStore Integrity Check failed: We can't give away table that is off its deep end";
       log.javaLogger().error(errorToReport);
-      MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(
-          errorToReport, null, null, null, null);
+      MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(errorToReport);
       shouldFail = true;
     }
 
@@ -505,8 +504,7 @@ public class OGTraceStore {
       String errorToReport =
           "OGTraceStore Integrity Check failed: We can't give away table that is in use";
       log.javaLogger().error(errorToReport);
-      MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(
-          errorToReport, null, null, null, null);
+      MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(errorToReport);
       shouldFail = true;
     }
 

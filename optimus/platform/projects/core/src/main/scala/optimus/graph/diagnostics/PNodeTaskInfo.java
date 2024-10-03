@@ -215,7 +215,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
   }
 
   public final boolean getFavorReuseIsXS() {
-    return Objects.equals(cachePolicy, NCPolicy.XS.favorReuseName());
+    return Objects.equals(cachePolicy, NCPolicy.XS.policyName());
   }
 
   public final boolean isConstructor() {
@@ -451,7 +451,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
       NodeCCache ccache = nti.customCache();
       if (ccache != null) cacheName = ccache.getName();
       // Default is just not interesting
-      cachePolicy = nti.cachePolicy().favorReuseName();
+      cachePolicy = nti.cachePolicy().policyName();
     }
 
     if (name == null) {

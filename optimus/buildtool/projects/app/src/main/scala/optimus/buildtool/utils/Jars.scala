@@ -11,18 +11,13 @@
  */
 package optimus.buildtool.utils
 
-import msjava.slf4jutils.scalalog
-
 import java.io.ByteArrayOutputStream
-import java.io.FilterOutputStream
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.FileTime
-import java.time.Instant
 import java.util.jar
 import java.util.jar.Attributes.Name
 import java.util.jar.JarFile
@@ -35,6 +30,7 @@ import optimus.buildtool.artifacts.MessagesMetadata
 import optimus.buildtool.config.JarConfiguration
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.JarAsset
+import optimus.buildtool.files.Pathed
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.TaskTrace
@@ -42,8 +38,15 @@ import optimus.buildtool.utils.JarUtils.jarFileSystem
 import optimus.buildtool.utils.JarUtils.nme
 import optimus.platform._
 import optimus.platform.metadatas.internal.MetaDataFiles
+import sbt.internal.inc.zip.ZipCentralDir
 import spray.json.JsonFormat
 
+import java.io.InputStream
+import java.nio.charset.StandardCharsets
+import java.nio.file.FileSystem
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
@@ -61,7 +64,20 @@ class MismatchedManifestException(val key: AnyRef, val manifests: Seq[jar.Manife
  */
 object Jars {
 
-  private val log = scalalog.getLogger(this)
+  /**
+   * https://github.com/sbt/sbt-assembly/pull/430
+   *
+   * DOS doesn't support dates before 1980, that's why UNIX timestamp is no go here.
+   * Running exactly 1980 is also error prone due to timezones.
+   * 2010 is just another date which is also used by other tools such as bazel or sbt.
+   */
+  val FIXED_TIME: Instant = LocalDateTime.of(2010, 1, 1, 0, 0, 0).toInstant(ZoneOffset.UTC)
+  val FIXED_EPOCH_MILLIS: Long = FIXED_TIME.toEpochMilli
+  val FIXED_EPOCH_SECONDS: Int = FIXED_TIME.getEpochSecond.toInt
+  private val FIXED_FILE_TIME = FileTime.from(FIXED_TIME)
+
+  val incrementalHashingEnabled: Boolean =
+    Option(System.getProperty("optimus.buildtool.jars.experimental.incrementalHashing")).exists(_.toBoolean)
 
   // Note that we don't use JarAssets here, since the classpath may be relative
   def createPathingManifest(classpath: Seq[Path], premainClass: Option[String]): jar.Manifest = {
@@ -193,58 +209,66 @@ object Jars {
     } finally manifestJar.close()
   }
 
-  /** Creates a new targetJar and copies the files from sourceJars into it. Optimizes the case of only one sourceJar */
-  def mergeJarContentAndManifests(
+  def mergeManifestsThenMergeJarContent(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       manifest: Option[jar.Manifest] = None,
       compress: Boolean,
-      extraFiles: Seq[ExtraInJarFile] = Nil
+      extraFiles: Seq[ExtraInJar] = Nil
   ): Long = {
-    if (sourceJars.size == 1 && manifest.isEmpty && !compress) {
-      // optimize case of exactly one input
-      val one = sourceJars.head.path
-      Files.copy(one, targetJar.path, StandardCopyOption.REPLACE_EXISTING)
-      Files.size(one)
-    } else {
-      // for zero or more than one input, first merge the manifests (if any), then write the jar
-      val manifests = manifest ++ sourceJars.flatMap(readManifestJar)
-      val mergedManifest = mergeManifests(manifests.toList)
-      mergeAndHashJarContentGivenManifest(sourceJars, targetJar, mergedManifest, compress, extraFiles)
-    }
+    val manifests = manifest ++ sourceJars.flatMap(readManifestJar)
+    val mergedManifest = mergeManifests(manifests.toList)
+    mergeAndHashJarContentGivenManifest(sourceJars, targetJar, compress, mergedManifest, extraFiles)
   }
 
+  /**
+   * Merge source jars into a target jar with computing hash of each file and storing it in META-INF/optimus inside jar.
+   * There are two implementations of this method, and are selected based on [[ incrementalCompressionEnabled ]] flag.
+   *
+   * This method does not merge manifests, it already assumes that @param manifest is the correct one.
+   * If merging of source manifests is required use [[ mergeManifestsThenMergeJarContent ]] instead
+   */
   def mergeAndHashJarContentGivenManifest(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
-      manifest: Option[jar.Manifest] = None,
       compress: Boolean,
-      extraFiles: Seq[ExtraInJarFile] = Nil
+      manifest: Option[jar.Manifest] = None,
+      extraFiles: Seq[ExtraInJar] = Nil,
   ): Long = {
-    val countingStream = new CountingOutputStream(Files.newOutputStream(targetJar.path))
-    try {
-      val outputJar = () => new ConsistentlyHashedJarOutputStream(countingStream, manifest, compress)
-      mergeJarContent(sourceJars, outputJar, Map.empty, extraFiles)(_ => ())
-    } finally countingStream.close()
-    countingStream.bytesWritten
+    if (incrementalHashingEnabled) {
+      fastMergeJarContent(sourceJars, targetJar, manifest, extraFiles)
+    } else {
+      val outputJar = () =>
+        new ConsistentlyHashedJarOutputStream(Files.newOutputStream(targetJar.path), manifest, compress)
+      mergeJarGivenTokens(sourceJars, outputJar, Map.empty, extraFiles)
+    }
+    Files.size(targetJar.path)
   }
 
-  def mergeContent(
+  def mergeUnhashedContentGivenTokens(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       tokens: Map[String, String],
-      compress: Boolean
-  )(extraJarContent: EnhancedJarOutputStream => Unit): Unit = {
-    val outputJar = () => new UnhashedJarOutputStream(Files.newOutputStream(targetJar.path), None, compress)
-    mergeJarContent(sourceJars, outputJar, tokens)(extraJarContent)
+      extraFiles: Seq[ExtraInJar] = Nil
+  ): Unit = {
+    val outputStream = () => new UnhashedJarOutputStream(Files.newOutputStream(targetJar.path), None, compressed = true)
+    mergeJarGivenTokens(sourceJars, outputStream, tokens, extraFiles)
   }
 
-  private def mergeJarContent(
+  def getAllPathsInJar(jar: JarAsset): Seq[Path] = {
+    try {
+      Using.resource(JarUtils.jarFileSystem(jar)) { jarFs => Directory.findFiles(Directory.root(jarFs)).map(_.path) }
+    } catch {
+      case NonFatal(e) => throw new IllegalStateException(s"read content from jar file failed! ${jar.path}", e)
+    }
+  }
+
+  private def mergeJarGivenTokens(
       sourceJars: Seq[JarAsset],
       outputJar: () => EnhancedJarOutputStream,
       tokens: Map[String, String],
-      extraFiles: Seq[ExtraInJarFile] = Nil
-  )(extraJarContent: EnhancedJarOutputStream => Unit): Unit = {
+      extraFiles: Seq[ExtraInJar] = Nil
+  ): Unit = {
     val allFiles = mutable.Buffer[(String, JarAsset)]()
     val metadataContents = mutable.Map[String, Seq[String]]()
     val servicesContents = mutable.Map[String, Seq[String]]()
@@ -267,7 +291,7 @@ object Jars {
                     // manifest and hash are (re)generated automatically by the CHJOS so we exclude them here
                     name != JarFile.MANIFEST_NAME && name != Hashing.optimusHashPath && name != Hashing.optimusPerEntryHashPath &&
                     // if we've specified any extra files to write, then they'll overwrite the versions in the source jars
-                    !extraFiles.exists { case ExtraInJarFile(path, _) => path.pathString == name }
+                    !extraFiles.exists(extraFile => extraFile.inJarPath.pathString == name)
                   ) {
                     allFiles.append((name, j))
                     val target = RelativePath(name)
@@ -291,8 +315,7 @@ object Jars {
         val target = RelativePath(name)
         output.writeFile(contents.mkString("\n"), target)
       }
-      extraFiles.foreach { case ExtraInJarFile(path, content) => output.writeFile(content, path) }
-      extraJarContent(output)
+      extraFiles.foreach { file => file.write(output) }
     } finally {
       try output.close()
       catch {
@@ -305,6 +328,199 @@ object Jars {
           throw new IllegalArgumentException(s"Duplicate file entries: ${duplicates.mkString(", ")}")
       }
     }
+  }
+
+  private def fastMergeJarContent(
+      sourceJars: Seq[JarAsset],
+      targetJar: JarAsset,
+      manifest: Option[jar.Manifest],
+      extraFiles: Seq[ExtraInJar] = Nil
+  ): Unit = {
+    val additionalMetadataEntries = Set(Hashing.optimusPerEntryHashPath, Hashing.optimusHashPath, JarFile.MANIFEST_NAME)
+
+    def tempJarOutputStream(path: Path, manifest: Option[jar.Manifest])(fn: EnhancedJarOutputStream => Unit): Unit = {
+      val outputStream = Files.newOutputStream(path)
+      try {
+        val output = new UnhashedJarOutputStream(outputStream, manifest, true)
+        try { fn(output) }
+        finally { output.close() }
+      } finally { outputStream.close() }
+    }
+
+    def getUnchangedEntries(
+        jarFilesystem: FileSystem,
+        nonMetaEntries: Seq[ZipCentralDir.Entry],
+        changedEntries: Seq[RelativePath]
+    ): Map[RelativePath, String] = {
+      val previousCompilationEntryHashes = jarFilesystem.getPath(Hashing.optimusPerEntryHashPath)
+
+      if (Files.exists(previousCompilationEntryHashes)) {
+        val previousEntries = Files
+          .readAllLines(previousCompilationEntryHashes)
+          .asScala
+          .map(entry => entry.split('\t').toList)
+          .collect { case fileName :: hash :: Nil =>
+            RelativePath(fileName) -> hash
+          }
+          .toMap
+
+        val removedEntries = previousEntries.keySet diff nonMetaEntries.map(entry => RelativePath(entry.getName)).toSet
+        previousEntries -- (removedEntries ++ changedEntries)
+      } else Map.empty
+    }
+
+    def getManifestEntry: Option[(RelativePath, String)] =
+      manifest.map { mf =>
+        val bytes = new ByteArrayOutputStream()
+        Jars.writeManifestToStreamWithLf(mf, bytes)
+        RelativePath(JarFile.MANIFEST_NAME) -> JarHashingUtils.getHashForBytes(bytes.toByteArray)
+      }
+
+    def getServiceContents(jarFilesystem: FileSystem): Seq[(RelativePath, String)] =
+      if (Files.exists(jarFilesystem.getPath("META-INF/services"))) {
+        Using.resource(Files.walk(jarFilesystem.getPath("META-INF/services"))) {
+          _.toList.asScala
+            .filter(Files.isRegularFile(_))
+            .map { p => RelativePath(p.toString.stripPrefix("/")) -> Files.readString(p) }
+            .toList
+        }
+      } else Seq.empty
+
+    def getMetadataContents(jarFileSystem: FileSystem): Seq[(RelativePath, String)] =
+      MetaDataFiles.metadataFileNames.flatMap { metadataFile =>
+        val path = jarFileSystem.getPath(metadataFile)
+        if (Files.exists(path)) {
+          Some(RelativePath(metadataFile) -> Files.readString(path))
+        } else None
+      }
+
+    def rehashEntries(jarFilesystem: FileSystem, changedEntries: Seq[RelativePath]): Seq[(RelativePath, String)] = {
+      changedEntries.flatMap { changedEntryPath =>
+        val changedEntryNioPath = jarFilesystem.getPath(changedEntryPath.pathString)
+        if (Files.isRegularFile(changedEntryNioPath)) {
+          val inputStream = new JarHashingUtils.HashingInputStream(Files.newInputStream(changedEntryNioPath))
+          try { Some(changedEntryPath -> inputStream.readAllAndGetHash()) }
+          finally { inputStream.close() }
+        } else None
+      }
+    }
+
+    final case class RehashedEntries(
+        centralDir: ZipCentralDir,
+        path: Path,
+        filesToHashes: Seq[(RelativePath, String)],
+        metadata: Seq[(RelativePath, String)],
+        services: Seq[(RelativePath, String)]
+    )
+
+    /**
+     * This method is responsible for cleaning and rehashing entries inside the original jar.
+     * The cleaning consists of separating all of the metadata files from central directory.
+     * We return them separately as they will be merged together into a single metadata file for all jars.
+     *
+     * Removed files do not need to be handled, as they should not exist in [[sbt.internal.inc.IndexBasedZipFsOps.CentralDir]] in the first place.
+     * [[sbt.internal.inc.IndexBasedZipFsOps.CentralDir]] is our source of truth and it is developer responsibility to ensure that this is the case.
+     */
+    def cleanAndRehashJars(): Seq[RehashedEntries] =
+      sourceJars.map { jarAsset =>
+        /**
+         * This is slow operation, as we need to parse central directory entries.
+         * It is latter passed directly to [[ TruncatingIndexBasedZipFsOps.mergeArchivesUnsafe ]]
+         * to avoid rereading of the central directory
+         */
+        val centralDir = TruncatingIndexBasedZipFsOps.readCentralDirFromPath(jarAsset.path)
+
+        Using.resource(JarUtils.jarFileSystem(jarAsset)) { inputJar =>
+          val allHeaders = centralDir.getHeaders.asScala.toList
+          val headersWithoutExtra = allHeaders.filter { entry =>
+            !extraFiles.exists { extraFile => extraFile.inJarPath.pathString == entry.getName }
+          }
+
+          val serviceContents = getServiceContents(inputJar)
+          val metadataContents = getMetadataContents(inputJar)
+
+          val metadataFiles =
+            (serviceContents ++ metadataContents).map(_._1.pathString).toSet ++ additionalMetadataEntries
+          val nonMetaEntries = headersWithoutExtra.filter(entry => !metadataFiles.contains(entry.getName))
+          centralDir.setHeaders(nonMetaEntries.asJava) // Ensure that there are no metadata files left in central dir
+
+          /**
+           * [[ FIXED_EPOCH_MILLIS ]] is set by us for all files in [[ TruncatingIndexBasedZipOps ]].
+           * This allows us to reliably find changed entries by other tools e.g Zinc.
+           */
+          val changedEntries = nonMetaEntries
+            .filter(entry => entry.getLastModifiedTime != FIXED_EPOCH_MILLIS)
+            .map(entry => RelativePath(entry.getName))
+
+          val unchangedEntries = getUnchangedEntries(inputJar, nonMetaEntries, changedEntries)
+          val rehashedEntries = rehashEntries(inputJar, changedEntries)
+
+          val filesToHashes = unchangedEntries ++ rehashedEntries
+
+          RehashedEntries(
+            centralDir,
+            jarAsset.path,
+            filesToHashes = filesToHashes.toList,
+            metadata = metadataContents,
+            services = serviceContents)
+        }
+      }
+
+    def checkForDuplicates(rehashedEntries: Seq[RehashedEntries], allExtraEntries: Seq[ExtraInJar]): Unit = {
+      val nonExtraEntriesToJars =
+        rehashedEntries.flatMap(entry => entry.filesToHashes.map(_._1.pathString -> entry.path))
+      val extraEntriesToFakeJar = {
+        lazy val fakeExtraEntryJar = Paths.get("extra-entry")
+        allExtraEntries.map(entry => entry.inJarPath.pathString -> fakeExtraEntryJar)
+      }
+
+      val allEntriesToJars = (nonExtraEntriesToJars ++ extraEntriesToFakeJar).toGroupedMap
+      if (nonExtraEntriesToJars.length + extraEntriesToFakeJar.length != allEntriesToJars.size) {
+        val duplicates = allEntriesToJars.filter(_._2.size > 1)
+        val messages = duplicates.map { case (path, jars) =>
+          s"$path (${jars.map(Pathed.pathString).mkString(", ")})"
+        }
+        throw new IllegalArgumentException(s"Duplicate file entries: ${messages.mkString(", ")}")
+      }
+    }
+
+    val rehashedEntries = cleanAndRehashJars()
+
+    val metadataContents = rehashedEntries
+      .flatMap(_.metadata)
+      .toGroupedMap
+      .map { case (path, contents) => ExtraContentInJar(path, mergeMetadata(contents)) }
+
+    val serviceContents = rehashedEntries
+      .flatMap(_.services)
+      .toGroupedMap
+      .map { case (path, contents) => ExtraContentInJar(path, contents.mkString("\n")) }
+
+    val allExtraEntries = extraFiles ++ metadataContents ++ serviceContents
+    checkForDuplicates(rehashedEntries, allExtraEntries)
+
+    tempJarOutputStream(targetJar.path, manifest) { tempOutput =>
+      val extraFilesHashes = allExtraEntries.map { entry => entry.inJarPath -> entry.write(tempOutput) }
+
+      /* sortedFileToHashes can merge files directly to map, because we check for duplicates above */
+      val sortedFileToHashes = (rehashedEntries.flatMap(_.filesToHashes) ++ getManifestEntry ++ extraFilesHashes).sorted
+      val entryHashContent = sortedFileToHashes.map { case (file, hash) => s"$file\t$hash\n" }.mkString
+      val entryHashesHash =
+        Hashing.consistentlyHashFileHashes(sortedFileToHashes.map { case (path, hash) => path.toString -> hash })
+
+      tempOutput.writeFile(entryHashContent, RelativePath(Hashing.optimusPerEntryHashPath))
+      tempOutput.writeFile(entryHashesHash, RelativePath(Hashing.optimusHashPath))
+    }
+
+    val tempCentralDir = TruncatingIndexBasedZipFsOps.readCentralDir(targetJar.path.toFile)
+
+    /**
+     * We want to always write to our temp file, as it does not contain any previous artifacts.
+     * The TruncatingIndexBasedZipFsOps will truncate all remaining bytes from previous compilations / merge.
+     * To learn more read [[ TruncatingIndexBasedZipFsOps.mergeArchivesUnsafe ]]
+     */
+    val sources = rehashedEntries.map(entries => entries.centralDir -> entries.path)
+    TruncatingIndexBasedZipFsOps.mergeArchivesUnsafe(tempCentralDir, targetJar.path, sources)
   }
 
   @tailrec def mergeManifests(manifests: Seq[jar.Manifest]): Option[jar.Manifest] = manifests match {
@@ -338,18 +554,19 @@ object Jars {
   def stampJarWithConsistentHash(jarAsset: JarAsset, compress: Boolean, trace: Option[TaskTrace]): Unit = {
     trace.foreach(_.addToStat(ObtStats.StampedJars, 1))
     val manifest = readManifestJar(jarAsset).filterNot(_.getMainAttributes.isEmpty)
+    // This has to be replaced with a method, that does not copy all entries, but rather modifies current jar
     AssetUtils.atomicallyWrite(jarAsset, replaceIfExists = true) { temp =>
-      mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), manifest, compress)
+      val writtenBytes = mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), compress, manifest)
+      trace.foreach(_.addToStat(ObtStats.WrittenClassJars, writtenBytes))
     }
   }
 
-  /** Creates a new [[ZipEntry]] with the given name and a modified date of 0, for RTness. */
+  /** Creates a new [[ZipEntry]] with the given name and a modified date of [[FIXED_TIME]], for RTness. */
   def zipEntry(name: String): ZipEntry = {
     val entry = new ZipEntry(name)
-    entry.setLastModifiedTime(EpochFileTime)
+    entry.setLastModifiedTime(FIXED_FILE_TIME)
     entry
   }
-  private[this] val EpochFileTime = FileTime.from(Instant.EPOCH)
 
   def withJar[T](jarFile: JarAsset, create: Boolean = false)(res: Directory => T): T = {
     val fs = jarFileSystem(jarFile, create)
@@ -404,18 +621,68 @@ object Jars {
   }
 }
 
-private class CountingOutputStream(out: OutputStream) extends FilterOutputStream(out) {
-  private[this] var count: Long = _
-  def bytesWritten: Long = count
-  override def write(b: Int): Unit = {
-    out.write(b)
-    count += 1
+private object JarHashingUtils {
+  def getHashForString(str: String): String = {
+    getHashForBytes(str.getBytes(StandardCharsets.UTF_8))
   }
-  // (note that write(b: Array[Byte]) is redirected here too by FilterOutputStream)
-  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
-    out.write(b, off, len)
-    count += len
+
+  def getHashForBytes(bytes: Array[Byte]): String = {
+    val hasher = Hashing.hashFunction.newHasher()
+    hasher.putBytes(bytes)
+    s"HASH${hasher.hash()}"
+  }
+
+  class HashingInputStream(underlying: InputStream) extends InputStream {
+    private val hasher = Hashing.hashFunction.newHasher()
+
+    override def read(): Int = {
+      val b = underlying.read()
+      if (b != -1) {
+        hasher.putBytes(Array(b.toByte), 0, 1)
+      }
+      b
+    }
+
+    override def read(b: Array[Byte], off: Int, len: Int): Int = {
+      val readBytes = underlying.read(b)
+      if (readBytes != -1) {
+        hasher.putBytes(b, off, readBytes)
+      }
+      readBytes
+    }
+
+    def readAllAndGetHash(): String = {
+      val buffer = new Array[Byte](4096)
+      var len = underlying.read(buffer) // this method does not require clearing of the buffer
+      while (len != -1) {
+        hasher.putBytes(buffer, 0, len)
+        len = underlying.read(buffer)
+      }
+      getHash
+    }
+
+    def getHash: String = s"HASH${hasher.hash()}"
   }
 }
 
-final case class ExtraInJarFile(inJarPath: RelativePath, content: String)
+trait ExtraInJar {
+  def inJarPath: RelativePath
+  def write(outputStream: EnhancedJarOutputStream): String
+}
+
+final case class ExtraContentInJar(inJarPath: RelativePath, content: String) extends ExtraInJar {
+  override def write(outputStream: EnhancedJarOutputStream): String = {
+    outputStream.writeFile(content, inJarPath)
+    JarHashingUtils.getHashForString(content)
+  }
+}
+
+final case class ExtraFileInJar(inJarPath: RelativePath, path: Path) extends ExtraInJar {
+  override def write(outputStream: EnhancedJarOutputStream): String = {
+    val inStream = new JarHashingUtils.HashingInputStream(Files.newInputStream(path))
+    try {
+      outputStream.copyInFile(inStream, inJarPath)
+      inStream.getHash
+    } finally inStream.close()
+  }
+}

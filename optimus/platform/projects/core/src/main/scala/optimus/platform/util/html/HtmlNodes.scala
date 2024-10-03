@@ -107,6 +107,12 @@ final case class TweakVal(contents: StringContents = classOf[TweakVal]) extends 
   override def withDefaultStringContents = TweakVal()
 }
 
+/** purple, for tweaks that are not relevant to the specific calculation (when traceTweaks is enabled) but are for the NTI */
+final case class TweakMid(contents: StringContents = classOf[TweakMid]) extends StyledLeafHtmlNode {
+  override def css = "color: purple;"
+  override def withDefaultStringContents = TweakMid()
+}
+
 /** Greyed out, for tweaks that are not relevant to the calculation (when traceTweaks is enabled) */
 final case class TweakLow(contents: StringContents = classOf[TweakLow]) extends StyledLeafHtmlNode {
   override def css = "color: silver;"

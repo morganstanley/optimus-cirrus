@@ -19,6 +19,7 @@ import optimus.graph.{PropertyNode => PN}
 import optimus.platform.EvaluationQueue
 
 import java.util.function.Predicate
+import scala.annotation.tailrec
 
 final case class CleanupStats(removed: Long, remaining: Long) {
   def +(other: CleanupStats): CleanupStats = CleanupStats(removed + other.removed, remaining + other.remaining)
@@ -122,4 +123,27 @@ abstract class NodeCCache {
 /**
  * A container for informations about global caches.
  */
-final class PrivateCache(val cache: NodeCCache, val readFromGlobalFirst: Boolean)
+final class PrivateCache(val cache: NodeCCache, val readFrom: PrivateCacheParent) extends PrivateCacheParent {
+  import PrivateCache._
+  def toMoniker: Moniker = {
+    @tailrec def readFromGlobalCaches(parent: PrivateCacheParent): Boolean = parent match {
+      case cache: PrivateCache       => readFromGlobalCaches(cache.readFrom)
+      case PrivateCache.NoOtherCache => false
+      case PrivateCache.GlobalCaches => true
+    }
+
+    // Monikers don't need to carry the entire set of nested caches because on the remote side the caches aren't
+    // themselves cached from one call to the next, so you won't get reuse.
+    Moniker(cache.getName, readFromGlobalCaches(readFrom))
+  }
+}
+
+sealed trait PrivateCacheParent
+
+object PrivateCache {
+  case object NoOtherCache extends PrivateCacheParent
+  case object GlobalCaches extends PrivateCacheParent
+
+  final case class Moniker(cache: String, readFromGlobalCaches: Boolean)
+
+}

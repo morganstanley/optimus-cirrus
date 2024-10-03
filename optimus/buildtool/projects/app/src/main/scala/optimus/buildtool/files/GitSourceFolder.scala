@@ -184,6 +184,7 @@ import scala.collection.mutable
       }
 
       ObtTrace.addToStat(ObtStats.ReadGitSourceFiles, 1)
+      ObtTrace.addToStat(ObtStats.ReadDistinctGitSourceFiles, Set(workspaceSrcRootToSourceFilePath.pathString))
       val hashedContent = Hashing.hashFileInputStreamWithContent(p, () => queue.open().openStream())
       contents += ((id, hashedContent))
     }

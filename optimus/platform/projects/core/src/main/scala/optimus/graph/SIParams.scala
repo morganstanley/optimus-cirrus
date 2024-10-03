@@ -12,6 +12,7 @@
 package optimus.graph
 
 import optimus.breadcrumbs.ChainedID
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.platform._
 import optimus.observability._
@@ -38,9 +39,27 @@ final case class SIParams(
     @transient seqOpID: Long = 0L,
     progressTracker: ProgressTracker = null,
     jobConfiguration: JobConfiguration = MissingJobConfiguration,
+    scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = null,
     // note: not included in hashcode, will be reset if it didn't match
     @transient scheduler: WeakReference[Scheduler] = SIParams.emptyWeakRef
 ) {
+
+  private[optimus] def markPluginNodeTaskInfos(): Unit = if (scopedPlugins ne null) {
+    scopedPlugins.foreach { case (nti, _) => nti.markAsShouldLookupPlugin() }
+  }
+
+  def resolvePlugin(info: NodeTaskInfo): SchedulerPlugin =
+    if (scopedPlugins eq null) null
+    else {
+      scopedPlugins.get(info) match {
+        case Some(entry) =>
+          val enablePluginTagKey = entry.enablePluginTagKey
+          if ((enablePluginTagKey eq null) || nodeInputs.contains(enablePluginTagKey)) entry.schedulerPlugin
+          else null
+        case None => null
+      }
+    }
+
   // note that we can't just use @stable because we're in core, so the entityplugin doesn't apply to this code, so we
   // write cached hashCode by hand. Note also that the default case class equals is fine so we don't write that.
   private[this] var hashCodeCache: Int = 0
@@ -57,6 +76,7 @@ final case class SIParams(
       h = h * 37 + seqOpID.##
       h = h * 37 + progressTracker.##
       h = h * 37 + jobConfiguration.##
+      h = h * 37 + scopedPlugins.##
       hashCodeCache = h
       h
     }

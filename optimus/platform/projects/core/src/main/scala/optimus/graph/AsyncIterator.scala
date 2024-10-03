@@ -19,9 +19,11 @@ import optimus.platform.annotations.scenarioIndependentTransparent
 import optimus.platform._
 import optimus.scalacompat.collection.IterableLike
 
+import scala.util.Success
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.compat._
+import scala.util.Failure
 
 object AsyncIterator {
 
@@ -47,6 +49,34 @@ object AsyncIterator {
       extends Compose[AA, A, Z]
   // Boring placeholder for when we create an iterator that doesn't do anything
   final private[AsyncIterator] case class Noop[A]() extends IterableProducer[A, A]
+
+  private trait SlotValue {
+    def reapable = false
+  }
+  // State when the first closure is processing an initial input:
+  private final case object InitialState extends SlotValue
+  // When the closure completes, it pokes its results into the slot.
+  private trait ClosureResult extends SlotValue
+  // Normally, that result is is one or more values, e.g. from a flatMap closure,
+  // which is either an intermediate or final result, depending on whether there are further phases.
+  private final case class IntermediateResults(as: Iterable[Any]) extends ClosureResult
+  private final case class FinalResults[B](as: Iterable[B]) extends SlotValue { override def reapable = true }
+  // We handle empty (e.g. an empty flatMap or a negative filter) and erroneous results specially.
+  private final case object EmptyResults extends ClosureResult { override def reapable = true }
+  private final case class ErrorResult(t: Throwable) extends ClosureResult { override def reapable = true }
+  // In consumeIteration, each value in an InterableResult is converted into a slot holding a single IntermediateInput
+  private final case class IntermediateInput(a: Any) extends SlotValue
+  // and we track each of those slots in our result tree
+  private final case class FanOut(slots: List[Slot]) extends SlotValue { override def reapable = true }
+  // When a node in that tree is finally processed, we mark it as reaped.
+  private final case object Reaped extends SlotValue
+
+  private final case class Phase(f: Any => NI[Any], next: Phase) {
+    def hasNext: Boolean = next ne null
+  }
+  private final case class Slot(var slotValue: SlotValue, phase: Phase) {
+    def reapable = slotValue.reapable
+  }
 
   final case class AI[A, CI <: IterableOnce[A], B](
       c: CI,
@@ -93,19 +123,7 @@ object AsyncIterator {
       AI(c, workMarker, maxConcurrency, newChain)
     }
 
-    private case class Phase(f: Any => NI[Any], next: Phase) {
-      def hasNext: Boolean = next ne null
-    }
-
     private type FA = Any => NI[Any]
-
-    private case class Slot(var a: Any, phase: Phase, var done: Boolean = false)
-    //                     null                        false             =>  waiting for node completion
-    //                     Iterable[Any]               false             =>  holds result of completion of any phase
-    //                     Iterable[B]                 true              =>  results of last phase, to be reaped
-    //                     null                        true              =>  reaped
-    //                     List[Slot]                  false             =>  slots for the results of the next phase
-
     // Reverse and type-erase the list of transforms, so we can process them in order.
     @tailrec
     private def reverseTransforms(xf: IterableProducer[Any, Any], next: Phase): Phase = xf match {
@@ -125,7 +143,7 @@ object AsyncIterator {
     def to$newNode[CC](cbf: Factory[B, CC]): Node[CC] = {
 
       val builder: mutable.Builder[B, CC] = cbf.newBuilder
-      val phase0 = reverseTransforms(chain.asInstanceOf[IterableProducer[Any, Any]], null)
+      val phase0: Phase = reverseTransforms(chain.asInstanceOf[IterableProducer[Any, Any]], null)
 
       // inputs from the original collection
       val input = c.iterator
@@ -138,67 +156,93 @@ object AsyncIterator {
         private val phase0Slots = mutable.Queue.empty[Slot]
 
         override def hasNextIteration: Boolean = input.hasNext || intermediates.nonEmpty
+
+        private def wrappedNode(destinationSlot: Slot, input: Any, closure: Any => NI[Any]): Node[Slot] = {
+          // Wrap closure in a NodeTry.  If it completes, the exception it contains is guaranteed RT
+          new NodeTryNode(closure(input)).map { nt =>
+            destinationSlot.slotValue = nt.toTry match {
+              case Success(as) =>
+                if (as.isEmpty)
+                  EmptyResults
+                else if (destinationSlot.phase.hasNext)
+                  IntermediateResults(as)
+                else
+                  FinalResults(as.asInstanceOf[Iterable[B]])
+              case Failure(e) =>
+                ErrorResult(e)
+            }
+            destinationSlot
+          }
+
+        }
+
         override def nextIteration: Iteration = {
           // Priority given to processing intermediates
           val node: Node[Slot] = if (intermediates.nonEmpty) {
+            // re-use the slot from the intermediate result
             val slot = intermediates.head
-            intermediates = intermediates.tail
-            // node will complete with the re-used slot, but now holding results - on completion, we will either
-            // convert each result to a new Slot for the next phase, or try to reap it
-            slot.phase.f(slot.a).map { as: Iterable[Any] =>
-              slot.a = as
-              slot
+            val a = slot.slotValue match {
+              case IntermediateInput(a) => a
+              case _                    => throw new IllegalStateException("Expected intermediate result")
             }
+            intermediates = intermediates.tail
+            wrappedNode(slot, a, slot.phase.f)
           } else if (input.hasNext) {
             // brand new slot for our tree
-            val slot = Slot(null, phase0)
+            val slot = Slot(InitialState, phase0)
             phase0Slots += slot
-            phase0.f(input.next()).map { as =>
-              slot.a = as
-              slot
-            }
-          } else throw new IllegalStateException("There is a blight in the land!")
+            val a = input.next()
+            wrappedNode(slot, a, phase0.f)
+          } else throw new IllegalStateException("nextIteration called unexpectedly")
           new Iteration(node)
         }
 
         override def consumeIteration(i: Iteration): Unit = {
           val slot = i.node.result
-          if (slot.phase.hasNext) {
-            // If there's another phase, create new slots for it
-            val as = slot.a.asInstanceOf[Iterable[Any]]
-            if (as.isEmpty) {
-              // If closure returned an empty iterable, then we consider it already reaped
-              slot.a = null
-              slot.done = true
-            } else {
-              val ss: List[Slot] = as.map { a => Slot(a, slot.phase.next) }.toList
-              // exiting slot becomes a branch
-              slot.a = ss
-              slot.done = true
-              // and we add the new slots to the intermediates stack
-              intermediates = ss ::: intermediates
-            }
-          } else {
-            slot.done = true
-            // Pull results from the slot tree until we find some that are still pending
-            while (phase0Slots.nonEmpty && reap(phase0Slots.head))
-              phase0Slots.dequeue()
+          slot.slotValue match {
+            case EmptyResults =>
+              // Nothing more to be done here
+              slot.slotValue = Reaped
+            case IntermediateResults(as) =>
+              val newSlots: List[Slot] = as.map { a =>
+                Slot(IntermediateInput(a), slot.phase.next)
+              }.toList
+              slot.slotValue = FanOut(newSlots)
+              intermediates = newSlots ::: intermediates
+            case FinalResults(_) =>
+              recursivelyReap()
+            case ErrorResult(_) =>
+              recursivelyReap()
+            case Reaped =>
+            // This can happen if the closure completed before a previous consumeIteration that triggered a recursive reap
+            case _ =>
+              throw new IllegalStateException
           }
         }
 
+        // Collect results in the same order as if this were a normal (non-async) iterator, by traversing
+        // the trees of partially completed calculations.
+        def recursivelyReap(): Unit = {
+          while (phase0Slots.nonEmpty && reap(phase0Slots.head))
+            phase0Slots.dequeue()
+        }
+
         // returns true if we emptied this slot
-        def reap(slot: Slot): Boolean = slot.done && ((null == slot.a) || {
-          if (!slot.phase.hasNext) {
-            // We're at a leaf.  If it's done, feed it to the builder
-            builder ++= slot.a.asInstanceOf[Iterable[B]]
-            slot.a = null
-            true
-          } else {
-            // We're at a branch - traverse from bottom
-            var slots = slot.a.asInstanceOf[List[Slot]]
-            while (slots.nonEmpty && reap(slots.head))
-              slots = slots.tail
-            slots.isEmpty
+        def reap(slot: Slot): Boolean = (slot.slotValue == Reaped) || (slot.reapable && {
+          slot.slotValue match {
+            case ErrorResult(t) =>
+              throw t
+            case FinalResults(bs) =>
+              builder ++= bs.asInstanceOf[Iterable[B]] // irritating
+              slot.slotValue = Reaped
+              true
+            case FanOut(ss) =>
+              var slots = ss
+              while (slots.nonEmpty && reap(slots.head))
+                slots = slots.tail
+              slots.isEmpty
+            case _ =>
+              throw new IllegalStateException()
           }
         })
 

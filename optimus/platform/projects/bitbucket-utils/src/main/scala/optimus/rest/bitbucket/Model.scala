@@ -246,7 +246,8 @@ final case class PrComment(
     comments: Seq[PrComment],
     resolvedDate: Option[Instant],
     resolver: Option[User],
-    parentCommentId: Option[Int]
+    parentCommentId: Option[Int],
+    threadResolved: Option[Boolean] = None
 ) extends PrTextActivity {
   import PrComment._
 
@@ -254,6 +255,7 @@ final case class PrComment(
 
   def isTask: Boolean = severity == CommentSeverity.Blocker.toString
   def isRestricted: Boolean = text.startsWith(restrictedPrefix)
+  def isThreadResolved: Boolean = threadResolved.getOrElse(false)
 
   def tasks: Seq[PrTask] = comments.collect {
     case taskComment: PrComment if taskComment.isTask =>
@@ -271,7 +273,7 @@ final case class PrComment(
 }
 
 object PrComment extends DefaultJsonProtocol with NullOptions with InstantJsonFormat {
-  implicit lazy val format: JsonFormat[PrComment] = lazyFormat(jsonFormat12(PrComment.apply))
+  implicit lazy val format: JsonFormat[PrComment] = lazyFormat(jsonFormat13(PrComment.apply))
 
   val restrictedPrefix: String = "[Restricted] "
   val mandatoryPrefix: String = "[Mandatory] "
@@ -334,6 +336,11 @@ object UpdateComment extends DefaultJsonProtocol {
 final case class UpdateTaskState(state: String, version: Int)
 object UpdateTaskState extends DefaultJsonProtocol {
   implicit lazy val format: RootJsonFormat[UpdateTaskState] = jsonFormat2(UpdateTaskState.apply)
+}
+
+final case class UpdateCommentThreadState(threadResolved: Boolean, version: Int)
+object UpdateCommentThreadState extends DefaultJsonProtocol {
+  implicit lazy val format: RootJsonFormat[UpdateCommentThreadState] = jsonFormat2(UpdateCommentThreadState.apply)
 }
 
 final case class AddTask(text: String, parent: Anchor)

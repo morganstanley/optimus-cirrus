@@ -12,6 +12,7 @@
 package optimus.platform
 
 import optimus.breadcrumbs.ChainedID
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.graph
 import optimus.graph.EvaluationState
 import optimus.graph.OGTrace
@@ -49,13 +50,14 @@ object ScenarioStack {
     newRoot(ScenarioState(env), uniqueID)
 
   private[optimus] def newRoot(state: UntweakedScenarioState, uniqueID: Boolean): ScenarioStack =
-    newRoot(state.environment, state.inputs, uniqueID)
+    newRoot(state.environment, state.inputs, state.scopedConfiguration, uniqueID)
 
   private[platform] def newRoot(
       environment: RuntimeEnvironment,
       inputs: FrozenNodeInputMap,
+      scopedConfiguration: Map[NodeTaskInfo, ScopedSchedulerPlugin],
       uniqueID: Boolean): ScenarioStack = {
-    val r = ScenarioStackShared(environment, inputs, uniqueID).scenarioStack
+    val r = ScenarioStackShared(environment, inputs, scopedConfiguration, uniqueID).scenarioStack
     if (NodeTrace.profileSSUsage.getValue) Profiler.t_sstack_root(r)
     r
   }
@@ -167,9 +169,17 @@ final case class ScenarioStack private[optimus] (
   if (_stableSS eq null)
     _stableSS = this
 
+  if ((siParams.scopedPlugins ne null) && (isRoot || (siParams.scopedPlugins eq parent.siParams.scopedPlugins)))
+    // invoked every time we create a scenario stack (even on engines via deserialization in `ScenarioStackMoniker`)
+    // we only mark the plugin tasks if the scenario stack is root OR the scoped plugins is different from the parent's.
+    // there are situations where we can mark the same NodeTaskInfo multiple times (eg: two root scenario stacks created
+    // with the same siParams), but that's safe cause marking is idempotent - we just want to avoid running this code
+    // too many times for no good reason.
+    siParams.markPluginNodeTaskInfos()
+
   /** Scenario State is one to one with ScenarioStack but we don't want to expose to the 'user' all innards */
   def asScenarioState: ScenarioState = ScenarioState(this)
-  def asUntweakedScenarioState: UntweakedScenarioState = new UntweakedScenarioState(env, siParams.nodeInputs.freeze)
+  def asUntweakedScenarioState: UntweakedScenarioState = new UntweakedScenarioState(env, siParams.scopedPlugins, siParams.nodeInputs.freeze)
 
   // finds the parent ss that has the current scenarioReference as scenRef
   private[optimus] def findParentByScenarioReferenceId(scenRef: ScenarioReference): ScenarioStack = {
@@ -722,8 +732,13 @@ final case class ScenarioStack private[optimus] (
     else copy(privateCache = null)
   }
 
-  private[optimus] def withPrivateProvidedCache(cache: UNodeCache, readFromOutside: Boolean): ScenarioStack =
-    copy(privateCache = new PrivateCache(cache, readFromOutside))
+  private[optimus] def withPrivateProvidedCache(cache: UNodeCache, readFromOutside: Boolean): ScenarioStack = {
+    val parent = if (readFromOutside) {
+      if (privateCache eq null) PrivateCache.GlobalCaches
+      else privateCache
+    } else PrivateCache.NoOtherCache
+    copy(privateCache = new PrivateCache(cache, parent))
+  }
 
   /** Create identical scenario stack with new BatchScope */
   def withBatchScope(bs: BatchScope): ScenarioStack =

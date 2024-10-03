@@ -307,13 +307,9 @@ class PyroUploader(
     }
   }
 
-  private def enqueue(payload: Queued, block: Boolean = false): Unit = if (continue) {
-    enqueued.incrementAndGet()
-    payload match {
-      case Done =>
-        continueTimer.countDown()
-      case _ =>
-    }
+  private def enqueue(payload: Queued, block: Boolean = false): Unit = {
+    if (payload ne Done)
+      enqueued.incrementAndGet()
     if (block) queue.put(payload)
     else
       while (!queue.offer(payload)) {
@@ -370,10 +366,8 @@ class PyroUploader(
     blocking)
 
   private val oidcHttpClient = HttpClientOIDC.create(nThreads = 2 * (nUploadThreads + 1))
-  private val continueTimer = new CountDownLatch(1)
-  private def continue = continueTimer.getCount > 0
   private def delay(ms: Long): Unit = {
-    continueTimer.await(ms, TimeUnit.MILLISECONDS)
+    Thread.sleep(ms)
   }
   private val activeThreads = new CountDownLatch(nUploadThreads)
   private var backoffMs = backoffDelayMinMs
@@ -425,8 +419,11 @@ class PyroUploader(
     backoffMs = backoffDelayMinMs
   }
 
+  private val payloadID = new AtomicInteger(0)
+
   private def upload(upload: Payload): Unit = {
     import upload._
+    val id = payloadID.incrementAndGet()
     val d = Random.nextInt(randomDelayMs)
     delay(d)
     var response: CloseableHttpResponse = null
@@ -438,7 +435,7 @@ class PyroUploader(
     } else do {
       i += 1
       try {
-        log.info(s"Uploading snapshot $upload, size=$size")
+        log.info(s"Uploading snapshot $id $upload, size=$size")
         val postRequest = upload.request
         if (!pyroLatestVersion) {
           val getReq = new HttpGet(request.getURI.toString)
@@ -450,7 +447,7 @@ class PyroUploader(
       } catch {
         case e: Exception =>
           errors.incrementAndGet()
-          backoff(s"PyroUploader: Exception uploading snapshot $upload: ${e.getMessage}")
+          backoff(s"PyroUploader: Exception uploading snapshot $id $upload: ${e.getMessage}")
       } finally {
         if (response ne null) {
           val code = response.getStatusLine.getStatusCode()
@@ -463,15 +460,16 @@ class PyroUploader(
             val content = Option(body).fold("<empty>")(_.toString)
             errors.incrementAndGet()
             backoff(
-              s"PyroUploader: Error uploading snapshot code=$code status=${response.getStatusLine} $upload ($size): $content")
+              s"PyroUploader: Error uploading $id snapshot code=$code status=${response.getStatusLine} $upload ($size): $content")
           }
           response.close()
           response = null
         }
       }
-    } while (!success && i < tries && continue)
+    } while (!success && i < tries)
     if (!success) {
-      warn(s"Giving up on $upload")
+      warn(s"Giving up on $id $upload")
+      discarded.incrementAndGet()
     }
     cleanup()
   }

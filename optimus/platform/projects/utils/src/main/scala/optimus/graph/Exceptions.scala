@@ -52,7 +52,7 @@ object Exceptions {
 
   }
 
-  def minimizeTrace(t: Throwable, maxDepth: Int, maxCauses: Int): collection.Seq[String] = {
+  def minimizeTrace(t: Throwable, maxDepth: Int = 50, maxCauses: Int = 3): collection.Seq[String] = {
     val lineIter = for {
       cause <- causes(t).take(maxCauses)
       lines <- stackTraceLines(cause).take(maxDepth + 1)

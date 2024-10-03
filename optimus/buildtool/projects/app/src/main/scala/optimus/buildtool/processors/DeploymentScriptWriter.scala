@@ -51,7 +51,7 @@ class DeploymentScriptWriter {
   private val executable: String = StaticConfig.string("deploymentScriptExecutable")
 
   private def generateCommand(templateFile: FileAsset, paramsFile: FileAsset, outputDir: Directory): String =
-    s"$executable generate deploy --file ${templateFile.pathString} --params-file ${paramsFile.pathString} --output-dir ${outputDir.pathString} --verify"
+    s"$executable generate deploy --file ${templateFile.pathString} --params-file ${paramsFile.pathString} --output-dir ${outputDir.pathString}"
 
   private def handleCmdResponse(response: String): Try[DeploymentResponse] = {
     if (response.contains("[ERROR]")) {

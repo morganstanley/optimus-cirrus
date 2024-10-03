@@ -17,6 +17,11 @@ import java.util.{ArrayList => JavaArrayList}
 import java.util.{List => JavaList}
 import java.util.{UUID => JUUID}
 import msjava.base.util.uuid.{MSUuid => UUID}
+import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
+import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
+import optimus.graph.Exceptions
+import optimus.platform.util.InfoDump
 import optimus.utils.PropertyUtils
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -30,6 +35,29 @@ import org.slf4j.LoggerFactory
 @SerialVersionUID(2017071401L)
 final class ChainedID private[breadcrumbs] (val repr: String, val depth: Int, val crumbLevel: Int, val vertexId: String)
     extends Serializable {
+
+  if (depth > ChainedID.unreasonableDepth && !ChainedID.checkedDepth) {
+    // Document this only once.  We can live with the race condition.
+    ChainedID.checkedDepth = true
+
+    Breadcrumbs.error(
+      ChainedID.root,
+      PropertiesCrumb(
+        _,
+        RuntimeSource,
+        Properties.logMsg -> "Unreasonably deep chainedID",
+        Properties.stackTrace -> Exceptions.minimizeTrace(new IllegalStateException()))
+    )
+
+    val doKill = PropertyUtils.get("breadcrumb.unreasonable.depth.kill", false)
+    if (doKill)
+      InfoDump.kill(
+        "ChainedID",
+        msgs = s"Attempt to create unreasonably deep ChainedID($repr, $depth, $crumbLevel, $vertexId)" :: Nil,
+        exceptions = Array(new IllegalStateException("Unreasonably deep ChainedID"))
+      )
+  }
+
   private[optimus] def this(repr: String, depth: Int, level: Int) =
     this(repr, depth, level, if (depth == 0) repr else (new UUID).toString)
   @transient private lazy val id = new AtomicInteger(0)
@@ -62,6 +90,9 @@ object ChainedID {
     type TagTypes = Value
     val BATCH, REQUEST = Value
   }
+
+  private val unreasonableDepth: Int = PropertyUtils.get("breadcrumb.unreasonable.depth", 50)
+  @volatile private var checkedDepth = false
 
   final val prefix = PropertyUtils.get("breadcrumb.chainedid.prefix", "")
   private[breadcrumbs] val log: Logger = LoggerFactory.getLogger("ChainedID")

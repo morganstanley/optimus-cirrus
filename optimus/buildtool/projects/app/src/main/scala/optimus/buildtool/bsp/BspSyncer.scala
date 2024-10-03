@@ -468,8 +468,8 @@ class BspSyncer(
 
   private def vsCodeFriendlyPath(p: Pathed): String = {
     val pathStr = p.pathString
-    if (isWindows && pathStr.startsWith(NamingConventions.AfsRootStr))
-      pathStr.replaceFirst(NamingConventions.AfsRootStr, NamingConventions.AfsRootMapping)
+    if (isWindows && pathStr.startsWith(AfsNamingConventions.AfsRootStr))
+      pathStr.replaceFirst(AfsNamingConventions.AfsRootStr, AfsNamingConventions.AfsRootMapping)
     else pathStr
   }
 

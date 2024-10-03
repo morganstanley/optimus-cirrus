@@ -74,4 +74,6 @@ trait SignalAsEventSource[V] extends WithStatusSource[SignalAsEvent[V]]
 trait ContainedEventSignalAsEventSource[V <: BusinessEvent with ContainedEvent]
     extends WithStatusSource[ContainedEventSignalAsEvent[V]]
 
+trait TransactionEventSignalAsEventSource[V <: BusinessEvent] extends WithStatusSource[TransactionEventSignalAsEvent[V]]
+
 trait TransactionSignalAsEventSource[V <: Entity] extends WithStatusSource[TransactionEntitySignalAsEvent[V]]

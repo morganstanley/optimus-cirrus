@@ -150,11 +150,11 @@ object CoursierArtifactResolver {
 
   def coursierDependencyToInfo(d: Dependency, isMaven: Boolean): DependencyInfo = {
     val config = getConfig(d.configuration, isMaven)
-    DependencyInfo(cleanModuleStr(d.module), config, d.version)
+    DependencyInfo(cleanModuleStr(d.module), config, d.version, isMaven)
   }
 
   def definitionToInfo(d: DependencyDefinition): DependencyInfo = {
-    DependencyInfo(s"${d.group}:${d.name}", getConfig(Configuration(d.configuration), d.isMaven), d.version)
+    DependencyInfo(s"${d.group}:${d.name}", getConfig(Configuration(d.configuration), d.isMaven), d.version, d.isMaven)
   }
   def toDependencyCoursierKey(
       d: Dependency,
@@ -658,6 +658,12 @@ object CoursierArtifactResolver {
       .getOrElse(Nil)
   }
 
+  // we won't download target maven jar again after first time check
+  @node private def checkMavenJar(isMaven: Boolean, artifact: CoursierArtifact): Boolean =
+    if (!isMaven) true
+    else
+      downloadUrl(new URI(artifact.url).toURL, dependencyCopier, remoteAssetStore)(asNode(f => f.exists))(_ => false)
+
   @node private def artifactsForDependency(
       resolution: Resolution,
       dep: Dependency,
@@ -689,7 +695,8 @@ object CoursierArtifactResolver {
           }
 
           artifacts.toIndexedSeq.apar.collect {
-            case Right(artifact) if MsIvyRepository.isClassJar(artifact) =>
+            case Right(artifact)
+                if MsIvyRepository.isClassJar(artifact) && checkMavenJar(hasMavenArtifacts, artifact) =>
               Right(
                 convertArtifact(
                   source,
@@ -811,9 +818,20 @@ object CoursierArtifactResolver {
     val indirectJniPaths: Seq[String] = indirectDependencies.apar.flatMap(jniPathsForDependency(resolution, _))
     val indirectModuleLoads: Seq[String] = indirectDependencies.apar.flatMap(moduleLoadsForDependency(resolution, _))
 
-    val mavenDependencies = (directArtifacts ++ indirectArtifacts).collect {
-      case (d, arts) if arts.exists(_.isMaven) => toDependencyCoursierKey(d, configuration = Some(""))
-    }
+    val mavenDependencies = resolution.projectCache
+      .collect {
+        case ((module, version), (source, proj)) if source.isInstanceOf[MavenRepository] =>
+          proj.dependencies.map { case (c, d) => // do not take version/configuration to identify maven library
+            DependencyCoursierKey(d.module.organization.value, d.module.name.value, "", "")
+          } :+ DependencyCoursierKey(module.organization.value, module.name.value, "", "")
+      }
+      .flatten
+      .toSet
+
+    def isMavenDep(d: Dependency): Boolean =
+      d.publication.`type` == coursier.core.Type.pom || mavenDependencies.contains(
+        DependencyCoursierKey(d.module.organization.value, d.module.name.value, "", ""))
+
     val artifactsToDepInfos = mutable.LinkedHashMap.empty[ExternalClassFileArtifact, mutable.HashSet[DependencyInfo]]
     (directArtifacts ++ indirectArtifacts).foreach {
       case (d, Right(art)) =>
@@ -855,10 +873,8 @@ object CoursierArtifactResolver {
       // which not ideal for obtv and we should deduplicate them by ourself (Coursier won't help in this case)
       nonClassifierDeps.apar.map { case (d, seqd) =>
         (
-          coursierDependencyToInfo(d, mavenDependencies.contains(toDependencyCoursierKey(d, Some("")))),
-          seqd
-            .map(sd => coursierDependencyToInfo(sd, mavenDependencies.contains(toDependencyCoursierKey(sd, Some("")))))
-            .toIndexedSeq)
+          coursierDependencyToInfo(d, isMavenDep(d)),
+          seqd.map(sd => coursierDependencyToInfo(sd, isMavenDep(sd))).toIndexedSeq)
       }
     }
 

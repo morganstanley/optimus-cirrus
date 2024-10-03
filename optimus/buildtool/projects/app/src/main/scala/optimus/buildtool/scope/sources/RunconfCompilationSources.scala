@@ -256,16 +256,11 @@ object RunconfCompilationSources {
         .apar
         .filterNot(substitutions.allowedSubstitution)
 
-    val obtHardCodedWorkspaceDependencies: Seq[RunConfSourceSubstitution] =
-      RunConfSourceSubstitutions.workspaceDependencies.apar.map(
-        substitutions.workspaceDependency("workspace", _, optionalCheck = false)
-      )
-
     // Note here that we're deliberately excluding `ignoredSubstitutions` from the fingerprint, even though
     // they can change the runconf output
     val substitutionFingerprint = (
       allSourceSubstitutions.apar.filterNot(substitutions.ignoredSubstitution).flatMap(_.fingerprint) ++
-        obtHardCodedWorkspaceDependencies.flatMap(_.fingerprint)
+        substitutions.obtHardCodedWorkspaceDependencies.flatMap(_.fingerprint)
     ).map { case (category, kv) =>
       s"[Substitution:$category]$kv"
     }

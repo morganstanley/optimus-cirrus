@@ -14,17 +14,17 @@ package optimus.platform.dsi.bitemporal
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.exceptions.RTExceptionTrait
 import optimus.platform.EvaluationContext
+import optimus.platform.dal.config.DalEnv
+import optimus.platform.dsi.versioning.VersioningKey
+import optimus.platform.dsi.versioning.VersioningRedirectionInfo
 import optimus.platform.storable.BusinessEventReference
 import optimus.platform.storable.EntityReference
 import optimus.platform.storable.SerializedEntity
 import optimus.platform.storable.SerializedKey
 import optimus.platform.storable._
-import optimus.platform.dal.config.DalEnv
-import optimus.platform.dsi.versioning.VersioningKey
-import optimus.platform.dsi.versioning.VersioningRedirectionInfo
 import org.apache.commons.codec.binary.Hex
-import org.apache.commons.httpclient.util.URIUtil
 
+import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
 import scala.util.control.NonFatal
@@ -362,7 +362,7 @@ object EntitlementCheckFailed {
     if (failedRuleMessage.isEmpty) {
       val paramWithValue = erefOrType match {
         case Left(eref)       => s"eref=${base64ToHex(eref)}"
-        case Right(typeNames) => s"hierarchy=${URIUtil.encodeQuery(typeNames.mkString(","))}"
+        case Right(typeNames) => s"hierarchy=${URLEncoder.encode(typeNames.mkString(","), "UTF-8")}"
       }
 
       val env = MessageContainsDALEnv.tryDetectEnv.map(e => DalEnv.apply(e).mode).getOrElse("")
@@ -515,12 +515,12 @@ class ChangeSubscriptionMultiPartitionException(
     val partitionToSubMap: Map[String, Seq[Int]])
     extends PubSubException(streamId, "ChangeSubscription across multiple partitions not allowed.")
 
-sealed abstract class MessagesException(message: String) extends DSIException(message)
+sealed abstract class MessagesException(message: String, cause: Throwable = null) extends DSIException(message, cause)
 
 /**
  * Thrown when the messages could not publish on the broker
  */
-class MessagesPublishException(message: String) extends MessagesException(message)
+class MessagesPublishException(message: String, cause: Throwable = null) extends MessagesException(message, cause)
 
 class StreamsACLsCommandException(message: String) extends MessagesException(message)
 

@@ -17,6 +17,7 @@
 package org.gradle.api.internal.tasks.testing.junit.report;
 
 import org.apache.commons.lang3.StringUtils;
+import org.gradle.api.internal.tasks.testing.junit.result.CoverageResult;
 
 import java.util.*;
 
@@ -48,6 +49,10 @@ public class AllTestResults extends CompositeTestResults {
   public TestResult addTest(long classId, String className, String testName, long duration) {
     PackageTestResults packageResults = addPackageForClass(className);
     return addTest(packageResults.addTest(classId, className, testName, duration));
+  }
+
+  public Optional<CoverageResult> addCoverageResult(Optional<CoverageResult> coverage) {
+    return addCoverage(coverage);
   }
 
   public ClassTestResults addTestClass(long classId, String className) {

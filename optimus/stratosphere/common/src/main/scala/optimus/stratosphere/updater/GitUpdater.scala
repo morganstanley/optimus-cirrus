@@ -95,22 +95,26 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
       .runGit(srcDir = stratoWorkspace.directoryStructure.sourcesDirectory, ignoreExitCode = false)(args: _*)
   }
 
-  private def getGitConfig(regexp: String): Seq[String] = {
-    runGitIgnoreExit("config", "--get-regexp", regexp).linesIterator.toSeq
+  private def getGitConfig(regexp: String, system: Boolean): Seq[String] = {
+    val args = if (system) systemConfigArgs("--get-regexp", regexp) else Seq("config", "--get-regexp", regexp)
+    runGitIgnoreExit(args: _*).linesIterator.toSeq
   }
 
-  private def getAndModifyGitConfig(regexp: String, ignoreExit: Boolean = false)(
+  private def getAndModifyGitConfig(regexp: String, ignoreExit: Boolean = false, system: Boolean = false)(
       mapper: (String, String) => (String, String),
       filter: (String, String) => Boolean = (_, _) => true): Unit = {
-    val result = getGitConfig(regexp).collect {
+    val result = getGitConfig(regexp, system).collect {
       case ConfigPattern(configKey, configValue)
           if bitbucketInstances.exists(i => configValue.contains(i)) && filter(configKey, configValue) =>
         mapper(configKey, configValue)
     }
     result.foreach { case (key, value) =>
-      if (ignoreExit) runGitIgnoreExit("config", key, value) else runGit("config", key, value)
+      val args = if (system) systemConfigArgs(key, value) else Seq("config", key, value)
+      if (ignoreExit) runGitIgnoreExit(args: _*) else runGit(args: _*)
     }
   }
+
+  private def systemConfigArgs(key: String, value: String) = Seq("config", "--system", key, value)
 
   def reportResolutionFailures(value: Map[String, String]): Unit = {
     val missing = bitbucketInstances.filterNot(value.contains)
@@ -142,27 +146,31 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     reportResolutionFailures(resolved)
     val configureRepositoryCommands: Seq[Seq[String]] = resolved.flatMap { case (instance, name) =>
       Seq(
-        Seq("config", s"url.http://$name.insteadOf", s"http://$instance"),
+        systemConfigArgs(s"url.http://$name.insteadOf", s"http://$instance"),
         // slash at the end is intentional - we don't want multiple mappings under the same key
-        Seq("config", s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
-        Seq("config", s"http.http://$name.extraHeader", s"Host: $instance")
+        systemConfigArgs(s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
+        systemConfigArgs(s"http.http://$name.extraHeader", s"Host: $instance")
       )
     }.toSeq
     configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
     // emptyAuth
-    runGit("config", "http.emptyAuth", "true")
+    runGit(systemConfigArgs("http.emptyAuth", "true"): _*)
   }
 
-  private def unsetConfig(keyRegex: String): Unit = getAndModifyGitConfig(keyRegex, ignoreExit = true) {
-    (configKey, _) => ("--unset", configKey)
+  private def unsetConfig(keyRegex: String): Unit = {
+    val mapper = (configKey: String, _: String) => ("--unset", configKey)
+    getAndModifyGitConfig(keyRegex, ignoreExit = true)(mapper)
+    getAndModifyGitConfig(keyRegex, ignoreExit = true, system = true)(mapper)
   }
 
   private def removeInsteadOfs(): Unit = unsetConfig(InsteadOfConfigRegex)
 
   private def removeExtraHeaders(): Unit = unsetConfig(ExtraHeaderConfigRegex)
 
-  private def removeEmptyAuth(): Unit =
+  private def removeEmptyAuth(): Unit = {
     runGitIgnoreExit("config", "--unset", "http.emptyAuth")
+    runGitIgnoreExit("config", "--system", "--unset", "http.emptyAuth")
+  }
 
   def doRevertToOldFetchConfig(): Unit = {
     // unset all custom settings for instances we care about

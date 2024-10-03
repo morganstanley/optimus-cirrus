@@ -25,7 +25,9 @@ import scala.util.Properties
  */
 sealed abstract class ImageLocation {
   def name: String
-  val tag: String = ImageReference.parse(name).getTag.orElse("latest")
+  private val ref = ImageReference.parse(name)
+  val tag: String = ref.getTag.orElse("latest")
+  val repo: String = ref.getRepository
 
   import ImageLocation.MakeBuilder
   // i.e., use this as a base image

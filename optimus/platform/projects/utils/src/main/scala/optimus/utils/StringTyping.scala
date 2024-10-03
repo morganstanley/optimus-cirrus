@@ -11,7 +11,7 @@
  */
 package optimus.utils
 import scala.reflect.macros.whitebox
-import java.util.function.Predicate
+import scala.reflect.ClassTag
 
 object StringTyping {
   private def getString(c: whitebox.Context)(s: c.Tree): String = {
@@ -23,6 +23,8 @@ object StringTyping {
         ""
     }
   }
+
+  def classString[T](implicit tag: ClassTag[T]): String = tag.toString.replaceAllLiterally(".", "/")
 
   /**
    * methodFrameName[Clazz]("method") will return "fully/qualified/Clazz.method"
@@ -63,32 +65,4 @@ object StringTyping {
     c.Expr[String](Literal(Constant(ret)))
   }
 
-  def startsWith(prefix: String): StringPredicate = new StringPredicate(s"startsWith($prefix)") {
-    override def test(t: String): Boolean = t.startsWith(prefix)
-  }
-  def isEqualTo(value: String): StringPredicate = new StringPredicate(s"isEqualTo($value)") {
-    override def test(t: String): Boolean = t == value
-  }
-}
-
-sealed abstract class StringPredicate(name: String) extends Predicate[String] {
-  override def toString: String = name
-  def and(other: StringPredicate): StringPredicate = {
-    val outer = this
-    new StringPredicate(s"($this and $other)") {
-      override def test(t: String): Boolean = outer.test(t) && other.test(t)
-    }
-  }
-  def or(other: StringPredicate): StringPredicate = {
-    val outer = this
-    new StringPredicate(s"($this or $other)") {
-      override def test(t: String): Boolean = outer.test(t) || other.test(t)
-    }
-  }
-  override def negate(): StringPredicate = {
-    val outer = this
-    new StringPredicate(s"!$this") {
-      override def test(t: String): Boolean = !outer.test(t)
-    }
-  }
 }

@@ -146,9 +146,6 @@ object Profiler {
     writeConfigWithCaches(confName, combinedProfileData, cacheConfigs, settings, isPgoGen = isPgoGen)
   }
 
-  def pgoCacheDisabledPntis(pntis: Seq[PNodeTaskInfo]): (Seq[PNodeTaskInfo], Seq[PNodeTaskInfo]) =
-    pntis.partition(pgoWouldDisableCache)
-
   def pgoWouldDisableCache(pnti: PNodeTaskInfo): Boolean =
     DisableCache.autoConfigure(pnti, ConfigWriterSettings.default.thresholds)
 

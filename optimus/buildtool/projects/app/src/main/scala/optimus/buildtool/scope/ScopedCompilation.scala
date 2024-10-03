@@ -241,11 +241,17 @@ trait CompilationNode extends ScopedCompilation {
 
   @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact] =
     distinctArtifacts("runtime artifacts for downstreams", track = true) {
-      apar(signatureErrorsOr(ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
+      apar(
+        signatureErrorsOr(ourJvmRuntimeArtifacts) ++ ourOtherRuntimeArtifacts,
+        upstream.artifactsForOurRuntime
+      )
     }
 
   @node def runtimeArtifacts: Artifacts = distinct("runtime artifacts", track = true) {
-    apar(signatureErrorsOr(pathingArtifact.to(Seq) ++ ourRuntimeArtifacts), upstream.artifactsForOurRuntime)
+    apar(
+      signatureErrorsOr(pathingArtifact.to(Seq) ++ ourJvmRuntimeArtifacts) ++ ourOtherRuntimeArtifacts,
+      upstream.artifactsForOurRuntime
+    )
   }
 
   @node private def pathingArtifact: Option[PathingArtifact] =
@@ -257,7 +263,7 @@ trait CompilationNode extends ScopedCompilation {
   }
 
   @node private def pathingArtifactWithFingerprint: Option[(PathingArtifact, FingerprintArtifact)] =
-    buildPathingArtifact(ourRuntimeArtifacts ++ upstream.artifactsForOurRuntime)
+    buildPathingArtifact(ourJvmRuntimeArtifacts ++ upstream.artifactsForOurRuntime)
 
   @node private def sourceFingerprint =
     if (ScopedCompilation.generate(AT.SourceFingerprint)) Some(sources.compilationFingerprint) else None
@@ -267,16 +273,13 @@ trait CompilationNode extends ScopedCompilation {
     apar(
       signatureErrorsOr {
         pathingArtifacts ++
-          ourRuntimeArtifacts ++ {
+          ourJvmRuntimeArtifacts ++ {
             if (config.usePipelining) signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis
             else Nil
           } ++ scala.analysis ++ scala.locator ++ java.analysis ++ java.locator ++
           pathingArtifact.map(processing.process).getOrElse(Nil)
       } ++
-        cpp.artifacts ++
-        python.artifacts ++
-        web.artifacts ++
-        electron.artifacts ++
+        ourOtherRuntimeArtifacts ++
         sourcePackaging.packagedSources ++
         sourceFingerprint ++
         // always copy generated sources and regex messages (among others) so that we can make use of
@@ -350,12 +353,14 @@ trait CompilationNode extends ScopedCompilation {
     else
       res()
 
-  @node private def ourRuntimeArtifacts: Seq[Artifact] =
+  @node private def ourJvmRuntimeArtifacts: Seq[Artifact] =
     scala.classes ++ scala.messages ++
       java.classes ++ java.messages ++
       resources.resources ++ packaging.archiveContents ++
-      jmh.classes ++ jmh.messages ++
-      cpp.artifacts ++ web.artifacts ++ electron.artifacts ++
+      jmh.classes ++ jmh.messages
+
+  @node private def ourOtherRuntimeArtifacts: Seq[Artifact] =
+    cpp.artifacts ++ web.artifacts ++ electron.artifacts ++ python.artifacts ++
       runconf.runConfArtifacts ++ runconf.messages ++
       genericFiles.files
 

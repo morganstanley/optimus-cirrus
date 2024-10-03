@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.builders
 
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import msjava.slf4jutils.scalalog.Logger
@@ -23,6 +24,7 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.MessagesArtifact
+import optimus.buildtool.artifacts.PathedArtifact
 import optimus.buildtool.artifacts.Severity
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader
@@ -52,6 +54,7 @@ sealed trait BuildResult {
   def messageArtifacts: Seq[MessagesArtifact]
   def errors: Int
   def successful: Boolean = errors == 0
+  def artifactPaths: Seq[Path] = artifacts.collectInstancesOf[PathedArtifact].map(_.path)
 }
 object BuildResult {
   final case class CompletedBuildResult(

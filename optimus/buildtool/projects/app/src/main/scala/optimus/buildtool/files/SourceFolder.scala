@@ -62,21 +62,21 @@ import optimus.scalacompat.collection._
   ): SortedMap[SourceFileId, HashedContent] = _findSourceFiles(filter, maxDepth, scopeArtifacts = true)
 
   @node def runconfSourceFiles: SortedMap[SourceFileId, HashedContent] = {
-    val nonLocalRunConfs = findSourceFiles(isNonLocalRunConfSourceFile, maxDepth = 1)
-    if (nonLocalRunConfs.nonEmpty) {
+    val withLeafLocalRunConfs = findSourceFiles(isRunConfSourceFile, maxDepth = 1)
+    if (withLeafLocalRunConfs.nonEmpty) {
       // Do not discover anything above the workspace source root
-      val parentFiles = findFilesAbove(workspaceSrcRootToSourceFolderPath, isNonLocalRunConfSourceFile)
-      parentFiles ++ nonLocalRunConfs
-    } else nonLocalRunConfs
+      val parentNonLocalRunConfs = findFilesAbove(workspaceSrcRootToSourceFolderPath, isNonLocalRunConfSourceFile)
+      parentNonLocalRunConfs ++ withLeafLocalRunConfs
+    } else withLeafLocalRunConfs
   }
 
   @node def obtConfigSourceFiles(filesToGrab: Seq[String]): SortedMap[SourceFileId, HashedContent] = {
     val predicate = Directory.fileNamePredicate(filesToGrab: _*)
-    // Don't look for obt conf files unless we've first got a runconf
+    // Don't look for obt conf files unless we've first got a runconf (local runconf don't make sense without a runconf)
     if (findSourceFiles(isNonLocalRunConfSourceFile, maxDepth = 1).nonEmpty) {
       // Do not discover anything above the workspace source root
-      val parentFiles = findFilesAbove(workspaceSrcRootToSourceFolderPath, predicate)
-      parentFiles ++ findSourceFiles(predicate)
+      val parentObtConfigs = findFilesAbove(workspaceSrcRootToSourceFolderPath, predicate)
+      parentObtConfigs ++ findSourceFiles(predicate)
     } else SortedMap.empty
   }
 
@@ -180,6 +180,7 @@ object FileSystemSourceFolder {
   @entity private class SourceFile(val id: SourceFileId, file: FileAsset) {
     @node def hashedContent: HashedContent = {
       ObtTrace.addToStat(ObtStats.ReadFileSystemSourceFiles, 1)
+      ObtTrace.addToStat(ObtStats.ReadDistinctFileSystemSourceFiles, Set(file.pathString))
       Hashing.hashFileWithContent(file)
     }
     override def toString: String = s"${getClass.getSimpleName}($id, $file)"

@@ -57,6 +57,13 @@ object MischiefLoader {
     log.warn(msg)
   }
 
+  private def info(msg: String): Unit = {
+    // display intellij bsp msg
+    ObtTrace.info(msg)
+    // display msg in terminal
+    log.info(msg)
+  }
+
   def logNoMischief(hasFile: Boolean): Unit = {
     if (hasFile) MischiefLoader.warn("mischief.obt file exists, but active = false. Compilation will proceed normally.")
   }
@@ -73,27 +80,26 @@ object MischiefLoader {
       else {
         s"   Not frozen:\n     ${conf.fpStrings.mkString("\n     ")}"
       }
-    val begin = if (conf.active) {
-      s"""|Freezer cache ACTIVE!
-          |   OBT will proceed ABNORMALLY
-          |     - installed jars could be INCORRECT
-          |     - compilation might NO LONGER BE RT
-          |${notFrozen}
-          |""".stripMargin
-    } else {
-      """|Freezer cache INACTIVE!
-         |   OBT will proceed normally
-         |""".stripMargin
-    }
     val end = s"""   Results will ${if (conf.save) "" else "NOT "}be saved for frozen compilations."""
-    warn(begin ++ end)
+    if (conf.active) {
+      warn(s"""|Freezer cache ACTIVE!
+               |   OBT will proceed ABNORMALLY
+               |     - installed jars could be INCORRECT
+               |     - compilation might NO LONGER BE RT
+               |${notFrozen}
+               |""".stripMargin ++ end)
+    } else {
+      info("""|Freezer cache inactive.
+              |   OBT will proceed normally
+              |""".stripMargin ++ end)
+    }
   }
 
   private def log(conf: MischiefStructure): Unit = {
     if (conf.tricks.isEmpty) {
-      warn("Mischief is INACTIVE.")
+      info("Mischief special tricks are inactive, but freezer is still active!")
     } else {
-      warn(s"Mischief is ACTIVE for scopes: ${conf.tricks.keys.mkString(", ")}")
+      warn(s"Mischief special tricks are ACTIVE for scopes: ${conf.tricks.keys.mkString(", ")}")
     }
   }
 }

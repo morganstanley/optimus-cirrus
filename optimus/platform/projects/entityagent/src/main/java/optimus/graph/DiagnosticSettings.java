@@ -354,6 +354,10 @@ public class DiagnosticSettings {
   public static String disposableInterfaceToRewrite = null;
   public static String disposablePackageToRewrite = null;
 
+  // TODO (OPTIMUS-65703): Remove this option when asSignalEvents is gone.
+  public static final boolean inReactiveTestSuites =
+      getBoolProperty("optimus.reactive.in.test", false);
+
   @SuppressWarnings("unused") // Invoked by reflection
   public static List<String> forwardedProperties() {
     List<String> ret = new ArrayList<>();

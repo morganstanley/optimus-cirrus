@@ -20,6 +20,7 @@ import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 import org.slf4j.LoggerFactory.getLogger
 
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.collection.mutable
@@ -96,6 +97,14 @@ trait HasArtifactStore {
   protected def cacheMode: CacheMode
   protected def ignoreErroneousArtifacts: Boolean
 
+  @async def onWrite[B <: CachedArtifactType](
+      id: ScopeId,
+      tpe: B,
+      discriminator: Option[String],
+      fingerprintHash: String,
+      artifact: B#A
+  ) = {}
+
   @node override def getOrCompute$NF[B <: CachedArtifactType](
       id: ScopeId,
       tpe: B,
@@ -124,9 +133,11 @@ trait HasArtifactStore {
     }
     if (shouldWrite) {
       log.trace(s"${store.getClass.getName}:$cacheMode PUT $id:$tpe:$discriminator:$fingerprintHash")
-      ret.foreach(a => store.put(tpe)(id, fingerprintHash, discriminator, a))
+      ret.foreach { a =>
+        store.put(tpe)(id, fingerprintHash, discriminator, a)
+        onWrite(id, tpe, discriminator, fingerprintHash, a)
+      }
     }
-
     ret
   }
 
@@ -140,6 +151,30 @@ trait HasArtifactStore {
 ) extends ArtifactCacheBase
 
 object SimpleArtifactCache {
-  private val IgnoreErroneousArtifacts =
+  private[cache] val IgnoreErroneousArtifacts =
     sys.props.get("optimus.buildtool.ignoreErroneousArtifacts").contains("true") // default to false
+}
+
+@entity class RemoteReadThroughTriggeringArtifactCache[+A <: ArtifactStore](
+    override val store: A,
+    val readThroughStores: Set[_ <: ComparableArtifactStore],
+    val artifactSizeThresholdBytes: Long,
+    override val cacheMode: CacheMode = CacheMode.ReadWrite,
+    override val ignoreErroneousArtifacts: Boolean = SimpleArtifactCache.IgnoreErroneousArtifacts
+) extends SimpleArtifactCache[A](store, cacheMode, ignoreErroneousArtifacts) {
+  @async override def onWrite[B <: CachedArtifactType](
+      id: ScopeId,
+      tpe: B,
+      discriminator: Option[String],
+      fingerprintHash: String,
+      artifact: B#A): Unit = {
+    val size = Files.size(artifact.path)
+    if (size >= artifactSizeThresholdBytes) {
+      readThroughStores.apar.foreach { s =>
+        log.info(
+          s"Force read through for key '$id:$fingerprintHash:$tpe:$discriminator' ($size bytes) on '${s.toString}'")
+        s.check(id, Set(fingerprintHash), tpe, discriminator)
+      }
+    }
+  }
 }
