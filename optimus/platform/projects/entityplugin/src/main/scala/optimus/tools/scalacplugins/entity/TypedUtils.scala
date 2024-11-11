@@ -48,7 +48,9 @@ trait SharedUtils extends TreeDSL { this: OptimusNames =>
     rootMirror.getRequiredClass("optimus.platform.storable.EmbeddableTraitCompanionBase")
 
   lazy val Node: ClassSymbol = rootMirror.getRequiredClass("optimus.graph.Node")
+  lazy val NodeFuture: ClassSymbol = rootMirror.getRequiredClass("optimus.graph.NodeFuture")
   lazy val NodeGet: String = s"${Node.fullName}.get"
+  lazy val NodeFutureGet$ : String = s"${NodeFuture.fullName}.get${'$'}"
   lazy val AlreadyCompletedPropertyNode = rootMirror.getRequiredClass("optimus.graph.AlreadyCompletedPropertyNode")
   lazy val NodeDebugAnnotation = rootMirror.getRequiredClass("optimus.platform.nodeDebug")
   lazy val NodeConstructors = rootMirror.getRequiredClass("optimus.graph.NodeConstructors")
@@ -368,6 +370,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val NodeSync = rootMirror.getRequiredClass("optimus.graph.profiled.NodeSync")
   lazy val NodeSyncWithExecInfo = rootMirror.getRequiredClass("optimus.graph.profiled.NodeSyncWithExecInfo")
   lazy val NodeSyncAlwaysUnique = rootMirror.getRequiredClass("optimus.graph.profiled.NodeSyncAlwaysUnique")
+  lazy val NodeSyncStoredClosure = rootMirror.getRequiredClass("optimus.graph.profiled.NodeSyncStoredClosure")
   lazy val NodeFSM = rootMirror.getRequiredClass("optimus.graph.profiled.NodeFSM")
   lazy val NodeFSMWithExecInfo = rootMirror.getRequiredClass("optimus.graph.profiled.NodeFSMWithExecInfo")
   lazy val NodeFSMAlwaysUnique = rootMirror.getRequiredClass("optimus.graph.profiled.NodeFSMAlwaysUnique")

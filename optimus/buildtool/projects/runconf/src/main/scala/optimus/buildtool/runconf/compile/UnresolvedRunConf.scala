@@ -65,7 +65,8 @@ final case class UnresolvedRunConf(
     owner: Option[String],
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
-    interopPython: Option[Boolean]
+    interopPython: Option[Boolean],
+    python: Option[Boolean]
 ) extends HasScopedName {
   def isApp: Boolean = !isTemplate && !isTest
 }

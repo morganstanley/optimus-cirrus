@@ -19,7 +19,6 @@ import optimus.graph.Settings
 import optimus.graph.tracking.CleanupScheduler.DependencyTrackerRootCleanupState
 import optimus.graph.tracking.CleanupScheduler.InterruptionFlag
 import optimus.graph.tracking.DependencyTracker.log
-import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
 import optimus.ui.ScenarioReference
@@ -73,15 +72,6 @@ trait DependencyTrackerAsyncApi {
       }
     }
   }
-
-  def removeTweaksAsync(nks: Iterable[NodeKey[_]], callback: Try[Unit] => Unit): Unit =
-    queue.executeAsync(new TSA_RemoveTweak(nks), callback)
-
-  def setUnderlayAsync(scenario: Scenario, callback: Try[Unit] => Unit): Unit =
-    queue.executeAsync(new TSA_SetUnderlay(scenario), callback)
-
-  def removeAllTweaksAsync(callback: Try[Unit] => Unit): Unit =
-    queue.executeAsync(new TSA_RemoveAllTweaks(), callback)
 
   def snapshotScenarioAsync(callback: Try[ScenarioStack] => Unit): Unit = {
     log.debug("Snapshotting scenario stack")

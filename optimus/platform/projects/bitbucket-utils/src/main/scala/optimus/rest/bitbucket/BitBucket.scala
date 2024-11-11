@@ -87,10 +87,12 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
       commentId: Int,
       version: Int
   ): Int = {
-    val msg = "[AutoBuild] Comment thread has been reopened.\n" +
-      "\n- Please do not resolve AutoBuild-related comments as this breaks the tooling" +
-      "\n- Resolving comments is a different operation from signing off on open tasks" +
-      "\n- Resolving user comments is fine, such as part of the code review process"
+    val msg =
+      s"""[AutoBuild] Comment thread has been reopened.
+         |- Please do not resolve AutoBuild-related comments as this breaks the tooling
+         |- Resolving comments is a different operation from signing off on open tasks
+         |- Resolving user comments is fine, such as part of the code review process
+         |""".stripMargin
     updateCommentThreadState(project, repo, prNumber, commentId, version, threadResolved = false)
     addComment(
       project,

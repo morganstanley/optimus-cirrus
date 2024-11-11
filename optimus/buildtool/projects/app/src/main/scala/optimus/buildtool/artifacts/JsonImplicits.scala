@@ -19,6 +19,8 @@ import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode._
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.dependencies.PythonDefinition
+import optimus.buildtool.dependencies.PythonDependencies
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
@@ -119,7 +121,7 @@ private[buildtool] object JsonImplicits {
       case t                         => throw new IllegalArgumentException(s"Unexpected external artifact type: $t")
     }
   }
-  implicit val VersionedExternalArtifactIdFormatter: RootJsonFormat[VersionedExternalArtifactId] = jsonFormat5(
+  implicit val VersionedExternalArtifactIdFormatter: RootJsonFormat[VersionedExternalArtifactId] = jsonFormat6(
     VersionedExternalArtifactId.apply)
   implicit val SingletonArtifactIdFormatter: RootJsonFormat[SingletonArtifactId] = jsonFormat1(
     SingletonArtifactId.apply)
@@ -177,16 +179,16 @@ private[buildtool] object JsonImplicits {
     new JsonFormat[DependencyInfo] {
       private val delimiter = ",,"
       override def write(obj: DependencyInfo): JsValue = {
-        JsString(Seq(obj.module, obj.config, obj.version, obj.isMaven.toString).mkString(delimiter))
+        JsString(Seq(obj.group, obj.name, obj.config, obj.version, obj.isMaven.toString).mkString(delimiter))
       }
       override def read(json: JsValue): DependencyInfo = {
         val obj = json.convertTo[String]
-        val Array(module, config, version, isMaven) = obj.split(delimiter, 4)
-        DependencyInfo(module, config, version, isMaven.toBoolean)
+        val Array(group, name, config, version, isMaven) = obj.split(delimiter, 5)
+        DependencyInfo(group, name, config, version, isMaven.toBoolean)
       }
     }
 
-  implicit val CachedExternalClassFileArtifactFormatter: RootJsonFormat[ExternalClassFileArtifact.Cached] = jsonFormat8(
+  implicit val CachedExternalClassFileArtifactFormatter: RootJsonFormat[ExternalClassFileArtifact.Cached] = jsonFormat9(
     ExternalClassFileArtifact.Cached.apply)
   implicit val CachedResolutionArtifactFormatter: RootJsonFormat[ResolutionArtifact.Cached] = jsonFormat9(
     ResolutionArtifact.Cached.apply)
@@ -199,6 +201,9 @@ private[buildtool] object JsonImplicits {
   implicit val CppMetadataFormatter: RootJsonFormat[CppMetadata] = jsonFormat5(CppMetadata.apply)
   implicit val ElectronMetadataFormatter: RootJsonFormat[ElectronMetadata] = jsonFormat4(ElectronMetadata.apply)
   implicit val ProcessorMetadataFormatter: RootJsonFormat[ProcessorMetadata] = jsonFormat3(ProcessorMetadata.apply)
-  implicit val PythonMetadataFormatter: RootJsonFormat[PythonMetadata] = jsonFormat4(PythonMetadata.apply)
+
+  implicit val pythonVariant: RootJsonFormat[PythonDependencies.Variant] = jsonFormat2(PythonDependencies.Variant.apply)
+  implicit val PythonDefinitionFormatter: RootJsonFormat[PythonDefinition] = jsonFormat4(PythonDefinition.apply)
+  implicit val PythonMetadataFormatter: RootJsonFormat[PythonMetadata] = jsonFormat5(PythonMetadata.apply)
 
 }

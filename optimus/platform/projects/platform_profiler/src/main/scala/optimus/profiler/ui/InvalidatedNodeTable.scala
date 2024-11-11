@@ -15,7 +15,9 @@ import msjava.slf4jutils.scalalog.Logger
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.diagnostics.PNodeInvalidate
+import optimus.graph.tracking.NoEventCause
 import optimus.profiler.ui.common.JPopupMenu2
+import optimus.ui.ScenarioReference
 
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
@@ -43,6 +45,12 @@ object InvalidatedNodeTable {
     },
     new TableColumnCount[PNodeInvalidate]("Invalidated Nodes") {
       override def valueOf(row: PNodeInvalidate): Int = row.invalidatedNodeCount
+    },
+    new TableColumnString[PNodeInvalidate]("Caused by") {
+      override def valueOf(row: PNodeInvalidate): String = row.rootEventCause
+    },
+    new TableColumnString[PNodeInvalidate]("Scenario reference") {
+      override def valueOf(row: PNodeInvalidate): String = row.scenarioReference.toString
     }
   )
 
@@ -69,7 +77,7 @@ object InvalidatedNodeTable {
 final case class PropertyAndCount(property: NodeTaskInfo, count: Int)
 
 class InvalidatedNodeTable extends NPTable[PNodeInvalidate] with Filterable[PNodeInvalidate] {
-  emptyRow = PNodeInvalidate(null)
+  emptyRow = PNodeInvalidate(null, NoEventCause, ScenarioReference.Dummy)
   override def initialColumns: ArrayBuffer[TableColumn[PNodeInvalidate]] = InvalidatedNodeTable.regularView
 
   NodeTrace.traceInvalidates.addCallback(enabled => {

@@ -75,6 +75,7 @@ object ResourceCompilationSources {
     protected val scope: CompilationScope,
     sourceGeneration: SourceGeneration
 ) extends ResourceCompilationSources {
+  import CompilationSources._
 
   override def id: ScopeId = scope.id
 
@@ -85,18 +86,18 @@ object ResourceCompilationSources {
     val generatedSources = sourceGeneration.generatedSources
     ObtTrace.traceTask(id, hashTask) {
       val generatedSourceContent = generatedSources.apar.collect { case s: GeneratedSourceArtifact =>
-        s"Generated:${s.tpe.name}" -> s.hashedContent(isResourceFile)
+        s"$Generated:${s.tpe.name}" -> s.hashedContent(isResourceFile)
       }
 
       SourceFileContent(staticContent +: generatedSourceContent, generatedSources)
     }
   }
 
-  @node private[sources] def staticContent: (String, SortedMap[SourceUnitId, HashedContent]) = {
+  @node private def staticContent: (String, SortedMap[SourceUnitId, HashedContent]) = {
     val content =
       scope.resourceFolders.apar.map(_.resources()).merge[SourceUnitId] ++
         scope.sourceFolders.apar.map(_.resources(includeSources = false)).merge[SourceUnitId]
-    "Resource" -> content
+    Resource -> content
   }
 }
 

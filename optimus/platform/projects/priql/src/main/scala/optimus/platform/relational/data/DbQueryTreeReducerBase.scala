@@ -116,8 +116,8 @@ abstract class DbQueryTreeReducerBase extends DbQueryTreeVisitor with ReducerVis
       case KnowableValueElement(kn) =>
         val desc = new RuntimeMethodDescriptor(kn.rowTypeInfo, "toOption", option.rowTypeInfo)
         Some(visitElement(ElementFactory.call(kn, desc, Nil)))
-      case c: ColumnElement if !(c.rowTypeInfo <:< classOf[Option[_]]) => getReaderFunction(c, option.projectedType())
-      case _                                                           => None
+      case c: ColumnElement if !TypeInfo.isOption(c.rowTypeInfo) => getReaderFunction(c, option.projectedType())
+      case _                                                     => None
     }
     readerOpt.getOrElse {
       val e = visitElement(option.element)

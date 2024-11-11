@@ -12,6 +12,7 @@
 package optimus.platform.dsi.accelerated
 
 import optimus.platform.versioning.RegisteredFieldType
+import optimus.utils.CollectionUtils._
 
 import scala.collection.immutable
 
@@ -221,9 +222,11 @@ object AcceleratedInfoConversions {
         hash -> name
       }
       .toMap
-    val parallelWorkers = properties.get("parallelWorkers").flatMap(_.asInstanceOf[Seq[Int]].headOption)
+    val parallelWorkers = properties.get("parallelWorkers").flatMap(_.asInstanceOf[Seq[Int]].singleOption)
+    val enableSerializedKeyBasedFilter =
+      properties.get("enableSerializedKeyBasedFilter").flatMap(_.asInstanceOf[Seq[Boolean]].singleOption)
     // we don't use classpathHashes and rwTTScope now, so set them to be Nil and None
-    new AcceleratedInfo(
+    AcceleratedInfo(
       key,
       types,
       fields,
@@ -233,6 +236,7 @@ object AcceleratedInfoConversions {
       canWrite,
       tableHash,
       nameLookup,
-      parallelWorkers)
+      parallelWorkers,
+      enableSerializedKeyBasedFilter)
   }
 }

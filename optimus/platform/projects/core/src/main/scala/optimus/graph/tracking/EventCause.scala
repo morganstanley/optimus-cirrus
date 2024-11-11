@@ -244,7 +244,6 @@ private[optimus] trait EventCause {
   }
 
   protected def countDown(token: EventCause.Token): Unit = synchronized {
-    safeAssert(counter > 0, "Counter must be more than 0 in order to countDown")
     counter -= 1
     if (counter == 0) {
       if (completed) throwOrLogException(s"Already completed EventCause $this", token)
@@ -310,20 +309,14 @@ private[optimus] trait EventCause {
 
   def cause: String = getClass.getSimpleName
 
-  def safeAssert(condition: Boolean, message: String): Unit = {
-    if (Settings.throwOnEventCauseErrors) {
-      assert(condition, message)
-    } else if (!condition) {
-      log.warn(message)
-    }
-  }
-
   def throwOrLogException(baseExceptionMsg: String, token: EventCause.Token = null, debug: Boolean = false): Unit = {
-    val exceptionMsg =
+    val exceptionMsg0 =
       if (token != null)
         s"$baseExceptionMsg alreadyReleased = ${token.released != null}"
       else
         baseExceptionMsg
+
+    val exceptionMsg = exceptionMsg0 + "\nEvent cause stack:\n" + causeStack
 
     val toThrow = root.foldError(new EventCauseInInvalidState(exceptionMsg, this))
 
@@ -377,7 +370,7 @@ private[optimus] trait EventCause {
     completed
   }
 
-  private[optimus] def causeStack: String = {
+  private[optimus] def causeStack: String = try {
     // evaluate f for every parent up
     @tailrec def forParents(c: EventCause)(f: EventCause => Unit): Unit = {
       f(c)
@@ -394,6 +387,8 @@ private[optimus] trait EventCause {
       sb.append(c.cause)
     }
     sb.toString
+  } catch {
+    case e: Exception => s"<error while unwrapping cause stack: $e>"
   }
 }
 

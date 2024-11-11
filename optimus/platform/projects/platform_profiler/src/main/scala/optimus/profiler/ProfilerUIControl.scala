@@ -67,6 +67,5 @@ private final class ProfilerUIControl extends ProfilerUIControlAPI {
     ImageIO.write(bufferedImage, "png", new File(filename))
   }
 
-  override def underStackOfWithoutNodeTracing[T](ssIn: ScenarioStack)(f: => T): T =
-    DebuggerUI.underStackOfWithoutNodeTracing(ssIn)(f)
+  override def underStackOf[T](ssIn: ScenarioStack)(f: => T): T = DebuggerUI.underStackOf(ssIn)(f)
 }

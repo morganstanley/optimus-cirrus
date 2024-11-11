@@ -30,6 +30,7 @@ import optimus.platform.metadatas.internal.PIIDetails
 import java.net.URL
 import scala.collection.compat._
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
 object ClientEntityHierarchy {
   private[optimus] val hierarchy = new EntityHierarchyManager
@@ -116,15 +117,25 @@ class ExportedInfoScanner(
 
   private val log = getLogger(this)
 
-  lazy val cachedInfo: Map[String, BaseMetaData] = {
+  lazy val cachedInfo: Map[String, BaseMetaData] =
+    baseMetadataPerJar.values.flatMap { metaData =>
+      metaData.map(entity => entity.fullClassName -> entity)
+    }.toMap
+
+  lazy val cachedInfoByJar: Map[String, Seq[String]] =
+    baseMetadataPerJar.map { case (jar, metaData) =>
+      jar -> metaData.map(entity => entity.fullClassName)
+    }
+
+  private lazy val baseMetadataPerJar: Map[String, Seq[BaseMetaData]] = {
     val resources = resourceFinder.getResources(metaDataFileName)
-    resources
-      .flatMap(resource => {
-        val is = resource.openStream()
+    resources.map { resource =>
+      val is = resource.openStream()
+      val jarMetaData =
         try {
           val bufferSize = 65536 // 64 KB
           val result = new ByteArrayOutputStream(bufferSize)
-          val i = IOUtils.copy(is, result, bufferSize)
+          IOUtils.copy(is, result, bufferSize)
           result.flush()
           result.close()
           val bytes = result.toByteArray
@@ -145,17 +156,17 @@ class ExportedInfoScanner(
             } else {
               throw new IllegalArgumentException(s"Invalid file name: $fileName")
             }
-          metaData.map(entity => entity.fullClassName -> entity)
+          metaData
         } catch {
-          case t: Throwable =>
-            log.error(s"MetaDataReader caught exception working on $resource", t)
-            t.printStackTrace(System.out)
-            throw t
+          case NonFatal(e) =>
+            log.error(s"MetaDataReader caught exception working on $resource", e)
+            e.printStackTrace(System.out)
+            throw e
         } finally {
           is.close()
         }
-      })
-      .toMap
+      resource.getPath -> jarMetaData
+    }.toMap
   }
 
   override def discoverAllInfo: Map[String, BaseMetaData] = cachedInfo

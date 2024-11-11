@@ -53,6 +53,7 @@ import scala.collection.immutable.Seq
       sources.compilationSources,
       Map.empty,
       containsPlugin = scope.config.containsPlugin,
+      containsAgent = scope.config.containsAgent,
       containsOrUsedByMacros = scope.config.containsMacros
     )
 }

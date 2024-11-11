@@ -14,8 +14,8 @@ package optimus.platform.dal
 import java.time.Instant
 import optimus.dsi.partitioning.Partition
 import optimus.entity._
-import optimus.graph.Node
 import optimus.graph.NodeKey
+import optimus.graph.NodeFuture
 import optimus.platform.annotations.nodeSync
 import optimus.platform.internal.ClassInfo
 import optimus.platform.relational.tree.MultiRelationElement
@@ -43,7 +43,7 @@ trait EntityResolver {
   @nodeSync
   @scenarioIndependent
   def findEntity[S <: Entity](key: Key[S], temporality: TemporalContext): S
-  def findEntity$queued[S <: Entity](key: Key[S], temporality: TemporalContext): Node[S]
+  def findEntity$queued[S <: Entity](key: Key[S], temporality: TemporalContext): NodeFuture[S]
   def findEntity$newNode[S <: Entity](
       key: Key[S],
       temporality: TemporalContext)
@@ -52,13 +52,13 @@ trait EntityResolver {
   @nodeSync
   @scenarioIndependent
   def findEntityOption[S <: Entity](key: Key[S], temporality: TemporalContext): Option[S]
-  def findEntityOption$queued[S <: Entity](key: Key[S], temporality: TemporalContext): Node[Option[S]]
+  def findEntityOption$queued[S <: Entity](key: Key[S], temporality: TemporalContext): NodeFuture[Option[S]]
   def findEntityOption$newNode[S <: Entity](key: Key[S], temporality: TemporalContext): NodeKey[Option[S]]
 
   @nodeSync
   @scenarioIndependent
   def findByReference(eRef: EntityReference, temporality: TemporalContext): Entity
-  def findByReference$queued(eRef: EntityReference, temporality: TemporalContext): Node[Entity]
+  def findByReference$queued(eRef: EntityReference, temporality: TemporalContext): NodeFuture[Entity]
   def findByReference$newNode(eRef: EntityReference, temporality: TemporalContext): NodeKey[Entity]
 
   @nodeSync
@@ -72,7 +72,7 @@ trait EntityResolver {
       idx: Key[E],
       temporality: TemporalContext,
       classInfo: Option[Class[E]],
-      entitledOnly: Boolean): Node[Iterable[E]]
+      entitledOnly: Boolean): NodeFuture[Iterable[E]]
   def findByIndex$newNode[E <: Entity](
       idx: Key[E],
       temporality: TemporalContext,
@@ -88,7 +88,7 @@ trait EntityResolver {
   def findByIndexInRange$queued[E <: Entity](
       key: Key[E],
       fromTemporalContext: TemporalContext,
-      toTemporalContext: TemporalContext): Node[Iterable[VersionHolder[E]]]
+      toTemporalContext: TemporalContext): NodeFuture[Iterable[VersionHolder[E]]]
   def findByIndexInRange$newNode[E <: Entity](
       key: Key[E],
       fromTemporalContext: TemporalContext,
@@ -103,7 +103,7 @@ trait EntityResolver {
   def findByIndexWithEref$queued[E <: Entity](
       idx: Key[E],
       erefs: Iterable[EntityReference],
-      temporality: TemporalContext): Node[Iterable[E]]
+      temporality: TemporalContext): NodeFuture[Iterable[E]]
   def findByIndexWithEref$newNode[E <: Entity](
       idx: Key[E],
       erefs: Iterable[EntityReference],
@@ -118,7 +118,7 @@ trait EntityResolver {
   def enumerateKeysWithRtt$queued[E <: Entity](
       indexInfo: IndexInfo[E, _],
       when: QueryTemporality,
-      rtt: Instant): Node[Iterable[SortedPropertyValues]]
+      rtt: Instant): NodeFuture[Iterable[SortedPropertyValues]]
   def enumerateKeysWithRtt$newNode[E <: Entity](
       indexInfo: IndexInfo[E, _],
       when: QueryTemporality,
@@ -131,7 +131,7 @@ trait EntityResolver {
       temporality: TemporalContext): Option[PersistentEntity]
   private[optimus] def getPersistentEntityByRef$queued(
       eRef: EntityReference,
-      temporality: TemporalContext): Node[Option[PersistentEntity]]
+      temporality: TemporalContext): NodeFuture[Option[PersistentEntity]]
   private[optimus] def getPersistentEntityByRef$newNode(
       eRef: EntityReference,
       temporality: TemporalContext): NodeKey[Option[PersistentEntity]]
@@ -163,7 +163,7 @@ trait EntityResolver {
   private[optimus] /*[platform]*/ def enumerateQuery$queued[E <: Entity](
       query: ElementQuery,
       classNames: collection.Seq[String],
-      temporality: TemporalContext): Node[Iterable[E]]
+      temporality: TemporalContext): NodeFuture[Iterable[E]]
   private[optimus] /*[platform]*/ def enumerateQuery$newNode[E <: Entity](
       query: ElementQuery,
       classNames: collection.Seq[String],
@@ -179,7 +179,7 @@ trait EntityResolver {
   private[optimus] /*[platform]*/ def enumerateReferenceQuery$queued[E <: Entity](
       query: ElementQuery,
       classNames: collection.Seq[String],
-      loadContext: TemporalContext): Node[Iterable[ReferenceHolder[E]]]
+      loadContext: TemporalContext): NodeFuture[Iterable[ReferenceHolder[E]]]
   private[optimus] /*[platform]*/ def enumerateReferenceQuery$newNode[E <: Entity](
       query: ElementQuery,
       classNames: collection.Seq[String],
@@ -197,14 +197,14 @@ private[optimus] trait TemporalContextEntityResolver {
   @nodeSync
   @scenarioIndependent
   def loadClassInfo(entityRef: EntityReference): ClassInfo
-  def loadClassInfo$queued(entityRef: EntityReference): Node[ClassInfo]
+  def loadClassInfo$queued(entityRef: EntityReference): NodeFuture[ClassInfo]
 
   @nodeSync
   @scenarioIndependent
   def getItemKeys(operation: TemporalSurfaceQuery)(
       sourceTemporality: operation.TemporalityType): collection.Seq[operation.ItemKey]
   def getItemKeys$queued(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType): Node[collection.Seq[operation.ItemKey]]
+      sourceTemporality: operation.TemporalityType): NodeFuture[collection.Seq[operation.ItemKey]]
 
   @nodeSync
   @scenarioIndependent
@@ -213,7 +213,7 @@ private[optimus] trait TemporalContextEntityResolver {
       itemTemporality: operation.TemporalityType): Map[operation.ItemKey, operation.ItemData]
   def getItemData$queued(operation: TemporalSurfaceQuery)(
       sourceTemporality: operation.TemporalityType,
-      itemTemporality: operation.TemporalityType): Node[Map[operation.ItemKey, operation.ItemData]]
+      itemTemporality: operation.TemporalityType): NodeFuture[Map[operation.ItemKey, operation.ItemData]]
 
   @nodeSync
   @scenarioIndependent
@@ -222,7 +222,7 @@ private[optimus] trait TemporalContextEntityResolver {
       key: operation.ItemKey): operation.ItemData
   def getSingleItemData$queued(operation: TemporalSurfaceQuery)(
       temporality: operation.TemporalityType,
-      key: operation.ItemKey): Node[operation.ItemData]
+      key: operation.ItemKey): NodeFuture[operation.ItemData]
 
 }
 

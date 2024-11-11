@@ -47,8 +47,8 @@ import scala.util.Try
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
 class GraphSchedulerCounter extends SchedulerCounter {
-  override def getCounts = Scheduler.getCounts
-  override def numThreads = Scheduler.numThreads
+  override def getCounts: SchedulerCounts = Scheduler.getCounts
+  override def numThreads: Option[Int] = Scheduler.numThreads
 }
 
 object Scheduler {
@@ -144,15 +144,17 @@ object Scheduler {
     val sched = snapshots()
     val counts = sched.foldLeft(SchedulerCounts.empty) { case (counts, SchedulerSnapshot(_, contexts)) =>
       SchedulerCounts(
-        working = counts.working + contexts.working.size,
-        waiting = counts.waiting + contexts.waiting.size,
-        blocked = counts.blocked + contexts.blocked.size
+        working = counts.working + contexts.working.length,
+        waiting = counts.waiting + contexts.waiting.length,
+        blocked = counts.blocked + contexts.blocked.length
       )
     }
     counts
   }
 
-  def numThreads: Option[Int] = Try(currentOrDefault.getIdealThreadCount).toOption
+  def numThreads: Option[Int] = if (EvaluationContext.isInitialised)
+    Try(currentOrDefault.getIdealThreadCount).toOption
+  else None
 }
 
 private object PT {
@@ -163,9 +165,7 @@ private object PT {
  *   1. Consider extending to provide more details 2. Do NOT hold onto instances of this class they contain NodeTask
  *      that can lead to a memory leak Note - atieoc = awaitedTaskInfoEndOfChain
  */
-final case class SchedulerStallSource(
-    awaitedTasks: Array[OGScheduler.AwaitedTasks],
-    syncStackPresent: Boolean) {
+final case class SchedulerStallSource(awaitedTasks: Array[OGScheduler.AwaitedTasks], syncStackPresent: Boolean) {
   private def sample = awaitedTasks.head
   // We pick any ctx because we want stall times to add up and don't want to double report
   def awaitedTask: NodeTask = sample.task()
@@ -199,7 +199,13 @@ abstract class Scheduler extends EvaluationQueue {
    * Marks task as runnable and enqueues on scheduler queues WARNING: This is not the function you are looking for!
    * Verify the need to use this function with someone
    */
-  def markAsRunnableAndEnqueue(task: NodeTask): Unit
+  final def markAsRunnableAndEnqueue(task: NodeTask): Unit = markAsRunnableAndEnqueue(task, trackCompletion = false)
+
+  /**
+   * Marks task as runnable and enqueues on scheduler queues WARNING: This is not the function you are looking for!
+   * Verify the need to use this function with someone
+   */
+  def markAsRunnableAndEnqueue(task: NodeTask, trackCompletion: Boolean): Unit
 
   /**
    * Before exiting Scheduler's last thread, track and make sure this task is completed
@@ -276,7 +282,7 @@ abstract class Scheduler extends EvaluationQueue {
       v.continueWithLast(completionCounter, this)
       if (v.scenarioStack eq null) v.attach(currentScenarioStack)
       v.poisonCausality() // We don't have any causality information for our caller
-      enqueueAndTrackCompletion(v, true)
+      enqueueAndTrackCompletion(v, doTrack = true)
     }
 
     completionCounter.onChildCompleted(Scheduler.this, null)

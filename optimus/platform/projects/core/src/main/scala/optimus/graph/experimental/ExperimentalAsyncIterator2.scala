@@ -311,7 +311,7 @@ trait ExperimentalAsyncIterator2[A] {
   @nodeSyncLift
   @scenarioIndependentTransparent
   def force(maxCcy: Int = 1): Iterable[A] = force$newNode(maxCcy).get
-  def force$queued(maxCcy: Int): Node[Iterable[A]] = force$newNode(maxCcy).enqueue
+  def force$queued(maxCcy: Int): NodeFuture[Iterable[A]] = force$newNode(maxCcy).enqueue
   def force$withNode(maxCcy: Int): Iterable[A] = force$newNode(maxCcy).get
   def force$newNode(maxCcy: Int): Node[Iterable[A]] = {
     val in = if (maxCcy <= 1) this else this.buf(maxCcy)

@@ -120,11 +120,10 @@ class CrumbMerger(args: CrumbMergerArgs = new CrumbMergerArgs) {
         vertex.withTime(t)
       }
 
-  // Note: The .toMap is necessary, and (for some resason) breakOut won't compile.
   private def toMergeable(crumb: Map[String, JsValue], src: Option[String]): Map[Properties.Key[_], JsValue] =
-    (crumb - ("crumb", "uuid", "vuid", "t", "src", "tUTC", "replicaFrom"))
-      .map(e => (Properties.stringToKey(e._1, src), e._2))
-      .toMap
+    (crumb -- Seq("crumb", "uuid", "vuid", "t", "src", "tUTC", "replicaFrom"))
+      // element type ascription can be dropped on 2.13 (optimus msg=20317)
+      .map(e => (Properties.stringToKey(e._1, src), e._2): (Properties.Key[_], JsValue))
 
   private def lt(c1: Vertex, c2: Vertex) = c1.tFirst.isBefore(c2.tFirst)
 

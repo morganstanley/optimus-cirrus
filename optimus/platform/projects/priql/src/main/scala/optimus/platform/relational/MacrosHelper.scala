@@ -67,6 +67,7 @@ class AggregateByImplicitUtils[C <: Context](val c: C) extends MacroBase {
     "toString",
     "productIterator",
     "productElements",
+    "productElementNames",
     "getClass",
     "productPrefix",
     "productArity",

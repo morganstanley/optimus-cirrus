@@ -15,6 +15,7 @@ package app
 import optimus.buildtool.app.OptimusBuildToolCmdLineT._
 import optimus.buildtool.artifacts._
 import optimus.buildtool.bsp.BuildServerProtocolServer
+import optimus.buildtool.bsp.BuildServerProtocolService.PythonBspConfig
 import optimus.buildtool.builders._
 import optimus.buildtool.builders.postbuilders.DocumentationInstaller
 import optimus.buildtool.builders.postbuilders.PostBuilder
@@ -40,8 +41,8 @@ import optimus.buildtool.cache.MultiLevelStore
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteAssetStore
-import optimus.buildtool.cache.silverking.CacheOperationRecorder
-import optimus.buildtool.cache.silverking.CacheProvider
+import optimus.buildtool.cache.remote.CacheOperationRecorder
+import optimus.buildtool.cache.remote.RemoteCacheProvider
 import optimus.buildtool.compilers.AsyncCppCompilerImpl
 import optimus.buildtool.compilers.AsyncElectronCompilerImpl
 import optimus.buildtool.compilers.AsyncJavaCompiler
@@ -52,6 +53,7 @@ import optimus.buildtool.compilers.AsyncScalaCompiler
 import optimus.buildtool.compilers.AsyncWebCompilerImpl
 import optimus.buildtool.compilers.GenericFilesPackager
 import optimus.buildtool.compilers.JarPackager
+import optimus.buildtool.compilers.ManifestGenerator
 import optimus.buildtool.compilers.RegexScanner
 import optimus.buildtool.compilers.cpp.CppCompilerFactory
 import optimus.buildtool.compilers.cpp.CppCompilerFactoryImpl
@@ -168,11 +170,13 @@ object OptimusBuildToolImpl {
     cmdLine.sandboxDir.asDirectory.getOrElse(buildDir.resolveDir(Sandboxes))
   private val dockerImageCacheDir = buildDir.resolveDir("docker_cache")
 
+  private val compilerThrottle = new CompilerThrottle(cmdLine.maxZincCompileBytes, cmdLine.maxNumZincs)
+
   private val traceRecorder = new TraceRecorder(cmdLine.traceFile.asDirectory)
   private val timingsRecorder = new TimingsRecorder(logDir)
   val countingTrace = new CountingTrace(Some(cmdLine.statusIntervalSec))
   private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = useCrumbs)
-  private val buildSummaryRecorder = new BuildSummaryRecorder(cmdLine.statsDir.asDirectory)
+  private val buildSummaryRecorder = new BuildSummaryRecorder(cmdLine.statsDir.asDirectory, compilerThrottle)
 
   private val memoryThrottle = MemoryThrottle.fromConfigStringOrSysProp(cmdLine.memConfig.nonEmptyOption)
   private val baseListeners = timingsRecorder :: traceRecorder :: countingTrace :: longRunningTraceListener ::
@@ -233,7 +237,7 @@ object OptimusBuildToolImpl {
     workspaceRoot.parent.resolveDir(".stratosphere").resolveDir("depcopy")
   }
   val venvCacheDir: Directory = depCopyRoot.resolveDir("venv-cache")
-  val pipCacheDir: Directory = depCopyRoot.resolveDir("pip-cache")
+  val uvCacheDir: Directory = depCopyRoot.resolveDir("uv-cache")
 
   private val depCopyFileSystemAsset = Utils.isWindows && cmdLine.depCopyDir != NoneArg
 
@@ -280,7 +284,7 @@ object OptimusBuildToolImpl {
   private val cacheOperationRecorder = new CacheOperationRecorder
 
   @node @scenarioIndependent private[buildtool] def remoteCaches =
-    CacheProvider(cmdLine, version, pathBuilder, stratoWorkspace(), cacheOperationRecorder)
+    RemoteCacheProvider(cmdLine, version, pathBuilder, stratoWorkspace(), cacheOperationRecorder)
 
   @node @scenarioIndependent private def combined(
       caches: Seq[ArtifactCache with HasArtifactStore]
@@ -345,8 +349,6 @@ object OptimusBuildToolImpl {
     obtConfig.externalDependencies,
     scalaVersionConfig.scalaMajorVersion
   )
-
-  private val compilerThrottle = new CompilerThrottle(cmdLine.maxZincCompileBytes, cmdLine.maxNumZincs)
 
   @node private def underlyingCompilerFactory: ZincCompilerFactory = {
     val interfaceDir = cmdLine.zincInterfaceDir.asDirectory.getOrElse {
@@ -510,11 +512,12 @@ object OptimusBuildToolImpl {
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
     AsyncPythonCompilerImpl(
-      pipCacheDir,
       venvCacheDir,
+      uvCacheDir,
       sandboxFactory,
       logDir,
       cmdLine.pypiCredentials,
+      cmdLine.pypiUvCredentials,
       asNode(() => globalConfig.pythonEnabled))
   @node @scenarioIndependent private def webCompiler =
     AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
@@ -526,6 +529,7 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def resourcePackager = JarPackager()
   @node @scenarioIndependent private def regexScanner = RegexScanner()
   @node @scenarioIndependent private def genericFilesPackager = GenericFilesPackager(cmdLine.installVersion)
+  @node @scenarioIndependent private def manifestGenerator = ManifestGenerator(dependencyCopier, cmdLine.cppFallback)
 
   @node private def freezerCache = FreezerCache(FreezerStoreConf.load(mischiefOpts), pathBuilder)
 
@@ -678,6 +682,7 @@ object OptimusBuildToolImpl {
             pythonc = pythonCompiler,
             webc = webCompiler,
             electronc = electronCompiler,
+            manifestGenerator = manifestGenerator,
             runconfc = runconfCompiler,
             jarPackager = resourcePackager,
             regexScanner = regexScanner,
@@ -897,7 +902,7 @@ object OptimusBuildToolImpl {
   }
 
   @async private def writeRootLocator(
-      buildCache: Option[CacheProvider.RemoteArtifactCache],
+      buildCache: Option[RemoteCacheProvider.RemoteArtifactCache],
       rootLocatorCache: Option[HasArtifactStore],
       writeType: String,
       tagName: Option[String] = None
@@ -953,8 +958,14 @@ object OptimusBuildToolImpl {
       sendCrumbs = useCrumbs,
       installerFactory = asNode(bspInstaller),
       scalaVersionConfig = asNode(() => scalaVersionConfig),
-      pythonEnabled = asNode(() => globalConfig.pythonEnabled),
-      extractVenvs = asNode(() => globalConfig.extractVenvs),
+      pythonBspConfig = PythonBspConfig(
+        asNode(() => globalConfig.pythonEnabled),
+        asNode(() => globalConfig.extractVenvs),
+        uvCacheDir,
+        venvCacheDir,
+        cmdLine.pypiCredentials,
+        cmdLine.pypiUvCredentials
+      ),
       depMetadataResolvers = asNode(() => dependencyMetadataResolvers.allResolvers),
       directoryFactory = directoryFactory,
       dependencyCopier = dependencyCopier,
@@ -1137,7 +1148,7 @@ object OptimusBuildToolImpl {
         Some(
           MetadataSettings(
             stratoConfig = stratoConfig,
-            dependencyResolver = dependencyResolver,
+            extraLibs = dependencyResolver.extraLibsDefinitions,
             webDependencyResolver = webDependencyResolver,
             installDir = installDir,
             dockerDir = dockerDir,

@@ -12,14 +12,13 @@
 package optimus.platform.internal
 
 import java.time.Instant
-import java.util.{ArrayList => JArrayList}
-
 import optimus.core.NodeAPI
+import optimus.graph.RTGraphException
 import optimus.graph.GraphException
 import optimus.graph.InstancePropertyTarget
-import optimus.graph.NodeTask
 import optimus.graph.PropertyNode
 import optimus.graph.Settings
+import optimus.graph.diagnostics.InfoDumper
 import optimus.platform._
 import optimus.platform.dal.DALImpl._
 import optimus.platform.dal.Marker
@@ -103,9 +102,13 @@ object TemporalSource {
   @node(tweak = true) private[optimus] def validTimeStore: Instant = initialTime
 
   // Must always be tweaked.  RuntimeEnvironment creation installs a tweak in its top scenario.
-  @node(tweak = true) def initialTime: Instant = {
-    val stack = EvaluationContext.currentNode.nodeStackAny()
-    throw new UninitializedInitialTimeException(stack)
+  @node(tweak = true) def initialTime: Instant = uninitializedInitialTime()
+
+  def uninitializedInitialTime(): Instant = {
+    val msg = s"nodestack=${GraphException.pathAsString()}; scenarioStack=${GraphException.scenarioStackString()}"
+    val e = new UninitializedInitialTimeException(msg)
+    if (Settings.killOnUninitializedTime) InfoDumper.graphPanic("panic", s"Uninitialized initialTime $msg", 121, e)
+    throw e
   }
 
   @node(tweak = true) def temporalContextFactory: TemporalContextFactory = LoadContextTemporalContextFactory
@@ -114,7 +117,4 @@ object TemporalSource {
   IgnoreSyncStacksPlugin.installIfNeeded(validTimeStore_info, loadContext_info)
 }
 
-class UninitializedInitialTimeException(val path: JArrayList[NodeTask])
-    extends GraphException("Uninitialized initialTime") {
-  override def getMessage: String = "Uninitialized initialTime:\n" + GraphException.pathAsString(path)
-}
+class UninitializedInitialTimeException(diags: String) extends RTGraphException("Uninitialized initialTime " + diags)

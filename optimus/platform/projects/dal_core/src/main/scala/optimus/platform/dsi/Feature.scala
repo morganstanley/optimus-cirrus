@@ -91,6 +91,12 @@ object Feature {
   case object AsyncPartitionedWrite extends Feature(value = 46)
   case object SetStreamsACLs extends Feature(value = 47)
 
+  // With this feature, the client will send SK-based filter conditions to server if possible.
+  // The server will use Mongodb to execute the SK-based conditions if the related AccInfo has
+  // enableSerializedKeyBasedFilter == Some(true), otherwise, it will rewrite the SK-based
+  // conditions back to normal acc conditions and use Postgres to execute it.
+  case object SerializedKeyBasedFilterForAccelerator extends Feature(value = 48)
+
   def fromValue(value: Id, registeredEntities: Set[SerializedEntity.TypeRef] = Set.empty): Feature = value match {
     case 1  => ExtendedChunkedResponses
     case 4  => RangeQuery
@@ -135,6 +141,7 @@ object Feature {
     case 45 => EventEntitiesWithType
     case 46 => AsyncPartitionedWrite
     case 47 => SetStreamsACLs
+    case 48 => SerializedKeyBasedFilterForAccelerator
     case _  => Unknown(value)
   }
 
@@ -235,6 +242,9 @@ private object FeatureSets {
   private val disableTypeInfoQueries =
     DiagnosticSettings.getBoolProperty("optimus.dsi.server.disableTypeInfoQueries", false)
 
+  private val disableSerializedKeyBasedFilterForAccelerator =
+    DiagnosticSettings.getBoolProperty("optimus.dsi.server.disableSerializedKeyBasedFilterForAccelerator", false)
+
   // avoid class loading on startup
   lazy val All: SupportedFeatures = {
     val allFeatures = SupportedFeatures(
@@ -285,6 +295,8 @@ private object FeatureSets {
               Set(Feature.EmitEntityReferenceStats)
             else Set.empty)
         ++ (if (!disableTypeInfoQueries) Set(Feature.EventEntitiesWithType) else Set.empty)
+        ++ (if (!disableSerializedKeyBasedFilterForAccelerator) Set(Feature.SerializedKeyBasedFilterForAccelerator)
+            else Set.empty)
     )
     validate(allFeatures)
     allFeatures

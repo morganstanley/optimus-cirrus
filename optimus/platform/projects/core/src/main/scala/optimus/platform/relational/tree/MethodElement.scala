@@ -34,6 +34,10 @@ class MethodElement(
   def replaceArgs(newArgs: List[MethodArg[RelationElement]]): MethodElement = {
     new MethodElement(methodCode, newArgs, rowTypeInfo, key, pos)
   }
+
+  def replaceKey(newKey: RelationKey[_]): MethodElement = {
+    new MethodElement(methodCode, methodArgs, rowTypeInfo, newKey, pos)
+  }
 }
 
 object MethodElement {

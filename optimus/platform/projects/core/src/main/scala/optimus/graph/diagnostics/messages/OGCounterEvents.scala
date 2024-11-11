@@ -18,6 +18,8 @@ import optimus.breadcrumbs.crumbs.Properties.profDALCommands
 import java.lang.management.ManagementFactory
 import optimus.graph.OGTraceCounter
 import optimus.graph.OGTraceCounter._
+import optimus.graph.tracking.EventCause
+import optimus.ui.ScenarioReference
 import optimus.utils.MacroUtils.SourceLocation
 import optimus.utils.misc.Color
 
@@ -254,9 +256,40 @@ sealed abstract class TimedEvent extends OGEventWithComplete {
   final override def graphLabel(counter: OGCounter[_]): String = event.description
 }
 
-final case class HandlerStepEvent(event: EventDescription = EventDescription.empty) extends TimedEvent {
+final case class HandlerStepEvent(scenarioRef: String, cause: String, event: EventDescription) extends TimedEvent {
   override def counterID: Int = CounterId.HANDLER_ID.id
   override def graphColor: Int = Color.MAGENTA.getRGB
+}
+
+object HandlerStepEventCounter
+    extends OGCounterWithComplete("Handler Step Events", BOOKMARK, HandlerStepEvent("", "", EventDescription.empty)) {
+  def report(scenario: ScenarioReference, cause: EventCause, description: EventDescription): HandlerStepEvent = {
+    val event = HandlerStepEvent(scenario.toString, cause.root.cause, description)
+    publish(event)
+    event
+  }
+
+  def reportCompleted(event: HandlerStepEvent): Unit = publishComplete(event)
+}
+
+final case class DTQEvent(scenarioRef: String, isUpdate: Boolean, event: EventDescription) extends TimedEvent {
+  override def counterID: Int = CounterId.DTQ_ID.id
+  override def graphColor: Int = Color.ORANGE.getRGB
+}
+
+object DTQEventCounter
+    extends OGCounterWithComplete(
+      "Dependency Tracker Queue Events",
+      BOOKMARK,
+      DTQEvent("", isUpdate = false, EventDescription.empty)) {
+
+  def report(scenario: ScenarioReference, cause: EventCause, isUpdate: Boolean): DTQEvent = {
+    val event = DTQEvent(scenario.toString, isUpdate, EventDescription(cause.root.cause))
+    publish(event)
+    event
+  }
+
+  def reportCompleted(event: DTQEvent): Unit = publishComplete(event)
 }
 
 sealed abstract class TimedEventCounter[T <: TimedEvent](description: String, event: T)
@@ -271,10 +304,6 @@ sealed abstract class TimedEventCounter[T <: TimedEvent](description: String, ev
   }
 
   def reportCompleted(event: TimedEvent): Unit = publishComplete(event)
-}
-
-object HandlerStepEventCounter extends TimedEventCounter("Handler Step Events", HandlerStepEvent()) {
-  override def create(description: EventDescription): HandlerStepEvent = HandlerStepEvent(description)
 }
 
 final case class StartupEvent(event: EventDescription = EventDescription.empty) extends TimedEvent {

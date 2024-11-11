@@ -509,7 +509,7 @@ public class OGScheduler extends Scheduler {
   }
 
   @Override
-  public final void markAsRunnableAndEnqueue(NodeTask ntsk) {
+  public final void markAsRunnableAndEnqueue(NodeTask ntsk, boolean trackCompletion) {
     // All nodes that are not yet completed must be marked as runnable
     // This condition is just to help plugins that enqueue nodes twice
     if (!ntsk.isDoneOrRunnable()) ntsk.markAsRunnable();
@@ -523,7 +523,7 @@ public class OGScheduler extends Scheduler {
     // However, to the local scheduler it looks like a
     // 'safe' task, we need remove that 'safe' promise
     if (ntsk.causalityThreadID() == 0) ntsk.poisonCausality();
-    enqueue(ntsk);
+    enqueueAndTrackCompletion(ntsk, trackCompletion);
   }
 
   /**

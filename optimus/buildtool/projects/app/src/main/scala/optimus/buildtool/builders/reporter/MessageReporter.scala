@@ -13,6 +13,7 @@ package optimus.buildtool.builders.reporter
 
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.builders.BuildResult.CompletedBuildResult
 import optimus.buildtool.builders.postbuilders.codereview.CodeReviewSettings
 import optimus.buildtool.builders.postbuilders.metadata.MetadataSettings
@@ -39,13 +40,13 @@ class MessageReporter(
   private val jsonReporter = new JsonReporter(obtConfig, codeReviewSettings, metadataSettings)
   private val lookupReporter = new LookupReporter(obtConfig)
 
-  @async def writeReports(buildResult: CompletedBuildResult): Unit =
+  @async def writeReports(buildResult: CompletedBuildResult, factory: ScopedCompilationFactory): Unit =
     apar(
       errorReporter.writeErrorReport(buildResult),
       writeLookupReport(buildResult),
       writeOptimusWarningReports(buildResult),
       writeCodeReviewAnalysis(buildResult),
-      jsonReporter.writeMetadataReports(buildResult)
+      jsonReporter.writeMetadataReports(buildResult.scopeIds, factory)
     )
 
   @async private def writeLookupReport(buildResult: CompletedBuildResult): Unit = {

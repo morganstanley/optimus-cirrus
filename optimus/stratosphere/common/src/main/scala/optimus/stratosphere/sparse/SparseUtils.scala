@@ -11,7 +11,6 @@
  */
 package optimus.stratosphere.sparse
 
-import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.config.StratoWorkspaceCommon
@@ -289,8 +288,6 @@ trait SparseUtils {
     stratoWorkspace.log.debug(s"Reloaded sparse config: $currentConfig")
     stratoWorkspace.log.info("Updating set of opened scopes/profiles. Please wait, it can take a moment...")
 
-    if (!GitProcess.isSparseReady(stratoWorkspace.config))
-      stratoWorkspace.log.info("Upgrading git to version with sparse checkout support.")
     new GitUpdater(stratoWorkspace).ensureGitInstalled(useGitFromArtifactory = true)
 
     val dirStructure = stratoWorkspace.directoryStructure

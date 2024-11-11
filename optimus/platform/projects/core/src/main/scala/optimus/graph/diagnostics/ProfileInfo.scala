@@ -74,24 +74,28 @@ final class PScenarioStack {
       propertyNodes += propertyNode -> nodeTasks
     }
 
-  def hasViolations: Boolean = propertyNodes != null && propertyNodes.nonEmpty
-
-  def writeViolations(sb: PrettyStringBuilder): Unit = if (propertyNodes != null) {
-    sb.startBlock()
-    propertyNodes.foreach { case (k, vs) =>
-      k.writePrettyString(sb)
-      sb.endln()
-      sb.indent()
-      vs.forEach { v =>
-        sb ++= NodeName.nameAndSource(v)
-        sb.endln()
-      }
-      sb.unIndent()
-    }
-    sb.endBlock()
+  def hasViolations: Boolean = synchronized {
+    propertyNodes != null && propertyNodes.nonEmpty
   }
 
-  def clearViolations(): Unit = {
+  def writeViolations(sb: PrettyStringBuilder): Unit = synchronized {
+    if (propertyNodes != null) {
+      sb.startBlock()
+      propertyNodes.foreach { case (k, vs) =>
+        k.writePrettyString(sb)
+        sb.endln()
+        sb.indent()
+        vs.forEach { v =>
+          sb ++= NodeName.nameAndSource(v)
+          sb.endln()
+        }
+        sb.unIndent()
+      }
+      sb.endBlock()
+    }
+  }
+
+  def clearViolations(): Unit = synchronized {
     propertyNodes = null
     entryTask = null
   }

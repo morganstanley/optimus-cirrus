@@ -48,7 +48,7 @@ sealed trait NodeInputMapOps[NI[T] <: NodeInput[T], NIM <: NodeInputMap[NI]] { s
   // typesafe getters
   protected def getLocalInput[T](input: NI[T]): Option[VisibleValue[T]] =
     localInputs.get(input).map(_.asInstanceOf[VisibleValue[T]])
-  protected def getEngineSpecificInput[T](input: NI[T]): Option[EngineValue[T]] =
+  protected[loaders] def getEngineSpecificInput[T](input: NI[T]): Option[EngineValue[T]] =
     engineSpecificInputs.get(input).map(_.asInstanceOf[EngineValue[T]])
 
   private[loaders] def appendLocalInput[T](

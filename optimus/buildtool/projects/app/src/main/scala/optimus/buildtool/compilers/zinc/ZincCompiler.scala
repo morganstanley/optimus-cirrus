@@ -100,11 +100,15 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
 
       val jars = Jars(inputs, analysisType)
       val sourceSizeBytes = inputs.sourceFiles.values.map(_.size).sum
+      val compressedSourceSizeBytes = inputs.sourceFiles.values.map(_.compressedSize).sum
+      val sizeStr =
+        if (sourceSizeBytes == compressedSourceSizeBytes) f"$sourceSizeBytes%,d bytes"
+        else f"$sourceSizeBytes%,d bytes, $compressedSourceSizeBytes%,d compressed bytes"
 
       // We write to a uniquely named temporary jar and later atomically move it to the target name so that we
       // never leave the target file in a incomplete or incorrect state. We rely on this behavior in
       // ScopedCompilation because if a file with the target name is present, we assume is is good to use.
-      log.info(s"${prefix}Starting compilation ($sourceSizeBytes bytes)")
+      log.info(s"${prefix}Starting compilation ($sizeStr)")
       log.debug(s"${prefix}Output paths: ${jars.outputJar.tempPath.path} -> ${jars.outputJar.finalPath.path}")
 
       val (previousAnalysis, previousMessages, previousSignatureAnalysis) =
@@ -362,6 +366,7 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
               Hashing.hashFileOrDirectoryContent(inputs.outPath),
               incremental = incremental,
               containsPlugin = inputs.containsPlugin,
+              containsAgent = inputs.containsAgent,
               containsOrUsedByMacros = inputs.containsMacros
             )
           }

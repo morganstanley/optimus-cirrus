@@ -24,7 +24,7 @@ object HandlerProfilingEventPublisher extends Log {
     // If EventCause.profileAllEventsEnabled = true, there will be loads of events generate, we don't want to spam them
     // to splunk, this is only used on adhoc when performanceTracker is opened to see the detailed breakdown.
     if (EventCause.profileAllEventsEnabled) {
-      val profiledCause = cause.profile.getAllProfilingData
+      val profiledCause = cause.root.rootProfiler.getAllProfilingData
       if (profiledCause.totalDurationMs > ignoreEventThreshold) {
         val (currentNanos, currentMillis) = (OGTrace.nanoTime(), System.currentTimeMillis())
         val startTimeMillis = currentMillis - (currentNanos - cause.profile.eventStartTimeNs) / 1000000

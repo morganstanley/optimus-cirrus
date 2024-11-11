@@ -27,7 +27,10 @@ import optimus.platform.relational.data.DbQueryTreeReducerBase
 import optimus.platform.relational.data.DbQueryTreeReducerBase.TypeInfos
 import optimus.platform.relational.data.FieldReader
 import optimus.platform.relational.data.QueryCommand
+import optimus.platform.relational.data.language.FormattedQuery
 import optimus.platform.relational.data.mapping.MappingEntityLookup
+import optimus.platform.relational.data.translation.ComparisonRewriter
+import optimus.platform.relational.data.translation.ConditionalFlattener
 import optimus.platform.relational.data.tree._
 import optimus.platform.relational.tree._
 import optimus.platform.storable.Entity
@@ -123,6 +126,13 @@ class DALAccReducer(val provider: DALProvider) extends DbQueryTreeReducerBase {
     caseClass.members.head match {
       case e: ColumnElement => getReaderFunction(e, caseClass.rowTypeInfo).getOrElse(e)
     }
+  }
+
+  protected override def getFormattedQuery(proj: ProjectionElement): FormattedQuery = {
+    var select = SerializedKeyBasedIndexOptimizer.optimize(proj.select, translator.mapping)
+    select = ComparisonRewriter.rewrite(select)
+    select = ConditionalFlattener.flatten(select)
+    translator.dialect.format(select)
   }
 }
 

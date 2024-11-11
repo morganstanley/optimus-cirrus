@@ -215,7 +215,7 @@ private class ProjectorRewriter(reader: ParameterElement, aggColumns: List[Colum
           case c: ColumnElement =>
             DALAccReducer.getFieldReaderFunction(reader, option.rowTypeInfo, nameToIndex(c.name), c)
         }
-      case c: ColumnElement if !(c.rowTypeInfo <:< classOf[Option[_]]) =>
+      case c: ColumnElement if !TypeInfo.isOption(c.rowTypeInfo) =>
         DALAccReducer.getFieldReaderFunction(reader, option.rowTypeInfo, nameToIndex(c.name), c)
       case _ => super.handleOptionElement(option)
     }

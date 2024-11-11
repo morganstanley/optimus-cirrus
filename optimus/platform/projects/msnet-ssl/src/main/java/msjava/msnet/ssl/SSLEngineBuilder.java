@@ -36,13 +36,25 @@ public class SSLEngineBuilder {
 
   private final SSLEngineConfig config;
 
-  private final KeyManagerFactory keyManagerFactory;
+  private final KeyManagerFactory clientKeyManagerFactory;
+  private final KeyManagerFactory serverKeyManagerFactory;
   private final TrustManagerFactory trustManagerFactory;
 
   public SSLEngineBuilder(SSLEngineConfig config) {
     this.config = config;
-    this.keyManagerFactory =
-        Optional.ofNullable(config.keystorePath).map(this::createKeyManagerFactory).orElse(null);
+    this.clientKeyManagerFactory =
+        Optional.ofNullable(config.clientKeystorePath)
+            .map(this::createKeyManagerFactory)
+            .orElse(null);
+    if (config.clientKeystorePath != null
+        && config.clientKeystorePath.equals(config.serverKeystorePath)) {
+      this.serverKeyManagerFactory = clientKeyManagerFactory;
+    } else {
+      this.serverKeyManagerFactory =
+          Optional.ofNullable(config.serverKeystorePath)
+              .map(this::createKeyManagerFactory)
+              .orElse(null);
+    }
     this.trustManagerFactory =
         Optional.ofNullable(config.truststorePath)
             .map(this::createTrustManagerFactory)
@@ -65,6 +77,8 @@ public class SSLEngineBuilder {
   }
 
   private SSLEngine createJdkSSLEngine(boolean isServer) throws Exception {
+    KeyManagerFactory keyManagerFactory =
+        isServer ? serverKeyManagerFactory : clientKeyManagerFactory;
     KeyManager[] keyManagers =
         Optional.ofNullable(keyManagerFactory).map(KeyManagerFactory::getKeyManagers).orElse(null);
     TrustManager[] trustManagers =
@@ -86,8 +100,10 @@ public class SSLEngineBuilder {
     }
 
     LOGGER.debug(
-        "Creating SSLEngine with keystore "
-            + config.keystorePath
+        "Creating SSLEngine with client keystore "
+            + config.clientKeystorePath
+            + ", server keystore"
+            + config.serverKeystorePath
             + ", truststore="
             + config.truststorePath);
     LOGGER.debug(
@@ -110,7 +126,7 @@ public class SSLEngineBuilder {
     if (isServer) {
       List<String> ciphers = getCiphers();
       sslContext =
-          SslContextBuilder.forServer(keyManagerFactory)
+          SslContextBuilder.forServer(serverKeyManagerFactory)
               .trustManager(trustManagerFactory)
               .clientAuth(ClientAuth.REQUIRE)
               .sslProvider(SslProvider.OPENSSL)
@@ -124,7 +140,7 @@ public class SSLEngineBuilder {
       }
       sslContext =
           SslContextBuilder.forClient()
-              .keyManager(keyManagerFactory)
+              .keyManager(clientKeyManagerFactory)
               .trustManager(trustManagerFactory)
               .clientAuth(clientAuth)
               .sslProvider(SslProvider.OPENSSL)
@@ -135,8 +151,10 @@ public class SSLEngineBuilder {
     SSLEngine sslEngine = sslContext.newEngine(PooledByteBufAllocator.DEFAULT);
 
     LOGGER.debug(
-        "Creating SSLEngine with keystore "
-            + config.keystorePath
+        "Creating SSLEngine with client keystore "
+            + config.clientKeystorePath
+            + ", server keystore"
+            + config.serverKeystorePath
             + ", truststore="
             + config.truststorePath);
     LOGGER.debug(

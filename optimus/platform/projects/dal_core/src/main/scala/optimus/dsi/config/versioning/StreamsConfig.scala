@@ -38,4 +38,5 @@ object StreamsConfigConstants {
   val defaultRetentionInDays: Int = 21
   val defaultCleanupPolicy: String = TopicConfig.CLEANUP_POLICY_DELETE
   private[config] val minInSyncReplicas = 3
+  private[dsi] val replicationFactor: Short = 3
 }

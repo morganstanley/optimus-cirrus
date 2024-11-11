@@ -96,6 +96,7 @@ class NodeTimeLineView(private val reader: OGTraceReader) extends JPanel2(new Bo
   private val syncStackEvents = new SyncStackTable(tline)
   private val blockingWaitEvents = new BlockingWaitTable(tline)
   private val userActionEvents = new UserActionTable(tline)
+  private val dtqEvents = new DTQEventViewTable(tline)
   private val activeIdleEvents = new ActiveIdleDetectionTable(tline)
   private val bookmarkEvents = new BookmarkTable(tline)
   private val startupEvents = new StartupEventTable(tline)
@@ -201,9 +202,10 @@ class NodeTimeLineView(private val reader: OGTraceReader) extends JPanel2(new Bo
     toolBar.addSeparator()
     toolBar.add(btnReset)
     toolBar.addSeparator()
-    toolBar.addButton("-", "Ctrl -") { tline.zoomBy(-0.05) }
-    toolBar.addButton("100%") { tline.zoomOut() }
-    toolBar.addButton("+", "Ctrl +") { tline.zoomBy(0.05) }
+    toolBar.addButton("-", "Ctrl -") { tline.zoomBy(-1) }
+    toolBar.addButton("All") { tline.zoomOut() }
+    toolBar.addButton("Range") { tline.zoomToRange() }
+    toolBar.addButton("+", "Ctrl +") { tline.zoomBy(1) }
     toolBar.addSeparator()
     toolBar.add(menuBar)
 
@@ -216,6 +218,7 @@ class NodeTimeLineView(private val reader: OGTraceReader) extends JPanel2(new Bo
     tabs.add("Blocking Waits", blockingWaitEvents)
     tabs.add("Bookmark Events", bookmarkEvents)
     tabs.add("User Actions", userActionEvents)
+    tabs.add("UI blocking events", dtqEvents)
     tabs.add("Active/Idle Detection", activeIdleEvents)
     tabs.add("Startup Events", startupEvents)
     tabs.add("Handler Step Events", handlerStepEvents)

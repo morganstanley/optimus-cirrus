@@ -14,9 +14,8 @@ package optimus.core
 import com.github.benmanes.caffeine.cache.Caffeine
 import optimus.graph.GraphStallInfo
 import optimus.graph.NodeTask
-import optimus.graph.Scheduler
-import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
+import optimus.platform.NoEvaluationQueue
 
 import java.util
 import java.util.Objects
@@ -84,7 +83,7 @@ object NodeInfoAppender {
         }
       )
       if (newEntry)
-        ntsk.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => infoMap.remove(n), Scheduler.currentOrDefault)
+        ntsk.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => infoMap.remove(n), NoEvaluationQueue)
       old.asInstanceOf[T]
     }
 
@@ -106,7 +105,7 @@ object NodeInfoAppender {
         }
       )
       if (newEntry)
-        ntsk.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => infoMap.remove(n), EvaluationContext.current)
+        ntsk.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => infoMap.remove(n), NoEvaluationQueue)
       ret.asInstanceOf[T]
     }
 
@@ -120,7 +119,7 @@ class NodeInfoAppender[T <: AnyRef] {
   def attachExtraData(node: NodeTask, associatedData: T): Unit = {
     // first time we add to map attach the continuation to remove it from map
     if (nodeInfoMap.put(node, associatedData) eq null) {
-      node.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => nodeInfoMap.remove(n), EvaluationContext.current)
+      node.continueWithIfEverRuns((_: EvaluationQueue, n: NodeTask) => nodeInfoMap.remove(n), NoEvaluationQueue)
     }
   }
 

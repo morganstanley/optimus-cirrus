@@ -14,7 +14,8 @@ package optimus.platform.dsi.bitemporal
 import optimus.dsi.partitioning.PartitionMap
 import optimus.dsi.session.EstablishSession
 import optimus.dsi.session.EstablishedClientSession
-import optimus.graph.{Node, AlreadyFailedNode}
+import optimus.graph.NodeFuture
+import optimus.graph.AlreadyFailedNode
 import optimus.platform.async
 import optimus.platform.dsi.SupportedFeatures
 
@@ -49,13 +50,13 @@ trait DSI {
   def supportsImpersonation: Boolean
 
   @async private[optimus] def getSession(tryEstablish: Boolean = true): EstablishedClientSession =
-    getSession$queued(tryEstablish).result
-  private[optimus] def getSession$queued(tryEstablish: Boolean): Node[EstablishedClientSession] =
+    getSession$queued(tryEstablish).result$
+  private[optimus] def getSession$queued(tryEstablish: Boolean): NodeFuture[EstablishedClientSession] =
     new AlreadyFailedNode(notImplemented("getSession"))
 
   @async private[optimus] def createNewSession(roles: Set[String]): EstablishedClientSession =
-    createNewSession$queued(roles).result
-  private[optimus] def createNewSession$queued(roles: Set[String]): Node[EstablishedClientSession] =
+    createNewSession$queued(roles).result$
+  private[optimus] def createNewSession$queued(roles: Set[String]): NodeFuture[EstablishedClientSession] =
     new AlreadyFailedNode(notImplemented("createNewSession"))
 
   private[this] def notImplemented(what: String): Throwable =

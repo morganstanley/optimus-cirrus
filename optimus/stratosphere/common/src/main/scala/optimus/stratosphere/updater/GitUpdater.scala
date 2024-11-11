@@ -20,7 +20,6 @@ import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.telemetry.CrumbSender
 import optimus.stratosphere.utils.CommonProcess
-import optimus.stratosphere.utils.ConfigUtils
 import optimus.stratosphere.utils.RemoteUrl
 
 import java.net.InetAddress
@@ -28,8 +27,8 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util
 import scala.util.Failure
-import scala.util.Try
 import scala.util.Success
+import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
@@ -51,12 +50,9 @@ object GitUpdater {
   def catchupRemoteUrl(ws: StratoWorkspaceCommon): RemoteUrl = {
     val catchUpRemoteUrl = ws.catchUp.remote.url
     val configuredCatchUpRemoteUrl: String =
-      (ws.git.useUpdatedFetchSettings, urlContainsUsername(catchUpRemoteUrl)) match {
-        // old style settings, no username in url
-        case (false, false) => addUsernameToRemoteUrl(ws)
-        // url style already matches settings style
-        case (_, _) => catchUpRemoteUrl
-      }
+      if (!urlContainsUsername(catchUpRemoteUrl))
+        addUsernameToRemoteUrl(ws)
+      else catchUpRemoteUrl
     RemoteUrl(configuredCatchUpRemoteUrl)
   }
 
@@ -149,6 +145,8 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         systemConfigArgs(s"url.http://$name.insteadOf", s"http://$instance"),
         // slash at the end is intentional - we don't want multiple mappings under the same key
         systemConfigArgs(s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
+        // this is for urls containing port
+        systemConfigArgs(s"url.http://$name:.insteadOf", s"http://${stratoWorkspace.userName}@$instance:"),
         systemConfigArgs(s"http.http://$name.extraHeader", s"Host: $instance")
       )
     }.toSeq
@@ -191,17 +189,14 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         doUpdateFetchSettings()
       } else {
         doRevertToOldFetchConfig()
-        doAddUserNamesToBitbucketRemotes()
       }
+      doAddUserNamesToBitbucketRemotes()
     }
   }
 
   def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit =
     if (OsSpecific.isWindows && !OsSpecific.isCi) {
-      if (stratoWorkspace.tools.git.isDefault != useGitFromArtifactory) {
-        stratoWorkspace.log.info("Updating git settings...")
-        setGitVersionInConfig(useGitFromArtifactory)
-      }
+      stratoWorkspace.log.info("Updating git settings...")
 
       val gitProcess = new GitProcess(stratoWorkspace.config)
       val gitPath = gitProcess.getGitPath
@@ -220,12 +215,6 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
         path.file.write(s"set ${pathEntry.getKey}=${pathEntry.getValue}")
       }
     }
-
-  private def setGitVersionInConfig(useGitFromArtifactory: Boolean): Unit = {
-    val customConf = stratoWorkspace.directoryStructure.customConfFile
-    ConfigUtils.updateConfigProperty(customConf)("tools.git.isDefault", useGitFromArtifactory)(stratoWorkspace)
-    stratoWorkspace.reload()
-  }
 
   private def adjustSettings(): Unit = {
     stratoWorkspace.log.info("Configuring git aliases...")

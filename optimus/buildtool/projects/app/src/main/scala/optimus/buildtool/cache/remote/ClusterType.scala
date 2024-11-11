@@ -9,15 +9,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.cache.silverking
+package optimus.buildtool.cache.remote
 
-object SilverKingStoreConfig {
-  private[silverking] val prefix = "optimus.buildtool.silverking"
-  // Some(True): always enabled
-  // Some(false): always disabled
-  // None: dependent on zookeeper state
-  val enabled: Option[Boolean] = sys.props.get(s"$prefix.enabled").map(_.toBoolean)
+sealed trait ClusterType
+object ClusterType {
 
-  private[cache] def clusterStr(clusterType: ClusterType) = s"Distributed artifact cache (SilverKing $clusterType)"
-
+  case object QA extends ClusterType
+  case object Dev extends ClusterType
+  final case class Labeled(name: String) extends ClusterType {
+    override def toString: String = name
+  }
+  case object Custom extends ClusterType
 }

@@ -19,6 +19,7 @@ import optimus.dsi.partitioning.Partition
 import optimus.dsi.partitioning.PartitionMap
 import optimus.graph.Node
 import optimus.graph.NodeKey
+import optimus.graph.NodeFuture
 import optimus.graph.PropertyNode
 import optimus.platform.AsyncImplicits._
 import optimus.platform.PluginHelpers.toNode
@@ -52,31 +53,31 @@ trait TemporalContextAPI {
   @tweakable
   @nodeSync
   def validTime: Instant = TemporalSource.validTimeAsNode
-  def validTime$queued: Node[Instant] = NodeAPI.queuedNodeOf { TemporalSource.validTimeAsNode }
+  def validTime$queued: NodeFuture[Instant] = NodeAPI.queuedNodeOf { TemporalSource.validTimeAsNode }
   def validTime$newNode: PropertyNode[Instant] = TemporalSource.validTimeMarker
 
   @tweakable
   @nodeSync
   def transactionTime: Instant = TemporalSource.transactionTimeAsNode
-  def transactionTime$queued: Node[Instant] = NodeAPI.queuedNodeOf { TemporalSource.transactionTimeAsNode }
+  def transactionTime$queued: NodeFuture[Instant] = NodeAPI.queuedNodeOf { TemporalSource.transactionTimeAsNode }
   def transactionTime$newNode: PropertyNode[Instant] = TemporalSource.transactionTimeMarker
 
   @tweakable
   @nodeSync // TODO (OPTIMUS-11594): revisit name of public API
   def loadContext: TemporalContext = TemporalSource.loadContext
-  def loadContext$queued: Node[TemporalContext] = NodeAPI.queuedNodeOf { TemporalSource.loadContext }
+  def loadContext$queued: NodeFuture[TemporalContext] = NodeAPI.queuedNodeOf { TemporalSource.loadContext }
   def loadContext$newNode: PropertyNode[Nothing] = TemporalSource.loadContextMarker
 
   @tweakable
   @nodeSync // TODO (OPTIMUS-11594): revisit name of public API
   def storeContext: Instant = TemporalSource.validTimeStore
-  def storeContext$queued: Node[Instant] = NodeAPI.queuedNodeOf { TemporalSource.validTimeStore }
+  def storeContext$queued: NodeFuture[Instant] = NodeAPI.queuedNodeOf { TemporalSource.validTimeStore }
   def storeContext$newNode: PropertyNode[Instant] = TemporalSource.validTimeStoreMarker
 
   @tweakable
   @nodeSync // TODO (OPTIMUS-11594): revisit name of public API
   def temporalContextFactory: TemporalContextFactory = TemporalSource.temporalContextFactory
-  def temporalContextFactory$queued: Node[TemporalContextFactory] = NodeAPI.queuedNodeOf {
+  def temporalContextFactory$queued: NodeFuture[TemporalContextFactory] = NodeAPI.queuedNodeOf {
     TemporalSource.temporalContextFactory
   }
   def temporalContextFactory$newNode: NodeKey[TemporalContextFactory] = NodeAPI.nodeKeyOf {

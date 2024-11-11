@@ -34,7 +34,7 @@ object PythonConfigurationCompiler {
   private[buildtool] val Variant = "variant"
   private[buildtool] val Type = "type"
   private[buildtool] val PythonVenvCmd = "pythonVenvCmd"
-  private[buildtool] val PipInstallCmd = "pipInstallCmd"
+  private[buildtool] val ThinPyappCmd = "thinPyappCmd"
 
   def load(
       config: Config,
@@ -90,7 +90,7 @@ object PythonConfigurationCompiler {
         else Set()
 
       val pythonVenvCmd: Option[String] = pyCfg.optionalString(PythonVenvCmd)
-      val pipInstallCmd: Option[String] = pyCfg.optionalString(PipInstallCmd)
+      val pipInstallCmd: Option[String] = pyCfg.optionalString(ThinPyappCmd)
 
       if (errors.isEmpty)
         pyDefinition.map(python =>

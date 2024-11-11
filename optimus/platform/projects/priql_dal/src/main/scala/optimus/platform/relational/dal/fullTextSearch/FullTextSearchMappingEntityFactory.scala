@@ -13,8 +13,10 @@
 package optimus.platform.relational.dal.fullTextSearch
 
 import optimus.entity.ClassEntityInfo
+import optimus.entity.IndexInfo
 import optimus.graph.NodeTaskInfo
 import optimus.platform.annotations.internal._fullTextSearch
+import optimus.platform.dsi.bitemporal.proto.ProtoSerialization.distinctBy
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
 import optimus.platform.dsi.expressions.Id
@@ -27,6 +29,7 @@ import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
 import optimus.platform.relational.internal.RelationalUtils
 import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.storable.Storable
 
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
@@ -51,7 +54,8 @@ object FullTextSearchMappingEntityFactory {
       memberList += MemberInfo(projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType)
       val entityMethods = RelationalUtils.getMethodsMap(entityInfo.runtimeClass)
 
-      for (indexInfo <- entityInfo.indexes if indexInfo.queryable) {
+      val queryableIndexInfoIt = entityInfo.indexes.iterator.filter(_.queryable)
+      distinctBy[IndexInfo[_ <: Storable, _], String](queryableIndexInfoIt, _.name).foreach { indexInfo =>
         val fullTextSearchAnno =
           RelationalUtils.getMethodAnnotation(entityMethods, indexInfo.name, classOf[_fullTextSearch]).getOrElse(null)
         if (fullTextSearchAnno != null && fullTextSearchAnno.queryable()) {

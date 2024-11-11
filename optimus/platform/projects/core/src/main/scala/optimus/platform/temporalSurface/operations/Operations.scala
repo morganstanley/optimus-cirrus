@@ -11,7 +11,7 @@
  */
 package optimus.platform.temporalSurface.operations
 
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.TemporalContext
 import optimus.platform.annotations.nodeSync
 import optimus.platform.dal.QueryTemporality
@@ -35,7 +35,7 @@ trait TemporalSurfaceQuery {
   def toResult$queued(
       contextGenerator: ItemKey => (TemporalContext, ItemData),
       keys: Iterable[ItemKey],
-      storageInfo: Option[StorageInfo] = None): Node[ResultType]
+      storageInfo: Option[StorageInfo] = None): NodeFuture[ResultType]
 
   def itemKeyName = "EntityReference"
   def itemDataName = "PersistentEntity"

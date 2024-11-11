@@ -319,6 +319,7 @@ trait OptimusNames {
     val GenPropertyInfo: TypeName = newTypeName("GenPropertyInfo")
 
     val Node: TypeName = newTypeName("Node")
+    val NodeFuture: TypeName = newTypeName("NodeFuture")
     val NodeKey: TypeName = newTypeName("NodeKey")
     val CompletableNode: TypeName = newTypeName("CompletableNode")
     val PropertyNode: TypeName = newTypeName("PropertyNode")

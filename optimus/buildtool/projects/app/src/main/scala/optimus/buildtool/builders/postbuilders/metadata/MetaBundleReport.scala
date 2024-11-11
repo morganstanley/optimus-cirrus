@@ -13,12 +13,14 @@ package optimus.buildtool.builders.postbuilders.metadata
 
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
-import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 import optimus.scalacompat.collection._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+
+import scala.collection.immutable.Seq
 
 final case class MetaBundleReport(
     metadataCreator: String,
@@ -46,8 +48,8 @@ object MetaBundleReport {
   @node def apply(
       settings: MetadataSettings,
       metaBundle: MetaBundle,
-      scopeConfigurations: Map[ScopeId, ScopeConfiguration]): MetaBundleReport = {
-    val scopeConfigurationsPerModule = scopeConfigurations.groupBy { case (id, _) => ModuleId(id) }
+      bundleCompilations: Map[ScopeId, ScopedCompilation]): MetaBundleReport = {
+    val scopeCompilationsPerModule = bundleCompilations.groupBy { case (id, _) => ModuleId(id) }
     new MetaBundleReport(
       metadataCreator = s"optimus/buildtool/${settings.obtVersion}",
       metadataVersion = "1.0",
@@ -55,8 +57,8 @@ object MetaBundleReport {
       project = metaBundle.bundle,
       release = settings.installVersion,
       buildInfo = BuildInfoReport(settings.buildId),
-      artifacts = scopeConfigurationsPerModule.apar.map { case (module, configs) =>
-        ArtifactReport(settings, module, configs)
+      artifacts = scopeCompilationsPerModule.apar.map { case (module, compilations) =>
+        ArtifactReport(settings, module, compilations)
       }(Seq.breakOut)
     )
   }
@@ -66,8 +68,8 @@ object MetaBundleReport {
       settings: MetadataSettings,
       metaBundle: MetaBundle,
       id: ScopeId,
-      scopeConfiguration: ScopeConfiguration): MetaBundleReport = {
-    val confMap = Map(id -> scopeConfiguration)
+      idCompilation: ScopedCompilation): MetaBundleReport = {
+    val compilationMap = Map(id -> idCompilation)
     new MetaBundleReport(
       metadataCreator = s"optimus/buildtool/${settings.obtVersion}",
       metadataVersion = "1.0",
@@ -75,7 +77,7 @@ object MetaBundleReport {
       project = metaBundle.bundle,
       release = settings.installVersion,
       buildInfo = BuildInfoReport(settings.buildId),
-      artifacts = Seq(ArtifactReport(settings, ModuleId(id), confMap))
+      artifacts = Seq(ArtifactReport(settings, ModuleId(id), compilationMap))
     )
   }
 }

@@ -252,7 +252,7 @@ trait DependencyTrackerTemporalContexts { tracker: TemporalDependencyTracker =>
     protected[this] def invalidateOnTick(e: Entity): Unit = {
       assertIsActuallyTracking()
       trackedEntities.remove(e.dal$entityRef)
-      dt.root.tweakableTracker.invalidateByKey(propertyKey(e), null)
+      dt.root.tweakableTracker.invalidateByKey(propertyKey(e), null, NoEventCause)
     }
 
     @node private def loadPersistentEntity(

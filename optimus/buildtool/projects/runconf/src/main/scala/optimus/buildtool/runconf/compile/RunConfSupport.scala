@@ -71,6 +71,8 @@ object RunConfSupport {
 
     object jacocoOptions {
       val minCoveragePct = "minCoveragePct"
+      val includes = "includes"
+      val excludes = "excludes"
     }
 
     val scope = "scope"
@@ -106,5 +108,6 @@ object RunConfSupport {
     val flags = "flags"
     val jacocoOpts = "jacoco"
     val interopPython = "interopPython"
+    val python = "python"
   }
 }

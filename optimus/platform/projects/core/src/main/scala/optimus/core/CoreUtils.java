@@ -52,7 +52,7 @@ public class CoreUtils {
   }
 
   /** Returns list of indexes for all the bits set on mask */
-  public static List<Integer> maskToIndexList(long[] mask) {
+  public static ArrayList<Integer> maskToIndexList(long[] mask) {
     ArrayList<Integer> r = new ArrayList<>();
     if (mask != null) {
       for (int i = 0; i < mask.length; i++) {
@@ -68,7 +68,8 @@ public class CoreUtils {
     return r;
   }
 
-  static int[] toIntArray(List<Integer> list) {
+  // this will be O(n*n) if it's a linked list, so force to ArrayList only
+  static int[] toIntArray(ArrayList<Integer> list) {
     int[] r = new int[list.size()];
     for (int i = 0; i < r.length; ++i) r[i] = list.get(i);
     return r;

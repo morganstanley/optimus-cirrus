@@ -72,7 +72,7 @@ public class NodeMethod extends TransformableMethod {
   }
 
   public void writeQueuedFunc(ClassVisitor cv) {
-    writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_TYPE);
+    writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_FUTURE_TYPE);
   }
 
   private void writeInvokeNewNode(ClassVisitor cv, String cmd, MethodNode org, Type returnType) {

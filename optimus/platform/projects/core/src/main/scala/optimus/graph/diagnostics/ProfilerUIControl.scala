@@ -13,9 +13,10 @@ package optimus.graph.diagnostics
 
 import optimus.graph.NodeTask
 import optimus.graph.outOfProcess.views.ScenarioStackProfileView
-import optimus.platform.util.RuntimeServiceLoader
 import optimus.platform.ScenarioStack
+import optimus.platform.util.RuntimeServiceLoader
 import optimus.utils.misc.Color
+
 import scala.collection.mutable.ArrayBuffer
 
 private[optimus] trait ProfilerUIControl {
@@ -45,7 +46,7 @@ private[optimus] trait ProfilerUIControl {
 
   def screenshot(name: String): Unit
 
-  def underStackOfWithoutNodeTracing[T](ssIn: ScenarioStack)(f: => T): T
+  def underStackOf[T](ssIn: ScenarioStack)(f: => T): T
 
   def getWaits: ArrayBuffer[WaitProfile]
 

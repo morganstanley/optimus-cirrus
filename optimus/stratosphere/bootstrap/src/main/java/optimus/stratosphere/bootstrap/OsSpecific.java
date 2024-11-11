@@ -18,6 +18,8 @@ public class OsSpecific {
 
   public static final String osName = System.getProperty("os.name");
 
+  public static final String osVersion = System.getProperty("os.version");
+
   public static final boolean isWindows = osName.toLowerCase().startsWith("windows");
 
   public static final boolean isLinux = !isWindows;

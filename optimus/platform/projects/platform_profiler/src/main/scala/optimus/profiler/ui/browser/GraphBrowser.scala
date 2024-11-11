@@ -142,13 +142,13 @@ class GraphBrowser(_allTasks: JCollection[PNodeTask], val showNodesFrom: Int, _i
     btnDumpTrace.setToolTipText("Dump Graph in json format")
     btnDumpTrace.addActionListener((_: ActionEvent) => dumpTrace())
 
-    toolBar.add(filter)
-    toolBar.addSeparator()
-    toolBar.add(groupByButton)
-    toolBar.addSeparator()
     toolBar.add(btnRefresh)
     toolBar.addSeparator()
     toolBar.add(btnReset)
+    toolBar.addSeparator()
+    toolBar.add(filter)
+    toolBar.addSeparator()
+    toolBar.add(groupByButton)
     toolBar.addSeparator()
     toolBar.add(btnDumpTrace)
     toolBar
@@ -245,10 +245,11 @@ class GraphBrowser(_allTasks: JCollection[PNodeTask], val showNodesFrom: Int, _i
     // either the top filter bar or a column in the table had a filter
     val wasFiltered = !ignoreFilter && filter.getCurrentFilter.nonEmpty
     if (wasFiltered && tableFilteredTasks.isEmpty)
-      if (!groupingPaneAlreadyWarnedAboutFilter) groupingPane.showMessage("No nodes found! Try removing your filter")
+      if (!groupingPaneAlreadyWarnedAboutFilter) groupingPane.showMessage("No nodes found! Try removing your filter(s)")
       else {
-        val tableFilter = groupingPane.getTableColumns(0).filter
-        groupingPane.showMessage(s"Did you forget to remove the table filter: $tableFilter from the yellow row?")
+        val tableFilter = groupingPane.getTableColumns.filter(c => (c.filter ne null) && c.filter.nonEmpty)
+        groupingPane.showMessage(
+          s"Did you forget to remove the table filter(s): ${tableFilter.map(_.filter).mkString(", ")} from the yellow row?")
       }
     refreshGroups(tableFilteredTasks)
   }

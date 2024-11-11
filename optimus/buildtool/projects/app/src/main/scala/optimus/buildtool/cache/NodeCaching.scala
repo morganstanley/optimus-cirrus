@@ -34,4 +34,13 @@ object NodeCaching {
     cacheBatchSize = NodeCCache.defaultCacheBatchSize,
     cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding
   )
+
+  // custom cache to minimize re-reading of source files
+  private[buildtool] val sourceCache = new UNodeCache(
+    name = "SourceCache",
+    maxSize = 500000,
+    requestedConcurrency = Settings.cacheConcurrency,
+    cacheBatchSize = NodeCCache.defaultCacheBatchSize,
+    cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding
+  )
 }

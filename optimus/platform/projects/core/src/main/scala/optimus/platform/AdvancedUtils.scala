@@ -14,6 +14,7 @@ package optimus.platform
 import com.sun.management.GarbageCollectionNotificationInfo
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.core.CoreAPI
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayKey
@@ -556,7 +557,7 @@ object AdvancedUtils {
         new CompletableNode[T] {
           override def run(ec: OGSchedulerContext): Unit = {
             val nodeToRun =
-              if (Settings.convertByNameToByValue && scenario.hasReducibleToByValueTweaksWithNested)
+              if (Settings.convertByNameToByValue && scenario.existsWithNested(_.hasReducibleToByValueTweaks))
                 new ConvertByNameToByValueNode(scenarioStack, scenario, f, true)
               else {
                 val ss = scenarioStack.createChild(scenario, f)
@@ -991,6 +992,25 @@ object AdvancedUtils {
     EvaluationContext.given(ss.withScopedNodeInput(ni, v), f)
   }
 
+  @nodeSync
+  @nodeSyncLift
+  final def givenWithPlugin[T, P](info: NodeTaskInfo, plugin: ScopedSchedulerPlugin)(
+      @nodeLift @nodeLiftByName f: => T): T =
+    givenWithPlugin$withNode(info, plugin)(toNode(f _))
+  // noinspection ScalaUnusedSymbol
+  final def givenWithPlugin$queued[T, P](info: NodeTaskInfo, plugin: ScopedSchedulerPlugin)(f: Node[T]): Node[T] =
+    givenWithPlugin$newNode(info, plugin)(f).enqueueAttached
+  final def givenWithPlugin$withNode[T, P](info: NodeTaskInfo, plugin: ScopedSchedulerPlugin)(f: Node[T]): T =
+    givenWithPlugin$newNode(info, plugin)(f).get
+  final private[this] def givenWithPlugin$newNode[T, P](info: NodeTaskInfo, plugin: ScopedSchedulerPlugin)(
+      f: Node[T]) = {
+    val ss = EvaluationContext.scenarioStack
+    val prevPlugins = ss.siParams.scopedPlugins
+    val newPlugins = if (prevPlugins eq null) Map(info -> plugin) else prevPlugins + (info -> plugin)
+    val newSIParams = ss.siParams.copy(scopedPlugins = newPlugins)
+    EvaluationContext.given(ss.withSIParams(newSIParams), f)
+  }
+
   // Add a nested comment - useful for logging/crumbs
   object Comment extends ForwardingPluginTagKey[String]
   @nodeSync
@@ -1216,7 +1236,9 @@ object AdvancedUtils {
               completeWithException(child.exception, eq)
             } else {
               val resultOfNode1 = child.resultObject().asInstanceOf[R1]
-              node2 = EvaluationContext.asIfCalledFrom(this, eq) { nf2.apply$queued(resultOfNode1) }
+              node2 = EvaluationContext.asIfCalledFrom(this, eq) {
+                nf2.apply$queued(resultOfNode1).asNode$
+              }
               node2.continueWith(this, eq)
             }
           }
@@ -1251,7 +1273,8 @@ object AdvancedUtils {
       if (enablePriority) new PriorityQueue[PNode[_]]() else new JLinkedList[PNode[_]]()
 
     def getCounters: ThrottleState = queue.synchronized {
-      ThrottleState(inflightWeightStatic, nInFlight, nBardo, nPnode)
+      val nQueued = queue.size
+      ThrottleState(inflightWeightStatic, nInFlight, nBardo, nPnode, nQueued)
     }
 
     private var inflightWeightStatic = 0.0 // modified under queue.synchronized
@@ -1452,23 +1475,33 @@ object AdvancedUtils {
    * nesting of the resulting scenarios
    */
   def translateScenariosRecursively[T](inputs: Seq[T])(translator: T => Scenario): Scenario = {
-    var scenario: Scenario = Scenario.empty
-    val cn = new ScenarioStackNullTask(EvaluationContext.currentNode) // Any temporary task
-    // Pretend we are executing a different node.
-    EvaluationContext.asIfCalledFrom(cn, null /*EC.currentNode would already fail*/ ) {
-      val it = inputs.iterator
-      while (it.hasNext) {
-        val next = it.next()
-        val newScenario = translator(next)
-        scenario = scenario.nest(newScenario)
+    // we create a temporary node that will accumulate our scenarios. Note that this function *must* be sync stacked,
+    // because we really don't want this node to be taken over by more than one thread!
+    val cn = new ScenarioStackNullTask(EvaluationContext.currentNode)
 
-        // Logically push scenario onto scenario stack
-        if (newScenario.nonEmpty) {
-          val nss = cn.scenarioStack.createChild(newScenario, this)
+    try {
+      var scenario: Scenario = Scenario.empty
+      var step: Scenario = Scenario.empty
+      inputs.foreach { input =>
+        // replace the scenario stack on cn with one that nests the previous step
+        if (step.nonEmpty) {
+          val nss = cn.scenarioStack.createChild(step, this)
           cn.replace(nss)
         }
+
+        // Update our output value.
+        //
+        // The "asIfCalledFrom()" here is absolutely mandatory because it sets the scenario stack for the translator!
+        // This is unlike any other usages of asIfCalledFrom!
+        step = EvaluationContext.asIfCalledFrom(cn, null) { translator(input) }
+        scenario = scenario.nest(step)
       }
+
       scenario
+    } finally {
+      // the translator may have tweak dependencies or other xinfo - very important to report that back to the caller,
+      // even if the translator threw.
+      cn.orgTask.combineInfo(cn, EvaluationContext.current)
     }
   }
 
@@ -1487,4 +1520,4 @@ object AdvancedUtils {
     new AsyncUsingNode[R, B](() => resource, f).enqueue
 }
 
-final case class ThrottleState(inflightWeight: Double, nInFlight: Int, nBardo: Int, nPnode: Int)
+final case class ThrottleState(inflightWeight: Double, nInFlight: Int, nBardo: Int, nPnode: Int, nQueued: Int)

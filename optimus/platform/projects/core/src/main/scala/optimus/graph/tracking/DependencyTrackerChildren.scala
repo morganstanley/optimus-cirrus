@@ -35,7 +35,7 @@ private[tracking] trait DependencyTrackerChildren {
     if (childrenDependency == null) {
       childrenDependency = new TTrack(null)
     }
-    EvaluationContext.currentNode.combineInfo(childrenDependency)
+    EvaluationContext.currentNode.partialCombineInfo(childrenDependency)
   }
 
   private def fireChildDependency(): Unit = dependencyLock.synchronized {

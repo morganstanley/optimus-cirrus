@@ -75,9 +75,9 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
           ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
         case (_, ConstValueElement(value: Double, _)) if java.lang.Double.isNaN(value) =>
           ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
-        case (l, ConstValueElement(_: Option[_], _)) if !(l.rowTypeInfo <:< classOf[Option[_]]) =>
+        case (l, ConstValueElement(_: Option[_], _)) if !TypeInfo.isOption(l.rowTypeInfo) =>
           ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
-        case (ConstValueElement(_: Option[_], _), r) if !(r.rowTypeInfo <:< classOf[Option[_]]) =>
+        case (ConstValueElement(_: Option[_], _), r) if !TypeInfo.isOption(r.rowTypeInfo) =>
           ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
         case _ => super.handleBinaryExpression(binary)
       }
@@ -116,7 +116,7 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
       case None | _: AsyncValueHolder[_] =>
         val constant = ElementFactory.constant(value, optionType)
         ElementFactory.makeBinary(op, e, wrapConstantAsOptionValue(constant))
-      case Some(_: Option[_]) if !(e.rowTypeInfo <:< classOf[Option[_]]) =>
+      case Some(_: Option[_]) if !TypeInfo.isOption(e.rowTypeInfo) =>
         ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
       case Some(_) =>
         val constant = ElementFactory.constant(value, optionType)
@@ -179,7 +179,7 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
           case Left(v) =>
             throw new RelationalException("Expect ConstValueElement list in ContainsElement but got ScalarElement")
           case Right(v) =>
-            balancedOr(v.map { case ConstValueElement(value: Product, _) =>
+            BinaryExpressionElement.balancedOr(v.map { case ConstValueElement(value: Product, _) =>
               visitElement(rewriteTupleCompare(elems, value, EQ))
             })
         }
@@ -209,15 +209,6 @@ object ComparisonRewriter {
   def rewrite(e: RelationElement): RelationElement = {
     val elem = new ComparisonRewriter().visitElement(e)
     elem
-  }
-
-  @tailrec
-  private def balancedOr(conds: Seq[RelationElement]): RelationElement = {
-    if (conds.size == 1) {
-      conds.head
-    } else {
-      balancedOr(conds.grouped(2).map(_.reduce(ElementFactory.orElse(_, _))).toVector)
-    }
   }
 
   def rewriteGroupKey(e: RelationElement): RelationElement = {

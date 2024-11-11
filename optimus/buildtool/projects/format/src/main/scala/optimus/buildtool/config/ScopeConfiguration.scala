@@ -99,7 +99,9 @@ private[buildtool] final case class AllDependencies(
     compileOnlyDependencies: Dependencies,
     runtimeDependencies: Dependencies,
     externalNativeDependencies: Seq[NativeDependencyDefinition],
-    extraLibs: Dependencies
+    extraLibs: Dependencies,
+    substitutions: Seq[Substitution],
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration]
 ) {
   def allInternal: Seq[ScopeId] =
     compileDependencies.modules ++ compileOnlyDependencies.modules ++ runtimeDependencies.modules
@@ -153,6 +155,7 @@ object ScopePaths {
 private[buildtool] final case class ScopeFlags(
     open: Boolean,
     containsPlugin: Boolean,
+    containsAgent: Boolean,
     definesMacros: Boolean, // contains def foo: Int = macro foo_impl
     containsMacros: Boolean, // contains def foo_impl(c: Context): c.Tree = ...
     javaOnly: Boolean,
@@ -168,6 +171,7 @@ object ScopeFlags {
   val empty: ScopeFlags = ScopeFlags(
     open = false,
     containsPlugin = false,
+    containsAgent = false,
     definesMacros = false,
     containsMacros = false,
     javaOnly = true,
@@ -199,7 +203,6 @@ private[buildtool] final case class ScopeConfiguration(
     targetBundles: Seq[MetaBundle],
     processorConfig: Seq[(ProcessorType, ProcessorConfiguration)],
     interopConfig: Option[InteropConfiguration],
-    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
     useMavenLibs: Boolean // global setting to force scope use mavenLibs instead of libs
 ) {
 
@@ -212,6 +215,7 @@ private[buildtool] final case class ScopeConfiguration(
 
   def open: Boolean = flags.open
   def containsPlugin: Boolean = flags.containsPlugin
+  def containsAgent: Boolean = flags.containsAgent
   def definesMacros: Boolean = flags.definesMacros
   def containsMacros: Boolean = flags.containsMacros
   def javaOnly: Boolean = flags.javaOnly

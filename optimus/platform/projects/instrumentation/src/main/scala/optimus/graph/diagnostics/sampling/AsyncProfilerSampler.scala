@@ -47,16 +47,13 @@ trait StackSampler {
   def drainToIterable(sp: SamplingProfiler): Iterable[TimedStack]
 }
 
-class AsyncProfilerSampler(
-    override val sp: SamplingProfiler,
-    extraStackSamplers: Iterable[StackSampler],
-    crumbConsumer: Option[Crumb => Unit])
+class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers: Iterable[StackSampler])
     extends SamplerTrait[StacksAndCounts, StacksAndTimers]
     with Log
     with OptimusStringUtils {
   import AsyncProfilerSampler._
 
-  val stackAnalysis = new StackAnalysis(crumbConsumer)
+  val stackAnalysis = new StackAnalysis(sp)
 
   // Disable automatic shutdown attempt on VM exit, using flag added to
   // async-profiler by MS.
@@ -146,10 +143,10 @@ class AsyncProfilerSampler(
       case Some(_) =>
         val parsed =
           stackAnalysis
-            .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks)
+            .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks, uploadFolded)
             .copy(dtStopped = curr.dtStopped)
         stackUpload(parsed.stacks)
-        parsed.applyIf(!stacksToSplunk)(_.copy(stacks = Nil))
+        parsed.applyIf(!stacksToCrumbs)(_.copy(stacks = Nil))
     }
   }
 
@@ -195,6 +192,20 @@ class AsyncProfilerSampler(
       stackDataSource -> data.stacks.grouped(40).map(stackToElems).toList
     )
   }
+  // Compose settings from AP defaults, overridden with SP defaults, finally overridden with user defaults.
+  lazy private val settings = PropertyUtils.propertyMap(
+    AsyncProfilerIntegration.defaultSettings,
+    spDefaults,
+    AsyncProfilerIntegration.userSettings,
+    sp.propertyUtils.get("optimus.sampling.async.profiler.settings", "")
+  )
+
+  // etypeframe - multiple event types with collapsed output
+  // memoframes - memoize frames with integer identifier
+  lazy val apStartCmd: String = {
+    val event = AsyncProfilerIntegration.containerSafeEvent(settings("event"))
+    s"start,event=$event,cstack=dwarf,etypeframes,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
+  }
 
 }
 object AsyncProfilerSampler extends Log {
@@ -205,33 +216,16 @@ object AsyncProfilerSampler extends Log {
   val apInterval = PropertyUtils.get("optimus.sampling.stacks.interval", "10ms")
   private val apPeriod = PropertyUtils.get("optimus.sampling.stacks.nsnaps", 1)
   private val uploadJfr = pyroUrl.nonEmpty && PropertyUtils.get("optimus.sampling.pyro.jfr", false)
-  val stacksToSplunk = PropertyUtils.get("optimus.sampling.stacks.splunk", !pyroUrl.nonEmpty)
+  val stacksToCrumbs = PropertyUtils.get("optimus.sampling.stacks.splunk", !pyroUrl.nonEmpty)
   val numPrunedStacks = PropertyUtils.get("optimus.sampling.stacks", 100)
   private val uploadFolded = pyroUrl.nonEmpty && !uploadJfr
   private val saveJfr = PropertyUtils.get("optimus.sampling.jfr", false)
-  val enableKafkaStackPublication = PropertyUtils.get("optimus.sampling.kafka.upload", false)
   val apLogLevel = PropertyUtils.get("optimus.sampling.async.profiler.log.level", "ERROR")
   val childProfilingFrequency = PropertyUtils.get("optimus.sampling.profile.child.frequency", 5)
   val allowChildProfiling = PropertyUtils.get("optimus.sampling.profile.child", false)
 
-  // Allocation every (1M - 1)B, contention every 99ms second. The choice of one less than
-  // a power of 2 for allocation sampling is probably useless, based on documentation for the random algorithm in
-  // https://github.com/openjdk/jdk/blob/b92de54a81a4037a5396509d41de57323212639c/src/hotspot/share/runtime/threadHeapSampler.cpp
   private val spDefaults =
     s"await=${DiagnosticSettings.awaitStacks}" +
-      ":event=cpu,alloc=1048575b,lock=99m,live"
-
-  // Compose settings from AP defaults, overridden with SP defaults, finally overridden with user defaults.
-  lazy private val settings = PropertyUtils.propertyMap(
-    AsyncProfilerIntegration.defaultSettings,
-    spDefaults,
-    AsyncProfilerIntegration.userSettings)
-
-  // etypeframe - multiple event types with collapsed output
-  // memoframes - memoize frames with integer identifier
-  lazy val apStartCmd: String = {
-    val event = AsyncProfilerIntegration.containerSafeEvent(settings("event"))
-    s"start,event=$event,cstack=dwarf,etypeframes,memoframes,interval=${apInterval},loglevel=${apLogLevel}"
-  }
+      ":event=cpu,alloc=10m,lock=99m,live"
 
 }

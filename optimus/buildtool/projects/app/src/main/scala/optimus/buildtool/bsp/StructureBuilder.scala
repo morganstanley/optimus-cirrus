@@ -23,8 +23,6 @@ import optimus.buildtool.config.CppConfiguration.LinkerFlag
 import optimus.buildtool.config.CppConfiguration.OutputType
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.PythonAfsDependencyDefinition
-import optimus.buildtool.dependencies.PythonDefinition
-import optimus.buildtool.dependencies.PythonDependencies
 import optimus.buildtool.dependencies.PythonDependency
 import optimus.buildtool.dependencies.PythonDependencyDefinition
 import optimus.buildtool.files.Directory
@@ -330,7 +328,12 @@ object JsonImplicits {
       }
       override def write(obj: Dependencies): JsValue = obj.toJsonInput.toJson
     }
-  implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat5(AllDependencies.apply)
+  implicit val GroupNameConfigFormat: RootJsonFormat[GroupNameConfig] = jsonFormat3(GroupNameConfig.apply)
+  implicit val SubstitutionFormat: RootJsonFormat[Substitution] = jsonFormat2(Substitution.apply)
+  implicit val PartialScopeIdFormat: RootJsonFormat[PartialScopeId] = jsonFormat4(PartialScopeId.apply)
+  implicit val ForbiddenDependencyConfigurationFormat: RootJsonFormat[ForbiddenDependencyConfiguration] = jsonFormat7(
+    ForbiddenDependencyConfiguration.apply)
+  implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat7(AllDependencies.apply)
   implicit val InheritableWarningsConfigFormat: JsonFormat[WarningsConfiguration] =
     new JsonFormat[WarningsConfiguration] {
       override def write(obj: WarningsConfiguration): JsValue = obj.asJson
@@ -347,21 +350,14 @@ object JsonImplicits {
   implicit val ElectronConfigurationFormat: RootJsonFormat[ElectronConfiguration] = jsonFormat5(
     ElectronConfiguration.apply)
 
-  implicit val PartialScopeIdFormat: RootJsonFormat[PartialScopeId] = jsonFormat4(PartialScopeId.apply)
-
-  implicit val ForbiddenDependencyConfigurationFormat: RootJsonFormat[ForbiddenDependencyConfiguration] = jsonFormat7(
-    ForbiddenDependencyConfiguration.apply)
-
   implicit val ProcessorConfigurationFormat: RootJsonFormat[ProcessorConfiguration] = jsonFormat7(
     ProcessorConfiguration.apply)
 
   implicit val ScopePathsFormat: RootJsonFormat[ScopePaths] = jsonFormat10(ScopePaths.apply)
-  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat12(ScopeFlags.apply)
+  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat13(ScopeFlags.apply)
 
   implicit val interopConfigurationFormat: RootJsonFormat[InteropConfiguration] = jsonFormat2(
     InteropConfiguration.apply)
-
-  implicit val pythonVariant: RootJsonFormat[PythonDependencies.Variant] = jsonFormat2(PythonDependencies.Variant.apply)
 
   implicit val pythonPyPiDependencyFormat: RootJsonFormat[PythonDependencyDefinition] = jsonFormat5(
     PythonDependencyDefinition.apply)
@@ -389,14 +385,12 @@ object JsonImplicits {
     override def read(json: JsValue): ModuleType = ModuleType.resolve(json.convertTo[String]).get
   }
 
-  implicit val pythonDefinitionFormat: RootJsonFormat[PythonDefinition] = jsonFormat4(PythonDefinition.apply)
-
   implicit val pythonOverriddenCommandsFormat: RootJsonFormat[PythonConfiguration.OverriddenCommands] = jsonFormat2(
     PythonConfiguration.OverriddenCommands.apply)
 
   implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat4(PythonConfiguration.apply)
 
-  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat19(ScopeConfiguration.apply)
+  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat18(ScopeConfiguration.apply)
 
   implicit val ExternalClassFileArtifactFormat: JsonFormat[ExternalClassFileArtifact] =
     new JsonFormat[ExternalClassFileArtifact] {

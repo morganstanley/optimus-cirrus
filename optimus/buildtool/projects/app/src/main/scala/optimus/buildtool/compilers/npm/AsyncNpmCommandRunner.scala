@@ -46,6 +46,7 @@ object AsyncNpmCommandRunner extends Log {
       logFile,
       cmds,
       workingDir = Some(sandboxSrc),
+      envVariablesToClean = Seq("FPATH"),
       useCrumbs = useCrumbs)
       .buildWithRetry(id, NpmCommand)(
         maxRetry = 3, // retry 3 times to prevent maven server setup unstable issue

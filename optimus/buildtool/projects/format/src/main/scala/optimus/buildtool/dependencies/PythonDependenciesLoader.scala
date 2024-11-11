@@ -31,8 +31,8 @@ object PythonDependenciesLoader {
   private[buildtool] val PythonPath = "path"
   private[buildtool] val Python = "python"
   private[buildtool] val Reason = "reason"
+  private[buildtool] val ThinPyapp = "thin-pyapp"
   private[buildtool] val Variants = "variants"
-  private[buildtool] val VenvPack = "venv-pack"
   private[buildtool] val Version = "version"
 
   def lacksDependencies(origin: ObtFile) =
@@ -81,8 +81,8 @@ object PythonDependenciesLoader {
       Result.tryWith(origin, config) {
         val version = config.getString(Version)
         val path = config.getString(PythonPath)
-        val venvPack = config.getString(VenvPack)
-        Success(PythonDefinition(version, path, venvPack, None))
+        val thinPyapp = config.getString(ThinPyapp)
+        Success(PythonDefinition(version, path, thinPyapp, None))
       } match {
         case Success(result, problems) => Success(Some(result), problems)
         case Failure(problems)         => Success(None, problems)
@@ -92,7 +92,7 @@ object PythonDependenciesLoader {
       for {
         variant <- loadVariant(variantName, config)
         python <- loadPython(config)
-      } yield python.map(py => PythonDefinition(py.version, py.path, py.venvPack, Some(variant)))
+      } yield python.map(py => PythonDefinition(py.version, py.path, py.thinPyapp, Some(variant)))
 
     def loadVariant(name: String, config: Config): Result[PythonDependencies.Variant] =
       Success(

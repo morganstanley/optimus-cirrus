@@ -14,8 +14,9 @@ package optimus.platform;
 public class ScenarioFlags {
   public static final int none = 0;
   public static final int hasReducibleToByValueTweaks = 1;
-  public static final int hasUnresolvedOrMarkerTweaks = 2;
-  public static final int hasContextDependentTweaks = 4;
-  public static final int unorderedTweaks = 8;
-  public static final int markedForDebugging = 16;
+  public static final int hasPossiblyRedundantTweaks = 2;
+  public static final int hasUnresolvedOrMarkerTweaks = 4;
+  public static final int hasContextDependentTweaks = 8;
+  public static final int unorderedTweaks = 16;
+  public static final int markedForDebugging = 32;
 }

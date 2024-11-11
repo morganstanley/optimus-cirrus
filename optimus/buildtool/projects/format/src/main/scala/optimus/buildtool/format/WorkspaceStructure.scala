@@ -96,20 +96,25 @@ object TopLevelConfig {
     WorkspaceConfig,
     ResolverConfig,
     DependenciesConfig,
-    BundlesConfig,
-    DockerConfig,
-    RulesConfig,
-    CppToolchainConfig,
+    JvmDependenciesConfig,
     MavenDependenciesConfig,
     BuildDependenciesConfig,
     JdkDependenciesConfig,
+    BundlesConfig,
+    ApplicationValidation,
+    RunConfSubstitutions,
+    DockerConfig,
+    RulesConfig,
+    CppToolchainConfig,
     MischiefConfig,
     PythonConfig,
-    RuleFiltersConfig
+    RuleFiltersConfig,
   ).sortBy(_.path)
 
   object empty extends TopLevelConfig("")
 }
+
+/* WARNING: Addition of new TopLevelConfig require adjusting of [[ TopLevelConfig.allFiles ]] */
 
 object WorkspaceDefaults extends TopLevelConfig("workspace.obt")
 object WorkspaceConfig extends TopLevelConfig("conf.obt")
@@ -138,15 +143,10 @@ final case class Module(
 ) extends ObtFile
     with OrderedElement
 
-final case class Bundle(id: MetaBundle, eonId: Option[String], modulesRoot: String, line: Int)
+final case class Bundle(id: MetaBundle, eonId: Option[String], modulesRoot: String, root: Boolean, line: Int)
     extends ObtFile
     with OrderedElement {
   def path: RelativePath = RelativePath(s"${id.meta}/${id.bundle}/bundle.obt")
-}
-
-final case class MavenMappingFile(pathStr: String) extends ObtFile {
-  val path: RelativePath = RelativePath(pathStr)
-  val id: WorkspaceId.type = WorkspaceId
 }
 
 final case class WorkspaceStructure(name: String, bundles: Seq[Bundle], modules: Map[ModuleId, Module]) {
@@ -169,8 +169,9 @@ object WorkspaceStructure {
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
     val eonId: Option[String] = config.optionalString(Names.EonId)
+    val root = config.optionalBoolean(Names.Root).contains(true)
     val id = MetaBundle(meta, name)
-    Success(Bundle(id, eonId, modulesRoot, config.origin().lineNumber()))
+    Success(Bundle(id, eonId, modulesRoot, root, config.origin().lineNumber()))
   }
 
   private def genModule(name: String, bundle: Bundle, conf: Config) =
@@ -200,9 +201,23 @@ object WorkspaceStructure {
         .withoutPath(Names.ModulesRoot)
         .withoutPath(Names.ForbiddenDependencies)
         .withoutPath(Names.EonId)
+        .withoutPath(Names.Root)
+
+      val validatedBundleAndModulesConf = bundleAndModulesConf.withProblems { bundleAndModules =>
+        val roots = bundleAndModules.collect { case (bundle, _) if bundle.root => bundle }
+        if (roots.size > 1)
+          roots.map { r =>
+            Error(
+              "Marking multiple bundles as root is forbidden (should only be assigned to workspace repository bundle)",
+              BundlesConfig,
+              r.line
+            )
+          }
+        else Nil
+      }
 
       val modules: ResultSeq[Module] = for {
-        (bundle, bundleConfig) <- bundleAndModulesConf
+        (bundle, bundleConfig) <- validatedBundleAndModulesConf
         (name, moduleConfig) <- ResultSeq(bundleConfig.nested(BundlesConfig))
         module <- ResultSeq.single(
           genModule(name, bundle, moduleConfig).withProblems(

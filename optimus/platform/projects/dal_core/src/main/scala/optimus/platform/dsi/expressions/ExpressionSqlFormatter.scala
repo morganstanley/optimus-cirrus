@@ -594,8 +594,8 @@ class DefaultConstFormatter extends ConstFormatter {
         case t: LocalDate               => ExpressionSqlFormatter.dateFmt.format(t)
         case t: LocalTime               => ExpressionSqlFormatter.timeFmt.format(t)
         case t: OffsetTime              => ExpressionSqlFormatter.timetzFmt.format(t)
-        case sk: SerializedKey          => s"$doubleQuotes${sk}$doubleQuotes"
-
+        case sk: SerializedKey =>
+          s"SK(${sk.properties.map { case (k, v) => s"$k=${serialize(v)}" }.mkString(",")})"
         case seq: Seq[_] => // Seq/ Tuple.
           seq.map(serialize(_))
 

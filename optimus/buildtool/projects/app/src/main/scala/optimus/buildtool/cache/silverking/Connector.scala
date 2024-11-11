@@ -12,8 +12,9 @@
 package optimus.buildtool.cache.silverking
 
 import optimus.buildtool.artifacts.CompilationMessage.Warning
-import optimus.buildtool.cache.silverking.SilverKingStore._
+import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.cache.silverking.SilverKingStore.Connection._
+import optimus.buildtool.cache.silverking.SilverKingStore._
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.trace.ConnectCache
 import optimus.buildtool.trace.ObtTrace
@@ -28,8 +29,6 @@ private[silverking] class Connector(
     clusterType: ClusterType
 ) {
   import Connector.log
-
-  private val clusterStr = SilverKingStore.clusterStr(clusterType)
 
   private var _connection: Option[Connection] = None
   private val lock = new Object

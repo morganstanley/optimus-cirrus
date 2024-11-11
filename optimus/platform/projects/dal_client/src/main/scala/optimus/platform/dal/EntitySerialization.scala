@@ -143,7 +143,7 @@ trait EntitySerialization extends StorableSerializer {
       def inlinedEntities: Seq[SerializedEntity] = inlineBuf
     }
 
-  private[platform] def getBaseTypes(entityInfo: ClassEntityInfo): Seq[String] =
+  private[optimus] def getBaseTypes(entityInfo: ClassEntityInfo): Seq[String] =
     entityInfo.baseTypes.iterator.map { _.runtimeClass.getName }.toIndexedSeq
 
   private[platform] def getEntityInfoByName(entityName: String): ClassEntityInfo =

@@ -56,7 +56,10 @@ import scala.collection.immutable.Seq
         // Cached artifacts don't know if they contain plugins or macros, so we need to update them here. This
         // can be removed if the cached artifacts are changed to include that information.
         case c: ClassFileArtifact =>
-          c.copy(containsPlugin = scope.config.containsPlugin, containsOrUsedByMacros = scope.config.containsMacros)
+          c.copy(
+            containsPlugin = scope.config.containsPlugin,
+            containsAgent = scope.config.containsAgent,
+            containsOrUsedByMacros = scope.config.containsMacros)
         case x => x
       } :+ fingerprint
     }

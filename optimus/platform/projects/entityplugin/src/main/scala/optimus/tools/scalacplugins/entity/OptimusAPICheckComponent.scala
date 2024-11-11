@@ -84,7 +84,7 @@ class OptimusAPICheckComponent(val plugin: EntityPlugin, override val phaseInfo:
 
       def canCall: Boolean = {
         val isNodeGet = calleeSym match {
-          case m: MethodSymbol => m.fullName == NodeGet
+          case m: MethodSymbol => m.fullName == NodeGet || m.overrides.exists(_.fullName == NodeFutureGet$)
           case _               => false
         }
         !isNodeGet || currentOwner.ownerChain.exists(e => allowedToCallNodeGet(e.fullName))

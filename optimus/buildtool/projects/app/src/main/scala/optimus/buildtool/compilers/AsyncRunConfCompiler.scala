@@ -17,10 +17,12 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValue
 import com.typesafe.config.ConfigValueFactory
+import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompiledRunconfArtifact
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
+import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
@@ -49,7 +51,6 @@ import optimus.buildtool.format.Names
 import optimus.buildtool.format.RunConfSubstitutions
 import optimus.buildtool.format.RunConfSubstitutionsValidator
 import optimus.buildtool.runconf.AppRunConf
-import optimus.buildtool.runconf.ModuleRef
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.RunConfFile
 import optimus.buildtool.runconf.TestRunConf
@@ -128,7 +129,8 @@ object AsyncRunConfCompiler {
       sourceSubstitutions: Seq[RunConfSourceSubstitution],
       blockedSubstitutions: Seq[RunConfSourceSubstitution],
       installVersion: String,
-      outputJar: JarAsset
+      outputJar: JarAsset,
+      upstreamAgents: Seq[ClassFileArtifact]
   )
 }
 
@@ -278,33 +280,6 @@ final class StaticRunscriptCompilationBindingSources(
     distinctLast(modules ++ addKerberosUnlessMitKerberosForWindows(modules))
   }
 
-  @node private def getAdditionalAgentNames(
-      upstreamScopes: Seq[ScopeId],
-      javaOpts: Seq[String],
-      agents: Seq[ModuleRef]
-  ): Seq[(String, Seq[ScopeId])] = {
-    val agentAndScopeId = agents.apar
-      .map { agent => // Skip agent if not in its runtime dependencies
-        val scopeIdsWithAgent = upstreamScopes.filter {
-          _.properPath == s"$agent.main"
-        }
-        (agent, scopeIdsWithAgent)
-      }
-      .filter(_._2.nonEmpty)
-      .flatMap { case (agent, scopeIds) =>
-        val pathComponents = agent.split('.')
-        val agentName = pathComponents.last
-        require(!agentName.endsWith(".jar"))
-        val isAlreadyDefined = javaOpts.exists(opt => opt.startsWith("-javaagent:") && opt.contains(agentName))
-        if (isAlreadyDefined) {
-          None
-        } else {
-          Some((agentName, scopeIds))
-        }
-      }
-    agentAndScopeId
-  }
-
   @node private def computePathingJarName(scopeId: ScopeId, arc: AppRunConf): String = {
     import NamingConventions._
     val pathingScope = arc.additionalScope
@@ -324,7 +299,8 @@ final class StaticRunscriptCompilationBindingSources(
       arc: AppRunConf,
       upstreamInputs: UpstreamRunconfInputs,
       installVersion: String,
-      pythonVenvPath: Option[Directory]
+      pythonVenvPath: Option[Directory],
+      upstreamAgents: Seq[ClassFileArtifact]
   ): Map[String, Any] = {
     import AsyncRunConfCompilerImpl.dirNameEnvVar
     import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
@@ -397,13 +373,12 @@ final class StaticRunscriptCompilationBindingSources(
       fileName = CppUtils.linuxNativeLibrary(_, preloadBuildType)
     )
 
-    val additionalAgents = getAdditionalAgentNames(upstreamInputs.upstreamScopes, arc.javaOpts, arc.agents)
-    require(additionalAgents.forall(!_._1.endsWith(".jar")))
+    val agentScopes = upstreamAgents.collect { case internalArtifact: InternalClassFileArtifact =>
+      internalArtifact.id.scopeId
+    }.distinct
 
-    val agentsJarPaths = additionalAgents
-      .flatMap { case (agent, scopeIds) =>
-        pathBuilder.locationIndependentJar(scopeId, scopeIds.head, agent)
-      }
+    val agentsJarPaths =
+      agentScopes.flatMap(agentScope => pathBuilder.locationIndependentJar(scopeId, agentScope, agentScope.module))
 
     val linuxAgentsJarPaths = agentsJarPaths.map(agentJarPath =>
       if (agentJarPath.startsWith("..")) s"$linuxDirVar/$agentJarPath" else agentJarPath)
@@ -472,7 +447,8 @@ final class StaticRunscriptCompilationBindingSources(
       javaModule: Option[JavaModule],
       runConfs: Seq[RunConf],
       upstreamInputs: UpstreamRunconfInputs,
-      installVersion: String
+      installVersion: String,
+      upstreamAgents: Seq[ClassFileArtifact]
   ): Seq[ApplicationScriptResult] = {
     runConfs.apar.collect {
       case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe && !arc.strictRuntime.enabled.getOrElse(false) =>
@@ -480,7 +456,14 @@ final class StaticRunscriptCompilationBindingSources(
         Templates.getTemplateDescriptions(templates, arc.name, arc.scriptTemplates).apar.map {
           case Left(templateDescription) =>
             val bindings =
-              contextBindings(scopeId, javaModule, arc, upstreamInputs, installVersion, maybePythonVenvPath)
+              contextBindings(
+                scopeId,
+                javaModule,
+                arc,
+                upstreamInputs,
+                installVersion,
+                maybePythonVenvPath,
+                upstreamAgents)
             val applicationScriptName =
               AsyncRunConfCompilerImpl
                 .getTemplateFilenameOverride(arc, templateDescription)
@@ -749,7 +732,8 @@ final class StaticRunscriptCompilationBindingSources(
         AsyncRunConfCompilerImpl.getJavaModule(obtWorkspaceProperties),
         result.rootRunConfs, // We do not generate runscripts for local runconfs
         upstreamInputs,
-        installVersion
+        installVersion,
+        upstreamAgents
       )
 
     val allRunConfs = result.rootRunConfs ++ result.localRunConfs

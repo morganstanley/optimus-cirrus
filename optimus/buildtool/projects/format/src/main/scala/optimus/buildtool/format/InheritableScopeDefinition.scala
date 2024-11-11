@@ -22,6 +22,7 @@ import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.InteropConfiguration
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScalacConfiguration
+import optimus.buildtool.config.Substitution
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
@@ -62,6 +63,7 @@ final case class InheritableScopeDefinition(
     relationships: Seq[ScopeRelationship],
     extraLibs: Dependencies,
     forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
+    substitutions: Seq[Substitution],
     interop: Option[InteropConfiguration]
 ) {
   def allExternalDependencies: Dependencies = (compile ++ compileOnly ++ runtime ++ extraLibs).distinct
@@ -100,6 +102,7 @@ final case class InheritableScopeDefinition(
       relationships = relationships ++ parent.relationships,
       extraLibs = extraLibs ++ parent.extraLibs,
       forbiddenDependencies = forbiddenDependencies ++ parent.forbiddenDependencies,
+      substitutions = substitutions ++ parent.substitutions,
       interop = interop
     )
   }
@@ -143,6 +146,7 @@ object InheritableScopeDefinition {
     relationships = Nil,
     extraLibs = Dependencies.empty,
     forbiddenDependencies = Nil,
+    substitutions = Nil,
     interop = None
   )
 }

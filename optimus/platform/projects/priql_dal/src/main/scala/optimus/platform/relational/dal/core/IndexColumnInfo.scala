@@ -14,6 +14,7 @@ package optimus.platform.relational.dal.core
 import optimus.entity.IndexInfo
 import optimus.platform.pickling.Unpickler
 import optimus.platform.relational.RelationalUnsupportedException
+import optimus.platform.relational.dal.SerializedKeyBuilder
 import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
 import optimus.platform.storable.EntityReference
@@ -37,8 +38,9 @@ object IndexColumnInfo {
     def unique = index.unique
     def isCollection = index.isCollection
     def storableClass = index.storableClass
+    lazy val serializedKeyBuilder = SerializedKeyBuilder(index)
     def toSerializedKey(value: Any): SerializedKey = {
-      index.asInstanceOf[IndexInfo[_, Any]].makeKey(value).toSerializedKey
+      serializedKeyBuilder.toSerializedKey(value)
     }
     override def toString: String = s"DefaultIndexColumnInfo(${storableClass.getSimpleName}:${index.name},U:${unique})"
   }

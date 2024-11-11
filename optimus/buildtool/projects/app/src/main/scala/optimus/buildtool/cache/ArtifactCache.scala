@@ -168,13 +168,17 @@ object SimpleArtifactCache {
       discriminator: Option[String],
       fingerprintHash: String,
       artifact: B#A): Unit = {
-    val size = Files.size(artifact.path)
-    if (size >= artifactSizeThresholdBytes) {
-      readThroughStores.apar.foreach { s =>
-        log.info(
-          s"Force read through for key '$id:$fingerprintHash:$tpe:$discriminator' ($size bytes) on '${s.toString}'")
-        s.check(id, Set(fingerprintHash), tpe, discriminator)
+    if (artifact.shouldBeStored) { // this guard matches the guard on put
+      val size = Files.size(artifact.path)
+      if (size >= artifactSizeThresholdBytes) {
+        readThroughStores.apar.foreach { s =>
+          log.debug(
+            s"Force read through for key '$id:$fingerprintHash:$tpe:$discriminator' ($size bytes) on '${s.toString}'")
+          s.check(id, Set(fingerprintHash), tpe, discriminator)
+        }
       }
+    } else {
+      log.debug(s"Skipping forced read through of ${artifact.pathString} (contains errors? ${artifact.hasErrors})")
     }
   }
 }

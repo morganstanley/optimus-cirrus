@@ -11,6 +11,10 @@
  */
 package optimus.buildtool.runconf.plugins
 
+import scala.collection.immutable.Seq
+
 final case class JacocoOpts(
-    minCoveragePct: Option[Int] = None
+    minCoveragePct: Option[Int] = None,
+    includes: Seq[String] = Seq.empty,
+    excludes: Seq[String] = Seq.empty
 )

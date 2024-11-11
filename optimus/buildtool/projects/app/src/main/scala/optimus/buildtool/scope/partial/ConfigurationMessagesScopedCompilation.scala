@@ -17,12 +17,14 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.compilers.ConfigurationValidator
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
+import optimus.buildtool.resolvers.CoursierArtifactResolver
 import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.ScopeDependencies
 import optimus.buildtool.scope.sources.ConfigurationMessagesCompilationSources
 import optimus.buildtool.trace.ConfigurationValidation
 import optimus.platform._
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 @entity
@@ -49,14 +51,17 @@ class ConfigurationMessagesScopedCompilation(
       val messages = configurationValidator.duplicateDefinitionsCheck match {
         case Some(messages) => messages
         case None =>
-          allDependencies.apar.flatMap(sd =>
+          allDependencies.apar.flatMap { sd =>
+            val externalDirectDeps = sd.dualExternalDependencyIds.map(CoursierArtifactResolver.definitionToInfo)
+            val externalTransitiveDeps = sd.resolution.map(_.result.dependencies.to(Seq)).getOrElse(Nil)
             configurationValidator.validate(
               internalDirectDeps = sd.internalDependencyIds,
-              externalDirectDeps = sd.dualExternalDependencyIds,
+              externalDirectDeps = externalDirectDeps,
               internalTransitiveDeps = sd.transitiveInternalDependencyIdsAll,
-              externalTransitiveDeps = sd.transitiveExternalDependencyIds.all,
+              externalTransitiveDeps = externalTransitiveDeps,
               sd.tpe
-            ))
+            )
+          }
       }
       val a =
         CompilerMessagesArtifact.create(artifactId, jsonFile, messages, ConfigurationValidation, incremental = false)

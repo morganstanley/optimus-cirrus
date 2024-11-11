@@ -30,6 +30,7 @@ import optimus.graph.Scheduler
 import optimus.graph.Settings
 import optimus.graph.TweakNode
 import optimus.graph.TweakValueProviderNode
+import optimus.graph.diagnostics.InfoDumper
 import optimus.graph.diagnostics.sampling.SamplingProfilerSwitch
 import optimus.graph.{Settings => gs}
 import optimus.platform.RuntimeEnvironment.KnownNames._
@@ -79,10 +80,7 @@ object RuntimeComponents {
 }
 
 @entity private object InitialRuntime {
-  @node(tweak = true) private[optimus] def initialTime: Instant = {
-    val stack = EvaluationContext.currentNode.nodeStackAny()
-    throw new UninitializedInitialTimeException(stack)
-  }
+  @node(tweak = true) private[optimus] def initialTime: Instant = TemporalSource.uninitializedInitialTime()
   initialTime_info.internalSetTweakMaskForDAL()
 }
 

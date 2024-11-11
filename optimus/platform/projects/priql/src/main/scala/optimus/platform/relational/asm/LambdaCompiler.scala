@@ -151,7 +151,7 @@ class LambdaCompiler protected (protected val t: AnalyzedTree, l: LambdaElement)
       val parent: LambdaEmitter = null,
       val isContinuation: Boolean = false) {
     val resultIsNode = isContinuation || t.nodeDependencies.get(l).map(_.nonEmpty).getOrElse(false)
-    val resultDesc = if (resultIsNode) s"L$Node;" else descFrom(l.body.rowTypeInfo)
+    val resultDesc = if (resultIsNode) s"L$NodeFuture;" else descFrom(l.body.rowTypeInfo)
     protected var needsClosure = false
     protected var currentVar = if (parent eq null) 1 else 2
     protected val argOffset: Map[ParameterElement, Int] = {
@@ -266,14 +266,19 @@ class LambdaCompiler protected (protected val t: AnalyzedTree, l: LambdaElement)
                 Type.getType(s"(${emitter.boxedParamsDesc})${emitter.resultDesc}")
               ): _*
             )
-            mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "andThen", s"(L$Node;L$Function;)L$Node;", false)
+            mv.visitMethodInsn(
+              INVOKEVIRTUAL,
+              ContinuationObject,
+              "andThen",
+              s"(L$NodeFuture;L$Function;)L$Node;",
+              false)
 
             if (emitter.hasPrimitiveParams)
               emitter.emitSyntheticStub()
 
           case _ => // whenAll
             mv.visitIntInsn(BIPUSH, nodeDeps.size)
-            mv.visitTypeInsn(ANEWARRAY, Node)
+            mv.visitTypeInsn(ANEWARRAY, NodeFuture)
             nodeDeps.zipWithIndex.foreach { case (e, idx) =>
               mv.visitInsn(DUP)
               mv.visitIntInsn(BIPUSH, idx)
@@ -293,12 +298,17 @@ class LambdaCompiler protected (protected val t: AnalyzedTree, l: LambdaElement)
                   Opcodes.H_INVOKESPECIAL,
                   className,
                   s"${emitter.name}$$synthetic",
-                  s"(L$Closure;$objArrayDesc)L$Node;",
+                  s"(L$Closure;$objArrayDesc)L$NodeFuture;",
                   false),
-                Type.getType(s"($objArrayDesc)L$Node;")
+                Type.getType(s"($objArrayDesc)L$NodeFuture;")
               ): _*
             )
-            mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "whenAll", s"([L$Node;L$Function;)L$Node;", false)
+            mv.visitMethodInsn(
+              INVOKEVIRTUAL,
+              ContinuationObject,
+              "whenAll",
+              s"([L$NodeFuture;L$Function;)L$Node;",
+              false)
         }
       }
     }
@@ -318,7 +328,12 @@ class LambdaCompiler protected (protected val t: AnalyzedTree, l: LambdaElement)
 
       if (isContinuation && l.parameters.size > 1) {
         val mv =
-          cw.visitMethod(ACC_PRIVATE + ACC_SYNTHETIC, s"$name$$synthetic", s"(L$Closure;[L$Object;)L$Node;", null, null)
+          cw.visitMethod(
+            ACC_PRIVATE + ACC_SYNTHETIC,
+            s"$name$$synthetic",
+            s"(L$Closure;[L$Object;)L$NodeFuture;",
+            null,
+            null)
         mv.visitCode()
         mv.visitVarInsn(ALOAD, 0)
         mv.visitVarInsn(ALOAD, 1)

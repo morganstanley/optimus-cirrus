@@ -26,7 +26,6 @@ import optimus.platform.util.html.HtmlInterpreters
 import optimus.platform.util.html.PreFormatted
 import optimus.platform.ScenarioStack
 import optimus.profiler.DebuggerUI
-import optimus.profiler.DebuggerUI.underStackOfWithoutNodeTracing
 import optimus.profiler.ui.MaxCharUtils._
 import optimus.profiler.ui.common.JPanel2
 import optimus.profiler.ui.common.JSplitPane2
@@ -91,7 +90,7 @@ class ValueInspector(values: Array[Any], ss: ScenarioStack) extends JPanel2 {
   private var maxChars = DetailsConfig.maxCharsMinimum
 
   private def buildUpRow(interpreter: HtmlInterpreters.Type, hb: HtmlBuilder, obj: Any): HtmlBuilder = {
-    val str = underStackOfWithoutNodeTracing(ss)(CoreHelpers.safeToString(obj))
+    val str = DebuggerUI.underStackOf(ss)(CoreHelpers.safeToString(obj))
     hb.separated(2) {
       if (wrap)
         hb.noStyle("NodeResult", str)
@@ -113,7 +112,7 @@ class ValueInspector(values: Array[Any], ss: ScenarioStack) extends JPanel2 {
     val hb = new HtmlBuilder
     hb.styledGroup(nodes => NodeViewStyle(nodes: _*)) {
       valueTree.getSelections.foreach(_.values.foreach {
-        DebuggerUI.underStackOfWithoutNodeTracing(ss) {
+        DebuggerUI.underStackOf(ss) {
           buildUpRow(HtmlInterpreters.prod, hb, _)
         }
       })

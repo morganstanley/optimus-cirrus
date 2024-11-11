@@ -104,8 +104,7 @@ private[optimus] object TweakExpander {
       }
 
       if (markers ne null) processMarkers(markers, results)
-      val expandedScenario = new Scenario(results.toArray, Nil, scenario.flagsWithoutUnresolved)
-      expandedScenario.validate("After tweak expansion", expandedScenario.unorderedTweaks)
+      val expandedScenario = Scenario.validate(results.toList, "After tweak expansion", scenario.unorderedTweaks, scenario.flagsWithoutUnresolved)
       expandedScenario
     }
 

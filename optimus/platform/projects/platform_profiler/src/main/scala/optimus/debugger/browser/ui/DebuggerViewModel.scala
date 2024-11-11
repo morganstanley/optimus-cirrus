@@ -48,7 +48,7 @@ object DebuggerViewModel {
       UUID.randomUUID().toString,
       "more details",
       Some(() =>
-        DebuggerUI.underStackOfWithoutNodeTracing(ss) {
+        DebuggerUI.underStackOf(ss) {
           try {
             val jd: JDialog = new JDialog()
             jd.setSize(1500, 900)

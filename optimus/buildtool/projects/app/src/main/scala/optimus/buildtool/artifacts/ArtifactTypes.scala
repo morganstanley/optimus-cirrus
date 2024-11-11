@@ -34,17 +34,15 @@ import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
-import optimus.buildtool.utils.TarUtils
 import optimus.core.utils.RuntimeMirror
 import optimus.platform._
-import spray.json.JsonParser
 
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
-import scala.reflect.runtime.universe._
 import scala.jdk.CollectionConverters._
+import scala.reflect.runtime.universe._
 
 trait ArtifactType {
   def name: String
@@ -257,24 +255,20 @@ trait ElectronArtifactType extends CachedArtifactType {
 
 trait PythonArtifactType extends CachedArtifactType {
   type A = PythonArtifact
-  override val suffix = TarGzExt
+  override val suffix = TpaExt
 
-  override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
+  override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): PythonArtifact = {
-    TarUtils
-      .readFileInTarGz(a.path, CachedMetadata.MetadataFile)
-      .map { metadata =>
-        import JsonImplicits._
-        val parsed = JsonParser(metadata).convertTo[PythonMetadata]
-        PythonArtifact.create(
-          id,
-          FileAsset(a.path),
-          parsed.osVersion,
-          parsed.messages,
-          parsed.hasErrors,
-          parsed.inputsHash)
-      }
-      .getOrThrow(s"Couldn't read cached metadata in ${a.path}")
+    val parsed = PythonMetadata.load(a.path)
+
+    PythonArtifact.create(
+      id,
+      FileAsset(a.path),
+      parsed.osVersion,
+      parsed.messages,
+      parsed.hasErrors,
+      parsed.inputsHash,
+      parsed.python)
   }
 }
 

@@ -161,9 +161,16 @@ object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAla
 
   val COLLECTION_CONVERTER_IMPORT_MUST_BE_WILDCARD =
     warning0(
-      20016,
+      20016, // intended 20316?
       StagingPhase.POST_TYPER_STANDARDS,
       "To ensure cross-compilability with Scala 2.12 and 2.13, only wildcard import from scala.jdk.CollectionConverters is allowed."
+    )
+
+  val MAP_CBF_EXISTENTIAL =
+    error0(
+      20317,
+      StagingPhase.POST_TYPER_STANDARDS,
+      "Map transformation results in a sequence, not a map. Add a type ascription, e.g., `m.map(_ => (k, v): (K[_], V))`. Note that duplicate keys are then no longer preserved."
     )
 }
 

@@ -76,7 +76,10 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
     lazy val baseType = {
       val baseClass = (isProperty, needAsync) match {
         case (false, false) =>
-          if (isAlwaysUnique) NodeSyncAlwaysUnique else if (isUserAnnotated) NodeSyncWithExecInfo else NodeSync
+          if (isAlwaysUnique) NodeSyncAlwaysUnique
+          else if (isUserAnnotated) NodeSyncWithExecInfo
+          else if (isStoredClosure) NodeSyncStoredClosure
+          else NodeSync
         case (false, true) =>
           if (isAlwaysUnique) {
             if (isSimple) NodeDelegateAlwaysUnique else NodeFSMAlwaysUnique
@@ -340,7 +343,7 @@ trait TypedNodeClassGenerator extends OptimusNames with TreeDuplicator with Type
 
       val (funcType, funcName) = {
         if (isSimple)
-          (NullaryMethodType(appliedType(Node, nodeResultType :: Nil)), names.childNode)
+          (NullaryMethodType(appliedType(NodeFuture, nodeResultType :: Nil)), names.childNode)
         else if (needAsync) {
           (MethodType(nodeParam :: ecParam :: Nil, definitions.UnitTpe), names.funcFSM)
         } else

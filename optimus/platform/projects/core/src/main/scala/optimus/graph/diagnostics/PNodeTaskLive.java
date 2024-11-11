@@ -69,6 +69,25 @@ public class PNodeTaskLive extends PNodeTask {
   }
 
   @Override
+  public String dependsOnTweakableMaskFixedWidth() {
+    return NodeTrace.dependsOnTweakableMaskFixedWidth(ntsk);
+  }
+
+  public String dependsOnTweakableMask() {
+    return NodeTrace.dependsOnTweakableMask(ntsk);
+  }
+
+  @Override
+  public int dependsOnTweakableMaskBitCount() {
+    return NodeTrace.dependsOnTweakableMaskBitCount(ntsk);
+  }
+
+  @Override
+  public boolean dependsOnIsPoison() {
+    return NodeTrace.dependsOnIsPoison(ntsk);
+  }
+
+  @Override
   public NodeName nodeName() {
     return ntsk.nodeName();
   }

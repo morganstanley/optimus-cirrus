@@ -67,7 +67,8 @@ object Keys {
       "bundle",
       "includeInClassBundle",
       "forbiddenDependencies",
-      "allowUnorderedAndDuplicateDependencies"
+      "allowUnorderedAndDuplicateDependencies",
+      Substitutions
     )
   val regexDefinition = KeySet("rules")
   val scopeDefinition = KeySet(
@@ -204,7 +205,7 @@ object Keys {
 
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
   val jvmDependencyDefinition = KeySet(Maven, Afs, NoAfs, Variants, "scala", IvyConfigurations)
-  val substitutionsConfig = KeySet(s"fromGroup", s"fromName", s"toGroup", s"toName")
+  val substitutionsConfig = KeySet("fromGroup", "fromName", "fromConfig", "toGroup", "toName", "toConfig")
   val excludesConfig = KeySet(Group, Name)
   val excludesWithIvyConfig = KeySet(Group, Name, IvyConfiguration)
 
@@ -265,7 +266,7 @@ object Keys {
 
   val pythonTopLevel = KeySet("python", Dependencies)
   val pythonDependencyLevel = KeySet(Afs, "pypi", Variants)
-  val pythonDefinition = KeySet(Version, Variants, "path", "venv-pack")
+  val pythonDefinition = KeySet(Version, Variants, "path", "thin-pyapp", "venv-pack")
   val pythonVariant = pythonDefinition ++ KeySet("reason")
   val pythonObtFile = KeySet(LibsKey, "variant", "type", "pythonVenvCmd", "pipInstallCmd")
 }

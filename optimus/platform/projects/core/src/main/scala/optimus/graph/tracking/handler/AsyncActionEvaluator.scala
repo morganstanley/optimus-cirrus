@@ -32,10 +32,12 @@ object AsyncActionEvaluator {
 
     // Ensure callback is called even if an exception is thrown by the run method
     def tryRunAsync(onComplete: Try[List[Action]] => Unit, progressTracker: ProgressTracker = null): Unit = {
-      val t = Try(runAsync(onComplete, progressTracker))
-      t match {
-        case Failure(_) => onComplete(t.map(_ => List[Action]()))
-        case _          =>
+      cause.counted {
+        val t = Try(runAsync(onComplete, progressTracker))
+        t match {
+          case Failure(_) => onComplete(t.map(_ => List[Action]()))
+          case _          =>
+        }
       }
     }
   }
@@ -43,7 +45,7 @@ object AsyncActionEvaluator {
   private final case class State(
       private var todo: Int,
       private var result: Try[Unit],
-      private val completedCallback: Try[Unit] => Unit) {
+      private val completedCallback: (Try[Unit], EventCause) => Unit) {
     private var completed: Boolean = false
 
     def beginAction(): Boolean = synchronized {
@@ -68,7 +70,9 @@ object AsyncActionEvaluator {
       todo -= 1
       if ((result.isFailure || todo <= 0) && !completed) {
         completed = true
-        completedCallback(result recoverWith injectSrcLoc(action.getClass.getSimpleName, action.details.sourceLocation))
+        completedCallback(
+          result recoverWith injectSrcLoc(action.getClass.getSimpleName, action.details.sourceLocation),
+          action.cause)
       }
     }
 
@@ -77,7 +81,7 @@ object AsyncActionEvaluator {
     }
   }
 
-  private def StartState(completedCallback: Try[Unit] => Unit) =
+  private def StartState(completedCallback: (Try[Unit], EventCause) => Unit) =
     State(0, Success(()), completedCallback)
 
   /**
@@ -86,7 +90,10 @@ object AsyncActionEvaluator {
    * If an action fails, then no further actions will begin evaluating, and the completion callback will be called
    * regardless of whether there are any in-flight actions to be completed.
    */
-  def start(action: Action, callback: Try[Unit] => Unit, progressTracker: ProgressTracker = null): Unit = {
+  def start(
+      action: Action,
+      callback: (Try[Unit], EventCause) => Unit,
+      progressTracker: ProgressTracker = null): Unit = {
     processLevel(StartState(callback), List(action), PendingActionList(action), progressTracker)
   }
 
@@ -149,7 +156,6 @@ object AsyncActionEvaluator {
       }
       .recover { case _ =>
         current.actionComplete()
-        Nil
       }
 
     state.completeAction(action)

@@ -119,33 +119,37 @@ object Progress extends Log {
     }
   }
 
-  private def reportItemStarted[T](marker: ProgressMarker, weight: Double, f: Node[T]): Node[T] = {
+  @nodeSync
+  @nodeSyncLift
+  def track[T](progressMarker: ProgressMarker = DefaultMarker, enableTracking: Boolean = true, weight: Double = 1.0)(
+      @nodeLift @nodeLiftByName f: => T): T =
+    track$withNode(progressMarker, enableTracking, weight)(toNode(f _))
+  def track$withNode[T](progressMarker: ProgressMarker, enableTracking: Boolean, weight: Double)(f: Node[T]): T =
+    reportItemStarted(progressMarker, enableTracking, weight, f).get
+  def track$queued[T](progressMarker: ProgressMarker, enableTracking: Boolean, weight: Double)(f: Node[T]): Node[T] =
+    reportItemStarted(progressMarker, enableTracking, weight, f).enqueueAttached
+
+  private def reportItemStarted[T](
+      marker: ProgressMarker,
+      enableTracking: Boolean,
+      weight: Double,
+      f: Node[T]): Node[T] = {
     val css = EvaluationContext.scenarioStack
-    val pr = css.progressReporter
     f.attach(css)
-    if (pr ne null) {
-      val newpr = pr.reportItemStarted(marker, weight)
-      if (newpr ne pr) {
-        if (!f.tryAddToWaiterList(new ProgressCompleter(marker)))
-          newpr.reportItemCompleted(marker) // This handles the trivial case when a constant passed in
-        f.replace(css.withProgressReporter(newpr))
+
+    if (enableTracking) {
+      val pr = css.progressReporter
+
+      if (pr ne null) {
+        val newpr = pr.reportItemStarted(marker, weight)
+        if (newpr ne pr) {
+          if (!f.tryAddToWaiterList(new ProgressCompleter(marker)))
+            newpr.reportItemCompleted(marker) // This handles the trivial case when a constant passed in
+          f.replace(css.withProgressReporter(newpr))
+        }
       }
     }
+
     f
   }
-
-  @nodeSync
-  @nodeSyncLift
-  def track[T](weight: Double)(@nodeLift @nodeLiftByName f: => T): T = track$withNode(weight)(toNode(f _))
-  def track$withNode[T](weight: Double)(f: Node[T]): T = reportItemStarted(DefaultMarker, weight, f).get
-  def track$queued[T](weight: Double)(f: Node[T]): Node[T] = reportItemStarted(DefaultMarker, weight, f).enqueueAttached
-
-  @nodeSync
-  @nodeSyncLift
-  def track[T](progressMarker: ProgressMarker, weight: Double)(@nodeLift @nodeLiftByName f: => T): T =
-    track$withNode(progressMarker, weight)(toNode(f _))
-  def track$withNode[T](progressMarker: ProgressMarker, weight: Double)(f: Node[T]): T =
-    reportItemStarted(progressMarker, weight, f).get
-  def track$queued[T](progressMarker: ProgressMarker, weight: Double)(f: Node[T]): Node[T] =
-    reportItemStarted(progressMarker, weight, f).enqueueAttached
 }

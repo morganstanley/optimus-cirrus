@@ -59,7 +59,7 @@ class BspSyncer(
 
   private val isWindows = OsUtils.isWindows(osVersion)
 
-  val pythonVenvExtractor = new PythonVenvExtractorPostBuilder(service.buildDir)
+  val pythonVenvExtractor = new PythonVenvExtractorPostBuilder(service.buildDir, service.pythonBspConfig)
 
   def buildTargets(buildSparseScopes: Boolean): CompletableFuture[Seq[BuildTarget]] = run[Seq[BuildTarget]] {
     def handleBuildFailure(result: BuildResult): Unit = {
@@ -359,7 +359,7 @@ class BspSyncer(
             .venvLocation(scopeId, hash)
             .path
           val binaryDir = if (OsUtils.isWindows) "Scripts" else "bin"
-          venv.resolve(s"venv-${scopeId.module}").resolve(binaryDir)
+          venv.resolve(s"venv").resolve(binaryDir)
         } else {
           Paths.get(pythonCfg.python.binPath.getOrElse("MISSING_INTERPRETER"))
         }

@@ -12,6 +12,8 @@
 package optimus.platform.relational.dal.deltaquery
 
 import optimus.entity.ClassEntityInfo
+import optimus.entity.IndexInfo
+import optimus.platform.dsi.bitemporal.proto.ProtoSerialization.distinctBy
 import optimus.platform.dsi.expressions.EntityBitemporalSpace
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
@@ -23,10 +25,12 @@ import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
 import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.storable.Storable
 
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 import optimus.scalacompat.collection._
+
 import scala.collection.compat._
 
 object DALEntityBitemporalSpaceMappingEntityFactory {
@@ -44,7 +48,8 @@ object DALEntityBitemporalSpaceMappingEntityFactory {
       memberList += MemberInfo(projectedType, DALProvider.StorageTxTime, DALProvider.StorageTxTimeType)
       memberList += MemberInfo(projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType)
       // Focus only on index field
-      for (indexInfo <- entityInfo.indexes if indexInfo.queryable && indexInfo.indexed && !indexInfo.unique) {
+      val indexInfoIt = entityInfo.indexes.iterator.filter(i => i.queryable && i.indexed && !i.unique)
+      distinctBy[IndexInfo[_ <: Storable, _], String](indexInfoIt, _.name).foreach { indexInfo =>
         if (indexInfo.propertyNames.isEmpty) {
           memberList += new IndexMemberInfo(projectedType, TypeInfo.UNIT, indexInfo)
         } else if (indexInfo.propertyNames.size > 1) {

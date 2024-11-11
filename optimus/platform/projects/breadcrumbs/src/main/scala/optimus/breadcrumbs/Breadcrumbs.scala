@@ -142,10 +142,17 @@ object Breadcrumbs {
 
   def getCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.count.get)
 
-  val queueLength: Int =
+  private val queueMaxLength: Int =
     if (defaultResources == "none" || defaultResources == "off") 1 else PropertyUtils.get(queueLengthName, 10000)
-  val queue = new ArrayBlockingQueue[Crumb](queueLength)
+  private[breadcrumbs] val queue = new ArrayBlockingQueue[Crumb](queueMaxLength)
   val drainTime: Int = PropertyUtils.get(queueDrainTime, 2000)
+
+  def exposeQueueForTesting: ArrayBlockingQueue[Crumb] = {
+    log.warn(s"Exposing breadcrumbs queue for testing purposes. Queue length: ${queue.size}")
+    queue
+  }
+
+  def queueLength: Int = queue.size
 
   private val registrationCallbacks = new mutable.HashMap[String, (Registration, Boolean) => Unit]
   private[breadcrumbs] val interests = new mutable.HashMap[String, Map[String, (Int, ChainedID)]]
@@ -538,7 +545,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
         val count = s.count.addAndGet(cReplicated.size)
         knownSource.put(s, s)
         if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
-          cReplicated.forall(sendInternal)
+          cReplicated.map(sendInternal).forall(identity)
         else {
           s.shutdown()
           false
@@ -546,7 +553,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
       }
       crumb.source match {
         case ms: MultiSource =>
-          ms.sources.forall(s => sendCrumbsForOneSource(new WithSource(crumb, s)))
+          ms.sources.map(s => sendCrumbsForOneSource(new WithSource(crumb, s))).forall(identity)
         case _ =>
           sendCrumbsForOneSource(crumb)
       }

@@ -152,5 +152,8 @@ class GenerateNodeMethodsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
   // async lazy methods, or manually (for non-plugin projects such as core))
   // This implies that we shouldn't create any new methods.
   private def nodeMethodsExist(sym: Symbol): Boolean =
-    sym.owner.info.decls.lookupAll(mkGetNodeName(sym.name)).exists(_.tpe matches methodType(sym.tpe, Node, NoSymbol))
+    sym.owner.info.decls.lookupAll(mkGetNodeName(sym.name)).exists { s =>
+      s.tpe.matches(methodType(sym.tpe, NodeFuture, NoSymbol)) ||
+      s.tpe.matches(methodType(sym.tpe, Node, NoSymbol))
+    }
 }

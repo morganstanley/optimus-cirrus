@@ -297,7 +297,7 @@ class StandardBuilder(
       DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty)(s =>
         log.debug(s))
       RemoteArtifactCacheTracker.summaryThenClean(RemoteArtifactCacheTracker.corruptedFiles.nonEmpty)(s => log.warn(s))
-      messageReporter.foreach(_.writeReports(res))
+      messageReporter.foreach(_.writeReports(res, factory))
       log.info(Utils.LogSeparator)
       onBuildEnd.foreach(_())
       res
@@ -394,8 +394,10 @@ class StandardBuilder(
         case (r, n) if n > 0 =>
           s"$r ($n)"
       }
-      val evictionsStr = if (evictions.nonEmpty) s" [Evictions: ${evictions.mkString(", ")}]" else ""
-      s"${c.getName}: ${c.getSizeIndicative}/${c.getMaxSize}$evictionsStr"
+      val evictionsStr =
+        if (evictions.nonEmpty) s" [Evictions: ${evictions.mkString(", ")}]"
+        else s" [Evictions: ${counters.insertCount - counters.indicativeCacheSize}]"
+      s"${c.getName}: ${counters.indicativeCacheSize}/${c.getMaxSize}$evictionsStr"
     }
     log.debug(s"Cache details: ${cacheDetails.mkString("\n\t", "\n\t", "")}")
   }

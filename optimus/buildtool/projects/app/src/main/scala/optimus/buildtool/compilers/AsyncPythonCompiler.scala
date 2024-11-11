@@ -13,12 +13,12 @@ package optimus.buildtool.compilers
 import optimus.buildtool.app.OptimusBuildToolBootstrap
 import optimus.buildtool.artifacts.CachedMetadata
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.artifacts.JsonImplicits._
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PythonArtifact
 import optimus.buildtool.artifacts.PythonMetadata
 import optimus.buildtool.compilers.AsyncPythonCompiler.Inputs
-import optimus.buildtool.compilers.venv.AsyncVenvCommandRunner
-import optimus.buildtool.compilers.venv.VenvUtils
+import optimus.buildtool.compilers.venv.ThinPyappWrapper
 import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -28,24 +28,25 @@ import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Python
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.HashedContent
+import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.SandboxFactory
-import optimus.buildtool.utils.TarUtils
 import optimus.buildtool.utils.Utils
 import optimus.exceptions.RTException
 import optimus.platform.NodeFunction0
 import optimus.platform.NodeTry
 import optimus.platform.entity
 import optimus.platform.node
-import org.apache.commons.compress.compressors.gzip.GzipParameters
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
 object AsyncPythonCompiler {
   final case class Inputs(
       sourceFiles: SortedMap[SourceUnitId, HashedContent],
-      outputJar: FileAsset,
+      outputTpa: FileAsset,
       pythonConfig: PythonConfiguration,
       inputsHash: String
   )
@@ -56,11 +57,12 @@ object AsyncPythonCompiler {
 }
 
 @entity private[buildtool] class AsyncPythonCompilerImpl(
-    pipCache: Directory,
     venvCache: Directory,
+    uvCache: Directory,
     sandboxFactory: SandboxFactory,
     logDir: Directory,
-    credentialFile: String,
+    pipCredentialFile: String,
+    uvCredentialFile: String,
     pythonEnabled: NodeFunction0[Boolean])
     extends AsyncPythonCompiler {
 
@@ -68,8 +70,8 @@ object AsyncPythonCompiler {
     logDir.resolveFile(s"${OptimusBuildToolBootstrap.generateLogFilePrefix()}.$id.venvCmd.log")
 
   @node override def artifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): Option[PythonArtifact] = {
-    if (OsUtils.isWindows && !pythonEnabled()) None
-    else Some(buildArtifact(scopeId, inputs))
+    if (pythonEnabled()) Some(buildArtifact(scopeId, inputs))
+    else None
   }
 
   @node private def buildArtifact(scopeId: ScopeId, inputs: NodeFunction0[Inputs]): PythonArtifact = {
@@ -86,53 +88,41 @@ object AsyncPythonCompiler {
       val sandbox = sandboxFactory(s"${scopeId.properPath}-python-", sourceFiles)
       Utils.createDirectories(sandbox.buildDir)
 
-      val venvName = s"venv-${scopeId.module}"
       val (compilationFailed, compilationMessages) = {
         val messages =
-          AsyncVenvCommandRunner.createVenv(
-            venvName,
+          ThinPyappWrapper.createTpa(
+            outputTpa.path,
             pythonConfig,
-            sandbox.buildDir,
-            pipCache,
+            sandbox,
             venvCache,
-            credentialFile)
+            uvCache,
+            pipCredentialFile,
+            uvCredentialFile)
         (MessagesArtifact.hasErrors(messages), messages)
       }
 
-      val gzipParams = new GzipParameters()
-      /*
-        level 1 was chosen because it benefits large artifacts and is around the same as default level for small ones.
-        (the difference is about 10% in size, and its faster about 50%)
-       */
-      gzipParams.setCompressionLevel(1)
-      TarUtils.populateTarGz(outputJar, sandbox.buildDir, gzipParams) { stream =>
-        import TarUtils._
-        import optimus.buildtool.artifacts.JsonImplicits._
-        addFileToTarGz(stream, sandbox.sourceDir.path)
+      Jars.withJar(outputTpa.asJar) { fs =>
+        val metadata =
+          PythonMetadata(
+            OsUtils.osVersion,
+            compilationMessages,
+            hasErrors = compilationFailed,
+            resolvedInputs.inputsHash,
+            python = pythonConfig.python)
 
-        val metadata = PythonMetadata(
-          OsUtils.osVersion,
-          compilationMessages,
-          hasErrors = compilationFailed,
-          resolvedInputs.inputsHash)
         AssetUtils.withTempJson(metadata) { json =>
-          tarWriteFile(stream, CachedMetadata.MetadataFile.toString, json.toString)
-        }
-
-        if (pythonConfig.isAfs) {
-          val pathToPth = s"${VenvUtils.sitePackages(venvName, pythonConfig)}/libs.pth"
-          val content = pythonConfig.afsDependencies.map(_.path).mkString("\n")
-          tarWriteFile(stream, pathToPth, content)
+          Files.write(fs.resolveFile(CachedMetadata.MetadataFile).path, json.toString.getBytes(StandardCharsets.UTF_8))
         }
       }
 
       val artifact = PythonArtifact.create(
         scopeId,
-        outputJar,
+        outputTpa,
         OsUtils.osVersion,
         compilationMessages,
         compilationFailed,
-        resolvedInputs.inputsHash
+        resolvedInputs.inputsHash,
+        pythonConfig.python
       )
 
       sandbox.close()

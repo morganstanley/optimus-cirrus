@@ -32,6 +32,8 @@ public class SSLEngineConfig {
 
   public static final String KEY_STORE_TYPE_PARAMETER = "msjava.msnet.ssl.keystore_type";
   public static final String KEY_STORE_PATH_PARAMETER = "msjava.msnet.ssl.keystore";
+  public static final String CLIENT_KEY_STORE_PATH_PARAMETER = "msjava.msnet.ssl.keystore_client";
+  public static final String SERVER_KEY_STORE_PATH_PARAMETER = "msjava.msnet.ssl.keystore_server";
   public static final String TRUST_STORE_TYPE_PARAMETER = "msjava.msnet.ssl.truststore_type";
   public static final String TRUST_STORE_PATH_PARAMETER = "msjava.msnet.ssl.truststore";
   public static final String KEY_STORE_PASSWORD_PARAMETER = "msjava.msnet.ssl.keystore_password";
@@ -49,7 +51,12 @@ public class SSLEngineConfig {
   public String keyPassword = getProperty(KEY_PASSWORD_PARAMETER, LOGGER);
   public String truststorePassword = getProperty(TRUST_STORE_PASSWORD_PARAMETER, LOGGER);
 
-  public String keystorePath = getProperty(KEY_STORE_PATH_PARAMETER, LOGGER);
+  private String keystorePath = getProperty(KEY_STORE_PATH_PARAMETER, LOGGER);
+  public String clientKeystorePath =
+      getProperty(CLIENT_KEY_STORE_PATH_PARAMETER, keystorePath, LOGGER);
+  public String serverKeystorePath =
+      getProperty(SERVER_KEY_STORE_PATH_PARAMETER, keystorePath, LOGGER);
+
   public String truststorePath = getProperty(TRUST_STORE_PATH_PARAMETER, LOGGER);
 
   boolean enabledClientAuthSSL = getBoolean(ENABLED_CLIENT_AUTH_PARAMETER, true, LOGGER);
@@ -121,6 +128,8 @@ public class SSLEngineConfig {
    */
   public SSLEngineConfig withKeystorePath(String keystorePath) {
     this.keystorePath = keystorePath;
+    this.clientKeystorePath = keystorePath;
+    this.serverKeystorePath = keystorePath;
     return this;
   }
 

@@ -15,11 +15,9 @@ import optimus.buildtool.app.IncrementalMode
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
-import optimus.buildtool.artifacts.ArtifactType.PathingFingerprint
 import optimus.buildtool.artifacts.Artifacts
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.ElectronArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
@@ -27,9 +25,10 @@ import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
+import optimus.buildtool.builders.postbuilders.metadata.{Compile, Runtime}
+import optimus.buildtool.builders.postbuilders.metadata.QualifierReport
 import optimus.buildtool.compilers.AsyncClassFileCompiler
 import optimus.buildtool.compilers.AsyncCppCompiler
-import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
 import optimus.buildtool.compilers.AsyncElectronCompiler
 import optimus.buildtool.compilers.AsyncJmhCompiler
 import optimus.buildtool.compilers.AsyncPythonCompiler
@@ -38,17 +37,15 @@ import optimus.buildtool.compilers.AsyncSignaturesCompiler
 import optimus.buildtool.compilers.AsyncWebCompiler
 import optimus.buildtool.compilers.GenericFilesPackager
 import optimus.buildtool.compilers.JarPackager
+import optimus.buildtool.compilers.ManifestGenerator
 import optimus.buildtool.compilers.RegexScanner
-import optimus.buildtool.compilers.cpp.CppLibrary
-import optimus.buildtool.compilers.cpp.CppUtils
 import optimus.buildtool.compilers.zinc.AnalysisLocator
 import optimus.buildtool.config._
-import optimus.buildtool.files.FileAsset
-import optimus.buildtool.files.JarAsset
 import optimus.buildtool.generators.GeneratorType
 import optimus.buildtool.generators.SourceGenerator
 import optimus.buildtool.processors.ProcessorType
 import optimus.buildtool.processors.ScopeProcessor
+import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.scope.partial.ArchivePackaging
 import optimus.buildtool.scope.partial.CppScopedCompilation
@@ -57,6 +54,7 @@ import optimus.buildtool.scope.partial.ConfigurationMessagesScopedCompilation
 import optimus.buildtool.scope.partial.GenericFilesScopedCompilation
 import optimus.buildtool.scope.partial.JavaScopedCompilation
 import optimus.buildtool.scope.partial.JmhScopedCompilation
+import optimus.buildtool.scope.partial.PathingScopedCompilation
 import optimus.buildtool.scope.partial.PythonScopedCompilation
 import optimus.buildtool.scope.partial.RegexMessagesScopedCompilation
 import optimus.buildtool.scope.partial.ResourcePackaging
@@ -78,13 +76,7 @@ import optimus.buildtool.scope.sources.ElectronCompilationSources
 import optimus.buildtool.scope.sources.ConfigurationMessagesCompilationSources
 import optimus.buildtool.scope.sources.PythonCompilationSources
 import optimus.buildtool.scope.sources.WebCompilationSources
-import optimus.buildtool.trace.ObtTrace
-import optimus.buildtool.trace.Pathing
 import optimus.buildtool.trace.Validation
-import optimus.buildtool.utils.AssetUtils
-import optimus.buildtool.utils.JarUtils
-import optimus.buildtool.utils.Jars
-import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils.distinctLast
 import optimus.core.needsPlugin
 import optimus.platform._
@@ -117,6 +109,11 @@ trait ScopedCompilation {
   def config: ScopeConfiguration
   def allCompileDependencies: Seq[ScopeDependencies]
   def runtimeDependencies: ScopeDependencies
+  @node def allResolutions: Map[QualifierReport, Seq[ResolutionResult]] =
+    Map(
+      Compile -> allCompileDependencies.apar.flatMap(_.resolution).map(_.result).to(Seq),
+      Runtime -> runtimeDependencies.resolution.map(_.result).to(Seq)
+    )
 
   @node def runConfigurations: Seq[RunConf]
   @node def runconfArtifacts: Seq[Artifact]
@@ -141,6 +138,7 @@ trait CompilationNode extends ScopedCompilation {
   @node private[buildtool] def signaturesForDownstreamCompilers: Seq[Artifact]
   @node private[buildtool] def classesForDownstreamCompilers: Seq[Artifact]
   @node private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact]
+  @node private[buildtool] def agentsForDownstreamRuntimes: Seq[Artifact]
   @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact]
   @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact]
   @node private[buildtool] def scopeMessages: MessagesArtifact
@@ -161,10 +159,12 @@ trait CompilationNode extends ScopedCompilation {
     resources: ResourcePackaging,
     packaging: ArchivePackaging,
     jmh: JmhScopedCompilation,
+    pathing: PathingScopedCompilation,
     runconf: RunconfAppScopedCompilation,
     genericFiles: GenericFilesScopedCompilation,
     regexMessages: RegexMessagesScopedCompilation,
     processing: ScopeProcessing,
+    manifestGenerator: ManifestGenerator,
     strictEmptySources: Boolean,
     configurationValidationMessages: ConfigurationMessagesScopedCompilation
 ) extends CompilationNode {
@@ -215,6 +215,14 @@ trait CompilationNode extends ScopedCompilation {
       (ourArtifacts ++ relevantResources, upstreamArtifacts)
     }
 
+  @node override private[buildtool] def agentsForDownstreamRuntimes: Seq[Artifact] =
+    distinctArtifacts("agents artifacts for downstreams") {
+      apar(
+        if (config.containsAgent) scala.classes ++ java.classes else Nil,
+        upstream.agentsForOurRuntime
+      )
+    }
+
   @node override private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact] =
     distinctArtifacts("plugin artifacts for downstreams") {
       apar(
@@ -249,21 +257,10 @@ trait CompilationNode extends ScopedCompilation {
 
   @node def runtimeArtifacts: Artifacts = distinct("runtime artifacts", track = true) {
     apar(
-      signatureErrorsOr(pathingArtifact.to(Seq) ++ ourJvmRuntimeArtifacts) ++ ourOtherRuntimeArtifacts,
+      signatureErrorsOr(pathing.pathing ++ ourJvmRuntimeArtifacts) ++ ourOtherRuntimeArtifacts,
       upstream.artifactsForOurRuntime
     )
   }
-
-  @node private def pathingArtifact: Option[PathingArtifact] =
-    pathingArtifactWithFingerprint.map(_._1)
-
-  @node private def pathingArtifacts: Seq[Artifact] = {
-    val (pa, fa) = pathingArtifactWithFingerprint.unzip
-    (pa ++ fa).to(Seq)
-  }
-
-  @node private def pathingArtifactWithFingerprint: Option[(PathingArtifact, FingerprintArtifact)] =
-    buildPathingArtifact(ourJvmRuntimeArtifacts ++ upstream.artifactsForOurRuntime)
 
   @node private def sourceFingerprint =
     if (ScopedCompilation.generate(AT.SourceFingerprint)) Some(sources.compilationFingerprint) else None
@@ -272,12 +269,12 @@ trait CompilationNode extends ScopedCompilation {
     // we include the compile and runtime dependencies artifacts because these may contain errors about resolution
     apar(
       signatureErrorsOr {
-        pathingArtifacts ++
+        pathing.pathing ++
           ourJvmRuntimeArtifacts ++ {
             if (config.usePipelining) signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis
             else Nil
           } ++ scala.analysis ++ scala.locator ++ java.analysis ++ java.locator ++
-          pathingArtifact.map(processing.process).getOrElse(Nil)
+          pathing.pathing.collectInstancesOf[PathingArtifact].apar.flatMap(processing.process)
       } ++
         ourOtherRuntimeArtifacts ++
         sourcePackaging.packagedSources ++
@@ -298,8 +295,7 @@ trait CompilationNode extends ScopedCompilation {
     val artifactsForBundle = compiledArtifacts.collect {
       case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) => a
     }
-    val (pa, fa) = buildPathingArtifact(artifactsForBundle).unzip
-    (pa ++ fa).to(Seq)
+    PathingScopedCompilation.artifacts(manifestGenerator, scope, artifactsForBundle)
   } else Nil
 
   // noinspection ScalaUnusedSymbol
@@ -364,128 +360,6 @@ trait CompilationNode extends ScopedCompilation {
       runconf.runConfArtifacts ++ runconf.messages ++
       genericFiles.files
 
-  @node private def buildPathingArtifact(
-      allRuntimeArtifacts: Seq[Artifact]
-  ): Option[(PathingArtifact, FingerprintArtifact)] = if (ScopedCompilation.generate(AT.Pathing)) {
-    val internalClassFileArtifacts = allRuntimeArtifacts.collect { case c: ClassFileArtifact =>
-      c
-    }
-    val externalClassFileArtifacts =
-      runtimeDependencies.transitiveExternalDependencies.apar.map { a =>
-        scope.dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(a)
-      }
-    val classFileArtifacts = internalClassFileArtifacts ++ externalClassFileArtifacts
-
-    val scopeClassFileArtifacts = internalClassFileArtifacts.collect {
-      case c @ InternalClassFileArtifact(InternalArtifactId(scopeId, _, _), _) if scopeId == id =>
-        c
-    }
-
-    val extraFiles = runtimeDependencies.transitiveExtraFiles
-
-    val externalJniPaths = runtimeDependencies.transitiveJniPaths.distinct
-
-    val cppLibs: Seq[CppLibrary] =
-      CppUtils.libraries(allRuntimeArtifacts, runtimeDependencies.transitiveScopeDependencies)
-    val preloadLibs = cppLibs.filter(_.preload).groupBy(_.buildType)
-    val preloadReleaseLibs = preloadLibs.getOrElse(BuildType.Release, Nil)
-    val preloadDebugLibs = preloadLibs.getOrElse(BuildType.Debug, Nil)
-
-    // Native artifact paths are used in several different places in the jar file:
-    // - JniScopes: Contains the scopes with native artifacts. This is used by OAR/OTR when running apps/tests
-    //     (if fallback is false)
-    // - PackagedJniLibs: Contains build_obt paths to native libs within jars. This is used by IntelliJ
-    //     when running apps (if fallback is false)
-    // - JniFallbackPaths: Contains paths to disted native artifacts. This is used by OAR/OTR/IntellliJ when
-    //     running apps/tests (if fallback is true)
-    // - Preload[Type]Scopes: Contains the scopes with native artifacts for the build type (Release or Debug). This is used
-    //     by OAR/OTR when running apps/tests (if fallback is false)
-    // - PackagedPreload[Type]Libs: Contains build_obt paths to native libs within jars for the build type (Release or Debug).
-    //     This is used by IntelliJ when running apps (if fallback is false)
-    // - NativePreload[Type]FallbackPath: Contains paths to disted native artifacts for the build type (Release or Debug).
-    //     This is used by OAR/OTR/IntellliJ when running apps/tests (if fallback is true, or we're running a
-    //     windows app/test on the grid)
-
-    // Include both release and debug scopes (in general these will be the same) - the app/test
-    // will decide at runtime which lib to load with a `System.loadLibrary` call
-    val jniScopes = cppLibs.map(_.scopeId).distinct
-    // Include both release and debug version of packaged native libs - the app/test will decide at runtime
-    // which to load with a `System.loadLibrary` call. Note that these are OS-specific, but are only used locally
-    // by intellij
-    val packagedJniLibs = cppLibs.filter(_.osVersion == OsUtils.osVersion).flatMap(_.localFile)
-
-    // Include both release and debug fallback paths (in general these will be the same) - the app/test
-    // will decide at runtime which lib to load with a `System.loadLibrary` call
-    val jniFallbackPaths = cppLibs.flatMap(_.fallbackPath).distinct
-
-    // Include both release and debug scopes - OAR/OTR will select the appropriate one at runtime
-    val preloadReleaseScopes = preloadReleaseLibs.map(_.scopeId).distinct
-    val preloadDebugScopes = preloadDebugLibs.map(_.scopeId).distinct
-
-    // Include both release and debug version of packaged preload libs - IntelliJ will select the
-    // appropriate one at runtime
-    val packagedPreloadReleaseLibs = preloadReleaseLibs.filter(_.osVersion == OsUtils.osVersion).flatMap(_.localFile)
-    val packagedPreloadDebugLibs = preloadDebugLibs.filter(_.osVersion == OsUtils.osVersion).flatMap(_.localFile)
-
-    // Include both release and debug version of preload fallback paths - OAR/OTR/IntelliJ will select the appropriate
-    // one at runtime
-    def fallbackPaths(libs: Seq[CppLibrary]): Seq[FileAsset] = (for {
-      lib <- libs
-      fallbackPath <- lib.fallbackPath
-    } yield fallbackPath.resolveFile(CppUtils.linuxNativeLibrary(lib.scopeId, lib.buildType))).distinct
-
-    val preloadReleaseFallbackPaths = fallbackPaths(preloadReleaseLibs)
-    val preloadDebugFallbackPaths = fallbackPaths(preloadDebugLibs)
-
-    val moduleLoads = runtimeDependencies.resolution.map(_.result.moduleLoads).getOrElse(Nil)
-
-    val (premainOption, filteredArtifacts) = config.agentConfig
-      .map { a =>
-        (
-          Some(a.agentClass),
-          classFileArtifacts.flatMap {
-            case ia: InternalClassFileArtifact if a.excluded.contains(ia.id.scopeId) && ia.id.tpe == AT.Scala =>
-              None
-            case artifact =>
-              Some(artifact)
-          }
-        )
-      }
-      .getOrElse(None, classFileArtifacts)
-    val electronMetadata = allRuntimeArtifacts
-      .collect { case e: ElectronArtifact => s"${e.scopeId};${e.pathString};${e.mode};${e.executables.mkString(",")}" }
-      .mkString(" ")
-    val manifest = Jars.updateManifest(
-      Jars.createPathingManifest(filteredArtifacts.map(_.path), premainOption),
-      JarUtils.nme.ClassJar -> scopeClassFileArtifacts.map(_.pathString).mkString(";"),
-      JarUtils.nme.ExtraFiles -> extraFiles.map(_.pathString).mkString(";"),
-      JarUtils.nme.ExternalJniPath -> externalJniPaths.mkString(";"),
-      JarUtils.nme.JniScopes -> jniScopes.map(_.properPath).mkString(";"),
-      JarUtils.nme.PackagedJniLibs -> packagedJniLibs.map(_.pathString).mkString(";"),
-      JarUtils.nme.JniFallbackPath -> jniFallbackPaths.map(_.pathString).mkString(";"),
-      JarUtils.nme.PreloadReleaseScopes -> preloadReleaseScopes.map(_.properPath).mkString(";"),
-      JarUtils.nme.PreloadDebugScopes -> preloadDebugScopes.map(_.properPath).mkString(";"),
-      JarUtils.nme.PackagedElectron -> electronMetadata,
-      JarUtils.nme.PackagedPreloadReleaseLibs -> packagedPreloadReleaseLibs.map(_.pathString).mkString(";"),
-      JarUtils.nme.PackagedPreloadDebugLibs -> packagedPreloadDebugLibs.map(_.pathString).mkString(";"),
-      JarUtils.nme.PreloadReleaseFallbackPath -> preloadReleaseFallbackPaths.map(_.pathString).mkString(";"),
-      JarUtils.nme.PreloadDebugFallbackPath -> preloadDebugFallbackPaths.map(_.pathString).mkString(";"),
-      JarUtils.nme.CppFallback -> cpp.cppFallback.toString,
-      JarUtils.nme.ModuleLoads -> moduleLoads.mkString(";"),
-      // backward compatibility
-      JarUtils.nme.JNIPath -> (jniFallbackPaths.map(_.pathString) ++ externalJniPaths).mkString(";"),
-      JarUtils.nme.PreloadPath -> preloadReleaseFallbackPaths.map(_.pathString).mkString(";")
-    )
-    val fingerprint = Jars.fingerprint(manifest)
-    val pathingFingerprint = scope.hasher.hashFingerprint(fingerprint, PathingFingerprint)
-
-    val jarPath = scope.pathBuilder.outputPathFor(id, pathingFingerprint.hash, AT.Pathing, None, incremental = false)
-    AssetUtils.atomicallyWriteIfMissing(jarPath) { tmpName =>
-      ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), manifest) }
-    }
-    Some((AT.Pathing.fromAsset(id, jarPath), pathingFingerprint))
-  } else None
-
   @node def runConfigurations: Seq[RunConf] = runconf.runConfigurations
 
   @node private def sourcesAreEmpty: Boolean = {
@@ -528,6 +402,7 @@ private[buildtool] object ScopedCompilationImpl {
       pythonc: AsyncPythonCompiler,
       webc: AsyncWebCompiler,
       electronc: AsyncElectronCompiler,
+      manifestGenerator: ManifestGenerator,
       runconfc: AsyncRunConfCompiler,
       jarPackager: JarPackager,
       regexScanner: RegexScanner,
@@ -574,7 +449,7 @@ private[buildtool] object ScopedCompilationImpl {
     val regexSources = RegexMessagesCompilationSources(scope, sources, resourceSources, globalRules)
     val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, regexScanner, globalRules)
 
-    val forbiddenDependencies = scope.config.forbiddenDependencies
+    val forbiddenDependencies = scope.config.dependencies.forbiddenDependencies
     val allDependencies = scope.upstream.allCompileDependencies :+ scope.upstream.runtimeDependencies
     val configurationSources =
       ConfigurationMessagesCompilationSources(
@@ -584,6 +459,8 @@ private[buildtool] object ScopedCompilationImpl {
         scope.externalDependencyResolver)
     val configurationMessages =
       ConfigurationMessagesScopedCompilation(scope, configurationSources, forbiddenDependencies, allDependencies)
+
+    val pathing = PathingScopedCompilation(scope, manifestGenerator, scala, java, resources, jmh, cppFallback)
 
     val runconfSources = RunconfCompilationSources(
       runconfc.obtWorkspaceProperties,
@@ -614,10 +491,12 @@ private[buildtool] object ScopedCompilationImpl {
       resources,
       archivePackaging,
       jmh,
+      pathing,
       runconf,
       genericFiles,
       regexMessages,
       processing,
+      manifestGenerator,
       strictEmptySources = strictEmptySources,
       configurationMessages
     )

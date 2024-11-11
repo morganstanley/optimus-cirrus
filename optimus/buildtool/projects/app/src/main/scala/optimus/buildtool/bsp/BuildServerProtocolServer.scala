@@ -22,6 +22,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.app.IncrementalMode
 import optimus.buildtool.app.ScopedCompilationFactory
+import optimus.buildtool.bsp.BuildServerProtocolService.PythonBspConfig
 import optimus.buildtool.builders.StandardBuilder
 import optimus.buildtool.builders.TrackedWorkspace
 import optimus.buildtool.builders.postbuilders.PostBuilder
@@ -60,8 +61,7 @@ class BuildServerProtocolServer(
     sendCrumbs: Boolean,
     installerFactory: NodeFunction1[Option[Directory], PostBuilder],
     scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
-    pythonEnabled: NodeFunction0[Boolean],
-    extractVenvs: NodeFunction0[Boolean],
+    pythonBspConfig: PythonBspConfig,
     depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]],
     directoryFactory: LocalDirectoryFactory,
     dependencyCopier: DependencyCopier,
@@ -90,8 +90,7 @@ class BuildServerProtocolServer(
       builder = builder,
       installerFactory = installerFactory,
       scalaVersionConfig = scalaVersionConfig,
-      pythonEnabled = pythonEnabled,
-      extractVenvs = extractVenvs,
+      pythonBspConfig = pythonBspConfig,
       depMetadataResolvers = depMetadataResolvers,
       directoryFactory = directoryFactory,
       dependencyCopier = dependencyCopier,

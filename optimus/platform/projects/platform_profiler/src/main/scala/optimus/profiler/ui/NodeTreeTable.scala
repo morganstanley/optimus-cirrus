@@ -147,6 +147,17 @@ object NodeTreeTable {
     new TableColumnString[NodeTreeView]("Depends On", 100) {
       override def valueOf(row: NodeTreeView): String = row.task.dependsOnTweakableString
     },
+    new TableColumnCount[NodeTreeView]("Depends On (BitCount)", 100) {
+      override def valueOf(row: NodeTreeView): Int = row.task.dependsOnTweakableMaskBitCount
+    },
+    new TableColumnString[NodeTreeView]("Depends On (Mask)", 100) {
+      override def getCellRenderer: TableCellRenderer = NPTableRenderer.simpleRenderFontFixedWidth
+      override def valueOf(row: NodeTreeView): String = row.task.dependsOnTweakableMask
+    },
+    new TableColumnString[NodeTreeView]("Depends On (Mask Fixed Width)", 500) {
+      override def getCellRenderer: TableCellRenderer = NPTableRenderer.simpleRenderFontFixedWidth
+      override def valueOf(row: NodeTreeView): String = row.task.dependsOnTweakableMaskFixedWidth
+    },
     new TableColumnString[NodeTreeView]("Process", 100) {
       override def valueOf(row: NodeTreeView): String = row.task.process.displayName()
     },

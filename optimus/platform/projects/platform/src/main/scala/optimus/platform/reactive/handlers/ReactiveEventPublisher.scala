@@ -70,8 +70,6 @@ private[handlers] final class StatefulIO[State](initial: State) {
       out
     } finally lock.writeLock().unlock()
   }
-
-  def notUpdating(): Boolean = !lock.writeLock().isHeldByCurrentThread
 }
 
 /**
@@ -97,7 +95,6 @@ private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { sel
       (updated, shouldStart)
     }
 
-    // call start outside of write() to avoid a dead lock if start calls publish()
     if (shouldStart) start
   }
 
@@ -109,7 +106,6 @@ private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { sel
       (updated, shouldStop)
     }
 
-    // call stop outside of write() to avoid a dead lock if start calls publish()
     if (shouldStop) stop
   }
 
@@ -118,9 +114,9 @@ private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { sel
 
   protected final def publishNow(t: T): Unit = subscribers.read { subscribers =>
     // Note that we publish under the read lock. This means that if any subscribers try to add a new subscriber during
-    // published, they will deadlock forever. This could be a problem, but removing the lock here could also cause
-    // issues, mainly that it would make it possible to publish to subscribers that are no longer subscribed at all and
-    // might have started cleanup actions.
+    // published, they will deadlock forever, as it is illegal to take a write lock when read locked. This could be a
+    // problem, but removing the lock here could also cause issues, mainly that it would make it possible to publish to
+    // subscribers that are no longer subscribed at all and might have started cleanup actions.
     //
     // This is a read lock because it is possible to have many publishers publishing at the same time.
     logger.trace(s"publishNow: event=$t")
@@ -158,7 +154,6 @@ private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { sel
     // We need to set started to true in case the startImpl wants to call the stopImpl, which should result in a final
     // "stopped" state, or if it wants to publish, which is allowed.
     started = true
-    assert(subscribers.notUpdating(), "cannot start while holding write lock because publication would deadlock")
     self.startImpl
   }
 
@@ -166,7 +161,6 @@ private[reactive] trait ReactiveEventPublisherInternal[T <: ReactiveEvent] { sel
   protected final def stopNow(): Unit = synchronized {
     if (!started) return // already stopped
     started = false
-    assert(subscribers.notUpdating(), "cannot stop while holding write lock because publication would deadlock")
     self.stopImpl
   }
 }

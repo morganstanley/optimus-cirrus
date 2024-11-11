@@ -17,9 +17,9 @@ import java.nio.file.Path
 import scala.io.Codec
 import scala.io.Source
 
-final case class DalGoto(app: String, env: String, alias: String)(implicit defaultDataSource: DalGoto.DataSource) {
+final case class DalGoto(app: String, env: String, alias: String) {
   def aliasURL: String = s"http://$alias/"
-  def rawURL: Option[String] = DalGotoUrlLoader.default.getRawURL(alias)
+  def rawURL(implicit defaultDataSource: DalGoto.DataSource): Option[String] = DalGotoUrlLoader.default.getRawURL(alias)
 }
 
 object DalGoto {
@@ -38,7 +38,7 @@ object DalGoto {
       .split("/index.html")(0) + endpoint
   }
 
-  def apply(app: String, env: String)(implicit defaultDataSource: DataSource): DalGoto = {
+  def apply(app: String, env: String): DalGoto = {
     val alias = (app, env) match {
       case ("dalviewer", mode)      => s"dalviewer-$mode"
       case ("dalusage", "prod2")    => "dalusage"

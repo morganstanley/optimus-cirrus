@@ -48,7 +48,7 @@ object NodeFormatUI {
   )
 
   // Only visible for testing
-  private[optimus] var _current = readFromPref()
+  private[optimus] var _current = if (ProfilerUI.prefDisabledForTesting) default else readFromPref()
   def current: NodeFormatUI = _current
   def current_=(nodeFormatUI: NodeFormatUI): Unit = _current = writeToPref(nodeFormatUI)
 

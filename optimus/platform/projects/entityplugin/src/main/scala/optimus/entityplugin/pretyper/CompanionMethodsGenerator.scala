@@ -82,6 +82,7 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
               case id @ Ident(_)                                              => make(List(id))
               case Apply(fun, args) if fun.toString.startsWith("scala.Tuple") => make(args)
               case a @ Apply(Select(_, n), _) if n.toString == "map"          => make(a :: Nil)
+              case e @ EmptyTree                                              => make(e :: Nil)
               case _ =>
                 alarm(OptimusErrors.CANT_GENERATE_INDEX, dd.pos, dd)
                 None
@@ -225,6 +226,10 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
     }
 
     def mkOne(arg: Tree): (TermName, Tree) = arg match {
+      case EmptyTree =>
+        if (isUnique || !isIndexed)
+          alarm(OptimusErrors.KEY_CANNOT_BE_ABSTRACT, arg.pos)
+        (name, PluginMacros.findPickler(mkCast(LIT(null), keyTree.tpt)))
       case Ident(propName: TermName) =>
         (propName, Select(Select(This(tpnme.EMPTY), propName), names.pickler))
       case Select(_: Super | _: This, propName: TermName) =>

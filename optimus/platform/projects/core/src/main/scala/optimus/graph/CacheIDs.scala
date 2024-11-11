@@ -195,6 +195,8 @@ sealed private[optimus] class SSCacheID {
   protected[graph] var twkHash: JHashMap[AnyRef, AnyRef] = _ // Node hash or NodeTaskInfo hash
   protected[graph] var tweakMask: TPDMask = TPDMask.empty
 
+  def tweakMaskString = tweakMask.stringEncoded()
+
   def this(original: SSCacheID) = {
     this()
     this.tweaks = original.tweaks

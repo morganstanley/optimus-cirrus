@@ -11,13 +11,15 @@
  */
 package optimus.core;
 
-import static optimus.core.CoreUtils.maskToIndexList;
-import static optimus.core.CoreUtils.toIntArray;
 import static optimus.graph.DiagnosticSettings.enablePerNodeTPDMask;
 import static optimus.graph.DiagnosticSettings.tweakUsageQWords;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Arrays;
+
+import com.google.common.base.Strings;
+import org.apache.commons.lang3.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +46,7 @@ public final class TPDMask implements Serializable, Cloneable {
     if (maskLength > maskQWords)
       log.debug("Compressing mask from length " + maskLength + " to length " + maskQWords);
     TPDMask mask = new TPDMask();
-    if (maskArray.length != maskQWords)
+    if (maskLength != maskQWords)
       // this'll chop off the end if maskArray is longer than qWords
       maskArray = Arrays.copyOf(maskArray, maskQWords);
     fillFromArray(mask, maskArray);
@@ -87,12 +89,11 @@ public final class TPDMask implements Serializable, Cloneable {
 
   public static long[] indexListToMask(int[] indexes) {
     long[] r = new long[maskQWords];
-    int tweakUsageWrapAround = maskQWords - 1;
-
     for (int index : indexes) {
       int offset = (index - 1) >>> 6; // [REVERSE_INDEX_COMPUTE]
       int shift = (index - 1) & 63;
-      r[offset & tweakUsageWrapAround] |= 1L << shift;
+      // use % not &, as (offset & maskQWord-1) only valid when maskQWords is a power of 2
+      r[offset % maskQWords] |= 1L << shift;
     }
     return r;
   }
@@ -107,19 +108,34 @@ public final class TPDMask implements Serializable, Cloneable {
   }
 
   public int[] toIndexes() {
-    return toIntArray(maskToIndexList(toArray()));
+    return CoreUtils.toIntArray(toIndexList());
+  }
+
+  public ArrayList<Integer> toIndexList() {
+    return CoreUtils.maskToIndexList(toArray());
   }
 
   public String stringEncoded() {
     return stringEncoded(toArray());
   }
 
+  public String stringEncodedFixedWidth() {
+    return stringEncodedFixedWidth(toArray());
+  }
+
+  public int countOfSetBits() {
+    return (int) Arrays.stream(toArray()).map(Long::bitCount).sum();
+  }
+
+  // encodes 33,34 ... 64 as ffffffff00000000 not -100000000
   public static String stringEncoded(long[] mask) {
     StringBuilder r = new StringBuilder();
     for (int i = mask.length - 1; i >= 0; i--) {
       if (r.length() > 0) r.append('_');
-      if (mask[i] != 0) r.append(Long.toString(mask[i], 16));
-      else if (r.length() > 0) r.append('0');
+      if (mask[i] != 0) {
+        // avoid negative sign when top bit is set
+        r.append(StringUtils.stripStart(Long.toHexString(mask[i]), "0"));
+      } else if (r.length() > 0) r.append('0');
     }
     return r.length() == 0 ? "0" : r.toString();
   }
@@ -128,15 +144,38 @@ public final class TPDMask implements Serializable, Cloneable {
     if (str == null) return new TPDMask();
     String[] parts = str.split("_");
     long[] mask = new long[parts.length];
-
     for (int i = 0; i < parts.length; i++)
-      if (!parts[i].isEmpty()) mask[mask.length - 1 - i] = Long.valueOf(parts[i], 16);
+      if (!parts[i].isEmpty()) mask[mask.length - 1 - i] = Long.parseUnsignedLong(parts[i], 16);
     return TPDMask.fromArray(mask);
   }
 
+  // fixed width representation - makes cases such as below easier to read
+  // parent: 00000003FFFE0020_0000000000140000
+  // child1: 00000003FFFE0020_0000000000000000
+  // child2: 00000000000E0020_0000000000140000
+  public static String stringEncodedFixedWidth(long[] mask) {
+    StringBuilder r = new StringBuilder();
+    for (int i = mask.length - 1; i >= 0; i--) {
+      if (r.length() > 0) r.append('_');
+      r.append(Strings.padStart(Long.toHexString(mask[i]), 16, '0'));
+    }
+    return r.toString().toUpperCase();
+  }
+
   /** Returns true if all bits are set otherwise false */
-  public final boolean allBitsAreSet() {
-    return equals(poison);
+  public boolean allBitsAreSet() {
+    // was the following
+    // return equals(poison);
+    // but comment on equals says "Equals should be used for testing only"
+    // this method is used in HotspotsTable and XSFTRemapper
+    long[] mask = toArray();
+    // all bits are set if all values in mask are -1
+    // the poison mask is currently all bits set
+    // overflow / many tweaks can result in all bits being set
+    // seems dangerous to potentially conflate the two
+    // ideally would stop last bit ever being set unless poison
+    for (int i = 0; i < mask.length; i++) if (mask[i] != -1L) return false;
+    return true;
   }
 
   /** Equals should be used for testing only */

@@ -198,6 +198,8 @@ object PluginSupport {
         out.write(it.next(), pickler.asInstanceOf[Pickler[Any]])
       }
     }
+
+    override def underlyingPicklerSeq: Seq[Pickler[_]] = picklers
   }
 
   class InferredMetaKey1[E <: Storable, P1](
@@ -217,6 +219,8 @@ object PluginSupport {
     }
 
     override protected def stringForPrettyPrint(p: P1) = s"($p)"
+
+    override def underlyingPicklerSeq: Seq[Pickler[_]] = Seq(pickler)
   }
 
   class InferredMetaKey0[E <: Storable](
@@ -231,6 +235,8 @@ object PluginSupport {
       extends InferredMetaKeyBase[E, Unit](name, Nil, f, uniq, indexed, default, isCollection) {
 
     override protected def pickleRep(e: Unit, out: PickledOutputStream): Unit = ()
+
+    override val underlyingPicklerSeq: Seq[Pickler[_]] = Nil
   }
 
   // Classes for non-unique indexes
@@ -268,8 +274,8 @@ object PluginSupport {
   trait IndexFindEventOps[A <: BusinessEvent, K] {
     this: InferredMetaKeyBase[A, K] =>
     override final def queryable = true
-    @nodeSync def find(k: K) = findEventsByIndexAtNow(makeKey(k))
-    def find$queued(k: K) = queuedNodeOf(findEventsByIndexAtNow(makeKey(k)))
+    @nodeSync def find(k: K): Iterable[A] = findEventsByIndexAtNow(makeKey(k))
+    def find$queued(k: K): NodeFuture[Iterable[A]] = queuedNodeOf(findEventsByIndexAtNow(makeKey(k)))
   }
 
   trait EntityGetOps[A <: Entity, K] extends EntityGetImpl[A, K] {
@@ -822,13 +828,13 @@ trait IndexFindImpl[E <: Entity, R] {
 
   @nodeSync def $findByPropType(key: R, entitledOnly: Boolean): Iterable[E] =
     DAL.resolver.findByIndex(makeKey(key), loadContext, None, entitledOnly)
-  def $findByPropType$queued(key: R, entitledOnly: Boolean): Node[Iterable[E]] =
+  def $findByPropType$queued(key: R, entitledOnly: Boolean): NodeFuture[Iterable[E]] =
     queuedNodeOf(DAL.resolver.findByIndex(makeKey(key), loadContext, None, entitledOnly))
 
   @nodeSync
   def findInRange(key: R, fromTemporalContext: TemporalContext): Iterable[VersionHolder[E]] =
     DAL.resolver.findByIndexInRange(makeKey(key), fromTemporalContext, loadContext)
-  def findInRange$queued(key: R, fromTemporalContext: TemporalContext): Node[Iterable[VersionHolder[E]]] =
+  def findInRange$queued(key: R, fromTemporalContext: TemporalContext): NodeFuture[Iterable[VersionHolder[E]]] =
     queuedNodeOf(DAL.resolver.findByIndexInRange(makeKey(key), fromTemporalContext, loadContext))
 }
 
@@ -854,10 +860,10 @@ trait EntityGetImpl[E <: Entity, R] {
   def indexInfo: IndexInfo[E, R]
 
   @nodeSync def get(k: R): E = getEntityByKeyAtNow(makeKey(k))
-  def get$queued(k: R): Node[E] = queuedNodeOf(getEntityByKeyAtNow(makeKey(k)))
+  def get$queued(k: R): NodeFuture[E] = queuedNodeOf(getEntityByKeyAtNow(makeKey(k)))
 
   @nodeSync def getOption(k: R): Option[E] = getEntityByKeyAtNowOption(makeKey(k))
-  def getOption$queued(k: R): Node[Option[E]] = queuedNodeOf(getEntityByKeyAtNowOption(makeKey(k)))
+  def getOption$queued(k: R): NodeFuture[Option[E]] = queuedNodeOf(getEntityByKeyAtNowOption(makeKey(k)))
 
   @node def enumerate(): Iterable[SortedPropertyValues] = {
     val resolver = EvaluationContext.entityResolver.asInstanceOf[EntityResolverReadImpl]
@@ -929,7 +935,7 @@ final class EventIndexPropertyInfo[E <: BusinessEvent, R](
 
   @nodeSync def $findByPropType(key: PropType, entitledOnly: Boolean): Iterable[E] =
     DAL.resolver.findEventsByIndex(makeKey(key), loadContext, entitledOnly)
-  def $findByPropType$queued(key: PropType, entitledOnly: Boolean): Node[Iterable[E]] =
+  def $findByPropType$queued(key: PropType, entitledOnly: Boolean): NodeFuture[Iterable[E]] =
     queuedNodeOf(DAL.resolver.findEventsByIndex(makeKey(key), loadContext, entitledOnly))
 }
 
@@ -940,9 +946,9 @@ final class EventUniqueIndexPropertyInfo[E <: BusinessEvent, R](
     extends BaseIndexPropertyInfo[E, R](name, flags, annotations) {
   @nodeSync
   def get(key: PropType): E = PluginSupport.getEventByKeyAtNow[E](makeKey(key))
-  def get$queued(key: PropType): Node[E] = queuedNodeOf(PluginSupport.getEventByKeyAtNow[E](makeKey(key)))
+  def get$queued(key: PropType): NodeFuture[E] = queuedNodeOf(PluginSupport.getEventByKeyAtNow[E](makeKey(key)))
   @nodeSync def getOption(key: PropType): Option[E] = PluginSupport.getEventByKeyAtNowOption[E](makeKey(key))
-  def getOption$queued(key: PropType): Node[Option[E]] =
+  def getOption$queued(key: PropType): NodeFuture[Option[E]] =
     queuedNodeOf(PluginSupport.getEventByKeyAtNowOption[E](makeKey(key)))
 }
 
@@ -953,14 +959,15 @@ final class Child2ParentReallyNontweakablePropertyInfo[E <: Entity, R](
     extends ReallyNontweakablePropertyInfo[E, R](name, flags, annotations) {
 
   @nodeSync
-  def find(lookupSrc: Entity, temporalContext: TemporalContext) =
+  def find(lookupSrc: Entity, temporalContext: TemporalContext): Iterable[E] =
     resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag)
-  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext) =
+  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext): NodeFuture[Iterable[E]] =
     queuedNodeOf(resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag))
 
   @nodeSync
-  def find(lookupSrc: Entity) = resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag)
-  def find$queued(lookupSrc: Entity) = queuedNodeOf(resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag))
+  def find(lookupSrc: Entity): Iterable[E] = resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag)
+  def find$queued(lookupSrc: Entity): NodeFuture[Iterable[E]] = queuedNodeOf(
+    resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag))
 
   override def isChildToParent: Boolean = true
 }
@@ -974,12 +981,12 @@ final class Child2ParentPropertyInfo0[E <: Entity, R](
   @nodeSync
   def find(lookupSrc: Entity, temporalContext: TemporalContext): Iterable[E] =
     resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag)
-  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext): Node[Iterable[E]] =
+  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext): NodeFuture[Iterable[E]] =
     queuedNodeOf(resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag))
 
   @nodeSync
   def find(lookupSrc: Entity): Iterable[E] = resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag)
-  def find$queued(lookupSrc: Entity): Node[Iterable[E]] =
+  def find$queued(lookupSrc: Entity): NodeFuture[Iterable[E]] =
     queuedNodeOf(resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag))
 
   override def isChildToParent: Boolean = true
@@ -992,14 +999,14 @@ final class Child2ParentTwkPropertyInfo0[E <: Entity, R](
     extends PropertyInfo0[E, R](name, flags, annotations) {
 
   @nodeSync
-  def find(lookupSrc: Entity, temporalContext: TemporalContext) =
+  def find(lookupSrc: Entity, temporalContext: TemporalContext): Iterable[E] =
     resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag)
-  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext) =
+  def find$queued(lookupSrc: Entity, temporalContext: TemporalContext): NodeFuture[Iterable[E]] =
     queuedNodeOf(resolver.getLinkedEntities[E](lookupSrc, name, temporalContext)(entityClassTag))
 
   @nodeSync
   def find(lookupSrc: Entity): Iterable[E] = resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag)
-  def find$queued(lookupSrc: Entity): Node[Iterable[E]] = queuedNodeOf(
+  def find$queued(lookupSrc: Entity): NodeFuture[Iterable[E]] = queuedNodeOf(
     resolver.getLinkedEntities2[E](lookupSrc, name)(entityClassTag))
 
   override def isChildToParent: Boolean = true

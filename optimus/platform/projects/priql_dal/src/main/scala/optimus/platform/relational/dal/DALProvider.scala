@@ -375,7 +375,7 @@ private object OptionColumnElement {
     e match {
       case OptionElement(c: ColumnElement) =>
         Some(c.rowTypeInfo -> c.columnInfo.unpickler)
-      case c: ColumnElement if c.rowTypeInfo <:< classOf[Option[_]] =>
+      case c: ColumnElement if TypeInfo.isOption(c.rowTypeInfo) =>
         Some(c.rowTypeInfo.typeParams.head -> None)
       case _ => None
     }

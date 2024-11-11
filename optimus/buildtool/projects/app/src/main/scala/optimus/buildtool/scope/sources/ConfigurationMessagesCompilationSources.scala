@@ -12,6 +12,7 @@
 package optimus.buildtool.scope.sources
 
 import optimus.buildtool.artifacts.ArtifactType.ValidationMessagesFingerprint
+import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.resolvers.ExternalDependencyResolver
@@ -41,11 +42,11 @@ class ConfigurationMessagesCompilationSources(
   @node private def dependenciesFingerprint = {
     if (includeTransitive)
       scopeDependencies.apar.flatMap(d =>
-        externalDependencyResolver.fingerprintDependencies(d.transitiveExternalDependencyIds.all)
+        externalDependencyResolver.fingerprintDependencies(d.transitiveExternalDependencyIds)
           ++ d.transitiveInternalDependencyIdsAll.map(_.toString))
     else
       scopeDependencies.apar.flatMap(d =>
-        externalDependencyResolver.fingerprintDependencies(d.dualExternalDependencyIds)
+        externalDependencyResolver.fingerprintDependencies(DependencyDefinitions(d.dualExternalDependencyIds, Nil))
           ++ d.internalDependencyIds.map(_.toString))
   }
 

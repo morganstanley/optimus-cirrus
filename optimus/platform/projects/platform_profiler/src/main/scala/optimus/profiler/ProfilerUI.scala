@@ -11,40 +11,35 @@
  */
 package optimus.profiler
 
-import java.io.BufferedWriter
-import java.io.FileWriter
-import java.util.prefs.Preferences
-import java.util.{Iterator => JIterator}
-import java.util.{ArrayList => JArrayList}
-import java.util.{IdentityHashMap => JIdentityHashMap}
 import optimus.graph.DiagnosticSettings
 import optimus.graph.JMXConnection
 import optimus.graph.NodeTrace
+import optimus.graph.diagnostics.GivenBlockProfile
 import optimus.graph.diagnostics.PNodeInvalidate
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
-import optimus.graph.diagnostics.pgo.Profiler.log
-import optimus.graph.diagnostics.pgo.Profiler.sstack_roots
-import optimus.graph.diagnostics.GivenBlockProfile
 import optimus.graph.diagnostics.WaitProfile
-import optimus.graph.diagnostics.pgo.AutoPGOThresholds
-import optimus.graph.diagnostics.pgo.ConfigWriterSettings
 import optimus.graph.diagnostics.pgo.Profiler
+import optimus.graph.diagnostics.pgo.Profiler.sstack_roots
 import optimus.graph.outOfProcess.views.ScenarioStackProfileView
 import optimus.graph.outOfProcess.views.ScenarioStackProfileViewHelper
 import optimus.profiler.recipes.PNodeTaskInfoGrp
 
-import scala.jdk.CollectionConverters._
-import scala.collection.mutable.ArrayBuffer
+import java.util.prefs.Preferences
+import java.util.{ArrayList => JArrayList}
+import java.util.{IdentityHashMap => JIdentityHashMap}
+import java.util.{Iterator => JIterator}
 import scala.collection.compat._
+import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 object ProfilerUI {
 
+  /** A number of tests assume no preferences are stored, this flags is to ensure that */
+  val prefDisabledForTesting: Boolean = DiagnosticSettings.getBoolProperty("optimus.profiler.selfTest", false)
+
   /** Start off with the top level preferences that are not panel specific */
   val pref: Preferences = Preferences.userNodeForPackage(this.getClass)
-
-  /** A number of tests assume no preferences are stored, this flags is to ensure that */
-  var prefDisabledForTesting = false
 
   /** Public api for resetting waits */
   final def resetWaits(): Unit =

@@ -19,6 +19,22 @@ import optimus.platform.ScenarioStack.isSyntheticScenario
 import optimus.platform.Tweak
 import optimus.platform.storable.Entity
 
+object TwkResolver {
+
+  /** Only looks up instance tweaks */
+  private[graph] def findInstanceTweak(key: NodeKey[_], ss: ScenarioStack): Tweak = {
+    val info = key.propertyInfo
+    var cur = ss
+    while (!cur.isScenarioIndependent && !cur.isRoot) {
+      val cacheID = cur._cacheID
+      val tweak = if (cacheID.mayContainTweak(info)) cacheID.get(key) else null
+      if (tweak ne null) return tweak
+      cur = cur.parent
+    }
+    null
+  }
+}
+
 /* To avoid allocation on a common path of not finding anything TwkResolver also implements PropertyNode
     @requestingNode reported if SI violation detected (getNode sets this)
  */
@@ -198,7 +214,7 @@ final private[optimus] class TwkResolver[R](
     // bypassed tweakResolver may have extra info from when clauses in sync case (rare case)
     if (r ne this) {
       val requestingNode = ec.getCurrentNodeTask
-      requestingNode.combineInfo(_xinfo)
+      requestingNode.combineInfo(this, ec)
     }
     r
   }

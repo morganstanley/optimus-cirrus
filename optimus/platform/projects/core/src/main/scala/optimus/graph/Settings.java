@@ -66,6 +66,9 @@ public class Settings {
   public static final boolean convertByNameToByValue =
       getBoolProperty("optimus.compat.byName2byValue", true);
 
+  public static final boolean removeRedundantTweaks =
+      getBoolProperty("optimus.graph.removeRedundantTweaks", true);
+
   /** Will try hard to re-use SI scenario stacks */
   public static final boolean reuseSIStacks = getBoolProperty("optimus.cache.reuseSIStacks", false);
 
@@ -354,6 +357,9 @@ public class Settings {
   public static final boolean warnOnVtTtAccessed =
       getBoolProperty("optimus.temporalContext.warnOnVtTtAccessed", warnOnVtTtAccessedDefaultValue);
   // trace all cases that we cannot turn off legacy tweaks
+
+  public static final boolean killOnUninitializedTime =
+      getBoolProperty("optimus.temporalContext.killOnUninitializedTime", false);
   public static final boolean traceFailedLegacyTurnoffDefaultValue = false;
   public static final boolean traceFailedLegacyTurnoff =
       getBoolProperty(
@@ -422,6 +428,13 @@ public class Settings {
       getIntProperty("optimus.tracking.queue.taskTimelatencyWarningSecs", 10) * 1000_000_000L;
   public static double dtqLatencyWarningGrowthFactor =
       getDoubleProperty("optimus.tracking.queue.latencyWarningGrowthFactor", 2.0);
+  public static long dtqQueueSizeWarning = getIntProperty("optimus.tracking.queue.sizeWarning", 64);
+  public static double dtqQueueSizeWarningGrowthFactor =
+      getDoubleProperty("optimus.tracking.queue.sizeWarningGrowthFactor", 2.0);
+
+  public static boolean dtqPrintStateOfQueuesOnWarnings =
+      getBoolProperty("optimus.tracking.queue.printStateOnWarnings", false);
+
   public static final boolean traceTemporalContextMigration =
       profileTemporalContext
           || traceCreateTemporalContext

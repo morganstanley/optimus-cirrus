@@ -14,10 +14,13 @@ package optimus.buildtool.scope.sources
 import optimus.buildtool.artifacts.ArtifactType.RegexMessagesFingerprint
 import optimus.buildtool.config.CodeFlaggingRule
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.scope.CompilationScope
+import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
 import scala.collection.immutable.Seq
+import scala.collection.immutable.SortedMap
 
 @entity
 class RegexMessagesCompilationSources(
@@ -26,11 +29,18 @@ class RegexMessagesCompilationSources(
     resourceSources: ResourceCompilationSourcesImpl,
     rules: Seq[CodeFlaggingRule]
 ) extends CompilationSources {
+  import CompilationSources._
 
   override def id: ScopeId = scope.id
 
   // Note: we call `staticContent` here rather than `content` since we don't want to scan the generated sources
-  @node private def allContent = Seq(sourceSources.staticContent, resourceSources.staticContent)
+  @node private def allContent =
+    Seq(staticContent(sourceSources.content, Source), staticContent(resourceSources.content, Resource))
+
+  private def staticContent(content: Seq[(String, SortedMap[SourceUnitId, HashedContent])], tpe: String) = {
+    val m = content.toMap
+    tpe -> m(tpe)
+  }
 
   @node def nonEmpty: Boolean = allContent.map(_._2).exists(_.nonEmpty)
 

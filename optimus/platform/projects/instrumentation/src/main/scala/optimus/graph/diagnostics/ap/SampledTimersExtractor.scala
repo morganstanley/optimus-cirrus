@@ -12,6 +12,7 @@
 package optimus.graph.diagnostics.ap
 
 import optimus.graph.diagnostics.ap.SampledTimersExtractor.FrameMatcher
+import optimus.graph.diagnostics.ap.StackAnalysis.BackedArray
 import optimus.graph.diagnostics.ap.StackAnalysis.CleanName
 import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
@@ -32,6 +33,8 @@ object StringPredicate {
   private val all = mutable.ArrayBuffer.empty[StringPredicate]
   def startsWith(prefix: String): StringPredicate =
     new StringPredicate(s"startsWith($prefix)", (t: String) => t.startsWith(prefix))
+  def contains(substr: String): StringPredicate =
+    new StringPredicate(s"contains($substr)", (t: String) => t.contains(substr))
   def isEqualTo(value: String): StringPredicate = new StringPredicate(s"isEqualTo($value)", (t: String) => t == value)
 
   def getMaskForAllPredicates(s: String): Long = synchronized {
@@ -48,13 +51,14 @@ object StringPredicate {
 final class StringPredicate private (name: String, val pred: Predicate[String]) {
   private var mask = 0L
   // We don't assign a mask to components of compound predicates
-  private[ap] def assignMask(): Unit = StringPredicate.synchronized {
+  private[ap] def assignMask(): Long = StringPredicate.synchronized {
     if (mask == 0) {
       import StringPredicate.all
       all += this
       assert(all.size < 64, "Maximum number of frame matcher predicates exceeded!")
       mask = 1 << all.size
     }
+    mask
   }
 
   def test(x: Long): Boolean = (mask & x) != 0L
@@ -100,7 +104,7 @@ object SampledTimersExtractor extends Log {
    * Update a count for every stack that matches the ordered sequence of predicates in `pred`.
    */
   final case class FrameMatcher private[ap] (name: String, preds: Array[StringPredicate]) {
-    preds.foreach(_.assignMask())
+    val mask = preds.map(_.assignMask()).reduce(_ | _)
     def testAndAdvanceState(frame: CleanName, step: Int): Int = {
       if (preds(step).test(frame.predMask)) {
         if (step == preds.length - 1) MATCHED
@@ -110,26 +114,31 @@ object SampledTimersExtractor extends Log {
     override def toString: String = s"FrameMatcher($name, ${preds.mkString(", ")})"
   }
 
-  lazy private val analysers = {
+  final private case class AllAnalysers(frameMatchers: Array[FrameMatcher], mask: Long)
+
+  lazy private val analysers: AllAnalysers = {
     val as = (ServiceLoaderUtils
       .all[FrameMatcherProvider]
       .flatMap(_.frameMatchers) ++ DefaultFrameMatchers.frameMatchers).toArray
     log.info(s"Installing analysers: ${as.mkString(", ")}")
-    as
+    val mask = as.map(_.mask).reduce(_ | _)
+    AllAnalysers(as, mask)
   }
 
-  def newRecording: SampledTimers = new MutableRecordingState(analysers)
+  def newRecording: SampledTimers = new MutableRecordingState(analysers.frameMatchers)
 
-  def analyse(rec: SampledTimers, frames: Array[CleanName], count: Long): Unit = {
-    val state = new Array[Int](analysers.length)
+  def analyse(rec: SampledTimers, frames: BackedArray[CleanName], count: Long): Unit = {
+    val state = new Array[Int](analysers.frameMatchers.length)
     val mut = rec match { case mut: MutableRecordingState => mut }
+    val frameMatchers = analysers.frameMatchers
+    val matchAny = analysers.mask
     mut.everything += count
     for (f <- frames) {
       // Don't bother checking if no known predicates match
-      if (f.predMask != 0)
-        for (i <- analysers.indices) {
+      if ((f.predMask & matchAny) != 0)
+        for (i <- frameMatchers.indices) {
           if (state(i) >= 0) {
-            state(i) = analysers(i).testAndAdvanceState(f, state(i))
+            state(i) = frameMatchers(i).testAndAdvanceState(f, state(i))
             if (state(i) == MATCHED) { mut.counts(i) += count }
           }
         }

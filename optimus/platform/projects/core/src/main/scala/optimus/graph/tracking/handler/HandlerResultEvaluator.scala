@@ -98,7 +98,10 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
       cause.counted {
         val start = OGTrace.nanoTime()
         val handlerResult = {
-          val event = HandlerStepEventCounter.report(EventDescription(details.tag, details.sourceLocation))
+          val event = HandlerStepEventCounter.report(
+            details.updater.target.scenarioReference,
+            cause.root,
+            EventDescription(details.tag, details.sourceLocation))
 
           val scenarioModifyF = (ss: ScenarioStack) =>
             ScenarioStack.modifySS(
@@ -242,7 +245,7 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
       handler: () => HandlerResult,
       updater: DependencyTrackerBatchUpdater,
       uiDelegate: HandlerResultDelegate,
-      onComplete: Try[Unit] => Unit,
+      onComplete: (Try[Unit], EventCause) => Unit,
       eventDescription: String = "",
       progressTracker: ProgressTracker = null,
       progressTrackerParams: ProgressTrackerParams = null)(implicit sourceLocation: SourceLocation): Unit = {
@@ -276,8 +279,11 @@ private[optimus] object HandlerResultEvaluator extends HandlerResultEvaluatorBas
           val progressTracker = scenarioStack().progressTracker
           ProgressTracker.sendInitialMessageIfPossible(progressTracker)
           val description = if (details.tag.isEmpty) "InBackground" else details.tag
-          event = HandlerStepEventCounter.report(EventDescription(description, details.sourceLocation))
-          child = handler.apply$queued()
+          event = HandlerStepEventCounter.report(
+            details.updater.target.scenarioReference,
+            cause.root,
+            EventDescription(description, details.sourceLocation))
+          child = handler.apply$queued().asNode$
           ec.enqueue(this, child)
           child.continueWith(this, ec)
         } else {
@@ -351,7 +357,7 @@ private[optimus] object HandlerResultEvaluator extends HandlerResultEvaluatorBas
           details.handler,
           _,
           details.uiDelegate,
-          (t: Try[Unit]) => runFollowing(for (_ <- t) yield List[Action]()),
+          (t: Try[Unit], _) => runFollowing(for (_ <- t) yield List[Action]()),
           eventDescription = "Separately",
           progressTracker,
           details.progressTrackerParams

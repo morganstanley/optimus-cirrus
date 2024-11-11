@@ -18,25 +18,38 @@ import scala.reflect.ClassTag
 import scala.reflect.classTag
 
 abstract class BasicApp[T <: BasicAppCmdLine: ClassTag] {
-  private def parseCmdline(args: Array[String]): T = {
+  protected val SuccessExitCode: Int = 0
+  protected val DefaultFailureExitCode: Int = 1
+
+  private def parseCmdline(args: Array[String]): Option[T] = {
     val cmdLine = classTag[T].runtimeClass.getDeclaredConstructor().newInstance().asInstanceOf[T]
     val parser = new CmdLineParser(cmdLine)
     try {
       parser.parseArgument(args.toArray: _*)
+      Some(cmdLine)
     } catch {
       case x: CmdLineException =>
         System.err.println(x.getMessage)
         parser.printUsage(System.err)
-        System.exit(1)
+        None
     }
-    cmdLine
   }
 
   final def main(args: Array[String]): Unit = {
-    run(parseCmdline(args))
+    val exitCode =
+      parseCmdline(args)
+        .map(runWithExitCode)
+        .getOrElse(DefaultFailureExitCode)
+
+    if (exitCode != SuccessExitCode) System.exit(exitCode)
   }
 
-  protected def run(cmdLine: T): Unit
+  // You may override either. If you care about the exit code, use the second one.
+  protected def run(cmdLine: T): Unit = {}
+  protected def runWithExitCode(cmdLine: T): Int = {
+    run(cmdLine)
+    SuccessExitCode
+  }
 }
 
 class BasicAppCmdLine

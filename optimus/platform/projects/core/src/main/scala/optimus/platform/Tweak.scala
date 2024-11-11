@@ -204,12 +204,17 @@ class Tweak private[optimus] (
     computableValueNode[R](evaluateInSS).result
   }
 
-  /* False for the tweaks, that have computed/fixed value and the target is fixed and doesn't need to be resolved */
+  /** False for the tweaks, that have computed/fixed value and the target is fixed and doesn't need to be resolved */
   private[optimus] final def isContextDependent =
     !tweakTemplate.resultIsScenarioIndependent() || target.hasWhenClause || target.unresolved
-  private[optimus] final def isReducibleToByValue: Boolean = {
+
+  /** If all the inputs into RHS of the tweak are known at the entry into a given block, can replace with byValue RHS */
+  private[optimus] final def isReducibleToByValue: Boolean =
     (evaluateIn == Tweak.evaluateInParentOfGiven) && tweakTemplate.isReducibleToByValue && !keepLazyEval
-  }
+
+  /** Consider comparing tweak RHS ('to value') to the LHS (previous) value */
+  private[optimus] final def shouldCheckForRedundancy: Boolean =
+    tweakTemplate.resultIsStable() && target.fullSpecified && target.propertyInfo.canRemoveRedundant
 
   /** Retarget tweak to byValue... Warning: this method downgrades any tweak to a simple tweak */
   private[optimus] def reduceToByValue(v: Node[_]): Tweak = {

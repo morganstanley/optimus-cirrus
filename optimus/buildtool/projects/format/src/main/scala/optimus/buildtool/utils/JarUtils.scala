@@ -29,6 +29,7 @@ object JarUtils {
     val CanSetNativeMethodPrefix = new Name("Can-Set-Native-Method-Prefix")
     val ExtraFiles: Name = new Name("MS-extra-files")
     val ExternalJniPath: Name = new Name("MS-external-jni-path")
+    val AgentsPath: Name = new Name("MS-java-agent-path")
 
     val JniScopes: Name = new Name("MS-jni-scopes") // used by OAR/OTR for installed libs
     val PackagedJniLibs: Name = new Name("MS-packaged-jni-libraries") // used by ObtRuntimeSupport for intellij

@@ -14,6 +14,7 @@ package optimus.buildtool.artifacts
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
+import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.NoFilter
@@ -321,6 +322,7 @@ object GeneratedSourceArtifact {
 @entity private[buildtool] sealed trait ClassFileArtifact extends HashedArtifact {
   val file: JarAsset
   val containsPlugin: Boolean
+  val containsAgent: Boolean
   val containsOrUsedByMacros: Boolean
 
   override def path: Path = file.path
@@ -329,6 +331,7 @@ object GeneratedSourceArtifact {
   @node def copy(
       file: JarAsset = file,
       containsPlugin: Boolean = containsPlugin,
+      containsAgent: Boolean = containsAgent,
       containsOrUsedByMacros: Boolean = containsOrUsedByMacros
   ): ClassFileArtifact
 }
@@ -340,6 +343,7 @@ object GeneratedSourceArtifact {
     val precomputedContentsHash: String,
     val incremental: Boolean,
     val containsPlugin: Boolean,
+    val containsAgent: Boolean,
     val containsOrUsedByMacros: Boolean
 ) extends ClassFileArtifact
     with IncrementalArtifact
@@ -348,6 +352,7 @@ object GeneratedSourceArtifact {
   @node def copy(
       file: JarAsset = file,
       containsPlugin: Boolean = containsPlugin,
+      containsAgent: Boolean = containsAgent,
       containsOrUsedByMacros: Boolean = containsOrUsedByMacros
   ): InternalClassFileArtifact =
     InternalClassFileArtifact.create(
@@ -356,11 +361,12 @@ object GeneratedSourceArtifact {
       precomputedContentsHash,
       incremental = incremental,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros
     )
 
   override def toString: String =
-    s"${getClass.getSimpleName}($id, $file, $precomputedContentsHash, $incremental, $containsPlugin, $containsOrUsedByMacros)"
+    s"${getClass.getSimpleName}($id, $file, $precomputedContentsHash, $incremental, $containsPlugin, agent?$containsAgent, $containsOrUsedByMacros)"
 }
 
 object InternalClassFileArtifact {
@@ -373,6 +379,7 @@ object InternalClassFileArtifact {
       precomputedContentsHash: String,
       incremental: Boolean,
       containsPlugin: Boolean = false,
+      containsAgent: Boolean = false,
       containsOrUsedByMacros: Boolean = false
   ): InternalClassFileArtifact =
     InternalClassFileArtifact(
@@ -381,6 +388,7 @@ object InternalClassFileArtifact {
       precomputedContentsHash,
       incremental,
       containsPlugin,
+      containsAgent,
       containsOrUsedByMacros
     ).watchForDeletion()
 
@@ -393,6 +401,7 @@ object InternalClassFileArtifact {
       precomputedContentsHash: String,
       incremental: Boolean,
       containsPlugin: Boolean = false,
+      containsAgent: Boolean = false,
       containsOrUsedByMacros: Boolean = false
   ): InternalClassFileArtifact =
     InternalClassFileArtifact(
@@ -401,6 +410,7 @@ object InternalClassFileArtifact {
       precomputedContentsHash,
       incremental,
       containsPlugin,
+      containsAgent,
       containsOrUsedByMacros
     )
 
@@ -414,6 +424,7 @@ object InternalClassFileArtifact {
     val javadoc: Option[JarAsset],
     assumedImmutable: Boolean,
     val containsPlugin: Boolean,
+    val containsAgent: Boolean,
     val containsOrUsedByMacros: Boolean,
     val isMaven: Boolean
 ) extends ClassFileArtifact {
@@ -425,6 +436,7 @@ object InternalClassFileArtifact {
       javadoc,
       assumedImmutable = assumedImmutable,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros,
       isMaven = isMaven
     )
@@ -437,6 +449,7 @@ object InternalClassFileArtifact {
   @node def copy(
       file: JarAsset = file,
       containsPlugin: Boolean = containsPlugin,
+      containsAgent: Boolean = containsAgent,
       containsOrUsedByMacros: Boolean = containsOrUsedByMacros
   ): ExternalClassFileArtifact =
     ExternalClassFileArtifact.create(
@@ -446,6 +459,7 @@ object InternalClassFileArtifact {
       javadoc,
       assumedImmutable = assumedImmutable,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros
     )
 
@@ -461,11 +475,12 @@ object InternalClassFileArtifact {
       javadoc,
       assumedImmutable = assumedImmutable,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros
     )
 
   override def toString: String =
-    s"${getClass.getSimpleName}($id, $file, $source, $javadoc, $assumedImmutable, $containsPlugin, $containsOrUsedByMacros)"
+    s"${getClass.getSimpleName}($id, $file, $source, $javadoc, $assumedImmutable, $containsPlugin, agent?$containsAgent, $containsOrUsedByMacros)"
 }
 
 @entity object ExternalClassFileArtifact {
@@ -476,6 +491,7 @@ object InternalClassFileArtifact {
       javadoc: Option[JarAsset],
       assumedImmutable: Boolean,
       containsPlugin: Boolean,
+      containsAgent: Boolean,
       containsOrUsedByMacros: Boolean,
       isMaven: Boolean
   ) {
@@ -487,6 +503,7 @@ object InternalClassFileArtifact {
         javadoc: Option[JarAsset],
         assumedImmutable = assumedImmutable,
         containsPlugin = containsPlugin,
+        containsAgent = containsAgent,
         containsOrUsedByMacros = containsOrUsedByMacros,
         isMaven = isMaven
       )
@@ -503,6 +520,7 @@ object InternalClassFileArtifact {
       javadoc: Option[JarAsset],
       assumedImmutable: Boolean,
       containsPlugin: Boolean = false,
+      containsAgent: Boolean = false,
       containsOrUsedByMacros: Boolean = false,
       isMaven: Boolean = false
   ): ExternalClassFileArtifact =
@@ -513,6 +531,7 @@ object InternalClassFileArtifact {
       javadoc,
       assumedImmutable = assumedImmutable,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros,
       isMaven = isMaven
     )
@@ -524,6 +543,7 @@ object InternalClassFileArtifact {
       javadoc: Option[JarAsset],
       assumedImmutable: Boolean,
       containsPlugin: Boolean = false,
+      containsAgent: Boolean = false,
       containsOrUsedByMacros: Boolean = false,
       isMaven: Boolean = false
   ): ExternalClassFileArtifact =
@@ -534,6 +554,7 @@ object InternalClassFileArtifact {
       javadoc,
       assumedImmutable = assumedImmutable,
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros,
       isMaven = isMaven
     )
@@ -615,7 +636,8 @@ object InternalCppArtifact {
     val osVersion: String,
     val messages: Seq[CompilationMessage],
     protected val cachedHasErrors: Boolean,
-    val inputsHash: String)
+    val inputsHash: String,
+    val python: PythonDefinition)
     extends PathedArtifact
     with MessagesArtifact {
   override def id: InternalArtifactId = InternalArtifactId(scopeId, ArtifactType.Python, Some(osVersion))
@@ -623,7 +645,7 @@ object InternalCppArtifact {
   override def taskCategory: CategoryTrace = trace.Python
 
   @node def copy(file: FileAsset = file): PythonArtifact =
-    PythonArtifact(scopeId, file, osVersion, messages, cachedHasErrors, inputsHash)
+    PythonArtifact(scopeId, file, osVersion, messages, cachedHasErrors, inputsHash, python)
 }
 
 object PythonArtifact {
@@ -633,13 +655,15 @@ object PythonArtifact {
       osVersion: String,
       messages: Seq[CompilationMessage],
       hasErrors: Boolean,
-      inputsHash: String): PythonArtifact = PythonArtifact(
+      inputsHash: String,
+      python: PythonDefinition): PythonArtifact = PythonArtifact(
     scopeId = scopeId,
     file = file,
     osVersion = osVersion,
     messages = messages,
     cachedHasErrors = hasErrors,
-    inputsHash = inputsHash
+    inputsHash = inputsHash,
+    python = python
   )
 }
 

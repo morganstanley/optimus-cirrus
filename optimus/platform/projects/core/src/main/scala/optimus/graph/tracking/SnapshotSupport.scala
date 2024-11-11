@@ -70,9 +70,9 @@ trait SnapshotSupport {
     children.foreach(_.invalidateSnapshot()) // invalidation should propagate down to all children
   }
 
-  private[tracking] def disposeSnapshot(): Unit = {
+  private[tracking] def disposeSnapshot(cause: EventCause): Unit = {
     _asBasicScenarioStack = null
-    tweakContainer.doRemoveTweaks(collection.Seq(ScenarioReference.currentSnapshot$newNode))
+    tweakContainer.doRemoveTweaks(collection.Seq(ScenarioReference.currentSnapshot$newNode), cause)
   }
 }
 

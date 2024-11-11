@@ -134,10 +134,35 @@ public class NodeTrace {
     return sb.toString();
   }
 
+  // blakedav - this isn't reliable when id > qword*64 (it wraps around)
   public static String dependsOnTweakableString(NodeTask tsk) {
     TPDMask mask = new TPDMask();
     tsk.mergeTweakPropertyDependenciesInto(mask); // Copy bits
     return dependsOnTweakableString(mask.toArray());
+  }
+
+  public static String dependsOnTweakableMask(NodeTask tsk) {
+    TPDMask mask = new TPDMask();
+    tsk.mergeTweakPropertyDependenciesInto(mask); // Copy bits
+    return mask.stringEncoded();
+  }
+
+  public static String dependsOnTweakableMaskFixedWidth(NodeTask tsk) {
+    TPDMask mask = new TPDMask();
+    tsk.mergeTweakPropertyDependenciesInto(mask); // Copy bits
+    return mask.stringEncodedFixedWidth();
+  }
+
+  public static int dependsOnTweakableMaskBitCount(NodeTask tsk) {
+    TPDMask mask = new TPDMask();
+    tsk.mergeTweakPropertyDependenciesInto(mask); // Copy bits
+    return mask.countOfSetBits();
+  }
+
+  public static boolean dependsOnIsPoison(NodeTask tsk) {
+    TPDMask mask = new TPDMask();
+    tsk.mergeTweakPropertyDependenciesInto(mask); // Copy bits
+    return mask.allBitsAreSet();
   }
 
   private static String nonNullName(int tweakableID) {
@@ -212,24 +237,6 @@ public class NodeTrace {
     }
     if (sort) r.sort(Comparator.comparing(NodeTaskInfo::toString));
     return r.toArray(new NodeTaskInfo[0]);
-  }
-
-  // TODO (OPTIMUS-43939): drop this altogether or make profiling per-thread/scenarioStack
-  /**
-   * Warning! profiling is not per thread so this flips a global switch and disables tracing while
-   * displaying in ui
-   */
-  public static <A> A runFWithDisabledTrace(Function0<A> f) {
-    synchronized (trace) {
-      OGEventsObserver m0 = OGTrace.getTraceMode();
-
-      try {
-        GraphInputConfiguration$.MODULE$.setTraceMode(OGTraceMode.none);
-        return f.apply();
-      } finally {
-        GraphInputConfiguration$.MODULE$.setTraceMode(m0);
-      }
-    }
   }
 
   @SuppressWarnings("unchecked")

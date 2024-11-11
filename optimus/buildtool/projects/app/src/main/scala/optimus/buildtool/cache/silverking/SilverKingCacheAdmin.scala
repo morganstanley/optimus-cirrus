@@ -11,16 +11,11 @@
  */
 package optimus.buildtool.cache.silverking
 
-import java.io.ByteArrayInputStream
-import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.util.zip.GZIPInputStream
-import java.util.zip.ZipException
 import optimus.buildtool.OptimusBuildTool
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.cache.silverking.SilverKingStore.ArtifactKey
 import optimus.buildtool.cache.silverking.SilverKingStore.DirectoryContent
 import optimus.buildtool.cache.silverking.SilverKingStore.FileContent
@@ -28,14 +23,21 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.AssetUtils
-import optimus.buildtool.utils.FlexibleBooleanOptionHandler
 import optimus.buildtool.utils.PathUtils
-import optimus.platform._
 import optimus.platform.OptimusApp.ExitHandler
+import optimus.platform._
 import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.platform.util.Log
+import optimus.utils.app.FlexibleBooleanOptionHandler
 import org.apache.poi.util.IOUtils
 import org.kohsuke.args4j.CmdLineParser
+
+import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.util.zip.GZIPInputStream
+import java.util.zip.ZipException
 
 private[silverking] class SilverKingCacheAdminCmdLine extends OptimusAppCmdLine {
 
@@ -100,7 +102,6 @@ object SilverKingCacheAdmin extends OptimusApp[SilverKingCacheAdminCmdLine] with
 
   @entersGraph override def run(): Unit = {
 
-    val config = SilverKingConfig(cmdLine.silverKing)
     log.info(s"SilverKing artifact version: ${cmdLine.artifactVersion}")
 
     val artifactType =
@@ -141,7 +142,7 @@ object SilverKingCacheAdmin extends OptimusApp[SilverKingCacheAdminCmdLine] with
 
   @async private def createOps(configStr: String): SilverKingOperations = {
     val config = SilverKingConfig(configStr)
-    // Always use ClusterType.Custom here so we don't affect stats for builds
+    // Always use CacheClusterType.Custom here so we don't affect stats for builds
     SilverKingOperationsImpl(config, ClusterType.Custom, debug = true, forward = cmdLine.forward)
   }
 

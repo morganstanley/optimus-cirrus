@@ -13,8 +13,13 @@ package optimus.buildtool.artifacts
 
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
+import optimus.buildtool.dependencies.PythonDefinition
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.Jars
 
+import java.nio.file.Path
 import scala.collection.immutable.Seq
 
 object CachedMetadata {
@@ -29,8 +34,20 @@ final case class PythonMetadata(
     osVersion: String,
     messages: Seq[CompilationMessage],
     hasErrors: Boolean,
-    inputsHash: String)
+    inputsHash: String,
+    python: PythonDefinition)
     extends CachedMetadata
+
+object PythonMetadata {
+  def load(pythonArtifact: Path): PythonMetadata = {
+    val file = JarAsset(pythonArtifact)
+    Jars.withJar(file) { root =>
+      val metadataJson = root.resolveFile(CachedMetadata.MetadataFile).asJson
+      import JsonImplicits._
+      AssetUtils.readJson[PythonMetadata](metadataJson, unzip = false)
+    }
+  }
+}
 
 final case class CppMetadata(
     osVersion: String,

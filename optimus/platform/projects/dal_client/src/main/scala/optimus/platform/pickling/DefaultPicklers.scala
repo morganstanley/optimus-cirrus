@@ -92,7 +92,7 @@ object FloatPickler extends Pickler[Float] {
   def pickle(t: Float, visitor: PickledOutputStream) = visitor.writeRawObject(t.toDouble.asInstanceOf[AnyRef])
 }
 
-class OptionPickler[T](innerPickler: Pickler[T]) extends Pickler[Option[T]] {
+class OptionPickler[T](val innerPickler: Pickler[T]) extends Pickler[Option[T]] {
   override def pickle(s: Option[T], visitor: PickledOutputStream) = {
     if (s eq null)
       throw new PicklingException("Cannot pickle null values")
@@ -105,6 +105,10 @@ class OptionPickler[T](innerPickler: Pickler[T]) extends Pickler[Option[T]] {
 object OptionPickler {
   def apply[T](innerPickler: Pickler[T]): Pickler[Option[T]] = {
     new OptionPickler[T](innerPickler)
+  }
+
+  def unapply(op: OptionPickler[_]): Option[Pickler[_]] = {
+    Some(op.innerPickler)
   }
 }
 

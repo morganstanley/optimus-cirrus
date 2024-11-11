@@ -17,6 +17,7 @@ import optimus.exceptions.RTExceptionTrait
 import optimus.graph.AlreadyCompletedNode
 import optimus.graph.CompletableNodeM
 import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerContext
 import optimus.platform.EvaluationContext
@@ -33,7 +34,6 @@ import scala.collection.compat._
 import scala.collection.immutable.SortedSet
 import scala.util.Try
 import scala.reflect.runtime.universe.{Try => _, _}
-
 import optimus.scalacompat.collection._
 
 object EmbeddablePicklers extends StorableSerializer {
@@ -112,7 +112,7 @@ object EmbeddablePicklers extends StorableSerializer {
 
     def unpicklerForSubtype(simpleName: String): Unpickler[Embeddable] = unpicklers(simpleName).get
 
-    private def unpickleTrait(clsName: String, m: Any, is: PickledInputStream): Node[Embeddable] = {
+    private def unpickleTrait(clsName: String, m: Any, is: PickledInputStream): NodeFuture[Embeddable] = {
       unpicklers.get(clsName) match {
         case Some(u) => u.get.unpickle$queued(m, is)
         case None =>
@@ -125,8 +125,8 @@ object EmbeddablePicklers extends StorableSerializer {
       }
     }
 
-    @nodeSync def unpickle(m: Any, is: PickledInputStream): Embeddable = unpickle$queued(m, is).get
-    override def unpickle$queued(m: Any, is: PickledInputStream): Node[Embeddable] = {
+    @nodeSync def unpickle(m: Any, is: PickledInputStream): Embeddable = unpickle$queued(m, is).get$
+    override def unpickle$queued(m: Any, is: PickledInputStream): NodeFuture[Embeddable] = {
       m match {
         case e: Embeddable => new AlreadyCompletedNode(e)
         case _ =>
@@ -196,9 +196,9 @@ object EmbeddablePicklers extends StorableSerializer {
       }.toArray
     }
 
-    @nodeSync def unpickle(pickled: Any, is: PickledInputStream): Embeddable = unpickle$queued(pickled, is).get
+    @nodeSync def unpickle(pickled: Any, is: PickledInputStream): Embeddable = unpickle$queued(pickled, is).get$
 
-    override def unpickle$queued(pickled: Any, is: PickledInputStream): Node[Embeddable] = pickled match {
+    override def unpickle$queued(pickled: Any, is: PickledInputStream): NodeFuture[Embeddable] = pickled match {
       case e: Embeddable => new AlreadyCompletedNode(e)
       case _ =>
         new CompletableNodeM[Embeddable] {
@@ -271,7 +271,7 @@ object EmbeddablePicklers extends StorableSerializer {
 
   class EmbeddableObjectUnpickler(val obj: Embeddable) extends Unpickler[Embeddable] {
     override def unpickle(pickled: Any, ctxt: PickledInputStream): Embeddable = obj
-    override def unpickle$queued(pickled: Any, ctxt: PickledInputStream): Node[Embeddable] =
+    override def unpickle$queued(pickled: Any, ctxt: PickledInputStream): NodeFuture[Embeddable] =
       new AlreadyCompletedNode[Embeddable](obj)
   }
 

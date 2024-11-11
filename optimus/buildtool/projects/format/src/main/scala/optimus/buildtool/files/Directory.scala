@@ -33,6 +33,7 @@ import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.Try
 import scala.collection.compat._
+import scala.util.control.NonFatal
 
 trait Directory extends DirectoryAsset {
   import Directory.PathFilter
@@ -90,7 +91,14 @@ trait DirectoryOps extends AssetOps {
   // is on a different filesystem from `path`. We don't however use pathString, since that could cause issues for
   // UNIX paths with `\` in their name.
   final def resolveFile(p: RelativePath): FileAsset = resolveFile(p.path.toString)
-  final def resolveFile(s: String): FileAsset = FileAsset(path.resolve(s))
+  final def resolveFile(s: String): FileAsset = {
+    try {
+      FileAsset(path.resolve(s))
+    } catch {
+      case NonFatal(e) => throw new IllegalArgumentException(s"cannot resolve the path for $s", e)
+    }
+  }
+
   final def resolveTimestampedFile(p: RelativePath): FileAsset = resolveTimestampedFile(p.pathString)
   final def resolveTimestampedFile(s: String): FileAsset = FileAsset.timestamped(path.resolve(s))
 

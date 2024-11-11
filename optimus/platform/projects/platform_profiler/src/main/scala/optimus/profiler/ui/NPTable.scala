@@ -424,7 +424,7 @@ abstract class NPTable[RType] extends JPanel with Log {
   // more than one has sortByThisColumn as true, we'll just take the first one here
   private def setPreferredSortByColumn(): Unit = {
     val existingPref = pref.getInt(sortedColumnPreferencesKey, -1)
-    if (existingPref > -1) toggleSortOrder(existingPref)
+    if (existingPref > -1 && !ProfilerUI.prefDisabledForTesting) toggleSortOrder(existingPref)
     else {
       viewColumns.zipWithIndex.find { case (v, _) => v.prototype.sortByThisColumn }.foreach { case (_, i) =>
         updatePreferredSortByColumn(i)

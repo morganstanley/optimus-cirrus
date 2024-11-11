@@ -156,6 +156,7 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
   def ScenarioStackType = Select(PlatformPkg, tpnames.ScenarioStack)
   def TemporalContextType = Select(PlatformPkg, tpnames.TemporalContext)
   def NodeType = Select(GraphPkg, tpnames.Node)
+  def NodeFutureType = Select(GraphPkg, tpnames.NodeFuture)
   def AsyncLazyType = Select(Select(PlatformPkg, tpnames.asyncLazyWithAnyRuntimeEnv), tpnames.Lazy)
 
   def mkImpureBlock(tree: Tree): Tree =

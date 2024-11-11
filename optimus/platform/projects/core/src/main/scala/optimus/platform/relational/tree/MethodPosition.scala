@@ -16,6 +16,7 @@ import optimus.utils.MacroUtils.relativeSourcePath
 
 final case class MethodPosition(posInfo: String) {
   def orElse(pos: MethodPosition): MethodPosition = if (posInfo.isEmpty) pos else this
+  def lineNum: Int = posInfo.split(',')(1).split('-')(1).toInt
 }
 
 /**

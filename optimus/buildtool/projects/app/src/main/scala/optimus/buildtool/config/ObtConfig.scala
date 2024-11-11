@@ -295,12 +295,29 @@ import scala.collection.immutable.SortedMap
   }
 
   private object Converter {
+
+    /**
+     * The reason behind having warnings in a first place was to avoid hard coupling between obt and Jetfire plugin.
+     * Changing the OBT format will result in new diagnostics being reported and it will have different behaviors depending on deployment order.
+     * First it will have no effect without releasing either OBT and Jetfire.
+     * If only OBT is released, it will report an error so you have to fix your configuration.
+     *   Jetfire will not report anything, as it will be already fixed.
+     * If Jetfire is released first, it will already report that new key is invalid, but the new obt has not yet been released,
+     *   it will be a false positive. If this is an error there is a chance that it will have side effects in Jetfire.
+     *
+     * We want to avoid this by enabling it only for OBT, while retaining current behaviour in other dependencies.
+     */
+    private def fatalConfigWarningsEnabled =
+      sys.props.get("optimus.buildtool.fatalConfigWarnings").exists(_.toBoolean)
+
     def toObt(msgs: Seq[Message]): Map[(MessageArtifactType, MessageTrace), Seq[CompilationMessage]] =
       Map((ArtifactType.ConfigMessages, LoadConfig) -> msgs.map(toObt))
 
-    def toObt(m: Message): CompilationMessage = {
+    private def toObt(m: Message): CompilationMessage = {
       val pos = MessagePosition(m.file.path.toString, m.line, -1, m.line, -1, -1, -1)
-      val level = if (m.isError) CompilationMessage.Error else CompilationMessage.Warning
+      val level =
+        if (m.isError || fatalConfigWarningsEnabled) CompilationMessage.Error
+        else CompilationMessage.Warning
       CompilationMessage(Some(pos), m.msg, level)
     }
 

@@ -1765,6 +1765,7 @@ public class GCNative {
   }
 
   private static final AtomicReference<Thread> detectThread = new AtomicReference(null);
+  private static final AtomicBoolean livenessSuspended = new AtomicBoolean();
 
   private static void startLongPauseDetectThreads() {
     synchronized (detectThread) {
@@ -1775,7 +1776,9 @@ public class GCNative {
             new Thread(
                 () -> {
                   while (true) {
-                    updateAliveTime();
+                    if (!livenessSuspended.get()) {
+                      updateAliveTime();
+                    }
                     try {
                       Thread.sleep(heartbeatDurationMs);
                     } catch (InterruptedException e) {
@@ -2134,6 +2137,31 @@ public class GCNative {
         startLongPauseDetectThreads();
       }
       exitOnProcessPauseOverLimit(newVal);
+    }
+
+    public synchronized void timeCritical(Long timeoutOverride, Runnable task) {
+      Long originalTimeout = keepAliveTimeout;
+      try {
+        Preconditions.checkNotNull(timeoutOverride);
+        Preconditions.checkNotNull(task);
+        Preconditions.checkArgument(timeoutOverride > 0);
+        Preconditions.checkState(!livenessSuspended.get());
+
+        livenessSuspended.set(true);
+        updateAliveTime();
+        setKeepAliveTimeout(timeoutOverride);
+
+        task.run();
+      } catch (Throwable e) {
+        log.error("time-critical task failed with exception, exiting ...", e);
+        System.exit(-1);
+      } finally {
+        livenessSuspended.set(false);
+        if (getKeepAliveTimeout().equals(Optional.of(timeoutOverride))) {
+          // only reset timeout, if task.run didn't modify the timeout settings
+          setKeepAliveTimeout(originalTimeout);
+        }
+      }
     }
 
     // Boilerplate

@@ -69,6 +69,7 @@ private[buildtool] object SyncCompiler {
       outlineTypesOnly: Boolean,
       saveAnalysisFiles: Boolean, // note that if mischief is active we never save
       containsPlugin: Boolean,
+      containsAgent: Boolean,
       containsMacros: Boolean,
       mischief: Option[MischiefArgs]
   ) {

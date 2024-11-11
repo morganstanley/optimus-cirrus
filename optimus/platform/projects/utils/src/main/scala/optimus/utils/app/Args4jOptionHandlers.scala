@@ -17,6 +17,8 @@ import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.OptionDef
 import org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler
 import org.kohsuke.args4j.spi.OneArgumentOptionHandler
+import org.kohsuke.args4j.spi.OptionHandler
+import org.kohsuke.args4j.spi.Parameters
 import org.kohsuke.args4j.spi.Setter
 
 import java.nio.file.Files
@@ -167,6 +169,35 @@ final class ExistingPathOptionHandler(parser: CmdLineParser, optionDef: OptionDe
   }
 }
 
+// Similar to org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler, but assume any parameter not matching one of the
+// acceptable values is part of the next option/argument.
+class FlexibleBooleanOptionHandler(
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Boolean]
+) extends OptionHandler[Boolean](parser, option, setter) {
+
+  private val acceptableValues = Map(
+    "true" -> true,
+    "on" -> true,
+    "yes" -> true,
+    "1" -> true,
+    "false" -> false,
+    "off" -> false,
+    "no" -> false,
+    "0" -> false
+  )
+
+  override def parseArguments(params: Parameters): Int = {
+    val arg = if (params.size == 0) None else acceptableValues.get(params.getParameter(0).toLowerCase)
+
+    setter.addValue(arg.getOrElse(true))
+    arg.size
+  }
+
+  override def getDefaultMetaVariable: String = "VALUE"
+}
+
 final class FilePermissionOptionHandler(
     parser: CmdLineParser,
     option: OptionDef,
@@ -188,8 +219,8 @@ abstract class MapOptionHandler[KeyType, ValueType](
         keyValuePair.split(":") match {
           case Array(key: String, value: String) =>
             (convertKey(key), convertValue(value))
-          case x =>
-            throw new IllegalArgumentException(s"Unable to parse \'${keyValuePair}\' as a key-value pair")
+          case _ =>
+            throw new IllegalArgumentException(s"Unable to parse \'$keyValuePair\' as a key-value pair")
         })
       .toMap
   }

@@ -14,7 +14,7 @@ package optimus.platform
 import scala.reflect.runtime.universe._
 import optimus.platform.storable.Entity
 import optimus.platform.annotations.nodeSync
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.relational.tree.TypeInfo
 
 object RelationKey {
@@ -72,7 +72,7 @@ trait RelationKey[-T] {
   // the generated methods ourself otherwise the asyncgraph transform won't actually treat
   // this as a node
   @nodeSync def of(t: T): AnyRef // gets the key of t
-  def of$queued(t: T): Node[AnyRef]
+  def of$queued(t: T): NodeFuture[AnyRef]
 
   def fields: collection.Seq[String] // gets the names of the fields which make up the key
 

@@ -289,7 +289,7 @@ final class ASMKeyGenerator(shapeType: TypeInfo[_], fields: Seq[String]) extends
             Type.getType(s"(${boxToDesc(fDesc)})L$Node;")
           ): _*
         )
-        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "andThen", s"(L$Node;L$Function;)L$Node;", false)
+        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "andThen", s"(L$NodeFuture;L$Function;)L$Node;", false)
         mv.visitInsn(ARETURN)
         mv.visitMaxs(0, 0)
         mv.visitEnd()
@@ -347,7 +347,7 @@ final class ASMKeyGenerator(shapeType: TypeInfo[_], fields: Seq[String]) extends
             Type.getType(s"($objArrayDesc)L$Node;")
           ): _*
         )
-        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "whenAll", s"([L$Node;L$Function;)L$Node;", false)
+        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "whenAll", s"([L$NodeFuture;L$Function;)L$Node;", false)
         mv.visitInsn(ARETURN)
         mv.visitMaxs(0, 0)
         mv.visitEnd()

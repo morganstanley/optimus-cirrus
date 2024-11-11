@@ -213,7 +213,7 @@ class NodeResult[+T] private[optimus] (_node: Node[T]) extends Serializable {
   @nodeSyncLift
   def thenFinally(@nodeLiftByName @nodeLift f: => Unit): NodeResult[T] = thenFinally$withNode(toNode(f _))
   @impure def thenFinally$withNode(f: Node[Unit]): NodeResult[T] = thenFinally$newNode(f).get
-  @impure def thenFinally$queued(f: Node[Unit]): Node[NodeResult[T]] = thenFinally$newNode(f).enqueue
+  @impure def thenFinally$queued(f: Node[Unit]): NodeFuture[NodeResult[T]] = thenFinally$newNode(f).enqueue
   @impure def thenFinally$newNode(f: Node[Unit]): Node[NodeResult[T]] = new CompletableNodeM[NodeResult[T]] {
     override def executionInfo(): NodeTaskInfo = NodeTaskInfo.ThenFinally
     override def run(ec: OGSchedulerContext): Unit = {
@@ -375,7 +375,7 @@ sealed trait NodeTry[+T] {
   @nodeSyncLift
   @scenarioIndependentTransparent
   def get: T
-  def get$queued: Node[T]
+  def get$queued: NodeFuture[T]
   def get$withNode: T
 
   def toOption: Option[T]
@@ -523,7 +523,7 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
   @scenarioIndependentTransparent
   def get: T = get$newNode.get
   def get$withNode: T = get$newNode.get
-  def get$queued: Node[T] = get$newNode.enqueue
+  def get$queued: NodeFuture[T] = get$newNode.enqueue
   def get$newNode: Node[T] = {
     // We've been combining info into the NodeTry, so anyone who continues on the .get will
     // get accumulated info.

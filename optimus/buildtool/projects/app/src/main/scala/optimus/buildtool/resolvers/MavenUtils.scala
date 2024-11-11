@@ -190,7 +190,9 @@ import scala.util.control.NonFatal
       TransitiveMappedResult(
         Module(Organization(af.group), ModuleName(af.name), attr.toMap),
         af.version,
-        af.configuration)
+        // use default config to resolve transitive maven dep properly, for no artifact ivy.runtime extends cases
+        if (af.configuration.isEmpty) DefaultConfiguration else af.configuration
+      )
     }
   }
 

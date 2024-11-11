@@ -12,6 +12,7 @@
 package optimus.graph;
 
 import static optimus.graph.OGScheduler.schedulerVersion;
+import static optimus.graph.cache.NCSupport.isDelayedProxy;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -150,9 +151,12 @@ public abstract class NodeTask extends NodeAwaiter
   // Used by scheduler when waiting for cancelled nodes to stop - see [WAIT_FOR_CANCELLED]
   private static final int STATE_WAITING_FOR_CANCELLED_NODES = 0x80000;
 
-  // The task has a plugin type only for reporting purposes
+  // The task has a plugin even if not actually adapted - e.g. a promise.
   private static final int STATE_HAS_REPORTING_PLUGIN_TYPE = 0x100000;
+  // E.g. the the batch has been sent out:
   private static final int STATE_PLUGIN_FIRED = 0x200000;
+  // Distinct from STATE_ADAPTED, as it is not set pre-emptively:
+  private static final int STATE_PLUGIN_TRACKED = 0x400000;
 
   // Only one walker is allowed at a time
   private static final ReentrantLock _visitLock = new ReentrantLock();
@@ -383,10 +387,7 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   public PrettyStringBuilder writePrettyString(PrettyStringBuilder sb) {
-    NodeTaskInfo nti = executionInfo();
-    if (nti == NodeTaskInfo.Default || nti == NodeTaskInfo.NonEntityNode)
-      sb.append(nodeName().toString(sb.simpleName(), sb.includeHint()));
-    else sb.append(executionInfo().name());
+    sb.append(nodeName().toString(sb.simpleName(), sb.includeHint()));
 
     if (subProfile() != null) {
       sb.append(" ")
@@ -597,6 +598,10 @@ public abstract class NodeTask extends NodeAwaiter
     return (state & STATE_ADAPTED) != 0;
   }
 
+  private static boolean pluginTracked(int state) {
+    return (state & STATE_PLUGIN_TRACKED) != 0;
+  }
+
   public final SchedulerPlugin getPlugin() {
     return executionInfo().getPlugin(scenarioStack());
   }
@@ -608,6 +613,10 @@ public abstract class NodeTask extends NodeAwaiter
 
   public final boolean isAdapted() {
     return isAdapted(_state);
+  }
+
+  public boolean pluginTracked() {
+    return pluginTracked(_state);
   }
 
   public final boolean hasPluginType() {
@@ -626,7 +635,7 @@ public abstract class NodeTask extends NodeAwaiter
     return pluginFired(_state);
   }
 
-  public final void markPluginFired() {
+  public final void setPluginFired() {
     updateState(STATE_PLUGIN_FIRED, 0);
   }
 
@@ -641,6 +650,14 @@ public abstract class NodeTask extends NodeAwaiter
 
   final void markAsAdapted() {
     updateState(STATE_ADAPTED, 0);
+  }
+
+  final void setPluginTracked() {
+    updateState(STATE_PLUGIN_TRACKED, 0);
+  }
+
+  final boolean getAndSetPluginTracked() {
+    return (updateState(STATE_PLUGIN_TRACKED, 0) & STATE_PLUGIN_TRACKED) == STATE_PLUGIN_TRACKED;
   }
 
   public final void markAsHavingPluginType() {
@@ -1221,7 +1238,7 @@ public abstract class NodeTask extends NodeAwaiter
         throw new GraphInInvalidState("Scheduler context is per thread");
 
       boolean recordingAndNotProxy =
-          scenarioStack().isRecordingTweakUsage() && !NCSupport.isDelayedProxy(this);
+          scenarioStack().isRecordingTweakUsage() && !isDelayedProxy(this);
       if (recordingAndNotProxy && child.scenarioStack().isTrackingIndividualTweakUsage())
         throw new GraphInInvalidState("Should never combineInfo from tracked node into XS node");
     }
@@ -1260,8 +1277,12 @@ public abstract class NodeTask extends NodeAwaiter
     throw new GraphInInvalidState();
   }
 
-  /** TODO (OPTIMUS-13315): Change to protected */
-  public final void combineInfo(NodeExtendedInfo childInfo) {
+  /**
+   * TODO (OPTIMUS-13315): Change to protected.
+   *
+   * <p>This method does a lot less than combineInfo, so be very careful when calling it!
+   */
+  public final void partialCombineInfo(NodeExtendedInfo childInfo) {
     // Invariants: null += null == null and A += A == A
     if (childInfo != _xinfo) _xinfo = _xinfo.combine(childInfo, this);
   }
@@ -1872,10 +1893,17 @@ public abstract class NodeTask extends NodeAwaiter
         }
 
         boolean cycleIsUnrecoverable = true;
-        /* Note: 'breaking' the chain as close as possible to the awaitedNode */
+        // Note: 'breaking' the chain as close as possible to the awaitedNode
+        // but should not be a proxy. Proxies state could much more complicated.
+        // Alternatively, it's possible to invoke something like cancelInsteadOfRun()
         var nodeToCompleteWithException = chain.get(chain.marker);
+        var nodeToCompleteIsProxy = isDelayedProxy(nodeToCompleteWithException);
         for (int i = chain.marker; i < chain.size(); i++) {
           var tsk = chain.get(i);
+          if (nodeToCompleteIsProxy && !isDelayedProxy(tsk)) {
+            nodeToCompleteWithException = tsk;
+            nodeToCompleteIsProxy = false;
+          }
           if (tsk.tryToRecoverFromCycle(mask, eq)) { // Note: this takes additional locks
             cycleIsUnrecoverable = false;
             OGScheduler.log.warn("Recovering from XSFT cycle");
@@ -2206,7 +2234,7 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   // _LauncherRef and _LauncherStackHash fields are injected by entityagent.
-
+  @SuppressWarnings("unused")
   private void setLauncherRef(Object ntsk) {}
 
   private Object getLauncherRef() {

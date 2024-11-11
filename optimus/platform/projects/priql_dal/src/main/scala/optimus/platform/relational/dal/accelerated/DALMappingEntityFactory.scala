@@ -13,6 +13,7 @@ package optimus.platform.relational.dal.accelerated
 
 import optimus.entity.ClassEntityInfo
 import optimus.entity.EntityInfoRegistry
+import optimus.entity.IndexInfo
 import optimus.graph.NodeTaskInfo
 import optimus.graph.PropertyInfo
 import optimus.graph.TweakTarget
@@ -21,6 +22,7 @@ import optimus.platform.ScenarioStack
 import optimus.platform.annotations.internal.AccelerateInfoAnnotation
 import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.annotations.internal._projected
+import optimus.platform.dsi.bitemporal.proto.ProtoSerialization.distinctBy
 import optimus.platform.dsi.expressions.Embeddable
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
@@ -45,6 +47,7 @@ import optimus.platform.relational.tree.RelationElement
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.storable.EmbeddableCompanionBase
 import optimus.platform.storable.Entity
+import optimus.platform.storable.Storable
 import optimus.platform.util.ReflectUtils
 import optimus.platform.versioning.TransformerRegistry
 import optimus.platform.versioning.TransformerRegistry.ClientVertex
@@ -245,7 +248,8 @@ object DALMappingEntityFactory {
       memberList += MemberInfo(projectedType, DALProvider.StorageTxTime, DALProvider.StorageTxTimeType)
       memberList += MemberInfo(projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType)
       memberList += MemberInfo(projectedType, DALProvider.InitiatingEvent, DALProvider.InitiatingEventType)
-      for (indexInfo <- entityInfo.indexes) {
+
+      distinctBy[IndexInfo[_ <: Storable, _], String](entityInfo.indexes.iterator, _.name).foreach { indexInfo =>
         val accAnno =
           RelationalUtils.getMethodAnnotation(entityMethods, indexInfo.name, classOf[_projected]).getOrElse(null)
         if (accAnno != null && accAnno.queryable()) {
@@ -328,7 +332,7 @@ object DALMappingEntityFactory {
     val mappedMemberLookup: HashMap[String, MemberInfo] =
       mappedMembers.iterator.map(t => t.name -> t).convertTo(HashMap)
     val columnMemberLookup: HashMap[String, MemberInfo] = {
-      val c2pProps = entityInfo.properties.collect { case p if p.isChildToParent => p.name } toSet
+      val c2pProps = entityInfo.properties.collect { case p if p.isChildToParent => p.name }.toSet
 
       mappedMembers.iterator
         .filter(m => {
@@ -367,7 +371,11 @@ object DALMappingEntityFactory {
     def getCompoundMembers(member: String): Option[List[MemberInfo]] = indirectMembers.get(member)
     def getDefaultValue(member: String): Option[Any] = addedFieldMap.get(member)
     def getOriginalType(member: String): TypeInfo[_] = {
-      replacedMembers.get(member).getOrElse(mappedMemberLookup(member).memberType)
+      replacedMembers
+        .get(member)
+        .orElse(mappedMemberLookup.get(member).map(_.memberType))
+        .orElse(indirectMembers.valuesIterator.flatten.find(_.name == member).map(_.memberType))
+        .get
     }
     def format(id: Id): Expression = {
       val types: Seq[String] = entityInfo.baseTypes.iterator.map { _.runtimeClass.getName }.toIndexedSeq

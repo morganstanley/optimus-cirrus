@@ -150,11 +150,35 @@ object HotspotsTable {
         if (row.nti == null) ValueWithTooltip("", SelectionFlags.toToolTipText(flag))
         else if (row.nti.dependsOnTweakMask().allBitsAreSet())
           ValueWithTooltip("[poison]", SelectionFlags.toToolTipText(flag))
-        else ValueWithTooltip(row.nti.dependsOn.asScala.mkString(", "), SelectionFlags.toToolTipText(flag))
+        else
+          ValueWithTooltip(
+            row.nti.dependsOnTweakMask().toIndexList.asScala.mkString(", "),
+            SelectionFlags.toToolTipText(flag))
       }
       override def toolTip = "Internal Tweak ID Dependencies"
       override def getHeaderColor: Color = nodeInfoSectionColor
     }
+
+  private val c_tweakDependenciesFixedWidth: TableColumn[PNodeTaskInfo] =
+    new TableColumn[PNodeTaskInfo]("Tweak Dependencies (Fixed Width)", 60) {
+      override def getCellRenderer = NPTableRenderer.simpleRenderFontFixedWidth
+      override def valueOf(row: PNodeTaskInfo): ValueWithTooltip[String] = {
+        val flag =
+          if (MarkTweakDependency.dependencyMapIsNull) SelectionFlags.NotFlagged
+          else MarkTweakDependency.getTweakDependencyHighlight(row).getOrElse(SelectionFlags.NotFlagged)
+        ValueWithTooltip(row.tweakDependencies.stringEncodedFixedWidth(), SelectionFlags.toToolTipText(flag))
+      }
+      override def toolTip = "Internal Tweak ID Dependencies (Fixed Width)"
+      override def getHeaderColor: Color = nodeInfoSectionColor
+    }
+
+  private val c_ntiName = new TableColumn[PNodeTaskInfo]("NodeTaskInfo Name", 60) {
+    override def valueOf(row: PNodeTaskInfo): String = if (row.nti == null) "" else row.nti.fullName()
+    override def toolTip = "NodeTaskInfo Name"
+    override def getHeaderColor: Color = nodeInfoSectionColor
+    override def computeSummary(table: NPTable[PNodeTaskInfo], indexes: Seq[Int]): AnyRef = "" // Do not aggregate
+  }
+
   private val c_process = new TableColumnString[PNodeTaskInfo]("Process", 60) {
     override def valueOf(row: PNodeTaskInfo): String = row.getProcess.displayName()
     override def toolTip = "Process name / pid"
@@ -635,7 +659,8 @@ object HotspotsTable {
     ArrayBuffer(c_reuseCycle, c_simpleMatch, c_cacheName)
   cacheDetailsColumns.foreach(_.setCategory(cacheCategory))
 
-  val internalColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] = ArrayBuffer(c_tweakID, c_tweakDependencies, c_process)
+  val internalColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+    ArrayBuffer(c_tweakID, c_tweakDependencies, c_tweakDependenciesFixedWidth, c_process, c_ntiName)
   internalColumns.foreach(_.setCategory(internalCategory))
 
   val allColumnsSorted: ArrayBuffer[TableColumn[PNodeTaskInfo]] =

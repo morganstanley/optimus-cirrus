@@ -42,13 +42,15 @@ class MultiBundleJarInstaller(installer: Installer) extends ComponentBatchInstal
       if (targetBundles.contains(metaBundle)) {
         val name = scopeOutputName(scopeId)
         val sourceJar = pathBuilder.libDir(scopeId).resolveJar(name)
-        val targetDir = pathBuilder.libDir(metaBundle)
-        val targetJar = targetDir.resolveJar(name)
-        val newHash = Hashing.hashFileContent(sourceJar)
-        bundleFingerprints(metaBundle).writeIfChanged(targetJar, newHash) {
-          Files.createDirectories(targetDir.path)
-          AssetUtils.copy(sourceJar, targetJar, replaceIfExists = true)
-        }
+        if (sourceJar.exists) {
+          val targetDir = pathBuilder.libDir(metaBundle)
+          val targetJar = targetDir.resolveJar(name)
+          val newHash = Hashing.hashFileContent(sourceJar)
+          bundleFingerprints(metaBundle).writeIfChanged(targetJar, newHash) {
+            Files.createDirectories(targetDir.path)
+            AssetUtils.copy(sourceJar, targetJar, replaceIfExists = true)
+          }
+        } else None
       } else None
     }
   }.toIndexedSeq

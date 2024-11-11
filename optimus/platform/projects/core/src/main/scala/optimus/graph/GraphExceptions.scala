@@ -19,11 +19,38 @@ import optimus.graph.GraphException.pathAsString
 import optimus.graph.cache.NCSupport
 import optimus.graph.diagnostics.NodeName
 import optimus.graph.tracking.EventCause
+import optimus.platform.EvaluationContext
 import optimus.platform.util.PrettyStringBuilder
 
+import scala.util.{Try, Failure, Success}
 import java.util.{ArrayList => JArrayList}
 
 object GraphException {
+
+  def tryReallyHard(f: => String)(e: Throwable => String): String = {
+    Try(f) match {
+      case Success(s) => s
+      case Failure(ex) =>
+        Try(e(ex)).getOrElse(s"Exception generating exception message for ${ex.getClass.getName}")
+    }
+  }
+
+  def pathAsString(): String = {
+    EvaluationContext.currentNode.enqueuerChain()
+    tryReallyHard {
+      if (DiagnosticSettings.awaitStacks)
+        EvaluationContext.currentNode.enqueuerChain()
+      else
+        GraphException.pathAsString(EvaluationContext.currentNode.nodeStackAny)
+    } { e =>
+      s"Exception generating node stack: ${e.getMessage}"
+    }
+  }
+
+  def scenarioStackString(): String =
+    tryReallyHard(EvaluationContext.currentNode.scenarioStack().prettyString)(e =>
+      s"Exception generating scenario stack: ${e.getMessage}")
+
   def pathAsString(path: JArrayList[NodeTask], includeArgs: Boolean = false): String = {
     if (path eq null) "[no path]"
     else {
@@ -45,6 +72,12 @@ object GraphException {
       sb.toString
     }
   }
+
+  def verifyOffGraphException(path: JArrayList[NodeTask]): GraphFailedTrustException = {
+    val msg = pathAsString(path)
+    new GraphFailedTrustException(msg)
+  }
+
 }
 
 /**
@@ -66,9 +99,8 @@ private[graph] object MandatedExceptionLogger {
   val log: Logger = getLogger(this.getClass)
 }
 
-class GraphFailedTrustException(val path: JArrayList[NodeTask])
-    extends GraphException("You violated the trust the Optimus team gave you!") {
-  override def getMessage: String = "Can't call non RT function from node(s):\n" + pathAsString(path)
+class GraphFailedTrustException private[graph] (nodes: String) extends GraphException(nodes) {
+  override def getMessage: String = s"Can't call non RT function from nodes: $nodes"
 
   MandatedExceptionLogger.log.error("GraphFailedTrustException constructed - logging always", this)
 }

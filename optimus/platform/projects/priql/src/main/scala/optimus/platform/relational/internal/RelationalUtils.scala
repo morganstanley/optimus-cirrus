@@ -12,14 +12,13 @@
 package optimus.platform.relational.internal
 
 import java.lang.annotation.Annotation
-
 import optimus.utils.datetime.ZoneIds
+
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.text.ParseException
 import java.util.Date
 import java.util.concurrent.atomic.AtomicReference
-
 import java.time._
 import java.time.format.DateTimeFormatterBuilder
 import java.time.format.DateTimeFormatter
@@ -247,8 +246,7 @@ object RelationalUtils {
     } else
       data.apar(PriqlSettings.concurrencyLevel, runtimeChecks = false).map(r => key.of(r).hashCode)(Array.breakOut)
 
-    val dataArray = new ArrayBuffer[T](data.size)
-    dataArray ++= data
+    val dataArray = data.toArray[Any].asInstanceOf[Array[T]]
     val resultBuffer = new ArrayBuffer[T](data.size)
 
     sort(hashCodeArray, dataArray)
@@ -276,11 +274,12 @@ object RelationalUtils {
     resultBuffer.toIndexedSeq
   }
 
-  @node private def extractUniqueItemsWithIdenticalHashCode[T](
-      data: ArrayBuffer[T],
+  @async private def extractUniqueItemsWithIdenticalHashCode[T](
+      data: Array[T],
       from: Int,
       until: Int,
       key: RelationKey[T]): Iterable[T] = {
+    val dataView = data.view
     def checkUniqueness(v: Vector[Any]): Unit = {
       val len = v.length
       var i = 0
@@ -301,7 +300,7 @@ object RelationalUtils {
     var u = until
     while (i < u) {
       val item = data(i)
-      if (data.view(from, i).exists(t => equal(t, item))) {
+      if (dataView.slice(from, i).exists(t => equal(t, item))) {
         u -= 1
         val temp = data(u)
         data(u) = data(i)
@@ -314,9 +313,9 @@ object RelationalUtils {
     if (u - from > 1) {
       val keys: Vector[Any] =
         if (key.isSyncSafe)
-          data.slice(from, u).iterator.map(v => key.ofSync(v)).toVector
+          dataView.slice(from, u).iterator.map(v => key.ofSync(v)).toVector
         else
-          data
+          dataView
             .slice(from, u)
             .apar(PriqlSettings.concurrencyLevel, runtimeChecks = false)
             .map(v => key.of(v))(Vector.breakOut)
@@ -324,10 +323,10 @@ object RelationalUtils {
       checkUniqueness(keys)
     }
 
-    data.view(from, u)
+    dataView.slice(from, u)
   }
 
-  private def sort[T](values: Array[Int], adjoint: ArrayBuffer[T]): Unit = {
+  private def sort[T](values: Array[Int], adjoint: Array[T]): Unit = {
 
     def exchange(i: Int, j: Int): Unit = {
       val temp1 = values(i)

@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.cache.silverking
 
+import optimus.buildtool.cache.remote.OperationType
+
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 

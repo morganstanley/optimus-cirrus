@@ -119,6 +119,14 @@ object BuildServerProtocolService {
     }
     (unwrapped, exceptionMessage)
   }
+
+  final case class PythonBspConfig(
+      pythonEnabled: NodeFunction0[Boolean],
+      extractVenvs: NodeFunction0[Boolean],
+      uvCache: Directory,
+      venvCache: Directory,
+      pipCredentialFile: String,
+      uvCredentialFile: String)
 }
 
 private[bsp] trait BSPServiceTrait extends BuildServer with ScalaBuildServer with PythonBuildServer
@@ -135,8 +143,7 @@ class BuildServerProtocolService(
     val builder: NodeFunction0[StandardBuilder],
     val installerFactory: NodeFunction1[Option[Directory], PostBuilder],
     val scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
-    val pythonEnabled: NodeFunction0[Boolean],
-    val extractVenvs: NodeFunction0[Boolean],
+    val pythonBspConfig: BuildServerProtocolService.PythonBspConfig,
     val depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]],
     val directoryFactory: LocalDirectoryFactory,
     val dependencyCopier: DependencyCopier,
@@ -176,14 +183,14 @@ class BuildServerProtocolService(
   }
 
   private[bsp] val structureHasher =
-    StructureHasher(hasher, builder, scalaVersionConfig, pythonEnabled, depMetadataResolvers)
+    StructureHasher(hasher, builder, scalaVersionConfig, pythonBspConfig.pythonEnabled, depMetadataResolvers)
 
   private[bsp] val structureBuilder =
     StructureBuilder(
       builder,
       scalaVersionConfig,
-      pythonEnabled,
-      extractVenvs,
+      pythonBspConfig.pythonEnabled,
+      pythonBspConfig.extractVenvs,
       directoryFactory,
       dependencyCopier,
       structureHasher,

@@ -10,14 +10,15 @@
  * limitations under the License.
  */
 package optimus.buildtool.compilers
+
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilationMessage.Severity
 import optimus.buildtool.artifacts.ResolutionArtifactType
-import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.PartialScopeId
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeResolver
+import optimus.buildtool.resolvers.DependencyInfo
 import optimus.platform._
 
 import scala.util.matching.Regex
@@ -43,9 +44,9 @@ import scala.collection.immutable.Seq
 
   @node def validate(
       internalDirectDeps: Seq[ScopeId],
-      externalDirectDeps: Seq[DependencyDefinition],
+      externalDirectDeps: Seq[DependencyInfo],
       internalTransitiveDeps: Seq[ScopeId],
-      externalTransitiveDeps: Seq[DependencyDefinition],
+      externalTransitiveDeps: Seq[DependencyInfo],
       tpe: ResolutionArtifactType): Seq[CompilationMessage] =
     validateInternal(internalDirectDeps, internalTransitiveDeps, tpe) ++
       validateExternal(externalDirectDeps, externalTransitiveDeps, tpe)
@@ -69,8 +70,8 @@ import scala.collection.immutable.Seq
     }
 
   @node private def validateExternal(
-      externalDirectDeps: Seq[DependencyDefinition],
-      externalTransitiveDeps: Seq[DependencyDefinition],
+      externalDirectDeps: Seq[DependencyInfo],
+      externalTransitiveDeps: Seq[DependencyInfo],
       tpe: ResolutionArtifactType): Seq[CompilationMessage] =
     forbiddenDependencies.apar.flatMap { fd =>
       val allowedIn =
@@ -79,9 +80,10 @@ import scala.collection.immutable.Seq
       else {
         val externalDependencies = if (fd.transitive) externalTransitiveDeps else externalDirectDeps
         externalDependencies.apar.flatMap { externalDep =>
-          if (fd.configurations.isEmpty || fd.configurations.contains(externalDep.configuration))
-            regexDependencyCheck(fd, externalDep.key, tpe, fd.transitive)
-          else Seq.empty
+          if (fd.configurations.isEmpty || fd.configurations.contains(externalDep.config)) {
+            stringDependencyCheck(fd, externalDep.dotModule, tpe, fd.transitive) ++
+              regexDependencyCheck(fd, externalDep.dotModule, tpe, fd.transitive)
+          } else Seq.empty
         }
       }
     }
@@ -101,11 +103,26 @@ import scala.collection.immutable.Seq
       })
       .getOrElse(Seq.empty)
 
+  @node private def stringDependencyCheck(
+      fd: ForbiddenDependencyConfiguration,
+      dependency: String,
+      tpe: ResolutionArtifactType,
+      transitiveCheck: Boolean
+  ): Seq[CompilationMessage] =
+    fd.dependencyId
+      .map { id =>
+        if (id == dependency)
+          Seq(generateForbiddenDependencyErrorMsg(dependency, scopeId, tpe, transitiveCheck))
+        else Seq.empty
+      }
+      .getOrElse(Seq.empty)
+
   @node private def regexDependencyCheck(
       fd: ForbiddenDependencyConfiguration,
       dependency: String,
       tpe: ResolutionArtifactType,
-      transitiveCheck: Boolean): Seq[CompilationMessage] =
+      transitiveCheck: Boolean
+  ): Seq[CompilationMessage] =
     fd.dependencyRegex
       .map { r =>
         if (r.pattern.matcher(dependency).matches())

@@ -21,7 +21,8 @@ import optimus.graph.cache.Caches
 import optimus.graph.cache.ClearCacheCause
 import optimus.graph.diagnostics.GraphDiagnostics
 import optimus.graph.diagnostics.TTrackStats
-import optimus.graph.tracking.DependencyTrackerQueue.QueueStats
+import optimus.graph.tracking.monitoring.QueueActionSummary
+import optimus.graph.tracking.monitoring.QueueStats
 import optimus.graph.tracking.ttracks.Invalidators
 import optimus.graph.tracking.ttracks.TTrack
 import optimus.platform._
@@ -169,7 +170,7 @@ final class DependencyTrackerRoot private (
     if (namedStructureDependency == null) {
       namedStructureDependency = new TTrack(null)
     }
-    EvaluationContext.currentNode.combineInfo(namedStructureDependency)
+    EvaluationContext.currentNode.partialCombineInfo(namedStructureDependency)
   }
   private def fireNamedStructureDependency(): Unit = {
     if (namedStructureDependency != null) {
@@ -409,6 +410,24 @@ object DependencyTrackerRoot {
       .groupBy(queue => queue.tracker.name)
       // we sum up the counts for all the queues with the same name
       .map { case (k, v) => k -> v.foldLeft(QueueStats.zero)(QueueStats.accumulate) }
+
+  /**
+   * Grab queue state summaries for all queues. Note that this isn't atomic over multiple queues.
+   */
+  def summarize(): Seq[QueueActionSummary] =
+    rootsList
+      .flatMap(walkChildren(_))
+      .map(_.queue)
+      .distinct // multiple trackers might share a queue
+      // we sum up the counts for all the queues with the same name
+      .map { q => q.summary }
+
+  /**
+   * Logs a formatted summary of all the queues.
+   */
+  def logSummaryOfAllQueues(): Unit = {
+    log.warn("Dependency tracker queues:\n" + summarize().map(_.formatted).mkString("\n"))
+  }
 
   def ttrackStatsForAllRoots(cleanup: Boolean = false): Map[DependencyTrackerRoot, TTrackStats] = {
     rootsList.map { root =>

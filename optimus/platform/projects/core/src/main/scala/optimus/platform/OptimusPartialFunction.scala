@@ -18,6 +18,7 @@ import optimus.graph.Node
 import optimus.graph.AlreadyCompletedNode
 import optimus.graph.AlreadyFailedNode
 import optimus.graph.CompletableNode
+import optimus.graph.NodeFuture
 import optimus.graph.NodeTaskInfo
 import optimus.graph.OGSchedulerContext
 
@@ -50,13 +51,13 @@ trait OptimusPartialFunction[
 
   @nodeSync
   final def apply(x: T1): R = apply$_newNode(x).get
-  final def apply$queued(x: T1): Node[R] = apply$_newNode(x).enqueue
+  final def apply$queued(x: T1): NodeFuture[R] = apply$_newNode(x).enqueue
   final def apply$withNode(x: T1): R = apply$_newNode(x).get
   private[platform] def apply$_newNode(x: T1): Node[R]
 
   @nodeSync
   final def isDefinedAt(x: T1): Boolean = isDefinedAt$_newNode(x).get
-  final def isDefinedAt$queued(x: T1): Node[Boolean] = isDefinedAt$_newNode(x).enqueue
+  final def isDefinedAt$queued(x: T1): NodeFuture[Boolean] = isDefinedAt$_newNode(x).enqueue
   final def isDefinedAt$withNode(x: T1): Boolean = isDefinedAt$_newNode(x).get
   protected def isDefinedAt$_newNode(x: T1): Node[Boolean]
 
@@ -67,7 +68,7 @@ trait OptimusPartialFunction[
 
       override def executionInfo: NodeTaskInfo = NodeTaskInfo.PartialFunction
       override def run(ec: OGSchedulerContext): Unit = {
-        val n2: Node[Boolean] = pf.isDefinedAt$queued(x)
+        val n2 = pf.isDefinedAt$queued(x)
         n2.continueWith(this, ec)
       }
       override def onChildCompleted(eq: EvaluationQueue, node: NodeTask): Unit = {
@@ -117,7 +118,7 @@ private class OrElsePartialFunction[-A, +B](left: OptimusPartialFunction[A, B], 
     extends OptimusPartialFunction[A, B] {
   override private[platform] def apply$_newNode(x: A): Node[B] = new CompletableNode[B] {
     private var state: Int = _
-    private var child: NodeTask = _
+    private var child: NodeFuture[_] = _
     override def executionInfo(): NodeTaskInfo = NodeTaskInfo.OrElse
     override def run(ec: OGSchedulerContext): Unit = state match {
       case 0 =>

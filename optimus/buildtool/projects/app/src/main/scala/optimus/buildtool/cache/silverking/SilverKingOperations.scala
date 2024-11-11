@@ -11,12 +11,6 @@
  */
 package optimus.buildtool.cache.silverking
 
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.file.Files
-import java.nio.file.Path
-import java.time.Instant
-import java.util.UUID
 import com.ms.silverking.cloud.dht.ForwardingMode
 import com.ms.silverking.cloud.dht.RetrievalType
 import com.ms.silverking.cloud.dht.client.AsyncKeyedOperation
@@ -27,40 +21,47 @@ import com.ms.silverking.cloud.dht.client.DHTSession
 import com.ms.silverking.cloud.dht.client.FailureCause
 import com.ms.silverking.cloud.dht.client.serialization.SerializationRegistry
 import com.ms.silverking.cloud.dht.common.OpResult
-import optimus.buildtool.files.Asset
-import optimus.buildtool.files.Directory
-import optimus.buildtool.files.FileAsset
-import optimus.dal.silverking.SkUtils
-import optimus.dal.silverking.client.SkClientKerberosUtils
-import optimus.graph.Node
-import optimus.graph.NodePromise
-import optimus.graph.NodeTaskInfo
-import optimus.platform.annotations.nodeSync
-import optimus.platform.util.Log
-import optimus.platform._
-import optimus.scalacompat.collection._
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.Properties.obtCategory
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.buildtool.artifacts.CachedArtifactType
-import optimus.buildtool.config.ScopeId.RootScopeId
+import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.ScopeId.RootScopeId
+import optimus.buildtool.files.Asset
+import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace.ObtCrumbSource
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.SilverkingOperation
 import optimus.buildtool.trace.TaskTrace
 import optimus.core.ChainedNodeID
+import optimus.dal.silverking.SkUtils
+import optimus.dal.silverking.client.SkClientKerberosUtils
 import optimus.dal.silverking.client.TraceableAsyncNamespacePerspective
 import optimus.dal.silverking.client.TraceableSkConverters
 import optimus.dsi.trace.TraceId
+import optimus.graph.Node
 import optimus.graph.NodeAwaiter
+import optimus.graph.NodePromise
 import optimus.graph.NodeTask
+import optimus.graph.NodeTaskInfo
+import optimus.platform._
+import optimus.platform.annotations.nodeSync
+import optimus.platform.util.Log
+import optimus.scalacompat.collection._
 
-import scala.jdk.CollectionConverters._
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.Path
+import java.time.Instant
+import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.Future
 import scala.concurrent.TimeoutException
+import scala.jdk.CollectionConverters._
 import scala.reflect._
 import scala.util.Failure
 import scala.util.Success
@@ -442,8 +443,8 @@ private[cache] class SilverKingOperationsImpl private (
     pathSession: DHTSession
 ) extends SilverKingOperations {
   import SilverKingOperations._
-  import SilverKingStore._
   import SilverKingOperationsImpl.Config._
+  import SilverKingStore._
 
   protected val maxDataSize: Int = 5 * 1024 * 1024
 

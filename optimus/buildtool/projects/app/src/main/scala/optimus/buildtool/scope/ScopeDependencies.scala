@@ -25,9 +25,11 @@ import optimus.buildtool.cache.ArtifactCache
 import optimus.buildtool.config.Dependencies
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinitions
+import optimus.buildtool.config.ForbiddenDependencyConfiguration
 import optimus.buildtool.config.HasScopeId
 import optimus.buildtool.config.NativeDependencyDefinition
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.config.Substitution
 import optimus.buildtool.files.Asset
 import optimus.buildtool.resolvers.ExternalDependencyResolver
 import optimus.buildtool.trace.ObtTrace
@@ -43,6 +45,8 @@ import scala.collection.immutable.Seq
     val mavenOnly: Boolean,
     val dependencies: Dependencies,
     externalNativeDependencies: Seq[NativeDependencyDefinition],
+    substitutions: Seq[Substitution],
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration],
     val tpe: ResolutionArtifactType,
     pathBuilder: CompilePathBuilder,
     externalDependencyResolver: ExternalDependencyResolver,
@@ -79,7 +83,10 @@ import scala.collection.immutable.Seq
     }
     DependencyDefinitions(
       directIds = distinctLast(externalDependencyIds()),
-      indirectIds = distinctLast(upstreamExtDeps))
+      indirectIds = distinctLast(upstreamExtDeps),
+      substitutions = substitutions,
+      forbiddenDependencies = forbiddenDependencies
+    )
   }
 
   @node def transitiveInternalDependencyIds: Seq[ScopeId] =
@@ -100,7 +107,7 @@ import scala.collection.immutable.Seq
 
   @node def externalInputsHash: FingerprintArtifact = {
     hasher.hashFingerprint(
-      externalDependencyResolver.fingerprintDependencies(transitiveExternalDependencyIds.all),
+      externalDependencyResolver.fingerprintDependencies(transitiveExternalDependencyIds),
       tpe.fingerprintType
     )
   }

@@ -13,10 +13,16 @@ package optimus.ui
 
 import optimus.graph.NodeKey
 import optimus.graph.tracking.DependencyTrackerBatchUpdater
+import optimus.graph.tracking.RootEventCause
 import optimus.platform._
 import optimus.platform.annotations.handle
 import optimus.platform.storable.Entity
 import optimus.ui.ScenarioReference.ScenarioReferenceState
+
+final case class GestureEventCause(override val cause: String) extends RootEventCause
+object GestureEventCause {
+  def createCause(gesture: Gesture) = GestureEventCause(gesture.getClass.getSimpleName)
+}
 
 trait Gesture {
   private[optimus] def allTargetedScenarioReferences(current: ScenarioReference): Set[ScenarioReference] =
@@ -156,7 +162,7 @@ final case class SetUnderlayGesture private (scenarioRef: ScenarioReference, sce
   private[optimus] override def allTargetedScenarioReferences(current: ScenarioReference) = Set(scenarioRef)
 
   private[optimus] def doGesture(updater: DependencyTrackerBatchUpdater): Unit =
-    updater.updaterFor(scenarioRef).setUnderlayImmediate(scenario)
+    updater.updaterFor(scenarioRef).setUnderlayImmediate(scenario, updater.cause.root)
 }
 
 object SetUnderlayGesture {

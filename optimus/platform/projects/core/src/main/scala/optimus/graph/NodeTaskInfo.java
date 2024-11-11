@@ -127,6 +127,8 @@ public class NodeTaskInfo {
 
   private static final long EXCLUDE_FROM_RTV_NODE_RERUNNER = 1L << 36;
 
+  private static final long DONT_REMOVE_REDUNDANT = 1L << 37;
+
   @SuppressWarnings("FieldMayBeFinal") // Set atomically via Unsafe
   private volatile long _flags;
 
@@ -421,6 +423,14 @@ public class NodeTaskInfo {
 
   final boolean atMostOneWaiter() {
     return (_flags & AT_MOST_ONE_WAITER) != 0;
+  }
+
+  public final boolean canRemoveRedundant() {
+    return (_flags & DONT_REMOVE_REDUNDANT) == 0;
+  }
+
+  public final void dontRemoveRedundant() {
+    updateFlags(DONT_REMOVE_REDUNDANT, true);
   }
 
   public int syncID;
@@ -1173,13 +1183,9 @@ public class NodeTaskInfo {
     return dependsOnTweakMask;
   }
 
-  public final List<Integer> dependsOn() {
-    return CoreUtils.maskToIndexList(dependsOnTweakMask.toArray());
-  }
-
   // check whether actual dependencies are a subset of assumed dependencies
   final void updateDependsOnMask(NodeTask nodeTask) {
-    if (!nodeTask.isTweakPropertyDependencySubsetOf(dependsOnTweakMask)) {
+    if (getCacheable() && !nodeTask.isTweakPropertyDependencySubsetOf(dependsOnTweakMask)) {
       synchronized (this) {
         // We specifically allocate a new instance to allow easy detection of
         TPDMask newMask = new TPDMask();
@@ -1191,6 +1197,10 @@ public class NodeTaskInfo {
     }
   }
 
+  /**
+   * does not check for cacheability since this is only called from proxies and if you are in a
+   * proxy the underlying node has to be cacheable
+   */
   public final void updateDependsOnMask(TPDMask mask) {
     if (!mask.subsetOf(dependsOnTweakMask)) {
       synchronized (this) {
@@ -1287,11 +1297,6 @@ public class NodeTaskInfo {
   /** Do not use */
   public final void DEBUG_ONLY_markNeverPropertyTweaked() {
     updateFlags(WAS_PROPERTY_TWEAKED | WAS_MARK_PTWEAKED_CALLED, false);
-  }
-
-  /** Do not use */
-  public final void DEBUG_ONLY_markInstanceUntweaked() {
-    updateFlags(0, WAS_INSTANCE_TWEAKED | TWEAKABLE);
   }
 
   public boolean trackForInvalidation() {
@@ -1558,28 +1563,35 @@ public class NodeTaskInfo {
 
     if ((flags & TWEAKABLE) != 0) {
       sb.append("=");
+      // redundant as WAS_TWEAKED = WAS_INSTANCE_TWEAKED | WAS_PROPERTY_TWEAKED
       if ((flags & WAS_TWEAKED) != 0) {
-        if ((flags & WAS_INSTANCE_TWEAKED) != 0) {
-          sb.append("i");
+        boolean instanceTweaked = (flags & WAS_INSTANCE_TWEAKED) != 0;
+        boolean propertyTweaked = (flags & WAS_PROPERTY_TWEAKED) != 0;
+        if (instanceTweaked && propertyTweaked) {
+          sb.append("ip - instance and property tweaked<br>");
+        } else {
+          if (instanceTweaked) {
+            sb.append("i - instance tweaked<br>");
+          }
+          if (propertyTweaked) {
+            sb.append("p - property tweaked<br>");
+          }
         }
-        if ((flags & WAS_PROPERTY_TWEAKED) != 0) {
-          sb.append("p");
-        }
-        sb.append(" - Tweaked<br>");
       } else {
-        sb.append(" - Tweakable, but not tweaked<br>");
+        sb.append(" - tweakable, but not tweaked<br>");
       }
     }
 
     if ((flags & DONT_CACHE) == 0) {
-      sb.append("$ - cacheable");
+      sb.append("$ - cacheable<br>");
       if ((flags & FAVOR_REUSE) != 0) {
-        sb.append(" x - Favor Reuse: ").append(policy);
+        sb.append("x - favor reuse (aka XS aka Cross Scenario Reuse): ")
+            .append(policy)
+            .append("<br>");
       }
       if ((flags & LOCAL_CACHE) != 0) {
-        sb.append(" * - local");
+        sb.append("* - local cache<br>");
       }
-      sb.append("<br>");
     }
 
     if ((flags & SCENARIOINDEPENDENT) != 0) {
@@ -1590,34 +1602,37 @@ public class NodeTaskInfo {
       sb.append("[sync] - single threaded<br>");
     }
     if ((flags & ASYNC_NEEDED) != 0) {
-      sb.append("a - async was helpful<br>");
+      sb.append("a - async was helpful (aka async needed)<br>");
     }
+
     if ((flags & EXTERNALLY_CONFIGURED_CUSTOM_CACHE) != 0) {
-      sb.append("@ - Externally configured custom cache<br>");
+      sb.append("@ - externally configured custom cache<br>");
     }
     if ((flags & EXTERNALLY_CONFIGURED_POLICY) != 0) {
-      sb.append("@ - Externally configured cache policy<br>");
+      sb.append("@ - externally configured cache policy<br>");
     }
+
     if ((flags & PROFILER_UI_CONFIGURED) != 0) {
-      sb.append("UI - Configured in this Profiler UI session<br>");
+      sb.append("UI - configured in this Profiler UI session<br>");
     }
     if ((flags & AT_MOST_ONE_WAITER) != 0) {
-      sb.append("1 - At most one waiter");
+      sb.append("1 - at most one waiter<br>");
     }
     if ((flags & GIVEN_RUNTIME_ENV) != 0) {
-      sb.append("R - Given initial Runtime environment");
+      sb.append("R - given initial Runtime environment<br>");
     }
     if ((flags & PROFILER_INTERNAL) != 0) {
-      sb.append("g - internal graph node");
+      sb.append("g - internal graph node<br>");
     }
     if ((flags & ATTRIBUTABLE_USER_CODE) != 0) {
-      sb.append("u - user attributable code");
+      sb.append(
+          "u - either [non-entity node] or [node-function] (see NodeTaskInfo Name column)<br>");
     }
     if ((flags & PROFILER_PROXY) != 0) {
-      sb.append("~ - proxy node");
+      sb.append("~ - proxy node<br>");
     }
     if ((flags & SHOULD_LOOKUP_PLUGIN) != 0) {
-      sb.append("+ - should lookup plugin");
+      sb.append("+ - should lookup plugin<br>");
     }
 
     sb.append("</html>");
@@ -1660,7 +1675,7 @@ public class NodeTaskInfo {
     return (_flags & TRACE_SELF_AND_PARENT) != 0;
   }
 
-  static NodeTaskInfo internal(String name) {
+  public static NodeTaskInfo internal(String name) {
     return internal(name, 0);
   }
 
@@ -1699,7 +1714,7 @@ public class NodeTaskInfo {
   public static final NodeTaskInfo NonEntityNode =
       userDefined("[non-entity node]", ATTRIBUTABLE_USER_CODE);
   public static final NodeTaskInfo NonEntityAlwaysUniqueNode =
-      userDefined("[non-entity node]", ATTRIBUTABLE_USER_CODE | AT_MOST_ONE_WAITER);
+      userDefined("[non-entity always unique node]", ATTRIBUTABLE_USER_CODE | AT_MOST_ONE_WAITER);
   public static final NodeTaskInfo StoredNodeFunction =
       userDefined("[node-function]", ATTRIBUTABLE_USER_CODE);
 

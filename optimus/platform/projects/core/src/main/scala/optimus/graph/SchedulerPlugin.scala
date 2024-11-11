@@ -15,6 +15,7 @@ import optimus.breadcrumbs.crumbs.RequestsStallInfo
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.NodeInfoAppender
 import optimus.core.StallInfoAppender
+import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
 import optimus.platform.EvaluationQueue
 
 import java.lang.ref.WeakReference
@@ -46,14 +47,13 @@ final class PluginType private (val name: String, @transient private var id: Int
     val tracker = lt.pluginTracker
     // Should be uncontentended except when sampling is occurring
     tracker.synchronized {
-      // starts only increases, so you can calculate the number of starts in a time range
-      tracker.starts.update(this, 1)
-      tracker.adaptedNodes.track(this, ntsk)
+      if (!ntsk.getAndSetPluginTracked()) {
+        // starts only increases, so you can calculate the number of starts in a time range
+        tracker.starts.update(this, 1)
+        if (!tracker.adaptedNodes.track(this, ntsk))
+          tracker.overflow.update(this, 1)
+      }
     }
-  }
-
-  def recordLaunch(ntsk: NodeTask): Unit = if (DiagnosticSettings.pluginCounts) {
-    OGLocalTables.borrow(recordLaunch(_, ntsk))
   }
 
   def decrementInFlightTaskCount(eq: EvaluationQueue): Unit = if (DiagnosticSettings.pluginCounts) {
@@ -145,7 +145,7 @@ object PluginType {
 
     def diff(pc: Counter): Counter = {
       val c = snap().getSafe
-      c.accumulate(pc, -1)
+      c.accumulate(pc, mult = -1)
       c
     }
 
@@ -160,14 +160,18 @@ object PluginType {
       val vv = for (i <- counts.indices if counts(i) != 0) yield vs(i).name -> counts(i)
       vv.toMap
     }
+    def toMapMillis: Map[String, Long] = this.synchronized {
+      val vv = for (i <- counts.indices if counts(i) != 0) yield vs(i).name -> counts(i) / NANOSPERMILLI
+      vv.toMap
+    }
 
     override def toString: String = toMap.toString
   }
 
+  private val maxNodeArraySize = DiagnosticSettings.maxPluginNodesTracked
   private val forceCompactFloor = 100
   private val minNodeArraySize = 4
 
-  // Not using NodeInfoAppender, because we need to know plugin type after completion
   private val pluginTypes = NodeInfoAppender.accessor[PluginType]
   def setPluginType(ntsk: NodeTask, pluginType: PluginType): PluginType = pluginTypes.set(ntsk, pluginType)
 
@@ -187,19 +191,32 @@ object PluginType {
     private var resizes = 0
     private var maxSize = minNodeArraySize
 
-    private def track(ref: WeakReference[NodeTask]): Unit = this.synchronized {
+    // If accumulating nodes globally and under lock, use persistent snap destination to avoid repeatedly allocating the
+    // node array.
+    private var snapBuffer: AdaptedNodesOfOnePlugin = null
+
+    def resetNodesButRetainArray(): Unit = this.synchronized {
+      nNodes = 0
+    }
+
+    private def track(ref: WeakReference[NodeTask]): Boolean = this.synchronized {
       if (nNodes > nextForcedCompact)
         removeCollectedOrCompleted()
-      if (nNodes == nodes.length) {
-        nodes = util.Arrays.copyOf(nodes, nodes.length * 2)
-        if (nodes.size > maxSize)
-          maxSize = nodes.size
-        resizes += 1
+      if (nNodes > maxNodeArraySize)
+        false
+      else {
+        if (nNodes == nodes.length) {
+          nodes = util.Arrays.copyOf(nodes, nodes.length * 2)
+          if (nodes.size > maxSize)
+            maxSize = nodes.size
+          resizes += 1
+        }
+        nodes(nNodes) = ref
+        nNodes += 1
       }
-      nodes(nNodes) = ref
-      nNodes += 1
+      true
     }
-    def track(ntsk: NodeTask): Unit = track(new WeakReference[NodeTask](ntsk))
+    private[graph] def track(ntsk: NodeTask): Boolean = track(new WeakReference[NodeTask](ntsk))
 
     // Called by AdaptedNodesOfAllPlugins.accumulate under forAllRemovables lock
     def accumulateAdaptedNodesFromOnePlugin(other: GuaranteedSnapped[AdaptedNodesOfOnePlugin]): Unit = {
@@ -245,10 +262,22 @@ object PluginType {
       i
     }
 
-    def snap(): GuaranteedSnapped[AdaptedNodesOfOnePlugin] = this.synchronized {
-      val nt = new AdaptedNodesOfOnePlugin
-      // Don't compact() here, as this occurs under forAllRemovables lock
-      nt.nodes = util.Arrays.copyOf(nodes, nNodes)
+    def snap(intoBuffer: Boolean): GuaranteedSnapped[AdaptedNodesOfOnePlugin] = this.synchronized {
+      val nt = if (intoBuffer) {
+        // If snapping into the persistent global store we only grow the array, never shrink it.
+        if (Objects.isNull(snapBuffer))
+          snapBuffer = new AdaptedNodesOfOnePlugin
+        if (snapBuffer.nodes.length < nodes.length)
+          snapBuffer.nodes = new Array(nodes.length * 3 / 2)
+        System.arraycopy(nodes, 0, snapBuffer.nodes, 0, nNodes)
+        snapBuffer
+      } else {
+        // Compact if we're not snapping into the global store, in which case compaction will occur later.
+        removeCollectedOrCompleted()
+        val nt = new AdaptedNodesOfOnePlugin
+        nt.nodes = util.Arrays.copyOf(nodes, nodes.length)
+        nt
+      }
       nt.nNodes = nNodes
       nt.resizes = resizes
       nt.maxSize = maxSize
@@ -319,51 +348,55 @@ object PluginType {
 
   final class AdaptedNodesOfAllPlugins {
     // indexed by plugin id
-    private var trackers: Array[AdaptedNodesOfOnePlugin] = new Array(PluginType.maxId * 2)
+    private var individualPlugins: Array[AdaptedNodesOfOnePlugin] = new Array(PluginType.maxId * 2)
     private val random = new Random()
 
+    def resetNodesButRetainArray(): Unit = this.synchronized {
+      individualPlugins.foreach(ip => if (Objects.nonNull(ip)) ip.resetNodesButRetainArray())
+    }
+
     private def ensureAlloc(id: Int): Unit = {
-      if (trackers.length <= id) {
+      if (individualPlugins.length <= id) {
         val newLength = Math.max(PluginType.maxId, id) * 2
-        trackers = util.Arrays.copyOf(trackers, newLength)
+        individualPlugins = util.Arrays.copyOf(individualPlugins, newLength)
       }
     }
 
-    private def getTracker(id: Int): AdaptedNodesOfOnePlugin = {
+    private def getAdaptedNodeTracker(id: Int): AdaptedNodesOfOnePlugin = {
       ensureAlloc(id)
-      if (Objects.isNull(trackers(id)))
-        trackers(id) = new AdaptedNodesOfOnePlugin
-      trackers(id)
+      if (Objects.isNull(individualPlugins(id)))
+        individualPlugins(id) = new AdaptedNodesOfOnePlugin
+      individualPlugins(id)
     }
 
-    def track(pt: PluginType, ntsk: NodeTask): Unit = this.synchronized {
-      getTracker(pt.id).track(ntsk)
+    def track(pt: PluginType, ntsk: NodeTask): Boolean = this.synchronized {
+      getAdaptedNodeTracker(pt.id).track(ntsk)
     }
 
-    private def snapArray(): GuaranteedSnapped[Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]]] = {
+    private def snapArray(intoBuffer: Boolean): GuaranteedSnapped[Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]]] = {
       val opans: Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]] =
-        trackers.map(t => if (t ne null) t.snap() else null.asInstanceOf[GuaranteedSnapped[AdaptedNodesOfOnePlugin]])
+        individualPlugins.map(t =>
+          if (t ne null) t.snap(intoBuffer) else null.asInstanceOf[GuaranteedSnapped[AdaptedNodesOfOnePlugin]])
       guaranteeSnapped(opans)
     }
 
-    // Called under forAllRemovables lock to pull in adapted nodes across all threads
-    def accumulate(nts: AdaptedNodesOfAllPlugins): Unit = if (nts.trackers.length > 0) {
-      ensureAlloc(nts.trackers.length - 1)
-      val c: Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]] = nts.snapArray().getSafe
+    def accumulate(from: AdaptedNodesOfAllPlugins, intoBuffer: Boolean): Unit = if (from.individualPlugins.length > 0) {
+      ensureAlloc(from.individualPlugins.length - 1)
+      val c: Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]] = from.snapArray(intoBuffer).getSafe
       c.indices.foreach { id =>
-        val us = trackers(id)
+        val us = individualPlugins(id)
         val them = c(id)
         if (Objects.nonNull(us) && nonNullSnapped(them))
           us.accumulateAdaptedNodesFromOnePlugin(them)
         else if (Objects.isNull(us))
-          trackers(id) = them.getSafe
+          individualPlugins(id) = them.getSafe
       }
     }
 
     private def makeMap[T](f: AdaptedNodesOfOnePlugin => Option[T]): Map[PluginType, T] = {
       val ret = mutable.HashMap.empty[PluginType, T]
-      trackers.indices.foreach { id =>
-        val t = trackers(id)
+      individualPlugins.indices.foreach { id =>
+        val t = individualPlugins(id)
         if (Objects.nonNull(t)) {
           f(t).foreach {
             ret += vs(id) -> _
@@ -383,7 +416,7 @@ object PluginType {
     }
     def countNodes(): Map[PluginType, Int] = makeMap(t => Some(t.countNodes()))
     def stats(): Map[PluginType, NodeStats] = makeMap(t => Some(t.stats()))
-    def resetStats(): Unit = trackers.foreach(t => if (Objects.nonNull(t)) t.resetStats())
+    def resetStats(): Unit = individualPlugins.foreach(t => if (Objects.nonNull(t)) t.resetStats())
 
     def nodeSet(): Map[PluginType, Set[Int]] = makeMap(t => Some(t.nodeSet()))
   }
@@ -393,7 +426,8 @@ object PluginType {
     val completed = new Counter
     val fired = new Counter
     val fullWaitTimes = new Counter
-    private val counters = Array(starts, completed, fired, fullWaitTimes)
+    val overflow = new Counter
+    private val counters = Array(starts, completed, fired, fullWaitTimes, overflow)
     private val nCounters = counters.size
     val adaptedNodes = new AdaptedNodesOfAllPlugins
 
@@ -406,45 +440,53 @@ object PluginType {
 
     def diff(rhs: PluginTracker): PluginTracker = {
       val pt = new PluginTracker
-      pt.accumulate(this, 1)
-      pt.accumulate(rhs, -1)
+      pt.accumulate(from = this, mult = 1, intoBuffer = false)
+      pt.accumulate(from = rhs, mult = -1, intoBuffer = false)
       pt
     }
 
     override def toString: String =
       s"$cumulativeCounts $snapCounts fullWaitTimes=$fullWaitTimes adaptedNodes=${adaptedNodes.stats()}"
-    def accumulate(from: PluginTracker, mult: Long): Unit = {
+    def accumulate(from: PluginTracker, mult: Long, intoBuffer: Boolean): Unit = {
       var i = 0
       while (i < nCounters) {
         counters(i).accumulate(from.counters(i), mult)
         i += 1
       }
-      adaptedNodes.accumulate(from.adaptedNodes)
+      adaptedNodes.accumulate(from.adaptedNodes, intoBuffer)
     }
   }
 
-  def snapAggregatePluginCounts(): PluginTracker = PluginType.synchronized {
+  def snapAggregatePluginCountsIntoGlobalBuffer(): PluginTracker = PluginType.synchronized {
     val pc = new PluginTracker
-    OGLocalTables.forAllRemovables((rt: RemovableLocalTables) => pc.accumulate(rt.pluginTracker, 1))
+    OGLocalTables.forAllRemovables((rt: RemovableLocalTables) => pc.accumulate(rt.pluginTracker, 1, true))
     pc
   }
 
-  def fire(ns: Iterable[NodeTask]): Unit = fire(ns, PluginType.Other)
-  def fire(ns: Iterable[NodeTask], default: PluginType): Unit = {
+  def fire(ntsk: NodeTask): Unit = fire(Seq(ntsk))
+
+  def fire(ns: Iterable[NodeTask]): Unit = {
     OGLocalTables.borrow { lt =>
       ns.foreach { n =>
-        val pt0 = n.getReportingPluginType
-        if (Objects.isNull(pt0)) {
-          MonitoringBreadcrumbs.sendGraphFatalErrorCrumb(
-            "NodeTask with no plugin type",
-            ntsk = n,
-            exception = new NullPointerException(),
-            logFile = null,
-            logMsg = null)
+        if (!n.pluginFired()) {
+          val pt = n.getReportingPluginType
+          if (Objects.isNull(pt)) {
+            MonitoringBreadcrumbs.sendGraphFatalErrorCrumb(
+              "NodeTask with no plugin type",
+              ntsk = n,
+              exception = new NullPointerException(),
+              logFile = null,
+              logMsg = null
+            )
+            return
+          }
+          n.setPluginFired()
+          lt.pluginTracker.fired.update(pt, 1)
+          // If we're fired without being adapted, record the adapting now
+          if (!n.pluginTracked) {
+            pt.recordLaunch(lt, n)
+          }
         }
-        val pt = if (Objects.isNull(pt0)) default else pt0
-        n.markPluginFired()
-        lt.pluginTracker.fired.update(pt, 1)
       }
     }
   }
@@ -515,6 +557,6 @@ final case class GraphStallInfo(
 object GraphStallInfo {
   def apply(pluginOpt: Option[SchedulerPlugin], nodeTaskInfo: NodeTaskInfo): GraphStallInfo = pluginOpt match {
     case Some(plugin) => plugin.graphStallInfo(nodeTaskInfo)
-    case None => apply(PluginType.Other, nodeTaskInfo.name)
+    case None         => apply(PluginType.Other, nodeTaskInfo.name)
   }
 }

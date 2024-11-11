@@ -100,7 +100,7 @@ trait NodeSynthesis { this: UntypedUtils =>
         val queuedDefDef = atPos(tree.pos.focus) {
           val rt = tpt match {
             case TypeTree() => TypeTree()
-            case _          => AppliedTypeTree(NodeType, List(dupTree(tpt) setPos NoPosition))
+            case _          => AppliedTypeTree(NodeFutureType, List(dupTree(tpt) setPos NoPosition))
           }
           DefDef(queuedMods, mkGetNodeName(name), Nil, Nil, rt, q"$lazyHolderName.${newTermName("deref$queued")}")
         }

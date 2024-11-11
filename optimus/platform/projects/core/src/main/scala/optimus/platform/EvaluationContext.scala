@@ -19,6 +19,7 @@ import optimus.graph._
 import optimus.platform.PluginHelpers.toNode
 import optimus.platform.dal.EntityResolver
 import optimus.platform.inputs.loaders.FrozenNodeInputMap
+import optimus.graph.ConvertByNameToByValueNode.removeRedundantTweaks
 
 import scala.util.control.NonFatal
 
@@ -168,7 +169,7 @@ object EvaluationContext {
         val cn = currentNode
         val path = cn.nodeStackToCacheable()
         if (path.isEmpty) path.add(cn)
-        val exception = new GraphFailedTrustException(path)
+        val exception = GraphException.verifyOffGraphException(path)
         if (verifyOffGraphNonFatal || beNice)
           optimus.core.log.error("**********************************************************************", exception)
         else
@@ -260,13 +261,7 @@ object EvaluationContext {
   // A given function that is specific for Loom
   final def givenL[T](scenario: Scenario, f: => T): T = {
     val node = toNode(f _)
-    val waitFor =
-      if (Settings.convertByNameToByValue && scenario.hasReducibleToByValueTweaksWithNested)
-        new ConvertByNameToByValueNode(scenarioStack, scenario, node)
-      else
-        given(scenarioStack.createChild(scenario, node), node)
-
-    waitFor.get
+    given(scenario, node).get
   }
 
   final def given[T](scenario: Scenario, node: Node[T]): Node[T] = {
@@ -277,9 +272,14 @@ object EvaluationContext {
     // if (Settings.schedulerAsserts && !scenario.isTrivial)
     //  throw new GraphException("Wrong API usage! Did you mean to use TrackingScenario.given()?")
 
-    if (Settings.convertByNameToByValue && scenario.hasReducibleToByValueTweaksWithNested)
+    if (Settings.convertByNameToByValue && scenario.existsWithNested(_.hasReducibleToByValueTweaks))
       new ConvertByNameToByValueNode(scenarioStack, scenario, node)
-    else
+    else if (Settings.removeRedundantTweaks && scenario.existsWithNested(_.hasPossiblyRedundantTweaks)) {
+      // if we do not have nested we can just remove the tweaks directly and not make a whole new node, if there are nested ConvertByNameToByValueNode takes care of it for us
+      if (scenario.nestedScenarios.isEmpty)
+        given(scenarioStack.createChild(removeRedundantTweaks(scenario, scenarioStack), node), node)
+      else new ConvertByNameToByValueNode(scenarioStack, scenario, node)
+    } else
       given(scenarioStack.createChild(scenario, node), node)
   }
 
@@ -483,4 +483,16 @@ abstract class EvaluationQueue {
 
   def maybeSaveAwaitStack(ntsk: NodeTask): Unit = {}
 
+}
+
+/**
+ * A very special EvaluationQueue that can't be actually used, and will throw on any attempt.
+ * Only to be used in places where EvaluationQueue argument is required, but is effectively unused.
+ */
+object NoEvaluationQueue extends EvaluationQueue {
+
+  override def enqueue(task: NodeTask): Unit = throw new IllegalStateException(
+    "NoEvaluationQueue cannot be used to enqueue any nodes")
+
+  override def scheduler: Scheduler = throw new IllegalStateException("NoEvaluationQueue does not know any scheduler")
 }

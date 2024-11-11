@@ -206,6 +206,12 @@ class KafkaListenerArgs {
     usage = "If writing plex files, close (potentially to be reopened later) after ms of inactivity, default 60000")
   val closeAfterMs: Int = closeAfterMsDefault
 
+  @ArgOption(
+    name = "--dedupCacheSize",
+    usage = "Number of dedup keys to retain in memory"
+  )
+  val nDedupKeys = 100 * 1000 * 1000
+
   @ArgOption(name = "--help", aliases = Array("-h"), usage = "Help.")
   val help = false
 
@@ -460,7 +466,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private var continue = true
   private var badUuids = 0L
 
-  private val dedupCache = Caffeine.newBuilder().maximumSize(1000 * 1000).build[String, Object]()
+  private val dedupCache = Caffeine.newBuilder().maximumSize(nDedupKeys).build[String, Object]()
   private val dummy = new Object
   def isDuplicate(string2JsValue: Map[String, JsValue]): Boolean = {
     getAs[String](string2JsValue, "dedupKey") match {

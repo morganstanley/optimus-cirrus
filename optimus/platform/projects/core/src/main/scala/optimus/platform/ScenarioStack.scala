@@ -179,7 +179,8 @@ final case class ScenarioStack private[optimus] (
 
   /** Scenario State is one to one with ScenarioStack but we don't want to expose to the 'user' all innards */
   def asScenarioState: ScenarioState = ScenarioState(this)
-  def asUntweakedScenarioState: UntweakedScenarioState = new UntweakedScenarioState(env, siParams.scopedPlugins, siParams.nodeInputs.freeze)
+  def asUntweakedScenarioState: UntweakedScenarioState =
+    new UntweakedScenarioState(env, siParams.scopedPlugins, siParams.nodeInputs.freeze)
 
   // finds the parent ss that has the current scenarioReference as scenRef
   private[optimus] def findParentByScenarioReferenceId(scenRef: ScenarioReference): ScenarioStack = {
@@ -314,6 +315,7 @@ final case class ScenarioStack private[optimus] (
           }
 
           // Print the stack
+          hb += this._cacheID.tweakMaskString
           hb.squareBracketsIndent {
             if (!ScenarioStack.isSyntheticScenario(this)) {
               if (hb.cfg.scenarioStackEffective || !_cacheID.isEmpty)
@@ -1126,7 +1128,7 @@ final case class ScenarioStack private[optimus] (
     if (_parent ne ssShared.scenarioStack) {
       _tweakableListener = rt // First so that visibility of _parent write implies visibility of this write
       _parent = ssShared.scenarioStack
-      _stableSS = this // stableSS is already always equals to this, except that dist managed to modify this
+      _stableSS = this // stableSS is already always equals to `this`, except that dist managed to modify stableSS
     }
   }
 
