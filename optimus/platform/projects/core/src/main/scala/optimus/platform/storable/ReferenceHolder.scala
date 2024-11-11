@@ -11,15 +11,15 @@
  */
 package optimus.platform.storable
 
-import optimus.platform.annotations._
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.TemporalContext
+import optimus.platform.annotations._
 
 /**
  */
 trait ReferenceHolder[T <: Storable] {
   @nodeSync def payload: T
-  def payload$queued: Node[T]
+  def payload$queued: NodeFuture[T]
 
   /**
    * the most specific type of the underlying reference that is known. This result is not stable, if a more exact type
@@ -32,9 +32,9 @@ trait ReferenceHolder[T <: Storable] {
 trait VersionHolder[T <: Storable] {
   def creationContext: TemporalContext
   @nodeSync def payloadAt(tc: TemporalContext): T
-  def payloadAt$queued(tc: TemporalContext): Node[T]
+  def payloadAt$queued(tc: TemporalContext): NodeFuture[T]
   @nodeSync def payloadOptionAt(tc: TemporalContext, entitledOnly: Boolean = false): Option[T]
-  def payloadOptionAt$queued(tc: TemporalContext, entitledOnly: Boolean = false): Node[Option[T]]
+  def payloadOptionAt$queued(tc: TemporalContext, entitledOnly: Boolean = false): NodeFuture[Option[T]]
 }
 
 object HolderType {

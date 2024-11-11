@@ -34,7 +34,7 @@ private[buildtool] object OptimusBuildTool
   val originalStdOut: PrintStream = System.out
   val originalStdErr: PrintStream = System.err
 
-  val DefaultArtifactVersionNumber = "1.40"
+  val DefaultArtifactVersionNumber = "1.42"
 
   override protected def parseCmdline(args: Array[String], exitHandler: ExitHandler): Unit = {
     super.parseCmdline(args, exitHandler)
@@ -44,7 +44,12 @@ private[buildtool] object OptimusBuildTool
     // Run this code as early as possible. Because we're modifying the log destination after startup,
     // we'll unfortunately end up with a (hopefully empty) logfile in the default destination (generally
     // %TEMP%/obt).
-    OptimusBuildToolBootstrap.initLogging(Directory(logDir), cmdLine.debug, cmdLine.bspDebug)
+    OptimusBuildToolBootstrap.initLogging(
+      Directory(logDir),
+      cmdLine.debug,
+      cmdLine.bspDebug,
+      cmdLine.histoFreqSecs
+    )
 
     if (cmdLine.bspServer) {
       def printStream(name: String) = {

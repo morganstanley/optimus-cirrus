@@ -78,6 +78,7 @@ object NamingConventions {
   val JarExt = "jar"
   val ZipExt = "zip"
   val TarGzExt = "tar.gz"
+  val TpaExt = "tpa"
   // json files
   val JsonExt = "json"
   val IdzExt = "idz"

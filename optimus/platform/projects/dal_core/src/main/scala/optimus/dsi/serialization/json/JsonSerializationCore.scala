@@ -24,12 +24,10 @@ import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.storable.CmReference
 import optimus.platform.storable.EntityReference
-import optimus.platform.storable.FinalReference
 import optimus.platform.storable.SerializedEntity
 import optimus.platform.storable.SerializedEntity.EntityLinkage
 import optimus.platform.storable.SerializedKey
 import optimus.platform.storable.StorableReference
-import optimus.platform.storable.TemporaryReference
 
 import java.time.Instant
 import scala.collection.immutable
@@ -235,17 +233,19 @@ trait JsonSerializationBase {
 }
 
 trait JsonSerialization[T] extends JsonSerializationBase {
-  def toJson(p: T): String = JacksonObjectMapper.mapper.writeValueAsString(toJsonMap(p))
-  def toJsonBytes(p: T): Array[Byte] = JacksonObjectMapper.mapper.writeValueAsBytes(toJsonMap(p))
-  def toJsonPrettyPrint(p: T): String =
-    JacksonObjectMapper.mapper.writerWithDefaultPrettyPrinter.writeValueAsString(toJsonMap(p))
-  def toJsonNode(p: T): JsonNode = {
-    JacksonObjectMapper.mapper.valueToTree(p)
-  }
+  import JacksonObjectMapper.mapper
+  def toJson(p: T): String = mapper.writeValueAsString(toJsonMap(p))
+  def toJsonBytes(p: T): Array[Byte] = mapper.writeValueAsBytes(toJsonMap(p))
+  def toJsonBytesSeq(p: Seq[T]): Array[Byte] = mapper.writeValueAsBytes(p.map(toJsonMap))
+  def toJsonPrettyPrint(p: T): String = mapper.writerWithDefaultPrettyPrinter.writeValueAsString(toJsonMap(p))
+  def toJsonNode(p: T): JsonNode = mapper.valueToTree(p)
   def fromJson(json: String): T = fromJsonMap(readJsonMap(json))
-  def fromJsonBytes(bytes: Array[Byte]): T = fromJsonMap(
-    JacksonObjectMapper.mapper.readValue(bytes, classOf[Map[String, Any]]))
-  def fromJsonNode[V](json: JsonNode, v: Class[V]): V = JacksonObjectMapper.mapper.treeToValue(json, v)
+  def fromJsonBytes(bytes: Array[Byte]): T = fromJsonMap(mapper.readValue(bytes, classOf[Map[String, Any]]))
+  def fromJsonBytesSeq(bytes: Array[Byte]): Seq[T] = {
+    val elements = mapper.readValue(bytes, classOf[Seq[Map[String, Any]]])
+    elements.map(fromJsonMap)
+  }
+  def fromJsonNode[V](json: JsonNode, v: Class[V]): V = mapper.treeToValue(json, v)
 
   def toJsonMap(p: T): Map[String, Any]
   def fromJsonMap(map: Map[String, Any]): T

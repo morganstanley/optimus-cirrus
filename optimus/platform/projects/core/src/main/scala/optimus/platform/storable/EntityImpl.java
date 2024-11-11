@@ -16,21 +16,38 @@ import java.io.ObjectInputStream;
 import java.io.Serial;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import msjava.base.util.uuid.MSUuid;
 import msjava.slf4jutils.scalalog.Logger;
 import optimus.entity.ModuleEntityInfo;
+import optimus.graph.AlreadyCompletedNode;
 import optimus.graph.AuditTrace;
 import optimus.graph.GraphInInvalidState;
+import optimus.graph.Node;
+import optimus.graph.NodeAwaiter;
+import optimus.graph.NodeFuture;
+import optimus.graph.NodeStateMachine;
 import optimus.graph.Settings;
 import optimus.platform.EvaluationContext$;
+import optimus.platform.EvaluationQueue;
 import optimus.platform.TemporalContext;
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation;
 import optimus.platform.pickling.PickledInputStream;
 import optimus.platform.pickling.PickledOutputStream;
 import optimus.platform.pickling.ReflectiveEntityPickling$;
 
+//
+// A key reason to have this class rather than have all the implementations in the Entity trait is
+// so that the abstractions are not visible to "user" code, that is, code that is visible to the
+// compiler.
+// We have methods that only the entity plug-in should be aware of and use as their usage are based
+// on assumptions
+// that only the entity-plugin can be sure of. For example, the NodeFuture implementation within
+// EntityImpl would
+// be highly dangerous if it were exposed to user code.
+//
 @EntityMetaDataAnnotation(isStorable = true)
-public abstract class EntityImpl implements Entity {
+public abstract class EntityImpl implements Entity, NodeFuture<EntityImpl> {
   private static final VarHandle flavor_mh;
 
   static {
@@ -238,5 +255,53 @@ public abstract class EntityImpl implements Entity {
       return ReferenceEntityToken$.MODULE$.apply(
           entityFlavor.dal$entityRef(), entityFlavor.dal$temporalContext());
     }
+  }
+
+  @Override
+  public void continueWith(NodeAwaiter awaiter, EvaluationQueue eq) {
+    asNode$().continueWith(awaiter, eq);
+  }
+
+  @Override
+  public void continueWithFSM(NodeStateMachine currentStateMachine) {
+    asNode$().continueWithFSM(currentStateMachine);
+  }
+
+  @Override
+  public NodeFuture<EntityImpl> completeOrElseNullWDP(NodeStateMachine currentStateMachine) {
+    return asNode$().completeOrElseNullWDP(currentStateMachine);
+  }
+
+  @JsonIgnore // Method name matches jackson's default naming pattern for properties
+  @Override
+  public boolean isDoneWithException() {
+    return false;
+  }
+
+  @Override
+  public Throwable exception$() {
+    return null;
+  }
+
+  @Override
+  public EntityImpl result$() {
+    return this;
+  }
+
+  @JsonIgnore // Method name matches jackson's default naming pattern for properties
+  @Override
+  public EntityImpl get$() {
+    return this;
+  }
+
+  @Override
+  public Node<EntityImpl> asNode$() {
+    // This is only legitimate for entity references used in non-tweakable vals.
+    // We deem this to be a valid implementation only if the $queued method returning entities as
+    // NodeFuture instances are implemented correctly in a way that special cases when the entity
+    // reference is tweakable. This call only happens within plugin generated code which we can
+    // ensure is safely
+    // implemented.
+    return new AlreadyCompletedNode<>(this);
   }
 }

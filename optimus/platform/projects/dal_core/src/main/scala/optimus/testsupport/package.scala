@@ -25,14 +25,14 @@ package object testsupport {
   private val inTest = DiagnosticSettings.getBoolProperty("optimus.inTest", false)
   private val backendAccessAllowed = !inTest || allowBackendAccess
 
-  val shouldLogDalResultWeight = inTest && logDalResultWeight
+  val shouldLogDalResultWeight: Boolean = inTest && logDalResultWeight
 
   class IllegalBackendAccessException(msg: String) extends Exception(msg)
 
   def authorizeBackendAccess(backendName: String): Unit = {
     if (!backendAccessAllowed)
       throw new IllegalBackendAccessException(
-        s"Not allowed to access ${backendName} from a regular test case, please move me to a test-dal-backend source dir")
+        s"Not allowed to access $backendName from a regular test case, please move me to a test-dal-backend source dir")
   }
 
   // ZkClassNameStore access
@@ -49,9 +49,9 @@ package object testsupport {
         "Not allowed to access ZkClassNameStore from a test case, please use TestWithInMemoryClassNameStore")
 
   class IllegalZkAccessException(env: ServiceEnvironment)
-      extends Exception(s"Not allowed to access given ZK from tests: ${env}") {}
+      extends Exception(s"Not allowed to access given ZK from tests: $env") {}
 
-  def setZkClassNameStoreAccess(value: Boolean) = allowZkClassNameStoreAccess.set(value)
+  def setZkClassNameStoreAccess(value: Boolean): Unit = allowZkClassNameStoreAccess.set(value)
 
   def withForcedAllowedNonDevZkAccess[T](logic: => T): T = {
     val originalNonDevZk = forceAllowNonDevZkAccess.get()

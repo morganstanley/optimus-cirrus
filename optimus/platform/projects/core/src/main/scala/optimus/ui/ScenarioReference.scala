@@ -11,10 +11,9 @@
  */
 package optimus.ui
 
-import java.util.UUID
 import optimus.core.MonitoringBreadcrumbs
 import optimus.graph.AlreadyCompletedPropertyNode
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.graph.NodeTaskInfo
 import optimus.graph.PropertyInfo
 import optimus.graph.PropertyNode
@@ -26,6 +25,7 @@ import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.storable.FakeModuleEntity
 
+import java.util.UUID
 import scala.annotation.tailrec
 
 /**
@@ -130,7 +130,7 @@ final class ScenarioReference private (
   }
 }
 
-import ScenarioReferencePropertyHelper._
+import optimus.ui.ScenarioReferencePropertyHelper._
 object ScenarioReference
     extends FakeModuleEntity(currentScenarioProp :: currentOverlayScenarioProp :: currentSnapshotScenarioProp :: Nil) {
 
@@ -174,7 +174,7 @@ object ScenarioReference
    */
   @nodeSync
   def current: ScenarioReference = forStack
-  def current$queued: Node[ScenarioReference] = {
+  def current$queued: NodeFuture[ScenarioReference] = {
     MonitoringBreadcrumbs.sendCurrentScenarioReferenceCrumb()
     current$newNode.lookupAndEnqueue
   }

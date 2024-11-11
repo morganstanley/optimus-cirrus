@@ -221,34 +221,37 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
       val baseModules = baseClasses.map(_.companionModule)
       val thisIsAConcreteClass = sym.isConcreteClass
 
+      def isAbstractMethod(s: Symbol): Boolean = s match {
+        case m: MethodSymbol => m.isAbstract
+        case _               => false
+      }
+
+      def isValAccessor(m: Symbol): Boolean = {
+        m.keyString == "val" || m.hasAnnotation(ValAccessorAnnotation)
+      }
+
       // Find the key infos from this module and modules of parent entity classes and traits
       val indexInfos: List[Tree] = {
         val grps = baseModules flatMap { c =>
           c.info.decls filter { m =>
-            m.isGetter && isIndexInfo(
-              m) && m.name != names.KeyInfo // TODO (OPTIMUS-47219): check to exclude names.keyInfo should be temporary
+            // TODO (OPTIMUS-47219): check to exclude names.keyInfo should be temporary
+            m.isGetter && isIndexInfo(m) && m.name != names.KeyInfo
           }
-        } groupBy { _.name }
+        } groupBy { _.name.stripSuffix(suffixes.KEY_INFO) }
 
-        val refs: List[Tree] = grps.toList.sortBy(_._1).map { case (name, ms) =>
-          val nameToReport = name.stripSuffix(suffixes.KEY_INFO)
-          if (ms.size > 1) {
+        val refs: List[Tree] = grps.toList.sortBy(_._1).flatMap { case (name, ms) =>
+          val msToCheck = ms.filter { m =>
+            m.name.endsWith(suffixes.KEY_INFO) || !isAbstractMethod(m.owner.companionClass.info.decl(name))
+          }
+          if (msToCheck.length > 1) {
             val deets =
-              s"field $nameToReport has conflicting definitions from ${ms map {
-                  _.enclClass.name
-                } mkString ("(", ", ", ")")}"
+              s"field $name has conflicting definitions from ${msToCheck.map(_.enclClass.name).mkString("(", ", ", ")")}"
             alarm(OptimusErrors.KEY_SHADOWED, sym.pos, sym.name, deets)
-          } else {
-            val indexedSymbolOwner = ms.head.owner.companionClass
+          } else if (msToCheck.length == 1) {
+            val indexedSymbolOwner = msToCheck.head.owner.companionClass
             val impliedParentClasses = impliedBaseClasses(indexedSymbolOwner).filterNot(_.equals(indexedSymbolOwner))
-            val priorStorageDefinitions = impliedParentClasses flatMap { c =>
-              c.info
-                .decl(nameToReport)
-                .filter { m =>
-                  m.keyString == "val" || m.hasAnnotation(ValAccessorAnnotation)
-                }
-                .alternatives
-            }
+            val priorStorageDefinitions =
+              impliedParentClasses.flatMap(c => c.info.decl(name).filter(isValAccessor).alternatives)
             if (priorStorageDefinitions.nonEmpty) {
               alarm(
                 OptimusErrors.INDEX_ADDED_TO_EXISTING_STORED_VAL,
@@ -258,8 +261,10 @@ class EntityInfoComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
             }
           }
 
-          localTyper.typedPos(sym.pos.focus) {
-            gen.mkAttributedRef(ms.head)
+          ms.map { m =>
+            localTyper.typedPos(sym.pos.focus) {
+              gen.mkAttributedRef(m)
+            }
           }
         }
 

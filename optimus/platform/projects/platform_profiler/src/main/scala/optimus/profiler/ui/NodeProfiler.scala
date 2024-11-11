@@ -372,6 +372,19 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     val uriFAQ = URI.create(StaticConfig.string("debuggerFAQ"))
     add(menuHelp, "Debugger FAQ...", Desktop.getDesktop.browse(uriFAQ))
       .setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0))
+    add(
+      menuHelp,
+      "Restore defaults...", {
+        val confirm = JOptionPane.showConfirmDialog(
+          this,
+          "Restore all graph debugger options to factory settings?",
+          "Restore defaults",
+          JOptionPane.OK_CANCEL_OPTION)
+        if (confirm == JOptionPane.OK_OPTION)
+          GraphDebuggerUI.clearUserPreferences()
+
+      }
+    )
 
     val menuExperimental = new JMenu2("Experimental")
     configureEdgesObserverButtons(menuExperimental)

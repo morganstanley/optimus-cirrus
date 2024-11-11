@@ -11,7 +11,6 @@
  */
 package optimus.stratosphere.obt
 
-import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
@@ -34,14 +33,13 @@ object BspConfig {
   def defaultArgs(stratoWorkspace: StratoWorkspaceCommon): Seq[String] =
     serverPath(stratoWorkspace) +: stratoWorkspace.obt.server.args
 
-  def sparseArgs(stratoWorkspace: StratoWorkspaceCommon): Seq[String] =
-    if (GitProcess.isSparseReady(stratoWorkspace.config)) Seq("--allowSparse") else Seq()
+  def sparseArgs: Seq[String] = Seq("--allowSparse")
 
   def apply(stratoWorkspace: StratoWorkspaceCommon): BspConfig = {
 
     new BspConfig(
       name = "OBT",
-      argv = defaultArgs(stratoWorkspace) ++ sparseArgs(stratoWorkspace),
+      argv = defaultArgs(stratoWorkspace) ++ sparseArgs,
       javaOpts = stratoWorkspace.obt.server.opts,
       version = "1.0",
       bspVersion = "2.0",

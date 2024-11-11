@@ -118,7 +118,7 @@ class NodeLiftComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseInf
           case newFuncSym =>
             val newArgs = map2(newFuncSym.info.params, allArgs) { (param, arg) =>
               if (
-                (queued && !param.tpe.typeSymbol.isSubClass(Node)) ||
+                (queued && !param.tpe.typeSymbol.isSubClass(NodeFuture)) ||
                 (!queued && !param.tpe.typeSymbol.isSubClass(NodeKey))
               ) arg
               else

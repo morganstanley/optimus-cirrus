@@ -11,7 +11,7 @@
  */
 package optimus.platform.temporalSurface.impl
 
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.temporalSurface.LeafTemporalSurface
@@ -75,7 +75,7 @@ private[temporalSurface] trait EntityQueryData {
       context: List[TemporalContext],
       temporalitySource: LeafTemporalSurface,
       fn: NodeFunction1[ItemKey, Option[(MatchAssignment, Option[ItemData])]],
-      tsProf: Option[TemporalSurfaceProfilingData]): Node[EntityQueryData]
+      tsProf: Option[TemporalSurfaceProfilingData]): NodeFuture[EntityQueryData]
 
   def withCompletion(otherOp: TemporalSurfaceQuery)(
       newAssignmentId: Int,

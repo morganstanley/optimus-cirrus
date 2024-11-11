@@ -33,6 +33,9 @@ public class OGTraceMode {
   public static final OGEventsObserver hotspots =
       testNewHS ? hotspotsLight : new OGEventsHotspotsObserver();
 
+  public static final OGEventsObserver hotspotsTimeline =
+      new OGEventsHotspotsWithTimelineObserver();
+
   public static final OGEventsObserver hashCounts = new OGEventsHotspotsWithHashesObserver();
   public static final OGEventsObserver traceNodes = new OGEventsHotspotsWithFullTraceObserver();
   public static final OGEventsObserver recording = new OGEventsRecordingObserver();
@@ -64,6 +67,7 @@ public class OGTraceMode {
           none,
           edges,
           hotspotsLight,
+          hotspotsTimeline,
           hashCounts,
           traceNodes,
           recording,

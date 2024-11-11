@@ -81,7 +81,7 @@ object PNodeTaskExtension {
       r.iterator
     }
 
-    def safeResultAsString: String = DebuggerUI.underStackOfWithoutNodeTracing(task.scenarioStack) {
+    def safeResultAsString: String = DebuggerUI.underStackOf(task.scenarioStack) {
       task.resultDisplayString
     }
   }

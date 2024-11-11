@@ -68,7 +68,7 @@ trait NodeAPI {
   @parallelizable
   def queuedNodeOf[T](v: T): Node[T] = needsPlugin
   // noinspection ScalaUnusedSymbol
-  def queuedNodeOf$nodeQueued[T](node: Node[T]): Node[T] = node
+  def queuedNodeOf$nodeQueued[T](nodeFuture: NodeFuture[T]): Node[T] = nodeFuture.asNode$
 
   /**
    * Returns the `NodeKey` of an expression (a.k.a node template itself) The returned node is always relative to the
@@ -171,9 +171,9 @@ trait CoreAPI
   @scenarioIndependentInternal
   def given[T](tweaks: Tweak*)(@nodeLift @nodeLiftByName f: => T): T = EvaluationContext.givenL(Scenario(tweaks: _*), f)
   def given$withNode[T](tweaks: Tweak*)(f: Node[T]): T = EvaluationContext.given(Scenario(tweaks: _*), f).get
-  def given$queued[T](tweaks: Tweak*)(f: Node[T]): Node[T] =
+  def given$queued[T](tweaks: Tweak*)(f: Node[T]): NodeFuture[T] =
     EvaluationContext.given(Scenario(tweaks: _*), f).enqueueAttached
-  def given$queued[T](tweaks: Seq[Tweak], f: () => T): Node[T] = given$queued(tweaks)(toNode(f))
+  def given$queued[T](tweaks: Seq[Tweak], f: () => T): NodeFuture[T] = given$queued(tweaks)(toNode(f))
 
   @nodeSync
   @nodeSyncLift
@@ -261,8 +261,8 @@ trait CoreAPI
 
   /** These functions are mostly for testing code */
   @nodeSync
-  def delay(msDelay: Long): Unit = delay$queued(msDelay).get // NOT Thread.sleep - need to support Cancellation
-  def delay$queued(msDelay: Long): Node[Unit] = {
+  def delay(msDelay: Long): Unit = delay$queued(msDelay).get$ // NOT Thread.sleep - need to support Cancellation
+  def delay$queued(msDelay: Long): NodeFuture[Unit] = {
     val promise = NodePromise[Unit](NodeTaskInfo.Delay)
     delayPromise(promise, msDelay, TimeUnit.MILLISECONDS)
     promise.node

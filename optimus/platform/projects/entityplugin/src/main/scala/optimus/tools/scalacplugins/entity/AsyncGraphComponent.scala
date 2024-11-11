@@ -356,7 +356,7 @@ class AsyncGraphComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
             curInfo.isSimple = true
 
           val applyMethod: DefDef =
-            q"""override def apply(tr$$async: $Node[${definitions.AnyRefTpe}]): ${definitions.UnitTpe} = {$r}"""
+            q"""override def apply(tr$$async: $NodeFuture[${definitions.AnyRefTpe}]): ${definitions.UnitTpe} = {$r}"""
           val nodeDebugPath: Option[(String, Symbol)] = currentOwner.ownersIterator.collectFirst {
             case x if x.hasAnnotation(NodeDebugAnnotation) =>
               val path = x.getAnnotation(NodeDebugAnnotation).get.args.head.asInstanceOf[Literal].value.stringValue
@@ -388,9 +388,17 @@ class AsyncGraphComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
             case None =>
               config += ("postAnfTransform" -> codeMotion)
           }
+          // workaround for a regression with async in the REPL in Scala 2.13.
+          // needed for InterpreterRunnerTest until the upstream bug is fixed in Scala
+          // TODO (OPTIMUS-69938): Remove the workaround once we pick up the upstream Scala 2.13 fix
+          val savedPos = currentOwner.pos
+          util.Try(currentOwner.pos = unit.source.position(0)) // can fail in our compiler tests, but we don't mind
 
           val applyMethodMarked =
             async.markForAsyncTransform(currentOwner, applyMethod, FSM_await, config.result())
+
+          currentOwner.pos = savedPos
+
           // IntelliJ's debugger has special support for async-generated classes based on the class name:
           // https://github.com/JetBrains/intellij-scala/blob/e30b66a277553ea90b6b0d86b6ce22739248fe64/scala/scala-impl/src/org/jetbrains/plugins/scala/debugger/ScalaSyntheticProvider.scala#L112
           // I'm not sure how much this adds to IntelliJ's support for Node, but let's leave it as tpnme.stateMachine

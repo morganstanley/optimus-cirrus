@@ -516,7 +516,7 @@ object JvmDependenciesLoader {
 
     def getCentralDependencies(
         topLevelConfig: TopLevelConfig,
-        singleSourceDep: Option[JvmDependencies] = None): Result[JvmDependencies] = {
+        singleSourceDep: Option[JvmDependencies] = None): Result[JvmDependencies] = topLevelConfig.tryWith {
       def missingMsg(isError: Boolean): Result[JvmDependencies] =
         Success(
           JvmDependencies.empty,
@@ -550,14 +550,12 @@ object JvmDependenciesLoader {
         }
     }
 
-    DependenciesConfig.tryWith {
-      for {
-        deps <- getCentralDependencies(DependenciesConfig)
-        mavenDeps <- getCentralDependencies(MavenDependenciesConfig)
-        buildDeps <- getCentralDependencies(BuildDependenciesConfig)
-        singleSourceDeps = deps ++ mavenDeps ++ buildDeps
-        multipleSourceDeps <- getCentralDependencies(JvmDependenciesConfig, Some(singleSourceDeps))
-      } yield deps ++ mavenDeps ++ buildDeps ++ multipleSourceDeps
-    }
+    for {
+      deps <- getCentralDependencies(DependenciesConfig)
+      mavenDeps <- getCentralDependencies(MavenDependenciesConfig)
+      buildDeps <- getCentralDependencies(BuildDependenciesConfig)
+      singleSourceDeps = deps ++ mavenDeps ++ buildDeps
+      multipleSourceDeps <- getCentralDependencies(JvmDependenciesConfig, Some(singleSourceDeps))
+    } yield deps ++ mavenDeps ++ buildDeps ++ multipleSourceDeps
   }
 }

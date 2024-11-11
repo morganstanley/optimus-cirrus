@@ -100,8 +100,7 @@ object ConfigUtils {
             msg = s"No valid keys found. Expected at least one of ${expected.order.mkString(", ")}"
           )
         )
-      } else
-        Seq.empty
+      } else Seq.empty
     }
 
     def checkExtraProperties(
@@ -110,9 +109,7 @@ object ConfigUtils {
         filter: String => Boolean = _ => true
     ): Seq[Message] = {
       val extraKeys = keys(origin).getOrElse(Nil).toSet.filter(filter) -- expected.all
-
       def msg(key: String) = s"Unrecognized key: '$key', possible ones: ${expected.order.mkString(", ")}"
-
       extraKeys.map(k => origin.warningAt(conf.getValue(k), msg(k))).to(Seq)
     }
 

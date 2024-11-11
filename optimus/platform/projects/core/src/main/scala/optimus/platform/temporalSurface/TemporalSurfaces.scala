@@ -15,7 +15,7 @@ import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import msjava.slf4jutils.scalalog.Logger
 import optimus.dsi.partitioning.Partition
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.TemporalContext
 import optimus.platform.annotations.nodeSync
 import optimus.platform.dal.EntityResolver
@@ -96,7 +96,7 @@ trait TemporalSurface extends Serializable {
   }
   private[optimus] final def findPossiblyMatchingLeaves$queued(
       operation: TemporalSurfaceQuery,
-      firstOnly: Boolean): Node[(MatchSourceQuery, List[EntityTemporalInformation])] = {
+      firstOnly: Boolean): NodeFuture[(MatchSourceQuery, List[EntityTemporalInformation])] = {
     val currentTs = TemporalSurfaceProfilingDataManager.maybeUpdateProfilingTSData(this.asInstanceOf[TemporalContext])
     findPossiblyMatchingLeavesImpl$queued(operation, addToChain(Nil), firstOnly, currentTs)
   }
@@ -114,7 +114,7 @@ trait TemporalSurface extends Serializable {
       operation: TemporalSurfaceQuery,
       temporalContextChain: List[TemporalContext],
       firstOnly: Boolean,
-      tsProf: Option[TemporalSurfaceProfilingData]): Node[(MatchSourceQuery, List[EntityTemporalInformation])]
+      tsProf: Option[TemporalSurfaceProfilingData]): NodeFuture[(MatchSourceQuery, List[EntityTemporalInformation])]
 
   /**
    * Queries the temporal surface and returns a QueryData containing the temporality results for the query.
@@ -148,7 +148,7 @@ trait TemporalSurface extends Serializable {
       operation: EntityQueryData,
       temporalContextChain: List[TemporalContext],
       considerDelegation: Boolean,
-      tsProf: Option[TemporalSurfaceProfilingData]): Node[EntityQueryData]
+      tsProf: Option[TemporalSurfaceProfilingData]): NodeFuture[EntityQueryData]
 
   override final def toString: String = oneLineSummary
 

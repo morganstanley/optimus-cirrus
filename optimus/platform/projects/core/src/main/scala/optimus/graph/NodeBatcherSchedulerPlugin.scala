@@ -56,7 +56,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
    * execution
    */
   protected def getNodeWeight(v: NodeT) = 1
-  protected def getNodeWeight$queued(v: NodeT): Node[Int] = null
+  protected def getNodeWeight$queued(v: NodeT): NodeFuture[Int] = null
 
   /** Batch can report the number of outstanding nodes to batch */
   protected def getLimitTag: PluginTagKey[AtomicInteger] = null
@@ -534,7 +534,7 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
    * the sum of weights reaches maxBatchSize the batch is scheduled for execution
    */
   protected def getGroupBy(psinfo: PerScenarioInfoT, inputNode: NodeT): GroupKeyT
-  protected def getGroupBy$queued(psinfo: PerScenarioInfoT, inputNode: NodeT): Node[GroupKeyT] = null
+  protected def getGroupBy$queued(psinfo: PerScenarioInfoT, inputNode: NodeT): NodeFuture[GroupKeyT] = null
 
   /**
    * When BNode starts to run we need to clean up grp key and node reference But we have to verify that some other batch
@@ -601,17 +601,17 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
             // At this point we should have results from both nodes and can make a call to add2BatchNode
             if (gnwNode ne null) {
               if (gnwNode.isDoneWithException) {
-                node.completeWithException(gnwNode.exception(), eq)
+                node.completeWithException(gnwNode.exception$, eq)
               } else {
-                w = gnwNode.result // WARNING: We are no picking up dependencies in extra info... Should we?
+                w = gnwNode.result$ // WARNING: We are no picking up dependencies in extra info... Should we?
               }
             }
 
             if (ggbNode ne null) {
               if (ggbNode.isDoneWithException) {
-                node.completeWithException(ggbNode.exception(), eq)
+                node.completeWithException(ggbNode.exception$, eq)
               } else {
-                k = ggbNode.result // WARNING: We are no picking up dependencies in extra info... Should we?
+                k = ggbNode.result$ // WARNING: We are no picking up dependencies in extra info... Should we?
               }
             }
             // If gnwNode OR ggbNode threw an exception, we just complete the original node with exception
@@ -692,7 +692,8 @@ abstract class GroupingNodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]
 
   @nodeSync
   def run(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): collection.Seq[T]
-  def run$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[T]]
+  def run$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[T]]
+  def run$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[collection.Seq[T]]
 
   override final protected def run(
       ec: OGSchedulerContext,
@@ -705,10 +706,11 @@ abstract class GroupingNodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]
       JobDecorator
         .ifPresent(bnode.scenarioStack, inputs) { jobDecorator =>
           jobDecorator.decorateBatch$queued[T, NodeT](inputs) { subInputs =>
-            run$queued(grpKey, subInputs)
+            run$newNode(grpKey, subInputs).enqueue
           }
         }
         .getOrElse(run$queued(grpKey, inputs))
+        .asNode$
 
     if (rn.isFSM) {
       bnode.setWaitingOn(rn)
@@ -737,7 +739,8 @@ abstract class GroupingNodeBatcherWithTrySchedulerPlugin[T, NodeT <: Completable
 
   @nodeSync
   def tryRun(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): collection.Seq[Try[T]]
-  def tryRun$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[Try[T]]]
+  def tryRun$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[Try[T]]]
+  def tryRun$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[collection.Seq[Try[T]]]
 
   override final protected def run(
       ec: OGSchedulerContext,
@@ -749,11 +752,13 @@ abstract class GroupingNodeBatcherWithTrySchedulerPlugin[T, NodeT <: Completable
     val rn =
       JobDecorator
         .ifPresent(bnode.scenarioStack, inputs) { jobDecorator =>
-          jobDecorator.decorateTryBatch$queued[T, NodeT](inputs) { subInputs =>
-            tryRun$queued(grpKey, subInputs)
-          }
+          jobDecorator
+            .decorateTryBatch$queued[T, NodeT](inputs) { subInputs =>
+              tryRun$newNode(grpKey, subInputs).enqueue
+            }
+            .asNode$
         }
-        .getOrElse(tryRun$queued(grpKey, inputs))
+        .getOrElse(tryRun$newNode(grpKey, inputs).enqueue)
 
     if (rn.isFSM) {
       bnode.setWaitingOn(rn)

@@ -53,3 +53,9 @@ private[sources] final case class HashedSourcesImpl(
 
   @node protected def hashedSources: HashedSources
 }
+
+object CompilationSources {
+  val Source = "Source"
+  val Resource = "Resource"
+  val Generated = "Generated"
+}

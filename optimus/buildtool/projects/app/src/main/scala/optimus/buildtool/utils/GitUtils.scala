@@ -173,7 +173,7 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorksp
 
   private def files(lines: Seq[String]): Set[FileAsset] =
     lines
-      .filter(!_.startsWith("warning: "))
+      .filter(!_.contains(": "))
       .map(l => workspaceSourceRoot.resolveFile(l))
       .toSet
 
@@ -203,10 +203,10 @@ final case class NativeGitUtils(workspaceSourceRoot: Directory, ws: StratoWorksp
     log.debug(s"Executing: ${pb.command().asScala.mkString(" ")}")
     val ret = Process(pb) ! ProcessLogger(msg => output += msg)
     if (ret != 0) {
-      val msg = s"Git command failed:\n${output.mkString("\n")}"
+      val msg = s"Git command failed (exit code $ret):\n${output.mkString("\n")}"
       log.error(msg)
       ObtTrace.error(msg)
-      throw new RuntimeException("Git command failed")
+      throw new RuntimeException(s"Git command failed with exit code $ret")
     }
     output.toIndexedSeq
   }

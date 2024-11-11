@@ -78,8 +78,8 @@ object Debugger {
   def brk(): Unit = ProfilerUIControl.brk()
   def screenshot(name: String): Unit = ProfilerUIControl.screenshot(name: String)
 
-  def underStackOfWithoutNodeTracing[T](ssIn: ScenarioStack)(f: => T): T =
-    ProfilerUIControl.underStackOfWithoutNodeTracing(ssIn)(f)
+  def underStackOf[T](ssIn: ScenarioStack)(f: => T): T =
+    ProfilerUIControl.underStackOf(ssIn)(f)
 
   /**
    * User can supply in the console a callback to post process nodes as they complete when tracing is on. One thing to

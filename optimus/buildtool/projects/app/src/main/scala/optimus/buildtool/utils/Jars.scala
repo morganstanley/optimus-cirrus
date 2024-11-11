@@ -140,6 +140,22 @@ object Jars {
     }
   }
 
+  // would return the agent paths as written in pathing jar manifest
+  private def parseAgentPaths(pathingJarAsset: JarAsset, manifestParsedAgents: String): Seq[JarAsset] = {
+    manifestParsedAgents.split(";").toIndexedSeq.map { p =>
+      val path = if (p.startsWith(PathUtils.FileProtocol)) {
+        val subPath = p.substring(PathUtils.FileProtocol.length)
+        utils.ClassPathUtils.demanglePathFromUrlPath(subPath)
+      } else Paths.get(p)
+      if (path.isAbsolute) JarAsset(path) else pathingJarAsset.parent.resolveFile(RelativePath(path)).asJar
+    }
+  }
+
+  def extractAgentsInManifest(jarAsset: JarAsset, manifest: jar.Manifest): Seq[JarAsset] = {
+    val loadedAgents = JarUtils.load(manifest, JarUtils.nme.AgentsPath)
+    loadedAgents.map(parseAgentPaths(jarAsset, _)).getOrElse(Nil)
+  }
+
   def extractManifestClasspath(jarAsset: JarAsset, manifest: jar.Manifest): Seq[JarAsset] =
     JarUtils
       .load(manifest, jar.Attributes.Name.CLASS_PATH)
@@ -500,6 +516,7 @@ object Jars {
     checkForDuplicates(rehashedEntries, allExtraEntries)
 
     tempJarOutputStream(targetJar.path, manifest) { tempOutput =>
+      rehashedEntries.flatMap(_.filesToHashes.map(_._1.pathString)).foreach(tempOutput.writeParentDirectory)
       val extraFilesHashes = allExtraEntries.map { entry => entry.inJarPath -> entry.write(tempOutput) }
 
       /* sortedFileToHashes can merge files directly to map, because we check for duplicates above */

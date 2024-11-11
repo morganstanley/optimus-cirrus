@@ -187,7 +187,7 @@ private[optimus] class DependencyTracker private[tracking] (
   }
 
   // always need to install our underlay so that it starts tracking
-  doSetUnderlay(Scenario.empty)
+  doSetUnderlay(Scenario.empty, TrackingActionEventCause("DependencyTracker.<init>"))
 
   // there is no cancellation scope installed at initial time
   @volatile private[this] var scenarioStackWithCancelScopeCache = scenarioStack

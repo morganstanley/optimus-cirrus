@@ -47,6 +47,7 @@ abstract class NPTreeTable[RType <: NPTreeNode] extends NPTable[RType] {
         val tcol = dataTable.getTCol(col)
         val tree = tcol.getCellRenderer.asInstanceOf[NPTableRenderer.TreeTableCellRenderer]
         val ctrlDown = (e.getModifiersEx & InputEvent.CTRL_DOWN_MASK) != 0
+        val shiftDown = (e.getModifiersEx & InputEvent.SHIFT_DOWN_MASK) != 0
         if (
           e.getKeyCode == KeyEvent.VK_LEFT || e.getKeyCode == KeyEvent.VK_KP_LEFT
           || e.getKeyCode == KeyEvent.VK_MINUS || e.getKeyCode == KeyEvent.VK_SUBTRACT
@@ -56,7 +57,7 @@ abstract class NPTreeTable[RType <: NPTreeNode] extends NPTable[RType] {
           e.getKeyCode == KeyEvent.VK_RIGHT || e.getKeyCode == KeyEvent.VK_KP_RIGHT
           || e.getKeyCode == KeyEvent.VK_EQUALS || e.getKeyCode == KeyEvent.VK_ADD
         ) {
-          dataTable.getSelectedRows reverseMap (tree.expand(dataTable, _, col, ctrlDown))
+          dataTable.getSelectedRows reverseMap (tree.expand(dataTable, _, col, ctrlDown, shiftDown))
         }
       })
     }

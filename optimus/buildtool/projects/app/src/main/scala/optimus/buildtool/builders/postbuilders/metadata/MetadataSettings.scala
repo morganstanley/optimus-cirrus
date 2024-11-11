@@ -11,17 +11,17 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DockerImage
 import optimus.buildtool.config.StratoConfig
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.RelativePath
-import optimus.buildtool.resolvers.ExternalDependencyResolver
 import optimus.buildtool.resolvers.WebDependencyResolver
 
 final case class MetadataSettings(
     installPathBuilder: InstallPathBuilder,
-    dependencyResolver: ExternalDependencyResolver,
+    extraLibs: Seq[DependencyDefinition],
     webDependencyResolver: WebDependencyResolver,
     leafDir: RelativePath,
     installVersion: String,
@@ -37,7 +37,7 @@ object MetadataSettings {
 
   def apply(
       stratoConfig: StratoConfig,
-      dependencyResolver: ExternalDependencyResolver,
+      extraLibs: Seq[DependencyDefinition],
       webDependencyResolver: WebDependencyResolver,
       installDir: Directory,
       dockerDir: Directory,
@@ -52,7 +52,7 @@ object MetadataSettings {
     val installPathBuilder = InstallPathBuilder.dev(installDir, installVersion)
     new MetadataSettings(
       installPathBuilder,
-      dependencyResolver,
+      extraLibs,
       webDependencyResolver,
       leafDir,
       installVersion,

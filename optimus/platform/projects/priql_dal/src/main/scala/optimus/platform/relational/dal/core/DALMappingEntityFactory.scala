@@ -13,6 +13,7 @@ package optimus.platform.relational.dal.core
 
 import optimus.entity.ClassEntityInfo
 import optimus.entity.IndexInfo
+import optimus.platform.dsi.bitemporal.proto.ProtoSerialization.distinctBy
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
@@ -47,7 +48,9 @@ object DALMappingEntityFactory {
       memberList += MemberInfo(projectedType, DALProvider.EntityRef, DALProvider.EntityRefType)
       memberList += MemberInfo(projectedType, DALProvider.StorageTxTime, DALProvider.StorageTxTimeType)
       memberList += MemberInfo(projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType)
-      for (indexInfo <- entityInfo.indexes if indexInfo.queryable) {
+
+      val queryableIndexInfoIt = entityInfo.indexes.iterator.filter(_.queryable)
+      distinctBy[IndexInfo[_ <: Storable, _], String](queryableIndexInfoIt, ii => ii.name).foreach { indexInfo =>
         if (indexInfo.propertyNames.isEmpty) {
           memberList += new IndexMemberInfo(projectedType, TypeInfo.UNIT, indexInfo)
         } else if (indexInfo.propertyNames.size > 1) {

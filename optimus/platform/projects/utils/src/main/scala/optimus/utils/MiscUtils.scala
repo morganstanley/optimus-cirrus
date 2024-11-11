@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.slf4j
 import msjava.slf4jutils.scalalog
 
+import scala.annotation.tailrec
 import scala.collection.LinearSeq
 import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable
@@ -83,6 +84,15 @@ object MiscUtils {
     }.get
   }
 
+  @tailrec
+  final def syncRetryWithSleep(f: () => Boolean, retries: Int, sleepIntervalMs: Long): Boolean = {
+    val success = f()
+    if (!success && retries > 0) {
+      Thread.sleep(sleepIntervalMs)
+      syncRetryWithSleep(f, retries - 1, sleepIntervalMs)
+    } else
+      success
+  }
   /*
   Sequester code in a Function0 in _1, and return its source as _2
    */

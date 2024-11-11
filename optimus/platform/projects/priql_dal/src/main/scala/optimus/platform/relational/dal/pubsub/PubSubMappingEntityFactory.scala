@@ -12,6 +12,8 @@
 package optimus.platform.relational.dal.pubsub
 
 import optimus.entity.ClassEntityInfo
+import optimus.entity.IndexInfo
+import optimus.platform.dsi.bitemporal.proto.ProtoSerialization.distinctBy
 import optimus.platform.dsi.expressions.Expression
 import optimus.platform.dsi.expressions.Id
 import optimus.platform.dsi.expressions.{Entity => EntityExpression}
@@ -23,10 +25,12 @@ import optimus.platform.relational.data.mapping.MemberInfo
 import optimus.platform.relational.data.tree.ColumnInfo
 import optimus.platform.relational.data.tree.ColumnType
 import optimus.platform.relational.tree.TypeInfo
+import optimus.platform.storable.Storable
 
 import scala.collection.immutable.HashMap
 import scala.collection.mutable
 import optimus.scalacompat.collection._
+
 import scala.collection.compat._
 
 object PubSubMappingEntityFactory {
@@ -44,9 +48,13 @@ object PubSubMappingEntityFactory {
       memberList += MemberInfo(projectedType, DALProvider.StorageTxTime, DALProvider.StorageTxTimeType)
       memberList += MemberInfo(projectedType, DALProvider.VersionedRef, DALProvider.VersionedRefType)
 
+      val queryableIndexInfoIt = entityInfo.indexes.iterator.filter(_.queryable)
+      val queryableIndexInfoSeq =
+        distinctBy[IndexInfo[_ <: Storable, _], String](queryableIndexInfoIt, _.name).toIndexedSeq
+
       propertyMap foreach { case (name, tinfo) =>
-        entityInfo.indexes.find(_.name == name) match {
-          case Some(indexInfo) if indexInfo.queryable =>
+        queryableIndexInfoSeq.find(i => i.name == name) match {
+          case Some(indexInfo) =>
             if (indexInfo.propertyNames.isEmpty) {
               memberList += new IndexMemberInfo(projectedType, TypeInfo.UNIT, indexInfo)
             } else if (indexInfo.propertyNames.size > 1) {
@@ -65,9 +73,8 @@ object PubSubMappingEntityFactory {
         }
 
       }
-      val (aliasAndCompoundIndexes, defIndexes) = entityInfo.indexes
+      val (aliasAndCompoundIndexes, defIndexes) = queryableIndexInfoSeq
         .filterNot(idx => propertyMap.contains(idx.name))
-        .filter(idx => idx.queryable)
         .partition(idx => idx.propertyNames.forall(propertyMap.contains))
 
       // compound index

@@ -35,6 +35,7 @@ trait ASMConstants {
   val Comparable = "java/lang/Comparable"
   val Exception = "java/lang/Exception"
   val Node = "optimus/graph/Node"
+  val NodeFuture = "optimus/graph/NodeFuture"
   val RelationKeyObject = "optimus/platform/RelationKey$"
   val ContinuationObject = "optimus/platform/relational/asm/Continuation$"
   val Function = "java/util/function/Function"

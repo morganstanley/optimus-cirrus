@@ -61,13 +61,15 @@ private[graph] class JobPlugin extends SchedulerPlugin {
         val cn = n.asInstanceOf[CompletableNode[Any]]
         JobDecorator
           .ifPresent(cn.scenarioStack, Seq(cn)) { jobDecorator =>
-            val rn = jobDecorator.decorateSingleNode$queued(cn) { n: Node[Any] =>
-              // this method may be called from a different graph thread than the original adapt above, so cannot pass references
-              // to OGSchedulerContext, and need to fetch our current one
-              val ec = OGSchedulerContext.current()
-              // handing back to the scheduler a previously adapted node is the only legit use case of `markAsRunnableAndEnqueue`
-              if (!hasSubPlugin || !subPlugin.readapt(n, ec)) ec.scheduler.markAsRunnableAndEnqueue(n)
-            }
+            val rn = jobDecorator
+              .decorateSingleNode$queued(cn) { n: Node[Any] =>
+                // this method may be called from a different graph thread than the original adapt above, so cannot pass references
+                // to OGSchedulerContext, and need to fetch our current one
+                val ec = OGSchedulerContext.current()
+                // handing back to the scheduler a previously adapted node is the only legit use case of `markAsRunnableAndEnqueue`
+                if (!hasSubPlugin || !subPlugin.readapt(n, ec)) ec.scheduler.markAsRunnableAndEnqueue(n)
+              }
+              .asNode$
             // deal explicitly with failures at the @job decorator level,
             rn.continueWith(
               (eq: EvaluationQueue, _: NodeTask) => {
@@ -94,7 +96,7 @@ private[graph] trait JobDecorator {
    */
   @nodeSync
   def decorateSingleNode[T](node: CompletableNode[T])(enqueue: CompletableNode[T] => Unit): Unit
-  def decorateSingleNode$queued[T](node: CompletableNode[T])(enqueue: CompletableNode[T] => Unit): Node[Unit]
+  def decorateSingleNode$queued[T](node: CompletableNode[T])(enqueue: CompletableNode[T] => Unit): NodeFuture[Unit]
 
   /**
    * The entry point into @job decoration for batchers inheriting from [[GroupingNodeBatcherSchedulerPlugin]].
@@ -104,7 +106,7 @@ private[graph] trait JobDecorator {
   @nodeSync
   def decorateBatch[T, NodeT <: CompletableNode[T]](nodes: Seq[NodeT])(enqueue: Seq[NodeT] => Node[Seq[T]]): Seq[T]
   def decorateBatch$queued[T, NodeT <: CompletableNode[T]](nodes: Seq[NodeT])(
-      enqueue: Seq[NodeT] => Node[Seq[T]]): Node[Seq[T]]
+      enqueue: Seq[NodeT] => Node[Seq[T]]): NodeFuture[Seq[T]]
 
   /**
    * The entry point into @job decoration for batchers inheriting from [[GroupingNodeBatcherWithTrySchedulerPlugin]].
@@ -115,7 +117,7 @@ private[graph] trait JobDecorator {
   def decorateTryBatch[T, NodeT <: CompletableNode[T]](nodes: Seq[NodeT])(
       enqueue: Seq[NodeT] => Node[Seq[Try[T]]]): Seq[Try[T]]
   def decorateTryBatch$queued[T, NodeT <: CompletableNode[T]](nodes: Seq[NodeT])(
-      enqueue: Seq[NodeT] => Node[Seq[Try[T]]]): Node[Seq[Try[T]]]
+      enqueue: Seq[NodeT] => Node[Seq[Try[T]]]): NodeFuture[Seq[Try[T]]]
 
 }
 

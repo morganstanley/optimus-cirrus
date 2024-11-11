@@ -137,6 +137,9 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
   private val counterHeaderHeight = 4
   private val counterTitleHOffSet = 4
 
+  // Global zoom "speed"
+  private val percentZoomBy: Double = 0.20
+
   // Includes counters from which we need data from to generate tables, but that are redundant to plot on the timeline
   val tableOnlyCounters: Seq[Int] = Seq(CounterId.IDLE_GUI_ID.id)
 
@@ -251,7 +254,7 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
       }
 
       override def mouseWheelMoved(e: MouseWheelEvent): Unit = if (e.isControlDown) {
-        zoomBy(e.getPreciseWheelRotation * -0.05)
+        zoomBy(-e.getPreciseWheelRotation)
       }
 
       private def timeString(nanos: Long): String = {
@@ -280,8 +283,8 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
     val kia = new KeyAdapter {
       override def keyPressed(e: KeyEvent): Unit = {
         if (e.isControlDown) {
-          if (e.getKeyChar == '+' || e.getKeyChar == '=') zoomBy(0.05)
-          if (e.getKeyChar == '-' || e.getKeyChar == '_') zoomBy(-0.05)
+          if (e.getKeyChar == '+' || e.getKeyChar == '=') zoomBy(1)
+          if (e.getKeyChar == '-' || e.getKeyChar == '_') zoomBy(-1)
         }
       }
     }
@@ -291,12 +294,7 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
     addMouseWheelListener(mia)
 
     menu.addMenu("Zoom Out", zoomOut())
-    menu.addMenu(
-      "Zoom to Range", {
-        visibleMinAbsNanos = mouseRangeStartNanos
-        visibleMaxAbsNanos = mouseRangeEndNanos
-        repaint()
-      })
+    menu.addMenu("Zoom to Range", zoomToRange())
     menu.addSeparator()
     menu.addMenu(
       "Remove data to the left", {
@@ -973,11 +971,44 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
     repaint()
   }
 
-  def zoomBy(percent: Double): Unit = {
-    val range = visibleMaxAbsNanos - visibleMinAbsNanos
-    val changeRange = (range * percent).toInt
-    visibleMinAbsNanos = Math.max(minAbsNanos, visibleMinAbsNanos + changeRange)
-    visibleMaxAbsNanos = Math.min(visibleMaxAbsNanos - changeRange, maxAbsNanos)
+  def zoomToRange(): Unit = {
+    if (mouseRangeStartNanos == 0L && mouseRangeEndNanos == 0L) return // no selection
+
+    visibleMinAbsNanos = mouseRangeStartNanos
+    visibleMaxAbsNanos = mouseRangeEndNanos
+    repaint()
+  }
+
+  // Zoom in (factor > 0) or out (factor < 0) by some amount. |factor| = 1 corresponds to the "normal" zoom in/out speed.
+  //
+  // If centerOn is within the view, zooming will also moved the view elastically to it.
+  def zoomBy(factor: Double): Unit = {
+    val min = visibleMinAbsNanos
+    val max = visibleMaxAbsNanos
+    val range = max - min
+    val changeRange = (range * factor * percentZoomBy).toLong
+
+    // Our zoom center is either the middle of the highlight range (if there is one) or the last click position
+    val centerOn = if (mouseRangeStartNanos != 0L && mouseRangeEndNanos != 0L) {
+      (mouseRangeStartNanos + mouseRangeEndNanos) / 2
+    } else lastClickedAbsNanos
+
+    // On zoom-in, we attempt to center on centerOn, but we don't want the windows to jump all over the place, so we
+    // elastically move towards it. If it is within view, we displace our window so that centerOn falls in the middle,
+    // but bound by the previous limits, so that we are never seeing more than we did before the zoom.
+    //
+    // This gives the "expected" behaviour of other graphical applications.
+    val displace = if (factor > 0) {
+      val center = (min + max) / 2L
+      val newCenter = if (centerOn <= max && centerOn >= min) centerOn else center
+      val displace = newCenter - center
+      if (displace < -changeRange) -changeRange
+      else if (displace > changeRange) changeRange
+      else displace
+    } else 0L
+
+    visibleMinAbsNanos = Math.max(minAbsNanos, min + changeRange + displace)
+    visibleMaxAbsNanos = Math.min(max - changeRange + displace, maxAbsNanos)
     repaint()
   }
 

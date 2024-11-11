@@ -447,7 +447,8 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
       flags = nti.snapFlags();
       reuseCycle = nti.reuseCycle;
       tweakID = nti.tweakableID();
-      tweakDependencies = nti.dependsOnTweakMask();
+      // ensure frozen version is a duplicate!
+      tweakDependencies = nti.dependsOnTweakMask().dup();
       NodeCCache ccache = nti.customCache();
       if (ccache != null) cacheName = ccache.getName();
       // Default is just not interesting

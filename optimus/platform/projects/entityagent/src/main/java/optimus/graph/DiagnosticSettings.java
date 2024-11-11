@@ -237,6 +237,9 @@ public class DiagnosticSettings {
 
   public static final boolean pluginCounts;
 
+  public static final int maxPluginNodesTracked =
+      getIntProperty("optimus.plugin.maxNodesTracked", 100 * 1000);
+
   public static final boolean autoAsyncProfiler;
   public static final boolean repairLauncherChain;
   public static final int awaitChainHashStrategy;

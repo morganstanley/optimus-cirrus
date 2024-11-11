@@ -39,6 +39,9 @@ import optimus.platform._
     val manifest = Jars
       .readManifestJar(pj)
       .getOrElse(throw new IllegalArgumentException(s"Jar $pathingJar is missing manifest"))
+    val maybeAgentPaths = Jars.extractAgentsInManifest(pj, manifest)
+    val installedAgents =
+      pathBuilder.locationIndependentClasspath(scopeId, maybeAgentPaths, installJarMapping, includeRelativePaths)
     val classpath = Jars.extractManifestClasspath(pj, manifest)
     val installedClasspath =
       pathBuilder.locationIndependentClasspath(
@@ -51,6 +54,7 @@ import optimus.platform._
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedJniLibs)
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedPreloadReleaseLibs)
     manifest.getMainAttributes.remove(JarUtils.nme.PackagedPreloadDebugLibs)
+    manifest.getMainAttributes.put(JarUtils.nme.AgentsPath, installedAgents.mkString(";"))
     manifest
   }
 

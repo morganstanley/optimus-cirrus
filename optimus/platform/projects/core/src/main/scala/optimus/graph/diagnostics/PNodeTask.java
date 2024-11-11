@@ -223,6 +223,22 @@ public abstract class PNodeTask {
     return "";
   }
 
+  public String dependsOnTweakableMaskFixedWidth() {
+    return "";
+  }
+
+  public String dependsOnTweakableMask() {
+    return "";
+  }
+
+  public int dependsOnTweakableMaskBitCount() {
+    return 0;
+  }
+
+  public boolean dependsOnIsPoison() {
+    return false;
+  }
+
   public abstract NodeName nodeName();
 
   /** Useless value for recording tasks */

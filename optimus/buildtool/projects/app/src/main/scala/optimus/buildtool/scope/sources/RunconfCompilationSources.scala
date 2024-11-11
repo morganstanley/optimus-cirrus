@@ -294,6 +294,7 @@ object RunconfCompilationSources {
         distinctLast(transitiveJniPaths).map(p => s"[JniPath]$p") ++
         distinctLast(transitiveModuleLoads)
           .map(p => s"[ModuleLoad]$p") ++
+        scope.upstream.agentsForOurRuntimeArtifacts.map(agent => s"[AgentPath]${agent.id}") ++
         Seq(s"[SubstitutionRules]${substitutions.hashableSubstitutionRules}") ++
         substitutionFingerprint ++
         blockedSubstitutionFingerprint ++

@@ -58,7 +58,8 @@ final case class Template(
     owner: Option[String],
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
-    interopPython: Boolean
+    interopPython: Boolean,
+    python: Boolean
 ) extends HasScopedName
     with HasNativeLibraries {
 
@@ -102,7 +103,8 @@ final case class Template(
           owner = owner,
           flags = flags,
           jacocoOpts = jacocoOpts,
-          interopPython = interopPython
+          interopPython = interopPython,
+          python = python
         )
       )
     case _ =>
@@ -138,6 +140,7 @@ final case class Template(
        |  owner = $owner
        |  flags = $flags
        |  jacocoOpts = $jacocoOpts
+       |  python = $python
        |)""".stripMargin
   }
 

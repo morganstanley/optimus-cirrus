@@ -11,13 +11,13 @@
  */
 package optimus.buildtool.trace
 
-import java.net.URL
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.builders.postinstallers.uploaders.UploadLocation
-import optimus.buildtool.cache.silverking.ClusterType
+import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ScopeId
 
+import java.net.URL
 import scala.collection.mutable
 
 private[buildtool] sealed trait CategoryTrace {
@@ -103,7 +103,8 @@ object ResolveTrace {
 trait ClusterTrace extends CategoryTrace {
   def clusterType: ClusterType
   override lazy val categoryName: String =
-    if (clusterType == ClusterType.QA) lower(getClass) else s"${lower(getClass)}-${clusterType.toString.toLowerCase}"
+    if (clusterType == ClusterType.QA) lower(getClass)
+    else s"${lower(getClass)}-${clusterType.toString.toLowerCase}"
 }
 
 private[buildtool] sealed trait CacheTrace extends ClusterTrace with AsyncCategoryTrace {
@@ -202,6 +203,13 @@ private[buildtool] final case class SilverkingOperation(clusterType: ClusterType
   override lazy val name: String = s"$categoryName($requestId)"
 }
 
+// TODO (OPTIMUS-70246): Integrate into DHTStore
+private[buildtool] final case class DhtOperation(clusterType: ClusterType, requestId: String)
+    extends ClusterTrace
+    with AsyncCategoryTrace {
+  override lazy val name: String = s"$categoryName($requestId)"
+}
+
 private[buildtool] case object ScanFilesystem extends CategoryTrace
 private[buildtool] case object FindArtifacts extends CategoryTrace
 private[buildtool] case object TidyRubbish extends CategoryTrace
@@ -279,7 +287,9 @@ private[buildtool] case object GitDiff extends SingletonCategoryTrace
 
 trait TraceFilter {
   import TraceFilter._
-  def include(category: CategoryTrace): Boolean = category != Build && !category.isInstanceOf[SilverkingOperation]
+  def include(category: CategoryTrace): Boolean =
+    category != Build && category != TidyRubbish && !category.isInstanceOf[SilverkingOperation] && !category
+      .isInstanceOf[DhtOperation]
   def publish(category: CategoryTrace): FilterResult
 }
 

@@ -68,15 +68,14 @@ class ECProfiler(root: RootEventCause) { handler =>
     }
   }
 
+  def getAllProfilingData: ProfiledEventCause = withGlobalTag(leaf.snap(true))
+
   // Accumulates data for a given EventCause
   final private class LeafImpl(
       val cause: String,
       val includeInHandlerProfCrumb: Boolean,
       val depth: Int,
   ) extends ECProfilerLeaf {
-
-    override def getAllProfilingData: ProfiledEventCause =
-      withGlobalTag(rooted(snap(true), Nil))
 
     override def getSummaryProfilingData: ProfiledEventCause = {
       @tailrec def foreachChild(stack: List[LeafImpl])(f: LeafImpl => Unit): Unit = {
@@ -89,16 +88,15 @@ class ECProfiler(root: RootEventCause) { handler =>
       }
 
       withGlobalTag(
-        rooted(
-          snap(false), {
-            // Snap only children with includeInHandlerProfCrumb
-            val acc = Seq.newBuilder[ProfiledEventCause]
-            foreachChild(children) { child =>
-              if (child.includeInHandlerProfCrumb) acc += child.snap(false)
-            }
-            acc.result()
+        snap(false).copy(childEvents = {
+          // Snap only children with includeInHandlerProfCrumb
+          val acc = Seq.newBuilder[ProfiledEventCause]
+          foreachChild(children) { child =>
+            if (child.includeInHandlerProfCrumb) acc += child.snap(false)
           }
-        ))
+          acc.result()
+        })
+      )
     }
 
     // Return a snapshot of this profiled event cause data.
@@ -169,19 +167,10 @@ class ECProfiler(root: RootEventCause) { handler =>
     private var _children: List[LeafImpl] = Nil
 
     private def iAmRoot = leaf eq this
-
-    private def rooted(pec: ProfiledEventCause, children: Seq[ProfiledEventCause]) =
-      if (iAmRoot) pec.copy(childEvents = children)
-      else ProfiledEventCause(leaf.cause, Map.empty, 0L, 0L, 0L, pec +: children)
   }
 }
 
 trait ECProfilerLeaf {
-
-  /**
-   * Get profiling data for this and all its foreground children
-   */
-  def getAllProfilingData: ProfiledEventCause
 
   /**
    * Produce a summary of profiling data for foreground children

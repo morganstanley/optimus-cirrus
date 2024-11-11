@@ -160,7 +160,7 @@ class ArchiveInstaller(installer: Installer) extends Log {
       }
       .filter {
         _.id match {
-          case VersionedExternalArtifactId(group, name, _, _, EAT.SignatureJar | EAT.ClassJar) =>
+          case VersionedExternalArtifactId(group, name, _, _, EAT.SignatureJar | EAT.ClassJar, _) =>
             !excludes.exists { e =>
               e.group.forall(_ == group) && e.name.forall(_ == name)
             }

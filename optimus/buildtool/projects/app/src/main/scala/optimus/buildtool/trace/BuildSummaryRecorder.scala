@@ -12,6 +12,7 @@
 package optimus.buildtool.trace
 
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.compilers.zinc.CompilerThrottle
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.utils.Utils
@@ -25,7 +26,8 @@ import scala.collection.compat._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTraceListener {
+class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: CompilerThrottle)
+    extends DefaultObtTraceListener {
   private val log = getLogger(this)
 
   @volatile private var startTime: Instant = _
@@ -193,6 +195,20 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
       ).filter(!_.isBlank).mkString("\n")
     }
 
+    def jvmThrottleSummary: String = {
+      val stats = compilerThrottle.snapAndResetStats()
+      if (stats.nonEmpty) {
+        val maxWeight = stats.map(_.inflightWeight).max.toInt
+        val concurrency = stats.map(_.nInFlight)
+        val maxConcurrency = concurrency.max
+        val meanConcurrency = concurrency.sum.toDouble / concurrency.size
+        val queued = stats.map(_.nQueued)
+        val maxQueued = queued.max
+        val meanQueued = queued.sum.toDouble / queued.size
+        f"\t\tMean Concurrency: $meanConcurrency%,.1f ($meanQueued%,.1f queued), Max Concurrency: $maxConcurrency%,d ($maxWeight%,d bytes, $maxQueued%,d queued), Limit: ${compilerThrottle.maxNumZincs}%,d (${compilerThrottle.zincByteLimit}%,d bytes)"
+      } else ""
+    }
+
     def pythonHitsSummary: String = {
       def pythonHits(cacheType: ObtStats.Cache): Long =
         stats.getOrDefault(cacheType.PythonHit, 0)
@@ -235,6 +251,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory]) extends DefaultObtTrace
         s"$totalScopesSummary",
         s"$workspaceChangesSummary",
         s"$jvmSummary",
+        jvmThrottleSummary,
         s"$pythonSummary",
         gcSummary
       ).filter(!_.isBlank).mkString("\n")

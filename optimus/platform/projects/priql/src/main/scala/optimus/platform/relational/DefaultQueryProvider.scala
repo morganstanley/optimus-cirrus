@@ -40,16 +40,6 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     QueryImpl[T](method, this)
   }
 
-  private def lambdaToFuncElement[T, U](f: Lambda1[T, U], resultType: TypeInfo[U], argument: Argument): FuncElement =
-    f match {
-      case Lambda1(Some(f), _, lambda) =>
-        new FuncElement(new ScalaLambdaCallee(Right(f), lambda, resultType, argument), Nil, null)
-      case Lambda1(_, Some(nf), lambda) =>
-        new FuncElement(new ScalaLambdaCallee(Left(nf), lambda, resultType, argument), Nil, null)
-      case Lambda1(None, None, _) =>
-        throw new IllegalArgumentException("expected either a Function or a NodeFunction but both were None")
-    }
-
   def map[T, U: TypeInfo](src: Query[T], f: Lambda1[T, U])(implicit pos: MethodPosition): Query[U] = {
     val sourceType = src.elementType
     val resultType = typeInfo[U]
@@ -1115,6 +1105,19 @@ object DefaultQueryProvider {
     val optimized = ExtensionOptimizer.optimize(reduced)
     ShapeToRewriter.rewrite(optimized)
   }
+
+  private[relational] def lambdaToFuncElement[T, U](
+      f: Lambda1[T, U],
+      resultType: TypeInfo[U],
+      argument: Argument): FuncElement =
+    f match {
+      case Lambda1(Some(f), _, lambda) =>
+        new FuncElement(new ScalaLambdaCallee(Right(f), lambda, resultType, argument), Nil, null)
+      case Lambda1(_, Some(nf), lambda) =>
+        new FuncElement(new ScalaLambdaCallee(Left(nf), lambda, resultType, argument), Nil, null)
+      case Lambda1(None, None, _) =>
+        throw new IllegalArgumentException("expected either a Function or a NodeFunction but both were None")
+    }
 }
 
 private final case class QueryImpl[T](val element: MultiRelationElement, val provider: QueryProvider) extends Query[T]

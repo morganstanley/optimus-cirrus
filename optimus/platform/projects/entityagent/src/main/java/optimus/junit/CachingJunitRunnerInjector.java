@@ -79,21 +79,23 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
     }
   }
 
-  private boolean extendsRunner(ClassLoader loader, String className) {
-    if (className == null || skipName(className)) return false;
-    else if (className.equals(JUNIT_RUNNER_CLASS)) return true;
+  private boolean extendsRunner(ClassLoader loader, String className, String superClassName) {
+    if (superClassName == null || skipName(superClassName)) return false;
+    else if (superClassName.equals(JUNIT_RUNNER_CLASS)) return true;
 
     // getResourceAsStream does not cause class loading, which we must absolutely avoid
-    InputStream is = loader.getResourceAsStream(className + ".class");
+    InputStream is = loader.getResourceAsStream(superClassName + ".class");
     ClassReader reader;
     try (is) {
-      if (is == null) throw new RuntimeException(String.format("Class not found: %s", className));
+      if (is == null)
+        throw new RuntimeException(
+            String.format("Parent class of %s not found: %s", className, superClassName));
       reader = new ClassReader(is);
     } catch (IOException e) {
       // throwing here will be logged by safeTransform
       throw new RuntimeException(e);
     }
-    return extendsRunner(loader, reader.getSuperName());
+    return extendsRunner(loader, superClassName, reader.getSuperName());
   }
 
   private static boolean skipName(String name) {
@@ -125,7 +127,7 @@ public class CachingJunitRunnerInjector implements ClassFileTransformer {
     // is className assignableFrom junit runner base - without loading any new classes, as they
     // won't be transformed if
     // we do it from here
-    if (!extendsRunner(loader, classReader.getSuperName())) {
+    if (!extendsRunner(loader, className, classReader.getSuperName())) {
       return null;
     }
 

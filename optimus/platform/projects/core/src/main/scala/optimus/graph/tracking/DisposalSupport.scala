@@ -36,7 +36,7 @@ trait DisposalSupport {
     if (!_disposed) {
       val disposalMutableInfo = mutable.Map.empty[DependencyTracker, KeyAndTracked]
 
-      disposeThisAndChildren(disposalMutableInfo)
+      disposeThisAndChildren(disposalMutableInfo, cause)
       this match {
         case root: DependencyTrackerRoot => DependencyTrackerRoot.removeRoot(root)
         case _                           => parent.removeDisposedChildren()
@@ -56,10 +56,12 @@ trait DisposalSupport {
     }
   }
 
-  private[tracking] def disposeThisAndChildren(info: mutable.Map[DependencyTracker, KeyAndTracked]): Unit = {
+  private[tracking] def disposeThisAndChildren(
+      info: mutable.Map[DependencyTracker, KeyAndTracked],
+      cause: EventCause): Unit = {
     if (!_disposed) {
       children foreach { c =>
-        c.disposeThisAndChildren(info)
+        c.disposeThisAndChildren(info, cause)
       }
       _disposed = true
       removeDisposedChildren()
@@ -69,7 +71,7 @@ trait DisposalSupport {
       disposeChildList()
       tweakableTracker.disposeTweakableTracker()
       userNodeTracker.disposeUserNodeTracker()
-      disposeSnapshot()
+      disposeSnapshot(cause)
     }
   }
 

@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import com.typesafe.config.Config;
 
 /**
@@ -53,7 +52,7 @@ import com.typesafe.config.Config;
  */
 public class GitProcess {
 
-  private Supplier<Config> config;
+  private final Supplier<Config> config;
 
   public GitProcess(Config config) {
     this.config = () -> config;
@@ -67,7 +66,7 @@ public class GitProcess {
           Arrays.stream(args)
               .map(this::escapeWindows)
               .filter(Predicate.not(String::isEmpty))
-              .collect(Collectors.toList()));
+              .toList());
     } else {
       command.addAll(Arrays.asList(args));
     }
@@ -88,18 +87,8 @@ public class GitProcess {
     return pb;
   }
 
-  public static boolean isSparseReady(Config conf) {
-    if (OsSpecific.isWindows) {
-      return isUsingGitFromTools(conf);
-    } else {
-      // sparse on linux works fine out of the box
-      return true;
-    }
-  }
-
-  public static boolean isUsingGitFromTools(Config conf) {
-    String path = "tools.git.isDefault";
-    return OsSpecific.isWindows && conf.hasPath(path) && conf.getBoolean(path);
+  public static boolean isUsingGitFromTools() {
+    return OsSpecific.isWindows;
   }
 
   public Path getGitExecPath() {
@@ -126,7 +115,7 @@ public class GitProcess {
   }
 
   public String getGitPath() {
-    return isUsingGitFromTools(config.get()) ? toolsGitPath() : config.get().getString("git.path");
+    return isUsingGitFromTools() ? toolsGitPath() : config.get().getString("git.path");
   }
 
   private String toolsGitPath() {

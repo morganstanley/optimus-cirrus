@@ -9,26 +9,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.cache
-package silverking
+package optimus.buildtool.cache.remote
 
 import optimus.buildtool.app.OptimusBuildToolCmdLineT
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.app.RemoteStoreWriteCmdLine
 import optimus.buildtool.cache.CacheMode
+import optimus.buildtool.cache.ComparableArtifactStore
+import optimus.buildtool.cache.ComparingArtifactStore
+import optimus.buildtool.cache.EmptyStore
+import optimus.buildtool.cache.NodeCaching
+import optimus.buildtool.cache.RemoteReadThroughTriggeringArtifactCache
+import optimus.buildtool.cache.SimpleArtifactCache
 import optimus.buildtool.cache.dht.DHTStore
+import optimus.buildtool.cache.dht.LocalDhtServer
+import optimus.buildtool.cache.silverking.SilverKingConfig
+import optimus.buildtool.cache.silverking.SilverKingStore
 import optimus.buildtool.utils.CompilePathBuilder
+import optimus.dht.client.api.DHTClientBuilder
+import optimus.dht.client.api.registry.StaticRegistryObserver
 import optimus.platform._
 import optimus.stratosphere.config.StratoWorkspace
 
-@entity class CacheProvider(
-    cmdLine: CacheProvider.CacheCmdLine,
+@entity class RemoteCacheProvider(
+    cmdLine: RemoteCacheProvider.CacheCmdLine,
     defaultVersion: String,
     pathBuilder: CompilePathBuilder,
     stratoWorkspace: StratoWorkspace,
     cacheOperationRecorder: CacheOperationRecorder
 ) {
-  import CacheProvider._
+  import RemoteCacheProvider._
   private def isEnabled[T](sk: String): Boolean = sk != OptimusBuildToolCmdLineT.NoneArg
   private def isEnabled(): Boolean =
     cmdLine.silverKing != OptimusBuildToolCmdLineT.NoneArg || cmdLine.dhtRemoteStore != OptimusBuildToolCmdLineT.NoneArg
@@ -125,7 +135,6 @@ import optimus.stratosphere.config.StratoWorkspace
       cacheMode: CacheMode = defaultCacheMode,
       version: String = defaultVersion,
       silverKing: String = cmdLine.silverKing,
-      dht: String = cmdLine.dhtRemoteStore,
       offlinePuts: Boolean = true,
   ): RemoteArtifactCache = {
 
@@ -135,7 +144,21 @@ import optimus.stratosphere.config.StratoWorkspace
         EmptyStore
       case (NoneArg, dht, _) if dht != NoneArg =>
         log.info(s"Using DHT $cacheType cache at $dht")
-        new DHTStore(pathBuilder, DHTStore.zkClusterType(dht), version, cacheMode.write, DHTStore.ZkBuilder(dht))
+
+        val clusterType = DHTStore.zkClusterType(dht)
+        val clientBuilder = clusterType match {
+          case ClusterType.Custom =>
+            LocalDhtServer
+              .fromString(dht)
+              .map { localServer =>
+                val registryObserver = StaticRegistryObserver.local(localServer.port, localServer.uniqueId)
+                DHTClientBuilder.create.registryObserver(registryObserver).kerberos(false)
+              }
+              .getOrElse(DHTStore.ZkBuilder(dht)) // custom ZK path
+          case _ => DHTStore.ZkBuilder(dht)
+        }
+
+        new DHTStore(pathBuilder, clusterType, version, cacheMode.write, clientBuilder)
       case (sk, NoneArg, _) if sk != NoneArg =>
         val config = SilverKingConfig(silverKing)
         log.info(s"Using silverking $cacheType cache at $config")
@@ -175,7 +198,7 @@ import optimus.stratosphere.config.StratoWorkspace
 
 }
 
-object CacheProvider {
+object RemoteCacheProvider {
   type RemoteArtifactCache =
     SimpleArtifactCache[ComparableArtifactStore]
   type CacheCmdLine = RemoteStoreWriteCmdLine

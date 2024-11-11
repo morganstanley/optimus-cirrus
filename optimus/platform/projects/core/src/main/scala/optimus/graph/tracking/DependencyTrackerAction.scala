@@ -15,16 +15,18 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-
 import optimus.exceptions.GenericRTException
 import optimus.graph.AlreadyFailedNode
 import optimus.graph.NodeTaskInfo
 import optimus.graph.Settings
 import optimus.graph._
 import optimus.graph.diagnostics.GraphDiagnostics
+import optimus.graph.diagnostics.messages.DTQEvent
+import optimus.graph.diagnostics.messages.DTQEventCounter
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.ThreadDumper
 import optimus.platform._
+import optimus.ui.ScenarioReference
 
 import scala.util.Failure
 import scala.util.Success
@@ -263,6 +265,20 @@ abstract class DependencyTrackerAction[T] extends NodeCauseInfo {
     val sb = new PrettyStringBuilder
     writeWorkInfo(sb)
     TrackingActionEventCause(sb.toString.stripLineEnd) // don't want a new line baked into a TrackingActionEventCause
+  }
+
+  /**
+   * For monitoring via the graph debugger
+   */
+  private var dtqEvent: DTQEvent = _
+  private[tracking] def recordStart(scenario: ScenarioReference): Unit = {
+    dtqEvent = DTQEventCounter.report(scenario, cause, isUpdate)
+  }
+
+  private[tracking] def recordStop(): Unit = {
+    val event = dtqEvent
+    if (event ne null) DTQEventCounter.reportCompleted(event)
+    dtqEvent = null
   }
 }
 

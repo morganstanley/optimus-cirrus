@@ -22,6 +22,7 @@ import optimus.graph.diagnostics.sampling.SamplingProfiler.LoadData
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
 import optimus.platform.util.Log
 import optimus.platform.util.Version
+import optimus.utils.CountLogger
 import optimus.utils.MiscUtils.Endoish._
 import optimus.utils.OptimusStringUtils
 import optimus.utils.PropertyUtils
@@ -40,6 +41,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.util.Objects
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -93,20 +95,20 @@ object PyroUploader extends Log {
 
   // Approximate the full chain ID in eight bytes.
   // This is useful for publishing to destinations like pyroscope that can't handle high cardinality.
-  def approxTags(prefix: SegKey, id: ChainedID): Seq[(String, String)] = {
-    hashing.hashString(id.repr, StandardCharsets.UTF_8).asBytes().take(8).zipWithIndex.map { case (code, i) =>
+  def approxTags(prefix: SegKey, id: String): Seq[(String, String)] = {
+    hashing.hashString(id, StandardCharsets.UTF_8).asBytes().take(8).zipWithIndex.map { case (code, i) =>
       (f"$prefix%s${i}%02d", f"${code + 128}%03d")
     }
   }
 
-  private def approxLabels(prefix: SegKey, id: ChainedID, quote: Boolean = false): Seq[String] = {
+  private def approxLabels(prefix: SegKey, id: String, quote: Boolean = false): Seq[String] = {
     val q = if (quote) "\"" else ""
     approxTags(prefix, id).map { case (k, v) =>
       s"$k=$q$v$q"
     }
   }
 
-  def approxId(key: SegKey, id: ChainedID): String = approxLabels(key, id, true).mkString("{", ",", "}")
+  def approxId(key: SegKey, id: String): String = approxLabels(key, id, true).mkString("{", ",", "}")
 
   def cleanPyroAppName(appName: String): String = appName.replaceAll("\\$", "")
 
@@ -141,17 +143,19 @@ object PyroUploader extends Log {
       inst: AppInstance,
       canonical: Boolean,
       withExtraLabels: Boolean,
+      suffix: String,
       pyroExtraLabels: Map[String, String]): Seq[String] = {
 
     val commonLabels = Seq(
       s"canonical=$canonical",
       s"cpuLoad=${Math.floor(loadData.cpuLoad * 10) / 10}",
       s"graphUtil=${Math.floor(loadData.graphUtilization * 10) / 10}",
-      s"appId=${inst.appId}"
+      s"appId=${inst.appId}",
+      s"chainedID=${inst.root + suffix}"
     ).applyIf(withExtraLabels) {
       _ ++ pyroExtraLabels.map { case (pyroLabelKey, pyroLabelValue) =>
         s"$pyroLabelKey=$pyroLabelValue"
-      }.toSeq :+ s"chainedID=${inst.root}"
+      }.toSeq
     }
 
     if (pyroLatestVer) commonLabels
@@ -162,8 +166,8 @@ object PyroUploader extends Log {
       // If there were multiple appIds active during this period, then this method will be called for each
       // of them, but with canonical=true only for the first.  This will allow searching pyroscope by appId
       // if desired, or for canonical publications across appIds.
-      val appRoot = approxLabels(AppKey, inst.rootId)
-      val procRoot = approxLabels(EngineKey, ChainedID.root)
+      val appRoot = approxLabels(AppKey, inst.rootId.repr + suffix)
+      val procRoot = approxLabels(EngineKey, ChainedID.root.repr + suffix)
 
       commonLabels ++ procRoot ++ appRoot
     }
@@ -180,9 +184,10 @@ object PyroUploader extends Log {
       metricTpe: Option[String],
       canonical: Boolean,
       withExtraLabels: Boolean,
+      suffix: String,
       pyroExtraLabels: Map[String, String] = Map.empty): URI = {
     // construct the pyroscope labels/tags that will show as key value pairs in the 'Select Tag' drop down in pyro UI
-    val labels = pyroLabels(pyroLatestVersion, loadData, inst, canonical, withExtraLabels, pyroExtraLabels)
+    val labels = pyroLabels(pyroLatestVersion, loadData, inst, canonical, withExtraLabels, suffix, pyroExtraLabels)
 
     val pyroServiceName = buildPyroPublishingName(pyroLatestVersion, labels, metricTpe)
 
@@ -210,19 +215,18 @@ class PyroUploader(
     pyroUrl: String,
     pyroLatestVersion: Boolean = false,
     withExtraLabels: Boolean = false,
-    id: Option[ChainedID] = None,
+    suffix: String = "",
     dryRun: Boolean = false,
     nUploadThreads: Int = 1
 ) extends Log {
   import PyroUploader._
 
+  @volatile private var observedId: ChainedID = null
+
   def logRootKey(): Unit = {
-    id match {
-      case None =>
-        log.info(
-          s"Root keys: ${ChainedID.root}=${approxId(AppKey, ChainedID.root)} ${ChainedID.root}=${approxId(EngineKey, ChainedID.root)}")
-      case Some(id) =>
-        log.info(s"Root keys: $id=${approxId(AppKey, id)}")
+    if (Objects.nonNull(observedId)) {
+      val id = observedId.repr + suffix
+      log.info(s"Root keys: $id=${approxId(AppKey, id)}")
     }
   }
 
@@ -257,7 +261,18 @@ class PyroUploader(
 
     override def request: HttpPost = {
       val pyroUri =
-        buildUri(pyroUrl, pyroLatestVersion, meta, appInstance, from, until, format, None, canonical, withExtraLabels)
+        buildUri(
+          pyroUrl,
+          pyroLatestVersion,
+          meta,
+          appInstance,
+          from,
+          until,
+          format,
+          None,
+          canonical,
+          withExtraLabels,
+          suffix)
       val httpPostReq = new HttpPost(pyroUri)
 
       httpPostReq.addHeader("Content-Type", "multipart/form-data")
@@ -298,6 +313,7 @@ class PyroUploader(
         Some(tpe),
         canonical,
         withExtraLabels,
+        suffix,
         extraLabels)
       val httpPostReq = new HttpPost(pyroUri)
       httpPostReq.setEntity(new StringEntity(apDump, StandardCharsets.UTF_8))
@@ -382,6 +398,8 @@ class PyroUploader(
               activeThreads.countDown()
               return
             case p: Payload =>
+              if (Objects.isNull(observedId))
+                observedId = p.chainedID
               upload(p)
           }
         }
@@ -395,6 +413,7 @@ class PyroUploader(
 
   def shutdown(timeout: Int = 100): Unit = {
     enqueue(Done)
+    count.done()
     activeThreads.await(timeout, TimeUnit.SECONDS)
   }
 
@@ -421,6 +440,8 @@ class PyroUploader(
 
   private val payloadID = new AtomicInteger(0)
 
+  private val count = new CountLogger(s"Uploading $status", 5000, log)
+
   private def upload(upload: Payload): Unit = {
     import upload._
     val id = payloadID.incrementAndGet()
@@ -435,7 +456,7 @@ class PyroUploader(
     } else do {
       i += 1
       try {
-        log.info(s"Uploading snapshot $id $upload, size=$size")
+        log.debug(s"Uploading snapshot $id $upload, size=$size")
         val postRequest = upload.request
         if (!pyroLatestVersion) {
           val getReq = new HttpGet(request.getURI.toString)
@@ -449,11 +470,12 @@ class PyroUploader(
           errors.incrementAndGet()
           backoff(s"PyroUploader: Exception uploading snapshot $id $upload: ${e.getMessage}")
       } finally {
+        count()
         if (response ne null) {
           val code = response.getStatusLine.getStatusCode()
           if (code < 400) {
             success = true
-            uploaded.incrementAndGet()
+            val n = uploaded.incrementAndGet()
             resetBackoff()
           } else {
             val body = response.getEntity()

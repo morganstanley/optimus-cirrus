@@ -113,6 +113,9 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
   def allOpenPullRequestsOfCurrentUser(): Seq[Config] =
     getValues("dashboard/pull-requests", "state" -> "OPEN", "role" -> "AUTHOR")
 
+  def allDeclinedPullRequestsOfCurrentUser(): Seq[Config] =
+    getValues("dashboard/pull-requests", "state" -> "DECLINED", "role" -> "AUTHOR")
+
   def lastPullRequestActivity(project: String, repository: String, pullRequestId: Long): Long = {
     val config = findValue(s"projects/$project/repos/$repository/pull-requests/$pullRequestId/activities")(_ => true)
     val rootDate = config.map(
@@ -137,6 +140,9 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
 
     List(created, updated) ++ traverseValidChild(hasComments, "comments") ++ traverseValidChild(hasTasks, "tasks")
   }
+
+  def pullRequestActivities(project: String, repository: String, pullRequestId: Long): Seq[Config] =
+    getValues(s"projects/$project/repos/$repository/pull-requests/$pullRequestId/activities")
 
   def declinePullRequest(pullRequest: Config): Unit = {
     httpClient.post(

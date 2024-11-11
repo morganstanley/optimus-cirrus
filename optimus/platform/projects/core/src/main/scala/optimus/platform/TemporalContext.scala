@@ -12,9 +12,9 @@
 package optimus.platform
 
 import java.time.Instant
-
 import optimus.exceptions.GenericRTException
 import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.annotations.nodeSync
 import optimus.platform.storable.Entity
 import optimus.platform.storable.PersistentEntity
@@ -71,7 +71,7 @@ trait TemporalContext extends TemporalSurface with HasTTContext {
 
   @nodeSync
   private[optimus] def deserialize(pe: PersistentEntity, storageInfo: StorageInfo): Entity
-  private[optimus] def deserialize$queued(pe: PersistentEntity, storageInfo: StorageInfo): Node[Entity]
+  private[optimus] def deserialize$queued(pe: PersistentEntity, storageInfo: StorageInfo): NodeFuture[Entity]
 
   /**
    * Actually executes the query operation against the DAL at appropriate temporalities and returns the results
@@ -83,7 +83,7 @@ trait TemporalContext extends TemporalSurface with HasTTContext {
    */
   @nodeSync
   private[optimus] def dataAccess(operation: TemporalSurfaceQuery): operation.ResultType
-  private[optimus] def dataAccess$queued(operation: TemporalSurfaceQuery): Node[operation.ResultType]
+  private[optimus] def dataAccess$queued(operation: TemporalSurfaceQuery): NodeFuture[operation.ResultType]
 
   override type surfaceForFrozenType <: TemporalContext
 }

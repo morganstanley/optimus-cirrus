@@ -50,6 +50,8 @@ final case class GitLog(commit: String, date: String)
  */
 final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
+  private val MissingIndexRegex = """^warning: no corresponding \.idx:\s+(.+\.pack)$""".r
+
   def diff(): String = runGit("diff")
 
   def diffNameOnly(commit: String, withPattern: String = ""): Seq[String] = {
@@ -72,6 +74,8 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def addRemote(name: String, location: RemoteUrl): String = runGit("remote", "add", name, location.url)
 
+  def addRemoteNoTags(name: String, location: RemoteUrl): String = runGit("add-remote", name, location.url)
+
   def setRemote(name: String, location: RemoteUrl): String = runGit("remote", "set-url", name, location.url)
 
   def removeRemote(name: String): String = runGit("remote", "remove", name)
@@ -80,12 +84,22 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def disableGc(): String = runGit("config", "gc.auto", "0")
 
-  def collectGarbage(): String = runGit("gc") + runGit("prune")
+  def collectGarbage(): String = runGit("gc")
 
   def updateIndex(version: Int): String = {
     require(Seq(2, 3, 4).contains(version), s"Version must be one of: (2,3,4), was $version")
     runGit("update-index", "--index-version", version.toString)
   }
+
+  def createMissingIndices(packFilesLimit: Int): Seq[String] = {
+    countObjects()
+      .collect { case MissingIndexRegex(packPath) => Paths.get(packPath) }
+      .take(packFilesLimit)
+      .map(indexPack)
+  }
+
+  def indexPack(path: Path): String =
+    runGit("index-pack", path.toString)
 
   def writeCommitGraph(): String = runGit("commit-graph", "write", "--reachable")
 
@@ -270,11 +284,19 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     }
   }
 
+  def countObjects(): Seq[String] = {
+    val result = runGit("count-objects", "--verbose")
+    Source.fromString(result).getLines().to(Seq)
+  }
+
   private[utils] def retrieveBranchesNames(listBranchesOutput: String) =
     listBranchesOutput.split("""\s+|[\s*]+""").filter(_.nonEmpty).toList
 
   def runGit(args: String*): String = {
-    val env = Map("GIT_ASK_YESNO" -> "false")
+    val env = Map(
+      "GIT_ADVICE" -> "0", // no hints please!
+      "GIT_ASK_YESNO" -> "false",
+    )
     CommonProcess.in(workspace).runGit(workspace.directoryStructure.sourcesDirectory, env)(args: _*)
   }
 }

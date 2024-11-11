@@ -12,8 +12,8 @@
 package optimus.buildtool.builders.postbuilders.metadata
 
 import optimus.buildtool.config.ModuleId
-import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -39,13 +39,13 @@ object ArtifactReport {
   @node def apply(
       settings: MetadataSettings,
       module: ModuleId,
-      configurations: Map[ScopeId, ScopeConfiguration]): ArtifactReport = new ArtifactReport(
+      moduleCompilations: Map[ScopeId, ScopedCompilation]): ArtifactReport = new ArtifactReport(
     name = module.module,
     tpe = ".trainsubproject",
     scope = "public",
     usage = s"group: '${module.meta}.${module.bundle}'",
     onToolchain = {
-      val externalDependenciesReports = DependenciesReport(settings, configurations)
+      val externalDependenciesReports = DependenciesReport(settings, moduleCompilations)
       Map(settings.javaVersion -> externalDependenciesReports.jvm, "*" -> externalDependenciesReports.extraLibs)
         .filter { case (_, reports) =>
           reports.dependencies.nonEmpty

@@ -9,17 +9,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.cache.silverking
+package optimus.graph.diagnostics.trace
 
-sealed trait OperationType {
-  def str: String
-}
-
-object OperationType {
-  case object Read extends OperationType {
-    val str = "reads"
-  }
-  case object Write extends OperationType {
-    val str = "writes"
-  }
+/**
+ * A mode that is like hotspots, but it has a timeline view to display in graph debugger.
+ */
+class OGEventsHotspotsWithTimelineObserver private[trace]
+    extends OGEventsNewHotspotsObserver
+    with OGEventsTimeLineObserverImpl {
+  override def name: String = "hotspotsTimeline"
+  override def title: String = "Hotspots (with timeline)"
+  override def description: String = "Hotspots mode that includes timeline recording"
+  override def includeInUI: Boolean = true
 }

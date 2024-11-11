@@ -18,7 +18,7 @@ import org.apache.commons.text.StringSubstitutor
 
 import scala.collection.immutable.Seq
 
-final case class TestplanTask(module: ModuleId, testName: String) {
+final case class TestplanTask(module: ModuleId, testName: String, runStage: String = RunStage.Reg) {
   def moduleScoped: ModuleScopedName = ModuleScopedName(module, testName)
 }
 
@@ -38,6 +38,7 @@ sealed trait TestplanEntry {
   def copyEntry(testTasks: Seq[TestplanTask] = this.testTasks, groupName: String = this.groupName): TestplanEntry
 
   val moduleName: String = additionalBindings.getOrElse("MODULE_NAME", groupName)
+  val metaBundleName = s"${metaBundle.meta}-${metaBundle.bundle}"
 
   protected def bind(text: String, replacements: Map[String, String]): String = {
     val sub =
@@ -47,6 +48,16 @@ sealed trait TestplanEntry {
     sub.setDisableSubstitutionInValues(true) // don't bind variables in values
     sub.replace(text)
   }
+
+  def commonBindings: Map[String, String] = Map(
+    "APP_NAME" -> additionalBindings.getOrElse("APP_NAME", displayTestName),
+    "DISPLAY_TEST_NAME" -> displayTestName,
+    "GROUP_NAME" -> groupName,
+    "MODULE_GROUP_NAME" -> additionalBindings.getOrElse("MODULE_GROUP_NAME", s"$metaBundleName-$displayTestName"),
+    "MODULE_NAME" -> moduleName,
+    // e.g. -cpu 100% -mem 42G -disk 16G -priority 40
+    "TREADMILL_OPTS" -> treadmillOpts.toSeq.sortBy(_._1).map { case (k, v) => s"-$k $v" }.mkString(" ")
+  )
 }
 
 final case class ScalaTestplanEntry(
@@ -66,21 +77,13 @@ final case class ScalaTestplanEntry(
     copy(testTasks = testTasks, groupName = groupName)
 
   def bind(value: String): String = {
-    val metaBundleName = s"${metaBundle.meta}-${metaBundle.bundle}"
     val replacements = withAppId(
       Map(
-        "APP_NAME" -> additionalBindings.getOrElse("APP_NAME", displayTestName),
-        "DISPLAY_TEST_NAME" -> displayTestName,
-        "GROUP_NAME" -> groupName,
         "GRADLE_ARGS" -> testTasks.map(t => s"-t ${t.module.properPath}.${t.testName}").mkString(" "),
-        "MODULE_GROUP_NAME" -> additionalBindings.getOrElse("MODULE_GROUP_NAME", s"$metaBundleName-$displayTestName"),
-        "MODULE_NAME" -> moduleName,
         "REG_PATH_VAR" -> additionalBindings.getOrElse("REG_PATH_VAR", "REG_PATH"),
         // if override is set, pass it to the runner
-        "RUNNER_EXTRA" -> stratoOverride.fold("")(value => s"--strato-override $value"),
-        // e.g. -cpu 100% -mem 42G -disk 16G -priority 40
-        "TREADMILL_OPTS" -> treadmillOpts.toSeq.sortBy(_._1).map { case (k, v) => s"-$k $v" }.mkString(" ")
-      ) ++ additionalBindings)
+        "RUNNER_EXTRA" -> stratoOverride.fold("")(value => s"--strato-override $value")
+      ) ++ commonBindings ++ additionalBindings)
 
     bind(value, replacements)
   }
@@ -111,25 +114,53 @@ final case class PythonTestplanEntry(
   val scope: String = testTasks.map(t => t.module.properPath).mkString(" ")
 
   def bind(value: String): String = {
-    val metaBundleName = s"${metaBundle.meta}-${metaBundle.bundle}"
     // Generate python's artifacts directory, using environment variable e.g. OPTIMUS_PLATFORM_COMMON_REG_PATH
     val projectName = testTasks.map(t => t.module.bundle).headOption.getOrElse("PLATFORM")
     val pythonArtifactsDir = s"OPTIMUS_${projectName.toUpperCase}_COMMON_REG_PATH"
 
     val replacements =
       Map(
-        "APP_NAME" -> additionalBindings.getOrElse("APP_NAME", displayTestName),
-        "DISPLAY_TEST_NAME" -> displayTestName,
-        "GROUP_NAME" -> groupName,
-        "MODULE_GROUP_NAME" -> additionalBindings.getOrElse("MODULE_GROUP_NAME", s"$metaBundleName-$displayTestName"),
-        "MODULE_NAME" -> moduleName,
         "PYTHON_ARTIFACTS_DIR" -> pythonArtifactsDir,
-        "SCOPE" -> scope,
-        // e.g. -cpu 100% -mem 42G -disk 16G -priority 40
-        "TREADMILL_OPTS" -> treadmillOpts.toSeq.sortBy(_._1).map { case (k, v) => s"-$k $v" }.mkString(" ")
-      ) ++ additionalBindings
+        "SCOPE" -> scope
+      ) ++ commonBindings ++ additionalBindings
 
     bind(value, replacements)
   }
+}
 
+final case class ConsumerProviderContractTestplanEntry(
+    displayTestName: String,
+    groupName: String,
+    metaBundle: MetaBundle,
+    treadmillOpts: Map[String, String],
+    additionalBindings: Map[String, String],
+    stratoOverride: Option[String],
+    testTasks: Seq[TestplanTask],
+    testModulesFileName: String
+) extends TestplanEntry {
+
+  override def copyEntry(
+      testTasks: Seq[TestplanTask] = this.testTasks,
+      groupName: String = this.groupName): ConsumerProviderContractTestplanEntry =
+    this.copy(testTasks = testTasks, groupName = groupName)
+
+  def bind(value: String): String = {
+    val replacements =
+      Map(
+        "CONSUMER_ARGS" -> testTasks
+          .filter(_.runStage == RunStage.Consumer)
+          .map(t => s"-t ${t.module.properPath}.${t.testName}")
+          .mkString(" "),
+        "PROVIDER_ARGS" -> testTasks
+          .filter(_.runStage == RunStage.Provider)
+          .map(t => s"-t ${t.module.properPath}.${t.testName}")
+          .mkString(" "),
+        "BAS_PATH_VAR" -> additionalBindings.getOrElse("BAS_PATH_VAR", "BAS_PATH"),
+        "REG_PATH_VAR" -> additionalBindings.getOrElse("REG_PATH_VAR", "REG_PATH"),
+        // if override is set, pass it to the runner
+        "RUNNER_EXTRA" -> stratoOverride.fold("")(value => s"--strato-override $value")
+      ) ++ commonBindings ++ additionalBindings
+
+    bind(value, replacements)
+  }
 }

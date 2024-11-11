@@ -12,17 +12,19 @@
 package optimus.buildtool.config
 
 import java.nio.file.Path
+import java.nio.file.Paths
 
 object AfsNamingConventions {
   val AfsRootStr: String = StaticConfig.string("afsRoot")
   val AfsRootStrWindows: String = AfsRootStr.replace('/', '\\')
 
   val AfsDistStr: String = s"${AfsRootStr}dist/"
-  private val AfsDistStrWindows: String = s"${AfsRootStrWindows}dist\\"
+  private val AfsDistPath: Path = Paths.get(AfsDistStr)
+  private val AfsDistPathWindows: Path = Paths.get(s"${AfsRootStrWindows}dist\\")
 
   val AfsRootMapping: String = StaticConfig.string("afsRootMapping")
   val AfsRootMappingWindows: String = AfsRootMapping.replace('/', '\\')
 
-  def isAfs(path: Path): Boolean = path.startsWith(AfsDistStr) || path.startsWith(AfsDistStrWindows)
+  def isAfs(path: Path): Boolean = path.startsWith(AfsDistPath) || path.startsWith(AfsDistPathWindows)
 
 }

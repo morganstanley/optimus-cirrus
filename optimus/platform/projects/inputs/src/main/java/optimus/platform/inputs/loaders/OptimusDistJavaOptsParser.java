@@ -11,7 +11,8 @@
  */
 package optimus.platform.inputs.loaders;
 
-import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -19,6 +20,7 @@ import optimus.platform.inputs.EngineAwareNodeInputResolver;
 import optimus.platform.inputs.NodeInput;
 import optimus.platform.inputs.NodeInputResolver;
 import optimus.platform.inputs.NodeInputMapValue;
+import optimus.platform.inputs.NodeInputs;
 import optimus.platform.inputs.dist.DistNodeInputs;
 import optimus.platform.inputs.registry.Registry;
 import optimus.platform.inputs.registry.Source;
@@ -40,7 +42,7 @@ public class OptimusDistJavaOptsParser {
    * @return a {@link NodeInputStorage}
    */
   public static <N> NodeInputStorage<N> parse(NodeInputStorage<N> result, String value) {
-    for (NodeInputResolver.Entry<?> entry : parseFromString(value)) {
+    for (NodeInputResolver.Entry<?> entry : parseFromString(value).values()) {
       result = result.appendEngineSpecificInput(entry);
     }
     return result;
@@ -54,14 +56,15 @@ public class OptimusDistJavaOptsParser {
    * @return a {@link Set} of parsed {@link NodeInputResolver.Entry}
    */
   public static <N> NodeInputStorage<N> parseAsLocal(NodeInputStorage<N> result, String value) {
-    for (NodeInputResolver.Entry<?> entry : parseFromString(value)) {
-      result = result.appendLocalInput(entry, true);
+    for (Map.Entry<NodeInput<?>, NodeInputResolver.Entry<?>> entry :
+        parseFromString(value).entrySet()) {
+      result = result.appendLocalInput(entry.getValue(), true);
     }
     return result;
   }
 
-  private static Set<NodeInputResolver.Entry<?>> parseFromString(String value) {
-    Set<NodeInputResolver.Entry<?>> result = new HashSet<>();
+  private static Map<NodeInput<?>, NodeInputResolver.Entry<?>> parseFromString(String value) {
+    Map<NodeInput<?>, NodeInputResolver.Entry<?>> result = new HashMap<>();
     if (value == null || value.trim().isEmpty()) return result;
     String[] properties = value.replaceAll("\\s+", " ").trim().split(" ");
     for (String property : properties) {
@@ -71,11 +74,14 @@ public class OptimusDistJavaOptsParser {
       Optional<NodeInputResolver.Entry<?>> entry = parseIfJvmProperty(systemProperty);
       if (!entry.isPresent()) entry = parseIfSystemProperty(systemProperty);
       if (entry.isPresent()) {
-        result.add(entry.get());
+        result.put(entry.get().nodeInput(), entry.get());
       } else {
-        result.add(
+        NodeInputs.ScopedSINodeInput<String> input =
+            DistNodeInputs.newOptimusDistJavaFlag(systemProperty);
+        result.put(
+            input,
             NodeInputResolver.entry(
-                DistNodeInputs.newOptimusDistJavaFlag(systemProperty),
+                input,
                 new NodeInputMapValue<>(LoaderSource.ENVIRONMENT_VARIABLES, systemProperty)));
       }
     }

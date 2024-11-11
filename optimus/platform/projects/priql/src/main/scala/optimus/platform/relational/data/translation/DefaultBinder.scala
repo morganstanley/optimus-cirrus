@@ -91,7 +91,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
           case _ => None
         }
         resultOpt.getOrElse(updateFuncCall(func, inst, args))
-      case mc: MethodCallee if mc.method.declaringType <:< classOf[Option[_]] =>
+      case mc: MethodCallee if TypeInfo.isOption(mc.method.declaringType) =>
         val inst = visitElement(func.instance)
         val resultOpt = (inst, func.arguments) match {
           case (OptionElement(e), List(l: LambdaElement)) =>
@@ -313,7 +313,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
         val cond = optionToCondition(x)
         ElementFactory.condition(cond.test, cond.ifTrue, OptionElement(cond.ifFalse), e.rowTypeInfo)
       case _ =>
-        val constNull = ElementFactory.constant(if (e.rowTypeInfo <:< classOf[Option[_]]) None else null, e.rowTypeInfo)
+        val constNull = ElementFactory.constant(if (TypeInfo.isOption(e.rowTypeInfo)) None else null, e.rowTypeInfo)
         val test = ElementFactory.equal(e, constNull)
         flatten(ElementFactory.condition(test, ElementFactory.constant(null, TypeInfo.ANY), e, e.rowTypeInfo))
     }
@@ -353,7 +353,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
           case v if (validateValue(v, leftType)) => ElementFactory.constant(v, leftType)
         }.toList
         // Add Binary(eq, left, null) to result if has none value.
-        val isOption = leftType <:< classOf[Option[_]]
+        val isOption = TypeInfo.isOption(leftType)
         val isKnowable = leftType <:< classOf[Knowable[_]]
         val hasNoneValue = isOption && i.exists(v => v == None)
         val hasUnknown = isKnowable && i.exists(v => v.isInstanceOf[Unknown[_]])
@@ -414,7 +414,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
   }
 
   private def validateValue(value: Any, typeInfo: TypeInfo[_]): Boolean = {
-    val isOption = typeInfo <:< classOf[Option[_]]
+    val isOption = TypeInfo.isOption(typeInfo)
     val isKnownable = typeInfo <:< classOf[Knowable[_]]
     value match {
       case None                      => false
@@ -634,7 +634,7 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                   ElementFactory.notEqual(
                     cond.ifFalse,
                     ElementFactory.constant(
-                      if (cond.ifFalse.rowTypeInfo <:< classOf[Option[_]]) None else null,
+                      if (TypeInfo.isOption(cond.ifFalse.rowTypeInfo)) None else null,
                       cond.ifFalse.rowTypeInfo))
                 )
               case _ => invertTest(cond.test)
@@ -884,8 +884,8 @@ class DefaultBinder protected (mapper: QueryMapper, root: RelationElement) exten
                 case ConstValueElement(_: PopulationVariance[_] | _: PopulationStandardDeviation[_], _) => n + "_pop"
                 case _                                                                                  => n
               }
-            case "count" if projection.projector.rowTypeInfo <:< classOf[Option[_]] => "countOption"
-            case n                                                                  => n
+            case "count" if TypeInfo.isOption(projection.projector.rowTypeInfo) => "countOption"
+            case n                                                              => n
           }
           val alias = nextAlias()
           val aggElem = new AggregateElement(mc.resType, aggName, Option(arg).toList, false)

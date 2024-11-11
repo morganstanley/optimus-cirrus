@@ -68,7 +68,7 @@ object QueryMethod {
   case object FLATMAP extends QueryMethod
   case object ARRANGE extends QueryMethod
 
-  def isJoin(v: QueryMethod) = v match {
+  def isJoin(v: QueryMethod): Boolean = v match {
     case INNER_JOIN | LEFT_OUTER_JOIN | RIGHT_OUTER_JOIN | FULL_OUTER_JOIN | NATURAL_INNER_JOIN |
         NATURAL_LEFT_OUTER_JOIN | NATURAL_RIGHT_OUTER_JOIN | NATURAL_FULL_OUTER_JOIN =>
       true

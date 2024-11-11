@@ -41,6 +41,7 @@ import optimus.platform._
   /** exactly the same as calc but calling a non-cacheable child so that we can test profile time attribution */
   @node def calcWithAnc(i: Int): Int = tweakableA + i + x + tweakableC + anc
   @node def anc: Int = identity(1)
+  @node def nonCacheable(i: Int): Int = 1 + tweakableA + i
 }
 
 object AnalyzeEntity {

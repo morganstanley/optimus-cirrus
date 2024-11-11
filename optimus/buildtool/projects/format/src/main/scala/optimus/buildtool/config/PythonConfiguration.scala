@@ -34,8 +34,12 @@ object ModuleType {
 object PythonConfiguration {
   final case class OverriddenCommands(
       pythonVenvCmd: Option[String],
-      pipInstallCmd: Option[String]
+      thinPyappCmd: Option[String]
   )
+
+  object OverriddenCommands {
+    def empty: OverriddenCommands = OverriddenCommands(None, None)
+  }
 }
 
 final case class PythonConfiguration(

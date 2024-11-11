@@ -87,6 +87,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
       "Thus, it must have a matching non-RT method, but no such matching method found. Method name: %s"
   )
 
+  val KEY_INDEX_DEF_CANNOT_BE_ASYNC =
+    error0(20900, OptimusPhases.ADJUST_AST, "@key/@indexed def members cannot be @node/@async")
+  val KEY_CANNOT_BE_ABSTRACT =
+    error0(20901, OptimusPhases.ADJUST_AST, "@indexed(unique=true) or @key cannot be abstract")
+
   // Unclassified transformation errors
   val TRANSFORM_ERROR_ADJUST_AST = error2(21000, OptimusPhases.ADJUST_AST, "Error transforming in %s: %s")
 
@@ -95,7 +100,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val KEY_INDEX_MUST_STABLE = error0(
     21002,
     OptimusPhases.ADJUST_AST,
-    "@key/@indexed members must be stable (non-@node or @node(tweak=false) or final @node val) "
+    "@key/@indexed val members must be stable (non-@node or @node(tweak=false) or final @node val) "
   )
   val KEY_INDEX_WITH_PRIVATE =
     error0(21003, OptimusPhases.ADJUST_AST, "Illegal private[this] @key/@indexed (if ctor param, add 'val')")
@@ -458,21 +463,27 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     "@stored(childToParent=true) val must be an immutable.Set or optimus.platform.CovariantSet of an @stored @entity type"
   )
   val INDEX_MUST_EMBEDDABLE_PATH =
-    error0(22003, OptimusPhases.REF_CHECKS, "@indexed only supported on embeddable attribute paths/types")
+    error0(
+      22003,
+      OptimusPhases.REF_CHECKS,
+      "@indexed implementation only supported on embeddable attribute paths/types")
   val INDEX_MUST_REFER_CTOR_PARAM =
-    error0(22004, OptimusPhases.REF_CHECKS, "Index may only refer to constructor parameters of @embeddables")
+    error0(
+      22004,
+      OptimusPhases.REF_CHECKS,
+      "Index implementation may only refer to constructor parameters of @embeddables")
   val KEY_INDEX_MUST_STABLE2 =
-    error0(22005, OptimusPhases.REF_CHECKS, "@key/@index members must be stable, non-@node values")
+    error0(22005, OptimusPhases.REF_CHECKS, "Compound @key/@index implementation must use stable & non-@node members")
   val CANT_GENERATE_INDEX2 = error1(
     22006,
     OptimusPhases.REF_CHECKS,
-    "Cannot generate an index from %s"
+    "Cannot implement/override an '@indexed def' from %s"
   ) // TODO (OPTIMUS-0000): duplicate error message in different phases, redundant check?
   val INDEX_SEQ_DEF_MAP_ON_ENTITY =
     error1(
       22007,
       OptimusPhases.REF_CHECKS,
-      "The term %s is not valid on the RHS of an @indexed def. For more information " +
+      "The term %s is not valid on the RHS of an '@indexed def' implementation. For more information " +
         "see http://optimusguide/OptimusCoreDAL/DalIndexing.html#rules-for-indexes"
     )
   val NONTWEAK_OVERRIDE_TWEAK =
@@ -928,6 +939,8 @@ object OptimusNonErrorMessages extends OptimusNonErrorMessagesBase with OptimusP
     warning0(11000, OptimusPhases.ADJUST_AST, "Consider removing @node from non-tweakable final vals")
   val COMPOUND_KEY_MUST_DEF =
     warning0(11001, OptimusPhases.ADJUST_AST, "compound @key definitions should be defs")
+
+  val BANNED_PACKAGE = warning2(11002, OptimusPhases.ADJUST_AST, "Use of %s in this project is banned (use %s instead)")
 
   // refcheck phase warnings
   val TRANSIENT_CTOR_PARAM_USE = warning0(

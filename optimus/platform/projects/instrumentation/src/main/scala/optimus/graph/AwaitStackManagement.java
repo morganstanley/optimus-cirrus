@@ -451,7 +451,7 @@ public class AwaitStackManagement {
     return h ^ (h >>> 16);
   }
 
-  private static long combine(final long hash, final long rhs) {
+  public static long combineHashes(final long hash, final long rhs) {
     switch (DiagnosticSettings.awaitChainHashStrategy) {
       case 0:
         // boost::hash_combine but where rhs is fibonacci-mixed
@@ -483,9 +483,9 @@ public class AwaitStackManagement {
     // compute stack hash
     long hash = fromUnder.getLauncherStackHash();
     if (hash == 0L) hash = baseStackHash;
-    hash = combine(hash, toTask.getProfileId());
+    hash = combineHashes(hash, toTask.getProfileId());
     if (inJavaStack) {
-      hash = combine(hash, javaCallStackHash) | 1L; // java boundary stack hashes are odd
+      hash = combineHashes(hash, javaCallStackHash) | 1L; // java boundary stack hashes are odd
     } else hash &= ~1L; // normal hashes are even
     toTask.setLaunchData(fromUnder, hash, implFlags);
   }

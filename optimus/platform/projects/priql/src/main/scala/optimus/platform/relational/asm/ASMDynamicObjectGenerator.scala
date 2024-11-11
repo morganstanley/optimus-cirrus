@@ -325,7 +325,7 @@ final class ASMDynamicObjectGenerator(shapeType: TypeInfo[_]) extends ASMGenerat
             Type.getType(s"($fDesc)L$Node;")
           ): _*
         )
-        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "andThen", s"(L$Node;L$Function;)L$Node;", false)
+        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "andThen", s"(L$NodeFuture;L$Function;)L$Node;", false)
         mv.visitInsn(ARETURN)
         mv.visitMaxs(0, 0)
         mv.visitEnd()
@@ -387,7 +387,7 @@ final class ASMDynamicObjectGenerator(shapeType: TypeInfo[_]) extends ASMGenerat
             Type.getType(s"($objArrayDesc)L$Node;")
           ): _*
         )
-        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "whenAll", s"([L$Node;L$Function;)L$Node;", false)
+        mv.visitMethodInsn(INVOKEVIRTUAL, ContinuationObject, "whenAll", s"([L$NodeFuture;L$Function;)L$Node;", false)
         mv.visitInsn(ARETURN)
         mv.visitMaxs(0, 0)
         mv.visitEnd()

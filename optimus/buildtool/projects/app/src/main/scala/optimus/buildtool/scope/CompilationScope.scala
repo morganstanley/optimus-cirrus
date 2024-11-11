@@ -121,7 +121,7 @@ import scala.collection.immutable.SortedMap
         case Some(variantDef) => Some(s"[PythonVariant]${variantDef.name}")
         case None             => None
       },
-      Some(s"[venvPack2]${definition.venvPack}"),
+      Some(s"[thin-pyapp]${definition.thinPyapp}"),
       Some(s"[moduleType]${moduleType.label}"),
       Some(s"[osVersion]${OsUtils.osVersion}")
     ).flatten
@@ -216,12 +216,14 @@ import scala.collection.immutable.SortedMap
         case c @ ExternalClassFileArtifact(_: PathedExternalArtifactId, _) =>
           Seq(c)
         case ExternalClassFileArtifact(
-              VersionedExternalArtifactId(group, name, version, _, ExternalArtifactType.ClassJar),
+              VersionedExternalArtifactId(group, name, version, _, ExternalArtifactType.ClassJar, isMaven),
               _
             ) =>
           val deps = DependencyDefinitions(
-            directIds = Seq(DependencyDefinition(group, name, version, LocalDefinition)),
-            indirectIds = Seq.empty
+            directIds = Seq(DependencyDefinition(group, name, version, LocalDefinition, isMaven = isMaven)),
+            indirectIds = Nil,
+            substitutions = config.dependencies.substitutions,
+            forbiddenDependencies = config.dependencies.forbiddenDependencies
           )
           // get the transitive dependencies for each external plugin jar (note that we don't distinguish
           // between runtime and compile-time transitivity for external jars)
@@ -321,16 +323,19 @@ object CompilationScope {
 
     def mkScopeDeps(tpe: ResolutionArtifactType, deps: Dependencies, nativeDeps: Seq[NativeDependencyDefinition]) =
       ScopeDependencies(
-        id,
-        config.flags.mavenOnly,
-        deps,
-        nativeDeps,
-        tpe,
-        pathBuilder,
-        externalDependencyResolver,
-        factory,
-        cache,
-        hasher)
+        id = id,
+        mavenOnly = config.flags.mavenOnly,
+        dependencies = deps,
+        externalNativeDependencies = nativeDeps,
+        substitutions = config.dependencies.substitutions,
+        forbiddenDependencies = config.dependencies.forbiddenDependencies,
+        tpe = tpe,
+        pathBuilder = pathBuilder,
+        externalDependencyResolver = externalDependencyResolver,
+        scopedCompilationFactory = factory,
+        cache = cache,
+        hasher = hasher
+      )
 
     val compileDependencies = mkScopeDeps(CompileResolution, config.compileDependencies, Nil)
     val compileOnlyDependencies = mkScopeDeps(CompileOnlyResolution, config.compileOnlyDependencies, Nil)

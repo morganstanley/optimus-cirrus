@@ -11,20 +11,15 @@
  */
 package optimus.buildtool.cache.silverking
 
-import optimus.buildtool.cache.silverking.OperationType.Read
-import optimus.buildtool.cache.silverking.OperationType.Write
+import optimus.buildtool.cache.remote.ClusterType
 
-import java.util.concurrent.atomic.AtomicInteger
+object SilverKingStoreConfig {
+  private[silverking] val prefix = "optimus.buildtool.silverking"
+  // Some(True): always enabled
+  // Some(false): always disabled
+  // None: dependent on zookeeper state
+  val enabled: Option[Boolean] = sys.props.get(s"$prefix.enabled").map(_.toBoolean)
 
-class CacheOperationRecorder {
-  private val _incompleteReads = new AtomicInteger(0)
-  def incompleteReads: Int = _incompleteReads.get
+  private[cache] def clusterStr(clusterType: ClusterType) = s"Distributed artifact cache (SilverKing $clusterType)"
 
-  private val _incompleteWrites = new AtomicInteger(0)
-  def incompleteWrites: Int = _incompleteWrites.get
-
-  private[silverking] def recordIncomplete(opType: OperationType): Unit = opType match {
-    case Read  => _incompleteReads.incrementAndGet()
-    case Write => _incompleteWrites.incrementAndGet()
-  }
 }

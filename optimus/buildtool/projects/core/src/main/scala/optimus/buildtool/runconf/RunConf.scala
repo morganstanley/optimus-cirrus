@@ -50,6 +50,7 @@ sealed trait RunConf extends HasNativeLibraries {
   def additionalScope: Option[ScopeId]
   def strictRuntime: StrictRuntime
   def interopPython: Boolean
+  def python: Boolean
 
   def tpe: RunConfType // this can be made more "type safe" with lots of magic but I trust that we can keep it straight
 
@@ -99,7 +100,8 @@ final case class AppRunConf(
     credentialGuardCompatibility: Boolean,
     debugPreload: Boolean,
     additionalScope: Option[ScopeId],
-    interopPython: Boolean
+    interopPython: Boolean,
+    python: Boolean
 ) extends RunConf {
   def modifyStrings(modify: String => String): AppRunConf = {
     copy(
@@ -136,6 +138,7 @@ final case class AppRunConf(
        |  debugPreload = $debugPreload
        |  additionalScope = $additionalScope
        |  interopPython = $interopPython
+       |  python = $python
        |)""".stripMargin
   }
 
@@ -174,7 +177,8 @@ final case class TestRunConf(
     owner: Option[String],
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
-    interopPython: Boolean
+    interopPython: Boolean,
+    python: Boolean
 ) extends RunConf {
 
   def modifyStrings(modify: String => String): TestRunConf = {

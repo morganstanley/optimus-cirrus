@@ -18,10 +18,11 @@ import static optimus.debug.CommonAdapter.isStatic;
 import static optimus.debug.CommonAdapter.makePrivate;
 import static optimus.debug.InstrumentationConfig.OBJECT_DESC;
 import static optimus.debug.InstrumentationConfig.OGSC_TYPE;
-import static optimus.graph.loom.LoomConfig.NODE;
-import static optimus.graph.loom.LoomConfig.NODE_DESC;
+import static optimus.graph.loom.LoomConfig.NODE_FUTURE;
+import static optimus.graph.loom.LoomConfig.NODE_FUTURE_DESC;
 import static optimus.graph.loom.LoomConfig.PLAIN_SUFFIX;
 import static optimus.graph.loom.LoomConfig.QUEUED_SUFFIX;
+import static optimus.graph.loom.LoomConfig.TO_VALUE_PREFIX;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -442,7 +443,7 @@ public class LCompiler implements Opcodes {
     }
   }
 
-  /** Writes out toValue call with proper casting/unboxing provided the original call op */
+  /** Writes out toValue$ call with proper casting/unboxing provided the original call op */
   private void writeNodeToValue(Op op) {
     write(op, new VarInsnNode(ALOAD, op.localSlot), 0, true, false);
     var methodOp = (MethodInsnNode) op.insnNode;
@@ -451,14 +452,14 @@ public class LCompiler implements Opcodes {
     String toValueReturnType = returnType;
     var needsCast = false;
     if (!returnType.startsWith("L")) {
-      toValueName = "toValue" + returnType;
+      toValueName = TO_VALUE_PREFIX + returnType;
     } else {
-      toValueName = "toValue";
+      toValueName = TO_VALUE_PREFIX;
       toValueReturnType = OBJECT_DESC;
       if (!returnType.equals(OBJECT_DESC)) needsCast = true;
     }
     var toValueDesc = "()" + toValueReturnType;
-    var i = new MethodInsnNode(INVOKEVIRTUAL, NODE, toValueName, toValueDesc, false);
+    var i = new MethodInsnNode(INVOKEINTERFACE, NODE_FUTURE, toValueName, toValueDesc, true);
     write(op, i, 1, true, false);
     if (needsCast) {
       var castToOriginalType = new TypeInsnNode(CHECKCAST, descToClass(returnType));
@@ -468,7 +469,7 @@ public class LCompiler implements Opcodes {
       var start = registerLabel(op.label);
       var end = addLabelNode(new Label());
       var name = methodOp.name + "_node_" + op.localSlot;
-      var lvn = new LocalVariableNode(name, NODE_DESC, null, start, end, op.localSlot);
+      var lvn = new LocalVariableNode(name, NODE_FUTURE_DESC, null, start, end, op.localSlot);
       method.localVariables.add(lvn);
     }
   }
@@ -503,7 +504,7 @@ public class LCompiler implements Opcodes {
     var nodeCall = (MethodInsnNode) op.insnNode;
     var opCode = nodeCall.getOpcode();
     var queuedName = nodeCall.name + QUEUED_SUFFIX;
-    var desc = changeReturnType(nodeCall.desc, NODE_DESC);
+    var desc = changeReturnType(nodeCall.desc, NODE_FUTURE_DESC);
     var i = new MethodInsnNode(opCode, nodeCall.owner, queuedName, desc, nodeCall.itf);
     write(op, i, op.popCount, op.hasResult, true);
     op.localSlot = method.maxLocals + tmpVars++;

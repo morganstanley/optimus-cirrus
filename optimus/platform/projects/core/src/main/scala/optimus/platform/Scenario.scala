@@ -59,6 +59,8 @@ final class Scenario private[optimus] (
   /** true if any of the tweaks are convertible to byValue */
   private[optimus] def hasReducibleToByValueTweaks: Boolean = (flags & ScenarioFlags.hasReducibleToByValueTweaks) != 0
 
+  private[optimus] def hasPossiblyRedundantTweaks: Boolean = (flags & ScenarioFlags.hasPossiblyRedundantTweaks) != 0
+
   /** true if we have unresolved tweaks (i.e. also-sets which have not been expanded, or tweak markers) */
   private[optimus] def hasUnresolvedOrMarkerTweaks: Boolean = (flags & ScenarioFlags.hasUnresolvedOrMarkerTweaks) != 0
 
@@ -68,8 +70,10 @@ final class Scenario private[optimus] (
   /** true to compare tweaks as set */
   private[optimus] def unorderedTweaks: Boolean = (flags & ScenarioFlags.unorderedTweaks) != 0
 
-  /** Same flags with ReducibleToByValueTweaks flag cleared */
-  private[optimus] def flagsWithoutRBValue: Int = flags & ~ScenarioFlags.hasReducibleToByValueTweaks
+  private[optimus] def flagsWithoutHasRedundant: Int = flags & ~ScenarioFlags.hasPossiblyRedundantTweaks
+
+  private[optimus] def flagsWithoutHasRedundantOrRBValue =
+    (flags & ~ScenarioFlags.hasReducibleToByValueTweaks) & ~ScenarioFlags.hasPossiblyRedundantTweaks
 
   /** Same flags with ReducibleToByValueTweaks flag cleared */
   private[optimus] def flagsWithoutUnresolved: Int = flags & ~ScenarioFlags.hasUnresolvedOrMarkerTweaks
@@ -85,15 +89,13 @@ final class Scenario private[optimus] (
     _topLevelTweaks
   }
 
-  /** Returns true if any of the tweaks are convertible to byValue in this scenario or any of the nested scenarios */
-  private[optimus] def hasReducibleToByValueTweaksWithNested: Boolean = {
-    if (hasReducibleToByValueTweaks) true
+  private[optimus] def existsWithNested(f: Scenario => Boolean) =
+    if (f(this)) true
     else {
       var ns = this.nestedScenarios
-      while (ns.nonEmpty && !ns.head.hasReducibleToByValueTweaks) ns = ns.tail
+      while (ns.nonEmpty && !f(ns.head)) ns = ns.tail
       ns.nonEmpty
     }
-  }
 
   /**
    * Check if there are any tweaks in this scenario or in any nested scenarios.
@@ -215,76 +217,6 @@ final class Scenario private[optimus] (
     }
   }
 
-  private[optimus] def validate(messagePrefix: String, unorderedTweaks: Boolean): Unit = {
-    val it = _topLevelTweaks.iterator
-    var instanceTweaks: ju.HashMap[TweakableKey, Tweak] = null
-
-    /** See: [[ optimus.graph.SSCacheID.tweaks ]] */
-    var propertyTweaks: ju.HashMap[AnyRef, AnyRef] = null
-
-    while (it.hasNext) {
-      val tweak = it.next()
-      val target = tweak.target
-
-      val pinfo = target.propertyInfo
-      val hashKey = target.hashKey
-
-      if (hashKey ne null) {
-        if (instanceTweaks eq null) instanceTweaks = new ju.HashMap[TweakableKey, Tweak]
-        val prevTweak = instanceTweaks.put(hashKey, tweak)
-        if ((prevTweak ne null) && prevTweak != tweak && !tweak.dupAllowed) {
-          val tweakValues =
-            if (Settings.showDuplicateInstanceTweakValues)
-              s"Tweak 1: $prevTweak; Tweak 2: $tweak."
-            else
-              s"To see full details of the tweaks, set -D${Settings.ShowDuplicateInstanceTweakValuesProp}=true and " +
-                s"-D${DiagnosticSettings.TRACE_TWEAKS}=true. "
-          val ex = new IllegalArgumentException(
-            s"$messagePrefix: Conflicting instance tweaks provided for node '${pinfo.fullName()}'. " +
-              tweakValues +
-              "See ConflictingTweaks.md for guidance. ")
-          if (Settings.throwOnDuplicateInstanceTweaks) throw ex
-          else if (unorderedTweaks) {
-            sendTweaksConflictingWithScenarioUnordered(ex)
-            throw new IllegalArgumentException("Conflicting tweaks found while using unordered scenario", ex)
-          } else
-            log.warn(
-              "Conflicting tweak warning (non-fatal, but you should fix your code; " +
-                "the last conflicting tweak for this node will be used)",
-              ex)
-        }
-      } else {
-        if (propertyTweaks eq null) propertyTweaks = new ju.HashMap[AnyRef, AnyRef]
-        val newValue = tweak.target match {
-          case target: TweakKeyExtractorTarget[_, _] =>
-            val keyExtractor = target.keyExtractor
-            val prevTweak = propertyTweaks.put(target, tweak)
-            if ((prevTweak ne null) && prevTweak != tweak)
-              throw new IllegalArgumentException(
-                s"$messagePrefix: Same tweak extractors should have the same value producers for the same property: " +
-                  s"$pinfo extractor: $keyExtractor  T1:$prevTweak   T2:$tweak")
-            keyExtractor
-          case _ => tweak
-        }
-        val prevValue = propertyTweaks.put(pinfo, newValue)
-        if ((prevValue ne null) && (prevValue ne newValue)) {
-          (prevValue, newValue) match {
-            case (_: TweakKeyExtractor, _: TweakKeyExtractor) =>
-              throw new IllegalArgumentException(
-                s"$messagePrefix: Tweak extractors at the same level for the same property need to be equal: $pinfo  T1:$prevValue   T2:$newValue")
-            case (_: Tweak, _: Tweak) =>
-              throw new IllegalArgumentException(
-                s"$messagePrefix: Multiple property-level tweaks to the same property in the same scenario not supported. See ConflictingTweaks.md for guidance. $pinfo  T1:$prevValue   T2:$tweak")
-            case (_, _) =>
-              throw new IllegalArgumentException(
-                s"$messagePrefix: Cannot mix property-level tweaks and tweak extractors to the same property in the same scenario. $pinfo  T1:$prevValue   T2:$tweak")
-          }
-        }
-
-      }
-    }
-  }
-
   def prettyString(isHtml: Boolean = false): String = {
     val builder = new HtmlBuilder
     writeHtml(builder)
@@ -376,19 +308,95 @@ object Scenario {
     while (it.hasNext) {
       val tweak = it.next()
       if (tweak.isReducibleToByValue) flags |= ScenarioFlags.hasReducibleToByValueTweaks
+      if (tweak.shouldCheckForRedundancy) flags |= ScenarioFlags.hasPossiblyRedundantTweaks
       if (tweak.target.isUnresolvedOrMarkerTweak) flags |= ScenarioFlags.hasUnresolvedOrMarkerTweaks
       if (tweak.isContextDependent) flags |= ScenarioFlags.hasContextDependentTweaks
       if (tweak.target.propertyInfo.tweakableID() == 1) flags |= ScenarioFlags.markedForDebugging
     }
     if (unorderedTweaks) flags |= ScenarioFlags.unorderedTweaks
-    val scenario = new Scenario(tweaks.toArray, Nil, flags)
+    val scenario = Scenario.validate(tweaks, "When creating Scenario", unorderedTweaks, flags)
     if ((flags & ScenarioFlags.markedForDebugging) != 0)
       scenario._createdAt = new Exception()
-    scenario.validate("When creating Scenario", unorderedTweaks)
     scenario
   }
 
   def toNestedScenarios(scenarios: collection.Seq[Scenario]): Scenario = {
     scenarios.reduceOption((a, b) => a.nest(b)).getOrElse(Scenario.empty)
+  }
+
+  private[optimus] def validate(
+      topLevelTweaks: Iterable[Tweak],
+      messagePrefix: String,
+      unorderedTweaks: Boolean,
+      flags: Int): Scenario = {
+    var flagsToUse: Int = flags
+    val it = topLevelTweaks.iterator
+    var instanceTweaks: ju.HashMap[TweakableKey, Tweak] = null
+
+    /** See: [[ optimus.graph.SSCacheID.tweaks ]] */
+    var propertyTweaks: ju.HashMap[AnyRef, AnyRef] = null
+
+    while (it.hasNext) {
+      val tweak = it.next()
+      val target = tweak.target
+
+      val pinfo = target.propertyInfo
+      val hashKey = target.hashKey
+
+      if (hashKey ne null) {
+        if (instanceTweaks eq null) instanceTweaks = new ju.HashMap[TweakableKey, Tweak]
+        val prevTweak = instanceTweaks.put(hashKey, tweak)
+        if ((prevTweak ne null) && (prevTweak != tweak && !tweak.dupAllowed)) {
+          val tweakValues =
+            if (Settings.showDuplicateInstanceTweakValues)
+              s"Tweak 1: $prevTweak; Tweak 2: $tweak."
+            else
+              s"To see full details of the tweaks, set -D${Settings.ShowDuplicateInstanceTweakValuesProp}=true and " +
+                s"-D${DiagnosticSettings.TRACE_TWEAKS}=true. "
+          val ex = new IllegalArgumentException(
+            s"$messagePrefix: Conflicting instance tweaks provided for node '${pinfo.fullName()}'. " +
+              tweakValues +
+              "See ConflictingTweaks.md for guidance. ")
+          if (Settings.throwOnDuplicateInstanceTweaks) throw ex
+          else if (unorderedTweaks) {
+            sendTweaksConflictingWithScenarioUnordered(ex)
+            throw new IllegalArgumentException("Conflicting tweaks found while using unordered scenario", ex)
+          } else
+            log.warn(
+              "Conflicting tweak warning (non-fatal, but you should fix your code; " +
+                "the last conflicting tweak for this node will be used)",
+              ex)
+          flagsToUse = flagsToUse & ~ScenarioFlags.hasPossiblyRedundantTweaks
+        }
+      } else {
+        if (propertyTweaks eq null) propertyTweaks = new ju.HashMap[AnyRef, AnyRef]
+        val newValue = tweak.target match {
+          case target: TweakKeyExtractorTarget[_, _] =>
+            val keyExtractor = target.keyExtractor
+            val prevTweak = propertyTweaks.put(target, tweak)
+            if ((prevTweak ne null) && prevTweak != tweak)
+              throw new IllegalArgumentException(
+                s"$messagePrefix: Same tweak extractors should have the same value producers for the same property: " +
+                  s"$pinfo extractor: $keyExtractor  T1:$prevTweak   T2:$tweak")
+            keyExtractor
+          case _ => tweak
+        }
+        val prevValue = propertyTweaks.put(pinfo, newValue)
+        if ((prevValue ne null) && (prevValue ne newValue))
+          (prevValue, newValue) match {
+            case (_: TweakKeyExtractor, _: TweakKeyExtractor) =>
+              throw new IllegalArgumentException(
+                s"$messagePrefix: Tweak extractors at the same level for the same property need to be equal: $pinfo  T1:$prevValue   T2:$newValue")
+            case (_: Tweak, _: Tweak) =>
+              throw new IllegalArgumentException(
+                s"$messagePrefix: Multiple property-level tweaks to the same property in the same scenario not supported. See ConflictingTweaks.md for guidance. $pinfo  T1:$prevValue   T2:$tweak")
+            case (_, _) =>
+              throw new IllegalArgumentException(
+                s"$messagePrefix: Cannot mix property-level tweaks and tweak extractors to the same property in the same scenario. $pinfo  T1:$prevValue   T2:$tweak")
+          }
+
+      }
+    }
+    new Scenario(topLevelTweaks.toArray, Nil, flagsToUse)
   }
 }

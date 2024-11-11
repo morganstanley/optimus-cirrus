@@ -27,14 +27,16 @@ object WriteShapeMetadata {
 
 sealed trait WriteStorageMetadata
 object WriteStorageMetadata {
-  final case class Index(indexedFields: SortedMap[String, FieldType], unique: Boolean) extends WriteStorageMetadata
+  final case class Index(indexedFields: SortedMap[String, FieldType], unique: Boolean, typeName: Option[String])
+      extends WriteStorageMetadata
 
   final case class Key(fields: SortedMap[String, FieldType]) extends WriteStorageMetadata
 
   // For C2P field, we only need store the fieldName since the FieldType of RFT.EntityReference is always StorableReference
   final case class ChildToParentLinkage(fieldName: String) extends WriteStorageMetadata
 
-  def index(indexedFields: SortedMap[String, FieldType], unique: Boolean): Index = Index(indexedFields, unique)
+  def index(indexedFields: SortedMap[String, FieldType], unique: Boolean, typeName: Option[String]): Index =
+    Index(indexedFields, unique, typeName)
 
   def key(fields: SortedMap[String, FieldType]): Key = Key(fields)
 

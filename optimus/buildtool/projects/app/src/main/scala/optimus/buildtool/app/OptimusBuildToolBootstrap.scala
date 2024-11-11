@@ -31,15 +31,39 @@ import optimus.platform.breadcrumbs.BreadcrumbsSetup
 import optimus.platform.breadcrumbs.BreadcrumbsSetup.Flags
 import org.slf4j
 
+import java.lang.management.ManagementFactory
 import java.nio.file.Files
+import java.util.Timer
+import java.util.TimerTask
+import javax.management.MBeanServer
+import javax.management.ObjectName
+import scala.util.control.NonFatal
+
+final class HistogramLogger(server: MBeanServer) extends TimerTask with Log {
+  override def run(): Unit = {
+    val startTime = System.nanoTime
+    val heap = server
+      .invoke(
+        new ObjectName("com.sun.management:type=DiagnosticCommand"),
+        "gcClassHistogram",
+        Array[AnyRef](null),
+        Array[String]("[Ljava.lang.String;")
+      )
+      .asInstanceOf[String]
+    val elapsed = System.nanoTime - startTime
+    log.info(f"Heap (calculated in ${elapsed / 1000000}%,d ms):\n$heap")
+  }
+}
 
 object OptimusBuildToolBootstrap extends Log {
   // Note: This timestamp format is chosen to match the format of '%t' for -Xloggc
   private[buildtool] val logFilePrefix: String = generateLogFilePrefix()
 
+  private val timer = new Timer
+
   def generateLogFilePrefix() = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(LocalDateTime.now)
 
-  def initLogging(logDir: Directory, debug: Boolean, bspDebug: Boolean): Unit = {
+  def initLogging(logDir: Directory, debug: Boolean, bspDebug: Boolean, histoFreqSecs: Option[Int] = None): Unit = {
     Files.createDirectories(logDir.path)
     slf4j.LoggerFactory.getILoggerFactory match {
       case lc: logback.LoggerContext =>
@@ -60,6 +84,18 @@ object OptimusBuildToolBootstrap extends Log {
         log.debug(s"Not overriding log dir for factory $f")
     }
     ProcessUtils.setupTerminal()
+    histoFreqSecs.filter(_ > 0).foreach(f => initializeHistogramLogger(f))
+  }
+
+  private def initializeHistogramLogger(freqSecs: Int): Unit = {
+    try {
+      val server = ManagementFactory.getPlatformMBeanServer
+      val logger = new HistogramLogger(server)
+      timer.scheduleAtFixedRate(logger, freqSecs * 1000, freqSecs * 1000)
+    } catch {
+      case NonFatal(t) =>
+        log.warn("Failed to initialize heap histogram logger", t)
+    }
   }
 
   def initializeCrumbs(

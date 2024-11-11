@@ -16,8 +16,12 @@ import optimus.breadcrumbs.crumbs.Properties.MapStringToJsonOps
 import optimus.breadcrumbs.crumbs.Properties
 import spray.json._
 import DefaultJsonProtocol._
+import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
+import optimus.breadcrumbs.crumbs.Properties.Elems
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.diagnostics.ap.CrumbStackExtractor.CrumbMap
+import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
 import optimus.platform.util.Log
 import optimus.utils.CountLogger
 
@@ -27,9 +31,10 @@ import java.util.regex.Pattern
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
-import scala.collection.immutable
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
-
+import optimus.scalacompat.collection._
 object CrumbStackExtractor extends Log {
 
   type CrumbMap = Map[String, JsValue]
@@ -40,6 +45,8 @@ object CrumbStackExtractor extends Log {
   def likelyStacksSample(s: String): Boolean = s.contains(ProfStacksMarker)
   private val ProfCollapsedMarker = s"$q${Properties.profCollapsed}$q:$q"
   def likelyStacksFrames(s: String): Boolean = s.contains(ProfCollapsedMarker)
+  private val StackPathMarker = s"$q${Properties.profMS}$q:$q"
+  def likelyStackPathFrames(s: String): Boolean = s.contains(StackPathMarker)
 
   final case class FullSampleData(
       source: String,
@@ -128,15 +135,17 @@ object CrumbStackExtractor extends Log {
   private lazy val splitter = Pattern.compile("[^\\W_]+")
   private lazy val loremized = new ConcurrentHashMap[String, String]()
 
-  class CrumbConsumer(throwOnInconsistency: Boolean = true) extends Function1[Crumb, Unit] {
+  class TestCrumbConsumer(throwOnInconsistency: Boolean = true, stackPath: Boolean = false)
+      extends SampleCrumbConsumer {
     private val crumbsRef = new AtomicReference[List[Crumb]](List.empty)
-    override def apply(crumb: Crumb): Unit = {
+    override def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit = {
+      val crumb = PropertiesCrumb(id, source, elems)
       crumbsRef.updateAndGet(crumb :: _)
     }
     def crumbs: Seq[Crumb] = crumbsRef.get()
     def samples: Seq[Sample] = {
       val crumbs = crumbsRef.get()
-      val extractor = new CrumbStackExtractor(throwOnInconsistency = throwOnInconsistency)
+      val extractor = new CrumbStackExtractor(throwOnInconsistency = throwOnInconsistency, stackPath = stackPath)
       val crumbsMap = crumbs.map(_.asJMap)
       val samples = crumbsMap.map(extractor.crumbToSamples).flatten
       crumbsMap.foreach(extractor.incorporateFrames(_, true))
@@ -150,7 +159,9 @@ class CrumbStackExtractor(
     anonymize: Boolean = false,
     throwOnInconsistency: Boolean = false,
     withVerboseLabels: Boolean = false,
-    crumbFilter: CrumbMap => Boolean = _ => true) {
+    crumbFilter: CrumbMap => Boolean = _ => true,
+    val stackPath: Boolean = false)
+    extends Log {
   import CrumbStackExtractor._
 
   val speedscope = new Speedscope(cleanLambdas = true)
@@ -192,7 +203,7 @@ class CrumbStackExtractor(
         tSnap <- pulse.geti(Properties.snapTimeMs)
         snapPeriod <- pulse.geti(Properties.snapPeriod)
         stack <- stacks
-        total <- stack.get(Properties.pTot)
+        self <- stack.get(Properties.pSlf)
         tpe <- stack.get(Properties.pTpe)
         sid <- stack.get(Properties.pSID)
       } yield {
@@ -217,7 +228,7 @@ class CrumbStackExtractor(
         val load = LoadData(cpu, work / cores).round(10)
         val isid = intern(sid)
         knownSIDs.add(isid)
-        Sample(key = intern(key), stackValue = total, stackId = isid, loadData = intern(load), extractor = this)
+        Sample(key = intern(key), stackValue = self, stackId = isid, loadData = intern(load), extractor = this)
       }
   }
 
@@ -227,29 +238,101 @@ class CrumbStackExtractor(
       .map(m => speedscope.methodIndex(processFrame(m)))
       .toSeq
 
-  def frames(sid: String): Option[Iterable[String]] = Option(sid2frames.get(sid)).map(speedscope.frames)
+  def frames(sid: String): Option[Iterable[String]] = Option(sid2frames.get(sid)).map(speedscope.frames(_))
 
-  def incorporateFrames(crumb: CrumbMap, includeUnknown: Boolean = true): Unit = for {
-    sid <- crumb.get(Properties.pSID)
-    collapsed <- crumb.get(Properties.profCollapsed)
-  } if (includeUnknown || knownSIDs.contains(sid)) {
-    if (throwOnInconsistency) {
-      sid2frames.compute(
-        sid,
-        { (_, v) =>
-          val stack = collapsed2Frames(collapsed)
-          if ((v ne null) && (stack != v)) {
-            val msg = s"duplicate pSid $sid pointing at different stacks: $v and $stack"
-            throw new IllegalStateException(msg)
-          }
-          stack
+  def allFrames: Map[String, Iterable[String]] = sid2frames.asScala.toMap.mapValuesNow(speedscope.frames(_))
+
+  private val stackCache = mutable.HashMap.empty[String, StackNode]
+  class StackNode(val frame: String, val fid: Int, val parent: StackNode) {
+    private val sn = this
+    def fids: Iterator[Int] = {
+      var ll: List[StackNode] = Nil
+      var node = sn
+      while (node ne null) {
+        ll = node :: ll
+        node = node.parent
+      }
+      ll.iterator.map(_.fid)
+    }
+  }
+
+  private val waitingForDefinitions = mutable.HashMap.empty[String, List[StackNode => Unit]]
+
+  private def extractAndSave(encoded: String, parent: StackNode): StackNode = {
+    assert(encoded.startsWith("="))
+    val i = encoded.indexOf('=', 1) + 1
+    assert(i > 1 && i < encoded.size)
+    val m = encoded.substring(i)
+    val fid = speedscope.methodIndex(processFrame(m))
+    val sn = new StackNode(m, fid, parent)
+    val idx = encoded.substring(1, i - 1)
+    stackCache.put(idx, sn)
+    waitingForDefinitions.remove(idx).foreach { _.foreach(_(sn)) }
+    sn
+  }
+
+  private def processStackPathTail(sid: String, head: StackNode, it: Iterator[String]): Unit = {
+    val fids = ArrayBuffer.empty[Int]
+    if (head ne null) fids ++= head.fids
+    var prev = head
+    it.foreach { encoded =>
+      val curr = extractAndSave(encoded, prev)
+      prev = curr
+      fids += curr.fid
+    }
+    sid2frames.put(sid, fids)
+  }
+
+  def incorporateFrames(crumb: CrumbMap, includeUnknown: Boolean = true): Unit = if (stackPath) {
+    for {
+      sid <- crumb.get(Properties.pSID)
+      collapsed <- crumb.get(Properties.profMS)
+    } if (!sid2frames.contains(sid) && (includeUnknown || knownSIDs.contains(sid))) {
+      val it = StackAnalysis.SplitIterator(collapsed, ';')
+      if (!it.hasNext) return
+      val first = it.next()
+      if (first.startsWith("==")) {
+        assert(first.length > 3)
+        val root = first.substring(2)
+        stackCache.get(root) match {
+          case Some(head) =>
+            processStackPathTail(sid, head, it)
+          case None =>
+            val fns = { head: StackNode =>
+              log.info(s"Got definition for $root")
+              processStackPathTail(sid, head, it)
+            } :: waitingForDefinitions.getOrElseUpdate(root, Nil)
+            waitingForDefinitions.put(root, fns)
+            log.info(s"Missing definition for $root; added to waitlist (${waitingForDefinitions.size}), ${fns.size}")
         }
-      )
-    } else {
-      sid2frames.computeIfAbsent(
-        sid,
-        { _ => collapsed2Frames(collapsed) }
-      )
+      } else {
+        val head = extractAndSave(first, null)
+        processStackPathTail(sid, head, it)
+      }
+    }
+  } else {
+    for {
+      sid <- crumb.get(Properties.pSID)
+      collapsed <- crumb.get(Properties.profCollapsed)
+    } if (includeUnknown || knownSIDs.contains(sid)) {
+      if (throwOnInconsistency) {
+        sid2frames.compute(
+          sid,
+          { (_, v) =>
+            val stack = collapsed2Frames(collapsed)
+            if ((v ne null) && (stack != v)) {
+              val msg = s"duplicate pSid $sid pointing at different stacks: $v and $stack"
+              throw new IllegalStateException(msg)
+            }
+            stack
+          }
+        )
+      } else {
+        sid2frames.computeIfAbsent(
+          sid,
+          { _ => collapsed2Frames(collapsed) }
+        )
+      }
     }
   }
 }

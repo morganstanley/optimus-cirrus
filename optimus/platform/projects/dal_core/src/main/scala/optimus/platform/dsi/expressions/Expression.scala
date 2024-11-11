@@ -18,6 +18,9 @@ import optimus.platform.dsi.bitemporal.QueryPlan
 import optimus.platform.storable.SerializedKey
 import optimus.platform.storable.{Entity => StorableEntity}
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 /**
  * The common query language for DAL, these APIs are not intended to be used by the client directly.
  *
@@ -49,6 +52,43 @@ import optimus.platform.storable.{Entity => StorableEntity}
  * )
  */
 trait Expression
+
+object Expression {
+  def flattenAndAlsoConditions(ex: Expression): List[Expression] = {
+    if (ex eq null) Nil
+    else {
+      var s: List[Expression] = ex :: Nil
+      val b = new mutable.ListBuffer[Expression]
+      while (s.nonEmpty) {
+        val pop = s.head
+        s = s.tail
+        pop match {
+          case Binary(BinaryOperator.AndAlso, left, right) =>
+            s = left :: right :: s
+          case e => b += e
+        }
+      }
+      b.result()
+    }
+  }
+
+  def balancedAnd(conds: Seq[Expression]): Expression = {
+    balancedBinaryWithOp(BinaryOperator.AndAlso, conds)
+  }
+
+  def balancedOr(conds: Seq[Expression]): Expression = {
+    balancedBinaryWithOp(BinaryOperator.OrElse, conds)
+  }
+
+  @tailrec
+  private def balancedBinaryWithOp(op: BinaryOperator, conds: Seq[Expression]): Expression = {
+    if (conds.length == 1) {
+      conds.head
+    } else {
+      balancedBinaryWithOp(op, conds.grouped(2).map(_.reduce(Binary(op, _, _))).toVector)
+    }
+  }
+}
 
 final case class Member(name: String, owner: Expression) extends Expression {
   override def toString: String = s"$owner.$name"

@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.utils
 
+import com.github.luben.zstd.Zstd
 import com.google.common.hash
 import com.google.common.hash.HashCode
 import com.google.common.hash.HashFunction
@@ -42,18 +43,53 @@ import java.util
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-final class HashedContent(val hash: String, private val content: Array[Byte]) {
+trait HashedContent {
+  def hash: String
+  def contentAsInputStream: InputStream
+  def utf8ContentAsString: String
+  def size: Int
+  def compressedSize: Int
+}
+
+object HashedContent {
+  private val compressionLevel = sys.props.get("optimus.buildtool.sourceCompressionLevel").map(_.toInt)
+
+  def apply(hash: String, content: Array[Byte]): HashedContent = compressionLevel match {
+    case Some(l) if content != null => new CompressedHashedContent(hash, Zstd.compress(content, l), content.length)
+    case _                          => new HashedContentImpl(hash, content)
+  }
+}
+
+final class HashedContentImpl(val hash: String, content: Array[Byte]) extends HashedContent {
   def contentAsInputStream: InputStream = new ByteArrayInputStream(content)
   def utf8ContentAsString: String = new String(content, StandardCharsets.UTF_8)
   def size: Int = content.length
+  def compressedSize: Int = size
 
-  // we assume that equal hashes mean equal content (which is a fair assumption unless you think SHA-2 is broken)
+// we assume that equal hashes mean equal content
   override def equals(obj: Any): Boolean = obj match {
     case h: HashedContent => this.hash == h.hash
     case _                => false
   }
   override def hashCode(): Int = hash.hashCode
-  override def toString: String = f"HashedContent($hash, ${content.length}%,d bytes)"
+  override def toString: String = f"HashedContent($hash, $size%,d bytes)"
+}
+
+final class CompressedHashedContent(val hash: String, compressedContent: Array[Byte], val size: Int)
+    extends HashedContent {
+  def contentAsInputStream: InputStream = new ByteArrayInputStream(content)
+  def utf8ContentAsString: String = new String(content, StandardCharsets.UTF_8)
+  private def content: Array[Byte] = Zstd.decompress(compressedContent, size)
+  def compressedSize: Int = compressedContent.length
+
+  // we assume that equal hashes mean equal content
+  override def equals(obj: Any): Boolean = obj match {
+    case h: HashedContent => this.hash == h.hash
+    case _                => false
+  }
+  override def hashCode(): Int = hash.hashCode
+  override def toString: String =
+    f"HashedContent($hash, $size%,d bytes, $compressedSize%,d bytes compressed)"
 }
 
 object Hashing {
@@ -305,7 +341,7 @@ object Hashing {
       // If this file is a jar and needs to be hashed consistently
       if (fileCanBeStampedWithConsistentHash(file)) {
         if (returnContent) throw new IllegalArgumentException(s"Cannot return content for $file")
-        new HashedContent(NamingConventions.HASH + consistentlyHashJar(file.asJar), null)
+        HashedContent(NamingConventions.HASH + consistentlyHashJar(file.asJar), null)
       } else {
         _hashFileInputStream(file.name, () => Files.newInputStream(file.path), returnContent, strict)
       }
@@ -356,7 +392,7 @@ object Hashing {
       // for unknown files, try as text (with CRLF -> LF conversion), and fallback to binary with a warning
       else hashAsText(lfEndings = true, isStrict = false)
     }
-    new HashedContent(NamingConventions.HASH + hc, content)
+    HashedContent(NamingConventions.HASH + hc, content)
   }
 
   def hashBytes(data: Array[Byte]): String = NamingConventions.HASH + hashFunction.hashBytes(data)

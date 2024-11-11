@@ -244,17 +244,16 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
       }
 
       val defSym = dd.symbol
-      val isIndex = defSym.hasAnnotation(IndexedAnnotation)
-      val isKey = defSym.hasAnnotation(KeyAnnotation)
+      val isOverridingIndex = defSym.overrideChain.exists(_.hasAnnotation(IndexedAnnotation))
+      val isOverridingKey = defSym.overrideChain.exists(_.hasAnnotation(KeyAnnotation))
       val isStoredC2P = defSym.hasAnnotation(C2PAnnotation)
-      val isKeyOrIndex = isIndex || isKey
+      val isOverridingKeyOrIndex = isOverridingIndex || isOverridingKey
       dd match {
         case vodd: DefDef if isStoredC2P && !isValidC2PType(vodd.symbol.tpe.resultType) =>
           alarm(OptimusErrors.CHILD_PARENT_MUST_BE_SET, dd.pos)
-        case DefDef(_, _, _, _, _, sel @ Select(qual, name))
-            if isKeyOrIndex &&
-              // for 2.12, if we have valAccessor, it comes from val definition, which is fine for index
-              !defSym.hasAnnotation(ValAccessorAnnotation) =>
+        // for 2.12, if we have valAccessor, it comes from val definition, which is fine for index
+        case DefDef(_, _, _, _, _, sel @ Select(_, _))
+            if isOverridingKeyOrIndex && !defSym.hasAnnotation(ValAccessorAnnotation) =>
           val isEmbeddablePath = checkPathIsEmbeddable(defSym.owner, sel)
           if (!isEmbeddablePath)
             alarm(OptimusErrors.INDEX_MUST_EMBEDDABLE_PATH, dd.pos)
@@ -271,14 +270,16 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
                 (s1 @ Select(s2 @ Select(_: This | _: Super, _), _)),
                 _,
                 (Function(p :: Nil, body @ Select(_, _)) :: Nil) :: _))
-            if isKeyOrIndex && s1.name == nme.map && s1.symbol.owner.isNonBottomSubClass(TraversableLikeClass) =>
+            if isOverridingKeyOrIndex && s1.name == nme.map && s1.symbol.owner.isNonBottomSubClass(
+              TraversableLikeClass) =>
           val mapOnEmbeddables = isValidEmbeddableCollToMapOver(s2.symbol.tpe.resultType)
           val mapToEntityField = isEntity(body.tpe.typeSymbol)
           val embeddablePath = checkPathIsEmbeddable(p.symbol, body, expectThis = false)
           if (!mapOnEmbeddables || !isStableOrValAccessor(s2.symbol) || !mapToEntityField || !embeddablePath)
             alarm(OptimusErrors.INDEX_SEQ_DEF_MAP_ON_ENTITY, dd.pos, dd.rhs)
         // for @indexed def and rhs is Tuple Apply
-        case DefDef(_, _, _, _, _, ap @ Apply(fun, args)) if isKeyOrIndex =>
+        case DefDef(_, _, _, _, _, ap @ Apply(f, args))
+            if isOverridingKeyOrIndex && f.toString().startsWith(s"scala.Tuple${args.length}.apply") =>
           args foreach {
             case sel @ Select(_: This | _: Super, x) =>
               if (
@@ -288,11 +289,13 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
             case tree =>
               alarm(OptimusErrors.CANT_GENERATE_INDEX2, tree.pos, showRaw(ap))
           }
-        case DefDef(_, _, _, _, _, rhs) if isKeyOrIndex && !defSym.hasAnnotation(ValAccessorAnnotation) =>
+        case DefDef(_, _, _, _, _, rhs) if isOverridingKeyOrIndex && !defSym.hasAnnotation(ValAccessorAnnotation) =>
           rhs match {
             // singleton use case: @key def foo = ()
-            case Literal(Constant(())) =>
-            case _                     => alarm(OptimusErrors.CANT_GENERATE_INDEX2, dd.pos, showRaw(dd))
+            case Literal(Constant(()))          =>
+            case EmptyTree if isOverridingIndex =>
+            case _ =>
+              alarm(OptimusErrors.CANT_GENERATE_INDEX2, dd.pos, showRaw(dd))
           }
         case _ =>
       }

@@ -126,7 +126,7 @@ abstract class XmlConfigurationResult(xml: String) {
       .asInstanceOf[NodeList]
   }
 
-  private[optimus] lazy val root = {
+  protected[optimus] lazy val root = {
     val nodeList: NodeList = getNodes(rootNodeName)
     require(nodeList.getLength == 1)
     ConfigurationNode(rootNodeName, nodeList.item(0))

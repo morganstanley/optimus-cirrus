@@ -326,5 +326,5 @@ class ComparingArtifactStore(
     result
   }
   override def logStatus(): Seq[String] = authoritativeStore.logStatus()
-  override def incompleteWrites: Int = authoritativeStore.incompleteWrites
+  override def incompleteWrites: Int = authoritativeStore.incompleteWrites + otherStores.map(_.incompleteWrites).sum
 }

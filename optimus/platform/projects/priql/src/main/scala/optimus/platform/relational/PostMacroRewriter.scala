@@ -32,7 +32,7 @@ private class PostMacroRewriter extends QueryTreeVisitor {
 
   override protected def handleBinaryExpression(binary: BinaryExpressionElement): RelationElement = {
     super.handleBinaryExpression(binary) match {
-      case BinaryExpressionElement(ITEM_IS_IN, ConstValueElement(v, _), r, _) if r.rowTypeInfo <:< classOf[Option[_]] =>
+      case BinaryExpressionElement(ITEM_IS_IN, ConstValueElement(v, _), r, _) if TypeInfo.isOption(r.rowTypeInfo) =>
         // x.optionField.contains(y) ==> x.optionField == Some(y)
         val newValue = AsyncValueHolder.map(v, Some(_))
         ElementFactory.equal(r, ElementFactory.constant(newValue, r.rowTypeInfo))
@@ -52,7 +52,7 @@ private class PostMacroRewriter extends QueryTreeVisitor {
    */
   override protected def handleMemberRef(member: MemberElement): RelationElement = {
     super.handleMemberRef(member) match {
-      case m: MemberElement if m.member.declaringType <:< classOf[Option[_]] =>
+      case m: MemberElement if TypeInfo.isOption(m.member.declaringType) =>
         m.member.name match {
           case "isDefined" | "nonEmpty" =>
             ElementFactory.notEqual(m.instanceProvider, ElementFactory.constant(None, m.member.declaringType))

@@ -74,7 +74,8 @@ private[buildtool] final case class VersionedExternalArtifactId(
     name: String,
     version: String,
     artifactName: String,
-    tpe: ExternalArtifactType
+    tpe: ExternalArtifactType,
+    isMaven: Boolean
 ) extends ExternalArtifactId {
   override def toString: String = s"$group:$name:$version:$artifactName"
 }

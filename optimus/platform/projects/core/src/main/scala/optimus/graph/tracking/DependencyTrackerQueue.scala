@@ -17,9 +17,14 @@ import optimus.graph.OGTrace
 import optimus.graph.Scheduler
 import optimus.graph.Settings
 import optimus.graph.diagnostics.GraphDiagnostics
+import optimus.graph.tracking.monitoring.ActionSummary
+import optimus.graph.tracking.monitoring.QueueActionSummary
+import optimus.graph.tracking.monitoring.QueueMonitor
+import optimus.graph.tracking.monitoring.QueueStats
 import optimus.platform.util.PrettyStringBuilder
 
 import java.util
+import scala.collection.compat._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.collection.mutable
@@ -27,15 +32,6 @@ import scala.util.control.ControlThrowable
 
 object DependencyTrackerQueue {
   private[optimus] val log = msjava.slf4jutils.scalalog.getLogger(getClass)
-
-  final case class QueueStats(added: Int, removed: Int) {
-    def `+`(o: QueueStats): QueueStats = QueueStats(added + o.added, removed + o.removed)
-    def `-`(o: QueueStats): QueueStats = QueueStats(added - o.added, removed - o.removed)
-  }
-  object QueueStats {
-    val zero: QueueStats = QueueStats(0, 0)
-    def accumulate(accum: QueueStats, o: DependencyTrackerQueue): QueueStats = accum + o.snap
-  }
 }
 
 /**
@@ -46,6 +42,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     extends DependencyTrackerActionEvaluateBase[Unit]
     with CallbackBatchOwner {
   import DependencyTrackerQueue._
+  private val monitor = QueueMonitor.register(this)
   override protected def trackerRoot: DependencyTrackerRoot = tracker.root
   override def toString: String = s"DependencyTrackerQueue[${tracker.scenarioReference}] [$stateManager]"
 
@@ -123,6 +120,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
 
     def recordStart(action: DependencyTrackerAction[_]): Unit = {
       workQueue.assertLocked()
+      action.recordStart(tracker.scenarioReference)
 
       log.debug(s"recordStart: $action (isUpdate = ${action.isUpdate})")
       checkInvariants()
@@ -146,7 +144,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
         throw new GraphInInvalidState("called recordStop without holding queueLock")
 
       log.debug(s"recordStop: $action (isUpdate = ${action.isUpdate})")
-
+      action.recordStop()
       checkInvariants()
 
       if (inFlightWorkSet.contains(action)) {
@@ -181,9 +179,6 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
   private val workQueue = new WorkQueue
   private val lowPriorityQueue = new WorkQueue
   private val queueLock = new Object // used to synchronized queue access
-
-  private var nextLatencyWarningNs: Long = Settings.dtqLatencyWarningNanos
-  private val slowTaskWarnThreshold: Long = Settings.dtqTaskTimeLatencyWarningNanos
 
   private[optimus] def outstandingWorkCount = workQueue.size
 
@@ -453,18 +448,11 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
 
       if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.beforeRunLog(action)
 
-      val startNs = OGTrace.nanoTime()
-      val queueLatencyNs = startNs - action.cause.profile.eventStartTimeNs
-      if (queueLatencyNs >= nextLatencyWarningNs && !action.isLowPriority) {
-        nextLatencyWarningNs = (nextLatencyWarningNs * Settings.dtqLatencyWarningGrowthFactor).toLong
-        log.warn(
-          s"Slow code? Action $action with cause ${action.cause} was enqueued on DTQ[${tracker.scenarioReference}] " +
-            f"${queueLatencyNs / 1.0e9}%.1fs ago but is only starting now. Will warn again if the queue latency exceeds " +
-            f"${nextLatencyWarningNs / 1.0e9}%.1fs. If you keep seeing this message, your application may be enqueuing " +
-            s"actions (e.g. due to reactive or UI events) faster than it can process them.")
-      }
-
       val actionStartTime = OGTrace.nanoTime()
+      val queueLatencyNs = actionStartTime - action.cause.profile.eventStartTimeNs
+      if (queueLatencyNs >= monitor.queueLatencyThresholdNanos) {
+        monitor.queueLatencyWarning(queueLatencyNs, ActionSummary(action))
+      }
 
       action.executeAsync { accurateActionStartTime => // after execute, called on both success and failure
         action.raiseCallback()
@@ -477,15 +465,13 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
           val endNs = OGTrace.nanoTime()
           val completionLatency =
             if (accurateActionStartTime == 0) endNs - actionStartTime else endNs - accurateActionStartTime
-          if (completionLatency >= slowTaskWarnThreshold) {
-            log.warn(
-              s"Task taking a long time? Action $action with cause ${action.cause} was started on DTQ[${tracker.scenarioReference}] " +
-                f"${completionLatency / 1.0e9}%.1fs ago ${if (accurateActionStartTime == 0) "(this calculation is really being done using the time that the action was scheduled to run not when it actually run so in reality the action may have taken slightly shorter to run. In order to get more accurate results please run with traceNodes enabled)"
-                  else ""} but is only finishing now.")
+
+          if (completionLatency >= monitor.completionLatencyThresholdNanos) {
+            monitor.completionLatencyWarning(completionLatency, accurateActionStartTime == 0, ActionSummary(action))
           }
 
           afterActionCompleted(action)
-          if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.afterRunLog(action, startNs)
+          if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.afterRunLog(action, actionStartTime)
         }
       }
     }
@@ -612,6 +598,16 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     QueueStats(
       added = workQueue.added + lowPriorityQueue.added,
       removed = workQueue.removed + lowPriorityQueue.removed
+    )
+  }
+
+  // get additional information about the queues
+  def summary: QueueActionSummary = queueLock.synchronized {
+    QueueActionSummary(
+      tracker.name,
+      snap,
+      workQueue.iterator.map(ActionSummary(_)).to(Vector),
+      lowPriorityQueue.iterator.map(ActionSummary(_)).to(Vector)
     )
   }
 

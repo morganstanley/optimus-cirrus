@@ -11,10 +11,6 @@
  */
 package optimus.buildtool.cache.silverking
 
-import java.io.File
-import java.net.URI
-import java.time.Duration
-
 import com.ms.silverking.cloud.dht.SessionOptions
 import com.ms.silverking.cloud.dht.client.ClientDHTConfiguration
 import com.ms.silverking.cloud.dht.client.DHTClient
@@ -27,6 +23,10 @@ import optimus.dal.silverking.SkUtils
 import optimus.dal.silverking.SysLoc
 import optimus.dal.silverking.client.PrcServiceConfig
 import optimus.platform.dal.config.DalServicesSilverKingLookup
+
+import java.io.File
+import java.net.URI
+import java.time.Duration
 
 sealed trait SilverKingConfig {
   def newSession(client: DHTClient): DHTSession

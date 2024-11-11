@@ -14,11 +14,10 @@ package optimus.buildtool.app
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.cache.NodeCaching
-import optimus.buildtool.utils.FlexibleBooleanOptionHandler
-import optimus.platform.entersGraph
 import optimus.platform._
 import optimus.platform.OptimusApp.ExitHandler
 import optimus.platform.OptimusAppCmdLine
+import optimus.utils.app.FlexibleBooleanOptionHandler
 import org.kohsuke.args4j.CmdLineParser
 
 private[buildtool] trait OptimusBuildToolAppBase[A <: OptimusAppCmdLine] extends OptimusAppTrait[A] {

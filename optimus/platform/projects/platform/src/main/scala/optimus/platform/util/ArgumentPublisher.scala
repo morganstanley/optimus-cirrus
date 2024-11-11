@@ -72,7 +72,7 @@ object ArgumentPublisher {
           Properties.crumbType -> "CommandLine" ::
             Properties.argsType -> argType ::
             Properties.args -> batch ::
-            Properties.batchId -> (i + 1) :: Elems.Nil
+            Properties.batchId -> (i + 1) :: Version.properties
         )
       )
     }

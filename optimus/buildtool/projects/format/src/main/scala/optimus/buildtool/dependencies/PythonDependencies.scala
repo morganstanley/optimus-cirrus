@@ -56,9 +56,9 @@ final case class PythonDependencies(
 final case class PythonDefinition(
     version: String,
     path: String,
-    venvPack: String,
+    thinPyapp: String,
     variant: Option[PythonDependencies.Variant]) {
-  def hash: String = Hashing.hashStrings(Seq(version, path, venvPack) ++ variant.map(_.name))
+  def hash: String = Hashing.hashStrings(Seq(version, path, thinPyapp) ++ variant.map(_.name))
   private def LinuxPossibleBinPaths: Seq[String] = Seq("/exec/bin").map(path + _)
   private def WindowsPossibleBinPaths: Seq[String] = Seq("/exec", "/exec/bin").map(path + _)
   def binPath: Option[String] =

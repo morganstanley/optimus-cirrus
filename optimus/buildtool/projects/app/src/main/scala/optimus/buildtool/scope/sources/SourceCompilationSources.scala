@@ -13,7 +13,6 @@ package optimus.buildtool.scope.sources
 
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.GeneratedSourceArtifact
-import optimus.buildtool.cache.NodeCaching.optimizerCache
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.SourceFolder
 import optimus.buildtool.files.SourceUnitId
@@ -35,6 +34,7 @@ import scala.collection.immutable.SortedMap
     scope: CompilationScope,
     sourceGeneration: SourceGeneration
 ) extends CompilationSources {
+  import CompilationSources._
 
   override def id: ScopeId = scope.id
 
@@ -62,7 +62,7 @@ import scala.collection.immutable.SortedMap
     val generatedSources = sourceGeneration.generatedSources
     ObtTrace.traceTask(id, HashSources) {
       val generatedSourceContent = generatedSources.apar.collect { case s: GeneratedSourceArtifact =>
-        s"Generated:${s.tpe.name}" -> s.hashedContent(SourceFolder.isScalaOrJavaSourceFile)
+        s"$Generated:${s.tpe.name}" -> s.hashedContent(SourceFolder.isScalaOrJavaSourceFile)
       }
 
       val staticSourceContent = staticContent
@@ -74,7 +74,7 @@ import scala.collection.immutable.SortedMap
     }
   }
 
-  @node private[sources] def staticContent: (String, SortedMap[SourceUnitId, HashedContent]) = {
+  @node private def staticContent: (String, SortedMap[SourceUnitId, HashedContent]) = {
     val sourceExclusions = scope.config.sourceExclusions
     val content = scope.sourceFolders.apar
       .map { f =>
@@ -83,7 +83,7 @@ import scala.collection.immutable.SortedMap
         }
       }
       .merge[SourceUnitId]
-    "Source" -> content
+    Source -> content
   }
 
   // Ensure we don't have duplicated source paths between static and generated source content. Note that within
@@ -111,8 +111,4 @@ object SourceCompilationSources {
   // since hashedSources holds the source files and the hash, it's important that it's frozen for the duration of a
   // compilation (so that we're sure what we hashed is what we compiled)
   hashedSources.setCustomCache(reallyBigCache)
-
-  // don't rehash source files unless we really need to (purely for performance reasons, hence
-  // why it uses the optimizerCache rather than reallyBigCache)
-  sourceFileContent.setCustomCache(optimizerCache)
 }

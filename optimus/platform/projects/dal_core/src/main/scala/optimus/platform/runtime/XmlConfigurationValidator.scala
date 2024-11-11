@@ -42,7 +42,7 @@ trait XmlConfigurationValidator {
     IOUtils.toString(getClass.getClassLoader.getResourceAsStream(resource), StandardCharsets.UTF_8)
   }
 
-  private[optimus] def validate(xml: String): Boolean = {
+  protected[optimus] def validate(xml: String): Boolean = {
     val factory: SchemaFactory =
       SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
     val schemaSource: SAXSource = new SAXSource(new InputSource(new StringReader(xsd)))

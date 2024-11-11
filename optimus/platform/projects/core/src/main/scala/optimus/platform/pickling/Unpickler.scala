@@ -11,8 +11,8 @@
  */
 package optimus.platform.pickling
 
+import optimus.graph.NodeFuture
 import optimus.graph.AlreadyCompletedNode
-import optimus.graph.Node
 import optimus.platform.annotations.nodeSync
 
 import scala.annotation.implicitNotFound
@@ -23,6 +23,6 @@ trait Unpickler[T] {
 
   // provide a default implementation of this to allow for synchronous overrides of unpickle (which may not make
   // further asynchronous calls anyway and often doesn't benefit from being an @node)
-  def unpickle$queued(pickled: Any, ctxt: PickledInputStream): Node[T] =
+  def unpickle$queued(pickled: Any, ctxt: PickledInputStream): NodeFuture[T] =
     new AlreadyCompletedNode(unpickle(pickled, ctxt))
 }

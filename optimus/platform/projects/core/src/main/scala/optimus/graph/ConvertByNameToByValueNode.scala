@@ -11,6 +11,7 @@
  */
 package optimus.graph
 
+import optimus.graph.ConvertByNameToByValueNode.isTweakRedundant
 import optimus.platform.AdvancedUtils
 import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
@@ -19,7 +20,30 @@ import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
 import optimus.platform.inputs.loaders.FrozenNodeInputMap
 
+import java.util
 import scala.collection.mutable.ArrayBuffer
+
+object ConvertByNameToByValueNode {
+  private def isTweakRedundant(t: Tweak, ss: ScenarioStack): Boolean = if (
+    Settings.removeRedundantTweaks && t.shouldCheckForRedundancy
+  ) {
+    // t.isPossiblyRedundant currently only returns true for InstancePropertyTarget
+    val target = t.target.asInstanceOf[InstancePropertyTarget[_, _]]
+    if (target.propertyInfo.wasTweakedByProperty()) false // Don't support propertyTweaks for now
+    else {
+      val tRes = t.tweakTemplate.immediateResult
+      // isPossiblyRedundant == true only ACPN
+      val key = target.key.asInstanceOf[AlreadyCompletedPropertyNode[_]]
+      val alreadyTweak = TwkResolver.findInstanceTweak(key, ss)
+      // key.result here is the underlying untweaked value of the node
+      val compareTo = if (alreadyTweak eq null) key.result else alreadyTweak.tweakTemplate.immediateResult
+      tRes == compareTo
+    }
+  } else false
+
+  def removeRedundantTweaks(s: Scenario, ss: ScenarioStack): Scenario =
+    new Scenario(s.topLevelTweaks.filter(!isTweakRedundant(_, ss)).toArray, Nil, s.flagsWithoutHasRedundant)
+}
 
 /**
  * This node/class translate whatever byName tweaks it can into byValue tweak There is a potential loss of performance
@@ -75,10 +99,12 @@ class ConvertByNameToByValueNode[T](
 
     do {
       // Quick check that the 'next' scenario contains reducible tweaks
-      if (s.hasReducibleToByValueTweaks) {
+      if (Settings.convertByNameToByValue && s.hasReducibleToByValueTweaks) {
         parseAndEnqueue(s, eq)
         inWaiting = true
       } else {
+        if (Settings.removeRedundantTweaks && s.hasPossiblyRedundantTweaks)
+          s = ConvertByNameToByValueNode.removeRedundantTweaks(s, curSS)
         try setCurSS()
         catch {
           case e: Exception =>
@@ -99,10 +125,10 @@ class ConvertByNameToByValueNode[T](
   }
 
   override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-    if (child eq node) {
+    if (child eq node)
       // Original node finished and we take its value (i.e. given() { thisIsTheNode }
       completeFromNode(node, eq)
-    } else {
+    else {
       if (rtweakAwaiting.twkNode ne child) throw new GraphInInvalidState()
       // Callbacks onChildCompleted are one at a time (because we continueWith to one a time)
 
@@ -114,12 +140,25 @@ class ConvertByNameToByValueNode[T](
       rtweakAwaiting.twkNode = null // Eager cleanup
       rtweakAwaiting = rtweakAwaiting.next
       if (rtweakAwaiting eq null) {
-        val newTweaks = rtweaks.map {
-          case t: Tweak  => t
-          case r: RTweak => r.twk
+        var newTweaks = new Array[Tweak](rtweaks.length)
+        var count = 0
+        def add(t: Tweak): Unit = if (!isTweakRedundant(t, curSS)) {
+          newTweaks(count) = t
+          count += 1
         }
+
+        var i = 0
+        while (i < rtweaks.length) {
+          rtweaks(i) match {
+            case t: Tweak  => add(t)
+            case r: RTweak => add(r.twk)
+          }
+          i += 1
+        }
+        if (count != newTweaks.length) newTweaks = util.Arrays.copyOf(newTweaks, count)
+
         EvaluationContext.asIfCalledFrom(this, eq) {
-          workOnScenario(new Scenario(newTweaks.toArray, Nil, currentScenario.flagsWithoutRBValue), eq)
+          workOnScenario(new Scenario(newTweaks, Nil, currentScenario.flagsWithoutHasRedundantOrRBValue), eq)
         }
       } else {
         rtweakAwaiting.twkNode.continueWith(this, eq)

@@ -126,8 +126,17 @@ object DependencyDefinition {
   val DefaultConfiguration = "runtime"
 }
 
-final case class DependencyDefinitions(directIds: Seq[DependencyDefinition], indirectIds: Seq[DependencyDefinition]) {
+final case class DependencyDefinitions(
+    directIds: Seq[DependencyDefinition],
+    indirectIds: Seq[DependencyDefinition],
+    substitutions: Seq[Substitution] = Nil,
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration] = Nil
+) {
   val all: Seq[DependencyDefinition] = directIds ++ indirectIds
+}
+
+object DependencyDefinitions {
+  val empty: DependencyDefinitions = DependencyDefinitions(Nil, Nil, Nil, Nil)
 }
 
 final case class ExternalDependency(definition: DependencyDefinition, equivalents: Seq[DependencyDefinition])

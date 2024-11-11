@@ -658,6 +658,7 @@ object Properties extends KnownProperties {
   val pluginStateTimes = prop[Map[String, Map[String, Long]]]
   val pluginFullWaitTimes = prop[Map[String, Long]]
   val pluginStallTimes = prop[Map[String, Long]]
+  val pluginNodeOverflows = prop[Map[String, Long]]
   val profDALBatches = propI
   val profDALCommands = propI
   val profGCDuration = propL
@@ -866,6 +867,8 @@ object Properties extends KnownProperties {
   val profStacks = prop[Seq[Elems]]
   val numStacksPublished = propL
   val numSamplesPublished = propL
+  val numCrumbFailures = propI
+  val crumbQueueLength = propI
   val stackElem = prop[String]
   val pTpe = prop[String]
   val jfrSize = propL
@@ -876,6 +879,7 @@ object Properties extends KnownProperties {
   val stepName = prop[String]
   val stepProfile = prop[Seq[Elems]]
   val profCollapsed = prop[String]
+  val profMS = prop[String]
   val stackThumb = prop[Map[String, Int]]
   val profPreOptimusStartup = propL
 

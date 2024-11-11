@@ -264,12 +264,6 @@ public class StratosphereConfig {
 
       String javaShortVersion = getJavaShortVersion(config.getString("javaVersion"));
       updateProperty("javaShortVersion", javaShortVersion);
-      if (!config.hasPath("javaTargetCompatibility")) {
-        updateProperty("javaTargetCompatibility", javaShortVersion);
-      }
-      if (!config.hasPath("javaSourceCompatibility")) {
-        updateProperty("javaSourceCompatibility", config.getString("javaTargetCompatibility"));
-      }
 
       // set home if outside workspace AND no override is set by user
       if (workspaceRoot == null && !config.hasPath("stratosphereHome")) {

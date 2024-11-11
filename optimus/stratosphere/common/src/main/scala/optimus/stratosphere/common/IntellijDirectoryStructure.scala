@@ -76,6 +76,14 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val intellijPluginsDir: Path = intellijInstallDirectory.resolve("plugins")
 
+  val intellijPythonPluginDir: Path = intellijPluginsDir.resolve("python")
+
+  val intellijPythonPluginDebuggerDir: Path =
+    intellijPythonPluginDir.resolve("debugger-eggs-output").resolve("pydevd-pycharm")
+
+  val intellijPythonPluginDebuggerEggFile: Path =
+    intellijPythonPluginDir.resolve("debugger-eggs-output").resolve("pydevd-pycharm.egg")
+
   val remoteIntellijDir: Path = Paths.get(afsIntellijLocation.remoteLocation)
 
   val remoteIntellijArtifactoryDir: String = artifactoryIntellijLocation.remoteLocation

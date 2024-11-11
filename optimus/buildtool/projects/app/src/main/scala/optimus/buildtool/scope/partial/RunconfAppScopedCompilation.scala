@@ -49,7 +49,8 @@ import scala.collection.immutable.Seq
       installVersion = sources.installVersion,
       outputJar = pathBuilder
         .outputPathFor(id, sources.compilationFingerprint.hash, AT.CompiledRunconf, None, incremental = false)
-        .asJar
+        .asJar,
+      upstreamAgents = upstream.agentsForOurRuntimeArtifacts
     )
   }
 }

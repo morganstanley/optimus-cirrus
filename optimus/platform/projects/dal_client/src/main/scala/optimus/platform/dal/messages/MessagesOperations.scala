@@ -36,16 +36,35 @@ import java.time.Instant
 @entity
 trait MessagesOperations { this: DSIResolver =>
 
+  /**
+   * For consistency, reactive tests need to know whether messages were published in different test steps. This is
+   * straightforward for DAL pubsub, because DAL pubsub is bitemporal. It is sufficient to wait for a tt tick to know
+   * that we have received everything before that tick.
+   *
+   * This is more complicated for messages. We need to have some way of telling ReactiveSequence that it should wait to
+   * receive things, but we don't want to create dependency on reactive in dal_client... but we also want things to be
+   * testable easily without a complex test setup, because ReactiveSequence tests are done in user code (as they should!)
+   * So we use tweaks, the standard optimus approaches to mutate global state.
+   *
+   * In prod, in most cases this won't be tweaked, which means that it is nearly free to call (due to the
+   * WAS_NEVER_TWEAKED optimization). Accessing the tweak shouldn't cause scenario dependence issues either, because
+   * publishing is impure.
+   */
+  @node(tweak = true) final def publishedMessagesListener: Option[MessagesPublishCommandBase => Unit] = None
+
   @async def publishEvent(
       event: BusinessEvent with ContainedEvent,
       option: MessagesPublishCommandBase.Option
   ): Unit = {
     val serMsg = ContainedEventSerializer.serialize(event)
-    val results = executeMessagesCommands(MessagesPublishCommand(serMsg, option) :: Nil)
-    results.foreach {
+    val command = MessagesPublishCommand(serMsg, option)
+    val result = executeMessagesCommand(MessagesPublishCommand(serMsg, option))
+
+    result match {
       case MessagesErrorResult(error) =>
         throw new MessagesPublishException(error.getMessage, error)
-      case _                        =>
+      case _ =>
+        publishedMessagesListener.foreach(_.apply(command))
     }
   }
 
@@ -60,14 +79,16 @@ trait MessagesOperations { this: DSIResolver =>
 
     // 2) txn content (writes/upserts) must goto the same DAL partition - must be enforced before publish
     // for now this is only done on dal broker side - there is no fail-fast client side check to do same
+    val command = MessagesPublishTransactionCommand(serializedMsg)
+    val result = executeMessagesCommand(command)
 
-    val results = executeMessagesCommands(MessagesPublishTransactionCommand(serializedMsg) :: Nil)
-    results.foreach {
+    result match {
       case res: MessagesErrorResult =>
         transaction.dispose()
         throw new MessagesPublishException(res.error.getMessage)
       case _ =>
         transaction.dispose()
+        publishedMessagesListener.foreach(_.apply(command))
     }
   }
 
@@ -89,7 +110,7 @@ trait MessagesOperations { this: DSIResolver =>
       env: RuntimeEnvironment
   ): MessagesNotificationStream = {
     val streamId = createStream.streamId
-    val result = executeMessagesCommands(CreateMessagesClientStream(createStream, callback, env) :: Nil).head
+    val result = executeMessagesCommand(CreateMessagesClientStream(createStream, callback, env))
     result match {
       case MessagesErrorResult(error) => throw error
       case MessagesCreateClientStreamSuccessResult(id, stream: MessagesNotificationStream) =>
@@ -99,19 +120,21 @@ trait MessagesOperations { this: DSIResolver =>
     }
   }
 
-  @async private def executeMessagesCommands(
-      cmds: Seq[MessagesCommand]
-  ): Seq[MessagesResult] = {
-    dsi match {
-      case clientSideDSI: ClientSideDSI => clientSideDSI.executeMessagesCommands(cmds)
-      case serverDsi                    => serverDsi.executeMessagesCommands(cmds)
+  @async private def executeMessagesCommand(
+      cmd: MessagesCommand
+  ): MessagesResult = {
+    val result = dsi match {
+      case clientSideDSI: ClientSideDSI => clientSideDSI.executeMessagesCommands(cmd :: Nil)
+      case serverDsi                    => serverDsi.executeMessagesCommands(cmd :: Nil)
     }
+    assert(result.length == 1, "sent one command, expected one result")
+    result.head
   }
 
   @async def checkEntitlementAndSetACLs(appId: String, acls: Seq[StreamsACLs]): Unit = {
     require(dsi.serverFeatures().supports(Feature.SetStreamsACLs), "Cannot run StreamsACLsCommand against this broker")
-    val results = executeMessagesCommands(StreamsACLsCommand(appId, acls) :: Nil)
-    results foreach {
+    val results = executeMessagesCommand(StreamsACLsCommand(appId, acls))
+    results match {
       case res: MessagesErrorResult => throw new StreamsACLsCommandException(res.error.getMessage)
       case _                        =>
     }

@@ -28,7 +28,6 @@ import optimus.platform.util.ResourceFinder
 import optimus.platform.util.StoredHierarchyManager
 import optimus.platform.util.EntityHierarchyManager
 import optimus.scalacompat.collection._
-import optimus.tools.scalacplugins.entity.OptimusExportInfoComponent
 // Using mutable structures when building the
 // relationship graphs
 import scala.collection.mutable
@@ -379,12 +378,15 @@ class ClassInfoFromClassLoader(
 
 trait ClassInfoBase extends Log {
   private val excludedPackages: Set[String] = Set("scala.", "java.", "msjava.", "optimus.")
-
+  private val packageExceptions: Set[String] = Set(
+    "optimus.stargazer.",
+    "optimus.platform.util.dalschema.test." // Package for lasses that are used in tests so need to be supported
+  )
   protected def resourceFinder: ResourceFinder
   protected def classLoader: ClassLoader
 
   def isExcludedByPackage(e: ClassInfo): Boolean = {
-    !e.fullName.startsWith("optimus.stargazer") && excludedPackages.exists { e.fullName.startsWith }
+    !packageExceptions.exists { e.fullName.startsWith } && excludedPackages.exists { e.fullName.startsWith }
   }
 
   lazy val incomingGraph: Map[ClassInfo, Seq[ClassInfo]] = buildIncomingGraph(includeInheritance = true)

@@ -39,6 +39,7 @@ import optimus.buildtool.config.ScopeFlags
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopePaths
 import optimus.buildtool.dependencies.CentralDependencies
+import optimus.buildtool.dependencies.JvmDependenciesLoader
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
@@ -524,6 +525,7 @@ class ScopeDefinitionCompiler(
         postInstallApps <- loadPostInstallApps(config, origin)
         (extraLibs, extraRels) <- loadScopeDeps(origin, "extraLibs", config, parent, allowUnorderedDependencies)
         forbiddenDependencies <- loadForbiddenDependencies(config, origin)
+        substitutions <- JvmDependenciesLoader.readSubstitutions(config, origin)
         interopConf <- InteropConfigurationCompiler.load(config, origin)
       } yield {
         val archiveContentRoots = config.seqOrEmpty("archiveContents")
@@ -560,6 +562,7 @@ class ScopeDefinitionCompiler(
           relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
           extraLibs = extraLibs,
           forbiddenDependencies = forbiddenDependencies,
+          substitutions = substitutions,
           interop = interopConf
         ).withParent(parent)
       }
@@ -711,7 +714,9 @@ class ScopeDefinitionCompiler(
         compileOnlyDependencies = defn.compileOnly.distinct,
         runtimeDependencies = (defn.runtime ++ defn.compile).distinct,
         externalNativeDependencies = defn.native,
-        extraLibs = defn.extraLibs.distinct
+        extraLibs = defn.extraLibs.distinct,
+        substitutions = defn.substitutions,
+        forbiddenDependencies = defn.forbiddenDependencies
       )
     }
 
@@ -757,6 +762,7 @@ class ScopeDefinitionCompiler(
             config.booleanOrDefault(_, default = false)
           }
 
+        val isAgent = agentConf.isDefined
         val mavenOnly = resolvedConfiguration.mavenOnly.getOrElse(false)
 
         val scopePaths = ScopePaths(
@@ -775,6 +781,7 @@ class ScopeDefinitionCompiler(
         val scopeFlags = ScopeFlags(
           open = config.booleanOrDefault("open", default = tpe == "main"),
           containsPlugin = containsPlugin,
+          containsAgent = isAgent,
           definesMacros = definesMacros,
           containsMacros = containsMacros,
           jmh = jmh,
@@ -807,7 +814,6 @@ class ScopeDefinitionCompiler(
           targetBundles = targetBundles,
           processorConfig = processorConfiguration,
           interopConfig = interopConfiguration,
-          forbiddenDependencies = resolvedConfiguration.forbiddenDependencies,
           useMavenLibs = useMavenLibs
         )
         ScopeDefinition(

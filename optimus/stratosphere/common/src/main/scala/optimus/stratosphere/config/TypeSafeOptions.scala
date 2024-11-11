@@ -14,6 +14,7 @@ package optimus.stratosphere.config
 import com.typesafe.config.Config
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
+import optimus.stratosphere.utils.RemoteUrl
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
 import org.fusesource.jansi.Ansi.Color
@@ -340,7 +341,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def stratoReleaseNotes: Path = self.select("internal.markdown.strato-release-notes")
 
       object graphviz {
-        def path: Option[String] = self.select("internal.markdown.graphviz.path")
+        def path: Option[Path] = self.select("internal.markdown.graphviz.path")
         def dpi: Option[Int] = self.select("internal.markdown.graphviz.dpi")
         def enableImageLinks: Option[Boolean] = self.select("internal.markdown.graphviz.enable-image-links")
       }
@@ -368,7 +369,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def initEnviron: String = self.select("internal.paths.init-environ")
       def javassist(version: String): String =
         self.select("internal.paths.javassist").replace("$VERSION", version)
-      def jiraProjectMapping: Path = self.select("internal.paths.jira-project-mapping")
       def proidHomes: Seq[String] = self.select("internal.paths.proid-homes")
       def python: String = self.select("internal.paths.python")
       def windowsTerminal: String = self.select("internal.paths.windows-terminal")
@@ -430,6 +430,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object urls {
       def artifactoryBug: String = self.select("internal.urls.artifactory-bug")
       def indexerExclusions: String = self.select("internal.urls.indexer-exclusions")
+      def codetreeRelease: RemoteUrl = RemoteUrl(self.select("internal.urls.codetree-release"))
       def gitVersion: String = self.select("internal.urls.git-version")
       def jenkinsLibrary: String = self.select("internal.urls.jenkins-library")
       def jenkinsLibraryBrowser: String = self.select("internal.urls.jenkins-library-browser")
@@ -458,6 +459,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         def check: String = self.select("internal.urls.pc-health.check")
         def credentialGuard: String = self.select("internal.urls.pc-health.credential-guard")
         def freeSwapSpace: MemSize = self.select("internal.urls.pc-health.free-swap-space")
+      }
+
+      object workflowServer {
+        def host: String = self.select("internal.urls.workflow-server.host")
+        def port: Int = self.select("internal.urls.workflow-server.port")
       }
     }
   }
@@ -512,6 +518,9 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object console {
       def version: String = self.select("python.console.version")
     }
+
+    def debugHost: String = self.select("python.debug-host")
+    def debugPort: Int = self.select("python.debug-port")
   }
 
   object setup {
@@ -555,12 +564,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def logo: Boolean = self.select("show.logo")
     def startupTooltips: Boolean = self.select("show.startup-tooltips")
     def commandTime: Boolean = self.select("show.command-time")
-  }
-
-  object tools {
-    object git {
-      def isDefault: Boolean = self.select("tools.git.isDefault")
-    }
   }
 
   // please keep the object sorted

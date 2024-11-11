@@ -27,7 +27,9 @@ object JacocoOptionsSupport {
   }
 
   private val expectedTypes: Map[String, Type] = Map(
-    RunConfSupport.names.jacocoOptions.minCoveragePct -> T.Integer
+    RunConfSupport.names.jacocoOptions.minCoveragePct -> T.Integer,
+    RunConfSupport.names.jacocoOptions.includes -> T.Array(T.String),
+    RunConfSupport.names.jacocoOptions.excludes -> T.Array(T.String)
   )
 
   private val expectedProperties: Set[String] = expectedTypes.keySet
@@ -74,7 +76,9 @@ object JacocoOptionsSupport {
         val merger = new Merger(t, s)
         Some(
           runconf.plugins.JacocoOpts(
-            minCoveragePct = merger.merge(_.minCoveragePct)
+            minCoveragePct = merger.merge(_.minCoveragePct),
+            includes = merger.mergeDistinct(_.includes),
+            excludes = merger.mergeDistinct(_.excludes)
           )
         )
       case (Some(s), None) => Some(s)
@@ -89,7 +93,12 @@ object JacocoOptionsSupport {
         case a: Some[Int] => a
         case None         => None
       }
-    JacocoOpts(minCoveragePct = extractedMinCoveragePctValue)
+    def extractArray(runconfName: String): Seq[String] = extractor.extractSeq(runconfName)
+    JacocoOpts(
+      minCoveragePct = extractedMinCoveragePctValue,
+      includes = extractArray(RunConfSupport.names.jacocoOptions.includes),
+      excludes = extractArray(RunConfSupport.names.jacocoOptions.excludes),
+    )
   }
 
   private def extractRaw(properties: RawProperties): Option[RawProperties] = {

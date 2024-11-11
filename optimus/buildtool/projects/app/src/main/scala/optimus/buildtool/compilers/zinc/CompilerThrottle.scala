@@ -15,11 +15,17 @@ import optimus.buildtool.utils.Utils
 import optimus.platform._
 import optimus.platform.util.Log
 
-class CompilerThrottle(maxZincCompileBytes: Int, maxNumZincs: Int) extends Log {
+import scala.collection.compat._
+import scala.collection.immutable.Seq
+import scala.collection.mutable
+
+class CompilerThrottle(maxZincCompileBytes: Int, val maxNumZincs: Int) extends Log {
+
+  private val stats = mutable.Buffer[ThrottleState]()
 
   // Set Int.MaxValue if maxZincCompileBytes is zero so that we can still use the throttle to limit the
   // number of zincs, even if it's not going to limit based on source size
-  private val zincByteLimit =
+  val zincByteLimit: Int =
     if (maxZincCompileBytes == 0) Int.MaxValue
     else if (maxZincCompileBytes > 0) maxZincCompileBytes
     else (Runtime.getRuntime.maxMemory / -maxZincCompileBytes).toInt
@@ -42,7 +48,21 @@ class CompilerThrottle(maxZincCompileBytes: Int, maxNumZincs: Int) extends Log {
   @async def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = zincSizeThrottle match {
     case Some(st) =>
       val actualWeight = math.max(sizeBytes, zincMinWeight)
-      st(f, NodeFunction1.identity[T], nodeWeight = actualWeight)
+
+      st(
+        asNode { () =>
+          stats.synchronized(stats += st.getCounters)
+          f()
+        },
+        NodeFunction1.identity[T],
+        nodeWeight = actualWeight
+      )
     case None => f()
+  }
+
+  def snapAndResetStats(): Seq[ThrottleState] = stats.synchronized {
+    val r = stats.to(Seq)
+    stats.clear()
+    r
   }
 }

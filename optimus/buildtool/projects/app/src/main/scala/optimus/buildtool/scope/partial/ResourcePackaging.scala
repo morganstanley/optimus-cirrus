@@ -63,6 +63,7 @@ final case class HashedResources(
       sources.compilationSources,
       scope.config.resourceTokens,
       containsPlugin = scope.config.containsPlugin,
+      containsAgent = scope.config.containsAgent,
       containsOrUsedByMacros = scope.config.containsMacros
     )
 }
@@ -98,6 +99,7 @@ private[scope] object ResourcePackaging {
       sources.compilationSources,
       scope.config.resourceTokens,
       containsPlugin = scope.config.containsPlugin,
+      containsAgent = scope.config.containsAgent,
       containsOrUsedByMacros = scope.config.containsMacros
     )
 }

@@ -533,8 +533,8 @@ object Tracer {
       ids,
       (t: TraceEvent.Event) =>
         t match {
-          case _: TraceEvent.EntitlementLoadEventBase => true
-          case _                                      => false
+          case TraceEvent.EntitlementLoad => true
+          case _                          => false
         })
   }
 
@@ -920,7 +920,7 @@ object Tracer {
   def getAllAggregateTime(ids: Seq[TraceId]): Long =
     getAggregateTime(ids, TraceEvent.All) + getEntitlementLoadAggregateTime(ids)
   def getAllWallclockTime(ids: Seq[TraceId]): Long = {
-    getWallClockTime(ids, TraceEvent.All) + getEntitlementLoadWallclockTime(ids)
+    getWallClockTime(ids, TraceEvent.All)
   }
   def getGpbAggregateTime(id: TraceId): Long = getGpbAggregateTime(Seq(id))
   def getGpbAggregateTime(ids: Seq[TraceId]): Long = getAggregateTime(ids, TraceEvent.GpbSerialization)

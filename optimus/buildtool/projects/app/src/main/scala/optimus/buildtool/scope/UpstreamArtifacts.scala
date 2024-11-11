@@ -93,6 +93,17 @@ import scala.collection.mutable
         .apar
         .flatMap(_.artifactsForDownstreamRuntimes))
 
+  @node def agentsForOurRuntime: Seq[Artifact] =
+    distinctArtifacts(
+      runtimeDependencies.directScopeDependencies
+        .sortBy(_.id.toString)
+        .apar
+        .flatMap(_.agentsForDownstreamRuntimes))
+
+  @node def agentsForOurRuntimeArtifacts: Seq[ClassFileArtifact] = agentsForOurRuntime.collect {
+    case c: ClassFileArtifact => c
+  }
+
   @node def allUpstreamArtifacts: Seq[Artifact] =
     // ask our upstreams for full compile, compileOnly and runtime artifacts
     distinctArtifacts(

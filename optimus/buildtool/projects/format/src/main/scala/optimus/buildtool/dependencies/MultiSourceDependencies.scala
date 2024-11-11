@@ -34,9 +34,9 @@ final case class MultiSourceDependency(
     name: String,
     afs: Option[DependencyDefinition],
     maven: Seq[DependencyDefinition],
-    line: Int)
+    line: Int,
+    ivyConfig: Boolean = false)
     extends OrderedElement {
-
   private def mavenDefinition: DependencyDefinition = maven match {
     case Seq(mavenAlone) => mavenAlone // for maven-only mixed mode definitions
     case multipleMaven
@@ -87,7 +87,7 @@ object MultiSourceDependency {
       line: Int): Result[Seq[MultiSourceDependency]] = {
     val emptyError = Failure(Seq(obtFile.errorAt(confValue, emptyDepError(name))))
     val loadedIvyCfgs = ivyCfgsMap.map { case (ivy, equivalents) =>
-      MultiSourceDependency(s"$name.${ivy.configuration}", Some(ivy), equivalents, ivy.line)
+      MultiSourceDependency(s"$name.${ivy.configuration}", Some(ivy), equivalents, ivy.line, ivyConfig = true)
     }
 
     def getMavenVariants(mavenVariants: Seq[DependencyDefinition]) =

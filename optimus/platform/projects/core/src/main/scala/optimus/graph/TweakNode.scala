@@ -22,6 +22,10 @@ import optimus.platform._
 import optimus.platform.{RecordingScenarioStack => RSS}
 import optimus.platform.{ScenarioStack => SS}
 
+object TweakNode {
+  private object UnknownValue
+}
+
 /**
  * Node implementation to compute the effect of a Tweak and reflect it as a Node computeGenerator is one of the
  * following (@see optimus.graph.TweakNode.getComputeNode)
@@ -212,6 +216,12 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
   def resultIsStable(): Boolean = computeGenerator match {
     case node: NodeTask => node.isStable
     case _              => false
+  }
+
+  /** Returns RHS value if available and marker object otherwise */
+  private[graph] def immediateResult: Any = computeGenerator match { // really returns T
+    case acn: AlreadyCompletedNode[_] => acn.result
+    case _                            => TweakNode.UnknownValue
   }
 
   /** Returns true if the result is stable or SI */

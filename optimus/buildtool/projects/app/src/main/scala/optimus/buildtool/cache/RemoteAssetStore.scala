@@ -21,6 +21,10 @@ trait RemoteAssetStore {
   @async def put(url: URL, file: FileAsset): FileAsset
   @async def check(url: URL): Boolean
 }
+object RemoteAssetStore {
+  lazy val externalArtifactVersion: String =
+    sys.props.get("optimus.buildtool.cache.externalArtifactVersion").getOrElse("external-1.1")
+}
 
 object NoOpRemoteAssetStore extends RemoteAssetStore {
   @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = None

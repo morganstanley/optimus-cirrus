@@ -28,7 +28,8 @@ trait AsyncReduce[A, CC <: Iterable[A]] {
   @scenarioIndependentTransparent
   def associativeReduce(@nodeLift merge: (A, A) => A): Option[A] = associativeReduce$withNode(toNodeFactory(merge))
   def associativeReduce$withNode(merge: (A, A) => Node[A]): Option[A] = associativeReduce$newNode(merge).get
-  def associativeReduce$queued(merge: (A, A) => Node[A]): Node[Option[A]] = associativeReduce$newNode(merge).enqueue
+  def associativeReduce$queued(merge: (A, A) => Node[A]): NodeFuture[Option[A]] = associativeReduce$newNode(
+    merge).enqueue
   def associativeReduce$newNode(merge: (A, A) => Node[A]): Node[Option[A]] = if (c.isEmpty)
     new AlreadyCompletedNode(None)
   else {

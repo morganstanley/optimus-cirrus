@@ -14,6 +14,8 @@ import optimus.graph.NodeTrace
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.messages.BlockingWaitCounter
 import optimus.graph.diagnostics.messages.BlockingWaitEvent
+import optimus.graph.diagnostics.messages.DTQEvent
+import optimus.graph.diagnostics.messages.DTQEventCounter
 import optimus.graph.diagnostics.messages.EventDescription
 import optimus.graph.diagnostics.messages.HandlerStepEvent
 import optimus.graph.diagnostics.messages.HandlerStepEventCounter
@@ -115,11 +117,71 @@ class StartupEventTable(tl: NodeTimeLine)
   override def task: PNodeTask = null
 }
 
+final case class HandlerStepEventView(
+    cause: String,
+    scenarioReference: String,
+    override val event: EventDescription,
+    override val startTimeNanos: Long,
+    override val durationNanos: Long,
+) extends TimedEventView(event, startTimeNanos, durationNanos)
+
 class HandlerStepEventTable(tl: NodeTimeLine)
-    extends TimedEventTable[HandlerStepEvent, TimedEventView](tl, HandlerStepEventCounter) {
-  override def createEmptyRow: TimedEventView = TimedEventTable.empty
-  override def createEventView(e: HandlerStepEvent): TimedEventView = TimedEventTable.basicView(e)
+    extends TimedEventTable[HandlerStepEvent, HandlerStepEventView](tl, HandlerStepEventCounter) {
+  override def createEmptyRow: HandlerStepEventView = HandlerStepEventView("", "", EventDescription.empty, 0, 0)
+  override def createEventView(e: HandlerStepEvent): HandlerStepEventView =
+    HandlerStepEventView(e.cause, e.scenarioRef, e.event, e.startTime, e.duration)
+  override def initialColumns: ArrayBuffer[TableColumn[HandlerStepEventView]] = {
+    val view = regularView
+    view.append(
+      new TableColumnString[HandlerStepEventView](name = "Cause", width = 80) {
+        override def valueOf(row: HandlerStepEventView): String = row.cause
+        override def toolTip: String = {
+          "Originating cause for the event"
+        }
+      }
+    )
+
+    view.append(new TableColumnString[HandlerStepEventView](name = "Scenario", width = 80) {
+      override def valueOf(row: HandlerStepEventView): String = row.scenarioReference
+      override def toolTip: String = {
+        "Scenario reference where the step is executed"
+      }
+    })
+
+    view
+  }
+
   // no task here, but DbgPrintSource forces us to implement this
+  override def task: PNodeTask = null
+}
+
+final case class DTQEventView(
+    scenarioReference: String,
+    isUpdate: Boolean,
+    override val event: EventDescription,
+    override val startTimeNanos: Long,
+    override val durationNanos: Long,
+) extends TimedEventView(event, startTimeNanos, durationNanos)
+
+class DTQEventViewTable(tl: NodeTimeLine) extends TimedEventTable[DTQEvent, DTQEventView](tl, DTQEventCounter) {
+  override def createEmptyRow: DTQEventView = DTQEventView("", false, EventDescription.empty, 0, 0)
+  override def createEventView(e: DTQEvent): DTQEventView =
+    DTQEventView(e.scenarioRef, e.isUpdate, e.event, e.startTime, e.duration)
+  override def initialColumns: ArrayBuffer[TableColumn[DTQEventView]] = {
+    val view = regularView
+
+    view.append(new TableColumnString[DTQEventView](name = "Scenario") {
+      override def valueOf(row: DTQEventView): String = row.scenarioReference
+      override def toolTip: String = "Scenario reference blocked by this event"
+    })
+
+    view.append(new TableColumnString[DTQEventView](name = "Update?") {
+      override def valueOf(row: DTQEventView): String = row.isUpdate.toString
+      override def toolTip: String =
+        "Whether this event is an update (blocking other updates and evaluations) or an evaluation (which blocks new updates)"
+    })
+    view
+  }
   override def task: PNodeTask = null
 }
 

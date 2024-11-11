@@ -143,10 +143,10 @@ class ZincClasspathResolver(
     else resolveZincJars(scalaMajorVersion)
   }
 
-  @node private def doCourserZincResolve(zinc: DependencyDefinition): Seq[JarAsset] = {
+  @node private def doCoursierZincResolve(zinc: DependencyDefinition): Seq[JarAsset] = {
     // we skip mapping validation for zinc generator only, in order to resolve zinc for multiple scala versions
     val coursierResult =
-      dependencyResolver.resolveDependencies(DependencyDefinitions(Seq(zinc), Nil), doValidation = false)
+      dependencyResolver.resolveDependencies(DependencyDefinitions(Seq(zinc), Nil), validate = false)
     val depCopied = coursierResult.resolvedArtifacts.apar.map(
       dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(_))
     depCopied.flatMap { a =>
@@ -163,7 +163,7 @@ class ZincClasspathResolver(
     if (scalaVer == "2.11") s"${name}_$scalaMajorVersion" else s"${name}_$scalaVer"
 
   @node private def resolveZinc(zincDep: DependencyDefinition, scalaVersion: String): Seq[JarAsset] = {
-    val mavenZincResult = doCourserZincResolve(zincDep)
+    val mavenZincResult = doCoursierZincResolve(zincDep)
     val zincJars =
       // for scala 2.11, we don't have zinc_2.11 release after zinc 1.2.1, therefore we can use current obt compile time
       // scala ver zinc with 2.11 compiler-bridge
@@ -175,7 +175,7 @@ class ZincClasspathResolver(
             zincDep.version,
             LocalDefinition,
             isMaven = true)
-        val resolvedCompilerBridge = doCourserZincResolve(compilerBridge211)
+        val resolvedCompilerBridge = doCoursierZincResolve(compilerBridge211)
         if (resolvedCompilerBridge.isEmpty)
           log.warn(s"zinc generator: can't resolve compiler bridge ${compilerBridge211.key}")
         mavenZincResult.filterNot(_.name.contains(sourceRequiredFor)) ++ resolvedCompilerBridge

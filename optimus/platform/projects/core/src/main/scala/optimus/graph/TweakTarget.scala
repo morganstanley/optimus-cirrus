@@ -47,6 +47,8 @@ trait TweakTarget[R, SetT] {
    * and for old plain property tweaks and extractor tweaks, it will return null
    */
   def hashKey: NodeKey[_] = null // Can be used as the direct
+  /** Simple boring instance tweak On ACPN without also-sets */
+  final def fullSpecified: Boolean = hashKey.isInstanceOf[AlreadyCompletedPropertyNode[_]] && !unresolved
 
   private[this] def makeTweak(tweakTemplate: TweakNode[R]) = new Tweak(this, tweakTemplate)
   protected def mkPlus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] = new TweakNodeModifyOriginal[R](vn) {

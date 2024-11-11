@@ -28,6 +28,7 @@ import optimus.platform.relational.dal.core.RichConstant
 import optimus.platform.relational.data.tree._
 import optimus.platform.relational.tree._
 import optimus.platform.storable.Entity
+import optimus.platform.storable.SerializedKey
 import optimus.platform.util.ZonedDateTimeOps
 
 class DALFormatter extends DALFormatterBase {
@@ -137,7 +138,7 @@ class DALFormatter extends DALFormatterBase {
       case _ =>
         throw new RelationalUnsupportedException(s"The func call '${desc.name}' is not supported")
     }
-    else if (declType <:< classOf[Option[_]] && desc.name == "value") {
+    else if (TypeInfo.isOption(declType) && desc.name == "value") {
       Function(s"option.${desc.name}", inst :: args)
     } else if (declType <:< classOf[Knowable[_]]) {
       Function(s"knowable.${desc.name}", inst :: args)
@@ -154,13 +155,24 @@ class DALFormatter extends DALFormatterBase {
     } else if (declType <:< DALProvider.EntityRefType) {
       Function(s"convert.${desc.name}", args)
     } else if (declType <:< classOf[Iterable[_]]) {
-      val newArgs = if (desc.name == "contains") args.collect {
-        case RichConstant(value, typeInfo, _) =>
-          RichConstant(Seq(value), new TypeInfo[Seq[_]](Seq(classOf[Seq[_]]), Nil, Nil, Seq(typeInfo)))
-        case t => t
-      }
-      else args
-      Function(s"jsonb.${desc.name}", inst :: newArgs)
+      if (desc.name == "contains") {
+        var skCount = 0
+        val newArgs = args.collect {
+          // this is only possible from SerializedKeyBasedIndexOptimizer
+          case rc @ RichConstant(_: SerializedKey, _, _) =>
+            skCount += 1
+            rc
+          case RichConstant(value, typeInfo, _) =>
+            RichConstant(Seq(value), new TypeInfo[Seq[_]](Seq(classOf[Seq[_]]), Nil, Nil, Seq(typeInfo)))
+          case t => t
+        }
+        if (skCount == 0)
+          Function(JsonbOps.Contains.Name, inst :: newArgs)
+        else {
+          require(skCount == newArgs.size)
+          Function(CollectionOps.Contains.Name, inst :: newArgs)
+        }
+      } else Function(s"jsonb.${desc.name}", inst :: args)
     } else if (
       (declType eq TypeInfo.UNIT) && (desc.name == ConvertOps.ToJsonbArray.Name || desc.name == ConvertOps.ToText.Name)
     ) {

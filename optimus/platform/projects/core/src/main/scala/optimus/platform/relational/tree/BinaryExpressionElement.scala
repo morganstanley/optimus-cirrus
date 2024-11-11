@@ -14,6 +14,8 @@ package optimus.platform.relational.tree
 import BinaryExpressionType._
 import optimus.platform.relational.RelationalUnsupportedException
 
+import scala.annotation.tailrec
+
 /**
  * BinaryExpressionElement represents the binary expression, e.g. ( a == "xx" && b > 10)
  */
@@ -64,6 +66,23 @@ object BinaryExpressionElement {
     case BinaryExpressionElement(expType, const @ ConstValueElement(c, _), param, typeInfo) =>
       new BinaryExpressionElement(flip(expType), param, const, typeInfo)
     case exp => exp
+  }
+
+  def balancedAnd(conds: Seq[RelationElement]): RelationElement = {
+    balancedBinaryWithOp(BOOLAND, conds)
+  }
+
+  def balancedOr(conds: Seq[RelationElement]): RelationElement = {
+    balancedBinaryWithOp(BOOLOR, conds)
+  }
+
+  @tailrec
+  private def balancedBinaryWithOp(op: BinaryExpressionType, conds: Seq[RelationElement]): RelationElement = {
+    if (conds.length == 1) {
+      conds.head
+    } else {
+      balancedBinaryWithOp(op, conds.grouped(2).map(_.reduce(ElementFactory.makeBinary(op, _, _))).toVector)
+    }
   }
 }
 

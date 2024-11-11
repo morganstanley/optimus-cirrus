@@ -120,8 +120,9 @@ object Compiler {
       names.category -> T.String,
       names.owner -> T.String,
       names.flags -> T.Object(T.Union(Set(T.String, T.String))),
-      names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Integer))),
-      names.interopPython -> T.Boolean
+      names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Any))),
+      names.interopPython -> T.Boolean,
+      names.python -> T.Boolean
     )
   }
 
@@ -162,6 +163,7 @@ object Compiler {
     val defaultCredentialGuardCompatibility = false
     val defaultDebugPreload = false
     val defaultInteropPython = false
+    val defaultPython = false
   }
 
 }
@@ -548,7 +550,8 @@ class Compiler(
         owner = extractString(names.owner),
         flags = extractMap(names.flags).mapValuesNow(_.toString),
         jacocoOpts = extractJacocoOpts(names.jacocoOpts),
-        interopPython = extractBoolean(names.interopPython)
+        interopPython = extractBoolean(names.interopPython),
+        python = extractBoolean(names.python)
       )
     }
   }
@@ -809,7 +812,8 @@ class Compiler(
       owner = merger.merge(_.owner),
       flags = merger.mergeMaps(_.flags),
       jacocoOpts = JacocoOptionsSupport.mergeJacocoOpts(target.jacocoOpts, source.jacocoOpts),
-      interopPython = merger.merge(_.interopPython)
+      interopPython = merger.merge(_.interopPython),
+      python = merger.merge(_.python)
     )
   }
 
@@ -955,7 +959,8 @@ class Compiler(
       runConf.credentialGuardCompatibility.getOrElse(defaults.defaultCredentialGuardCompatibility),
       runConf.debugPreload.getOrElse(defaults.defaultDebugPreload),
       runConf.additionalScope.filter(_.nonEmpty).map(ScopeId.parse),
-      runConf.interopPython.getOrElse(defaults.defaultInteropPython)
+      runConf.interopPython.getOrElse(defaults.defaultInteropPython),
+      runConf.python.getOrElse(false)
     )
   }
 
@@ -990,7 +995,8 @@ class Compiler(
       flags = runConf.flags,
       strictRuntime = runConf.strictRuntime,
       jacocoOpts = runConf.jacocoOpts,
-      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython)
+      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython),
+      python = runConf.python.getOrElse(defaults.defaultPython)
     )
   }
 
@@ -1035,7 +1041,8 @@ class Compiler(
       flags = runConf.flags,
       strictRuntime = runConf.strictRuntime,
       jacocoOpts = runConf.jacocoOpts,
-      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython)
+      interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython),
+      python = runConf.python.getOrElse(defaults.defaultPython)
     )
   }
 

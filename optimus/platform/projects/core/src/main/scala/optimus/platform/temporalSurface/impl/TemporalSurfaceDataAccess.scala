@@ -12,7 +12,7 @@
 package optimus.platform.temporalSurface.impl
 
 import optimus.platform.annotations.nodeSync
-import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.storable.EntityReference
 import optimus.platform.internal.ClassInfo
 import optimus.platform.temporalSurface.LeafTemporalSurface
@@ -27,7 +27,7 @@ trait TemporalSurfaceDataAccess {
       sourceTemporalitySurface: LeafTemporalSurface): collection.Seq[operation.ItemKey]
   def getItemKeys$queued(
       operation: TemporalSurfaceQuery,
-      sourceTemporalitySurface: LeafTemporalSurface): Node[collection.Seq[operation.ItemKey]]
+      sourceTemporalitySurface: LeafTemporalSurface): NodeFuture[collection.Seq[operation.ItemKey]]
 
   @nodeSync def getItemData(
       operation: TemporalSurfaceQuery,
@@ -36,12 +36,12 @@ trait TemporalSurfaceDataAccess {
   def getItemData$queued(
       operation: TemporalSurfaceQuery,
       sourceTemporalitySurface: LeafTemporalSurface,
-      itemTemporalitySurface: LeafTemporalSurface): Node[Map[operation.ItemKey, operation.ItemData]]
+      itemTemporalitySurface: LeafTemporalSurface): NodeFuture[Map[operation.ItemKey, operation.ItemData]]
 
   @nodeSync def getSingleItemData(operation: TemporalSurfaceQuery, sourceTemporalitySurface: LeafTemporalSurface)(
       itemKey: operation.ItemKey): operation.ItemData
   def getSingleItemData$queued(operation: TemporalSurfaceQuery, sourceTemporalitySurface: LeafTemporalSurface)(
-      itemKey: operation.ItemKey): Node[operation.ItemData]
+      itemKey: operation.ItemKey): NodeFuture[operation.ItemData]
 
   @nodeSync def getClassInfo(
       operation: TemporalSurfaceQuery,
@@ -54,6 +54,6 @@ trait TemporalSurfaceDataAccess {
       surface: TemporalSurface,
       entityRef: EntityReference,
       requireConcrete: Boolean,
-      reason: EntityReferenceQueryReason): Node[ClassInfo]
+      reason: EntityReferenceQueryReason): NodeFuture[ClassInfo]
 
 }

@@ -15,12 +15,14 @@ import optimus.core.needsPlugin
 import optimus.core.utils.RuntimeMirror
 import optimus.graph.AlreadyCompletedNode
 import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform.AsyncCollectionHelpers
 import optimus.platform.DynamicObject
 import optimus.platform.annotations.dimension
 import optimus.platform.annotations.nodeSync
 import optimus.platform.annotations.parallelizable
 import optimus.platform.storable.Entity
+import optimus.platform.storable.EntityImpl
 import optimus.platform.util.ReflectUtils
 import optimus.scalacompat.collection._
 import org.objectweb.asm.{Type => AsmType}
@@ -112,7 +114,8 @@ object TypeInfoUtils {
     ) /* all our generated methods have $ in them... user properties never do */ && ! {
       m.getName == "getCallbacks" && m.getReturnType.isArray &&
       m.getReturnType.getComponentType.getName.startsWith("net.sf.cglib")
-    }
+    } && m.getDeclaringClass != classOf[EntityImpl]
+    // all methods declated in EntityImpl should be ignored as they are not properties
   }
 
   private[optimus] def isPreDefMethod(m: Method): Boolean = {
@@ -162,6 +165,10 @@ object TypeInfo {
   def underlying(shape: TypeInfo[_]): TypeInfo[_] = {
     if (shape.clazz == classOf[Option[_]] || shape.clazz == classOf[Some[_]]) underlying(shape.typeParams.head)
     else shape
+  }
+
+  final def isOption(shape: TypeInfo[_]): Boolean = {
+    shape <:< classOf[Option[_]]
   }
 
   def isCollection(shape: TypeInfo[_]): Boolean = {
@@ -1030,16 +1037,16 @@ sealed abstract class Field {
   val method: Method
   val isSyncSafe: Boolean
   @nodeSync def invokeOn(instance: Any): Any = needsPlugin
-  def invokeOn$queued(instance: Any): Node[Any]
+  def invokeOn$queued(instance: Any): NodeFuture[Any]
   def invokeOnSync(instance: Any): Any = ???
 }
 final case class OptimusNodeField(method: Method) extends Field {
   val isSyncSafe = false
-  def invokeOn$queued(instance: Any): Node[Any] = method.invoke(instance).asInstanceOf[Node[Any]]
+  def invokeOn$queued(instance: Any): NodeFuture[Any] = method.invoke(instance).asInstanceOf[Node[Any]]
 }
 final case class RegularField(method: Method) extends Field {
   val isSyncSafe = true
-  def invokeOn$queued(instance: Any): Node[Any] = {
+  def invokeOn$queued(instance: Any): NodeFuture[Any] = {
     new AlreadyCompletedNode(invokeOnSync(instance))
   }
   override def invokeOnSync(instance: Any): Any = method.invoke(instance)
@@ -1047,7 +1054,7 @@ final case class RegularField(method: Method) extends Field {
 final case class AnonymousField(name: String) extends Field {
   val method = null
   val isSyncSafe = true
-  def invokeOn$queued(instance: Any): Node[Any] = {
+  def invokeOn$queued(instance: Any): NodeFuture[Any] = {
     new AlreadyCompletedNode(invokeOnSync(instance))
   }
   override def invokeOnSync(instance: Any): Any = {

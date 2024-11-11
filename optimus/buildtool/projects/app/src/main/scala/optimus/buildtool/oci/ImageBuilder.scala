@@ -612,12 +612,14 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
   private def copyPermissions(srcPath: Path): FilePermissions =
     FilePermissions.fromPosixFilePermissions {
-      srcPath.asView[PosixFileAttributeView] match {
-        case Some(attrs) => attrs.readAttributes.permissions
-        case None =>
-          OptimusBuildToolAssertions.assert(Properties.isWin, s"Expected to find mode for $srcPath somehow")
-          PosixPermissionUtils.NoPermissions
-      }
+      if (Files.exists(srcPath)) {
+        srcPath.asView[PosixFileAttributeView] match {
+          case Some(attrs) => attrs.readAttributes.permissions
+          case None =>
+            OptimusBuildToolAssertions.assert(Properties.isWin, s"Expected to find mode for $srcPath somehow")
+            PosixPermissionUtils.NoPermissions
+        }
+      } else PosixPermissionUtils.NoPermissions
     }
 
   override def complete(successful: Boolean): Unit =

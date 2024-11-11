@@ -51,12 +51,51 @@ trait SamplerProvider {
   val priority: Int = Int.MaxValue
 }
 
+trait SampleCrumbConsumer {
+  def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit
+  final def consume(id: ChainedID, elems: Elems): Unit = consume(id, SamplingProfilerSource, elems)
+  def flush(): Unit = {}
+  def errors: Int = 0
+  def sent: Int = 0
+
+  def resetStats(): Unit = {}
+}
+
+object NullSampleCrumbConsumer extends SampleCrumbConsumer {
+  override def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit = {}
+}
+
+object DefaultSampleCrumbConsumer extends SampleCrumbConsumer {
+  private val crumbsSent = new AtomicInteger(0)
+  private val crumbErrors = new AtomicInteger(0)
+
+  override def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit = {
+    val success = Breadcrumbs.info(id, PropertiesCrumb(_, source, elems))
+    if (success) crumbsSent.incrementAndGet() else crumbErrors.incrementAndGet()
+  }
+
+  override def flush(): Unit = Breadcrumbs.flush()
+
+  override def errors: Int = crumbErrors.get
+  override def sent: Int = crumbsSent.get
+
+  override def resetStats(): Unit = {
+    crumbsSent.set(0)
+    crumbErrors.set(0)
+  }
+}
+
 class SamplingProfiler private[diagnostics] (
     private val ownerId: ChainedID,
-    crumbConsumer: Option[Crumb => Unit] = None,
+    crumbConsumer: SampleCrumbConsumer = DefaultSampleCrumbConsumer,
     properties: Map[String, String] = Map.empty
-) extends Log {
+) extends SampleCrumbConsumer
+    with Log {
   import SamplingProfiler._
+
+  override def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit =
+    crumbConsumer.consume(id, source, elems)
+  override def flush(): Unit = crumbConsumer.flush()
 
   private val schedulerCounters = ServiceLoaderUtils.all[SchedulerCounter]
 
@@ -146,14 +185,15 @@ class SamplingProfiler private[diagnostics] (
           profWorkThreads -> counts.working,
           graphUtil -> counts.working.toDouble / numThreads,
           profWaitThreads -> counts.waiting,
-          profBlockedThreads -> counts.waiting
+          profBlockedThreads -> counts.waiting,
+          numCrumbFailures -> crumbConsumer.errors,
+          crumbQueueLength -> Breadcrumbs.queueLength
         )
       }
     )
 
     if (asyncProfiler)
-      ss += new AsyncProfilerSampler(sp, stackSamplers, crumbConsumer)
-
+      ss += new AsyncProfilerSampler(sp, stackSamplers)
     // Most of the samplers
     samplerProviders.foreach { provider =>
       ss ++= provider.provide(sp)
@@ -188,7 +228,7 @@ class SamplingProfiler private[diagnostics] (
   private val staticElems: Elems =
     profStatsType -> Name ::
       cpuCores -> numCores ::
-      engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root) ::
+      engPrint -> PyroUploader.approxId(EngineKey, ChainedID.root.repr) ::
       engineRoot -> ChainedID.root.base ::
       Version.properties
 
@@ -257,7 +297,7 @@ class SamplingProfiler private[diagnostics] (
     destinations.foreach { appInstance =>
       val id = appInstance.rootId
 
-      val identificationData = appPrint -> PyroUploader.approxId(AppKey, id) ::
+      val identificationData = appPrint -> PyroUploader.approxId(AppKey, id.repr) ::
         appId -> appInstance.appId :: idealThreads -> numThreads :: staticElems
 
       // Each sampler returns its crumb source, plus a list of batches to publish.  We'll publish all the
@@ -292,12 +332,7 @@ class SamplingProfiler private[diagnostics] (
 
               if (isCanonical)
                 log.debug(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
-              crumbConsumer match {
-                case Some(consumer) =>
-                  consumer(PropertiesCrumb(id, source, toPublish))
-                case None =>
-                  Breadcrumbs.info(id, PropertiesCrumb(_, source, toPublish))
-              }
+              crumbConsumer.consume(id, source, toPublish)
             }
             batchesForAllSamplers = rest.filter(_.nonEmpty)
           }
@@ -305,8 +340,7 @@ class SamplingProfiler private[diagnostics] (
         }
       isCanonical = false
     }
-    if (!crumbConsumer.isDefined)
-      Breadcrumbs.flush()
+    crumbConsumer.flush()
   }
 
   private def snap(): Unit = {
@@ -407,7 +441,7 @@ object SamplingProfiler extends Log {
   private def start(): Option[SamplingProfiler] = this.synchronized {
     if (enabled) {
       _instance orElse {
-        val sp = new SamplingProfiler(ChainedID.root)
+        val sp = new SamplingProfiler(ChainedID.root, DefaultSampleCrumbConsumer)
         startUnconfiguredTimer()
         _instance = Some(sp)
         _instance
@@ -678,4 +712,5 @@ object SamplingProfiler extends Log {
       }
     }.filter(_._2.size > 0)
   }
+
 }

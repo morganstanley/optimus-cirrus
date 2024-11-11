@@ -11,25 +11,21 @@
  */
 package optimus.buildtool.cache.silverking
 
-import java.net.URL
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.nio.file.Path
-import java.nio.file.StandardOpenOption
-import java.time.Duration
-import java.time.Instant
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.Properties.obtCategory
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.artifacts.CompilationMessage.Warning
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.IncrementalArtifact
 import optimus.buildtool.cache.ArtifactStoreBase
-import optimus.buildtool.artifacts.CompilationMessage.Warning
 import optimus.buildtool.cache.ComparableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
+import optimus.buildtool.cache.remote.ClusterType
+import optimus.buildtool.cache.remote.CacheOperationRecorder
+import optimus.buildtool.cache.remote.OperationType
+import optimus.buildtool.cache.silverking.SilverKingConfig.Explicit
+import optimus.buildtool.cache.silverking.SilverKingConfig.ServiceLookup
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.FileAsset
@@ -43,20 +39,22 @@ import optimus.core.ChainedNodeID
 import optimus.graph.NodeAwaiter
 import optimus.graph.NodeTask
 import optimus.graph.diagnostics.GraphDiagnostics
-import optimus.platform.{Query => _, _}
 import optimus.platform.util.Log
+// watch out for IDE optimize-imports here - it can reorder and make code fail to compile!
+import optimus.platform.{Query => _, _}
 
+import java.net.URL
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
 
 object SilverKingStore extends Log {
-
-  object Config {
-    // TODO (OPTIMUS-64537): change prefix after cut-over
-    private val prefix = SilverKingStoreConfig.prefix
-
-    // defaults to "external"
-    val externalArtifactVersion: String = sys.props.get(s"$prefix.externalArtifactVersion").getOrElse("external-1.1")
-  }
 
   private[cache] sealed trait StoredKey
 
@@ -113,7 +111,16 @@ object SilverKingStore extends Log {
       offlinePuts: Boolean = true,
       cacheOperationRecorder: CacheOperationRecorder = new CacheOperationRecorder
   ): SilverKingStore = {
-    val clusterType = ClusterType.forLookup(config)
+    def forLookup(config: SilverKingConfig): ClusterType = {
+      config match {
+        case sl: ServiceLookup if sl.name == "obtqa"  => ClusterType.QA
+        case sl: ServiceLookup if sl.name == "obtdev" => ClusterType.Dev
+        case Explicit(name, _, _, _)                  => ClusterType.Labeled(name)
+        case _                                        => ClusterType.Custom
+      }
+    }
+    val clusterType = forLookup(config)
+
     val connector = new Connector(() => SilverKingOperationsImpl(config, clusterType), clusterType)
     val disconnect = Some(() => connector.disconnect())
     val distributedSwitch = ZookeeperSwitch(config, clusterType, onTrigger = disconnect)
@@ -145,9 +152,9 @@ class SilverKingStore private[cache] (
 ) extends ArtifactStoreBase
     with RemoteAssetStore
     with ComparableArtifactStore {
-  import SilverKingStore._
-  import SilverKingStore.Connection._
   import OperationType._
+  import SilverKingStore.Connection._
+  import SilverKingStore._
 
   override protected val cacheType: String = s"SilverKing $clusterType"
   override protected val stat: ObtStats.Cache = ObtStats.SilverKing
@@ -229,7 +236,7 @@ class SilverKingStore private[cache] (
   }
 
   @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = {
-    val key = ArtifactKey(RootScopeId, url.toString, null, None, Config.externalArtifactVersion)
+    val key = ArtifactKey(RootScopeId, url.toString, null, None, RemoteAssetStore.externalArtifactVersion)
     _get(key, RemoteAssetCacheTraceType(url), destination)
   }
 
@@ -298,7 +305,7 @@ class SilverKingStore private[cache] (
 
   @async def check(url: URL): Boolean =
     safely[Boolean](Read, RootScopeId, false, s"Failed to check silverking cache for url: $url") { ops =>
-      val key = ArtifactKey(RootScopeId, url.toString, null, None, Config.externalArtifactVersion)
+      val key = ArtifactKey(RootScopeId, url.toString, null, None, RemoteAssetStore.externalArtifactVersion)
       val checkedArtifact =
         ObtTrace.traceTask(key.id, Query(clusterType, RemoteAssetCacheTraceType(url)), failureSeverity = Warning) {
           ops.getValidKeys(Seq(key))
@@ -323,7 +330,7 @@ class SilverKingStore private[cache] (
   }
 
   @async override def put(url: URL, file: FileAsset): FileAsset = {
-    val key = ArtifactKey(RootScopeId, url.toString, null, None, Config.externalArtifactVersion)
+    val key = ArtifactKey(RootScopeId, url.toString, null, None, RemoteAssetStore.externalArtifactVersion)
     maybeOfflinePut(key, RemoteAssetCacheTraceType(url), file.path)
     file
   }

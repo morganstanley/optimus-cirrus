@@ -26,7 +26,7 @@ import optimus.graph.diagnostics.trace.OGTraceMode
 object Level extends Enumeration {
   type Level = Value
   val NONE, EDGES, ENVIRON, LIGHT, RECORDING, RECORDINGWITHHASHES, TIMELINELIGHT, HOTSPOTSLIGHT, RECORDINGLIGHT,
-      DISTRIBUTEDTASKS, HOTSPOTS, HASHCOUNTS, TRACENODES = Value
+      DISTRIBUTEDTASKS, HOTSPOTS, HOTSPOTSTIMELINE, HASHCOUNTS, TRACENODES = Value
 
   values.foreach(k => require(OGTraceMode.find(k.toString) != null))
 }

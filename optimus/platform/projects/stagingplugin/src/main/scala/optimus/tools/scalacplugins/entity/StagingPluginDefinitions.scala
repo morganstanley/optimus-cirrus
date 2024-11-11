@@ -17,7 +17,7 @@ trait StagingPluginDefinitions {
   val global: Global
   import global._
   import definitions._
-  import rootMirror.{getClassIfDefined, getRequiredClass, requiredClass, requiredModule}
+  import rootMirror.{getClassIfDefined, getModuleIfDefined, getRequiredClass, requiredClass, requiredModule}
 
   lazy val GenTraversableOnceClass = getClassIfDefined("scala.collection.GenTraversableOnce")
   lazy val GenTraversableOnce_to = getMemberIfDefined(GenTraversableOnceClass, TermName("to"))

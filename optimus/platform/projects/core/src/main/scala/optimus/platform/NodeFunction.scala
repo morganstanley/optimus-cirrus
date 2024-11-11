@@ -15,6 +15,7 @@ import scala.annotation.nowarn
 import optimus.graph.AlreadyCompletedNode
 import optimus.graph.Node
 import optimus.graph.NodeClsIDSupport
+import optimus.graph.NodeFuture
 import optimus.graph.OGSchedulerContext
 import optimus.graph.UnsafeInternal
 import optimus.graph.profiled.NodeDelegate
@@ -40,7 +41,7 @@ trait AsyncFunction0[+R] extends Serializable {
   @nodeSync
   def apply(): R
   @impure
-  def apply$queued(): Node[R]
+  def apply$queued(): NodeFuture[R]
 }
 
 trait AsyncFunction1[-T1, +R] extends Serializable {
@@ -48,7 +49,7 @@ trait AsyncFunction1[-T1, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1): R
   @impure
-  def apply$queued(v1: T1): Node[R]
+  def apply$queued(v1: T1): NodeFuture[R]
 }
 case object AsyncFunction1 {
   // no sense in creating many of these
@@ -65,7 +66,7 @@ trait AsyncFunction2[-T1, -T2, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1, v2: T2): R
   @impure
-  def apply$queued(v1: T1, v2: T2): Node[R]
+  def apply$queued(v1: T1, v2: T2): NodeFuture[R]
 }
 
 trait AsyncFunction3[-T1, -T2, -T3, +R] extends Serializable {
@@ -73,7 +74,7 @@ trait AsyncFunction3[-T1, -T2, -T3, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3): NodeFuture[R]
 }
 
 trait AsyncFunction4[-T1, -T2, -T3, -T4, +R] extends Serializable {
@@ -81,7 +82,7 @@ trait AsyncFunction4[-T1, -T2, -T3, -T4, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): NodeFuture[R]
 }
 
 trait AsyncFunction5[-T1, -T2, -T3, -T4, -T5, +R] extends Serializable {
@@ -89,7 +90,7 @@ trait AsyncFunction5[-T1, -T2, -T3, -T4, -T5, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): NodeFuture[R]
 }
 
 trait AsyncFunction6[-T1, -T2, -T3, -T4, -T5, -T6, +R] extends Serializable {
@@ -97,7 +98,7 @@ trait AsyncFunction6[-T1, -T2, -T3, -T4, -T5, -T6, +R] extends Serializable {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): NodeFuture[R]
 }
 
 trait AsyncFunction7[-T1, -T2, -T3, -T4, -T5, -T6, -T7, +R] extends Serializable {
@@ -105,7 +106,7 @@ trait AsyncFunction7[-T1, -T2, -T3, -T4, -T5, -T6, -T7, +R] extends Serializable
   @impure
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): NodeFuture[R]
 }
 
 trait AsyncFunction8[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, +R] extends Serializable {
@@ -113,7 +114,7 @@ trait AsyncFunction8[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, +R] extends Seriali
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): NodeFuture[R]
 }
 
 trait AsyncFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R] extends Serializable {
@@ -121,7 +122,7 @@ trait AsyncFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R] extends Se
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): R
   @impure
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R]
 }
 
 trait HasNewNode[+R] {
@@ -133,7 +134,7 @@ trait HasNewNode[+R] {
 trait NodeFunction0[+R] extends AsyncFunction0[R] {
   @nodeSync
   def apply(): R
-  def apply$queued(): Node[R]
+  def apply$queued(): NodeFuture[R]
 }
 
 trait NodeFunction0NN[+R] extends NodeFunction0[R] with HasNewNode[R]
@@ -141,7 +142,7 @@ trait NodeFunction0NN[+R] extends NodeFunction0[R] with HasNewNode[R]
 trait NodeFunction1[-T1, +R] extends AsyncFunction1[T1, R] {
   @nodeSync
   def apply(v1: T1): R
-  def apply$queued(v1: T1): Node[R]
+  def apply$queued(v1: T1): NodeFuture[R]
 }
 
 trait HasFastNodeGenerator[-T1, +R] {
@@ -155,7 +156,7 @@ case object NodeFunction1 {
       case _ =>
         (v: T1) =>
           new NodeDelegate[R] {
-            override protected def childNode: Node[R] = nf.apply$queued(v)
+            override protected def childNode: NodeFuture[R] = nf.apply$queued(v)
           }
     }
 
@@ -171,51 +172,51 @@ case object NodeFunction1 {
 trait NodeFunction2[-T1, -T2, +R] extends AsyncFunction2[T1, T2, R] {
   @nodeSync
   def apply(v1: T1, v2: T2): R
-  def apply$queued(v1: T1, v2: T2): Node[R]
+  def apply$queued(v1: T1, v2: T2): NodeFuture[R]
 }
 
 trait NodeFunction3[-T1, -T2, -T3, +R] extends AsyncFunction3[T1, T2, T3, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3): R
-  def apply$queued(v1: T1, v2: T2, v3: T3): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3): NodeFuture[R]
 }
 
 trait NodeFunction4[-T1, -T2, -T3, -T4, +R] extends AsyncFunction4[T1, T2, T3, T4, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): NodeFuture[R]
 }
 
 trait NodeFunction5[-T1, -T2, -T3, -T4, -T5, +R] extends AsyncFunction5[T1, T2, T3, T4, T5, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): NodeFuture[R]
 }
 
 trait NodeFunction6[-T1, -T2, -T3, -T4, -T5, -T6, +R] extends AsyncFunction6[T1, T2, T3, T4, T5, T6, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): NodeFuture[R]
 }
 
 trait NodeFunction7[-T1, -T2, -T3, -T4, -T5, -T6, -T7, +R] extends AsyncFunction7[T1, T2, T3, T4, T5, T6, T7, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): NodeFuture[R]
 }
 
 trait NodeFunction8[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, +R]
     extends AsyncFunction8[T1, T2, T3, T4, T5, T6, T7, T8, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): NodeFuture[R]
 }
 
 trait NodeFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R]
     extends AsyncFunction9[T1, T2, T3, T4, T5, T6, T7, T8, T9, R] {
   @nodeSync
   def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): R
-  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Node[R]
+  def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R]
 
 }
 
@@ -226,7 +227,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(): R = vn().get
     @impure
-    def apply$queued(): Node[R] = vn().enqueue
+    def apply$queued(): NodeFuture[R] = vn().enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction0Impl[_] => NodeClsIDSupport.equals(vn, that.vn)
       case _                           => false
@@ -251,7 +252,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1): R = vn(v1).get
     @impure
-    def apply$queued(v1: T1): Node[R] = vn(v1).enqueue
+    def apply$queued(v1: T1): NodeFuture[R] = vn(v1).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction1Impl[_, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                              => false
@@ -265,7 +266,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2): R = vn(v1, v2).get
     @impure
-    def apply$queued(v1: T1, v2: T2): Node[R] = vn(v1, v2).enqueue
+    def apply$queued(v1: T1, v2: T2): NodeFuture[R] = vn(v1, v2).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction2Impl[_, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                 => false
@@ -279,7 +280,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3): R = vn(v1, v2, v3).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3): Node[R] = vn(v1, v2, v3).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3): NodeFuture[R] = vn(v1, v2, v3).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction3Impl[_, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                    => false
@@ -294,7 +295,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4): R = vn(v1, v2, v3, v4).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): Node[R] = vn(v1, v2, v3, v4).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): NodeFuture[R] = vn(v1, v2, v3, v4).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction4Impl[_, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                       => false
@@ -309,7 +310,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): R = vn(v1, v2, v3, v4, v5).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Node[R] = vn(v1, v2, v3, v4, v5).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): NodeFuture[R] = vn(v1, v2, v3, v4, v5).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction5Impl[_, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                          => false
@@ -324,7 +325,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): R = vn(v1, v2, v3, v4, v5, v6).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Node[R] = vn(v1, v2, v3, v4, v5, v6).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): NodeFuture[R] = vn(v1, v2, v3, v4, v5, v6).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction6Impl[_, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                             => false
@@ -339,7 +340,7 @@ object asAsyncInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): R = vn(v1, v2, v3, v4, v5, v6, v7).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction7Impl[_, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -356,7 +357,7 @@ object asAsyncInnards {
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): R =
       vn(v1, v2, v3, v4, v5, v6, v7, v8).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7, v8).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction8Impl[_, _, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -373,7 +374,7 @@ object asAsyncInnards {
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): R =
       vn(v1, v2, v3, v4, v5, v6, v7, v8, v9).get
     @impure
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7, v8, v9).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: AsyncFunction9Impl[_, _, _, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -412,8 +413,8 @@ object asNodeInnards {
   private[optimus /*platform*/ ] final class NodeFunctionByNameImpl[+R](val template: Node[R])
       extends NodeFunction0ImplBase[R](template) {
     @nodeSync
-    def apply(): R = apply$queued().get
-    def apply$queued(): Node[R] = apply$newNode().enqueue
+    def apply(): R = apply$queued().get$
+    def apply$queued(): NodeFuture[R] = apply$newNode().enqueue
     @nowarn("msg=10500 optimus.graph.UnsafeInternal.clone")
     override def apply$newNode(): Node[R] = template match {
       case acn: AlreadyCompletedNode[R] => acn
@@ -425,7 +426,7 @@ object asNodeInnards {
       extends NodeFunction0ImplBase[R](vn) {
     @nodeSync
     def apply(): R = vn().get
-    def apply$queued(): Node[R] = vn().enqueue
+    def apply$queued(): NodeFuture[R] = vn().enqueue
     def apply$newNode(): Node[R] = vn()
   }
 
@@ -434,7 +435,7 @@ object asNodeInnards {
       with HasFastNodeGenerator[T1, R] {
     @nodeSync
     def apply(v1: T1): R = vn(v1).get
-    def apply$queued(v1: T1): Node[R] = vn(v1).enqueue
+    def apply$queued(v1: T1): NodeFuture[R] = vn(v1).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction1Impl[_, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                             => false
@@ -463,7 +464,7 @@ object asNodeInnards {
 
     @nodeSync
     def apply(v1: T1): R = node(v1).get
-    def apply$queued(v1: T1): Node[R] = node(v1).enqueueAttached
+    def apply$queued(v1: T1): NodeFuture[R] = node(v1).enqueueAttached
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction1ImplSS[_, _] => NodeClsIDSupport.equals(vn, that.vn) && (ss._cacheID eq that.ss._cacheID)
       case _                               => false
@@ -477,7 +478,7 @@ object asNodeInnards {
       extends NodeFunction2[T1, T2, R] {
     @nodeSync
     def apply(v1: T1, v2: T2): R = vn(v1, v2).get
-    def apply$queued(v1: T1, v2: T2): Node[R] = vn(v1, v2).enqueue
+    def apply$queued(v1: T1, v2: T2): NodeFuture[R] = vn(v1, v2).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction2Impl[_, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                => false
@@ -489,7 +490,7 @@ object asNodeInnards {
       extends NodeFunction3[T1, T2, T3, R] {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3): R = vn(v1, v2, v3).get
-    def apply$queued(v1: T1, v2: T2, v3: T3): Node[R] = vn(v1, v2, v3).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3): NodeFuture[R] = vn(v1, v2, v3).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction3Impl[_, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                   => false
@@ -502,7 +503,7 @@ object asNodeInnards {
       extends NodeFunction4[T1, T2, T3, T4, R] {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4): R = vn(v1, v2, v3, v4).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): Node[R] = vn(v1, v2, v3, v4).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4): NodeFuture[R] = vn(v1, v2, v3, v4).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction4Impl[_, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                      => false
@@ -515,7 +516,7 @@ object asNodeInnards {
       extends NodeFunction5[T1, T2, T3, T4, T5, R] {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): R = vn(v1, v2, v3, v4, v5).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Node[R] = vn(v1, v2, v3, v4, v5).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): NodeFuture[R] = vn(v1, v2, v3, v4, v5).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction5Impl[_, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                         => false
@@ -528,7 +529,7 @@ object asNodeInnards {
       extends NodeFunction6[T1, T2, T3, T4, T5, T6, R] {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): R = vn(v1, v2, v3, v4, v5, v6).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Node[R] = vn(v1, v2, v3, v4, v5, v6).enqueue
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): NodeFuture[R] = vn(v1, v2, v3, v4, v5, v6).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction6Impl[_, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
       case _                                            => false
@@ -541,7 +542,7 @@ object asNodeInnards {
       extends NodeFunction7[T1, T2, T3, T4, T5, T6, T7, R] {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): R = vn(v1, v2, v3, v4, v5, v6, v7).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction7Impl[_, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -556,7 +557,7 @@ object asNodeInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): R =
       vn(v1, v2, v3, v4, v5, v6, v7, v8).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7, v8).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction8Impl[_, _, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -571,7 +572,7 @@ object asNodeInnards {
     @nodeSync
     def apply(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): R =
       vn(v1, v2, v3, v4, v5, v6, v7, v8, v9).get
-    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Node[R] =
+    def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R] =
       vn(v1, v2, v3, v4, v5, v6, v7, v8, v9).enqueue
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction9Impl[_, _, _, _, _, _, _, _, _, _] => NodeClsIDSupport.equals(vn, that.vn)
@@ -838,7 +839,7 @@ object asAsync extends asAsyncInnards
 object asyncLazyWithAnyRuntimeEnv {
 
   @async implicit def derefLazy[R](l: Lazy[R]): R = l.deref
-  def derefLazy$queued[R](l: Lazy[R]): Node[R] = l.deref$queued
+  def derefLazy$queued[R](l: Lazy[R]): NodeFuture[R] = l.deref$queued
 
   final class Lazy[R] private[asyncLazyWithAnyRuntimeEnv] (v: Node[R]) {
     @nodeSync
@@ -846,14 +847,14 @@ object asyncLazyWithAnyRuntimeEnv {
       ensureAttached
       v.get
     }
-    def apply$queued(): Node[R] = {
+    def apply$queued(): NodeFuture[R] = {
       val ec = ensureAttached
       if (!v.isDone)
         ec.enqueueDirect(v)
       v
     }
     @nodeSync def deref: R = apply()
-    def deref$queued: Node[R] = apply$queued()
+    def deref$queued: NodeFuture[R] = apply$queued()
 
     private def ensureAttached: OGSchedulerContext = {
       val ec = OGSchedulerContext.current()

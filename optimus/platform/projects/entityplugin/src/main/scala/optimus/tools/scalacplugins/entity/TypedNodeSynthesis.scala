@@ -224,7 +224,7 @@ trait TypedNodeSynthesis { this: GenerateNodeMethodsComponent =>
 
     if (nodeInfo.rt == TriState.False) setMiscFlags(queuedNodeSym, MiscFlags.NOT_RT)
 
-    val queuedNodeType = methodType(nodeSym.info, Node, queuedNodeSym)
+    val queuedNodeType = methodType(nodeSym.info, NodeFuture, queuedNodeSym)
     queuedNodeSym.setInfo(queuedNodeType)
     resetOverrideIfNecessary(queuedNodeSym)
 

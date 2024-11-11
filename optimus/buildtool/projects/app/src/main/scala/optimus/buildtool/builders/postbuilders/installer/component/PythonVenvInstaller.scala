@@ -19,9 +19,8 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.trace.InstallPython
 import optimus.buildtool.trace.ObtTrace
-import optimus.buildtool.utils.OsUtils
+import optimus.buildtool.utils.AssetUtils
 import optimus.platform._
-import optimus.stratosphere.filesanddirs.Unzip
 
 import java.nio.file.Files
 import scala.collection.immutable.Seq
@@ -40,10 +39,7 @@ class PythonVenvInstaller(
   }
 
   @async def install(artifact: PythonArtifact): Seq[FileAsset] = {
-    val target =
-      pathBuilder
-        .dirForScope(artifact.scopeId, leaf = "venvs", branch = s".exec/${OsUtils.exec}")
-        .resolveDir(artifact.scopeId.module)
+    val target = pathBuilder.pathForTpa(artifact.scopeId)
 
     val fpName = s"PythonVenv(${artifact.scopeId})"
 
@@ -52,7 +48,8 @@ class PythonVenvInstaller(
       .writeIfKeyChanged[FileAsset](fpName, artifact.inputsHash) {
         ObtTrace.traceTask(artifact.scopeId, InstallPython) {
           Files.createDirectories(target.parent.path)
-          Unzip.extract(artifact.file.path.toFile, target.path.toFile).map(path => FileAsset(path))
+          AssetUtils.atomicallyCopy(artifact.file, target, replaceIfExists = true)
+          Seq(target)
         }
       }
   }

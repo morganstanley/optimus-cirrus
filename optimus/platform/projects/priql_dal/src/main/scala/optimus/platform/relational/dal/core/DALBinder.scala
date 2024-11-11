@@ -113,7 +113,7 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
           case _ => None
         }
         resultOpt.getOrElse(updateFuncCall(func, inst, visitElementList(func.arguments)))
-      case mc: MethodCallee if mc.method.declaringType <:< classOf[Option[_]] =>
+      case mc: MethodCallee if TypeInfo.isOption(mc.method.declaringType) =>
         val inst = visitElement(func.instance)
         val resultOpt = (inst, func.arguments) match {
           case (c: ColumnElement, List(LambdaElement(_, body, Seq(lp)))) =>

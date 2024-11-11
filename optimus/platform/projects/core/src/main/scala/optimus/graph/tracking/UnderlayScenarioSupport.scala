@@ -29,8 +29,8 @@ import scala.collection.mutable.ArrayBuffer
 private[tracking] trait UnderlayScenarioSupport {
   self: DependencyTracker =>
 
-  final private[tracking] def doSetUnderlay(scenario: Scenario): Unit = {
-    val newUnderlayStack = regenerateUnderlay(scenario, scenarioStack)
+  final private[tracking] def doSetUnderlay(scenario: Scenario, cause: EventCause): Unit = {
+    val newUnderlayStack = regenerateUnderlay(scenario, scenarioStack, cause)
     scenarioStack.setParent(newUnderlayStack)
     nc_scenarioStack.setParent(newUnderlayStack)
   }
@@ -46,7 +46,7 @@ private[tracking] trait UnderlayScenarioSupport {
    * @param scenario
    *   The new scenario to insert as the underlay scenario.
    */
-  def regenerateUnderlay(scenario: Scenario, ss: ScenarioStack): ScenarioStack = {
+  def regenerateUnderlay(scenario: Scenario, ss: ScenarioStack, cause: EventCause): ScenarioStack = {
     // n.b. we invalidate all tweaks from the old underlay and the new underlay - this leads to over
     // invalidation (if the same byValue tweak is applied in new and old stack it does not need invalidating.
     // This leads to correct but potentially sub-optimal performance.
@@ -76,7 +76,7 @@ private[tracking] trait UnderlayScenarioSupport {
 
     if (allInvalidations.nonEmpty) {
       invalidateSnapshot()
-      underlayTweakableTracker.invalidateByTweaks(allInvalidations)
+      underlayTweakableTracker.invalidateByTweaks(allInvalidations, cause)
     }
 
     newStack
@@ -139,6 +139,6 @@ private[tracking] trait UnderlayScenarioSupport {
   }
 
   private[tracking] class TSA_SetUnderlay(scenario: Scenario) extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = doSetUnderlay(scenario)
+    override protected def doUpdate(): Unit = doSetUnderlay(scenario, cause.root)
   }
 }

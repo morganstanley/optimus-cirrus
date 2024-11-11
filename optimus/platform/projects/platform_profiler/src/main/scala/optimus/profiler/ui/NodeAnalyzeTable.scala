@@ -75,6 +75,20 @@ object NodeAnalyzeTable {
     },
     new TableColumn[NodeReview]("Entity ", 500) with DiffHighlighter {
       override def valueOf(row: NodeReview): Any = row.task.getEntity
+    },
+    new TableColumnCount[NodeReview]("Depends On (Bit Count)", 40) with DiffHighlighter {
+      override def toolTip = "Number of bits set in the TPDMask (XSFT)"
+      override def valueOf(row: NodeReview): Int = row.task.dependsOnTweakableMaskBitCount()
+    },
+    new TableColumnString[NodeReview]("Depends On (Mask Fixed Width)", 500) {
+      override def getCellRenderer: TableCellRenderer = NPTableRenderer.simpleRenderFontFixedWidth
+      override def toolTip = "Fixed width view of TPDMask (XSFT)"
+      override def valueOf(row: NodeReview): String = row.task.dependsOnTweakableMaskFixedWidth()
+    },
+    new TableColumnString[NodeReview]("Depends On (Mask)", 100) {
+      override def getCellRenderer: TableCellRenderer = NPTableRenderer.simpleRenderFontFixedWidth
+      override def toolTip = "Compact variable width view of TPDMask (XSFT)"
+      override def valueOf(row: NodeReview): String = row.task.dependsOnTweakableMask()
     }
   )
 

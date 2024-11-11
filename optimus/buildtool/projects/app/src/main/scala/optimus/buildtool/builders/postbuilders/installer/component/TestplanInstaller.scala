@@ -51,6 +51,7 @@ final class TestplanInstaller(
 ) extends ComponentInstaller
     with ComponentBatchInstaller
     with Log
+    with ConsumerProviderContractTestplanInstaller
     with PythonTestplanInstaller {
   import installer._
 
@@ -117,13 +118,14 @@ final class TestplanInstaller(
     val groupsDir = directoryFactory.reactive(sourceDir.resolveDir(PathNames.TestGroups))
     val groupFiles = groupsDir.findFiles(PathRegexFilter(""".*\.json"""))
     val testplanFiles = sourceDir.testplanFiles
-    (groupFiles ++ testplanFiles)
+    val testTypes = (groupFiles ++ testplanFiles)
       .map(JsonSupport.readValue[TestType])
       .groupBy(t => t.testGroupsOpts.os -> t.testGroupsOpts.testGroupsName)
       .map { case (_, toMerge) =>
         toMerge.reduce(_ mergeWith _)
       }
       .to(Seq)
+    testTypes
   }
 
   @node protected def loadTestplanTemplate(os: String, templatePath: RelativePath): TestplanTemplate = {
@@ -152,7 +154,7 @@ final class TestplanInstaller(
 
     testType.testGroups.flatMap { testGroup =>
       val testTasks = testGroup.entries.map { e =>
-        TestplanTask(e.moduleId, e.testName.getOrElse(testType.testGroupsOpts.testGroupsName))
+        TestplanTask(e.moduleId, e.testName.getOrElse(testType.testGroupsOpts.testGroupsName), e.runStage)
       }
       val additionalBindings =
         testType.bindingsFor(testGroup, versionConfig, testplanConfig, workspaceStructure)
@@ -192,6 +194,17 @@ final class TestplanInstaller(
           testTasks,
           additionalBindings,
           testplanConfig)
+      else if (testGroup.programmingLanguage == ProgrammingLanguage.Pact)
+        testplanEntries.toSeq :+ createConsumerProviderContractTestplanEntry(
+          displayTestName = testType.displayName,
+          groupName = testGroup.name,
+          metaBundle = testGroup.metaBundle,
+          treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
+          additionalBindings = additionalBindings,
+          stratoOverride = stratoOverride,
+          testModulesFileName = testType.testGroupsOpts.testModulesFileName,
+          testTasks = testTasks
+        )
       else
         testplanEntries
     }
@@ -219,11 +232,30 @@ final class TestplanInstaller(
       if (filteredTestData.nonEmpty) {
         val os = testType.testGroupsOpts.os
 
-        val (pythonTestData, unitTestData) = filteredTestData.partition(_.isInstanceOf[PythonTestplanEntry])
+        val (pythonTestData, unitTestData, consumerProviderContractTestData) =
+          filteredTestData.foldLeft(
+            (
+              Seq.empty[PythonTestplanEntry],
+              Seq.empty[ScalaTestplanEntry],
+              Seq.empty[ConsumerProviderContractTestplanEntry])) {
+            case ((pythons, units, pacts), python: PythonTestplanEntry) => (pythons :+ python, units, pacts)
+            case ((pythons, units, pacts), unit: ScalaTestplanEntry)    => (pythons, units :+ unit, pacts)
+            case ((pythons, units, pacts), pact: ConsumerProviderContractTestplanEntry) =>
+              (pythons, units, pacts :+ pact)
+          }
+
         val pythonQualityTestplans =
           if (pythonTestData.nonEmpty) generatePythonQualityTestplan(os, pythonTestData) else Seq.empty
-        val unitTestplan = generateTestplan(unitTestData, templatesPerOS(os))
-        val testplan = TestPlan.merge(pythonQualityTestplans ++ Seq(unitTestplan))
+        val (consumerProviderRunTestplans, unitTestplan) =
+          if (consumerProviderContractTestData.nonEmpty) {
+            val unitTests =
+              unitTestData.filterNot(u => consumerProviderContractTestData.exists(_.moduleName == u.moduleName))
+            (
+              generateConsumerProviderContractTestplan(os, consumerProviderContractTestData),
+              if (unitTests.nonEmpty) Seq(generateTestplan(unitTests, templatesPerOS(os))) else Seq.empty
+            )
+          } else (Seq.empty, Seq(generateTestplan(unitTestData, templatesPerOS(os))))
+        val testplan = TestPlan.merge(consumerProviderRunTestplans ++ pythonQualityTestplans ++ unitTestplan)
 
         val testModules = unitTestData.map(_.moduleName).distinct.sorted
         Some(TestData(testType, testplan, testModules))

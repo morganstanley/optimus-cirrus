@@ -12,16 +12,16 @@
 package optimus.buildtool.builders.postbuilders.metadata
 
 import optimus.buildtool.config.DependencyDefinition
-import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeId
-import optimus.buildtool.resolvers.ExternalDependencyResolver
 import optimus.buildtool.resolvers.ResolutionResult
+import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 final case class DependenciesReport(dependencies: Set[DependencyReport])
@@ -34,21 +34,22 @@ object DependenciesReport {
 
   @node def apply(
       settings: MetadataSettings,
-      configurations: Map[ScopeId, ScopeConfiguration]
+      moduleCompilations: Map[ScopeId, ScopedCompilation]
   ): ExternalDependenciesReports = {
     val internalDeps = {
       val internalCompileDeps =
-        toInternalDependenciesReport(configurations, settings)(Compile, _.internalCompileDependencies)
+        toInternalDependenciesReport(moduleCompilations, settings)(Compile, _.internalCompileDependencies)
       val internalRuntimeDeps =
-        toInternalDependenciesReport(configurations, settings)(Runtime, _.internalRuntimeDependencies)
+        toInternalDependenciesReport(moduleCompilations, settings)(Runtime, _.internalRuntimeDependencies)
       DependencyReport.merge(internalCompileDeps, internalRuntimeDeps)
     }
 
     val (externalDeps, externalWebDeps) = {
       val externalCompileDeps =
-        toExternalDependenciesReport(configurations)(Compile, _.externalCompileDependencies, settings)
+        toExternalDependenciesReport(moduleCompilations)(Compile, _.externalCompileDependencies, settings)
       val externalRuntimeDeps =
-        toExternalDependenciesReport(configurations)(Runtime, _.externalRuntimeDependencies, settings)
+        toExternalDependenciesReport(moduleCompilations)(Runtime, _.externalRuntimeDependencies, settings)
+
       (
         DependencyReport.merge(externalCompileDeps.jvm.dependencies, externalRuntimeDeps.jvm.dependencies),
         DependencyReport.merge(externalCompileDeps.extraLibs.dependencies, externalRuntimeDeps.extraLibs.dependencies))
@@ -60,12 +61,13 @@ object DependenciesReport {
   private def isTest(scopeId: ScopeId): Boolean = scopeId.tpe.toLowerCase().contains("test")
 
   private def toInternalDependenciesReport(
-      configurations: Map[ScopeId, ScopeConfiguration],
+      moduleCompilations: Map[ScopeId, ScopedCompilation],
       settings: MetadataSettings
   )(
       qualifier: QualifierReport,
       depExtractor: ScopeConfiguration => Seq[ScopeId]
   ): Set[DependencyReport] = {
+    val configurations = moduleCompilations.map { case (k, v) => k -> v.config }
     val (testConfigurations, nonTestConfigurations) = {
       val (test, nonTest) = configurations.partition { case (id, _) => isTest(id) }
       (test.values, nonTest.values)
@@ -80,24 +82,27 @@ object DependenciesReport {
   @node private def getDepsReports(
       settings: MetadataSettings,
       qualifier: QualifierReport,
-      deps: Set[DependencyDefinition],
-      testDeps: Set[DependencyDefinition]): Set[DependencyReport] = {
+      compileResolutions: Seq[ResolutionResult],
+      testResolutions: Seq[ResolutionResult],
+      extraCompileDeps: Set[DependencyDefinition],
+      extraTestDeps: Set[DependencyDefinition]): Set[DependencyReport] = {
+    // we use resovled direct + transitive all artifacts to generate metadata
+    val resolvedCompileArtifacts = compileResolutions.flatMap(_.resolvedArtifacts.map(_.id)).distinct
+    val resolvedTestArtifacts =
+      testResolutions.flatMap(_.resolvedArtifacts.map(_.id)).diff(resolvedCompileArtifacts).distinct
 
     def extraLibsReports(libs: Set[DependencyDefinition], qualifiers: Set[QualifierReport]): Set[DependencyReport] =
-      libs.filter(_.isExtraLib).map(DependencyReport.fromExtraLib(_, qualifiers))
+      libs.map(DependencyReport.fromExtraLib(_, qualifiers))
 
-    val nonTestReports = resolveExternalDependencies(deps, settings.dependencyResolver).apar.flatMap {
-      case (depDef, resolution) =>
-        DependencyReport.fromExternalResolution(depDef, resolution, Set(qualifier), settings)
-    } ++ extraLibsReports(deps, Set(qualifier))
-
+    val nonTestReports =
+      DependencyReport.fromExternalIds(resolvedCompileArtifacts, Set(qualifier), settings) ++
+        extraLibsReports(extraCompileDeps, Set(qualifier))
     val testQualifier = Set(qualifier, TestOnly)
-    val testReports = resolveExternalDependencies(testDeps, settings.dependencyResolver).apar.flatMap {
-      case (depDef, resolution) =>
-        DependencyReport.fromExternalResolution(depDef, resolution, testQualifier, settings)
-    } ++ extraLibsReports(testDeps, testQualifier)
+    val testReports =
+      DependencyReport.fromExternalIds(resolvedTestArtifacts, testQualifier, settings) ++
+        extraLibsReports(extraTestDeps, Set(qualifier))
 
-    nonTestReports ++ testReports
+    (nonTestReports ++ testReports).toSet
   }
 
   @node private def getWebDepsReports(
@@ -127,7 +132,7 @@ object DependenciesReport {
     .map { str =>
       val splitStr = str.split("\\.")
       val variant = if (splitStr.contains("variant")) Some(splitStr.last) else None
-      val afsElectronLibs = settings.dependencyResolver.extraLibsDefinitions
+      val afsElectronLibs = settings.extraLibs
         .find(d => d.group == splitStr(0) && d.name == splitStr(1) && d.variant.map(_.name) == variant)
         .map(_.copy(transitive = false))
         .getOrThrow(s"can't find related extra lib $str for $id")
@@ -148,39 +153,45 @@ object DependenciesReport {
     else electronLibReport
   }.toSet
 
-  @node private def toExternalDependenciesReport(configurations: Map[ScopeId, ScopeConfiguration])(
+  @node private def getResolutions(
+      compilations: Map[ScopeId, ScopedCompilation],
+      qualifier: QualifierReport): Seq[ResolutionResult] =
+    compilations.apar
+      .flatMap { case (k, v) => v.allResolutions.getOrElse(qualifier, Nil) }
+      .to(Seq)
+      .filterNot(_.resolvedArtifacts.isEmpty)
+
+  @node private def toExternalDependenciesReport(moduleCompilations: Map[ScopeId, ScopedCompilation])(
       qualifier: QualifierReport,
       depExtractor: ScopeConfiguration => Seq[DependencyDefinition],
       settings: MetadataSettings
   ): ExternalDependenciesReports = {
-    val (testConfs, confs) = configurations.partition { case (id, conf) => isTest(id) }
+    val configurations = moduleCompilations.map { case (k, v) => k -> v.config }
+    val (testCompilations, compileCompilations) = moduleCompilations.partition { case (id, v) => isTest(id) }
+    val testResolutions = getResolutions(testCompilations, qualifier)
+    val compileResolutions = getResolutions(compileCompilations, qualifier)
 
-    def getDeps(cfgs: Map[ScopeId, ScopeConfiguration]): Set[DependencyDefinition] = cfgs.flatMap { case (id, conf) =>
-      depExtractor(conf)
-    }.toSet
-
-    val (testOnlyDeps, deps) = {
-      val (loadTestDeps, loadDeps) = (getDeps(testConfs), getDeps(confs))
+    def getExtraDeps(cfgs: Map[ScopeId, ScopeConfiguration]): Set[DependencyDefinition] = cfgs
+      .flatMap { case (id, conf) =>
+        depExtractor(conf)
+      }
+      .toSet
+      .filter(_.isExtraLib)
+    val (extraTestDeps, extraCompileDeps) = {
+      val (testConfs, confs) = configurations.partition { case (id, conf) => isTest(id) }
+      val (loadTestDeps, loadDeps) = (getExtraDeps(testConfs), getExtraDeps(confs))
       (loadTestDeps.diff(loadDeps), loadDeps)
     }
+
     val electronConfigs = configurations.filter { case (id, conf) => conf.electronConfig.isDefined }
     val webConfigs = configurations.filter { case (id, conf) => conf.webConfig.isDefined }
 
-    val dependenciesReports = getDepsReports(settings, qualifier, deps, testOnlyDeps)
+    val dependenciesReports =
+      getDepsReports(settings, qualifier, compileResolutions, testResolutions, extraCompileDeps, extraTestDeps)
     val otherExtraLibsReports = getWebDepsReports(settings, qualifier, webConfigs) ++
       getElectronReports(settings, qualifier, electronConfigs)
 
     ExternalDependenciesReports(DependenciesReport(dependenciesReports), DependenciesReport(otherExtraLibsReports))
   }
 
-  @node private def resolveExternalDependencies(
-      deps: Set[DependencyDefinition],
-      resolver: ExternalDependencyResolver
-  ): Set[(DependencyDefinition, ResolutionResult)] = {
-    deps.apar.map { dep =>
-      val resolution =
-        resolver.resolveDependencies(DependencyDefinitions(directIds = Seq(dep), indirectIds = Seq.empty))
-      (dep, resolution)
-    }
-  }
 }

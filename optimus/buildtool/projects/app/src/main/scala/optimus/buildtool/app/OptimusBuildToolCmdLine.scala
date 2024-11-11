@@ -23,6 +23,7 @@ import optimus.platform._
 import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.rest.bitbucket.MergeCommitUtils
 import optimus.utils.Args4JOptionHandlers.DelimitedStringOptionHandler
+import optimus.utils.Args4JOptionHandlers.PositiveIntOptionOptionHandler
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
 import optimus.utils.app.MemSizeOptionHandler
@@ -238,7 +239,6 @@ private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { th
   @args.Option(
     name = "--remoteCacheMode",
     required = false,
-    aliases = Array("--skMode", "--silverKingMode"),
     usage = "Remote cache mode. Available modes: readWrite, readOnly, writeOnly, forceWrite, forceWriteOnly"
   )
   val remoteCacheMode: String = NoneArg
@@ -246,17 +246,15 @@ private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { th
   @args.Option(
     name = "--remoteCacheWritable",
     required = false,
-    aliases = Array("--skw", "--silverkingWritable", "--silverKingWritable"),
-    usage = "Write artifacts to SilverKing (defaults to false)"
+    usage = "Write artifacts to remote cache (defaults to false)"
   )
   val remoteCacheWritable: Boolean = false
 
   @args.Option(
     name = "--remoteCacheForceWrite",
     required = false,
-    aliases = Array("--skfw", "--silverKingForceWrite"),
-    depends = Array("--silverKingWritable"),
-    usage = "Force writing of artifacts to SilverKing even on cache hits (defaults to false)"
+    depends = Array("--remoteCacheWritable"),
+    usage = "Force writing of artifacts to remote cache even on cache hits (defaults to false)"
   )
   val remoteCacheForceWrite: Boolean = false
 
@@ -296,6 +294,14 @@ private[buildtool] trait OptimusBuildToolCmdLineT
 
   @args.Option(name = "--debug", required = false, usage = "Increase logging verbosity (defaults to false)")
   val debug: Boolean = false
+
+  @args.Option(
+    name = "--histoFreqSecs",
+    required = false,
+    handler = classOf[PositiveIntOptionOptionHandler],
+    usage = "Dump periodic heap histograms"
+  )
+  val histoFreqSecs: Option[Int] = None
 
   @args.Option(
     name = "--scopesToBuild",
@@ -894,7 +900,6 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   )
   val pypiCredentials: String = NoneArg
 
-  // TODO (OPTIMUS-68785): this flag will be used when we merge this obt <> thin-pyapp integration, remove this comment after the merge
   @args.Option(
     name = "--pypiUvCredentials",
     required = false,

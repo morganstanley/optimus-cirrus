@@ -128,6 +128,11 @@ sealed abstract class InstallPathBuilder(
     }.distinct
   }
 
+  def pathForTpa(scopeId: ScopeId): FileAsset =
+    dirForScope(scopeId, branch = ".exec")
+      .resolveDir(OsUtils.exec)
+      .resolveFile(s"${scopeId.module}.tpa")
+
 }
 
 class RelativeInstallPathBuilder(override protected val installVersion: String) extends CommonDirs {

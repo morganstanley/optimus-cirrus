@@ -18,7 +18,7 @@ import optimus.platform.versioning.RegisteredFieldTypeT
 
 import scala.collection.mutable
 
-final case class AcceleratedKey(val name: SerializedEntity.TypeRef, val schemaVersion: Int)
+final case class AcceleratedKey(name: SerializedEntity.TypeRef, schemaVersion: Int)
 
 //mark this field is a single, multiple or linked(childToParent) type
 sealed trait CollFlag
@@ -29,24 +29,25 @@ object CollFlag {
 }
 
 final case class AcceleratedField(
-    val name: String,
-    val typeInfo: RegisteredFieldTypeT,
-    val indexed: Boolean,
-    val collFlag: CollFlag,
-    val target: Option[AcceleratedKey] = None,
-    val compositeFields: Seq[String] = Nil)
+    name: String,
+    typeInfo: RegisteredFieldTypeT,
+    indexed: Boolean,
+    collFlag: CollFlag,
+    target: Option[AcceleratedKey] = None,
+    compositeFields: Seq[String] = Nil)
 
 final case class AcceleratedInfo(
-    val id: AcceleratedKey,
-    val types: List[String],
-    val fields: Seq[AcceleratedField],
-    val classpathHashes: Set[String],
-    val rwTTScope: (Option[Instant], Option[Instant]),
-    val canRead: Boolean,
-    val canWrite: Boolean,
-    val tableHash: List[String],
-    val nameLookup: Map[String, String],
-    val parallelWorkers: Option[Int] = None) {
+    id: AcceleratedKey,
+    types: List[String],
+    fields: Seq[AcceleratedField],
+    classpathHashes: Set[String],
+    rwTTScope: (Option[Instant], Option[Instant]),
+    canRead: Boolean,
+    canWrite: Boolean,
+    tableHash: List[String],
+    nameLookup: Map[String, String],
+    parallelWorkers: Option[Int] = None,
+    enableSerializedKeyBasedFilter: Option[Boolean] = None) {
 
   val nameHash: Sha1Hash = Sha1Hash(tableHash.head)
 

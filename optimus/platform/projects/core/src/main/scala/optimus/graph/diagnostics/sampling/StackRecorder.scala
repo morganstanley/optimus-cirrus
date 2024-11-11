@@ -103,6 +103,7 @@ class NodeStackSampler extends StackSampler with Log {
     targetIntervalNs = sp.propertyUtils.get("optimus.sampling.nodestacks.interval.ms", 100) * 1000L * 1000L
     if (Objects.isNull(pluginSampleThread)) {
       pluginSampleThread = new Thread {
+        val adaptedNodes = new AdaptedNodesOfAllPlugins
         override def run(): Unit = {
           try {
             val pluginStackInterval: Long = sp.propertyUtils.get("optimus.sampling.plugin.stacks.ms", 100)
@@ -124,9 +125,9 @@ class NodeStackSampler extends StackSampler with Log {
                 }
               }
               if (pluginSamplingContinues) {
-                val adaptedNodes = new AdaptedNodesOfAllPlugins
+                adaptedNodes.resetNodesButRetainArray()
                 OGLocalTables.forAllRemovables { rt =>
-                  adaptedNodes.accumulate(rt.pluginTracker.adaptedNodes)
+                  adaptedNodes.accumulate(rt.pluginTracker.adaptedNodes, true)
                 }
                 val inFlightSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomUncompletedNodes()
                 val unFiredSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomNodes(!_.pluginFired())
@@ -253,13 +254,13 @@ class StackRecorder(eventName: String) {
     sv.weight += weight
   }
 
-  def record(ntsk: Awaitable, weight: Long): Unit = {
+  def record(ntsk: Awaitable, weight: Long): Unit = if (Objects.nonNull(ntsk)) {
     val h = ntsk.getLauncherStackHash
     val stack = AwaitStackManagement.awaitStack(ntsk)
     addWeightToStack(h, stack, weight)
   }
 
-  private def recordAndAdjustTiming(ntsk: NodeTask, extraMods: String): Unit = {
+  private def recordAndAdjustTiming(ntsk: NodeTask, extraMods: String): Unit = if (Objects.nonNull(ntsk)) {
     val t = TestableClock.nanoTime()
     if (skipBeforeSample == 0)
       skipBeforeSample = 1

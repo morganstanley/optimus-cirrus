@@ -83,8 +83,11 @@ object NodeName {
       var i = 0
 
       def eatString(i: Int, s: String): Int = {
-        if (clsName.startsWith(s, i))
-          i + s.length
+        val newStart = i + s.length
+        // only eat the string if it is followed by a non-letter/digit character or end of string (this is so that
+        // we don't eat $node from the classname of "@node def nodesAreFun" etc.)
+        if (clsName.startsWith(s, i) && (newStart >= clsName.length || !clsName(newStart).isLetterOrDigit))
+          newStart
         else i
       }
 
@@ -112,12 +115,13 @@ object NodeName {
             k = eatString(k, "$stateMachine")
             k = eatString(k, "$macro")
             k = eatString(k, "$async")
-            i = if (k == i || c(k).isLetterOrDigit) i + 1 else k
+            i = if (k == i) i + 1 else k
           }
         }
       }
       if (sb.length > 1 && sb.charAt(sb.length - 1) == replaceWith)
         sb.setLength(sb.length - 1)
+
       sb.toString
     }
 
@@ -201,13 +205,14 @@ object NodeName {
     }
   }
 
-  def fromNodeCls(nodeCls: Class[_]): NodeName = {
+  def fromNodeCls(nodeCls: Class[_]): NodeName = fromNodeCls(nodeCls, "")
+  def fromNodeCls(nodeCls: Class[_], modifier: String): NodeName = {
     if (nodeCls != null) {
       val pkgName = nodeCls.getPackage.getName
       val name = NodeName.stripPackageFromName(pkgName, NodeName.cleanNodeClassName(nodeCls))
-      NodeName(pkgName, name)
+      NodeName(pkgName, name, modifier)
     } else {
-      NodeName("", "[error]")
+      NodeName("", "[error]", modifier)
     }
   }
 
@@ -252,9 +257,11 @@ object NodeName {
         val pkgName = nti.runtimeClass().getPackage.getName
         val name = NodeName.stripPackageFromName(pkgName, nti.runtimeClass().getName + "." + nti.rawName())
         NodeName(pkgName, name, nti.modifier())
-      } else if (nti.isInternal || nodeCls == null) {
+      } else if (nti.isInternal || nodeCls == null)
         NodeName("", nti.rawName(), nti.modifier())
-      } else
+      else if (nti == NodeTaskInfo.StoredNodeFunction) // useful to see [node-function] in the debugger because its a sort of a non-local jump
+        fromNodeCls(nodeCls, nti.rawName())
+      else
         fromNodeCls(nodeCls)
     } else
       fromNodeCls(nodeCls)

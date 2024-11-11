@@ -408,12 +408,10 @@ object DebuggerUI extends Log {
     r
   }
 
-  /* Used to run underStackOf *without* tracing enabled. This avoids issues where irrelevant nodes are added to the
-     node trace. For example, as part of EntityPrettyPrintView.dumpProps. */
-  final def underStackOfWithoutNodeTracing[T](ssIn: ScenarioStack)(f: => T): T = {
-    NodeTrace.runFWithDisabledTrace[T](() => underStackOf(ssIn)(f))
-  }
-
+  /**
+   * An evil version of EvaluationContext.given used by the graph profiler to compute things while completely
+   * disregarding SI etc.
+   */
   final def underStackOf[T](ssIn: ScenarioStack)(f: => T): T = {
     var r: T = null.asInstanceOf[T]
     var saved_ss: ScenarioStack = null

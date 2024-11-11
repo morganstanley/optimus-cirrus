@@ -73,6 +73,7 @@ import scala.collection.immutable.Seq
       outlineTypesOnly = false,
       saveAnalysisFiles = true,
       containsPlugin = config.containsPlugin,
+      containsAgent = config.containsAgent,
       containsMacros = config.containsMacros,
       mischief = scope.mischief
     )

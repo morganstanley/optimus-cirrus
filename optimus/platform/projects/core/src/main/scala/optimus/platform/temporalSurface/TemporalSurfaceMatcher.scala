@@ -13,21 +13,21 @@ package optimus.platform.temporalSurface
 
 import optimus.platform.annotations.nodeSync
 import optimus.platform.temporalSurface.operations._
-import optimus.graph.Node
-import java.io.Serializable
+import optimus.graph.NodeFuture
 
+import java.io.Serializable
 import optimus.dsi.partitioning.Partition
 
 trait TemporalSurfaceScopeMatcher extends Serializable {
   @nodeSync
   def matchScope(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): MatchScope
-  def matchScope$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): Node[MatchScope]
+  def matchScope$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): NodeFuture[MatchScope]
 
   @nodeSync
   def matchItemScope(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface)(
       key: operation.ItemKey): MatchItemScope
   def matchItemScope$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface)(
-      key: operation.ItemKey): Node[MatchItemScope]
+      key: operation.ItemKey): NodeFuture[MatchItemScope]
 }
 
 trait TemporalSurfaceMatcher extends Serializable {
@@ -37,14 +37,16 @@ trait TemporalSurfaceMatcher extends Serializable {
    */
   @nodeSync
   def matchQuery(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): MatchResult
-  def matchQuery$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): Node[MatchResult]
+  def matchQuery$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): NodeFuture[MatchResult]
 
   /**
    * determine to what extend the operations temporality is determined by this matcher
    */
   @nodeSync
   def matchSourceQuery(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): MatchSourceQuery
-  def matchSourceQuery$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface): Node[MatchSourceQuery]
+  def matchSourceQuery$queued(
+      operation: TemporalSurfaceQuery,
+      temporalSurface: TemporalSurface): NodeFuture[MatchSourceQuery]
 
   /**
    * determine to what extend a particular key within the scope of an operation matches this matcher Note - the result
@@ -54,7 +56,7 @@ trait TemporalSurfaceMatcher extends Serializable {
   def matchItem(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface)(
       key: operation.ItemKey): Option[(MatchAssignment, Option[operation.ItemData])]
   def matchItem$queued(operation: TemporalSurfaceQuery, temporalSurface: TemporalSurface)(
-      key: operation.ItemKey): Node[Option[(MatchAssignment, Option[operation.ItemData])]]
+      key: operation.ItemKey): NodeFuture[Option[(MatchAssignment, Option[operation.ItemData])]]
 
   def ||(other: TemporalSurfaceMatcher): TemporalSurfaceMatcher
 

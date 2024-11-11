@@ -73,7 +73,11 @@ trait StorageMetadataT {
 }
 
 object StorageMetadataT {
-  final case class Index(fieldName: String, indexedFields: Seq[(String, RegisteredFieldTypeT)], unique: Boolean)
+  final case class Index(
+      fieldName: String,
+      indexedFields: Seq[(String, RegisteredFieldTypeT)],
+      unique: Boolean,
+      typeName: Option[String])
       extends StorageMetadataT
 
   // represents an @indexed annotation on one or more fields of a stored field
@@ -83,8 +87,12 @@ object StorageMetadataT {
   // e.g. `@stored(childToParent = true) val foo: Set[Bar]` will give `ChildToParentLinkage("foo", RFT.Entity("Bar"))`
   final case class ChildToParentLinkage(fieldName: String, linkedType: RegisteredFieldTypeT) extends StorageMetadataT
 
-  def index(fieldName: String, indexedFields: Seq[(String, RegisteredFieldTypeT)], unique: Boolean): Index =
-    Index(fieldName, indexedFields, unique)
+  def index(
+      fieldName: String,
+      indexedFields: Seq[(String, RegisteredFieldTypeT)],
+      unique: Boolean,
+      typeName: Option[String]): Index =
+    Index(fieldName, indexedFields, unique, typeName)
 
   def key(fieldName: String, fields: Seq[(String, RegisteredFieldTypeT)]): Key = Key(fieldName, fields)
 

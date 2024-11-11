@@ -52,7 +52,7 @@ public final class AuditTrace {
           NodeExtendedInfo info = ntsk.info();
           if (auditorEnabled) {
             NodeExtendedInfo ninfo = _visitor.visit(e, info);
-            if (ninfo != info) ec.getCurrentNodeTask().combineInfo(ninfo);
+            if (ninfo != info) ec.getCurrentNodeTask().partialCombineInfo(ninfo);
           }
         } else {
           System.err.println("visit(Entry): current OGSchedulerContext has no node task.");

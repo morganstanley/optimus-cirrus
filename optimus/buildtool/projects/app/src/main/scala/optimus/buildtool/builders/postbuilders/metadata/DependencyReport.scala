@@ -11,11 +11,12 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import optimus.buildtool.artifacts.ExternalArtifactId
+import optimus.buildtool.artifacts.VersionedExternalArtifactId
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.resolvers.WebDependency
-import optimus.buildtool.resolvers.ResolutionResult
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -44,20 +45,20 @@ object DependencyReport {
     fieldName8 = "parent"
   )
 
-  def dependencyNamespace(dep: DependencyDefinition): String = if (dep.isMaven) MavenNamespace else AfsNamespace
+  def dependencyNamespace(isMaven: Boolean): String = if (isMaven) MavenNamespace else AfsNamespace
 
-  def fromExternalResolution(
-      dependencyDef: DependencyDefinition,
-      resolution: ResolutionResult,
+  // we generate train metadata for all resolved .jar artifacts
+  def fromExternalIds(
+      extIds: Seq[ExternalArtifactId],
       qualifiers: Set[QualifierReport],
       settings: MetadataSettings): Seq[DependencyReport] = {
-    resolution.resolvedArtifacts.map { externalArtifact =>
+    extIds.collect { case id: VersionedExternalArtifactId =>
       DependencyReport(
-        namespace = if (settings.generatePoms) MavenNamespace else dependencyNamespace(dependencyDef),
-        meta = dependencyDef.group,
-        project = dependencyDef.name,
-        release = Some(dependencyDef.version),
-        artifact = Some(externalArtifact.file.name),
+        namespace = if (settings.generatePoms) MavenNamespace else dependencyNamespace(id.isMaven),
+        meta = id.group,
+        project = id.name,
+        release = Some(id.version),
+        artifact = Some(id.artifactName),
         qualifiers = qualifiers,
         isTransitive = false
       )
@@ -66,7 +67,7 @@ object DependencyReport {
 
   def fromExtraLib(extraLib: DependencyDefinition, qualifiers: Set[QualifierReport]): DependencyReport =
     DependencyReport(
-      namespace = dependencyNamespace(extraLib),
+      namespace = dependencyNamespace(extraLib.isMaven),
       meta = extraLib.group,
       project = extraLib.name,
       release = Some(extraLib.version),
@@ -91,7 +92,8 @@ object DependencyReport {
 
   def fromWebToolingDefinition(dependency: DependencyDefinition, qualifiers: Set[QualifierReport]): DependencyReport =
     DependencyReport(
-      namespace = if (dependency.group == MsWebDependencyDefaultMeta) NpmNamespace else dependencyNamespace(dependency),
+      namespace =
+        if (dependency.group == MsWebDependencyDefaultMeta) NpmNamespace else dependencyNamespace(dependency.isMaven),
       meta = if (dependency.name == PnpmName) OutsideWebDependencyDefaultMeta else dependency.group,
       project = dependency.name,
       release = Some(dependency.version),

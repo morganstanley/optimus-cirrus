@@ -171,8 +171,10 @@ object TableColumnFlags {
 }
 
 class TableColumnFlags(name: String, width: Int = 0) extends TableColumn[PNodeTaskInfo](name, width) {
-  override def valueOf(row: PNodeTaskInfo): String = row.flagsAsString
-  override def valueOf(row: PNodeTaskInfo, row2: PNodeTaskInfo): String = row.flagsAsString
+  // flags renderer has logic to handle different types - it assumes strings are filter column,
+  // and PNodeTaskInfo are individual rows
+  override def valueOf(row: PNodeTaskInfo): PNodeTaskInfo = row
+  override def valueOf(row: PNodeTaskInfo, row2: PNodeTaskInfo): PNodeTaskInfo = row
   override def getCellRenderer: TableCellRenderer = NPTableRenderer.flagsRenderer
   override def getHeaderColor: Color = nodeInfoSectionColor
   override def parsedFilter(filter: String): (PNodeTaskInfo, PNodeTaskInfo) => Boolean =
@@ -215,10 +217,10 @@ class TableColumnFlags(name: String, width: Int = 0) extends TableColumn[PNodeTa
     }
   override def compareColumn: TableColumn[PNodeTaskInfo] =
     new TableColumnFlags(TableView.deltaSymbol + name, width) {
-      override def valueOf(row: PNodeTaskInfo, row2: PNodeTaskInfo): String = {
+      override def valueOf(row: PNodeTaskInfo, row2: PNodeTaskInfo): PNodeTaskInfo = {
         val org = row.dup()
         org.flags = (org.flags ^ row2.flags) ^ NodeTaskInfo.DONT_CACHE
-        org.flagsAsString
+        org
       }
     }
 }

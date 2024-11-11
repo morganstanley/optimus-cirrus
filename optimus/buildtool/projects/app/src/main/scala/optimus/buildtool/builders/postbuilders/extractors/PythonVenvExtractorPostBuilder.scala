@@ -10,25 +10,28 @@
  * limitations under the License.
  */
 package optimus.buildtool.builders.postbuilders.extractors
-
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.PythonArtifact
+import optimus.buildtool.bsp.BuildServerProtocolService.PythonBspConfig
 import optimus.buildtool.builders.postbuilders.FilteredPostBuilder
+import optimus.buildtool.compilers.venv.PythonConsts
+import optimus.buildtool.compilers.venv.ThinPyappWrapper
+import optimus.buildtool.compilers.venv.VenvProvider
+import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.platform._
-import optimus.stratosphere.filesanddirs.Unzip
 
 import java.io.PrintWriter
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
 import scala.collection.immutable.Seq
-import scala.util.Random
 import scala.jdk.CollectionConverters._
-
+import scala.util.Random
 object PythonVenvExtractorPostBuilder {
   private[buildtool] def venvFolder(buildDir: Directory): Directory = buildDir.resolveDir("venvs")
   private[buildtool] def mappingFile(buildDir: Directory): FileAsset =
@@ -37,7 +40,8 @@ object PythonVenvExtractorPostBuilder {
     venvFolder(buildDir).resolveFile("latest-venvs.txt")
 }
 
-class PythonVenvExtractorPostBuilder(buildDir: Directory) extends FilteredPostBuilder {
+class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: PythonBspConfig)
+    extends FilteredPostBuilder {
   private val venvFolder: Directory = PythonVenvExtractorPostBuilder.venvFolder(buildDir)
   private val mappingFile: FileAsset = PythonVenvExtractorPostBuilder.mappingFile(buildDir)
   private val latestVenvFile: FileAsset = PythonVenvExtractorPostBuilder.latestVenvFile(buildDir)
@@ -53,7 +57,28 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory) extends FilteredPostBu
         val venvExtractionDest = venvLocation(id, pythonArtifact.inputsHash)
         if (!venvExtractionDest.exists) {
           Files.createDirectories(venvExtractionDest.path)
-          Unzip.extract(pythonArtifact.file.path.toFile, venvExtractionDest.path.toFile)
+          val tpaPath = pythonArtifact.file.path
+
+          val (venv, _) = VenvProvider.ensureVenvExists(
+            OverriddenCommands.empty,
+            pythonArtifact.python,
+            pythonBspConfig.venvCache,
+            pythonBspConfig.pipCredentialFile,
+            pythonBspConfig.uvCredentialFile)
+
+          ThinPyappWrapper.runTpa(
+            pythonArtifact.python,
+            Seq(
+              PythonConsts.tpa.unpackCmd(
+                tpaPath,
+                Some(pythonBspConfig.uvCache.path),
+                Some(Paths.get(venvExtractionDest.name)),
+                Some(venv))
+            ),
+            venvExtractionDest.parent,
+            pythonBspConfig.pipCredentialFile,
+            pythonBspConfig.uvCredentialFile
+          )
         }
         latestVenvs.getAndUpdate(old => old.update(pythonArtifact, venvExtractionDest.path))
 

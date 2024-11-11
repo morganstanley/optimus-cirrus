@@ -69,16 +69,7 @@ import javax.swing.event.ChangeListener
 object GraphDebuggerUI extends Log with ConfigSettings {
   private lazy val frame: GraphDebuggerUI = new GraphDebuggerUI(DiagnosticSettings.offlineReview)
 
-  private[ui] def setFrameToLostConcurrency(): Unit = {
-    val profilerTab = frame.profiler
-    // this is done to go into Profiler tab
-    frame.tabs.setSelectedComponent(profilerTab)
-    // this is done to go into the Lost Concurrency tab in Profiler
-    profilerTab.tabs.setSelectedComponent(profilerTab.lc_table)
-  }
-
-  if (DiagnosticSettings.diag_lustrate) {
-    val wnVersion = WhatsNew.lastVersionViewed
+  def clearUserPreferences(): Unit = {
     val prefs = Preferences.userNodeForPackage(getClass)
     val prefNode = {
       import java.io._
@@ -89,6 +80,19 @@ object GraphDebuggerUI extends Log with ConfigSettings {
     log.warn(s"Resetting debugger preferences; old value:\n$prefNode\n")
     prefs.clear()
     prefs.flush()
+  }
+
+  private[ui] def setFrameToLostConcurrency(): Unit = {
+    val profilerTab = frame.profiler
+    // this is done to go into Profiler tab
+    frame.tabs.setSelectedComponent(profilerTab)
+    // this is done to go into the Lost Concurrency tab in Profiler
+    profilerTab.tabs.setSelectedComponent(profilerTab.lc_table)
+  }
+
+  if (DiagnosticSettings.diag_lustrate) {
+    val wnVersion = WhatsNew.lastVersionViewed
+    clearUserPreferences()
     WhatsNew.lastVersionViewed = wnVersion
   }
   Fonts.initializeFontSize()

@@ -126,7 +126,7 @@ object Collapsed2Speedscope extends App with Log {
       if (csv1)
         line = line.replaceAllLiterally("\"", "")
       n += 1
-      val (stack, weight) = StackAnalysis.splitStackLine(line)
+      val (stack, _, weight) = StackAnalysis.separateStackAndCount(line, true)
       val trace = stack.split(';').filter(_.nonEmpty).map(speedscope.methodIndex)
       speedscope.addTrace("exec", weight, trace)
       line = input.readLine()

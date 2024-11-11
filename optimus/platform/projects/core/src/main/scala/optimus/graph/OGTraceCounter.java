@@ -54,7 +54,8 @@ public class OGTraceCounter {
     IDLE_GUI_ID,
     MAX_ID,
     STARTUP_ID,
-    HANDLER_ID;
+    HANDLER_ID,
+    DTQ_ID;
 
     public final int id;
 

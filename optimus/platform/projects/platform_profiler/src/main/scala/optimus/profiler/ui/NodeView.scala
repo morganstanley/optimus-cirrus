@@ -172,7 +172,7 @@ class NodeView(withToolbar: Boolean, pref: Preferences) extends JTabbedPane with
 
   def buildUpView(hb: HtmlBuilder, nodeReview: NodeReview, scenarioStackMinStackDepth: Int): Unit = {
     if (nodeReview ne null)
-      DebuggerUI.underStackOfWithoutNodeTracing(nodeReview.task.scenarioStack) {
+      DebuggerUI.underStackOf(nodeReview.task.scenarioStack) {
         val dvm = DebuggerViewModelHtml(nodeReview)
         dvm.nodeDetails(hb, this.selection.length > 1, scenarioStackMinStackDepth, overviewPane.getTextPane)
       }

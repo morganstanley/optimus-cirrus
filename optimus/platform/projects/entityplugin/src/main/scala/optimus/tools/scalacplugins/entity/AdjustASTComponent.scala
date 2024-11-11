@@ -11,6 +11,7 @@
  */
 package optimus.tools.scalacplugins.entity
 
+import optimus.entityplugin.config.StaticConfig
 import optimus.entityplugin.pretyper._
 import optimus.tools.scalacplugins.entity.reporter.OptimusErrors
 import optimus.tools.scalacplugins.entity.reporter.OptimusNonErrorMessages
@@ -63,6 +64,23 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
   import Flags._
   def newTransformer0(unit: CompilationUnit) = new AdjustAST(unit)
 
+  // TODO (OPTIMUS-51110): Remove this once we're done with package migration
+  private case class BannedPackage(
+      srcPathPrefix: String,
+      bannedParent: TermName,
+      bannedPackage: TermName,
+      replacement: String)
+
+  private lazy val bannedPackages: Set[BannedPackage] = {
+    StaticConfig.stringSet("bannedPackages").map { confStr =>
+      val Array(src, banned, replacement) = confStr.split(":")
+      // n.b. this is very specific to our particular use case of banning a certain optimus.x package so it's not
+      // designed to be flexible at all
+      val Array(bannedOuter, bannedInner) = banned.split("\\.")
+      BannedPackage(src, TermName(bannedOuter), TermName(bannedInner), replacement)
+    }
+  }
+
   /**
    * This is a placeholder with all the information needed to create a companion object.
    */
@@ -96,6 +114,8 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
   class AdjustAST(unit: CompilationUnit) extends Transformer {
     import CODE._
     import global._
+
+    private val relevantBannedPackages = bannedPackages.filter(b => unit.source.path.startsWith(b.srcPathPrefix))
 
     case class EntityScope(isValOrDefDef: Boolean, module: HashMap[TermName, ModuleSpec] = HashMap())
     val packageName = new StateHolder[String]("")
@@ -476,6 +496,19 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
     override def transform(tree: Tree): Tree = {
       try {
+        // TODO (OPTIMUS-51110): Remove this once we're done with package migration
+        relevantBannedPackages.foreach { ban =>
+          tree match {
+            case Select(Ident(ban.bannedParent), ban.bannedPackage) =>
+              alarm(
+                OptimusNonErrorMessages.BANNED_PACKAGE,
+                tree.pos,
+                s"${ban.bannedParent}.${ban.bannedPackage}",
+                ban.replacement)
+            case _ =>
+          }
+        }
+
         transformSafe(tree)
       } catch {
         case ex: Throwable =>
@@ -958,6 +991,9 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
             if shouldMakeNode(mods) && (name != nme.CONSTRUCTOR) && !mods.hasFlag(Flags.SYNTHETIC) =>
           checkIllegalDefAnnots(dd, implDef)
 
+          if (hasAnnotation(mods, tpnames.key) || hasAnnotation(mods, tpnames.indexed))
+            alarm(OptimusErrors.KEY_INDEX_DEF_CANNOT_BE_ASYNC, dd.pos)
+
           if (mods.isPrivateLocal)
             alarm(OptimusErrors.NODE_WITH_PRIVATE_DEF, dd.pos)
 
@@ -989,6 +1025,10 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
             if hasAnnotation(mods, tpnames.key) || hasAnnotation(mods, tpnames.indexed) =>
           assertNoBothIndexedAndKey(dd)
           checkIllegalDefAnnots(dd, implDef)
+
+          if (hasAnnotation(mods, tpnames.async))
+            alarm(OptimusErrors.KEY_INDEX_DEF_CANNOT_BE_ASYNC, dd.pos)
+
           addToCompanion(implDef.name.toTermName, keyGen.companionKeyTrees(dd))
           // Suppress sync->async warnings on @key defs referring to @nodes.  See OPTIMUS-3710
           // This should only be possible with "synthetic" nodes due to lazy-loaded vals.
@@ -996,7 +1036,21 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
             val newAnnos = mkAnnotation(EntersGraphAnnotation, dd.pos.focus) :: Nil
             mods.withAnnotations(newAnnos.map(transformSafe))
           }
-          if (hasAnnotation(mods, tpnames.key))
+
+          // we disallow overriding a non-abstract '@indexed def', the reason is as following:
+          //
+          //  trait FooT {  @indexed def idx1: String  }
+          //  class Foo(val a: String, val b: String) extends FooT {
+          //      @indexed def idx1 = a
+          //  }
+          //  class Foo2(_a: String, _b: String) extends Foo(_a, _b) {
+          //      override def idx1 = b
+          //  }
+          //
+          //  DAL.put(Foo2("a1", "b1"))  // save SK("a" -> "a1", Foo), SK("idx1" -> "b1", FooT) into DAL
+          //  val foo2: Foo2 = ...       // load the previous instance form DAL
+          //  Foo.idx1.find(foo2.idx1)   // this will not find foo2 since foo2.idx1 == "b1"
+          if (rhs.nonEmpty)
             newMods |= FINAL
 
           val copied = treeCopy.DefDef(dd, newMods, name, tparams, vparamss, tpt, rhs)

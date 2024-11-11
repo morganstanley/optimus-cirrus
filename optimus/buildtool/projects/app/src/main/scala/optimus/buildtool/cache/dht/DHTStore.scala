@@ -19,8 +19,8 @@ import optimus.buildtool.artifacts.Severity.Warning
 import optimus.buildtool.cache.ArtifactStoreBase
 import optimus.buildtool.cache.ComparableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
-import optimus.buildtool.cache.silverking.ClusterType
-import optimus.buildtool.cache.silverking.SilverKingStore.Config.externalArtifactVersion
+import optimus.buildtool.cache.RemoteAssetStore.externalArtifactVersion
+import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.FileAsset
@@ -98,6 +98,7 @@ object DHTStore extends Log {
       .zkPath(zkPath)
       .kerberos(true)
       .replicationStrategy(new SimpleReplicationStrategy(2))
+      .readTimeout(Duration.ofSeconds(System.getProperty("obt.dht.readTimeoutSeconds", "60").toLong))
       .defaultOperationTimeout(
         Duration.ofSeconds(System.getProperty("obt.dht.defaultOperationTimeoutSeconds", "60").toLong))
       .ioThreads(System.getProperty("obt.dht.ioThreads", "12").toInt)
@@ -143,7 +144,7 @@ object DHTStore extends Log {
     }) + suffix
   }
 
-  val MappedBufferThreshold: Long = 1024 * 1024 // 1MB
+  private val MappedBufferThreshold: Long = 1024 * 1024 // 1MB
 
 }
 
@@ -341,5 +342,15 @@ class DHTStore(
   override def incompleteWrites: Int = lvClient.getFailedWrites.toInt
   @async override def close(): Unit = {
     client.shutdown(true)
+  }
+}
+
+final case class LocalDhtServer(uniqueId: String, port: Int) {
+  def toPath: String = s"$uniqueId:$port"
+}
+object LocalDhtServer {
+  def fromString(s: String): Option[LocalDhtServer] = s.split(":").toSeq match {
+    case Seq(serverId, portStr) => Some(LocalDhtServer(serverId, portStr.toInt))
+    case _                      => None // probably a custom ZK path
   }
 }

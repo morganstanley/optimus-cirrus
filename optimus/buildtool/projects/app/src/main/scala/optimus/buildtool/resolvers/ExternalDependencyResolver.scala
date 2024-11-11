@@ -24,8 +24,8 @@ import scala.collection.immutable.Seq
 @entity abstract class ExternalDependencyResolver(val loadedDefinitions: Seq[DependencyDefinition]) {
   val (extraLibsDefinitions, dependencyDefinitions) = loadedDefinitions.partition(_.isExtraLib)
 
-  @node def fingerprintDependencies(deps: Seq[DependencyDefinition]): Seq[String]
-  @node def resolveDependencies(deps: DependencyDefinitions, predefined: Boolean = true): ResolutionResult
+  @node def fingerprintDependencies(deps: DependencyDefinitions): Seq[String]
+  @node def resolveDependencies(deps: DependencyDefinitions, validate: Boolean = true): ResolutionResult
 }
 
 @entity object ExternalDependencyResolver {
@@ -36,6 +36,7 @@ import scala.collection.immutable.Seq
       source: Option[JarAsset],
       javadoc: Option[JarAsset],
       containsPlugin: Boolean = false,
+      containsAgent: Boolean = false,
       containsOrUsedByMacros: Boolean = false,
       isMaven: Boolean = false
   ): ExternalClassFileArtifact = {
@@ -47,6 +48,7 @@ import scala.collection.immutable.Seq
       // we capture the assumption of immutability here so that it's preserved if we later depcopy (etc.)
       assumedImmutable = Hashing.isAssumedImmutable(jar),
       containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
       containsOrUsedByMacros = containsOrUsedByMacros,
       isMaven = isMaven
     )
@@ -57,10 +59,14 @@ import scala.collection.immutable.Seq
  * A ResolutionResult serves as a return type in the "CoursierArtifactResolver.scala":getArtifacts method. This class is
  * intended to wrap the artifacts and dependencies information inside to support related functions such as cache
  * mechanism in `dependency-visualiser`'s graph class. Parameters are solved from Coursier Api "Resolution.scala" and
- * "CoursierArtifactResolver.scala": "dependencies" contains minDependencies and mapped to a Set type. It means
- * `dependencies` with no redundancy. "finalDependencies" contains finalDependenciesCache info and wrapped in the Map,
- * which get the final used dependencies with it's originating. e.g. (`from.module == to.module`).
- * "externalNodeArtifactMap" contains all Artifacts, both direct artifacts and indirect artifacts.
+ * "CoursierArtifactResolver.scala".
+ *
+ * @param resolvedArtifactsToDepInfos All external jar artifacts and the dependency/dependencies from which they were resolved
+ * @param messages Any messages associated with resolution
+ * @param jniPaths Paths to external JNI artifacts
+ * @param moduleLoads External modules to be loaded
+ * @param finalDependencies All resolved dependencies and their children
+ * @param mappedDependencies All resolved dependencies mapped from AFS to maven coordinates
  */
 final case class ResolutionResult(
     resolvedArtifactsToDepInfos: Seq[(ExternalClassFileArtifact, Seq[DependencyInfo])],
@@ -79,10 +85,14 @@ final case class ResolutionResult(
  * String and finally be used for `dependency-visualiser`'s graph to generate its nodes for "OBTVisualizer.scala"
  */
 @embeddable final case class DependencyInfo @node() (
-    module: String,
+    group: String,
+    name: String,
     config: String,
     version: String,
-    isMaven: Boolean) {
+    isMaven: Boolean
+) {
+  def module: String = s"$group:$name"
+  def dotModule: String = s"$group.$name"
   def noVersionName: String = s"$module:$config"
   override def toString: String = s"$module:$config.$version"
 }

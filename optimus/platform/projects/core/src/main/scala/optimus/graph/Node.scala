@@ -39,8 +39,8 @@ import scala.util.control.NonFatal
 
 abstract class NodeStateMachine(final val completableNode: CompletableNode[AnyRef], ec: OGSchedulerContext)
     extends NodeStateMachineBase
-    with Function1[Node[Any], Unit]
-    with AsyncStateMachine[Node[Any], Node[Any]] {
+    with Function1[NodeFuture[Any], Unit]
+    with AsyncStateMachine[NodeFuture[Any], NodeFuture[Any]] {
   final def _result: NodeTask = completableNode
 
   private[this] var _childNode: NodeTask = _
@@ -52,7 +52,7 @@ abstract class NodeStateMachine(final val completableNode: CompletableNode[AnyRe
   protected final def state_=(i: Int): Unit = _state = i
 
   /** Scala async implements this method */
-  def apply(node: Node[Any]): Unit
+  def apply(node: NodeFuture[Any]): Unit
 
   /**
    * Given at_node def a = { some code ... val x = b // where b is also @node def b = .... } b is childNode a is node
@@ -86,10 +86,10 @@ abstract class NodeStateMachine(final val completableNode: CompletableNode[AnyRe
     completableNode.completeWithResultFSM(value, this)
 
   /** Register the state machine as a completion callback of the given future. */
-  override protected final def onComplete(f: Node[Any]): Unit = f.continueWithFSM(this)
+  override protected final def onComplete(f: NodeFuture[Any]): Unit = f.continueWithFSM(this)
 
   /** Extract the result of the given future if it is complete, or `null` if it is incomplete. */
-  override protected final def getCompleted(f: Node[Any]): Node[Any] = {
+  override protected final def getCompleted(f: NodeFuture[Any]): NodeFuture[Any] = {
     f.completeOrElseNullWDP(this)
   }
 
@@ -98,12 +98,12 @@ abstract class NodeStateMachine(final val completableNode: CompletableNode[AnyRe
    * block and return `this` as a sentinel value to indicate that the caller (the state machine dispatch loop) should
    * immediately exit.
    */
-  override protected final def tryGet(tr: Node[Any]): AnyRef = {
+  override protected final def tryGet(tr: NodeFuture[Any]): AnyRef = {
     if (tr.isDoneWithException) {
-      _result.completeWithException(tr.exception(), OGSchedulerContext.current())
+      _result.completeWithException(tr.exception$, OGSchedulerContext.current())
       this
     } else {
-      tr.result.asInstanceOf[AnyRef]
+      tr.result$.asInstanceOf[AnyRef]
     }
   }
 }
@@ -137,6 +137,48 @@ trait AsyncStateMachine[F, R] {
   protected def tryGet(tr: R): AnyRef
 }
 
+//
+// Trait that represents the Future-like facade of a node in the graph.
+//
+trait NodeFuture[+T] {
+
+  def continueWith(awaiter: NodeAwaiter, eq: EvaluationQueue): Unit
+  @miscFlags(MiscFlags.NODESYNC_ONLY)
+  def get$ : T
+  // Some usages require a full Node[T] beyond just the Future-like methods.
+  // so a NodeFuture[T] has to be convertable to a Node[T]
+  def asNode$ : Node[T]
+
+  // Following should go away when we switch to Loom
+  def completeOrElseNullWDP(currentStateMachine: NodeStateMachine): NodeFuture[T]
+  def continueWithFSM(currentStateMachine: NodeStateMachine): Unit
+
+  // Following should not be required. Usage in Node and NodeBatcherSchedulerPlugin needs to change
+  // so we can get rid of them -- follow up PR will address.
+  def isDoneWithException: Boolean
+  def exception$ : Throwable
+  def result$ : T
+
+  /**
+   * toValue$ functions for each primitive type descriptor.
+   * @see jdk.internal.org.objectweb.asm.Type.PRIMITIVE_DESCRIPTORS
+   *
+   * Loom code gen is using this function to retrieve the value of the delayed call.
+   * Note: it looks like get... but this will start changing
+   * Why a new function? Because we will modify this without breaking the existing code!
+   */
+  final def toValue$V: Unit = get$ // void
+  final def toValue$Z: Boolean = get$.asInstanceOf[Boolean]
+  final def toValue$C: Char = get$.asInstanceOf[Char]
+  final def toValue$B: Byte = get$.asInstanceOf[Byte]
+  final def toValue$S: Short = get$.asInstanceOf[Short]
+  final def toValue$I: Int = get$.asInstanceOf[Int]
+  final def toValue$F: Float = get$.asInstanceOf[Float]
+  final def toValue$J: Long = get$.asInstanceOf[Long]
+  final def toValue$D: Double = get$.asInstanceOf[Double]
+  final def toValue$ : T = get$ // object
+}
+
 /*
  * Node is:
  *   1. A node on the graph.
@@ -145,7 +187,9 @@ trait AsyncStateMachine[F, R] {
  *
  * TODO (OPTIMUS-0000): Avoid boxing by marking this class a relevant subclasses with specialized(double, int, etc...)
  */
-abstract class Node[+T] extends NodeTask {
+abstract class Node[+T] extends NodeTask with NodeFuture[T] {
+
+  override def asNode$ : Node[T] = this
 
   /**
    * Returns result of the Node's computation or throws an exception if Node completes with an exception. Calling result
@@ -153,6 +197,7 @@ abstract class Node[+T] extends NodeTask {
    * combineInfo
    */
   def result: T = throw new GraphException()
+  override def result$ : T = result
   override def resultObject: Object = result.asInstanceOf[java.lang.Object]
   override def resultObjectEvenIfIncomplete: Object = null
   def safeResult: Try[T] =
@@ -174,6 +219,9 @@ abstract class Node[+T] extends NodeTask {
    */
   @miscFlags(MiscFlags.NODESYNC_ONLY)
   final def get: T = getInternal
+  @miscFlags(MiscFlags.NODESYNC_ONLY)
+  override def get$ : T = get
+  override def exception$ : Throwable = exception
 
   /**
    * [PLUGIN_ENTRY] Looks up the node in cache, applies tweaks, blocks until node executes and returns result
@@ -216,33 +264,12 @@ abstract class Node[+T] extends NodeTask {
   @nodeSyncLift
   private[optimus] def await: T = get
   private[optimus] def await$withNode: T = get
-  private[optimus] def await$queued: Node[T] = {
+  private[optimus] def await$queued: NodeFuture[T] = {
     // only attach if not already attached (matches behavior of #getInternal).
     // we're assuming that unattached nodes are not shared between threads, so this should not be racy in normal usage
     if (scenarioStack() == null) attach(EvaluationContext.scenarioStack)
     enqueueAttached
   }
-
-  /**
-   * Loom code gen is using this function to retrieve the value of the delayed call.
-   * Note: it looks like the rest of get/await/etc... but this will start changing
-   * Why a new function? Because we will modify this without breaking the existing code!
-   */
-  final def toValue: T = getInternal // object
-
-  /**
-   * toValue functions for each primitive type descriptor.
-   * @see jdk.internal.org.objectweb.asm.Type.PRIMITIVE_DESCRIPTORS
-   */
-  final def toValueV: Unit = getInternal // void
-  final def toValueZ: Boolean = getInternal.asInstanceOf[Boolean]
-  final def toValueC: Char = getInternal.asInstanceOf[Char]
-  final def toValueB: Byte = getInternal.asInstanceOf[Byte]
-  final def toValueS: Short = getInternal.asInstanceOf[Short]
-  final def toValueI: Int = getInternal.asInstanceOf[Int]
-  final def toValueF: Float = getInternal.asInstanceOf[Float]
-  final def toValueJ: Long = getInternal.asInstanceOf[Long]
-  final def toValueD: Double = getInternal.asInstanceOf[Double]
 
   /**
    * [PLUGIN_ENTRY] Used by rawNodes Enqueues in the local scheduler queue Expected pattern: node.enqueue
@@ -289,7 +316,7 @@ abstract class Node[+T] extends NodeTask {
    *
    * (can't define in NodeTask, the return type need to be Node[T] instead of NodeTask)
    */
-  final def completeOrElseNullWDP(currentStateMachine: NodeStateMachine): Node[T] = {
+  final def completeOrElseNullWDP(currentStateMachine: NodeStateMachine): NodeFuture[T] = {
     val curNode = currentStateMachine._result
     if (isDone) {
       curNode.combineInfo(this, currentStateMachine.getEC)
@@ -464,18 +491,13 @@ abstract class CompletableNode[T] extends Node[T] {
   }
 
   final private[optimus] def toCompletedNodeWithTweakInfo(converter: PropertyNode[_] => PropertyNode[_]) = {
-
-    if (isDoneWithResult) {
-      val n =
-        new AlreadyCompletedNodeWithTweakInfo[T](result, scenarioStack.tweakableListener.recordedTweakables, converter)
-      n.combineInfo(this, OGSchedulerContext.current)
-      n
+    val completedNode = if (isDoneWithResult) {
+      new AlreadyCompletedNodeWithTweakInfo[T](result, scenarioStack.tweakableListener.recordedTweakables, converter)
     } else {
-      val n =
-        new AlreadyFailedNodeWithTweakInfo[T](exception, scenarioStack.tweakableListener.recordedTweakables, converter)
-      n.combineInfo(this, OGSchedulerContext.current)
-      n
+      new AlreadyFailedNodeWithTweakInfo[T](exception, scenarioStack.tweakableListener.recordedTweakables, converter)
     }
+    completedNode.combineInfo(this, OGSchedulerContext.current)
+    completedNode
   }
 
   override def reset(): Unit = { super.reset(); _result = null.asInstanceOf[T] }
@@ -519,6 +541,10 @@ package profiled {
   }
   abstract class NodeSyncWithExecInfo[T] extends NodeSync[T] with RawNodeExecutionInfo[T]
   abstract class NodeSyncAlwaysUnique[T] extends NodeSync[T] with RawNodeAlwaysUniqueExecutionInfo[T]
+  abstract class NodeSyncStoredClosure[T] extends NodeSync[T] {
+    override def executionInfo: NodeTaskInfo = NodeTaskInfo.StoredNodeFunction
+  }
+
   abstract class NodeFSM[T] extends CompletableRawNode[T] {
     override def isFSM = true
     @transient final private var __k: NodeStateMachine = _
@@ -566,7 +592,7 @@ package profiled {
     }
 
     /* Implemented by plug-in, must return just queued up node */
-    protected def childNode: Node[A]
+    protected def childNode: NodeFuture[A]
   }
   abstract class NodeDelegateWithExecInfo[A] extends NodeDelegate[A] with RawNodeExecutionInfo[A]
   abstract class NodeDelegateAlwaysUnique[A] extends NodeDelegate[A] with RawNodeAlwaysUniqueExecutionInfo[A]
@@ -739,7 +765,7 @@ class NodePromise[A] private (
   @nodeSyncLift
   def await: A = promisedNode.await
   def await$withNode: A = promisedNode.await$withNode
-  def await$queued: Node[A] = promisedNode.await$queued
+  def await$queued: NodeFuture[A] = promisedNode.await$queued
 
   /**
    * Note that this doesn't propagate xInfo, and therefore should only be used to integrate with frameworks which don't
@@ -767,7 +793,7 @@ class NodePromise[A] private (
     if (outer.executionInfo.reportingPluginType(ss) != null) {
       markAsHavingPluginType()
       // Normally this would happen in the scheduler, but this node doesn't actually get run.
-      getReportingPluginType.recordLaunch(this)
+      PluginType.fire(this)
     }
 
     // if we get cancelled at any point then abort immediately

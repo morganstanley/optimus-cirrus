@@ -69,6 +69,7 @@ object PropertyUtils extends PropertyUtils(Map.empty) {
   def propertyMap(settingss: String*): Map[String, String] =
     settingss.foldLeft(Map.empty[String, String]) {
       case (z, null) => z
+      case (z, "")   => z
       case (z, value) =>
         z ++ value
           .split("[;:]")

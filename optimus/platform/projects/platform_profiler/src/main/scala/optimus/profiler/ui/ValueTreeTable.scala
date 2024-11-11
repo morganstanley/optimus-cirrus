@@ -47,8 +47,11 @@ import optimus.profiler.ui.NPTableRenderer.ValueWithTooltip
 import optimus.profiler.ui.ValueTreeTable.RowState
 import optimus.profiler.ui.common.JPopupMenu2
 
+import java.util.Objects
+import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.collection.compat._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{mutable => m}
 import scala.util.control.NonFatal
@@ -220,7 +223,7 @@ class ValueViewRow(id: RowID, val values: Array[Any], val diffs: SelectionFlag, 
 object ValueTreeTable {
   private val pref = Preferences.userNodeForPackage(ValueTreeTable.getClass)
   private val MAX_TO_COMPARE = 5
-  val AVERAGE_COLUMN_WIDTH = "averageColumnWidth"
+  val VALUE_TABLE_WIDTH = "valueTableWidth"
   val NAME_COLUMN_WIDTH = "nameColumnWidth"
 
   private[ui] val showRawValues = DbgPreference("showRawValues", pref)
@@ -358,17 +361,20 @@ object ValueTreeTable {
   }
 
   def tweakExpander(ss: ScenarioStack, tweaks: Iterable[Tweak], fields: m.HashMap[RowID, Any]): Unit =
-    DebuggerUI.underStackOfWithoutNodeTracing(ss) {
+    DebuggerUI.underStackOf(ss) {
       for (twk <- tweaks)
         fields.put(RowID(twk.target.toString), twk.tweakTemplate) // for toString calling onto graph
     }
 
   // helper to compare arrays properly in diff view
   def rowsAreDifferent(currentValue: Any, compareTo: Any): SelectionFlag = {
-    def selectFlags(a: Any, b: Any): SelectionFlag =
-      if (a != b) SelectionFlags.EqualDiff // not equal
+    def selectFlags(a: Any, b: Any): SelectionFlag = {
+      // null+null case already checked
+      if (Objects.isNull(a) ^ Objects.isNull(b)) SelectionFlags.EqualDiff
+      else if (a != b) SelectionFlags.EqualDiff // not equal
       else if (a.hashCode != b.hashCode) SelectionFlags.HashCodeDiff // equal, but hashcode is different
-      else SelectionFlags.NotFlagged // equal, same hashcode
+      else SelectionFlags.NotFlagged
+    } // equal, same hashcode
 
     def arrayDiff(a: Array[_], b: Array[_]) = {
       def arrayType(obj: Array[_]): Class[_] = obj.getClass.getComponentType
@@ -386,11 +392,11 @@ object ValueTreeTable {
     }
   }
 
-  private def regularView(nameColumnWidth: Int): ArrayBuffer[TableColumn[ValueViewRow]] =
-    ArrayBuffer[TableColumn[ValueViewRow]](new TableColumn[ValueViewRow]("Name", nameColumnWidth) {
+  private def makeNameColumn(nameColumnWidth: Int): TableColumn[ValueViewRow] =
+    new TableColumn[ValueViewRow]("Name", nameColumnWidth) {
       override def valueOf(row: ValueViewRow): ValueViewRow = row
       override def getCellRenderer: TableCellRenderer = NPTableRenderer.treeRenderer
-    })
+    }
 
   class ValueTableColumn(title: String, val index: Int, val columnWidth: Int)
       extends TableColumn[ValueViewRow](title, columnWidth) {
@@ -420,81 +426,154 @@ object ValueTreeTable {
 class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] {
   import optimus.profiler.ui.ValueTreeTable._
 
-  private def nameColumnWidth = ValueTreeTable.pref.get(ValueTreeTable.NAME_COLUMN_WIDTH, "100").toInt
-  private def averageColumnWidth = ValueTreeTable.pref.get(ValueTreeTable.AVERAGE_COLUMN_WIDTH, "650").toInt
-  private val valueTreePref = Preferences.userNodeForPackage(ValueTreeTable.getClass)
-
-  prototypesColumns = ValueTreeTable.regularView(nameColumnWidth)
-  override def wantSummary = true
-  sumTable.showTypeAsSummary = true
-
-  private var _root: ValueViewRow = _
-  private val menu: JPopupMenu2 = createValueTreeTableMenu()
-  dataTable.setComponentPopupMenu(menu)
-
-  def root: ValueViewRow = _root
-
-  menu.addSeparator()
-  menu.addMenu("Print Type Source") {
-    val sel = getSelection
-    if (sel ne null) {
-      val value = sel.values(0).asInstanceOf[AnyRef]
-      if (value ne null)
-        println("" + value.getClass + "(" + SourceLocator.sourceOf(value.getClass) + ")")
+  // There is an annoying bit of state here, which is that we have to maintain column widths manually.
+  //
+  // There are two main "flows" where we want the behaviour to be user friendly:
+  //   - user is looking at values for one node, they select a second node to compare (or a third, or fourth etc.)
+  //   - user is clicking through nodes because they want to look at different values.
+  //
+  // This means that we want to make sure that the "values" columns have widths that don't change when we change the
+  // selection.
+  //
+  // The name column has a single width which is saved and restored from a preference.
+  private def defaultNameColumnWidth: Int = pref.get(ValueTreeTable.NAME_COLUMN_WIDTH, "100").toInt
+  private def setDefaultNameColumnWidth(w: Int): Unit = pref.put(ValueTreeTable.NAME_COLUMN_WIDTH, w.toString)
+  private def nameColumnWidth: Int = {
+    if (model.getColumnCount < 1) defaultNameColumnWidth
+    else {
+      model.getColumn(0).getWidth
     }
   }
 
-  private val mi = menu.addMenu("Print Stack Trace") {
-    val sel = getSelection
-    if (sel ne null) {
-      val value = sel.values(0).asInstanceOf[AnyRef]
-      value match {
-        case e: Exception => e.printStackTrace()
-        case _            =>
+  // Value columns are more complicated: we keep a map of all the values seen for different amount of columns, so that
+  // changing selections doesn't cause the columns to jump around all over the place. When we create a new selection for
+  // the first time, we subdivide equally the total width of the current subdivision.
+  //
+  // We use a pref for the default width for the first set of columns / minimum size for new columns subdivisions so that
+  // we don't have weirdly small columns.
+  private def defaultWidthForValueCols = pref.get(ValueTreeTable.VALUE_TABLE_WIDTH, "650").toInt
+  private val minSizeColRescale = 20
+  private def model = dataTable.getColumnModel
+
+  private def valueColumnWidths: Seq[Int] = {
+    val n = model.getColumnCount - 1
+    (0 until n).map(icol => model.getColumn(icol + 1).getWidth)
+  }
+
+  // We keep track of the sizes of all the columns for all the number of value columns we have seen.
+  private var sizesSeenSoFar = Map(0 -> Seq.empty, 1 -> Seq(defaultWidthForValueCols))
+
+  private def updateSizes(): Unit = {
+    // We only do those updates when the user changes the size
+    setDefaultNameColumnWidth(nameColumnWidth)
+    val valuesWidths = valueColumnWidths
+    if (valuesWidths.nonEmpty) {
+      sizesSeenSoFar += (valueColumnWidths.size -> valuesWidths)
+    }
+  }
+
+  // Creates the columns for this table.
+  //
+  // This table always has the following layout:
+  //    | name | value 1 | value 2 | etc.
+  //
+  // This is enforced by this function which should always be used to create or recreate the columns.
+  private def getOrCreateColumns(numOfValueCols: Int): ArrayBuffer[TableColumn[ValueViewRow]] = {
+    val title: Int => String = if (numOfValueCols < 2) _ => "Value" else i => s"Value ${i + 1}"
+    val nameCol = makeNameColumn(nameColumnWidth)
+    val currentWidths = valueColumnWidths
+
+    val newWidths = {
+      // make sure we have up to date size data. This is important especially if the num of columns doesnt change:
+      updateSizes()
+
+      // we find if we have seen this size before. Note that we just udp
+      sizesSeenSoFar.get(numOfValueCols) match {
+        case Some(hasBeforeWidths) => hasBeforeWidths
+        case None =>
+          val toDivide = currentWidths.sum.min(defaultWidthForValueCols)
+          // If its the first time we have this many columns, we just simply divide our current width down to that
+          // amount. Note that numOfValueCols = 0 is added when we create this object so no divide by zero here.
+          val newWidth = (toDivide / numOfValueCols).max(minSizeColRescale)
+          Seq.fill(numOfValueCols)(newWidth)
       }
     }
+
+    (Seq(nameCol) ++ newWidths.zipWithIndex.map { case (width, i) =>
+      new ValueTreeTable.ValueTableColumn(title(i), i, width)
+    }).to(ArrayBuffer)
   }
 
-  menu.addOnPopup {
-    val sel = getSelection
-    if (sel ne null) {
-      val value = sel.values(0).asInstanceOf[AnyRef]
-      mi.setEnabled(value.isInstanceOf[Exception])
-    }
-  }
+  // Initialization code
+  locally {
+    prototypesColumns = getOrCreateColumns(0)
+    sumTable.showTypeAsSummary = true
 
-  menu.addAdvMenu("Call DebuggerUI.debugSink") {
-    val sel = getSelection
-    if (sel ne null) {
-      val value1 = sel.values(0).asInstanceOf[AnyRef]
-      val value2 = sel.values(1).asInstanceOf[AnyRef]
-      DebuggerUI.debugSink(value1, value2)
-    }
-  }
-
-  menu.addSeparator()
-  menu.addMenu("Report Constructor Calls During Entity Creation") {
-    val sel = getSelection
-    if (sel ne null) {
-      val value1 = sel.values(0).asInstanceOf[AnyRef]
-      val value2 = sel.values(1).asInstanceOf[AnyRef]
-      val valueCls = if (value1 ne null) value1.getClass else value2.getClass
-
-      val from: InstrumentationConfig.MethodRef = InstrumentationConfig.asMethodRef(valueCls.getName + ".<init>")
-      val to = InstrumentationConfig.dumpIfEntityConstructing
-      InstrumentationConfig.addPrefixCall(from, to, false, false)
-      EntityAgent.retransform(valueCls)
-      println("prefix> " + from + " " + to)
-    }
-  }
-
-  private def createValueTreeTableMenu(): JPopupMenu2 = {
     val menu = new JPopupMenu2
     menu.addCheckBoxMenu("Show Raw Values", "Don't use custom expanders", showRawValues, refreshDisplayedFields)
     menu.addCheckBoxMenu("Show Internal Values", "Show fields in optimus._", showInternalValues, refreshDisplayedFields)
     menu.addCheckBoxMenu("Show Raw Names", "Don't remove $", showRawNames, refreshDisplayedFields)
-    menu
+
+    dataTable.setComponentPopupMenu(menu)
+
+    menu.addSeparator()
+    menu.addMenu("Print Type Source") {
+      val sel = getSelection
+      if (sel ne null) {
+        val value = sel.values(0).asInstanceOf[AnyRef]
+        if (value ne null)
+          println("" + value.getClass + "(" + SourceLocator.sourceOf(value.getClass) + ")")
+      }
+    }
+
+    val mi = menu.addMenu("Print Stack Trace") {
+      val sel = getSelection
+      if (sel ne null) {
+        val value = sel.values(0).asInstanceOf[AnyRef]
+        value match {
+          case e: Exception => e.printStackTrace()
+          case _            =>
+        }
+      }
+    }
+
+    menu.addOnPopup {
+      val sel = getSelection
+      if (sel ne null) {
+        val value = sel.values(0).asInstanceOf[AnyRef]
+        mi.setEnabled(value.isInstanceOf[Exception])
+      }
+    }
+
+    menu.addAdvMenu("Call DebuggerUI.debugSink") {
+      val sel = getSelection
+      if (sel ne null) {
+        val value1 = sel.values(0).asInstanceOf[AnyRef]
+        val value2 = sel.values(1).asInstanceOf[AnyRef]
+        DebuggerUI.debugSink(value1, value2)
+      }
+    }
+
+    menu.addSeparator()
+    menu.addMenu("Report Constructor Calls During Entity Creation") {
+      val sel = getSelection
+      if (sel ne null) {
+        val value1 = sel.values(0).asInstanceOf[AnyRef]
+        val value2 = sel.values(1).asInstanceOf[AnyRef]
+        val valueCls = if (value1 ne null) value1.getClass else value2.getClass
+
+        val from: InstrumentationConfig.MethodRef = InstrumentationConfig.asMethodRef(valueCls.getName + ".<init>")
+        val to = InstrumentationConfig.dumpIfEntityConstructing
+        InstrumentationConfig.addPrefixCall(from, to, false, false)
+        EntityAgent.retransform(valueCls)
+        println("prefix> " + from + " " + to)
+      }
+    }
   }
+
+  override def wantSummary = true
+  private var _root: ValueViewRow = _
+  def root: ValueViewRow = _root
 
   /** called when Show Internal Values etc changes to re-expand the fields based on new config */
   // noinspection ScalaUnusedSymbol
@@ -505,60 +584,11 @@ class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] 
       setList(Array(_root))
     }
 
-  def getNameColumns(cm: TableColumnModel): Seq[table.TableColumn] =
-    cm.getColumns.asScala.toSeq.filter(_.getHeaderValue == "Name")
-
-  private class ValueColumnModelListener extends TableColumnModelListener {
-    def columnAdded(e: TableColumnModelEvent): Unit = {}
-    def columnRemoved(e: TableColumnModelEvent): Unit = {}
-    def columnMoved(e: TableColumnModelEvent): Unit = {}
-    def columnMarginChanged(e: ChangeEvent): Unit = {
-      val cm = dataTable.getColumnModel
-      val nameColumns: Seq[table.TableColumn] = getNameColumns(cm)
-      if (nameColumns.size == 1) {
-        val nameColumnWidth = nameColumns.head.getWidth
-        valueTreePref.put(ValueTreeTable.NAME_COLUMN_WIDTH, nameColumnWidth.toString)
-        val averageColumnWidth =
-          ValueTreeTable.calculateAverageColumnWidth(cm.getTotalColumnWidth, nameColumnWidth, cm.getColumnCount)
-        valueTreePref.put(ValueTreeTable.AVERAGE_COLUMN_WIDTH, averageColumnWidth.toString)
-      } else if (nameColumns.isEmpty) {
-        val averageColumnWidth =
-          ValueTreeTable.calculateAverageColumnWidth(cm.getTotalColumnWidth, 0, cm.getColumnCount)
-        valueTreePref.put(ValueTreeTable.AVERAGE_COLUMN_WIDTH, averageColumnWidth.toString)
-      }
-
-    }
-    def columnSelectionChanged(e: ListSelectionEvent): Unit = {}
-  }
-  private val cm = dataTable.getColumnModel
-  val nameColumns: Seq[table.TableColumn] = getNameColumns(cm)
-  if (nameColumns.length == 1) {
-    nameColumns.head.setWidth(valueTreePref.get(ValueTreeTable.NAME_COLUMN_WIDTH, "100").toInt)
-  }
-
-  cm.getColumns.asScala.toSeq
-    .filter(_.getHeaderValue != "Name")
-    .foreach(valueColumn => {
-      valueColumn.setWidth(valueTreePref.get(ValueTreeTable.AVERAGE_COLUMN_WIDTH, "650").toInt)
-    })
-
-  private val columnModelListener: ValueColumnModelListener = new ValueColumnModelListener
-  cm.addColumnModelListener(columnModelListener)
-
   def inspect(values_suggested: Array[Any]): Unit = {
     // Probably don't want to compare more than MAX_TO_COMPARE?
     val values = values_suggested.take(MAX_TO_COMPARE)
-
-    // Add/Generate columns for arguments
-    val nView = new ArrayBuffer[TableColumn[ValueViewRow]]()
-    if (values.length > 1) {
-      for (i <- values.indices) {
-        nView += new ValueTreeTable.ValueTableColumn("Value " + i, i, averageColumnWidth)
-      }
-    } else if (values.length == 1) {
-      nView += new ValueTreeTable.ValueTableColumn("Value", 0, averageColumnWidth)
-    }
-    setView(ValueTreeTable.regularView(nameColumnWidth) ++ nView)
+    setView(getOrCreateColumns(values.length))
+    updateSizes()
 
     val rowID =
       if (values.length == 0) RowID(title)

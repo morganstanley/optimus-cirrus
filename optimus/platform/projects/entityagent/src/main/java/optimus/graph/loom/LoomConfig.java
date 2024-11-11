@@ -43,6 +43,8 @@ public class LoomConfig {
   public static final String QUEUED_SUFFIX = "$queued";
   public static final String IMPL_SUFFIX = "$impl";
 
+  public static final String TO_VALUE_PREFIX = "toValue$";
+
   public static final String NODE_FACTORY = "optimus/graph/loom/NodeMetaFactory";
   public static final String INTERCEPTED_BSM_DESC =
       "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;[Ljava/lang/Object;)Ljava/lang/invoke/CallSite;";
@@ -66,6 +68,10 @@ public class LoomConfig {
 
   public static final String NODE_GETTER_DESC = "()" + NODE_DESC;
   public static final Type NODE_TYPE = Type.getObjectType(NODE);
+
+  public static final String NODE_FUTURE_DESC = "Loptimus/graph/NodeFuture;";
+  public static final String NODE_FUTURE = "optimus/graph/NodeFuture";
+  public static final Type NODE_FUTURE_TYPE = Type.getObjectType(NODE_FUTURE);
 
   public static final String ENTITY_DESC = "optimus/platform/storable/Entity";
   public static final Type ENTITY_TYPE = Type.getObjectType(ENTITY_DESC);

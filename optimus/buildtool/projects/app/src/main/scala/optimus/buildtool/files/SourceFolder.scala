@@ -11,6 +11,7 @@
  */
 package optimus.buildtool.files
 
+import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.compilers.runconfc.Templates
 import optimus.buildtool.files.Directory.FileFilter
 import optimus.buildtool.files.Directory.NoFilter
@@ -177,8 +178,15 @@ object SourceFolder {
   }
 }
 object FileSystemSourceFolder {
+  // don't rehash source files unless we really need to (purely for performance reasons, hence
+  // why it uses the optimizerCache rather than reallyBigCache)
+  hash.setCustomCache(NodeCaching.optimizerCache)
+  SourceFile.hashedContent.setCustomCache(NodeCaching.sourceCache)
+
+  // Note: We expect FileAsset to have a real timestamp here, to ensure that we get cache misses (and hence new content)
+  // for different versions of the same file
   @entity private class SourceFile(val id: SourceFileId, file: FileAsset) {
-    @node def hashedContent: HashedContent = {
+    @scenarioIndependent @node def hashedContent: HashedContent = {
       ObtTrace.addToStat(ObtStats.ReadFileSystemSourceFiles, 1)
       ObtTrace.addToStat(ObtStats.ReadDistinctFileSystemSourceFiles, Set(file.pathString))
       Hashing.hashFileWithContent(file)

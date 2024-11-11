@@ -173,7 +173,7 @@ final case class TestGroupOpts(
 
 @JsonDeserialize(using = classOf[EntryDeserializer])
 @JsonSerialize(using = classOf[EntrySerializer])
-final case class Entry(moduleId: ModuleId, testName: Option[String])
+final case class Entry(moduleId: ModuleId, testName: Option[String], runStage: String = RunStage.Reg)
 
 class EntrySerializer extends StdSerializer[Entry](classOf[Entry]) {
 
@@ -190,21 +190,34 @@ class EntryDeserializer extends StdDeserializer[Entry](classOf[Entry]) {
 
   override def deserialize(jsonParser: JsonParser, ctxt: databind.DeserializationContext): Entry = {
     val text = jsonParser.getText
-    text.split('.').toIndexedSeq match {
-      case Seq(meta, bundle, module, testName) => Entry(ModuleId(meta, bundle, module), Some(testName))
-      case Seq(meta, bundle, module)           => Entry(ModuleId(meta, bundle, module), None)
+    def formModuleEntry(stage: String, schema: String): Entry = schema.split('.').toIndexedSeq match {
+      case Seq(meta, bundle, module, testName) => Entry(ModuleId(meta, bundle, module), Some(testName), stage)
+      case Seq(meta, bundle, module)           => Entry(ModuleId(meta, bundle, module), None, stage)
       case _                                   => throw new RuntimeException(s"Invalid testplan entry: $text")
     }
-  }
 
+    text.split("""\s*[:=]\s*""").toIndexedSeq match {
+      case Seq(stage, schema) => formModuleEntry(stage.trim.toLowerCase.capitalize, schema)
+      case Seq(schema)        => formModuleEntry(RunStage.Reg, schema)
+    }
+  }
 }
 
 object ProgrammingLanguage extends Enumeration {
   type ProgrammingLanguage = Value
-  val Scala, Java, Python = Value
+  val Scala, Java, Pact, Python = Value
 
   def fromString(s: String): ProgrammingLanguage =
     values.find(_.toString.equalsIgnoreCase(s)).getOrElse(ProgrammingLanguage.Scala)
+}
+
+object RunStage extends Enumeration {
+  type RunStage = String
+
+  val Consumer: RunStage = "Consumer"
+  val Provider: RunStage = "Provider"
+  val Bas: RunStage = "Bas"
+  val Reg: RunStage = "Reg"
 }
 
 final case class Group(

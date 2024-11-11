@@ -17,7 +17,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks method foo(arg*): T as having a companion method foo$queued(arg*): Node[T]
+ * Marks method foo(arg*): T as having a companion method foo$queued(arg*): NodeFuture[T]
  *
  * <p>By name args marked with nodeLift * will be converted to Node[T]
  */

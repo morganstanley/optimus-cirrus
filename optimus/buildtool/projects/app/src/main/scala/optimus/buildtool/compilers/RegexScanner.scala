@@ -90,6 +90,13 @@ import scala.collection.immutable.SortedMap
 
 @entity
 object RegexScanner {
+  import optimus.buildtool.cache.NodeCaching.reallyBigCache
+  // This is the node through which scanning is initiated. It's very important that we don't lose these from
+  // cache (while they are still running at least) because that can result in rescanning of the same scope
+  // due to a (potentially large) race between checking if the output artifacts are on disk and actually writing
+  // them there after scanning completes.
+  messages.setCustomCache(reallyBigCache)
+
   trait ScanInputs {
     def sourceFiles: SortedMap[SourceUnitId, HashedContent]
     def rules: Seq[CodeFlaggingRule]

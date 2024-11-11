@@ -50,6 +50,7 @@ object NPTableRenderer {
     }
 
   val dataFont = new Font("Calibri", Font.PLAIN, Math.round(13 * Fonts.multiplier))
+  val dataFontFixedWidth = new Font("Consolas", Font.PLAIN, Math.round(13 * Fonts.multiplier))
   val subHeaderFont = new Font("Calibri", Font.BOLD, Math.round(13 * Fonts.multiplier))
   val headerFont = new Font("Calibri", Font.PLAIN, Math.round(18 * Fonts.multiplier))
   val diffFont = new Font("Calibri", Font.ITALIC, Math.round(13 * Fonts.multiplier))
@@ -64,6 +65,7 @@ object NPTableRenderer {
   val lightGrey = new Color(230, 230, 230)
   val lightYellow = new Color(255, 254, 200)
 
+  val simpleRenderFontFixedWidth = new TTTableCellRender(dataFontFixedWidth, SwingConstants.RIGHT)
   val simpleRender = new TTTableCellRender(dataFont, SwingConstants.LEFT)
   val simpleRenderCenter = new TTTableCellRender(dataFont, SwingConstants.CENTER)
   val timeRenderer = new TimeTableCellRender(dataFont)
@@ -266,12 +268,12 @@ object NPTableRenderer {
           setText(filterText)
           setToolTipText(
             "<html>To filter properties use:<br/>" +
-              "<b>=</b> tweakable<br/><b>$</b> cacheable<br/>" +
-              "<b>=i</b> tweakable and instance tweaked<br/><b>$</b> cacheable<br/>" +
-              "<b>=p</b> tweakable and property tweaked<br/><b>$</b> cacheable<br/>" +
-              "<b>t</b> internal transparent nodes<br/><b>$</b> cacheable<br/>" +
+              "<b>$</b> cacheable<br/>" +
+              "<b>=</b> tweakable<br/>" +
+              "<b>=i</b> tweakable and instance tweaked<br/>" +
+              "<b>=p</b> tweakable and property tweaked<br/>" +
+              "<b>t</b> internal transparent nodes<br/>" +
               "<b>SI</b> scenario independent<br/>" +
-              "<b>SIn</b> scenario independent nodes<br/>" +
               "<br/><b>!</b> to negate next filter and <b>;</b> to OR filters</html>")
         case _ =>
           setText("")
@@ -390,13 +392,18 @@ object NPTableRenderer {
       }
     }
 
-    def expand[RType <: NPTreeNode](table: NPSubTableData[RType], row: Int, col: Int, ctrlDown: Boolean): Unit = {
+    def expand[RType <: NPTreeNode](
+        table: NPSubTableData[RType],
+        row: Int,
+        col: Int,
+        ctrlDown: Boolean,
+        shiftDown: Boolean): Unit = {
       val tnode = table.getTRow(row)
       if (!tnode.open && tnode.hasChildren) {
         val modelRow = table.convertRowIndexToModel(row)
         tnode.open = true
         // if ctrlDown, force open all child nodes
-        val addNodes = NPTreeNodeExt.expandTree(tnode.getChildren, ctrlDown)
+        val addNodes = NPTreeNodeExt.expandTree(tnode.getChildren, ctrlDown, shiftDown)
         table.Rows.insertAll(modelRow + 1, addNodes)
         val model = table.getModel.asInstanceOf[AbstractTableModel]
         model.fireTableRowsInserted(modelRow + 1, modelRow + addNodes.length)
@@ -407,6 +414,7 @@ object NPTableRenderer {
     def click[T <: NPTreeNode](table: NPSubTableData[T], row: Int, col: Int, e: MouseEvent): Unit = {
       val tnode = table.getTRow(row)
       val ctrlMask = e.isControlDown
+      val shiftMask = e.isShiftDown
       // Any double clicking on a compressed row will expand it
       if (tnode.isCompressed && e.getClickCount == 2) {
         uncompress(table, row, ctrlMask)
@@ -425,7 +433,7 @@ object NPTableRenderer {
             if (tnode.open)
               collapse(table, row, col, ctrlMask)
             else
-              expand(table, row, col, ctrlMask)
+              expand(table, row, col, ctrlMask, shiftMask)
           }
         }
       }

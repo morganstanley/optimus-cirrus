@@ -180,6 +180,7 @@ import scala.collection.immutable.SortedMap
       outlineTypesOnly = false,
       saveAnalysisFiles = false,
       containsPlugin = false,
+      containsAgent = false,
       containsMacros = false,
       mischief = None
     )

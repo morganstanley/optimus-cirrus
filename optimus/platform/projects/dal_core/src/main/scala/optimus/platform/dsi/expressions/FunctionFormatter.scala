@@ -905,7 +905,7 @@ object HashLikeBtreeIndexOps {
         case List(i: In) =>
           (i.e, i.values) match {
             case (e, Right(values)) =>
-              val orExpr = values.map(v => Binary(Equal, e, v)).reduce((b1, b2) => Binary(OrElse, b1, b2))
+              val orExpr = Expression.balancedOr(values.map(v => Binary(Equal, e, v)))
               sqlFormatter.visit(orExpr)
             case _ =>
           }

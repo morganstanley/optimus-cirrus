@@ -96,6 +96,8 @@ class GenericRunnerInstaller(
            |""".stripMargin.trim
     }
 
+    // We want to use OAR from the same version of OBT that built the artifacts: we must use compatible versions
+    // for runconf compilation.
     @node private def genericRunnerAppDir: Directory = {
       val runnerInstallPath =
         config.genericRunnerAppDirOverride

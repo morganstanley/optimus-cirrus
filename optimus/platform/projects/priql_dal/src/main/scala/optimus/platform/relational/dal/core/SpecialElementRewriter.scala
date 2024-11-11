@@ -14,6 +14,7 @@ package optimus.platform.relational.dal.core
 import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.data.translation.SourceColumnFinder
 import optimus.platform.relational.data.tree.ColumnElement
+import optimus.platform.relational.data.tree.ContainsElement
 import optimus.platform.relational.data.tree.DALHeapEntityElement
 import optimus.platform.relational.data.tree.DbEntityElement
 import optimus.platform.relational.data.tree.DbQueryTreeVisitor
@@ -92,6 +93,37 @@ class SpecialElementRewriter private (private val searchScope: RelationElement) 
     }
 
     super.handleConditional(c) match {
+      case cond @ ConditionalElement(test, ConstValueElement(false, _), contains: ContainsElement, _) =>
+        val containsValuesAreNonNullConstants = contains.values match {
+          case Right(values) =>
+            values.forall {
+              case c: ConstValueElement => c.value != null
+              case _                    => false
+            }
+          case _ => false
+        }
+        if (!containsValuesAreNonNullConstants) cond
+        else {
+          val c0Opt = test match {
+            case BinaryExpressionElement(EQ, c0: ColumnElement, ConstValueElement(null, _), _) =>
+              if (c0.name.startsWith(DALProvider.EntityRef)) Some(c0)
+              else if (contains.element == c0) Some(c0)
+              else None
+            case BinaryExpressionElement(EQ, he: DALHeapEntityElement, ConstValueElement(null, _), _) =>
+              Some(he.members.head.asInstanceOf[ColumnElement])
+            case _ => None
+          }
+          c0Opt map { c0 =>
+            val scOpt0 = SourceColumnFinder.findSourceColumn(searchScope, c0)
+            val scOpt1 =
+              asColumnOpt(contains.element).flatMap(c => SourceColumnFinder.findSourceColumn(searchScope, c))
+            (scOpt0, scOpt1) match {
+              case (Some(sc0), Some(sc1)) if (sc0.alias eq sc1.alias) => contains
+              case _                                                  => cond
+            }
+          } getOrElse (cond)
+        }
+
       case cond @ ConditionalElement(
             test,
             ConstValueElement(false, _),

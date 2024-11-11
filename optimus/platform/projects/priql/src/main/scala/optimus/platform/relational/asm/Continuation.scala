@@ -15,16 +15,17 @@ import java.util.function.Function
 import optimus.graph.CompletableNode
 import optimus.graph.FlatMapNode
 import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerContext
 import optimus.platform.EvaluationQueue
 
 object Continuation {
-  def andThen[T, R](node: Node[T], f: Function[T, Node[R]]): Node[R] = {
-    new FlatMapNode(node, (n: T) => f(n), false).enqueue
+  def andThen[T, R](node: NodeFuture[T], f: Function[T, NodeFuture[R]]): Node[R] = {
+    new FlatMapNode(node.asNode$, (n: T) => f(n).asNode$, false).enqueue
   }
 
-  def whenAll[T](nodes: Array[Node[_]], f: Function[Array[Any], Node[T]]): Node[T] =
+  def whenAll[T](nodes: Array[NodeFuture[_]], f: Function[Array[Any], NodeFuture[T]]): Node[T] =
     andThen(new WhenAll(nodes).enqueue, f)
 
   def wrap[T](f: () => Node[T]): Node[T] = {
@@ -44,7 +45,7 @@ object Continuation {
   // the node in nodes are already running, we do not need to enqueue them
   //
   // note that we could reuse SequenceNode, but we do not, for performance reasons.
-  private class WhenAll(nodes: Array[Node[_]]) extends CompletableNode[Array[Any]] {
+  private class WhenAll(nodes: Array[NodeFuture[_]]) extends CompletableNode[Array[Any]] {
     private var current = 0
     private val output = Array.ofDim[Any](nodes.length)
 

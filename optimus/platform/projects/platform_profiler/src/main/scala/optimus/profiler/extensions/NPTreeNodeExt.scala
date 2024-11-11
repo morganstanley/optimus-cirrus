@@ -12,10 +12,10 @@
 package optimus.profiler.extensions
 
 import java.awt.Color
-
 import optimus.graph.diagnostics.SelectionFlags
 import optimus.graph.diagnostics.NPTreeNode
 import optimus.profiler.ui.NPTableRenderer
+import optimus.profiler.ui.NodeTreeView
 import optimus.profiler.ui.TableColumn
 import optimus.profiler.ui.TreeSelector
 
@@ -46,16 +46,25 @@ object NPTreeNodeExt {
     else null
   }
 
-  def expandTree[RType <: NPTreeNode](seq: Iterable[NPTreeNode], forceOpen: Boolean = false): ArrayBuffer[RType] = {
+  def expandTree[RType <: NPTreeNode](
+      seq: Iterable[NPTreeNode],
+      forceOpen: Boolean = false,
+      onlyForceOpenPoison: Boolean = false): ArrayBuffer[RType] = {
     val lst = new ArrayBuffer[RType]()
 
     def expand(seq: Iterable[NPTreeNode]): Unit = {
       val it = seq.iterator
       while (it.hasNext) {
-        val ssu = it.next()
+        val ssu: NPTreeNode = it.next()
         if (ssu ne null) {
           lst += ssu.asInstanceOf[RType]
           if (forceOpen) ssu.open = true
+          if (forceOpen && onlyForceOpenPoison) {
+            ssu match {
+              case ntv: NodeTreeView if !ntv.task.dependsOnIsPoison() => ssu.open = false
+              case _                                                  =>
+            }
+          }
           if (ssu.open && ssu.hasChildren)
             expand(ssu.getChildren)
         }

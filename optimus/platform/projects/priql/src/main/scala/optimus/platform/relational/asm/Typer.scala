@@ -18,6 +18,7 @@ import java.lang.reflect.Modifier
 import com.google.common.primitives.Primitives
 import optimus.core.CoreAPI
 import optimus.graph.Node
+import optimus.graph.NodeFuture
 import optimus.platform._
 import optimus.platform.relational.AbstractLambdaReifier
 import optimus.platform.staged
@@ -380,7 +381,7 @@ object Typer {
   private def mkFieldMeta(method: Method): Map[String, Any] = {
     val name = s"${method.getName}$$queued"
     method.getDeclaringClass.getMethods
-      .find(m => m.getParameterCount == 0 && m.getReturnType == classOf[Node[_]] && m.getName == name)
+      .find(m => m.getParameterCount == 0 && m.getReturnType == classOf[NodeFuture[_]] && m.getName == name)
       .map { am =>
         Map(MetaMethod -> method, MetaMethodAsync -> am)
       } getOrElse {
@@ -392,7 +393,7 @@ object Typer {
     val name = s"${method.getName}$$queued"
     method.getDeclaringClass.getMethods.find { m =>
       m.getParameterCount == method.getParameterCount &&
-      m.getReturnType == classOf[Node[_]] &&
+      m.getReturnType == classOf[NodeFuture[_]] &&
       m.getName == name &&
       m.getParameterTypes.zip(method.getParameterTypes).forall(t => t._1 == t._2)
     } map { am =>

@@ -27,7 +27,8 @@ private[tracking] object UpdateMultipleScenarios {
   def evaluateAndApplyTweakLambdas(
       tweaks: Map[DependencyTracker, collection.Seq[Tweak]],
       tweakLambdas: Map[DependencyTracker, Iterable[TweakLambda]],
-      commonParent: DependencyTracker
+      commonParent: DependencyTracker,
+      cause: EventCause
   ): Unit = {
     val trackers = tweaks.keys ++ tweakLambdas.keys
     val toResetBatchers: Set[DependencyTracker] = trackers.toSet.filter {
@@ -71,7 +72,7 @@ private[tracking] object UpdateMultipleScenarios {
     val sorted = results.toSeq.sortBy { case (scenario, _) => (-scenario.level, scenario.name) }
 
     tweaks.toSeq ++ sorted foreach { case (scenario, tweaks) =>
-      scenario.tweakContainer.doAddTweaks(tweaks, Settings.throwOnDuplicateInstanceTweaks, cs)
+      scenario.tweakContainer.doAddTweaks(tweaks, Settings.throwOnDuplicateInstanceTweaks, cause, cs)
     }
 
     toResetBatchers foreach { _.queue.resetCurrentBatcher() }

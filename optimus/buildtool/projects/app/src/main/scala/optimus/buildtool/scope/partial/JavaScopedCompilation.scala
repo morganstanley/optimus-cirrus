@@ -126,6 +126,7 @@ import scala.collection.immutable.Seq
       outlineTypesOnly = false,
       saveAnalysisFiles = true,
       containsPlugin = false,
+      containsAgent = false,
       containsMacros = false,
       mischief = scope.mischief
     )

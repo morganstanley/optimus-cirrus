@@ -46,6 +46,6 @@ trait AuditVisitor {
    */
   protected def visitBeforeRun(v: NodeTask, info: NodeExtendedInfo): NodeExtendedInfo = ???
   protected def visitBeforeRun$newNode(v: NodeTask, info: NodeExtendedInfo): NodeKey[NodeExtendedInfo] = null
-  protected def visitBeforeRun$queued(v: NodeTask, info: NodeExtendedInfo): Node[NodeExtendedInfo] = null
+  protected def visitBeforeRun$queued(v: NodeTask, info: NodeExtendedInfo): NodeFuture[NodeExtendedInfo] = null
 
 }

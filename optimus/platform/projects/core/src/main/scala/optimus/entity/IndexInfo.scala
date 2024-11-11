@@ -12,6 +12,7 @@
 package optimus.entity
 
 import optimus.platform.pickling.PickledOutputStream
+import optimus.platform.pickling.Pickler
 import optimus.platform.pickling.PropertyMapOutputStream
 import optimus.platform.storable._
 import optimus.scalacompat.collection.AbstractImmutableMap
@@ -78,4 +79,6 @@ abstract class IndexInfo[A <: Storable, K](
   private object SeqMap {
     def newBuilder[K, V]: mutable.Builder[(K, V), SeqMap[K, V]] = Vector.newBuilder[(K, V)].mapResult(new SeqMap(_))
   }
+
+  def underlyingPicklerSeq: Seq[Pickler[_]]
 }

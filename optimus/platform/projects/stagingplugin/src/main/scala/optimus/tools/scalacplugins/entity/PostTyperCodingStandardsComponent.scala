@@ -312,6 +312,17 @@ class PostTyperCodingStandardsComponent(
               if (argss.length == fun.tpe.paramss.length) argss.last match {
                 case List(arg) if arg.pos.start != arg.pos.end =>
                   alarm(Scala213MigrationMessages.EXPLICIT_CBF_ARGUMENT, fun.pos)
+                case List(arg @ TypeApply(_, List(targ))) if arg.pos.start == arg.pos.end /* synthetic*/ =>
+                  val mapToNonMapOp = fun match {
+                    case Select(qual, _) if qual.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass) =>
+                      !tree.tpe.typeSymbol.isNonBottomSubClass(CollectionMapClass)
+                    case _ => false
+                  }
+                  if (mapToNonMapOp) targ.tpe match {
+                    case ExistentialType(_ :: _, tp) if tp.typeSymbol == definitions.TupleClass(2) =>
+                      alarm(Scala213MigrationMessages.MAP_CBF_EXISTENTIAL, fun.pos)
+                    case _ =>
+                  }
                 case _ =>
               }
             case _ =>

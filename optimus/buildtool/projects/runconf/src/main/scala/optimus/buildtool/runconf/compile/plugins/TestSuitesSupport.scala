@@ -80,7 +80,7 @@ class TestSuitesSupport(runEnv: RunEnv, sysProps: Properties) {
     RunConfSupport.names.category -> T.String,
     RunConfSupport.names.owner -> T.String,
     RunConfSupport.names.flags -> T.Object(T.Union(Set(T.String, T.String))),
-    RunConfSupport.names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Integer)))
+    RunConfSupport.names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Integer, T.Array(T.String))))
   )
 
   private val expectedProperties = expectedTypes.keySet

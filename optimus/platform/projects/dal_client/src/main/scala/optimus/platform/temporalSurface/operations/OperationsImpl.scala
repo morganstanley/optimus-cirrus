@@ -206,16 +206,12 @@ private[optimus /*platform*/ ] sealed trait QueryTree extends TemporalSurfaceQue
   def left: TemporalSurfaceQuery
   def right: TemporalSurfaceQuery
 
-  @async protected def getMatchResult[T](leftResFunc: NodeFunction0[T], rightResFunc: NodeFunction0[T]): T
+  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T
 
   @async def doScopeMatch(ts: BranchTemporalSurfaceImpl): MatchScope =
-    getMatchResult[MatchScope](
-      asNode { () =>
-        doQueryScopeMatch(left, ts)
-      },
-      asNode { () =>
-        doQueryScopeMatch(right, ts)
-      })
+    getMatchResult[MatchScope](asNode { q =>
+      doQueryScopeMatch(q, ts)
+    })
 
   @async private def doQueryScopeMatch(query: TemporalSurfaceQuery, ts: BranchTemporalSurfaceImpl): MatchScope =
     query match {
@@ -224,13 +220,9 @@ private[optimus /*platform*/ ] sealed trait QueryTree extends TemporalSurfaceQue
     }
 
   @async def doMatch(ts: LeafTemporalSurfaceImpl): MatchResult =
-    getMatchResult[MatchResult](
-      asNode { () =>
-        doQueryMatch(left, ts)
-      },
-      asNode { () =>
-        doQueryMatch(right, ts)
-      })
+    getMatchResult[MatchResult](asNode { q =>
+      doQueryMatch(q, ts)
+    })
 
   @async private def doQueryMatch(query: TemporalSurfaceQuery, ts: LeafTemporalSurfaceImpl): MatchResult = query match {
     case qt: QueryTree => qt.doMatch(ts)
@@ -257,18 +249,47 @@ private[optimus] final case class AndTemporalSurfaceQuery(left: TemporalSurfaceQ
    * CantTell && Never    = Never
    * Never    && Never    = Never
    */
-  @async protected def getMatchResult[T](leftResFunc: NodeFunction0[T], rightResFunc: NodeFunction0[T]): T = {
-    val leftRes = leftResFunc()
+  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T = {
+    val leftRes = matchFunc(left)
     if (leftRes == NeverMatch) leftRes // one Never must be Never, no need to calc the other half
     else {
-      val rightRes = rightResFunc()
+      val rightRes = matchFunc(right)
       (leftRes, rightRes) match {
-        case (_, NeverMatch)         => rightRes // Never => Never
-        case (_, AlwaysMatch)        => rightRes // left is not Never, right is Always => Always
-        case (CantTell, CantTell)    => rightRes
+        case (_, NeverMatch)      => rightRes // Never => Never
+        case (_, AlwaysMatch)     => rightRes // left is not Never, right is Always => Always
+        case (CantTell, CantTell) =>
+          // if the left and right side of the query considered in isolation are CantTell, try combining them because
+          // together they might be specific enough to be provably convered by the matcher
+          val merged = mergeAdjacentKeyQueries
+          if (merged ne this) matchFunc(merged)
+          else rightRes
         case (AlwaysMatch, CantTell) => leftRes
         case s                       => throw new IllegalArgumentException(s"Invalid match state: $s")
       }
+    }
+  }
+
+  private def mergeAdjacentKeyQueries: TemporalSurfaceQuery = {
+    def visit(t: TemporalSurfaceQuery) = t match {
+      case a: AndTemporalSurfaceQuery => a.mergeAdjacentKeyQueries
+      case t => t
+    }
+    // visiting in post-order so that any adjacent keys in our children will have already been merged
+    (visit(left), visit(right)) match {
+      // if both sides are query by key on the same class, try treating it as a compound key (we don't actually need
+      // there to be a compound key in the DAL, we're just checking if a compound key query would be covered by our
+      // client-side TS filter)
+      case (l: QueryByKey[_], r: QueryByKey[_]) if l.targetClass == r.targetClass =>
+        val lProps = l.key.properties
+        val rProps = r.key.properties
+        // if there are any common properties then they must have the same value
+        if (lProps.keySet.intersect(rProps.keySet).forall(k => lProps(k) == rProps(k))) {
+          val combinedProperties = SortedPropertyValues(lProps.toSeq ++ rProps.toSeq)
+          // Unique vs NonUnique doesn't matter here - only the key properties will be used
+           QueryByUniqueKey(l.dataAccess, l.key.copy(combinedProperties), l.targetClass, entitledOnly = false)
+        }
+        else this
+      case _ => this
     }
   }
 }
@@ -287,11 +308,11 @@ private[optimus] final case class OrTemporalSurfaceQuery(left: TemporalSurfaceQu
    * CantTell || Never    = CantTell
    * Never    || Never    = Never
    */
-  @async protected def getMatchResult[T](leftResFunc: NodeFunction0[T], rightResFunc: NodeFunction0[T]): T = {
-    val leftRes = leftResFunc()
+  @async protected def getMatchResult[T](matchFunc: NodeFunction1[TemporalSurfaceQuery, T]): T = {
+    val leftRes = matchFunc(left)
     if (leftRes == CantTell) leftRes // one CantTell must be CantTell, no need to calc the other half
     else {
-      val rightRes = rightResFunc()
+      val rightRes = matchFunc(right)
       (leftRes, rightRes) match {
         case (_, CantTell)    => rightRes // CantTell => CantTell
         case (l, r) if l == r => rightRes // left == right (Always/Never)

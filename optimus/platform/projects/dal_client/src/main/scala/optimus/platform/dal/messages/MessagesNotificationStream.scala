@@ -328,9 +328,9 @@ class MessagesNotificationStream(
   private[messages] def shutdown(maybeThrowable: => Option[Throwable] = None): Unit = synchronized {
     getState match {
       case NotificationStreamState.Closed => Iterator.empty
-      case _ =>
+      case o =>
         maybeThrowable match {
-          case None =>
+          case None => log.info(s"$logHeader Closing stream")
           case Some(th) =>
             log.info(s"$logHeader Closing stream due to $th")
             callbackInvoker.notifyMessage(MessagesStreamError(streamId, th))
@@ -338,7 +338,7 @@ class MessagesNotificationStream(
         pendingSubscriptionChanges.clear()
         presentSubs.clear()
         callbackInvoker.shutdown()
-        updateState(getState, NotificationStreamState.Closed)
+        updateState(o, NotificationStreamState.Closed)
     }
   }
 }

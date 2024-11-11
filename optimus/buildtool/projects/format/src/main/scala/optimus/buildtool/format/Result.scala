@@ -153,6 +153,11 @@ sealed trait ResultSeq[+A] {
     case f: FailureSeq      => f
   }
 
+  def withProblems(newProblems: Seq[A] => Seq[Message]): ResultSeq[A] = this match {
+    case SuccessSeq(rs, ps) => SuccessSeq(rs, ps ++ newProblems(rs))
+    case f: FailureSeq      => f
+  }
+
   def flatMap[B](op: A => ResultSeq[B]): ResultSeq[B] = this match {
     case SuccessSeq(rs, ps) => ResultSeq.traverse(rs)(op).withProblems(ps)
     case f: FailureSeq      => f

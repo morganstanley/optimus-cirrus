@@ -206,9 +206,9 @@ final class ASMProxyGenerator(mainType: TypeInfo[_], extType: TypeInfo[_]) exten
 
       {
         val fn$queued = s"$fn$$queued"
-        val fn$queuedDesc = s"()L$Node;"
+        val fn$queuedDesc = s"()L$NodeFuture;"
         visited.add((fn$queued, fn$queuedDesc))
-        val mv = cw.visitMethod(ACC_PUBLIC, fn$queued, fn$queuedDesc, s"()L$Node<$desc>;", null)
+        val mv = cw.visitMethod(ACC_PUBLIC, fn$queued, fn$queuedDesc, s"()L$NodeFuture<$desc>;", null)
         mv.visitCode()
         mv.visitVarInsn(ALOAD, 0)
         mv.visitFieldInsn(GETFIELD, className, inst, instDesc)

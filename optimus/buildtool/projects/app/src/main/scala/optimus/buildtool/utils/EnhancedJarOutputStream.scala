@@ -52,13 +52,7 @@ abstract class EnhancedJarOutputStream(outputStream: OutputStream, manifest: Opt
 
   protected def putNextEntry(entryName: String): Unit = {
     // get all of the parent dirs of the entry, starting with the parent-most (excluding root)
-    entryName.split('/').inits.toSeq.tail.init.reverse.foreach { prefix =>
-      val prefixStr = prefix.mkString("", "/", "/")
-      // create entries for any missing ones
-      if (directoriesCreated.add(prefixStr)) {
-        jarOutputStream.putNextEntry(Jars.zipEntry(prefixStr))
-      }
-    }
+    writeParentDirectory(entryName)
 
     val ze = Jars.zipEntry(entryName)
     jarOutputStream.putNextEntry(ze)
@@ -87,6 +81,17 @@ abstract class EnhancedJarOutputStream(outputStream: OutputStream, manifest: Opt
       write(buffer, 0, len)
       len = inputStream.read(buffer)
     }
+  }
+
+  def writeParentDirectory(entryPath: String): Unit = {
+    entryPath.split('/').inits.toSeq.tail.init.reverse.foreach { prefix =>
+      val prefixStr = prefix.mkString("", "/", "/")
+      // create entries for any missing ones
+      if (directoriesCreated.add(prefixStr)) {
+        jarOutputStream.putNextEntry(Jars.zipEntry(prefixStr))
+      }
+    }
+
   }
 
   def writeFile(data: CharSequence, targetName: RelativePath): Unit = {

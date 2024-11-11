@@ -93,7 +93,7 @@ sealed trait DependencyTrackerBatchUpdater {
 
   def removeTweaksForEntityInstanceWithKeysImmediate(entityInstance: Entity, keys: Seq[NodeKey[_]]): Unit
 
-  def setUnderlayImmediate(scenario: Scenario): Unit
+  def setUnderlayImmediate(scenario: Scenario, cause: EventCause): Unit
 
   def setPluginTag[P](key: PluginTagKey[P], value: P): Unit
 
@@ -219,14 +219,14 @@ private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extend
       logTimedCommand(
         "removeTweaksForEntityInstanceWithKeys",
         s"$entityInstance, $keys",
-        target.tweakContainer.doRemoveTweaksFromGivenEntity(entityInstance, keys))
+        target.tweakContainer.doRemoveTweaksFromGivenEntity(entityInstance, keys, cause))
     } finally consistentRoot.finishUpdating()
   }
 
   override final def removeTweaksImmediate(keys: Iterable[NodeKey[_]]): Unit = {
     try {
       beforeAccessTarget(forUpdate = true)
-      logTimedCommand("removeTweaksImmediate", keys.toString, target.tweakContainer.doRemoveTweaks(keys))
+      logTimedCommand("removeTweaksImmediate", keys.toString, target.tweakContainer.doRemoveTweaks(keys, cause))
     } finally consistentRoot.finishUpdating()
   }
 
@@ -238,10 +238,10 @@ private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extend
     logTimedCommand("clearPluginTag", key.toString, target.clearPluginTag(key))
   }
 
-  override final def setUnderlayImmediate(scenario: Scenario): Unit = {
+  override final def setUnderlayImmediate(scenario: Scenario, cause: EventCause): Unit = {
     try {
       beforeAccessTarget(forUpdate = true)
-      logTimedCommand("setUnderlayImmediate", scenario.toString, target.doSetUnderlay(scenario))
+      logTimedCommand("setUnderlayImmediate", scenario.toString, target.doSetUnderlay(scenario, cause))
     } finally consistentRoot.finishUpdating()
   }
 
@@ -513,7 +513,7 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
         "addTweakMapImmediate",
         tweaks.keys.toString(),
         UpdateMultipleScenarios
-          .evaluateAndApplyTweakLambdas(tweaksByScenario, tweakLambdasByScenario, consistentRoot.target)
+          .evaluateAndApplyTweakLambdas(tweaksByScenario, tweakLambdasByScenario, consistentRoot.target, cause)
       )
     } finally finishUpdating()
   }
@@ -522,7 +522,7 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
     try {
       beforeAccessTarget(forUpdate = true)
       val tracker = toScenario(scenario)
-      tracker.tweakContainer.doRemoveAllTweaks()
+      tracker.tweakContainer.doRemoveAllTweaks(cause)
     } finally finishUpdating()
   }
 

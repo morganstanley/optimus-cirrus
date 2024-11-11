@@ -420,7 +420,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def filter(@nodeLift f: A => Boolean): CC = filter$withNode(toNodeFactory(f))
-  def filter$queued(f: A => Node[Boolean]): Node[CC] = filter$newNode(f).enqueue
+  def filter$queued(f: A => Node[Boolean]): NodeFuture[CC] = filter$newNode(f).enqueue
   def filter$withNode(f: A => Node[Boolean]): CC = filter$newNode(f).get
   final private[this] def filter$newNode(f: A => Node[Boolean]): Node[CC] =
     if (isEmpty) new AlreadyCompletedNode(c)
@@ -437,7 +437,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def filterNot(@nodeLift f: A => Boolean): CC = filterNot$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def filterNot$queued(f: A => Node[Boolean]): Node[CC] = filterNot$newNode(f).enqueue
+  def filterNot$queued(f: A => Node[Boolean]): NodeFuture[CC] = filterNot$newNode(f).enqueue
   def filterNot$withNode(f: A => Node[Boolean]): CC = filterNot$newNode(f).get
   final private[this] def filterNot$newNode(f: A => Node[Boolean]): Node[CC] =
     if (isEmpty) new AlreadyCompletedNode(c)
@@ -451,8 +451,8 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
 
   @nodeSync
   @scenarioIndependentTransparent
-  private[optimus] def filterPrelifted(f: A => Node[Boolean]): CC = filterPrelifted$queued(f).get
-  private[optimus] def filterPrelifted$queued(f: A => Node[Boolean]): Node[CC] = filter$queued(f)
+  private[optimus] def filterPrelifted(f: A => Node[Boolean]): CC = filterPrelifted$queued(f).get$
+  private[optimus] def filterPrelifted$queued(f: A => Node[Boolean]): NodeFuture[CC] = filter$queued(f)
 
   /**
    * flatMap optimized for closures returning Option. This avoids forced conversion of Options to sequences, providing
@@ -534,7 +534,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def partition(@nodeLift f: A => Boolean): (CC, CC) = partition$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def partition$queued(f: A => Node[Boolean]): Node[(CC, CC)] = partition$newNode(f).enqueue
+  def partition$queued(f: A => Node[Boolean]): NodeFuture[(CC, CC)] = partition$newNode(f).enqueue
   def partition$withNode(f: A => Node[Boolean]): (CC, CC) = partition$newNode(f).get
   final private[this] def partition$newNode(f: A => Node[Boolean]) =
     if (isEmpty) new AlreadyCompletedNode(c, c)
@@ -552,7 +552,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def forall(@nodeLift f: A => Boolean): Boolean = forall$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def forall$queued(f: A => Node[Boolean]): Node[Boolean] = forall$newNode(f).enqueue
+  def forall$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = forall$newNode(f).enqueue
   def forall$withNode(f: A => Node[Boolean]): Boolean = forall$newNode(f).get
   final private[this] def forall$newNode(f: A => Node[Boolean]) =
     if (isEmpty) trueNode
@@ -569,7 +569,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def find(@nodeLift f: A => Boolean): Option[A] = find$withNode(toNodeFactory(f))
-  def find$queued(f: A => Node[Boolean]): Node[Option[A]] = find$newNode(f).enqueue
+  def find$queued(f: A => Node[Boolean]): NodeFuture[Option[A]] = find$newNode(f).enqueue
   def find$withNode(f: A => Node[Boolean]): Option[A] = find$newNode(f).get
   final private[this] def find$newNode(f: A => Node[Boolean]): Node[Option[A]] =
     if (isEmpty) noneNode
@@ -586,7 +586,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def exists(@nodeLift f: A => Boolean): Boolean = exists$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def exists$queued(f: A => Node[Boolean]): Node[Boolean] = exists$newNode(f).enqueue
+  def exists$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = exists$newNode(f).enqueue
   def exists$withNode(f: A => Node[Boolean]): Boolean = exists$newNode(f).get
   final private[this] def exists$newNode(f: A => Node[Boolean]) =
     if (isEmpty) falseNode
@@ -736,7 +736,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def count(@nodeLift p: A => Boolean): Int = count$withNode(toNodeFactory(p))
   // noinspection ScalaUnusedSymbol
-  def count$queued(p: A => Node[Boolean]): Node[Int] = count$newNode(p).enqueue
+  def count$queued(p: A => Node[Boolean]): NodeFuture[Int] = count$newNode(p).enqueue
   def count$withNode(p: A => Node[Boolean]): Int = count$newNode(p).get
   final private[this] def count$newNode(f: A => Node[Boolean]): Node[Int] =
     if (isEmpty) zeroNode
@@ -753,7 +753,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     @scenarioIndependentTransparent
     final def map(@nodeLift f: A => B): That = needsPlugin
     // noinspection ScalaUnusedSymbol
-    final def map$queued(f: A => Node[B]): Node[That] = AsyncBase.this.map$newNode(f)(bf).enqueue
+    final def map$queued(f: A => Node[B]): NodeFuture[That] = AsyncBase.this.map$newNode(f)(bf).enqueue
     final def map$withNode(f: A => Node[B]): That = AsyncBase.this.map$newNode(f)(bf).get
 
     @nodeSync
@@ -761,7 +761,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
     @scenarioIndependentTransparent
     def flatMap(@nodeLift f: A => GenTraversableOnce[B]): That = needsPlugin
     // noinspection ScalaUnusedSymbol
-    def flatMap$queued(@nodeLift f: A => Node[GenTraversableOnce[B]]): Node[That] =
+    def flatMap$queued(@nodeLift f: A => Node[GenTraversableOnce[B]]): NodeFuture[That] =
       AsyncBase.this.flatMap$newNode(f)(bf).enqueue
     def flatMap$withNode(f: A => Node[GenTraversableOnce[B]]): That = AsyncBase.this.flatMap$newNode(f)(bf).get
   }
@@ -838,7 +838,7 @@ class asyncPar[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def withFilter(@nodeLift f: A => Boolean): asyncPar[A, CC] = withFilter$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def withFilter$queued(f: A => Node[Boolean]): Node[asyncPar[A, CC]] = withFilter$newNode(f).enqueue
+  def withFilter$queued(f: A => Node[Boolean]): NodeFuture[asyncPar[A, CC]] = withFilter$newNode(f).enqueue
   def withFilter$withNode(f: A => Node[Boolean]): asyncPar[A, CC] = withFilter$newNode(f).get
   final private[this] def withFilter$newNode(f: A => Node[Boolean]): Node[asyncPar[A, CC]] = {
     def cast(coll: CC) = coll.asInstanceOf[CC with IterableLike[A, CC]]
@@ -884,7 +884,7 @@ sealed class asyncSeq[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def withFilter(@nodeLift f: A => Boolean): CC = withFilter$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def withFilter$queued(f: A => Node[Boolean]): Node[CC] = withFilter$newNode(f).enqueue
+  def withFilter$queued(f: A => Node[Boolean]): NodeFuture[CC] = withFilter$newNode(f).enqueue
   def withFilter$withNode(f: A => Node[Boolean]): CC = withFilter$newNode(f).get
   final private[this] def withFilter$newNode(f: A => Node[Boolean]) =
     if (isEmpty) new AlreadyCompletedNode(c)

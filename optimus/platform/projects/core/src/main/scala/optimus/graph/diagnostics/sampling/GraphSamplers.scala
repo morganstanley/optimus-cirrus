@@ -24,7 +24,7 @@ import optimus.graph.diagnostics.messages.Accumulating
 import optimus.graph.diagnostics.messages.AllOGCounters
 import optimus.breadcrumbs.crumbs.Properties._
 import optimus.graph.diagnostics.sampling.Cardinality.LogLogCounter
-import optimus.graph.tracking.DependencyTrackerQueue.QueueStats
+import optimus.graph.tracking.monitoring.QueueStats
 import optimus.graph.tracking.DependencyTrackerRoot
 
 import scala.jdk.CollectionConverters._
@@ -94,22 +94,28 @@ class GraphSamplers extends SamplerProvider {
         cumulativeCounts: Map[String, Map[String, Long]],
         // Snapshots cannot sensibly be summed over multiple intervals
         snapShots: Map[String, Map[String, Long]],
-        fullWaitTimes: Map[String, Long])
+        fullWaitTimes: Map[String, Long],
+        overflows: Map[String, Long]
+    )
 
     // Number of nodes started during period, and number of nodes currently waiting
     ss += new Sampler[PluginType.PluginTracker, PluginData](
       sp,
-      snapper = (_: Boolean) => PluginType.snapAggregatePluginCounts(),
+      snapper = (_: Boolean) => PluginType.snapAggregatePluginCountsIntoGlobalBuffer(),
       process = { (prevOpt: Option[PluginType.PluginTracker], curr: PluginType.PluginTracker) =>
         prevOpt.fold {
-          PluginData(curr.cumulativeCounts, curr.snapCounts, curr.fullWaitTimes.toMap)
+          PluginData(curr.cumulativeCounts, curr.snapCounts, curr.fullWaitTimes.toMapMillis, curr.overflow.toMap)
         } { prev =>
           val diff = curr.diff(prev)
-          PluginData(diff.cumulativeCounts, curr.snapCounts, diff.fullWaitTimes.toMap)
+          PluginData(diff.cumulativeCounts, curr.snapCounts, diff.fullWaitTimes.toMapMillis, diff.overflow.toMap)
         }
       },
       publish = { pc =>
-        Elems(pluginCounts -> pc.cumulativeCounts, pluginSnaps -> pc.snapShots, pluginFullWaitTimes -> pc.fullWaitTimes)
+        Elems(
+          pluginCounts -> pc.cumulativeCounts,
+          pluginSnaps -> pc.snapShots,
+          pluginFullWaitTimes -> pc.fullWaitTimes,
+          pluginNodeOverflows -> pc.overflows)
       }
     )
 

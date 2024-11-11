@@ -12,7 +12,6 @@
 package optimus.buildtool.dependencies
 
 import com.typesafe.config._
-import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.config._
 import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
 import optimus.buildtool.dependencies.JvmDependenciesLoader.loadLocalDefinitions
@@ -321,7 +320,7 @@ object MultiSourceDependenciesLoader {
       multiSourceDeps
         .map(loaded => loaded.foldLeft(MultiSourceDependencies(Nil))(_ ++ _))
         .withProblems { deps =>
-          val (ivyConfigs, jvmDeps) = deps.loaded.partition(_.afs.exists(_.configuration != DefaultConfiguration))
+          val (ivyConfigs, jvmDeps) = deps.loaded.partition(_.ivyConfig)
           OrderingUtils.checkOrderingIn(obtFile, ivyConfigs) ++ OrderingUtils.checkOrderingIn(obtFile, jvmDeps)
         }
     }

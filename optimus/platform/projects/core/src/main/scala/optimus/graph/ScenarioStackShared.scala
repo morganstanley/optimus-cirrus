@@ -126,7 +126,9 @@ private[optimus /*ScenarioStack*/ ] final class ScenarioStackShared private (val
 
   /** Useful in checking if the the scenarioStack is based on the top of initialTime scenario */
   def initTimePresentWithCheck(scenario: Scenario): Boolean = {
-    if ((_scenarioStackWithInitialTime ne null) && (_scenarioStackWithInitialTime.topScenario eq scenario))
+    if (
+      (_scenarioStackWithInitialTime ne null) && ((_scenarioStackWithInitialTime.topScenario eq scenario) || (_scenarioStackWithInitialTime.topScenario == scenario))
+    )
       true
     else if (_scenarioStackWithInitialTime ne null) {
       if (Settings.throwOnInvalidInitRuntimeEnvUsage)

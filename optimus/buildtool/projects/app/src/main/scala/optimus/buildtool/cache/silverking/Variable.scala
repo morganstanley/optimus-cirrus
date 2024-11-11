@@ -11,20 +11,21 @@
  */
 package optimus.buildtool.cache.silverking
 
-import java.nio.charset.StandardCharsets
-import java.time.Instant
-import java.util.concurrent.atomic.AtomicInteger
-
 import msjava.slf4jutils.scalalog.Logger
-
-import scala.util.control.NonFatal
-import optimus.buildtool.cache.silverking.OperationType._
-import org.apache.curator.framework.CuratorFramework
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.cache.remote.ClusterType
+import optimus.buildtool.cache.remote.OperationType
+import optimus.buildtool.cache.remote.OperationType._
 import optimus.buildtool.cache.silverking.SilverKingConfig.ZookeeperConfig
 import optimus.dal.silverking.SilverKingPlantConfig
 import optimus.platform.runtime.ZkUtils
 import optimus.utils.zookeeper.ReadOnlyDistributedValue
+import org.apache.curator.framework.CuratorFramework
+
+import java.nio.charset.StandardCharsets
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
+import scala.util.control.NonFatal
 
 private[silverking] trait Variable[A] {
   def state: A

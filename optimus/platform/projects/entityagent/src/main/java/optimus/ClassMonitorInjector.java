@@ -126,7 +126,9 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   // This is to prevent lumping test classes by accident. This is meant only for production code.
   public static class ExemptedPackage {
     final String packageBase;
+    // Matches jars from build_obt/
     final String buildObtJarPrefix;
+    // Matches jars in install/
     final String installJarName;
 
     ExemptedPackage(String packageBase, String buildObtJarPrefix, String installJarName) {
@@ -160,8 +162,15 @@ public class ClassMonitorInjector implements ClassFileTransformer {
   // Exempt are DTC, CMI and their related structures
   public static final List<ExemptedPackage> instrumentationExemptedPackages =
       Arrays.asList(
-          // Graph has hot loops
+          // Breadcrumbs are hot
+          new ExemptedPackage(
+              "optimus/breadcrumbs/", "optimus.platform.breadcrumbs.main", "breadcrumbs.jar"),
+          // Graph has hot loops or is featured too much in hot loops
+          new ExemptedPackage("optimus/core/", "optimus.platform.core.main", "core.jar"),
+          new ExemptedPackage("optimus/entity/", "optimus.platform.core.main", "core.jar"),
           new ExemptedPackage("optimus/graph/", "optimus.platform.core.main", "core.jar"),
+          new ExemptedPackage("optimus/platform/", "optimus.platform.core.main", "core.jar"),
+          new ExemptedPackage("optimus/ui/", "optimus.platform.core.main", "core.jar"),
           // CMI dependencies are hot
           new ExemptedPackage(
               "optimus/deps/", "optimus.platform.entityagent.main", "entityagent.jar"),
@@ -170,7 +179,25 @@ public class ClassMonitorInjector implements ClassFileTransformer {
               "optimus/dtc/", "optimus.platform.dtc_collector.main", "dtc_collector.jar"),
           // DTC runners are hot
           new ExemptedPackage(
-              "optimus/dtc/", "optimus.platform.dtc_runners.main", "dtc_runners.jar"));
+              "optimus/dtc/", "optimus.platform.dtc_runners.main", "dtc_runners.jar"),
+          // DAL internals are hot
+          new ExemptedPackage(
+              "optimus/dsi/base/", "optimus.platform.dsi_base.main", "dsi_base.jar"),
+          // Diagnostic instrumentation is hot
+          new ExemptedPackage(
+              "optimus/graph/", "optimus.platform.instrumentation.main", "instrumentation.jar"),
+          // Scala compatibility collections is hot
+          new ExemptedPackage(
+              "optimus/scalacompat/collection/",
+              "optimus.platform.scala_compat.main",
+              "scala_compat.jar"),
+          // Versioning is hot
+          new ExemptedPackage(
+              "optimus/platform/versioning/", "optimus.platform.platform.main", "platform.jar"),
+          new ExemptedPackage(
+              "optimus/platform/versioning/",
+              "optimus.platform.versioning_runtime.main",
+              "versioning_runtime.jar"));
   // CAUTION: This list is dynamic and cannot be used to analyze cached dependencies!
   //          Used only by DTC and CMI internals.
   public static final List<String> classesFromExemptedPackages = new CopyOnWriteArrayList<>();
