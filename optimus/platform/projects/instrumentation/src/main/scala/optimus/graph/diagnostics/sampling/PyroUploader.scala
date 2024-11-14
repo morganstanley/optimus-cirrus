@@ -17,6 +17,7 @@ import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.LogPropertiesCrumb
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.PropertyUnits
 import optimus.core.utils.HttpClientOIDC
 import optimus.graph.diagnostics.sampling.SamplingProfiler.LoadData
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
@@ -200,8 +201,8 @@ object PyroUploader extends Log {
       .addParameter("sampleRate", GHz) // samples are reported in ns
 
     if (!pyroLatestVersion) {
-      val bytes = metricTpe.exists { t => t.startsWith("Alloc") || t.startsWith("Free") || t.startsWith("Live") }
-      val doAverage = metricTpe.exists { t => t.startsWith("Live") }
+      val bytes = metricTpe.exists(FlameTreatment.units(_) == PropertyUnits.Bytes)
+      val doAverage = metricTpe.exists(FlameTreatment.sumOverTime)
       uriBuilder.applyIf(bytes)(_.addParameter("units", "bytes"))
       uriBuilder
         .applyIf(doAverage)(_.addParameter("aggregationType", "avg"))

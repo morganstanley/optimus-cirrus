@@ -1040,7 +1040,7 @@ object Tracer {
     getSKSendResultWallclockTime(Seq(id))
   def getSKSendResultWallclockTime(ids: Seq[TraceId]): Long =
     getWallClockTime(ids, (t: TraceEvent.Event) => t == TraceEvent.SkSendResult)
-  def getConflicCheckWallClockTime(ids: Seq[TraceId]): Long =
+  def getConflictCheckWallClockTime(ids: Seq[TraceId]): Long =
     getWallClockTime(ids, (t: TraceEvent.Event) => t.isInstanceOf[TraceEvent.LockManagerConflictCheck])
 
   def getBackendHosts(id: TraceId): Set[Host] = getBackendHosts(Seq(id))
@@ -1054,6 +1054,20 @@ object Tracer {
         case _                                           => None
       } toSet
     } else Set.empty
+  }
+
+  def getTxnActionsMetrics(ids: Seq[TraceId]): Map[String, String] = {
+    val traces: Seq[TraceData] = ids flatMap { id =>
+      Option(TracerRegistry.get(id)) map { _.getTraces() } getOrElse Nil
+    }
+
+    ((traces map { _.event } collect { case e: TraceEvent.MongoPrep => e.info })
+      .foldLeft(Map.empty[String, Long]) { (acc, map) =>
+        map.foldLeft(acc) { case (iAcc, (k, v)) =>
+          iAcc.updated(k, iAcc.getOrElse(k, 0L) + v)
+        }
+      })
+      .mapValuesNow(_.toString)
   }
 
   private def cnfEventMatcher(event: TraceEvent.Event): Int = {

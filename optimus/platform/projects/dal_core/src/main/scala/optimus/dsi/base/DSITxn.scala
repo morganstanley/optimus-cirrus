@@ -12,9 +12,9 @@
 package optimus.dsi.base
 
 import java.time.Instant
-
 import optimus.dsi.base.actions._
 import optimus.core.Collections
+import optimus.graph.DiagnosticSettings
 import optimus.platform.dsi.bitemporal.AccTableResult
 import optimus.platform.dsi.bitemporal.CreateSlotsResult
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
@@ -23,6 +23,7 @@ import optimus.platform.dsi.bitemporal.InvalidateAllCurrentResult
 import optimus.platform.dsi.bitemporal.PutApplicationEventResult
 import optimus.platform.dsi.bitemporal.Result
 import optimus.platform.dsi.bitemporal.VoidResult
+import optimus.platform.internal.SimpleStateHolder
 import optimus.platform.storable.SerializedAppEvent
 
 object DSITxn {
@@ -114,6 +115,27 @@ object DSITxn {
   }
 }
 
+final class DSITxnActionsConfigValues {
+  private val includeTxnActionSizeDefault =
+    DiagnosticSettings.getBoolProperty("optimus.dsi.base.resultSender.includeTxnActionSize", true)
+  private val includeTxnActionSizeBySourceDefault =
+    DiagnosticSettings.getBoolProperty("optimus.dsi.base.resultSender.includeTxnActionSizeBySource", false)
+  private[dsi] var includeTxnActionSize = includeTxnActionSizeDefault
+  private[dsi] var includeTxnActionSizeBySource = includeTxnActionSizeBySourceDefault
+}
+
+object DSITxnActionsConfig extends SimpleStateHolder(() => new DSITxnActionsConfigValues) {
+
+  def setConfigValue(includeTxnActionSizeFlag: Boolean, includeTxnActionSizeBySourceFlag: Boolean) =
+    getState.synchronized {
+      getState.includeTxnActionSize = includeTxnActionSizeFlag
+      getState.includeTxnActionSizeBySource = includeTxnActionSizeBySourceFlag
+    }
+
+  def getIncludeTxnActionSize: Boolean = getState.synchronized { getState.includeTxnActionSize }
+  def getIncludeTxnActionSizeBySource: Boolean = getState.synchronized { getState.includeTxnActionSizeBySource }
+}
+
 final case class DSITxn[+A](result: A, actions: Seq[TxnAction]) {
   def map[B](f: A => B): DSITxn[B] = DSITxn(f(result), actions)
 
@@ -122,4 +144,56 @@ final case class DSITxn[+A](result: A, actions: Seq[TxnAction]) {
       result == otherDsiTxn.result && actions.toSet == otherDsiTxn.actions.toSet
     case _ => false
   }
+
+  def actionsSizeBySource(): Map[String, Int] = {
+    var r = Map[String, Int]()
+    if (DSITxnActionsConfig.getIncludeTxnActionSize) {
+      r ++= Map("tx_acs" -> actions.size)
+      if (DSITxnActionsConfig.getIncludeTxnActionSizeBySource) {
+        r ++= actions.groupBy(actionToSourceGroup).map { case (k, v) =>
+          k -> v.size
+        }
+      }
+    }
+
+    r
+  }
+
+  private def actionToSourceGroup(action: TxnAction): String = {
+    action match {
+      case _: AccAction                   => "tx_o" // other
+      case _: PutTemporalKey              => "tx_enk" // entityKey
+      case _: PutRegisteredIndexEntry     => "tx_enri" // entityRegisteredIndex
+      case _: CloseRegisteredIndexEntry   => "tx_enri" // entityRegisteredIndex
+      case _: PutIndexEntry               => "tx_eni" // entityIndex
+      case _: CloseIndexEntry             => "tx_eni" // entityIndex
+      case _: PutLinkageEntry             => "tx_envl" // entityLinkage
+      case _: CloseLinkageEntry           => "tx_envl" // entityLinkage
+      case _: PutAppEvent                 => "tx_ae" // appEvent
+      case _: PutBusinessEventKey         => "tx_evk" // eventKey
+      case _: PutObliterateEffect         => "tx_o" //
+      case _: ExecuteObliterate           => "tx_ob" // obliterate
+      case _: DBRawAction                 => "tx_dbr" // dbRaw
+      case _: PutDBRawEffect              => "tx_dbr" // dbRaw
+      case _: AddWriteSlots               => "tx_o" // other
+      case _: FillWriteSlot               => "tx_o" // other
+      case _: PutClassIdMapping           => "tx_o" // other
+      case _: ReuseBusinessEvent          => "tx_o" // other
+      case _: PutEntityGrouping           => "tx_engts" // entityGroupingTimeslice
+      case _: UpdateEntityGrouping        => "tx_engts" // entityGroupingTimeslice
+      case _: PutUniqueIndexGrouping      => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
+      case _: UpdateUniqueIndexGrouping   => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
+      case _: PutBusinessEventGrouping    => "tx_evgts" // eventGroupingTimeslice
+      case _: UpdateBusinessEventGrouping => "tx_evgts" // eventGroupingTimeslice
+      case _: PutEntityTimeSlice          => "tx_engts" // entityGroupingTimeslice
+      case _: CloseEntityTimeSlice        => "tx_engts" // entityGroupingTimeslice
+      case _: PutUniqueIndexTimeSlice     => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
+      case _: CloseUniqueIndexTimeSlice   => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
+      case _: PutBusinessEventTimeSlice   => "tx_evgts" // eventGroupingTimeslice
+      case _: CloseBusinessEventTimeSlice => "tx_evgts" // eventGroupingTimeslice
+      case _: PutCmReference              => "tx_m" // metadata
+      case _: PutBusinessEventIndexEntry  => "tx_evi" // eventIndex
+    }
+  }
+
 }

@@ -42,7 +42,7 @@ class RegexMessagesScopedCompilation(
 
   @node private def inputs = {
     val jsonFile = scope.pathBuilder
-      .outputPathFor(scope.id, fingerprint.hash, ArtifactType.RegexMessages, None, incremental = false)
+      .outputPathFor(scope.id, fingerprint.hash, ArtifactType.RegexMessages, None)
       .asJson
     RegexScanner.Inputs(sources.compilationSources, rules, jsonFile)
   }

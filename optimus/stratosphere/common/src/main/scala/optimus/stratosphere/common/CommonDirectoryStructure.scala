@@ -76,6 +76,8 @@ class CommonDirectoryStructure(
   // src/.git/hooks
   val gitHooksDirectory: Path = gitDirectory.resolve("hooks")
 
+  val gitSparseCheckoutLock: Path = gitDirectory.resolve("info").resolve("sparse-checkout.lock")
+
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/logs
   val logsDirectory: Path = stratosphereWorkspaceDir.resolve("logs")
 

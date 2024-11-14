@@ -55,8 +55,7 @@ import scala.collection.immutable.Seq
       localArtifacts = (scala.classes ++ java.classes).filter(!_.isInstanceOf[FingerprintArtifact]),
       otherArtifacts = JavaScopedCompilation.updateNetworkPaths(dependencyCopier, otherArtifacts),
       jmhJars = jmhJars,
-      outputJar =
-        pathBuilder.outputPathFor(id, sources.compilationFingerprint.hash, AT.Jmh, None, incremental = false).asJar,
+      outputJar = pathBuilder.outputPathFor(id, sources.compilationFingerprint.hash, AT.Jmh, None).asJar,
       // no current use case for passing through full options/warnings, and it's not clear that it would be correct
       scope.config.javacConfig.copy(options = Nil, warnings = WarningsConfiguration.empty)
     )

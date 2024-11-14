@@ -12,7 +12,6 @@
 package optimus.buildtool.compilers
 
 import java.io.StringReader
-import java.nio.file.Files
 import java.util.Properties
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.GenericFilesArtifact
@@ -109,7 +108,7 @@ import optimus.scalacompat.collection._
 
         val artifact = Utils.atomicallyWrite(jarPath) { tempOut =>
           // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
-          val tempJar = new ConsistentlyHashedJarOutputStream(Files.newOutputStream(tempOut), None, compressed = true)
+          val tempJar = new ConsistentlyHashedJarOutputStream(JarAsset(tempOut), None, compressed = true)
           AsyncUtils.asyncTry {
             val common = RelativePath("common")
 

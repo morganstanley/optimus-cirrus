@@ -119,7 +119,8 @@ trait SparseUtils {
 
   def refresh(updatedProfile: Option[SparseProfile] = None)(implicit stratoWorkspace: StratoWorkspaceCommon): Unit = {
     val config = SparseConfiguration.load()
-    if (!stratoWorkspace.isOutsideOfWorkspace && config.isEnabled)
+    val sparseLockFile = stratoWorkspace.directoryStructure.gitSparseCheckoutLock.file
+    if (!stratoWorkspace.isOutsideOfWorkspace && config.isEnabled && !sparseLockFile.exists())
       updateSparseSet(updatedProfile.getOrElse(config.profile.orNull), forceReapply = true)
   }
 

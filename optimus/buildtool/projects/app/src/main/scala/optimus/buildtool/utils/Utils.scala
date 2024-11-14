@@ -19,7 +19,6 @@ import optimus.buildtool.artifacts.Artifacts
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.config.NamingConventions
-import optimus.buildtool.config.NamingConventions.incrString
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.files.Directory.NoFilter
@@ -286,15 +285,13 @@ import scala.util.control.NonFatal
       tpe: ArtifactType,
       discriminator: Option[String],
       fingerprintHash: String,
-      id: ScopeId,
-      incremental: Boolean
+      id: ScopeId
   ): FileAsset = {
     val s = tpe.suffix
     val tpeDir = outputDirFor(bundleOutDir, tpe, discriminator)
     createDirectories(tpeDir)
-    val incr = incrString(incremental)
     val prefix = if (id == RootScopeId) "" else s"${id.properPath}."
-    val fname = s"$prefix$incr$fingerprintHash.$s"
+    val fname = s"$prefix$fingerprintHash.$s"
     tpeDir.resolveFile(fname)
   }
 

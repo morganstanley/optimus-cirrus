@@ -15,7 +15,6 @@ import optimus.buildtool.app.IncrementalMode
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.artifacts.IncrementalArtifact
-import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.trace.ObtStats
@@ -33,27 +32,14 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
       id: ScopeId,
       fingerprintHash: String,
       tpe: A,
-      discriminator: Option[String]): Option[A#A] = {
-    val nonIncrementalFile = pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator, incremental = false)
-    if (nonIncrementalFile.existsUnsafe) {
-      logFound(id, tpe, nonIncrementalFile.pathString)
-      Some(tpe.fromAsset(id, nonIncrementalFile, incremental = false))
+      discriminator: Option[String]
+  ): Option[A#A] = {
+    val file = pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator)
+    if (file.existsUnsafe) {
+      artifact(id, file, tpe)
     } else {
-      if (incrementalMode.useIncrementalArtifacts) {
-        val incrementalFile = pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator, incremental = true)
-        if (incrementalFile.existsUnsafe) {
-          logFound(id, tpe, incrementalFile.pathString)
-          Some(tpe.fromAsset(id, incrementalFile, incremental = true))
-        } else {
-          // In incremental mode, only log the not-found paths if neither of them could be found
-          logNotFound(id, tpe, nonIncrementalFile.pathString)
-          logNotFound(id, tpe, incrementalFile.pathString)
-          None
-        }
-      } else {
-        logNotFound(id, tpe, nonIncrementalFile.pathString)
-        None
-      }
+      logNotFound(id, tpe, file.pathString)
+      None
     }
   }
 
@@ -65,10 +51,22 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
     val files = Directory.listFilesUnsafe(dir, (path, _) => path.getFileName.toString.startsWith(id.properPath))
     if (files.nonEmpty) {
       logFound(id, tpe, files.map(_.pathString))
-      files.apar.map(f => tpe.fromAsset(id, f, NamingConventions.isIncremental(f)))
+      files.apar.flatMap(f => artifact(id, f, tpe))
     } else {
       logNotFound(id, tpe, s"No relevant artifacts in directory ${dir.pathString}")
       Nil
+    }
+  }
+
+  @async private def artifact(id: ScopeId, file: FileAsset, tpe: CachedArtifactType) = {
+    val artifact = tpe.fromAsset(id, file)
+    artifact match {
+      case i: IncrementalArtifact if i.incremental && !incrementalMode.useIncrementalArtifacts =>
+        logUnsuitableIncrementalFound(id, tpe, file.pathString)
+        None
+      case _ =>
+        logFound(id, tpe, file.pathString)
+        Some(tpe.fromAsset(id, file))
     }
   }
 
@@ -76,11 +74,7 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     // no put required - compiler job will automatically place artifacts in the correct location
     val path = artifact.path
-    val incremental = artifact match {
-      case ia: IncrementalArtifact => ia.incremental
-      case _                       => false
-    }
-    val expectedFile = pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator, incremental)
+    val expectedFile = pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator)
     // likely something else is wrong if these messages pop up, however we don't need to fail the compilation because we
     // have a local cache error
     if (!FileAsset(path).existsUnsafe)
@@ -97,11 +91,13 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
   ): Set[String] = {
     val useIncrementalArtifacts = incrementalMode.useIncrementalArtifacts
     val ret = fingerprintHashes.apar.filter { fp =>
-      pathBuilder.outputPathFor(id, fp, tpe, discriminator, incremental = false).existsUnsafe || (
-        useIncrementalArtifacts && pathBuilder
-          .outputPathFor(id, fp, tpe, discriminator, incremental = true)
-          .existsUnsafe
-      )
+      val file = pathBuilder.outputPathFor(id, fp, tpe, discriminator)
+      file.existsUnsafe && (tpe.fromAsset(id, file) match {
+        case i: IncrementalArtifact if i.incremental && !useIncrementalArtifacts =>
+          false
+        case _ =>
+          true
+      })
     }
     debug(s"[$id] Found $ret out of $fingerprintHashes")
     ret

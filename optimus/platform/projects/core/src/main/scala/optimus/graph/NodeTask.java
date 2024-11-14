@@ -485,6 +485,10 @@ public abstract class NodeTask extends NodeAwaiter
     return prevState;
   }
 
+  protected final boolean getAndSet(int setFlags) {
+    return (updateState(setFlags, 0) & setFlags) == setFlags;
+  }
+
   /**
    * Atomically sets flags but only if the done flag is not set Returns the value right before the
    * update (Obviously it can be stale by then)
@@ -652,12 +656,12 @@ public abstract class NodeTask extends NodeAwaiter
     updateState(STATE_ADAPTED, 0);
   }
 
-  final void setPluginTracked() {
-    updateState(STATE_PLUGIN_TRACKED, 0);
+  final boolean getAndSetPluginTracked() {
+    return getAndSet(STATE_PLUGIN_TRACKED);
   }
 
-  final boolean getAndSetPluginTracked() {
-    return (updateState(STATE_PLUGIN_TRACKED, 0) & STATE_PLUGIN_TRACKED) == STATE_PLUGIN_TRACKED;
+  final boolean getAndSetPluginFired() {
+    return getAndSet(STATE_PLUGIN_FIRED);
   }
 
   public final void markAsHavingPluginType() {
@@ -1290,10 +1294,6 @@ public abstract class NodeTask extends NodeAwaiter
   public final void setInfo(NodeExtendedInfo inf) {
     _xinfo = _xinfo.withInfo(inf);
     if (_xinfo == null) _xinfo = NullNodeExtendedInfo$.MODULE$;
-  }
-
-  public final PluginType setPluginType(PluginType pt) {
-    return PluginType.setPluginType(this, pt);
   }
 
   /** TODO (OPTIMUS-13315): MUST become internal!!!! */

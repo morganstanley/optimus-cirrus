@@ -56,7 +56,7 @@ import scala.collection.immutable.Seq
             scope.cached(tpe, Some(cfg.name), fingerprint.hash) {
               val outputJar =
                 scope.pathBuilder
-                  .outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false)
+                  .outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name))
                   .asJar
               log.info(s"[${scope.id}] Starting $tpeStr source generation")
               val artifacts = gen.generateSource(scope.id, inputs, outputJar)

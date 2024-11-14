@@ -11,8 +11,6 @@
  */
 package optimus.buildtool.compilers
 
-import java.nio.file.Files
-
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
@@ -37,7 +35,7 @@ import optimus.platform._
       ObtTrace.traceTask(scopeId, task) {
         AssetUtils.atomicallyWrite(jarPath) { tempOut =>
           // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
-          val tempJar = new ConsistentlyHashedJarOutputStream(Files.newOutputStream(tempOut), None, compressed = true)
+          val tempJar = new ConsistentlyHashedJarOutputStream(JarAsset(tempOut), None, compressed = true)
           try {
             content.foreach { case (file, content) =>
               if (tokens.isEmpty)

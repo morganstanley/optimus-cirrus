@@ -51,7 +51,7 @@ final class TestplanInstaller(
 ) extends ComponentInstaller
     with ComponentBatchInstaller
     with Log
-    with ConsumerProviderContractTestplanInstaller
+    with PactContractTestplanInstaller
     with PythonTestplanInstaller {
   import installer._
 
@@ -128,7 +128,7 @@ final class TestplanInstaller(
     testTypes
   }
 
-  @node protected def loadTestplanTemplate(os: String, templatePath: RelativePath): TestplanTemplate = {
+  @node protected def loadTestplanTemplate(templatePath: RelativePath): TestplanTemplate = {
     val testplanDir = directoryFactory.reactive(sourceDir.resolveDir(PathNames.TestplanDir))
     val templateFile = testplanDir.resolveFile(templatePath)
 
@@ -149,12 +149,12 @@ final class TestplanInstaller(
       data.apar.map(datum => TestPlan(template.header, Seq(template.values.map(datum.bind))))
     )
 
-  private def getData(testType: TestType): Seq[TestplanEntry] = {
+  private def getData(testType: TestType, includedScopes: Set[ScopeId]): Seq[TestplanEntry] = {
     val estimates = testType.estimates
 
     testType.testGroups.flatMap { testGroup =>
       val testTasks = testGroup.entries.map { e =>
-        TestplanTask(e.moduleId, e.testName.getOrElse(testType.testGroupsOpts.testGroupsName), e.runStage)
+        TestplanTask(e.moduleId, e.testName.getOrElse(testType.testGroupsOpts.testGroupsName))
       }
       val additionalBindings =
         testType.bindingsFor(testGroup, versionConfig, testplanConfig, workspaceStructure)
@@ -171,7 +171,8 @@ final class TestplanInstaller(
                 additionalBindings = additionalBindings,
                 stratoOverride = stratoOverride,
                 testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-                testTasks = subTestTasks
+                testTasks = subTestTasks,
+                testTaskOverrides = Map()
               )
           }
         case _ =>
@@ -184,28 +185,43 @@ final class TestplanInstaller(
               additionalBindings = additionalBindings,
               stratoOverride = stratoOverride,
               testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-              testTasks = testTasks
+              testTasks = testTasks,
+              testTaskOverrides = Map()
             ))
       }
-      if (testGroup.programmingLanguage == ProgrammingLanguage.Python)
-        testplanEntries.toSeq :+ createPythonTestplanEntry(
-          testType,
-          testGroup,
-          testTasks,
-          additionalBindings,
-          testplanConfig)
-      else if (testGroup.programmingLanguage == ProgrammingLanguage.Pact)
-        testplanEntries.toSeq :+ createConsumerProviderContractTestplanEntry(
-          displayTestName = testType.displayName,
-          groupName = testGroup.name,
-          metaBundle = testGroup.metaBundle,
-          treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
-          additionalBindings = additionalBindings,
-          stratoOverride = stratoOverride,
-          testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-          testTasks = testTasks
-        )
-      else
+      if (testGroup.programmingLanguage == ProgrammingLanguage.Python) {
+        val entry = createPythonTestplanEntry(testType, testGroup, testTasks, additionalBindings, testplanConfig)
+        Seq(entry)
+      } else if (testGroup.programmingLanguage == ProgrammingLanguage.PactContract) {
+        // Special handling for pact contract testing - we need to work out if we are generating a test entry for
+        // both consumer and provider, or just consumer, or just provider.  We do this by scanning the rest of the
+        // scopes to see if there is a counterpart
+        val contractTestTypes = Set("consumerContractTest", "providerContractTest")
+        val testTaskOverrides = testTasks.map { task =>
+          val taskOverrides = includedScopes
+            .filter(s => s.fullModule == task.module && contractTestTypes.contains(s.tpe))
+            .map(_.tpe)
+          task -> taskOverrides
+        } toMap
+
+        if (testTaskOverrides.values.head.size == 0) {
+          // No pact contract testing in the defined scopes so skip this
+          Seq()
+        } else {
+          val entry = createPactContractTestplanEntry(
+            displayTestName = testType.displayName,
+            groupName = testGroup.name,
+            metaBundle = testGroup.metaBundle,
+            treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
+            additionalBindings = additionalBindings,
+            stratoOverride = stratoOverride,
+            testModulesFileName = testType.testGroupsOpts.testModulesFileName,
+            testTasks = testTasks,
+            testTaskOverrides = testTaskOverrides
+          )
+          Seq(entry)
+        }
+      } else
         testplanEntries
     }
   }
@@ -216,62 +232,73 @@ final class TestplanInstaller(
       includedScopes: Set[ScopeId]): Seq[TestData] = {
     val templatesPerOS: Map[String, TestplanTemplate] = {
       val operatingSystems = testTypes.map(tt => tt.testGroupsOpts.os).toSet
-      operatingSystems.apar.map(os => os -> loadTestplanTemplate(os, PathNames.templateFile(os))).toMap
+      operatingSystems.apar.map(os => os -> loadTestplanTemplate(PathNames.templateFile(os))).toMap
     }
 
-    val allTestData = testTypes.apar.map(testType => testType -> getData(testType))
+    val allTestData = testTypes.apar.map(testType => testType -> getData(testType, includedScopes))
     // we cannot validate the entries until we have all of them
     validateTestplanEntries(includedScopes, allTestData.apar.flatMap(_._2))
 
     val includedRunconfs = testRunConfs(includedScopes)
 
-    allTestData.apar.flatMap { case (testType, fullTestData) =>
+    val testDataRows = allTestData.apar.flatMap { case (testType, fullTestData) =>
       val filteredTestData: Seq[TestplanEntry] =
         fullTestData.apar.flatMap(changes.onlyChanged(_, includedRunconfs))
 
       if (filteredTestData.nonEmpty) {
         val os = testType.testGroupsOpts.os
 
-        val (pythonTestData, unitTestData, consumerProviderContractTestData) =
+        val (pythonTestData, unitTestData, pactContractTestData) =
           filteredTestData.foldLeft(
-            (
-              Seq.empty[PythonTestplanEntry],
-              Seq.empty[ScalaTestplanEntry],
-              Seq.empty[ConsumerProviderContractTestplanEntry])) {
+            (Seq.empty[PythonTestplanEntry], Seq.empty[ScalaTestplanEntry], Seq.empty[PactContractTestplanEntry])) {
             case ((pythons, units, pacts), python: PythonTestplanEntry) => (pythons :+ python, units, pacts)
             case ((pythons, units, pacts), unit: ScalaTestplanEntry)    => (pythons, units :+ unit, pacts)
-            case ((pythons, units, pacts), pact: ConsumerProviderContractTestplanEntry) =>
+            case ((pythons, units, pacts), pact: PactContractTestplanEntry) =>
               (pythons, units, pacts :+ pact)
           }
 
         val pythonQualityTestplans =
           if (pythonTestData.nonEmpty) generatePythonQualityTestplan(os, pythonTestData) else Seq.empty
-        val (consumerProviderRunTestplans, unitTestplan) =
-          if (consumerProviderContractTestData.nonEmpty) {
+
+        val (pactContractTestplans, unitTestplan) =
+          if (pactContractTestData.nonEmpty) {
             val unitTests =
-              unitTestData.filterNot(u => consumerProviderContractTestData.exists(_.moduleName == u.moduleName))
+              unitTestData.filterNot(u => pactContractTestData.exists(_.moduleName == u.moduleName))
             (
-              generateConsumerProviderContractTestplan(os, consumerProviderContractTestData),
+              generatePactContractTestplan(os, pactContractTestData),
               if (unitTests.nonEmpty) Seq(generateTestplan(unitTests, templatesPerOS(os))) else Seq.empty
             )
           } else (Seq.empty, Seq(generateTestplan(unitTestData, templatesPerOS(os))))
-        val testplan = TestPlan.merge(consumerProviderRunTestplans ++ pythonQualityTestplans ++ unitTestplan)
+        val testplan = TestPlan.merge(pactContractTestplans ++ pythonQualityTestplans ++ unitTestplan)
 
-        val testModules = unitTestData.map(_.moduleName).distinct.sorted
+        val testModules =
+          unitTestData.map(_.moduleName).distinct.sorted ++ pactContractTestData.map(_.moduleName).distinct.sorted
+
         Some(TestData(testType, testplan, testModules))
       } else None
     }
+
+    testDataRows
   }
 
   @node private def validateTestplanEntries(scopeIds: Set[ScopeId], testData: Seq[TestplanEntry]): Unit = {
     val runConfNames = testRunConfNames(scopeIds)
 
     val allTestTasks = testData.flatMap(_.testTasks).toSet
+    val allTestTaskOverrides = testData
+      .flatMap(_.testTaskOverrides)
+      .map(t => {
+        val task = t._1
+        val overrides = t._2
+        overrides.map { o => task.forTestName(o).moduleScoped }
+      })
+      .flatten
+      .toSet
 
     // 1. Check for test runconfs for the scopes we've build that are defined in .runconf files but not mentioned
     //    anywhere in testplans
     val allTestplanTestNames = allTestTasks.map(t => t.moduleScoped)
-    val missingTestNames = runConfNames -- allTestplanTestNames
+    val missingTestNames = runConfNames -- allTestplanTestNames -- allTestTaskOverrides
     if (missingTestNames.nonEmpty) {
       val missing = missingTestNames.map(_.properPath).to(Seq).sorted.mkString(", ")
       val msg =
@@ -294,7 +321,12 @@ final class TestplanInstaller(
     // Note: These aren't real runconf names, but we ignore them for now to maintain backward compatibility
     val fakeRunconfNames = allScopesForModules.map(s => ModuleScopedName(s.fullModule, s.tpe))
 
-    val superfluousTestNames = testplanTestNamesForModules -- testRunConfNamesForModules -- fakeRunconfNames
+    // Special test types that are treated different to the rest
+    val specialTestNames = Set("pactContractTest")
+    val superfluousTestNames =
+      testplanTestNamesForModules -- testRunConfNamesForModules -- fakeRunconfNames -- testplanTestNamesForModules
+        .filter(t => specialTestNames.contains(t.name))
+
     if (superfluousTestNames.nonEmpty) {
       val superfluous = superfluousTestNames.map(_.properPath).to(Seq).sorted.mkString(", ")
       val msg =

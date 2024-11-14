@@ -552,9 +552,9 @@ object CoursierArtifactResolver {
   private def loadContent(path: Path): Either[String, String] = Right(Files.readString(path))
 
   /**
-   * This is a customized Coursier:fetch to make obt support download maven files(.xml/.pom) into SilverKing. By
+   * This is a customized Coursier:fetch to make obt support download maven files(.xml/.pom) into remote cache. By
    * default OBT would try resolve maven artifacts in this order:
-   *   1. local disk 2. silverking 3. maven
+   *   1. local disk 2. remote cache 3. maven
    */
   @entersGraph def doHttpFetch(artifact: Artifact): Either[String, String] = {
     val url: URL = new URI(artifact.url).toURL

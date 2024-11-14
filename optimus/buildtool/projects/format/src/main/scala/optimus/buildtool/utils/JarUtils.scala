@@ -16,6 +16,7 @@ import java.nio.file.FileSystem
 import java.nio.file.FileSystems
 import optimus.buildtool.files.JarAsset
 
+import java.nio.file.Files
 import java.util.jar
 import java.util.jar.Attributes.Name
 import scala.collection.compat._
@@ -61,6 +62,9 @@ object JarUtils {
     val PreloadPath: Name = new Name("MS-preload-path")
   }
 
+  private[utils] val optimusIncrementalAttribute = "optimus-incremental"
+  private[utils] val optimusIncrementalPath = "META-INF/optimus/incremental"
+
   def defaultManifest(
       meta: String,
       project: String,
@@ -95,4 +99,17 @@ object JarUtils {
 
   def load(m: jar.Manifest, key: Name, sep: String): Seq[String] =
     load(m, key).map(_.split(sep).map(_.trim).to(Seq)).getOrElse(Nil)
+
+  def incremental(jar: JarAsset): Boolean = {
+    val attributeHash = Hashing.readFileAttribute(jar, optimusIncrementalAttribute).map(_.toBoolean)
+
+    attributeHash.getOrElse {
+      val zipfs = JarUtils.jarFileSystem(jar)
+      val incremental =
+        try Files.exists(zipfs.getPath(optimusIncrementalPath))
+        finally zipfs.close()
+      Hashing.writeFileAttribute(jar, optimusIncrementalAttribute, incremental.toString)
+      incremental
+    }
+  }
 }

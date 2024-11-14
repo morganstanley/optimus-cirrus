@@ -82,7 +82,7 @@ class RootLocatorWriter(git: GitLog, pathBuilder: CompilePathBuilder, writer: Ar
    */
   @async def writeRootLocator(artifactVersion: String): Unit = {
     val headCommit = NamingConventions.COMMIT + git.recentCommits().head.hash
-    val asset = pathBuilder.outputPathFor(RootScopeId, headCommit, RootLocator, None, incremental = false).asJson
+    val asset = pathBuilder.outputPathFor(RootScopeId, headCommit, RootLocator, None).asJson
     val locator = RootLocatorArtifact.create(asset, headCommit, artifactVersion)
     log.info(s"Storing $locator")
     locator.storeJson()

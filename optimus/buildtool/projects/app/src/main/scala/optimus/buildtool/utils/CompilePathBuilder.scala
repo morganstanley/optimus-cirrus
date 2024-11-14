@@ -27,25 +27,23 @@ final case class CompilePathBuilder(outputDir: Directory) {
       id: ScopeId,
       fingerprintHash: String,
       tpe: ArtifactType,
-      discriminator: Option[String],
-      incremental: Boolean
+      discriminator: Option[String]
   ): FileAsset =
-    Utils.outputPathFor(outputDir, tpe, discriminator, fingerprintHash, id, incremental)
+    Utils.outputPathFor(outputDir, tpe, discriminator, fingerprintHash, id)
 
   @scenarioIndependent @node def signatureOutPath(
       id: ScopeId,
-      fingerprintHash: String,
-      incremental: Boolean
+      fingerprintHash: String
   ): JarAsset =
-    outputPathFor(id, fingerprintHash, ArtifactType.JavaAndScalaSignatures, None, incremental).asJar
+    outputPathFor(id, fingerprintHash, ArtifactType.JavaAndScalaSignatures, None).asJar
 
-  @scenarioIndependent @node def scalaOutPath(id: ScopeId, fingerprintHash: String, incremental: Boolean): JarAsset =
-    outputPathFor(id, fingerprintHash, ArtifactType.Scala, None, incremental).asJar
-  @scenarioIndependent @node def javaOutPath(id: ScopeId, fingerprintHash: String, incremental: Boolean): JarAsset =
-    outputPathFor(id, fingerprintHash, ArtifactType.Java, None, incremental).asJar
+  @scenarioIndependent @node def scalaOutPath(id: ScopeId, fingerprintHash: String): JarAsset =
+    outputPathFor(id, fingerprintHash, ArtifactType.Scala, None).asJar
+  @scenarioIndependent @node def javaOutPath(id: ScopeId, fingerprintHash: String): JarAsset =
+    outputPathFor(id, fingerprintHash, ArtifactType.Java, None).asJar
   @scenarioIndependent @node def resourceOutPath(id: ScopeId, fingerprintHash: String): JarAsset =
-    outputPathFor(id, fingerprintHash, ArtifactType.Resources, None, incremental = false).asJar
+    outputPathFor(id, fingerprintHash, ArtifactType.Resources, None).asJar
   @scenarioIndependent @node def electronOutPath(id: ScopeId, fingerprintHash: String): JarAsset =
-    outputPathFor(id, fingerprintHash, ArtifactType.Electron, None, incremental = false).asJar
+    outputPathFor(id, fingerprintHash, ArtifactType.Electron, None).asJar
 
 }

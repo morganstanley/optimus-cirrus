@@ -43,8 +43,8 @@ import scala.collection.immutable.Seq
           id,
           sources.compilationFingerprint.hash,
           ArtifactType.Python,
-          incremental = false,
-          discriminator = None),
+          discriminator = None
+        ),
       pyConfig,
       sources.compilationFingerprint.hash
     )

@@ -37,7 +37,7 @@ trait PythonTestplanInstaller { self: TestplanInstaller =>
         pythonQualityTestplans.apar.map { case (quality_test_name, templateFileFunc) =>
           generateTestplan(
             Seq(data.copyEntry(groupName = s"$quality_test_name-${data.groupName}")),
-            loadTestplanTemplate(os, templateFileFunc(os)))
+            loadTestplanTemplate(templateFileFunc(os)))
         }
       TestPlan.merge(qualityTestplans)
     }
@@ -54,7 +54,8 @@ trait PythonTestplanInstaller { self: TestplanInstaller =>
     treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
     additionalBindings = additionalBinding,
     testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-    testTasks = testTasks
+    testTasks = testTasks,
+    testTaskOverrides = Map()
   )
 
 }

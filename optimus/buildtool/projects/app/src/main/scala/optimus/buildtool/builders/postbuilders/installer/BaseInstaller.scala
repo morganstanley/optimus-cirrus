@@ -120,7 +120,13 @@ trait BaseInstaller { this: PostBuilder with Log =>
     // a race between replacing the old jar with the new jar and loading new classes.
     AssetUtils.atomicallyWrite(installJar, replaceIfExists = true, localTemp = true, backupPrevious = true) { tempJar =>
       // since this is our final output (which will get distributed to AFS or wherever), we definitely want to compress it
-      Jars.mergeManifestsThenMergeJarContent(classJars, JarAsset(tempJar), Some(manifest), compress = true, extraFiles)
+      Jars.mergeManifestsThenMergeJarContent(
+        classJars,
+        JarAsset(tempJar),
+        Some(manifest),
+        compress = true,
+        extraFiles = extraFiles
+      )
     }
   }
 

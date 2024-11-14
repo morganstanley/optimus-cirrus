@@ -56,10 +56,6 @@ final class PluginType private (val name: String, @transient private var id: Int
     }
   }
 
-  def decrementInFlightTaskCount(eq: EvaluationQueue): Unit = if (DiagnosticSettings.pluginCounts) {
-    OGLocalTables.borrow(eq, { lt: OGLocalTables => lt.pluginTracker.completed.update(this, 1) })
-  }
-
   def recordFullWait(ec: OGSchedulerContext, ntsk: NodeTask, ns: Long): Unit = {
     val lt = OGLocalTables.getOrAcquire(ec)
     lt.pluginTracker.fullWaitTimes.update(this, ns)
@@ -143,9 +139,9 @@ object PluginType {
       guaranteeSnapped(c)
     }
 
-    def diff(pc: Counter): Counter = {
+    def diff(pc: Counter*): Counter = {
       val c = snap().getSafe
-      c.accumulate(pc, mult = -1)
+      pc.foreach(c.accumulate(_, -1))
       c
     }
 
@@ -425,17 +421,22 @@ object PluginType {
     val starts = new Counter
     val completed = new Counter
     val fired = new Counter
+    val neverFired = new Counter // completed before being fired - a nonfatal error
     val fullWaitTimes = new Counter
     val overflow = new Counter
-    private val counters = Array(starts, completed, fired, fullWaitTimes, overflow)
+    private val counters = Array(starts, completed, fired, neverFired, fullWaitTimes, overflow)
     private val nCounters = counters.size
     val adaptedNodes = new AdaptedNodesOfAllPlugins
 
     def inFlight: Counter = starts.diff(completed)
-    def unFired: Counter = starts.diff(fired)
+    def unFired: Counter = starts.diff(fired, neverFired)
 
     def cumulativeCounts: Map[String, Map[String, Long]] =
-      Map("starts" -> starts.toMap, "completed" -> completed.toMap, "fired" -> fired.toMap)
+      Map(
+        "starts" -> starts.toMap,
+        "completed" -> completed.toMap,
+        "fired" -> fired.toMap,
+        "neverFired" -> neverFired.toMap)
     def snapCounts: Map[String, Map[String, Long]] = Map("inFlight" -> inFlight.toMap, "unFired" -> unFired.toMap)
 
     def diff(rhs: PluginTracker): PluginTracker = {
@@ -463,12 +464,31 @@ object PluginType {
     pc
   }
 
+  def completed(eq: EvaluationQueue, task: NodeTask): Unit = {
+    if (task.pluginTracked) {
+      val pt = getPluginType(task)
+      if (Objects.nonNull(pt)) {
+        val wasFired = task.getAndSetPluginFired()
+        OGLocalTables.borrow(
+          eq,
+          { lt: OGLocalTables =>
+            {
+              if (!wasFired) {
+                lt.pluginTracker.neverFired.update(pt, 1)
+              }
+              lt.pluginTracker.completed.update(pt, 1)
+            }
+          })
+      }
+    }
+  }
+
   def fire(ntsk: NodeTask): Unit = fire(Seq(ntsk))
 
   def fire(ns: Iterable[NodeTask]): Unit = {
     OGLocalTables.borrow { lt =>
       ns.foreach { n =>
-        if (!n.pluginFired()) {
+        if (!n.getAndSetPluginFired()) {
           val pt = n.getReportingPluginType
           if (Objects.isNull(pt)) {
             MonitoringBreadcrumbs.sendGraphFatalErrorCrumb(
@@ -480,7 +500,6 @@ object PluginType {
             )
             return
           }
-          n.setPluginFired()
           lt.pluginTracker.fired.update(pt, 1)
           // If we're fired without being adapted, record the adapting now
           if (!n.pluginTracked) {
@@ -509,10 +528,10 @@ abstract class SchedulerPlugin {
   final def readapt(n: NodeTask, ec: OGSchedulerContext): Boolean = adaptInternal(n, ec)
 
   private[graph] final def adaptInternal(n: NodeTask, ec: OGSchedulerContext): Boolean = {
-    val old = n.setPluginType(pluginType)
+    val old = PluginType.setPluginType(n, pluginType)
     val ret = adapt(n, ec)
     if (!ret) {
-      n.setPluginType(old)
+      PluginType.setPluginType(n, old)
     }
     ret
   }

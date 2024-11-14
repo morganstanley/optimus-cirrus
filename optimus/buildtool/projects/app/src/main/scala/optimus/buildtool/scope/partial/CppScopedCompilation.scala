@@ -60,8 +60,7 @@ import scala.collection.immutable.Seq
           id,
           sources.compilationFingerprint.hash,
           ArtifactType.Cpp,
-          Some(sources.osVersion),
-          incremental = false
+          Some(sources.osVersion)
         )
         .asJar,
       scope.config.cppConfig(sources.osVersion),

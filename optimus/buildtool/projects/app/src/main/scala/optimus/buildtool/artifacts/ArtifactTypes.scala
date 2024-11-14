@@ -74,8 +74,6 @@ sealed trait CachedArtifactType extends ArtifactType {
     }
 
   @node def fromAsset(id: ScopeId, a: Asset): A
-  // by default, artifacts are not incremental
-  @node def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): A = fromAsset(id, a)
 }
 
 sealed trait ResolutionArtifactType extends CachedArtifactType {
@@ -142,11 +140,14 @@ trait InternalClassFileArtifactType extends CachedArtifactType {
   override val suffix = JarExt
 
   override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
-  @node override def fromAsset(id: ScopeId, a: Asset): InternalClassFileArtifact =
-    fromAsset(id, a, incremental = false)
-  @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): InternalClassFileArtifact = {
+  @node override def fromAsset(id: ScopeId, a: Asset): InternalClassFileArtifact = {
     val file = JarAsset(a.path)
-    InternalClassFileArtifact.create(InternalArtifactId(id, this, None), file, hash(file), incremental = incremental)
+    InternalClassFileArtifact.create(
+      InternalArtifactId(id, this, None),
+      file,
+      hash(file),
+      JarUtils.incremental(file)
+    )
   }
 }
 
@@ -185,9 +186,10 @@ trait AnalysisArtifactType extends CachedArtifactType {
   override val suffix = JarExt
 
   override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
-  @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): AnalysisArtifact =
-    AnalysisArtifact.create(InternalArtifactId(id, this, None), JarAsset(a.path), incremental)
-  @node override def fromAsset(id: ScopeId, a: Asset): AnalysisArtifact = fromAsset(id, a, incremental = false)
+  @node override def fromAsset(id: ScopeId, a: Asset): AnalysisArtifact = {
+    val file = JarAsset(a.path)
+    AnalysisArtifact.create(InternalArtifactId(id, this, None), file, JarUtils.incremental(file))
+  }
 }
 
 trait SignatureArtifactType extends CachedArtifactType {
@@ -195,11 +197,10 @@ trait SignatureArtifactType extends CachedArtifactType {
   override val suffix = JarExt
 
   override def isReadable(a: FileAsset): Boolean = isJarReadable(a)
-  @node override def fromAsset(id: ScopeId, a: Asset, incremental: Boolean): SignatureArtifact = {
+  @node override def fromAsset(id: ScopeId, a: Asset): SignatureArtifact = {
     val file = JarAsset(a.path)
-    SignatureArtifact.create(InternalArtifactId(id, this, None), file, hash(file), incremental)
+    SignatureArtifact.create(InternalArtifactId(id, this, None), file, hash(file), JarUtils.incremental(file))
   }
-  @node override def fromAsset(id: ScopeId, a: Asset): SignatureArtifact = fromAsset(id, a, incremental = false)
 }
 
 trait PathingArtifactType extends ArtifactType {

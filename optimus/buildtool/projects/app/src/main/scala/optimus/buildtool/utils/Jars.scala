@@ -230,11 +230,19 @@ object Jars {
       targetJar: JarAsset,
       manifest: Option[jar.Manifest] = None,
       compress: Boolean,
+      incremental: Boolean = false,
       extraFiles: Seq[ExtraInJar] = Nil
   ): Long = {
     val manifests = manifest ++ sourceJars.flatMap(readManifestJar)
     val mergedManifest = mergeManifests(manifests.toList)
-    mergeAndHashJarContentGivenManifest(sourceJars, targetJar, compress, mergedManifest, extraFiles)
+    mergeAndHashJarContentGivenManifest(
+      sourceJars,
+      targetJar,
+      compress,
+      incremental,
+      mergedManifest,
+      extraFiles
+    )
   }
 
   /**
@@ -248,14 +256,14 @@ object Jars {
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       compress: Boolean,
+      incremental: Boolean = false,
       manifest: Option[jar.Manifest] = None,
       extraFiles: Seq[ExtraInJar] = Nil,
   ): Long = {
     if (incrementalHashingEnabled) {
-      fastMergeJarContent(sourceJars, targetJar, manifest, extraFiles)
+      fastMergeJarContent(sourceJars, targetJar, manifest, incremental, extraFiles)
     } else {
-      val outputJar = () =>
-        new ConsistentlyHashedJarOutputStream(Files.newOutputStream(targetJar.path), manifest, compress)
+      val outputJar = () => new ConsistentlyHashedJarOutputStream(targetJar, manifest, compress, incremental)
       mergeJarGivenTokens(sourceJars, outputJar, Map.empty, extraFiles)
     }
     Files.size(targetJar.path)
@@ -267,7 +275,7 @@ object Jars {
       tokens: Map[String, String],
       extraFiles: Seq[ExtraInJar] = Nil
   ): Unit = {
-    val outputStream = () => new UnhashedJarOutputStream(Files.newOutputStream(targetJar.path), None, compressed = true)
+    val outputStream = () => new UnhashedJarOutputStream(targetJar, None, compressed = true)
     mergeJarGivenTokens(sourceJars, outputStream, tokens, extraFiles)
   }
 
@@ -306,6 +314,8 @@ object Jars {
                   } else if (
                     // manifest and hash are (re)generated automatically by the CHJOS so we exclude them here
                     name != JarFile.MANIFEST_NAME && name != Hashing.optimusHashPath && name != Hashing.optimusPerEntryHashPath &&
+                    // incremental marker written separately
+                    name != JarUtils.optimusIncrementalPath &&
                     // if we've specified any extra files to write, then they'll overwrite the versions in the source jars
                     !extraFiles.exists(extraFile => extraFile.inJarPath.pathString == name)
                   ) {
@@ -350,17 +360,23 @@ object Jars {
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
       manifest: Option[jar.Manifest],
+      incremental: Boolean,
       extraFiles: Seq[ExtraInJar] = Nil
   ): Unit = {
-    val additionalMetadataEntries = Set(Hashing.optimusPerEntryHashPath, Hashing.optimusHashPath, JarFile.MANIFEST_NAME)
+    val additionalMetadataEntries =
+      Set(
+        Hashing.optimusPerEntryHashPath,
+        Hashing.optimusHashPath,
+        JarFile.MANIFEST_NAME,
+        JarUtils.optimusIncrementalPath
+      )
 
-    def tempJarOutputStream(path: Path, manifest: Option[jar.Manifest])(fn: EnhancedJarOutputStream => Unit): Unit = {
-      val outputStream = Files.newOutputStream(path)
-      try {
-        val output = new UnhashedJarOutputStream(outputStream, manifest, true)
-        try { fn(output) }
-        finally { output.close() }
-      } finally { outputStream.close() }
+    def tempJarOutputStream(file: JarAsset, manifest: Option[jar.Manifest])(
+        fn: EnhancedJarOutputStream => Unit
+    ): Unit = {
+      val output = new UnhashedJarOutputStream(file, manifest, true)
+      try { fn(output) }
+      finally { output.close() }
     }
 
     def getUnchangedEntries(
@@ -515,7 +531,7 @@ object Jars {
     val allExtraEntries = extraFiles ++ metadataContents ++ serviceContents
     checkForDuplicates(rehashedEntries, allExtraEntries)
 
-    tempJarOutputStream(targetJar.path, manifest) { tempOutput =>
+    tempJarOutputStream(targetJar, manifest) { tempOutput =>
       rehashedEntries.flatMap(_.filesToHashes.map(_._1.pathString)).foreach(tempOutput.writeParentDirectory)
       val extraFilesHashes = allExtraEntries.map { entry => entry.inJarPath -> entry.write(tempOutput) }
 
@@ -527,6 +543,7 @@ object Jars {
 
       tempOutput.writeFile(entryHashContent, RelativePath(Hashing.optimusPerEntryHashPath))
       tempOutput.writeFile(entryHashesHash, RelativePath(Hashing.optimusHashPath))
+      Jars.stampJarWithIncrementalFlag(tempOutput, incremental)
     }
 
     val tempCentralDir = TruncatingIndexBasedZipFsOps.readCentralDir(targetJar.path.toFile)
@@ -568,14 +585,36 @@ object Jars {
     s"[${contents.map(c => c.trim().stripPrefix("[").stripSuffix("]")).mkString(",\n")}]"
   }
 
-  def stampJarWithConsistentHash(jarAsset: JarAsset, compress: Boolean, trace: Option[TaskTrace]): Unit = {
+  def stampJarWithConsistentHash(
+      jarAsset: JarAsset,
+      compress: Boolean,
+      trace: Option[TaskTrace],
+      incremental: Boolean = false
+  ): Unit = {
     trace.foreach(_.addToStat(ObtStats.StampedJars, 1))
     val manifest = readManifestJar(jarAsset).filterNot(_.getMainAttributes.isEmpty)
     // This has to be replaced with a method, that does not copy all entries, but rather modifies current jar
     AssetUtils.atomicallyWrite(jarAsset, replaceIfExists = true) { temp =>
-      val writtenBytes = mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), compress, manifest)
+      val writtenBytes =
+        mergeAndHashJarContentGivenManifest(Seq(jarAsset), JarAsset(temp), compress, incremental, manifest)
       trace.foreach(_.addToStat(ObtStats.WrittenClassJars, writtenBytes))
     }
+  }
+
+  def stampJarWithIncrementalFlag(jarAsset: JarAsset, incremental: Boolean): Unit = {
+    if (incremental) Using.resource(JarUtils.jarFileSystem(jarAsset)) { j =>
+      val incrPath = RelativePath(j.getPath(JarUtils.optimusIncrementalPath))
+      incrPath.parentOption.foreach(p => Files.createDirectories(p.path))
+      // Note, we don't need to worry about deleting the marker file if incremental == false, since for a
+      // non-incremental jar there will never be a previous jar containing an incremental file
+      if (!Files.exists(incrPath.path)) Files.createFile(incrPath.path)
+    }
+    Hashing.writeFileAttribute(jarAsset, JarUtils.optimusIncrementalAttribute, incremental.toString)
+  }
+
+  def stampJarWithIncrementalFlag(os: EnhancedJarOutputStream, incremental: Boolean): Unit = {
+    if (incremental) os.copyInFile(Array.empty[Byte], RelativePath(JarUtils.optimusIncrementalPath))
+    Hashing.writeFileAttribute(os.file, JarUtils.optimusIncrementalAttribute, incremental.toString)
   }
 
   /** Creates a new [[ZipEntry]] with the given name and a modified date of [[FIXED_TIME]], for RTness. */
@@ -599,13 +638,6 @@ object Jars {
       jar: JarAsset,
       messages: Seq[CompilationMessage],
       hasErrors: Boolean,
-      contentRoot: Directory
-  ): Seq[CompilationMessage] = createJar(jar, messages, hasErrors, Some(contentRoot))
-
-  def createJar(
-      jar: JarAsset,
-      messages: Seq[CompilationMessage],
-      hasErrors: Boolean,
       contentRoot: Option[Directory]
   ): Seq[CompilationMessage] = {
     import optimus.buildtool.artifacts.JsonImplicits._
@@ -619,7 +651,7 @@ object Jars {
       contentRoot: Option[Directory] = None
   )(f: ConsistentlyHashedJarOutputStream => Unit = _ => ()): Unit = {
     // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
-    val tempJarStream = new ConsistentlyHashedJarOutputStream(Files.newOutputStream(jar.path), None, compressed = true)
+    val tempJarStream = new ConsistentlyHashedJarOutputStream(jar, None, compressed = true)
     try {
       AssetUtils.withTempJson(metadata) {
         tempJarStream.writeFile(_, CachedMetadata.MetadataFile)

@@ -58,6 +58,16 @@ final case class PythonDefinition(
     path: String,
     thinPyapp: String,
     variant: Option[PythonDependencies.Variant]) {
+  /* extracts major and minor python version
+  "3.10.10" -> "3.10"
+  "3.10.10-1 -> "3.10"
+   */
+  def majorMinorVersion: String =
+    version
+      .split("\\.")
+      .take(2)
+      .mkString(".")
+
   def hash: String = Hashing.hashStrings(Seq(version, path, thinPyapp) ++ variant.map(_.name))
   private def LinuxPossibleBinPaths: Seq[String] = Seq("/exec/bin").map(path + _)
   private def WindowsPossibleBinPaths: Seq[String] = Seq("/exec", "/exec/bin").map(path + _)
@@ -70,6 +80,7 @@ final case class PythonDefinition(
        | Python not found, was searching in
        | ${if (OsUtils.isWindows) WindowsPossibleBinPaths else LinuxPossibleBinPaths}
        |""".stripMargin
+
 }
 
 sealed trait PythonDependency {

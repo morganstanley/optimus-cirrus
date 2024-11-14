@@ -11,10 +11,10 @@
  */
 package optimus.buildtool.utils
 
-import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.util.jar
 import com.google.common.hash.Hasher
+import optimus.buildtool.files.JarAsset
 
 import scala.collection.compat._
 import scala.collection.mutable
@@ -28,10 +28,11 @@ class DuplicateEntriesException(val files: Seq[String])
  */
 //noinspection UnstableApiUsage
 final class ConsistentlyHashedJarOutputStream(
-    outputStream: OutputStream,
+    file: JarAsset,
     manifest: Option[jar.Manifest],
-    compressed: Boolean
-) extends BaseConsistentlyHashedJarOutputStream(outputStream, manifest, compressed) {
+    compressed: Boolean,
+    incremental: Boolean = false
+) extends BaseConsistentlyHashedJarOutputStream(file, manifest, compressed) {
   override protected def putNextEntry(entryName: String): Unit = {
     commitPreviousHash()
     isDuplicate = filesToHashes.contains(entryName)
@@ -80,12 +81,13 @@ final class ConsistentlyHashedJarOutputStream(
       val hash = Hashing.consistentlyHashFileHashes(sortedFileHashes)
       putNextEntry(Hashing.optimusHashPath)
       jarOutputStream.write(hash.getBytes(StandardCharsets.UTF_8))
+      Jars.stampJarWithIncrementalFlag(this, incremental)
     } finally super.close()
   }
 }
 
 class BaseConsistentlyHashedJarOutputStream(
-    outputStream: OutputStream,
+    file: JarAsset,
     manifest: Option[jar.Manifest],
     compressed: Boolean,
     // declare these here as fields so that they're available to `EnhancedJarOutputStream` when it adds the manifest
@@ -93,4 +95,4 @@ class BaseConsistentlyHashedJarOutputStream(
     protected val duplicateFilesAndHashes: mutable.Buffer[(String, String)] = mutable.Buffer.empty,
     protected var isDuplicate: Boolean = false,
     protected var fileHasherAndName: Option[(String, Hasher)] = None
-) extends EnhancedJarOutputStream(outputStream, manifest, compressed)
+) extends EnhancedJarOutputStream(file, manifest, compressed)

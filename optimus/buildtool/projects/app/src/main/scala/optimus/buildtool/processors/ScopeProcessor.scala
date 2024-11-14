@@ -37,7 +37,6 @@ import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import java.nio.file.Files
 import scala.collection.immutable.Seq
 
 @entity trait ScopeProcessor {
@@ -98,7 +97,7 @@ import scala.collection.immutable.Seq
   ): Option[ProcessorArtifact] = ObtTrace.traceTask(scopeId, ProcessScope) {
     val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
       // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
-      val tempJar = new ConsistentlyHashedJarOutputStream(Files.newOutputStream(tempOut), None, compressed = true)
+      val tempJar = new ConsistentlyHashedJarOutputStream(JarAsset(tempOut), None, compressed = true)
       val errorOrContent = generateContent(inputs, pathingArtifact, dependencyArtifacts)
       AsyncUtils.asyncTry {
         val msgs = errorOrContent match {

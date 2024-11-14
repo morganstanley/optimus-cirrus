@@ -72,7 +72,11 @@ class ObtSignatureConsumer(
       // are the leaf nodes that call this code
       val signatures = {
         // we incrementally rewrite these and it's much cheaper if they aren't compressed
-        JarUtils.stampJarWithConsistentHash(signatureJar.tempPath, compress = false, Some(activeTask.trace))
+        JarUtils.stampJarWithConsistentHash(
+          signatureJar.tempPath,
+          compress = false,
+          Some(activeTask.trace),
+          incremental)
         signatureJar.moveTempToFinal()
         SignatureArtifact.unwatched(
           InternalArtifactId(scopeId, AT.JavaAndScalaSignatures, None),
@@ -82,6 +86,7 @@ class ObtSignatureConsumer(
         )
       }
       val signatureAnalysis = if (inputs.saveAnalysis) {
+        JarUtils.stampJarWithIncrementalFlag(signatureAnalysisJar.tempPath, incremental)
         // don't stamp with content hash, since we don't ever use analysis artifacts as part of a fingerprint
         signatureAnalysisJar.moveTempToFinal()
         Some(

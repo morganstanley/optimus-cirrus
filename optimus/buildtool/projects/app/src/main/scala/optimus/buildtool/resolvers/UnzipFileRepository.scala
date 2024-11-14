@@ -116,7 +116,7 @@ private[resolvers] final case class UnzipFileRepository(
     val isMarker = isZip || UnzipMavenRepoExts.exists(ext => rawUrl.toString.endsWith(s".$ext"))
     val url = if (isMarker) new URI(rawUrl.toString + ".marker").toURL() else rawUrl
     val foundArtifact = Artifact(url.toString).withAuthentication(authentication)
-    // The order of checking is 1. local disk, 2. SK, 3. maven
+    // The order of checking is 1. local disk, 2. remote cache, 3. maven
     downloadUnzip(url, isMarker, foundArtifact)
   }
 

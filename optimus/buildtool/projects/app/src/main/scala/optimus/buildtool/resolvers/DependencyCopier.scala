@@ -11,10 +11,10 @@
  */
 package optimus.buildtool.resolvers
 
-import java.nio.file.Files
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
+import optimus.buildtool.cache.CacheMode
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -29,12 +29,12 @@ import optimus.buildtool.resolvers.MavenUtils.maxDownloadSeconds
 import optimus.buildtool.resolvers.MavenUtils.maxRetry
 import optimus.buildtool.resolvers.MavenUtils.retryIntervalSeconds
 import optimus.buildtool.trace.CheckRemoteUrl
-import optimus.buildtool.trace.DownloadRemoteUrl
 import optimus.buildtool.trace.DepCopy
 import optimus.buildtool.trace.DepCopyFromRemote
+import optimus.buildtool.trace.DownloadRemoteUrl
 import optimus.buildtool.trace.ObtTrace
-import optimus.buildtool.utils.Utils.atomicallyWriteIfMissing
 import optimus.buildtool.utils.PathUtils.isDisted
+import optimus.buildtool.utils.Utils.atomicallyWriteIfMissing
 import optimus.buildtool.utils.Utils.localize
 import optimus.platform._
 import optimus.stratosphere.artifactory.Credential
@@ -42,6 +42,7 @@ import optimus.stratosphere.artifactory.Credential
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.net.SocketTimeoutException
+import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
@@ -81,7 +82,7 @@ import java.util.concurrent.TimeUnit
   }
 
   @node def atomicallyDepCopyFileIfMissing(depFile: FileAsset): FileAsset = depFile match {
-    case http: BaseHttpAsset => atomicallyCopyOverHttp(http, retryIntervalSeconds)
+    case http: BaseHttpAsset => atomicallyCopyOverHttp(http, retryIntervalSeconds, assetStore.cacheMode)
     case d                   => atomicallyCopyOverAfs(d)
   }
 
@@ -171,8 +172,10 @@ import java.util.concurrent.TimeUnit
   @node def atomicallyCopyOverHttp(
       httpAsset: BaseHttpAsset,
       retryIntervalSeconds: Int,
+      cacheMode: CacheMode,
       isMarker: Boolean = false,
-      openedHttp: Option[HttpProbingResponse] = None): httpAsset.LocalAsset = {
+      openedHttp: Option[HttpProbingResponse] = None,
+  ): httpAsset.LocalAsset = {
     // even if depCopy is disabled we still need to copy HTTP Jars locally, so use tempDir instead
     val localFile = httpLocalAsset(httpAsset)
 
@@ -181,8 +184,8 @@ import java.util.concurrent.TimeUnit
         if (assetStore.get(httpAsset.url, FileAsset(tmp)).isDefined) {
           val downloadedFileChecksum = getSha256(tmp)
           log.debug(
-            s"Downloaded http file from silverking to: $tmp ${getLocalChecksumStr(tmp, downloadedFileChecksum)}")
-          false // false because we fetched from SK
+            s"Downloaded http file from remote cache to: $tmp ${getLocalChecksumStr(tmp, downloadedFileChecksum)}")
+          false // false because we fetched from remote cache
         } else if (isMarker) {
           try { // put empty marker url file in local disk
             Files.createDirectories(tmp.getParent)
@@ -203,13 +206,13 @@ import java.util.concurrent.TimeUnit
       }
     }
 
-    // if we fetched from maven then the artifact wasn't in SK (modulo a small race, but re-putting is safe)
+    // if we fetched from maven then the artifact wasn't in remote cache (modulo a small race, but re-putting is safe)
     // so we should put it. Note that we do this using the final localFile name, not the tmp file, because the put
     // is async and the tmp file is often removed by the point where the put actually reads the file.
-    if (fetchedFromMaven.contains(true) && assetStore != NoOpRemoteAssetStore) {
+    if (fetchedFromMaven.contains(true) && assetStore != NoOpRemoteAssetStore && cacheMode.canWrite) {
       assetStore.put(httpAsset.url, localFile)
       log.debug(
-        s"Uploaded http file to silverking: ${httpAsset.url}, ${getLocalChecksumStr(localFile.path, getSha256(localFile.path))}")
+        s"Uploaded http file to remote cache: ${httpAsset.url}, ${getLocalChecksumStr(localFile.path, getSha256(localFile.path))}")
     }
 
     localFile

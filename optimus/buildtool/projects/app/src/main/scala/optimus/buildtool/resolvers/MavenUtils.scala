@@ -69,17 +69,17 @@ import scala.util.control.NonFatal
     val urlAsset = BaseHttpAsset.httpAsset(fileUrl)
 
     if (isMarker || checkLocalDisk(url, depCopier))
-      f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker))
-    else if (checkSK(url, remoteAssetStore)) {
+      f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, remoteAssetStore.cacheMode, isMarker))
+    else if (checkRemoteStore(url, remoteAssetStore)) {
       val depCopiedLocation = depCopier.httpLocalAsset(urlAsset)
       remoteAssetStore.get(url, depCopiedLocation) match {
         case Some(file) =>
           log.debug(
-            s"Downloaded http file from silverking to: ${file.path} ${getLocalChecksumStr(file.path, getSha256(file.path))}")
+            s"Downloaded http file from remote cache to: ${file.path} ${getLocalChecksumStr(file.path, getSha256(file.path))}")
           f(file)
         case None =>
-          log.debug(s"Failed load url from SK, try download it now: $url")
-          f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker))
+          log.debug(s"Failed load url from remote cache, try download it now: $url")
+          f(depCopier.atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, remoteAssetStore.cacheMode, isMarker))
       }
     } else { // check url, only download it when valid
       val (durationInNanos, (downloadResult, urlCode, isSuccess)) = AdvancedUtils.timed {
@@ -90,7 +90,12 @@ import scala.util.control.NonFatal
               (
                 f(
                   depCopier
-                    .atomicallyCopyOverHttp(urlAsset, retryIntervalSeconds, isMarker, Some(probingHttpResponse))),
+                    .atomicallyCopyOverHttp(
+                      urlAsset,
+                      retryIntervalSeconds,
+                      remoteAssetStore.cacheMode,
+                      isMarker,
+                      Some(probingHttpResponse))),
                 probingHttpResponse.headerInfo.code,
                 true)
             } getOrRecover { case e @ RTException =>
@@ -108,7 +113,7 @@ import scala.util.control.NonFatal
     }
   }
 
-  @node def checkSK(url: URL, remoteAssetStore: RemoteAssetStore): Boolean = remoteAssetStore.check(url)
+  @node def checkRemoteStore(url: URL, remoteAssetStore: RemoteAssetStore): Boolean = remoteAssetStore.check(url)
 
   @node def checkLocalDisk(url: URL, depCopier: DependencyCopier): Boolean = {
     try { Files.exists(depCopier.httpLocalAsset(BaseHttpAsset.httpAsset(url)).path) }
@@ -162,8 +167,8 @@ import scala.util.control.NonFatal
       deps: Seq[DependencyDefinition],
       afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
   ): MappedDependencyDefinitions = {
-    import scala.collection.immutable.Seq
     import scala.collection.compat._
+    import scala.collection.immutable.Seq
 
     if (deps.nonEmpty && afsToMavenMap.nonEmpty) {
       val appliedMap: Map[DependencyDefinition, Seq[DependencyDefinition]] = deps

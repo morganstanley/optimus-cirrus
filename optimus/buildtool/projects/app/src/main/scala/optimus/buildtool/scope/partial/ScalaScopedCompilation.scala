@@ -50,9 +50,8 @@ import scala.collection.immutable.Seq
         config.usePipelining
       )
     }
-    val incremental = bestPreviousAnalysis.isDefined
     val signatureOutPath =
-      if (config.usePipelining) Some(pathBuilder.signatureOutPath(id, fingerprint.hash, incremental))
+      if (config.usePipelining) Some(pathBuilder.signatureOutPath(id, fingerprint.hash))
       else None
 
     /**
@@ -63,7 +62,7 @@ import scala.collection.immutable.Seq
       sourceFiles = compilationSources,
       fingerprint = fingerprint,
       bestPreviousAnalysis = Hide(bestPreviousAnalysis),
-      outPath = pathBuilder.scalaOutPath(id, fingerprint.hash, incremental),
+      outPath = pathBuilder.scalaOutPath(id, fingerprint.hash),
       signatureOutPath = signatureOutPath,
       scalacConfig = config.scalacConfig,
       javacConfig = config.javacConfig,

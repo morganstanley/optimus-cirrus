@@ -12,6 +12,7 @@
 package optimus.stratosphere.config
 
 import com.typesafe.config.Config
+import optimus.stratosphere.common.PluginBundle
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
 import optimus.stratosphere.utils.RemoteUrl
@@ -149,10 +150,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def ultimate: Boolean = self.select("intellij.ultimate")
     def version: String = self.select("intellij.version")
 
-    protected def disabledPlugins: Seq[Map[String, String]] = self.select("intellij.disabledPlugins")
-    def disabledPluginsNames: Seq[String] = disabledPlugins.map(_.apply("name"))
-    def disabledPluginsDirs: Seq[String] = disabledPlugins.map(_.apply("path"))
-
     object backup {
       def maxBackupsCount: Int = self.select("intellij.backups.max-backups-count")
       def dirsToSkip: Seq[String] = self.select("intellij.backups.dirs-to-skip")
@@ -223,6 +220,20 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     }
 
     object plugins {
+      object disabled {
+        protected def disabledPlugins: Seq[Map[String, String]] = self.select("intellij.plugins.disabled")
+        def names: Seq[String] = disabledPlugins.map(_.apply("name"))
+        def dirs: Seq[String] = disabledPlugins.map(_.apply("path"))
+      }
+
+      object blocked {
+        protected def blockedPlugins: Seq[Map[String, String]] = self.select("intellij.plugins.blocked")
+        def names: Seq[String] = blockedPlugins.map(_.apply("name"))
+        def dirs: Seq[String] = blockedPlugins.map(_.apply("path"))
+      }
+
+      def bundles: Seq[PluginBundle] = self.select[Seq[Config]]("intellij.plugins.bundles").map(PluginBundle(_))
+
       def artifactoryDir: String = self.select("intellij.plugins.artifactory-dir")
 
       def community: Seq[PluginInfo] =

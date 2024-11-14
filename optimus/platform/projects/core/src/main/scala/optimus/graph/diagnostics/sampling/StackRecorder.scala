@@ -130,7 +130,9 @@ class NodeStackSampler extends StackSampler with Log {
                   adaptedNodes.accumulate(rt.pluginTracker.adaptedNodes, true)
                 }
                 val inFlightSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomUncompletedNodes()
-                val unFiredSample: Map[PluginType, (NodeTask, Int)] = adaptedNodes.randomNodes(!_.pluginFired())
+                // (most) completed nodes will have been removed at previous step, so check rarer unfired condition first.
+                val unFiredSample: Map[PluginType, (NodeTask, Int)] =
+                  adaptedNodes.randomNodes(n => !n.pluginFired() && !n.isDone)
                 val interval = tSample - prevSample
                 val weightMillis = (tSample - prevSample)
                 val weightNanos = weightMillis * SamplingProfiler.NANOSPERMILLI

@@ -79,7 +79,7 @@ import scala.collection.immutable.Seq
       scope: CompilationScope
   ): PathingArtifact = {
     val jarPath =
-      scope.pathBuilder.outputPathFor(scope.id, f.hash, AT.Pathing, None, incremental = false)
+      scope.pathBuilder.outputPathFor(scope.id, f.hash, AT.Pathing, None)
     AssetUtils.atomicallyWriteIfMissing(jarPath) { tmpName =>
       ObtTrace.traceTask(scope.id, Pathing) { Jars.writeManifestJar(JarAsset(tmpName), manifest) }
     }

@@ -10,7 +10,6 @@
  * limitations under the License.
  */
 package optimus.buildtool.artifacts
-
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.NpmConfiguration.NpmBuildMode
 import optimus.buildtool.dependencies.PythonDefinition

@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.utils
 
+import optimus.buildtool.files.JarAsset
+
 import java.io.BufferedOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -21,16 +23,17 @@ import java.util.jar
 import java.util.jar.JarFile
 import java.util.jar.JarOutputStream
 import java.util.zip.Deflater
-
 import optimus.buildtool.files.RelativePath
 import org.apache.commons.io.input.CharSequenceInputStream
 
+import java.io.ByteArrayInputStream
 import scala.collection.mutable
 
-abstract class EnhancedJarOutputStream(outputStream: OutputStream, manifest: Option[jar.Manifest], compressed: Boolean)
+abstract class EnhancedJarOutputStream(val file: JarAsset, manifest: Option[jar.Manifest], compressed: Boolean)
     extends OutputStream {
 
-  protected val jarOutputStream = new JarOutputStream(new BufferedOutputStream(outputStream))
+  protected val fileOutputStream: OutputStream = Files.newOutputStream(file.path)
+  protected val jarOutputStream = new JarOutputStream(new BufferedOutputStream(fileOutputStream))
   // We avoid compressing certain jars that we know we'll be rereading and rewriting a lot to avoid the overhead of
   // deflation and inflation. Note that even when compression is disabled we still use the Deflater because it computes
   // the mandatory CRC32 checksum for us (otherwise ZipOutputStream expects us to do that and pass it in ourselves).
@@ -73,6 +76,9 @@ abstract class EnhancedJarOutputStream(outputStream: OutputStream, manifest: Opt
     finally inStream.close()
   }
 
+  def copyInFile(content: Array[Byte], targetName: RelativePath): Unit =
+    copyInFile(new ByteArrayInputStream(content), targetName)
+
   def copyInFile(inputStream: InputStream, targetName: RelativePath): Unit = {
     putNextEntry(targetName.pathString)
     val buffer = new Array[Byte](4096)
@@ -109,7 +115,7 @@ abstract class EnhancedJarOutputStream(outputStream: OutputStream, manifest: Opt
 }
 
 class UnhashedJarOutputStream(
-    outputStream: OutputStream,
+    file: JarAsset,
     manifest: Option[jar.Manifest],
     compressed: Boolean
-) extends EnhancedJarOutputStream(outputStream, manifest, compressed)
+) extends EnhancedJarOutputStream(file, manifest, compressed)

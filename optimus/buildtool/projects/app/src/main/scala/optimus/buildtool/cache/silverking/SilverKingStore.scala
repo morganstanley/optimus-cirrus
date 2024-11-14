@@ -19,7 +19,8 @@ import optimus.buildtool.artifacts.CompilationMessage.Warning
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.IncrementalArtifact
 import optimus.buildtool.cache.ArtifactStoreBase
-import optimus.buildtool.cache.ComparableArtifactStore
+import optimus.buildtool.cache.CacheMode
+import optimus.buildtool.cache.MultiWriteableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.cache.remote.CacheOperationRecorder
@@ -107,7 +108,7 @@ object SilverKingStore extends Log {
       pathBuilder: CompilePathBuilder,
       config: SilverKingConfig,
       artifactVersion: String,
-      writeArtifacts: Boolean,
+      cacheMode: CacheMode,
       offlinePuts: Boolean = true,
       cacheOperationRecorder: CacheOperationRecorder = new CacheOperationRecorder
   ): SilverKingStore = {
@@ -129,7 +130,7 @@ object SilverKingStore extends Log {
       pathBuilder,
       clusterType,
       artifactVersion,
-      writeArtifacts = writeArtifacts,
+      cacheMode = cacheMode,
       offlinePuts = offlinePuts,
       cacheOperationRecorder = cacheOperationRecorder,
       connector,
@@ -143,7 +144,7 @@ class SilverKingStore private[cache] (
     pathBuilder: CompilePathBuilder,
     clusterType: ClusterType = ClusterType.QA,
     artifactVersion: String,
-    writeArtifacts: Boolean,
+    val cacheMode: CacheMode,
     offlinePuts: Boolean,
     cacheOperationRecorder: CacheOperationRecorder,
     connector: Connector,
@@ -151,7 +152,7 @@ class SilverKingStore private[cache] (
     failureSwitch: MaxFailuresReadWriteSwitch
 ) extends ArtifactStoreBase
     with RemoteAssetStore
-    with ComparableArtifactStore {
+    with MultiWriteableArtifactStore {
   import OperationType._
   import SilverKingStore.Connection._
   import SilverKingStore._
@@ -229,8 +230,7 @@ class SilverKingStore private[cache] (
       discriminator: Option[String]
   ): Option[A#A] = {
     val key = ArtifactKey(id, fingerprintHash, tpe, discriminator, artifactVersion)
-    // Safe to set incremental=false here, since we don't allow incremental artifacts in SK
-    val asset = pathBuilder.outputPathFor(key.id, key.fingerprintHash, key.tpe, key.discriminator, incremental = false)
+    val asset = pathBuilder.outputPathFor(key.id, key.fingerprintHash, key.tpe, key.discriminator)
     val storedAsset = _get(key, ArtifactCacheTraceType(tpe), asset)
     tpe.fromRemoteAsset(storedAsset, id, key.toString, stat)
   }
@@ -316,7 +316,7 @@ class SilverKingStore private[cache] (
   @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     artifact match {
-      case _ if !writeArtifacts =>
+      case _ if !cacheMode.canWrite =>
       // don't write artifacts if we're configured not to
       case cma: CompilerMessagesArtifact if cma.hasErrors =>
       // don't write failure artifacts, to protect against non-rt build failures

@@ -40,11 +40,6 @@ object MappingTrace {
     pathString.substring(hashIndex, pathString.indexOf('.', hashIndex))
   }
 
-  def incr(p: Path): Boolean = {
-    // safe to use `toString` here, since we're only parsing the filename portion of the path
-    p.getFileName.toString.contains(".INCR.")
-  }
-
   def artifactType(provenance: String): ArtifactType =
     ArtifactType.parse(provenance.substring(0, provenance.indexOf('/')))
 

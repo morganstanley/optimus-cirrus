@@ -208,6 +208,26 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   }
 
 }
+
+object FlameTreatment {
+  import optimus.breadcrumbs.crumbs.PropertyUnits._
+
+  def units(source: String): Units = {
+    if (source.startsWith("Adapted")) Count
+    else if (
+      source.startsWith("Alloc") ||
+      source.startsWith("Free") ||
+      source.startsWith("Live")
+    ) Bytes
+    else if (source.startsWith("CacheHit")) Count
+    else Nanoseconds
+  }
+
+  def sumOverTime(source: String): Boolean = !source.startsWith("Live")
+  def avgOverTime(source: String): Boolean = !sumOverTime(source)
+
+}
+
 object AsyncProfilerSampler extends Log {
 
   private val pyroUrl = PropertyUtils.get("optimus.sampling.pyro.url", "")

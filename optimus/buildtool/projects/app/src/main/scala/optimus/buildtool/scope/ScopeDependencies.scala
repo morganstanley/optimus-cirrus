@@ -127,7 +127,7 @@ import scala.collection.immutable.Seq
           val artifact = ResolutionArtifact.create(
             InternalArtifactId(id, tpe, None),
             resolved,
-            pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None, incremental = false).asJson,
+            pathBuilder.outputPathFor(id, fingerprintHash.hash, tpe, None).asJson,
             tpe.category)
           if (!artifact.messages.exists(_.isError)) artifact.storeJson()
           log.info(s"[$id] Completed $tpeStr")
