@@ -169,7 +169,7 @@ object InstallPathLocator {
     } else Seq(installDir)
   }
 
-  private val PathingJarSuffix = "-runtimeAppPathing.jar"
+  val PathingJarSuffix = "-runtimeAppPathing.jar"
   def libJars(
       installationType: InstallationType.Value,
       installDirs: Seq[Path],

@@ -79,9 +79,7 @@ import scala.collection.immutable.SortedMap
     // we don't actually care about the compiled artifacts created, so just put them in a
     // temporary location which we'll delete after the compile. they do need to be in the `scala` directory
     // though otherwise PathedArtifact validation will complain.
-    val tempOutputJar = NamingConventions
-      .tempFor(scope.pathBuilder.scalaOutPath(scope.id, fingerprintHash.hash, incremental = false))
-      .asJar
+    val tempOutputJar = NamingConventions.tempFor(scope.pathBuilder.scalaOutPath(scope.id, fingerprintHash.hash)).asJar
 
     val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
       scope.upstream.allCompileDependencies.apar

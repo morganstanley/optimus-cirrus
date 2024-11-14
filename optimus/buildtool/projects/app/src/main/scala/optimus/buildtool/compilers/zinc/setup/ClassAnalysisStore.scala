@@ -35,14 +35,12 @@ class ClassAnalysisStore(
     settings: ZincCompilerFactory,
     inputs: SyncCompiler.Inputs,
     jars: Jars,
-    incremental: Boolean,
     analysisMappingTrace: MappingTrace
 ) extends AnalysisStore {
   import ClassAnalysisStore._
 
-  private val tpeAndNameToLatestIncrAndHash = (inputs.inputArtifacts ++ inputs.pluginArtifacts.flatten).collect {
-    case InternalPathedArtifact(id, a) =>
-      (id.tpe, id.scopeId.properPath) -> (MappingTrace.incr(a.path), MappingTrace.hash(a.path))
+  private val tpeAndNameToLatestHash = (inputs.inputArtifacts ++ inputs.pluginArtifacts.flatten).collect {
+    case InternalPathedArtifact(id, a) => (id.tpe, id.scopeId.properPath) -> MappingTrace.hash(a.path)
   }.toMap // we can't use toSingleMap here, because it's possible we have duplicates
 
   private val analysisJar = jars.analysisJar.tempPath
@@ -51,11 +49,10 @@ class ClassAnalysisStore(
     new ZincReadMapper(
       scopeId = scopeId,
       fingerprintHash = inputs.fingerprint.hash,
-      incremental = incremental,
       traceType = traceType,
       outputJar = jars.outputJar,
       mappingTrace = analysisMappingTrace,
-      tpeAndNameToLatestIncrAndHash = tpeAndNameToLatestIncrAndHash,
+      tpeAndNameToLatestHash = tpeAndNameToLatestHash,
       workspaceRoot = settings.workspaceRoot,
       buildDir = settings.buildDir,
       depCopyRoot = settings.depCopyRoot,
@@ -67,7 +64,6 @@ class ClassAnalysisStore(
     new ZincWriteMapper(
       scopeId = scopeId,
       fingerprintHash = inputs.fingerprint.hash,
-      incremental = incremental,
       traceType = traceType,
       outputJar = jars.outputJar,
       workspaceRoot = settings.workspaceRoot,

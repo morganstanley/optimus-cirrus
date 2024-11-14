@@ -220,6 +220,7 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
   )
   val silverKing: String = NoneArg
 
+  // TODO (OPTIMUS-70130): delete once fully unused in obt.conf and CI jobs
   @args.Option(
     name = "--remoteStoreComparisonModeEnabled",
     required = false,
@@ -233,9 +234,7 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     usage = "DHT Location (defaults to DHT disabled)"
   )
   val dhtRemoteStore: String = NoneArg
-}
 
-private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { this: OptimusAppCmdLine =>
   @args.Option(
     name = "--remoteCacheMode",
     required = false,
@@ -275,20 +274,13 @@ private[buildtool] trait RemoteStoreWriteCmdLine extends RemoteStoreCmdLine { th
       "Threshold for cross-region read-through after write to current region (defaults to 100MB).  Artifacts larger than threshold value will be read through DHT from the remote DHTs."
   )
   val crossRegionDHTSizeThreshold: MemSize = MemSize.of(100, MemUnit.MB)
-
-  @args.Option(
-    name = "--silverKingDualWrite",
-    required = false,
-    usage = "SilverKing location for dual-write destination (defaults to SK dual write disabled)"
-  )
-  val silverKingDualWrite: String = NoneArg
 }
 
 private[buildtool] class OptimusBuildToolCmdLine extends OptimusBuildToolCmdLineT
 private[buildtool] trait OptimusBuildToolCmdLineT
     extends OptimusAppCmdLine
     with GitCmdLine
-    with RemoteStoreWriteCmdLine
+    with RemoteStoreCmdLine
     with WorkspaceCmdLine {
   import OptimusBuildToolCmdLineT.NoneArg
 

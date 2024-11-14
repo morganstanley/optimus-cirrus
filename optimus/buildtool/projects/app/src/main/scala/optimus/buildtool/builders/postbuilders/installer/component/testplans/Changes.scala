@@ -109,7 +109,13 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
   @node def directlyChangedScopes: Set[ScopeId] = changesAsScopes.getOrElse(Set.empty)
 
   @node private def taskDependenciesChanged(task: TestplanTask, includedRunconfs: Set[RunConf]): Boolean = {
-    val scope = includedRunconfs.find(_.runConfId.moduleScoped == task.moduleScoped).map(_.runConfId.scope)
+    val contractTestNames = Set("consumerContractTest", "providerContractTest")
+    val scope = includedRunconfs
+      .find(r => {
+        r.runConfId.moduleScoped == task.moduleScoped || task.testName == "pactContractTest" && contractTestNames
+          .contains(r.runConfId.name)
+      })
+      .map(_.runConfId.scope)
     scope.exists(scopeDependenciesChanged)
   }
 

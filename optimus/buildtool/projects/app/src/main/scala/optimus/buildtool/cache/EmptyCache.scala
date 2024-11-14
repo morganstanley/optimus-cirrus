@@ -20,7 +20,7 @@ import java.net.URL
 
 @entity object EmptyCache extends SimpleArtifactCache(EmptyStore)
 
-object EmptyStore extends SearchableArtifactStore with ComparableArtifactStore {
+object EmptyStore extends SearchableArtifactStore with MultiWriteableArtifactStore {
   @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A
   )(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A =
@@ -47,4 +47,5 @@ object EmptyStore extends SearchableArtifactStore with ComparableArtifactStore {
   @async override def check(url: URL): Boolean = false
   override def logStatus(): Seq[String] = Seq.empty
   override def incompleteWrites: Int = 0
+  override def cacheMode: CacheMode = CacheMode.ReadWrite
 }

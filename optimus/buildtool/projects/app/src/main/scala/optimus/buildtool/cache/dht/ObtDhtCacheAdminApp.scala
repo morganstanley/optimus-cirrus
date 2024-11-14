@@ -16,6 +16,7 @@ import msjava.zkapi.internal.ZkaData
 import optimus.buildtool.OptimusBuildTool
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.cache.CacheMode
 import optimus.buildtool.cache.dht.DHTStore._
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
@@ -153,8 +154,9 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
       CompilePathBuilder(Directory(Paths.get("."))),
       DHTStore.zkClusterType(zkPath),
       artifactVersion,
-      writeArtifacts = false,
-      DHTStore.ZkBuilder(zkPath))
+      cacheMode = CacheMode.ReadWrite, // admin needs to be able to read and delete
+      DHTStore.ZkBuilder(zkPath)
+    )
 
   @entersGraph override def run(): Unit = {
     import ObtDhtCacheAdminOperation._
@@ -178,7 +180,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
         pathBuilder,
         DHTStore.zkClusterType(zkPath),
         artifactVersion,
-        writeArtifacts = false,
+        cacheMode = CacheMode.ReadOnly,
         DHTStore.ZkBuilder(zkPath))
 
     val maybeResult = getArtifactKey match {

@@ -104,7 +104,6 @@ object NamingConventions {
   val TEMP = "TEMP"
   val LATEST = "LATEST"
   val EMPTYHASH = "NOHASH"
-  val INCR = "INCR"
   val IMMUTABLE = "ASSUMED_IMMUTABLE"
   val WORKSPACE = "WORKSPACE"
   val BUILD: Path = Paths.get("BUILD")
@@ -133,6 +132,13 @@ object NamingConventions {
   val runConfInventory = "inventory.txt"
   val runConfInventoryHeader = "# ObtScopeId / RunconfScopedName"
   val capturedPropertiesExtension = "properties"
+
+  val venvProperties = "venv.properties"
+  val venvPropertiesHeader = "# InteropEnabledScopeId / PythonScopeId"
+  val scalaPyProperty = "SCALAPY_PYTHON_PROGRAMNAME"
+  val scalaPyLibVersion = "SCALAPY_PYTHON_LIBRARY"
+  val pythonPath = "PYTHONPATH"
+  val pythonHome = "PYTHONHOME"
 
   val dockerMetadataProperties: Path = Paths.get("/etc/obt/version.properties")
 
@@ -164,9 +170,6 @@ object NamingConventions {
   val baseNamePattern: Regex = """(.*)(?:[.](\w+))""".r
   private def baseNameForScope(scopeId: ScopeId): String =
     s"${scopeId.module}${if (scopeId.isMain) "" else s".${scopeId.tpe}"}"
-
-  def isIncremental(file: FileAsset): Boolean = file.pathString.contains(s"$INCR.")
-  def incrString(incremental: Boolean): String = if (incremental) s"$INCR." else ""
 
   def tempFor(file: FileAsset): FileAsset = tempFor(UUID.randomUUID(), file)
   def tempFor(file: FileAsset, prefix: String): FileAsset = tempFor(UUID.randomUUID(), file, prefix = prefix)

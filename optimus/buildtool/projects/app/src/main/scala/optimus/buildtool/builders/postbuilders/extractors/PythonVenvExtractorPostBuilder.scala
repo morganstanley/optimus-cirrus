@@ -14,7 +14,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.PythonArtifact
 import optimus.buildtool.bsp.BuildServerProtocolService.PythonBspConfig
 import optimus.buildtool.builders.postbuilders.FilteredPostBuilder
-import optimus.buildtool.compilers.venv.PythonConsts
+import optimus.buildtool.compilers.venv.PythonConstants
 import optimus.buildtool.compilers.venv.ThinPyappWrapper
 import optimus.buildtool.compilers.venv.VenvProvider
 import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
@@ -69,13 +69,13 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: Pytho
           ThinPyappWrapper.runTpa(
             pythonArtifact.python,
             Seq(
-              PythonConsts.tpa.unpackCmd(
+              PythonConstants.tpa.unpackCmd(
                 tpaPath,
                 Some(pythonBspConfig.uvCache.path),
                 Some(Paths.get(venvExtractionDest.name)),
                 Some(venv))
             ),
-            venvExtractionDest.parent,
+            Some(venvExtractionDest.parent),
             pythonBspConfig.pipCredentialFile,
             pythonBspConfig.uvCredentialFile
           )

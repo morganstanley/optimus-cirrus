@@ -27,7 +27,13 @@ import scala.collection.mutable
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 
-sealed abstract class CacheMode(val read: Boolean, val write: Boolean, val forceWrite: Boolean = false)
+sealed abstract class CacheMode(
+    val read: Boolean,
+    private val write: Boolean,
+    private val forceWrite: Boolean = false
+) {
+  final def canWrite: Boolean = write || forceWrite
+}
 object CacheMode {
   case object ReadWrite extends CacheMode(read = true, write = true)
   case object ReadOnly extends CacheMode(read = true, write = false)
@@ -157,7 +163,7 @@ object SimpleArtifactCache {
 
 @entity class RemoteReadThroughTriggeringArtifactCache[+A <: ArtifactStore](
     override val store: A,
-    val readThroughStores: Set[_ <: ComparableArtifactStore],
+    val readThroughStores: Set[_ <: MultiWriteableArtifactStore],
     val artifactSizeThresholdBytes: Long,
     override val cacheMode: CacheMode = CacheMode.ReadWrite,
     override val ignoreErroneousArtifacts: Boolean = SimpleArtifactCache.IgnoreErroneousArtifacts

@@ -44,7 +44,7 @@ import scala.collection.immutable.Seq
     val hash: String = hashPrefix + (if (freezeHash.nonEmpty) "Z" else "") + (if (mischief) "M" else "")
     log.debug(s"[$id] Hashed fingerprint (${fingerprint.size}) for $tpe: $hash")
     if (fingerprint.nonEmpty) {
-      val path = pathBuilder.outputPathFor(id, hash, tpe, discriminator, incremental = false)
+      val path = pathBuilder.outputPathFor(id, hash, tpe, discriminator)
       AssetUtils.atomicallyWriteIfMissing(path) { tmp =>
         Utils.writeStringsToFile(tmp, fingerprint)
       }

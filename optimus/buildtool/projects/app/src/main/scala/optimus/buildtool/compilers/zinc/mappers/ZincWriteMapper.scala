@@ -40,7 +40,6 @@ private[zinc] object ZincSignatureWriteMapper extends PathTranslatingMapper with
 class ZincWriteMapper(
     val scopeId: ScopeId,
     fingerprintHash: String,
-    incremental: Boolean,
     val traceType: MessageTrace,
     val outputJar: PathPair,
     val workspaceRoot: Directory,
@@ -67,13 +66,13 @@ class ZincWriteMapper(
         validatePath(sanitizedPath)
         sanitizedPath
       // For current scope, strip out the uuid and specific working directory.
-      case Right(Dissection(_, `classType`, Some(uuid), `scopeName`, incr, hash, "jar", fileInJar)) =>
+      case Right(Dissection(_, `classType`, Some(uuid), `scopeName`, hash, "jar", fileInJar)) =>
         assert(uuid == this.uuid)
         assert(hash == fingerprintHash)
-        reconstructFile(BUILD_DIR, classType, None, scopeName, incr, hash, fileInJar).pathString
+        reconstructFile(BUILD_DIR, classType, None, scopeName, hash, fileInJar).pathString
       // For inputs used for this build, just substitute the stand-in BUILD directory.
-      case Right(Dissection(_, tpe, None, name, incr, hash, "jar", fileInJar)) =>
-        reconstructFile(BUILD_DIR, tpe, None, name, incr, hash, fileInJar).pathString
+      case Right(Dissection(_, tpe, None, name, hash, "jar", fileInJar)) =>
+        reconstructFile(BUILD_DIR, tpe, None, name, hash, fileInJar).pathString
       case x =>
         throw new RuntimeException(s"Unexpected file $x")
     }
@@ -121,12 +120,12 @@ class ZincWriteMapper(
 
   private def translateOptionPath(jar: JarAsset): FileAsset = {
     dissectFile(buildDir, jar) match {
-      case Right(Dissection(_, tpe, Some(uuid), `scopeName`, incr, hash, "jar", None)) =>
+      case Right(Dissection(_, tpe, Some(uuid), `scopeName`, hash, "jar", None)) =>
         assert(uuid == this.uuid)
         assert(hash == fingerprintHash)
-        reconstructFile(BUILD_DIR, tpe, None, scopeName, incr, hash, None)
-      case Right(Dissection(_, tpe, _, name, incr, hash, "jar", None)) =>
-        reconstructFile(BUILD_DIR, tpe, None, name, incr, hash, None)
+        reconstructFile(BUILD_DIR, tpe, None, scopeName, hash, None)
+      case Right(Dissection(_, tpe, _, name, hash, "jar", None)) =>
+        reconstructFile(BUILD_DIR, tpe, None, name, hash, None)
       case _ =>
         validatePath(jar.pathString)
         jar

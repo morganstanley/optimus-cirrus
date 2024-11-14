@@ -99,9 +99,7 @@ final case class AnalysisLocatorImpl(
         case None         => artifactHash
       }
       val discriminator = analysisTypeWithDiscriminator(analysisType)
-      val locatorFile = pathBuilder
-        .outputPathFor(id, localHash, ArtifactType.Locator, discriminator, incremental = false)
-        .asJson
+      val locatorFile = pathBuilder.outputPathFor(id, localHash, ArtifactType.Locator, discriminator).asJson
       val now = patch.MilliInstant.now
       val locator = LocatorArtifact.create(id, analysisType, locatorFile, commitHash, artifactHash, now)
       locator.storeJson()
@@ -111,7 +109,7 @@ final case class AnalysisLocatorImpl(
       log.debug(s"[$id] Locator written: $locator")
 
       // Save locator remotely (if it doesn't already exist) based on commit hash. In general we will only
-      // write to remote stores (eg. SilverKing) from CI jobs, which will always be on a clean commit
+      // write to remote stores (eg. DHT) from CI jobs, which will always be on a clean commit
       // without local changes (so a one-to-one mapping between commitHash and artifactHash).
       for {
         commit <- commitHash

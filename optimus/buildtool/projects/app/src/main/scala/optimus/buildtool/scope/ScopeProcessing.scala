@@ -59,7 +59,7 @@ import scala.collection.immutable.Seq
           val fingerprintHash = fingerprint.hash
           scope.cached(tpe, Some(cfg.name), fingerprintHash) {
             val outputJar =
-              scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name), incremental = false).asJar
+              scope.pathBuilder.outputPathFor(scope.id, fingerprintHash, tpe, Some(cfg.name)).asJar
             val tpeStr = if (cfg.name == tpe.name) tpe.name else s"${tpe.name} (${cfg.name})"
             log.info(s"[${scope.id}:$tpeStr] Starting processing task ${cfg.name}")
             val artifact = processor.processInputs(scope.id, inputs, pathingArtifact, dependencyArtifacts, outputJar)

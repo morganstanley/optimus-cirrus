@@ -246,7 +246,7 @@ object TraceEvent {
     val relevance: Relevance = One
   }
 
-  case object MongoPrep extends Event with ImpliesWallclockTiming {
+  final case class MongoPrep(info: Map[String, Int] = Map.empty) extends Event with ImpliesWallclockTiming {
     val name = "MONGO_PREP"
     val level: Level = Info
     val phase: Phase = Execution

@@ -17,7 +17,8 @@ import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.IncrementalArtifact
 import optimus.buildtool.artifacts.Severity.Warning
 import optimus.buildtool.cache.ArtifactStoreBase
-import optimus.buildtool.cache.ComparableArtifactStore
+import optimus.buildtool.cache.CacheMode
+import optimus.buildtool.cache.MultiWriteableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore.externalArtifactVersion
 import optimus.buildtool.cache.remote.ClusterType
@@ -152,11 +153,11 @@ class DHTStore(
     pathBuilder: CompilePathBuilder,
     clusterType: ClusterType = ClusterType.QA,
     artifactVersion: String,
-    writeArtifacts: Boolean,
+    val cacheMode: CacheMode,
     clientBuilder: DHTClientBuilder)
     extends ArtifactStoreBase
     with RemoteAssetStore
-    with ComparableArtifactStore
+    with MultiWriteableArtifactStore
     with Log {
   import DHTStore._
   override protected def cacheType: String = s"DHT $clusterType"
@@ -224,12 +225,16 @@ class DHTStore(
 
   // private admin method - not meant for general use
   @async private[dht] def _remove(key: StoredKey): Boolean = {
-    AdvancedUtils.timed {
-      lvClient.removeLarge(key.keyspace, key, key.toString)
-    } match {
-      case (timeNanos, result) =>
-        logRemoved(key.id, key.traceType, s"$key (removed=$result) in ${durationStringNanos(timeNanos)}")
-        result
+    if (cacheMode.canWrite) {
+      AdvancedUtils.timed {
+        lvClient.removeLarge(key.keyspace, key, key.toString)
+      } match {
+        case (timeNanos, result) =>
+          logRemoved(key.id, key.traceType, s"$key (removed=$result) in ${durationStringNanos(timeNanos)}")
+          result
+      }
+    } else {
+      throw new RuntimeException(s"Cannot remove DHT keys for current cache mode: $cacheMode")
     }
   }
 
@@ -267,7 +272,7 @@ class DHTStore(
   @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A)(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A = {
     artifact match {
-      case _ if !writeArtifacts                           => // don't write if we're not configured to
+      case _ if !cacheMode.canWrite                       => // don't write if we're not configured to
       case cma: CompilerMessagesArtifact if cma.hasErrors => // don't write failure artifacts, may be non-rt failure
       case ia: IncrementalArtifact if ia.incremental =>
         throw new IllegalArgumentException(
@@ -287,7 +292,7 @@ class DHTStore(
       tpe: A,
       discriminator: Option[String]): Option[A#A] = {
     val key = ArtifactKey(id, fingerprintHash, tpe, discriminator, artifactVersion)
-    val storedAsset = _get(key, pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator, incremental = false))
+    val storedAsset = _get(key, pathBuilder.outputPathFor(id, fingerprintHash, tpe, discriminator))
     tpe.fromRemoteAsset(storedAsset, id, key.toString, stat)
   }
 

@@ -33,6 +33,7 @@ import scala.util.Try
 abstract class KnownProperties extends Enumeration {
   import Properties.Elem
   import Properties.Key
+  import KnownProperties._
 
   // copied out of Enumeration.scala
   private def nextNameOrNull = if (nextName != null && nextName.hasNext) nextName.next() else null
@@ -43,7 +44,16 @@ abstract class KnownProperties extends Enumeration {
     def parse(s: String): A = s.parseJson.convertTo[A]
     def parse(js: JsValue): A = js.convertTo[A]
     def toJson(a: A): JsValue = a.toJson
+
+    private var _meta: MetaData = NullMeta
+    def meta: MetaData = _meta
+
+    private[crumbs] def withMeta(md: MetaData): this.type = {
+      _meta = md
+      this
+    }
   }
+
   // This nonsense is necessary to ensure that .elem will take only the correct type, including
   // basic types, when called from Java.
   class EnumeratedKeyRef[A <: AnyRef: JsonReader: JsonWriter](nme: String) extends EnumeratedKey[A](nme) {
@@ -90,7 +100,18 @@ abstract class KnownProperties extends Enumeration {
   protected[this] def propF = new EnumeratedKeyFloat
   protected[this] def propF(nme: String) = new EnumeratedKeyFloat(nme)
 
-  private[crumbs] def set = values.asInstanceOf[Set[KnownProperties#EnumeratedKey[_]]]
+  private[crumbs] def set = values.asInstanceOf[collection.Set[KnownProperties#EnumeratedKey[_]]]
+}
+
+object PropertyUnits {
+  sealed trait Units
+  case object Millis extends Units
+  case object Nanoseconds extends Units
+  case object MegaBytes extends Units
+  case object Count extends Units
+  case object BareNumber extends Units
+  case object Bytes extends Units
+
 }
 
 object KnownProperties {
@@ -101,10 +122,34 @@ object KnownProperties {
     }
   }
   implicit val EnumeratedKeyOrdering: Ordering[KnownProperties#EnumeratedKey[_]] = Ordering.by(_.name)
+
+  import PropertyUnits._
+
+  final case class MetaData(flags: Int, units: Units) {
+    def sumOverTime: Boolean = (flags & AGG_OVER_TIME) != 0
+    def sumOverEngines: Boolean = (flags & AGG_OVER_ENGINES) != 0
+    def avgOverTime: Boolean = !sumOverTime
+    def avgOverEngines: Boolean = !sumOverEngines
+  }
+
+  val AGG_OVER_TIME = 1
+  val AGG_OVER_ENGINES = 2
+  val AGG_ALL = AGG_OVER_TIME | AGG_OVER_ENGINES
+
+  val NullMeta = MetaData(0, BareNumber)
+  val TimeSpent = MetaData(AGG_ALL, Millis)
+  val AllocSamples = MetaData(AGG_ALL, MegaBytes)
+  val MemoryInUse = MetaData(AGG_OVER_ENGINES, MegaBytes)
+  val ItemCount = MetaData(AGG_OVER_ENGINES, Count)
+  val EventCount = MetaData(AGG_ALL, Count)
+  val GaugeLevel = MetaData(0, BareNumber)
+
 }
 
 //noinspection TypeAnnotation
 object Properties extends KnownProperties {
+
+  import KnownProperties._
 
   implicit class MapStringToJsonOps(m: Map[String, JsValue]) {
     def getAs[T: JsonReader](k: String): Option[T] = m.get(k).flatMap(x => Try(x.convertTo[T]).toOption)
@@ -620,23 +665,23 @@ object Properties extends KnownProperties {
   val profDalRequestsDist = propI
   val profDalWritesDist = propI
   val profDalResultsDist = propI
-  val profMaxHeap = propL
-  val profCurrHeap = propL
-  val profMaxNonHeap = propL
-  val profCurrNonHeap = propL
-  val profJvmCPUTime = propL
-  val profJvmCPULoad = propD
-  val profSysCPULoad = propD
-  val profLoadAvg = propD
-  val profGcStopTheWorld = propL
-  val profGcTimeAll = propL
-  val profGcCount = propL
-  val profJitTime = propL
-  val profClTime = propL
+  val profMaxHeap = propL.withMeta(MemoryInUse)
+  val profCurrHeap = propL.withMeta(MemoryInUse)
+  val profMaxNonHeap = propL.withMeta(MemoryInUse)
+  val profCurrNonHeap = propL.withMeta(MemoryInUse)
+  val profJvmCPUTime = propL.withMeta(TimeSpent)
+  val profJvmCPULoad = propD.withMeta(GaugeLevel)
+  val profSysCPULoad = propD.withMeta(GaugeLevel)
+  val profLoadAvg = propD.withMeta(GaugeLevel)
+  val profGcStopTheWorld = propL.withMeta(TimeSpent)
+  val profGcTimeAll = propL.withMeta(TimeSpent)
+  val profGcCount = propL.withMeta(EventCount)
+  val profJitTime = propL.withMeta(TimeSpent)
+  val profClTime = propL.withMeta(TimeSpent)
   val profEngineReuse = propI
   val profDistOverhead = propL
   val profDistOverheadAtEngine = propL
-  val profDistTasks = propI
+  val profDistTasks = propI.withMeta(ItemCount)
   val profNodeExecutionTime = propL
   val profThreads = prop[Map[String, Map[String, Long]]]
   val profCaches = prop[Map[String, Map[String, Long]]]
@@ -653,26 +698,26 @@ object Properties extends KnownProperties {
   val cardEstimators = prop[Map[String, Map[String, Int]]]
 
   val profStallTime = propL
-  val pluginCounts = prop[Map[String, Map[String, Long]]]
-  val pluginSnaps = prop[Map[String, Map[String, Long]]]
-  val pluginStateTimes = prop[Map[String, Map[String, Long]]]
-  val pluginFullWaitTimes = prop[Map[String, Long]]
-  val pluginStallTimes = prop[Map[String, Long]]
-  val pluginNodeOverflows = prop[Map[String, Long]]
-  val profDALBatches = propI
-  val profDALCommands = propI
-  val profGCDuration = propL
-  val profGCMajorDuration = propL
-  val profGCMinorDuration = propL
-  val profGCMajors = propI
-  val profGCMinors = propI
-  val profCommitedMB = propL
-  val profHeapMB = propL
-  val profNonAuxBlockingTime = propL
-  val profStartupEventTime = propL
-  val profHandlerEventTime = propL
+  val pluginCounts = prop[Map[String, Map[String, Long]]].withMeta(EventCount)
+  val pluginSnaps = prop[Map[String, Map[String, Long]]].withMeta(ItemCount)
+  val pluginStateTimes = prop[Map[String, Map[String, Long]]].withMeta(TimeSpent)
+  val pluginFullWaitTimes = prop[Map[String, Long]].withMeta(TimeSpent)
+  val pluginStallTimes = prop[Map[String, Long]].withMeta(TimeSpent)
+  val pluginNodeOverflows = prop[Map[String, Long]].withMeta(EventCount)
+  val profDALBatches = propI.withMeta(EventCount)
+  val profDALCommands = propI.withMeta(EventCount)
+  val profGCDuration = propL.withMeta(TimeSpent)
+  val profGCMajorDuration = propL.withMeta(TimeSpent)
+  val profGCMinorDuration = propL.withMeta(TimeSpent)
+  val profGCMajors = propI.withMeta(EventCount)
+  val profGCMinors = propI.withMeta(EventCount)
+  val profCommitedMB = propL.withMeta(MemoryInUse)
+  val profHeapMB = propL.withMeta(MemoryInUse)
+  val profNonAuxBlockingTime = propL.withMeta(TimeSpent)
+  val profStartupEventTime = propL.withMeta(TimeSpent)
+  val profHandlerEventTime = propL.withMeta(TimeSpent)
 
-  val snapTimeMs = propL
+  val snapTimeMs = propL.withMeta(TimeSpent)
   val snapTimeUTC = prop[String]
   val snapEpochId = propL
   val snapPeriod = propL
@@ -846,28 +891,28 @@ object Properties extends KnownProperties {
   val hotspotChildNodeLookupCount = propI
   val hotspotChildNodeLookupTime = propL
 
-  val smplTimes = prop[Map[String, Long]]
-  val samplingPauseTime = propL
+  val smplTimes = prop[Map[String, Long]].withMeta(TimeSpent)
+  val samplingPauseTime = propL.withMeta(TimeSpent)
   val crumbplexerIgnore = prop[String]
-  val childProcessCount = propI
-  val childProcessCPU = propD
-  val childProcessRSS = propL
+  val childProcessCount = propI.withMeta(ItemCount)
+  val childProcessCPU = propD.withMeta(GaugeLevel)
+  val childProcessRSS = propL.withMeta(MemoryInUse)
   val spInternalStats = prop[Map[String, Map[String, Double]]]
 
-  val profDmcCacheAttemptCount = propL
-  val profDmcCacheMissCount = propL
-  val profDmcCacheHitCount = propL
-  val profDmcCacheComputeCount = propL
-  val profDmcCacheDeduplicationCount = propL
+  val profDmcCacheAttemptCount = propL.withMeta(EventCount)
+  val profDmcCacheMissCount = propL.withMeta(EventCount)
+  val profDmcCacheHitCount = propL.withMeta(EventCount)
+  val profDmcCacheComputeCount = propL.withMeta(EventCount)
+  val profDmcCacheDeduplicationCount = propL.withMeta(EventCount)
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
   val profSummary = prop[Map[String, JsObject]]
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
-  val numStacksPublished = propL
-  val numSamplesPublished = propL
-  val numCrumbFailures = propI
+  val numStacksPublished = propL.withMeta(EventCount)
+  val numSamplesPublished = propL.withMeta(EventCount)
+  val numCrumbFailures = propI.withMeta(EventCount)
   val crumbQueueLength = propI
   val stackElem = prop[String]
   val pTpe = prop[String]
@@ -883,12 +928,12 @@ object Properties extends KnownProperties {
   val stackThumb = prop[Map[String, Int]]
   val profPreOptimusStartup = propL
 
-  val distWallTime = propL
-  val distTaskDuration = propL
-  val distTasksComplete = propI
-  val distTasksRcvd = propI
-  val distBytesRcvd = propL
-  val distBytesSent = propL
+  val distWallTime = propL.withMeta(TimeSpent)
+  val distTaskDuration = propL.withMeta(TimeSpent)
+  val distTasksComplete = propI.withMeta(EventCount)
+  val distTasksRcvd = propI.withMeta(EventCount)
+  val distBytesRcvd = propL.withMeta(AllocSamples)
+  val distBytesSent = propL.withMeta(AllocSamples)
 
   // Temporal surface tracing
   val tsQueryClassName = prop[String]

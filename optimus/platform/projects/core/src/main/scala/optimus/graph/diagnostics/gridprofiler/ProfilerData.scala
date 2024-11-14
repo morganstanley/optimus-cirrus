@@ -21,7 +21,6 @@ import optimus.graph.diagnostics.pgo.Profiler
 import optimus.platform.temporalSurface.tsprofiler.TemporalSurfaceProfilingData
 
 import scala.jdk.CollectionConverters._
-import scala.collection.mutable.ArrayBuffer
 
 // a ProfilerData object is constructed on the grid and returned with the results of calculating a node
 final case class ProfilerData(
@@ -51,7 +50,7 @@ final case class ProfilerData(
       GridProfilerData.removeAll()
     }
 
-  val data: Map[Int, Map[String, ArrayBuffer[Any]]] = extractedData.transform((_, v) =>
+  val data: Map[Int, Map[String, GridProfilerData.MetricData]] = extractedData.transform((_, v) =>
     GridProfilerData
       .aggregate(v, tag.map(_.aggregation).getOrElse(AggregationType.DEFAULT))) // eager aggregation
 

@@ -256,14 +256,10 @@ public class OGTrace {
     return OGLocalTables.getContexts();
   }
 
-  /** Call out from graph */
   public static void completed(EvaluationQueue eq, NodeTask task) {
     if (Settings.allowTestableClock)
       OGTrace.publishEvent(task.getId(), ProfiledEvent.NODE_COMPLETED);
-    if (task.pluginTracked()) {
-      var pt = task.getReportingPluginType();
-      if (Objects.nonNull(pt)) pt.decrementInFlightTaskCount(eq);
-    }
+    PluginType.completed(eq, task);
     observer.completed(eq, task);
   }
 

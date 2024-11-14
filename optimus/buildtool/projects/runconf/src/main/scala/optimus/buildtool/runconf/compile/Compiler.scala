@@ -960,7 +960,7 @@ class Compiler(
       runConf.debugPreload.getOrElse(defaults.defaultDebugPreload),
       runConf.additionalScope.filter(_.nonEmpty).map(ScopeId.parse),
       runConf.interopPython.getOrElse(defaults.defaultInteropPython),
-      runConf.python.getOrElse(false)
+      runConf.python.getOrElse(defaults.defaultPython)
     )
   }
 

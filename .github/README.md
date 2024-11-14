@@ -2,7 +2,7 @@ Welcome to Optimus Cirrus. This is our open-sourcing of a set of software infras
 
 Please note the LICENSE file.
 
-We hope that you find the project interesting and useful. If you want to ask questions or make comments then please feel free to contact us at `optimus_cirrus (at) morganstanley (dot) com`. If you would like to make a contribution, please also contact us there so that we can discuss the proposed changes and outline the process. Contributing guidelines will be available here soon. 
+We hope that you find the project interesting and useful. If you want to ask questions or make comments then please feel free to contact us at `optimus_cirrus (at) morganstanley (dot) com`. If you would like to make a contribution, please also contact us there so that we can discuss the proposed changes and outline the process. [Contributing guidelines are available here](CONTRIBUTING.md).
 
 [Contributors](contributors.md)
 
@@ -17,5 +17,6 @@ Here are some links to talks we have done about the principles behind Optimus Ci
 The initial releases will include the basics that will allow you to see some parts of the runtime in action. We are in the process of preparing more project components to be shared here.
 
 ### Upcoming Work:
-* We are preparing all the code used to compile the Optimus Build Tool (OBT).
-* Once all that code is available here, we will run an initial build and then bootstrap OBT.
+* We have published all the code used to compile the Optimus Build Tool (OBT).
+* We are currently working on a successful build of that code using another build tool.
+* Once that initial build is successful, we will bootstrap and publish OBT.

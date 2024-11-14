@@ -47,11 +47,10 @@ object ZincReadMapper {
 private[zinc] class ZincReadMapper(
     val scopeId: ScopeId,
     fingerprintHash: String,
-    incremental: Boolean,
     val traceType: MessageTrace,
     val outputJar: PathPair,
     mappingTrace: MappingTrace,
-    tpeAndNameToLatestIncrAndHash: Map[(ArtifactType, String), (Boolean, String)],
+    tpeAndNameToLatestHash: Map[(ArtifactType, String), String],
     val workspaceRoot: Directory,
     val buildDir: Directory,
     val depCopyRoot: Directory,
@@ -82,12 +81,12 @@ private[zinc] class ZincReadMapper(
         }
 
       // For current output, substitute in current uuid and hash, and prepend current working directory.
-      case Right(Dissection(_, `classType`, _, `scopeName`, _, _, "jar", fileInJar)) =>
-        reconstructFile(buildDir, classType, Some(uuid), scopeName, incremental, fingerprintHash, fileInJar).pathString
+      case Right(Dissection(_, `classType`, _, `scopeName`, _, "jar", fileInJar)) =>
+        reconstructFile(buildDir, classType, Some(uuid), scopeName, fingerprintHash, fileInJar).pathString
       // For other inputs, we don't expect any uuid, but we need to map to new hashes, potentially.
-      case Right(Dissection(_, tpe, None, name, origIncr, origHash, "jar", fileInJar)) =>
-        val (incr, hash) = updatedIncrAndHash(tpe, name, origIncr, origHash)
-        reconstructFile(buildDir, tpe, None, name, incr, hash, fileInJar).pathString
+      case Right(Dissection(_, tpe, None, name, origHash, "jar", fileInJar)) =>
+        val hash = updatedHash(tpe, name, origHash)
+        reconstructFile(buildDir, tpe, None, name, hash, fileInJar).pathString
       case x =>
         throw new RuntimeException(s"Unexpected file $x")
     }
@@ -127,14 +126,13 @@ private[zinc] class ZincReadMapper(
 
   private def translateOptionPath(jar: JarAsset, updateHash: Boolean): FileAsset = {
     dissectFile(BUILD_DIR, jar) match {
-      case Right(Dissection(_, tpe, _, `scopeName`, _, _, "jar", None)) =>
-        val path = reconstructFile(buildDir, tpe, Some(uuid), scopeName, incremental, fingerprintHash, None)
+      case Right(Dissection(_, tpe, _, `scopeName`, _, "jar", None)) =>
+        val path = reconstructFile(buildDir, tpe, Some(uuid), scopeName, fingerprintHash, None)
         assert(tpe == ArtifactType.Scala || tpe == ArtifactType.JavaAndScalaSignatures || tpe == ArtifactType.Java)
         path
-      case Right(Dissection(_, tpe, _, name, origIncr, origHash, "jar", None)) =>
-        val (incr, hash) =
-          if (updateHash) updatedIncrAndHash(tpe, name, origIncr, origHash) else (origIncr, origHash)
-        reconstructFile(buildDir, tpe, None, name, incr, hash, None)
+      case Right(Dissection(_, tpe, _, name, origHash, "jar", None)) =>
+        val hash = if (updateHash) updatedHash(tpe, name, origHash) else origHash
+        reconstructFile(buildDir, tpe, None, name, hash, None)
       case _ =>
         validatePath(jar.pathString)
         jar
@@ -142,9 +140,9 @@ private[zinc] class ZincReadMapper(
   }
 
   private val namesWithMissingHash = new mutable.HashSet[String]()
-  private def updatedIncrAndHash(tpe: ArtifactType, name: String, origIncr: Boolean, origHash: String) =
-    tpeAndNameToLatestIncrAndHash.get((tpe, name)) match {
-      case Some((newIncr, newHash)) =>
+  private def updatedHash(tpe: ArtifactType, name: String, origHash: String) =
+    tpeAndNameToLatestHash.get((tpe, name)) match {
+      case Some(newHash) =>
         if (newHash == origHash) {
           // if the hash hasn't changed, then we can save time later by reusing the upstream API analysis within this
           // scope's full analysis, rather than having to read the new one from disk to see what's changed
@@ -165,14 +163,13 @@ private[zinc] class ZincReadMapper(
         } else {
           mappingTrace.hashUpdatesOnRead += 1
         }
-        (newIncr, newHash)
+        newHash
       case None if namesWithMissingHash.contains(name) =>
-        (origIncr, origHash)
+        origHash
       case _ =>
-        log.debug(
-          s"${prefix}No new hash found for $name:$tpe (maybe a removed dependency); using $origHash (incremental: $origIncr)")
+        log.debug(s"${prefix}No new hash found for $name:$tpe (maybe a removed dependency); using $origHash")
         namesWithMissingHash += name
-        (origIncr, origHash)
+        origHash
     }
 }
 

@@ -35,6 +35,7 @@ import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
+import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagePosition
@@ -47,6 +48,7 @@ import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceFileId
 import optimus.buildtool.files.SourceUnitId
+import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.trace
 import optimus.buildtool.trace.Java
 import optimus.buildtool.trace.ObtTrace
@@ -87,7 +89,8 @@ object AsyncJmhCompiler {
   )
 }
 
-@entity final class AsyncJmhCompilerImpl(sandboxFactory: SandboxFactory) extends AsyncJmhCompiler {
+@entity final class AsyncJmhCompilerImpl(sandboxFactory: SandboxFactory, dependencyCopier: DependencyCopier)
+    extends AsyncJmhCompiler {
   @node def fingerprint: Seq[String] = Nil
 
   @node protected def output(scopeId: ScopeId, inputs0: NodeFunction0[AsyncJmhCompiler.Inputs]): CompilerOutput = {
@@ -185,11 +188,19 @@ object AsyncJmhCompiler {
 
   import AsyncJmhCompilerImpl._
 
+  @entersGraph def downloadMavenLib(mavenLib: ExternalClassFileArtifact): String =
+    dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(mavenLib).pathString
+
   private def generateSources(inputs: AsyncJmhCompiler.Inputs): SourceGenerationResult = {
     import CompilationMessage._
 
     val jmhGenClasspath = (inputs.jmhJars ++ inputs.localArtifacts ++ inputs.otherArtifacts).collect {
-      case classes: ClassFileArtifact => classes.pathString
+      case classes: ClassFileArtifact =>
+        classes match {
+          case mavenLib: ExternalClassFileArtifact if mavenLib.isMaven => downloadMavenLib(mavenLib)
+          case _                                                       => classes.pathString
+        }
+
     }.toArray
     val inputClasses = inputs.localArtifacts.collect { case classes: ClassFileArtifact =>
       classes

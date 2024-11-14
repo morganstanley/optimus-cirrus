@@ -13,15 +13,16 @@ package optimus.buildtool.builders
 package postbuilders.installer.component
 
 import java.nio.file.Files
-
 import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.CompiledRunconfArtifact
 import optimus.buildtool.builders.postbuilders.installer.BatchInstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
 import optimus.buildtool.compilers.runconfc.{RunConfInventory, RunConfInventoryEntry}
+import optimus.buildtool.compilers.venv.VenvProperties
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.{MetaBundle, NamingConventions => NC}
 import optimus.buildtool.files.InstallPathBuilder
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.{Directory, FileAsset, RelativePath}
 import optimus.buildtool.trace.InstallRunconfs
 import optimus.buildtool.trace.ObtTrace
@@ -66,6 +67,7 @@ class BundleRunConfsInstaller(
     // Consolidated bundle from compiled runconf jars
     val archive = runConfArchive(mb)
     val jars = collectRunConfArtifacts(mb)
+    val venvs = collectVenvMappings(mb)
     val hashes = jars.map {
       // This is safe/stable because jars is a SortedMap
       case (scope, artifact) =>
@@ -73,7 +75,7 @@ class BundleRunConfsInstaller(
     }
     val installed = bundleFingerprints(mb).writeIfAnyChanged(archive, hashes) {
       ObtTrace.traceTask(RootScopeId, InstallRunconfs(mb)) {
-        if (jars.nonEmpty) writeRunConfArchive(mb, jars)
+        if (jars.nonEmpty) writeRunConfArchive(mb, jars, venvs)
         else removeRunConfArchive(mb)
       }
     }
@@ -97,6 +99,22 @@ class BundleRunConfsInstaller(
       }(SortedMap.breakOut)
   }
 
+  @async private[component] def collectVenvMappings(metaBundle: MetaBundle): SortedMap[String, String] = {
+    factory.scopeIds
+      .filter(_.metaBundle == metaBundle)
+      .apar
+      .flatMap(factory.lookupScope)
+      .apar
+      .flatMap { scoped =>
+        val maybeInteropConfig = scoped.config.interopConfig
+        maybeInteropConfig.flatMap { interopConfig =>
+          interopConfig.pythonModule.map { pyModule =>
+            scoped.id.toString -> pyModule.scope("main").toString
+          }
+        }
+      }(SortedMap.breakOut)
+  }
+
   // =============================================
   //  CAUTION: this does incremental installation
   // =============================================
@@ -106,12 +124,13 @@ class BundleRunConfsInstaller(
   @entersGraph
   private def writeRunConfArchive(
       metaBundle: MetaBundle,
-      runConfJars: SortedMap[String, CompiledRunconfArtifact]): FileAsset = {
+      runConfJars: SortedMap[String, CompiledRunconfArtifact],
+      venvs: SortedMap[String, String]): FileAsset = {
     val archive = runConfArchive(metaBundle)
     Utils.atomicallyWrite(archive) { tempJar =>
       // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
       val tempJarStream =
-        new ConsistentlyHashedJarOutputStream(Files.newOutputStream(tempJar), None, compressed = true)
+        new ConsistentlyHashedJarOutputStream(JarAsset(tempJar), None, compressed = true)
       AsyncUtils.asyncTry {
         // Most recent wins
         // TODO (OPTIMUS-39958): this sorting by mtime fails to take reuse into account
@@ -168,6 +187,7 @@ class BundleRunConfsInstaller(
         }
 
         RunConfInventory.writeFile(tempJarStream, summary.inventory)
+        VenvProperties.writeFile(tempJarStream, venvs)
       } asyncFinally {
         tempJarStream.close()
       }

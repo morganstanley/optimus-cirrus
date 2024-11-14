@@ -372,8 +372,7 @@ object OptimusBuildToolImpl {
       bspServer = cmdLine.bspServer,
       localArtifactStore = localStore,
       remoteArtifactReader = remoteCaches.remoteBuildCache.map(_.store),
-      remoteArtifactWriter =
-        combined(remoteCaches.remoteBuildCache.to(Seq) ++ remoteCaches.remoteBuildDualWriteCache.to(Seq)).map(_.store),
+      remoteArtifactWriter = remoteCaches.remoteBuildCache.map(_.store),
       classLoaderCaches = ZincClassLoaderCaches,
       scalacProfileDir = scalacProfileDir,
       strictErrorTolerance = cmdLine.zincStrictMapping,
@@ -430,7 +429,7 @@ object OptimusBuildToolImpl {
           else Credential.fromPropertiesFile(Paths.get(p))
         }
 
-  // This is used for maven url file cache into silverking.
+  // This is used for maven url file cache into remote store.
   @node @scenarioIndependent private def remoteAssetStore: RemoteAssetStore =
     remoteCaches.remoteBuildCache.map(_.store).getOrElse(NoOpRemoteAssetStore)
 
@@ -507,7 +506,7 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def sandboxFactory: SandboxFactory = SandboxFactory(sandboxDir)
   @node private def scalaCompiler: AsyncScalaCompiler = AsyncScalaCompiler(underlyingCompilerFactory)
   @node private def javaCompiler: AsyncJavaCompiler = AsyncJavaCompiler(underlyingCompilerFactory)
-  @node @scenarioIndependent private def jmhCompiler = AsyncJmhCompilerImpl(sandboxFactory)
+  @node @scenarioIndependent private def jmhCompiler = AsyncJmhCompilerImpl(sandboxFactory, dependencyCopier)
   @node @scenarioIndependent private def cppCompiler =
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
@@ -542,15 +541,11 @@ object OptimusBuildToolImpl {
     val caches = remoteCaches.remoteBuildCache match {
       case Some(remoteCache) =>
         if (cmdLine.remoteCacheWritable) {
-          // If we've enabled silverking writes, then write to SK even if we've found it in our
+          // If we've enabled remote cache writes, then write to it even if we've found it in our
           // filesystem cache. Among other benefits, this works around a bug that can cause artifacts not to
-          // be written to SK if they've been written to the filesystem as a side-effect of compiling for a different
+          // be written to remote cache if they've been written to the filesystem as a side-effect of compiling for a different
           // artifact type.
-          Seq(
-            remoteCaches.remoteBuildDualWriteCache,
-            remoteCaches.writeOnlyRemoteBuildCache,
-            Some(fsCache),
-            remoteCaches.readOnlyRemoteBuildCache).flatten
+          Seq(remoteCaches.writeOnlyRemoteBuildCache, Some(fsCache), remoteCaches.readOnlyRemoteBuildCache).flatten
         } else Seq(fsCache, remoteCache)
       case None =>
         Seq(fsCache)
@@ -877,18 +872,14 @@ object OptimusBuildToolImpl {
               remoteCaches.remoteRootLocatorCache,
               "write",
               cmdLine.gitTag)
-            writeRootLocator(
-              remoteCaches.remoteBuildDualWriteCache,
-              remoteCaches.remoteRootLocatorDualWriteCache,
-              "dual-write"
-            )
+
           }
         }
       } thenFinally {
         localStore.flush(cacheFlushTimeout)
       } thenFinally {
         if (success && cmdLine.writeRootLocator)
-          (remoteCaches.remoteRootLocatorCache ++ remoteCaches.remoteRootLocatorDualWriteCache).foreach(
+          (remoteCaches.remoteRootLocatorCache).foreach(
             _.store.flush(cacheFlushTimeout)
           )
       } asyncFinally {

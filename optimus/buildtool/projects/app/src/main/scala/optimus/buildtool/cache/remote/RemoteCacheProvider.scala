@@ -13,10 +13,10 @@ package optimus.buildtool.cache.remote
 
 import optimus.buildtool.app.OptimusBuildToolCmdLineT
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
-import optimus.buildtool.app.RemoteStoreWriteCmdLine
+import optimus.buildtool.app.RemoteStoreCmdLine
 import optimus.buildtool.cache.CacheMode
-import optimus.buildtool.cache.ComparableArtifactStore
-import optimus.buildtool.cache.ComparingArtifactStore
+import optimus.buildtool.cache.MultiWriteableArtifactStore
+import optimus.buildtool.cache.MultiWriteArtifactStore
 import optimus.buildtool.cache.EmptyStore
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteReadThroughTriggeringArtifactCache
@@ -42,7 +42,7 @@ import optimus.stratosphere.config.StratoWorkspace
   private def isEnabled[T](sk: String): Boolean = sk != OptimusBuildToolCmdLineT.NoneArg
   private def isEnabled(): Boolean =
     cmdLine.silverKing != OptimusBuildToolCmdLineT.NoneArg || cmdLine.dhtRemoteStore != OptimusBuildToolCmdLineT.NoneArg
-  private val writeCmdLine = PartialFunction.condOpt(cmdLine) { case wcl: RemoteStoreWriteCmdLine => wcl }
+  private val writeCmdLine = PartialFunction.condOpt(cmdLine) { case wcl: RemoteStoreCmdLine => wcl }
 
   private val defaultCacheMode: CacheMode = writeCmdLine.fold[CacheMode](CacheMode.ReadOnly) { cmdLine =>
     if (cmdLine.remoteCacheMode == NoneArg) {
@@ -76,14 +76,6 @@ import optimus.stratosphere.config.StratoWorkspace
     }
   }
 
-  @node @scenarioIndependent def remoteBuildDualWriteCache: Option[RemoteArtifactCache] = writeCmdLine.flatMap {
-    cmdLine =>
-      val cacheMode = if (cmdLine.remoteCacheForceWrite) CacheMode.ForceWriteOnly else CacheMode.WriteOnly
-      if (isEnabled(cmdLine.silverKingDualWrite)) {
-        Some(getCache("build (dual write)", cacheMode = cacheMode, silverKing = cmdLine.silverKingDualWrite))
-      } else None
-  }
-
   // root locators are used for "strato catchup" and the local artifact version of OBT at the point catchup is run
   // may not match the artifact version of OBT that build the latest staging, so the remote cache for locators
   // is version independent (artifactVersion = "rootLocator" instead of version)
@@ -92,31 +84,14 @@ import optimus.stratosphere.config.StratoWorkspace
       Some(getCache("rootLocator", version = "rootLocator", offlinePuts = false))
     } else None
 
-  @node @scenarioIndependent def remoteRootLocatorDualWriteCache: Option[RemoteArtifactCache] = writeCmdLine.flatMap {
-    cmdLine =>
-      if (isEnabled(cmdLine.silverKingDualWrite)) {
-        Some(
-          getCache(
-            "rootLocator (dual write)",
-            version = "rootLocator",
-            silverKing = cmdLine.silverKingDualWrite,
-            offlinePuts = false))
-      } else None
-  }
-
   @node @scenarioIndependent private def getCrossRegionPopulatingCache(
-      store: ComparableArtifactStore,
+      store: MultiWriteableArtifactStore,
       cacheMode: CacheMode,
       version: String): RemoteArtifactCache = {
     val forcedReadThroughStores: Set[DHTStore] = cmdLine.crossRegionReadThroughDHTLocations.apar
       .withFilter(!_.equalsIgnoreCase(NoneArg))
       .map { location =>
-        new DHTStore(
-          pathBuilder,
-          DHTStore.zkClusterType(location),
-          version,
-          writeArtifacts = false,
-          DHTStore.ZkBuilder(location))
+        new DHTStore(pathBuilder, DHTStore.zkClusterType(location), version, cacheMode, DHTStore.ZkBuilder(location))
       }
       .toSet
     if (forcedReadThroughStores.nonEmpty) {
@@ -138,42 +113,39 @@ import optimus.stratosphere.config.StratoWorkspace
       offlinePuts: Boolean = true,
   ): RemoteArtifactCache = {
 
-    val store: ComparableArtifactStore = (silverKing, cmdLine.dhtRemoteStore, cmdLine.comparisonMode) match {
-      case (NoneArg, NoneArg, _) =>
+    val store = (silverKing, cmdLine.dhtRemoteStore) match {
+      case (NoneArg, NoneArg) =>
         log.info(s"SilverKing and DHT remote stores not enabled, using EmptyStore")
         EmptyStore
-      case (NoneArg, dht, _) if dht != NoneArg =>
+      case (NoneArg, dht) if dht != NoneArg =>
         log.info(s"Using DHT $cacheType cache at $dht")
 
         val clusterType = DHTStore.zkClusterType(dht)
-        val clientBuilder = clusterType match {
-          case ClusterType.Custom =>
-            LocalDhtServer
-              .fromString(dht)
-              .map { localServer =>
-                val registryObserver = StaticRegistryObserver.local(localServer.port, localServer.uniqueId)
-                DHTClientBuilder.create.registryObserver(registryObserver).kerberos(false)
-              }
-              .getOrElse(DHTStore.ZkBuilder(dht)) // custom ZK path
-          case _ => DHTStore.ZkBuilder(dht)
-        }
 
-        new DHTStore(pathBuilder, clusterType, version, cacheMode.write, clientBuilder)
-      case (sk, NoneArg, _) if sk != NoneArg =>
+        val clientBuilder = LocalDhtServer
+          .fromString(dht)
+          .map { localServer =>
+            val registryObserver = StaticRegistryObserver.local(localServer.port, localServer.uniqueId)
+            DHTClientBuilder.create.registryObserver(registryObserver).kerberos(false)
+          }
+          .getOrElse(DHTStore.ZkBuilder(dht)) // custom ZK path
+
+        new DHTStore(pathBuilder, clusterType, version, cacheMode, clientBuilder)
+      case (sk, NoneArg) if sk != NoneArg =>
         val config = SilverKingConfig(silverKing)
         log.info(s"Using silverking $cacheType cache at $config")
-        SilverKingStore(pathBuilder, config, version, cacheMode.write, offlinePuts, cacheOperationRecorder)
-      case (sk, dht, true) if sk != NoneArg && dht != NoneArg =>
+        SilverKingStore(pathBuilder, config, version, cacheMode, offlinePuts, cacheOperationRecorder)
+      case (sk, dht) if sk != NoneArg && dht != NoneArg =>
         val config = SilverKingConfig(silverKing)
         log.info(s"Using silverking $cacheType cache at $config")
         log.info(s"Using DHT $cacheType cache at $dht")
         log.info(s"Comparison mode enabled, using ComparingArtifactStore")
-        new ComparingArtifactStore(
+        new MultiWriteArtifactStore(
           new DHTStore(
             pathBuilder,
             DHTStore.zkClusterType(dht),
             version,
-            cacheMode.write,
+            cacheMode,
             DHTStore.ZkBuilder(dht)
           ),
           Seq(
@@ -181,17 +153,12 @@ import optimus.stratosphere.config.StratoWorkspace
               CompilePathBuilder(pathBuilder.outputDir.parent.resolveDir("build_obt_compare")),
               config,
               version,
-              cacheMode.write,
+              cacheMode,
               offlinePuts),
           ),
-          stratoWorkspace
+          stratoWorkspace,
+          cacheMode
         )
-      case (sk, dht, false) if sk != NoneArg && dht != NoneArg =>
-        val config = SilverKingConfig(silverKing)
-        log.info(s"Using silverking $cacheType cache at $config")
-        log.info(s"Using DHT $cacheType cache at $dht")
-        log.info(s"SilverKing and DHT remote stores enabled without comparison mode, using DualStore")
-        throw new UnsupportedOperationException("Not implemented yet, specify --comparisonMode")
     }
     getCrossRegionPopulatingCache(store, cacheMode, version)
   }
@@ -200,8 +167,8 @@ import optimus.stratosphere.config.StratoWorkspace
 
 object RemoteCacheProvider {
   type RemoteArtifactCache =
-    SimpleArtifactCache[ComparableArtifactStore]
-  type CacheCmdLine = RemoteStoreWriteCmdLine
-  // making sure we keep the Silverking caches internal information around to decide if we can write root locators
+    SimpleArtifactCache[MultiWriteableArtifactStore]
+  type CacheCmdLine = RemoteStoreCmdLine
+  // making sure we keep the remote caches internal information around to decide if we can write root locators
   `getCache`.setCustomCache(NodeCaching.reallyBigCache)
 }

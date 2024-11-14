@@ -48,7 +48,7 @@ import scala.collection.immutable.Seq
       Sources,
       ArtifactType.Sources,
       pathBuilder
-        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.Sources, None, incremental = false)
+        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.Sources, None)
         .asJar,
       sources.compilationSources,
       Map.empty,

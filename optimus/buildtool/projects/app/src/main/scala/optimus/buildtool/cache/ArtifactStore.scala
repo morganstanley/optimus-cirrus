@@ -13,8 +13,8 @@ package optimus.buildtool.cache
 
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.CachedArtifactType
-import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.NamingConventions.ConfigPrefix
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace.ArtifactCacheTraceType
 import optimus.buildtool.trace.CacheTraceType
 import optimus.buildtool.trace.ObtStats
@@ -23,9 +23,9 @@ import optimus.buildtool.trace.RemoteAssetCacheTraceType
 import optimus.buildtool.utils.BlockingQueue
 import optimus.platform._
 
-import scala.concurrent.duration._
 import java.util.Timer
 import java.util.TimerTask
+import scala.concurrent.duration._
 
 trait ArtifactReader {
   @async def get[A <: CachedArtifactType](
@@ -109,6 +109,11 @@ trait ArtifactStoreBase extends ArtifactStore {
     ObtTrace.addToStat(stat.Hit, details.size)
     if (details.size == 1) debug(id, s"Artifact found for $tpe: ${details.mkString("")}")
     else debug(id, s"Artifact(s) found for $tpe:\n  ${details.mkString("\n  ")}")
+  }
+
+  final def logUnsuitableIncrementalFound(id: ScopeId, tpe: CachedArtifactType, detail: String): Unit = {
+    val traceType = ArtifactCacheTraceType(tpe)
+    debug(id, s"Incremental artifact found for $traceType, but we need non-incremental: $detail")
   }
 
   final def logNotFound(id: ScopeId, tpe: CachedArtifactType, detail: String): Unit =

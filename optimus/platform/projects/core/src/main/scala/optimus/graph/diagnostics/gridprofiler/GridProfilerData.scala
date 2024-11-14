@@ -15,10 +15,11 @@ import optimus.graph.diagnostics.gridprofiler.GridProfiler.defaultCombOp
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.nextMetricName
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.{concurrent => c}
 import scala.collection.{mutable => m}
+import java.util.ArrayList
 import optimus.scalacompat.collection._
+import scala.jdk.CollectionConverters._
 
 object GridProfilerData {
   // This is the static storage of all gridprofiler data
@@ -33,14 +34,44 @@ object GridProfilerData {
   // metric name is naturally either GridProfiler.Metric or String, but within each JVM it is an Int: see GridProfiler.metricNameRegistry. The ints are sequential starting at zero, and can be be used as array index
   // dist task id is replaced by aggregation key when aggregation is performed (when sending from engine to client and on user API boundaries), but it's still a String
 
-  // This could be done as Guava's "new HashBasedTable[Int, String, ArrayBuffer[Any]]", but it's just Map<R, Map<C, V>> under the hood anyway
+  // This could be done as Guava's "new HashBasedTable[Int, String, MetricData]", but it's just Map<R, Map<C, V>> under the hood anyway
   // Putting Scope first because profiler.result will index on that, while there are no queries that index on task/aggregation key without also indexing on scopes
   // the index in the ArrayBuffer is the metric name; some values may be null
-  private[optimus] val data = c.TrieMap.empty[Int /*Scope*/, c.Map[String /*Task*/, ArrayBuffer[Any /* Value */ ]]]
+  private[optimus] val data = c.TrieMap.empty[Int /*Scope*/, c.Map[String /*Task*/, MetricData]]
+
   // The type of Value is not actually "Any": it must be Serializable and supported by GridProfiler.defaultCombOp
+  type MetricData = mutable.Buffer[Any /*Value*/ ]
+  def MetricData(initCapacity: Int): MetricData = {
+    // TODO (OPTIMUS-70380): Scala 2.13's ArrayBuffer, which used to be used here,
+    //  now throws a ConcurrentModificationException
+    // when an element is written by another thread during iteration. This appears to be an overreach in Scala 2.13's
+    // implementation of fail-fast iteration -- Java only fails when the operation alters the structure of underlying
+    // data structure, e.g. an append that requires a capacity increase of an ArrayList.
+    //
+    // To get things working in 2.13, we use a Java ArrayList wrapped as a s.c.mutable.Buffer. This is API
+    // compatible with existing clients of this code.
+    //
+    // It is hard to reason about the thread safety here. A cleaner implementation IMO would avoid resizing the
+    // Seq mid-flight, perhaps by reserving it for the standard metrics and using a Map for custom metries (if any):
+    //
+    // class MetricData {
+    //    // where numStandardMetrics is a final val computed after registration of
+    //    private val standardData = Array[Any](GridProfile.numStandardMetrics)
+    //    private val customData = c.TrieMap[CustomMetric, Any]()
+    //    ...
+    // }
+    //
+    // A variation of this would be:
+    //     private val standardData = new j.u.c.AtomicReferenceArray[Any](GridProfile.numStandardMetrics)
+    //     private val customData = j.u.c.ConcurrentHashMap[CustomMetric, Any]()
+    //
+    // To allow for use of the AtomicReferenceArray#accumulateAndGet / ConcurrentHashMap.compute for lock-free
+    // methods to avoid TOUTOA bugs that seem possible with the current implementation.
+    new ArrayList[Any](initCapacity).asScala
+  }
 
   // backup for when local distribution is in effect
-  private[optimus] val suspendedData = m.Map.empty[Int, Map[Int, Map[String, ArrayBuffer[Any]]]]
+  private[optimus] val suspendedData = m.Map.empty[Int, Map[Int, Map[String, MetricData]]]
 
   // property name -> tweak ID, used for remapping dependency data between JVMs (lives here because this is where all
   // other data that is reported from engines is stored).
@@ -53,15 +84,15 @@ object GridProfilerData {
   //
   private[optimus] def put(scope: Int, task: String, key: Int, value: Any): Unit = {
 
-    val row: c.Map[String, ArrayBuffer[Any]] = data.getOrElse(
+    val row: c.Map[String, MetricData] = data.getOrElse(
       scope, {
-        val emptyRow = c.TrieMap.empty[String, ArrayBuffer[Any]]
+        val emptyRow = c.TrieMap.empty[String, MetricData]
         data.putIfAbsent(scope, emptyRow).getOrElse(emptyRow)
       })
 
-    val metrics: ArrayBuffer[Any] = row.getOrElse(
+    val metrics: MetricData = row.getOrElse(
       task, {
-        val emptyMetrics = new ArrayBuffer[Any](nextMetricName.get)
+        val emptyMetrics = MetricData(nextMetricName.get)
         row.putIfAbsent(task, emptyMetrics).getOrElse(emptyMetrics)
       })
 
@@ -269,15 +300,15 @@ object GridProfilerData {
   }
 
   // extract and delete all metrics for the given scope
-  private[optimus] def removeByScope(scope: Int): Map[String, ArrayBuffer[Any]] = {
-    val empty = m.Map.empty[String, ArrayBuffer[Any]]
+  private[optimus] def removeByScope(scope: Int): Map[String, MetricData] = {
+    val empty = m.Map.empty[String, MetricData]
     val removed = data.remove(scope)
     removed.getOrElse(empty).toMap
   }
 
   // extract and delete all metrics for the given taskId
-  private[optimus] def removeByTask(task: String): Map[Int, ArrayBuffer[Any]] = {
-    val r = m.Map.empty[Int, ArrayBuffer[Any]]
+  private[optimus] def removeByTask(task: String): Map[Int, MetricData] = {
+    val r = m.Map.empty[Int, MetricData]
     for ((scope, row) <- data) {
       row.remove(task).map(r.put(scope, _))
     }
@@ -286,8 +317,8 @@ object GridProfilerData {
 
   // extract and delete all metrics
   // this is called on the engine from the constructor of ProfileData
-  private[optimus] def removeAll(): Map[Int, Map[String, ArrayBuffer[Any]]] = {
-    val r = m.Map.empty[Int, m.Map[String, ArrayBuffer[Any]]]
+  private[optimus] def removeAll(): Map[Int, Map[String, MetricData]] = {
+    val r = m.Map.empty[Int, m.Map[String, MetricData]]
     for (scope <- data.keySet) {
       data.remove(scope).map(r.put(scope, _))
     }
@@ -297,7 +328,7 @@ object GridProfilerData {
   // extracts and deletes custom metrics for the given key./scope
   // this is called through the user-facing API GridProfiler.removeCustomMetrics
   private[optimus] def removeByKey(key: Int, sc: Int): collection.Seq[Any] = {
-    val res = ArrayBuffer.empty[Any]
+    val res = MetricData(0)
     for (
       map <- data.get(sc);
       (task, metric) <- map
@@ -319,9 +350,9 @@ object GridProfilerData {
   // Aggregation APIs
   //
 
-  private[optimus] def mergeMetricValues(a1: ArrayBuffer[Any], a2: ArrayBuffer[Any]): ArrayBuffer[Any] = {
+  private[optimus] def mergeMetricValues(a1: MetricData, a2: MetricData): MetricData = {
     val sz = math.max(a1.size, a2.size)
-    val res = new ArrayBuffer[Any](sz)
+    val res = MetricData(sz)
     var i = 0
     while (i < sz) {
       val v1 = if (i < a1.size) a1(i) else null
@@ -356,11 +387,9 @@ object GridProfilerData {
   }
 
   // apply AggregationType (from --profile-aggregation) to all metrics at once (called when preparing ProfilerData on the grid)
-  private[optimus] def aggregate(
-      data: Map[String, ArrayBuffer[Any]],
-      agg: AggregationType.Value): Map[String, ArrayBuffer[Any]] = {
+  private[optimus] def aggregate(data: Map[String, MetricData], agg: AggregationType.Value): Map[String, MetricData] = {
 
-    val result = m.Map.empty[String, ArrayBuffer[Any]]
+    val result = m.Map.empty[String, MetricData]
     for ((k, v) <- data) {
       val nk = aggregationKey(k, agg)
       aggregateAndUpdate(result, nk, v, mergeMetricValues)

@@ -139,7 +139,6 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
         settings = settings,
         inputs = inputs,
         jars = jars,
-        incremental = incremental,
         analysisMappingTrace = analysisMappingTrace
       )
 
@@ -355,7 +354,14 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
             utils.Jars.withJar(jars.outputJar.tempPath, create = true)(_ => ())
           val classes = {
             if (!profiler.hasNoSourceInvalidations(cycles, compileResult.toOption)) {
-              utils.Jars.stampJarWithConsistentHash(jars.outputJar.tempPath, compress = false, Some(activeTask.trace))
+              utils.Jars.stampJarWithConsistentHash(
+                jars.outputJar.tempPath,
+                compress = false,
+                Some(activeTask.trace),
+                incremental
+              )
+            } else {
+              utils.Jars.stampJarWithIncrementalFlag(jars.outputJar.tempPath, incremental)
             }
             jars.outputJar.moveTempToFinal()
             // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput` or
@@ -371,6 +377,7 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
             )
           }
           val analysis = if (inputs.saveAnalysis) {
+            utils.Jars.stampJarWithIncrementalFlag(jars.analysisJar.tempPath, incremental)
             // don't stamp with content hash, since we don't ever use analysis artifacts as part of a fingerprint
             jars.analysisJar.moveTempToFinal()
             // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput` or

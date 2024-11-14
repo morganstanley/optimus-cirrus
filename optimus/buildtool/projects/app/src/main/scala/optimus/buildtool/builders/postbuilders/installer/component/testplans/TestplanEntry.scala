@@ -18,8 +18,10 @@ import org.apache.commons.text.StringSubstitutor
 
 import scala.collection.immutable.Seq
 
-final case class TestplanTask(module: ModuleId, testName: String, runStage: String = RunStage.Reg) {
+final case class TestplanTask(module: ModuleId, testName: String) {
   def moduleScoped: ModuleScopedName = ModuleScopedName(module, testName)
+
+  def forTestName(otherTestName: String) = TestplanTask(module, otherTestName)
 }
 
 /**
@@ -32,6 +34,7 @@ sealed trait TestplanEntry {
   val treadmillOpts: Map[String, String]
   val additionalBindings: Map[String, String]
   val testTasks: Seq[TestplanTask]
+  val testTaskOverrides: Map[TestplanTask, Set[String]]
   val testModulesFileName: String
 
   def bind(value: String): String
@@ -68,6 +71,7 @@ final case class ScalaTestplanEntry(
     additionalBindings: Map[String, String],
     stratoOverride: Option[String],
     testTasks: Seq[TestplanTask],
+    testTaskOverrides: Map[TestplanTask, Set[String]],
     testModulesFileName: String
 ) extends TestplanEntry {
 
@@ -103,6 +107,7 @@ final case class PythonTestplanEntry(
     treadmillOpts: Map[String, String],
     additionalBindings: Map[String, String],
     testTasks: Seq[TestplanTask],
+    testTaskOverrides: Map[TestplanTask, Set[String]],
     testModulesFileName: String
 ) extends TestplanEntry {
 
@@ -128,7 +133,7 @@ final case class PythonTestplanEntry(
   }
 }
 
-final case class ConsumerProviderContractTestplanEntry(
+final case class PactContractTestplanEntry(
     displayTestName: String,
     groupName: String,
     metaBundle: MetaBundle,
@@ -136,30 +141,41 @@ final case class ConsumerProviderContractTestplanEntry(
     additionalBindings: Map[String, String],
     stratoOverride: Option[String],
     testTasks: Seq[TestplanTask],
+    testTaskOverrides: Map[TestplanTask, Set[String]],
     testModulesFileName: String
 ) extends TestplanEntry {
 
+  // Enforce there is only a single entry for each PactContract as otherwise it gets too tricky to manage for the cases
+  // where 1 entry might only have a consumer test, another might only have a provider, and a 3rd case that might have
+  // both of these
+  require(testTasks.size == 1, "PactContract test plans can only contain 1 project per test group")
+  require(
+    testTaskOverrides.size == 1 && Set(1, 2).contains(testTaskOverrides.values.head.size),
+    "PactContract test plans must have at least 1 consumer or provider test"
+  )
+
   override def copyEntry(
       testTasks: Seq[TestplanTask] = this.testTasks,
-      groupName: String = this.groupName): ConsumerProviderContractTestplanEntry =
+      groupName: String = this.groupName): PactContractTestplanEntry =
     this.copy(testTasks = testTasks, groupName = groupName)
 
   def bind(value: String): String = {
-    val replacements =
+    val replacements = {
+      val consumerArgs = if (testTaskOverrides.values.head.contains("consumerContractTest")) {
+        Map("CONSUMER_ARGS" -> s"-t ${testTasks.head.module.properPath}.consumerContractTest")
+      } else Map()
+
+      val providerArgs = if (testTaskOverrides.values.head.contains("providerContractTest")) {
+        Map("PROVIDER_ARGS" -> s"-t ${testTasks.head.module.properPath}.providerContractTest")
+      } else Map()
+
       Map(
-        "CONSUMER_ARGS" -> testTasks
-          .filter(_.runStage == RunStage.Consumer)
-          .map(t => s"-t ${t.module.properPath}.${t.testName}")
-          .mkString(" "),
-        "PROVIDER_ARGS" -> testTasks
-          .filter(_.runStage == RunStage.Provider)
-          .map(t => s"-t ${t.module.properPath}.${t.testName}")
-          .mkString(" "),
         "BAS_PATH_VAR" -> additionalBindings.getOrElse("BAS_PATH_VAR", "BAS_PATH"),
         "REG_PATH_VAR" -> additionalBindings.getOrElse("REG_PATH_VAR", "REG_PATH"),
         // if override is set, pass it to the runner
         "RUNNER_EXTRA" -> stratoOverride.fold("")(value => s"--strato-override $value")
-      ) ++ commonBindings ++ additionalBindings
+      ) ++ consumerArgs ++ providerArgs ++ commonBindings ++ additionalBindings
+    }
 
     bind(value, replacements)
   }

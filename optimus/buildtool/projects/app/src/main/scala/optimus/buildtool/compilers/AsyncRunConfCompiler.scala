@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.compilers
 
-import java.nio.file.Files
 import java.util.Properties
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
@@ -25,7 +24,6 @@ import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagePosition
 import optimus.buildtool.artifacts.{ArtifactType => AT}
-import optimus.buildtool.builders.postbuilders.extractors.PythonVenvExtractorPostBuilder
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
 import optimus.buildtool.compilers.cpp.CppUtils
@@ -72,7 +70,6 @@ import optimus.buildtool.scope.sources.UpstreamRunconfInputs
 import optimus.buildtool.trace
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.trace.Runconf
-import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.AsyncUtils
 import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
 import optimus.buildtool.utils.HashedContent
@@ -299,8 +296,7 @@ final class StaticRunscriptCompilationBindingSources(
       arc: AppRunConf,
       upstreamInputs: UpstreamRunconfInputs,
       installVersion: String,
-      pythonVenvPath: Option[Directory],
-      upstreamAgents: Seq[ClassFileArtifact]
+    upstreamAgents: Seq[ClassFileArtifact]
   ): Map[String, Any] = {
     import AsyncRunConfCompilerImpl.dirNameEnvVar
     import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
@@ -313,19 +309,10 @@ final class StaticRunscriptCompilationBindingSources(
     val javaHomePath = javaModule.flatMap(_.pathOption)
     // this endsWith is the one on Path not the one on String, so it matches the last path segment always
     assert(javaHomePath.forall(_.endsWith("exec")), javaHomePath.get)
-    val earlySetEnvVarsWindows: Seq[(String, String)] = Seq(
+    val earlySetEnvVars: Seq[(String, String)] = Seq(
       Some("SCALA_HOME" -> scalaHomePath.pathString),
       javaHomePath.map(path => "JAVA_HOME" -> PathUtils.platformIndependentString(path))
     ).flatten
-    val earlySetEnvVarsLinux: Seq[(String, String)] = pythonVenvPath match {
-      case Some(path) =>
-        Seq(
-          Some("SCALA_HOME" -> scalaHomePath.pathString),
-          javaHomePath.map(path => "JAVA_HOME" -> PathUtils.platformIndependentString(path)),
-          Some("PYTHONHOME" -> path.pathString),
-        ).flatten
-      case None => earlySetEnvVarsWindows
-    }
 
     val linuxDirVar = linuxShellVariableNameWrapper(dirNameEnvVar)
     val windowsDirVar = windowsBatchVariableNameWrapper(dirNameEnvVar)
@@ -417,9 +404,7 @@ final class StaticRunscriptCompilationBindingSources(
       "scopedName" -> scopedName(arc),
       "appName" -> getCustomVariableOption(arc, appNameOverride).getOrElse(
         unquote(scopedName(arc).split('.').drop(3).mkString("."))),
-      "earlySetEnvVarsBlock" -> earlySetEnvVarsWindows.asJava,
-      "earlySetEnvVarsBlockForWindows" -> earlySetEnvVarsWindows.asJava,
-      "earlySetEnvVarsBlockForLinux" -> earlySetEnvVarsLinux.asJava,
+      "earlySetEnvVarsBlock" -> earlySetEnvVars.asJava,
       "linuxJavaOpts" -> linuxJavaOpts.asJava,
       "linuxAgentsJarPaths" -> linuxAgentsJarPaths.asJava,
       "windowsAgentsJarPaths" -> windowsAgentsJarPaths.asJava,
@@ -452,7 +437,6 @@ final class StaticRunscriptCompilationBindingSources(
   ): Seq[ApplicationScriptResult] = {
     runConfs.apar.collect {
       case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe && !arc.strictRuntime.enabled.getOrElse(false) =>
-        val maybePythonVenvPath = getPythonVenv(arc, obtConfig)
         Templates.getTemplateDescriptions(templates, arc.name, arc.scriptTemplates).apar.map {
           case Left(templateDescription) =>
             val bindings =
@@ -462,7 +446,6 @@ final class StaticRunscriptCompilationBindingSources(
                 arc,
                 upstreamInputs,
                 installVersion,
-                maybePythonVenvPath,
                 upstreamAgents)
             val applicationScriptName =
               AsyncRunConfCompilerImpl
@@ -495,7 +478,7 @@ final class StaticRunscriptCompilationBindingSources(
     Utils.atomicallyWrite(jar) { tempJar =>
       // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
       val tempJarStream =
-        new ConsistentlyHashedJarOutputStream(Files.newOutputStream(tempJar), None, compressed = true)
+        new ConsistentlyHashedJarOutputStream(JarAsset(tempJar), None, compressed = true)
       AsyncUtils.asyncTry {
         // Preserve original source files, with the folder structure as runconf package infer scope from structure
         def storeSourceFile(file: InputFile, isCommon: Boolean = false): Unit =
@@ -573,34 +556,6 @@ final class StaticRunscriptCompilationBindingSources(
       .collect { case (arg, Failure(e)) =>
         CompilationMessage.message(s"Cannot parse '$arg': $e", CompilationMessage.Warning)
       }
-
-  @async
-  def getPythonVenv(arc: AppRunConf, obtConfig: ObtConfig): Option[Directory] = {
-    if (AsyncRunConfCompilerImpl.getInteropPython(arc)) {
-      val maybeInteropConfig = obtConfig.scopeConfiguration(arc.id).interopConfig
-      maybeInteropConfig.flatMap { interopConfig =>
-        interopConfig.pythonModule.flatMap { pyModule =>
-          if (PythonVenvExtractorPostBuilder.venvFolder(buildDir).exists) {
-            val pythonMappingLines =
-              AssetUtils.loadFileAsset(PythonVenvExtractorPostBuilder.latestVenvFile(buildDir)) { pythonMappingFile =>
-                Files.readAllLines(pythonMappingFile).asScala.to(Seq)
-              }
-
-            val scopeIdToVenv = pythonMappingLines.flatMap { line =>
-              line.split(",", 2) match {
-                case Array(scopeIdString, venvDir) => Some(scopeIdString -> venvDir)
-                case _                             => None
-              }
-            }.toMap
-
-            scopeIdToVenv.get(ScopeId(pyModule, arc.id.tpe).toString).flatMap { venvDirName =>
-              Some(PythonVenvExtractorPostBuilder.venvFolder(buildDir).resolveDir(venvDirName))
-            }
-          } else None
-        }
-      }
-    } else None
-  }
 
   @node protected def output(
       scopeId: ScopeId,
@@ -853,7 +808,6 @@ final class StaticRunscriptCompilationBindingSources(
         None
     }
   }
-  private def getInteropPython(arc: AppRunConf) = arc.interopPython
 
   output.setCustomCache(NodeCaching.reallyBigCache)
 }

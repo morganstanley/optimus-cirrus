@@ -44,7 +44,7 @@ class ConfigurationMessagesScopedCompilation(
     compile(ArtifactType.ValidationMessages, None) {
       val artifactId = InternalArtifactId(scope.id, ArtifactType.ValidationMessages, None)
       val jsonFile = scope.pathBuilder
-        .outputPathFor(scopeId, fingerprint.hash, ArtifactType.ValidationMessages, None, incremental = false)
+        .outputPathFor(scopeId, fingerprint.hash, ArtifactType.ValidationMessages, None)
         .asJson
       val configurationValidator = ConfigurationValidator(scopeId, forbiddenDependencies)
       // Only do the forbidden dependencies check if the forbidden dependencies defined are valid (no duplicate definitions)

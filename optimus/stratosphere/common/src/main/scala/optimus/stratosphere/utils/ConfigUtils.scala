@@ -55,6 +55,9 @@ object ConfigUtils {
     }
   }
 
+  def hasProperty[A: Extractor](configFile: Path)(propertyName: String): Boolean =
+    readConfig[Option[A]](configFile)(propertyName).isDefined
+
   def updateConfigProperty(
       configFile: Path)(propertyName: String, value: Any, prepend: Boolean = false, append: Boolean = false)(implicit
       workspace: StratoWorkspaceCommon): Unit = {

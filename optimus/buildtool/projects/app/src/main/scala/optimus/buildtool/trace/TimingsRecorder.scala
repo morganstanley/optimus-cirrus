@@ -155,6 +155,7 @@ class TimingsRecorder(outputTo: Directory) extends DefaultObtTraceListener {
       category: CategoryTrace,
       time: Instant = patch.MilliInstant.now()): DefaultTaskTrace = {
     category match {
+      case DhtOperation(_, _)        => NoOpTaskTrace
       case SilverkingOperation(_, _) => NoOpTaskTrace
       case _ => {
         val t = new TimingsRecorderTask(scopeId, category, time)

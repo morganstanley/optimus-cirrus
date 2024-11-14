@@ -11,15 +11,17 @@
  */
 package optimus.buildtool.cache
 
-import java.net.URL
-
 import optimus.buildtool.files.FileAsset
 import optimus.platform._
+
+import java.net.URL
 
 trait RemoteAssetStore {
   @async def get(url: URL, destination: FileAsset): Option[FileAsset]
   @async def put(url: URL, file: FileAsset): FileAsset
   @async def check(url: URL): Boolean
+
+  def cacheMode: CacheMode
 }
 object RemoteAssetStore {
   lazy val externalArtifactVersion: String =
@@ -30,4 +32,6 @@ object NoOpRemoteAssetStore extends RemoteAssetStore {
   @async override def get(url: URL, destination: FileAsset): Option[FileAsset] = None
   @async override def put(url: URL, file: FileAsset): FileAsset = file
   @async def check(url: URL): Boolean = false
+
+  def cacheMode: CacheMode = CacheMode.ReadWrite
 }

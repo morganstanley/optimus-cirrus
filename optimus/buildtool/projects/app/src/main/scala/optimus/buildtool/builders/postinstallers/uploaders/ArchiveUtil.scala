@@ -13,6 +13,7 @@ package optimus.buildtool.builders.postinstallers.uploaders
 
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.FileAsset
+import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.UnhashedJarOutputStream
@@ -28,7 +29,7 @@ object ArchiveUtil extends Log {
       files: Seq[ArchiveEntry]
   ): FileAsset =
     AssetUtils.atomicallyWrite(zipFile, replaceIfExists = true, localTemp = true) { tempFile =>
-      val jos = new UnhashedJarOutputStream(Files.newOutputStream(tempFile), manifest = None, compressed = true)
+      val jos = new UnhashedJarOutputStream(JarAsset(tempFile), manifest = None, compressed = true)
       try {
         val paths = mutable.Map[String, FileAsset]()
         files.foreach { f =>

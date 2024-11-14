@@ -37,7 +37,7 @@ import scala.collection.immutable.Seq
 
   @node private def genericFilesPackagerInputs = GenericFilesPackager.Inputs(
     pathBuilder
-      .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.GenericFiles, None, incremental = false)
+      .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.GenericFiles, None)
       .asJar,
     sources.compilationSources
   )

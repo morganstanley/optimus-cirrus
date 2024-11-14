@@ -117,7 +117,7 @@ import scala.collection.immutable.Seq
       sourceFiles = sources.javaSources,
       fingerprint = fingerprint,
       bestPreviousAnalysis = Hide(bestPreviousAnalysis),
-      outPath = pathBuilder.javaOutPath(id, fingerprint.hash, incremental = bestPreviousAnalysis.isDefined),
+      outPath = pathBuilder.javaOutPath(id, fingerprint.hash),
       signatureOutPath = None,
       scalacConfig = ScalacConfiguration.empty,
       javacConfig = config.javacConfig,

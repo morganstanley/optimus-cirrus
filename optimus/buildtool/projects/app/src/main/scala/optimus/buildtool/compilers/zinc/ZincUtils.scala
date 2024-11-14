@@ -55,7 +55,7 @@ private object ZincUtils {
   private val uuidReText = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 
   private val fnameReText =
-    s"(?:TEMP($uuidReText)-)?([\\w\\.\\-]+?)(\\.$INCR)?\\.($EMPTYHASH|$HASH[0-9a-f]+[ZM]*)\\.(\\w+)(!\\S+)?"
+    s"(?:TEMP($uuidReText)-)?([\\w\\.\\-]+?)\\.($EMPTYHASH|$HASH[0-9a-f]+[ZM]*)\\.(\\w+)(!\\S+)?"
   private val fnameRe = ("^" + fnameReText + "$").r
 
   /**
@@ -66,7 +66,6 @@ private object ZincUtils {
       tpe: ArtifactType,
       uuid: Option[String],
       name: String,
-      incr: Boolean,
       hash: String,
       suffix: String,
       fileWithinJar: Option[RelativePath]
@@ -83,11 +82,10 @@ private object ZincUtils {
         val jarName = jarPath.name
         val tpe = ArtifactType.parse(jarPath.parent.name)
         jarName match {
-          case fnameRe(uuid, name, incrStr, hash, ext, _) =>
-            val incr = Option(incrStr).isDefined
-            Dissection(jarPath, tpe, Option(uuid), name, incr, hash, ext, None)
+          case fnameRe(uuid, name, hash, ext, _) =>
+            Dissection(jarPath, tpe, Option(uuid), name, hash, ext, None)
           case _ =>
-            throw new RuntimeException(s"$jarPath did not match BUILD/TPE/$fnameRe")
+            throw new RuntimeException(s"$jarName did not match BUILD/${tpe.name}/$fnameRe")
         }
       }
     )
@@ -110,13 +108,11 @@ private object ZincUtils {
       tpe: ArtifactType,
       uuid: Option[String],
       name: String,
-      incremental: Boolean,
       hash: String,
       fileInJar: Option[RelativePath]
   ): FileAsset = {
     val t = uuid.map(u => s"TEMP$u-").getOrElse("")
-    val incrStr = incrString(incremental)
-    val jarName = s"$t$name.$incrStr$hash.jar"
+    val jarName = s"$t$name.$hash.jar"
     val p = buildDir.resolveDir(tpe.name)
     val jar = p.resolveJar(jarName)
     fileInJar.map(f => FileInJarAsset(jar, f)).getOrElse(jar)

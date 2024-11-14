@@ -14,7 +14,7 @@ package optimus.buildtool.compilers.venv
 import java.nio.file.Path
 import java.nio.file.Paths
 
-object PythonConsts {
+object PythonConstants {
   object tpa {
     def unpackedArtifact(artifactName: String): Path = {
       val user = System.getProperty("user.name")
@@ -27,22 +27,25 @@ object PythonConsts {
       unpackedArtifactVenv(artifactName).resolve("bin").resolve("python")
     def unpackedArtifactScript(artifactName: String, script: String): Path =
       unpackedArtifactSrc(artifactName).resolve(script)
-
     def unpackCmd(
         artifact: Path,
         cacheDir: Option[Path] = None,
         unpackPath: Option[Path] = None,
-        existingVenv: Option[Path] = None): String = {
+        existingVenv: Option[Path] = None,
+        findLinks: Option[Path] = None,
+        index: Boolean = true): String = {
       val cacheString = cacheDir.map(c => s"--cache-dir $c")
       val unpackString = unpackPath.map(up => s"--unpack-path $up")
       val existingVenvString = existingVenv.map(ev => s"--existing-venv $ev")
+      val findLinksString = findLinks.map(fl => s"--find-links $fl")
+      val indexString = if (index) None else Some("-ni")
 
-      (Seq("python", artifact) ++ cacheString ++ unpackString ++ existingVenvString).mkString(" ")
+      (Seq("python", artifact) ++ cacheString ++ unpackString ++ existingVenvString ++ findLinksString ++ indexString)
+        .mkString(" ")
     }
 
     def runScriptCmd(artifactName: String, script: String, args: Seq[String]): String = {
       (Seq(unpackedArtifactPython(artifactName), unpackedArtifactScript(artifactName, script)) ++ args).mkString(" ")
     }
   }
-
 }

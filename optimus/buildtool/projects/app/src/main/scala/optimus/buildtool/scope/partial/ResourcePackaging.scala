@@ -94,7 +94,7 @@ private[scope] object ResourcePackaging {
       WarSources,
       ArtifactType.ArchiveContent,
       pathBuilder
-        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.ArchiveContent, None, incremental = false)
+        .outputPathFor(id, sources.compilationFingerprint.hash, ArtifactType.ArchiveContent, None)
         .asJar,
       sources.compilationSources,
       scope.config.resourceTokens,

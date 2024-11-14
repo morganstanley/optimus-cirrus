@@ -42,14 +42,19 @@ object ThinPyappWrapper extends Log {
   private[buildtool] val RequirementsFile = "{requirements}"
   private[buildtool] val PthFile = "{libsPth}"
 
+  @async def runTpa(python: PythonDefinition, cmds: Seq[String], where: Option[Directory]): Unit = {
+    val cmd = cmds.mkString(" && ")
+    PythonLauncher.launchWithPython(python, "ThinPyappLaunch", cmd, where)
+  }
+
   @async def runTpa(
       python: PythonDefinition,
       cmds: Seq[String],
-      where: Directory,
+      where: Option[Directory],
       pipCredentialFile: String,
       uvCredentialFile: String): Unit = {
-    val withConfig = PythonLauncher.prerequisites(pipCredentialFile, uvCredentialFile) ++ cmds
-    val cmd = withConfig.mkString(" && ")
+    val commands = PythonLauncher.prerequisites(pipCredentialFile, uvCredentialFile) ++ cmds
+    val cmd = commands.mkString(" && ")
     PythonLauncher.launchWithPython(python, "ThinPyappLaunch", cmd, where)
   }
 
@@ -98,7 +103,7 @@ object ThinPyappWrapper extends Log {
       "deactivate"
     )
 
-    PythonLauncher.launch("ThinPyappLaunch", cmds.mkString(" && "), sandbox.buildDir) {
+    PythonLauncher.launch("ThinPyappLaunch", cmds.mkString(" && "), Some(sandbox.buildDir)) {
       case out if out.contains("ERROR") =>
         CompilationMessage(None, out, Severity.Error)
     } ++ cacheMessages
@@ -167,7 +172,7 @@ object VenvUtils extends Log {
             .getOrElse(pythonVenv(cacheVenvName, python)))
     ).flatten.mkString(" && ")
 
-    val result = PythonLauncher.launchWithPython(python, "Venv", cmds, venvCache)
+    val result = PythonLauncher.launchWithPython(python, "Venv", cmds, Some(venvCache))
 
     val cacheDir = cachePath(python, venvCache)
     Files.createFile(cacheDir.resolve(ValidCacheMarker))
@@ -226,7 +231,7 @@ object PythonLauncher extends Log {
       python: PythonDefinition,
       prefix: String,
       cmdline: String,
-      workingDir: Directory): Seq[CompilationMessage] = {
+      workingDir: Option[Directory] = None): Seq[CompilationMessage] = {
     python.binPath match {
       case Some(pythonBinPath) =>
         launch(prefix, cmdline, workingDir, Seq(pythonBinPath)) {
@@ -237,14 +242,14 @@ object PythonLauncher extends Log {
     }
   }
 
-  @async def launch(prefix: String, cmdLine: String, workingDir: Directory, addToPath: Seq[String] = Seq.empty)(
+  @async def launch(prefix: String, cmdLine: String, workingDir: Option[Directory], addToPath: Seq[String] = Seq.empty)(
       pf: PartialFunction[String, CompilationMessage]): Seq[CompilationMessage] = {
     val cmds =
       if (Utils.isWindows) Seq("cmd.exe", "/c", cmdLine)
       else Seq("ksh", "-c", cmdLine)
 
     val pb = new ProcessBuilder(cmds: _*)
-    pb.directory(workingDir.path.toFile)
+    workingDir.foreach(dir => pb.directory(dir.path.toFile))
 
     val pathEnv = {
       val currentPath = pb.environment().getOrDefault("PATH", "")
