@@ -11,7 +11,6 @@
  */
 package optimus.stratosphere.common
 
-import scala.language.experimental.macros
 import scala.reflect.macros.whitebox
 
 /**

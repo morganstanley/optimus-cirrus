@@ -212,13 +212,14 @@ private[buildtool] trait GitCmdLine { this: OptimusAppCmdLine =>
 }
 
 private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
+  // TODO (OPTIMUS-70130): delete once fully unused in obt.conf and CI jobs
   @args.Option(
     name = "--silverKing",
     required = false,
     aliases = Array("--sk", "--silverking"),
     usage = "SilverKing location (defaults to SK disabled)"
   )
-  val silverKing: String = NoneArg
+  val silverKing_DO_NOT_USE: String = NoneArg
 
   // TODO (OPTIMUS-70130): delete once fully unused in obt.conf and CI jobs
   @args.Option(
@@ -226,7 +227,7 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     required = false,
     usage = "Comparison mode [dis|en]abled for remote store (defaults to false/disabled)"
   )
-  val comparisonMode: Boolean = false
+  val comparisonMode_DO_NOT_USE: Boolean = false
 
   @args.Option(
     name = "--dhtRemoteStore",

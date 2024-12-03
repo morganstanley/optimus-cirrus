@@ -29,6 +29,7 @@ import scala.collection.immutable.Seq
 class MessageReporter(
     obtConfig: ObtConfig,
     val errorReporter: ErrorReporter,
+    buildDir: Directory,
     warningsDir: Option[Directory],
     lookupsDir: Option[Directory],
     codeReviewSettings: Option[CodeReviewSettings],
@@ -39,6 +40,7 @@ class MessageReporter(
   private val csvReporter = new CsvReporter(obtConfig)
   private val jsonReporter = new JsonReporter(obtConfig, codeReviewSettings, metadataSettings)
   private val lookupReporter = new LookupReporter(obtConfig)
+  private val classpathReporter = new ScopedClasspathReporter()
 
   @async def writeReports(buildResult: CompletedBuildResult, factory: ScopedCompilationFactory): Unit =
     apar(
@@ -46,7 +48,8 @@ class MessageReporter(
       writeLookupReport(buildResult),
       writeOptimusWarningReports(buildResult),
       writeCodeReviewAnalysis(buildResult),
-      jsonReporter.writeMetadataReports(buildResult.scopeIds, factory)
+      jsonReporter.writeMetadataReports(buildResult.scopeIds, factory),
+      classpathReporter.writeClasspathReports(buildDir, buildResult, factory)
     )
 
   @async private def writeLookupReport(buildResult: CompletedBuildResult): Unit = {

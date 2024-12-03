@@ -14,8 +14,6 @@ package optimus.platform.util.html
 import optimus.platform.util.PrettyStringBuilder
 import org.apache.commons.text.StringEscapeUtils
 
-import scala.language.implicitConversions
-
 /**
  * ***** Concrete GroupHtmlNodes ******
  */

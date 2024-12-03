@@ -24,7 +24,6 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.WatchEvent
 import java.nio.file.attribute.BasicFileAttributes
 import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 object PathsOpts {

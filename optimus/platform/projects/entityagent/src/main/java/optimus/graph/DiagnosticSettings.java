@@ -237,8 +237,10 @@ public class DiagnosticSettings {
 
   public static final boolean pluginCounts;
 
-  public static final int maxPluginNodesTracked =
-      getIntProperty("optimus.plugin.maxNodesTracked", 100 * 1000);
+  public static final int maxPluginNodesBuffer =
+      getIntProperty("optimus.plugin.max.nodes", 100 * 1000);
+
+  public static final int minPluginNodeResizeRatio = getIntProperty("optimus.plugin.min.nodes", 10);
 
   public static final boolean autoAsyncProfiler;
   public static final boolean repairLauncherChain;

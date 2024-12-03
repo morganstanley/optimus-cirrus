@@ -13,6 +13,7 @@ package optimus.buildtool.config
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.util.hashing.MurmurHash3
 
 trait Id {
   def contains(scopeId: ScopeId): Boolean
@@ -72,6 +73,9 @@ final case class ScopeId(meta: String, bundle: String, module: String, tpe: Stri
   override def contains(scopeId: ScopeId): Boolean = this == scopeId
   override def toString: String =
     if (Seq(meta, bundle, module, tpe).forall(_.isEmpty)) "." else super.toString
+
+  @transient
+  override val hashCode: Int = MurmurHash3.productHash(this)
 }
 
 object ScopeId {

@@ -22,11 +22,10 @@ import org.slf4j.LoggerFactory.getLogger
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
-import scala.util
 import scala.util.Try
 import scala.collection.compat._
 import scala.collection.immutable.Seq
-import scala.collection.mutable.Buffer
+import scala.collection.mutable
 
 // Functions related to reading and writing the mapping files (current-mapping.json, classpath-mapping.txt) that maps from the OBT produced jars to the scope IDs.
 
@@ -47,10 +46,10 @@ object OutputMappings {
             .asScala
         } catch {
           // this is the only exception that it makes sense to catch here, as we call this function when we update the
-          // (potentially inexistent) classpath mapping file. Other issues (invalid path, permissions etc) are bubbled up.
-          case e: NoSuchFileException =>
+          // (potentially nonexistent) classpath mapping file. Other issues (invalid path, permissions etc) are bubbled up.
+          case _: NoSuchFileException =>
             log.debug(s"No such file ${file.pathString}")
-            Buffer.empty
+            mutable.Buffer.empty
         }
       lines
         .flatMap(line => {

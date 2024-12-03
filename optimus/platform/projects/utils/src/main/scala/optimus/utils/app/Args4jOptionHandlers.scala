@@ -169,14 +169,7 @@ final class ExistingPathOptionHandler(parser: CmdLineParser, optionDef: OptionDe
   }
 }
 
-// Similar to org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler, but assume any parameter not matching one of the
-// acceptable values is part of the next option/argument.
-class FlexibleBooleanOptionHandler(
-    parser: CmdLineParser,
-    option: OptionDef,
-    setter: Setter[Boolean]
-) extends OptionHandler[Boolean](parser, option, setter) {
-
+object FlexibleBooleanOptionHandler {
   private val acceptableValues = Map(
     "true" -> true,
     "on" -> true,
@@ -187,6 +180,15 @@ class FlexibleBooleanOptionHandler(
     "no" -> false,
     "0" -> false
   )
+}
+// Similar to org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler, but assume any parameter not matching one of the
+// acceptable values is part of the next option/argument.
+class FlexibleBooleanOptionHandler(
+    parser: CmdLineParser,
+    option: OptionDef,
+    setter: Setter[Boolean]
+) extends OptionHandler[Boolean](parser, option, setter) {
+  import FlexibleBooleanOptionHandler.acceptableValues
 
   override def parseArguments(params: Parameters): Int = {
     val arg = if (params.size == 0) None else acceptableValues.get(params.getParameter(0).toLowerCase)

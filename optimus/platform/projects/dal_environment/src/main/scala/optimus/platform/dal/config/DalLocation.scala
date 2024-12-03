@@ -79,7 +79,6 @@ object DalEnv {
   val qa = DalEnv("qa")
   val qai = DalEnv("qai")
   val bas = DalEnv("bas")
-  val cloud_reg = DalEnv("cloud-reg")
   val reg = DalEnv("reg")
   val reg2 = DalEnv("reg2")
   val snap = DalEnv("snap")

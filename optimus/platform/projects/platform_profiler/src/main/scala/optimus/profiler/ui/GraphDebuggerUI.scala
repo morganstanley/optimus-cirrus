@@ -301,7 +301,7 @@ class GraphDebuggerUI private (val offlineReview: Boolean) extends JFrame2 with 
       }
 
       profilerMenu.addSeparator()
-      add(profilerMenu, "Generate Property Configuration...", profiler.cmdExportCachePropertiesFile())
+      add(profilerMenu, "Generate optconf (property configuration)", profiler.cmdExportCachePropertiesFile())
       profilerMenu.addSeparator()
       add(profilerMenu, "Refresh All", refresh()).setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0))
       add(profilerMenu, "Reset Profile", profiler.cmdResetProfile())

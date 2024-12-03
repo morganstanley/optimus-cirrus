@@ -15,33 +15,26 @@ import optimus.buildtool.app.OptimusBuildToolCmdLineT
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.app.RemoteStoreCmdLine
 import optimus.buildtool.cache.CacheMode
-import optimus.buildtool.cache.MultiWriteableArtifactStore
-import optimus.buildtool.cache.MultiWriteArtifactStore
 import optimus.buildtool.cache.EmptyStore
 import optimus.buildtool.cache.NodeCaching
+import optimus.buildtool.cache.WriteableArtifactStore
 import optimus.buildtool.cache.RemoteReadThroughTriggeringArtifactCache
 import optimus.buildtool.cache.SimpleArtifactCache
 import optimus.buildtool.cache.dht.DHTStore
 import optimus.buildtool.cache.dht.LocalDhtServer
-import optimus.buildtool.cache.silverking.SilverKingConfig
-import optimus.buildtool.cache.silverking.SilverKingStore
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.dht.client.api.DHTClientBuilder
 import optimus.dht.client.api.registry.StaticRegistryObserver
 import optimus.platform._
-import optimus.stratosphere.config.StratoWorkspace
 
 @entity class RemoteCacheProvider(
     cmdLine: RemoteCacheProvider.CacheCmdLine,
     defaultVersion: String,
-    pathBuilder: CompilePathBuilder,
-    stratoWorkspace: StratoWorkspace,
-    cacheOperationRecorder: CacheOperationRecorder
+    pathBuilder: CompilePathBuilder
 ) {
   import RemoteCacheProvider._
-  private def isEnabled[T](sk: String): Boolean = sk != OptimusBuildToolCmdLineT.NoneArg
   private def isEnabled(): Boolean =
-    cmdLine.silverKing != OptimusBuildToolCmdLineT.NoneArg || cmdLine.dhtRemoteStore != OptimusBuildToolCmdLineT.NoneArg
+    cmdLine.dhtRemoteStore != OptimusBuildToolCmdLineT.NoneArg
   private val writeCmdLine = PartialFunction.condOpt(cmdLine) { case wcl: RemoteStoreCmdLine => wcl }
 
   private val defaultCacheMode: CacheMode = writeCmdLine.fold[CacheMode](CacheMode.ReadOnly) { cmdLine =>
@@ -81,11 +74,11 @@ import optimus.stratosphere.config.StratoWorkspace
   // is version independent (artifactVersion = "rootLocator" instead of version)
   @node @scenarioIndependent def remoteRootLocatorCache: Option[RemoteArtifactCache] =
     if (isEnabled()) {
-      Some(getCache("rootLocator", version = "rootLocator", offlinePuts = false))
+      Some(getCache("rootLocator", version = "rootLocator"))
     } else None
 
   @node @scenarioIndependent private def getCrossRegionPopulatingCache(
-      store: MultiWriteableArtifactStore,
+      store: WriteableArtifactStore,
       cacheMode: CacheMode,
       version: String): RemoteArtifactCache = {
     val forcedReadThroughStores: Set[DHTStore] = cmdLine.crossRegionReadThroughDHTLocations.apar
@@ -108,16 +101,14 @@ import optimus.stratosphere.config.StratoWorkspace
   @node @scenarioIndependent private def getCache(
       cacheType: String,
       cacheMode: CacheMode = defaultCacheMode,
-      version: String = defaultVersion,
-      silverKing: String = cmdLine.silverKing,
-      offlinePuts: Boolean = true,
+      version: String = defaultVersion
   ): RemoteArtifactCache = {
 
-    val store = (silverKing, cmdLine.dhtRemoteStore) match {
-      case (NoneArg, NoneArg) =>
-        log.info(s"SilverKing and DHT remote stores not enabled, using EmptyStore")
+    val store = cmdLine.dhtRemoteStore match {
+      case NoneArg =>
+        log.info(s"DHT remote store not enabled, using EmptyStore")
         EmptyStore
-      case (NoneArg, dht) if dht != NoneArg =>
+      case dht =>
         log.info(s"Using DHT $cacheType cache at $dht")
 
         val clusterType = DHTStore.zkClusterType(dht)
@@ -131,34 +122,7 @@ import optimus.stratosphere.config.StratoWorkspace
           .getOrElse(DHTStore.ZkBuilder(dht)) // custom ZK path
 
         new DHTStore(pathBuilder, clusterType, version, cacheMode, clientBuilder)
-      case (sk, NoneArg) if sk != NoneArg =>
-        val config = SilverKingConfig(silverKing)
-        log.info(s"Using silverking $cacheType cache at $config")
-        SilverKingStore(pathBuilder, config, version, cacheMode, offlinePuts, cacheOperationRecorder)
-      case (sk, dht) if sk != NoneArg && dht != NoneArg =>
-        val config = SilverKingConfig(silverKing)
-        log.info(s"Using silverking $cacheType cache at $config")
-        log.info(s"Using DHT $cacheType cache at $dht")
-        log.info(s"Comparison mode enabled, using ComparingArtifactStore")
-        new MultiWriteArtifactStore(
-          new DHTStore(
-            pathBuilder,
-            DHTStore.zkClusterType(dht),
-            version,
-            cacheMode,
-            DHTStore.ZkBuilder(dht)
-          ),
-          Seq(
-            SilverKingStore(
-              CompilePathBuilder(pathBuilder.outputDir.parent.resolveDir("build_obt_compare")),
-              config,
-              version,
-              cacheMode,
-              offlinePuts),
-          ),
-          stratoWorkspace,
-          cacheMode
-        )
+
     }
     getCrossRegionPopulatingCache(store, cacheMode, version)
   }
@@ -167,7 +131,7 @@ import optimus.stratosphere.config.StratoWorkspace
 
 object RemoteCacheProvider {
   type RemoteArtifactCache =
-    SimpleArtifactCache[MultiWriteableArtifactStore]
+    SimpleArtifactCache[WriteableArtifactStore]
   type CacheCmdLine = RemoteStoreCmdLine
   // making sure we keep the remote caches internal information around to decide if we can write root locators
   `getCache`.setCustomCache(NodeCaching.reallyBigCache)

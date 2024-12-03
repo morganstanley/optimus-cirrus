@@ -83,8 +83,16 @@ object NodeTreeTable {
     Mode("UI Invalidation by Tweak", uiInvalidationByTweakToolTip, autoExpand = false, icon = Icons.uiInvalidates)
   val commonParent: Mode =
     Mode("Common Parent", cp, autoExpand = true, directionToChildren = true, icon = Icons.commonParent)
+  val topParents: Mode =
+    Mode(
+      "Top Parent(s)",
+      "Show top level parents",
+      autoExpand = true,
+      directionToChildren = true,
+      icon = Icons.commonParent)
 
-  val modes = List(children, parents, null /* separator */, uiInvalidation, uiInvalidationGroupByTweak, commonParent)
+  val modes =
+    List(children, parents, null /* separator */, uiInvalidation, uiInvalidationGroupByTweak, commonParent, topParents)
   val noAutoExpandConfig: ExpandConfig = ExpandConfig(skipInternal = true, uiInvalidation)
 
   val fakePNodeTask: PNodeTask = PNodeTask.fake
@@ -174,6 +182,30 @@ object NodeTreeTable {
     }
   )
 
+  private abstract class TS(val visitedNodes: ArrayBuffer[PNodeTask]) extends TreeSelector[NodeTreeView] {
+    var matched = false // Complete match
+    var maybeLower = true
+
+    override def review(i: NodeTreeView): Unit = {
+      val pnt = i.task
+      if (pnt.visitedID > 0) {
+        matched = false
+        maybeLower = false
+      } else {
+        pnt.visitedID = 1
+        visitedNodes += i.task
+        reviewTask(i)
+      }
+    }
+
+    def reviewTask(i: NodeTreeView): Unit
+
+    override def destroy(): Unit = {
+      val it = visitedNodes.iterator
+      while (it.hasNext) it.next().visitedID = 0
+    }
+  }
+
   private def getTreeSelector(selectionPath: String): TreeSelector[NodeTreeView] = {
     val matchExp = new ArrayBuffer[PNodeTask => Boolean]()
     val matchCond = new ArrayBuffer[Char]()
@@ -202,54 +234,55 @@ object NodeTreeTable {
       }
     }
 
-    class TS(val level: Int, val visitedNodes: ArrayBuffer[PNodeTask]) extends TreeSelector[NodeTreeView] {
-      var matched = false // Complete match
-      var maybeLower = true
+    class CustomTreeSelector(level: Int, visitedNodes: ArrayBuffer[PNodeTask]) extends TS(visitedNodes) {
       var levelMatched = false // match on this level
 
-      override def review(i: NodeTreeView): Unit = {
-        // if matchCond is empty, we were just filtering for exceptions and don't care about depth
-        def deepMatch(level: Int): Boolean = matchCond.isEmpty || matchCond(level) == 'D'
-
+      // if matchCond is empty, we were just filtering for exceptions and don't care about depth
+      private def deepMatch(level: Int): Boolean = matchCond.isEmpty || matchCond(level) == 'D'
+      def reviewTask(i: NodeTreeView): Unit = {
         def hasChildrenWithExceptions: Boolean = {
           i.hasChildren && i.getUncompressedChildren.exists(_.asInstanceOf[NodeTreeView].task.isDoneWithException)
         }
 
-        val pnt = i.task
-        if (pnt.visitedID > 0) {
+        if (level < matchExp.size) {
+          if (matchCond(level) == 'X') {
+            matched = i.task.isDoneWithException && !hasChildrenWithExceptions
+            maybeLower = true
+          } else {
+            levelMatched = matchExp(level)(i.task)
+            if (level == matchExp.size - 1) {
+              maybeLower = !levelMatched && deepMatch(level)
+              matched = levelMatched
+            } else {
+              matched = false // Not a last level so for sure not a 'full' match
+              maybeLower = levelMatched || deepMatch(level)
+            }
+          }
+        } else {
           matched = false
           maybeLower = false
-        } else {
-          pnt.visitedID = 1
-          visitedNodes += i.task
-          if (level < matchExp.size) {
-            if (matchCond(level) == 'X') {
-              matched = i.task.isDoneWithException && !hasChildrenWithExceptions
-              maybeLower = true
-            } else {
-              levelMatched = matchExp(level)(i.task)
-              if (level == matchExp.size - 1) {
-                maybeLower = !levelMatched && deepMatch(level)
-                matched = levelMatched
-              } else {
-                matched = false // Not a last level so for sure not a 'full' match
-                maybeLower = levelMatched || deepMatch(level)
-              }
-            }
-          } else {
-            matched = false
-            maybeLower = false
-          }
         }
       }
+      def moveDown() = new CustomTreeSelector(if (levelMatched) level + 1 else level, visitedNodes)
+    }
 
-      def moveDown() = new TS(if (levelMatched) level + 1 else level, visitedNodes)
-      override def destroy(): Unit = {
-        val it = visitedNodes.iterator
-        while (it.hasNext) it.next().visitedID = 0
+    new CustomTreeSelector(0, new ArrayBuffer[PNodeTask]())
+  }
+
+  def getTreeSelector(pnts: Seq[PNodeTask]): TreeSelector[NodeTreeView] = {
+    class CustomTreeSelectorWithTaskMatch(visitedNodes: ArrayBuffer[PNodeTask]) extends TS(visitedNodes) {
+      def moveDown(): TS = new CustomTreeSelectorWithTaskMatch(visitedNodes)
+      override def reviewTask(i: NodeTreeView): Unit = {
+        if (pnts.contains(i.task)) {
+          matched = true
+          maybeLower = false
+        } else {
+          maybeLower = true
+        }
       }
     }
-    new TS(0, new ArrayBuffer[PNodeTask]())
+
+    new CustomTreeSelectorWithTaskMatch(new ArrayBuffer[PNodeTask]())
   }
 
   def recomputeMinMaxTime(firstAndLastTimes: Seq[(Long, Long)]): TimeFullRange = {
@@ -324,6 +357,8 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
         expandUITracksGroupedByTweaks(_roots) // Expand ui tracks and setList
       else if (expandCfg.mode eq NodeTreeTable.commonParent)
         expandCommonParent(_roots)
+      else if (expandCfg.mode eq NodeTreeTable.topParents)
+        expandTopParents(_roots, expand)
       else
         openFromRoot(_roots, if (!expand) 1 else 50)
     } else setList(List())
@@ -350,6 +385,24 @@ class NodeTreeTable(var _roots: ArrayBuffer[PNodeTask], val details: NodeView, v
       }
     } else if (newTasks.length == 1)
       openFromRoot(newTasks, expandCfg.withDirection(toChildren = false), maxCount = 50) // same as parents view
+  }
+
+  private def expandTopParents(selectedTasks: ArrayBuffer[PNodeTask], expandTree: Boolean = true): Unit = {
+    val topParents = NodeGraphVisitor.topParents(selectedTasks)
+    if (topParents.nonEmpty) {
+      if (expandTree) {
+        openFromRoot(topParents, expandCfg.withDirection(toChildren = true), 1)
+        val treeSelector = NodeTreeTable.getTreeSelector(selectedTasks)
+        try {
+          super.openTo(useSelection = false, treeSelector, compress = true)
+        } finally { treeSelector.destroy() }
+      } else {
+        openFromRoot(topParents, expandCfg.withDirection(toChildren = true), 1)
+      }
+    } else {
+      println(s"No top parents found for ${selectedTasks.map(_.getTask.nameAndSource())}")
+      setList(List())
+    }
   }
 
   private def expandUITracksGroupedByTweaks(roots: ArrayBuffer[PNodeTask]): Unit = {
@@ -617,7 +670,10 @@ class NodeTreeView(override val task: PNodeTask, val expandCfg: ExpandConfig, va
 
   def resultAsString: String = task.resultDisplayString
 
-  override def title: String = task.toPrettyName(NodeFormatUI.useEntityType, NodeFormatUI.abbreviateName)
+  override def title: String = {
+    val taskName = task.toPrettyName(NodeFormatUI.useEntityType, NodeFormatUI.abbreviateName)
+    if (!task.isDone) "↨" + taskName else taskName
+  }
 
   override def printSource(): Unit = task.printSource()
 

@@ -360,7 +360,7 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   }
 
   // Given source node, produce a Node representing the transformed value.
-  final def flatMap[B](f: T => Node[B]): Node[B] = new FlatMapNode(this, f)
+  final def flatMap[B](f: T => Node[B]): Node[B] = new FlatMapNode(this, f, true)
 
   protected def throwNodeCompletionException(otherNode: Node[_]): Unit = {
     import scala.jdk.CollectionConverters._
@@ -923,7 +923,7 @@ abstract class MarkedAsAdaptedNode[A] extends CompletableNode[A] {
  *
  * If attach = false, we neither attach outer, nor the node produced by f.
  */
-final class FlatMapNode[A, B](outer: Node[A], f: A => Node[B], attach: Boolean = true) extends CompletableNodeM[B] {
+final class FlatMapNode[A, B](outer: Node[A], f: A => Node[B], attach: Boolean) extends CompletableNodeM[B] {
   override def run(ec: OGSchedulerContext): Unit = {
     if (attach) outer.attach(scenarioStack())
     ec.enqueue(this, outer) // Schedule the result node as a continuation of the source node.

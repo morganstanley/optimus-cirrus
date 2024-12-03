@@ -14,6 +14,7 @@ package optimus.stratosphere.workflow
 import akka.http.scaladsl.model.Uri
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.http.client.HttpClientFactory
+
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
@@ -27,12 +28,16 @@ final class WorkflowServerRestApiClient(workspace: StratoWorkspaceCommon)(
     .factory(workspace)
     .createClient(Uri(s"http://$host:$port"), "workflow-server", timeout, sendCrumbs = false)
 
-  def jiraInstanceProjectMapping(): Map[String, String] = {
+  /**
+   * @return Map of ("PROJECT" -> "jira")
+   */
+  def projectInstanceMapping(): Map[String, String] = {
     httpClient
       .get("/api/jira/instanceProjectMapping")
       .entrySet()
       .asScala
-      .map(entry => entry.getKey -> entry.getValue.render())
+      .toSeq
+      .map(entry => entry.getKey -> entry.getValue.unwrapped().toString)
       .toMap
   }
 }

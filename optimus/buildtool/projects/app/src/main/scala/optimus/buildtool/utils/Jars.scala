@@ -162,8 +162,8 @@ object Jars {
       .map(parseManifestClasspath(jarAsset, _))
       .getOrElse(Nil)
 
-  def extractClassJar(jarAsset: JarAsset, manifest: jar.Manifest): Option[JarAsset] =
-    JarUtils.load(manifest, nme.ClassJar).map(f => jarAsset.parent.resolveJar(f))
+  def extractClassJars(jarAsset: JarAsset, manifest: jar.Manifest): Seq[JarAsset] =
+    JarUtils.load(manifest, nme.ClassJar).map(_.split(";").map(jarAsset.parent.resolveJar).toList).getOrElse(Seq.empty)
 
   private def extractSemicolonSeparatedValue(manifest: jar.Manifest, name: Name): Seq[String] =
     JarUtils.load(manifest, name, ";")

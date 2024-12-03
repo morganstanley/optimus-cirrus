@@ -28,7 +28,6 @@ import org.objectweb.asm.Type;
 
 public class InstrumentationConfig {
   private static final HashMap<String, ClassPatch> clsPatches = new HashMap<>();
-  private static final HashMap<String, Boolean> entityClasses = new HashMap<>();
   private static final HashMap<String, Boolean> derivedClasses = new HashMap<>();
   private static final HashMap<String, Boolean> moduleOrEntityExclusions = new HashMap<>();
   private static final ArrayList<ClassPatch> multiClsPatches = new ArrayList<>();
@@ -58,6 +57,7 @@ public class InstrumentationConfig {
   public static final Type OBJECT_TYPE = Type.getObjectType(OBJECT_CLS_NAME);
 
   private static final String ENTITY_TYPE = "optimus/platform/storable/Entity";
+  static final String ENTITY_ANNOTATION = "Loptimus/platform/entity;";
   private static final String SS_TYPE = "optimus/platform/ScenarioStack";
   public static final String OGSC_TYPE = "optimus/graph/OGSchedulerContext";
   public static final String IS = "optimus/graph/InstrumentationSupport";
@@ -166,7 +166,6 @@ public class InstrumentationConfig {
   public static final ArrayList<MethodDesc> descriptors = new ArrayList<>();
 
   static {
-    entityClasses.putIfAbsent("optimus/platform/storable/EntityImpl", Boolean.TRUE);
     descriptors.add(new MethodDesc(new MethodRef("none", "none")));
     InstrumentationCmds.loadCommands();
   }
@@ -180,18 +179,12 @@ public class InstrumentationConfig {
         || instrumentEquals;
   }
 
-  private static boolean keepHierarchy(
-      HashMap<String, Boolean> table, String className, String superName) {
-    //noinspection SynchronizationOnLocalVariableOrMethodParameter
-    synchronized (table) {
-      if (!table.containsKey(superName)) return false;
-      table.putIfAbsent(className, Boolean.TRUE);
+  private static boolean keepHierarchy(String className, String superName) {
+    synchronized (InstrumentationConfig.derivedClasses) {
+      if (!InstrumentationConfig.derivedClasses.containsKey(superName)) return false;
+      InstrumentationConfig.derivedClasses.putIfAbsent(className, Boolean.TRUE);
     }
     return true;
-  }
-
-  public static boolean isEntity(String className, String superName) {
-    return keepHierarchy(entityClasses, className, superName);
   }
 
   /** For reporting */
@@ -204,7 +197,7 @@ public class InstrumentationConfig {
   }
 
   public static boolean isDerivedClass(String className, String superName) {
-    return keepHierarchy(derivedClasses, className, superName);
+    return keepHierarchy(className, superName);
   }
 
   @SuppressWarnings("BooleanMethodIsAlwaysInverted")

@@ -51,9 +51,10 @@ object BitbucketApiRestClient {
 }
 
 final case class Comment(text: String)
-final case class SetForkSyncing(enabled: Boolean)
-final case class SetAccess(enabled: Boolean)
 final case class CreatePrivateFork(name: String)
+final case class SetAccess(enabled: Boolean)
+final case class SetForkSyncing(enabled: Boolean)
+final case class SetName(name: String)
 final case class SynchronizeFork(refId: String, action: String)
 
 trait BitbucketApiRestClientProtocol extends DefaultJsonProtocol {
@@ -61,6 +62,7 @@ trait BitbucketApiRestClientProtocol extends DefaultJsonProtocol {
   implicit val createPrivateForkFormat: JsonFormat[CreatePrivateFork] = jsonFormat1(CreatePrivateFork.apply)
   implicit val setAccessFormat: JsonFormat[SetAccess] = jsonFormat1(SetAccess.apply)
   implicit val setForkSyncingFormat: JsonFormat[SetForkSyncing] = jsonFormat1(SetForkSyncing.apply)
+  implicit val setNameFormat: JsonFormat[SetName] = jsonFormat1(SetName.apply)
   implicit val synchronizeForkFormat: JsonFormat[SynchronizeFork] = jsonFormat2(SynchronizeFork.apply)
 }
 
@@ -216,8 +218,8 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
 
   def getPrivateForksOfUser(userName: String): Seq[RemoteSpec] = allPrivateRepositoriesOfUser(userName).filter(_.isFork)
 
-  def createPrivateFork(meta: String, project: String, repo: String, forkName: String): RemoteUrl = {
-    val forkUrl = prepareUrl(s"projects/${meta}_$project/repos/$repo", defaultApiName)
+  def createPrivateFork(projectKey: String, repo: String, forkName: String): RemoteUrl = {
+    val forkUrl = prepareUrl(s"projects/$projectKey/repos/$repo", defaultApiName)
     val cloneUrl = httpClient
       .post(forkUrl, CreatePrivateFork(forkName))
       .getConfigList("links.clone")
@@ -263,6 +265,11 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
       lastSync = maybeLastSync,
       divergedBranches = divergedBranches
     )
+  }
+
+  def updatePrivateForkName(userName: String, repository: String, name: String): Config = {
+    val url = prepareUrl(s"projects/~$userName/repos/$repository", defaultApiName)
+    httpClient.put(url, SetName(name))
   }
 
   def setForkSyncing(userName: String, repository: String, enabled: Boolean = true): Config = {

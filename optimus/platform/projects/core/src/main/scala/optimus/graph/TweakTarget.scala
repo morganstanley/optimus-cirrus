@@ -51,18 +51,14 @@ trait TweakTarget[R, SetT] {
   final def fullSpecified: Boolean = hashKey.isInstanceOf[AlreadyCompletedPropertyNode[_]] && !unresolved
 
   private[this] def makeTweak(tweakTemplate: TweakNode[R]) = new Tweak(this, tweakTemplate)
-  protected def mkPlus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] = new TweakNodeModifyOriginal[R](vn) {
-    def modify(org: R, mod: R): R = ev.plus(org, mod); def opName = "+"
-  }
-  protected def mkMinus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] = new TweakNodeModifyOriginal[R](vn) {
-    def modify(org: R, mod: R): R = ev.minus(org, mod); def opName = "-"
-  }
-  protected def mkTimes(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] = new TweakNodeModifyOriginal[R](vn) {
-    def modify(org: R, mod: R): R = ev.times(org, mod); def opName = "*"
-  }
-  protected def mkDiv(vn: AnyRef)(implicit ev: Fractional[R]): TweakNode[R] = new TweakNodeModifyOriginal[R](vn) {
-    def modify(org: R, mod: R): R = ev.div(org, mod); def opName = "/"
-  }
+  protected def mkPlus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
+    new TweakNodeModifyOriginal.Plus[R](vn)
+  protected def mkMinus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
+    new TweakNodeModifyOriginal.Minus[R](vn)
+  protected def mkTimes(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =
+    new TweakNodeModifyOriginal.Times[R](vn)
+  protected def mkDiv(vn: AnyRef)(implicit ev: Fractional[R]): TweakNode[R] =
+    new TweakNodeModifyOriginal.Div[R](vn)
 
   @tweakOperator
   @nodeSyncLift

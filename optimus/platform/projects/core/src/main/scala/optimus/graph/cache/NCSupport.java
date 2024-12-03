@@ -22,6 +22,7 @@ import optimus.graph.NodeTask;
 import optimus.graph.NodeTaskInfo;
 import optimus.graph.OGTrace;
 import optimus.graph.PropertyNode;
+import optimus.graph.ProxyPropertyNode;
 import optimus.graph.RecordedTweakables;
 import optimus.graph.TweakTreeNode;
 import optimus.platform.NodeHash;
@@ -230,6 +231,10 @@ public class NCSupport {
     return ntsk instanceof DelayedProxyNode;
   }
 
+  public static boolean isProxy(NodeTask ntsk) {
+    return ntsk instanceof ProxyPropertyNode<?>;
+  }
+
   /** Return true for CancellationScope proxies (used in tests to filter CS proxies in cache) */
   public static boolean isDelayedCSProxy(NodeTask ntsk) {
     return ntsk instanceof DelayedCSProxyNode;
@@ -377,15 +382,17 @@ public class NCSupport {
         return false;
       }
 
-      // We are going to need to to look at the tweaks in kss. If kss is cancelled, it might be
-      // because we are currently modifying it's MutableSSCacheID in a dependency tracker
+      // We are going to need to look at the tweaks in kss. If kss is cancelled, it might be
+      // because we are currently modifying its MutableSSCacheID in a dependency tracker
       // invalidation. If that's the case, calling matchXScenario(infoTarget, kss, rt) below can
       // produce a ConcurrentModificationException or potentially wrong results.
       //
-      // We don't need to check more than once because of evaluationBarrier(). If we are checking
-      // either we are in a currently running cancelled node (in which case we will mutate only
-      // after waitForCancelledNodesToStop, and thus our node is done) or in a NodeTask.complete()
-      // call after the barrier, in which case the scope has already been cancelled.
+      // We don't need to check more than once because of
+      // DependencyTrackerQueue.evaluationBarrier().
+      // If we are checking either we are in a currently running cancelled node (in which case we
+      // will mutate only after waitForCancelledNodesToStop, and thus our node is done) or in a
+      // NodeTask.complete() call after the barrier, in which case the scope has already been
+      // cancelled.
       //
       // css is fine though because we only look at recordedTweakables, which is not mutable.
       if (kss.cancelScope().isCancelled()) return false;

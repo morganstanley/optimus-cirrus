@@ -38,7 +38,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.nowarn
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import scala.reflect.macros.whitebox
 import scala.reflect.runtime.universe._

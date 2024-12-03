@@ -20,16 +20,44 @@ import optimus.platform._
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 
+@entity object UpstreamArtifacts {
+
+  // distinctLast, but also remove duplicate ClassFileArtifacts which differ only in containsOrUsedByMacros
+  @node private def distinctArtifacts(artifacts: Seq[Artifact]): Seq[Artifact] = {
+    val artifactIdsUsedByMacros = artifacts.collect {
+      case cfa: ClassFileArtifact if cfa.containsOrUsedByMacros => cfa.id
+    }.toSet
+    val builder = Vector.newBuilder[Artifact]
+    val seenClassFiles = mutable.Set[ArtifactId]()
+    val seenOthers = mutable.Set[Artifact]() // not all artifacts have unique IDs, so use the full artifact here
+    artifacts.toVector.reverse.foreach {
+      case cfa: ClassFileArtifact =>
+        if (seenClassFiles.add(cfa.id)) {
+          val updated =
+            if (!cfa.containsOrUsedByMacros && artifactIdsUsedByMacros.contains(cfa.id))
+              cfa.copy(containsOrUsedByMacros = true)
+            else cfa
+          builder += updated
+        }
+      case a =>
+        if (seenOthers.add(a)) builder += a
+    }
+    builder.result().reverse
+  }
+  distinctArtifacts_info.setCacheable(false)
+}
+
 @entity private[buildtool] class UpstreamArtifacts(
     private[scope] val compileDependencies: ScopeDependencies,
     private[scope] val compileOnlyDependencies: ScopeDependencies,
     val runtimeDependencies: ScopeDependencies
 ) {
+  import UpstreamArtifacts.distinctArtifacts
 
-  def allCompileDependencies: Seq[ScopeDependencies] = Seq(compileDependencies, compileOnlyDependencies)
+  def allCompileDependencies: Seq[ScopeDependencies] = Vector(compileDependencies, compileOnlyDependencies)
 
   @node def signaturesForOurCompiler: Seq[Artifact] =
-    distinctArtifacts(signaturesForDownstreamCompilers ++ signaturesForOurCompilerOnly)
+    distinctArtifacts((signaturesForDownstreamCompilers ++ signaturesForOurCompilerOnly).toVector)
 
   @node private def signaturesForOurCompilerOnly: Seq[Artifact] =
     // ask our upstreams what we need (it will vary depending on whether or not they have macros)
@@ -37,7 +65,8 @@ import scala.collection.mutable
       compileOnlyDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.signaturesForDownstreamCompilers))
+        .flatMap(_.signaturesForDownstreamCompilers)
+        .toVector)
 
   @node def signaturesForDownstreamCompilers: Seq[Artifact] =
     // ask our upstreams what we need (it will vary depending on whether or not they have macros)
@@ -45,38 +74,42 @@ import scala.collection.mutable
       compileDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.signaturesForDownstreamCompilers))
+        .flatMap(_.signaturesForDownstreamCompilers)
+        .toVector)
 
   @node def classesForOurCompiler: Seq[Artifact] =
-    distinctArtifacts(classesForDownstreamCompilers ++ classesForOurCompilerOnly)
+    distinctArtifacts((classesForDownstreamCompilers ++ classesForOurCompilerOnly).toVector)
 
   @node private def classesForOurCompilerOnly: Seq[Artifact] =
     distinctArtifacts(
       compileOnlyDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.classesForDownstreamCompilers))
+        .flatMap(_.classesForDownstreamCompilers)
+        .toVector)
 
   @node def classesForDownstreamCompilers: Seq[Artifact] =
     distinctArtifacts(
       compileDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.classesForDownstreamCompilers))
+        .flatMap(_.classesForDownstreamCompilers)
+        .toVector)
 
   @node def pluginsForOurCompiler: Seq[Artifact] =
     distinctArtifacts(
       compileDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.pluginsForDownstreamCompilers))
+        .flatMap(_.pluginsForDownstreamCompilers)
+        .toVector)
 
   @node def cppForOurOsCompiler(osVersion: String): Seq[Artifact] =
     cppForOurCompiler.flatMap {
       case a: InternalCppArtifact if a.osVersion == osVersion => Some(a)
       case _: InternalCppArtifact                             => None
       case a                                                  => Some(a)
-    }
+    }.toVector
 
   @node def cppForOurCompiler: Seq[Artifact] =
     distinctArtifacts(
@@ -91,7 +124,8 @@ import scala.collection.mutable
       runtimeDependencies.directScopeDependencies
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.artifactsForDownstreamRuntimes))
+        .flatMap(_.artifactsForDownstreamRuntimes)
+        .toVector)
 
   @node def agentsForOurRuntime: Seq[Artifact] =
     distinctArtifacts(
@@ -112,28 +146,7 @@ import scala.collection.mutable
         runtimeDependencies.directScopeDependencies).distinct
         .sortBy(_.id.toString)
         .apar
-        .flatMap(_.allArtifacts.all))
-
-  // distinctLast, but also remove duplicate ClassFileArtifacts which differ only in containsOrUsedByMacros
-  @node private def distinctArtifacts(artifacts: Seq[Artifact]): Seq[Artifact] = {
-    val artifactIdsUsedByMacros = artifacts.collect {
-      case cfa: ClassFileArtifact if cfa.containsOrUsedByMacros => cfa.id
-    }.toSet
-    val builder = Seq.newBuilder[Artifact]
-    val seenClassFiles = mutable.Set[ArtifactId]()
-    val seenOthers = mutable.Set[Artifact]() // not all artifacts have unique IDs, so use the full artifact here
-    artifacts.reverse.foreach {
-      case cfa: ClassFileArtifact =>
-        if (seenClassFiles.add(cfa.id)) {
-          val updated =
-            if (!cfa.containsOrUsedByMacros && artifactIdsUsedByMacros.contains(cfa.id))
-              cfa.copy(containsOrUsedByMacros = true)
-            else cfa
-          builder += updated
-        }
-      case a =>
-        if (seenOthers.add(a)) builder += a
-    }
-    builder.result().reverse
-  }
+        .flatMap(_.allArtifacts.all)
+        .toVector
+    )
 }

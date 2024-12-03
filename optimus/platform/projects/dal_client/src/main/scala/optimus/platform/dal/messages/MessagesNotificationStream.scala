@@ -203,12 +203,14 @@ class MessagesNotificationStream(
   def onMessageReceived(
       msgs: Seq[DirectMessagesNotificationResult]
   ): Unit = {
-    val currentSubs = currentSubscriptions.map(_.eventClassName)
+    val currentSubs = currentSubscriptions
+    val currentSubIds = currentSubs.map(_.subId)
+    val currentSubClasses = currentSubs.map(_.eventClassName)
     msgs.foreach { msg =>
       msg.entries.foreach {
         case eventEntry: MessagesNotificationResult.SimpleEntry =>
           val className = eventEntry.className
-          if (currentSubs.contains(className))
+          if (currentSubClasses.contains(className))
             callbackInvoker.notifyMessage(
               MessagesDataNotification(
                 streamId = streamId,
@@ -219,15 +221,16 @@ class MessagesNotificationStream(
               )
             )
         case transactionEntry: MessagesNotificationResult.TransactionEntry =>
-          val className = transactionEntry.className
-          if (currentSubs.contains(className))
+          val subId = transactionEntry.subId
+          if (currentSubIds.contains(subId))
             callbackInvoker.notifyMessage(
               MessagesTransactionNotification(
                 streamId = streamId,
-                className = className,
+                className = transactionEntry.className,
                 payload = transactionEntry.serializedMsg,
                 commitId = msg.commitId,
-                pubReqId = msg.publishReqId
+                pubReqId = msg.publishReqId,
+                subscriptionId = subId
               )
             )
       }

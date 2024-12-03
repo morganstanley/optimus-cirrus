@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.compilers.zinc.mappers
 
-import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
@@ -23,10 +22,6 @@ import optimus.buildtool.compilers.zinc.ZincVirtualFiles
 import optimus.buildtool.files.Directory
 import xsbti.VirtualFileRef
 import xsbti.compile.MiniSetup
-import xsbti.compile.MultipleOutput
-import xsbti.compile.Output
-import xsbti.compile.OutputGroup
-import xsbti.compile.SingleOutput
 import xsbti.compile.analysis.GenericMapper
 import xsbti.compile.analysis.Stamp
 import optimus.buildtool.config.NamingConventions._
@@ -34,7 +29,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
-import sbt.internal.inc.CompileOutput
 
 private[zinc] abstract class ZincPathTranslatingMapper extends PathTranslatingMapper {
 
@@ -136,47 +130,12 @@ private[zinc] abstract class PathTranslatingMapper extends GenericMapper {
   final override def mapProductStamp(file: VirtualFileRef, productStamp: Stamp): Stamp = productStamp
 
   final override def mapMiniSetup(miniSetup: MiniSetup): MiniSetup = logExceptions {
-    var ret = miniSetup
-    // At this point, miniOptions has already been through mappers, so miniOptions.classPathHash in particular has
-    // been translated by mapClassPathEntry above.  For some reason, however, output has not been mapped, so
-    // we have to do it here.
-
-    // If zinc actually calls its own mapMiniSetup
-    // Note this must be either a ConcreteSingleOutput or a ConcreteMultipleOutput, or zinc will be unable
-    // to detect equivalence.
-    val output: Output = miniSetup.output() match {
-      case so: SingleOutput =>
-        new SingleOutput {
-          @Deprecated
-          override def getOutputDirectory: File = getOutputDirectoryAsPath.toFile
-          override def getOutputDirectoryAsPath: Path = translateFile(so.getOutputDirectoryAsPath)
-        }
-      case mo: MultipleOutput =>
-        new MultipleOutput {
-          override def getOutputGroups: Array[OutputGroup] = mo.getOutputGroups.map { g =>
-            new OutputGroup {
-              @Deprecated
-              override def getSourceDirectory: File = getSourceDirectoryAsPath.toFile
-              override def getSourceDirectoryAsPath: Path = translateFile(g.getSourceDirectoryAsPath)
-              @Deprecated
-              override def getOutputDirectory: File = getOutputDirectoryAsPath.toFile
-              override def getOutputDirectoryAsPath: Path = translateFile(g.getOutputDirectoryAsPath)
-            }
-          }
-        }
-      case o @ CompileOutput.empty => o
-      case o =>
-        throw new IllegalArgumentException(s"Unexpected output type ${o.getClass}")
-    }
-    ret = ret.withOutput(output)
-
-    // Options may contain explicit output paths.
+    // At this point, miniOptions has already been through mappers, so all file paths have been translated. However,
+    // options may contain explicit output paths.
     val options = miniSetup.options()
     val javacOptions = options.javacOptions.map(translateOptions)
     val scalacOptions = options.scalacOptions.map(translateOptions)
-    ret = ret.withOptions(options.withJavacOptions(javacOptions).withScalacOptions(scalacOptions))
-
-    ret
+    miniSetup.withOptions(options.withJavacOptions(javacOptions).withScalacOptions(scalacOptions))
   }
 
   override def mapSourceDir(sourceDir: Path): Path = translateFile(sourceDir)

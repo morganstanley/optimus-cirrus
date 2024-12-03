@@ -11,22 +11,33 @@
  */
 package optimus.buildtool.compilers.venv
 
+import optimus.buildtool.artifacts.JsonImplicits._
+import optimus.buildtool.files.JarAsset
+import optimus.buildtool.files.RelativePath
+import optimus.buildtool.utils.AssetUtils
+import optimus.buildtool.utils.Jars
+
 import java.nio.file.Path
 import java.nio.file.Paths
+import scala.collection.immutable.Seq
 
 object PythonConstants {
   object tpa {
-    def unpackedArtifact(artifactName: String): Path = {
+    val ConfigFileName: String = "config.json"
+
+    def unpackedArtifact(artifactName: String, config: TpaConfig): Path = {
       val user = System.getProperty("user.name")
-      Paths.get(s"/var/tmp/$user/.tpa/artifacts/.$artifactName.tpa")
+      Paths.get(s"/var/tmp/$user/.tpa/artifacts/.$artifactName.tpa-${config.id}")
     }
 
-    def unpackedArtifactSrc(artifactName: String): Path = unpackedArtifact(artifactName).resolve("src")
-    def unpackedArtifactVenv(artifactName: String): Path = unpackedArtifact(artifactName).resolve("venv")
-    def unpackedArtifactPython(artifactName: String): Path =
-      unpackedArtifactVenv(artifactName).resolve("bin").resolve("python")
-    def unpackedArtifactScript(artifactName: String, script: String): Path =
-      unpackedArtifactSrc(artifactName).resolve(script)
+    def unpackedArtifactSrc(artifactName: String, config: TpaConfig): Path =
+      unpackedArtifact(artifactName, config).resolve("src")
+    def unpackedArtifactVenv(artifactName: String, config: TpaConfig): Path =
+      unpackedArtifact(artifactName, config).resolve("venv")
+    def unpackedArtifactPython(artifactName: String, config: TpaConfig): Path =
+      unpackedArtifactVenv(artifactName, config).resolve("bin").resolve("python")
+    def unpackedArtifactScript(artifactName: String, script: String, config: TpaConfig): Path =
+      unpackedArtifactSrc(artifactName, config).resolve(script)
     def unpackCmd(
         artifact: Path,
         cacheDir: Option[Path] = None,
@@ -44,8 +55,20 @@ object PythonConstants {
         .mkString(" ")
     }
 
-    def runScriptCmd(artifactName: String, script: String, args: Seq[String]): String = {
-      (Seq(unpackedArtifactPython(artifactName), unpackedArtifactScript(artifactName, script)) ++ args).mkString(" ")
+    def runScriptCmd(artifactName: String, script: String, args: Seq[String], config: TpaConfig): String = {
+      (Seq(unpackedArtifactPython(artifactName, config), unpackedArtifactScript(artifactName, script, config)) ++ args)
+        .mkString(" ")
+    }
+
+    final case class TpaConfig(id: String)
+    object TpaConfig {
+      def load(tpa: Path): TpaConfig = {
+        val file = JarAsset(tpa)
+        Jars.withJar(file) { root =>
+          val metadataJson = root.resolveFile(RelativePath(ConfigFileName)).asJson
+          AssetUtils.readJson[TpaConfig](metadataJson, unzip = false)
+        }
+      }
     }
   }
 }

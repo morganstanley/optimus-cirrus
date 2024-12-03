@@ -96,14 +96,15 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
     def workspaceChangesSummary: String = {
       val changedDirectories = stats.getOrDefault(ObtStats.ModifiedDirectories, 0)
       val deletedArtifacts = stats.getOrDefault(ObtStats.DeletedArtifacts, 0)
+      val internalBinaryDeps = stringsInSet(ObtStats.InternalBinaryDependencies).size
       val mutableExternalDeps = stringsInSet(ObtStats.MutableExternalDependencies)
       val numMutableExternalDeps = mutableExternalDeps.size
 
       if (numMutableExternalDeps > 0)
         log.debug(s"Mutable external dependencies: ${mutableExternalDeps.to(Seq).sorted.mkString(", ")}")
 
-      if (changedDirectories > 0 || deletedArtifacts > 0 || numMutableExternalDeps > 0)
-        f"\tWorkspace changes: ${changedDirectories + deletedArtifacts} [Changed directories: $changedDirectories%,d, Deleted artifacts: $deletedArtifacts%,d, Mutable external dependencies: $numMutableExternalDeps]"
+      if (changedDirectories > 0 || deletedArtifacts > 0 || internalBinaryDeps > 0 || numMutableExternalDeps > 0)
+        f"\tWorkspace changes: ${changedDirectories + deletedArtifacts} [Changed directories: $changedDirectories%,d, Deleted artifacts: $deletedArtifacts%,d, Internal binary dependencies: $internalBinaryDeps, Mutable external dependencies: $numMutableExternalDeps]"
       else ""
     }
 
@@ -124,12 +125,11 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
       val nodeCacheHits = math.max(jvmArtifacts - nodeCacheMisses, 0)
 
       val jvmFilesystemHits = jvmHits(ObtStats.FilesystemStore)
-      val jvmSkHits = jvmHits(ObtStats.SilverKing)
       val jvmDhtHits = jvmHits(ObtStats.DHT)
       val zincHits = stats.getOrDefault(ObtStats.ZincCacheHit, 0)
 
-      val jvmTotalCacheHits = nodeCacheHits + jvmFilesystemHits + jvmSkHits + zincHits + jvmDhtHits
-      f"\t\tCache hits: $jvmTotalCacheHits%,d [In-memory: $nodeCacheHits%,d, Local disk: $jvmFilesystemHits%,d, SilverKing: $jvmSkHits%,d, DHT: $jvmDhtHits%,d, Incremental: $zincHits%,d]"
+      val jvmTotalCacheHits = nodeCacheHits + jvmFilesystemHits + zincHits + jvmDhtHits
+      f"\t\tCache hits: $jvmTotalCacheHits%,d [In-memory: $nodeCacheHits%,d, Local disk: $jvmFilesystemHits%,d, DHT: $jvmDhtHits%,d, Incremental: $zincHits%,d]"
     }
 
     def jvmScopeCompilationSummary: String = {
@@ -214,12 +214,11 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
         stats.getOrDefault(cacheType.PythonHit, 0)
 
       val pythonFilesystemHits = pythonHits(ObtStats.FilesystemStore)
-      val pythonSkHits = pythonHits(ObtStats.SilverKing)
       val pythonDhtHits = pythonHits(ObtStats.DHT)
       // Note: We don't include node cache hits here because there's no easy way to calculate them
-      val pythonTotalCacheHits = pythonFilesystemHits + pythonSkHits + pythonDhtHits
+      val pythonTotalCacheHits = pythonFilesystemHits + pythonDhtHits
 
-      f"\t\tCache hits: $pythonTotalCacheHits%,d [Local disk: $pythonFilesystemHits%,d, SilverKing: $pythonSkHits%,d, DHT: $pythonDhtHits%,d]"
+      f"\t\tCache hits: $pythonTotalCacheHits%,d [Local disk: $pythonFilesystemHits%,d, DHT: $pythonDhtHits%,d]"
     }
 
     def gcSummary: String = {

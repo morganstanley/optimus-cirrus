@@ -9,6 +9,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.cache.silverking
+package optimus.stratosphere.indexing
 
-class SilverKingSessionClosedException(msg: String) extends Exception(msg)
+final case class IndexingFilterConfig(
+    disabledUnconditionally: Set[String],
+    disabledIfInJars: Set[String],
+    disabledIfLarge: Set[String],
+    largeFileSizeInBytes: Int
+) {
+  val enabled: Boolean = disabledUnconditionally.nonEmpty || disabledIfInJars.nonEmpty || disabledIfLarge.nonEmpty
+  val disabledDependingOnFile: Set[String] = disabledIfInJars ++ disabledIfLarge
+}

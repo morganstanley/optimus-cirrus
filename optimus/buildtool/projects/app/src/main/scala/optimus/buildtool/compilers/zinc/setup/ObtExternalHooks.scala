@@ -31,6 +31,7 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.format.MischiefInvalidator
 import optimus.buildtool.utils.PathUtils
+import optimus.platform.util.Log
 import sbt.internal.inc.APIs
 import sbt.internal.inc.Analysis
 import sbt.internal.inc.ExternalLookup
@@ -112,7 +113,8 @@ class ObtExternalLookup(
     classJarToAnalysis: Map[InternalPathedArtifact, AnalysisArtifact],
     invalidateOnly: Option[MischiefInvalidator],
     lookupTracker: Option[LookupTracker]
-) extends ExternalLookup {
+) extends ExternalLookup
+    with Log {
 
   private val currentClasspathForComparison = classpath.map(f => sanitizePath(f.id)).toSet
 
@@ -164,8 +166,8 @@ class ObtExternalLookup(
 
   override def lookupAnalyzedClass(binaryClassName: String, file: Option[VirtualFileRef]): Option[AnalyzedClass] = {
 
-    def lookInUpstreamAnalysis(classId: InternalArtifactId): Option[AnalyzedClass] =
-      for {
+    def lookInUpstreamAnalysis(classId: InternalArtifactId): Option[AnalyzedClass] = {
+      val clazz = for {
         path <- classIdToAnalysis.get(classId).map(_.path)
         analysis0 <- settings.analysisCache.get(path)
         analysis = analysis0 match { case a: Analysis => a }
@@ -173,6 +175,9 @@ class ObtExternalLookup(
         sourceClassName <- analysis.relations.productClassName.reverse(binaryClassName).headOption
         api <- analysis.apis.internal.get(sourceClassName)
       } yield api
+      if (clazz.isEmpty) log.debug(s"Could not find analysis for $classId/$binaryClassName")
+      clazz
+    }
 
     val result = quickAPICache.getOrElseUpdate(
       (file, binaryClassName), {

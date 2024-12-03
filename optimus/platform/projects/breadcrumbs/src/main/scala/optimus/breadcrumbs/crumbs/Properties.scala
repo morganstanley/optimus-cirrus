@@ -28,6 +28,8 @@ import scala.collection.immutable.SortedSet
 import scala.collection.immutable.TreeSet
 import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
+import scala.util.Failure
+import scala.util.Success
 import scala.util.Try
 
 abstract class KnownProperties extends Enumeration {
@@ -49,10 +51,22 @@ abstract class KnownProperties extends Enumeration {
     def meta: MetaData = _meta
 
     private[crumbs] def withMeta(md: MetaData): this.type = {
-      _meta = md
+      _meta = md.copy(owner = this)
+      this
+    }
+    private[crumbs] def withMeta(md: MetaData, description: String): this.type = {
+      _meta = md.copy(descriptionOverride = description)
       this
     }
   }
+
+  def fromString(s: String): Option[EnumeratedKey[_]] = Try(withName(s)) match {
+    case Success(k: EnumeratedKey[_])       => Some(k)
+    case Success(_)                         => None
+    case Failure(_: NoSuchElementException) => None
+    case Failure(e)                         => throw e
+  }
+  def metaFromString(s: String): MetaData = fromString(s).map(_.meta).getOrElse(NullMeta)
 
   // This nonsense is necessary to ensure that .elem will take only the correct type, including
   // basic types, when called from Java.
@@ -104,13 +118,15 @@ abstract class KnownProperties extends Enumeration {
 }
 
 object PropertyUnits {
-  sealed trait Units
-  case object Millis extends Units
-  case object Nanoseconds extends Units
-  case object MegaBytes extends Units
-  case object Count extends Units
-  case object BareNumber extends Units
-  case object Bytes extends Units
+  sealed class Units(nme: String) {
+    override def toString: String = nme
+  }
+  case object Millis extends Units("ms")
+  case object Nanoseconds extends Units("ns")
+  case object MegaBytes extends Units("MB")
+  case object Count extends Units("")
+  case object BareNumber extends Units("")
+  case object Bytes extends Units("B")
 
 }
 
@@ -125,16 +141,31 @@ object KnownProperties {
 
   import PropertyUnits._
 
-  final case class MetaData(flags: Int, units: Units) {
+  final case class MetaData(
+      flags: Int,
+      units: Units,
+      descriptionOverride: String = "",
+      owner: KnownProperties#EnumeratedKey[_] = null) {
     def sumOverTime: Boolean = (flags & AGG_OVER_TIME) != 0
     def sumOverEngines: Boolean = (flags & AGG_OVER_ENGINES) != 0
     def avgOverTime: Boolean = !sumOverTime
     def avgOverEngines: Boolean = !sumOverEngines
+    def graphable: Boolean = (flags & UNGRAPHABLE) == 0
+
+    def description =
+      if (descriptionOverride.nonEmpty) descriptionOverride
+      else if (Objects.nonNull(owner)) owner.name
+      else "Property"
+
+    def apply(description: String): MetaData = copy(descriptionOverride = description)
   }
 
+  val AVG_OVER = 0
   val AGG_OVER_TIME = 1
   val AGG_OVER_ENGINES = 2
   val AGG_ALL = AGG_OVER_TIME | AGG_OVER_ENGINES
+  val AGG_HYPER = 4
+  val UNGRAPHABLE = 8
 
   val NullMeta = MetaData(0, BareNumber)
   val TimeSpent = MetaData(AGG_ALL, Millis)
@@ -417,6 +448,9 @@ object Properties extends KnownProperties {
     // "null" is not likely to be meaningful, but it's better than throwing an NPE now
     def toTuple: (String, JsValue) = (k.toString, if (null == v) "null".toJson else k.toJson(v))
   }
+  object Elem {
+    def apply[A](tuple: (Key[A], A)): Elem[A] = Elem(tuple._1, tuple._2)
+  }
 
   // Utility wrapper for accumulating property lists - mostly useful because varargs and Seq are equivalent under erasure.
   // See GridProfilerUtils for an example.
@@ -518,6 +552,7 @@ object Properties extends KnownProperties {
   private[optimus] val _meta = prop[MetaDataType.Value]
 
   val breadcrumbsSentSoFar = propL
+  val crumbsSent = prop[Map[String, Int]].withMeta(EventCount)
 
   val uuidLevel = prop[String]
 
@@ -692,10 +727,11 @@ object Properties extends KnownProperties {
   val profDepTrackerTaskAdded = prop[Map[String, Int]]
   val profDepTrackerTaskProcessed = prop[Map[String, Int]]
 
-  val cardEstimated = prop[Map[String, Int]]
+  val cardEstimated = prop[Map[String, Int]].withMeta(MetaData(AGG_HYPER | UNGRAPHABLE, PropertyUnits.Count))
   val cardRaw = prop[Map[String, Long]]
   val cardNumerator = prop[Map[String, Double]]
-  val cardEstimators = prop[Map[String, Map[String, Int]]]
+  val cardEstimators =
+    prop[Map[String, Map[String, Int]]].withMeta(MetaData(AGG_HYPER | UNGRAPHABLE, PropertyUnits.Count))
 
   val profStallTime = propL
   val pluginCounts = prop[Map[String, Map[String, Long]]].withMeta(EventCount)
@@ -893,11 +929,21 @@ object Properties extends KnownProperties {
 
   val smplTimes = prop[Map[String, Long]].withMeta(TimeSpent)
   val samplingPauseTime = propL.withMeta(TimeSpent)
-  val crumbplexerIgnore = prop[String]
   val childProcessCount = propI.withMeta(ItemCount)
   val childProcessCPU = propD.withMeta(GaugeLevel)
   val childProcessRSS = propL.withMeta(MemoryInUse)
   val spInternalStats = prop[Map[String, Map[String, Double]]]
+
+  val crumbplexerIgnore = prop[String] // tells crumbplexer to ignore the whole crumb; value is the reason
+  val plexerCountPrinted = propL.withMeta(EventCount)
+  val plexerCountDeduped = propL.withMeta(EventCount)
+  val plexerCountDropped = propL.withMeta(EventCount)
+  val plexerCountParseError = propL.withMeta(EventCount)
+  val plexerSnapRootCount = propL.withMeta(EventCount)
+  val plexerSnapLagClient = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since crumb time"))
+  val plexerSnapLagKafka = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since kafka publish"))
+  val plexerSnapLagQueue = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Millis, "Lag since enqueued"))
+  val plexerSnapQueueSize = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Count))
 
   val profDmcCacheAttemptCount = propL.withMeta(EventCount)
   val profDmcCacheMissCount = propL.withMeta(EventCount)
@@ -1082,6 +1128,11 @@ object Properties extends KnownProperties {
   val results = prop[JsArray]
   val message = prop[String]
 
+  val pricingMachineId = prop[String]
+  val pricingPortId = prop[String]
+  val pricingTrade = prop[String]
+  val pricingHugeNumber = prop[String]
+  val pricingNumbers = prop[Seq[String]]
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

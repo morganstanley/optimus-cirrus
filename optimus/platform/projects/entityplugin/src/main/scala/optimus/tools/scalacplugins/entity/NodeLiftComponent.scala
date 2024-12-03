@@ -155,7 +155,7 @@ class NodeLiftComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseInf
         case sel: Select =>
           val param = sel.tpe.params.head // the tweak :*= API always has exactly one param!
           if (!param.isByNameParam) {
-            if (strict) alarm(OptimusErrors.CAN_CONVERT_TO_BYVALUE, tree.pos)
+            if (strict) alarm(OptimusErrors.CANT_CONVERT_TO_BYVALUE, tree.pos)
             sel
           } else update(transform(sel.qualifier), sel.name)
       }

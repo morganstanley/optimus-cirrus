@@ -88,12 +88,12 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
     ResolutionArtifact.create(
       InternalArtifactId(id, this, None),
       ResolutionResult(
-        cached.resolvedArtifactsToDepInfos.map { case (art, deps) => (art.asEntity, deps) },
-        cached.messages,
-        cached.jniPaths,
-        cached.moduleLoads,
-        cached.transitiveDependencies,
-        cached.mappedDependencies
+        cached.resolvedArtifactsToDepInfos.map { case (art, deps) => (art.asEntity, deps.toVector) }.toVector,
+        cached.messages.toVector,
+        cached.jniPaths.toVector,
+        cached.moduleLoads.toVector,
+        cached.transitiveDependencies.map { case (k, v) => (k, v.toVector) },
+        cached.mappedDependencies.map { case (k, v) => (k, v.toVector) }
       ),
       json,
       category,
@@ -355,6 +355,7 @@ object ArtifactType {
   case object Jxb extends BaseArtifactType("jxb") with GeneratedSourceArtifactType
   case object FlatBuffer extends BaseArtifactType("flatbuffer") with GeneratedSourceArtifactType
   case object Zinc extends BaseArtifactType(ZincGeneratorName) with GeneratedSourceArtifactType
+  case object Avro extends BaseArtifactType(name = "avro") with GeneratedSourceArtifactType
   case object Scala extends BaseArtifactType("scala") with InternalClassFileArtifactType
   case object Java extends BaseArtifactType("java") with InternalClassFileArtifactType
   case object Jmh extends BaseArtifactType("jmh") with InternalClassFileArtifactType

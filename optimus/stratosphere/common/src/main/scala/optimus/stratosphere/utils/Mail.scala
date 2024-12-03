@@ -20,6 +20,7 @@ import java.util.Properties
 import javax.activation.CommandMap
 import javax.activation.MailcapCommandMap
 import scala.collection.immutable.Seq
+import scala.util.control.NonFatal
 
 object Mail {
 
@@ -77,6 +78,6 @@ object Mail {
 
       optimus.utils.Mail.send(from, to, cc, bcc, subject, body, mimeType = mimeType, attachments = attachments)
     } catch {
-      case e: Throwable => println(s"[ERROR] Sending email failed due to: $e!")
+      case NonFatal(e) => println(s"[ERROR] Sending email failed due to: $e!")
     }
 }

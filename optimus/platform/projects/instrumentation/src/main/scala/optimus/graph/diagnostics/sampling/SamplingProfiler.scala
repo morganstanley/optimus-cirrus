@@ -28,6 +28,7 @@ import optimus.graph.diagnostics.sampling.PyroUploader.AppKey
 import optimus.graph.diagnostics.sampling.PyroUploader.EngineKey
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
+import optimus.platform.util.InfoDump
 import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
 import optimus.platform.util.Version
@@ -107,9 +108,15 @@ class SamplingProfiler private[diagnostics] (
 
   val propertyUtils = new PropertyUtils(properties)
 
+  private val pauseInactive = propertyUtils.get("optimus.sampling.pause.inactive", false)
   val periodSec = propertyUtils.get("optimus.sampling.sec", 60)
   private val spoofRoot = propertyUtils.get("optimus.sampling.rootids", true)
   private val cleanupWaitMs = propertyUtils.get("optimus.sampling.wait.ms", 5000)
+
+  // Give the first publication a freebie.
+  private val activityMeritingPublication = new AtomicInteger(1)
+
+  def recordActivity(): Unit = activityMeritingPublication.incrementAndGet()
 
   log.info(s"Starting SamplingProfiler $ownerId period=$periodSec")
 
@@ -148,6 +155,30 @@ class SamplingProfiler private[diagnostics] (
 
   private var _snappedMeta: LoadData = LoadData(0.0, 0.0)
   private[sampling] def snappedMeta: LoadData = _snappedMeta
+
+  @volatile private var hasPublished = false
+  private val diagnosticsTimer = new Timer(true)
+  private def scheduleDiagnosticsTask(delay: Long): Unit = {
+    diagnosticsTimer.schedule(
+      new TimerTask {
+        override def run(): Unit = if (enabled) {
+          val nextCheck =
+            if (hasPublished) delay
+            else {
+              val msg =
+                s"SamplingProfiler $ownerId has not snapped in ${System.currentTimeMillis() - _currentSnapTime} ms"
+              log.warn(msg)
+              InfoDump.dump("sampling", msg :: Nil)
+              delay * 2
+            }
+          hasPublished = false
+          scheduleDiagnosticsTask(nextCheck)
+        }
+      },
+      delay
+    )
+  }
+  scheduleDiagnosticsTask(propertyUtils.getLong("optimus.sampling.diagnostics.dump.ms", 5 * samplingPeriodMs))
 
   {
     // All metrics:
@@ -237,7 +268,13 @@ class SamplingProfiler private[diagnostics] (
 
   private val samplingThread = new Thread {
     override def run(): Unit = {
-      runSamplingThread()
+      try {
+        runSamplingThread()
+      } catch {
+        case t: Throwable =>
+          log.error("SamplingProfiler thread threw exception", t)
+          throw t
+      }
       log.info(s"Exiting $this")
     }
   }
@@ -285,7 +322,10 @@ class SamplingProfiler private[diagnostics] (
     } while (_stillPulsing)
   }
 
+  private var skippedPublications = 0
+
   private[sampling] def publish(): Unit = {
+
     val destinations = if (spoofRoot) publishAppInstances else Seq(defaultAppInstance)
     var isCanonical = true
 
@@ -303,6 +343,24 @@ class SamplingProfiler private[diagnostics] (
       // Each sampler returns its crumb source, plus a list of batches to publish.  We'll publish all the
       // 1st batch elems together, then all the 2nd, etc.
       val samplerResults: Seq[Map[Source, List[Elems]]] = samplers.map(_.elemss(id))
+
+      if (pauseInactive && activityMeritingPublication.get() == 0) {
+        hasPublished = true // Lie. No point publishing diagnostics if we meant to pause.
+        skippedPublications += 1
+        // Complain every power of 2
+        if ((skippedPublications & (skippedPublications - 1)) == 0)
+          Breadcrumbs.info(
+            ownerId,
+            PropertiesCrumb(
+              _,
+              ProfilerSource,
+              profStatsType -> Name,
+              logMsg -> s"Skipping publications due to inactivity: ${skippedPublications - skippedPublications / 2}.")
+          )
+        return
+      }
+      activityMeritingPublication.set(0)
+      skippedPublications = 0
 
       // Group map by source.
       val batchesBySource = new util.HashMap[Source, Seq[List[Elems]]]()
@@ -341,6 +399,7 @@ class SamplingProfiler private[diagnostics] (
       isCanonical = false
     }
     crumbConsumer.flush()
+    hasPublished = true
   }
 
   private def snap(): Unit = {

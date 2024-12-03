@@ -31,7 +31,6 @@ import optimus.graph.diagnostics.InfoDumper
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.graph.tracking.TrackingGraphCleanupTrigger
 import optimus.logging.LoggingInfo
-import optimus.platform.util.Log
 import optimus.platform.util.ProcessExitCodes
 import optimus.platform.util.Version
 import optimus.scalacompat.collection._
@@ -51,19 +50,86 @@ import scala.annotation.varargs
 import scala.collection.{mutable => m}
 import scala.jdk.CollectionConverters._
 
+private[optimus] abstract class HeapBasedMemoryMonitoring(val heapTriggerRatio: Double) {
+  import GCMonitor._
+
+  private val listeners: m.Map[String, NotificationListener] = m.Map.empty
+
+  // Number of minor collections with heap above threshold, since last major collection
+  protected var sadMinorsSinceMajor = 0L
+
+  def monitor(): Unit = {
+    log.info(s"Started heap monitoring, threshold is ${heapTriggerRatio * 100}% of heap")
+    ManagementFactory.getGarbageCollectorMXBeans.asScala
+      .collect { case n: NotificationEmitter => n }
+      .foreach(n =>
+        n.addNotificationListener(listeners.getOrElseUpdate(n.getName, createListener(n.getName)), null, null))
+  }
+
+  final def stop(): Unit =
+    ManagementFactory.getGarbageCollectorMXBeans.asScala
+      .collect { case n: NotificationEmitter => n }
+      .foreach(n => n.removeNotificationListener(listeners(n.getName), null, null))
+
+  protected def onNotification(info: GarbageCollectionNotificationInfo): Unit
+
+  private def createListener(name: String) = new NotificationListener {
+    log.info(s"Registering notification listener: $name")
+    override def handleNotification(notification: Notification, handback: AnyRef): Unit =
+      notification match {
+        case n if n.getType == GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION =>
+          val info = GarbageCollectionNotificationInfo.from(notification.getUserData.asInstanceOf[CompositeData])
+          log.info(s"Forwarding notification: ${notification.getMessage}")
+          onNotification(info)
+      }
+  }
+
+  protected def onHeapBelowThreshold(): Unit
+  protected def onHeapAboveThreshold(
+      gcUsages: GCHeapUsagesMb,
+      info: GarbageCollectionNotificationInfo,
+      heapRatio: Double,
+      action: String,
+      treatAsMajorGC: Boolean): Unit
+
+  final def heapBasedStrategy(info: GarbageCollectionNotificationInfo): Unit = {
+    val gcUsages = getGCHeapUsages(info, Some(SystemFinalization.getObjectPendingFinalizationCount))
+    val heapRatio = getHeapRatio(gcUsages, None)
+
+    if (heapRatio < heapOKRatio) onHeapBelowThreshold()
+
+    val action = info.getGcAction
+    val treatAsMajorGC =
+      if (action.contains("major")) {
+        // Really, truly major
+        sadMinorsSinceMajor = 0L
+        true
+      } else if (heapCleanupOnlyOnMajor || sadMinorsSinceMajor < heapCleanupAfterMinors) {
+        // Nope, not old or numerous enough
+        sadMinorsSinceMajor += 1
+        false
+      } else {
+        // Looks like we've hit our minor collection limit
+        sadMinorsSinceMajor = 0L
+        true
+      }
+
+    if (heapRatio > heapTriggerRatio) onHeapAboveThreshold(gcUsages, info, heapRatio, action, treatAsMajorGC)
+  }
+}
+
 /*
  * Installs callbacks in Java GC that clear a part of optimus graph @node cache
  *
  * @param forceGCOnEviction : execute System.gc after evicting @nodes. When true, this also causes GCMonitor to ignore System.gc as a potential trigger
  */
-class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter) {
+final class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter)
+    extends HeapBasedMemoryMonitoring(GCMonitor.heapTriggerRatio) {
   import GCMonitor._
   private[graph] var cleanupsTriggered = 0L
-  // Number of minor collections with heap above threshold, since last major collection
-  private var sadMinorsSinceMajor = 0L
 
   // begin monitoring
-  def monitor(): Unit = {
+  override def monitor(): Unit = {
     log.info(
       "will evict {}% cached nodes if old gen heap usage exceeds {}% of max or stop-the-world GC consumes {}% of the last {} seconds",
       "%.2f".format(cacheClearRatio * 100.0),
@@ -71,22 +137,11 @@ class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter)
       "%.2f".format(timeTriggerRatio * 100.0),
       statisticsWindowSeconds
     )
-    ManagementFactory.getGarbageCollectorMXBeans.asScala
-      .collect { case n: NotificationEmitter => n }
-      .foreach(n =>
-        n.addNotificationListener(listeners.getOrElseUpdate(n.getName, createListener(n.getName)), null, null))
+    super.monitor()
   }
 
-  // stop monitoring
-  def stop() =
-    ManagementFactory.getGarbageCollectorMXBeans.asScala
-      .collect { case n: NotificationEmitter => n }
-      .foreach(n => n.removeNotificationListener(listeners(n.getName), null, null))
-
-  private val log = getLogger(this.getClass)
   // list of end timestamps (gcStartTime, gcEndTIme)
   private var stamps: collection.Seq[(Long, Long)] = Nil
-  private val listeners: m.Map[String, NotificationListener] = m.Map.empty
 
   def prettyPools(info: GarbageCollectionNotificationInfo) = {
     val m1 = info.getGcInfo.getMemoryUsageBeforeGc.asScala
@@ -106,48 +161,117 @@ class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter)
   @volatile private var tNextStats = 0L
   private val cumulativeClears = new AtomicReference(CleanupStats(0, 0))
 
-  private def createListener(x: String) = new NotificationListener {
-    override def handleNotification(notification: Notification, handback: AnyRef): Unit =
-      notification match {
-        case n if n.getType == GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION => {
-          val info = GarbageCollectionNotificationInfo.from(notification.getUserData.asInstanceOf[CompositeData])
-          val cause = info.getGcCause
-          val action = info.getGcAction
-          val major = action.contains("major")
-          val stats = CumulativeGCStats(info)
-          gcStatsByConsumer.keys.asScala.foreach { k =>
-            gcStatsByConsumer.compute(k, (_, v) => v.combine(stats))
-          }
+  override def onNotification(info: GarbageCollectionNotificationInfo): Unit = {
+    val cause = info.getGcCause
+    val action = info.getGcAction
+    val major = action.contains("major")
+    val stats = CumulativeGCStats(info)
+    gcStatsByConsumer.keys.asScala.foreach { k =>
+      gcStatsByConsumer.compute(k, (_, v) => v.combine(stats))
+    }
 
-          // Don't handle notification of a gc we forced ourselves.  Java (at least as of 11) does not always mark System.gc() as
-          // with cause=System..., so we'll err on the side of sometimes ignoring one real GC.
-          if (wasForced && major) {
-            wasForced = false
-            Breadcrumbs(
-              ChainedID.root,
-              PropertiesCrumb(
-                _,
-                Crumb.GCSource,
-                Properties.description -> "System.gc",
-                Properties.gcCause -> cause,
-                Properties.gcAction -> action,
-                Properties.gcDuration -> info.getGcInfo.getDuration,
-                Properties.gcPools -> prettyPools(info),
-                Properties.logMsg -> "wasForced=true,resetting"
-              )
-            )
-          } else {
-            // Strategies make their own decision about major vs minor GC.
-            val t = System.currentTimeMillis()
-            if (major || t > tNextStats) {
-              snapAndResetStats("GCMonitor").publish()
-              tNextStats = t + minStatIntervalMs
-            }
-            timeBasedStrategy(info)
-            heapBasedStrategy(info)
-          }
-        }
+    // Don't handle notification of a gc we forced ourselves.  Java (at least as of 11) does not always mark System.gc() as
+    // with cause=System..., so we'll err on the side of sometimes ignoring one real GC.
+    if (wasForced && major) {
+      wasForced = false
+      Breadcrumbs(
+        ChainedID.root,
+        PropertiesCrumb(
+          _,
+          Crumb.GCSource,
+          Properties.description -> "System.gc",
+          Properties.gcCause -> cause,
+          Properties.gcAction -> action,
+          Properties.gcDuration -> info.getGcInfo.getDuration,
+          Properties.gcPools -> prettyPools(info),
+          Properties.logMsg -> "wasForced=true,resetting"
+        )
+      )
+    } else {
+      // Strategies make their own decision about major vs minor GC.
+      val t = System.currentTimeMillis()
+      if (major || t > tNextStats) {
+        snapAndResetStats("GCMonitor").publish()
+        tNextStats = t + minStatIntervalMs
       }
+      timeBasedStrategy(info)
+      heapBasedStrategy(info)
+    }
+  }
+
+  // if the heap after GC is below 75% of max heap, reset statistics counter
+  override def onHeapBelowThreshold(): Unit = cleanupsTriggered = 0
+
+  // if the heap after GC is 90% of max heap, evict 10% of nodes from optimus caches
+  override def onHeapAboveThreshold(
+      gcUsages: GCHeapUsagesMb,
+      info: GarbageCollectionNotificationInfo,
+      heapRatio: Double,
+      action: String,
+      treatAsMajorGC: Boolean): Unit = {
+    import gcUsages._
+
+    log.info(
+      "After GC due to {}, old gen was changed from {} MB to {} MB ({}% used of max {} MB), action={}, msm={}, triggered={}, backOffAfter={}",
+      info.getGcCause,
+      "%.2f".format(before.oldGen),
+      "%.2f".format(after.oldGen),
+      "%.2f".format(heapRatio * 100.0),
+      "%.2f".format(after.maxOldGen),
+      action,
+      sadMinorsSinceMajor,
+      cleanupsTriggered,
+      backOffAfter
+    )
+
+    if (!treatAsMajorGC) {
+      log.info(s"Skipping heap cleanup on minor GC ($sadMinorsSinceMajor since last major)")
+      sendCrumb(CacheClearHeapTriggerDescription, info, false, gcUsages, heapRatio, heapTriggerRatio)
+    } else {
+      if (cleanupsTriggered < includeSIAfter) {
+        val cleanup = doCleanup(Some(gcUsages), includeSI = false, includeCtor = false, forceGCOnEviction = true)
+        sendCrumb(
+          CacheClearHeapTriggerDescription,
+          info,
+          includeSI = false,
+          gcUsages,
+          heapRatio,
+          heapTriggerRatio,
+          Some(cleanup))
+        if (cleanup.kill) kill(cleanup.msgs)
+        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedTriggerHit)
+      } else if (cleanupsTriggered < backOffAfter) {
+        val cleanup = doCleanup(Some(gcUsages), includeSI = true, includeCtor = true, forceGCOnEviction = true)
+        sendCrumb(
+          CacheClearHeapTriggerDescription,
+          info,
+          includeSI = true,
+          gcUsages,
+          heapRatio,
+          heapTriggerRatio,
+          Some(cleanup))
+        if (cleanup.kill) kill(cleanup.msgs)
+        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedIncludeSITriggerHit)
+      } else if (cleanupsTriggered == backOffAfter) {
+        // if 20 triggers in a row never saw heapOKRatio after GC, assume optimus cache manipulations aren't helping and stop trying
+        log.info(
+          "In the last {} cache clears, heap usage never fell below {}. Suspending cache clearing",
+          backOffAfter,
+          "%.2f".format(heapOKRatio * 100.0))
+        sendCrumb(
+          CacheClearHeapTriggerDescription,
+          info,
+          false,
+          gcUsages,
+          heapRatio,
+          heapTriggerRatio,
+          None,
+          "suspending" :: Nil)
+        cleanupsTriggered += 1 // at backOffAfter+1, it won't keep repeating the message above
+        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedBackoffTriggerHit)
+      } else
+        log.info(s"Skipping cleanup due to backoff")
+    }
   }
 
   val CacheClearTimeTriggerDescription = "GCMonitor.cacheClear.timeTrigger"
@@ -272,113 +396,7 @@ class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter)
     )
   }
 
-  private def getHeapRatio(gcUsage: GCHeapUsagesMb, usage: Option[HeapUsageMb]): Double = {
-    val numerator = (useActualMaxHeap, usage) match {
-      case (true, None)     => gcUsage.after.total
-      case (true, Some(u))  => u.total
-      case (false, None)    => gcUsage.after.oldGen
-      case (false, Some(u)) => u.oldGen
-    }
-    val denominator = (useActualMaxHeap, usage) match {
-      case (true, _)        => maxHeapMB
-      case (false, Some(u)) => u.maxOldGen
-      case (false, None)    => gcUsage.after.maxOldGen
-    }
-    numerator / denominator
-  }
-
   val CacheClearHeapTriggerDescription = "GCMonitor.cacheClear.heapTrigger"
-  private def heapBasedStrategy(info: GarbageCollectionNotificationInfo) = {
-    // trim cache based on heap usage
-
-    val gcUsages = getGCHeapUsages(info, Some(SystemFinalization.getObjectPendingFinalizationCount))
-    import gcUsages._
-
-    val heapRatio = getHeapRatio(gcUsages, None)
-
-    // if the heap after GC is below 75% of max heap, reset statistics counter
-    if (heapRatio < heapOKRatio)
-      cleanupsTriggered = 0
-
-    val action = info.getGcAction
-    val treatAsMajorGC =
-      if (action.contains("major")) {
-        // Really, truly major
-        sadMinorsSinceMajor = 0L
-        true
-      } else if (heapCleanupOnlyOnMajor || sadMinorsSinceMajor < heapCleanupAfterMinors) {
-        // Nope, not old or numerous enough
-        sadMinorsSinceMajor += 1
-        false
-      } else {
-        // Looks like we've hit our minor collection limit
-        sadMinorsSinceMajor = 0L
-        true
-      }
-
-    // if the heap after GC is 90% of max heap, evict 10% of nodes from optimus caches
-    if (heapRatio > heapTriggerRatio) {
-      log.info(
-        "After GC due to {}, old gen was changed from {} MB to {} MB ({}% used of max {} MB), action={}, msm={}, triggered={}, backOffAfter={}",
-        info.getGcCause,
-        "%.2f".format(before.oldGen),
-        "%.2f".format(after.oldGen),
-        "%.2f".format(heapRatio * 100.0),
-        "%.2f".format(after.maxOldGen),
-        action,
-        sadMinorsSinceMajor,
-        cleanupsTriggered,
-        backOffAfter
-      )
-
-      if (!treatAsMajorGC) {
-        log.info(s"Skipping heap cleanup on minor GC ($sadMinorsSinceMajor since last major)")
-        sendCrumb(CacheClearHeapTriggerDescription, info, false, gcUsages, heapRatio, heapTriggerRatio)
-      } else if (cleanupsTriggered < includeSIAfter) {
-        val cleanup = doCleanup(Some(gcUsages), includeSI = false, includeCtor = false, forceGCOnEviction = true)
-        sendCrumb(
-          CacheClearHeapTriggerDescription,
-          info,
-          includeSI = false,
-          gcUsages,
-          heapRatio,
-          heapTriggerRatio,
-          Some(cleanup))
-        if (cleanup.kill) kill(cleanup.msgs)
-        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedTriggerHit)
-      } else if (cleanupsTriggered < backOffAfter) {
-        val cleanup = doCleanup(Some(gcUsages), includeSI = true, includeCtor = true, forceGCOnEviction = true)
-        sendCrumb(
-          CacheClearHeapTriggerDescription,
-          info,
-          includeSI = true,
-          gcUsages,
-          heapRatio,
-          heapTriggerRatio,
-          Some(cleanup))
-        if (cleanup.kill) kill(cleanup.msgs)
-        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedIncludeSITriggerHit)
-      } else if (cleanupsTriggered == backOffAfter) {
-        // if 20 triggers in a row never saw heapOKRatio after GC, assume optimus cache manipulations aren't helping and stop trying
-        log.info(
-          "In the last {} cache clears, heap usage never fell below {}. Suspending cache clearing",
-          backOffAfter,
-          "%.2f".format(heapOKRatio * 100.0))
-        sendCrumb(
-          CacheClearHeapTriggerDescription,
-          info,
-          false,
-          gcUsages,
-          heapRatio,
-          heapTriggerRatio,
-          None,
-          "suspending" :: Nil)
-        cleanupsTriggered += 1 // at backOffAfter+1, it won't keep repeating the message above
-        GCMonitorDiagnostics.incrementCounter(GCMonitorDiagnostics.heapBasedBackoffTriggerHit)
-      } else
-        log.info(s"Skipping cleanup due to backoff")
-    }
-  }
 
   private[optimus] def doCleanup(
       gcUsage: Option[GCHeapUsagesMb],
@@ -426,7 +444,8 @@ class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGCAfter)
 
 private[graph] object GCMonitorTrigger extends TrackingGraphCleanupTrigger
 
-object GCMonitor extends Log {
+object GCMonitor {
+  private[graph] val log = getLogger(this)
   val heapCleanupAfterMinors = getIntProperty("optimus.gc.heap.cleanup.after.n.minors", -1)
   val heapCleanupOnlyOnMajor = getBoolProperty("optimus.gc.heap.cleanup.only.major", heapCleanupAfterMinors < 0)
   assert(heapCleanupAfterMinors < 0 || !heapCleanupOnlyOnMajor, "Incompatible heap cleanup properties")
@@ -594,13 +613,28 @@ object GCMonitor extends Log {
   }
 
   // Heap usage before and after GC, from notification info
-  private[graph] final case class GCHeapUsagesMb(before: HeapUsageMb, after: HeapUsageMb)
+  private[optimus] final case class GCHeapUsagesMb(before: HeapUsageMb, after: HeapUsageMb)
 
   private[graph] def getGCHeapUsages(info: GarbageCollectionNotificationInfo, finalizers: Option[Int] = None) = {
     GCHeapUsagesMb(
       before = HeapUsageMb(info.getGcInfo.getMemoryUsageBeforeGc.asScala.toMap, None),
       after = HeapUsageMb(info.getGcInfo.getMemoryUsageAfterGc.asScala.toMap, finalizers)
     )
+  }
+
+  private[graph] def getHeapRatio(gcUsage: GCHeapUsagesMb, usage: Option[HeapUsageMb]): Double = {
+    val numerator = (useActualMaxHeap, usage) match {
+      case (true, None)     => gcUsage.after.total
+      case (true, Some(u))  => u.total
+      case (false, None)    => gcUsage.after.oldGen
+      case (false, Some(u)) => u.oldGen
+    }
+    val denominator = (useActualMaxHeap, usage) match {
+      case (true, _)        => maxHeapMB
+      case (false, Some(u)) => u.maxOldGen
+      case (false, None)    => gcUsage.after.maxOldGen
+    }
+    numerator / denominator
   }
 
   private[graph] final case class Cleanup(

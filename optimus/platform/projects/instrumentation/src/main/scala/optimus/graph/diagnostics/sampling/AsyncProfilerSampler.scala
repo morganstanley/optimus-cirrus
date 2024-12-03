@@ -145,6 +145,8 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
           stackAnalysis
             .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks, uploadFolded)
             .copy(dtStopped = curr.dtStopped)
+        if (parsed.timers.samples.values.sum > 1000)
+          sp.recordActivity()
         stackUpload(parsed.stacks)
         parsed.applyIf(!stacksToCrumbs)(_.copy(stacks = Nil))
     }

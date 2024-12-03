@@ -12,7 +12,6 @@
 package optimus.buildtool.compilers.zinc.mappers
 
 import java.io.File
-
 import optimus.buildtool.compilers.SyncCompiler.PathPair
 import optimus.buildtool.compilers.zinc.ZincUtils._
 import optimus.buildtool.config.NamingConventions._
@@ -23,6 +22,7 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.MessageTrace
 import optimus.platform.util.Log
+import org.apache.commons.lang3.StringUtils
 import xsbti.VirtualFile
 import xsbti.compile.analysis.WriteMapper
 
@@ -94,25 +94,28 @@ class ZincWriteMapper(
         // truly independent we replace it with a fixed string anyway
         DUMMY
       } else {
-        val separatorSubstitutions: Seq[Substitution] =
+        def separatorSubstitutions(s: String): String =
           if ((isXPlugin || isYMacro) && File.pathSeparator != ":")
-            Seq(Substitution(File.pathSeparator, ":"))
-          else Seq.empty
+            s.replace(File.pathSeparator, ":")
+          else s
 
-        val buildSubstitutions: Seq[Substitution] = {
-          val jars = findBuildJarsInText(buildDir, text)
-          jars.map(j => Substitution(j.pathString, translateOptionPath(j).pathString))
+        def buildSubstitutions(s: String): String = {
+          replaceBuildJarsInText(buildDir, s) { jarAsset =>
+            translateOptionPath(jarAsset).pathString
+          }
         }
 
         val pathSubstitutions: Seq[Substitution] =
           if (isXPlugin || isYMacro) externalDepsSubstitutions
           else Seq(workspaceSubstitution)
 
-        val substitutions =
-          (separatorSubstitutions ++ buildSubstitutions ++ pathSubstitutions).filterNot(_.isSame)
-        substitutions.foldLeft(text) { case (acc, s) =>
-          acc.replace(s.realDirectory, s.key) // convert dir path to KEY
-        }
+        val substitutions = pathSubstitutions.filterNot(_.isSame)
+        buildSubstitutions(
+          StringUtils.replaceEach(
+            buildSubstitutions(separatorSubstitutions(text)),
+            substitutions.map(_.realDirectory).toArray,
+            substitutions.map(_.key).toArray))
+
       }
     previousArg = Some(text)
     ret

@@ -41,7 +41,6 @@ import optimus.buildtool.cache.MultiLevelStore
 import optimus.buildtool.cache.NoOpRemoteAssetStore
 import optimus.buildtool.cache.NodeCaching
 import optimus.buildtool.cache.RemoteAssetStore
-import optimus.buildtool.cache.remote.CacheOperationRecorder
 import optimus.buildtool.cache.remote.RemoteCacheProvider
 import optimus.buildtool.compilers.AsyncCppCompilerImpl
 import optimus.buildtool.compilers.AsyncElectronCompilerImpl
@@ -87,6 +86,7 @@ import optimus.buildtool.generators.JaxbGenerator
 import optimus.buildtool.generators.JsonSchemaGenerator
 import optimus.buildtool.generators.JxbGenerator
 import optimus.buildtool.generators.ProtobufGenerator
+import optimus.buildtool.generators.AvroSchemaGenerator
 import optimus.buildtool.generators.ScalaxbGenerator
 import optimus.buildtool.generators.ZincGenerator
 import optimus.buildtool.processors.DeploymentScriptProcessor
@@ -281,10 +281,8 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent def mischiefOpts: MischiefOptions =
     MischiefOptions.load(workspaceSrcRoot = workspaceSourceRoot)
 
-  private val cacheOperationRecorder = new CacheOperationRecorder
-
   @node @scenarioIndependent private[buildtool] def remoteCaches =
-    RemoteCacheProvider(cmdLine, version, pathBuilder, stratoWorkspace(), cacheOperationRecorder)
+    RemoteCacheProvider(cmdLine, version, pathBuilder)
 
   @node @scenarioIndependent private def combined(
       caches: Seq[ArtifactCache with HasArtifactStore]
@@ -491,6 +489,7 @@ object OptimusBuildToolImpl {
       JsonSchemaGenerator(directoryFactory, workspaceRoot),
       ProtobufGenerator(workspaceSourceRoot),
       ScalaxbGenerator(workspaceSourceRoot),
+      AvroSchemaGenerator(workspaceSourceRoot),
       ZincGenerator(zincResolver, depCopyRoot)
     ).map(g => g.tpe -> g).toMap
 
@@ -1155,6 +1154,7 @@ object OptimusBuildToolImpl {
       new MessageReporter(
         obtConfig,
         errorReporter = obtErrorReporter,
+        buildDir = buildDir,
         warningsDir = if (cmdLine.warningsReport) Some(reportDir.resolveDir("compilation-warnings")) else None,
         lookupsDir = if (cmdLine.zincTrackLookups) Some(reportDir.resolveDir("compilation-errors")) else None,
         codeReviewSettings = codeReviewSettings,

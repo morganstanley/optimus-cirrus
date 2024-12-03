@@ -91,6 +91,19 @@ object NodeGraphVisitor {
     commonParent // Return computed commonParent if any was found
   }
 
+  def topParents(tasks: Seq[PNodeTask]): ArrayBuffer[PNodeTask] = {
+    val r = new ArrayBuffer[PNodeTask]()
+    val visitor = new NodeGraphVisitor(visitParents = true)
+    val observer = new Observer {
+      override def visit(task: PNodeTask): Unit = if (isEntryPoint(task)) r += task
+    }
+
+    for (task <- tasks) { visitor.bfs(task, observer) }
+
+    visitor.resetVisited()
+    r.sortBy(_.firstStartTime)
+  }
+
   final class NodeToUTrackToInvalidate(val utrack: PropertyNode[_]) {
     val nodes = new ArrayBuffer[PNodeTask]()
     var invalidatingTweak: Tweak = _ // tweak that caused invalidation and recomputing of node

@@ -17,7 +17,8 @@ import java.util.Arrays;
 
 /**
  * The caller of a TTrack, may be 0-n callers, and there are specialized implementations for
- * specific common counts to reduce memory load (0, 1, 2 callers).
+ * specific common counts to reduce memory load (0, and 2 callers). The special case for a single
+ * caller is the TTrack class itself.
  *
  * <p>See notes on TTrack for thread safety semantics.
  */
@@ -138,10 +139,12 @@ abstract class AbstractMultiPtracks implements Ptracks {
   }
 }
 
-/**
- * 2 field implementation of Ptracks Design guarantee - fields p0,p1 are never null, except during
- * cleanup if one is null following this operation the caller TTrack's Ptrack will be changed so as
- * not to use this value
+/*
+ * Specialization for two callers
+ *
+ * - fields p0,p1 are never null, except during cleanup
+ * - if one is null following this operation the caller TTrack's Ptrack will be changed so as not to
+ *   use this value
  */
 final class Ptracks2 extends AbstractMultiPtracks {
 
@@ -212,11 +215,14 @@ final class Ptracks2 extends AbstractMultiPtracks {
   }
 }
 
-/**
- * Array implementation of Ptracks Design guarantee - elements lower that nextFree are never null,
- * except during cleanup elements above nextFree may be null elements < 3 are never null if one is
- * null following this operation the caller TTracks Ptrack will be changed so as not to use this
- * value
+/*
+ * Array implementation of Ptracks
+ *
+ * - elements lower that nextFree are never null,except during cleanup
+ * - elements above nextFree may be null
+ * - elements < 3 are never null
+ *    - if an operation nulls out one of those elements, the TTracks Ptrack will be changed to the
+ *      specialized PtracksN version
  */
 class PtracksArray extends AbstractMultiPtracks {
   private static final VarHandle data_h;
@@ -257,8 +263,7 @@ class PtracksArray extends AbstractMultiPtracks {
   @Override
   public boolean addCaller(TTrack owner, TTrack newCaller, int minRescan) {
     // read nextFree first, because if nextFree is lagging behind data we're safe but if it's ahead
-    // then we can leave
-    // gaps in data array
+    // then we can leave gaps in data array
     int nextFree = this.nextFree;
     TTrack[] data = this.data;
 
@@ -276,23 +281,18 @@ class PtracksArray extends AbstractMultiPtracks {
         // it)
         data = this.data;
         // If nextFree is past the end of the array, try to double the size. If we lose the race
-        // it's fine because someone
-        // else must have increased the size, so just refetch the array. Note that when we refetch
-        // the array we might
-        // still not see a sufficiently large array (e.g. we could lose the CAS from size 8 to 16,
-        // but nextFree is up to
-        // 32 and we reread the array and see it at size 16 while someone else is already updating
-        // it to 32), so we might
+        // it's fine because someone else must have increased the size, so just refetch the array.
+        // Note that when we refetch the array we might still not see a sufficiently large array
+        // (e.g. we could lose the CAS from size 8 to 16, but nextFree is up to 32 and we reread the
+        // array and see it at size 16 while someone else is already updating it to 32), so we might
         // need to try a few times.
         while (nextFree >= data.length) {
           int newLength = data.length * 2;
           // (only true in special test mode)
           if (LINEAR_GROWTH) newLength = data.length + 1;
           // note that data will have no nulls (because we don't leave any gaps) and therefore
-          // nobody else can still be
-          // writing values in, so it's effectively immutable at this point and therefore our copy
-          // can't be stale unless
-          // we lose the CAS
+          // nobody else can still be writing values in, so it's effectively immutable at this point
+          // and therefore our copy can't be stale unless we lose the CAS
           TTrack[] newData = Arrays.copyOf(data, newLength);
           data_h.compareAndSet(this, data, newData);
           // refetch the array in case we lost the race - eventually we or someone else will have

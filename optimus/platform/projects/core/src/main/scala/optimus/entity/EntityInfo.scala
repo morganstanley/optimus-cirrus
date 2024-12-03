@@ -151,12 +151,13 @@ trait StorableInfo extends OptimusInfo {
   final def createUnpickled(is: PickledInputStream): BaseType = createUnpickled(is, forceUnpickle = false)
 }
 
-abstract class EntityInfo(val properties: collection.Seq[PropertyInfo[_]], val parents: collection.Seq[ClassEntityInfo])
+abstract class EntityInfo(props: collection.Seq[PropertyInfo[_]], val parents: collection.Seq[ClassEntityInfo])
     extends OptimusInfo
     with StorableInfo {
   import optimus.platform.storable.EntityReference
   type BaseType = Entity
   type PermRefType = EntityReference
+  lazy val properties: collection.Seq[PropertyInfo[_]] = props.toVector
 
   /**
    * Whether or not the Entity is storable.
@@ -219,12 +220,11 @@ abstract class EntityInfo(val properties: collection.Seq[PropertyInfo[_]], val p
 class ClassEntityInfo(
     clazz: Class[_],
     override val isStorable: Boolean,
-    properties: collection.Seq[PropertyInfo[_]],
+    props: collection.Seq[PropertyInfo[_]],
     parents: collection.Seq[ClassEntityInfo] = collection.Seq.empty,
     override val indexes: collection.Seq[IndexInfo[_ <: Storable, _]] = collection.Seq.empty,
     val upcastDomain: Option[UpcastDomain] = None)
-    extends EntityInfo(properties, parents) {
-
+    extends EntityInfo(props, parents) {
   lazy val runtimeClass: Class[_ <: Entity] = clazz.asSubclass(classOf[Entity])
   override def toString: String = runtimeClass.getName
 
@@ -265,9 +265,9 @@ class ClassEntityInfo(
 class ModuleEntityInfo(
     val runtimeClass: Class[_],
     val isStorable: Boolean,
-    properties: collection.Seq[PropertyInfo[_]],
+    props: collection.Seq[PropertyInfo[_]],
     parents: collection.Seq[ClassEntityInfo] = collection.Seq.empty
-) extends EntityInfo(properties, parents) {
+) extends EntityInfo(props, parents) {
   override val log: Logger = msjava.slf4jutils.scalalog.getLogger(runtimeClass)
   override val indexes: collection.Seq[IndexInfo[_, _]] = collection.Seq.empty
 

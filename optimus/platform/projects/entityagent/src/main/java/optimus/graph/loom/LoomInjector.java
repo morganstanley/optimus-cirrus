@@ -49,7 +49,7 @@ public class LoomInjector implements ClassFileTransformer {
     return cw.toByteArray();
   }
 
-  private ClassReader shouldBeTransformed(ProtectionDomain domain, byte[] bytes) {
+  private static ClassReader shouldBeTransformed(ProtectionDomain domain, byte[] bytes) {
     // The quickest check to ignore class we should not possibly be transforming
     if (domain == null) return null;
     // Note: consider quick exclusion for example based on package name

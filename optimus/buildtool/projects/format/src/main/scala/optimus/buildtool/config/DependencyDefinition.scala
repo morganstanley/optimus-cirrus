@@ -14,6 +14,7 @@ package optimus.buildtool.config
 import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
 import optimus.buildtool.files.Asset
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.immutable.Seq
 
 final case class Variant(name: String, reason: String, configurationOnly: Boolean = false)
@@ -100,6 +101,15 @@ final case class DependencyDefinition(
   def isScalaSdk: Boolean = id == DependencyDefinition.ScalaId
 
   def isSameName(to: DependencyDefinition): Boolean = this.group == to.group && this.name == to.name
+  @transient
+  private[this] val fingerprintSuffix =
+    s"-dependency-definition:$group:$name:$variant:$version:configuration=$configuration:resolvers=${resolvers
+        .mkString(",")}:ivyArtifacts=${ivyArtifacts.mkString(",")}:excludes=${excludes
+        .mkString(",")}:transitive=$transitive:force=$force:macros=$containsMacros:plugin=$isScalacPlugin"
+  @transient
+  private[this] val fingerprintCache = new ConcurrentHashMap[String, String]()
+  def fingerprint(tpe: String): String =
+    fingerprintCache.computeIfAbsent(tpe, (tpe: String) => s"$tpe$fingerprintSuffix")
 }
 
 final case class DependencyGroup(name: String, dependencies: Seq[DependencyDefinition])

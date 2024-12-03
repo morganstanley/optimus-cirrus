@@ -30,12 +30,10 @@ public class WorkspaceRoot {
     Path srcDir = currentDir.resolve(SRC_DIR);
     if (Files.exists(srcDir)) {
       if (Files.exists(srcDir.resolve(STRATOSPHERE_CONFIG_FILE))) {
+        SparseUtils.assertRequiredDirectoriesExist(srcDir);
         return currentDir;
-      } else if (SparseUtils.isConfigCorrupted(srcDir)) {
-        throw new RecoverableStratosphereException(
-            "Detected malformed sparse configuration. Run following commands to recover:\n\n"
-                + "git sparse-checkout disable\n"
-                + "stratosphere sparse refresh");
+      } else {
+        SparseUtils.assertValidSparseConfig(srcDir);
       }
     }
     return find(currentDir.getParent());

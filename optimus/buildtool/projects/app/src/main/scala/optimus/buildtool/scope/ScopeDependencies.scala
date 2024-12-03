@@ -34,7 +34,7 @@ import optimus.buildtool.files.Asset
 import optimus.buildtool.resolvers.ExternalDependencyResolver
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.CompilePathBuilder
-import optimus.buildtool.utils.Utils.distinctLast
+import optimus.buildtool.utils.Utils.{distinctLast, distinctLastBy}
 import optimus.platform._
 
 import scala.collection.compat._
@@ -66,11 +66,11 @@ import scala.collection.immutable.Seq
   }
 
   @node def transitiveScopeDependencies: Seq[CompilationNode] =
-    distinctLast(
+    distinctLastBy(
       directScopeDependencies.apar
         .flatMap { d =>
           d +: ScopeDependencies.dependencies(tpe, d).transitiveScopeDependencies
-        })
+        })(_.id)
 
   @node def transitiveExternalDependencyIds: DependencyDefinitions = {
     val upstreamExtDeps = {

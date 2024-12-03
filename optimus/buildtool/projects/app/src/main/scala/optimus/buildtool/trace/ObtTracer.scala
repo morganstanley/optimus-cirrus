@@ -99,6 +99,7 @@ private[buildtool] object ObtStats {
   case object JavaArtifacts extends ObtStat
   case object DeletedArtifacts extends ObtStat
   case object MutableExternalDependencies extends ObtStat
+  case object InternalBinaryDependencies extends ObtStat
 
   case object Compilations extends ObtStat
 
@@ -161,7 +162,6 @@ private[buildtool] object ObtStats {
     case object ExternalMiss extends ObtStat with CacheStat
     case object ExternalWrite extends ObtStat with CacheStat
   }
-  case object SilverKing extends Cache
   case object DHT extends Cache
   case object RemoteComparing extends Cache
   case object FilesystemStore extends Cache

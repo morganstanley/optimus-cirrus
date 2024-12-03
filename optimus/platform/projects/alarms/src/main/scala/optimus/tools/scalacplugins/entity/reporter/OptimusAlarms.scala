@@ -117,11 +117,11 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   )
 
   val INVALID_TYPE_ANNOTATION = error1(
-    210010,
+    21010,
     OptimusPhases.ADJUST_AST,
     "Invalid type annotation %s. Only the lambda's return type can be @node annotated!")
   val INVALID_TYPE_ANNOTATION_WITH_HINT =
-    error2(210011, OptimusPhases.ADJUST_AST, "Invalid type annotation %s. HINT: Did you mean %s ?")
+    error2(21011, OptimusPhases.ADJUST_AST, "Invalid type annotation %s. HINT: Did you mean %s ?")
 
   // These rules have either been removed or made more general - old values kept as comments for documentation purposes
   // val NO_INDEX_ON_EVENT_TRAIT = error0(1010, OptimusPhases.ADJUST_AST, "Unsupported indexes on event traits")
@@ -690,7 +690,7 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
   val NODELIFT_NOMATCH = error1(26100, OptimusPhases.NODE_LIFT, "nodeLift: Could not find matching %s")
   val NODELIFT_UNSUPPORT = error1(26101, OptimusPhases.NODE_LIFT, "nodeLift: Unsupported construct %s")
   val USE_TWEAK_OPT_DIRECT = error0(26102, OptimusPhases.NODE_LIFT, "tweak operator cant be used directly")
-  val CAN_CONVERT_TO_BYVALUE =
+  val CANT_CONVERT_TO_BYVALUE =
     error0(26103, OptimusPhases.NODE_LIFT, "byValue() can not be used, did you mean byName()?")
 
   // special error code for Value2TweakTarget since this implicit nodelift is sometimes invoked in unexpected places and

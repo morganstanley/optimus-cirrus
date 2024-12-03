@@ -20,7 +20,7 @@ import java.net.URL
 
 @entity object EmptyCache extends SimpleArtifactCache(EmptyStore)
 
-object EmptyStore extends SearchableArtifactStore with MultiWriteableArtifactStore {
+object EmptyStore extends SearchableArtifactStore with WriteableArtifactStore {
   @async override protected[buildtool] def write[A <: CachedArtifactType](
       tpe: A
   )(id: ScopeId, fingerprintHash: String, discriminator: Option[String], artifact: A#A): A#A =

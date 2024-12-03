@@ -70,7 +70,6 @@ import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.util.regex.Pattern
 import scala.collection.compat._
-import scala.collection.immutable.ListMap
 import scala.collection.immutable.Seq
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -87,7 +86,7 @@ object CoursierArtifactResolver {
   // regex-ignore-line this one is only for codegen
   private[buildtool] val Marker: String = "TODO"
   private val mavenDefaultConfigs =
-    Seq(Configuration.compile, Configuration.default, Configuration.defaultCompile, Configuration.runtime)
+    Set(Configuration.compile, Configuration.default, Configuration.defaultCompile, Configuration.runtime)
   private[buildtool] val ObtMavenDefaultConfig = ""
 
   private def jvmDepMsg(line: Int) = s"$JvmDependenciesFilePathStr:$line -"
@@ -285,16 +284,11 @@ object CoursierArtifactResolver {
     fingerprintDependencyDefinitions("default", defaultDefinitions.values.toSeq).sorted
 
   @node private def fingerprintDependencyDefinitions(tpe: String, deps: Iterable[DependencyDefinition]): Seq[String] = {
-    deps.map { d =>
-      s"$tpe-dependency-definition:${d.group}:${d.name}:${d.variant}:${d.version}:configuration=${d.configuration}:" +
-        s"resolvers=${d.resolvers.mkString(",")}:ivyArtifacts=${d.ivyArtifacts.mkString(",")}:excludes=${d.excludes
-            .mkString(",")}:" +
-        s"transitive=${d.transitive}:force=${d.force}:macros=${d.containsMacros}:plugin=${d.isScalacPlugin}"
-    }.toIndexedSeq
+    deps.map { d => d.fingerprint(tpe) }.toIndexedSeq
   }
 
   @node private def globalExcludesFingerprint: Seq[String] =
-    globalExcludes.apar
+    globalExcludes
       .map { exclude =>
         s"global-exclude:${exclude.group.getOrElse("")}:${exclude.name.getOrElse("")}:${exclude.ivyConfiguration.getOrElse("")}"
       }
@@ -337,15 +331,8 @@ object CoursierArtifactResolver {
   // if there are multiple (variant) definitions requested for the same module and config, the first one wins.
   // (note that ScopeDependencies puts the ones specifically for this module first, before the transitive ones)
   @node private def distinctRequestedDeps(deps: Seq[DependencyDefinition]): Seq[DependencyDefinition] = {
-    // carefully preserving order...
-    deps
-      .foldLeft(ListMap.empty[(Module, String), DependencyDefinition]) { (acc, d) =>
-        val m = (toModule(d), d.configuration)
-        // ...retaining only the first entry per module & config
-        if (acc.contains(m)) acc else acc + ((m, d))
-      }
-      .values
-      .toIndexedSeq // ensure we don't get a Stream
+    // ...retaining only the first entry per module & config
+    deps.distinctBy(d => (toModule(d), d.configuration))
   }
 
   private def toModule(d: DependencyDefinition): Module =
@@ -386,7 +373,7 @@ object CoursierArtifactResolver {
 
       if (unmappedResult.all.nonEmpty) {
         val autoMap: Option[AutoMappedResult] = {
-          val fromAfs = mappedResult.appliedAfsToMavenMap.apar
+          val fromAfs = mappedResult.appliedAfsToMavenMap
             .collect { case (k, v) if v.contains(mixedModeMavenDep) => k }
             .apar
             .map(toCoursierDep(_, scopeSubstitutions, allVersions))
@@ -883,8 +870,8 @@ object CoursierArtifactResolver {
         .sortBy { case (dep, arts) =>
           (dep.module.toString, arts.right.toOption.map(_.file.pathFingerprint).getOrElse(""))
         }
-    val indirectJniPaths: Seq[String] = indirectDependencies.apar.flatMap(jniPathsForDependency(resolution, _))
-    val indirectModuleLoads: Seq[String] = indirectDependencies.apar.flatMap(moduleLoadsForDependency(resolution, _))
+    val indirectJniPaths: Seq[String] = indirectDependencies.flatMap(jniPathsForDependency(resolution, _))
+    val indirectModuleLoads: Seq[String] = indirectDependencies.flatMap(moduleLoadsForDependency(resolution, _))
 
     val mavenDependencies = resolution.projectCache
       .collect {
@@ -941,7 +928,6 @@ object CoursierArtifactResolver {
       // which not ideal for obtv and we should deduplicate them by ourself (Coursier won't help in this case)
       nonClassifierDeps
         .to(Seq)
-        .apar
         .map { case (d, seqd) =>
           (
             coursierDependencyToInfo(d, isMavenDep(d)),
@@ -951,21 +937,23 @@ object CoursierArtifactResolver {
         }
         .groupBy(_._1)
         .map { case (k, grouped) => k -> grouped.flatMap(_._2).distinct }
-    }
+    }.filter(_._2.nonEmpty)
 
-    val directMappedDependencies = mappedDeps.apar.map { case (afs, equivalents) =>
+    val directMappedDependencies = mappedDeps.map { case (afs, equivalents) =>
       definitionToInfo(afs) -> equivalents.map(definitionToInfo)
     }
 
     val transitiveMappedDependencies =
-      externalDependencies.multiSourceDependencies.apar.collect {
+      externalDependencies.multiSourceDependencies.collect {
         case ExternalDependency(afs, equivalents)
             if equivalents.map(definitionToInfo).forall(artifactsDependencies.contains) =>
           definitionToInfo(afs) -> equivalents.map(definitionToInfo)
       }.toMap
 
     ResolutionResult(
-      resolvedArtifactsToDepInfos = artifactsToDepInfosList.map { case (a, ds) => (a, ds.to(Seq).sortBy(_.toString)) },
+      resolvedArtifactsToDepInfos = artifactsToDepInfosList.iterator.map { case (a, ds) =>
+        (a, ds.to(Vector).sortBy(_.toString))
+      }.toVector,
       messages = errorMessages ++ conflictMessages ++ artifactMessages,
       jniPaths = allJniPaths,
       moduleLoads = allModuleLoads,

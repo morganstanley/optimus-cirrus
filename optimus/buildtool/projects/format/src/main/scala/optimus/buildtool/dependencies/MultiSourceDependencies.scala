@@ -70,8 +70,6 @@ final case class MultiSourceDependency(
 }
 
 object MultiSourceDependency {
-  private[buildtool] val VersionedAfsError =
-    "afs version shouldn't be defined! All usages will be replaced by mapped maven version."
   private[buildtool] val MultipleAfsError = "only one afs dependency should be defined!"
   private[buildtool] def NoMavenVariantError(name: String) = s"'$name' no maven equivalent variant found!"
   private[buildtool] val NoVersionError = "maven version must be defined in order to map afs dependency!"

@@ -25,7 +25,6 @@ import java.nio.file.FileSystem
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import scala.collection.mutable.ListBuffer
-import scala.language.higherKinds
 import scala.util.Try
 
 /**
@@ -322,7 +321,7 @@ import scala.util.Try
       ivy <- fetch(artifact)
       proj0 <- EitherT(F.point {
         for {
-          xml <- Try(UnsafeXML(disallowDoctypeDecl = false).loadString(compatibility.xmlPreprocess(ivy)))
+          xml <- Try(MsIvyRepository.xmlLoader.loadString(compatibility.xmlPreprocess(ivy)))
             .fold(t => Left(t.getMessage), e => Right(compatibility.xmlFromElem(e)))
           _ <- if (xml.label == "ivy-module") Right(()) else Left("Module definition not found")
           proj <- MsIvyXml.project(xml, version, afsToMavenMap)
@@ -359,6 +358,7 @@ import scala.util.Try
 }
 
 private[resolvers] object MsIvyRepository {
+  private val xmlLoader = UnsafeXML(disallowDoctypeDecl = false)
   def parse(
       ivyPatternStr: String,
       artifactPatternStrs: Seq[String],

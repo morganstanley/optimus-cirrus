@@ -12,7 +12,6 @@
 package optimus.buildtool.compilers.zinc.mappers
 
 import java.io.File
-
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.compilers.SyncCompiler.PathPair
 import optimus.buildtool.compilers.zinc.ZincUtils._
@@ -24,6 +23,7 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.utils.Utils
+import org.apache.commons.lang3.StringUtils
 import xsbti.compile.analysis.ReadMapper
 
 import scala.collection.mutable
@@ -73,6 +73,10 @@ private[zinc] class ZincReadMapper(
 
   override protected final def translateFile(path: String): String = {
     dissectFile(BUILD_DIR, Asset.parse(BUILD_DIR.fileSystem, path)) match {
+      // Zinc analysis uses a dummy file for the output directory to make it more machine independent. What it
+      // really wants here is the current output path, so pass that back.
+      case Left(file) if file == dummyFile =>
+        outputJar.tempPath.pathString
       case Left(file) =>
         val path = file.pathString
         validatePath(path)
@@ -100,26 +104,27 @@ private[zinc] class ZincReadMapper(
 
     // Note this has to happen before buildSubstitutions, since buildDir may contain ":"
     // Slightly hacky here - we undo the conversion of the colon in "-Xplugin" after doing the separator replacement
-    val separatorSubstitutions: Seq[Substitution] =
+    def separatorSubstitutions(s: String): String =
       if ((isXPlugin || isYMacro) && File.pathSeparator != ":")
-        Seq(
-          Substitution(File.pathSeparator, ":"),
-          Substitution(pluginFlag, pluginFlag.dropRight(1) + File.pathSeparator))
-      else Seq.empty
+        s.replace(":", File.pathSeparator).replace(pluginFlag.dropRight(1) + File.pathSeparator, pluginFlag)
+      else s
 
-    val buildSubstitutions: Seq[Substitution] = {
-      val jars = findBuildJarsInText(BUILD_DIR, text)
-      val updateHash = updatePluginHash || !isXPlugin
-
-      jars.map(j => Substitution(translateOptionPath(j, updateHash).pathString, j.pathString))
+    def buildSubstitutions(s: String): String = {
+      val updateHash =
+        updatePluginHash || !isXPlugin // should we do something clever here for plugin paths (eg. use content hash)?
+      replaceBuildJarsInText(BUILD_DIR, s) { jarAsset =>
+        translateOptionPath(jarAsset, updateHash).pathString
+      }
     }
 
-    val substitutions =
-      (separatorSubstitutions ++ buildSubstitutions ++ externalDepsSubstitutions).filterNot(_.isSame)
-
-    val ret = substitutions.foldLeft(text) { case (acc, s) =>
-      acc.replace(s.key, s.realDirectory) // convert KEY to path
-    }
+    val substitutions = externalDepsSubstitutions.filterNot(_.isSame)
+    val ret =
+      buildSubstitutions(
+        StringUtils.replaceEach(
+          separatorSubstitutions(text),
+          substitutions.map(_.key).toArray,
+          substitutions.map(_.realDirectory).toArray)
+      )
     previousArg = Some(text)
     ret
   }

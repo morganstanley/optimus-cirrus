@@ -15,6 +15,7 @@ import java.nio.file.Paths
 import optimus.buildtool.app.MischiefOptions
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.artifacts.InternalArtifactId
+import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
 import optimus.buildtool.format.FreezerStructure
@@ -27,6 +28,7 @@ import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import scala.collection.immutable.Seq
 import scala.collection.concurrent.TrieMap
+import scala.util.control.NonFatal
 
 @entity trait FreezerStoreConf {
   @node def freeze(scope: ScopeId): Boolean
@@ -63,8 +65,7 @@ class CustomFreezerStore(
     with SearchableArtifactStore {
   override val cacheType: String = "CustomFreezerStore"
   override val stat: ObtStats.Cache = ObtStats.FilesystemStore
-  private val freezerMappingPath = "freezer-mapping.txt"
-  private val mappingFile = pathBuilder.outputDir.parent.resolveFile(freezerMappingPath)
+  private val mappingFile = pathBuilder.outputDir.parent.resolveFile(NamingConventions.FreezerMapping)
   private val mappings: TrieMap[String, String] = readFromFile()
 
   private def readFromFile() = {
@@ -76,7 +77,7 @@ class CustomFreezerStore(
           case _: NoSuchFileException =>
             info("No freezer mapping file")
             java.util.List.of[String]()
-          case t: Throwable =>
+          case NonFatal(t) =>
             warn("error while trying to retrieve freezer mapping", t)
             java.util.List.of[String]()
         }
@@ -164,14 +165,14 @@ class CustomFreezerStore(
         val writer = Files.newBufferedWriter(p)
         mappings.iterator
           .map { case (k, v) =>
-            s"$k\t${v}\n"
+            s"$k\t$v\n"
           }
           .foreach(writer.write)
         writer.flush()
         writer.close()
       }
     } catch {
-      case e: Throwable => warn("error while writing freezer mapping", e)
+      case NonFatal(e) => warn("error while writing freezer mapping", e)
     }
   }
 }

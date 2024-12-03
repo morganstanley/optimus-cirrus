@@ -23,10 +23,10 @@ import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.{Properties => P}
-import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
 import optimus.breadcrumbs.crumbs.Events
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.util.LimitedSizeConcurrentHashMap
+import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.utils.Args4JOptionHandlers.StringHandler
 import optimus.utils.MiscUtils.retry
@@ -68,6 +68,7 @@ import java.util.concurrent.TimeUnit
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.Objects
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -459,7 +460,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   private def getAs[T: JsonReader](m: Map[String, JsValue], k: String): Option[T] =
     m.get(k).flatMap(x => Try(x.convertTo[T]).toOption)
 
-  private val totalSkipped = new AtomicLong(0)
+  private val totalDropped = new AtomicLong(0)
   private val ignored = new AtomicLong(0)
   private val deduplicated = new AtomicLong(0)
   private var printed = 0L
@@ -490,23 +491,23 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
     new Thread {
       override def run(): Unit = {
         var skipping = false
-        var nSkipped = 0
+        var nDropped = 0
         while (continue) {
           try {
             val consumerRecords = consumer.poll(Duration.ofMillis(1000L))
             if (queue.size() > 50000) {
               if (!skipping) {
-                warn(s"$poolId $consumer skipping records queue size ${queue.size}")
+                warn(s"$poolId $consumer dropping records queue size ${queue.size}")
               }
               skipping = true
               val n = consumerRecords.count()
-              nSkipped += n
-              totalSkipped.addAndGet(n)
+              nDropped += n
+              totalDropped.addAndGet(n)
             } else {
               if (skipping) {
-                warn(s"$poolId $consumer skipped $nSkipped records due to  queue size")
+                warn(s"$poolId $consumer dropped $nDropped records due to  queue size")
                 skipping = false
-                nSkipped = 0
+                nDropped = 0
               }
               consumerRecords.iterator().asScala.foreach { s: ConsumerRecord[String, String] =>
                 for (
@@ -607,7 +608,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   }
 
   private var tNextLog = 0L
-  private val rootUuids = mutable.HashSet.empty[String]
+  private val rootUuids = new ConcurrentHashMap[String, Boolean];
   private var tLastDrained = System.currentTimeMillis()
   private val es = new util.ArrayList[QElem](mergeQueueSize * 10)
   // Give the queue some time to fill up, for better sorting.
@@ -636,7 +637,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
             logger.warn(s"Ignoring improper file name $uuid")
           } else if (tCrumb <= tFinal) {
             val t = System.currentTimeMillis()
-            rootUuids += uuid
+            rootUuids.put(uuid, true)
             plexDirOpt match {
               case Some(plexDir) =>
                 try {
@@ -673,10 +674,22 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
             val tnow = System.currentTimeMillis()
             if (status > 0 && tNow > tNextLog) {
               tNextLog = tNow + status * 1000L
-              val count = rootUuids.size
+              val liveRoots = rootUuids.size
               rootUuids.clear()
+              val dtCrumb = tnow - tCrumb
+              val dtKafka = tnow - tKafka
+              val dtQueue = tnow - tEnqueued
+              BaseSamplers.setCounter(P.plexerCountPrinted, printed)
+              BaseSamplers.setCounter(P.plexerCountDropped, totalDropped.get)
+              BaseSamplers.setCounter(P.plexerCountDeduped, deduplicated.get)
+              BaseSamplers.setCounter(P.plexerCountParseError, parseErrors.get)
+              BaseSamplers.setGauge(P.plexerSnapRootCount, liveRoots)
+              BaseSamplers.setGauge(P.plexerSnapQueueSize, queue.size)
+              BaseSamplers.setGauge(P.plexerSnapLagClient, dtCrumb)
+              BaseSamplers.setGauge(P.plexerSnapLagKafka, dtKafka)
+              BaseSamplers.setGauge(P.plexerSnapLagQueue, dtQueue)
               info(
-                s"$poolId printed=$printed skipped=$totalSkipped ignored=$ignored deduplicated=$deduplicated misparsed=$parseErrors badUuids=$badUuids qs=${queue.size} dtCrumb=${tnow - tCrumb} dtKafka=${tnow - tKafka} dtQueue=${tnow - tEnqueued} roots=$count")
+                s"$poolId printed=$printed dropped=$totalDropped ignored=$ignored deduplicated=$deduplicated misparsed=$parseErrors badUuids=$badUuids qs=${queue.size} dtCrumb=$dtCrumb dtKafka=$dtKafka dtQueue=$dtQueue roots=$liveRoots")
             }
           }
           if (waitAfterComplete > 0 && getAs[String](m, "event").contains(Events.AppCompleted.name)) {

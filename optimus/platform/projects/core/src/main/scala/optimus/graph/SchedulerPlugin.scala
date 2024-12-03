@@ -164,7 +164,7 @@ object PluginType {
     override def toString: String = toMap.toString
   }
 
-  private val maxNodeArraySize = DiagnosticSettings.maxPluginNodesTracked
+  private val maxNodeArraySize = DiagnosticSettings.maxPluginNodesBuffer
   private val forceCompactFloor = 100
   private val minNodeArraySize = 4
 
@@ -215,29 +215,34 @@ object PluginType {
     private[graph] def track(ntsk: NodeTask): Boolean = track(new WeakReference[NodeTask](ntsk))
 
     // Called by AdaptedNodesOfAllPlugins.accumulate under forAllRemovables lock
-    def accumulateAdaptedNodesFromOnePlugin(other: GuaranteedSnapped[AdaptedNodesOfOnePlugin]): Unit = {
-      val snapped = other.getSafe
-      val nNodesOther = snapped.nNodes
-      val nNodesNew = nNodes + nNodesOther
-      if (nNodesNew > nodes.length)
-        nodes = util.Arrays.copyOf(nodes, nNodesNew * 2)
-      var i = 0
-      val os = snapped.nodes
-      while (i < nNodesOther) {
-        nodes(nNodes + i) = os(i)
-        i += 1
+    def accumulateAdaptedNodesFromOnePlugin(other: GuaranteedSnapped[AdaptedNodesOfOnePlugin]): Unit =
+      this.synchronized {
+        val snapped = other.getSafe
+        val nNodesOther = snapped.nNodes
+        val nNodesNew = nNodes + nNodesOther
+        if (nNodesNew > nodes.length)
+          nodes = util.Arrays.copyOf(nodes, nNodesNew * 2)
+        var i = 0
+        val os = snapped.nodes
+        while (i < nNodesOther) {
+          nodes(nNodes + i) = os(i)
+          i += 1
+        }
+        nNodes = nNodesNew
+        maxSize = Math.max(maxSize, snapped.maxSize)
+        resizes = resizes + snapped.resizes
       }
-      nNodes = nNodesNew
-      maxSize = Math.max(maxSize, snapped.maxSize)
-      resizes = resizes + snapped.resizes
-    }
 
-    // Remove any nodes that are complete or collected.
-    private def removeCollectedOrCompleted(): Int = {
+    // Remove any nodes that are complete or collected.  This should always be called under lock.
+    private def removeCollectedOrCompleted(): Int = this.synchronized {
       var i = 0
       while (nNodes > i) {
-        val ntsk = nodes(i).get()
-        if (Objects.isNull(ntsk) || ntsk.isDone) {
+        val wr = nodes(i)
+        val doRemove = Objects.isNull(wr) || {
+          val ntsk = wr.get
+          Objects.isNull(ntsk) || ntsk.isDone
+        }
+        if (doRemove) {
           nNodes -= 1
           // if nNodes==i, this is a no-op, and we're about to exit the loop
           nodes(i) = nodes(nNodes)
@@ -248,8 +253,8 @@ object PluginType {
       }
       // Ideal size is next power of 2
       val newSize = Math.max(minNodeArraySize, 2 * Integer.highestOneBit(nNodes + 1))
-      // Resize if this shrinks us by more than a factor of two.
-      if (newSize < nodes.size / 2) {
+      // Resize if this shrinks us by more than a factor of 10 (by default)
+      if (newSize < nodes.size / DiagnosticSettings.minPluginNodeResizeRatio) {
         nodes = util.Arrays.copyOf(nodes, newSize)
         resizes += 1
       }
@@ -281,7 +286,7 @@ object PluginType {
     }
 
     // Pass in a Random that's local to whatever thread we're in
-    private[graph] def randomUncompletedNode(random: Random): Option[(NodeTask, Int)] = {
+    private[graph] def randomUncompletedNode(random: Random): Option[(NodeTask, Int)] = this.synchronized {
       removeCollectedOrCompleted()
       if (nNodes == 0) Option.empty
       else {
@@ -327,13 +332,13 @@ object PluginType {
     }
 
     // Methods used by tests
-    def countNodes(): Int = {
+    def countNodes(): Int = this.synchronized {
       removeCollectedOrCompleted()
     }
 
-    def nodeSet(): Set[Int] =
+    def nodeSet(): Set[Int] = this.synchronized {
       nodes.map { wr => Option(wr).flatMap(w => Option(w.get())).fold(0)(_.getId) }.toSet - 0
-
+    }
     def stats(): NodeStats = this.synchronized(NodeStats(nNodes, resizes, maxSize))
 
     def resetStats(): Unit = this.synchronized {
@@ -430,6 +435,8 @@ object PluginType {
 
     def inFlight: Counter = starts.diff(completed)
     def unFired: Counter = starts.diff(fired, neverFired)
+
+    def activity: Long = starts.toMap.values.sum + completed.toMap.values.sum + fired.toMap.values.sum
 
     def cumulativeCounts: Map[String, Map[String, Long]] =
       Map(

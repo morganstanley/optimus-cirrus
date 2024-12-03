@@ -15,23 +15,18 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.List;
 
-public class FilteredClassLoader extends ClassLoader {
-
-  private final List<String> excludedPaths;
-
-  public FilteredClassLoader(ClassLoader parent, List<String> excludedPaths) {
+public class SingleResourceClassLoader extends ClassLoader {
+  public SingleResourceClassLoader(ClassLoader parent) {
     super(parent);
-    this.excludedPaths = excludedPaths;
   }
 
   @Override
   public Enumeration<URL> getResources(String name) throws IOException {
-    Enumeration<URL> found = getParent().getResources(name);
-    List<URL> filtered =
-        Collections.list(found).stream().filter(url -> url != null && notExcluded(url)).toList();
-    return Collections.enumeration(filtered);
+    URL resource = getParent().getResource(name);
+
+    if (resource != null) return Collections.enumeration(Collections.singletonList(resource));
+    else return Collections.emptyEnumeration();
   }
 
   /** Comes from typesafeconfig.Parseable */
@@ -52,14 +47,5 @@ public class FilteredClassLoader extends ClassLoader {
         return packagePath + "/" + resource;
       }
     }
-  }
-
-  private String normalizePath(String path) {
-    return path.replace("\\", "/");
-  }
-
-  private Boolean notExcluded(URL url) {
-    return excludedPaths.stream()
-        .noneMatch(substring -> normalizePath(url.getPath()).contains(substring));
   }
 }
