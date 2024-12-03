@@ -98,7 +98,7 @@ trait ClassInfo {
   }
 
   def annotations: List[AnnotationInfo] = classSymbol.annotations.map { AnnotationInfo(_) }
-  protected def classSymbol: ClassSymbol
+  def classSymbol: ClassSymbol
   def referrers(implicit f: ClassInfo => Boolean = _ => true): Iterable[ClassInfo] = {
     ClassInfo.incomingGraph.flatMap { case (k, rs) =>
       if (f(k) && k.isSuperTypeOf(this)) {
@@ -273,7 +273,7 @@ final case class TypeClassInfo private (t: Type) extends ClassInfo {
     parents(f).toSeq :+ this
   }
 
-  override protected def classSymbol: ClassSymbol = t.typeSymbol.asClass
+  override def classSymbol: ClassSymbol = t.typeSymbol.asClass
 
   override val piiElements: Seq[PIIDetails] = DatatypeUtil.extractPiiElementsList(t.getClass.getDeclaredFields)
 }
@@ -310,7 +310,7 @@ final case class MetaDataClassInfo(meta: ClassMetaData, classLoader: ClassLoader
   override def children(implicit f: ClassInfo => Boolean = _ => true): Iterable[ClassInfo] =
     meta.allChildren.map { MetaDataClassInfo(_, classLoader) }.filter(f)
 
-  override protected lazy val classSymbol: ClassSymbol =
+  override lazy val classSymbol: ClassSymbol =
     ReflectionHelper.getClassSymbolFromName(meta.fullClassName, classLoader)
   override def fields(includeTypeArgs: Boolean = true): Iterable[FieldInfo] = {
     val filter = if (isEntity) { (s: Symbol) =>

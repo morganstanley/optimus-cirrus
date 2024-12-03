@@ -11,6 +11,7 @@
  */
 package optimus.platform.dal.messages
 
+import optimus.dsi.pubsub.Subscription
 import optimus.platform.dal.NotificationStreamCallback
 import optimus.platform.storable.SerializedContainedEvent
 import optimus.platform.storable.SerializedUpsertableTransaction
@@ -57,7 +58,8 @@ object MessagesEvent {
       className: String, // BusinessEvent className
       payload: SerializedUpsertableTransaction,
       commitId: Long,
-      pubReqId: String
+      pubReqId: String,
+      subscriptionId: Subscription.Id
   ) extends StreamNotificationEvent {
     def classNames: Seq[String] = payload.topLevelSerializedEntityClassNames
   }

@@ -13,6 +13,7 @@ package optimus.graph;
 
 import static optimus.graph.OGScheduler.schedulerVersion;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
+import static optimus.graph.cache.NCSupport.isProxy;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -568,6 +569,9 @@ public abstract class NodeTask extends NodeAwaiter
    * itself (flag clear)
    *
    * <p>Note: NOT thread safe and can ONLY be called in the constructor of a derived class
+   *
+   * <p>Note 2: complete() unflags this value. This is fine... until someone calls reset(). If you
+   * call this function you *must* provide a reset override that re-marks the node.
    */
   public final void markAsTrackingValue() {
     state_h.setOpaque(this, _state | STATE_TRACKING_VALUE);
@@ -689,6 +693,11 @@ public abstract class NodeTask extends NodeAwaiter
   final void markAsRunnable() {
     if (!isDoneOrRunnable()) updateState(0, STATE_NOT_RUNNABLE);
     else if (Settings.schedulerAsserts)
+      // It is always incorrect to markAsRunnable a completed node...
+      //
+      // except that when we discover a circular reference exception we can complete a parent node
+      // without completing its children, which causes it to be re-enqueued when the child
+      // completes.
       if (!(isDoneWithException() && (exception() instanceof CircularReferenceException)))
         throw new GraphInInvalidState(
             "markAsRunnable called on a completed or already runnable node!");
@@ -1076,9 +1085,8 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   private boolean isDoneWithCancellation(int state) {
-    return isDoneWithExceptionToHide(state)
-        && (_scenarioStack != null)
-        && _scenarioStack.cancelScope().isCancelled();
+    return (isDoneWithExceptionToHide(state)
+        && (exception() instanceof ScopeWasCancelledException));
   }
 
   public final boolean isDoneWithCancellation() {
@@ -1091,9 +1099,11 @@ public abstract class NodeTask extends NodeAwaiter
    * <p>TODO (OPTIMUS-13315): Change to protected when TrackingScenario moves to optimus .graph Also
    * OPTIMUS-18757 Also, remove all the usage outside of cloneXXX
    */
-  public /* protected */ void reset() {
+  public /*g protected */ void reset() {
     // NOTE: currently _scenarioStack is not reset for ease of debugging
-    // NOTE: preserve the value of STATE_TRACKING_VALUE
+    //
+    // if STATE_TRACKING_VALUE is set, we keep it, however it is cleared on complete, so it needs
+    // explicit processing in reset overrides.
     state_h.setOpaque(this, STATE_NEW | (STATE_TRACKING_VALUE & _state));
     _xinfo = NullNodeExtendedInfo$.MODULE$;
     setLauncherRef(null);
@@ -1162,6 +1172,10 @@ public abstract class NodeTask extends NodeAwaiter
       int clearFlags = 0;
       if (isTrackingValue() && _scenarioStack.isTrackingIndividualTweakUsage()) {
         // [SEE_ON_TWEAK_USED] && [SEE_TRK_REPORT]
+        // Why is it ok to not report when the node is cancelled?
+        //
+        // If we were cancelled (and are completing *due to the cancellation*) then we aren't
+        // actually using the value of the tweak for our result (which is a cancellation exception).
         if (!isCancelled)
           _scenarioStack._tweakableListener().onTweakableNodeCompleted((PropertyNode<?>) this);
         clearFlags = STATE_TRACKING_VALUE; // No point of reporting twice!
@@ -1187,11 +1201,17 @@ public abstract class NodeTask extends NodeAwaiter
 
       // Reset to the stable SS to save memory, UNLESS doing so would lose the CancellationScope in
       // a case where it matters for caching (see NCSupport.isUsableWRTCancellationScope)
-      if (DiagnosticSettings.resetScenarioStackOnCompletion
-          && (!isDoneWithExceptionToHide() && !_scenarioStack.cancelScope().isCancelled()
-              || _scenarioStack.cancelScope() == _scenarioStack._stableSS().cancelScope()))
-        _scenarioStack = _scenarioStack._stableSS(); // [SEE_RESET_SS]
+      if (DiagnosticSettings.resetScenarioStackOnCompletion) {
 
+        if (
+        // If we have a result, we can always reuse it and we don't care about the cancel scope:
+        isDoneWithUsableResult()
+            // if we have a non rt exception, we can still do the swap provided that the
+            // cancellation scope doesn't change when we do
+            || (_scenarioStack.cancelScope() == _scenarioStack._stableSS().cancelScope())) {
+          _scenarioStack = _scenarioStack._stableSS(); // [SEE_RESET_SS]
+        }
+      }
     } catch (Throwable e) {
       // If the above doesn't finish because of an error, we are probably heading for a bad
       // deadlock, so we panic and kill the process.
@@ -1254,10 +1274,7 @@ public abstract class NodeTask extends NodeAwaiter
 
     mergeTweakPropertyDependency(child);
 
-    // OPTIMUS-45457 can't do this if we're cancelled (and anyhow what's the point?)
-    if (isTrackingValueNonXSOwner(childState)
-        && isDoneWithUsableResult(childState)
-        && _scenarioStack.isTrackingOrRecordingTweakUsage())
+    if (isTrackingValueNonXSOwner(childState) && _scenarioStack.isTrackingOrRecordingTweakUsage())
       child.reportTweakableUseBy(this); // [SEE_REC_REPORT]
   }
 
@@ -1897,10 +1914,10 @@ public abstract class NodeTask extends NodeAwaiter
         // but should not be a proxy. Proxies state could much more complicated.
         // Alternatively, it's possible to invoke something like cancelInsteadOfRun()
         var nodeToCompleteWithException = chain.get(chain.marker);
-        var nodeToCompleteIsProxy = isDelayedProxy(nodeToCompleteWithException);
+        var nodeToCompleteIsProxy = isProxy(nodeToCompleteWithException);
         for (int i = chain.marker; i < chain.size(); i++) {
           var tsk = chain.get(i);
-          if (nodeToCompleteIsProxy && !isDelayedProxy(tsk)) {
+          if (nodeToCompleteIsProxy && !isProxy(tsk)) {
             nodeToCompleteWithException = tsk;
             nodeToCompleteIsProxy = false;
           }

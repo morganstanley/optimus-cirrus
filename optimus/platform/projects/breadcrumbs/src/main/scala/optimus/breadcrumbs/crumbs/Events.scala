@@ -155,4 +155,6 @@ object Events extends KnownEvents {
   val PublicationQueueDepth = event("PublicationQueueDepth")
   val DalBanWriteEntity = event("DalBanWriteEntity")
 
+  val UiFeature = event("UiFeature")
+
 }

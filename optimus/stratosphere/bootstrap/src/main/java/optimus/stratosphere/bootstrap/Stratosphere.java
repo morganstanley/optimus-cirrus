@@ -138,8 +138,6 @@ public class Stratosphere {
   private static int runCommand(String command, String[] args) throws Exception {
     Path workspace = WorkspaceRoot.find();
     final Config config = StratosphereConfig.loadFromCurrentDir();
-    final List<String> commandsToRunWithSnapshotInfra =
-        config.getStringList("internal.commands-to-run-with-snapshot-infra");
 
     if (workspace != null) {
       int migrationStatus =
@@ -149,8 +147,16 @@ public class Stratosphere {
         return migrationStatus;
       }
     }
-    return (workspace == null || commandsToRunWithSnapshotInfra.contains(command.toLowerCase()))
+    return shouldRunSnapshotInfra(workspace, config, command)
         ? runSnapshotInfra(args, config)
         : runNewInfra(args, config);
+  }
+
+  private static boolean shouldRunSnapshotInfra(Path workspace, Config config, String command) {
+    final List<String> commandsToRunWithSnapshotInfra =
+        config.getStringList("internal.commands-to-run-with-snapshot-infra");
+    return workspace == null
+        || commandsToRunWithSnapshotInfra.contains(command.toLowerCase())
+        || MigrationManager.requiresForkMigration(config, command);
   }
 }

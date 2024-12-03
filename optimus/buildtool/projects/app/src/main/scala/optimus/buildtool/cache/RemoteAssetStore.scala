@@ -35,3 +35,8 @@ object NoOpRemoteAssetStore extends RemoteAssetStore {
 
   def cacheMode: CacheMode = CacheMode.ReadWrite
 }
+
+trait WriteableArtifactStore extends RemoteAssetStore with ArtifactStore {
+  def logStatus(): Seq[String]
+  def incompleteWrites: Int
+}

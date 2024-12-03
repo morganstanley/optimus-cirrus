@@ -163,7 +163,7 @@ object SimpleArtifactCache {
 
 @entity class RemoteReadThroughTriggeringArtifactCache[+A <: ArtifactStore](
     override val store: A,
-    val readThroughStores: Set[_ <: MultiWriteableArtifactStore],
+    val readThroughStores: Set[_ <: WriteableArtifactStore],
     val artifactSizeThresholdBytes: Long,
     override val cacheMode: CacheMode = CacheMode.ReadWrite,
     override val ignoreErroneousArtifacts: Boolean = SimpleArtifactCache.IgnoreErroneousArtifacts

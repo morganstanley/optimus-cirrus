@@ -33,7 +33,6 @@ import optimus.platform.util.Log
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
-import optimus.scalacompat.collection._
 
 /**
  * @param uniqueFiles
@@ -60,14 +59,17 @@ class BundleRunConfsInstaller(
   override val descriptor = "bundle runconfs"
 
   @async override def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
-    installable.metaBundles.apar.flatMap(installBundleRunConfs).toIndexedSeq
+    installable.metaBundles.apar.flatMap(metaBundle => installBundleRunConfs(metaBundle, installable)).toIndexedSeq
   }
 
-  @async private def installBundleRunConfs(mb: MetaBundle): Option[FileAsset] = {
+  @async private def installBundleRunConfs(
+      mb: MetaBundle,
+      installable: BatchInstallableArtifacts): Option[FileAsset] = {
     // Consolidated bundle from compiled runconf jars
     val archive = runConfArchive(mb)
-    val jars = collectRunConfArtifacts(mb)
+    val jars = collectRunConfArtifacts(mb, installable)
     val venvs = collectVenvMappings(mb)
+
     val hashes = jars.map {
       // This is safe/stable because jars is a SortedMap
       case (scope, artifact) =>
@@ -86,33 +88,33 @@ class BundleRunConfsInstaller(
   private def runConfArchive(metaBundle: MetaBundle): FileAsset =
     installPathBuilder.etcDir(metaBundle).resolveFile(NC.bundleRunConfsJar)
 
-  @async private def collectRunConfArtifacts(metaBundle: MetaBundle): SortedMap[String, CompiledRunconfArtifact] = {
-    factory.scopeIds
-      .filter(_.metaBundle == metaBundle)
-      .apar
-      .flatMap(factory.lookupScope)
-      .apar
-      .flatMap { scoped =>
-        scoped.runconfArtifacts.collect { case artifact: CompiledRunconfArtifact =>
-          scoped.id.toString -> artifact
-        }
-      }(SortedMap.breakOut)
+  @async private def collectRunConfArtifacts(
+      metaBundle: MetaBundle,
+      installable: BatchInstallableArtifacts
+  ): SortedMap[String, CompiledRunconfArtifact] = {
+    val compiledRunconfArtifacts = installable.artifacts.collect {
+      case a: CompiledRunconfArtifact if a.scopeId.metaBundle == metaBundle =>
+        a.scopeId.properPath -> a
+    }
+    SortedMap(compiledRunconfArtifacts.toArray: _*)
   }
 
   @async private[component] def collectVenvMappings(metaBundle: MetaBundle): SortedMap[String, String] = {
-    factory.scopeIds
-      .filter(_.metaBundle == metaBundle)
-      .apar
-      .flatMap(factory.lookupScope)
-      .apar
-      .flatMap { scoped =>
-        val maybeInteropConfig = scoped.config.interopConfig
-        maybeInteropConfig.flatMap { interopConfig =>
-          interopConfig.pythonModule.map { pyModule =>
-            scoped.id.toString -> pyModule.scope("main").toString
+    SortedMap(
+      factory.scopeIds
+        .filter(_.metaBundle == metaBundle)
+        .apar
+        .flatMap(factory.lookupScope)
+        .apar
+        .flatMap { scoped =>
+          val maybeInteropConfig = scoped.config.interopConfig
+          maybeInteropConfig.flatMap { interopConfig =>
+            interopConfig.pythonModule.map { pyModule =>
+              scoped.id.toString -> pyModule.scope("main").toString
+            }
           }
         }
-      }(SortedMap.breakOut)
+        .toArray: _*)
   }
 
   // =============================================

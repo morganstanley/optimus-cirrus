@@ -13,6 +13,7 @@ package optimus.stratosphere.config
 
 import com.typesafe.config.Config
 import optimus.scalacompat.collection._
+import optimus.stratosphere.utils.RemoteUrl
 import optimus.utils.MemSize
 
 import java.nio.file.Path
@@ -123,5 +124,8 @@ trait LowerPriorityImplicits {
   implicit def instantExtractor: Extractor[Instant] = new Extractor[Instant] {
     override def extract(config: Config, property: String): Instant = Instant.ofEpochMilli(config.getLong(property))
   }
+
+  implicit def remoteUrlExtractor: Extractor[RemoteUrl] = (config: Config, property: String) =>
+    RemoteUrl(config.getString(property))
 
 }

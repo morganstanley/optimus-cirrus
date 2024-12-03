@@ -29,6 +29,7 @@ import optimus.graph.OGTrace;
 import optimus.graph.PropertyNode;
 import optimus.graph.ProxyPropertyNode;
 import optimus.graph.RecordedTweakables;
+import optimus.graph.RecordingTweakableListener;
 import optimus.graph.Settings;
 import optimus.graph.TweakNode;
 import optimus.platform.EvaluationQueue;
@@ -84,7 +85,7 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
 
   @Override
   public void onChildCompleted(EvaluationQueue eq, NodeTask child) {
-    if (DiagnosticSettings.proxyChainStackLimit > 0) {
+    if (DiagnosticSettings.proxyChainStackLimit > -1) {
       if (!eq.delayOnChildCompleted(this, child))
         try {
           processOnChildCompleted(eq, child);
@@ -230,6 +231,27 @@ final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
   }
 
   @Override
+  public void cancelInsteadOfRun(EvaluationQueue eq) {
+    // If an XS proxy node is cancelled on first run(), it still needs to swap out its tweakable
+    // listener to a recorded tweakable. If that's the case, then (by definition) we don't have any
+    // recorded tweaks (checked in the assertion here).
+    //
+    // We do this because we will attempt to report used tweaks even for failed nodes (such as
+    // cancelled ones), as explained in OPTIMUS-69943 and related tests.
+    if (Settings.schedulerAsserts
+        && !((srcNodeTemplate().scenarioStack().tweakableListener()
+                instanceof RecordingTweakableListener rec
+            && rec._tweakable().isEmpty()
+            && rec._tweakableHashes().isEmpty()
+            && rec._tweaked().isEmpty()))) {
+      throw new GraphInInvalidState("cancel instead of run on a non-empty src node");
+    }
+
+    srcNodeTemplate().scenarioStack().onXSOriginalCompleted(RecordedTweakables.empty());
+    super.cancelInsteadOfRun(eq);
+  }
+
+  @Override
   protected void processOnChildCompleted(EvaluationQueue eq, NodeTask child) {
     if (!isDelayedProxy(child)) {
       ScenarioStack childSS = child.scenarioStack();
@@ -238,9 +260,24 @@ final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
     super.processOnChildCompleted(eq, child);
   }
 
+  private void assertMatchIsInCorrectState(PropertyNode<T> key, PropertyNode<T> hit) {
+    // These invariants always hold by the time this method is called:
+    // - hit is done
+    // - hit is different from the key
+    // - key isn't done
+    // - hit has recorded tweakables
+    if (!((hit.isDone())
+        && (hit != key)
+        && (!key.isDone())
+        && (hit.scenarioStack().tweakableListener().recordedTweakables() != null)))
+      throw new GraphInInvalidState("Invalid XS hit " + hit + " for key " + key);
+  }
+
   @Override
   boolean matchedXS(PropertyNode<T> key, PropertyNode<T> hit, EvaluationQueue eq) {
     ScenarioStack kss = key.scenarioStack();
+
+    if (Settings.schedulerAsserts) assertMatchIsInCorrectState(key, hit);
 
     // We update tweakable listener to the end snapshot of tweakables when we complete
     // matchXscenario

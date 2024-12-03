@@ -13,7 +13,6 @@ package optimus.buildtool.compilers.zinc
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
-
 import optimus.buildtool.artifacts.AnalysisArtifactType
 import optimus.buildtool.artifacts.ArtifactType
 import optimus.buildtool.artifacts.InternalClassFileArtifactType
@@ -29,7 +28,9 @@ import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace.Java
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.trace.Scala
+import sbt.internal.inc.Analysis
 
+import java.nio.file.Paths
 import scala.util.matching.Regex
 
 private object ZincUtils {
@@ -57,6 +58,10 @@ private object ZincUtils {
   private val fnameReText =
     s"(?:TEMP($uuidReText)-)?([\\w\\.\\-]+?)\\.($EMPTYHASH|$HASH[0-9a-f]+[ZM]*)\\.(\\w+)(!\\S+)?"
   private val fnameRe = ("^" + fnameReText + "$").r
+
+  // Do a little Path -> String -> Path dance here to work around the fact that (on Windows) dummyOutputPath
+  // is a relative path
+  val dummyFile = FileAsset(Paths.get(Pathed.pathString(Analysis.dummyOutputPath)))
 
   /**
    * Splits path into Some((tpe, Some(tmp), name, hash, Some(inner))
@@ -99,7 +104,11 @@ private object ZincUtils {
         Left(m) // eg. //modules/java.base/java/lang/Object.class or //87/java.base/java/lang/Object.sig
       case j: JarAsset       => Either.cond(okDir(j), dissectPathInternal(j), j)
       case f: FileInJarAsset => Either.cond(okDir(f.jar), dissectPathInternal(f.jar).withClass(f.file), f)
-      case x                 => throw new IllegalArgumentException(s"Unexpected file $x")
+      // Zinc (from 1.10.2) tries to work out if it's compiling to a jar or not by inspecting the output path,
+      // forgetting that zinc itself sets the output path to `Analysis.dummyOutputPath` to make analysis files
+      // more machine independent. Don't do anything clever here - just return the dummy path that zinc gave us.
+      case f: FileAsset if f == dummyFile => Left(f)
+      case x                              => throw new IllegalArgumentException(s"Unexpected file $x")
     }
   }
 
@@ -120,16 +129,16 @@ private object ZincUtils {
 
   private val buildDirRe = new ConcurrentHashMap[Directory, Regex]()
 
-  // Find all the substrings matching "<buildDir>/<tpe>/<file-format> in text, and return as JarAssets
-  def findBuildJarsInText(buildDir: Directory, text: String): Seq[JarAsset] = {
+  // replace all the substrings matching "<buildDir>/<tpe>/<file-format> in text, and return as JarAssets
+  def replaceBuildJarsInText(buildDir: Directory, text: String)(f: JarAsset => String): String = {
     val buildDirStr = buildDir.pathString
-    if (!text.contains(buildDirStr)) Nil
+    if (!text.contains(buildDirStr)) text
     else {
       val re = buildDirRe.computeIfAbsent(
         buildDir,
         _ => (Pattern.quote(buildDir.pathString) + sepReText + tpeReText + sepReText + fnameReText).r
       )
-      re.findAllIn(text).toSeq.distinct.map(p => JarAsset(buildDir.fileSystem.getPath(p)))
+      re.replaceAllIn(text, (m: Regex.Match) => f(JarAsset(buildDir.fileSystem.getPath(m.matched))))
     }
   }
 

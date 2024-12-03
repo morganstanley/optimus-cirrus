@@ -13,8 +13,8 @@ package optimus.stratosphere.catchup
 
 import optimus.stratosphere.bootstrap.StratosphereAbortException
 import optimus.stratosphere.bootstrap.StratosphereException
-import optimus.stratosphere.bootstrap.config.migration.truncation.HistoryTruncationMigration
 import optimus.stratosphere.config.StratoWorkspaceCommon
+import optimus.stratosphere.repository.migration.PrivateForkMigrator
 import optimus.stratosphere.sparse.SparseUtils
 import optimus.stratosphere.updater.GitUpdater
 import optimus.stratosphere.utils.GitUtils
@@ -69,9 +69,7 @@ class CatchUp(
   def run(): Unit = {
     step(CatchupProgress.postStateInit)
 
-    if (new HistoryTruncationMigration(ws.directoryStructure.stratosphereWorkspaceDir, ws.config).isMigrationNeeded) {
-      abort("Migration is required. Please run 'stratosphere migrate' first.")
-    }
+    migratePrivateForkIfNeeded()
 
     val currBranch = getCurrentBranch()
     logger.info(s"Current branch: $currBranch")
@@ -94,6 +92,16 @@ class CatchUp(
         step(CatchupProgress.sparseRefreshed, canCancel = false)
       case _ =>
         abort(s"No good commit was found in $branchToUse from $remoteName.")
+    }
+  }
+
+  private def migratePrivateForkIfNeeded(): Unit = {
+    val maybeOrigin = gitUtil
+      .allRemotes()
+      .find(spec => spec.name == "origin")
+    maybeOrigin match {
+      case Some(origin) => new PrivateForkMigrator(ws, origin).migrateIfNeeded()
+      case None         => logger.warning("Skipping private fork migration due to missing origin")
     }
   }
 

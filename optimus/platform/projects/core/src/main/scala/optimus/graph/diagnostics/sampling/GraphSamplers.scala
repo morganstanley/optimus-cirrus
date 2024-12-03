@@ -107,6 +107,8 @@ class GraphSamplers extends SamplerProvider {
           PluginData(curr.cumulativeCounts, curr.snapCounts, curr.fullWaitTimes.toMapMillis, curr.overflow.toMap)
         } { prev =>
           val diff = curr.diff(prev)
+          if (diff.activity > 0)
+            sp.recordActivity()
           PluginData(diff.cumulativeCounts, curr.snapCounts, diff.fullWaitTimes.toMapMillis, diff.overflow.toMap)
         }
       },

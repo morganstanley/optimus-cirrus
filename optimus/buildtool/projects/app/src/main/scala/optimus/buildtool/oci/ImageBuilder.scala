@@ -52,7 +52,6 @@ import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
-import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.docker.DockerConfiguration
 import optimus.buildtool.format.docker.ExtraImageDefinition

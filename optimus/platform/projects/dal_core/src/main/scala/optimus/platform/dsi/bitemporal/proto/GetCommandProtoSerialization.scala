@@ -12,7 +12,6 @@
 package optimus.platform.dsi.bitemporal.proto
 
 import com.google.protobuf.ByteString
-import msjava.base.com.google.flatbuffers.FlatBufferBuilder.HeapByteBufferFactory
 import msjava.slf4jutils.scalalog.getLogger
 import net.jpountz.lz4.LZ4Factory
 import optimus.dsi.base.RegisteredIndexConfig
@@ -42,16 +41,12 @@ import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.dsi.expressions.proto.ExpressionSerialization
 import optimus.platform.pickling.ImmutableByteArray
-import optimus.platform.runtime.ZkUtils
 import optimus.platform.storable._
-import org.apache.commons.lang3.SerializationUtils
 
-import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 private[proto] trait GetCommandProtoSerialization extends QueryProtoSerialization with RolesetSerialization {
@@ -1581,17 +1576,55 @@ object GetInfoResultSerializer
   }
 }
 
+object ClientSessionInfoSerializer
+    extends ProtoSerializer[ClientSessionInfo, ClientSessionInfoProto]
+    with RolesetSerialization {
+
+  override def deserialize(proto: ClientSessionInfoProto): ClientSessionInfo = {
+    ClientSessionInfo(
+      proto.getRealId,
+      Option(proto.getEffectiveId).filter(_.nonEmpty),
+      fromProto(proto.getRolesetMode),
+      if (proto.hasEstablishmentTime) Some(InstantSerializer.deserialize(proto.getEstablishmentTime)) else None,
+      OnBehalfTokenType(proto.getOnBehalfTokenType),
+      if (proto.hasOnBehalfSessionToken) Some(proto.getOnBehalfSessionToken.toByteArray.toVector) else None,
+      ClientAppIdentifierSerializer.deserialize(proto.getApplicationIdentifier),
+      ClientMachineIdentifierSerializer.deserialize(proto.getClientMachineIdentifierProto)
+    )
+  }
+
+  override def serialize(cmd: ClientSessionInfo): ClientSessionInfoProto = {
+    val b = ClientSessionInfoProto.newBuilder
+      .setRealId(cmd.realId)
+    cmd.effectiveId.foreach(b.setEffectiveId(_))
+    b.setRolesetMode(toProto(cmd.rolesetMode))
+    cmd.establishmentTime.foreach(t => b.setEstablishmentTime(InstantSerializer.serialize(t)))
+    b.setOnBehalfTokenType(cmd.onBehalfTokenType.toString)
+    cmd.onBehalfSessionToken.foreach(t => b.setOnBehalfSessionToken(ByteString.copyFrom(t.toArray)))
+    b.setApplicationIdentifier(ClientAppIdentifierSerializer.serialize(cmd.applicationIdentifier))
+    b.setClientMachineIdentifierProto(ClientMachineIdentifierSerializer.serialize(cmd.clientMachineIdentifier))
+    b.build
+  }
+}
+
 object RoleMembershipQuerySerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[RoleMembershipQuery, RoleMembershipQueryProto] {
 
   override def deserialize(proto: RoleMembershipQueryProto): RoleMembershipQuery = {
-    new RoleMembershipQuery(proto.getRealId)
+    val info =
+      if (proto.hasClientSessionInfo)
+        Some(ClientSessionInfoSerializer.deserialize(proto.getClientSessionInfo))
+      else
+        None
+
+    RoleMembershipQuery(proto.getRealId, info)
   }
   override def serialize(cmd: RoleMembershipQuery): RoleMembershipQueryProto = {
-    RoleMembershipQueryProto.newBuilder
+    val b = RoleMembershipQueryProto.newBuilder
       .setRealId(cmd.realId)
-      .build
+    cmd.clientSessionInfo.foreach(info => b.setClientSessionInfo(ClientSessionInfoSerializer.serialize(info)))
+    b.build
   }
 }
 

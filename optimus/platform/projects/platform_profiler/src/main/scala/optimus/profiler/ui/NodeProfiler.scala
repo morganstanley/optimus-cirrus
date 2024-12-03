@@ -200,7 +200,9 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       bl_table.setList(null)
     }
     toolBar.addSeparator()
-    toolBar.addButton("Property Config", "Generate Property Configuration") { cmdExportCachePropertiesFile() }
+    toolBar.addButton("Generate Optconf", "Generate optconf (property configuration)") {
+      cmdExportCachePropertiesFile()
+    }
     toolBar.addSeparator()
     toolBar
   }

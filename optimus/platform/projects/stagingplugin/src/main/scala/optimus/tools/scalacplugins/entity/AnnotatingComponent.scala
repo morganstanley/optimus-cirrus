@@ -11,19 +11,20 @@
  */
 package optimus.tools.scalacplugins.entity
 
+import optimus.scalacompat.isScala2_12
+
 import java.util.concurrent.ConcurrentHashMap
 import scala.tools.nsc._
 import scala.tools.nsc.plugins._
 
 object AnnotatingComponent {
   val lazyReason =
-    "Lazy collections may cause code to get executed outside of the optimus scope that is expected: http://codetree-docs/optimus/docs/QualityAssurance/ReviewRules.html#Lazy-Collections"
+    "lazy collections may cause code to get executed outside of the optimus scope that is expected: http://codetree-docs/optimus/docs/QualityAssurance/ReviewRules.html#Lazy-Collections"
   val streamFunctions: Seq[String] = Seq("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "range")
 }
 
 /**
- * Adds annotations to pre-existing (i.e. library) symbols. Currently only supports @deprecated but could easily be
- * modified to add other annotations.
+ * Adds annotations to pre-existing (i.e. library) symbols.
  */
 class AnnotatingComponent(
     val pluginData: PluginData,
@@ -141,6 +142,10 @@ class AnnotatingComponent(
   private lazy val genTraversableFactory =
     rootMirror.getClassIfDefined("scala.collection.generic.GenTraversableFactory")
 
+  // Add an attachment to the `deprecated` symbol to ensure synthetic annotations are added only once.
+  // The symbol table is re-used for multiple global.Run instances which call `newPhase`.
+  private def completed: Boolean = deprecatedAnno.hasAttachment[AnnotatingComponent.type]
+
   def newPhase(prev: scala.tools.nsc.Phase): StdPhase = new StdPhase(prev) {
     private def add(targets: Seq[(String, List[String])], annot: Symbol, pred: Symbol => Boolean = _ => true): Unit =
       annot match {
@@ -154,14 +159,28 @@ class AnnotatingComponent(
 
         case _ => // annot class not found on classpath, do nothing
       }
-    def apply(unit: global.CompilationUnit): Unit = {
-      add(deprecations, deprecatedAnno)
-      add(deprecatings, deprecatingAnno)
-      add(newDeprecatings, deprecatingNewAnno)
-      add(discourageds, discouragedAnno)
-      add(discouragedStream, discouragedAnno, _.owner != genTraversableFactory)
-      pluginData.forceLoad.foreach(fqn => rootMirror.getClassIfDefined(fqn).andAlso(_.initialize))
+
+    override def run(): Unit = {
+      echoPhaseSummary(this) // we're not calling `super.run`, so running this part of it manually
+      if (!completed) {
+        deprecatedAnno.updateAttachment(AnnotatingComponent)
+
+        add(deprecations, deprecatedAnno)
+        add(deprecatings, deprecatingAnno)
+        add(newDeprecatings, deprecatingNewAnno)
+        add(discourageds, discouragedAnno)
+        // 2.13: handled in PostTyperCodingStandardsComponent. Some methods (LazyList.range) are inherited and
+        // not defined in the LazyList companion itself. If we annotate them, the warning is issued also for other
+        // collections, like List.range
+        if (isScala2_12)
+          add(discouragedStream, discouragedAnno, _.owner != genTraversableFactory)
+
+        // workaround for https://github.com/scala/bug/issues/12856
+        pluginData.forceLoad.foreach(fqn => rootMirror.getClassIfDefined(fqn).andAlso(_.initialize))
+      }
     }
+
+    def apply(unit: global.CompilationUnit): Unit = ()
   }
 
   private def addAnnotationInfo(target: Symbol, annotCls: ClassSymbol, args: List[Any]): Unit =

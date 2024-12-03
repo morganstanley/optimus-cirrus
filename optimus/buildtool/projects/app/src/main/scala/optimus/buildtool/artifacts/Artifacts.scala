@@ -224,7 +224,7 @@ object FingerprintArtifact {
       fingerprint: Seq[String],
       hash: String
   ): FingerprintArtifact with PathedArtifact =
-    FingerprintArtifactImpl(id, fingerprintFile, fingerprint, hash).watchForDeletion()
+    FingerprintArtifactImpl(id, fingerprintFile, fingerprint.toVector, hash).watchForDeletion()
   // Artifacts created with `unwatched` will not be monitored for deletion automatically, and so will need to be
   // watched separately. All uses of `unwatched` outside tests should be accompanied by a method detailing how the
   // deletion monitoring will be achieved.
@@ -234,7 +234,7 @@ object FingerprintArtifact {
       fingerprint: Seq[String],
       hash: String
   ): FingerprintArtifact with PathedArtifact =
-    FingerprintArtifactImpl(id, fingerprintFile, fingerprint, hash)
+    FingerprintArtifactImpl(id, fingerprintFile, fingerprint.toVector, hash)
 
   def empty(
       id: InternalArtifactId,

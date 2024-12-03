@@ -29,7 +29,12 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.utils.Utils
 import sbt.internal.inc._
+import xsbt.api.APIUtil
 import xsbti.VirtualFile
+import xsbti.api.AnalyzedClass
+import xsbti.api.DefinitionType
+import xsbti.api.SafeLazyProxy
+import xsbti.api.Companions
 import xsbti.compile.CompileAnalysis
 import xsbti.compile.DefinesClass
 import xsbti.compile.PerClasspathEntryLookup
@@ -90,6 +95,7 @@ class ZincAnalysisCache(zincAnalysisCacheSize: Int, instrumentation: BuildInstru
   def definesClass(classpathEntry: VirtualFile): DefinesClass = definesClassCache.get(classpathEntry).get
 
   private val loadCount = new ConcurrentHashMap[Path, Integer]()
+  private val templateEmptyApi = APIUtil.emptyClassLike("", DefinitionType.ClassDef)
   private val analysisCache = new UniqueCache[Path, CompileAnalysis](
     zincAnalysisCacheSize,
     { p =>
@@ -100,7 +106,19 @@ class ZincAnalysisCache(zincAnalysisCacheSize: Int, instrumentation: BuildInstru
           val t = (System.nanoTime() - t0) / 1000000L
           val n = loadCount.compute(p, (_, i) => if (i eq null) 1 else i + 1)
           generalLogger.debug(s"Analysis cache loaded (n=$n t=$t) $p")
-          Some(content.get.getAnalysis)
+          val analysis = content.get.getAnalysis.asInstanceOf[sbt.internal.inc.Analysis]
+          def minimize(cls: AnalyzedClass): AnalyzedClass = {
+            val minClassApi = templateEmptyApi
+              .withName(cls.api().classApi().name())
+              .withDefinitionType(cls.api().classApi().definitionType())
+            val minObjectApi = minClassApi.withDefinitionType(cls.api().objectApi().definitionType())
+            cls.withApi(SafeLazyProxy.strict(Companions.of(minClassApi, minObjectApi)))
+          }
+          val minAnalysis = analysis.copy(apis = sbt.internal.inc.APIs
+            .apply(
+              analysis.apis.internal.map { case (k, v) => (k, minimize(v)) },
+              analysis.apis.external.map { case (k, v) => (k, minimize(v)) }))
+          Some(minAnalysis)
         } else {
           generalLogger.warn(s"Cannot load $p")
           None

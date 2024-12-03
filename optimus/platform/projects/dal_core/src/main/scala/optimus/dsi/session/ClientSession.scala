@@ -62,6 +62,11 @@ final case class ClientSessionInfo(
     applicationIdentifier: ClientAppIdentifier,
     clientMachineIdentifier: ClientMachineIdentifier) {
   private[dsi] val appId: DalAppId = applicationIdentifier.appId
+
+  override def toString: String = {
+    // exclude session token
+    s"ClientSessionInfo($realId,$effectiveId,$rolesetMode,$establishmentTime,$onBehalfTokenType,$applicationIdentifier,$clientMachineIdentifier)"
+  }
 }
 
 final case class EstablishSession(

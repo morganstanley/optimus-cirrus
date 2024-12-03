@@ -291,10 +291,6 @@ trait SparseUtils {
 
     new GitUpdater(stratoWorkspace).ensureGitInstalled(useGitFromArtifactory = true)
 
-    val dirStructure = stratoWorkspace.directoryStructure
-    val gitSparseConfig = dirStructure.gitDirectory.resolve("info").resolve("sparse-checkout")
-    gitSparseConfig.file.deleteIfExists()
-
     val dirsToOpen = newProfile.listAllRelativeDirs()
 
     backupIgnoredFiles(dirsToOpen)

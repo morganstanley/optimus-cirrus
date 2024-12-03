@@ -25,6 +25,7 @@ import java.security.ProtectionDomain;
 import java.util.function.BiPredicate;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassReaderEx;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
@@ -48,10 +49,10 @@ public class InstrumentationInjector implements ClassFileTransformer {
     ClassPatch patch = forClass(className);
     if (patch == null && !instrumentAnyGroups()) return bytes;
 
-    ClassReader crSource = new ClassReader(bytes);
+    var crSource = new ClassReaderEx(bytes);
 
     var entityInstrType = instrumentAllEntities;
-    if (entityInstrType != none && shouldInstrumentEntity(className, crSource.getSuperName())) {
+    if (entityInstrType != none && shouldInstrumentEntity(className, crSource)) {
       if (entityInstrType == markScenarioStack) addMarkScenarioStackAsInitializing(className);
       else if (entityInstrType == recordConstructedAt) recordConstructorInvocationSite(className);
       if (patch == null) patch = forClass(className); // Re-read reconfigured value
@@ -140,8 +141,8 @@ public class InstrumentationInjector implements ClassFileTransformer {
     return false;
   }
 
-  private boolean shouldInstrumentEntity(String className, String superName) {
-    return isEntity(className, superName) && !isModuleOrEntityExcluded(className);
+  private boolean shouldInstrumentEntity(String className, ClassReaderEx crSource) {
+    return crSource.hasAnnotation(ENTITY_ANNOTATION) && !isModuleOrEntityExcluded(className);
   }
 
   private boolean shouldInstrumentModuleCtor(ClassLoader loader, String className) {

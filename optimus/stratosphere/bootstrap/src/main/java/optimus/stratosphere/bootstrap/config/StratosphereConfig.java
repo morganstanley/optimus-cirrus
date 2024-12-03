@@ -15,7 +15,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -364,14 +363,13 @@ public class StratosphereConfig {
 
   private void addConfig(String resource) {
     /* TODO (OPTIMUS-53773) this custom classloader logic should be removed when we get the
-    extension point */
-    FilteredClassLoader classLoader =
-        new FilteredClassLoader(
-            StratosphereConfig.class.getClassLoader(), List.of("plugins/markdown"));
+    extension point. Currently, jetfire-workspace receives multiple instances of .conf files when calling classLoader.getResources(.conf), and we need to manually remove them. */
+    SingleResourceClassLoader classLoader =
+        new SingleResourceClassLoader(StratosphereConfig.class.getClassLoader());
     Config newConfig =
         ConfigFactory.parseResources(
             classLoader,
-            FilteredClassLoader.convertResourceName(StratosphereConfig.class, resource));
+            SingleResourceClassLoader.convertResourceName(StratosphereConfig.class, resource));
     config = (config != null) ? newConfig.withFallback(config) : newConfig;
   }
 

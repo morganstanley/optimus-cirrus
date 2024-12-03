@@ -17,12 +17,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util
-
 import net.openhft.hashing.LongHashFunction
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.files.Asset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.Pathed
+import optimus.buildtool.trace.ObtStats
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.PathUtils
@@ -84,16 +85,21 @@ object VirtualSourceFile {
   def apply(p: Path, c: HashedContent): VirtualSourceFile = new VirtualSourceFile(p, c)
 }
 
+private[zinc] trait VirtualJar extends PathBasedFile {
+  def jarFile: JarAsset
+}
+
 /** Classes in jars - foo/bar/baz.jar!my/great/Class.class, etc. */
 private[zinc] final case class ClassInJarVirtualFile private (jar: String, clazz: String)
     extends VirtualFileRef
-    with PathBasedFile {
+    with VirtualJar {
   // it seems empirically that this is only called at the moment of writing protobufs, so it's a useful memory
   // optimization to avoid creating it until then
   override def id: String = s"$jar!$clazz"
   override def name: String = ZincUtils.substringAfterLast(clazz, '/')
   override def names: Array[String] = jar.split("/") ++ clazz.split("/")
 
+  override def jarFile: JarAsset = JarAsset.resolve(Paths.get(jar))
   override def toPath: Path = Paths.get(id)
   override def contentHash: Long = ???
   override def input: InputStream = ???
@@ -105,8 +111,9 @@ private[zinc] final case class ClassInJarVirtualFile private (jar: String, clazz
  */
 private[zinc] final case class SimpleVirtualFile private (override val id: String)
     extends BasicVirtualFileRef(id)
-    with PathBasedFile {
+    with VirtualJar {
   override def contentHash(): Long = ???
+  override def jarFile: JarAsset = JarAsset.resolve(toPath)
   override lazy val toPath: Path = Paths.get(id)
   override def input(): InputStream = Files.newInputStream(toPath)
 }
@@ -140,19 +147,31 @@ private[zinc] class ObtZincFileConverter(
       // anything from the java platform modules is effectively immutable - they crop up in various ways
       if (Asset.isJdkPlatformPath(s.id)) zeroStamp
       else if (s.toPath.getFileSystem.toString == "jrt:/") zeroStamp
-      else hashLibrary(s.toPath)
+      else hashLibrary(s)
+    case s: ClassInJarVirtualFile =>
+      hashLibrary(s)
     // this is here so you can put a breakpoint on it if needed
     case x => throw new MatchError(x)
   }
 
-  @entersGraph def hashLibrary(library: Path): Stamp = hashLibraryNode(library)
-  @node def hashLibraryNode(library: Path): Stamp = {
+  @entersGraph def hashLibrary(library: VirtualJar): Stamp = hashLibraryNode(library)
+  @node def hashLibraryNode(library: VirtualJar): Stamp = {
+    val jar = library.jarFile
     // TODO (OPTIMUS-38945): We should use OBT's artifact hashes here.
     // They should be added to the SimpleVirtualFile, but we need a lot of plumbing to get there
-    if (Hashing.isAssumedImmutable(JarAsset.resolve(library))) zeroStamp
-    else {
-      ExternalClassFileArtifact.witnessMutableExternalArtifactState(library)
-      if (Files.exists(library)) FarmHash.ofPath(library)
+    if (Hashing.isAssumedImmutable(jar)) zeroStamp
+    else if (Hashing.fileCanBeStampedWithConsistentHash(jar)) {
+      // We can end up with internal library dependencies if Zinc can't find the source file corresponding
+      // to a classfile dependency (eg. in the case of annotation processors which dynamically generate
+      // new sources). For unknown sources in the current scope we'd typically get a `ClassInJarVirtualFile`
+      // and for unknown sources in a parent scope we'd typically get a `SimpleVirtualFile`.
+      log.debug(s"Unexpected internal binary dependency: $library")
+      ObtTrace.addToStat(ObtStats.InternalBinaryDependencies, Set(jar.path))
+      if (Files.exists(jar.path)) FarmHash.ofPath(jar.path)
+      else zeroStamp
+    } else {
+      ExternalClassFileArtifact.witnessMutableExternalArtifactState(jar.path)
+      if (Files.exists(jar.path)) FarmHash.ofPath(jar.path)
       else zeroStamp
     }
   }

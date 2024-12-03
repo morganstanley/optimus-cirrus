@@ -47,6 +47,8 @@ object CrumbStackExtractor extends Log {
   def likelyStacksFrames(s: String): Boolean = s.contains(ProfCollapsedMarker)
   private val StackPathMarker = s"$q${Properties.profMS}$q:$q"
   def likelyStackPathFrames(s: String): Boolean = s.contains(StackPathMarker)
+  private val OtherStacksMarker = s"$q${Properties.pulse.name}$q:{"
+  def likelyOtherSample(s: String): Boolean = s.contains(OtherStacksMarker) && !likelyStacksSample(s)
 
   final case class FullSampleData(
       source: String,
@@ -60,7 +62,10 @@ object CrumbStackExtractor extends Log {
       stackValue: Long,
       stackId: String,
       loadData: LoadData,
-      private val extractor: CrumbStackExtractor) {
+      private val extractor: CrumbStackExtractor,
+      otherPulseData: OtherPulseData = OtherPulseData(Map.empty, 0, ""),
+      engineRoot: String = ""
+  ) {
     def frames: Iterable[String] = extractor.frames(stackId).getOrElse(Iterable.empty)
 
     def fullString = s"Sample($key, $stackValue $stackId $loadData, ${frames.mkString("->")})"
@@ -147,13 +152,15 @@ object CrumbStackExtractor extends Log {
       val crumbs = crumbsRef.get()
       val extractor = new CrumbStackExtractor(throwOnInconsistency = throwOnInconsistency, stackPath = stackPath)
       val crumbsMap = crumbs.map(_.asJMap)
-      val samples = crumbsMap.map(extractor.crumbToSamples).flatten
+      val samples = crumbsMap.flatMap(extractor.crumbToSamples(_))
       crumbsMap.foreach(extractor.incorporateFrames(_, true))
       samples
     }
   }
 
 }
+
+final case class OtherPulseData(pulseMap: Map[String, JsValue], t: Long, engineRoot: String)
 
 class CrumbStackExtractor(
     anonymize: Boolean = false,
@@ -191,11 +198,27 @@ class CrumbStackExtractor(
       splitter.matcher(fqmn).replaceAll { mr: MatchResult => f(mr.group(0)) }
     }
 
-  def crumbToSamples(crumb: CrumbMap): Iterable[Sample] = {
+  def crumbToSamples(crumb: CrumbMap, pulseOnly: Boolean = false): Iterable[Sample] = {
     if (!crumbFilter(crumb)) {
       ignored.incrementAndGet()
       Iterable.empty
-    } else
+    } else if (pulseOnly)
+      for {
+        pulse: Map[String, JsValue] <- crumb.getAsMap(Properties.pulse).toIterable
+        t: JsValue <- crumb.get("t")
+        engineRoot <- crumb.get(Properties.engineRoot)
+      } yield {
+        Sample(
+          key = SampleKey("", "", "", 0, 0),
+          stackValue = 0,
+          stackId = "",
+          loadData = LoadData(0, 0),
+          extractor = this,
+          OtherPulseData(pulse, t.asInstanceOf[JsNumber].value.toLong, engineRoot.toString()),
+          engineRoot = intern(engineRoot)
+        )
+      }
+    else
       for {
         pulse <- crumb.getAsMap(Properties.pulse).toIterable
         rid <- crumb.getAs[String]("uuid").toIterable
@@ -206,6 +229,7 @@ class CrumbStackExtractor(
         self <- stack.get(Properties.pSlf)
         tpe <- stack.get(Properties.pTpe)
         sid <- stack.get(Properties.pSID)
+        engineRoot <- crumb.get(Properties.engineRoot)
       } yield {
         val aid = (crumb.getKey(Properties.appId) orElse pulse.getKey(Properties.appIds).flatMap(_.headOption))
           .getOrElse("UnknownApp")
@@ -228,7 +252,13 @@ class CrumbStackExtractor(
         val load = LoadData(cpu, work / cores).round(10)
         val isid = intern(sid)
         knownSIDs.add(isid)
-        Sample(key = intern(key), stackValue = self, stackId = isid, loadData = intern(load), extractor = this)
+        Sample(
+          key = intern(key),
+          stackValue = self,
+          stackId = isid,
+          loadData = intern(load),
+          extractor = this,
+          engineRoot = intern(engineRoot))
       }
   }
 

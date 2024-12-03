@@ -37,17 +37,22 @@ object UnsafeXML {
       resolveDTDUris: Boolean = false,
       xIncludeAware: Boolean = false,
       namespaceAware: Boolean = false): XMLLoader[Elem] = new XMLLoader[Elem] {
-    override def parser: SAXParser = {
-      val parser = SAXParserFactory.newInstance()
-      parser.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", secureProcessing)
-      parser.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", loadExternalDTD)
-      parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", disallowDoctypeDecl)
-      parser.setFeature("http://xml.org/sax/features/external-parameter-entities", externalParameterEntities)
-      parser.setFeature("http://xml.org/sax/features/external-general-entities", externalGeneralEntities)
-      parser.setFeature("http://xml.org/sax/features/resolve-dtd-uris", resolveDTDUris)
-      parser.setXIncludeAware(xIncludeAware)
-      parser.setNamespaceAware(namespaceAware)
-      parser.newSAXParser()
+
+    private lazy val parserInstance = new ThreadLocal[SAXParser] {
+      override def initialValue = {
+        val parser = SAXParserFactory.newInstance()
+        parser.setFeature("http://javax.xml.XMLConstants/feature/secure-processing", secureProcessing)
+        parser.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", loadExternalDTD)
+        parser.setFeature("http://apache.org/xml/features/disallow-doctype-decl", disallowDoctypeDecl)
+        parser.setFeature("http://xml.org/sax/features/external-parameter-entities", externalParameterEntities)
+        parser.setFeature("http://xml.org/sax/features/external-general-entities", externalGeneralEntities)
+        parser.setFeature("http://xml.org/sax/features/resolve-dtd-uris", resolveDTDUris)
+        parser.setXIncludeAware(xIncludeAware)
+        parser.setNamespaceAware(namespaceAware)
+        parser.newSAXParser()
+      }
     }
+
+    override def parser: SAXParser = parserInstance.get()
   }
 }

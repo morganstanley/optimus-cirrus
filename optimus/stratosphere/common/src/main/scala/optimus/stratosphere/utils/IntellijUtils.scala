@@ -18,7 +18,44 @@ import optimus.stratosphere.utils.IntellijBackupCause.IntellijBackupCause
 
 import java.io.File
 import java.nio.file.attribute.BasicFileAttributes
-import java.time.ZonedDateTime
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+sealed trait IntellijBackupEntry extends Ordered[IntellijBackupEntry] {
+  def date: LocalDateTime
+  override def compare(that: IntellijBackupEntry): Int = this.date.compareTo(that.date)
+}
+
+final case class NonVerifiedIntellijBackupEntry(
+    fullEntryName: String,
+    date: LocalDateTime = LocalDateTime.of(2023, 1, 1, 0, 0))
+    extends IntellijBackupEntry {
+  override def toString: String = fullEntryName
+}
+
+final case class DetailedIntellijBackupEntry(
+    intellijVersion: String,
+    stratoVersion: String,
+    date: LocalDateTime,
+    cause: String)
+    extends IntellijBackupEntry {
+  override def toString: String =
+    s"${intellijVersion}_${stratoVersion}_${date.format(IntellijBackupEntry.dateFormat)}_$cause"
+}
+
+object IntellijBackupEntry {
+  val dateFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy.MM.dd-HH.mm")
+
+  def apply(entryName: String): IntellijBackupEntry = {
+    entryName.split('_') match {
+      case Array(ijVersion, stratoVersion, dateStr, cause) => {
+        val date = LocalDateTime.parse(dateStr, dateFormat)
+        DetailedIntellijBackupEntry(ijVersion, stratoVersion, date, cause)
+      }
+      case _ => NonVerifiedIntellijBackupEntry(entryName)
+    }
+  }
+}
 
 object IntellijBackupCause extends Enumeration {
   type IntellijBackupCause = Value
@@ -43,8 +80,8 @@ object IntellijUtils {
     if (ideaDir.exists()) {
       val ijVersion: String = versionForBackupCreation(stratoWorkspace).getOrElse("NO_IJ")
       val stratoVersion: String = stratoWorkspace.stratosphereVersion
-      val backupCreationDate: String = DateTimeUtils.formatDateTime("yyyy.MM.dd-HH.mm", ZonedDateTime.now())
-      val backupName = s"${ijVersion}_${stratoVersion}_${backupCreationDate}_$cause"
+      val backupEntry = DetailedIntellijBackupEntry(ijVersion, stratoVersion, LocalDateTime.now(), cause.toString)
+      val backupName = backupEntry.toString
       val targetBackupDir = backupDir.resolve(backupName).dir.create()
       log.debug(s"""Creating workspace backup in $targetBackupDir""")
 

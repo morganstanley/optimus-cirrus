@@ -18,16 +18,12 @@ import ch.epfl.scala.bsp4j.BuildTargetIdentifier
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.MessagesArtifact
-import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.builders.BuildResult
 import optimus.buildtool.compilers.CompilationException
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
-import optimus.buildtool.config.MetaBundle
-import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.RelaxedIdString
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
-import optimus.buildtool.format.OutputMappings
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.JsonAsset
 import optimus.buildtool.trace.ObtTraceListener
@@ -107,17 +103,6 @@ class BspBuilder(
 
             listener.endBuild(success = result.successful)
             listener.traceTask(RootScopeId, StoreMappings) {
-              if (result.successful) {
-                val compiledArtifacts = result.artifacts
-                val compiledScopeIds = Artifact.scopeIds(compiledArtifacts).toSet
-                val bundleScopeIds = scopeConfigSource.pathingBundles(compiledScopeIds)
-                val bundleArtifacts = compiledArtifacts.collect {
-                  case Artifact.InternalArtifact(id, a: PathingArtifact) if bundleScopeIds.contains(id.scopeId) =>
-                    id.scopeId.metaBundle -> a
-                }.toGroupedMap
-                // TODO (OPTIMUS-25798): replace with run configs from bsp
-                storeCpMapping(compiledArtifacts, bundleArtifacts)
-              }
               storeMessageMapping(result.messageArtifacts)
             }
 
@@ -205,21 +190,6 @@ class BspBuilder(
       if (p.module.endsWith("test")) ids.find(_.tpe == "test")
       else None
     }
-
-  /**
-   * Updates the classpath mapping used by IntelliJ to run apps and tests. Note that we update rather than overwrite so
-   * that modules built in previous builds but not in this one are not removed from the mapping.
-   */
-  private def storeCpMapping(artifacts: Seq[Artifact], bundleArtifacts: Map[MetaBundle, Seq[PathingArtifact]]): Unit = {
-    val updatedScopes = artifacts.collect { case p: PathingArtifact =>
-      val scopeId = p.id.scopeId
-      val pathingArtifacts = p +: bundleArtifacts.getOrElse(scopeId.metaBundle, Nil)
-      p.id.scopeId.properPath -> pathingArtifacts.map(_.pathingFile.pathString)
-    }.toSingleMap
-
-    val plainDest = buildDir.resolveFile(NamingConventions.ClassPathMapping)
-    OutputMappings.updateClasspathPlain(plainDest, updatedScopes)
-  }
 
   private val SRC = "/src/"
   private def pathPrefix(filePath: String): Option[String] = {

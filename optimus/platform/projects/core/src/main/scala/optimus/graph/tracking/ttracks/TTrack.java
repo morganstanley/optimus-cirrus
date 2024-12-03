@@ -27,40 +27,46 @@ import optimus.platform.util.PrettyStringBuilder;
 
 /*
  * Keeps the dependency tree from the tweakable item to all the cacheable nodes - really a shadow dependency tree
- * //formatter:off
  *
  * Concurrency
  *
  * A TTrack has some operations that operate concurrently, and some that only run during certain phases of operation
  * of the tracking scenario
  *
- * A dependency tracker (or tree) is in one of the following states: idle, or other states that don't affect TTracks;
- * evaluating; tweaking; cleaning
+ * A dependency tracker (or tree) is in one of the following states:
+ *  - idle, or other states that don't affect TTracks
+ *  - evaluating
+ *  - tweaking
+ *  - cleaning
  *
  * Can run at any time (readonly): toString
  *
- * Can run when tweaking (which is single threaded)
- * =====================
- * invalidate, invalidatePreview - only runs due to a addTweak, so only runs during tweaking
+ * Can run when tweaking (which is single threaded):
+ *   - invalidate & invalidatePreview - only runs due to a addTweak, so only runs during tweaking
  *
- * Can run when evaluating (which is multi threaded)
- * =======================
- * merge, nodeCompleted
+ * Can run when evaluating (which is multi threaded):
+ *   - merge
+ *   - nodeCompleted
  *
- * Can run when cleaning (which is single threaded)
- * =======================
- * set, drop, compress
+ * Can run when cleaning (which is single threaded):
+ *   - set
+ *   - drop
+ *   - compress
  *
  * Future direction and opportunities
  * =======================
  * 1. allow clean to run in parallel as we have multiple cores
  * 2. allow mini-clean cycles (just part of the graph)
- * a. separate clean cycle from normal cycle id
- * 3. better scheduling control
- * 4. investigate if it is useful to preview a clean - determine what could be cleaned as a read only task that can be
- * scheduled during evaluates. This may direct the clean, or just quantify the benefit
+ * 3. separate clean cycle from normal cycle id
+ * 4. better scheduling control
+ * 5. investigate if it is useful to preview a clean - determine what could be cleaned as a read only
+ *    task that can be scheduled during evaluates. This may direct the clean, or just quantify the
+ *    benefit of a future clean
  *
- * //formatter:on
+ * Note: TTrack implements PTracks --- it serves double duty as the 1-element specialized PTracks.
+ * This is so that chains of singly linked tracks (a very common pattern) don't need extra objects
+ * added in the middle. This is dangerous because it means that a random (not single caller) ttrack
+ * can be interpreted as an incorrect ptrack!
  */
 public class TTrack extends NodeExtendedInfo implements Ptracks {
   public TTrack() {
@@ -103,12 +109,14 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
    */
   public int lastUpdateTraversalID;
 
-  /**
+  /*
    * List of cached completed node and some special state.
    *
-   * <p>null - node is not complete TTrackRef.Nil - node is non-cacheable or complete but no nodes
-   * to be invalidated TTrackRef.Invalid - node has been invalidated - is should not be added to,
-   * and should be pruned when acceptable TTrackRef - head of a list of nodes
+   * null - node is not complete
+   * TTrackRef.Nil - node is non-cacheable or complete but no nodes to be invalidated
+   * TTrackRef.Invalid - node has been invalidated, should not be added to and should be pruned on cleanup
+   *
+   * otherwise this is the head of a singly-liked list of nodes weakrefs
    */
   TTrackRef nodes;
 
@@ -165,15 +173,11 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
 
   @Override
   public void nodeCompleted(NodeTask ntsk) {
-    // @formatter:off
+    // Technically, we could do this only if the ntsk was actually cached as opposed to cacheable,
+    // but then we wouldn't be invalidating nodes that are captured by user code. This may or may
+    // not be an issue.
 
-    // 1. This code ntsk.executionInfo().getCacheable() should become something like
-    // ntsk.executionInfo.cachePolicy.willCache(ntsk) or
-    // ntsk.wasCached()
-    // 2. This getCacheable() is somewhat tricky if people manually hold onto a node, currently it's
-    // possible to say don't cache, but
-    // then manually hold onto the node and it won't be invalidated. Most likely will surprise
-    // someone :)
+    // @formatter:off
 
     // Consider (diamond shaped compute)
     // def a = b + d + e
@@ -185,10 +189,10 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
     // 1. a, b , d are in progress
     // 2. as part of looking up c we will attach TTrack to c (xinfo). Notice that TTrack does not
     // point to c at this point!
-    // 3. c completes and c.completed() which calls xinfo.nodeCompleted(c) aka this call here :)
-    //    [i] c.completed() doesn't need synchronized, but!
+    // 3. c completes and c.completed() which calls here
+    //    [i] c.completed never runs in multiple threads
     //    [ii] xinfo.nodeCompleted(c) will be called in parallel in the diamond reuse of tweakable c
-    // (if the argument is the same).
+    //        (if the argument is the same).
     // 4. b gets notification that c completed and it will merge (aka NodeTask.combineInfo) the info
     // of c.
     //    [i] NodeTask.combineInfo will not call TTrack.merge at this point, xinfo starts out as
@@ -299,6 +303,8 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
     return sb;
   }
 
+  // Implementation for the PTracks interface:
+  // -----------------------------------------
   @Override
   public int currentSize() {
     return 1;

@@ -17,6 +17,7 @@ import optimus.dsi.base.actions.TxnAction
 import optimus.dsi.notification.NotificationEntry
 import optimus.dsi.partitioning.Partition
 import optimus.dsi.pubsub.Subscription
+import optimus.dsi.session.ClientSessionInfo
 import optimus.dsi.session.EstablishSession
 import optimus.dsi.session.EstablishSessionFailure
 import optimus.dsi.session.EstablishSessionResult
@@ -834,7 +835,9 @@ final case class SessionTokenRequest(
     with UnentitledCommand {
   override def needStreamingExecution: Boolean = false
 }
-final case class RoleMembershipQuery(realId: String) extends ReadOnlyCommand with UnentitledCommand {
+final case class RoleMembershipQuery(realId: String, clientSessionInfo: Option[ClientSessionInfo] = None)
+    extends ReadOnlyCommand
+    with UnentitledCommand {
   override val className: Option[SerializedEntity.TypeRef] =
     None // Should be BasicRole but not in the dependencies at this point
   override def needStreamingExecution: Boolean = false

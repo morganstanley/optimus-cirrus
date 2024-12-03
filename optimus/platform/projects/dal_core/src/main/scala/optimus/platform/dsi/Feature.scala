@@ -97,6 +97,8 @@ object Feature {
   // conditions back to normal acc conditions and use Postgres to execute it.
   case object SerializedKeyBasedFilterForAccelerator extends Feature(value = 48)
 
+  case object RoleMembershipQueryWithClientSessionInfo extends Feature(value = 49)
+
   def fromValue(value: Id, registeredEntities: Set[SerializedEntity.TypeRef] = Set.empty): Feature = value match {
     case 1  => ExtendedChunkedResponses
     case 4  => RangeQuery
@@ -142,6 +144,7 @@ object Feature {
     case 46 => AsyncPartitionedWrite
     case 47 => SetStreamsACLs
     case 48 => SerializedKeyBasedFilterForAccelerator
+    case 49 => RoleMembershipQueryWithClientSessionInfo
     case _  => Unknown(value)
   }
 
@@ -284,7 +287,8 @@ private object FeatureSets {
         Feature.CountGroupings,
         Feature.AtNowMaxCatchup,
         Feature.AsyncPartitionedWrite,
-        Feature.SetStreamsACLs
+        Feature.SetStreamsACLs,
+        Feature.RoleMembershipQueryWithClientSessionInfo
       ) ++ (if (RegisteredIndexConfig.areRegisteredIndexesEnabled) Set(Feature.RegisteredIndexes.empty) else Set.empty)
         ++ (if (enableEstablishAllRolesWithSession) Set(Feature.EstablishAllRolesWithSession) else Set.empty)
         ++ (if (enableExecuteRefQueryWithVref) Set(Feature.ExecuteRefQueryWithVersionedRef) else Set.empty)

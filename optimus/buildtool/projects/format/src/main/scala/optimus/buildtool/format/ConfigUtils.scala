@@ -28,7 +28,6 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.RelativePath
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import scala.collection.immutable.Seq

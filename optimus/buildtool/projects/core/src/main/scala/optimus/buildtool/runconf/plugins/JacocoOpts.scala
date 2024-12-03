@@ -13,8 +13,15 @@ package optimus.buildtool.runconf.plugins
 
 import scala.collection.immutable.Seq
 
+// Raw Jacoco opts from OBT files
 final case class JacocoOpts(
     minCoveragePct: Option[Int] = None,
     includes: Seq[String] = Seq.empty,
     excludes: Seq[String] = Seq.empty
+)
+
+// Parsed Jacoco opts for agent (no excludes as we compute in-scope class files via OBT)
+final case class ParsedJacocoOpts(
+    minCoveragePct: Option[Int] = None,
+    includes: Seq[String] = Seq.empty
 )

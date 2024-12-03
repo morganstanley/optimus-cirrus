@@ -50,6 +50,7 @@ final case class GitLog(commit: String, date: String)
  */
 final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
+  private val RemoteUrlRegex = "remote\\.(.+)\\.url\\s+(.+)".r
   private val MissingIndexRegex = """^warning: no corresponding \.idx:\s+(.+\.pack)$""".r
 
   def diff(): String = runGit("diff")
@@ -71,6 +72,11 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def replace(source: String, target: String): String = runGit("replace", source, target)
 
   def undoReplace(source: String): String = runGit("replace", "-d", source)
+
+  def allReplaceRefs(): Seq[String] = {
+    val result = runGit("replace", "-l")
+    Source.fromString(result).getLines().to(Seq)
+  }
 
   def addRemote(name: String, location: RemoteUrl): String = runGit("remote", "add", name, location.url)
 
@@ -117,20 +123,18 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def allRemoteNames(): Seq[String] = allRemotes().map(_.name)
 
-  def allRemotes(): Seq[RemoteSpec] = {
-    val result = runGit("remote", "-v")
-    result
-      .split("\n")
-      .flatMap { row =>
-        row.split("\\s+") match {
-          case Array(name, url)    => Some(RemoteSpec(name, RemoteUrl(url)))
-          case Array(name, url, _) => Some(RemoteSpec(name, RemoteUrl(url)))
-          case _                   => None
-        }
-      }
-      .toList
-      .distinct
-  }
+  def allRemotes(): Seq[RemoteSpec] =
+    Try(runGit("config", "--get-regexp", "remote\\..+\\.url")) match {
+      case Success(result) =>
+        result
+          .split(System.lineSeparator())
+          .collect { case RemoteUrlRegex(name, url) => RemoteSpec(name, RemoteUrl(url)) }
+          .toList
+          .distinct
+      // git will exit with 1 if no remotes
+      case Failure(_: StratosphereException) => List()
+      case Failure(throwable)                => throw throwable
+    }
 
   def maybeLocalBranch(name: String): Option[LocalBranch] = {
     val localBranchExists = checkBranchExists(name)

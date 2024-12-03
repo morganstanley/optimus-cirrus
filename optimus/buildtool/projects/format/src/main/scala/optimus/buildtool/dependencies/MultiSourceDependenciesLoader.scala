@@ -16,7 +16,6 @@ import optimus.buildtool.config._
 import optimus.buildtool.dependencies.JvmDependenciesLoader.IvyConfigurations
 import optimus.buildtool.dependencies.JvmDependenciesLoader.loadLocalDefinitions
 import optimus.buildtool.dependencies.MultiSourceDependency.MultipleAfsError
-import optimus.buildtool.dependencies.MultiSourceDependency.VersionedAfsError
 import optimus.buildtool.format.ConfigUtils.ConfOps
 import optimus.buildtool.format.DependenciesConfig
 import optimus.buildtool.format.ObtFile
@@ -289,9 +288,7 @@ object MultiSourceDependenciesLoader {
                 else loadJvmDepsBySourceName(depConfig, kind, obtFile, Afs, loadedResolvers, scalaMajorVer)
               afsDep <- afsDeps match {
                 case Seq(unique) =>
-                  if (unique.noVersion) Success(Some(unique))
-                  else
-                    Failure(Seq(obtFile.errorAt(depConfig.getValue(Afs), VersionedAfsError)))
+                  Success(Some(unique))
                 case multi if afsDeps.size > 1 =>
                   Failure(Seq(obtFile.errorAt(depConfig.getValue(Afs), MultipleAfsError)))
                 case _ => Success(None)

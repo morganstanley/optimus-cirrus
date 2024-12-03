@@ -18,9 +18,9 @@ import optimus.buildtool.artifacts.IncrementalArtifact
 import optimus.buildtool.artifacts.Severity.Warning
 import optimus.buildtool.cache.ArtifactStoreBase
 import optimus.buildtool.cache.CacheMode
-import optimus.buildtool.cache.MultiWriteableArtifactStore
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.cache.RemoteAssetStore.externalArtifactVersion
+import optimus.buildtool.cache.WriteableArtifactStore
 import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
@@ -157,7 +157,7 @@ class DHTStore(
     clientBuilder: DHTClientBuilder)
     extends ArtifactStoreBase
     with RemoteAssetStore
-    with MultiWriteableArtifactStore
+    with WriteableArtifactStore
     with Log {
   import DHTStore._
   override protected def cacheType: String = s"DHT $clusterType"

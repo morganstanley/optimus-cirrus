@@ -371,6 +371,7 @@ import scala.util.control.NonFatal
   def distinctLast[A](s: Seq[A]): Seq[A] = s.reverse.distinct.reverse
   def distinctLast[A](s: (Seq[A], Seq[A])): (Seq[A], Seq[A]) = (distinctLast(s._1), distinctLast(s._2))
   def distinctLast[A](as: Artifacts): Artifacts = Artifacts(distinctLast(as.scope), distinctLast(as.upstream))
+  def distinctLastBy[A, B](s: Seq[A])(f: A => B): Seq[A] = s.reverse.groupByStable(f).map(_._2.head).reverse
 
   /**
    * Find the jar where a class is defined.

@@ -319,8 +319,8 @@ class ArtifactoryToolDownloader(
       }
       true
     } catch {
-      case t: Throwable =>
-        stratoWorkspace.log.error(s"Failed to install $name to '${install.toolDir}'!", t)
+      case NonFatal(e) =>
+        stratoWorkspace.log.error(s"Failed to install $name to '${install.toolDir}'!", e)
         false
     }
   }

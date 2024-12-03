@@ -30,7 +30,8 @@ To create a DCO please follow these steps:
        You must ensure that you are authorized by the copyright holder(s) to be able to grant the licenses under the DCO
        for the purpose of contributing to the project. Negotiating such authorization and administering the terms is
        entirely between you and the copyright holder(s).
-3. Issue a pull request adding the DCO file and adding your name and username to [contributors.md](contributors.md)
+3. Issue a pull request adding the DCO file and adding your name and username to [contributors.md](contributors.md).
+   Alternatively, include the DCO file in your first PR.
 
 ## Pull request process
 
@@ -51,8 +52,6 @@ When you create a pull request, follow these steps:
 * Since tests are not currently public, please describe the manual testing process performed.
 * Ensure any install or build artefacts are removed from the pull request.
 * We generally prefer squashed commits, unless multi-commits add clarity or are required for mixed copyright commits.
-* You may merge the Pull Request in once the build has passed and you have the sign-off of one other developer who works
-  on maintaining the project, or if you do not have permission to do that, you may request the reviewer to merge it for
-  you. 
+* A maintainer will merge the PR when ready, to ensure the PR is brought into our internal system properly.
    
    

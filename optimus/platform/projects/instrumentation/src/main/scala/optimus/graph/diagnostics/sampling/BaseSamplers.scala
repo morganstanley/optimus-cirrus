@@ -11,6 +11,7 @@
  */
 package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
+import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.SamplingProfiler._
@@ -76,6 +77,7 @@ object BaseSamplers extends Log {
   }
 
   private val counters = new ConcurrentHashMap[Key[Long], Long]
+  private val gauges = new ConcurrentHashMap[Key[Long], Long]
   private val stats = new ConcurrentHashMap[String, StatsAccumulator]
 
   private[diagnostics] def accumulateStats[N: Numeric](key: String, value: N): Unit = {
@@ -102,7 +104,13 @@ object BaseSamplers extends Log {
         case (_, c) => c + incr
       })
 
+  def setCounter(key: Key[Long], value: Long): Unit = counters.put(key, value)
+
+  def setGauge(key: Key[Long], value: Long): Unit = gauges.put(key, value)
+
   def snapCountersMap: Map[Key[Long], Long] = counters.asScala.toMap
+
+  def snapGaugesMap: Map[Key[Long], Long] = gauges.asScala.toMap
 
   private[sampling] def clearCounters(): Unit = counters.clear()
 
@@ -165,6 +173,14 @@ class BaseSamplers extends SamplerProvider {
     ss += Diff(_ => StackAnalysis.numStacksPublished, numStacksPublished)
     ss += Snap(_ => memBean.getObjectPendingFinalizationCount, gcFinalizerCount)
 
+    ss += Diff(
+      _ =>
+        Breadcrumbs.getCounts.collect {
+          case (k, v) if v > 0 =>
+            (k.toString, v)
+        },
+      crumbsSent)
+
     var maxPsFailures = 10
 
     if (!DiagnosticSettings.isWindows)
@@ -198,7 +214,14 @@ class BaseSamplers extends SamplerProvider {
       sp,
       snapper = _ => snapCountersMap,
       process = MINUS,
-      publish = diff => Elems(diff.map(kv => kv._1 -> kv._2).toSeq: _*)
+      publish = diff => Elems(diff.map(Elem(_)).toSeq: _*)
+    )
+
+    ss += new Sampler[Map[Key[Long], Long], Map[Key[Long], Long]](
+      sp,
+      snapper = _ => snapGaugesMap,
+      process = LATEST,
+      publish = es => Elems(es.map(Elem(_)).toSeq: _*)
     )
 
     // Internal stats

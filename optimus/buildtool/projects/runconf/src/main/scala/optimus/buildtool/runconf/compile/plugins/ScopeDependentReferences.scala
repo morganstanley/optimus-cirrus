@@ -36,6 +36,7 @@ object ScopeDependentReferences {
     val scopedName = "scopedName"
     val appDir = "appDir"
     val installPath = "installPath"
+    val installVersion = "installVersion"
     val scope = "scope"
     val selfReference = "this"
   }
@@ -44,6 +45,7 @@ object ScopeDependentReferences {
     def module(name: String): String = path(names.module, name)
     val appDir: String = module(names.appDir)
     val installPath: String = module(names.installPath)
+    val installVersion: String = module(names.installVersion)
     val name: String = module(names.name)
   }
 
@@ -79,6 +81,7 @@ class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
       names.module -> Seq(
         names.appDir,
         names.installPath,
+        names.installVersion,
         names.name
       ),
       names.selfReference -> Seq(
@@ -130,6 +133,7 @@ class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
         case mb: HasMetaBundle => Some(normalizedInstallPath(mb.metaBundle))
         case _                 => None
       })
+      val substituteInstallVersion = substitute(moduleProperty.installVersion)(Some(runEnv.version))
       val substituteModuleName = substitute(moduleProperty.name)(conf.id match {
         case m: ModuleId => Some(m.module)
         case _           => Some("_none_")
@@ -141,6 +145,7 @@ class ScopeDependentReferences(runEnv: RunEnv, externalCache: ExternalCache) {
       Seq(
         substituteAppDir,
         substituteInstallPath,
+        substituteInstallVersion,
         substituteModuleName,
         substituteName,
         substituteScopedName,

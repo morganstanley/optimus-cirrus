@@ -62,7 +62,10 @@ final private[optimus] class TwkResolver[R](
   var infoTarget: NodeTask = _ // If provided, will be the target of combineInfo
   var cur: ScenarioStack = startSS
   var evaluateInSS: ScenarioStack = _ // used when evaluating underlying node (if no tweak) - set during asyncResolve
+
+  // If we have a when clause, this is the node that computes the when predicate.
   var whenNode: Node[Boolean] = _
+
   var tweak: Tweak = _ // Result of resolution of this tweak
   var resolved = false
 
@@ -75,15 +78,35 @@ final private[optimus] class TwkResolver[R](
       this.combineInfo(whenNode, eq)
     }
 
+    // If the when node fail, we want to fail the lookup. There are two ways we could do this:
+    //   - we could assume that the lookup is just always "false", and not apply our tweak and throw our exception out
+    //   - we can make the lookup throw the exception to the user
+    //
+    // The second one is obviously better in terms of user-friendliness, but it leads to an annoying issue when we
+    // consider reuse under different scenario stacks (XS etc.): if our resolution threw, do we really depend on the
+    // tweak? We don't even have a value for it, or even know whether it would have been tweaked!
+    //
+    // To get the exception to appear to the user, we set our tweak value to the exception, which achieves our goal
+    // while also ensuring that we properly recorded that we depend on this tweak. This means that, in effect, this
+    //
+    //   given(Tweak.byName(A.b when { en => if (pred(en)) throw new exception else ... } := ...)) { ... }
+    //
+    // is equivalent to
+    //
+    //   given(Tweak.byName(A.b when { en => pred(en) }  := throw new exception)) { ... }
+    //
+    // This is related to OPTIMUS-69943.
     resolved = whenNode.isDoneWithException || whenNode.result
+    if (whenNode.isDoneWithException) {
+      tweak = tweak.reduceToByValue(new AlreadyFailedNode[R](whenNode.exception()))
+    }
+
     if (startSS.isRecordingWhenDependencies) {
       val whenNodeRT = whenNode.scenarioStack().tweakableListener.recordedTweakables
       val whenNodePredicate = tweak.target.whenPredicate
       startSS.combineWhenClauseData(key.asInstanceOf[PropertyNode[_]], whenNodePredicate, resolved, whenNodeRT)
     }
 
-    // If when clause throws propagate to the caller
-    if (whenNode.isDoneWithException) this.completeWithException(whenNode.exception(), eq)
     whenNode = null // Very important for async logic to null this node out
     resolved
   }
@@ -93,7 +116,6 @@ final private[optimus] class TwkResolver[R](
     val evalSS = evaluateInSS
     evaluateInSS = null
     if (!resolved) throw new IllegalArgumentException("Can't call getValueNode before resolving!")
-    if (isDoneWithException) this
     else if (tweak eq null) {
       val underlyingNode = key.prepareForExecutionIn(evalSS).asInstanceOf[PropertyNode[R]]
       startSS.completeGetNode(info, underlyingNode, ec)
@@ -172,7 +194,7 @@ final private[optimus] class TwkResolver[R](
       else if (sync || !whenNode.isFSM) {
         ec.runAndWait(whenNode) // infoTarget
         if (!valueOfWhenClause(ec))
-          tweak = null // When Clause returned false
+          tweak = null // When Clause is not applicable
       }
       matchOnIdx += 1
     } else resolved = true

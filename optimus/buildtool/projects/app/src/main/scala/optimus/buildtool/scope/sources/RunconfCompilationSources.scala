@@ -247,7 +247,7 @@ object RunconfCompilationSources {
           case (n, c) if n.suffix == RunConfFile.extension =>
             substitutions.sourceSubstitutions(c.utf8ContentAsString)
         }
-        .to(Seq)
+        .to(Vector)
         .flatten
 
     val allBlockedSubstitutions =
@@ -315,7 +315,7 @@ object RunconfCompilationSources {
     // Note: Anything added to UpstreamRunconfInputs or HashedRunconfSources must be made part
     // of the inputsFingerprint above
     val upstreamInputs = UpstreamRunconfInputs(
-      upstreamScopes = upstreamScopes,
+      upstreamScopes = upstreamScopes.toVector,
       nativeUpstreams = nativeUpstreams,
       nativeUpstreamReleasePreloads = upstreamReleasePreload,
       nativeUpstreamDebugPreloads = upstreamDebugPreload,
@@ -326,8 +326,8 @@ object RunconfCompilationSources {
       content = Seq(sourceFileContent),
       upstreamInputs = upstreamInputs,
       installVersion = _installVersion,
-      allSourceSubstitutions = allSourceSubstitutions,
-      allBlockedSubstitutions = allBlockedSubstitutions,
+      allSourceSubstitutions = allSourceSubstitutions.toVector,
+      allBlockedSubstitutions = allBlockedSubstitutions.toVector,
       fingerprint = fingerprintHash
     )
   }

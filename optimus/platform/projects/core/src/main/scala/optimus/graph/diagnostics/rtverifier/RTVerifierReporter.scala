@@ -85,7 +85,9 @@ trait RTVerifierReporter {
 
       // only accumulate violations if we need to write a report on shutdown
       // or if we have explicitly requested to do so (usually for test purposes)
-      if (writeReport || accumulateViolations) violations.append(violation)
+      if (writeReport || accumulateViolations) this.synchronized {
+        violations.append(violation)
+      }
 
       if (publishCrumbs) MonitoringBreadcrumbs.sendRTViolationCrumb(violation)
       if (writeReport) enableReportOnShutdown

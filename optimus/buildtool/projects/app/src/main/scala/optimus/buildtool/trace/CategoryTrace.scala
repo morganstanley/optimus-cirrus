@@ -196,13 +196,6 @@ private[buildtool] final case class Query(clusterType: ClusterType, tpe: CacheTr
 private[buildtool] final case class Fetch(clusterType: ClusterType, tpe: CacheTraceType) extends CacheTrace
 private[buildtool] final case class Put(clusterType: ClusterType, tpe: CacheTraceType) extends CacheTrace
 
-// Deliberately lowercase 'k' here so that it's pretty-printed as "silverking-operation"
-private[buildtool] final case class SilverkingOperation(clusterType: ClusterType, requestId: String)
-    extends ClusterTrace
-    with AsyncCategoryTrace {
-  override lazy val name: String = s"$categoryName($requestId)"
-}
-
 // TODO (OPTIMUS-70246): Integrate into DHTStore
 private[buildtool] final case class DhtOperation(clusterType: ClusterType, requestId: String)
     extends ClusterTrace
@@ -288,8 +281,7 @@ private[buildtool] case object GitDiff extends SingletonCategoryTrace
 trait TraceFilter {
   import TraceFilter._
   def include(category: CategoryTrace): Boolean =
-    category != Build && category != TidyRubbish && !category.isInstanceOf[SilverkingOperation] && !category
-      .isInstanceOf[DhtOperation]
+    category != Build && category != TidyRubbish && !category.isInstanceOf[DhtOperation]
   def publish(category: CategoryTrace): FilterResult
 }
 

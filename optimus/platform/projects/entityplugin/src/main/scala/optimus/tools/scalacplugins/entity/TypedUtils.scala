@@ -27,6 +27,7 @@ import scala.tools.nsc.ast.TreeDSL
 import scala.tools.nsc.symtab.Flags
 import scala.tools.nsc.transform.Transform
 import scala.tools.nsc.transform.TypingTransformers
+import scala.util.control.NonFatal
 
 trait SharedUtils extends TreeDSL { this: OptimusNames =>
   val global: Global
@@ -688,7 +689,8 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   // allowedInSIContext => this function can be called within SI contexts
   def hasSIInternalAnnotation(sym: Symbol) = sym.hasAnnotation(ScenarioIndependentInternalAnnotation)
   def internalsMustBeSI(sym: Symbol) =
-    sym.hasAnnotation(ScenarioIndependentInternalAnnotation) || sym.hasAnnotation(ScenarioIndependentAnnotation)
+    sym.hasAnnotation(ScenarioIndependentInternalAnnotation) || sym.hasAnnotation(ScenarioIndependentAnnotation) ||
+      (sym.isPrimaryConstructor && isEntity(sym.owner))
   def allowedInSIContext(sym: Symbol) =
     sym.hasAnnotation(ScenarioIndependentAnnotation) ||
       sym.hasAnnotation(ScenarioIndependentInternalAnnotation) ||
@@ -1186,7 +1188,7 @@ trait SafeTransform extends Transform {
       try {
         transformSafe(tree)
       } catch {
-        case ex: Throwable =>
+        case NonFatal(ex) =>
           ex.printStackTrace()
           alarm(transformError, tree.pos, ex)
           EmptyTree

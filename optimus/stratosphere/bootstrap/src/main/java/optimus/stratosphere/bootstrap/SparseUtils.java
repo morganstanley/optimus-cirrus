@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -23,9 +24,19 @@ public abstract class SparseUtils {
 
   private static final String ROOT_DIR_PATTERN = "/*";
   private static final String SPARSE_CONFIG_PATH = ".git/info/sparse-checkout";
+  private static final List<String> REQUIRED_DIRS = List.of("config", "profiles");
+  private static final String BROKEN_SPARSE_MESSAGE =
+      "Detected malformed sparse configuration. Run following commands to recover:\n\n"
+          + "git sparse-checkout disable\n"
+          + "stratosphere sparse refresh";
 
-  public static boolean isConfigCorrupted(Path relativePath) {
-    Optional<Stream<String>> config = getSparseConfig(relativePath);
+  public static void assertValidSparseConfig(Path srcDir) {
+    if (isConfigCorrupted(srcDir))
+      throw new RecoverableStratosphereException(BROKEN_SPARSE_MESSAGE);
+  }
+
+  private static boolean isConfigCorrupted(Path srcDir) {
+    Optional<Stream<String>> config = getSparseConfig(srcDir);
     return config.isPresent() && config.get().noneMatch(ROOT_DIR_PATTERN::equals);
   }
 
@@ -41,5 +52,10 @@ public abstract class SparseUtils {
     } catch (IOException exception) {
       throw new UncheckedIOException(exception);
     }
+  }
+
+  public static void assertRequiredDirectoriesExist(Path srcDir) {
+    boolean requiredDirsExist = REQUIRED_DIRS.stream().map(srcDir::resolve).allMatch(Files::exists);
+    if (!requiredDirsExist) throw new RecoverableStratosphereException(BROKEN_SPARSE_MESSAGE);
   }
 }

@@ -15,6 +15,7 @@ import com.typesafe.config.Config
 import optimus.stratosphere.common.PluginBundle
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
+import optimus.stratosphere.indexing.IndexingFilterConfig
 import optimus.stratosphere.utils.RemoteUrl
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
@@ -135,6 +136,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def usedInWorkspace: Boolean = self.select("git.used-in-workspace")
     def requiredVersion: String = self.select("git.required-version")
     def useUpdatedFetchSettings: Boolean = self.select("git.use-updated-fetch-settings")
+    def garbageFilesThreshold: Int = self.select("git.garbage-files-threshold")
   }
 
   object intellij {
@@ -270,6 +272,15 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def ofVersion(version: String): Option[Instant] =
         self.select(s"intellij.last-usage.version.${version.replace(".", "_")}")
     }
+
+    object indexing {
+      def filter: IndexingFilterConfig = IndexingFilterConfig(
+        disabledUnconditionally = self.select[Set[String]]("intellij.indexing.filter.disabled-unconditionally"),
+        disabledIfInJars = self.select[Set[String]]("intellij.indexing.filter.disabled-if-in-jars"),
+        disabledIfLarge = self.select[Set[String]]("intellij.indexing.filter.disabled-if-large"),
+        largeFileSizeInBytes = self.select[Int]("intellij.indexing.filter.large-file-size-in-bytes"),
+      )
+    }
   }
 
   object internal {
@@ -310,6 +321,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def ideaScript: String = self.select("internal.files.idea-script")
       def fsNotifierExecutable: String = self.select("internal.files.fs-notifier-executable")
       def vmOptionsProperties: String = self.select("internal.files.vm-options-properties")
+    }
+
+    object historyTruncation {
+      def codetreeArchiveUrl: Option[RemoteUrl] = self.select("internal.history-truncation.codetree-archive-url")
+      def isWorkspaceMigrated: Option[Boolean] = self.select("internal.history-truncation.is-workspace-migrated")
     }
 
     object java {
@@ -446,6 +462,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def jenkinsLibrary: String = self.select("internal.urls.jenkins-library")
       def jenkinsLibraryBrowser: String = self.select("internal.urls.jenkins-library-browser")
       def jiraBrowse: String = self.select("internal.urls.jira-browse")
+      def noWorkspace: String = self.select("internal.urls.no-workspace")
       def runconfs: String = self.select("internal.urls.runconfs")
       def splunk: String = self.select("internal.urls.splunk")
       def stackoverflow: String = self.select("internal.urls.stackoverflow")

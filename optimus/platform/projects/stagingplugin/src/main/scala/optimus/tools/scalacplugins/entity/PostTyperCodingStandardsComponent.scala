@@ -34,6 +34,9 @@ class PostTyperCodingStandardsComponent(
   lazy val optimusAppClass = rootMirror.getClassIfDefined("optimus.platform.OptimusApp")
   lazy val jdkCollectionConverters = rootMirror.getModuleIfDefined("scala.jdk.CollectionConverters")
 
+  val lazyListFactoryFunctions: Set[Name] =
+    Set("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "unfold", "concat", "range").map(TermName(_))
+
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit): Unit = {
       if (!pluginData.rewriteConfig.anyEnabled)
@@ -298,6 +301,14 @@ class PostTyperCodingStandardsComponent(
         if (sym == GrowablePlusEquals) fun match {
           case Select(qual, _) if qual.tpe.typeSymbol == OptimusDoubleBuilderClass =>
             alarm(Scala213MigrationMessages.DOUBLE_BUILDER_PLUSEQ, fun.pos)
+          case _ =>
+        }
+
+        if (lazyListFactoryFunctions(sym.name)) fun match {
+          case Select(qual, _) =>
+            val qs = qual.tpe.typeSymbol
+            if (qs == StreamModuleClass || qs == LazyListModuleClass)
+              alarm(CodeStyleNonErrorMessages.DISCOURAGED_CONSTRUCT, fun.pos, sym.name, AnnotatingComponent.lazyReason)
           case _ =>
         }
       }

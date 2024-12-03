@@ -9,17 +9,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.cache.silverking
+package optimus.platform.util
 
-import optimus.buildtool.cache.remote.ClusterType
+import scala.tools.nsc.Settings
 
-object SilverKingStoreConfig {
-  private[silverking] val prefix = "optimus.buildtool.silverking"
-  // Some(True): always enabled
-  // Some(false): always disabled
-  // None: dependent on zookeeper state
-  val enabled: Option[Boolean] = sys.props.get(s"$prefix.enabled").map(_.toBoolean)
-
-  private[cache] def clusterStr(clusterType: ClusterType) = s"Distributed artifact cache (SilverKing $clusterType)"
-
+object ScalaCompilerConfigurer {
+  def updateSettingsForVersion(settings: Settings) = {
+    // there are not any known required Scala-2.12-only compiler settings
+  }
 }

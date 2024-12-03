@@ -873,7 +873,14 @@ public class NodeTaskInfo {
               "Cannot call @givenRuntimeEnv node from @scenarioIndependent node");
         else MonitoringBreadcrumbs$.MODULE$.sendEvilCallFromSINodeToGivenRuntimeEnvNode();
       }
-      return requestingSS.initialRuntimeScenarioStack();
+
+      // @givenRuntimeEnv runs a node in the "initial runtime scenario stack" + our requesting
+      // cancellation scope. We do it this way to ensure that a non RT exception in a @gRE @node
+      // called inside asyncResult {} doesn't pollute every other invocation of the same node
+      // forever.
+      return requestingSS
+          .initialRuntimeScenarioStack()
+          .withCancellationScopeRaw(requestingSS.cancelScope());
     }
     return requestingSS;
   }
@@ -1768,6 +1775,7 @@ public class NodeTaskInfo {
       internalCached("[convertByNameToByValue]", 0);
   public static final NodeTaskInfo HandlerResultBackgroundAction =
       internal("HandlerResultBackgroundAction", 0L);
+  public static final NodeTaskInfo TweakModifyOriginal = internal("[tweakModifyOriginal]", 0);
   public static final NodeTaskInfo NodeResult = internal("[nodeResult]");
   public static final NodeTaskInfo ProfilerResult = internal("[profilerResult]");
   public static final NodeTaskInfo ThenFinally = internal("[thenFinally]");

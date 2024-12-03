@@ -49,13 +49,18 @@ object NamingConventions {
 
   val WindowsDrive: Regex = "[A-Z]:.*".r
 
-  lazy val TempDir = Directory(Paths.get(sys.props("java.io.tmpdir")))
+  lazy val TempDir: Directory = Directory(Paths.get(sys.props("java.io.tmpdir")))
+
+  // Key folder names
+  val BuildDir = "build_obt"
+  val Install = "install"
+  val Sources = "src"
 
   val LocalVersion = "local"
 
   val InstallPathComponents = 5 // meta/bundle/version/install/common
   val Common = "common"
-  val InstallPattern = s"install/$Common"
+  val InstallPattern = s"$Install/$Common"
 
   val ArtifactoryStr = "artifactory"
   val MavenNamespaceToolExe = "artifactoryExePath"
@@ -86,7 +91,7 @@ object NamingConventions {
   val MgzExt = "mgz"
 
   // unzip maven repo exts
-  val UnzipMavenRepoExts = Seq(ZipExt, TarGzExt)
+  val UnzipMavenRepoExts: Seq[String] = Seq(ZipExt, TarGzExt)
 
   // These are a bit hacky, since they assume a certain format of the dep copy directory
   val DepCopyDistRoot: Regex = ".*/\\.stratosphere/depcopy/dist/(.*)".r
@@ -121,7 +126,11 @@ object NamingConventions {
   val ANALYSIS = "analysis"
   val SIGNATURE_ANALYSIS = "signature-analysis"
 
+  // Generated only by BSP after compilation; to find latest pathing jar compiled for all scopes
   val ClassPathMapping = "classpath-mapping.txt"
+  // Generated all the time except when mischief is activated; to find latest artifact for
+  // all scopes and for all artifact types
+  val FreezerMapping = "freezer-mapping.txt"
   val MischiefConfig = "mischief.obt"
 
   val GeneratedObt = "generated-obt"

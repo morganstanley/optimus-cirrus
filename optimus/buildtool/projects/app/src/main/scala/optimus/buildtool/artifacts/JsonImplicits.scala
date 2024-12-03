@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.artifacts
 
+import optimus.buildtool.compilers.venv.PythonConstants.tpa.TpaConfig
+
 import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -178,12 +180,13 @@ private[buildtool] object JsonImplicits {
   implicit val visualizerInfoFormatter: JsonFormat[DependencyInfo] =
     new JsonFormat[DependencyInfo] {
       private val delimiter = ",,"
+      private val delimiterPattern = delimiter.r
       override def write(obj: DependencyInfo): JsValue = {
         JsString(Seq(obj.group, obj.name, obj.config, obj.version, obj.isMaven.toString).mkString(delimiter))
       }
       override def read(json: JsValue): DependencyInfo = {
         val obj = json.convertTo[String]
-        val Array(group, name, config, version, isMaven) = obj.split(delimiter, 5)
+        val Array(group, name, config, version, isMaven) = delimiterPattern.pattern.split(obj, 5)
         DependencyInfo(group, name, config, version, isMaven.toBoolean)
       }
     }
@@ -206,4 +209,5 @@ private[buildtool] object JsonImplicits {
   implicit val PythonDefinitionFormatter: RootJsonFormat[PythonDefinition] = jsonFormat4(PythonDefinition.apply)
   implicit val PythonMetadataFormatter: RootJsonFormat[PythonMetadata] = jsonFormat5(PythonMetadata.apply)
 
+  implicit val TpaConfigFormatter: RootJsonFormat[TpaConfig] = jsonFormat1(TpaConfig.apply)
 }

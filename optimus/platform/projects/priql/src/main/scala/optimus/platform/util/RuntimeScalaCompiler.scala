@@ -56,6 +56,8 @@ class RuntimeScalaCompiler(
 
   settings.YaliasPackage.tryToSet(PackageAliases.aliases)
 
+  ScalaCompilerConfigurer.updateSettingsForVersion(settings)
+
   val reporter = new StoreReporter(settings)
   val global = new Global(settings, reporter)
 

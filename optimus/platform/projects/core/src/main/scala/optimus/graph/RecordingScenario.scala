@@ -379,6 +379,11 @@ class RecordingTweakableListener(
     _tweaked = new ConcurrentHashMap[PropertyNode[_], TweakTreeNode]
   }
 
+  /**
+   * If we aren't done, we don't know what our used tweakables are and can't report them to another node.
+   *
+   * To avoid a data race here, we *must* run onXSOriginalCompleted before we mark an XS node or its proxy as DONE.
+   */
   final override def reportTweakableUseBy(node: NodeTask): Unit = throw new GraphInInvalidState()
 
   /** RecordingScenarioStack doesn't need this callback! */

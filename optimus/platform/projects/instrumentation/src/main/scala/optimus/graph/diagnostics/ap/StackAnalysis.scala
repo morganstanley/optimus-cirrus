@@ -96,10 +96,10 @@ object StackAnalysis {
 
   // Minimal wrapper to allow re-use of large backing Array while enabling operations on
   // a smaller number of elements.
-  private[ap] class BackedArray[T](private val inner: Array[T], val length: Int) {
+  private[ap] class BackedArray[T](private val inner: Array[T], val length: Int) extends Iterable[T] {
     private def indices = 0 until length
-    def last: T = inner(length - 1)
-    def head: T = inner(0)
+    override def last: T = inner(length - 1)
+    override def head: T = inner(0)
     def apply(i: Int): T = inner(i)
 
     def mapInto[U](f: T => U)(backing: Array[U]): BackedArray[U] = {
@@ -108,9 +108,10 @@ object StackAnalysis {
       }
       new BackedArray(backing, length)
     }
-    def exists(f: T => Boolean): Boolean = indices.exists(i => f(inner(i)))
-    def foreach(f: T => Unit): Unit = indices.foreach(i => f(inner(i)))
+    override def exists(f: T => Boolean): Boolean = indices.exists(i => f(inner(i)))
+    override def foreach[U](f: T => U): Unit = indices.foreach(i => f(inner(i)))
     def replace(f: T => T): Unit = indices.foreach(i => inner(i) = f(inner(i)))
+    override def iterator = indices.iterator.map(inner)
   }
   private[ap] object BackedArray {
     def apply[T](arr: Array[T]): BackedArray[T] = new BackedArray(arr, arr.length)
@@ -297,7 +298,7 @@ object StackAnalysis {
       .mkString("\n")
   }
 
-  private[diagnostics] final class CleanName private (
+  final class CleanName private (
       val name: String,
       val orig: String,
       val id: Long,
@@ -316,7 +317,7 @@ object StackAnalysis {
     def rootNode = new StackNode(this, 0, hash)
   }
 
-  private object CleanName {
+  object CleanName {
     val FREE = 1
     val LIVE = 2
     val SPECIAL = 4
@@ -334,6 +335,10 @@ object StackAnalysis {
     def cleanName(frame: String, flags: Int): CleanName = cleanName(frame, false, doAbbreviateFrames, flags)
     def cleanName(frame: String, hasFrameNum: Boolean): CleanName =
       cleanName(frame, hasFrameNum, doAbbreviateFrames, 0)
+
+    def internOnly(frame: String): CleanName = {
+      frameNameCache.get(frame, frame => CleanName(frame, frame, 0, 0, hashString(frame)))
+    }
 
     def cleanName(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, flags: Int): CleanName = {
       def clean(frame0: String, hasFrameNum: Boolean, abbreviate: Boolean): CleanName = {
@@ -417,9 +422,11 @@ object StackAnalysis {
 
   // Each node is identified by an id unique to the frame name, plus a link to its
   // parent on the tree.  This is a conventional approach for representing flame graphs.
-  private[diagnostics] final class StackNode(val cn: CleanName, val depth: Int, val pathHash: Long) {
+  final class StackNode(val cn: CleanName, val depth: Int, val pathHash: Long) {
     def nameId: Long = cn.id
     def name: String = cn.name
+    def getTotal: Long = total
+    def getSelf: Long = self
 
     def terminalHash: Long = combineHashes(pathHash, stackHashTerminator)
 
@@ -459,6 +466,13 @@ object StackAnalysis {
         case map: LM[_]      => map.cast.valuesIterator
       }
 
+    def sortedKiderator: Iterator[StackNode] =
+      kids match {
+        case null            => Iterator.empty
+        case only: StackNode => Iterator(only)
+        case map: LM[_]      => map.cast.values.toSeq.sortBy(_.name).iterator
+      }
+
     def getOrUpdateChildNode(childId: Long, newChildNode: () => StackNode): StackNode = {
       kids match {
         case null =>
@@ -494,6 +508,20 @@ object StackAnalysis {
         kid
       }
       getOrUpdateChildNode(childName.id, newChildNode)
+    }
+
+    def addPath(names: Iterable[CleanName], count: Long): StackNode = {
+      var node = this
+      names.foreach { name =>
+        node = node.getOrCreateChildNode(name)
+      }
+      node.add(count)
+      node
+    }
+
+    def addFolded(folded: String, backer: Array[CleanName], count: Long): StackNode = {
+      val names = splitInto(folded, ';', backer, 0, CleanName.internOnly(_))
+      addPath(names, count)
     }
 
     // Add self time to this node, and total time to all nodes back to root
@@ -718,10 +746,6 @@ object StackAnalysis {
 
 }
 
-final case class StackFrame(stacks: Seq[String], samples: Long) {
-  override def toString: String = s"${stacks.mkString(";")} $samples"
-}
-
 final case class NestedSetModelRow(label: String, level: Int, value: Long, self: Long, stackFrames: Seq[String] = Nil) {
   override def toString: String = s"$label, $level, $value $self"
 }
@@ -851,15 +875,12 @@ class StackAnalysis(
 
   private val cleanNameBacker = new Array[CleanName](1000)
 
-  def buildStackTrees(stackFrames: Seq[StackFrame]): (Map[String, StackNode], SampledTimers) =
-    buildStackTrees(stackFrames.mkString("\n"))
-
   // Convert a list of stacks as semi-colon-delimited frame names into tree form, with the root frame
   // at the base, and leaf nodes representing innermost frames. This is essentially what every flamegraph
   // visualizer does.  Since async-profiler doesn't natively have a nice way to differentiate different kinds of
   // stacks, we look for the custom event prefix that we injected ourselves.  Thus we'll return a map of stacks
   // type to the root frame of that flame graph.
-  private[diagnostics] def buildStackTrees(
+  def buildStackTrees(
       dump: String,
       presplit: Iterable[TimedStack] = Iterable.empty): (Map[String, StackNode], SampledTimers) = {
     val unmemoize = new Unmemoizer()
@@ -973,6 +994,7 @@ class StackAnalysis(
     if (DiagnosticSettings.samplingAsserts) stackTypeToRoot.valuesIterator.foreach(assertTreesAreConsistent)
     (stackTypeToRoot.toMap, rec)
   }
+
   val leafQueue = new mutable.PriorityQueue[StackNode]()((x: StackNode, y: StackNode) => {
     // Smallest total at front of queue (avoid boxing from Long#compareTo)
     var ret = -JLong.compare(x.total, y.total)

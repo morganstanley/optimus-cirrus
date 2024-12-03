@@ -13,12 +13,13 @@ package optimus.buildtool.trace
 
 import java.nio.file.Files
 import java.time.Instant
-
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+
+import scala.collection.mutable.ArrayBuffer
 
 private[buildtool] object TraceRecorder {
   private val log = getLogger(this.getClass)
@@ -94,7 +95,7 @@ class TraceRecorder(traceFilePrefixOpt: Option[Directory] = None) extends Defaul
   private val log = getLogger(getClass)
   import TraceRecorder._
 
-  private val traces = List.newBuilder[TraceRecorderTask]
+  private val traces = ArrayBuffer[TraceRecorderTask]()
 
   override def startTask(
       scopeId: ScopeId,
@@ -105,7 +106,9 @@ class TraceRecorder(traceFilePrefixOpt: Option[Directory] = None) extends Defaul
     t
   }
 
-  def completedTasks: List[TraceRecorderTask] = traces.synchronized { traces.result() }.filter(_.durationMicros >= 0)
+  def completedTasks: List[TraceRecorderTask] = traces.synchronized {
+    traces.iterator.filter(_.durationMicros >= 0).toList
+  }
 
   override def endBuild(success: Boolean): Boolean = {
     traceFilePrefixOpt.foreach(writeToFiles)
