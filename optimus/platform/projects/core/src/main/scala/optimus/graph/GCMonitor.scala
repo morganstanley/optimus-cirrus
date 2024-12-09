@@ -79,7 +79,7 @@ private[optimus] abstract class HeapBasedMemoryMonitoring(val heapTriggerRatio: 
       notification match {
         case n if n.getType == GarbageCollectionNotificationInfo.GARBAGE_COLLECTION_NOTIFICATION =>
           val info = GarbageCollectionNotificationInfo.from(notification.getUserData.asInstanceOf[CompositeData])
-          log.info(s"Forwarding notification: ${notification.getMessage}")
+          log.debug(s"Forwarding notification: ${notification.getMessage}")
           onNotification(info)
       }
   }

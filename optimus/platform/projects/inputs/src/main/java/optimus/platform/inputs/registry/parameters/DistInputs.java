@@ -57,6 +57,7 @@ public class DistInputs {
     private static final String ClasspathExcludeRegexes = "client.engine.classPathExcludeRegexes";
     private static final String ImmutableLocations = "client.immutableLocations";
     private static final String LocalExecution = "client.localExecution";
+    private static final String DisableTaskStealing = "client.disableTaskStealing";
     public static final String LegacyLogFileDirectory = "localdist.engine.logFileDirectory";
     public static final String DefaultTaskTimeout = "client.defaultTaskTimeout";
     public static final String DepthLimit = "client.depthLimit";
@@ -405,6 +406,16 @@ public class DistInputs {
           SourceNames.LocalExecution,
           Object::toString,
           Source.fromBoolJavaProperties(prefixed(SourceNames.LocalExecution)),
+          CombinationStrategies.distCombinator());
+
+  public static final ScopedSINodeInput<Boolean> DisableTaskStealing =
+      NodeInputs.newTransientJavaOptWithDefault(
+          "DisableTaskStealing",
+          "Disables task stealing if multi-level distribution is used",
+          false,
+          SourceNames.DisableTaskStealing,
+          Object::toString,
+          Source.fromBoolJavaProperties(prefixed(SourceNames.DisableTaskStealing)),
           CombinationStrategies.distCombinator());
 
   // Legacy

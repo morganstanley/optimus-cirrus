@@ -24,6 +24,7 @@ import optimus.graph.cache.NCPolicy
 import optimus.graph.cache.UNodeCache
 import optimus.graph.diagnostics.NodeName
 import optimus.graph.loom.LNodeFunction1
+import optimus.graph.loom.TrivialNode
 import optimus.platform.PluginHelpers
 import optimus.platform._
 import optimus.platform.storable.Entity
@@ -512,7 +513,8 @@ class AlreadyCompletedPropertyNode[T](
     v: T,
     final override val entity: Entity,
     final override val propertyInfo: NodeTaskInfo)
-    extends PropertyNode[T] {
+    extends PropertyNode[T]
+    with TrivialNode {
 
   initAsCompleted(v)
 
@@ -526,7 +528,6 @@ class AlreadyCompletedPropertyNode[T](
   override def isStable: Boolean = scenarioStack() eq ScenarioStack.constant
   override def func: T = result
   override def run(ec: OGSchedulerContext): Unit = { throw new UnsupportedOperationException(s"Can't run ACPN $this") }
-
   override def tidyKey: PropertyNode[T] = new AlreadyCompletedPropertyNode(result, entity, propertyInfo)
 
   // noinspection ScalaUnusedSymbol

@@ -173,6 +173,8 @@ public abstract class OGTraceReader {
   public Collection<PNodeTask> getRawTasks(boolean includeProxies) {
     List<PNodeTask> r = new ArrayList<>();
     for (PNodeTaskRecorded p : tasks) {
+      // Only partial information is available if the task is started and then just dropped
+      if (p.info == PNodeTaskRecorded.fakeInfo) continue;
       if (includeProxies || !p.isProxy()) r.add(p);
     }
     return r;

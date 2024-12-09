@@ -27,5 +27,8 @@ public @interface compiler {
 
   boolean enqueueEarlier() default false;
 
+  /** Causes to reorder only node calls */
+  boolean assumeGlobalMutation() default false;
+
   boolean queueSizeSensitive() default false;
 }

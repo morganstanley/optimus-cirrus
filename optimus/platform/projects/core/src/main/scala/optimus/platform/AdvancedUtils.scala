@@ -40,6 +40,10 @@ import optimus.platform.annotations.nodeLiftByName
 import optimus.platform.annotations.nodeSync
 import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.inputs.NodeInputs.ScopedSINodeInput
+import optimus.platform.inputs.loaders.OptimusNodeInputStorage.OptimusStorageUnderlying
+import optimus.platform.inputs.loaders.Loaders
+import optimus.platform.inputs.loaders.OptimusNodeInputStorage
+import optimus.platform.inputs.loaders.ProcessSINodeInputMap
 import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.platform.storable.Entity
 import optimus.ui.ScenarioReference
@@ -48,6 +52,7 @@ import optimus.utils.AdvancedUtilsMacros
 import optimus.utils.SystemFinalization
 
 import java.io.File
+import java.io.InputStream
 import java.lang.management.ManagementFactory
 import java.lang.{Long => JLong}
 import java.time.Instant
@@ -589,11 +594,13 @@ object AdvancedUtils {
       readFromOuterCaches: Boolean = true,
       clearWhenCompleted: Boolean = false)(@nodeLift @nodeLiftByName f: => T): T =
     withProvidedCache$withNode(cache, readFromOuterCaches, clearWhenCompleted)(toNode(f _))
-  final def withProvidedCache$queued[T](
-      cache: UNodeCache,
-      readFromOuterCaches: Boolean = true,
-      clearWhenCompleted: Boolean = false)(f: Node[T]): Node[T] =
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withProvidedCache$queued[T](cache: UNodeCache, readFromOuterCaches: Boolean, clearWhenCompleted: Boolean)(
+      f: Node[T]): Node[T] =
     withProvidedCache$newNode(cache, readFromOuterCaches, clearWhenCompleted)(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def withProvidedCache$queued[T](c: UNodeCache, rfc: Boolean, cwc: Boolean, f: => T): NodeFuture[T] =
+    withProvidedCache$queued(c, rfc, cwc)(toNode(f _))
   final def withProvidedCache$withNode[T](
       cache: UNodeCache,
       readFromOuterCaches: Boolean = true,
@@ -653,8 +660,14 @@ object AdvancedUtils {
     givenFullySpecifiedScenario$withNode(scenario, inheritSIParams)(toNode(f _))
   final def givenFullySpecifiedScenario$withNode[T](scenario: Scenario, inheritSIParams: Boolean)(f: Node[T]): T =
     givenFullySpecifiedScenarioWithInitialTime$newNode(scenario, null, inheritSIParams)(f).get
-  final def givenFullySpecifiedScenario$queued[T](scenario: Scenario, inheritSIParams: Boolean)(f: Node[T]): Node[T] =
+  final def givenFullySpecifiedScenario$queued[T](scenario: Scenario, inheritSIParams: Boolean)(
+      f: Node[T]): NodeFuture[T] =
     givenFullySpecifiedScenarioWithInitialTime$newNode(scenario, null, inheritSIParams)(f).enqueueAttached
+  final def givenFullySpecifiedScenario$queued[T](
+      scenario: Scenario,
+      inheritSIParams: Boolean,
+      f: => T): NodeFuture[T] =
+    givenFullySpecifiedScenarioWithInitialTime$newNode(scenario, null, inheritSIParams)(toNode(f _)).enqueueAttached
 
   @nodeSync
   @nodeSyncLift
@@ -662,8 +675,10 @@ object AdvancedUtils {
     givenFullySpecifiedScenario$withNode(scenario)(toNode(f _))
   final def givenFullySpecifiedScenario$withNode[T](scenario: Scenario)(f: Node[T]): T =
     givenFullySpecifiedScenario$withNode(scenario, inheritSIParams = true)(f)
-  final def givenFullySpecifiedScenario$queued[T](scenario: Scenario)(f: Node[T]): Node[T] =
+  final def givenFullySpecifiedScenario$queued[T](scenario: Scenario)(f: Node[T]): NodeFuture[T] =
     givenFullySpecifiedScenario$queued(scenario, inheritSIParams = true)(f)
+  final def givenFullySpecifiedScenario$queued[T](scenario: Scenario, f: => T): NodeFuture[T] =
+    givenFullySpecifiedScenario$queued(scenario, inheritSIParams = true)(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
@@ -753,9 +768,11 @@ object AdvancedUtils {
     givenOverlay$withNode(scenRef)(toNode(f _))
   // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
   final def givenOverlay$withNode[T](scenRef: ScenarioReference)(f: Node[T]): T = givenOverlay$newNode(scenRef)(f).get
-  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
   final def givenOverlay$queued[T](scenRef: ScenarioReference)(f: Node[T]): Node[T] =
     givenOverlay$newNode(scenRef)(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  final def givenOverlay$queued[T](scenRef: ScenarioReference, f: => T): NodeFuture[T] =
+    givenOverlay$queued(scenRef)(toNode(f _))
   final private[this] def givenOverlay$newNode[T](scenRef: ScenarioReference)(f: Node[T]): Node[T] = {
     val (currentScenarioReference, ss) = verifyEvaluationPolicyAndGetCurrentScenario()
 
@@ -895,8 +912,10 @@ object AdvancedUtils {
       f: Node[T]): T =
     givenFullySpecifiedScenario$newNode(scenarioState, addScenario)(f).get
   final def givenFullySpecifiedScenario$queued[T](scenarioState: ScenarioState, addScenario: Scenario)(
-      f: Node[T]): Node[T] =
+      f: Node[T]): NodeFuture[T] =
     givenFullySpecifiedScenario$newNode(scenarioState, addScenario)(f).enqueueAttached
+  final def givenFullySpecifiedScenario$queued[T](ss: ScenarioState, addScenario: Scenario, f: => T): NodeFuture[T] =
+    givenFullySpecifiedScenario$queued(ss, addScenario)(toNode(f _))
   final def givenFullySpecifiedScenario$newNode[T](scenarioState: ScenarioState, addScenario: Scenario)(
       f: Node[T]): Node[T] = {
     if (!EvaluationContext.isInitialised) EvaluationContext.initializeWithoutRuntime()
@@ -923,6 +942,9 @@ object AdvancedUtils {
   final def givenWithNestedPluginTag$queued[T, V <: AnyRef](key: NestedTag[V], tag: V, s: Scenario)(
       f: Node[T]): Node[T] =
     givenWithNestedPluginTag$newNode(key, tag, s)(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol
+  final def givenWithNestedPluginTag$queued[T](key: NestedTag[_], tag: AnyRef, s: Scenario, f: => T): NodeFuture[T] =
+    givenWithNestedPluginTag$queued(key.asInstanceOf[NestedTag[AnyRef]], tag, s)(toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def givenWithNestedPluginTag$withNode[T, V <: AnyRef](key: NestedTag[V], tag: V, s: Scenario)(f: Node[T]): T =
     givenWithNestedPluginTag$newNode(key, tag, s)(f).get
@@ -955,6 +977,8 @@ object AdvancedUtils {
     givenWithPluginTag$withNode(key, tag, s)(toNode(f _))
   final def givenWithPluginTag$queued[T, P](key: PluginTagKey[P], tag: P, s: Scenario)(f: Node[T]): Node[T] =
     givenWithPluginTag$newNode(key, tag, s)(f).enqueueAttached
+  final def givenWithPluginTag$queued[T, P](key: PluginTagKey[P], tag: P, s: Scenario, f: => T): NodeFuture[T] =
+    givenWithPluginTag$queued(key, tag, s)(toNode(f _))
   final def givenWithPluginTag$withNode[T, P](key: PluginTagKey[P], tag: P, s: Scenario)(f: Node[T]): T =
     givenWithPluginTag$newNode(key, tag, s)(f).get
   final private[this] def givenWithPluginTag$newNode[T, P](key: PluginTagKey[P], tag: P, s: Scenario)(f: Node[T]) = {
@@ -975,6 +999,33 @@ object AdvancedUtils {
       f: Node[T]) = {
     val ss = EvaluationContext.scenarioStack.createChild(s, f)
     EvaluationContext.given(ss.withPluginTags(kvs), f)
+  }
+
+  /**
+   * Function that will merge node inputs from an input stream into the existing SS's scoped node input map and use that
+   * as the new scoped node input map for your scenario stack
+   *
+   * This will crash if the input stream contains any process (non scoped) node inputs!!
+   */
+  @nodeSync
+  @nodeSyncLift
+  final def givenWithScopedNodeInputsFromFile[T](is: InputStream)(@nodeLift @nodeLiftByName f: => T): T =
+    needsPlugin
+  // noinspection ScalaUnusedSymbol
+  final def givenWithScopedNodeInputsFromFile$queued[T](is: InputStream)(f: Node[T]): Node[T] =
+    givenWithScopedNodeInputsFromFile$newNode(is)(f).enqueueAttached
+  // noinspection ScalaUnusedSymbol
+  final def givenWithScopedNodeInputsFromFile$withNode[T](is: InputStream)(f: Node[T]): T =
+    givenWithScopedNodeInputsFromFile$newNode(is)(f).get
+  final private[this] def givenWithScopedNodeInputsFromFile$newNode[T](is: InputStream)(f: Node[T]) = {
+    val ss = EvaluationContext.scenarioStack
+    val OptimusStorageUnderlying(scopedMap, processMap) =
+      Loaders.inputStreamProperties(OptimusNodeInputStorage.empty, is).underlying
+    if (processMap != ProcessSINodeInputMap.empty)
+      throw new GraphInInvalidState("No process inputs should be present in your file!")
+    EvaluationContext.given(
+      ss.withFullySpecifiedScopedNodeInputMap(ss.siParams.nodeInputs.freeze.mergeWith(scopedMap)),
+      f)
   }
 
   @nodeSync
@@ -1518,6 +1569,10 @@ object AdvancedUtils {
     new AsyncUsingNode[R, B](() => resource, f).get
   def asyncUsing$queued[R <: AutoCloseable, B](resource: => R)(f: R => Node[B]): Node[B] =
     new AsyncUsingNode[R, B](() => resource, f).enqueue
+  // noinspection ScalaUnusedSymbol
+  def asyncUsing$queued[R <: AutoCloseable, B](resource: => R, f: R => B): NodeFuture[B] =
+    asyncUsing$queued(resource)(toNodeFactory(f))
+
 }
 
 final case class ThrottleState(inflightWeight: Double, nInFlight: Int, nBardo: Int, nPnode: Int, nQueued: Int)

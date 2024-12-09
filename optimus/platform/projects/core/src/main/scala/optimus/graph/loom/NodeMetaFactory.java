@@ -21,10 +21,6 @@ import static optimus.CoreUtils.stripFromLast;
 import static optimus.CoreUtils.stripSuffix;
 import static optimus.graph.DiagnosticSettings.injectNodeMethods;
 import static optimus.graph.loom.LoomConfig.*;
-import static optimus.graph.loom.NodeClassGenerator.EXPOSE_ARGS_TRAIT;
-import static optimus.graph.loom.NodeClassGenerator.NODE_FUNCTION;
-import static optimus.graph.loom.NodeClassGenerator.PLAIN_ASYNC;
-import static optimus.graph.loom.NodeClassGenerator.TWEAKHANDLER;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.ConstantCallSite;
 import java.lang.invoke.MethodHandle;
@@ -83,6 +79,7 @@ public class NodeMetaFactory {
       MethodType factoryType,
       MethodHandle nodeMethod,
       int clsID,
+      int nodeFlags,
       String... params)
       throws IllegalAccessException, NoSuchMethodException {
 
@@ -111,15 +108,16 @@ public class NodeMetaFactory {
             foldArguments(mhPluginOVN, nodeMethod.asType(methodType(Object.class, Entity.class)));
         yield mkConstantCallSite(insertArguments(mhIncomplete, 1, propertyID), factoryType);
       }
-      case CMD_NODE, CMD_ASYNC, CMD_NODE_WITH_TRAIT, CMD_ASYNC_WITH_TRAIT -> {
+      case CMD_NODE, CMD_ASYNC -> {
         LPropertyDescriptor.get(clsID).methodType = info.getMethodType();
-        var customTrait = cmd.endsWith(TRAIT_SUFFIX);
+        // Consider: Making all of the flags should come from byte code
+        var customTrait = (nodeFlags & NF_EXPOSE_ARGS_TRAIT) != 0;
         var async = cmd.startsWith(CMD_ASYNC);
         var hasProperty = (isEntity && !async) || customTrait;
         var propertyID = hasProperty ? getPropertyID(entityCls, info) : -1;
-        var flags = customTrait ? EXPOSE_ARGS_TRAIT : 0;
-        flags |= isEntity && !async ? 0 : PLAIN_ASYNC;
-        if (hasProperty && NodeTrace.forID(propertyID).hasTweakHandler()) flags |= TWEAKHANDLER;
+        var flags = nodeFlags;
+        flags |= isEntity && !async ? 0 : NF_PLAIN_ASYNC;
+        if (hasProperty && NodeTrace.forID(propertyID).hasTweakHandler()) flags |= NF_TWEAKHANDLER;
         var gen = new NodeClassGenerator(propertyID, info, factoryType, flags);
         gen.argNames = params;
         gen.clsID = clsID;
@@ -187,8 +185,8 @@ public class NodeMetaFactory {
     var clsID = (int) args[4];
 
     var info = caller.revealDirect(implementation);
-    int flags = NODE_FUNCTION;
-    flags |= lambdaFlags & FLAG_TRIVIAL;
+    int flags = NF_NODE_FUNCTION;
+    flags |= lambdaFlags & NF_TRIVIAL;
     var gen = new NodeClassGenerator(1, info, invokedType, flags);
     gen.runMethod = invokedName;
     gen.runMethodType = interfaceMethodType;

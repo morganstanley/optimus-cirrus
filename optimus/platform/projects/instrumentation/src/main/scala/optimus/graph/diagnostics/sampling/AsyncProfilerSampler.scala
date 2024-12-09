@@ -36,6 +36,7 @@ import optimus.utils.OptimusStringUtils
 import java.net.URLEncoder
 import java.nio.file.Files
 import java.nio.file.Path
+import scala.collection.immutable
 
 private[sampling] final case class StacksAndCounts(rawDump: String, preSplit: Iterable[TimedStack], dtStopped: Long)
 
@@ -54,6 +55,8 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   import AsyncProfilerSampler._
 
   val stackAnalysis = new StackAnalysis(sp)
+
+  private val inactiveThreshNs = sp.propertyUtils.get("optimus.sampling.inactive.cpu.thresh.ms", 1000) * 1000L * 1000L
 
   // Disable automatic shutdown attempt on VM exit, using flag added to
   // async-profiler by MS.
@@ -145,7 +148,7 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
           stackAnalysis
             .extractInterestingStacks(sp.publishRootIds, curr.rawDump, curr.preSplit, numPrunedStacks, uploadFolded)
             .copy(dtStopped = curr.dtStopped)
-        if (parsed.timers.samples.values.sum > 1000)
+        if (parsed.timers.samples.values.sum > inactiveThreshNs)
           sp.recordActivity()
         stackUpload(parsed.stacks)
         parsed.applyIf(!stacksToCrumbs)(_.copy(stacks = Nil))
@@ -186,9 +189,15 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
     )
   }
   override protected def elemss(data: StacksAndTimers, id: ChainedID): Map[Source, List[Elems]] = {
+
+    val rootElems: Iterable[Elem[Map[String, Long]]] =
+      data.rootSamples.groupBy(kv => FlameTreatment.smplKey(kv._1)).map { case (key, map) =>
+        key -> map.mapValuesNow(key.meta.units.fromStackCount)
+      }
+
     val profElems =
       numSamplesPublished -> data.stacks.size :: samplingPauseTime -> data.dtStopped / NANOSPERMILLI :: timersToElems(
-        data.timers)
+        data.timers) ++ rootElems
     Map(
       periodSamplesSource -> (profElems :: Nil),
       stackDataSource -> data.stacks.grouped(40).map(stackToElems).toList
@@ -215,8 +224,7 @@ object FlameTreatment {
   import optimus.breadcrumbs.crumbs.PropertyUnits._
 
   def units(source: String): Units = {
-    if (source.startsWith("Adapted")) Count
-    else if (
+    if (
       source.startsWith("Alloc") ||
       source.startsWith("Free") ||
       source.startsWith("Live")
@@ -227,6 +235,14 @@ object FlameTreatment {
 
   def sumOverTime(source: String): Boolean = !source.startsWith("Live")
   def avgOverTime(source: String): Boolean = !sumOverTime(source)
+
+  def smplKey(source: String): Key[Map[String, Long]] = units(source) match {
+    case Bytes =>
+      if (source.startsWith("Live")) flameLive
+      else flameAlloc
+    case Count => flameCounts
+    case _     => flameTimes
+  }
 
 }
 

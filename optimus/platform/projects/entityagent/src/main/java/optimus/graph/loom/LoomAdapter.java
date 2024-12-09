@@ -17,11 +17,39 @@ import static optimus.debug.CommonAdapter.dupNamed;
 import static optimus.debug.CommonAdapter.isInterface;
 import static optimus.debug.CommonAdapter.makePrivate;
 import static optimus.debug.CommonAdapter.sameArguments;
-import static optimus.graph.loom.LoomConfig.*;
+import static optimus.graph.loom.LPropertyDescriptor.COLUMN_NA;
+import static optimus.graph.loom.LPropertyDescriptor.register;
+import static optimus.graph.loom.LoomConfig.AsyncAnnotation;
+import static optimus.graph.loom.LoomConfig.CompilerAnnotation;
+import static optimus.graph.loom.LoomConfig.DESERIALIZE;
+import static optimus.graph.loom.LoomConfig.DESERIALIZE_BSM_MT;
+import static optimus.graph.loom.LoomConfig.DESERIALIZE_MT;
+import static optimus.graph.loom.LoomConfig.ExposeArgTypesParam;
+import static optimus.graph.loom.LoomConfig.IMPL_SUFFIX;
+import static optimus.graph.loom.LoomConfig.LOOM_SUFFIX;
+import static optimus.graph.loom.LoomConfig.LoomAnnotation;
+import static optimus.graph.loom.LoomConfig.LoomImmutablesParam;
+import static optimus.graph.loom.LoomConfig.LoomLambdasParam;
+import static optimus.graph.loom.LoomConfig.LoomLcnParam;
+import static optimus.graph.loom.LoomConfig.LoomNodesParam;
+import static optimus.graph.loom.LoomConfig.NEW_NODE_SUFFIX;
+import static optimus.graph.loom.LoomConfig.NF_TRIVIAL;
+import static optimus.graph.loom.LoomConfig.NodeAnnotation;
+import static optimus.graph.loom.LoomConfig.QUEUED_SUFFIX;
+import static optimus.graph.loom.LoomConfig.SCALA_ANON_PREFIX;
+import static optimus.graph.loom.LoomConfig.ScenarioIndependentAnnotation;
+import static optimus.graph.loom.LoomConfig.bsmScalaFunc;
+import static optimus.graph.loom.LoomConfig.bsmScalaFuncR;
+import static optimus.graph.loom.LoomConfig.enableCompilerDebug;
+import static optimus.graph.loom.LoomConfig.setCompilerLevelZero;
+import static optimus.graph.loom.LoomConfig.setAssumeGlobalMutation;
+import static optimus.graph.loom.LoomConfig.setTurnOffNodeReorder;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import optimus.graph.loom.compiler.LCompiler;
+import optimus.graph.loom.compiler.LError;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
@@ -41,8 +69,58 @@ public class LoomAdapter implements Opcodes {
   private final HashMap<String, String> implFieldMap = new HashMap<>();
   private final HashMap<String, String> implMethodMap = new HashMap<>();
 
+  /** async with plugins and node methods */
   private final ArrayList<NodeMethod> asyncMethods = new ArrayList<>();
+
   private final ArrayList<TransformableMethod> lambdaMethods = new ArrayList<>();
+
+  private final HashSet<LNodeCall> recomputeFrames = new HashSet<>();
+
+  private final HashMap<String, HashSet<String>> superTypes = new HashMap<>();
+  private final HashMap<String, ArrayList<String>> superTypesPerType = new HashMap<>();
+
+  public boolean needsToComputeFrames(String name, String descriptor) {
+    return recomputeFrames.contains(new LNodeCall("", name, descriptor));
+  }
+
+  public void registerForFrameCompute(String name, String desc) {
+    recomputeFrames.add(new LNodeCall("", name, desc));
+  }
+
+  public String getCommonType(String type1, String type2) {
+    var superTypes1 = getSuperTypes(type1);
+    var superTypes2 = getSuperTypes(type2);
+    var visited = new HashSet<>(superTypes1);
+    for (var st : superTypes2) {
+      if (visited.contains(st)) return st;
+    }
+    LError.fatal("Cannot find a common super type " + type1 + " & " + type2);
+    return null;
+  }
+
+  private ArrayList<String> getSuperTypes(String type) {
+    return superTypesPerType.computeIfAbsent(
+        type,
+        k -> {
+          var superTypes = new ArrayList<String>();
+          getSuperTypes(k, superTypes);
+          Collections.reverse(superTypes);
+          return superTypes;
+        });
+  }
+
+  private void getSuperTypes(String type, ArrayList<String> supers) {
+    var mySupers = superTypes.get(type);
+    if (mySupers != null) {
+      for (var mySuper : mySupers) getSuperTypes(mySuper, supers);
+    }
+    supers.add(type);
+  }
+
+  public void registerCommonType(String type, String superType) {
+    if (type.equals(superType)) return;
+    superTypes.computeIfAbsent(type, k -> new HashSet<>()).add(superType);
+  }
 
   private static class ReplacedBSM {
     InvokeDynamicInsnNode indy;
@@ -59,10 +137,12 @@ public class LoomAdapter implements Opcodes {
     final String enclosingMethod; // def foo() { .... }
     final String nestedCallIn; // given() { lambda }
     final int lineNumber;
+    final int columnNumber;
 
-    public EnrichedName(String enclosingMethod, int lineNumber, String nestedCallIn) {
+    public EnrichedName(String enclosingMethod, int line, int column, String nestedCallIn) {
       this.enclosingMethod = enclosingMethod;
-      this.lineNumber = lineNumber;
+      this.lineNumber = line;
+      this.columnNumber = column;
       this.nestedCallIn = nestedCallIn;
     }
   }
@@ -73,8 +153,10 @@ public class LoomAdapter implements Opcodes {
   private final HashMap<String, EnrichedName> nameTranslate = new HashMap<>();
   /* method, null*/
   private final HashMap<LNodeCall, LNodeCall> nodeCalls = new HashMap<>();
-  /* caller, lambdas */
-  private final HashSet<String> lambdaCalls = new HashSet<>();
+
+  /* lambdas, column number */
+  private final HashMap<String, Integer> lambdasWithCN = new HashMap<>();
+  public final HashSet<String> immutableTypes = new HashSet<>() {};
 
   public final ClassNode cls;
   private final String privatePrefix;
@@ -92,10 +174,9 @@ public class LoomAdapter implements Opcodes {
     setupNodeAndLambdaCalls();
     findImplFields();
     findImplMethods();
-    findAllNodeFunctions();
-    transformNodeFunctions();
+    findAllNodeAndTrivialFunctions();
     cls.methods.removeIf(this::isTransforming);
-    findAllTrivialFunctions();
+    transformNodeFunctions(); // Function re-ordering
     implementDeserializeLLambda();
     implementPrivateLoomMethods();
   }
@@ -103,19 +184,37 @@ public class LoomAdapter implements Opcodes {
   private void setupNodeAndLambdaCalls() {
     for (var ann : cls.invisibleAnnotations) {
       if (LoomAnnotation.equals(ann.desc)) {
+        var lambdas = new ArrayList<String>();
+        var lcns = new ArrayList<Integer>();
         var values = ann.values;
         if (values != null) {
           for (int i = 0, n = values.size(); i < n; i += 2) {
             var name = (String) values.get(i);
-            @SuppressWarnings("unchecked")
-            var value = (ArrayList<String>) values.get(i + 1);
-            if (name.equals(LoomNodesParam)) trackNodeCalls(value);
-            else if (name.equals(LoomLambdasParam)) lambdaCalls.addAll(value);
+            var value = values.get(i + 1);
+            //noinspection IfCanBeSwitch ...it doesn't look very readable :)
+            if (name.equals(LoomNodesParam)) trackNodeCalls(asStrings(value));
+            else if (name.equals(LoomLambdasParam)) lambdas = asStrings(value);
+            else if (name.equals(LoomLcnParam)) lcns = asInts(value);
+            else if (name.equals(LoomImmutablesParam)) immutableTypes.addAll(asStrings(value));
+          }
+          LError.require(lambdas.size() == lcns.size(), "Same size for lambdas and lcn expected");
+          for (var i = 0; i < lambdas.size(); i++) {
+            lambdasWithCN.put(lambdas.get(i), lcns.get(i));
           }
         }
       } else if (CompilerAnnotation.equals(ann.desc))
         classCompilerArgs = CompilerArgs.parse(ann, classCompilerArgs);
     }
+  }
+
+  private ArrayList<String> asStrings(Object entry) {
+    //noinspection unchecked
+    return (ArrayList<String>) entry;
+  }
+
+  private ArrayList<Integer> asInts(Object entry) {
+    //noinspection unchecked
+    return (ArrayList<Integer>) entry;
   }
 
   private void trackNodeCalls(ArrayList<String> value) {
@@ -143,50 +242,82 @@ public class LoomAdapter implements Opcodes {
     }
   }
 
-  private void findAllNodeFunctions() {
+  private void findAllNodeAndTrivialFunctions() {
     for (var method : cls.methods) {
       var asyncMethod = methodAsync(method);
-      if (asyncMethod != null) asyncMethods.add(asyncMethod);
-      else if (lambdaCalls.contains(method.name)) {
-        var hasNodeCalls = makesNodeCalls(method);
-        lambdaMethods.add(new TransformableMethod(method, classCompilerArgs, hasNodeCalls));
-      }
+      if (asyncMethod != null) {
+        enrichMethod(method, asyncMethod);
+        asyncMethods.add(asyncMethod);
+      } else if (lambdasWithCN.containsKey(method.name)) {
+        var lambda = new TransformableMethod(method, classCompilerArgs);
+        enrichMethod(method, lambda);
+        lambdaMethods.add(lambda);
+      } else enrichMethod(method, null);
     }
   }
 
-  private void transformNodeFunctions() {
-    for (var method : asyncMethods) if (!method.asyncOnly) LCompiler.transform(method, this);
-    for (var method : lambdaMethods) LCompiler.transform(method, this);
+  /** tmethod might be null if we don't care to set other values */
+  private void enrichMethod(MethodNode method, TransformableMethod tmethod) {
+    boolean trivial = true;
+    int lineNumber = -1; // Keep track of the latest line number
+    ReplacedBSM lastBSM = null; // [INNER_NAME] Candidate for name enrichment
+    for (var instr : method.instructions) {
+      if (instr instanceof LineNumberNode) {
+        lineNumber = ((LineNumberNode) instr).line;
+        if (tmethod != null && tmethod.lineNumber == 0) {
+          tmethod.lineNumber = lineNumber;
+          if (tmethod.clsID > 0) LPropertyDescriptor.get(tmethod.clsID).lineNumber = lineNumber;
+        }
+      } else if (instr instanceof MethodInsnNode) {
+        trivial = false;
+        // Record the fact that this method makes calls to @node/@async...
+        if (tmethod != null) {
+          var mi = (MethodInsnNode) instr;
+          if (!tmethod.hasNodeCalls) tmethod.hasNodeCalls = isNodeCall(mi);
+          if (enableCompilerDebug(mi)) tmethod.compilerArgs.debug = true;
+          if (setCompilerLevelZero(mi)) tmethod.compilerArgs.level = 0;
+          if (setTurnOffNodeReorder(mi)) tmethod.compilerArgs.level = 0;
+          if (setAssumeGlobalMutation(mi)) tmethod.compilerArgs.assumeGlobalMutation = true;
+        }
+        if (lastBSM != null) enrichName(lastBSM, instr, method.name, lineNumber);
+      } else if (instr instanceof InvokeDynamicInsnNode) {
+        trivial = false;
+        var indy = (InvokeDynamicInsnNode) instr;
+        if (bsmScalaFunc.equals(indy.bsm)) {
+          indy.bsm = bsmScalaFuncR;
+          var replaced = new ReplacedBSM();
+          replaced.indy = indy;
+          replaced.lineNumber = lineNumber;
+          replaced.localID = replacedBSM.size();
+          lastBSM = isLocalCall(replaced); // [INNER_NAME]
+          replacedBSM.add(replaced);
+        }
+      } else if (instr.getOpcode() == ATHROW) trivial = false;
+      else if (instr.getOpcode() == PUTFIELD || instr.getOpcode() == PUTSTATIC) {
+        trivial = false;
+        if (tmethod != null && !tmethod.asyncOnly) {
+          var methodName = cls.name + "." + method.name;
+          System.err.println("LWARNING: Method " + methodName + " is unsafe to transform!");
+          tmethod.unsafeToReorder = true;
+        }
+      }
+    }
+
+    // This should be unique (based on how scala/java create those synthetic methods
+    if ((method.access & LAMBDA_CANDIDATE_ACCESS) == LAMBDA_CANDIDATE_ACCESS && trivial)
+      trivialMethods.add(method.name);
+    if (tmethod != null) tmethod.trivial = trivial;
   }
 
-  private void findAllTrivialFunctions() {
-    for (var method : cls.methods) {
-      boolean trivial = true;
-      int lineNumber = -1; // Keep track of the latest line number
-      ReplacedBSM lastBSM = null; // [INNER_NAME] Candidate for name enrichment
-      for (var instr : method.instructions) {
-        if (instr instanceof LineNumberNode) lineNumber = ((LineNumberNode) instr).line;
-        else if (instr instanceof MethodInsnNode) {
-          trivial = false;
-          if (lastBSM != null) enrichName(lastBSM, instr, method.name, lineNumber);
-        } else if (instr instanceof InvokeDynamicInsnNode) {
-          var indy = (InvokeDynamicInsnNode) instr;
-          if (bsmScalaFunc.equals(indy.bsm)) {
-            indy.bsm = bsmScalaFuncR;
-            var replaced = new ReplacedBSM();
-            replaced.indy = indy;
-            replaced.lineNumber = lineNumber;
-            replaced.localID = replacedBSM.size();
-            lastBSM = isLocalCall(replaced); // [INNER_NAME]
-            replacedBSM.add(replaced);
-          }
-          trivial = false;
-        } else if (instr.getOpcode() == ATHROW) trivial = false;
-      }
-
-      // This should be unique (based on how scala/java create those synthetic methods
-      if ((method.access & LAMBDA_CANDIDATE_ACCESS) == LAMBDA_CANDIDATE_ACCESS && trivial)
-        trivialMethods.add(method.name);
+  private void transformNodeFunctions() {
+    var methodCount = 0;
+    for (var method : asyncMethods) {
+      method.id = methodCount++;
+      LCompiler.transform(method, this);
+    }
+    for (var method : lambdaMethods) {
+      method.id = methodCount++;
+      LCompiler.transform(method, this);
     }
   }
 
@@ -196,37 +327,55 @@ public class LoomAdapter implements Opcodes {
     else return null;
   }
 
+  /**
+   * Three legit ways to avoid this questionable logic of detecting the enclosed-in functions
+   * <li>Propagate with the rest of the information in @loom attribute i.e. for every lambda have a
+   *     parallel array of functions they are enclosed in. The obvious downsides: entityplugin is
+   *     needed and therefore further from support java and jar is a drop bigger
+   * <li>Use the logic we have in LCompiler to properly understand the flow of the values. The
+   *     downside is performance, reasonable choice if we always post compile immediately
+   * <li>At runtime ... If you pass node function to a map it can gain that 'enclosed-in' meaning.
+   */
   private void enrichName(
-      ReplacedBSM lastBSM, AbstractInsnNode instr, String enclMethod, int lineNumber) {
+      ReplacedBSM lastBSM, AbstractInsnNode instr, String enclMethod, int line) {
     var methodInsn = (MethodInsnNode) instr;
-    if (methodInsn.desc.contains("Lscala/Function")) {
-      var lambda = stripSuffix(lastBSM.getTarget().getName(), "$adapted");
-      var nestInName = isNodeCall(methodInsn) ? methodInsn.name : "";
-      nameTranslate.putIfAbsent(lambda, new EnrichedName(enclMethod, lineNumber, nestInName));
+    if (methodInsn.desc.contains("Lscala/Function") || isTweakFunction(methodInsn)) {
+      var lambdaName = lastBSM.getTarget().getName();
+      var lambdaRefName = stripSuffix(lambdaName, "$adapted");
+      var nestInName =
+          lambdasWithCN.containsKey(lambdaRefName) || isNodeCall(methodInsn) ? methodInsn.name : "";
+
+      // Replace of "$" is just to match current (bad) behaviour of cleanNodeClassName()
+      nestInName = nestInName.replace('$', '.');
+      var column = lambdasWithCN.getOrDefault(lambdaRefName, COLUMN_NA);
+      nameTranslate.putIfAbsent(
+          lambdaRefName, new EnrichedName(enclMethod, line, column, nestInName));
     }
   }
 
-  private boolean makesNodeCalls(MethodNode method) {
-    for (var instruction : method.instructions) {
-      if (instruction instanceof MethodInsnNode && isNodeCall((MethodInsnNode) instruction))
-        return true;
-    }
-    return false;
+  private boolean isTweakFunction(MethodInsnNode min) {
+    return min.name.equals("$colon$eq") && min.owner.equals("optimus/graph/TweakTargetKey");
   }
 
   public boolean isNodeCall(MethodInsnNode methodInsn) {
     return nodeCalls.containsKey(new LNodeCall(methodInsn.owner, methodInsn.name));
   }
 
-  private String enrichedName(String lambdaName) {
-    var en = nameTranslate.get(lambdaName);
+  public boolean isImmutable(String clsName) {
+    return immutableTypes.contains(clsName);
+  }
+
+  private String enrichedName(String lambdaName, EnrichedName en) {
     if (en == null) return stripPrefix(lambdaName, SCALA_ANON_PREFIX);
+    var isCtor = en.enclosingMethod.equals("<init>");
     var enclosingMethod =
         en.enclosingMethod.startsWith(SCALA_ANON_PREFIX)
-            ? enrichedName(en.enclosingMethod)
-            : en.enclosingMethod;
-    var nestedCallIn = en.nestedCallIn.isEmpty() ? "" : "_" + en.nestedCallIn + "_" + en.lineNumber;
-    return enclosingMethod + nestedCallIn;
+            ? enrichedName(en.enclosingMethod, nameTranslate.get(en.enclosingMethod))
+            : isCtor ? "" : en.enclosingMethod;
+    var nestedCallIn = en.nestedCallIn.isEmpty() ? "" : (isCtor ? "" : "_") + en.nestedCallIn;
+    var nestedCallLn = nestedCallIn.isEmpty() ? "" : "_" + en.lineNumber;
+    var columnSuffix = en.columnNumber != COLUMN_NA ? "_" + Math.abs(en.columnNumber) : "";
+    return enclosingMethod + nestedCallIn + nestedCallLn + columnSuffix;
   }
 
   private void implementDeserializeLLambda() {
@@ -244,8 +393,10 @@ public class LoomAdapter implements Opcodes {
     for (var patch : replacedBSM) {
       var indy = patch.indy;
       var methodTarget = patch.getTarget();
-      var cleanName = enrichedName(methodTarget.getName()); // [INNER_NAME]
-      var clsID = LPropertyDescriptor.register(cls, cleanName, patch.lineNumber, patch.localID);
+      var en = nameTranslate.get(stripSuffix(methodTarget.getName(), "$adapted"));
+      var cleanName = enrichedName(methodTarget.getName(), en); // [INNER_NAME]
+      var col = en == null ? COLUMN_NA : en.columnNumber;
+      var clsID = register(cls, cleanName, patch.lineNumber, col, patch.localID);
       var bsmDesc = DESERIALIZE_BSM_MT.toMethodDescriptorString();
       var handle = dupNamed(indy.bsm, "handleFactory");
       // this needs to match NodeMetaFactory.handleFactory!
@@ -254,7 +405,7 @@ public class LoomAdapter implements Opcodes {
       args[0] = indy.bsmArgs[0];
       args[1] = methodTarget;
       args[2] = factoryType;
-      args[3] = trivialMethods.contains(methodTarget.getName()) ? FLAG_TRIVIAL : 0;
+      args[3] = trivialMethods.contains(methodTarget.getName()) ? NF_TRIVIAL : 0;
       args[4] = clsID;
 
       mv.visitLabel(labels[patch.localID]);
@@ -356,23 +507,14 @@ public class LoomAdapter implements Opcodes {
     }
     if (asyncAnnotation == null) return null;
 
-    var hasNodeCalls = makesNodeCalls(method);
-    var asyncMethod = new NodeMethod(cls, privatePrefix, method, compilerArgs, hasNodeCalls);
+    var asyncMethod = new NodeMethod(cls, privatePrefix, method, compilerArgs);
     asyncMethod.isScenarioIndependent = scenarioIndependent;
     asyncMethod.implFieldDesc = implFieldMap.get(method.name);
     asyncMethod.implMethodDesc = implMethodMap.get(method.name);
     asyncMethod.asyncOnly = asyncOnly;
-    asyncMethod.lineNumber = getLineNumber(method);
-    asyncMethod.clsID = LPropertyDescriptor.register(cls, method.name, asyncMethod.lineNumber, -1);
+    asyncMethod.clsID = register(cls, method.name, asyncMethod.lineNumber, COLUMN_NA, -1);
     parseAsyncAnnotation(asyncMethod, asyncAnnotation);
     return asyncMethod;
-  }
-
-  private int getLineNumber(MethodNode method) {
-    for (var instr : method.instructions) {
-      if (instr instanceof LineNumberNode) return ((LineNumberNode) instr).line;
-    }
-    return -1;
   }
 
   private void parseAsyncAnnotation(NodeMethod method, AnnotationNode asyncAnnotation) {

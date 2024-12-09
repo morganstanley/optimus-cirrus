@@ -208,7 +208,11 @@ object BackgroundProcessBuilder {
 
   def lastLogLines(outputFile: FileAsset, n: Int): Seq[String] = {
     import org.apache.commons.io.input.ReversedLinesFileReader
-    val rlfReader = new ReversedLinesFileReader(outputFile.path.toFile, StandardCharsets.UTF_8)
+    val rlfReader = ReversedLinesFileReader
+      .builder()
+      .setFile(outputFile.path.toFile)
+      .setCharset(StandardCharsets.UTF_8)
+      .get()
     val seqBuilder = IndexedSeq.newBuilder[String]
 
     @tailrec

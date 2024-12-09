@@ -77,6 +77,18 @@ final class Scenario private[optimus] (
 
   /** Same flags with ReducibleToByValueTweaks flag cleared */
   private[optimus] def flagsWithoutUnresolved: Int = flags & ~ScenarioFlags.hasUnresolvedOrMarkerTweaks
+  private def flagsWithDisableRemoveRedundant: Int = flags | ScenarioFlags.disableRemoveRedundant
+
+  def removeRedundantDisabled: Boolean = (flags & ScenarioFlags.disableRemoveRedundant) != 0
+
+  /**
+   * this is definitely not the function you are looking for
+   *
+   * only used in client code once since they get the nested tweaks by applying them in a given then looking
+   * up the SS, but in that case we do not want to get rid of the redundant tweaks in that case
+   */
+  def disableRemoveRedundant(): Scenario =
+    new Scenario(_topLevelTweaks, nestedScenarios, flagsWithDisableRemoveRedundant)
 
   private[optimus] var _createdAt: Exception = _
   private[optimus] def createdAtAsString: String =

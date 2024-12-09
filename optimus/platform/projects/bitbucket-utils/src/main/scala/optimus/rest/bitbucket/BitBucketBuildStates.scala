@@ -16,21 +16,21 @@ import spray.json._
 import scala.util.Try
 
 object BitBucketBuildStates extends Enumeration {
-  type StashBuildState = Value
+  type BitbucketBuildState = Value
 
-  val successful: StashBuildState = Value("SUCCESSFUL")
-  val inProgress: StashBuildState = Value("INPROGRESS")
-  val failed: StashBuildState = Value("FAILED")
-  val unknown: StashBuildState = Value("UNKNOWN")
+  val successful: BitbucketBuildState = Value("SUCCESSFUL")
+  val inProgress: BitbucketBuildState = Value("INPROGRESS")
+  val failed: BitbucketBuildState = Value("FAILED")
+  val unknown: BitbucketBuildState = Value("UNKNOWN")
 
   // Enriched Build States:
-  val uploading: StashBuildState = Value("UPLOADING") // Jenkins pipeline is uploading artifacts to NFS
+  val uploading: BitbucketBuildState = Value("UPLOADING") // Jenkins pipeline is uploading artifacts to NFS
 
-  implicit def stashBuildState2String(state: StashBuildState): String = state.toString
-  implicit def string2StashBuildState(s: String): StashBuildState =
+  implicit def bitbucketBuildState2String(state: BitbucketBuildState): String = state.toString
+  implicit def string2StashBuildState(s: String): BitbucketBuildState =
     Try(BitBucketBuildStates.withName(s.toUpperCase)).getOrElse(unknown)
 
-  implicit lazy val stashBuildStateCommonFormat: RootJsonFormat[BitBucketBuildStates.Value] =
+  implicit lazy val bitbucketBuildStateCommonFormat: RootJsonFormat[BitBucketBuildStates.Value] =
     new RootJsonFormat[BitBucketBuildStates.Value] {
       override def write(obj: BitBucketBuildStates.Value): JsValue = JsString(obj)
       override def read(json: JsValue): BitBucketBuildStates.Value = json match {

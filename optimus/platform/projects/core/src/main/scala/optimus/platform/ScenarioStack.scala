@@ -24,6 +24,7 @@ import optimus.graph.diagnostics.PScenarioStack
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.graph.tracking.DependencyTracker
 import optimus.graph.tracking.SnapshotScenarioStack
+import optimus.graph.tracking.ttracks.RefCounter
 import optimus.observability.JobConfiguration
 import optimus.platform.inputs.NodeInputMapValue
 import optimus.platform.inputs.NodeInputs.ScopedSINodeInput
@@ -34,7 +35,6 @@ import optimus.platform.util.html._
 import optimus.ui.ScenarioReference
 
 import java.io.Serializable
-import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 import java.time.Instant
 import scala.collection.mutable
@@ -830,6 +830,9 @@ final case class ScenarioStack private[optimus] (
   private[optimus] def withScopedNodeInput[T](ni: ScopedSINodeInput[T], v: T) =
     copy(siParams = siParams.copy(nodeInputs = siParams.nodeInputs.freeze.withExtraInput(ni, v)))
 
+  private[platform] def withFullySpecifiedScopedNodeInputMap[T](scopedMap: FrozenNodeInputMap) =
+    copy(siParams = siParams.copy(nodeInputs = scopedMap))
+
   def withProgressReporter(pr: ProgressReporter): ScenarioStack = {
     if ((pr eq UnspecifiedProgressReporter) || (pr eq this.progressReporter)) this
     else copy(siParams = siParams.copy(progressReporter = pr))
@@ -1287,12 +1290,11 @@ private[optimus] abstract class TweakableListener {
   def isDisposed: Boolean = false
 
   /**
-   * Mostly to get an idea that it would be worthwhile to walk to clean up the dependency trees. The Garbage Collector
-   * will enqueue TTrackRefs here if they are reachable and their referent isn't, so it is an indication that we should
-   * do a cleanup. This is only triggered if the number of collected references is greater than
-   * Settings#ttrackCleanupThreshold
+   * Counts TTrackRefs that referred to GC-ed nodes.
+   *
+   * This is used as a heuristic to determine whether a DependencyTracker cleanup or can be skipped.
    */
-  def refQ: ReferenceQueue[NodeTask] = null
+  def refQ: RefCounter[NodeTask] = null
 
   /** Returns outer tracking proxy -> a node that is in the original TrackingScenario... Not in the RecordingScenario */
   def trackingProxy: NodeTask = null

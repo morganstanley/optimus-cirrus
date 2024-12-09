@@ -201,13 +201,13 @@ public class PluginHelpers {
   }
 
   public static <V> Node<V> toNode(scala.Function0<V> f) {
-    if (f instanceof ITrivialLamdba) return new AlreadyCompletedNode<>(f.apply());
+    if (f instanceof TrivialNode) return new AlreadyCompletedNode<>(f.apply());
     else if (f instanceof LNodeFunction0<?> lf) return new AsNode0<>((LNodeFunction0<V>) lf);
     else return new AsNodePlain<>(f);
   }
 
   public static <V> Object mkCompute(Function0<V> compute) {
-    if (compute instanceof ITrivialLamdba) return new AlreadyCompletedNode<>(compute.apply());
+    if (compute instanceof TrivialNode) return new AlreadyCompletedNode<>(compute.apply());
     return compute;
   }
 
@@ -234,4 +234,12 @@ public class PluginHelpers {
       return new AsNodeFactory2<>((LNodeFunction2<V1, V2, R>) f);
     else return f;
   }
+
+  // marker to enable debugging mode for loom
+  @SuppressWarnings("unused") // injectable by on demand in code and detected by LoomAdapter
+  public static void enableCompilerDebug() {}
+
+  // marker to disable code motion for loom
+  @SuppressWarnings("unused") // injectable by on demand in code and detected by LoomAdapter
+  public static void setCompilerLevelZero() {}
 }

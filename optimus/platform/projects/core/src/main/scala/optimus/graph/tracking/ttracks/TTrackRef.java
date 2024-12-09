@@ -11,7 +11,6 @@
  */
 package optimus.graph.tracking.ttracks;
 
-import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 
 import optimus.graph.GraphException;
@@ -34,7 +33,9 @@ public class TTrackRef {
     return weakRef.get();
   }
 
-  void clear() {
+  // This method should be used in tests only because it doesn't correctly update the count on the
+  // referenceCounter.
+  void unsafeForceClear() {
     weakRef.clear();
   }
 
@@ -128,8 +129,12 @@ public class TTrackRef {
    * @param nref The next reference is the single-linked list.
    * @param refQ The ReferenceQueue to use.
    */
-  public TTrackRef(NodeTask ntsk, TTrackRef nref, ReferenceQueue<NodeTask> refQ) {
-    this.weakRef = new WeakReference<>(ntsk, refQ);
+  public TTrackRef(NodeTask ntsk, TTrackRef nref, RefCounter<NodeTask> refQ) {
+    if (refQ == null) {
+      this.weakRef = new WeakReference<>(ntsk);
+    } else {
+      this.weakRef = refQ.createWeakReference(ntsk);
+    }
     this.nref = nref;
   }
 }

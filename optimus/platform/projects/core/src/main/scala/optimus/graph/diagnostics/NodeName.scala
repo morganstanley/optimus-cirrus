@@ -11,18 +11,20 @@
  */
 package optimus.graph.diagnostics
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.function
 import optimus.debug.InstrumentationConfig.MethodRef
 import optimus.graph.DiagnosticSettings
-import optimus.graph.SourceLocator
 import optimus.graph.NodeResultNode
 import optimus.graph.NodeTask
 import optimus.graph.NodeTaskInfo
 import optimus.graph.OGTrace
 import optimus.graph.ProxyPropertyNode
+import optimus.graph.SourceLocator
 import optimus.graph.TweakNode
 import optimus.graph.loom.LNodeClsID
+import optimus.graph.loom.LPropertyDescriptor
+
+import java.util.concurrent.ConcurrentHashMap
+import java.util.function
 
 //dont use scala StringBuilder
 import java.lang.{StringBuilder => JStringBuilder}
@@ -223,8 +225,17 @@ object NodeName {
 
   /** Returns NodeName suitable for display in graph debugger/profiler */
   def from(ntsk: NodeTask): NodeName = ntsk match {
-    case clsID: LNodeClsID if clsID.isDynamic => from(clsID.stackTraceElem())
+    case clsID: LNodeClsID if clsID.isDynamic => fromClsID(clsID)
     case _                                    => from(ntsk.executionInfo(), ntsk.getClass)
+  }
+
+  private def fromClsID(clsID: LNodeClsID): NodeName = {
+    val desc = LPropertyDescriptor.get(clsID._clsID())
+    val nn = from(clsID.stackTraceElem())
+    // This logic matches that of from(ntsk.executionInfo(), class).
+    if (desc.columnNumber < 0 && desc.columnNumber != LPropertyDescriptor.COLUMN_NA)
+      nn.copy(modifier = NodeTaskInfo.StoredNodeFunction.rawName())
+    else nn
   }
 
   def from(stackElm: StackTraceElement): NodeName = {
@@ -259,7 +270,7 @@ object NodeName {
         NodeName(pkgName, name, nti.modifier())
       } else if (nti.isInternal || nodeCls == null)
         NodeName("", nti.rawName(), nti.modifier())
-      else if (nti == NodeTaskInfo.StoredNodeFunction) // useful to see [node-function] in the debugger because its a sort of a non-local jump
+      else if (nti == NodeTaskInfo.StoredNodeFunction) // useful to see [node-function] in the debugger
         fromNodeCls(nodeCls, nti.rawName())
       else
         fromNodeCls(nodeCls)

@@ -11,19 +11,35 @@
  */
 package optimus.graph.loom;
 
+import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.MethodNode;
 
 public class TransformableMethod {
 
   public final MethodNode method;
+
+  public final Type[] argTypes; // Computed in ctor
+
   public final CompilerArgs compilerArgs;
 
   // we don't transform implementations that don't have node calls
-  public final boolean hasNodeCalls;
+  public boolean hasNodeCalls;
+  public int lineNumber; // first line number found in the bytecode
+  public boolean unsafeToReorder;
+  public boolean asyncOnly;
 
-  public TransformableMethod(MethodNode method, CompilerArgs compilerArgs, boolean hasNodeCalls) {
+  public int id;
+  public int clsID;
+  public boolean trivial;
+
+  public TransformableMethod(MethodNode method, CompilerArgs compilerArgs) {
     this.method = method;
-    this.compilerArgs = compilerArgs;
-    this.hasNodeCalls = hasNodeCalls;
+    this.compilerArgs = new CompilerArgs(compilerArgs);
+    this.argTypes = Type.getArgumentTypes(method.desc);
+  }
+
+  @Override
+  public String toString() {
+    return this.getClass().getSimpleName() + ":" + method.name;
   }
 }

@@ -17,19 +17,22 @@ import java.util.Objects;
 import org.objectweb.asm.tree.ClassNode;
 
 public class LPropertyDescriptor {
+  public static final int COLUMN_NA = Integer.MIN_VALUE;
   private static final Object _descriptorLock = new Object();
   private static int descriptorsCount = 1;
   private static LPropertyDescriptor[] descriptors = new LPropertyDescriptor[1024];
 
   static {
-    var clsName = LPropertyDescriptor.class.getName();
-    descriptors[0] = new LPropertyDescriptor(clsName, "ctor", "LPropertyDescriptor.java", 26, -1);
+    var cls = LPropertyDescriptor.class.getName();
+    descriptors[0] =
+        new LPropertyDescriptor(cls, "ctor", "LPropertyDescriptor.java", 26, COLUMN_NA, 0);
   }
 
   public final String className;
   public final String methodName;
   public String source;
   public int lineNumber;
+  public int columnNumber;
   public MethodType methodType;
   public final int localID; // Number of the lambda method in the bytecode (serialization)
   public int profileID; // See getProfileID. Assigned in core
@@ -40,13 +43,13 @@ public class LPropertyDescriptor {
     this.localID = -1;
   }
 
-  public LPropertyDescriptor(
-      String className, String methodName, String source, int lineNumber, int localID) {
-    this.className = className;
-    this.methodName = methodName;
-    this.source = source;
-    this.lineNumber = lineNumber;
-    this.localID = localID;
+  public LPropertyDescriptor(String cls, String method, String src, int line, int col, int lID) {
+    this.className = cls;
+    this.methodName = method;
+    this.source = src;
+    this.lineNumber = line;
+    this.columnNumber = col;
+    this.localID = lID;
   }
 
   @Override
@@ -62,18 +65,18 @@ public class LPropertyDescriptor {
     return Objects.hash(className, methodName);
   }
 
-  public static int register(ClassNode cls, String methodName, int lineNumber, int localID) {
-    return register(cls.name, methodName, cls.sourceFile, lineNumber, localID);
+  public static int register(ClassNode cls, String methodName, int line, int col, int localID) {
+    return register(cls.name, methodName, cls.sourceFile, line, col, localID);
   }
 
   private static int register(
-      String className, String methodName, String source, int lineNumber, int localID) {
+      String className, String methodName, String source, int line, int col, int localID) {
     synchronized (_descriptorLock) {
       var id = descriptorsCount;
       if (descriptorsCount >= descriptors.length)
         descriptors = Arrays.copyOf(descriptors, descriptors.length * 2);
       var cleanName = className.replace('/', '.');
-      var desc = new LPropertyDescriptor(cleanName, methodName, source, lineNumber, localID);
+      var desc = new LPropertyDescriptor(cleanName, methodName, source, line, col, localID);
       descriptors[descriptorsCount++] = desc;
       return id;
     }

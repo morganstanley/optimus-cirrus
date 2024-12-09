@@ -12,23 +12,34 @@
 package optimus.graph.loom;
 
 import static java.lang.invoke.MethodType.methodType;
+import static org.objectweb.asm.Opcodes.INVOKESTATIC;
 import java.lang.invoke.MethodType;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.Method;
+import org.objectweb.asm.tree.MethodInsnNode;
 
 public class LoomConfig {
-  public static final int FLAG_TRIVIAL = 1 << 5;
+  static final int NF_EXPOSE_ARGS_TRAIT = 1;
+  static final int NF_PLAIN_ASYNC = 1 << 1;
+  static final int NF_PLAIN_LAMBDA = 1 << 2;
+  static final int NF_NODE_FUNCTION = NF_PLAIN_LAMBDA | (1 << 3);
+  static final int NF_TWEAKHANDLER = 1 << 4;
+  /** Functions and lambdas that don't make any calls or set any fields... */
+  public static final int NF_TRIVIAL = 1 << 5;
 
   public static final String LoomAnnotation = "Loptimus/platform/loom;";
   public static final String LoomNodesParam = "nodes";
   public static final String LoomLambdasParam = "lambdas";
+  public static final String LoomLcnParam = "lcn";
+  public static final String LoomImmutablesParam = "immutables";
 
   public static final String CompilerAnnotation = "Loptimus/platform/compiler;";
   public static final String CompilerLevelParam = "level";
   public static final String CompilerDebugParam = "debug";
   public static final String CompilerEnqueueEarlierParam = "enqueueEarlier";
   public static final String CompilerQueueSizeSensitiveParam = "queueSizeSensitive";
+  public static final String CompilerAssumeGlobalMutationParam = "assumeGlobalMutation";
 
   public static final String NodeAnnotation = "Loptimus/platform/node;";
   public static final String AsyncAnnotation = "Loptimus/platform/async;";
@@ -63,6 +74,15 @@ public class LoomConfig {
   public static final Handle bsmScalaFuncR =
       new Handle(6, NODE_FACTORY, INTERCEPTED_BSM_METHOD, INTERCEPTED_BSM_DESC, false);
 
+  public static final Type ARRAY_BOOLEAN_TYPE = Type.getType("[Z");
+  public static final Type ARRAY_CHAR_TYPE = Type.getType("[C");
+  public static final Type ARRAY_FLOAT_TYPE = Type.getType("[F");
+  public static final Type ARRAY_DOUBLE_TYPE = Type.getType("[D");
+  public static final Type ARRAY_BYTE_TYPE = Type.getType("[B");
+  public static final Type ARRAY_SHORT_TYPE = Type.getType("[S");
+  public static final Type ARRAY_INT_TYPE = Type.getType("[I");
+  public static final Type ARRAY_LONG_TYPE = Type.getType("[L");
+
   public static final String NODE_DESC = "Loptimus/graph/Node;";
   public static final String NODE = "optimus/graph/Node";
 
@@ -84,10 +104,6 @@ public class LoomConfig {
 
   public static final String CMD_NODE = "node";
   public static final String CMD_ASYNC = "nodeAsync";
-
-  public static final String TRAIT_SUFFIX = "Ex";
-  public static final String CMD_NODE_WITH_TRAIT = CMD_NODE + TRAIT_SUFFIX;
-  public static final String CMD_ASYNC_WITH_TRAIT = CMD_ASYNC + TRAIT_SUFFIX;
   public static final String CMD_NODE_ACPN = "nodeACPN";
   public static final String CMD_OBSERVED_VALUE_NODE = "nodeOVN";
   public static final String CMD_QUEUED = "queued";
@@ -95,7 +111,7 @@ public class LoomConfig {
   public static final String CMD_GETSI = "getSI";
 
   public static final String BSM_DESC =
-      "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;I[Ljava/lang/String;)Ljava/lang/invoke/CallSite;";
+      "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;II[Ljava/lang/String;)Ljava/lang/invoke/CallSite;";
 
   private static Class<?> seqClass() {
     try {
@@ -109,4 +125,36 @@ public class LoomConfig {
       methodType(seqClass(), Object.class).toMethodDescriptorString();
   public static final String ALSO_SET_SUFFIX = "_$colon$eq";
   public static final Type SEQ = Type.getObjectType(seqClass().getName().replace(".", "/"));
+
+  private static final String PLUGIN_HELPERS = "optimus/platform/PluginHelpers";
+  private static final String PH_ENABLE_DEBUG = "enableCompilerDebug";
+  private static final String PH_LEVEL_ZERO = "setCompilerLevelZero";
+
+  private static final String FLOW_CONTROL = "optimus/platform/FlowControl";
+  private static final String TURN_OFF_REORDER = "turOffNodeReorder";
+  private static final String ASSUME_GLOBAL_MUTATION = "assumeGlobalMutation";
+
+  public static boolean enableCompilerDebug(MethodInsnNode mi) {
+    return mi.getOpcode() == INVOKESTATIC
+        && mi.owner.equals(PLUGIN_HELPERS)
+        && mi.name.equals(PH_ENABLE_DEBUG);
+  }
+
+  public static boolean setCompilerLevelZero(MethodInsnNode mi) {
+    return mi.getOpcode() == INVOKESTATIC
+        && mi.owner.equals(PLUGIN_HELPERS)
+        && mi.name.equals(PH_LEVEL_ZERO);
+  }
+
+  public static boolean setTurnOffNodeReorder(MethodInsnNode mi) {
+    return mi.getOpcode() == INVOKESTATIC
+        && mi.owner.equals(FLOW_CONTROL)
+        && mi.name.equals(TURN_OFF_REORDER);
+  }
+
+  public static boolean setAssumeGlobalMutation(MethodInsnNode mi) {
+    return mi.getOpcode() == INVOKESTATIC
+        && mi.owner.equals(FLOW_CONTROL)
+        && mi.name.equals(ASSUME_GLOBAL_MUTATION);
+  }
 }

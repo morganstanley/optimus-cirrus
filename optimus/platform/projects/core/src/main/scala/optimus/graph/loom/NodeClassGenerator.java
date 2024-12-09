@@ -64,12 +64,6 @@ public class NodeClassGenerator implements Opcodes {
           bsmObjectMethodsType.descriptorString(),
           false);
 
-  static final int EXPOSE_ARGS_TRAIT = 1;
-  static final int PLAIN_ASYNC = 1 << 1;
-  static final int PLAIN_LAMBDA = 1 << 2;
-  static final int NODE_FUNCTION = PLAIN_LAMBDA | (1 << 3);
-  static final int TWEAKHANDLER = 1 << 4;
-
   static {
     var names = new ArrayList<String>();
     var lnodeFunctions = new ArrayList<String>();
@@ -109,27 +103,27 @@ public class NodeClassGenerator implements Opcodes {
   final int flags;
 
   private boolean exposeArgsTrait() {
-    return (flags & EXPOSE_ARGS_TRAIT) != 0;
+    return (flags & NF_EXPOSE_ARGS_TRAIT) != 0;
   }
 
   private boolean isAsync() {
-    return (flags & PLAIN_ASYNC) != 0;
+    return (flags & NF_PLAIN_ASYNC) != 0;
   }
 
   private boolean isLambda() {
-    return (flags & PLAIN_LAMBDA) != 0;
+    return (flags & NF_PLAIN_LAMBDA) != 0;
   }
 
   private boolean isNodeFunction() {
-    return (flags & NODE_FUNCTION) == NODE_FUNCTION;
+    return (flags & NF_NODE_FUNCTION) == NF_NODE_FUNCTION;
   }
 
   private boolean plainNode() {
-    return (flags & (PLAIN_ASYNC | PLAIN_LAMBDA)) == 0;
+    return (flags & (NF_PLAIN_ASYNC | NF_PLAIN_LAMBDA)) == 0;
   }
 
   private boolean hasTweakHandler() {
-    return (flags & TWEAKHANDLER) != 0;
+    return (flags & NF_TWEAKHANDLER) != 0;
   }
 
   public NodeClassGenerator(int propertyID, MethodHandleInfo info, MethodType invoker, int flags) {
@@ -174,7 +168,7 @@ public class NodeClassGenerator implements Opcodes {
     var interfaces = new ArrayList<String>();
     if (exposeArgsTrait()) interfaces.add(exposeArgsTraitName());
     if (isLambda()) interfaces.add(Type.getInternalName(factoryType.returnType()));
-    if ((flags & FLAG_TRIVIAL) != 0) interfaces.add(Type.getInternalName(ITrivialLamdba.class));
+    if ((flags & NF_TRIVIAL) != 0) interfaces.add(Type.getInternalName(TrivialNode.class));
     return interfaces.toArray(new String[0]);
   }
 

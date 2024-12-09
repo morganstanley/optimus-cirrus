@@ -447,18 +447,19 @@ trait ClassInfoBase extends Log {
     }.toMap
   }
 
+  def normalizeClassname(classname: String): String =
+    classname
+      .stripSuffix("$") // deals with @store @entity objects
+      .replaceAll("\\.package\\$", ".")
+      .replaceAll("\\$", ".")
+      .replaceAll("###", "")
   lazy val allMetaDatas: Map[String, ClassMetaData] = {
     log.info("Loading @meta metadata")
     val (time, res) = AdvancedUtils.timed {
       new MetaHierarchyManager(resourceFinder, classLoader).metaData
     }
     log.info(s"Loaded metadata for ${res.size} @meta in ${time / 1e9} seconds")
-    def normalizeClassname(classname: String): String =
-      classname
-        .stripSuffix("$") // deals with @store @entity objects
-        .replaceAll("\\.package\\$", ".")
-        .replaceAll("\\$", ".")
-        .replaceAll("###", "")
+
     res.map { case (name, clsMeta) =>
       (normalizeClassname(name), clsMeta)
     }

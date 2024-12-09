@@ -353,16 +353,12 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
           if (!jars.outputJar.tempPath.existsUnsafe)
             utils.Jars.withJar(jars.outputJar.tempPath, create = true)(_ => ())
           val classes = {
-            if (!profiler.hasNoSourceInvalidations(cycles, compileResult.toOption)) {
-              utils.Jars.stampJarWithConsistentHash(
-                jars.outputJar.tempPath,
-                compress = false,
-                Some(activeTask.trace),
-                incremental
-              )
-            } else {
-              utils.Jars.stampJarWithIncrementalFlag(jars.outputJar.tempPath, incremental)
-            }
+            utils.Jars.stampJarWithConsistentHash(
+              jars.outputJar.tempPath,
+              compress = false,
+              Some(activeTask.trace),
+              incremental
+            )
             jars.outputJar.moveTempToFinal()
             // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput` or
             // `doCompilation(...).watchForDeletion()` in `AsyncJavaCompiler.output`

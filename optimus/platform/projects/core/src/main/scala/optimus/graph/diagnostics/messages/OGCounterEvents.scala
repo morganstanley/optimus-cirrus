@@ -94,6 +94,7 @@ final case class DALRequestEvent(
     reqID: String = "",
     env: String = "",
     batchSize: Int = 0,
+    nodeIDs: Array[Int] = null,
     locations: String = "",
     other: String = "")
     extends OGEventWithComplete {
@@ -113,8 +114,14 @@ object DALRequestCounter
     extends OGCounterWithComplete("DAL Reqs.", DISCRETE_VALUE, DALRequestEvent())
     with Accumulating[DALRequestEvent, DalRequestCumulant] {
   private val c = new AtomicReference(DalRequestCumulant(0, 0))
-  def report(requestUuid: String, dalEnv: String, size: Int, locations: String, otherStuff: String): DALRequestEvent = {
-    publish(DALRequestEvent(requestUuid, dalEnv, size, locations, otherStuff))
+  def report(
+      requestUuid: String,
+      dalEnv: String,
+      size: Int,
+      nodeIDs: Array[Int],
+      locations: String,
+      otherStuff: String): DALRequestEvent = {
+    publish(DALRequestEvent(requestUuid, dalEnv, size, nodeIDs, locations, otherStuff))
   }
   override def accumulate(event: DALRequestEvent): Unit = c.updateAndGet { case DalRequestCumulant(batches, commands) =>
     DalRequestCumulant(batches + 1, commands + event.batchSize)

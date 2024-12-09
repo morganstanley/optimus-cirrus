@@ -149,43 +149,40 @@ public class Settings {
       getBoolProperty("optimus.scheduler.diag.batcher", false);
 
   // We will skip cleanup of tweakable trackers unless the ratio of GC-cleared nodes (or calls to
-  // the track method)
-  // to the current number of ttrack roots exceeds the specified ratios. This avoids cleaning up
-  // tracking graphs
-  // where there is unlikely to be much garbage. These thresholds have been chosen to work for most
-  // apps. If you find
-  // yourself needing to override them please contact graph team.
+  // the track method) to the current number of ttrack roots exceeds the specified ratios. This
+  // avoids cleaning up tracking graphs where there is unlikely to be much garbage. These thresholds
+  // have been chosen to work for most apps.
   public static int ttrackClearedNodeRefToRootThresholdRatio =
       getIntProperty("optimus.tracking.cleanup.ttrackClearedNodeRefToRootThresholdRatio", 20);
   public static int ttrackTrackCallToRootThresholdRatio =
       getIntProperty("optimus.tracking.cleanup.ttrackTrackCallToRootThresholdRatio", 400);
 
-  // We also have a variable delay timed cleanup (which is varied based on the cost:benefit ratio
-  // of the previous cleanups).
-  // Note that this affects the decision about whether or not to clean a particular tracker during a
-  // cleanup cycle.
-  // It does not affect when cleanup cycles are scheduled.
+  // We also have a variable delay timed cleanup (which is varied based on the cost:benefit ratio of
+  // the previous cleanups). Note that this affects the decision about whether or not to clean a
+  // particular tracker during a cleanup cycle. It does not affect when cleanup cycles are
+  // scheduled.
   public static int ttrackCleanupMinDelayFromLastCleanupMs =
-      getIntProperty("optimus.tracking.cleanup.ttrackCleanupMinDelayFromLastCleanupMs", 5 * 1000);
+      getIntProperty("optimus.tracking.cleanup.ttrackCleanupMinDelayFromLastCleanupMs", 5_000);
   public static int ttrackCleanupMaxDelayFromLastCleanupMs =
-      getIntProperty("optimus.tracking.cleanup.ttrackCleanupMaxDelayFromLastCleanupMs", 300 * 1000);
+      getIntProperty("optimus.tracking.cleanup.ttrackCleanupMaxDelayFromLastCleanupMs", 300_000);
 
   // The minimum delays after the tracking queue goes idle, and after the last cleanup, before we
-  // attempt a new cleanup,
-  // and the maximum delay since the last successful cleanup after which we will start ignoring
-  // busyness and process the
-  // cleanup uninterruptably. Note that these do not affect which trackers actually get cleaned (if
-  // any), only
-  // when the cleanup cycles are scheduled and when they become uninteruptable.
-  // These thresholds have been chosen to work for most apps. If you find yourself needing to
-  // override them please
-  // contact graph team.
+  // attempt a new cleanup, and the maximum delay since the last successful cleanup after which we
+  // will start ignoring busyness and process the cleanup uninterruptably. Note that these do not
+  // affect which trackers actually get cleaned (if any), only when the cleanup cycles are scheduled
+  // and when they become uninterruptable.
   public static int ttrackCleanupMinDelayFromIdleMs =
       getIntProperty("optimus.tracking.cleanup.minDelayFromIdleMs", 500);
   public static int ttrackCleanupMinDelayFromLastStartMs =
-      getIntProperty("optimus.tracking.cleanup.minDelayFromLastStartMs", 15 * 1000);
+      getIntProperty("optimus.tracking.cleanup.minDelayFromLastStartMs", 15_000);
   public static int ttrackCleanupMaxDelaySinceLastCompletionMs =
-      getIntProperty("optimus.tracking.cleanup.maxDelaySinceLastCompletionMs", 150 * 1000);
+      getIntProperty("optimus.tracking.cleanup.maxDelaySinceLastCompletionMs", 150_000);
+
+  // Finally, if the queue never goes idle, we still want to schedule some cleanups, especially if
+  // we accumulate a lot of ttracks for nodes that are no longer reachable. We force a cleanup
+  // whenever there hasn't been a cleanup and we have seen 100K (by default) nodes getting cleared.
+  public static int ttrackClearedNodeRefWatermark =
+      getIntProperty("optimus.tracking.cleanup.ttrackClearedNodeRefWatermark", 100_000);
 
   public static final String threadsIdealName = "optimus.gthread.ideal";
   public static final String threadsMinName = "optimus.gthread.min";

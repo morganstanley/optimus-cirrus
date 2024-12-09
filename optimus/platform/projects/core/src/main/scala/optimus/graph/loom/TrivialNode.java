@@ -9,15 +9,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform;
+package optimus.graph.loom;
 
-public class ScenarioFlags {
-  public static final int none = 0;
-  public static final int hasReducibleToByValueTweaks = 1;
-  public static final int hasPossiblyRedundantTweaks = 2;
-  public static final int disableRemoveRedundant = 4;
-  public static final int hasUnresolvedOrMarkerTweaks = 8;
-  public static final int hasContextDependentTweaks = 16;
-  public static final int unorderedTweaks = 32;
-  public static final int markedForDebugging = 64;
+import optimus.graph.PropertyNode;
+/**
+ * Loom implements this marker method on nodes/lambda node that don't have side effects. Don't call
+ * any other methods.
+ */
+public interface TrivialNode {
+  default Object trivialResult() {
+    if (this instanceof PropertyNode) {
+      //noinspection unchecked
+      return ((PropertyNode<Object>) this).func();
+    }
+    throw new UnsupportedOperationException("Needs more work");
+  }
 }

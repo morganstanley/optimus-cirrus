@@ -213,7 +213,7 @@ object ClientRequestBatcher extends Log {
               node.requestBatcher.offer(clientRequest)
             }
           } catch {
-            case ex: Throwable =>
+            case NonFatal(ex) =>
               node.completeWithException(ex, ec)
           }
           true

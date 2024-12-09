@@ -706,6 +706,15 @@ public class OGSchedulerContext extends EvaluationQueue
     NodeTask prevNode = _currentNode;
     OGTrace.enqueue(prevNode, ntsk, true);
 
+    /* It's not wrong for limitThreads, it's just not likely to be needed
+     * Specifically get() functions that call into runAndWait() specifically do NOT enqueue
+     * If loom is to implement an optimization that $queued immediately followed by toValue
+     * this is still a benefit but smaller.
+     * The other optimization might be to remove all completed nodes on exit from runAndWait()
+     * needs to respect causality in this case....
+     * */
+    if (!Settings.limitThreads) localQ.tryLocalPop(ntsk);
+
     if (!ntsk.isDoneOrInvalidated()) {
       if (Settings.schedulerAsserts && ntsk.scenarioStack() == null)
         throw new GraphInInvalidState();

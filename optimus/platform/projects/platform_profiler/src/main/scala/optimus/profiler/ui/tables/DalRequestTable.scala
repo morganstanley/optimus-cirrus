@@ -11,6 +11,7 @@
  */
 package optimus.profiler.ui.tables
 
+import optimus.graph.NodeTrace
 import optimus.graph.diagnostics.PNodeTask
 
 import java.awt.event.MouseEvent
@@ -19,6 +20,7 @@ import optimus.graph.diagnostics.messages.DALRequestCounter
 import optimus.platform.dal.config.DALEnvs
 import optimus.profiler.ui.DbgPrintSource
 import optimus.profiler.ui.Filterable
+import optimus.profiler.ui.GraphDebuggerUI
 import optimus.profiler.ui.NPTable
 import optimus.profiler.ui.NodeTimeLine
 import optimus.profiler.ui.TableColumn
@@ -26,8 +28,10 @@ import optimus.profiler.ui.TableColumnCount
 import optimus.profiler.ui.TableColumnString
 import optimus.profiler.ui.TableColumnTime
 import optimus.profiler.ui.TableColumnUTC
+import optimus.profiler.ui.browser.GraphBrowser
 import optimus.profiler.ui.common.JPopupMenu2
 
+import java.util
 import scala.collection.mutable.ArrayBuffer
 
 final case class DalRequest(
@@ -36,6 +40,7 @@ final case class DalRequest(
     startTimeNanos: Long,
     durationNanos: Long,
     batchSize: Int,
+    nodeIDs: Array[Int],
     locations: String,
     details: String) {
   val splunkInstance: String = if (requestUuid.isEmpty) DALEnvs.splunkInstanceQa else DALEnvs.splunkInstanceSafe(env)
@@ -45,16 +50,26 @@ class DalRequestsTable(val tline: NodeTimeLine)
     extends NPTable[DalRequest]
     with DbgPrintSource
     with Filterable[DalRequest] {
-  emptyRow = DalRequest("", "", 0, 0, 0, "", "")
+  emptyRow = DalRequest("", "", 0, 0, 0, null, "", "")
   override def initialColumns: ArrayBuffer[TableColumn[DalRequest]] = regularView
 
   dataTable.setComponentPopupMenu(initPopupMenu)
 
   private def initPopupMenu: JPopupMenu2 = {
     val menu = new JPopupMenu2
-    val mi = menu.addMenu("Print Source Locations of Query", printSourceWithPopUp(getSelections, dataTable))
-    menu.addOnPopup(mi.setEnabled(getSelections.exists(_.locations.nonEmpty)))
+    val mi1 = menu.addMenu("Print Source Locations of Query", printSourceWithPopUp(getSelections, dataTable))
+    menu.addOnPopup(mi1.setEnabled(getSelections.exists(_.locations.nonEmpty)))
+    menu.addMenu("Show DAL Call(s) Backtrace", showDalBackTraceInBrowser(getSelections))
     menu
+  }
+
+  private def showDalBackTraceInBrowser(requests: ArrayBuffer[DalRequest]): Unit = {
+    val selectedTaskIds = new util.HashSet[Int]()
+    for (r <- requests if r.nodeIDs ne null) {
+      for (id <- r.nodeIDs) selectedTaskIds.add(id)
+    }
+    val nodes = NodeTrace.getTraceBy(n => selectedTaskIds.contains(n.getId), false)
+    GraphDebuggerUI.addTab("DAL Backtrace for Selection", new GraphBrowser(nodes))
   }
 
   // if provided, print query locations
@@ -85,7 +100,7 @@ class DalRequestsTable(val tline: NodeTimeLine)
   override def updateData(): Unit = {
     val selectedDalRequests = tline.getSelectedEvents(DALRequestCounter)
     val r = selectedDalRequests.map { e =>
-      DalRequest(e.reqID, e.env, e.time, e.duration, e.batchSize, e.locations, e.other)
+      DalRequest(e.reqID, e.env, e.time, e.duration, e.batchSize, e.nodeIDs, e.locations, e.other)
     }
     setList(r)
   }

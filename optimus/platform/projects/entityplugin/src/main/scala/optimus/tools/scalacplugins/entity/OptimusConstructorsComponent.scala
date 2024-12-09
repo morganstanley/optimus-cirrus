@@ -70,7 +70,7 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
           super.transform(tree)
 
         case ClassDef(_, _, _, Template(_, _, stats)) =>
-          trackNodeCallsAndLambdas(tree)
+          populateLoomArgs(tree)
           tryMakeCtor(tree, stats)
           super.transform(tree)
         // transform stats inside primary constructor:
@@ -218,20 +218,31 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
       sym))
   }
 
-  private def trackNodeCallsAndLambdas(tree: Tree): Unit = if (curInfo.isLoom) {
+  private def populateLoomArgs(tree: Tree): Unit = if (curInfo.isLoom) {
     tree.symbol.getAnnotation(LoomAnnotation).foreach { loomAnno =>
       val nodesArg = {
         val nodeCalls = getOrComputeLoomNodes(tree, loomAnno)
         if (nodeCalls.isEmpty) Nil else List(tpnames.loomNodes -> ArrayAnnotArg(nodeCalls))
       }
-      val lambdasArg = {
-        val nodeLiftCalls = getOrComputeLoomLambdas(tree, loomAnno)
+      val (nodeLiftCalls, columnNumbers) = getOrComputeLoomLambdasWithCN(tree, loomAnno)
+      val lambdasArg =
         if (nodeLiftCalls.isEmpty) Nil else List(tpnames.loomLambdas -> ArrayAnnotArg(nodeLiftCalls))
+      val lcnArg =
+        if (columnNumbers.isEmpty) Nil else List(tpnames.loomLcn -> ArrayAnnotArg(columnNumbers))
+      val immutablesArg = {
+        val immutableTypes = getOrComputeLoomImmutables(tree, loomAnno)
+        if (immutableTypes.isEmpty) Nil else List(tpnames.loomImmutables -> ArrayAnnotArg(immutableTypes))
       }
-      val updatedLoomAnno: AnnotationInfo = AnnotationInfo(LoomAnnotation.tpe, Nil, nodesArg ++ lambdasArg)
+      val loomArgs = nodesArg ++ lambdasArg ++ lcnArg ++ immutablesArg
+      val updatedLoomAnno: AnnotationInfo = AnnotationInfo(LoomAnnotation.tpe, Nil, loomArgs)
       tree.symbol.removeAnnotation(loomAnno.symbol)
       tree.symbol.addAnnotation(updatedLoomAnno)
     }
+  }
+
+  private def isTrueNode(sel: Select): Boolean = {
+    def returnsUnit = sel.symbol.asMethod.returnType == definitions.UnitTpe
+    hasNodeSyncAnnotation(sel) && !hasImpureAnnotation(sel) && !hasAsyncAnnotation(sel) && !returnsUnit
   }
 
   private def getOrComputeLoomNodes(tree: Tree, loomAnno: AnnotationInfo): Array[ClassfileAnnotArg] =
@@ -245,9 +256,10 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
          * [[scala.tools.nsc.backend.jvm.BCodeBodyBuilder.PlainBodyBuilder.genCallMethod]]
          */
         val calls = new mutable.HashSet[(Symbol, Symbol)]() // method, receiver
+
         for {
           sel @ Select(_, _) <- tree
-          if hasNodeSyncAnnotation(sel) && !hasAsyncAnnotation(sel)
+          if isTrueNode(sel)
         } { calls.add(sel.symbol, sel.qualifier.tpe.typeSymbol) }
         calls.toSeq
       }
@@ -266,34 +278,82 @@ class OptimusConstructorsComponent(val plugin: EntityPlugin, val phaseInfo: Opti
       nodeCallsArgs
     }
 
-  private def getOrComputeLoomLambdas(tree: Tree, loomAnno: AnnotationInfo): Array[ClassfileAnnotArg] =
+  private def getOrComputeLoomLambdasWithCN(
+      tree: Tree,
+      loomAnno: AnnotationInfo): (Array[ClassfileAnnotArg], Array[ClassfileAnnotArg]) = {
     // manually written annotation arg, usually for debugging purposes
-    getLoomLambdasArg(loomAnno).getOrElse {
-      // NOTE: here we can assume that the receiver is the current symbol, so no need to track it
-      val lambdaCalls = {
-        val calls = new mutable.HashSet[Symbol]() // method
-        for {
-          apply @ Apply(_, args) <- tree
-          // sadly apply.symbol.isMethod is not enough...
-          if apply.symbol.isInstanceOf[MethodSymbol] && args.nonEmpty
-        } {
-          val method = apply.symbol.asMethod
-          val List(params) = method.paramss // paramss has always size 1, since we're post-uncurry
-          params.zip(args).foreach { case (param, t) =>
-            if (hasNodeLiftAnno(param)) {
-              for { sel @ Select(_, _) <- t } { calls.add(sel.symbol) }
+    getLoomLambdasArg(loomAnno) match {
+      case Some(args) =>
+        args -> getLoomLcnArg(loomAnno).getOrElse {
+          throw new IllegalStateException("For manually written loom lambdas, please also specify column numbers!")
+        }
+      case None =>
+        val lambdaCallsWithCN = {
+          val callsWithCN = new mutable.HashSet[(String, Int)]() // method
+          for {
+            apply @ Apply(_, args) <- tree
+            // sadly apply.symbol.isMethod is not enough...
+            if apply.symbol.isInstanceOf[MethodSymbol] && args.nonEmpty
+          } {
+            val method = apply.symbol.asMethod
+            val List(params) = method.paramss // paramss has always size 1, since we're post-uncurry
+            params.zip(args).foreach { case (param, t) =>
+              if (hasNodeLiftAnno(param)) {
+                val withClassIDMult = if (hasNodeWithClassIDAnno(param)) -1 else 1
+                for { sel @ Select(_, _) <- t } {
+                  val callWithCN = sel.symbol.rawname.toString() -> withClassIDMult * sel.pos.column
+                  callsWithCN.add(callWithCN)
+                }
+              }
             }
           }
+          callsWithCN.toSeq.sortBy { case (n, _) => n }
         }
-        calls.toSeq
+
+        val lambdaCallsArgs: Array[ClassfileAnnotArg] =
+          lambdaCallsWithCN.map { case (n, _) => LiteralAnnotArg(Constant(n)) }.toArray
+
+        val lcnArgs: Array[ClassfileAnnotArg] =
+          lambdaCallsWithCN.map { case (_, cn) => LiteralAnnotArg(Constant(cn)) }.toArray
+
+        lambdaCallsArgs -> lcnArgs
+    }
+  }
+
+  private def getOrComputeLoomImmutables(tree: Tree, loomAnno: AnnotationInfo): Array[ClassfileAnnotArg] =
+    // manually written annotation arg, usually for debugging purposes
+    getLoomImmutablesArg(loomAnno).getOrElse {
+      val entitySymbols = {
+        val symbols = new mutable.HashSet[Symbol]()
+        for {
+          sel @ Select(_, _) <- tree
+          if isUserDefinedEntity(sel.qualifier.tpe.typeSymbol)
+        } { symbols.add(sel.qualifier.tpe.typeSymbol) }
+        symbols.toSeq
       }
 
-      val lambdaCallsArgs: Array[ClassfileAnnotArg] = {
-        val sortedCalls = lambdaCalls.map(_.rawname.toString()).sorted
-        sortedCalls.map(c => LiteralAnnotArg(Constant(c)))
+      val nodeSymbols = {
+        val symbols = new mutable.HashSet[Symbol]()
+        for {
+          sel @ Select(_, _) <- tree
+          if isTrueNode(sel)
+        } {
+          val selType = sel.tpe
+          selType.params.foreach(param => symbols.add(param.tpe.typeSymbol)) // parameters passed to node call
+          symbols.add(selType.resultType.typeSymbol) // return type of the node call
+        }
+        symbols.toSeq
+      }
+
+      val immutableArgs: Array[ClassfileAnnotArg] = {
+        val sortedTypes = (entitySymbols ++ nodeSymbols).collect {
+          // we are not interested in any primitive value class! (e.g.: Double, Float, Int, etc...)
+          case tpe if !tpe.isPrimitiveValueClass => tpe.javaBinaryNameString
+        }.sorted
+        sortedTypes.map(t => LiteralAnnotArg(Constant(t)))
       }.toArray
 
-      lambdaCallsArgs
+      immutableArgs
     }
 
 }

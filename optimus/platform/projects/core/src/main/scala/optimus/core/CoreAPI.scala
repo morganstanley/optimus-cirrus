@@ -35,6 +35,7 @@ trait AsyncResultAPI {
   def asyncResult[T](@nodeLiftByName @nodeLift f: => T): NodeResult[T] = asyncResult$withNode(toNode(f _))
   def asyncResult$withNode[T](f: Node[T]): NodeResult[T] = new NodeResultNode(f).get
   def asyncResult$queued[T](f: Node[T]): Node[NodeResult[T]] = new NodeResultNode(f).enqueue
+  def asyncResult$queued[T](f: => T): NodeFuture[NodeResult[T]] = new NodeResultNode(toNode(f _)).enqueue
 
   @impure
   @scenarioIndependentTransparent
@@ -71,6 +72,16 @@ trait NodeAPI {
   def queuedNodeOf$nodeQueued[T](nodeFuture: NodeFuture[T]): Node[T] = nodeFuture.asNode$
 
   /**
+   * Enqueues and returns the [[NodeFuture]] of an expression, as above.
+   */
+  // noinspection ScalaUnusedSymbol
+  @nodeLiftQueued
+  @parallelizable
+  def nodeFutureOf[T](v: T): NodeFuture[T] = needsPlugin
+  // noinspection ScalaUnusedSymbol
+  def nodeFutureOf$nodeQueued[T](nodeFuture: NodeFuture[T]): NodeFuture[T] = nodeFuture
+
+  /**
    * Returns the `NodeKey` of an expression (a.k.a node template itself) The returned node is always relative to the
    * constant scenario stack; use [[NodeTask#prepareForExecutionIn]] to migrate it into a different scenario.
    */
@@ -102,7 +113,7 @@ trait NodeAPI {
    */
   @nodeSync
   final def asyncGet[T](node: Node[T]): T = node.get
-  final def asyncGet$queued[T](node: Node[T]): Node[T] = node.enqueue
+  final def asyncGet$queued[T](node: Node[T]): NodeFuture[T] = node.enqueue
 
   /**
    * If you already have an node WHICH DOES NOT REQUIRE ENQUEUING (for some very advanced reason). This is an easy way
@@ -162,8 +173,9 @@ trait CoreAPI
   def track[T](@nodeLift @nodeLiftByName f: => T): T = track$withNode(toNode(f _))
   def track$withNode[T](f: Node[T]): T =
     EvaluationContext.track(f.toPrettyName(true, false), CrumbNodeType.GenericNode)(f).get
-  def track$queued[T](f: Node[T]): Node[T] =
+  def track$queued[T](f: Node[T]): NodeFuture[T] =
     EvaluationContext.track(f.toPrettyName(true, false), CrumbNodeType.GenericNode)(f).enqueueAttached
+  def track$queued[T](f: => T): NodeFuture[T] = track$queued(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
@@ -181,6 +193,9 @@ trait CoreAPI
   def given[T](scenario: Scenario)(@nodeLift @nodeLiftByName f: => T): T = EvaluationContext.givenL(scenario, f)
   def given$withNode[T](scenario: Scenario)(f: Node[T]): T = EvaluationContext.given(scenario, f).get
   def given$queued[T](scenario: Scenario)(f: Node[T]): Node[T] = EvaluationContext.given(scenario, f).enqueueAttached
+  // noinspection ScalaUnusedSymbol
+  def given$queued[T](scenario: Scenario, f: => T): NodeFuture[T] =
+    EvaluationContext.given(scenario, toNode(f _)).enqueueAttached
 
   @nodeSync
   @nodeSyncLift
@@ -190,6 +205,8 @@ trait CoreAPI
   def given$withNode[T](tweaks: Iterable[Tweak])(f: Node[T]): T = EvaluationContext.given(Scenario(tweaks), f).get
   def given$queued[T](tweaks: Iterable[Tweak])(f: Node[T]): Node[T] =
     EvaluationContext.given(Scenario(tweaks), f).enqueueAttached
+  // noinspection ScalaUnusedSymbol (compiler plugin forwards to this def)
+  def given$queued[T](tweaks: Iterable[Tweak], f: => T): NodeFuture[T] = given$queued(tweaks)(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
@@ -200,6 +217,8 @@ trait CoreAPI
     EvaluationContext.given(scenarios, f).get
   def givenNested$queued[T](scenarios: collection.Seq[Scenario])(f: Node[T]): Node[T] =
     EvaluationContext.given(scenarios, f).enqueueAttached
+  def givenNested$queued[T](scenarios: collection.Seq[Scenario], f: => T): NodeFuture[T] =
+    givenNested$queued(scenarios)(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
@@ -307,7 +326,7 @@ trait CoreAPI
   // noinspection ScalaUnusedSymbol
   def NodeTry$queued[T](f: Node[T]): Node[NodeTry[T]] = new NodeTryNode(f).enqueue
   // noinspection ScalaUnusedSymbol
-  def NodeTry$queued[T](f: => T): Node[NodeTry[T]] = new NodeTryNode(toNode(f _)).enqueue
+  def NodeTry$queued[T](f: => T): NodeFuture[NodeTry[T]] = new NodeTryNode(toNode(f _)).enqueue
 
   @deprecating(
     "Use NodeTry to handle RT exceptions; otherwise use asyncResult, which is @impure.  Use of nodeResult in @nodes is COMPLETELY UNSUPPORTED, and you should understand the consequences.")
@@ -316,8 +335,8 @@ trait CoreAPI
   @nodeSyncLift
   def nodeResult[T](@nodeLiftByName @nodeLift f: => T): NodeResult[T] = nodeResult$withNode(toNode(f _))
   def nodeResult$withNode[T](f: Node[T]): NodeResult[T] = new NodeResultNode(f).get
-  def nodeResult$queued[T](f: Node[T]): Node[NodeResult[T]] =
-    new NodeResultNode(f).enqueue
+  def nodeResult$queued[T](f: Node[T]): Node[NodeResult[T]] = new NodeResultNode(f).enqueue
+  def nodeResult$queued[T](f: => T): NodeFuture[NodeResult[T]] = nodeResult$queued(toNode(f _))
 
   @impure
   @nodeSync
@@ -351,6 +370,9 @@ trait CoreAPI
     new NodeResultCancelNode(f, cs, 0).get
   def withCancellation$queued[T](cs: CancellationScope)(f: Node[T]): Node[Option[T]] =
     new NodeResultCancelNode(f, cs, 0).enqueue
+  // noinspection ScalaUnusedSymbol
+  def withCancellation$queued[T](cs: CancellationScope, f: => T): NodeFuture[Option[T]] =
+    withCancellation$queued(cs)(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
@@ -361,6 +383,9 @@ trait CoreAPI
     new NodeResultProgressNode(f, weight, message, reportingIntervalMs).get
   def withProgress$queued[T](weight: Double, message: String, reportingIntervalMs: Long)(f: Node[T]): Node[T] =
     new NodeResultProgressNode(f, weight, message, reportingIntervalMs).enqueue
+  // noinspection ScalaUnusedSymbol
+  def withProgress$queued[T](weight: Double, message: String, reportingIntervalMs: Long, f: => T): NodeFuture[T] =
+    withProgress$queued(weight, message, reportingIntervalMs)(toNode(f _))
 
   // only used in UI bindings with optimus.ui.server.graph.ProgressChannel (to indicate what handlers can be cancelled)
   @nodeSync
@@ -412,6 +437,9 @@ trait CoreAPI
     withRethrow$queued(f)(handler).get
   def withRethrow$queued[T](f: Node[T])(handler: NodeResult[T] => Node[Unit]): Node[T] =
     new NodeResultRethrow[T](f, handler).enqueue
+  // noinspection ScalaUnusedSymbol
+  def withRethrow$queued[T](f: => T, handler: NodeResult[T] => Unit): NodeFuture[T] =
+    withRethrow$queued(toNode(f _))(toNodeFactory(handler))
 
   /**
    * lifts the lambda "() => B" in to a node factory "() => Node[B]"
@@ -464,6 +492,8 @@ object CoreAPI extends AsyncResultAPI {
   def nodeResult[T](@nodeLiftByName @nodeLift f: => T): NodeResult[T] = nodeResult$withNode(toNode(f _))
   def nodeResult$withNode[T](f: Node[T]): NodeResult[T] = new NodeResultNode(f).get
   def nodeResult$queued[T](f: Node[T]): Node[NodeResult[T]] = new NodeResultNode(f).enqueue
+  // noinspection ScalaUnusedSymbol
+  def nodeResult$queued[T](f: => T): NodeFuture[NodeResult[T]] = nodeResult$queued(toNode(f _))
 
   @deprecating(
     "Use NodeTry to handle RT exceptions; otherwise use asyncResult, which is @impure.  Use of nodeResult in @nodes is COMPLETELY UNSUPPORTED, and you should understand the consequences.")
@@ -473,8 +503,9 @@ object CoreAPI extends AsyncResultAPI {
   def nodeResultCurrentCS[T](@nodeLiftByName @nodeLift f: => T): NodeResult[T] =
     nodeResultCurrentCS$withNode(toNode(f _))
   def nodeResultCurrentCS$withNode[T](f: Node[T]): NodeResult[T] = new NodeResultNode(f).get
-  def nodeResultCurrentCS$queued[T](f: Node[T]): Node[NodeResult[T]] =
+  def nodeResultCurrentCS$queued[T](f: Node[T]): NodeFuture[NodeResult[T]] =
     new NodeResultNode(f, EvaluationContext.scenarioStack.cancelScope).enqueue
+  def nodeResultCurrentCS$queued[T](f: => T): NodeFuture[NodeResult[T]] = nodeResultCurrentCS$queued(toNode(f _))
 
   /** General timer to be shared for all optimus applications */
   lazy val optimusScheduledThreadPool: ScheduledExecutorService = {

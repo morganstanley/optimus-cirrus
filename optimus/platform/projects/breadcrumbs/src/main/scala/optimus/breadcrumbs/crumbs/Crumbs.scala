@@ -532,9 +532,13 @@ object Crumb {
     final def shutdown(): Unit = _shutdown = true
     final def isShutdown: Boolean = _shutdown
     final private[breadcrumbs] val kafkaCount = new AtomicInteger(0)
-    final private[breadcrumbs] val count = new AtomicInteger(0)
-    final def getCount: Int = count.get()
-    final def getKafkaCount: Int = count.get()
+    final private[breadcrumbs] val kafkaFailures = new AtomicInteger(0)
+    final private[breadcrumbs] val enqueueFailures = new AtomicInteger()
+    final private[breadcrumbs] val sendCount = new AtomicInteger(0)
+    final def getCount: Int = sendCount.get()
+    final def getKafkaCount: Int = kafkaCount.get()
+    final def getKafkaFailures: Int = kafkaFailures.get()
+    final def getEnqueueFailures: Int = enqueueFailures.get()
     final override def equals(obj: Any): Boolean = obj match {
       case s: AnyRef => s eq this
       case _         => false

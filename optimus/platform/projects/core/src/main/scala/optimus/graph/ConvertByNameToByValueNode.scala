@@ -12,6 +12,7 @@
 package optimus.graph
 
 import optimus.graph.ConvertByNameToByValueNode.isTweakRedundant
+import optimus.graph.loom.TrivialNode
 import optimus.platform.AdvancedUtils
 import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
@@ -32,17 +33,20 @@ object ConvertByNameToByValueNode {
     if (target.propertyInfo.wasTweakedByProperty()) false // Don't support propertyTweaks for now
     else {
       val tRes = t.tweakTemplate.immediateResult
-      // isPossiblyRedundant == true only ACPN
-      val key = target.key.asInstanceOf[AlreadyCompletedPropertyNode[_]]
+      // isPossiblyRedundant == true only TrivialNode
+      val key = target.key
       val alreadyTweak = TwkResolver.findInstanceTweak(key, ss)
       // key.result here is the underlying untweaked value of the node
-      val compareTo = if (alreadyTweak eq null) key.result else alreadyTweak.tweakTemplate.immediateResult
+      val tMethod = key.asInstanceOf[TrivialNode]
+      val compareTo = if (alreadyTweak eq null) tMethod.trivialResult() else alreadyTweak.tweakTemplate.immediateResult
       tRes == compareTo
     }
   } else false
 
   def removeRedundantTweaks(s: Scenario, ss: ScenarioStack): Scenario =
-    new Scenario(s.topLevelTweaks.filter(!isTweakRedundant(_, ss)).toArray, Nil, s.flagsWithoutHasRedundant)
+    if (s.hasPossiblyRedundantTweaks && !s.removeRedundantDisabled)
+      new Scenario(s.topLevelTweaks.filter(!isTweakRedundant(_, ss)).toArray, Nil, s.flagsWithoutHasRedundant)
+    else s
 }
 
 /**
@@ -103,7 +107,7 @@ class ConvertByNameToByValueNode[T](
         parseAndEnqueue(s, eq)
         inWaiting = true
       } else {
-        if (Settings.removeRedundantTweaks && s.hasPossiblyRedundantTweaks)
+        if (Settings.removeRedundantTweaks)
           s = ConvertByNameToByValueNode.removeRedundantTweaks(s, curSS)
         try setCurSS()
         catch {
@@ -142,7 +146,7 @@ class ConvertByNameToByValueNode[T](
       if (rtweakAwaiting eq null) {
         var newTweaks = new Array[Tweak](rtweaks.length)
         var count = 0
-        def add(t: Tweak): Unit = if (!isTweakRedundant(t, curSS)) {
+        def add(t: Tweak): Unit = if (originalScenario.removeRedundantDisabled || !isTweakRedundant(t, curSS)) {
           newTweaks(count) = t
           count += 1
         }

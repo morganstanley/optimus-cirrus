@@ -11,10 +11,12 @@
  */
 package optimus.graph.loom;
 
+import static optimus.graph.DiagnosticSettings.loomCompilerAssumeGlobalMutation;
 import static optimus.graph.DiagnosticSettings.loomCompilerDebug;
 import static optimus.graph.DiagnosticSettings.loomCompilerLevel;
 import static optimus.graph.DiagnosticSettings.loomCompilerEnqueueEarlier;
 import static optimus.graph.DiagnosticSettings.loomCompilerQueueSizeSensitive;
+import static optimus.graph.loom.LoomConfig.CompilerAssumeGlobalMutationParam;
 import static optimus.graph.loom.LoomConfig.CompilerDebugParam;
 import static optimus.graph.loom.LoomConfig.CompilerLevelParam;
 import static optimus.graph.loom.LoomConfig.CompilerEnqueueEarlierParam;
@@ -24,22 +26,36 @@ import org.objectweb.asm.tree.AnnotationNode;
 public class CompilerArgs {
   public int level;
   public boolean debug;
+
+  public boolean skipFoldingBlocks; // disables BlockFolding phase
+
+  // uses postOrder from DOMCalculator, rather than the original parsing order
+  public boolean usePostOrder;
   public boolean enqueueEarlier;
   public boolean queueSizeSensitive;
+  public boolean assumeGlobalMutation;
 
   public CompilerArgs(
-      int level, boolean debug, boolean enqueueEarlier, boolean queueSizeSensitive) {
+      int level,
+      boolean debug,
+      boolean enqueueEarlier,
+      boolean queueSizeSensitive,
+      boolean assumeGlobalMutation) {
     this.level = level;
     this.debug = debug;
     this.enqueueEarlier = enqueueEarlier;
     this.queueSizeSensitive = queueSizeSensitive;
+    this.assumeGlobalMutation = assumeGlobalMutation;
   }
 
   public CompilerArgs(CompilerArgs other) {
     this.level = other.level;
     this.debug = other.debug;
+    this.skipFoldingBlocks = other.skipFoldingBlocks;
+    this.usePostOrder = other.usePostOrder;
     this.enqueueEarlier = other.enqueueEarlier;
     this.queueSizeSensitive = other.queueSizeSensitive;
+    this.assumeGlobalMutation = other.assumeGlobalMutation;
   }
 
   public static final CompilerArgs Default =
@@ -47,7 +63,8 @@ public class CompilerArgs {
           loomCompilerLevel,
           loomCompilerDebug,
           loomCompilerEnqueueEarlier,
-          loomCompilerQueueSizeSensitive);
+          loomCompilerQueueSizeSensitive,
+          loomCompilerAssumeGlobalMutation);
 
   public static CompilerArgs parse(AnnotationNode ann, CompilerArgs defaultCArgs) {
     var values = ann.values;
@@ -68,6 +85,9 @@ public class CompilerArgs {
             break;
           case CompilerQueueSizeSensitiveParam:
             cArgs.queueSizeSensitive = (boolean) value;
+            break;
+          case CompilerAssumeGlobalMutationParam:
+            cArgs.assumeGlobalMutation = (boolean) value;
         }
       }
       return cArgs;

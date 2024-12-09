@@ -45,7 +45,8 @@ object UpsertableTransactionSerializer extends Log {
       vt: Instant,
       tt: Instant,
       serializedEntities: Seq[SerializedEntity],
-      storedEntityReferences: Seq[FinalTypedReference]
+      storedEntityReferences: Seq[FinalTypedReference],
+      serializedEntityFilter: SerializedEntity => Boolean
   ): Seq[Entity] = {
     log.info(
       s"Deserializing Transaction with SerializedEntities [size:${serializedEntities.size}; StoredRefs: ${storedEntityReferences.size}] @ (vt=$vt, tt=$tt)")
@@ -58,18 +59,21 @@ object UpsertableTransactionSerializer extends Log {
     ContainedEventSerializer
       .ContainedEntityDeserializer(storedEntities ++ heapEnts)
       .deserEnts
+      .filter { case (serializedWithEref, _) => serializedWithEref.se.forall(serializedEntityFilter) }
       .values
       .toSeq
   }
 
   @node
   def deserializeAllEntities(
-      transaction: DeserializedTransaction
+      transaction: DeserializedTransaction,
+      serializedEntityFilter: SerializedEntity => Boolean = _ => true
   ): Seq[Entity] = deserializeEntity(
     vt = transaction.businessEvent.validTime,
     tt = transaction.deserializeTime,
     serializedEntities = transaction.allSerializedEntities,
-    storedEntityReferences = transaction.allStoredEntityReferences()
+    storedEntityReferences = transaction.allStoredEntityReferences,
+    serializedEntityFilter = serializedEntityFilter
   )
 
   @node

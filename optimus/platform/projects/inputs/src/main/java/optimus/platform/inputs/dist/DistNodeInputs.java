@@ -59,6 +59,27 @@ public class DistNodeInputs {
   }
 
   /**
+   * @see #newAutoforwardingOptimusSafeJavaOpt(String, String, Source, Function)
+   */
+  public static <T> ScopedSINodeInput<T> newAutoforwardingOptimusSafeJavaOpt(
+      String name,
+      String description,
+      Source<String, String, T> source,
+      Function<T, String> invertAndConvert) {
+    GSFSection<T, ?> gsfSection = GSFSections.newSafeJavaOpt(source.name(), invertAndConvert);
+    return new BaseScopedSIInput<>(
+        name,
+        description,
+        null,
+        Arrays.asList(source),
+        gsfSection,
+        false,
+        Behavior.ALWAYS,
+        CombinationStrategies.distCombinator(),
+        false);
+  }
+
+  /**
    * Represents a Java property, in {@code -Dkey=val} format, that needs to be set on remote engines
    * because it is either:
    *

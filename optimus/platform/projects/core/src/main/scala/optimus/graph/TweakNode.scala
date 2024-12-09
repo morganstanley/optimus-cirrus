@@ -300,7 +300,11 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
       case _ if tweak != null =>
         if (tweak.initSite != null) sb ++= "{ code... }"
         else sb ++= NodeName.nameAndSource(computeGenerator)
-      case _ => sb ++= NodeName.cleanNodeClassName(computeGenerator.getClass)
+      case _ =>
+        sb ++= NodeName
+          .fromSubProfile(computeGenerator)
+          .toString(sb.simpleName, sb.includeHint)
+          .stripSuffix(NodeTaskInfo.StoredNodeFunction.rawName()) // Probably not worth generating in the first place
     }
   }
 

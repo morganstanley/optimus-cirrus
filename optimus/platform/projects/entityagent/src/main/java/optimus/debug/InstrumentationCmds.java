@@ -100,9 +100,9 @@ public class InstrumentationCmds {
     }
   }
 
-  private static boolean parseAndApplyConfig(List<String> lines)
+  private static void parseAndApplyConfig(List<String> lines)
       throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    if (lines == null) return true;
+    if (lines == null) return;
 
     boolean inComment = false; // Reading lines between /* and */
     for (String line : lines) {
@@ -119,7 +119,6 @@ public class InstrumentationCmds {
       parser.parse();
       parser.invoke();
     }
-    return false;
   }
 
   private static List<String> readResource(String filename) throws IOException {

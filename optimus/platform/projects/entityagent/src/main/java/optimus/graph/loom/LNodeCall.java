@@ -15,29 +15,32 @@ import java.util.Objects;
 
 /** record would have been just fine here! */
 class LNodeCall {
-  public String owner;
-  public String method;
+  public final String owner;
+  public final String method;
+  public final String desc;
 
   public LNodeCall(String owner, String method) {
+    this(owner, method, "");
+  }
+
+  public LNodeCall(String owner, String method, String desc) {
     this.owner = owner;
     this.method = method;
+    this.desc = desc;
   }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-
-    var nodeCall = (LNodeCall) o;
-
-    if (!Objects.equals(owner, nodeCall.owner)) return false;
-    return Objects.equals(method, nodeCall.method);
+    LNodeCall lNodeCall = (LNodeCall) o;
+    return owner.equals(lNodeCall.owner)
+        && method.equals(lNodeCall.method)
+        && desc.equals(lNodeCall.desc);
   }
 
   @Override
   public int hashCode() {
-    int result = owner != null ? owner.hashCode() : 0;
-    result = 31 * result + (method != null ? method.hashCode() : 0);
-    return result;
+    return Objects.hash(owner, method, desc);
   }
 }

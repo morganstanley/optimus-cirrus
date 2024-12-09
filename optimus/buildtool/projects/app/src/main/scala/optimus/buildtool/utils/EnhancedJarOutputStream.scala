@@ -101,7 +101,13 @@ abstract class EnhancedJarOutputStream(val file: JarAsset, manifest: Option[jar.
   }
 
   def writeFile(data: CharSequence, targetName: RelativePath): Unit = {
-    copyInFile(new CharSequenceInputStream(data, StandardCharsets.UTF_8), targetName)
+    copyInFile(
+      CharSequenceInputStream
+        .builder()
+        .setCharSequence(data)
+        .setCharset(StandardCharsets.UTF_8)
+        .get(),
+      targetName)
   }
 
   def writeFile(data: String, targetName: RelativePath, tokens: Map[String, String]): Unit = {

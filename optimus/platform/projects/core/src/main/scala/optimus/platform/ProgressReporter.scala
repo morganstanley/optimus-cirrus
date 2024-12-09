@@ -14,6 +14,7 @@ package optimus.platform
 import optimus.graph.OGSchedulerContext
 import optimus.graph.Node
 import optimus.graph.NodeAwaiter
+import optimus.graph.NodeFuture
 import optimus.graph.NodeTask
 import optimus.graph.Warning
 import optimus.platform.PluginHelpers.toNode
@@ -70,6 +71,8 @@ class ProgressReporter(@transient private var _parent: ProgressReporter) extends
     ec.enqueueDirect(f)
     f
   }
+  // noinspection ScalaUnusedSymbol
+  final def track$queued[T](f: => T): NodeFuture[T] = track$queued(toNode(f _))
 
   final def track$withNode[T](f: Node[T]): T = track$queued(f).get
 
@@ -128,6 +131,8 @@ object Progress extends Log {
     reportItemStarted(progressMarker, enableTracking, weight, f).get
   def track$queued[T](progressMarker: ProgressMarker, enableTracking: Boolean, weight: Double)(f: Node[T]): Node[T] =
     reportItemStarted(progressMarker, enableTracking, weight, f).enqueueAttached
+  def track$queued[T](progressMarker: ProgressMarker, enableTracking: Boolean, weight: Double, f: => T): NodeFuture[T] =
+    reportItemStarted(progressMarker, enableTracking, weight, toNode(f _)).enqueueAttached
 
   private def reportItemStarted[T](
       marker: ProgressMarker,

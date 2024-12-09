@@ -27,6 +27,7 @@ import scala.annotation.tailrec
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import msjava.slf4jutils.scalalog.getLogger
 
 /**
  * Base class for a quick implementation of "batching" nodes T is result type of individual node NodeT is type of the
@@ -158,7 +159,12 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
           // for us to batch (and more nodes is better because we have more flexibility in batching)
           // [SEE_XSFT_BATCH_SCOPE]
           val batchScope = inputs.head.scenarioStack.batchScope
-          !batchScope.hasCallsInFlight(batchScopeKeys, outstandingTasks)
+          val ready = !batchScope.hasCallsInFlight(batchScopeKeys, outstandingTasks)
+          if (!ready && DiagnosticSettings.batchScopeVerboseLogging) {
+            NodeBatcherSchedulerPluginBase.log.info(s"$this detected pending work in BatchScope")
+            batchScope.logBatchScopeStatus
+          }
+          ready
         } else true
       } else true
     }
@@ -429,6 +435,7 @@ class BatchLimitTagBase extends NonForwardingPluginTagKey[AtomicInteger] {
 }
 
 object NodeBatcherSchedulerPluginBase {
+  private val log = getLogger(this)
   private final val executionInfoMap = new ConcurrentHashMap[String, NodeTaskInfo]()
 
   def getExecutionInfo(name: String, plugin: SchedulerPlugin): NodeTaskInfo = {
