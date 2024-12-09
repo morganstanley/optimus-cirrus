@@ -139,6 +139,9 @@ public class DiagnosticSettings {
   public static final boolean loomCompilerQueueSizeSensitive =
       getBoolProperty("optimus.loom.compiler.queueSizeSensitive", false);
 
+  public static final boolean loomCompilerAssumeGlobalMutation =
+      getBoolProperty("optimus.loom.compiler.assumeGlobalMutation", false);
+
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
   public static final boolean enableXSReporting;
 
@@ -184,6 +187,9 @@ public class DiagnosticSettings {
 
   public static final boolean batchScopeTrackNodes =
       getBoolProperty("optimus.batchscope.trackNodes", false);
+
+  public static final boolean batchScopeVerboseLogging =
+      getBoolProperty("optimus.batchscope.verboseLogging", false);
 
   /**
    * When set to 0 XSFT is not supported, and basically reverts to a previous version TPD won't be

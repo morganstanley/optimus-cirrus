@@ -255,6 +255,8 @@ trait OptimusNames {
     val elevated: TypeName = newTypeName("elevated")
     val loomNodes: TypeName = newTypeName("nodes")
     val loomLambdas: TypeName = newTypeName("lambdas")
+    val loomLcn: TypeName = newTypeName("lcn")
+    val loomImmutables: TypeName = newTypeName("immutables")
     val nodeLift: TypeName = newTypeName("nodeLift")
     val scenarioIndependent: TypeName = newTypeName("scenarioIndependent")
     val siRhs: TypeName = newTypeName("siRhs")

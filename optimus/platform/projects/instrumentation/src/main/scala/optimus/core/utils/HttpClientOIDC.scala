@@ -26,8 +26,7 @@ import org.apache.http.impl.client.HttpClients
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
 import org.apache.http.message.BasicHeader
 import org.apache.http.protocol.HttpContext
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
+import org.apache.http.HttpHeaders
 
 import java.util.UUID
 
@@ -79,7 +78,7 @@ object HttpClientOIDC {
   }
   private object httpRequestInterceptor extends HttpRequestInterceptor {
     override def process(req: HttpRequest, httpContext: HttpContext) = {
-      req.setHeader(new BasicHeader(HttpHeaders.ACCEPT, MediaType.ALL_VALUE))
+      req.setHeader(new BasicHeader(HttpHeaders.ACCEPT, "*/*")) // */* is MimeType ALL
       req.setHeader(new BasicHeader("UUID", UUID.randomUUID.toString))
     }
   }

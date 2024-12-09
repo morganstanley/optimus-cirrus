@@ -10,7 +10,7 @@
  * limitations under the License.
  */
 package optimus.graph
-
+import optimus.graph.loom.TrivialNode
 import optimus.platform.PluginHelpers.mkCompute
 import optimus.platform._
 import optimus.platform.annotations._
@@ -48,7 +48,7 @@ trait TweakTarget[R, SetT] {
    */
   def hashKey: NodeKey[_] = null // Can be used as the direct
   /** Simple boring instance tweak On ACPN without also-sets */
-  final def fullSpecified: Boolean = hashKey.isInstanceOf[AlreadyCompletedPropertyNode[_]] && !unresolved
+  final def fullSpecified: Boolean = hashKey.isInstanceOf[TrivialNode] && !unresolved
 
   private[this] def makeTweak(tweakTemplate: TweakNode[R]) = new Tweak(this, tweakTemplate)
   protected def mkPlus(vn: AnyRef)(implicit ev: Numeric[R]): TweakNode[R] =

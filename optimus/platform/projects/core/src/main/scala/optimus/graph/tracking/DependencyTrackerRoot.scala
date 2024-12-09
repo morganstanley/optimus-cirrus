@@ -345,8 +345,21 @@ final class DependencyTrackerRoot private (
     maybeScheduleCleanup(lastAction)
   }
 
-  private def runCleanupNow(triggeredBy: TrackingGraphCleanupTrigger): Unit =
+  private[tracking] override def notifyActionCompleted(): Unit = {
+    // We may enqueue an immediate cleanup if the many ttrack refs were cleared since the last cleanup.
+    tweakableTracker.refQ.emptyQueueAndTestWatermark()
+  }
+
+  // Insert a high-priority cleanup.
+  //
+  // The cleanup will be put at the head of queue but will not interrupt currently running actions, so it is safe to
+  // call this method concurrently. The cleanup action will be skipped if there is already a cleanup at the head of the
+  // tracker action queue.
+  //
+  // This method returns without waiting for the cleanup to finish.
+  private[tracking] def runCleanupNow(triggeredBy: TrackingGraphCleanupTrigger): Unit = {
     queue.maybeRunCleanupNow(createTrackingGraphCleanupAction(None, CleanupScheduler.NoInterruption, triggeredBy))
+  }
 }
 
 object DependencyTrackerRoot {

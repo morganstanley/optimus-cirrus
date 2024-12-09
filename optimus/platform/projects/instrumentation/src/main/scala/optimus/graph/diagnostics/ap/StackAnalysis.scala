@@ -18,9 +18,11 @@ import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.Elems
+import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.AwaitStackManagement
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
+import optimus.graph.diagnostics.sampling.FlameTreatment
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.TimedStack
@@ -42,6 +44,7 @@ import java.lang.{Integer => JInteger, Long => JLong}
 import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import scala.collection.immutable
 
 object StackAnalysis {
 
@@ -59,7 +62,9 @@ object StackAnalysis {
   }
 
   private val stackCrumbCount = new AtomicLong(0)
+  private val unDedupedStackCrumbCount = new AtomicLong(0)
   private[diagnostics] def numStacksPublished: Long = stackCrumbCount.get()
+  private[diagnostics] def numStacksNonDeduped: Long = unDedupedStackCrumbCount.get()
   // Fully qualified class names are abbreviated to a maximum of N successive lower-case letters:
   val camelHumpWidth: Int = PropertyUtils.get("optimus.async.profiler.hump.width", 2)
   val frameNameCacheSize: Int = PropertyUtils.get("optimus.async.profiler.frame.cache.size", 1000000)
@@ -234,8 +239,12 @@ object StackAnalysis {
 
   final case class StackData private (tpe: String, total: Long, self: Long, hashId: String, folded: String)
 
-  final case class StacksAndTimers(stacks: Seq[StackData], timers: SampledTimers, dtStopped: Long = 0L)
-  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording) }
+  final case class StacksAndTimers(
+      stacks: Seq[StackData],
+      timers: SampledTimers,
+      rootSamples: Map[String, Long],
+      dtStopped: Long = 0L)
+  object StacksAndTimers { val empty = StacksAndTimers(Seq.empty, SampledTimersExtractor.newRecording, Map.empty) }
 
   // Java20 likes to give lambdas these unique suffixes e.g. "$La$722.0x000000080173d0.apply"
   val lambdaRe = "[\\$\\d\\.]*0x\\w+\\.".r
@@ -792,7 +801,7 @@ class StackAnalysis(
 
   // Return a token representing an entire stack
   private def stackMemoize(rootName: String, rootUuids: Seq[ChainedID], leaf: StackNode): String = {
-
+    unDedupedStackCrumbCount.addAndGet(rootUuids.size)
     val tSec = System.currentTimeMillis() / 1000
     val terminalHash = leaf.terminalHash
     val sid = longAbbrev(terminalHash, "S_")
@@ -802,29 +811,30 @@ class StackAnalysis(
         val publishTo = rootUuids.filter { uuid =>
           tSec - stackPublicationTime.get((uuid, sid), _ => 1L) > stackCacheExpireAfterSec
         }
-        val frames = leaf.frames
+        if (publishTo.nonEmpty) {
+          val frames = leaf.frames
+          val thumbPrint = if (thumbprintDimensionBits > 0) {
+            val printvec = new Array[Int](thumbprintDimension)
+            frames.foreach { f =>
+              printvec(f.hashCode & (thumbprintDimension - 1)) += 1
+            }
+            Some(dims.zip(printvec).toMap)
+          } else None
 
-        val thumbPrint = if (thumbprintDimensionBits > 0) {
-          val printvec = new Array[Int](thumbprintDimension)
-          frames.foreach { f =>
-            printvec(f.hashCode & (thumbprintDimension - 1)) += 1
+          publishTo.foreach { uuid =>
+            // deduplication key assures that we publish for each relevant root uuid and not more infrequently
+            // than once ever stackCacheExpirySec
+            val dedup = s"$sid:${tSec / stackCacheExpireAfterSec}:${uuid.base}"
+
+            stackPublicationTime.put((uuid, sid), tSec)
+            stackCrumbCount.incrementAndGet()
+            val elems = Properties.engineId -> ChainedID.root ::
+              Properties.pSID -> sid ::
+              Properties.profCollapsed -> frames.mkString(";") ::
+              Properties.stackThumb.maybe(thumbPrint) ::
+              Properties.dedupKey -> dedup :: Elems.Nil
+            crumbConsumer.consume(uuid, SamplingProfilerSource, elems)
           }
-          Some(dims.zip(printvec).toMap)
-        } else None
-
-        publishTo.foreach { uuid =>
-          // deduplication key assures that we publish for each relevant root uuid and not more infrequently
-          // than once ever stackCacheExpirySec
-          val dedup = s"$sid:${tSec / stackCacheExpireAfterSec}:${uuid.base}"
-
-          stackPublicationTime.put((uuid, sid), tSec)
-          stackCrumbCount.incrementAndGet()
-          val elems = Properties.engineId -> ChainedID.root ::
-            Properties.pSID -> sid ::
-            Properties.profCollapsed -> frames.mkString(";") ::
-            Properties.stackThumb.maybe(thumbPrint) ::
-            Properties.dedupKey -> dedup :: Elems.Nil
-          crumbConsumer.consume(uuid, SamplingProfilerSource, elems)
         }
       }
 
@@ -1167,7 +1177,7 @@ class StackAnalysis(
   ): StacksAndTimers = try {
     if (collapsedFormatDump.isEmpty && preSplitStacks.isEmpty) StacksAndTimers.empty
     else {
-      val (roots0: Map[String, StackNode], events) = buildStackTrees(collapsedFormatDump, preSplitStacks)
+      val (roots0: Map[String, StackNode], sampledTimers) = buildStackTrees(collapsedFormatDump, preSplitStacks)
 
       // Update live view
       if (trackLiveMemory) {
@@ -1204,7 +1214,10 @@ class StackAnalysis(
 
       heapTracking.restore()
       nativeTracking.restore()
-      StacksAndTimers(stackData, events)
+
+      val smplTotals = roots.mapValuesNow(_.total)
+
+      StacksAndTimers(stackData, sampledTimers, smplTotals)
     }
   } catch {
     case NonFatal(e) =>

@@ -312,7 +312,7 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
           mkGetNodeName(funcName),
           syncAnnotation = false,
           rtpeQ,
-          wrapper = PlatformPkgObj.queuedNodeOf)
+          wrapper = PlatformPkgObj.nodeFutureOf)
       )
     }
 
@@ -341,7 +341,7 @@ trait CompanionMethodsGenerator { this: AdjustASTComponent =>
       atPos(pos) { DefDef(Modifiers(mkFlags) withAnnotations annos, funcName, tpeArg, List(args), TypeTree(), rhs) }
     }
 
-    def genMakeKey = {
+    def genMakeKey: DefDef = {
       val tpe = Select(Select(This(tpnme.EMPTY), keyInfoName), keyImplType)
       val args = freshKeyArgs
       val params =

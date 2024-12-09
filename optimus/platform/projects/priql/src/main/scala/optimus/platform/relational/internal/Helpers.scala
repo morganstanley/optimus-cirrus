@@ -327,7 +327,7 @@ object CsvHelper extends CommonHelper {
       timeZone: ZoneId): Unit = {
     val fieldNames = results.head.getAll.keys
     val headerLine: String = fieldNames.map(f => quoteCsvData(f, null)).mkString(",")
-    IOUtils.write(headerLine + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+    IOUtils.write(headerLine + System.lineSeparator(), out, StandardCharsets.UTF_8)
 
     results.foreach(f => {
       val valueMap = f.getAll
@@ -338,7 +338,7 @@ object CsvHelper extends CommonHelper {
           quoteCsvData(a, timeZone)
         })
         .mkString(",")
-      IOUtils.write(bodyLine + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+      IOUtils.write(bodyLine + System.lineSeparator(), out, StandardCharsets.UTF_8)
     })
   }
 
@@ -348,7 +348,7 @@ object CsvHelper extends CommonHelper {
       timeZone: ZoneId): Unit = {
     val properties = typeInfo[RowType].propertyNames
     val headerLine: String = properties.map(f => quoteCsvData(f, null)).mkString(",")
-    IOUtils.write(headerLine + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+    IOUtils.write(headerLine + System.lineSeparator(), out, StandardCharsets.UTF_8)
 
     for ((_, rows) <- results; r <- rows) {
       val bodyLine = properties
@@ -356,7 +356,7 @@ object CsvHelper extends CommonHelper {
           quoteCsvData(typeInfo.propertyValue(p, r), timeZone)
         })
         .mkString(",")
-      IOUtils.write(bodyLine + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+      IOUtils.write(bodyLine + System.lineSeparator(), out, StandardCharsets.UTF_8)
     }
   }
 
@@ -373,7 +373,7 @@ object CsvHelper extends CommonHelper {
     else {
       val methodNames = typeInfo.propertyNames
       val headerLine: String = methodNames.map(f => quoteCsvData(prettifyName(f), null)).mkString(",")
-      IOUtils.write(headerLine + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+      IOUtils.write(headerLine + System.lineSeparator(), out, StandardCharsets.UTF_8)
 
       results.foreach(r => {
         val bodyLine = methodNames.map(m => {
@@ -382,7 +382,7 @@ object CsvHelper extends CommonHelper {
           quoteCsvData(fieldValue, timeZone)
         })
         val line = bodyLine.mkString(",")
-        IOUtils.write(line + IOUtils.LINE_SEPARATOR, out, StandardCharsets.UTF_8)
+        IOUtils.write(line + System.lineSeparator(), out, StandardCharsets.UTF_8)
       })
     }
   }

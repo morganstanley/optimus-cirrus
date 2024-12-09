@@ -21,9 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
 import optimus.graph.DiagnosticSettings;
-
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.util.ASMifier;
@@ -84,20 +82,21 @@ public class BiopsyLab {
     dumpClass(DiagnosticSettings.classDumpLocation, className, classfileBuffer);
   }
 
-  static void dumpClass(String folder, String className, byte[] classfileBuffer)
-      throws IOException {
-    if (folder != null) {
-      File parent = new File(folder);
-      if (!parent.exists()) throw new VerifyError("could not read output directory " + folder);
-      File classOutfile = new File(parent, className.replace('/', '.') + ".class");
-      if (!classOutfile.createNewFile())
-        throw new VerifyError("could not create output file " + classOutfile.getAbsolutePath());
-      try (FileOutputStream fos = new FileOutputStream(classOutfile)) {
-        fos.write(classfileBuffer);
+  public static void dumpClass(String folder, String className, byte[] classfileBuffer) {
+    try {
+      if (folder != null) {
+        File parent = new File(folder);
+        if (!parent.exists()) throw new VerifyError("could not read output directory " + folder);
+        File classOutfile = new File(parent, className.replace('/', '.') + ".class");
+        try (FileOutputStream fos = new FileOutputStream(classOutfile)) {
+          fos.write(classfileBuffer);
+        }
+      } else {
+        // let's not dump a raw classfile to stderr...
+        new ClassReader(classfileBuffer).accept(new TraceClassVisitor(new PrintWriter(stderr)), 0);
       }
-    } else {
-      // let's not dump a raw classfile to stderr...
-      new ClassReader(classfileBuffer).accept(new TraceClassVisitor(new PrintWriter(stderr)), 0);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
   }
 

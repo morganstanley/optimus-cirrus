@@ -9,6 +9,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.graph.loom;
+package optimus.platform;
 
-public interface ITrivialLamdba {}
+/** Allows user to control *uncommon* cases where more precise flow control is needed */
+public final class FlowControl {
+  /**
+   * Entire @node will have re-ordering of nodes disabled.
+   *
+   * @see optimus.platform.PluginHelpers#setCompilerLevelZero()
+   */
+  public static void turOffNodeReorder() {}
+  /**
+   * Entire @node reordering will assume that all non-immutable functions mutate some global state
+   */
+  public static void assumeGlobalMutation() {}
+
+  /** Allow user to 'declare' dependency in flow */
+  public static <T> boolean waitFor(T v) {
+    return true;
+  }
+}

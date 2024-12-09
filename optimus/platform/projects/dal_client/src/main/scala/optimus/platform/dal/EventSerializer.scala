@@ -173,6 +173,12 @@ object EventSerializer extends BusinessEventSerializer {
       cmid: Option[MSUuid] = None): SerializedBusinessEvent = doSerializeBusinessEvent(evt, entityReferences, cmid)
 }
 
+private[dal] final case class SerializedWithEref(se: Option[SerializedEntity], eref: EntityReference)
+private object SerializedWithEref {
+  def apply(se: SerializedEntity, eref: EntityReference): SerializedWithEref = SerializedWithEref(Some(se), eref)
+  def apply(eref: EntityReference): SerializedWithEref = SerializedWithEref(None, eref)
+}
+
 private[optimus] object ContainedEventSerializer extends BusinessEventSerializer {
   import SerializedContainedEvent._
   import DALImpl._
@@ -225,15 +231,15 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
       )
     }
 
-    @node def deserEnts: Map[EntityReference, Entity] = {
+    @node def deserEnts: Map[SerializedWithEref, Entity] = {
       // Use of .aseq is intentional here.
       ents.aseq.map { case (k: EntityReference, v: ContainedEntity) =>
         v match {
-          case AppliedHeapEntity(se) => k -> deserContainedSe(se)
-          case UniqueHeapEntity(se)  => k -> deserContainedSe(se)
+          case AppliedHeapEntity(se) => SerializedWithEref(se, k) -> deserContainedSe(se)
+          case UniqueHeapEntity(se)  => SerializedWithEref(se, k) -> deserContainedSe(se)
           case StoredEntity(vt, tt)  =>
             // TODO (OPTIMUS-46195): Make them lazily load with LazyPickledReferences
-            k -> loadEntityWithGivenContext(k, DALImpl.TemporalContext(vt, tt))
+            SerializedWithEref(k) -> loadEntityWithGivenContext(k, DALImpl.TemporalContext(vt, tt))
         }
       }
     }
@@ -393,7 +399,7 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
     val ser = serMsg.sbe
     val erefToContainedEntityMap = serMsg.entityMap
     val deser = ContainedEntityDeserializer(erefToContainedEntityMap)
-    val erefMap = deser.deserEnts
+    val erefMap = deser.deserEnts.map { case (serializedWithEref, entity) => serializedWithEref.eref -> entity }
 
     val evtProps = ser.properties.aseq.map { case (k, v) => k -> replaceRefs(v, erefMap) }
 

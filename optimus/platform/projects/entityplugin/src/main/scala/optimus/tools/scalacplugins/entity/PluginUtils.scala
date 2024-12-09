@@ -139,10 +139,10 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
     def THIS = gen.mkAttributedRef(thisSym)
 
     object localNames {
-      val queuedNodeOf = newTermName("queuedNodeOf")
+      val nodeFutureOf = newTermName("nodeFutureOf")
     }
 
-    def queuedNodeOf(node: Tree): Tree = Apply(Select(THIS, localNames.queuedNodeOf), node :: Nil)
+    def nodeFutureOf(node: Tree): Tree = Apply(Select(THIS, localNames.nodeFutureOf), node :: Nil)
   }
 
   def EmbeddableType = Select(StorablePkg, tpnames.Embeddable)

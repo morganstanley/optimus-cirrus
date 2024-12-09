@@ -14,11 +14,11 @@ package optimus.platform.inputs.loaders;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
-import optimus.platform.inputs.NodeInputResolver;
 import optimus.platform.inputs.dist.DistNodeInputs;
 import optimus.platform.inputs.registry.Registry;
 import optimus.platform.inputs.registry.Source;
@@ -82,8 +82,13 @@ public class Loaders {
 
   public static <N> NodeInputStorage<N> fileProperties(NodeInputStorage<N> result, File file)
       throws IOException {
+    return inputStreamProperties(result, new FileInputStream(file));
+  }
+
+  public static <N> NodeInputStorage<N> inputStreamProperties(
+      NodeInputStorage<N> result, InputStream inputStream) throws IOException {
     Properties props = new Properties();
-    props.load(new FileInputStream(file));
+    props.load(inputStream);
     return loadProperties(result, (Map) props, true, LoaderSource.FILE);
   }
 

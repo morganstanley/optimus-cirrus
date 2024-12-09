@@ -39,8 +39,22 @@ public @interface loom {
   @SuppressWarnings("unused")
   String[] nodes() default {};
 
+  /**
+   * List of immutable types (for example entities)
+   * <li>Any class derived from Entity mentioned in class
+   * <li>Any Type passed as an argument to node call and returned from a node call
+   * <li>Consider adding support for IJ's @Contract
+   * <li>This is on the top of the list in LCompiler
+   */
+  @SuppressWarnings("unused")
+  String[] immutables() default {};
+
   // used by entityplugin to track all @nodeLift params (as they will be converted to anonymous
   // functions)
   @SuppressWarnings("unused")
   String[] lambdas() default {};
+
+  // used by entityplugin to track column numbers of lambdas
+  @SuppressWarnings("unused")
+  int[] lcn() default {};
 }

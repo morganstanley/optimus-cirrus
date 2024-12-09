@@ -23,6 +23,6 @@ final case class DeserializedTransaction(
       clazz: Class[_]
   ): Seq[SerializedEntity] = allSerializedEntities.filter(_.className == clazz.getName)
 
-  def allStoredEntityReferences(): Seq[FinalTypedReference] =
+  def allStoredEntityReferences: Seq[FinalTypedReference] =
     SerializedEntityHelper.collectStoredEntityReferences(allSerializedEntities)
 }

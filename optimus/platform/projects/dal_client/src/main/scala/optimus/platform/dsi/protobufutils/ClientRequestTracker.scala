@@ -44,8 +44,9 @@ object ClientRequestTracker {
             // if provided, find locations (for debugger). Note: need deduplication if batch contains multiple queries
             // at the same source location (ie, in a map)
             val locations = context.clientRequests.flatMap(_.callerDetail).map(_.asClickableSource).toSet.mkString("\n")
+            val nodeIDs = context.clientRequests.flatMap(_.extraCallerDetail).map(_.node.getId).toArray
             val event =
-              DALRequestCounter.report(requestUuid, dalEnv, context.clientRequests.size, locations, otherStuff)
+              DALRequestCounter.report(requestUuid, dalEnv, context.clientRequests.size, nodeIDs, locations, otherStuff)
             correlationMap.put(requestUuid, Some(event))
             DALRequestsInFlightCounter.report(requestUuid, correlationMap.size) // must be after event is in map
           } else correlationMap.put(requestUuid, None)

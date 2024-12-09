@@ -406,7 +406,7 @@ object BitBucketError extends DefaultJsonProtocol {
 }
 
 final case class BuildStatus(
-    state: BitBucketBuildStates.StashBuildState,
+    state: BitBucketBuildStates.BitbucketBuildState,
     key: String,
     name: String,
     url: String,

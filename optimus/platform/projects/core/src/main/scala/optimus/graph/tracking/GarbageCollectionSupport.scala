@@ -37,16 +37,12 @@ private[tracking] trait GarbageCollectionSupport {
   @volatile private var lastCleanup: Option[DependencyTrackerRootCleanupState] = None
   private[tracking] def getLastCleanupState(): Option[DependencyTrackerRootCleanupState] = lastCleanup
 
-  private val queueBasedInterrupt = new InterruptionFlag {
-    override def isInterrupted: Boolean = queue.hasPendingWork
-  }
-
   private object ScheduledTrigger extends TrackingGraphCleanupTrigger
 
   private[this] val cleanupScheduler = new CleanupScheduler[DependencyTrackerRootCleanupState](
     self.timedScheduler,
-    queueBasedInterrupt,
-    (state, interruptMode) => cleanupAsync(state, interruptMode, ScheduledTrigger, (_: Try[Unit]) => ())
+    this.queue.interrupter,
+    (state, interruptMode) => cleanupAsync(state, interruptMode, ScheduledTrigger, _ => ())
   )
 
   private[tracking] def newInitialCleanupState: DependencyTrackerRootCleanupState = {
@@ -102,13 +98,14 @@ private[tracking] trait GarbageCollectionSupport {
       state: Option[DependencyTrackerRootCleanupState],
       interruptMode: InterruptionFlag,
       triggeredBy: TrackingGraphCleanupTrigger) =
-    new TrackingGraphCleanupAction(state, interruptMode, triggeredBy)
+    new TrackingGraphCleanupActionImpl(state, interruptMode, triggeredBy)
 
-  private[tracking] class TrackingGraphCleanupAction(
+  private[tracking] class TrackingGraphCleanupActionImpl(
       initialState: Option[DependencyTrackerRootCleanupState],
       val interrupt: InterruptionFlag,
       val triggeredBy: TrackingGraphCleanupTrigger)
-      extends DependencyTrackerActionUpdate[Unit] {
+      extends DependencyTrackerActionUpdate[Unit]
+      with TrackingGraphCleanupAction {
     final override protected def disposed = root.isDisposed
     final override private[tracking] def alreadyDisposedResult: Try[Unit] = Success(())
     final override protected def targetScenarioName: String = root.name
@@ -118,7 +115,6 @@ private[tracking] trait GarbageCollectionSupport {
       val cleanupState = initialState.getOrElse(newInitialCleanupState)
       if (CleanupScheduler.autoCleanupEnabled && !interrupt.isInterrupted) {
         try {
-          // TODO (OPTIMUS-21217): also cleanup TTracks held by ticking entities
           val result = doCleanup(CleanupIfNecessary, cleanupState, interrupt)
           val resultState = Some(result)
 
@@ -177,6 +173,11 @@ private[tracking] trait TimedScheduler extends CurrentTimeSource {
  *     on the queue (so we can be less defensive about checking for interruptions when scheduled)
  *   - Except if we've been trying for more than maxTimeSinceLastCompletion to complete a cleanup without interruption,
  *     force one through without interruption
+ *
+ *  There are two other main sources of cleanup actions:
+ *    - Memory pressure, specifically GCMonitor
+ *    - Cleared reference watermark events, when there is a lot of nodes that are cleared (and so a lot of useless
+ *      tracks)
  *
  * CleanupSchedulerTest explains the expected behavior programmatically.
  */
@@ -318,5 +319,10 @@ private[graph] object CleanupScheduler {
 
   object NoInterruption extends InterruptionFlag {
     override def isInterrupted: Boolean = false
+  }
+
+  sealed trait TrackingGraphCleanupAction extends DependencyTrackerAction[Unit] {
+    def interrupt: InterruptionFlag
+    def triggeredBy: TrackingGraphCleanupTrigger
   }
 }

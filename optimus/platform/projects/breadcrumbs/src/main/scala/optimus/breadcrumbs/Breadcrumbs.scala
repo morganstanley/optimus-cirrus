@@ -140,7 +140,13 @@ object Breadcrumbs {
 
   private[breadcrumbs] val knownSource = new ConcurrentHashMap[Crumb.Source, Crumb.Source]()
 
-  def getCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.count.get)
+  def getCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.sendCount.get)
+
+  def getKafkaCounts: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.kafkaCount.get)
+
+  def getKafkaFailures: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.kafkaFailures.get)
+
+  def getEnqueueFailures: Map[Crumb.Source, Int] = knownSource.asScala.toMap.mapValuesNow(_.enqueueFailures.get)
 
   private val queueMaxLength: Int =
     if (defaultResources == "none" || defaultResources == "off") 1 else PropertyUtils.get(queueLengthName, 10000)
@@ -353,6 +359,11 @@ object Breadcrumbs {
       setImpl(newImpl)
   }
 
+  Option(System.getProperty("optimus.breadcrumbs.minimal.env")).foreach { envAndNode =>
+    val Array(env, configNode) = envAndNode.split("/")
+    minimalInit(env, configNode)
+  }
+
   private[optimus] def minimalInit(env: String, zkEnv: String): Unit = {
     setImpl(new DeferredConfigurationBreadcrumbsPublisher)
     customizedInit(
@@ -542,7 +553,7 @@ abstract class BreadcrumbsPublisher extends Filterable {
       def sendCrumbsForOneSource(c: Crumb) = {
         val cReplicated = Breadcrumbs.replicateToUuids(c)
         val s = c.source
-        val count = s.count.addAndGet(cReplicated.size)
+        val count = s.sendCount.addAndGet(cReplicated.size)
         knownSource.put(s, s)
         if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
           cReplicated.map(sendInternal).forall(identity)
@@ -809,6 +820,8 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
       } catch {
         case t: Throwable =>
           Breadcrumbs.log.warn(s"Unable to create KafkaProducer: $t $props")
+          Breadcrumbs.log.warn(s"Creation failed with: ${t.getMessage}")
+          t.printStackTrace()
           producer = None
       }
     }
@@ -817,6 +830,7 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   override def sendInternal(c: Crumb): Boolean = BreadcrumbsVerifier.withUuidVerifiedInDalCrumbs(c) {
     Breadcrumbs.log.trace(s"Sending $c")
     Breadcrumbs.queue.offer(c) || {
+      c.source.enqueueFailures.incrementAndGet()
       warning.foreach(_.fail("Failed to send kafka message due to full queue."))
       false
     }
@@ -884,8 +898,9 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
       c.source.kafkaCount.incrementAndGet()
       true
     } catch {
-      case t: Throwable =>
+      case NonFatal(t) =>
         warning.foreach(_.fail(s"Unable to send $c via Kafka due to $t"))
+        c.source.kafkaFailures.incrementAndGet()
         false
     }
   }

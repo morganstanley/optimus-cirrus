@@ -222,9 +222,11 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
       TTrackRef result;
       // set the initial to Nil, not null, as this just makes the first cycle faster for normal
       // nodes
-      // note - refQ may be null (for TTracks from ticking entities, which don't have a
-      // tweakableListener)
-      ReferenceQueue<NodeTask> refQ = ntsk.scenarioStack().tweakableListener().refQ();
+
+      // TODO (OPTIMUS-65703): This reference queue is null for some ticking entities which don't
+      //  have a tweakable listener. Once the ticking reactive api is removed, we can verify here
+      //  that the reference queue isn't null.
+      var refQ = ntsk.scenarioStack().tweakableListener().refQ();
       do {
         initial = nodes;
         if (initial == null || initial == TTrackRef.Nil) result = new TTrackRef(ntsk, null, refQ);

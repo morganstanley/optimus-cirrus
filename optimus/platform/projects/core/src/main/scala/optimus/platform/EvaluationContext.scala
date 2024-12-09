@@ -274,7 +274,7 @@ object EvaluationContext {
 
     if (Settings.convertByNameToByValue && scenario.existsWithNested(_.hasReducibleToByValueTweaks))
       new ConvertByNameToByValueNode(scenarioStack, scenario, node)
-    else if (Settings.removeRedundantTweaks && scenario.existsWithNested(_.hasPossiblyRedundantTweaks)) {
+    else if (Settings.removeRedundantTweaks) {
       // if we do not have nested we can just remove the tweaks directly and not make a whole new node, if there are nested ConvertByNameToByValueNode takes care of it for us
       if (scenario.nestedScenarios.isEmpty)
         given(scenarioStack.createChild(removeRedundantTweaks(scenario, scenarioStack), node), node)

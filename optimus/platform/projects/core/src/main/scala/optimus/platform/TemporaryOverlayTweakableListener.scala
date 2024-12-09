@@ -11,11 +11,10 @@
  */
 package optimus.platform
 
-import java.lang.ref.ReferenceQueue
-
 import optimus.graph.NodeTask
 import optimus.graph.PropertyNode
 import optimus.graph.TweakTreeNode
+import optimus.graph.tracking.ttracks.RefCounter
 
 /* "Temporary" Overlay (because we throw it away, it's created on the fly for evaluation of the givenOverlay {} block) */
 class TemporaryOverlayTweakableListener(
@@ -30,7 +29,7 @@ class TemporaryOverlayTweakableListener(
     originalTweakableListener.respondsToInvalidationsFrom ++ overlayTweakableListener.respondsToInvalidationsFrom
 
   override def isDisposed: Boolean = originalTweakableListener.isDisposed
-  override val refQ: ReferenceQueue[NodeTask] = overlayTweakableListener.refQ
+  override val refQ: RefCounter[NodeTask] = overlayTweakableListener.refQ
 
   override def onTweakableNodeCompleted(node: PropertyNode[_]): Unit = {
     forwardToListener.onTweakableNodeCompleted(node)

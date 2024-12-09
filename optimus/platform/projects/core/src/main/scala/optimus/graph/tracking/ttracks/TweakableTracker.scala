@@ -11,7 +11,6 @@
  */
 package optimus.graph.tracking.ttracks
 
-import java.lang.ref.ReferenceQueue
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.LongAdder
@@ -37,6 +36,7 @@ import optimus.graph.tracking.DependencyTracker
 import optimus.graph.tracking.DependencyTrackerQueue
 import optimus.graph.tracking.DependencyTrackerRoot
 import optimus.graph.tracking.EventCause
+import optimus.graph.tracking.TrackingGraphCleanupTrigger
 import optimus.graph.tracking.TraversalIdSource
 import optimus.platform.NodeHash
 import optimus.platform.Tweak
@@ -66,8 +66,29 @@ private[optimus] final class TweakableTracker(
 
   override val respondsToInvalidationsFrom: Set[TweakableListener] = parent.respondsToInvalidationsFrom + this
   override def isDisposed: Boolean = owner.isDisposed
-  override val refQ: ReferenceQueue[NodeTask] = new ReferenceQueue[NodeTask]
-  private[tracking] var gcCollectedReferences = 0
+
+  private object RefCounterWatermark extends TrackingGraphCleanupTrigger
+  override val refQ: RefCounter[NodeTask] = new RefCounter[NodeTask] {
+    override def nextWatermark(currentWatermark: Acc): Acc = currentWatermark + Settings.ttrackClearedNodeRefWatermark
+
+    override def onWatermarkBreached(): Unit = {
+      // Breaching watermarks enqueues high prio cleanups that will jump the queue in front of other actions. Those
+      // cleanups are still subject to `cleanupRequired()` so they aren't guaranteed to run or cleanup anything, but they
+      // at least ensure that we will attempt some cleanups, even if action queues are consistently busy.
+      //
+      // This is called from the TTrackRef constructor (rarely but still!) so it needs to return asynchronously without
+      // waiting on the cleanup, otherwise there is a risk of deadlock. That is always the case because cleanups are
+      // always done asynchronously (through optimus.graph.tracking.DependencyTrackerQueue.executeAsync, which
+      // either enqueues or run through Scheduler.executeNodeAsync).
+      //
+      // The cleanup is not interruptable, which is important because the place where it becomes necessary is when
+      // queues are consistently busy. Were it interruptable, it would be interrupted immediately after starting.
+      log.info(s"Scheduling cleanup for ${owner.name} based on reference counter watermark")
+      owner.root.runCleanupNow(RefCounterWatermark)
+    }
+  }
+
+  private var collectedReferences: refQ.Acc = _
   protected[tracking] var ttracks: java.util.Map[TweakableKey, TTrackRoot] = new ConcurrentHashMap()
   private[tracking] var timedCleanupDelay = Settings.ttrackCleanupMinDelayFromLastCleanupMs
   private var nextTimedCleanup = timeSource.currentTimeMillis + timedCleanupDelay
@@ -76,19 +97,18 @@ private[optimus] final class TweakableTracker(
     val size = ttracks.size
     (size > 0) && {
       val tracks = trackCount.sum()
-      while (refQ.poll() != null) gcCollectedReferences += 1
+      val collectedSinceLastCleanup = refQ.getUpdate(collectedReferences)
+
       val trackLimit = size * Settings.ttrackTrackCallToRootThresholdRatio
       val refLimit = size * Settings.ttrackClearedNodeRefToRootThresholdRatio
       val timeToNextTimedCleanup = nextTimedCleanup - timeSource.currentTimeMillis
       log.debug(
-        s"[$name] GC Collected TRefs: $gcCollectedReferences (threshold $refLimit), " +
+        s"[$name] GC Collected TRefs: $collectedSinceLastCleanup (threshold $refLimit), " +
           s"TrackActivity: $tracks (threshold $trackLimit), " +
           s"TimeToNextTimedCleanup: $timeToNextTimedCleanup")
-      if (gcCollectedReferences > refLimit || tracks > trackLimit || timeToNextTimedCleanup <= 0) {
+      if (collectedSinceLastCleanup > refLimit || tracks > trackLimit || timeToNextTimedCleanup <= 0) {
         // reset counters regardless of which triggered the cleanup (since we're going to cleanup all types of
         // garbage). Note that the timeToNextTimedCleanup is updated after the cleanup since it looks at the stats.
-        gcCollectedReferences = 0
-        trackCount.reset()
         true
       } else false
     }
@@ -347,6 +367,10 @@ private[optimus] final class TweakableTracker(
         // by the timeout)
         timedCleanupDelay = recalculateTimedCleanupDelay(name, stats, timedCleanupDelay)
         nextTimedCleanup = timeSource.currentTimeMillis + timedCleanupDelay
+
+        // update other values based on the current state
+        trackCount.reset()
+        collectedReferences = refQ.snapshot
         Complete(stats)
       }
     } else NothingToDo

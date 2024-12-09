@@ -141,7 +141,7 @@ object JavaOpts {
             rest,
             if (modernJava) {
               log(s"$pre keeping $flag $arg")
-              acc ++ Seq(flag, arg)
+              arg +: flag +: acc
             } else {
               log(s"$pre dropping $flag $arg")
               acc
@@ -151,15 +151,15 @@ object JavaOpts {
             rest,
             if (modernJava) {
               log(s"$pre keeping $flag")
-              acc :+ flag
+              flag +: acc
             } else {
               log(s"$pre dropping $flag")
               acc
             })
         case flag +: rest =>
-          filter(rest, acc :+ flag)
+          filter(rest, flag +: acc)
         case _ =>
-          acc
+          acc.reverse.toVector
       }
     filter(opts, Seq.empty)
   }
@@ -291,7 +291,7 @@ object JavaOptionFiltering {
           tolerated = true
           oldArgs0
         } else Seq.empty
-        opts ++ oldArgs ++ newArgs
+        newArgs.reverse ++: oldArgs.reverse ++: opts
       }
 
       // Don't ignore previously seen for these.  We'll pick out the last as a final step.
@@ -308,7 +308,7 @@ object JavaOptionFiltering {
 
           // thou shalt not process arguments that be not command-line options
           case arg +: rest if !arg.startsWith("-") =>
-            filterPass1(rest, acc :+ arg)
+            filterPass1(rest, arg +: acc)
 
           case arg +: rest if seen(Seq(arg)) && !gcSelectors(arg) =>
             log(s"Removing duplicate $arg")
@@ -328,7 +328,7 @@ object JavaOptionFiltering {
             // apply a hard cutoff to tolerant if in tolerance mode
             if ((tolerantOutput && sign > 0) || cond(javaVersion * sign >= argVersion * sign)) {
               log(s"$pre unmasking $arg")
-              filterPass1(rest, acc :+ arg)
+              filterPass1(rest, arg +: acc)
             } else {
               log(s"$pre excluding $arg")
               filterPass1(rest, acc)
@@ -346,7 +346,7 @@ object JavaOptionFiltering {
 
             if (cond(javaVersion >= 9)) {
               log(s"$pre retaining $arg $arg2")
-              filterPass1(rest, acc :+ arg :+ arg2)
+              filterPass1(rest, arg2 +: arg +: acc)
             } else {
               log(s"$pre discarding $arg $arg2")
               filterPass1(rest, acc)
@@ -354,7 +354,7 @@ object JavaOptionFiltering {
 
           case arg +: rest if no11Equiv.contains(arg) || no11EquivStarts.exists(arg.startsWith(_)) =>
             if (cond(javaVersion < 9))
-              filterPass1(rest, acc :+ arg)
+              filterPass1(rest, arg +: acc)
             else
               filterPass1(rest, acc)
 
@@ -378,7 +378,7 @@ object JavaOptionFiltering {
             // one-argument version of add-export
             else if (arg.startsWith("--add-export") || arg.startsWith("--add-opens")) {
               if (cond(javaVersion >= 9)) {
-                filterPass1(rest, acc :+ arg)
+                filterPass1(rest, arg +: acc)
               } else {
                 log(s"$pre discarding $arg")
                 filterPass1(rest, acc)
@@ -417,12 +417,12 @@ object JavaOptionFiltering {
               }
               val newArg = arg.patch(addressStart, newAddress, address.length)
               logTrans(arg, newArg)
-              filterPass1(rest, acc :+ newArg)
+              filterPass1(rest, newArg +: acc)
             }
 
             // Nothing special, it seems.
             else
-              filterPass1(rest, acc :+ arg)
+              filterPass1(rest, arg +: acc)
           case _ =>
             acc
 
@@ -431,8 +431,8 @@ object JavaOptionFiltering {
 
       val pass1 = filterPass1(opts ++ addExports, Seq.empty)
 
-      // Keep only last GC specification
-      val pass2 = pass1.reverse
+      // Keep only last GC specification (note that filterPass1 has reversed the order already)
+      val pass2 = pass1
         .foldLeft((Option.empty[String], List.empty[String])) {
           case ((opt @ Some(last), acc), arg) if gcSelectors(arg) =>
             log(s"$pre Removing $arg in favor of last-specified $last")
@@ -447,7 +447,7 @@ object JavaOptionFiltering {
 
       val pass3 = if (tolerated) s"-XX:+$ignoreUnrecognized" +: pass2 else pass2
 
-      pass3
+      pass3.toVector
     }
   }
 }

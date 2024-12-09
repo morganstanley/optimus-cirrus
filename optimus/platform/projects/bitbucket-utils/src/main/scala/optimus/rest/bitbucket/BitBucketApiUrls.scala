@@ -44,6 +44,9 @@ trait BitBucketApiUrls {
   protected def apiPrActivitiesUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiPrsUrl(project, repo)}/$prNumber/activities"
 
+  protected def apiCommitsBetweenTagsUrl(project: String, repository: String, fromTag: String, toTag: String): String =
+    s"${apiRepoUrl(project, repository)}/commits?until=$toTag&since=$fromTag"
+
   protected def apiPrCommentsUrl(project: String, repo: String, prNumber: Long): String =
     s"${apiRepoUrl(project, repo)}/pull-requests/$prNumber/comments"
 

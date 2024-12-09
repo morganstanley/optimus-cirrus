@@ -220,7 +220,7 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   @miscFlags(MiscFlags.NODESYNC_ONLY)
   final def get: T = getInternal
   @miscFlags(MiscFlags.NODESYNC_ONLY)
-  override def get$ : T = get
+  override def get$ : T = getInternal
   override def exception$ : Throwable = exception
 
   /**

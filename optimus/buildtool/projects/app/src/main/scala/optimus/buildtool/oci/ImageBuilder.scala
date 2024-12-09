@@ -150,7 +150,7 @@ class ImageBuilder(
   }
 }
 
-abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with Log {
+abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with SymLinkSearch with Log {
   import ImageBuilder.Layers
 
   val sourceDir: WorkspaceSourceRoot
@@ -555,12 +555,22 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
             .map(_.absFilePath.toString)
             .mkString(",\n")}")
       // extraImages files should be prior than dependencies extraFiles
-      (extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath)) ++ includedDeps.toSeq.sortBy(e =>
-        (e.bucketId, e.absFilePath)))
+      extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath)) ++ includedDeps.toSeq.sortBy(e =>
+        (e.bucketId, e.absFilePath))
     } else depsPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath))
     deps.groupBy(f => f.bucketId).apar.foreach { case (bucketId, depDefs) => // parallel inserts for all buckets
       depDefs.foreach { depDef => // jib will keep insert order
-        addEntryToLayer(layers.get(f"<dependencies-${bucketId}%02d>"), depDef.absFilePath, depDef.inOutputTarPath)
+        val absPath = depDef.absFilePath
+        val symLinkLayer: Option[String] = pickSymLinkLayer(absPath)
+        val sourcePath =
+          if (symLinkLayer.isDefined) {
+            val finalPath = stagingDir.path.resolve(absPath)
+            if (!Files.exists(finalPath)) Files.copy(absPath, finalPath)
+            finalPath
+          } else absPath
+
+        val layerName = symLinkLayer.getOrElse(f"<dependencies-$bucketId%02d>")
+        addEntryToLayer(layers.get(layerName), sourcePath, depDef.inOutputTarPath)
       }
     }
 
@@ -599,7 +609,6 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
         log.debug(s"[${dstImage.name}] Skipping $path as it is neither a directory nor a file nor a valid symlink")
         Set.empty
     }
-
   }
 
   private def addEntryToLayer(layer: FileEntriesLayer.Builder, file: Path, inTarDst: Path): Unit = {

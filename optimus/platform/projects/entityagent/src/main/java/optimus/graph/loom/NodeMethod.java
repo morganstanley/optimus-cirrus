@@ -13,6 +13,7 @@ package optimus.graph.loom;
 
 import static optimus.CoreUtils.merge;
 import static optimus.CoreUtils.stripPrefix;
+import static optimus.debug.CommonAdapter.makePrivate;
 import static optimus.debug.CommonAdapter.newMethod;
 import static optimus.graph.loom.LoomConfig.*;
 import static org.objectweb.asm.Opcodes.*;
@@ -29,38 +30,23 @@ public class NodeMethod extends TransformableMethod {
   private final ClassNode cls;
   final String cleanName; // Unmangled name (gets mangled when private function is accessed
   private final Type returnType; // Computed in ctor
-  private final Type[] argTypes; // Computed in ctor
   private final String[] argNames; // Computed in ctor
   private final boolean isInterface; // True on interface
   public MethodNode queuedMethod;
   public MethodNode newNodeMethod;
-  public int clsID;
-  public int lineNumber; // first line number found in the bytecode
 
   // @node(exposeArgTypes = true)/@async(exposeArgTypes = true) needs to inherit this trait
   boolean trait;
-  boolean asyncOnly;
 
   String implFieldDesc; // null if not a simple ($impl) field, else no need to create nodeClass
   String implMethodDesc; // null if not a simple ($impl) method, else no need to create nodeClass
   boolean isScenarioIndependent;
 
-  @Override
-  public String toString() {
-    return this.getClass().getSimpleName() + ":" + cleanName;
-  }
-
-  public NodeMethod(
-      ClassNode cls,
-      String privatePrefix,
-      MethodNode method,
-      CompilerArgs cArgs,
-      boolean hasNodeCalls) {
-    super(method, cArgs, hasNodeCalls);
+  public NodeMethod(ClassNode cls, String privatePrefix, MethodNode method, CompilerArgs cArgs) {
+    super(method, cArgs);
     this.cls = cls;
     this.cleanName = stripPrefix(method.name, privatePrefix);
     this.isInterface = CommonAdapter.isInterface(cls.access);
-    this.argTypes = Type.getArgumentTypes(method.desc);
     if (method.parameters == null) this.argNames = null;
     else this.argNames = method.parameters.stream().map(p -> p.name).toArray(String[]::new);
     this.returnType = Type.getReturnType(method.desc);
@@ -109,8 +95,7 @@ public class NodeMethod extends TransformableMethod {
       var needsImplSuffix = implFieldDesc != null || implMethodDesc != null;
       var methodToCall = needsImplSuffix ? method.name + IMPL_SUFFIX : method.name;
       var cmd = asyncOnly ? CMD_ASYNC : CMD_NODE; // Default....
-      if (trait) cmd = asyncOnly ? CMD_ASYNC_WITH_TRAIT : CMD_NODE_WITH_TRAIT;
-      else if (implFieldDesc != null) cmd = CMD_NODE_ACPN;
+      if (implFieldDesc != null) cmd = CMD_NODE_ACPN;
       else if (implMethodDesc != null) cmd = CMD_OBSERVED_VALUE_NODE;
       var handleIsInterface = implFieldDesc == null && isInterface;
 
@@ -129,7 +114,8 @@ public class NodeMethod extends TransformableMethod {
     var methodOwner = Type.getObjectType(cls.name);
     var descX = Type.getMethodDescriptor(returnType, merge(methodOwner, argTypes));
 
-    var bsmParams = merge(new Object[] {handle, clsID}, argNames);
+    int flags = (trivial ? NF_TRIVIAL : 0) | (trait ? NF_EXPOSE_ARGS_TRAIT : 0);
+    var bsmParams = merge(new Object[] {handle, clsID, flags}, argNames);
     mv.visitInvokeDynamicInsn(cmd, descX, bsmHandle, bsmParams);
     mv.returnValue();
   }

@@ -577,11 +577,15 @@ object SamplingProfiler extends Log {
 
     trait Minus[N] {
       def minus(a: N, b: N): N
+      def isNonZero(a: N): Boolean
+      def nonZero(a: N): Option[N]
     }
 
     implicit def numericMinus[N: Numeric]: Minus[N] = new Minus[N] {
       val num = implicitly[Numeric[N]]
       def minus(a: N, b: N) = num.minus(a, b)
+      def isNonZero(v: N): Boolean = num.zero != v
+      def nonZero(v: N): Option[N] = if (num.zero == v) None else Some(v)
     }
 
     implicit def mapMinus[K, V: Minus]: Minus[Map[K, V]] = new Minus[Map[K, V]] {
@@ -592,15 +596,36 @@ object SamplingProfiler extends Log {
           k -> b.get(k).fold(a(k))(bv => num.minus(a(k), bv))
         }.toMap
       }
+      override def isNonZero(a: Map[K, V]): Boolean = a.exists(kv => num.isNonZero(kv._2))
+      def nonZero(m: Map[K, V]): Option[Map[K, V]] = {
+        val filtered = m.filter(kv => num.isNonZero(kv._2))
+        if (filtered.nonEmpty) Some(filtered) else None
+      }
     }
 
     // Report the numeric difference between the latest and previous value
     def MINUS[N](implicit num: Minus[N]) = (prev: Option[N], v: N) => prev.fold(v)(p => num.minus(v, p))
 
+    final implicit class FilterValues[K, V](val map: Map[K, V]) {
+      def stringMap: Map[String, V] = map.map { case (k, v) =>
+        k.toString -> v
+      }
+    }
+
     // Simple snap, publishing difference from previous numeric value to a single property
     def Diff[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
       new Sampler(sp, snapper, MINUS(num), PUB(key))
     }
+
+    // Like Diff, but never publishes zero diffs
+    def DiffNonZero[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
+      new Sampler(sp, snapper, MINUS(num), (v, _) => Elems(key.maybe(num.nonZero(v))))
+    }
+
+    def SnapNonZero[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
+      new Sampler(sp, snapper, LATEST[N], (v, _) => Elems(key.maybe(num.nonZero(v))))
+    }
+
   }
 
   /**

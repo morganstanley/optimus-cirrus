@@ -171,15 +171,14 @@ class BaseSamplers extends SamplerProvider {
     )
 
     ss += Diff(_ => StackAnalysis.numStacksPublished, numStacksPublished)
+    ss += Diff(_ => StackAnalysis.numStacksNonDeduped, numStacksReferenced)
     ss += Snap(_ => memBean.getObjectPendingFinalizationCount, gcFinalizerCount)
 
-    ss += Diff(
-      _ =>
-        Breadcrumbs.getCounts.collect {
-          case (k, v) if v > 0 =>
-            (k.toString, v)
-        },
-      crumbsSent)
+    ss += DiffNonZero(_ => Breadcrumbs.getCounts.stringMap, crumbsSent)
+
+    // If we diff these, we risk missing the interesting ones
+    ss += SnapNonZero(_ => Breadcrumbs.getKafkaFailures.stringMap, kafkaFailures)
+    ss += SnapNonZero(_ => Breadcrumbs.getEnqueueFailures.stringMap, enqueueFailures)
 
     var maxPsFailures = 10
 

@@ -17,6 +17,8 @@ import optimus.graph.OGTrace
 import optimus.graph.Scheduler
 import optimus.graph.Settings
 import optimus.graph.diagnostics.GraphDiagnostics
+import optimus.graph.tracking.CleanupScheduler.InterruptionFlag
+import optimus.graph.tracking.CleanupScheduler.TrackingGraphCleanupAction
 import optimus.graph.tracking.monitoring.ActionSummary
 import optimus.graph.tracking.monitoring.QueueActionSummary
 import optimus.graph.tracking.monitoring.QueueMonitor
@@ -43,6 +45,11 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     with CallbackBatchOwner {
   import DependencyTrackerQueue._
   private val monitor = QueueMonitor.register(this)
+
+  val interrupter: InterruptionFlag = new InterruptionFlag {
+    override def isInterrupted: Boolean = hasPendingWork
+  }
+
   override protected def trackerRoot: DependencyTrackerRoot = tracker.root
   override def toString: String = s"DependencyTrackerQueue[${tracker.scenarioReference}] [$stateManager]"
 
@@ -276,6 +283,8 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     queueLock.synchronized { workQueue.iterator.toList }
 
   private def afterActionCompleted(completedAction: DependencyTrackerAction[_]): Unit = {
+    tracker.notifyActionCompleted()
+
     var immediate: ArrayBuffer[DependencyTrackerAction[_]] = null
     var nextIsUpdate = false
 
@@ -585,11 +594,20 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     })
   }
 
-  // GC triggers may fire multiple times before the cleanup has a chance to actually run - make sure we don't enqueue
-  // again if the previous cleanup still hasn't run
-  private[tracking] def maybeRunCleanupNow(action: DependencyTrackerAction[_]): Unit = {
-    val headOfQueue = queueLock.synchronized { workQueue.peek }
-    if (!headOfQueue.isInstanceOf[GarbageCollectionSupport#TrackingGraphCleanupAction])
+  private[tracking] def maybeRunCleanupNow(action: TrackingGraphCleanupAction): Unit = {
+    // GC triggers may fire multiple times before the cleanup has a chance to actually run - make sure we don't enqueue
+    // again if the previous cleanup still hasn't run.
+    //
+    // We do run multiple cleanups if they differ in interruption status.
+    //
+    // We don't check the low priority queue, because that cleanup may never run if workQueue is always busy.
+    val debounced = queueLock.synchronized {
+      workQueue.peek match {
+        case other: TrackingGraphCleanupAction if other.interrupt == action.interrupt => true
+        case _                                                                        => false
+      }
+    }
+    if (!debounced)
       executeAsync(action, (_: Try[_]) => log.info(s"$action completed"), highPriority = true)
   }
 

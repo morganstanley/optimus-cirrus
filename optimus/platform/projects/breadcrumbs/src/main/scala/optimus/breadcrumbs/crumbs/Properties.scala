@@ -48,7 +48,7 @@ abstract class KnownProperties extends Enumeration {
     def toJson(a: A): JsValue = a.toJson
 
     private var _meta: MetaData = NullMeta
-    def meta: MetaData = _meta
+    override def meta: MetaData = _meta
 
     private[crumbs] def withMeta(md: MetaData): this.type = {
       _meta = md.copy(owner = this)
@@ -120,10 +120,15 @@ abstract class KnownProperties extends Enumeration {
 object PropertyUnits {
   sealed class Units(nme: String) {
     override def toString: String = nme
+    def fromStackCount(count: Long): Long = count
   }
-  case object Millis extends Units("ms")
+  case object Millis extends Units("ms") {
+    override def fromStackCount(count: Long): Long = count / (1000L * 1000L)
+  }
   case object Nanoseconds extends Units("ns")
-  case object MegaBytes extends Units("MB")
+  case object MegaBytes extends Units("MB") {
+    override def fromStackCount(count: Long): Long = count / (1000L * 1000L)
+  }
   case object Count extends Units("")
   case object BareNumber extends Units("")
   case object Bytes extends Units("B")
@@ -158,6 +163,9 @@ object KnownProperties {
       else "Property"
 
     def apply(description: String): MetaData = copy(descriptionOverride = description)
+
+    def withFlags(add: Int, remove: Int = 0): MetaData =
+      copy((flags & ~remove) | add)
   }
 
   val AVG_OVER = 0
@@ -166,6 +174,7 @@ object KnownProperties {
   val AGG_ALL = AGG_OVER_TIME | AGG_OVER_ENGINES
   val AGG_HYPER = 4
   val UNGRAPHABLE = 8
+  val FLAME = 16
 
   val NullMeta = MetaData(0, BareNumber)
   val TimeSpent = MetaData(AGG_ALL, Millis)
@@ -173,6 +182,7 @@ object KnownProperties {
   val MemoryInUse = MetaData(AGG_OVER_ENGINES, MegaBytes)
   val ItemCount = MetaData(AGG_OVER_ENGINES, Count)
   val EventCount = MetaData(AGG_ALL, Count)
+  val CumulativeEventCount = MetaData(AGG_OVER_ENGINES, Count)
   val GaugeLevel = MetaData(0, BareNumber)
 
 }
@@ -458,6 +468,7 @@ object Properties extends KnownProperties {
     def ++(o: TraversableOnce[Elem[_]]) = new Elems(m ++ o)
     def +(es: Elems) = new Elems(m ++ es.m)
     def :::(es: Elems) = new Elems(m ++ es.m)
+    def ::(es: Elems) = new Elems(m ++ es.m)
     def :::(eso: Option[Elems]) = eso.fold(this)(es => new Elems(m ++ es.m))
     def ::(e: Elem[_]) = new Elems(e :: m)
     def +(e: Elem[_]) = new Elems(e :: m)
@@ -488,10 +499,12 @@ object Properties extends KnownProperties {
     def source: String
     def parse(js: JsValue): A
     def toJson(a: A): JsValue
-    def maybe(b: Boolean, a: => A): Option[Elem[A]] = if (b) Some(Elem(this, a)) else None
-    def maybe(p: A => Boolean, a: A): Option[Elem[A]] = if (p(a)) Some(Elem(this, a)) else None
-    def maybe(o: Option[A]): Option[Elem[A]] = o.map(Elem(this, _))
-    def nonNull(o: A): Option[Elem[A]] = if (Objects.nonNull(o)) Some(Elem(this, o)) else None
+    def maybe(b: Boolean, a: => A): Elems = if (b) Elems(this -> a) else Elems.Nil
+    def maybe(p: A => Boolean, a: A): Elems = if (p(a)) Elems(this -> a) else Elems.Nil
+    def maybe(o: Option[A]): Elems = o.fold(Elems.Nil)(a => Elems(this -> a))
+    def nonNull(o: A): Elems = if (Objects.nonNull(o)) Elems(this -> o) else Elems.Nil
+
+    def meta: MetaData = NullMeta
   }
 
   class UntypedProperty(val name: String, src: Option[String]) extends Key[String] {
@@ -553,6 +566,8 @@ object Properties extends KnownProperties {
 
   val breadcrumbsSentSoFar = propL
   val crumbsSent = prop[Map[String, Int]].withMeta(EventCount)
+  val kafkaFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
+  val enqueueFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
 
   val uuidLevel = prop[String]
 
@@ -928,6 +943,10 @@ object Properties extends KnownProperties {
   val hotspotChildNodeLookupTime = propL
 
   val smplTimes = prop[Map[String, Long]].withMeta(TimeSpent)
+  val flameTimes = prop[Map[String, Long]].withMeta(TimeSpent.withFlags(FLAME))
+  val flameLive = prop[Map[String, Long]].withMeta(MemoryInUse.withFlags(FLAME))
+  val flameAlloc = prop[Map[String, Long]].withMeta(AllocSamples.withFlags(FLAME))
+  val flameCounts = prop[Map[String, Long]].withMeta(EventCount.withFlags(FLAME))
   val samplingPauseTime = propL.withMeta(TimeSpent)
   val childProcessCount = propI.withMeta(ItemCount)
   val childProcessCPU = propD.withMeta(GaugeLevel)
@@ -957,6 +976,7 @@ object Properties extends KnownProperties {
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
   val numStacksPublished = propL.withMeta(EventCount)
+  val numStacksReferenced = propL.withMeta(EventCount)
   val numSamplesPublished = propL.withMeta(EventCount)
   val numCrumbFailures = propI.withMeta(EventCount)
   val crumbQueueLength = propI

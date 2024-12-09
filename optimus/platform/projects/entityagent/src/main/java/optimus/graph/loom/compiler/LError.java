@@ -9,15 +9,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.platform;
+package optimus.graph.loom.compiler;
 
-public class ScenarioFlags {
-  public static final int none = 0;
-  public static final int hasReducibleToByValueTweaks = 1;
-  public static final int hasPossiblyRedundantTweaks = 2;
-  public static final int disableRemoveRedundant = 4;
-  public static final int hasUnresolvedOrMarkerTweaks = 8;
-  public static final int hasContextDependentTweaks = 16;
-  public static final int unorderedTweaks = 32;
-  public static final int markedForDebugging = 64;
+// mainly for easier debugging...
+public class LError {
+  private static final String prefix = "LERROR: ";
+
+  public static void fatal(String msg) {
+    throw new RuntimeException(prefix + msg);
+  }
+
+  static void log(String msg) {
+    System.err.println(prefix + msg);
+  }
+
+  public static void require(boolean cond, String msg) {
+    if (!cond) log("require failure: " + msg);
+  }
 }

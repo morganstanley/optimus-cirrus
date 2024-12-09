@@ -43,7 +43,8 @@ public class Registry {
           "optimus.platform.inputs.registry.ProcessGraphInputs",
           "optimus.sandbox.SandboxInputs",
           "optimus.platform.inputs.registry.ProcessDistInputs",
-          "optimus.observability.AtJobTestNodeInputs");
+          "optimus.observability.AtJobTestNodeInputs",
+          "optimus.platform.inputs.registry.parameters.SimCalcProtocolConfigNodeInputs");
 
   public static final Registry TheHugeRegistryOfAllOptimusProperties = new Registry();
 

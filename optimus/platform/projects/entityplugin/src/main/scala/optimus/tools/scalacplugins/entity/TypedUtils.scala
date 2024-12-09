@@ -331,6 +331,10 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     anno.javaArgs.get(tpnames.loomNodes).map(_.asInstanceOf[Array[ClassfileAnnotArg]])
   final def getLoomLambdasArg(anno: AnnotationInfo): Option[Array[ClassfileAnnotArg]] =
     anno.javaArgs.get(tpnames.loomLambdas).map(_.asInstanceOf[Array[ClassfileAnnotArg]])
+  final def getLoomLcnArg(anno: AnnotationInfo): Option[Array[ClassfileAnnotArg]] =
+    anno.javaArgs.get(tpnames.loomLcn).map(_.asInstanceOf[Array[ClassfileAnnotArg]])
+  final def getLoomImmutablesArg(anno: AnnotationInfo): Option[Array[ClassfileAnnotArg]] =
+    anno.javaArgs.get(tpnames.loomImmutables).map(_.asInstanceOf[Array[ClassfileAnnotArg]])
 
   // NB These may not be on classpath, so they will resolve to NoSymbol.
   lazy val JunitTestAnnotation = rootMirror.getClassIfDefined("org.junit.Test")
@@ -699,10 +703,12 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   def hasNodeLiftByValue(sym: Symbol) = sym.hasAnnotation(NodeLiftByValueAnnotation)
   def hasNodeLiftAnno(sym: Symbol) = sym.hasAnnotation(NodeLiftAnnotation)
   def hasNodeSyncLiftAnno(sym: Symbol) = sym.hasAnnotation(NodeSyncLiftAnnotation)
+  def hasNodeWithClassIDAnno(sym: Symbol): Boolean = sym.hasAnnotation(WithNodeClassIDAnnotation)
   def isNodeLifted(sym: Symbol) = hasNodeLiftByName(sym) || hasNodeLiftByValue(sym) || hasNodeLiftAnno(sym)
   def hasNodeAnnotation(tree: Tree) = tree.symbol.hasAnnotation(NodeAnnotation)
   def hasAsyncAnnotation(tree: Tree) = tree.symbol.hasAnnotation(AsyncAnnotation)
   def hasNodeSyncAnnotation(tree: Tree) = tree.symbol.hasAnnotation(NodeSyncAnnotation)
+  def hasImpureAnnotation(tree: Tree) = tree.symbol.hasAnnotation(ImpureAnnotation)
   def addLoomIfMissing(symbol: Symbol): Unit = if (curInfo.isLoom) addIfMissing(symbol, LoomAnnotation)
   def addIfMissing(sym: Symbol, annotation: ClassSymbol, assoc: List[(TermName, ClassfileAnnotArg)] = Nil): Unit =
     if (!sym.hasAnnotation(annotation)) sym.addAnnotation(AnnotationInfo(annotation.tpe, Nil, assoc))

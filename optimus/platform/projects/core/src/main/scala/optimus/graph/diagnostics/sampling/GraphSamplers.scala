@@ -121,37 +121,38 @@ class GraphSamplers extends SamplerProvider {
       }
     )
 
-    ss += new Sampler(
-      sp,
-      snapper = _ => {
-        val counters = new Cardinality.Counters()
-        OGLocalTables.forAllRemovables((table: RemovableLocalTables) => counters.add(table.getCardinalities))
-        counters
-      },
-      process = (_: Option[Cardinality.Counters], curr: Cardinality.Counters) => curr.countEstimateMap,
-      publish = (cardinalitiesMap: Map[Cardinality.Category, LogLogCounter]) => {
-        val m = cardinalitiesMap.mapValuesNow(_.estimate).map { case (k, v) =>
-          k.name -> Math.round(v).toInt
-        }
+    if (sp.propertyUtils.get("optimus.sampling.cardinalities", false))
+      ss += new Sampler(
+        sp,
+        snapper = _ => {
+          val counters = new Cardinality.Counters()
+          OGLocalTables.forAllRemovables((table: RemovableLocalTables) => counters.add(table.getCardinalities))
+          counters
+        },
+        process = (_: Option[Cardinality.Counters], curr: Cardinality.Counters) => curr.countEstimateMap,
+        publish = (cardinalitiesMap: Map[Cardinality.Category, LogLogCounter]) => {
+          val m = cardinalitiesMap.mapValuesNow(_.estimate).map { case (k, v) =>
+            k.name -> Math.round(v).toInt
+          }
 
-        // In json estimators will look like, e.g., "vref" : { "0" : 37, "1" : .... }, which will make it a lot easier to compute maximum in splunk
-        val estimators: Map[String, Map[String, Int]] = cardinalitiesMap.map { case (k, v) =>
-          k.name -> v.estimators.zipWithIndex.map { case (v, i) =>
-            i.toString -> v
-          }.toMap
-        }
+          // In json estimators will look like, e.g., "vref" : { "0" : 37, "1" : .... }, which will make it a lot easier to compute maximum in splunk
+          val estimators: Map[String, Map[String, Int]] = cardinalitiesMap.map { case (k, v) =>
+            k.name -> v.estimators.zipWithIndex.map { case (v, i) =>
+              i.toString -> v
+            }.toMap
+          }
 
-        val raw: Map[String, Long] = cardinalitiesMap.map { case (k, v) =>
-          k.name -> v.withDuplicates
-        }
+          val raw: Map[String, Long] = cardinalitiesMap.map { case (k, v) =>
+            k.name -> v.withDuplicates
+          }
 
-        val alphaNumerators: Map[String, Double] = cardinalitiesMap.map { case (k, v) =>
-          k.name -> v.numerator
-        }
+          val alphaNumerators: Map[String, Double] = cardinalitiesMap.map { case (k, v) =>
+            k.name -> v.numerator
+          }
 
-        Elems(cardEstimated -> m, cardRaw -> raw, cardNumerator -> alphaNumerators, cardEstimators -> estimators)
-      }
-    )
+          Elems(cardEstimated -> m, cardRaw -> raw, cardNumerator -> alphaNumerators, cardEstimators -> estimators)
+        }
+      )
 
     ss += new Sampler[PluginType.Counter, Map[String, Long]](
       sp,

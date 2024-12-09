@@ -277,7 +277,7 @@ object GridProfiler {
     profiled$newNode(NamedProfilerScope(scope), Some(ProcessMetricsEntry.start()))(action).get
   def profiled$queued[T](scope: String)(action: Node[T]): Node[ProfilerResult[T]] =
     profiled$newNode(NamedProfilerScope(scope), None)(action).enqueueAttached
-  def profiled$queued[T](scope: String, action: => T): Node[ProfilerResult[T]] =
+  def profiled$queued[T](scope: String, action: => T): NodeFuture[ProfilerResult[T]] =
     profiled$newNode(NamedProfilerScope(scope), None)(toNode(action _)).enqueueAttached
   // noinspection ScalaUnusedSymbol
   @nodeSync
@@ -513,7 +513,12 @@ object GridProfiler {
     GridProfilerData.put(currentScope, currentId, Metric.DALSTATS.id, DALStatsEntry(1, results, 0))
 
   /** Note: EvaluationContext.current is not always available */
-  private[optimus] final def recordStallTime(task: NodeTask, ni: NodeTaskInfo, p: SchedulerPlugin, tm: Long, nodeName: String): Unit =
+  private[optimus] final def recordStallTime(
+      task: NodeTask,
+      ni: NodeTaskInfo,
+      p: SchedulerPlugin,
+      tm: Long,
+      nodeName: String): Unit =
     if ((ni ne null) && (task ne null)) {
       GridProfilerData.put(
         scopeForNode(task),

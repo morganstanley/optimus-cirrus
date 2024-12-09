@@ -35,7 +35,6 @@ import org.apache.http.client.utils.URIBuilder
 import org.apache.http.entity.StringEntity
 import org.apache.http.entity.mime.HttpMultipartMode
 import org.apache.http.entity.mime.MultipartEntityBuilder
-import org.springframework.http.MediaType
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -318,7 +317,7 @@ class PyroUploader(
         extraLabels)
       val httpPostReq = new HttpPost(pyroUri)
       httpPostReq.setEntity(new StringEntity(apDump, StandardCharsets.UTF_8))
-      httpPostReq.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
+      httpPostReq.addHeader(HttpHeaders.CONTENT_TYPE, "text/html")
       httpPostReq.addHeader(HttpHeaders.ACCEPT, "*/*")
       httpPostReq
     }
@@ -461,7 +460,7 @@ class PyroUploader(
         val postRequest = upload.request
         if (!pyroLatestVersion) {
           val getReq = new HttpGet(request.getURI.toString)
-          getReq.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_HTML_VALUE)
+          getReq.addHeader(HttpHeaders.CONTENT_TYPE, "text/html")
           getReq.addHeader(HttpHeaders.ACCEPT, "*/*")
           oidcHttpClient.execute(getReq) // needed to initialize the oidc oauth
         }

@@ -117,6 +117,8 @@ class NodeResult[+T] private[optimus] (_node: Node[T]) extends Serializable {
   def recover[U >: T](@nodeLift f: Throwable => U): NodeResult[U] = recover$withNode { toNodeFactory(f) }
   @impure def recover$withNode[U >: T](f: Throwable => Node[U]): NodeResult[U] = recover$newNode(f).get
   @impure def recover$queued[U >: T](f: Throwable => Node[U]): Node[NodeResult[U]] = recover$newNode(f).enqueue
+  // noinspection ScalaUnusedSymbol
+  @impure def recover$queued[U >: T](f: Throwable => U): NodeFuture[NodeResult[U]] = recover$queued(toNodeFactory(f))
   @impure private def recover$newNode[U >: T](f: Throwable => Node[U]): Node[NodeResult[U]] =
     new CompletableNodeM[NodeResult[U]] {
       override def executionInfo(): NodeTaskInfo = NodeTaskInfo.Recover
@@ -544,7 +546,7 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
   @scenarioIndependentTransparent
   def recoverAndGetPF[U >: T](pf: OptimusPartialFunction[Throwable, U]): U = recoverAndGetPF$withNode(pf)
   def recoverAndGetPF$withNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): U = recoverAndGetPF$newNode(pf).get
-  def recoverAndGetPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[U] =
+  def recoverAndGetPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeFuture[U] =
     recoverAndGetPF$newNode(pf).enqueue
   def recoverAndGetPF$newNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[U] = {
     class recoverAndGet extends CN[U] {
