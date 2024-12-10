@@ -37,8 +37,8 @@ import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.CommandProtoSerialization
 import optimus.platform.dsi.bitemporal.proto.Dsi.DSIRequestProto
 import optimus.platform.dsi.bitemporal.proto.Dsi.DalResponseProto
-import optimus.platform.dsi.bitemporal.proto.Envelope.DalProtocolStatus
-import optimus.platform.dsi.bitemporal.proto.Envelope.DalRequestResponseEnvelope
+/* import optimus.platform.dsi.bitemporal.proto.Envelope.DalProtocolStatus
+import optimus.platform.dsi.bitemporal.proto.Envelope.DalRequestResponseEnvelope */
 import optimus.platform.dsi.connection.DalProtocolVersion
 import optimus.platform.dsi.protobufutils.BatchContext.BatchContextImpl
 import optimus.platform.dsi.protobufutils._
@@ -139,7 +139,7 @@ object MessagesProtoClient extends CommandProtoSerialization {
       Some(RequestsStallInfo(StallPlugin.DAL, requests.length, requests))
     }
 
-    override def adapt(v: NodeTask, ec: OGSchedulerContext): Boolean = {
+    override def adapt(v: NodeTask, ec: OGSchedulerContext): Boolean = ??? /* {
       v match {
         case node: PublishCommandScheduler.syncPublishCmd$node =>
           try {
@@ -171,7 +171,7 @@ object MessagesProtoClient extends CommandProtoSerialization {
           log.warn("Received unsupported task type " + v)
           false
       }
-    }
+    } */
   }
 
   syncPublishCmd_info.setCacheable(false)
@@ -258,7 +258,7 @@ class MessagesProtoClient(
     StreamsACLsCommandSuccessResult(cmd.streamAppId)
   }
 
-  private def getMsgCtx[T <: Command](cmd: T, p: Promise[Response] = Promise()) = {
+  private def getMsgCtx[T <: Command](cmd: T, p: Promise[Response] = Promise()) = ??? /* {
     val chainId = ChainedID.root
     BatchContextImpl(
       requestUuid = UUID.randomUUID().toString,
@@ -269,7 +269,7 @@ class MessagesProtoClient(
       token = None,
       redirectionInfo = None
     )
-  }
+  } */
 
   private def sendStreamRequest(cmd: MessagesStreamCommand): Unit = {
     // As we are not batching these requests, seqId set is -1, seqI
@@ -281,7 +281,7 @@ class MessagesProtoClient(
   private def sendSyncRequest[T <: Command](cmd: T): Unit = {
     val promise = Promise[Response]()
     val ctx = getMsgCtx(cmd, promise)
-    requestSender.sendBatch(ctx)
+    // requestSender.sendBatch(ctx)
     Await.result(promise.future, Duration(protoConfig.maxWaitingTimeDALRequest, TimeUnit.MILLISECONDS))
   }
 
@@ -326,8 +326,8 @@ class MessagesProtoClient(
       }
     }
 
-  def onMessage(message: MSNetMessage, dalProtocolOpt: Option[DalProtocolVersion]): Unit =
-    withRShutdownLock {
+  def onMessage(message: MSNetMessage, dalProtocolOpt: Option[DalProtocolVersion]): Unit = ???
+    /* withRShutdownLock {
       if (isRunning) {
         val envelope = DalRequestResponseEnvelope.parseFrom(message.getBytes)
         val header = envelope.getHeader
@@ -360,14 +360,14 @@ class MessagesProtoClient(
           } else handleStreamCmdResponse(response)
         }
       }
-    }
+    } */
 
   private def handleBatchCmdResponse(
       response: DalResponseProto,
       sessEstRes: Option[EstablishSessionResult],
       ctx: BatchContext,
       seqId: Int
-  ): Unit = {
+  ): Unit = ??? /* {
 
     val dsiResponse = response.getDsiResponse
     val requestId = dsiResponse.getRequestUuid
@@ -418,9 +418,9 @@ class MessagesProtoClient(
         ClientRequestTracker.markComplete(requestId)
         log.info(s"$requestId batch failed ")
     }
-  }
+  } */
 
-  private def handleStreamCmdResponse(response: DalResponseProto): Unit = {
+  private def handleStreamCmdResponse(response: DalResponseProto): Unit = ??? /* {
     val dsiResponse = response.getDsiResponse
     val results: Seq[Result] = dsiResponse.getResultsList.asScala.map(fromProto)
     val filteredRes = results.flatMap {
@@ -436,7 +436,7 @@ class MessagesProtoClient(
         None // ignore all other results
     }
     if (filteredRes.nonEmpty) listener.handleResults(filteredRes)
-  }
+  } */
 
   // TODO (OPTIMUS-52127): Handle Connect Disconnect events in reactive side
   def onDisconnect(): Unit = {

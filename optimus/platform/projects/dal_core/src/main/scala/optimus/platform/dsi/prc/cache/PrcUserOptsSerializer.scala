@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 private[optimus] object PrcUserOptsSerializer
     extends CommandProtoSerialization
     with ProtoSerializer[PrcUserOptions, PrcUserOptionsProto] {
-  override def serialize(value: PrcUserOptions): PrcUserOptionsProto = value match {
+  override def serialize(value: PrcUserOptions): PrcUserOptionsProto = ??? /* value match {
     case options: CommandsPrcUserOptions =>
       val cmdType = options match {
         case _: ClientCommandsPrcUserOptions   => PrcUserOptionsProto.UserOptionsType.COMMANDS
@@ -53,9 +53,9 @@ private[optimus] object PrcUserOptsSerializer
         .setUserOptionsType(PrcUserOptionsProto.UserOptionsType.LSQT)
         .addKey(key)
         .build()
-  }
+  } */
 
-  private def mkCommandsPrcUserOptions(typ: PrcUserOptionsProto.UserOptionsType, proto: PrcUserOptionsProto) = {
+  /* private def mkCommandsPrcUserOptions(typ: PrcUserOptionsProto.UserOptionsType, proto: PrcUserOptionsProto) = {
     require(proto.getCommandCount == proto.getKeyCount, "Each key option should be mapped to a command.")
     val keys = proto.getKeyList.asScala.map(NonTemporalPrcKeySerializer.deserialize)
     val cmds = proto.getCommandList.asScala.map(CommandSerializer.deserialize)
@@ -85,9 +85,9 @@ private[optimus] object PrcUserOptsSerializer
       case _ =>
         throw new IllegalArgumentException(s"Shouldn't be building CommandsPrcUserOptions for type $typ ")
     }
-  }
+  } */
 
-  override def deserialize(proto: PrcUserOptionsProto): PrcUserOptions = proto.getUserOptionsType match {
+  override def deserialize(proto: PrcUserOptionsProto): PrcUserOptions = ??? /* proto.getUserOptionsType match {
     // for backwards-compatibility, deserialize the default value (UNKNOWN) as COMMANDS since clients did not
     // initially serialize the user options type at all
     case PrcUserOptionsProto.UserOptionsType.DUAL_READ_COMMANDS | PrcUserOptionsProto.UserOptionsType.COMMANDS |
@@ -99,5 +99,5 @@ private[optimus] object PrcUserOptsSerializer
       require(proto.getKeyList.size() == 1, "Should have exactly one command keys for an LSQT user option")
       val key = proto.getKeyList.asScala.map(NonTemporalPrcKeySerializer.deserialize).head
       LsqtQueryPrcUserOptions(key.context)
-  }
+  } */
 }

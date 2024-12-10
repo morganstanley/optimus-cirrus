@@ -1,4 +1,4 @@
-/*
+/* /*
  * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
  * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
  * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -8,7 +8,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ 
 package optimus.dht.common.util.registry;
 
 import java.net.UnknownHostException;
@@ -53,7 +53,7 @@ public class ZkClientUtilsZookeeperFactory implements ZookeeperFactory {
        * servers. Sometimes, due to AFS transient failures, that file cannot be read and a YAMLException is
        * thrown. Since it is impossible to check whether starting the curator was successful, this case needs to be
        * handled explicitly.
-       */
+       
 
       // here the connectString is intentionally a rootnode without
       // servers prepended
@@ -88,10 +88,11 @@ public class ZkClientUtilsZookeeperFactory implements ZookeeperFactory {
        *
        * Catching this here means that we won't detect legitimately bad hostnames either, but since those are
        * provided by sam/zookeeper we assume they are correct.
-       */
+       
       KeeperException ex = new KeeperException.ConnectionLossException();
       ex.initCause(e);
       throw ex;
     }
   }
 }
+ */

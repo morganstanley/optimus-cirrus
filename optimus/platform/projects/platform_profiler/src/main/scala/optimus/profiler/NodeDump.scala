@@ -13,7 +13,7 @@ package optimus.profiler
 
 import java.nio.charset.Charset
 
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.core.CoreHelpers
 import optimus.graph.NodeTask
 import optimus.platform.storable.Entity

@@ -139,7 +139,7 @@ final class FastConsoleAppender extends ConsoleAppender[ILoggingEvent] with Fast
   override def start(): Unit = {
     super.start()
   }
-  override protected final def _lock: ReentrantLock = lock
+  override protected final def _lock: ReentrantLock = ??? // lock
   override protected final def _started(value: Boolean): Unit = started = value
   override def _encoder: Encoder[ILoggingEvent] = encoder
 }

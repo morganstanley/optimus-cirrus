@@ -527,6 +527,7 @@ object Properties extends KnownProperties {
   val crumbType = prop[String]
   val proid = prop[String]
   val node = prop[String]
+  val nodeStack = prop[String]
   val logFile = prop[String]
   val distedTo = prop[String]
   val distedFrom = prop[String]
@@ -547,6 +548,7 @@ object Properties extends KnownProperties {
   val stackTrace = prop[Seq[String]]
   val remoteException = prop[Throwable]
   val batchSize = propI
+  val batchId = propI
   val pricingDate = prop[String]
   val dalReqUuid = prop[String]
   val tStarted = prop[ZonedDateTime]
@@ -557,6 +559,7 @@ object Properties extends KnownProperties {
   val debug = prop[String]
   val priority = prop[String]
   val tasksExecutedOnEngine = propL
+  val taskId = prop[String]
 
   val logLevel = prop[String]
   val logMsg = prop[String]

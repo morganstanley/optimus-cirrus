@@ -75,7 +75,7 @@ class ClassAnalysisStore(
     )
   )
   private val store =
-    FileAnalysisStore.binary(analysisJar.path.toFile, mappers, tmpDir = jars.analysisJar.tempPath.parent.path.toFile)
+    FileAnalysisStore.binary(analysisJar.path.toFile, mappers /*,  tmpDir = jars.analysisJar.tempPath.parent.path.toFile */)
 
   override def get: Optional[AnalysisContents] = store.get
   override def unsafeGet: AnalysisContents = store.unsafeGet

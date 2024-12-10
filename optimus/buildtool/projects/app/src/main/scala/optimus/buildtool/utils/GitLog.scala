@@ -267,7 +267,7 @@ object GitLog {
     } else log.info(s"Skipping tag request for $tagName as only forward tagging are allowed (HEAD is $currentHead)")
   }
 
-  @async @impure private def isMovingForward(tagName: String): Boolean = {
+  @async @impure private def isMovingForward(tagName: String): Boolean = ??? /* {
     // git ls-remote --tags
     val currentRemoteHash: Option[String] = utils.git
       .lsRemote()
@@ -284,5 +284,5 @@ object GitLog {
       log.info(s"Tag $tagName is currently pointing to $remoteHash")
       utils.repo.hasObject(ObjectId.fromString(remoteHash))
     }
-  }
+  } */
 }

@@ -60,7 +60,7 @@ trait BatchContext {
   def requestUuid: String
   def chainedId: ChainedID
   def requestType: DSIRequestProto.Type
-  final def readOnly: Boolean = requestType == DSIRequestProto.Type.READ_ONLY
+  final def readOnly: Boolean = ??? /* requestType == DSIRequestProto.Type.READ_ONLY */
   def clientSessionContext: ClientSessionContext
   def clientRequests: Vector[ClientRequest]
   def token: Option[InFlightRequestToken]
@@ -109,7 +109,7 @@ trait BatchContext {
       }
   }
 
-  lazy val minAssignableTtOpt: Option[Instant] = {
+  lazy val minAssignableTtOpt: Option[Instant] = ??? /* {
     if (requestType == DSIRequestProto.Type.WRITE) {
       val mats = clientRequests.flatMap(_.commands.collect {
         case pae: PutApplicationEvent if pae.minAssignableTtOpt.isDefined => pae.minAssignableTtOpt.get
@@ -117,14 +117,14 @@ trait BatchContext {
       })
       if (mats.nonEmpty) Some(mats.max) else None
     } else None
-  }
+  } */
 
-  val lastWitnessedTxTimeOpt: Option[Instant] = {
+  val lastWitnessedTxTimeOpt: Option[Instant] = ??? /* {
     if (requestType == DSIRequestProto.Type.WRITE) {
       val lwts = clientRequests.collect { case wr: WriteClientRequest => wr.lastWitnessedTxTimeOpt }.flatten
       if (lwts.nonEmpty) Some(lwts.max) else None
     } else None
-  }
+  } */
 }
 
 object BatchContext {

@@ -28,7 +28,7 @@ import scala.jdk.CollectionConverters._
  * encode Expression to GPB ExpressionProto
  */
 trait ExpressionEncoder {
-  def encode(obj: Expression): ExpressionProto = {
+  def encode(obj: Expression): ExpressionProto = ??? /* {
     val b = ExpressionProto.newBuilder
     obj match {
       case e: Entity =>
@@ -69,9 +69,9 @@ trait ExpressionEncoder {
         b.setType(ExpressionProto.Type.Embeddable).setEmbeddable(encode(e))
     }
     b.build()
-  }
+  } */
 
-  protected def encode(obj: EntityBitemporalSpace): EntityBitempSpaceProto = {
+  protected def encode(obj: EntityBitemporalSpace): EntityBitempSpaceProto = ??? /* {
     import EntityBitempSpaceProto.Kind
     val kind = obj.kind match {
       case AllRects    => Kind.All
@@ -85,51 +85,58 @@ trait ExpressionEncoder {
       .setKind(kind)
       .addAllSuperClasses(obj.superClasses.asJava)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Entity): EntityProto = {
-    EntityProto.newBuilder
+  protected def encode(obj: Entity): EntityProto = ??? /* {
+    import EntityBitempSpaceProto.Kind
+    val kind = obj.kind match {
+      case AllRects    => Kind.All
+      case DeltaUpdate => Kind.Delta
+    }
+    EntityBitempSpaceProto
+      .newBuilder()
       .setName(obj.name)
       .setId(encode(obj.id))
       .setWhen(encode(obj.when))
+      .setKind(kind)
       .addAllSuperClasses(obj.superClasses.asJava)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Event): EventProto = {
+  protected def encode(obj: Event): EventProto = ??? /* {
     EventProto.newBuilder
       .setName(obj.name)
       .setId(encode(obj.id))
       .setWhen(encode(obj.when))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Linkage): LinkageProto = {
+  protected def encode(obj: Linkage): LinkageProto = ??? /* {
     LinkageProto.newBuilder
       .setName(obj.name)
       .setId(encode(obj.id))
       .setWhen(encode(obj.when))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Embeddable): EmbeddableProto = {
+  protected def encode(obj: Embeddable): EmbeddableProto = ??? /* {
     EmbeddableProto.newBuilder
       .setId(encode(obj.id))
       .setEntity(obj.entity)
       .setProperty(obj.property)
       .setTag(obj.tag)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Property): PropertyProto = {
+  protected def encode(obj: Property): PropertyProto = ??? /* {
     PropertyProto.newBuilder
       .setOwner(encode(obj.owner))
       .setPropType(encode(obj.propType))
       .addAllNames(obj.names.asJava)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Constant): ConstantProto = {
+  protected def encode(obj: Constant): ConstantProto = ??? /* {
     val value = obj.value match {
       case s: SerializedKey => SerializedKeySerializer.serialize(s)
       case _                => ProtoPickleSerializer.propertiesToProto(obj.value)
@@ -138,26 +145,26 @@ trait ExpressionEncoder {
       .setTypeCode(encode(obj.typeCode))
       .setValue(value.toByteString)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Binary): BinaryProto = {
+  protected def encode(obj: Binary): BinaryProto = ??? /*{
     BinaryProto.newBuilder
       .setOperator(encode(obj.op))
       .setLeft(encode(obj.left))
       .setRight(encode(obj.right))
       .build()
-  }
+  } */
 
-  protected def encode(obj: In): InProto = {
+  protected def encode(obj: In): InProto = ??? /* {
     val b = InProto.newBuilder
     obj.values match {
       case Left(select) => b.setSelect(encode(select))
       case Right(list)  => b.addAllValues(list.map(encode(_)).asJava)
     }
     b.setExpression(encode(obj.e)).build()
-  }
+  } */
 
-  protected def encode(obj: Select): SelectProto = {
+  protected def encode(obj: Select): SelectProto = ??? /* {
     val b = SelectProto.newBuilder
       .setFrom(encode(obj.from))
       .setId(encode(obj.id))
@@ -170,67 +177,67 @@ trait ExpressionEncoder {
     obj.take.foreach(t => b.setTake(encode(t)))
     obj.skip.foreach(t => b.setSkip(encode(t)))
     b.build()
-  }
+  } */
 
-  protected def encode(obj: Join): JoinProto = {
+  protected def encode(obj: Join): JoinProto = ??? /* {
     val b = JoinProto.newBuilder
       .setJoinType(encode(obj.joinType))
       .setLeft(encode(obj.left))
       .setRight(encode(obj.right))
     obj.on.foreach(on => b.setOn(encode(on)))
     b.build()
-  }
+  } */
 
-  protected def encode(obj: Member): MemberProto = {
+  protected def encode(obj: Member): MemberProto = ??? /* {
     MemberProto.newBuilder
       .setName(obj.name)
       .setOwner(encode(obj.owner))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Function): FunctionProto = {
+  protected def encode(obj: Function): FunctionProto = ??? /* {
     FunctionProto.newBuilder
       .setMethod(obj.method)
       .addAllArguments(obj.arguments.map(encode(_)).asJava)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Unary): UnaryProto = {
+  protected def encode(obj: Unary): UnaryProto = ??? /* {
     UnaryProto.newBuilder
       .setOperator(encode(obj.op))
       .setExpression(encode(obj.e))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Condition): ConditionProto = {
+  protected def encode(obj: Condition): ConditionProto = ??? /* {
     ConditionProto.newBuilder
       .setCheck(encode(obj.check))
       .setIfTrue(encode(obj.ifTrue))
       .setIfFalse(encode(obj.ifFalse))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Aggregate): AggregateProto = {
+  protected def encode(obj: Aggregate): AggregateProto = ??? /* {
     AggregateProto.newBuilder
       .setAggregateType(encode(obj.aggregateType))
       .addAllArguments(obj.arguments.map(encode(_)).asJava)
       .setDistinct(obj.isDistinct)
       .build()
-  }
+  } */
 
-  protected def encode(obj: Scalar): ScalarProto = {
+  protected def encode(obj: Scalar): ScalarProto = ??? /* {
     ScalarProto.newBuilder
       .setQuery(encode(obj.query))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Exists): ExistsProto = {
+  protected def encode(obj: Exists): ExistsProto = ??? /* {
     ExistsProto.newBuilder
       .setQuery(encode(obj.query))
       .build()
-  }
+  } */
 
-  protected def encode(typeCode: TypeCode): TypeCodeProto = {
+  protected def encode(typeCode: TypeCode): TypeCodeProto = ??? /* {
     typeCode match {
       case TypeCode.Int                => TypeCodeProto.Int
       case TypeCode.String             => TypeCodeProto.String
@@ -260,9 +267,9 @@ trait ExpressionEncoder {
       case TypeCode.VersionedReference => TypeCodeProto.VersionedReference
       case TypeCode.Rectangle          => TypeCodeProto.Rectangle
     }
-  }
+  } */
 
-  protected def encode(op: BinaryOperator): BinaryProto.BinaryOperator = {
+  /* protected def encode(op: BinaryOperator): BinaryProto.BinaryOperator = {
     op match {
       case BinaryOperator.AndAlso            => BinaryProto.BinaryOperator.AndAlso
       case BinaryOperator.OrElse             => BinaryProto.BinaryOperator.OrElse
@@ -325,9 +332,9 @@ trait ExpressionEncoder {
       case PropertyType.Index       => PropertyProto.PropertyType.Index
       case PropertyType.Special     => PropertyProto.PropertyType.Special
     }
-  }
+  } */
 
-  protected def encode(obj: DSIQueryTemporality): TemporalityProto = {
+  protected def encode(obj: DSIQueryTemporality): TemporalityProto = ??? /* {
     val b = TemporalityProto.newBuilder
     obj match {
       case DSIQueryTemporality.At(validTime, txTime) =>
@@ -350,41 +357,41 @@ trait ExpressionEncoder {
 
     }
     b.build()
-  }
+  } */
 
   private def toValidTimeInterval(i: TimeInterval): ValidTimeInterval = {
     ValidTimeInterval(i.from, i.to)
   }
 
-  protected def encode(obj: ValidTimeInterval): ValidTimeIntervalProto = {
+  protected def encode(obj: ValidTimeInterval): ValidTimeIntervalProto = ??? /* {
     ValidTimeIntervalProto.newBuilder
       .setFrom(encode(obj.from))
       .setTo(encode(obj.to))
       .build()
-  }
+  } */
 
-  protected def encode(obj: TimeInterval): TimeIntervalProto = {
+  protected def encode(obj: TimeInterval): TimeIntervalProto = ??? /* {
     TimeIntervalProto.newBuilder
       .setFrom(encode(obj.from))
       .setTo(encode(obj.to))
       .build()
-  }
+  } */
 
-  protected def encode(obj: Instant): InstantProto = {
+  protected def encode(obj: Instant): InstantProto = ??? /* {
     InstantProto.newBuilder
       .setNano(obj.getNano)
       .setSeconds(obj.getEpochSecond)
       .build()
-  }
+  } */
 
-  protected def encode(obj: PropertyDef): PropertyDefProto = {
+  protected def encode(obj: PropertyDef): PropertyDefProto = ??? /* {
     PropertyDefProto.newBuilder
       .setName(obj.name)
       .setExpression(encode(obj.e))
       .build()
-  }
+  } */
 
-  protected def encode(obj: SortByDef): SortByDefProto = {
+  protected def encode(obj: SortByDef): SortByDefProto = ??? /* {
     val sortType = obj.sortType match {
       case SortType.Asc  => SortByDefProto.SortType.Asc
       case SortType.Desc => SortByDefProto.SortType.Desc
@@ -393,7 +400,7 @@ trait ExpressionEncoder {
       .setSortType(sortType)
       .setExpression(encode(obj.e))
       .build()
-  }
+  } */
 
   protected def encode(id: Id): Int
 }

@@ -13,7 +13,7 @@ package optimus.dsi.base.actions
 
 import java.util.Arrays
 
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.storable.{EntityTimeSliceReference, SerializedAppEvent, SerializedKey, StorableReference}
 import DBRawObjectTypename._

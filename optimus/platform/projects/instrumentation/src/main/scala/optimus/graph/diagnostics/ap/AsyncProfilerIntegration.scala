@@ -45,7 +45,7 @@ object AsyncProfilerIntegration extends Log {
     private[AsyncProfilerIntegration] val offset = customOffsets.getAndIncrement()
     // must be lazy, since we can't save strings until after AP is initialized
     lazy val eventNamePtr: Long = saveString(s"${name}.${valueType}")
-    private[AsyncProfilerIntegration] def add(): Unit = profiler.addCustomEventType(offset, name, valueType)
+    private[AsyncProfilerIntegration] def add(): Unit = () // profiler.addCustomEventType(offset, name, valueType)
   }
 
   val TestingEvent: CustomEventType = CustomEventType("Testing", "TestValue")
@@ -101,7 +101,7 @@ object AsyncProfilerIntegration extends Log {
 
   private[graph] lazy val settings: Map[String, String] = PropertyUtils.propertyMap(defaultSettings, userSettings)
 
-  def ensureLoadedIfEnabled(): Boolean = doEnable && {
+  def ensureLoadedIfEnabled(): Boolean = doEnable /* && {
     if (profiler ne null) {
       true
     } else {
@@ -115,7 +115,7 @@ object AsyncProfilerIntegration extends Log {
             // One of the next two lines will likely throw if the native library is broken (so we'll catch
             // below and disable AP).
             p.getSamples()
-            p.saveString("test")
+            // p.saveString("test")
             if (p ne null) {
               log.info(s"asyncProfiler initialized")
               profiler = p
@@ -138,7 +138,7 @@ object AsyncProfilerIntegration extends Log {
         }
       }
     }
-  }
+  } */
 
   lazy val cpuProfilingEnabled: Boolean = ensureLoadedIfEnabled() && {
     try {
@@ -439,39 +439,39 @@ object AsyncProfilerIntegration extends Log {
   }
 
   def recordCustomEvent(etype: CustomEventType, valueD: Double, valueL: Long, ptr: Long): Unit = {
-    if (ensureLoadedIfEnabled())
-      profiler.recordCustomEvent(etype.offset, valueD, valueL, ptr)
+    // if (ensureLoadedIfEnabled())
+    //   profiler.recordCustomEvent(etype.offset, valueD, valueL, ptr)
   }
 
   private val savedStrings = new ConcurrentHashMap[String, Long]()
 
   // Get pointer to string in C-land
-  def saveString(name: String): Long =
-    if (!ensureLoadedIfEnabled()) 0L else savedStrings.computeIfAbsent(name, profiler.saveString)
+  def saveString(name: String): Long = 0L
+    // if (!ensureLoadedIfEnabled()) 0L else savedStrings.computeIfAbsent(name, profiler.saveString)
 
-  def getMethodID(cls: Class[_], method: String, sig: String): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
-    else profiler.getMethodID(cls, method, sig, false)
+  def getMethodID(cls: Class[_], method: String, sig: String): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
+    // else profiler.getMethodID(cls, method, sig, false)
 
-  def getStaticMethodID(cls: Class[_], method: String, sig: String): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
-    else profiler.getMethodID(cls, method, sig, true)
+  def getStaticMethodID(cls: Class[_], method: String, sig: String): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
+    // else profiler.getMethodID(cls, method, sig, true)
 
-  def setAwaitStackId(ids: Array[Long], signal: Long, insertionId: Long): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
-    else profiler.setAwaitStackId(ids, signal, insertionId)
+  def setAwaitStackId(ids: Array[Long], signal: Long, insertionId: Long): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
+    // else profiler.setAwaitStackId(ids, signal, insertionId)
 
-  def getAwaitDataAddress(): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitDataAddress()
+  def getAwaitDataAddress(): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitDataAddress()
 
-  def getAwaitSampledSignal(): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitSampledSignal()
+  def getAwaitSampledSignal(): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitSampledSignal()
 
-  def saveAwaitFrames(ids: Array[Long], nids: Int): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.saveAwaitFrames(2, ids, nids)
+  def saveAwaitFrames(ids: Array[Long], nids: Int): Long = 0L
+    // if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.saveAwaitFrames(2, ids, nids)
 
-  def externalContext(ctx: Long, shmPath: String): Unit =
-    if (ensureLoadedIfEnabled()) profiler.externalContext(ctx, shmPath)
+  def externalContext(ctx: Long, shmPath: String): Unit = ()
+    // if (ensureLoadedIfEnabled()) profiler.externalContext(ctx, shmPath)
 
   lazy val overflowMarker: Long = saveString("OverflowMarker")
   lazy val errorMarker: Long = saveString("ErrorMarker")

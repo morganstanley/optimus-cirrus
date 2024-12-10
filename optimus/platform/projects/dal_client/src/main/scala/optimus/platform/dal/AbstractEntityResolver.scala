@@ -31,7 +31,7 @@ import scala.jdk.CollectionConverters._
 
 object HasLastWitnessedTime {
   private final case class CatchupId(uuid: MSUuid) {
-    override def toString: String = s"CatchupId(${uuid.asDCEString})"
+    override def toString: String = s"CatchupId($uuid)"
   }
 
   private[HasLastWitnessedTime] val log = getLogger[HasLastWitnessedTime]
@@ -88,7 +88,7 @@ private[optimus] trait HasLastWitnessedTime {
       waitForMaxCatchup: Boolean,
       waitingTime: Int,
       witnessedTimeMap: ConcurrentHashMap[Partition, Instant]): Map[Partition, Instant] = {
-    val lsqtCatchupId = CatchupId(new MSUuid(true))
+    val lsqtCatchupId = CatchupId(new MSUuid(""))
     var retried = 0
     val frozenLastWitnessedTime: Map[Partition, Instant] = {
       // This is done to keep the change backward compatible

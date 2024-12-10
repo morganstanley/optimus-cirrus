@@ -36,7 +36,7 @@ trait DSIQueryTemporalitySerialization extends BasicProtoSerialization {
 
     def hasReadTxTime(): Boolean
     def getReadTxTime(): InstantProto
-  }): DSIQueryTemporality = {
+  }): DSIQueryTemporality = ??? /* {
 
     val temporality =
       if (proto.hasTxRange())
@@ -74,5 +74,5 @@ trait DSIQueryTemporalitySerialization extends BasicProtoSerialization {
         DSIQueryTemporality.All(readTT)
       }
     temporality
-  }
+  } */
 }

@@ -12,7 +12,7 @@
 package optimus.platform.dsi.bitemporal.proto
 
 import com.google.protobuf.ByteString
-import msjava.base.com.google.flatbuffers.FlatBufferBuilder.HeapByteBufferFactory
+// import msjava.base.com.google.flatbuffers.FlatBufferBuilder.HeapByteBufferFactory
 import msjava.slf4jutils.scalalog.getLogger
 import net.jpountz.lz4.LZ4Factory
 import optimus.dsi.base.RegisteredIndexConfig
@@ -111,7 +111,7 @@ private[proto] trait GetCommandProtoSerialization extends QueryProtoSerializatio
   implicit def dsrSerializer: ProtoSerializer[DiscoverServicesResult, DiscoverServicesResultProto] =
     DiscoverServicesResultSerializer
 
-  final def fromProto(proto: QueryDataType): DALDataType.DALDataType = {
+  /* final def fromProto(proto: QueryDataType): DALDataType.DALDataType = {
     val dalDataType =
       if (proto == QueryDataType.BUSINESS_EVENT)
         DALDataType.BusinessEvent
@@ -122,7 +122,7 @@ private[proto] trait GetCommandProtoSerialization extends QueryProtoSerializatio
   final def toProto(req: DALDataType.DALDataType): QueryDataType = {
     val data = if (DALDataType.BusinessEvent == req) QueryDataType.BUSINESS_EVENT else QueryDataType.ENTITY
     data
-  }
+  } */
 
   final def fromProto(proto: EstablishSessionResultProto) = EstablishSessionResultSerializer.deserialize(proto)
   final def toProto(result: EstablishSessionResult) = EstablishSessionResultSerializer.serialize(result)
@@ -131,7 +131,7 @@ private[proto] trait GetCommandProtoSerialization extends QueryProtoSerializatio
 object CountGroupingsSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[CountGroupings, CountGroupingsProto] {
-  override def serialize(count: CountGroupings): CountGroupingsProto = {
+  override def serialize(count: CountGroupings): CountGroupingsProto = ??? /* {
     val bld = CountGroupingsProto.newBuilder
     val builder = count.query match {
       case q: EntityClassQuery => bld.setEntityClassQuery(toProto(q))
@@ -140,9 +140,9 @@ object CountGroupingsSerializer
         throw new UnsupportedOperationException(s"CountGroupingsProto serialization for query $q not supported.")
     }
     builder.setReadTxTime(toProto(count.readTxTime)).build()
-  }
+  } */
 
-  override def deserialize(proto: CountGroupingsProto): CountGroupings = {
+  override def deserialize(proto: CountGroupingsProto): CountGroupings = ??? /* {
     val query =
       if (proto.hasEntityClassQuery)
         fromProto(proto.getEntityClassQuery)
@@ -152,7 +152,7 @@ object CountGroupingsSerializer
         throw new UnsupportedOperationException
 
     CountGroupings(query, fromProto(proto.getReadTxTime))
-  }
+  } */
 }
 
 object CountSerializer
@@ -161,7 +161,7 @@ object CountSerializer
     with DSIQueryTemporalitySerialization {
   protected override val log = getLogger(this)
 
-  override def serialize(count: Count): CountProto = {
+  override def serialize(count: Count): CountProto = ??? /* {
     val bld = CountProto.newBuilder
 
     val builder = count.temporality match {
@@ -182,9 +182,9 @@ object CountSerializer
       case _ =>
         throw new UnsupportedOperationException(s"CountProto serialization for query ${count.query} not supported.")
     }).build
-  }
+  } */
 
-  override def deserialize(proto: CountProto): Count = {
+  override def deserialize(proto: CountProto): Count = ??? /* {
     val query =
       if (proto.hasEntityClassQuery)
         fromProto(proto.getEntityClassQuery)
@@ -198,7 +198,7 @@ object CountSerializer
     val temporality = getTemporality(proto)
 
     Count(query, temporality)
-  }
+  } */
 }
 
 object SelectSerializer
@@ -207,7 +207,7 @@ object SelectSerializer
     with DSIQueryTemporalitySerialization {
   protected override val log = getLogger(this)
 
-  override def serialize(select: Select): SelectProto = {
+  override def serialize(select: Select): SelectProto = ??? /* {
     val bld = SelectProto.newBuilder
 
     val builder = select.temporality match {
@@ -238,9 +238,9 @@ object SelectSerializer
       case _: EventClassQuery | _: EventReferenceQuery | _: EntityClassAppIdUserIdQuery =>
         throw new UnsupportedOperationException(s"SelectProto serialization for query ${select.query} not supported.")
     }).build
-  }
+  } */
 
-  override def deserialize(proto: SelectProto): Select = {
+  override def deserialize(proto: SelectProto): Select = ??? /* {
     val query =
       if (proto.hasReferenceQuery)
         fromProto(proto.getReferenceQuery)
@@ -262,7 +262,7 @@ object SelectSerializer
     val temporality = getTemporality(proto)
 
     Select(query, temporality)
-  }
+  } */
 }
 
 object SelectSpaceSerializer
@@ -271,7 +271,7 @@ object SelectSpaceSerializer
     with DSIQueryTemporalitySerialization {
   protected override val log = getLogger(this)
 
-  override def serialize(cmd: SelectSpace): SelectSpaceProto = {
+  override def serialize(cmd: SelectSpace): SelectSpaceProto = ??? /* {
     val bld = SelectSpaceProto.newBuilder
 
     val builder = cmd.temporality match {
@@ -306,9 +306,9 @@ object SelectSpaceSerializer
     }
 
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: SelectSpaceProto): SelectSpace = {
+  override def deserialize(proto: SelectSpaceProto): SelectSpace = ??? /* {
     val temporality = getTemporality(proto)
     val query =
       if (proto.hasReferenceQuery) fromProto(proto.getReferenceQuery)
@@ -323,48 +323,48 @@ object SelectSpaceSerializer
       } else
         throw new UnsupportedOperationException(s"Cannot deserialize SelectSpace command due to unknown query type")
     SelectSpace(query, temporality)
-  }
+  } */
 }
 
 object SelectSpaceRectangleSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[SelectSpaceResult.Rectangle, SelectSpaceResultRectangleProto] {
-  override def deserialize(proto: SelectSpaceResultRectangleProto): SelectSpaceResult.Rectangle = {
+  override def deserialize(proto: SelectSpaceResultRectangleProto): SelectSpaceResult.Rectangle = ??? /* {
     SelectSpaceResult.Rectangle(
       txInterval = fromProto(proto.getTimeInterval),
       vtInterval = fromProto(proto.getValidTimeInterval),
       vref = fromProto(proto.getVersionedReference),
       eref = fromProto(proto.getEntityReference)
     )
-  }
-  override def serialize(obj: SelectSpaceResult.Rectangle): SelectSpaceResultRectangleProto = {
+  } */
+  override def serialize(obj: SelectSpaceResult.Rectangle): SelectSpaceResultRectangleProto = ??? /* {
     SelectSpaceResultRectangleProto.newBuilder
       .setTimeInterval(toProto(obj.txInterval))
       .setValidTimeInterval(toProto(obj.vtInterval))
       .setVersionedReference(toProto(obj.vref))
       .setEntityReference(toProto(obj.eref))
       .build()
-  }
+  } */
 }
 
 object SelectSpaceResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[SelectSpaceResult, SelectSpaceResultProto] {
-  override def serialize(res: SelectSpaceResult): SelectSpaceResultProto = {
+  override def serialize(res: SelectSpaceResult): SelectSpaceResultProto = ??? /* {
     val rects = res.value.map { SelectSpaceRectangleSerializer.serialize }
     SelectSpaceResultProto.newBuilder.addAllRectangles(rects.asJava).build()
-  }
+  } */
 
-  override def deserialize(proto: SelectSpaceResultProto): SelectSpaceResult = {
+  override def deserialize(proto: SelectSpaceResultProto): SelectSpaceResult = ??? /* {
     val rects = proto.getRectanglesList.asScala.map { SelectSpaceRectangleSerializer.deserialize }
     SelectSpaceResult(rects)
-  }
+  } */
 }
 
 object PartialSelectSpaceResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[PartialSelectSpaceResult, PartialSelectSpaceResultProto] {
-  override def serialize(res: PartialSelectSpaceResult): PartialSelectSpaceResultProto = {
+  override def serialize(res: PartialSelectSpaceResult): PartialSelectSpaceResultProto = ??? /* {
     val rects = res.value.map { case SelectSpaceResult.Rectangle(txInterval, vtInterval, vref, eref, _) =>
       SelectSpaceResultRectangleProto.newBuilder
         .setTimeInterval(toProto(txInterval))
@@ -374,9 +374,9 @@ object PartialSelectSpaceResultSerializer
         .build()
     }
     PartialSelectSpaceResultProto.newBuilder.addAllRectangles(rects.asJava).setIsLast(res.isLast).build()
-  }
+  } */
 
-  override def deserialize(proto: PartialSelectSpaceResultProto): PartialSelectSpaceResult = {
+  override def deserialize(proto: PartialSelectSpaceResultProto): PartialSelectSpaceResult = ??? /* {
     val rects = proto.getRectanglesList.asScala.map { rect =>
       SelectSpaceResult.Rectangle(
         txInterval = fromProto(rect.getTimeInterval),
@@ -386,7 +386,7 @@ object PartialSelectSpaceResultSerializer
       )
     }
     PartialSelectSpaceResult(rects, proto.getIsLast)
-  }
+  } */
 }
 
 object GetAuditInfoSerializer
@@ -395,7 +395,7 @@ object GetAuditInfoSerializer
     with DSIQueryTemporalitySerialization {
   protected override val log = getLogger(this)
 
-  override def serialize(getAuditInfo: GetAuditInfo): GetAuditInfoProto = {
+  override def serialize(getAuditInfo: GetAuditInfo): GetAuditInfoProto = ??? /* {
     val bld = GetAuditInfoProto.newBuilder
 
     val builder = getAuditInfo.temporality match {
@@ -413,9 +413,9 @@ object GetAuditInfoSerializer
     val bd = builder.setEntityReference(toProto(getAuditInfo.entityRef))
 
     (bd.setClassName(getAuditInfo.clazzName)).build()
-  }
+  } */
 
-  override def deserialize(proto: GetAuditInfoProto): GetAuditInfo = {
+  override def deserialize(proto: GetAuditInfoProto): GetAuditInfo = ??? /* {
     val entityRef =
       if (proto.hasEntityReference)
         fromProto(proto.getEntityReference)
@@ -432,13 +432,13 @@ object GetAuditInfoSerializer
         ""
 
     GetAuditInfo(entityRef, className, temporality)
-  }
+  } */
 }
 
 object EntityAuditInfoSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[EntityAuditInfo, EntityAuditInfoProto] {
-  override def serialize(auditInfo: EntityAuditInfo): EntityAuditInfoProto = {
+  override def serialize(auditInfo: EntityAuditInfo): EntityAuditInfoProto = ??? /* {
     val builder = EntityAuditInfoProto.newBuilder
       .setEffectiveUser(auditInfo.effectiveUser)
       .setRealUser(auditInfo.realUser)
@@ -449,9 +449,9 @@ object EntityAuditInfoSerializer
     auditInfo.reqId.foreach(builder.setRequestUuid)
     auditInfo.zoneId.foreach(builder.setZoneId)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: EntityAuditInfoProto): EntityAuditInfo = {
+  override def deserialize(proto: EntityAuditInfoProto): EntityAuditInfo = ??? /* {
     EntityAuditInfo(
       if (proto.hasRealUser) proto.getRealUser else proto.getEffectiveUser,
       if (proto.hasVersionedReference) Some(fromProto(proto.getVersionedReference)) else None,
@@ -462,152 +462,152 @@ object EntityAuditInfoSerializer
       if (proto.hasRequestUuid) Some(proto.getRequestUuid) else None,
       if (proto.hasZoneId) Some(proto.getZoneId) else None
     )
-  }
+  } */
 }
 
 object GetBusinessEventByKeySerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetBusinessEventByKey, SelectBusinesEventByKeyProto] {
 
-  override def serialize(byKey: GetBusinessEventByKey): SelectBusinesEventByKeyProto = {
+  override def serialize(byKey: GetBusinessEventByKey): SelectBusinesEventByKeyProto = ??? /* {
     SelectBusinesEventByKeyProto.newBuilder
       .setSerializedKey(toProto(byKey.key))
       .setReadTxTime(toProto(byKey.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: SelectBusinesEventByKeyProto): GetBusinessEventByKey = {
+  override def deserialize(proto: SelectBusinesEventByKeyProto): GetBusinessEventByKey = ??? /* {
     GetBusinessEventByKey(fromProto(proto.getSerializedKey()), fromProto(proto.getReadTxTime()))
-  }
+  } */
 }
 
 object GetBusinessEventsByClassSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetBusinessEventsByClass, SelectBusinesEventByEventClassProto] {
 
-  override def serialize(byClass: GetBusinessEventsByClass): SelectBusinesEventByEventClassProto = {
+  override def serialize(byClass: GetBusinessEventsByClass): SelectBusinesEventByEventClassProto = ??? /* {
     SelectBusinesEventByEventClassProto.newBuilder
       .setEventClassQuery(toProto(byClass.eventClassQuery))
       .setReadTxTime(toProto(byClass.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: SelectBusinesEventByEventClassProto): GetBusinessEventsByClass = {
+  override def deserialize(proto: SelectBusinesEventByEventClassProto): GetBusinessEventsByClass = ??? /* {
     GetBusinessEventsByClass(fromProto(proto.getEventClassQuery()), fromProto(proto.getReadTxTime()))
-  }
+  } */
 }
 
 object GetBusinessEventSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetBusinessEvent, SelectBusinesEventByEventRefProto] {
 
-  override def serialize(byEventRef: GetBusinessEvent): SelectBusinesEventByEventRefProto = {
+  override def serialize(byEventRef: GetBusinessEvent): SelectBusinesEventByEventRefProto = ??? /* {
     SelectBusinesEventByEventRefProto.newBuilder
       .setEventReference(toProto(byEventRef.ref))
       .setReadTxTime(toProto(byEventRef.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: SelectBusinesEventByEventRefProto): GetBusinessEvent = {
+  override def deserialize(proto: SelectBusinesEventByEventRefProto): GetBusinessEvent = ??? /* {
     GetBusinessEvent(fromProto(proto.getEventReference()), fromProto(proto.getReadTxTime()))
-  }
+  } */
 }
 
 object GetInitiatingEventSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetInitiatingEvent, GetInitiatingEventProto] {
 
-  override def serialize(gie: GetInitiatingEvent): GetInitiatingEventProto = {
+  override def serialize(gie: GetInitiatingEvent): GetInitiatingEventProto = ??? /* {
     GetInitiatingEventProto.newBuilder
       .setEntityReference(toProto(gie.ref))
       .setReadVtTime(toProto(gie.vt))
       .setReadTxTime(toProto(gie.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: GetInitiatingEventProto): GetInitiatingEvent = {
+  override def deserialize(proto: GetInitiatingEventProto): GetInitiatingEvent = ??? /* {
     GetInitiatingEvent(
       fromProto(proto.getEntityReference),
       fromProto(proto.getReadVtTime),
       fromProto(proto.getReadTxTime))
-  }
+  } */
 }
 
 object GetEntityEventTimelineSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetEntityEventTimeline, SelectBusinesEventByEntityRefProto] {
 
-  override def serialize(byEntityRef: GetEntityEventTimeline): SelectBusinesEventByEntityRefProto = {
+  override def serialize(byEntityRef: GetEntityEventTimeline): SelectBusinesEventByEntityRefProto = ??? /* {
     SelectBusinesEventByEntityRefProto.newBuilder
       .setEntityReference(toProto(byEntityRef.ref))
       .setReadTxTime(toProto(byEntityRef.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: SelectBusinesEventByEntityRefProto): GetEntityEventTimeline = {
+  override def deserialize(proto: SelectBusinesEventByEntityRefProto): GetEntityEventTimeline = ??? /* {
     GetEntityEventTimeline(fromProto(proto.getEntityReference()), fromProto(proto.getReadTxTime()))
-  }
+  } */
 }
 
 object GetEntityEventValidTimelineSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetEntityEventValidTimeline, SelectEntityEventValidTimelineProto] {
 
-  override def serialize(byEntityRef: GetEntityEventValidTimeline): SelectEntityEventValidTimelineProto = {
+  override def serialize(byEntityRef: GetEntityEventValidTimeline): SelectEntityEventValidTimelineProto = ??? /* {
     val builder = SelectEntityEventValidTimelineProto.newBuilder
     builder.setEntityReference(toProto(byEntityRef.ref))
     builder.setReadTxTime(toProto(byEntityRef.tt))
     if (byEntityRef.validTimeInterval.isDefined)
       builder.setValidTimeInterval(toProto(byEntityRef.validTimeInterval.get))
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: SelectEntityEventValidTimelineProto): GetEntityEventValidTimeline = {
+  override def deserialize(proto: SelectEntityEventValidTimelineProto): GetEntityEventValidTimeline = ??? /* {
     GetEntityEventValidTimeline(
       fromProto(proto.getEntityReference()),
       fromProto(proto.getReadTxTime()),
       if (proto.hasValidTimeInterval) Some(fromProto(proto.getValidTimeInterval)) else None
     )
-  }
+  } */
 }
 
 object GetEventTimelineSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetEventTimeline, SelectEventTimelineProto] {
 
-  override def serialize(byEventRef: GetEventTimeline): SelectEventTimelineProto = {
+  override def serialize(byEventRef: GetEventTimeline): SelectEventTimelineProto = ??? /* {
     SelectEventTimelineProto.newBuilder
       .setEventReference(toProto(byEventRef.ref))
       .setReadTxTime(toProto(byEventRef.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: SelectEventTimelineProto): GetEventTimeline = {
+  override def deserialize(proto: SelectEventTimelineProto): GetEventTimeline = ??? /* {
     GetEventTimeline(fromProto(proto.getEventReference()), fromProto(proto.getReadTxTime()))
-  }
+  } */
 }
 
 object GetEventTransactionsSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetEventTransactions, GetEventTransactionsProto] {
 
-  override def serialize(eventWithTt: GetEventTransactions): GetEventTransactionsProto = {
+  override def serialize(eventWithTt: GetEventTransactions): GetEventTransactionsProto = ??? /* {
     GetEventTransactionsProto.newBuilder
       .setEventReference(toProto(eventWithTt.ref))
       .setReadTxTime(toProto(eventWithTt.tt))
       .build
-  }
+  } */
 
-  override def deserialize(proto: GetEventTransactionsProto): GetEventTransactions = {
+  override def deserialize(proto: GetEventTransactionsProto): GetEventTransactions = ??? /* {
     GetEventTransactions(fromProto(proto.getEventReference), fromProto(proto.getReadTxTime))
-  }
+  } */
 }
 
 object GetAssociatedEntitiesSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetAssociatedEntities, SelectBusinessEventAssociatedEntitiesProto] {
 
-  override def serialize(byEventRef: GetAssociatedEntities): SelectBusinessEventAssociatedEntitiesProto = {
+  override def serialize(byEventRef: GetAssociatedEntities): SelectBusinessEventAssociatedEntitiesProto = ??? /* {
     val builder = SelectBusinessEventAssociatedEntitiesProto.newBuilder
     builder.setEventReference(toProto(byEventRef.ref))
     builder.setReadVtTime(toProto(byEventRef.vt))
@@ -616,20 +616,20 @@ object GetAssociatedEntitiesSerializer
       builder.setTypeName(byEventRef.typeName.get)
 
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: SelectBusinessEventAssociatedEntitiesProto): GetAssociatedEntities = {
+  override def deserialize(proto: SelectBusinessEventAssociatedEntitiesProto): GetAssociatedEntities = ??? /* {
     GetAssociatedEntities(
       fromProto(proto.getEventReference()),
       fromProto(proto.getReadVtTime()),
       fromProto(proto.getReadTxTime()),
       if (proto.hasTypeName) Some(proto.getTypeName) else None
     )
-  }
+  } */
 }
 
 object JarPathSerializer extends ProtoSerializer[ExistingNonStorableJarPath, JarPathProto] {
-  override def serialize(jp: ExistingNonStorableJarPath): JarPathProto = {
+  override def serialize(jp: ExistingNonStorableJarPath): JarPathProto = ??? /* {
     val builder = JarPathProto.newBuilder
     jp match {
       case AbsoluteJarPath(p) =>
@@ -643,17 +643,17 @@ object JarPathSerializer extends ProtoSerializer[ExistingNonStorableJarPath, Jar
         builder.setPath(rp)
     }
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: JarPathProto): ExistingNonStorableJarPath = proto.getType() match {
+  override def deserialize(proto: JarPathProto): ExistingNonStorableJarPath = ??? /* proto.getType() match {
     case JarPathProto.Type.ABSOLUTE => AbsoluteJarPath(proto.getPath)
     case JarPathProto.Type.MPR => MprJarPath(proto.getMetaproject, proto.getProject, proto.getRelease, proto.getPath)
-  }
+  } */
 }
 
 object ClientMachineIdentifierSerializer
     extends ProtoSerializer[ClientMachineIdentifier, ClientMachineIdentifierProto] {
-  override def serialize(clientMachineIdentifier: ClientMachineIdentifier): ClientMachineIdentifierProto = {
+  override def serialize(clientMachineIdentifier: ClientMachineIdentifier): ClientMachineIdentifierProto = ??? /* {
     val proto: ClientMachineIdentifierProto.Builder = ClientMachineIdentifierProto.newBuilder()
     clientMachineIdentifier match {
       case UnremarkableClientMachine =>
@@ -668,9 +668,9 @@ object ClientMachineIdentifierSerializer
         proto.setPort(cm.hostport.port.underlying)
     }
     proto.build
-  }
+  } */
 
-  override def deserialize(proto: ClientMachineIdentifierProto): ClientMachineIdentifier = {
+  override def deserialize(proto: ClientMachineIdentifierProto): ClientMachineIdentifier = ??? /* {
     proto.getType match {
       case cm if cm.equals(ClientMachineIdentifierProto.Type.TREADMILL) =>
         TreadmillNode(TreadmillApp(proto.getTreadmillApp), TreadmillInstanceId(proto.getTreadmillInstanceId))
@@ -679,18 +679,18 @@ object ClientMachineIdentifierSerializer
       }
       case _ => UnremarkableClientMachine
     }
-  }
+  } */
 }
 
 object EstablishSessionSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[(Int, EstablishSession), EstablishSessionProto] {
 
-  def deserializeTxTime(proto: EstablishSessionProto): Option[Instant] = {
+  def deserializeTxTime(proto: EstablishSessionProto): Option[Instant] = ??? /* {
     if (proto.hasEstablishmentTime) Some(fromProto(proto.getEstablishmentTime)) else None
-  }
+  } */
 
-  override def deserialize(proto: EstablishSessionProto): (Int, EstablishSession) = {
+  override def deserialize(proto: EstablishSessionProto): (Int, EstablishSession) = ??? /* {
     val appIdentifier = fromProto(proto.getApplicationIdentifier())
     val context = fromProto(proto.getContext())
     val features = proto.getFeatureIdentifiersList().asScala map { Feature.fromValue(_) }
@@ -738,9 +738,9 @@ object EstablishSessionSerializer
         clientPath,
         clientMachineIdentifier
       ))
-  }
+  } */
 
-  override def serialize(commandAndId: (Int, EstablishSession)): EstablishSessionProto = {
+  override def serialize(commandAndId: (Int, EstablishSession)): EstablishSessionProto = ??? /* {
     val (sessionId, command) = commandAndId
     val builder = EstablishSessionProto.newBuilder()
     builder.setSessionIdentifier(sessionId)
@@ -769,14 +769,14 @@ object EstablishSessionSerializer
     builder.setClientMachineIdentifierProto(toProto(command.sessionInfo.clientMachineIdentifier))
     builder.setEstablishAllRoles(command.establishAllRoles)
     builder.build()
-  }
+  } */
 }
 
 object EstablishSessionResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[EstablishSessionResult, EstablishSessionResultProto] {
 
-  override def deserialize(proto: EstablishSessionResultProto): EstablishSessionResult = {
+  override def deserialize(proto: EstablishSessionResultProto): EstablishSessionResult = ??? /* {
     if (proto.hasFailureType) {
       val failureType = proto.getFailureType match {
         case EstablishSessionResultProto.FailureType.GENERIC => EstablishSessionFailure.Type.Generic
@@ -850,9 +850,9 @@ object EstablishSessionResultSerializer
         if (proto.hasProfileKeyHash) Some(ProfileKeyHash(proto.getProfileKeyHash.toByteArray)) else None
       )
     }
-  }
+  } */
 
-  override def serialize(result: EstablishSessionResult): EstablishSessionResultProto = {
+  override def serialize(result: EstablishSessionResult): EstablishSessionResultProto = ??? /* {
     val builder = EstablishSessionResultProto.newBuilder()
     result match {
       case EstablishSessionSuccess(
@@ -942,7 +942,7 @@ object EstablishSessionResultSerializer
         builder.setErrorMessage(message)
     }
     builder.build()
-  }
+  } */
 }
 
 // converts Array of classname strings to a single compressed bytestring and back
@@ -1004,7 +1004,7 @@ object SessionTokenRequestSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[SessionTokenRequest, SessionTokenRequestProto] {
 
-  override def deserialize(proto: SessionTokenRequestProto): SessionTokenRequest = {
+  override def deserialize(proto: SessionTokenRequestProto): SessionTokenRequest = ??? /* {
     val effectiveID = if (proto.hasEffectiveId) Some(proto.getEffectiveId) else None
     val appID = if (proto.hasAppId) Some(proto.getAppId) else None
     val realID = if (proto.hasRealId) Some(proto.getRealId) else None
@@ -1014,9 +1014,9 @@ object SessionTokenRequestSerializer
     val token = if (proto.hasEncryptedSessionToken) Some(proto.getEncryptedSessionToken.toByteArray) else None
     val fi = if (proto.hasFeatureInfo) fromProto(proto.getFeatureInfo()) else ProtoFileProperties.NO_FEATURE_INFO
     SessionTokenRequest(roles, realID, effectiveID, appID, token, fi)
-  }
+  } */
 
-  override def serialize(command: SessionTokenRequest): SessionTokenRequestProto = {
+  override def serialize(command: SessionTokenRequest): SessionTokenRequestProto = ??? /* {
     val builder = SessionTokenRequestProto.newBuilder()
     // TODO (OPTIMUS-13040): once the multiple roles change has propagated to all environments
     // we can remove the optional role from dsi.proto and just use the repeated roles instead.
@@ -1028,59 +1028,59 @@ object SessionTokenRequestSerializer
     if (command.token != None) builder.setEncryptedSessionToken(ByteString.copyFrom(command.token.get))
     builder.setFeatureInfo(toProto(command.featureInfo))
     builder.build()
-  }
+  } */
 }
 
 object CreateNewSessionSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[CreateNewSession, CreateNewSessionProto] {
-  override def deserialize(proto: CreateNewSessionProto): CreateNewSession = {
+  override def deserialize(proto: CreateNewSessionProto): CreateNewSession = ??? /* {
     val es = fromProto(proto.getEstablishSession) match { case (_, es) => es }
     CreateNewSession(es)
-  }
-  override def serialize(command: CreateNewSession): CreateNewSessionProto = {
+  } */
+  override def serialize(command: CreateNewSession): CreateNewSessionProto = ??? /* {
     // This session is not supposed to be used by client so setting -1 as session id
     val esProto = toProto((-1, command.es))
     CreateNewSessionProto.newBuilder().setEstablishSession(esProto).build()
-  }
+  } */
 }
 
 object CreateNewSessionResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[CreateNewSessionResult, CreateNewSessionResultProto] {
-  override def deserialize(proto: CreateNewSessionResultProto): CreateNewSessionResult = {
+  override def deserialize(proto: CreateNewSessionResultProto): CreateNewSessionResult = ??? /* {
     val esr = fromProto(proto.getEstablishSessionResult)
     CreateNewSessionResult(esr)
-  }
-  override def serialize(result: CreateNewSessionResult): CreateNewSessionResultProto = {
+  } */
+  override def serialize(result: CreateNewSessionResult): CreateNewSessionResultProto = ??? /* {
     val esrProto = toProto(result.esr)
     CreateNewSessionResultProto.newBuilder().setEstablishSessionResult(esrProto).build()
-  }
+  } */
 }
 
 object DiscoverServicesSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[DiscoverServices, DiscoverServicesProto] {
-  override def serialize(ds: DiscoverServices): DiscoverServicesProto = {
+  override def serialize(ds: DiscoverServices): DiscoverServicesProto = ??? /* {
     val builder = DiscoverServicesProto.newBuilder()
     builder.setEstablishSession(toProto(-1 -> ds.establishSession))
     builder.setDalEnv(ds.env.underlying)
     ds.sysLoc.foreach(builder.setSysLoc)
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: DiscoverServicesProto): DiscoverServices = {
+  override def deserialize(proto: DiscoverServicesProto): DiscoverServices = ??? /* {
     val (_, es) = fromProto(proto.getEstablishSession)
     val env = DalEnv(proto.getDalEnv)
     val sysLocOpt = if (proto.hasSysLoc) Some(proto.getSysLoc) else None
     DiscoverServices(es, env, sysLocOpt)
-  }
+  } */
 }
 
 object DiscoverServicesResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[DiscoverServicesResult, DiscoverServicesResultProto] {
-  override def serialize(dsr: DiscoverServicesResult): DiscoverServicesResultProto = {
+  override def serialize(dsr: DiscoverServicesResult): DiscoverServicesResultProto = ??? /* {
     val builder = DiscoverServicesResultProto.newBuilder
     dsr match {
       case dss: DiscoverServicesSuccess =>
@@ -1098,9 +1098,9 @@ object DiscoverServicesResultSerializer
         builder.setFailureMessage(gf.msg)
     }
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: DiscoverServicesResultProto): DiscoverServicesResult = {
+  override def deserialize(proto: DiscoverServicesResultProto): DiscoverServicesResult = ??? /* {
     if (proto.hasFailureType) {
       proto.getFailureType match {
         case DiscoverServicesResultProto.FailureType.GENERIC =>
@@ -1120,12 +1120,12 @@ object DiscoverServicesResultSerializer
       val ess = fromProto(proto.getEstablishSessionResult).asInstanceOf[EstablishSessionSuccess]
       DiscoverServicesSuccess(services, ess)
     }
-  }
+  } */
 }
 
 object ServiceDiscoveryElementSerializer
     extends ProtoSerializer[ServiceDiscoveryElement, ServiceDiscoveryElementProto] {
-  override def serialize(elem: ServiceDiscoveryElement): ServiceDiscoveryElementProto = {
+  override def serialize(elem: ServiceDiscoveryElement): ServiceDiscoveryElementProto = ??? /* {
     val builder = ServiceDiscoveryElementProto.newBuilder
     val serviceTypeProto = elem.serviceType match {
       case DalServiceType.Read              => ServiceDiscoveryElementProto.ServiceType.READ
@@ -1154,9 +1154,9 @@ object ServiceDiscoveryElementSerializer
     elem.partition.foreach(ptn => builder.setPartitionName(ptn.name))
     builder.setLookup(elem.lookupStr)
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: ServiceDiscoveryElementProto): ServiceDiscoveryElement = {
+  override def deserialize(proto: ServiceDiscoveryElementProto): ServiceDiscoveryElement = ??? /* {
     def unknownValue(tpe: String): Nothing =
       throw new IllegalArgumentException(s"Cannot deserialize service discovery element due to unknown $tpe")
 
@@ -1188,14 +1188,14 @@ object ServiceDiscoveryElementSerializer
       if (proto.hasPartitionName) Some(PartitionHelper.getPartitionForString(proto.getPartitionName)) else None
     val lookup = proto.getLookup
     ServiceDiscoveryElement(serviceType, serviceProvider, lookupType, partition, lookup)
-  }
+  } */
 }
 
 object SessionTokenResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[SessionTokenResult, SessionTokenResultProto] {
 
-  override def deserialize(proto: SessionTokenResultProto): SessionTokenResult = {
+  override def deserialize(proto: SessionTokenResultProto): SessionTokenResult = ??? /* {
     val realID = if (proto.hasRealId) Some(proto.getRealId) else None
     val roles = proto.getRolesList.asScala
     SessionTokenResult(
@@ -1204,40 +1204,40 @@ object SessionTokenResultSerializer
       proto.getEncryptedSessionToken().toByteArray(),
       (if (proto.hasFeatureInfo) fromProto(proto.getFeatureInfo) else ProtoFileProperties.NO_FEATURE_INFO)
     )
-  }
+  } */
 
-  override def serialize(command: SessionTokenResult): SessionTokenResultProto = {
+  override def serialize(command: SessionTokenResult): SessionTokenResultProto = ??? /* {
     val builder =
       SessionTokenResultProto.newBuilder().setEncryptedSessionToken(ByteString.copyFrom(command.encryptedToken))
     builder.addAllRoles(command.roles.asJava)
     if (command.realID.isDefined) builder.setRealId(command.realID.get)
     builder.setFeatureInfo(toProto(command.featureInfo))
     builder.build()
-  }
+  } */
 }
 
 object HeartbeatSerializer extends GetCommandProtoSerialization with ProtoSerializer[Heartbeat, HeartbeatProto] {
 
-  override def deserialize(proto: HeartbeatProto): Heartbeat = {
+  override def deserialize(proto: HeartbeatProto): Heartbeat = ??? /* {
     Heartbeat(proto.getUuid(), fromProto(proto.getSentTime()))
-  }
+  } */
 
-  override def serialize(command: Heartbeat): HeartbeatProto = {
+  override def serialize(command: Heartbeat): HeartbeatProto = ??? /* {
     HeartbeatProto.newBuilder().setUuid(command.uuid).setSentTime(toProto(command.sentTime)).build()
-  }
+  } */
 }
 
 object HeartbeatResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[HeartbeatResult, HeartbeatResultProto] {
 
-  override def deserialize(proto: HeartbeatResultProto): HeartbeatResult = {
+  override def deserialize(proto: HeartbeatResultProto): HeartbeatResult = ??? /* {
     HeartbeatResult(fromProto(proto.getReceiveTime()))
-  }
+  } */
 
-  override def serialize(command: HeartbeatResult): HeartbeatResultProto = {
+  override def serialize(command: HeartbeatResult): HeartbeatResultProto = ??? /* {
     HeartbeatResultProto.newBuilder().setReceiveTime(toProto(command.receiveTime)).build()
-  }
+  } */
 }
 
 object GetProtoFilePropertiesSerializer
@@ -1246,13 +1246,13 @@ object GetProtoFilePropertiesSerializer
   val allowSendingGetProtoFileProperties =
     java.lang.Boolean.getBoolean("optimus.platform.dsi.allowSendingGetProtoFileProperties")
 
-  override def deserialize(proto: GetProtoFilePropertiesProto): GetProtoFileProperties = {
+  override def deserialize(proto: GetProtoFilePropertiesProto): GetProtoFileProperties = ??? /* {
     GetProtoFileProperties(
       proto.getLocalProtoFileVersion,
       (if (proto.hasClientFeature) fromProto(proto.getClientFeature) else ProtoFileProperties.NO_FEATURE_INFO))
-  }
+  } */
 
-  override def serialize(command: GetProtoFileProperties): GetProtoFilePropertiesProto = {
+  override def serialize(command: GetProtoFileProperties): GetProtoFilePropertiesProto = ??? /* {
     if (allowSendingGetProtoFileProperties) {
       GetProtoFilePropertiesProto
         .newBuilder()
@@ -1262,47 +1262,47 @@ object GetProtoFilePropertiesSerializer
     } else
       throw new UnsupportedOperationException(
         "Sending a GetProtoFileProperties is no longer supported. This should not have happened.")
-  }
+  } */
 }
 
 object GetProtoFilePropertiesResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetProtoFilePropertiesResult, GetProtoFilePropertiesResultProto] {
 
-  override def deserialize(proto: GetProtoFilePropertiesResultProto): GetProtoFilePropertiesResult = {
+  override def deserialize(proto: GetProtoFilePropertiesResultProto): GetProtoFilePropertiesResult = ??? /* {
     GetProtoFilePropertiesResult(
       proto.getRemoteProtoFileVersion(),
       (if (proto.hasRemoteFeature) fromProto(proto.getRemoteFeature) else ProtoFileProperties.NO_FEATURE_INFO))
-  }
+  } */
 
-  override def serialize(command: GetProtoFilePropertiesResult): GetProtoFilePropertiesResultProto = {
+  override def serialize(command: GetProtoFilePropertiesResult): GetProtoFilePropertiesResultProto = ??? /* {
     GetProtoFilePropertiesResultProto
       .newBuilder()
       .setRemoteProtoFileVersion(command.remoteProtoFileVersionNum)
       .setRemoteFeature(toProto(command.featureInfo))
       .build
-  }
+  } */
 }
 
 object SelectResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[SelectResult, SelectResultProto] {
 
-  override def deserialize(proto: SelectResultProto): SelectResult = {
+  override def deserialize(proto: SelectResultProto): SelectResult = ??? /* {
     val serializedResults = proto.getPersistentEntityList.asScala.toSeq
     SelectResult(serializedResults map { fromProto(_) })
-  }
+  } */
 
-  override def serialize(result: SelectResult): SelectResultProto = {
+  override def serialize(result: SelectResult): SelectResultProto = ??? /* {
     SelectResultProto.newBuilder
       .addAllPersistentEntity((result.value map { toProto(_) } toSeq).asJava)
       .build
-  }
+  } */
 }
 
 object ResultStatsSerializer extends GetCommandProtoSerialization with ProtoSerializer[ResultStats, ResultStatsProto] {
 
-  override def deserialize(proto: ResultStatsProto): ResultStats = {
+  override def deserialize(proto: ResultStatsProto): ResultStats = ??? /* {
     val resultStats = if (proto.hasType) {
       proto.getType match {
         case ResultStatsProto.Type.StringStats =>
@@ -1320,9 +1320,9 @@ object ResultStatsSerializer extends GetCommandProtoSerialization with ProtoSeri
       resultStats.attachPartitions(
         proto.getPartitionNamesList.asScala.iterator.map(PartitionHelper.getPartitionForString).toSet)
     resultStats
-  }
+  } */
 
-  override def serialize(stats: ResultStats): ResultStatsProto = {
+  override def serialize(stats: ResultStats): ResultStatsProto = ??? /* {
 
     val builder = ResultStatsProto.newBuilder
     stats match {
@@ -1347,134 +1347,134 @@ object ResultStatsSerializer extends GetCommandProtoSerialization with ProtoSeri
     }
     stats.getPartitions.foreach(p => builder.addPartitionNames(p.name))
     builder.build()
-  }
+  } */
 }
 
 object GetAuditInfoResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetAuditInfoResult, GetAuditInfoResultProto] {
 
-  override def deserialize(proto: GetAuditInfoResultProto): GetAuditInfoResult = {
+  override def deserialize(proto: GetAuditInfoResultProto): GetAuditInfoResult = ??? /* {
     val serializedAuditInfo = proto.getAuditInfoList.asScala.toSeq
     GetAuditInfoResult(serializedAuditInfo map { fromProto(_) })
-  }
+  } */
 
-  override def serialize(result: GetAuditInfoResult): GetAuditInfoResultProto = {
+  override def serialize(result: GetAuditInfoResult): GetAuditInfoResultProto = ??? /* {
     GetAuditInfoResultProto.newBuilder
       .addAllAuditInfo((result.value map { toProto(_) } toSeq).asJava)
       .build
-  }
+  } */
 }
 
 object PartialGetAuditInfoResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[PartialGetAuditInfoResult, PartialGetAuditInfoResultProto] {
 
-  override def deserialize(proto: PartialGetAuditInfoResultProto): PartialGetAuditInfoResult = {
+  override def deserialize(proto: PartialGetAuditInfoResultProto): PartialGetAuditInfoResult = ??? /* {
     val serializedAuditInfo = proto.getAuditInfoList.asScala.toSeq
     PartialGetAuditInfoResult(serializedAuditInfo map { fromProto(_) }, proto.getIsLast)
-  }
+  } */
 
-  override def serialize(result: PartialGetAuditInfoResult): PartialGetAuditInfoResultProto = {
+  override def serialize(result: PartialGetAuditInfoResult): PartialGetAuditInfoResultProto = ??? /* {
     PartialGetAuditInfoResultProto.newBuilder
       .addAllAuditInfo((result.value map { toProto(_) } toSeq).asJava)
       .setIsLast(result.isLast)
       .build
-  }
+  } */
 }
 
 object GetBusinessEventResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetBusinessEventResult, SelectBusinessEventResultProto] {
 
-  override def deserialize(proto: SelectBusinessEventResultProto): GetBusinessEventResult = {
+  override def deserialize(proto: SelectBusinessEventResultProto): GetBusinessEventResult = ??? /* {
     val serializedEvents = proto.getBusinessEventList().asScala.toSeq
     GetBusinessEventResult(serializedEvents map { fromProto(_) })
-  }
+  } */
 
-  override def serialize(result: GetBusinessEventResult): SelectBusinessEventResultProto = {
+  override def serialize(result: GetBusinessEventResult): SelectBusinessEventResultProto = ??? /* {
     SelectBusinessEventResultProto.newBuilder
       .addAllBusinessEvent((result.events map { toProto(_) } toSeq).asJava)
       .build
-  }
+  } */
 }
 
 object PartialGetBusinessEventResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[PartialGetBusinessEventResult, PartialSelectBusinessEventResultProto] {
 
-  override def deserialize(proto: PartialSelectBusinessEventResultProto): PartialGetBusinessEventResult = {
+  override def deserialize(proto: PartialSelectBusinessEventResultProto): PartialGetBusinessEventResult = ??? /* {
     val serializedEvents = proto.getBusinessEventList().asScala.toSeq
     PartialGetBusinessEventResult(serializedEvents map { fromProto(_) }, proto.getIsLast)
-  }
+  } */
 
-  override def serialize(result: PartialGetBusinessEventResult): PartialSelectBusinessEventResultProto = {
+  override def serialize(result: PartialGetBusinessEventResult): PartialSelectBusinessEventResultProto = ??? /* {
     PartialSelectBusinessEventResultProto.newBuilder
       .addAllBusinessEvent((result.events map { toProto(_) } toSeq).asJava)
       .setIsLast(result.isLast)
       .build
-  }
+  } */
 }
 
 object GetBusinessEventWithTTToResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetBusinessEventWithTTToResult, SelectBusinessEventWithTTToResultProto] {
 
-  override def deserialize(proto: SelectBusinessEventWithTTToResultProto): GetBusinessEventWithTTToResult = {
+  override def deserialize(proto: SelectBusinessEventWithTTToResultProto): GetBusinessEventWithTTToResult = ??? /* {
     val serializedEvents = proto.getBusinessEventList().asScala.toSeq
     GetBusinessEventWithTTToResult(serializedEvents map { fromProto(_) })
-  }
+  } */
 
-  override def serialize(result: GetBusinessEventWithTTToResult): SelectBusinessEventWithTTToResultProto = {
+  override def serialize(result: GetBusinessEventWithTTToResult): SelectBusinessEventWithTTToResultProto = ??? /* {
     SelectBusinessEventWithTTToResultProto.newBuilder
       .addAllBusinessEvent((result.events map { toProto(_) } toSeq).asJava)
       .build
-  }
+  } */
 }
 
 object GetInitiatingEventResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetInitiatingEventResult, GetInitiatingEventResultProto] {
 
-  override def deserialize(proto: GetInitiatingEventResultProto): GetInitiatingEventResult = {
+  override def deserialize(proto: GetInitiatingEventResultProto): GetInitiatingEventResult = ??? /* {
     val eventOpt = if (proto.hasBusinessEvent) Some(fromProto(proto.getBusinessEvent)) else None
     val entityOpt = if (proto.hasPersistentEntity) Some(fromProto(proto.getPersistentEntity)) else None
     GetInitiatingEventResult(eventOpt, entityOpt)
-  }
+  } */
 
-  override def serialize(result: GetInitiatingEventResult): GetInitiatingEventResultProto = {
+  override def serialize(result: GetInitiatingEventResult): GetInitiatingEventResultProto = ??? /* {
     val GetInitiatingEventResult(eventOpt, entityOpt) = result
     val builder = GetInitiatingEventResultProto.newBuilder
     eventOpt.foreach(event => builder.setBusinessEvent(toProto(event)))
     entityOpt.foreach(entity => builder.setPersistentEntity(toProto(entity)))
     builder.build
-  }
+  } */
 }
 
 object PartialSelectResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[PartialSelectResult, PartialSelectResultProto] {
 
-  override def deserialize(proto: PartialSelectResultProto): PartialSelectResult = {
+  override def deserialize(proto: PartialSelectResultProto): PartialSelectResult = ??? /* {
     val serializedResults: mutable.Seq[PersistentEntityProto] =
       proto.getPersistentEntityList.asScala // PersistentEntityProto - contain entityRef strings
     // -> ProtoSerializationFrom#fromProto -> BasicProtoSer#deserialize -> ... BPS#des:247 : SerializedEntity
     PartialSelectResult(serializedResults map { fromProto(_) }, proto.getLast())
-  }
+  } */
 
-  override def serialize(result: PartialSelectResult): PartialSelectResultProto = {
+  override def serialize(result: PartialSelectResult): PartialSelectResultProto = ??? /* {
     PartialSelectResultProto.newBuilder
       .addAllPersistentEntity((result.value map { toProto(_) }).asJava)
       .setLast(result.isLast)
       .build
-  }
+  } */
 }
 
 object PrcPartialSelectResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[PrcPartialSelectResult, PrcPartialSelectResultProto] {
 
-  override def deserialize(proto: PrcPartialSelectResultProto): PrcPartialSelectResult = {
+  override def deserialize(proto: PrcPartialSelectResultProto): PrcPartialSelectResult = ??? /* {
     require(proto.hasUnderlying, "PrcPartialSelectResultProto should have the underlying PartialSelectResult")
     val pss = fromProto(proto.getUnderlying)
     val txInterval = fromProto(proto.getTxInterval)
@@ -1490,9 +1490,9 @@ object PrcPartialSelectResultSerializer
       }
       .toMap
     PrcPartialSelectResult(pss, vtInterval, txInterval, lsqtMap)
-  }
+  } */
 
-  override def serialize(result: PrcPartialSelectResult): PrcPartialSelectResultProto = {
+  override def serialize(result: PrcPartialSelectResult): PrcPartialSelectResultProto = ??? /* {
     val builder = PrcPartialSelectResultProto.newBuilder
     builder.setUnderlying(toProto(result.underlying))
     builder.setTxInterval(toProto(result.txInterval))
@@ -1502,41 +1502,41 @@ object PrcPartialSelectResultSerializer
       builder.addLsqtMapValues(toProto(lsqt))
     }
     builder.build()
-  }
+  } */
 }
 
 object CountResultSerializer extends GetCommandProtoSerialization with ProtoSerializer[CountResult, CountResultProto] {
 
-  override def deserialize(proto: CountResultProto): CountResult = {
+  override def deserialize(proto: CountResultProto): CountResult = ??? /* {
     new CountResult(proto.getNumber())
-  }
+  } */
 
-  override def serialize(res: CountResult): CountResultProto = {
+  override def serialize(res: CountResult): CountResultProto = ??? /* {
     CountResultProto.newBuilder
       .setNumber(res.number)
       .build
-  }
+  } */
 }
 
 object FeatureInfoSerializer extends GetCommandProtoSerialization with ProtoSerializer[FeatureInfo, FeatureInfoProto] {
 
-  override def deserialize(proto: FeatureInfoProto): FeatureInfo = {
+  override def deserialize(proto: FeatureInfoProto): FeatureInfo = ??? /* {
     FeatureInfo(proto.getFeatureBuild, proto.getFeatureInfoTag)
-  }
+  } */
 
-  override def serialize(fInfo: FeatureInfo): FeatureInfoProto = {
+  override def serialize(fInfo: FeatureInfo): FeatureInfoProto = ??? /* {
     FeatureInfoProto.newBuilder
       .setFeatureBuild(fInfo.build)
       .setFeatureInfoTag(fInfo.infoTag)
       .build
-  }
+  } */
 }
 
 object GetInfoResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetInfoResult, GetInfoResultProto] {
 
-  override def deserialize(proto: GetInfoResultProto): GetInfoResult = {
+  override def deserialize(proto: GetInfoResultProto): GetInfoResult = ??? /* {
     import optimus.dsi.partitioning.PartitionHelper._
 
     val fi = if (proto.hasServerFeature) fromProto(proto.getServerFeature) else ProtoFileProperties.NO_FEATURE_INFO
@@ -1547,18 +1547,18 @@ object GetInfoResultSerializer
       (tlc.getSystemName, fromProto(tlc.getTime))
     }.toMap
     GetInfoResult(fromProto(proto.getServerTime), fi, timeLordClocks, partitionLsqtMap)
-  }
+  } */
 
-  override def serialize(res: GetInfoResult): GetInfoResultProto = {
+  override def serialize(res: GetInfoResult): GetInfoResultProto = ??? /* {
     GetInfoResultProto.newBuilder
       .setServerTime(toProto(res.serverTime))
       .setServerFeature(toProto(res.featureInfo))
       .addAllTimelordClocks(serializeTimeLordClocks(res.timeLordClocks))
       .addAllPartitionLsqts(serializeLsqtMap(res.partitionLsqtMap))
       .build
-  }
+  } */
 
-  private def serializeTimeLordClocks(timeLordClocks: Map[String, Instant]): java.lang.Iterable[TimelordClockProto] = {
+  /* private def serializeTimeLordClocks(timeLordClocks: Map[String, Instant]): java.lang.Iterable[TimelordClockProto] = {
     val tlcProtos = timeLordClocks.map { case (systemName, time) =>
       TimelordClockProto.newBuilder
         .setSystemName(systemName)
@@ -1578,28 +1578,28 @@ object GetInfoResultSerializer
     }
 
     partitionLsqtProto.asJava
-  }
+  } */
 }
 
 object RoleMembershipQuerySerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[RoleMembershipQuery, RoleMembershipQueryProto] {
 
-  override def deserialize(proto: RoleMembershipQueryProto): RoleMembershipQuery = {
+  override def deserialize(proto: RoleMembershipQueryProto): RoleMembershipQuery = ??? /* {
     new RoleMembershipQuery(proto.getRealId)
-  }
-  override def serialize(cmd: RoleMembershipQuery): RoleMembershipQueryProto = {
+  } */
+  override def serialize(cmd: RoleMembershipQuery): RoleMembershipQueryProto = ??? /* {
     RoleMembershipQueryProto.newBuilder
       .setRealId(cmd.realId)
       .build
-  }
+  } */
 }
 
 object CanPerformActionSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[CanPerformAction, CanPerformActionProto] {
 
-  val protoActionMappings = Map(
+  /* val protoActionMappings = Map(
     CanPerformActionProto.ActionType.READ -> EntityAction.Read,
     CanPerformActionProto.ActionType.CREATE -> EntityAction.Create,
     CanPerformActionProto.ActionType.UPDATE -> EntityAction.Update,
@@ -1608,46 +1608,46 @@ object CanPerformActionSerializer
 
   val actionProtoMappings = protoActionMappings
     .map { case (proto, action) => action -> proto }
-    .toMap[EntityAction, CanPerformActionProto.ActionType]
+    .toMap[EntityAction, CanPerformActionProto.ActionType] */
 
-  override def deserialize(proto: CanPerformActionProto): CanPerformAction = {
+  override def deserialize(proto: CanPerformActionProto): CanPerformAction = ??? /* {
     new CanPerformAction(proto.getTypeRef, protoActionMappings(proto.getAction))
-  }
-  override def serialize(cmd: CanPerformAction): CanPerformActionProto = {
+  } */
+  override def serialize(cmd: CanPerformAction): CanPerformActionProto = ??? /* {
     CanPerformActionProto.newBuilder
       .setTypeRef(cmd.typeRef)
       .setAction(actionProtoMappings(cmd.action))
       .build
-  }
+  } */
 }
 
 object BooleanResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[BooleanResult, BooleanResultProto] {
 
-  override def deserialize(proto: BooleanResultProto): BooleanResult = {
+  override def deserialize(proto: BooleanResultProto): BooleanResult = ??? /* {
     new BooleanResult(proto.getValue)
-  }
-  override def serialize(cmd: BooleanResult): BooleanResultProto = {
+  } */
+  override def serialize(cmd: BooleanResult): BooleanResultProto = ??? /* {
     BooleanResultProto.newBuilder
       .setValue(cmd.value)
       .build
-  }
+  } */
 }
 
 object RoleMembershipResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[RoleMembershipResult, RoleMembershipResultProto] {
 
-  override def deserialize(proto: RoleMembershipResultProto): RoleMembershipResult = {
+  override def deserialize(proto: RoleMembershipResultProto): RoleMembershipResult = ??? /* {
     new RoleMembershipResult(proto.getRoleIdList.asScala.toSet)
-  }
+  } */
 
-  override def serialize(res: RoleMembershipResult): RoleMembershipResultProto = {
+  override def serialize(res: RoleMembershipResult): RoleMembershipResultProto = ??? /* {
     RoleMembershipResultProto.newBuilder
       .addAllRoleId(res.roleIds.asJava)
       .build
-  }
+  } */
 }
 
 object TemporalityQueryCommandSerializer
@@ -1656,7 +1656,7 @@ object TemporalityQueryCommandSerializer
     with ProtoSerializer[TemporalityQueryCommand, TemporalityQueryCommandProto] {
   protected override val log = getLogger(this)
 
-  override def deserialize(proto: TemporalityQueryCommandProto): TemporalityQueryCommand = {
+  override def deserialize(proto: TemporalityQueryCommandProto): TemporalityQueryCommand = ??? /* {
     val temporality = getTemporality(proto)
 
     val queryDataType = fromProto(proto.getDataType())
@@ -1673,9 +1673,9 @@ object TemporalityQueryCommandSerializer
       queryResultType,
       proto.getTreeVersion()
     )()
-  }
+  } */
 
-  override def serialize(req: TemporalityQueryCommand): TemporalityQueryCommandProto = {
+  override def serialize(req: TemporalityQueryCommand): TemporalityQueryCommandProto = ??? /* {
     // TODO (OPTIMUS-13040): duplicate from toProto(req: EnumerateKeys)
     val queryDataType = toProto(req.dataType)
 
@@ -1707,7 +1707,7 @@ object TemporalityQueryCommandSerializer
     }
 
     builder.build
-  }
+  } */
 }
 trait QueryReferenceResultSerialization {
 
@@ -1733,7 +1733,7 @@ object QueryReferenceResultSerializer
     with ProtoSerializer[QueryReferenceResult, QueryReferenceResultProto]
     with QueryReferenceResultSerialization {
 
-  override def deserialize(proto: QueryReferenceResultProto): QueryReferenceResult = {
+  override def deserialize(proto: QueryReferenceResultProto): QueryReferenceResult = ??? /* {
     val dataType = fromProto(proto.getDataType)
     val typeIds = proto.getTypeIdList().asScala
     val refList = proto.getReferenceList().asScala
@@ -1748,9 +1748,9 @@ object QueryReferenceResultSerializer
     val vrefsFromProto = proto.getVersionedRefList.asScala.map(v => Some(fromProto(v)))
     val refWithTxTimesAndVref = getRefWithTxTimesAndVref(refs, txTimesFromProto, vrefsFromProto)
     QueryReferenceResult(dataType, refWithTxTimesAndVref)
-  }
+  } */
 
-  override def serialize(result: QueryReferenceResult): QueryReferenceResultProto = {
+  override def serialize(result: QueryReferenceResult): QueryReferenceResultProto = ??? /* {
     val (refs, optionTxTimes, vrefs) = result.refs.unzip3
     require(optionTxTimes.forall(_.isDefined))
     val txTimes = optionTxTimes.map(_.get)
@@ -1765,7 +1765,7 @@ object QueryReferenceResultSerializer
       .addAllTxTime(txTimeList)
       .addAllVersionedRef(vrefsList)
       .build
-  }
+  } */
 }
 
 object PartialQueryReferenceResultSerializer
@@ -1773,7 +1773,7 @@ object PartialQueryReferenceResultSerializer
     with ProtoSerializer[PartialQueryReferenceResult, PartialQueryReferenceResultProto]
     with QueryReferenceResultSerialization {
 
-  override def deserialize(proto: PartialQueryReferenceResultProto): PartialQueryReferenceResult = {
+  override def deserialize(proto: PartialQueryReferenceResultProto): PartialQueryReferenceResult = ??? /* {
     val dataType = fromProto(proto.getDataType)
     val typeIds = proto.getTypeIdList().asScala
     val refList = proto.getReferenceList().asScala
@@ -1788,9 +1788,9 @@ object PartialQueryReferenceResultSerializer
     val vrefsFromProto = proto.getVersionedRefList.asScala.map(v => Some(fromProto(v)))
     val refWithTxTimesAndVref = getRefWithTxTimesAndVref(refs, txTimesFromProto, vrefsFromProto)
     PartialQueryReferenceResult(dataType, refWithTxTimesAndVref, proto.getIsLast)
-  }
+  } */
 
-  override def serialize(result: PartialQueryReferenceResult): PartialQueryReferenceResultProto = {
+  override def serialize(result: PartialQueryReferenceResult): PartialQueryReferenceResultProto = ??? /* {
     val (refs, optionTxTimes, vrefs) = result.refs.unzip3
     require(optionTxTimes.forall(_.isDefined))
     val txTimes = optionTxTimes.map(_.get)
@@ -1809,7 +1809,7 @@ object PartialQueryReferenceResultSerializer
       .addAllTypeId(typeIdsList)
       .setIsLast(result.isLast)
       .build
-  }
+  } */
 }
 
 object GetRefsNotAtSlotSerializer
@@ -1818,7 +1818,7 @@ object GetRefsNotAtSlotSerializer
     with DSIQueryTemporalitySerialization {
   protected val log = getLogger(this)
 
-  override def deserialize(proto: GetRefsNotAtSlotProto): GetRefsNotAtSlot = {
+  override def deserialize(proto: GetRefsNotAtSlotProto): GetRefsNotAtSlot = ??? /* {
     val temporality = getTemporality(proto)
     val query =
       if (proto.hasReferenceQuery) fromProto(proto.getReferenceQuery)
@@ -1829,9 +1829,9 @@ object GetRefsNotAtSlotSerializer
     val slot = proto.getSlot
     val fqcn = proto.getFqcn
     GetRefsNotAtSlot(query, fqcn, slot, temporality)
-  }
+  } */
 
-  override def serialize(cmd: GetRefsNotAtSlot): GetRefsNotAtSlotProto = {
+  override def serialize(cmd: GetRefsNotAtSlot): GetRefsNotAtSlotProto = ??? /* {
     val builder = GetRefsNotAtSlotProto.newBuilder
     // TODO (OPTIMUS-13040): this needs refactoring out (copied and pasted)
     cmd.temporality match {
@@ -1856,18 +1856,18 @@ object GetRefsNotAtSlotSerializer
     builder.setSlot(cmd.slot)
     builder.setFqcn(cmd.fqcn)
     builder.build
-  }
+  } */
 }
 
 object GetRefsNotAtSlotResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetRefsNotAtSlotResult, GetRefsNotAtSlotResultProto] {
-  override def deserialize(proto: GetRefsNotAtSlotResultProto): GetRefsNotAtSlotResult = {
+  override def deserialize(proto: GetRefsNotAtSlotResultProto): GetRefsNotAtSlotResult = ??? /* {
     val refs = proto.getEntityReferencesList.asScala.map(r => EntityReference(r.getData.toByteArray))
     GetRefsNotAtSlotResult(refs)
-  }
+  } */
 
-  override def serialize(result: GetRefsNotAtSlotResult): GetRefsNotAtSlotResultProto = {
+  override def serialize(result: GetRefsNotAtSlotResult): GetRefsNotAtSlotResultProto = ??? /* {
     val entityRefs = Iterable.newBuilder[EntityReferenceProto]
     result.refs.foreach {
       case er: EntityReference => entityRefs += toProto(er)
@@ -1876,44 +1876,44 @@ object GetRefsNotAtSlotResultSerializer
           s"Unsupported reference ${o.toString} of type ${o.getClass.getName} in GetRefsNotAtSlot result set")
     }
     GetRefsNotAtSlotResultProto.newBuilder.addAllEntityReferences(entityRefs.result().asJava).build
-  }
+  } */
 }
 
 object GetSlotsSerializer extends GetCommandProtoSerialization with ProtoSerializer[GetSlots, GetSlotsProto] {
-  override def serialize(cmd: GetSlots): GetSlotsProto = {
+  override def serialize(cmd: GetSlots): GetSlotsProto = ??? /* {
     val builder = GetSlotsProto.newBuilder
     builder.setClassName(cmd.fqcn)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: GetSlotsProto): GetSlots = {
+  override def deserialize(proto: GetSlotsProto): GetSlots = ??? /* {
     val className = proto.getClassName
     GetSlots(className)
-  }
+  } */
 }
 object GetSlotsResultSerializer
     extends GetCommandProtoSerialization
     with ProtoSerializer[GetSlotsResult, GetSlotsResultProto] {
-  override def deserialize(proto: GetSlotsResultProto): GetSlotsResult = {
+  override def deserialize(proto: GetSlotsResultProto): GetSlotsResult = ??? /* {
     val slots = proto.getSlotsList.asScala.map(_.toInt).toSet
     new GetSlotsResult(slots)
-  }
+  } */
 
-  override def serialize(res: GetSlotsResult): GetSlotsResultProto = {
+  override def serialize(res: GetSlotsResult): GetSlotsResultProto = ??? /* {
     val builder = GetSlotsResultProto.newBuilder
     if (res.slots.nonEmpty)
       builder.addAllSlots((res.slots.map(Integer.valueOf(_))).asJava)
     builder.build()
-  }
+  } */
 }
 
 object ExpressionQuerySerializer
     extends GetCommandProtoSerialization
     with ExpressionSerialization
     with ProtoSerializer[ExpressionQueryCommand, ExpressionQueryCommandProto] {
-  import ExpressionQueryCommandProto.{QueryPlan => QueryPlanProto}
+  // import ExpressionQueryCommandProto.{QueryPlan => QueryPlanProto}
 
-  override def serialize(command: ExpressionQueryCommand): ExpressionQueryCommandProto = {
+  override def serialize(command: ExpressionQueryCommand): ExpressionQueryCommandProto = ??? /* {
     val plan = command.plan match {
       case QueryPlan.Accelerated    => QueryPlanProto.ACCELERATED
       case QueryPlan.FullTextSearch => QueryPlanProto.FULLTEXTSEARCH
@@ -1925,9 +1925,9 @@ object ExpressionQuerySerializer
       .setPlan(plan)
       .setEntitledOnly(command.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: ExpressionQueryCommandProto): ExpressionQueryCommand = {
+  override def deserialize(proto: ExpressionQueryCommandProto): ExpressionQueryCommand = ??? /* {
     val plan = proto.getPlan match {
       case QueryPlanProto.ACCELERATED    => QueryPlan.Accelerated
       case QueryPlanProto.FULLTEXTSEARCH => QueryPlan.FullTextSearch
@@ -1935,5 +1935,5 @@ object ExpressionQuerySerializer
       case QueryPlanProto.SAMPLING       => QueryPlan.Sampling
     }
     ExpressionQueryCommand(fromProto(proto.getQuery), plan, proto.getEntitledOnly)
-  }
+  } */
 }

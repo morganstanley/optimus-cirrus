@@ -51,7 +51,7 @@ object ErrorResultSerializer
     with VersioningProtoSerialization
     with Log {
 
-  override def deserialize(proto: ErrorResultProto): ErrorResult = {
+  override def deserialize(proto: ErrorResultProto): ErrorResult = ??? /* {
     val readAfter = if (proto.hasReadAfter) fromProto(proto.getReadAfter) else null
     val eref = if (proto.hasEntityReference) fromProto(proto.getEntityReference) else null
     val existingEref = if (proto.hasExistingEntityReference) Some(fromProto(proto.getExistingEntityReference)) else None
@@ -120,9 +120,9 @@ object ErrorResultSerializer
       case _ => new DSISpecificError(proto.getMessage)
     }
     ErrorResult(throwable, readAfter)
-  }
+  } */
 
-  override def serialize(result: ErrorResult): ErrorResultProto = {
+  override def serialize(result: ErrorResult): ErrorResultProto = ??? /* {
     val builder = ErrorResultProto.newBuilder
     val errorType = result.error match {
       // case _: DuplicateVersionException => ErrorResultProto.Type.DUPLICATE_VERSION
@@ -200,11 +200,11 @@ object ErrorResultSerializer
     if (message != null) builder.setMessage(message)
     if (result.readAfter ne null) builder.setReadAfter(toProto(result.readAfter))
     builder.build
-  }
+  } */
 }
 
 object CommandSerializer extends CommandProtoSerializationBase with ProtoSerializer[Command, CommandProto] {
-  def isWriteCommand(c: CommandProto): Boolean = {
+  def isWriteCommand(c: CommandProto): Boolean = ??? /* {
     c.getType match {
       case CommandProto.Type.PUT                            => true
       case CommandProto.Type.INVALIDATE_AFTER               => true
@@ -220,9 +220,9 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
       case CommandProto.Type.SYSTEM                         => true
       case _                                                => false
     }
-  }
+  } */
 
-  override def serialize(command: Command): CommandProto = {
+  override def serialize(command: Command): CommandProto = ??? /* {
     command match {
       case s: Select => CommandProto.newBuilder.setSelect(toProto(s)).setType(CommandProto.Type.SELECT).build
       case p: Put    => CommandProto.newBuilder.setPut(toProto(p)).setType(CommandProto.Type.PUT).build
@@ -402,9 +402,9 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported command in CommandProto serialization: $command.")
     }
-  }
+  } */
 
-  override def deserialize(proto: CommandProto): Command = {
+  override def deserialize(proto: CommandProto): Command = ??? /* {
     proto.getType() match {
       case CommandProto.Type.SELECT                              => fromProto(proto.getSelect())
       case CommandProto.Type.PUT                                 => fromProto(proto.getPut)
@@ -463,12 +463,12 @@ object CommandSerializer extends CommandProtoSerializationBase with ProtoSeriali
       case CommandProto.Type.PUBLISH_TRANSACTION          => fromProto(proto.getPublishTransaction)
       case CommandProto.Type.STREAMS_ACLS_COMMAND         => fromProto(proto.getStreamsAclsCommand)
     }
-  }
+  } */
 }
 
 object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializer[Result, ResultProto] {
 
-  override def serialize(result: Result): ResultProto = {
+  override def serialize(result: Result): ResultProto = ??? /* {
     val resultBuilder = result match {
       case s: SelectResult => ResultProto.newBuilder.setSelectResult(toProto(s)).setType(ResultProto.Type.SELECT)
       case p: PartialSelectResult =>
@@ -669,9 +669,9 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
       case _ =>
     }
     resultBuilder.build
-  }
+  } */
 
-  override def deserialize(proto: ResultProto): Result = {
+  override def deserialize(proto: ResultProto): Result = ??? /* {
     var result = proto.getType match {
       case ResultProto.Type.SELECT                          => fromProto(proto.getSelectResult)
       case ResultProto.Type.SELECT_PARTIAL                  => fromProto(proto.getPartialSelectResult)
@@ -754,9 +754,9 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
       }
     }
     result
-  }
+  } */
 
-  private def reasonFromProto(proto: ResultProto.RedirectionReasonType): RedirectionReason = proto match {
+  /* private def reasonFromProto(proto: ResultProto.RedirectionReasonType): RedirectionReason = proto match {
     case ResultProto.RedirectionReasonType.UNKNOWN_REDIRECTION_REASON => RedirectionReason.Unknown
     case ResultProto.RedirectionReasonType.UNSUPPORTED_QUERY_TYPE     => RedirectionReason.QueryTypeNotSupported
     case ResultProto.RedirectionReasonType.NO_READ_THROUGH            => RedirectionReason.PrcReadThroughNotEnabled
@@ -791,5 +791,5 @@ object ResultSerializer extends CommandProtoSerializationBase with ProtoSerializ
     case RedirectionReason.PrcNoBrokersFailure => ResultProto.RedirectionReasonType.PRC_NO_BROKERS_FAILURE
     case RedirectionReason.PrcReadThroughTimeoutFailure =>
       ResultProto.RedirectionReasonType.PRC_READ_THROUGH_TIMEOUT_FAILURE
-  }
+  } */
 }

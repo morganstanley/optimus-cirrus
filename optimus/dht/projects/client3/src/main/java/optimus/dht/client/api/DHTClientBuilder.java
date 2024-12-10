@@ -8,7 +8,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ 
 package optimus.dht.client.api;
 
 import java.io.FileInputStream;
@@ -87,17 +87,17 @@ public class DHTClientBuilder {
 
   private static final Logger logger = LoggerFactory.getLogger(DHTClientBuilder.class);
 
-  /** Holder for settings. */
+  /** Holder for settings. 
   protected class Setting<T> {
-    /** Property name */
+    /** Property name 
     final String name;
-    /** Property value (if set) */
+    /** Property value (if set) 
     T value;
-    /** Optional property default value supplier */
+    /** Optional property default value supplier 
     final Supplier<T> defaultValueSupplier;
-    /** Cached default value */
+    /** Cached default value 
     T defaultValue;
-    /** List of properties that conflict with this setting */
+    /** List of properties that conflict with this setting 
     final List<Setting<?>> conflictsWith;
 
     public Setting(String name, Supplier<T> defaultValueSupplier, Setting<?>... conflictsWith) {
@@ -161,7 +161,7 @@ public class DHTClientBuilder {
    * Creates a new instance of a builder.
    *
    * @return a new instance of a builder
-   */
+   
   public static DHTClientBuilder create() {
     return new DHTClientBuilder();
   }
@@ -693,3 +693,4 @@ public class DHTClientBuilder {
     }
   }
 }
+*/

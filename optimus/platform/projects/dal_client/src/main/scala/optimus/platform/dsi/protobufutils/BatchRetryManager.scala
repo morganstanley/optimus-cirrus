@@ -43,7 +43,7 @@ trait BatchRetryManager {
   final def retry(
       client: Option[DalBrokerClient],
       batch: BatchContext.RetryBatchContextImpl,
-      exception: Throwable): Unit = {
+      exception: Throwable): Unit = ??? /* {
     exception match {
       case ex: Exception => {
         log.warn(s"DAL client got exception: ${ex.getClass.getName} - ${ex.getMessage}")
@@ -77,7 +77,7 @@ trait BatchRetryManager {
       case t =>
         finallyCompleteBatchWithException(client, batch, t)
     }
-  }
+  } */
 
   private def finallyCompleteBatchWithException(
       client: Option[DalBrokerClient],

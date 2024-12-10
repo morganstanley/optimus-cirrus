@@ -8,7 +8,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ 
 package optimus.dht.common.util.registry;
 
 import java.util.List;
@@ -122,3 +122,4 @@ public class ZkConfig {
     return path;
   }
 }
+*/

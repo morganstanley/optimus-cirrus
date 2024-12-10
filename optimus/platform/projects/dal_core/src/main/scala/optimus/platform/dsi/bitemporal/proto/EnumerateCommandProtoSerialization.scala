@@ -34,7 +34,7 @@ object EnumerateKeysSerializer
     with ProtoSerializer[EnumerateKeys, EnumerateKeysProto]
     with Log {
 
-  override def deserialize(proto: EnumerateKeysProto): EnumerateKeys = {
+  override def deserialize(proto: EnumerateKeysProto): EnumerateKeys = ??? /* {
     // TODO (OPTIMUS-13040): This code is copy-pasted other places :(
     val temporality =
       if (proto.hasValidTime && proto.hasTxTime)
@@ -62,9 +62,9 @@ object EnumerateKeysSerializer
       }
 
     new EnumerateKeys(proto.getTypeName, proto.getPropertyNameList.asScala.toSeq, temporality)
-  }
+  } */
 
-  override def serialize(req: EnumerateKeys): EnumerateKeysProto = {
+  override def serialize(req: EnumerateKeys): EnumerateKeysProto = ??? /* {
     import DSIQueryTemporality._
 
     val bld = EnumerateKeysProto.newBuilder
@@ -85,7 +85,7 @@ object EnumerateKeysSerializer
     }
 
     builder.build
-  }
+  } */
 }
 
 object EnumerateKeysResultSerializer
@@ -93,16 +93,15 @@ object EnumerateKeysResultSerializer
     with ProtoSerializer[EnumerateKeysResult, EnumerateKeysResultProto]
     with Log {
 
-  override def deserialize(proto: EnumerateKeysResultProto): EnumerateKeysResult = {
+  override def deserialize(proto: EnumerateKeysResultProto): EnumerateKeysResult = ??? /* {
     new EnumerateKeysResult(proto.getSerializedKeyList.asScala.iterator.map(fromProto(_)).toIndexedSeq)
-  }
-
-  override def serialize(res: EnumerateKeysResult): EnumerateKeysResultProto = {
+  } */
+  override def serialize(res: EnumerateKeysResult): EnumerateKeysResultProto = ??? /* {
     val builder = EnumerateKeysResultProto.newBuilder
       .addAllSerializedKey((res.keys map { toProto(_) }).asJava)
 
     builder.build
-  }
+  } */
 }
 
 object EnumerateIndicesSerializer
@@ -110,7 +109,7 @@ object EnumerateIndicesSerializer
     with ProtoSerializer[EnumerateIndices, EnumerateIndicesProto]
     with Log {
 
-  override def deserialize(proto: EnumerateIndicesProto): EnumerateIndices = {
+  override def deserialize(proto: EnumerateIndicesProto): EnumerateIndices = ??? /* {
     // TODO (OPTIMUS-13040): duplicate from fromProto(proto: EnumerateIndicesProto)
     val temporality =
       if (proto.hasValidTime && proto.hasTxTime)
@@ -138,9 +137,9 @@ object EnumerateIndicesSerializer
       }
 
     new EnumerateIndices(proto.getTypeName, proto.getPropertyNameList.asScala.toSeq, temporality)
-  }
+  } */
 
-  override def serialize(req: EnumerateIndices): EnumerateIndicesProto = {
+  override def serialize(req: EnumerateIndices): EnumerateIndicesProto = ??? /* {
     // TODO (OPTIMUS-13040): duplicate from toProto(req: EnumerateKeys)
     import DSIQueryTemporality._
 
@@ -162,56 +161,56 @@ object EnumerateIndicesSerializer
     }
 
     builder.build
-  }
+  } */
 }
 
 object EnumerateIndicesResultSerializer
     extends EnumerateCommandProtoSerialization
     with ProtoSerializer[EnumerateIndicesResult, EnumerateIndicesResultProto] {
 
-  override def deserialize(proto: EnumerateIndicesResultProto): EnumerateIndicesResult = {
+  override def deserialize(proto: EnumerateIndicesResultProto): EnumerateIndicesResult = ??? /* {
     // TODO (OPTIMUS-13040): duplicate from fromProto(proto: EnumerateKeysResultProto)
     new EnumerateIndicesResult(proto.getSerializedKeyList.asScala.iterator.map(fromProto(_)).toIndexedSeq)
-  }
+  } */
 
-  override def serialize(res: EnumerateIndicesResult): EnumerateIndicesResultProto = {
+  override def serialize(res: EnumerateIndicesResult): EnumerateIndicesResultProto = ??? /* {
     // TODO (OPTIMUS-13040): duplicate from toProto(res: EnumerateKeysResult)
     val builder = EnumerateIndicesResultProto.newBuilder
       .addAllSerializedKey((res.keys map { toProto(_) }).asJava)
     builder.build
-  }
+  } */
 }
 
 object PartialEnumerateIndicesResultSerializer
     extends EnumerateCommandProtoSerialization
     with ProtoSerializer[PartialEnumerateIndicesResult, PartialEnumerateIndicesResultProto] {
 
-  override def deserialize(proto: PartialEnumerateIndicesResultProto): PartialEnumerateIndicesResult = {
+  override def deserialize(proto: PartialEnumerateIndicesResultProto): PartialEnumerateIndicesResult = ??? /* {
     val serializedResults = proto.getSerializedKeyList.asScala
     PartialEnumerateIndicesResult(serializedResults map { fromProto(_) } toSeq, proto.getIsLast())
-  }
+  } */
 
-  override def serialize(result: PartialEnumerateIndicesResult): PartialEnumerateIndicesResultProto = {
+  override def serialize(result: PartialEnumerateIndicesResult): PartialEnumerateIndicesResultProto = ??? /* {
     PartialEnumerateIndicesResultProto.newBuilder
       .addAllSerializedKey((result.keys map { toProto(_) }).asJava)
       .setIsLast(result.isLast)
       .build
-  }
+  } */
 }
 
 object PartialEnumerateKeysResultSerializer
     extends EnumerateCommandProtoSerialization
     with ProtoSerializer[PartialEnumerateKeysResult, PartialEnumerateKeysResultProto] {
 
-  override def deserialize(proto: PartialEnumerateKeysResultProto): PartialEnumerateKeysResult = {
+  override def deserialize(proto: PartialEnumerateKeysResultProto): PartialEnumerateKeysResult = ??? /* {
     val serializedResults = proto.getSerializedKeyList.asScala
     PartialEnumerateKeysResult(serializedResults map { fromProto(_) } toSeq, proto.getIsLast())
-  }
+  } */
 
-  override def serialize(result: PartialEnumerateKeysResult): PartialEnumerateKeysResultProto = {
+  override def serialize(result: PartialEnumerateKeysResult): PartialEnumerateKeysResultProto = ??? /* {
     PartialEnumerateKeysResultProto.newBuilder
       .addAllSerializedKey((result.keys map { toProto(_) }).asJava)
       .setIsLast(result.isLast)
       .build
-  }
+  } */
 }

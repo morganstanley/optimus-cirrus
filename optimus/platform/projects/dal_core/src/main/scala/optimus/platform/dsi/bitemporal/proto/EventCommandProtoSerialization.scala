@@ -51,7 +51,7 @@ object GetEntityEventTimelineResultSerializer
     extends EventCommandProtoSerialization
     with ProtoSerializer[GetEntityEventTimelineResult, SelectBusinessEventTimelineResultProto] {
 
-  override def deserialize(proto: SelectBusinessEventTimelineResultProto): GetEntityEventTimelineResult = {
+  override def deserialize(proto: SelectBusinessEventTimelineResultProto): GetEntityEventTimelineResult = ??? /* {
     val serializedEvents = proto.getEntityBusinessEventComboList().asScala.toSeq
     val x = serializedEvents map { k =>
       val be: SerializedBusinessEvent = fromProto(k.getBusinessEvent())
@@ -62,9 +62,9 @@ object GetEntityEventTimelineResultSerializer
       (be, pe)
     }
     GetEntityEventTimelineResult(x)
-  }
+  } */
 
-  override def serialize(result: GetEntityEventTimelineResult): SelectBusinessEventTimelineResultProto = {
+  override def serialize(result: GetEntityEventTimelineResult): SelectBusinessEventTimelineResultProto = ??? /* {
     val combos = result.eventsEntitiesCombo.map { k =>
       val builder = EntityBusinessEventComboProto.newBuilder.setBusinessEvent(toProto(k._1))
       if (k._2.isDefined)
@@ -75,7 +75,7 @@ object GetEntityEventTimelineResultSerializer
       .addAllEntityBusinessEventCombo(combos.asJava)
       .build
 
-  }
+  } */
 }
 
 object PartialGetEntityEventTimelineResultSerializer
@@ -83,7 +83,7 @@ object PartialGetEntityEventTimelineResultSerializer
     with ProtoSerializer[PartialGetEntityEventTimelineResult, PartialSelectBusinessEventTimelineResultProto] {
 
   override def deserialize(
-      proto: PartialSelectBusinessEventTimelineResultProto): PartialGetEntityEventTimelineResult = {
+      proto: PartialSelectBusinessEventTimelineResultProto): PartialGetEntityEventTimelineResult = ??? /* {
     val serializedEvents = proto.getEntityBusinessEventComboList().asScala.toSeq
     val x = serializedEvents map { k =>
       val be: SerializedBusinessEvent = fromProto(k.getBusinessEvent())
@@ -94,9 +94,9 @@ object PartialGetEntityEventTimelineResultSerializer
       (be, pe)
     }
     PartialGetEntityEventTimelineResult(x, proto.getIsLast)
-  }
+  } */
 
-  override def serialize(result: PartialGetEntityEventTimelineResult): PartialSelectBusinessEventTimelineResultProto = {
+  override def serialize(result: PartialGetEntityEventTimelineResult): PartialSelectBusinessEventTimelineResultProto = ??? /* {
     val combos = result.eventsEntitiesCombo.map { k =>
       val builder = EntityBusinessEventComboProto.newBuilder.setBusinessEvent(toProto(k._1))
       if (k._2.isDefined)
@@ -108,14 +108,14 @@ object PartialGetEntityEventTimelineResultSerializer
       .setIsLast(result.isLast)
       .build
 
-  }
+  } */
 }
 
 object GetEntityEventValidTimelineResultSerializer
     extends EventCommandProtoSerialization
     with ProtoSerializer[GetEntityEventValidTimelineResult, SelectBusinessEventValidTimelineResultProto] {
 
-  override def deserialize(proto: SelectBusinessEventValidTimelineResultProto): GetEntityEventValidTimelineResult = {
+  override def deserialize(proto: SelectBusinessEventValidTimelineResultProto): GetEntityEventValidTimelineResult = ??? /* {
     val serializedEvents = proto.getEntityBusinessEventComboList().asScala.toSeq
     val x = serializedEvents map { k =>
       val be =
@@ -129,9 +129,9 @@ object GetEntityEventValidTimelineResultSerializer
       (be, pe)
     }
     GetEntityEventValidTimelineResult(x)
-  }
+  } */
 
-  override def serialize(result: GetEntityEventValidTimelineResult): SelectBusinessEventValidTimelineResultProto = {
+  override def serialize(result: GetEntityEventValidTimelineResult): SelectBusinessEventValidTimelineResultProto = ??? /* {
     val combos = result.eventsEntitiesCombo.map { k =>
       val builder = EntityBusinessEventWithTTToComboProto.newBuilder
       if (k._1.isDefined) builder.setBusinessEvent(toProto(k._1.get))
@@ -142,7 +142,7 @@ object GetEntityEventValidTimelineResultSerializer
       .addAllEntityBusinessEventCombo(combos.asJava)
       .build
 
-  }
+  } */
 }
 
 object GetEntityEventValidTimelineLazyLoadResultSerializer
@@ -152,7 +152,7 @@ object GetEntityEventValidTimelineLazyLoadResultSerializer
       SelectBusinessEventValidTimelineLazyLoadResultProto] {
 
   override def deserialize(
-      proto: SelectBusinessEventValidTimelineLazyLoadResultProto): GetEntityEventValidTimelineLazyLoadResult = {
+      proto: SelectBusinessEventValidTimelineLazyLoadResultProto): GetEntityEventValidTimelineLazyLoadResult = ??? /* {
     val brefVtfs = proto.getBusinessEventValidTimeFromComboList().asScala.toSeq
     val x = brefVtfs map { c =>
       val bref =
@@ -163,10 +163,10 @@ object GetEntityEventValidTimelineLazyLoadResultSerializer
       (bref, vtf)
     }
     GetEntityEventValidTimelineLazyLoadResult(x)
-  }
+  } */
 
   override def serialize(
-      result: GetEntityEventValidTimelineLazyLoadResult): SelectBusinessEventValidTimelineLazyLoadResultProto = {
+      result: GetEntityEventValidTimelineLazyLoadResult): SelectBusinessEventValidTimelineLazyLoadResultProto = ??? /* {
     val combos = result.brefVtfsCombo.map { k =>
       val builder = BusinessEventValidTimeFromComboProto.newBuilder
       if (k._1.isDefined) builder.setBusinessEvent(toProto(k._1.get))
@@ -177,5 +177,5 @@ object GetEntityEventValidTimelineLazyLoadResultSerializer
       .addAllBusinessEventValidTimeFromCombo(combos.asJava)
       .build
 
-  }
+  } */
 }

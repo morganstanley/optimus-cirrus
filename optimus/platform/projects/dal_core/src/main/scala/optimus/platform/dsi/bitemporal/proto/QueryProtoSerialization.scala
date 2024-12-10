@@ -35,134 +35,132 @@ object ReferenceQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[ReferenceQuery, ReferenceQueryProto] {
 
-  override def serialize(query: ReferenceQuery): ReferenceQueryProto = {
+  override def serialize(query: ReferenceQuery): ReferenceQueryProto = ??? /* {
     val builder = ReferenceQueryProto.newBuilder()
     builder.setEntityReference(toProto(query.ref))
     builder.setEntitledOnly(query.entitledOnly)
     query.className.foreach(cn => builder.setClassName(cn))
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: ReferenceQueryProto): ReferenceQuery = {
+  override def deserialize(proto: ReferenceQueryProto): ReferenceQuery = ??? /* {
     val entitledOnly = if (proto.hasEntitledOnly) proto.getEntitledOnly else false
     val classNameOpt = if (proto.hasClassName) Option(proto.getClassName) else None
     ReferenceQuery(fromProto(proto.getEntityReference), entitledOnly, classNameOpt)
-  }
+  } */
 }
 
 object EventReferenceQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EventReferenceQuery, EventReferenceQueryProto] {
 
-  override def serialize(query: EventReferenceQuery): EventReferenceQueryProto = {
+  override def serialize(query: EventReferenceQuery): EventReferenceQueryProto = ??? /* {
     EventReferenceQueryProto.newBuilder
       .setEventReference(toProto(query.ref))
       .build()
-  }
+  } */
 
-  override def deserialize(proto: EventReferenceQueryProto): EventReferenceQuery = {
+  override def deserialize(proto: EventReferenceQueryProto): EventReferenceQuery = ??? /* {
     EventReferenceQuery(fromProto(proto.getEventReference))
-  }
+  } */
 }
 
 object SerializedKeyQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[SerializedKeyQuery, SerializedKeyQueryProto] {
 
-  override def serialize(query: SerializedKeyQuery): SerializedKeyQueryProto = {
+  override def serialize(query: SerializedKeyQuery): SerializedKeyQueryProto = ??? /* {
     SerializedKeyQueryProto.newBuilder
       .setSerializedKey(toProto(query.key))
       .addAllRefs((query.refs.map(toProto(_))).asJava)
       .setEntitledOnly(query.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: SerializedKeyQueryProto): SerializedKeyQuery = {
+  override def deserialize(proto: SerializedKeyQueryProto): SerializedKeyQuery = ??? /* {
     val refs = proto.getRefsList().asScala.map(fromProto(_)).toSet
     val entitledOnly = proto.getEntitledOnly
     SerializedKeyQuery(fromProto(proto.getSerializedKey), refs, entitledOnly)
-  }
+  } */
 }
 
 object EventSerializedKeyQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EventSerializedKeyQuery, EventSerializedKeyQueryProto] {
 
-  override def serialize(query: EventSerializedKeyQuery): EventSerializedKeyQueryProto = {
+  override def serialize(query: EventSerializedKeyQuery): EventSerializedKeyQueryProto = ??? /* {
     EventSerializedKeyQueryProto.newBuilder
       .setSerializedKey(toProto(query.key))
       .setEntitledOnly(query.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: EventSerializedKeyQueryProto): EventSerializedKeyQuery = {
-    EventSerializedKeyQuery(fromProto(proto.getSerializedKey), proto.getEntitledOnly)
-  }
+  override def deserialize(proto: EventSerializedKeyQueryProto): EventSerializedKeyQuery = ???
 }
 
 object LinkageQuerySerializer extends QueryProtoSerialization with ProtoSerializer[LinkageQuery, LinkageQueryProto] {
 
-  override def serialize(query: LinkageQuery): LinkageQueryProto = {
+  override def serialize(query: LinkageQuery): LinkageQueryProto = ??? /* {
     LinkageQueryProto.newBuilder
       .setParentClassName(query.parentTypeStr)
       .setParentPropertyName(query.parentPropertyName)
       .setChildEntityReference(toProto(query.childEntityRef))
       .build
-  }
+  } */
 
-  override def deserialize(proto: LinkageQueryProto): LinkageQuery = {
+  override def deserialize(proto: LinkageQueryProto): LinkageQuery = ??? /* {
     LinkageQuery(
       parentTypeStr = proto.getParentClassName,
       parentPropertyName = proto.getParentPropertyName,
       childEntityRef = fromProto(proto.getChildEntityReference))
-  }
+  } */
 }
 
 object EntityClassQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EntityClassQuery, EntityClassQueryProto] {
 
-  override def serialize(query: EntityClassQuery): EntityClassQueryProto = {
+  override def serialize(query: EntityClassQuery): EntityClassQueryProto = ??? /* {
     EntityClassQueryProto.newBuilder
       .setClassName(query.classNameStr)
       .setEntitledOnly(query.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: EntityClassQueryProto): EntityClassQuery = {
+  override def deserialize(proto: EntityClassQueryProto): EntityClassQuery = ??? /* {
     val entitledOnly = if (proto.hasEntitledOnly) proto.getEntitledOnly else false
     EntityClassQuery(proto.getClassName, entitledOnly)
-  }
+  } */
 }
 
 object EventClassQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EventClassQuery, EventClassQueryProto] {
 
-  override def serialize(query: EventClassQuery): EventClassQueryProto = {
+  override def serialize(query: EventClassQuery): EventClassQueryProto = ??? /* {
     EventClassQueryProto.newBuilder
       .setClassName(query.classNameStr)
       .setEntitledOnly(query.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: EventClassQueryProto): EventClassQuery = {
+  override def deserialize(proto: EventClassQueryProto): EventClassQuery = ??? /* {
     val entitledOnly = if (proto.hasEntitledOnly) proto.getEntitledOnly else false
     EventClassQuery(proto.getClassName, entitledOnly)
-  }
+  } */
 }
 
 object EntityCmReferenceQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EntityCmReferenceQuery, EntityCmReferenceQueryProto] {
-  override def serialize(query: EntityCmReferenceQuery): EntityCmReferenceQueryProto = {
+  override def serialize(query: EntityCmReferenceQuery): EntityCmReferenceQueryProto = ??? /* {
     val builder = EntityCmReferenceQueryProto.newBuilder()
     builder.setCmRef(toProto(query.cmid))
     builder.setClassName(query.clazzName)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: EntityCmReferenceQueryProto): EntityCmReferenceQuery = {
+  override def deserialize(proto: EntityCmReferenceQueryProto): EntityCmReferenceQuery = ??? /* {
     val className =
       if (proto.hasClassName) proto.getClassName
       else {
@@ -172,20 +170,20 @@ object EntityCmReferenceQuerySerializer
         classOf[Entity].getName
       }
     EntityCmReferenceQuery(fromProto(proto.getCmRef), className)
-  }
+  } */
 }
 
 object EventCmReferenceQuerySerializer
     extends QueryProtoSerialization
     with ProtoSerializer[EventCmReferenceQuery, EventCmReferenceQueryProto] {
-  override def serialize(query: EventCmReferenceQuery): EventCmReferenceQueryProto = {
+  override def serialize(query: EventCmReferenceQuery): EventCmReferenceQueryProto = ??? /* {
     val builder = EventCmReferenceQueryProto.newBuilder()
     builder.setCmRef(toProto(query.cmid))
     builder.setClassName(query.clazzName)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: EventCmReferenceQueryProto): EventCmReferenceQuery = {
+  override def deserialize(proto: EventCmReferenceQueryProto): EventCmReferenceQuery = ??? /* {
     val className =
       if (proto.hasClassName) proto.getClassName
       else {
@@ -195,5 +193,5 @@ object EventCmReferenceQuerySerializer
         classOf[Entity].getName
       }
     EventCmReferenceQuery(fromProto(proto.getCmRef), className)
-  }
+  } */
 }

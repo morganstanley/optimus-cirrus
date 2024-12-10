@@ -15,7 +15,6 @@ import com.google.protobuf.ByteString
 import msjava.slf4jutils.scalalog._
 import optimus.platform.ImmutableArray
 import optimus.platform.dsi.bitemporal._
-import optimus.platform.dsi.bitemporal.proto.Dsi.SlotRedirectionInfoProto.PathElementProto
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.dsi.versioning._
 import optimus.platform.storable.SerializedEntity
@@ -31,7 +30,7 @@ trait VersioningProtoSerialization extends BasicProtoSerialization {
 object SlotRedirectionInfoSerializer
     extends WriteCommandProtoSerialization
     with ProtoSerializer[SlotRedirectionInfo, SlotRedirectionInfoProto] {
-  private def protoToPathElement(proto: PathElementProto): (PathHashT, Int, Int) = {
+  /* private def protoToPathElement(proto: PathElementProto): (PathHashT, Int, Int) = {
     val pathHash = PathHashRepr(ImmutableArray.wrapped(proto.getClasspathHash.toByteArray))
     (pathHash, proto.getSourceSlotNumber, proto.getDestinationSlotNumber)
   }
@@ -42,9 +41,8 @@ object SlotRedirectionInfoSerializer
     builder.setDestinationSlotNumber(destSlotNumber)
     builder.setClasspathHash(ByteString.copyFrom(pathHash.hash.rawArray))
     builder.build()
-  }
-
-  override def deserialize(proto: SlotRedirectionInfoProto): SlotRedirectionInfo = {
+  } */
+  override def deserialize(proto: SlotRedirectionInfoProto): SlotRedirectionInfo = ??? /* {
     require(proto.getVersioningPathCount > 0, "Cannot deserialize SlotRedirectionInfoProto with empty path")
     val className = proto.getSourceClassName
 
@@ -62,9 +60,9 @@ object SlotRedirectionInfoSerializer
     }
 
     SlotRedirectionInfo(className, (lastHash, lastSource, destSlotKeys), intermediates)
-  }
+  } */
 
-  override def serialize(sri: SlotRedirectionInfo): SlotRedirectionInfoProto = {
+  override def serialize(sri: SlotRedirectionInfo): SlotRedirectionInfoProto = ??? /* {
     val builder = SlotRedirectionInfoProto.newBuilder
     builder.setSourceClassName(sri.sourceSlot.className)
     val pathBuilder = Seq.newBuilder[PathElementProto]
@@ -79,24 +77,24 @@ object SlotRedirectionInfoSerializer
     builder.addAllVersioningPath(path.asJava)
     builder.addAllAdditionalDestinationSlotNumbers((destinationSlotNumbers.tail.map(Integer.valueOf(_))).asJava)
     builder.build()
-  }
+  } */
 }
 
 object VersioningRedirectionInfoSerializer
     extends VersioningProtoSerialization
     with ProtoSerializer[VersioningRedirectionInfo, VersioningRedirectionInfoProto] {
-  override def deserialize(proto: VersioningRedirectionInfoProto): VersioningRedirectionInfo = {
+  override def deserialize(proto: VersioningRedirectionInfoProto): VersioningRedirectionInfo = ??? /* {
     val slotRedirections = proto.getSlotRedirectionInfosList.asScala.map(fromProto(_))
     val sriMap: Map[SerializedEntity.TypeRef, Set[SlotRedirectionInfo]] = slotRedirections.toSet.groupBy(_.className)
     VersioningRedirectionInfo(sriMap)
-  }
+  } */
 
-  override def serialize(cmd: VersioningRedirectionInfo): VersioningRedirectionInfoProto = {
+  override def serialize(cmd: VersioningRedirectionInfo): VersioningRedirectionInfoProto = ??? /* {
     val builder = VersioningRedirectionInfoProto.newBuilder
     val sriProtos = cmd.slotRedirections.values.flatMap(_.map(toProto(_)))
     builder.addAllSlotRedirectionInfos(sriProtos.toSeq.asJava)
     builder.build()
-  }
+  } */
 }
 
 object VersioningResultSerializer
@@ -106,7 +104,7 @@ object VersioningResultSerializer
 
   private[this] val log = getLogger(this)
 
-  override def serialize(result: VersioningResult): VersioningResultProto = {
+  override def serialize(result: VersioningResult): VersioningResultProto = ??? /* {
     result match {
       case v: VersioningValidResult =>
         val validResult =
@@ -142,9 +140,9 @@ object VersioningResultSerializer
         throw new UnsupportedOperationException(
           s"Unsupported result in VersioningResultProto serialization: ${result}.")
     }
-  }
+  } */
 
-  override def deserialize(proto: VersioningResultProto): VersioningResult = {
+  override def deserialize(proto: VersioningResultProto): VersioningResult = ??? /* {
     if (proto.hasValidResult) {
       VersioningValidResult(proto.getValidResult.getVersionedCommandsList.asScala.map(fromProto(_)))
     } else if (proto.hasErrorResult) {
@@ -162,5 +160,5 @@ object VersioningResultSerializer
     } else
       throw new UnsupportedOperationException(
         s"Unsupported proto result in VersioningResult deserialization: ${proto}.")
-  }
+  } */
 }

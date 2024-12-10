@@ -12,7 +12,7 @@
 package optimus.platform.dsi.bitemporal.proto
 
 import optimus.dsi.notification._
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform.storable._
 
@@ -42,7 +42,7 @@ object NotificationMessageSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[NotificationMessage, NotificationMessageProto] {
 
-  override def serialize(nm: NotificationMessage): NotificationMessageProto = {
+  override def serialize(nm: NotificationMessage): NotificationMessageProto = ??? /* {
     val builder = NotificationMessageProto.newBuilder
     nm match {
       case hb: NotifyHeartBeat =>
@@ -58,9 +58,9 @@ object NotificationMessageSerializer
       case om: ObliterateMessage =>
         builder.setType(NotificationMessageProto.Type.OBLITERATE_MESSAGE).setObliterateMessage(toProto(om)).build
     }
-  }
+  } */
 
-  override def deserialize(nmp: NotificationMessageProto): NotificationMessage = {
+  override def deserialize(nmp: NotificationMessageProto): NotificationMessage = ??? /* {
     nmp.getType match {
       case NotificationMessageProto.Type.HEARTBEAT          => fromProto(nmp.getHeartBeat)
       case NotificationMessageProto.Type.RESET_STATE        => fromProto(nmp.getResetState)
@@ -69,14 +69,14 @@ object NotificationMessageSerializer
       case NotificationMessageProto.Type.NOTIFICATION_ENTRY => fromProto(nmp.getNotificationEntry)
       case NotificationMessageProto.Type.OBLITERATE_MESSAGE => fromProto(nmp.getObliterateMessage)
     }
-  }
+  } */
 }
 
 private[proto] object NotifyHeartbeatSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[NotifyHeartBeat, NotifyHeartBeatProto] {
 
-  override def serialize(hb: NotifyHeartBeat): NotifyHeartBeatProto = {
+  override def serialize(hb: NotifyHeartBeat): NotifyHeartBeatProto = ??? /* {
     val builder = NotifyHeartBeatProto.newBuilder
     builder
       .setTxTime(toProto(hb.txTime))
@@ -84,16 +84,16 @@ private[proto] object NotifyHeartbeatSerializer
       .setPrimarySeq(hb.primarySeq)
     PartitionHelper.getPartitionNameOption(hb.partition).foreach(builder.setPartitionName)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: NotifyHeartBeatProto): NotifyHeartBeat = {
+  override def deserialize(proto: NotifyHeartBeatProto): NotifyHeartBeat = ??? /* {
     NotifyHeartBeat(
       fromProto(proto.getTxTime),
       if (proto.hasContext) fromProto(proto.getContext) else null,
       proto.getPrimarySeq,
       if (proto.hasPartitionName) PartitionHelper.getPartitionForString(proto.getPartitionName) else DefaultPartition
     ) // set to default value 0 if not found in proto
-  }
+  } */
 }
 
 // NB: For ResetState, null context is for reset on all Context's from the server side.
@@ -102,7 +102,7 @@ private[proto] object ResetStateSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[ResetState, ResetStateProto] {
 
-  override def serialize(rs: ResetState): ResetStateProto = {
+  override def serialize(rs: ResetState): ResetStateProto = ??? /* {
     val builder = ResetStateProto.newBuilder
 
     builder
@@ -115,9 +115,9 @@ private[proto] object ResetStateSerializer
       builder.setContext(toProto(rs.context))
 
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: ResetStateProto): ResetState = {
+  override def deserialize(proto: ResetStateProto): ResetState = ??? /* {
     ResetState.raw(
       fromProto(proto.getTxTime),
       if (proto.hasContext) fromProto(proto.getContext) else null,
@@ -125,14 +125,14 @@ private[proto] object ResetStateSerializer
       proto.getPrimarySeq,
       if (proto.hasPartitionName) PartitionHelper.getPartitionForString(proto.getPartitionName) else DefaultPartition
     )
-  }
+  } */
 }
 
 private[proto] object BeginTransactionSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[BeginTransaction, BeginTransactionProto] {
 
-  override def serialize(bt: BeginTransaction): BeginTransactionProto = {
+  override def serialize(bt: BeginTransaction): BeginTransactionProto = ??? /* {
     val builder = BeginTransactionProto.newBuilder
 
     builder
@@ -142,23 +142,23 @@ private[proto] object BeginTransactionSerializer
     PartitionHelper.getPartitionNameOption(bt.partition).foreach(builder.setPartitionName)
 
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: BeginTransactionProto): BeginTransaction = {
+  override def deserialize(proto: BeginTransactionProto): BeginTransaction = ??? /* {
     BeginTransaction(
       fromProto(proto.getTxTime),
       if (proto.hasContext) fromProto(proto.getContext) else null,
       proto.getPrimarySeq,
       if (proto.hasPartitionName) PartitionHelper.getPartitionForString(proto.getPartitionName) else DefaultPartition
     )
-  }
+  } */
 }
 
 private[proto] object EndTransactionSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[EndTransaction, EndTransactionProto] {
 
-  override def serialize(et: EndTransaction): EndTransactionProto = {
+  override def serialize(et: EndTransaction): EndTransactionProto = ??? /* {
     val builder = EndTransactionProto.newBuilder
     builder
       .setTxTime(toProto(et.txTime))
@@ -166,16 +166,16 @@ private[proto] object EndTransactionSerializer
       .setPrimarySeq(et.primarySeq)
     PartitionHelper.getPartitionNameOption(et.partition).foreach(builder.setPartitionName)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: EndTransactionProto): EndTransaction = {
+  override def deserialize(proto: EndTransactionProto): EndTransaction = ??? /* {
     EndTransaction(
       fromProto(proto.getTxTime),
       if (proto.hasContext) fromProto(proto.getContext) else null,
       proto.getPrimarySeq,
       if (proto.hasPartitionName) PartitionHelper.getPartitionForString(proto.getPartitionName) else DefaultPartition
     )
-  }
+  } */
 }
 
 // TODO (OPTIMUS-28487): Revert commit 2208323463741454f4109e1fd72c811069389272
@@ -186,7 +186,7 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
   private val segmentTtFromPresenceBit = 2
 
   override def serialize(entry: NotificationEntry): NotificationEntryProto =
-    entry.proto({
+    ??? /* entry.proto({
       val builder = NotificationEntryProto.newBuilder
 
       builder
@@ -220,9 +220,9 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
       })
 
       builder.build
-    })
+    }) */
 
-  override def deserialize(proto: NotificationEntryProto): NotificationEntry = {
+  override def deserialize(proto: NotificationEntryProto): NotificationEntry = ??? /* {
     val vref_ =
       if (proto.hasVersionedRef) fromProto(proto.getVersionedRef)
       else null
@@ -270,14 +270,14 @@ private[optimus /*dsi*/ ] object NotificationEntrySerializer
           partition
         )
     }
-  }
+  } */
 }
 
 private[proto] object ObliterateMessageSerializer
     extends NotificationProtoSerializationBase
     with ProtoSerializer[ObliterateMessage, ObliterateMessageProto] {
 
-  override def serialize(om: ObliterateMessage): ObliterateMessageProto = {
+  override def serialize(om: ObliterateMessage): ObliterateMessageProto = ??? /* {
     val builder = ObliterateMessageProto.newBuilder
     builder
       .addAllEntityReferenceStrings((om.entityReferences map (c => Base64.encodeBytes(c.data))).asJava)
@@ -287,9 +287,9 @@ private[proto] object ObliterateMessageSerializer
       .setPrimarySeq(om.primarySeq)
     PartitionHelper.getPartitionNameOption(om.partition).foreach(builder.setPartitionName)
     builder.build
-  }
+  } */
 
-  override def deserialize(o: ObliterateMessageProto): ObliterateMessage = {
+  override def deserialize(o: ObliterateMessageProto): ObliterateMessage = ??? /* {
     ObliterateMessage(
       o.getEntityReferenceStringsList.asScala map (s => EntityReference.fromString(s)) toSeq,
       o.getTypesList.asScala toSeq,
@@ -298,6 +298,6 @@ private[proto] object ObliterateMessageSerializer
       o.getPrimarySeq,
       if (o.hasPartitionName) NamedPartition(o.getPartitionName) else DefaultPartition
     )
-  }
+  } */
 
 }

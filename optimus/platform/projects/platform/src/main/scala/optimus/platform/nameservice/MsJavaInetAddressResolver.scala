@@ -11,9 +11,9 @@
  */
 package optimus.platform.nameservice
 
-import msjava.base.dns.AsyncNameService
+/* import msjava.base.dns.AsyncNameService
 import msjava.base.dns.CachingNameService
-import msjava.base.dns.MSNameService
+import msjava.base.dns.MSNameService */
 import msjava.slf4jutils.scalalog.getLogger
 
 import java.net.InetAddress
@@ -35,19 +35,19 @@ class MsJavaInetAddressResolverProvider extends InetAddressResolverProvider {
 
   // we end up with resolver = MSNameServiceToInetAddressResolverAdapter --> CachingNameService -->
   //    AsyncNameService --> InetAddressResolverToMSNameServiceAdapter --> configuration.builtinResolver
-  override def get(configuration: InetAddressResolverProvider.Configuration): InetAddressResolver = {
+  override def get(configuration: InetAddressResolverProvider.Configuration): InetAddressResolver = ??? /* {
     log.info(s"Constructing MsJavaInetAddressResolver with async and cached resolution")
     val adaptedBuiltinResolver = new InetAddressResolverToMSNameServiceAdapter(configuration.builtinResolver())
     val timeout: Long = sys.props.get(AsyncNameService.TIMEOUT_MS_PROPERTY).map(_.toLong).getOrElse(60000L)
     val asyncNameService = new AsyncNameService.Builder().delegate(adaptedBuiltinResolver).timeoutMs(timeout).build
     val cachingNameService = new CachingNameService.Builder().delegate(asyncNameService).build
     new MSNameServiceToInetAddressResolverAdapter(cachingNameService)
-  }
+  } */
   override def name(): String = getClass.getName
 }
 
 /** adapts a MSNameService to the Java InetAddressResolver API */
-private class MSNameServiceToInetAddressResolverAdapter(underlying: MSNameService) extends InetAddressResolver {
+/* private class MSNameServiceToInetAddressResolverAdapter(underlying: MSNameService) extends InetAddressResolver {
   override def lookupByName(host: String, lookupPolicy: InetAddressResolver.LookupPolicy): Stream[InetAddress] =
     Stream.of(underlying.lookupAllHostAddr(host): _*)
 
@@ -64,4 +64,4 @@ private class InetAddressResolverToMSNameServiceAdapter(underlying: InetAddressR
     underlying.lookupByName(hostname, policy).toArray(new Array[InetAddress](_))
 
   override def getHostByAddr(addr: Array[Byte]): String = underlying.lookupByAddress(addr)
-}
+} */

@@ -28,28 +28,28 @@ object SystemCommandResultSerializer
     extends AdminCommandProtoSerialization
     with ProtoSerializer[SystemCommandResult, SystemResultProto] {
 
-  override def deserialize(proto: SystemResultProto): SystemCommandResult = {
+  override def deserialize(proto: SystemResultProto): SystemCommandResult = ??? /* {
     new SystemCommandResult(proto.getReply)
-  }
+  } */
 
-  override def serialize(system: SystemCommandResult): SystemResultProto = {
+  override def serialize(system: SystemCommandResult): SystemResultProto = ??? /* {
     SystemResultProto.newBuilder
       .setReply(system.reply)
       .build
-  }
+  } */
 }
 
 object SystemCommandSerializer extends AdminCommandProtoSerialization with ProtoSerializer[SystemCommand, SystemProto] {
 
-  override def deserialize(proto: SystemProto): SystemCommand = {
+  override def deserialize(proto: SystemProto): SystemCommand = ??? /* {
     new SystemCommand(proto.getCommand)
-  }
+  } */
 
-  override def serialize(system: SystemCommand): SystemProto = {
+  override def serialize(system: SystemCommand): SystemProto = ??? /* {
     SystemProto.newBuilder
       .setCommand(system.cmd)
       .build
-  }
+  } */
 }
 
 object ObliterateSerializer
@@ -57,7 +57,7 @@ object ObliterateSerializer
     with ProtoSerializer[Obliterate, ObliterateProto]
     with Log {
 
-  override def deserialize(proto: ObliterateProto): Obliterate = {
+  override def deserialize(proto: ObliterateProto): Obliterate = ??? /* {
     val ttBefore = if (proto.hasTtBefore) Some(fromProto(proto.getTtBefore)) else None
 
     if (ttBefore.isDefined && ttBefore.get.isBefore(TimeInterval.Infinity))
@@ -78,9 +78,9 @@ object ObliterateSerializer
       new Obliterate(fromProto(proto.getEventKeyQuery))
     else
       throw new UnsupportedOperationException
-  }
+  } */
 
-  override def serialize(command: Obliterate): ObliterateProto = {
+  override def serialize(command: Obliterate): ObliterateProto = ??? /* {
     val builder = ObliterateProto.newBuilder
     require(command.queries.nonEmpty, "Serialization of Obliterate with empty queries is not supported")
 
@@ -94,5 +94,5 @@ object ObliterateSerializer
       case q: EventSerializedKeyQuery => builder.setEventKeyQuery(toProto(q)).build
       case o => throw new UnsupportedOperationException(s"Obliteration with query ${o} is not supported")
     }
-  }
+  } */
 }

@@ -29,7 +29,7 @@ object TemporalSurfaceMatcherSerializer
     with RelationElementSerialization
     with NamespaceSerialization
     with ProtoSerializerTo[TemporalSurfaceMatcher, TemporalSurfaceMatcherProto] {
-  private[this] def getTemporalSurfaceMatcherProtoForClass(
+  /* private[this] def getTemporalSurfaceMatcherProtoForClass(
       tsm: TemporalSurfaceMatcherT): TemporalSurfaceMatcherProto.Builder = {
     require(tsm.classes.nonEmpty, "Must have at least 1 class.")
     require(tsm.namespaceWrappers.isEmpty, "Must have empty namespaceWrappers.")
@@ -40,9 +40,9 @@ object TemporalSurfaceMatcherSerializer
       .addAllFqns(tsm.classes.map { c: Class[_] =>
         FqnProto.newBuilder.setFqClassName(c.getName).build
       }.asJava)
-  }
+  } */
 
-  private[this] def getTemporalSurfaceMatcherProtoForPackage(
+  /* private[this] def getTemporalSurfaceMatcherProtoForPackage(
       tsm: TemporalSurfaceMatcherT): TemporalSurfaceMatcherProto.Builder = {
     require(tsm.classes.isEmpty, "Must have empty classes.")
     require(tsm.namespaceWrappers.nonEmpty, "Must have at least 1 package.")
@@ -51,9 +51,9 @@ object TemporalSurfaceMatcherSerializer
     TemporalSurfaceMatcherProto.newBuilder
       .setType(TemporalSurfaceMatcherProto.Type.FOR_PACKAGE)
       .addAllNamespaces(tsm.namespaceWrappers.map(namespaceSerializer.serialize(_)).asJava)
-  }
+  } */
 
-  private[this] def getTemporalSurfaceMatcherProtoForPriql(
+  /* private[this] def getTemporalSurfaceMatcherProtoForPriql(
       tsm: TemporalSurfaceMatcherT): TemporalSurfaceMatcherProto.Builder = {
     require(tsm.classes.isEmpty, "Must have empty classes.")
     require(tsm.namespaceWrappers.isEmpty, "Must have empty namespaceWrappers.")
@@ -65,9 +65,9 @@ object TemporalSurfaceMatcherSerializer
       .addAllListsOfRelationElements(tsm.relationElementWrappers.map { l: Seq[RelationElementWrapper] =>
         ListOfRelationElementProto.newBuilder.addAllRelationElements(l.map(toProto(_)).asJava).build
       }.asJava)
-  }
+  } */
 
-  override def serialize(tsm: TemporalSurfaceMatcher): TemporalSurfaceMatcherProto = {
+  override def serialize(tsm: TemporalSurfaceMatcher): TemporalSurfaceMatcherProto = ??? /* {
     (tsm match {
       case DataFreeTemporalSurfaceMatchers.all =>
         TemporalSurfaceMatcherProto.newBuilder.setType(TemporalSurfaceMatcherProto.Type.ALL)
@@ -78,5 +78,5 @@ object TemporalSurfaceMatcherSerializer
       case o: TemporalSurfaceMatcherT if o.reactiveQueryProcessors.nonEmpty => getTemporalSurfaceMatcherProtoForPriql(o)
       case _ => throw new InvalidTemporalSurfaceMatcherException(tsm)
     }).build
-  }
+  } */
 }

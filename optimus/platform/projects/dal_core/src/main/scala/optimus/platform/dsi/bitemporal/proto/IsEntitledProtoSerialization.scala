@@ -23,26 +23,26 @@ object IsEntitledProtoSerialization
     extends CommandProtoSerializationBase
     with ProtoSerializer[IsEntitled, IsEntitledProto] {
 
-  override def deserialize(proto: IsEntitledProto): IsEntitled = {
+  override def deserialize(proto: IsEntitledProto): IsEntitled = ??? /* {
     IsEntitled(fromProto(proto.getCmd))
-  }
+  } */
 
-  override def serialize(write: IsEntitled): IsEntitledProto = {
+  override def serialize(write: IsEntitled): IsEntitledProto = ??? /* {
     IsEntitledProto.newBuilder
       .setCmd(toProto(write.cmd))
       .build
-  }
+  } */
 }
 
 object IsEntitledResultSerializer extends ProtoSerializer[IsEntitledResult, IsEntitledResultProto] {
 
-  override def deserialize(proto: IsEntitledResultProto): IsEntitledResult = {
+  override def deserialize(proto: IsEntitledResultProto): IsEntitledResult = ??? /* {
     IsEntitledResult(proto.getValue)
-  }
+  } */
 
-  override def serialize(entitled: IsEntitledResult): IsEntitledResultProto = {
+  override def serialize(entitled: IsEntitledResult): IsEntitledResultProto = ??? /* {
     IsEntitledResultProto.newBuilder
       .setValue(entitled.res)
       .build
-  }
+  } */
 }

@@ -29,7 +29,7 @@ import scala.jdk.CollectionConverters._
  * decode GPB ExpressionProto to Expression
  */
 trait ExpressionDecoder {
-  def decode(proto: ExpressionProto): Expression = {
+  def decode(proto: ExpressionProto): Expression = ??? /* {
     import ExpressionProto.Type
     proto.getType match {
       case Type.Entity            => decode(proto.getEntity)
@@ -51,17 +51,17 @@ trait ExpressionDecoder {
       case Type.Embeddable        => decode(proto.getEmbeddable)
       case Type.EntityBitempSpace => decode(proto.getEntityBitempSpace)
     }
-  }
+  } */
 
-  protected def decode(proto: EntityBitempSpaceProto.Kind): UpdateKind = {
+  protected def decode(proto: EntityBitempSpaceProto.Kind): UpdateKind = ??? /* {
     import EntityBitempSpaceProto.Kind
     proto match {
       case Kind.Delta => DeltaUpdate
       case Kind.All   => AllRects
     }
-  }
+  } */
 
-  protected def decode(proto: EntityBitempSpaceProto): EntityBitemporalSpace = {
+  protected def decode(proto: EntityBitempSpaceProto): EntityBitemporalSpace = ??? /* {
     EntityBitemporalSpace(
       proto.getName,
       decode(proto.getWhen).asInstanceOf[DSIQueryTemporality.BitempRange],
@@ -69,46 +69,46 @@ trait ExpressionDecoder {
       proto.getSuperClassesList.asScala,
       decode(proto.getId)
     )
-  }
+  } */
 
-  protected def decode(proto: EntityProto): Entity = {
+  protected def decode(proto: EntityProto): Entity = ??? /* {
     Entity(proto.getName, decode(proto.getWhen), proto.getSuperClassesList.asScala, decode(proto.getId))
-  }
+  } */
 
-  protected def decode(proto: EventProto): Event = {
+  protected def decode(proto: EventProto): Event = ??? /* {
     Event(proto.getName, decode(proto.getWhen), decode(proto.getId))
-  }
+  } */
 
-  protected def decode(proto: LinkageProto): Linkage = {
+  protected def decode(proto: LinkageProto): Linkage = ??? /* {
     Linkage(proto.getName, decode(proto.getWhen), decode(proto.getId))
-  }
+  } */
 
-  protected def decode(proto: EmbeddableProto): Embeddable = {
+  protected def decode(proto: EmbeddableProto): Embeddable = ??? /* {
     Embeddable(proto.getEntity, proto.getProperty, proto.getTag, decode(proto.getId))
-  }
+  } */
 
-  protected def decode(proto: PropertyProto): Property = {
+  protected def decode(proto: PropertyProto): Property = ??? /* {
     Property(propType = decode(proto.getPropType), names = proto.getNamesList.asScala, owner = decode(proto.getOwner))
-  }
+  } */
 
-  protected def decode(proto: ConstantProto): Constant = {
+  protected def decode(proto: ConstantProto): Constant = ??? /* {
     val typeCode = decode(proto.getTypeCode)
     val value = typeCode match {
       case TypeCode.SerializedKey => SerializedKeySerializer.deserialize(SerializedKeyProto.parseFrom(proto.getValue))
       case _                      => ProtoPickleSerializer.protoToProperties(FieldProto.parseFrom(proto.getValue))
     }
     Constant(value, decode(proto.getTypeCode))
-  }
+  } */
 
-  protected def decode(proto: BinaryProto): Binary = {
+  protected def decode(proto: BinaryProto): Binary = ??? /* {
     Binary(
       op = decode(proto.getOperator),
       left = decode(proto.getLeft),
       right = decode(proto.getRight)
     )
-  }
+  } */
 
-  protected def decode(proto: InProto): In = {
+  protected def decode(proto: InProto): In = ??? /* {
     val e = decode(proto.getExpression)
     if (proto.hasSelect)
       In(e, decode(proto.getSelect))
@@ -116,9 +116,9 @@ trait ExpressionDecoder {
       val v: List[Expression] = proto.getValuesList.asScala.iterator.map(decode(_)).toList
       In(e, v)
     }
-  }
+  } */
 
-  protected def decode(proto: SelectProto): Select = {
+  protected def decode(proto: SelectProto): Select = ??? /* {
     Select(
       from = deserializeQuerySource(proto.getFrom),
       properties = proto.getPropertiesList.asScala.iterator.map(decode(_)).toList,
@@ -131,64 +131,64 @@ trait ExpressionDecoder {
       reverse = proto.getReverse,
       id = decode(proto.getId)
     )
-  }
+  } */
 
   private def deserializeQuerySource(e: ExpressionProto): QuerySource = {
     decode(e).asInstanceOf[QuerySource]
   }
 
-  protected def decode(proto: JoinProto): Join = {
+  protected def decode(proto: JoinProto): Join = ??? /* {
     Join(
       joinType = decode(proto.getJoinType),
       left = deserializeQuerySource(proto.getLeft),
       right = deserializeQuerySource(proto.getRight),
       on = if (proto.hasOn) Some(decode(proto.getOn)) else None
     )
-  }
+  } */
 
-  protected def decode(proto: MemberProto): Member = {
+  protected def decode(proto: MemberProto): Member = ??? /* {
     Member(proto.getName, decode(proto.getOwner))
-  }
+  } */
 
-  protected def decode(proto: FunctionProto): Function = {
+  protected def decode(proto: FunctionProto): Function = ??? /* {
     Function(
       method = proto.getMethod,
       arguments = proto.getArgumentsList.asScala.iterator.map(decode(_)).toList
     )
-  }
+  } */
 
-  protected def decode(proto: UnaryProto): Unary = {
+  protected def decode(proto: UnaryProto): Unary = ??? /* {
     Unary(
       op = decode(proto.getOperator),
       e = decode(proto.getExpression)
     )
-  }
+  } */
 
-  protected def decode(proto: ConditionProto): Condition = {
+  protected def decode(proto: ConditionProto): Condition = ??? /* {
     Condition(
       check = decode(proto.getCheck),
       ifTrue = decode(proto.getIfTrue),
       ifFalse = decode(proto.getIfFalse)
     )
-  }
+  } */
 
-  protected def decode(proto: AggregateProto): Aggregate = {
+  protected def decode(proto: AggregateProto): Aggregate = ??? /* {
     Aggregate(
       aggregateType = decode(proto.getAggregateType),
       arguments = proto.getArgumentsList.asScala.iterator.map(decode(_)).toList,
       proto.getDistinct
     )
-  }
+  } */
 
-  protected def decode(proto: ScalarProto): Scalar = {
+  protected def decode(proto: ScalarProto): Scalar = ??? /* {
     Scalar(decode(proto.getQuery))
-  }
+  } */
 
-  protected def decode(proto: ExistsProto): Exists = {
+  protected def decode(proto: ExistsProto): Exists = ??? /* {
     Exists(decode(proto.getQuery))
-  }
+  } */
 
-  protected def decode(typeCode: TypeCodeProto): TypeCode = {
+  protected def decode(typeCode: TypeCodeProto): TypeCode = ??? /* {
     typeCode match {
       case TypeCodeProto.Int                => TypeCode.Int
       case TypeCodeProto.String             => TypeCode.String
@@ -218,9 +218,9 @@ trait ExpressionDecoder {
       case TypeCodeProto.VersionedReference => TypeCode.VersionedReference
       case TypeCodeProto.Rectangle          => TypeCode.Rectangle
     }
-  }
+  } */
 
-  protected def decode(op: BinaryProto.BinaryOperator): BinaryOperator = {
+  /* protected def decode(op: BinaryProto.BinaryOperator): BinaryOperator = {
     op match {
       case BinaryProto.BinaryOperator.AndAlso            => BinaryOperator.AndAlso
       case BinaryProto.BinaryOperator.OrElse             => BinaryOperator.OrElse
@@ -283,9 +283,9 @@ trait ExpressionDecoder {
       case PropertyProto.PropertyType.Index       => PropertyType.Index
       case PropertyProto.PropertyType.Special     => PropertyType.Special
     }
-  }
+  } */
 
-  protected def decode(proto: TemporalityProto): DSIQueryTemporality = {
+  protected def decode(proto: TemporalityProto): DSIQueryTemporality = ??? /* 
     import TemporalityProto.Type._
     proto.getType match {
       case At        => DSIQueryTemporality.At(decode(proto.getValidTime), decode(proto.getTxTime))
@@ -305,36 +305,36 @@ trait ExpressionDecoder {
       }
       case OpenVtTxRange => DSIQueryTemporality.OpenVtTxRange(decode(proto.getOpenVtTxRange))
     }
-  }
+  } */
 
   private def toTimeInterval(vt: ValidTimeInterval): TimeInterval = {
     // DSIQueryTemporality.BitempRange requires TimeInterval
     TimeInterval(vt.from, vt.to)
   }
 
-  protected def decode(proto: ValidTimeIntervalProto): ValidTimeInterval = {
+  protected def decode(proto: ValidTimeIntervalProto): ValidTimeInterval = ??? /* {
     ValidTimeInterval(decode(proto.getFrom), decode(proto.getTo))
-  }
+  } */
 
-  protected def decode(proto: TimeIntervalProto): TimeInterval = {
+  protected def decode(proto: TimeIntervalProto): TimeInterval = ??? /* {
     TimeInterval(decode(proto.getFrom), decode(proto.getTo))
-  }
+  } */
 
-  protected def decode(proto: InstantProto): Instant = {
+  protected def decode(proto: InstantProto): Instant = ??? /* {
     InstantSerializer.ofEpochSecond(proto.getSeconds, proto.getNano)
-  }
+  } */
 
-  protected def decode(proto: PropertyDefProto): PropertyDef = {
+  protected def decode(proto: PropertyDefProto): PropertyDef = ??? /* {
     PropertyDef(proto.getName, decode(proto.getExpression))
-  }
+  } */
 
-  protected def decode(proto: SortByDefProto): SortByDef = {
+  protected def decode(proto: SortByDefProto): SortByDef = ??? /* {
     val sortType = proto.getSortType match {
       case SortByDefProto.SortType.Asc  => SortType.Asc
       case SortByDefProto.SortType.Desc => SortType.Desc
     }
     SortByDef(sortType, decode(proto.getExpression))
-  }
+  } */
 
   protected def decode(id: Int): Id
 }

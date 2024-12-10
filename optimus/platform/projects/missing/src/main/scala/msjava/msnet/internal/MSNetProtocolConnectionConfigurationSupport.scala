@@ -1,0 +1,3 @@
+package msjava.msnet.internal
+
+class MSNetProtocolConnectionConfigurationSupport

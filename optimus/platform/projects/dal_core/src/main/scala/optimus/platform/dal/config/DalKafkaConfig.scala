@@ -60,7 +60,7 @@ abstract class DalKafkaConfig(lookup: DalFeatureKafkaLookup) extends KerberosAut
 
   protected def validate(xmlString: String): Boolean
 
-  private def getServersUri(kafkaXmlConfig: XmlBasedConfiguration): String = {
+  private def getServersUri(kafkaXmlConfig: XmlBasedConfiguration): String = ??? /* {
     val rootNode = kafkaXmlConfig.configs.head.getRootElement
     val childrenList = rootNode.getChildren(kafkaPropXml).get(0).getChildren().asScala.toList
     val servers = getServersFromConfig(childrenList)
@@ -68,15 +68,15 @@ abstract class DalKafkaConfig(lookup: DalFeatureKafkaLookup) extends KerberosAut
       throw new IllegalArgumentException("Could not find servers Uri for instance for kafka ")
     }
     servers.head.getValueAsString
-  }
+  } */
 
-  private def getServersFromConfig(childrenList: List[Element]): List[Element] = {
+  private def getServersFromConfig(childrenList: List[Element]): List[Element] = ??? /* {
     val servers = childrenList.filter(child => child.getName == kafkaPropToXml(BOOTSTRAP_SERVERS_CONFIG))
     lookup.instance match {
       case Some(instance) => servers.filter(child => child.getAttributeValue("instance") == instance)
       case None           => servers
     }
-  }
+  } */
 
   private def getProperty(config: XmlBasedConfiguration, path: String, default: => Option[String]): String =
     config.getString(path).orElse(default).getOrElse(throw new IllegalArgumentException(s"Missing property $path"))
@@ -102,7 +102,7 @@ abstract class DalKafkaConfig(lookup: DalFeatureKafkaLookup) extends KerberosAut
     try {
       val xmlOutputter: XMLOutputter = new XMLOutputter()
       val stringWriter: StringWriter = new StringWriter()
-      xmlOutputter.output(configXmlDocument, stringWriter)
+      // xmlOutputter.output(configXmlDocument, stringWriter)
       stringWriter.toString
     } catch {
       case ex: Exception => throw new Exception("Could not parse kafka Config xml", ex)

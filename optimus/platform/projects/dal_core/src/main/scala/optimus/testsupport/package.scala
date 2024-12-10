@@ -13,7 +13,7 @@ package optimus
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import msjava.base.slr.internal.ServiceEnvironment
+// import msjava.base.slr.internal.ServiceEnvironment
 import optimus.graph.DiagnosticSettings
 
 import scala.util.Try
@@ -27,7 +27,7 @@ package object testsupport {
 
   val shouldLogDalResultWeight: Boolean = inTest && logDalResultWeight
 
-  class IllegalBackendAccessException(msg: String) extends Exception(msg)
+  /* class IllegalBackendAccessException(msg: String) extends Exception(msg)
 
   def authorizeBackendAccess(backendName: String): Unit = {
     if (!backendAccessAllowed)
@@ -77,5 +77,5 @@ package object testsupport {
     if (!allowNonDevZkAccess && env != null && env != ServiceEnvironment.dev) {
       throw new IllegalZkAccessException(env)
     }
-  }
+  } */
 }

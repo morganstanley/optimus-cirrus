@@ -35,7 +35,7 @@ object TemporalContextSerializer
     extends BasicProtoSerialization
     with TemporalSurfaceMatcherSerialization
     with ProtoSerializerTo[TemporalContext, TemporalContextProto] {
-  private[this] def helper(ts: TemporalSurface): TemporalContextProto = {
+  private[this] def helper(ts: TemporalSurface): TemporalContextProto = ??? /* {
     val isBranch: Boolean = !ts.isLeaf
     val isContext: Boolean = ts.isInstanceOf[TemporalContext]
     if (isBranch && ts.asInstanceOf[BranchTemporalSurface].scope != DataFreeTemporalSurfaceMatchers.allScope)
@@ -62,11 +62,11 @@ object TemporalContextSerializer
       tcp.setTag(
         nonTickableTs.tag.getOrElse(throw new IllegalStateException(s"tag should be defined for $nonTickableTs")))
     tcp.build
-  }
+  } */
 
   // Use a helper function so that we can cast the TemporalContext to
   // TemporalSurface.
-  override def serialize(tc: TemporalContext): TemporalContextProto = {
+  override def serialize(tc: TemporalContext): TemporalContextProto = ??? /* {
     helper(tc.asInstanceOf[TemporalSurface])
-  }
+  } */
 }

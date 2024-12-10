@@ -86,20 +86,20 @@ object PublishMessagesCommandSerializer
     with ProtoSerializer[MessagesPublishCommand, PublishMessagesProto] {
   override def serialize(
       cmd: MessagesPublishCommand
-  ): PublishMessagesProto = {
+  ): PublishMessagesProto = ??? /* {
     PublishMessagesProto.newBuilder
       .setMessageType(toProto(cmd.msg))
       .setWaitForAck(cmd.option.waitForAck)
       .build()
-  }
+  } */
 
   override def deserialize(
       proto: PublishMessagesProto
-  ): MessagesPublishCommand = {
+  ): MessagesPublishCommand = ??? /* {
     val messageType = fromProto(proto.getMessageType)
     val option = if (proto.getWaitForAck) Ack else IgnoreAck
     MessagesPublishCommand(messageType, option)
-  }
+  } */
 }
 
 object PublishTransactionMessagesCommandSerializer
@@ -108,22 +108,22 @@ object PublishTransactionMessagesCommandSerializer
   override def serialize(
       cmd: MessagesPublishTransactionCommand
   ): PublishTransactionProto =
-    PublishTransactionProto.newBuilder
+    ??? /* PublishTransactionProto.newBuilder
       .setTransaction(toProto(cmd.msg))
-      .build()
+      .build() */
 
   override def deserialize(
       proto: PublishTransactionProto
-  ): MessagesPublishTransactionCommand = {
+  ): MessagesPublishTransactionCommand = ??? /* {
     val transaction = fromProto(proto.getTransaction)
     MessagesPublishTransactionCommand(transaction)
-  }
+  } */
 }
 
 object CreateMessagesStreamCommandSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[CreateMessagesStream, CreateMessagesStreamProto] {
-  override def serialize(cmd: CreateMessagesStream): CreateMessagesStreamProto = {
+  override def serialize(cmd: CreateMessagesStream): CreateMessagesStreamProto = ??? /* {
     val streamProtoBuilder = CreateMessagesStreamProto.newBuilder
       .setStreamId(cmd.streamId)
       .addAllSubscriptions(cmd.subs.map(toProto(_)).asJava)
@@ -133,111 +133,111 @@ object CreateMessagesStreamCommandSerializer
     }
     cmd.startTime.foreach(st => streamProtoBuilder.setStartTime(toProto(st)))
     streamProtoBuilder.build()
-  }
-  override def deserialize(proto: CreateMessagesStreamProto): CreateMessagesStream = {
+  } */
+  override def deserialize(proto: CreateMessagesStreamProto): CreateMessagesStream = ??? /* {
     val streamId = proto.getStreamId
     val subscriptions = proto.getSubscriptionsList.asScala.map(fromProto(_)).toSet
     val appSpecificConsumerId = Option(proto.getAppSpecificConsumerId).filter(!_.isBlank)
     val startTime = if (proto.hasStartTime) Some(fromProto(proto.getStartTime)) else None
     CreateMessagesStream(streamId, subscriptions, appSpecificConsumerId, startTime)
-  }
+  } */
 }
 
 object ChangeMessagesSubscriptionCommandSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[ChangeMessagesSubscription, ChangeMessagesSubscriptionProto] {
-  override def serialize(cmd: ChangeMessagesSubscription): ChangeMessagesSubscriptionProto = {
+  override def serialize(cmd: ChangeMessagesSubscription): ChangeMessagesSubscriptionProto = ??? /* {
     ChangeMessagesSubscriptionProto.newBuilder
       .setStreamId(cmd.streamId)
       .setChangeRequestId(cmd.changeRequestId)
       .addAllAddSubscriptions(cmd.newSubs.map(toProto(_)).asJava)
       .addAllRemoveSubscriptionIds(cmd.removeSubs.map(Integer.valueOf).asJava)
       .build
-  }
-  override def deserialize(proto: ChangeMessagesSubscriptionProto): ChangeMessagesSubscription = {
+  } */
+  override def deserialize(proto: ChangeMessagesSubscriptionProto): ChangeMessagesSubscription = ??? /* {
     val streamId = proto.getStreamId
     val changeRequestId = proto.getChangeRequestId
     val addSubscriptions = proto.getAddSubscriptionsList.asScala.map(fromProto(_))
     val removeSubscriptions = proto.getRemoveSubscriptionIdsList.asScala.map(_.intValue)
     ChangeMessagesSubscription(streamId, changeRequestId, addSubscriptions.toSet, removeSubscriptions.toSet)
-  }
+  } */
 }
 
 object CloseMessagesStreamCommandSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[CloseMessagesStream, CloseMessagesStreamProto] {
-  override def serialize(cmd: CloseMessagesStream): CloseMessagesStreamProto = {
+  override def serialize(cmd: CloseMessagesStream): CloseMessagesStreamProto = ??? /* {
     CloseMessagesStreamProto.newBuilder.setStreamId(cmd.streamId).build
-  }
-  override def deserialize(proto: CloseMessagesStreamProto): CloseMessagesStream = {
+  } */
+  override def deserialize(proto: CloseMessagesStreamProto): CloseMessagesStream = ??? /* {
     CloseMessagesStream(proto.getStreamId)
-  }
+  } */
 }
 
 object CommitMessagesStreamCommandSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[CommitMessagesStream, CommitMessagesStreamProto] {
-  override def serialize(cmd: CommitMessagesStream): CommitMessagesStreamProto = {
+  override def serialize(cmd: CommitMessagesStream): CommitMessagesStreamProto = ??? /* {
     val builder = CommitMessagesStreamProto.newBuilder.setStreamId(cmd.streamId)
     cmd.commitIds.foreach(builder.addCommitIds)
     builder.build
-  }
-  override def deserialize(proto: CommitMessagesStreamProto): CommitMessagesStream = {
+  } */
+  override def deserialize(proto: CommitMessagesStreamProto): CommitMessagesStream = ??? /* {
     CommitMessagesStream(proto.getStreamId, proto.getCommitIdsList.asScala.map(_.toLong))
-  }
+  } */
 }
 
 object PublishMessagesResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[MessagesPublishSuccessResult, PublishMessagesSuccessProto] {
-  override def serialize(cmd: MessagesPublishSuccessResult): PublishMessagesSuccessProto = {
+  override def serialize(cmd: MessagesPublishSuccessResult): PublishMessagesSuccessProto = ??? /* {
     PublishMessagesSuccessProto.newBuilder.setEventClassName(cmd.eventClassName).build
-  }
-  override def deserialize(proto: PublishMessagesSuccessProto): MessagesPublishSuccessResult = {
+  } */
+  override def deserialize(proto: PublishMessagesSuccessProto): MessagesPublishSuccessResult = ??? /* {
     MessagesPublishSuccessResult(proto.getEventClassName)
-  }
+  } */
 }
 
 object CreateMessagesStreamResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[MessagesCreateStreamSuccessResult, CreateMessagesStreamSuccessProto] {
-  override def serialize(cmd: MessagesCreateStreamSuccessResult): CreateMessagesStreamSuccessProto = {
+  override def serialize(cmd: MessagesCreateStreamSuccessResult): CreateMessagesStreamSuccessProto = ??? /* {
     CreateMessagesStreamSuccessProto.newBuilder.setStreamId(cmd.streamId).build
-  }
-  override def deserialize(proto: CreateMessagesStreamSuccessProto): MessagesCreateStreamSuccessResult = {
+  } */
+  override def deserialize(proto: CreateMessagesStreamSuccessProto): MessagesCreateStreamSuccessResult = ??? /* {
     MessagesCreateStreamSuccessResult(proto.getStreamId)
-  }
+  } */
 }
 
 object ChangeMessagesSubscriptionResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[MessagesChangeSubscriptionSuccessResult, ChangeMessagesSubscriptionSuccessProto] {
-  override def serialize(cmd: MessagesChangeSubscriptionSuccessResult): ChangeMessagesSubscriptionSuccessProto = {
+  override def serialize(cmd: MessagesChangeSubscriptionSuccessResult): ChangeMessagesSubscriptionSuccessProto = ??? /* {
     ChangeMessagesSubscriptionSuccessProto.newBuilder
       .setStreamId(cmd.streamId)
       .setChangeRequestId(cmd.changeRequestId)
       .build
-  }
-  override def deserialize(proto: ChangeMessagesSubscriptionSuccessProto): MessagesChangeSubscriptionSuccessResult = {
+  } */
+  override def deserialize(proto: ChangeMessagesSubscriptionSuccessProto): MessagesChangeSubscriptionSuccessResult = ??? /* {
     MessagesChangeSubscriptionSuccessResult(proto.getStreamId, proto.getChangeRequestId)
-  }
+  } */
 }
 
 object CloseMessagesStreamResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[MessagesCloseStreamSuccessResult, CloseMessagesStreamSuccessProto] {
-  override def serialize(cmd: MessagesCloseStreamSuccessResult): CloseMessagesStreamSuccessProto = {
+  override def serialize(cmd: MessagesCloseStreamSuccessResult): CloseMessagesStreamSuccessProto = ??? /* {
     CloseMessagesStreamSuccessProto.newBuilder.setStreamId(cmd.streamId).build
-  }
-  override def deserialize(proto: CloseMessagesStreamSuccessProto): MessagesCloseStreamSuccessResult = {
+  } */
+  override def deserialize(proto: CloseMessagesStreamSuccessProto): MessagesCloseStreamSuccessResult = ??? /* {
     MessagesCloseStreamSuccessResult(proto.getStreamId)
-  }
+  } */
 }
 
 object MessagesNotificationResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[MessagesNotificationResult, MessagesNotificationProto] {
-  override def serialize(cmd: MessagesNotificationResult): MessagesNotificationProto = {
+  override def serialize(cmd: MessagesNotificationResult): MessagesNotificationProto = ??? /* {
     val builder = MessagesNotificationProto.newBuilder
       .setStreamUuid(cmd.streamId)
       .setPublishRequestId(cmd.publishReqId)
@@ -256,32 +256,32 @@ object MessagesNotificationResultSerializer
             .asJava)
     }
     builder.build()
-  }
+  } */
   override def deserialize(
       proto: MessagesNotificationProto
-  ): MessagesNotificationResult = {
+  ): MessagesNotificationResult = ??? /* {
     val streamId = proto.getStreamUuid
     val publishReqId = proto.getPublishRequestId
     val commitId = proto.getCommitId
     val entries = proto.getEntriesList.asScala.map(fromProto(_))
     val transactions = proto.getTransactionsList.asScala.map(fromProto(_))
     MessagesNotificationResult(streamId, publishReqId, commitId, entries ++ transactions)
-  }
+  } */
 }
 
 object MessagesNotificationEntrySerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[SimpleEntry, MessagesNotificationEntryProto] {
   override def serialize(cmd: SimpleEntry): MessagesNotificationEntryProto =
-    MessagesNotificationEntryProto.newBuilder
+    ??? /* MessagesNotificationEntryProto.newBuilder
       .setSubId(cmd.subId)
       .setSerializedMessage(toProto(cmd.serializedMsg))
-      .build
+      .build */
 
-  override def deserialize(proto: MessagesNotificationEntryProto): SimpleEntry = {
+  override def deserialize(proto: MessagesNotificationEntryProto): SimpleEntry = ??? /* {
     val serializedMsg = fromProto(proto.getSerializedMessage)
     SimpleEntry(proto.getSubId, serializedMsg)
-  }
+  } */
 }
 
 object MessagesNotificationTransactionEntrySerializer
@@ -290,18 +290,18 @@ object MessagesNotificationTransactionEntrySerializer
   override def serialize(
       cmd: TransactionEntry
   ): MessagesTransactionNotificationEntryProto =
-    MessagesTransactionNotificationEntryProto.newBuilder
+    ??? /* MessagesTransactionNotificationEntryProto.newBuilder
       .setSubId(cmd.subId)
       .setClassName(cmd.className)
       .setSerializedMessage(toProto(cmd.serializedMsg))
-      .build
+      .build */
 
   override def deserialize(
       proto: MessagesTransactionNotificationEntryProto
-  ): TransactionEntry = {
+  ): TransactionEntry = ??? /* {
     val serializedMsg = fromProto(proto.getSerializedMessage)
     TransactionEntry(proto.getSubId, proto.getClassName, serializedMsg)
-  }
+  } */
 }
 
 // Map[EntityReference, ContainedEntity] is equal to EntityReferenceToContainedEntity message
@@ -309,40 +309,40 @@ object MessagesNotificationTransactionEntrySerializer
 object SerializedContainedEventSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[SerializedContainedEvent, SerializedMessageProto] {
-  override def serialize(cmd: SerializedContainedEvent): SerializedMessageProto = {
+  override def serialize(cmd: SerializedContainedEvent): SerializedMessageProto = ??? /* {
     SerializedMessageProto.newBuilder
       .setSbe(toProto(cmd.sbe))
       .addAllEntityMap(cmd.entityMap.map { case (k, v) => toProto((k, v)) }.asJava)
       .build
-  }
+  } */
 
-  override def deserialize(proto: SerializedMessageProto): SerializedContainedEvent = {
+  override def deserialize(proto: SerializedMessageProto): SerializedContainedEvent = ??? /* {
     val sbe = fromProto(proto.getSbe)
     val entityMap = proto.getEntityMapList.asScala.map(fromProto(_)).toMap
     SerializedContainedEvent(sbe, entityMap)
-  }
+  } */
 }
 
 object EntityReferenceToContainedEntitySerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[(EntityReference, ContainedEntity), EntityReferenceToContainedEntityProto] {
-  override def serialize(cmd: (EntityReference, ContainedEntity)): EntityReferenceToContainedEntityProto = {
+  override def serialize(cmd: (EntityReference, ContainedEntity)): EntityReferenceToContainedEntityProto = ??? /* {
     EntityReferenceToContainedEntityProto.newBuilder
       .setEntityReference(toProto(cmd._1))
       .setContainedEntity(toProto(cmd._2))
       .build
-  }
-  override def deserialize(proto: EntityReferenceToContainedEntityProto): (EntityReference, ContainedEntity) = {
+  } */
+  override def deserialize(proto: EntityReferenceToContainedEntityProto): (EntityReference, ContainedEntity) = ??? /* {
     val entityReference = fromProto(proto.getEntityReference)
     val containedEntity = fromProto(proto.getContainedEntity)
     (entityReference, containedEntity)
-  }
+  } */
 }
 
 object ContainedEntitySerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[ContainedEntity, ContainedEntityProto] {
-  override def serialize(cmd: ContainedEntity): ContainedEntityProto = {
+  override def serialize(cmd: ContainedEntity): ContainedEntityProto = ??? /* {
     cmd match {
       case a: AppliedHeapEntity =>
         ContainedEntityProto.newBuilder
@@ -361,14 +361,14 @@ object ContainedEntitySerializer
           .setTt(toProto(s.tt))
           .build
     }
-  }
-  override def deserialize(proto: ContainedEntityProto): ContainedEntity = {
+  } */
+  override def deserialize(proto: ContainedEntityProto): ContainedEntity = ??? /* {
     proto.getType match {
       case ContainedEntityProto.Type.APPLIED_HEAP_ENTITY => AppliedHeapEntity(fromProto(proto.getEntity))
       case ContainedEntityProto.Type.UNIQUE_HEAP_ENTITY  => UniqueHeapEntity(fromProto(proto.getEntity))
       case ContainedEntityProto.Type.STORED_ENTITY       => StoredEntity(fromProto(proto.getVt), fromProto(proto.getTt))
     }
-  }
+  } */
 }
 
 object MessagesSubscriptionSerializer
@@ -376,7 +376,7 @@ object MessagesSubscriptionSerializer
     with ProtoSerializer[MessagesSubscription, MessagesSubscriptionProto] {
   override def serialize(
       cmd: MessagesSubscription
-  ): MessagesSubscriptionProto = {
+  ): MessagesSubscriptionProto = ??? /* {
     val subscriptionType = cmd.subscriptionType match {
       case MessagesSubscriptionType.ContainedEvent => MessagesSubscriptionProto.SubscriptionType.CONTAINED_EVENT
       case MessagesSubscriptionType.UpsertableTransaction =>
@@ -389,11 +389,11 @@ object MessagesSubscriptionSerializer
       .setEventClassName(cmd.eventClassName)
       .setSubscriptionType(subscriptionType)
       .build
-  }
+  } */
 
   override def deserialize(
       proto: MessagesSubscriptionProto
-  ): MessagesSubscription = {
+  ): MessagesSubscription = ??? /* {
     val subscriptionType = proto.getSubscriptionType match {
       case MessagesSubscriptionProto.SubscriptionType.CONTAINED_EVENT => MessagesSubscriptionType.ContainedEvent
       case MessagesSubscriptionProto.SubscriptionType.UPSERTABLE_TRANSACTION =>
@@ -405,7 +405,7 @@ object MessagesSubscriptionSerializer
       proto.getEventClassName,
       subscriptionType
     )
-  }
+  } */
 }
 
 object SerializedTransactionSerializer
@@ -414,16 +414,16 @@ object SerializedTransactionSerializer
   override def serialize(
       cmd: SerializedUpsertableTransaction
   ): SerializedTransactionProto =
-    SerializedTransactionProto.newBuilder
+    ??? /* SerializedTransactionProto.newBuilder
       .setPutApplicationEvent(toProto(cmd.putEvent))
-      .build
+      .build */
 
   override def deserialize(
       proto: SerializedTransactionProto
-  ): SerializedUpsertableTransaction = {
+  ): SerializedUpsertableTransaction = ??? /* {
     val putEvent = fromProto(proto.getPutApplicationEvent)
     SerializedUpsertableTransaction(putEvent)
-  }
+  } */
 }
 
 object StreamsACLsCommandSerializer
@@ -432,50 +432,50 @@ object StreamsACLsCommandSerializer
   override def serialize(
       cmd: StreamsACLsCommand
   ): StreamsACLsCommandProto =
-    StreamsACLsCommandProto.newBuilder
+    ??? /* StreamsACLsCommandProto.newBuilder
       .setStreamAppId(cmd.streamAppId)
       .addAllAcls(cmd.acls.map(streamsACLsSerializer.serialize).asJava)
-      .build()
+      .build() */
 
   override def deserialize(
       proto: StreamsACLsCommandProto
-  ): StreamsACLsCommand = {
+  ): StreamsACLsCommand = ??? /* {
     val streamAppId = proto.getStreamAppId
     val acls = proto.getAclsList.asScala.map(streamsACLsSerializer.deserialize)
     StreamsACLsCommand(streamAppId, acls)
-  }
+  } */
 }
 
 object StreamsACLsSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[StreamsACLs, StreamsACLsProto] {
 
-  val protoEntitlementMapping = Map(
+  /* val protoEntitlementMapping = Map(
     StreamsACLsProto.Entitlement.Produce -> StreamsEntitlement.Produce,
     StreamsACLsProto.Entitlement.Consume -> StreamsEntitlement.Consume
   )
 
   val entitlementPrototMapping = protoEntitlementMapping
     .map { case (proto, action) => action -> proto }
-    .toMap[StreamsEntitlement, StreamsACLsProto.Entitlement]
+    .toMap[StreamsEntitlement, StreamsACLsProto.Entitlement] */
 
   override def serialize(
       cmd: StreamsACLs
   ): StreamsACLsProto =
-    StreamsACLsProto.newBuilder
+    ??? /* StreamsACLsProto.newBuilder
       .setEntitlement(entitlementPrototMapping(cmd.entitlement))
       .addAllHierarchicalEntities(cmd.hierarchicalEntities.map(hierarchicalEntitiesSerializer.serialize).asJava)
       .addAllInternalTopics(cmd.internalTopics.asJava)
-      .build
+      .build */
 
   override def deserialize(
       proto: StreamsACLsProto
-  ): StreamsACLs = {
+  ): StreamsACLs = ??? /* {
     val entitlement = protoEntitlementMapping(proto.getEntitlement)
     val hierarchicalEntities = proto.getHierarchicalEntitiesList.asScala.map(hierarchicalEntitiesSerializer.deserialize)
     val internalTopics = proto.getInternalTopicsList.asScala
     StreamsACLs(entitlement, hierarchicalEntities, internalTopics)
-  }
+  } */
 }
 
 object HierarchicalEntitiesSerializer
@@ -484,23 +484,23 @@ object HierarchicalEntitiesSerializer
   override def serialize(
       cmd: Seq[String]
   ): HierarchicalEntitiesProto =
-    HierarchicalEntitiesProto.newBuilder
+    ??? /* HierarchicalEntitiesProto.newBuilder
       .addAllEntityNames(cmd.asJava)
-      .build()
+      .build() */
 
   override def deserialize(
       proto: HierarchicalEntitiesProto
-  ): Seq[String] = proto.getEntityNamesList.asScala
+  ): Seq[String] = ??? // proto.getEntityNamesList.asScala
 
 }
 
 object StreamsACLsResultSerializer
     extends MessagesCommandProtoSerializationBase
     with ProtoSerializer[StreamsACLsCommandSuccessResult, StreamsACLsCommandSuccessProto] {
-  override def serialize(cmd: StreamsACLsCommandSuccessResult): StreamsACLsCommandSuccessProto = {
+  override def serialize(cmd: StreamsACLsCommandSuccessResult): StreamsACLsCommandSuccessProto = ??? /* {
     StreamsACLsCommandSuccessProto.newBuilder.setAppId(cmd.appId).build
-  }
-  override def deserialize(proto: StreamsACLsCommandSuccessProto): StreamsACLsCommandSuccessResult = {
+  } */
+  override def deserialize(proto: StreamsACLsCommandSuccessProto): StreamsACLsCommandSuccessResult = ??? /* {
     StreamsACLsCommandSuccessResult(proto.getAppId)
-  }
+  } */
 }

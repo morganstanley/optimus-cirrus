@@ -22,13 +22,13 @@ trait ClassEntityInfoSerialization extends ProtoSerialization {
 }
 
 object ClassEntityInfoSerializer extends ProtoSerializer[ClassEntityInfo, ClassEntityInfoProto] {
-  override def serialize(cei: ClassEntityInfo): ClassEntityInfoProto = {
+  override def serialize(cei: ClassEntityInfo): ClassEntityInfoProto = ??? /* {
     ClassEntityInfoProto.newBuilder
       .setFqn(FqnProto.newBuilder.setFqClassName(cei.runtimeClass.getName))
       .build
-  }
+  } */
 
-  override def deserialize(proto: ClassEntityInfoProto): ClassEntityInfo = {
+  override def deserialize(proto: ClassEntityInfoProto): ClassEntityInfo = ??? /* {
     EntityInfoRegistry.getClassInfo(proto.getFqn.getFqClassName)
-  }
+  } */
 }

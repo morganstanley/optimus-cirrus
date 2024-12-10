@@ -30,7 +30,7 @@ class QueryResultEncoder extends ExpressionEncoder {
     idToInt.getOrElseUpdate(id, idToInt.size)
   }
 
-  def encode(result: PartialQueryResult): PartialQueryResultProto = {
+  def encode(result: PartialQueryResult): PartialQueryResultProto = ??? /* {
     val values = result.values.map(row => encode(row))
     result.metaData
       .map(metaData =>
@@ -40,19 +40,19 @@ class QueryResultEncoder extends ExpressionEncoder {
           .setIsLast(result.isLast)
           .build())
       .getOrElse(PartialQueryResultProto.newBuilder.addAllResult(values.asJava).setIsLast(result.isLast).build())
-  }
+  } */
 
-  def encode(result: QueryResult): QueryResultProto = {
+  def encode(result: QueryResult): QueryResultProto = ??? /* {
     val values = result.value.map(row => encode(row))
     QueryResultProto.newBuilder.addAllResult(values.asJava).setMetadata(encode(result.metaData)).build()
-  }
+  } */
 
-  def encode(row: Array[Any]): ValuesProto = {
+  def encode(row: Array[Any]): ValuesProto = ??? /* {
     val newRow = row.map(v => encode(v))
     ValuesProto.newBuilder.addAllRow(CollectionConverters.asJavaIterable(newRow)).build()
-  }
+  } */
 
-  def encode(row: Any): ValueProto = {
+  def encode(row: Any): ValueProto = ??? /* {
     val builder = ValueProto.newBuilder
     row match {
       case x: PersistentEntity        => builder.setEntityValue(PersistentEntitySerializer.serialize(x)).build()
@@ -62,16 +62,16 @@ class QueryResultEncoder extends ExpressionEncoder {
         builder.setRectangleValue(SelectSpaceRectangleSerializer.serialize(x)).build()
       case _ => builder.setFieldValue(ProtoPickleSerializer.propertiesToProto(row, None)).build()
     }
-  }
+  } */
 
-  def encode(metaData: QueryResultMetaData): QueryResultMetaDataProto = {
+  def encode(metaData: QueryResultMetaData): QueryResultMetaDataProto = ??? /* {
     val fields = metaData.fields.map(f => encode(f))
     QueryResultMetaDataProto.newBuilder.addAllFields(CollectionConverters.asJavaIterable(fields)).build()
-  }
+  } */
 
-  def encode(field: Field): QueryFieldProto = {
+  def encode(field: Field): QueryFieldProto = ??? /* {
     QueryFieldProto.newBuilder.setName(field.name).setTypecode(encode(field.typeCode)).build()
-  }
+  } */
 }
 
 class QueryResultDecoder extends ExpressionDecoder {
@@ -81,37 +81,37 @@ class QueryResultDecoder extends ExpressionDecoder {
     intToId.getOrElseUpdate(id, Id())
   }
 
-  def decode(result: PartialQueryResultProto): PartialQueryResult = {
+  def decode(result: PartialQueryResultProto): PartialQueryResult = ??? /* {
     if (result.getIsLast && result.hasMetadata)
       FinalPartialQueryResult(result.getResultList.asScala.map(decode(_)), Some(decode(result.getMetadata)))
     else
       IntermediatePartialQueryResult(result.getResultList.asScala.map(decode(_)))
-  }
+  } */
 
-  def decode(result: QueryResultProto): QueryResult = {
+  def decode(result: QueryResultProto): QueryResult = ??? /* {
     QueryResult(result.getResultList.asScala.map(decode(_)), decode(result.getMetadata))
-  }
+  } */
 
-  def decode(row: ValuesProto): Array[Any] = {
+  def decode(row: ValuesProto): Array[Any] = ??? /* {
     row.getRowList.asScala.iterator.map(decode(_)).toArray
-  }
+  } */
 
-  def decode(row: ValueProto): Any = {
+  def decode(row: ValueProto): Any = ??? /* {
     if (row.hasFieldValue) ProtoPickleSerializer.protoToProperties(row.getFieldValue)
     else if (row.hasEntityValue) PersistentEntitySerializer.deserialize(row.getEntityValue)
     else if (row.hasEventValue) SerializedBusinessEventSerializer.deserialize(row.getEventValue)
     else if (row.hasResultValue) ResultSerializer.deserialize(row.getResultValue)
     else if (row.hasRectangleValue) SelectSpaceRectangleSerializer.deserialize(row.getRectangleValue)
     else throw new UnsupportedOperationException(s"Unexpected row value: $row.")
-  }
+  } */
 
-  def decode(metaData: QueryResultMetaDataProto): QueryResultMetaData = {
+  def decode(metaData: QueryResultMetaDataProto): QueryResultMetaData = ??? /* {
     QueryResultMetaData(metaData.getFieldsList.asScala.iterator.map(decode(_)).toArray)
-  }
+  } */
 
-  def decode(field: QueryFieldProto): Field = {
+  def decode(field: QueryFieldProto): Field = ??? /* {
     Field(field.getName, decode(field.getTypecode))
-  }
+  } */
 }
 
 trait ResultSerializationBase extends ProtoSerialization {

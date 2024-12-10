@@ -9,6 +9,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/*
 package msjava.logbackutils.async;
 
 import java.util.ArrayList;
@@ -26,24 +27,23 @@ import msjava.logbackutils.async.internal.AsyncDispatcherBasePatch;
 
 import ch.qos.logback.core.Appender;
 
-/** A bounded BlockingQueue backed implementation of the AsynDispatcher interface */
+/** A bounded BlockingQueue backed implementation of the AsynDispatcher interface
 public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E>
     implements AsyncDispatcher<E> {
 
-  /** List of appenders which will be used by this dispatcher */
+  /** List of appenders which will be used by this dispatcher
   protected final List<Appender<E>> appenderList = new ArrayList<>();
 
-  /** The produce consumer queue. */
+  /** The produce consumer queue.
   protected BlockingQueue<E> queue;
 
-  /** The dispatch thread */
+  /** The dispatch thread
   BaseDispatchThread dispatchThread;
 
   /**
    * Flag indicating whether the Logging thread have to wait until space become available on the
    * queue<br>
    * or it should return immediately.
-   */
   private boolean blocking = true;
 
   private static final AtomicInteger instanceId = new AtomicInteger();
@@ -55,7 +55,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
   /**
    * @param metricsId a unique ID for naming published metrics, not null and not empty; use
    *     parameterless constructor for default
-   */
   public AsyncDispatcherQueueImplPatch(String metricsId) {
     super(metricsId);
   }
@@ -66,7 +65,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
    *
    * @param bufferSize the size of the message queue
    * @throws IllegalArgumentException if the bufferSize is less then 1
-   */
   public AsyncDispatcherQueueImplPatch(int bufferSize) throws IllegalArgumentException {
     this(bufferSize, "AsyncDispatcherQueueImpl-" + instanceId.incrementAndGet());
   }
@@ -79,7 +77,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
    * @param metricsId a unique ID for naming published metrics, not null and not empty; use
    *     parameterless constructor for default
    * @throws IllegalArgumentException if the bufferSize is less then 1
-   */
   public AsyncDispatcherQueueImplPatch(int bufferSize, String metricsId)
       throws IllegalArgumentException {
     super(metricsId);
@@ -95,7 +92,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
    * is required.
    *
    * @return True when the logging thread have to wait when the queue is full.
-   */
   @Override
   public boolean isBlocking() {
     return blocking;
@@ -106,7 +102,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
    * is required.
    *
    * @param blocking the blocking to set
-   */
   @Override
   public void setBlocking(boolean blocking) {
     addInfo("Blocking flag set to: " + blocking);
@@ -130,7 +125,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
    * and on the dispatch thread as well. This function guarantees only that, at most queue.size()
    * messages will be flushed.<br>
    * New messages may arrive and will be present on the queue after flushing.
-   */
   @Override
   public synchronized void flush() {
     flushing();
@@ -139,7 +133,6 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
   /**
    * This function will put the message onto the queue. If the queue is full, than the current
    * thread will block on the queue.put() call if blocking is set to true.
-   */
   @Override
   public void add(E e) {
     if (Thread.currentThread() instanceof AsyncDispatcherQueueImplPatch.BaseDispatchThread) {
@@ -171,7 +164,7 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
 
   /**
    * @return the current number of queued messages
-   */
+   *
   @VisibleForTesting
   int getQueueSize() {
     return queue.size();
@@ -193,7 +186,7 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
     addInfo("Async dispatcher started");
   }
 
-  /** Starts up the dispatcher thread */
+  /** Starts up the dispatcher thread
   protected void startDispatchThread() {
     if (queue == null) {
       queue =
@@ -207,10 +200,10 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
     }
   }
 
-  /** Flag indicating the status of this dispatcher */
+  /** Flag indicating the status of this dispatcher
   private volatile boolean isStarted = false;
 
-  /** Stops the dispatcher thread, and logs all the messages on the current thread. */
+  /** Stops the dispatcher thread, and logs all the messages on the current thread.
   @Override
   public synchronized void stop() {
     stopDispatchThread();
@@ -220,13 +213,13 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
     addInfo("Async dispatcher stopped");
   }
 
-  /** If this appender is started */
+  /** If this appender is started
   @Override
   public boolean isStarted() {
     return isStarted;
   }
 
-  /** Stops the dispatcher thread */
+  /** Stops the dispatcher thread
   private void stopDispatchThread() {
     if (dispatchThread != null) {
       try {
@@ -255,7 +248,7 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
     }
   }
 
-  /** Flushes all messages in the current thread. */
+  /** Flushes all messages in the current thread.
   private void flushing() {
     addInfo("Flushing is just about to start in the AsyncDispatcher");
     AtomicReference<Exception> ex = new AtomicReference<>();
@@ -310,13 +303,13 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
   protected BaseDispatchThread newDispatchThread() {
     return new DispatchThreadImpl();
   }
-  /** The dispatcher thread implementation. It runs in a loop until it is interrupted. */
+  /** The dispatcher thread implementation. It runs in a loop until it is interrupted.
   public class DispatchThreadImpl extends BaseDispatchThread {
 
-    /** Creates the dispatcher thread */
+    /** Creates the dispatcher thread
     public DispatchThreadImpl() {}
 
-    /** Logs everything to Logback. If queue is empty, it will block on the queue.take() call. */
+    /** Logs everything to Logback. If queue is empty, it will block on the queue.take() call.
     @Override
     public void run() {
       while (!isInterrupted()) {
@@ -339,3 +332,4 @@ public class AsyncDispatcherQueueImplPatch<E> extends AsyncDispatcherBasePatch<E
     }
   }
 }
+*/

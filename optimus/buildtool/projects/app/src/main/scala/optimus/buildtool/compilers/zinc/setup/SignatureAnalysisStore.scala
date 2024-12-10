@@ -39,7 +39,7 @@ class SignatureAnalysisStore(
   private val store = FileAnalysisStore.binary(
     signatureAnalysisJar.path.toFile,
     signatureMappers,
-    tmpDir = signatureAnalysisJar.parent.path.toFile)
+    /* tmpDir = signatureAnalysisJar.parent.path.toFile */)
 
   // this store is only used for writing - signature analysis for upstreams is loaded via ZincEntryLookup
   override def get(): Optional[AnalysisContents] =

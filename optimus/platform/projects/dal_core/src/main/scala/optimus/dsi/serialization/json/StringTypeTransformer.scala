@@ -13,7 +13,7 @@ package optimus.dsi.serialization.json
 
 import java.{util => ju}
 
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.dsi.serialization.AbstractTypeTransformerOps
 import optimus.dsi.serialization.JavaCollectionUtils
 import optimus.dsi.serialization.TypeTransformException

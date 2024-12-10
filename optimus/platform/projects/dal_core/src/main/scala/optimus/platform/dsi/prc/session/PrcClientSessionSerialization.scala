@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 private[optimus] object PrcClientSessionSerializer
     extends CommandProtoSerialization
     with ProtoSerializer[PrcClientSessionInfo, PrcClientSessionInfoProto] {
-  override def serialize(value: PrcClientSessionInfo): PrcClientSessionInfoProto = {
+  override def serialize(value: PrcClientSessionInfo): PrcClientSessionInfoProto = ??? /* {
 
     val contextProto: ContextProto = value.context.contextType match {
       case DefaultContextType | UniqueContextType => ContextSerializer.serialize(value.context)
@@ -39,9 +39,9 @@ private[optimus] object PrcClientSessionSerializer
       .setTxTime(toProto(value.establishmentTime))
     value.effectiveId.foreach(builder.setReadId)
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: PrcClientSessionInfoProto): PrcClientSessionInfo = {
+  override def deserialize(proto: PrcClientSessionInfoProto): PrcClientSessionInfo = ??? /* {
     val context: Context = ContextSerializer.deserialize(proto.getContext)
     val effectiveOpt = if (proto.hasReadId) Some(proto.getReadId) else None
     PrcClientSessionInfo(
@@ -51,5 +51,5 @@ private[optimus] object PrcClientSessionSerializer
       fromProto(proto.getTxTime),
       context
     )
-  }
+  } */
 }

@@ -18,8 +18,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.ConsoleAppender
 import ch.qos.logback.core.encoder.LayoutWrappingEncoder
 import ch.qos.logback.core.spi.ContextAwareBase
-import msjava.logbackutils.async.AsyncAppender
-import msjava.logbackutils.async.AsyncDispatcherQueueImplPatch
+// import msjava.logbackutils.async.AsyncAppender
+// import msjava.logbackutils.async.AsyncDispatcherQueueImplPatch
 
 /**
  * Similar to default configuration of logback, except that console appender is wrapped in async appender.
@@ -29,7 +29,7 @@ import msjava.logbackutils.async.AsyncDispatcherQueueImplPatch
  */
 class DefaultAsyncLogbackConfigurator extends ContextAwareBase with Configurator {
 
-  override def configure(lc: LoggerContext): Unit = {
+  override def configure(lc: LoggerContext) = ??? /* {
     addInfo("Setting up default configuration for async logging.")
 
     val ca = new ConsoleAppender[ILoggingEvent]
@@ -61,6 +61,6 @@ class DefaultAsyncLogbackConfigurator extends ContextAwareBase with Configurator
     asyncAppender.start()
 
     val rootLogger = lc.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME)
-    rootLogger.addAppender(asyncAppender)
-  }
+    // rootLogger.addAppender(asyncAppender)
+  } */
 }

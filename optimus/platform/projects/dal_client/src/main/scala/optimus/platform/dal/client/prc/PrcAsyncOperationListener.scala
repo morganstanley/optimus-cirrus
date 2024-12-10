@@ -62,10 +62,10 @@ class PrcAsyncOperationListener(
   def expectingFurtherResults(): Boolean = keysCompleted < cmdIndexesByKey.size
   def getKeysCompleted: Int = keysCompleted
 
-  protected def parseResponse(v: Array[Byte]): PrcSingleKeyResponseProto =
-    PrcSingleKeyResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(v))
+  protected def parseResponse(v: Array[Byte]): PrcSingleKeyResponseProto = ???
+    /* PrcSingleKeyResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(v)) */
 
-  private def onKeyFinished(retrieval: AsyncRetrieval[Array[Byte], Array[Byte]]): Unit = synchronized {
+  private def onKeyFinished(retrieval: AsyncRetrieval[Array[Byte], Array[Byte]]): Unit = ??? /* synchronized {
     val storedValues = retrieval.getLatestStoredValues.asScala
     checkUpdateExpected(storedValues.size)
     storedValues.foreach { case (key, storedValue) =>
@@ -95,7 +95,7 @@ class PrcAsyncOperationListener(
             PrcResponseWrapper(isPartial, res, cmdIndexesForKey)
           }))
     }
-  }
+  } */
 
   override def asyncOperationUpdated(asyncOperation: AsyncOperation): Unit = {
     require(

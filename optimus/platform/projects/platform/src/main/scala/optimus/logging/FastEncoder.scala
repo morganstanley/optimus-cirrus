@@ -20,7 +20,7 @@ import ch.qos.logback.core.pattern.PatternLayoutEncoderBase
 object foo extends LayoutWrappingEncoder
 
 class FastEncoder extends PatternLayoutEncoderBase[ILoggingEvent] {
-  private var fastLayout: FastPatternLayout = _
+  // private var fastLayout: FastPatternLayout = _
 
   // start from parent for comparison
   private def convertToBytes(s: String): Array[Byte] = {
@@ -36,21 +36,21 @@ class FastEncoder extends PatternLayoutEncoderBase[ILoggingEvent] {
   // end from parent
 
   def encodeToBuffer(event: ILoggingEvent, buffer: EncoderBuffer) = {
-    fastLayout.doLayout(event, buffer)
+    // fastLayout.doLayout(event, buffer)
   }
 
   override def setLayout(layout: Layout[ILoggingEvent]): Unit = {
     layout match {
-      case fastPatternLayout: FastPatternLayout =>
+      /* case fastPatternLayout: FastPatternLayout =>
         this.layout = fastPatternLayout
-        this.fastLayout = fastPatternLayout
+        this.fastLayout = fastPatternLayout */
       case _ =>
         addError(s"A FastEncoder requires a FastLayout not a $layout")
     }
   }
   override def start(): Unit = {
-    fastLayout.setContext(context)
-    fastLayout.start()
+    /* fastLayout.setContext(context)
+    fastLayout.start() */
     super.start()
   }
 }

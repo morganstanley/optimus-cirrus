@@ -54,7 +54,7 @@ object CreatePubSubStreamCommandSerializer
     extends PubSubCommandProtoSerializationBase
     with ProtoSerializer[CreatePubSubStream, CreatePubSubStreamProto] {
 
-  override def serialize(cmd: CreatePubSubStream): CreatePubSubStreamProto = {
+  override def serialize(cmd: CreatePubSubStream): CreatePubSubStreamProto = ??? /* {
     val builder = CreatePubSubStreamProto.newBuilder
       .setStreamUuid(cmd.streamId)
       .addAllSubscriptions(cmd.subs.map(toProto(_)).asJava)
@@ -62,82 +62,82 @@ object CreatePubSubStreamCommandSerializer
     cmd.endTime.foreach(et => builder.setEndTime(toProto(et)))
     cmd.vtFilterInterval.foreach(filter => builder.setVtFilterInterval(toProto(filter)))
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: CreatePubSubStreamProto): CreatePubSubStream = {
+  override def deserialize(proto: CreatePubSubStreamProto): CreatePubSubStream = ??? /* {
     val streamId = proto.getStreamUuid
     val subscriptions = proto.getSubscriptionsList.asScala.map(fromProto(_))
     val startTime = if (proto.hasStartTime) Some(fromProto(proto.getStartTime)) else None
     val endTime = if (proto.hasEndTime) Some(fromProto(proto.getEndTime)) else None
     val vtFilterInterval = if (proto.hasVtFilterInterval) Some(fromProto(proto.getVtFilterInterval)) else None
     CreatePubSubStream(streamId, subscriptions, startTime, endTime, vtFilterInterval)
-  }
+  } */
 }
 
 object ChangeSubscriptionCommandSerializer
     extends PubSubCommandProtoSerializationBase
     with ProtoSerializer[ChangeSubscription, ChangeSubscriptionProto] {
 
-  override def serialize(cmd: ChangeSubscription): ChangeSubscriptionProto = {
+  override def serialize(cmd: ChangeSubscription): ChangeSubscriptionProto = ??? /* {
     ChangeSubscriptionProto.newBuilder
       .setStreamUuid(cmd.streamId)
       .setChangeRequestId(cmd.changeRequestId)
       .addAllAddSubscriptions(cmd.newSubs.map(toProto(_)).asJava)
       .addAllRemoveSubscriptionIds(cmd.removeSubs.map(Integer.valueOf).asJava)
       .build
-  }
+  } */
 
-  override def deserialize(proto: ChangeSubscriptionProto): ChangeSubscription = {
+  override def deserialize(proto: ChangeSubscriptionProto): ChangeSubscription = ??? /* {
     val streamId = proto.getStreamUuid
     val changeReqId = proto.getChangeRequestId
     val addSubs = proto.getAddSubscriptionsList.asScala.map(fromProto(_))
     val remSubs = proto.getRemoveSubscriptionIdsList.asScala.map(_.intValue).toSeq
     ChangeSubscription(streamId, changeReqId, addSubs, remSubs)
-  }
+  } */
 }
 
 object ClosePubSubStreamCommandSerializer
     extends PubSubCommandProtoSerializationBase
     with ProtoSerializer[ClosePubSubStream, ClosePubSubStreamProto] {
 
-  override def serialize(cmd: ClosePubSubStream): ClosePubSubStreamProto = {
+  override def serialize(cmd: ClosePubSubStream): ClosePubSubStreamProto = ??? /* {
     ClosePubSubStreamProto.newBuilder
       .setStreamUuid(cmd.streamId)
       .build
-  }
+  } */
 
-  override def deserialize(proto: ClosePubSubStreamProto): ClosePubSubStream = {
+  override def deserialize(proto: ClosePubSubStreamProto): ClosePubSubStream = ??? /* {
     ClosePubSubStream(proto.getStreamUuid)
-  }
+  } */
 }
 
 object SubscriptionSerializer
     extends PubSubCommandProtoSerializationBase
     with ProtoSerializer[Subscription, SubscriptionProto] {
 
-  override def serialize(sub: Subscription): SubscriptionProto = {
+  override def serialize(sub: Subscription): SubscriptionProto = ??? /* {
     SubscriptionProto.newBuilder
       .setSubId(sub.subId)
       .setQuery(toProto(sub.query))
       .setIncludeSow(sub.includeSow)
       .setEntitledOnly(sub.entitledOnly)
       .build
-  }
+  } */
 
-  override def deserialize(proto: SubscriptionProto): Subscription = {
+  override def deserialize(proto: SubscriptionProto): Subscription = ??? /* {
     val subId = proto.getSubId
     val query: QueryHolder = fromProto(proto.getQuery)
     val includeSow = proto.getIncludeSow
     val entitledOnly = if (proto.hasEntitledOnly) proto.getEntitledOnly else false
     Subscription(subId, query, includeSow, entitledOnly)
-  }
+  } */
 }
 
 object QueryHolderSerializer
     extends PubSubCommandProtoSerializationBase
     with ProtoSerializer[QueryHolder, QueryHolderProto] {
 
-  override def serialize(obj: QueryHolder): QueryHolderProto = {
+  override def serialize(obj: QueryHolder): QueryHolderProto = ??? /* {
     val builder = QueryHolderProto.newBuilder
     obj match {
       case ExpressionQueryHolder(query, clientFilter) =>
@@ -149,9 +149,9 @@ object QueryHolderSerializer
         builder.setHeartbeatInterval(interval)
     }
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: QueryHolderProto): QueryHolder = {
+  override def deserialize(proto: QueryHolderProto): QueryHolder = ??? /* {
     proto.getType match {
       case QueryHolderProto.Type.EXPRESSION_QUERY => ExpressionQueryHolder(fromProto(proto.getQuery), None)
       case QueryHolderProto.Type.HEARTBEAT_QUERY =>
@@ -161,7 +161,7 @@ object QueryHolderSerializer
           HeartbeatQueryHolder(partition, proto.getHeartbeatInterval)
         else HeartbeatQueryHolder(partition)
     }
-  }
+  } */
 }
 
 trait NotificationEntrySerialization extends BasicProtoSerialization {
@@ -177,55 +177,55 @@ object CreatePubSubStreamResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[CreatePubSubStreamSuccessResult, CreatePubSubStreamSuccessProto] {
 
-  override def serialize(res: CreatePubSubStreamSuccessResult): CreatePubSubStreamSuccessProto = {
+  override def serialize(res: CreatePubSubStreamSuccessResult): CreatePubSubStreamSuccessProto = ??? /* {
     CreatePubSubStreamSuccessProto.newBuilder
       .setStreamUuid(res.streamId)
       .setTxTime(toProto(res.txTime))
       .build
-  }
-  override def deserialize(proto: CreatePubSubStreamSuccessProto): CreatePubSubStreamSuccessResult = {
+  } */
+  override def deserialize(proto: CreatePubSubStreamSuccessProto): CreatePubSubStreamSuccessResult = ??? /* {
     CreatePubSubStreamSuccessResult(proto.getStreamUuid, fromProto(proto.getTxTime))
-  }
+  } */
 }
 
 object ChangeSubscriptionResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[ChangeSubscriptionSuccessResult, ChangeSubscriptionSuccessProto] {
 
-  override def serialize(res: ChangeSubscriptionSuccessResult): ChangeSubscriptionSuccessProto = {
+  override def serialize(res: ChangeSubscriptionSuccessResult): ChangeSubscriptionSuccessProto = ??? /* {
     ChangeSubscriptionSuccessProto.newBuilder
       .setStreamUuid(res.streamId)
       .setChangeRequestId(res.changeRequestId)
       .setTxTime(toProto(res.txTime))
       .build
-  }
+  } */
 
-  override def deserialize(proto: ChangeSubscriptionSuccessProto): ChangeSubscriptionSuccessResult = {
+  override def deserialize(proto: ChangeSubscriptionSuccessProto): ChangeSubscriptionSuccessResult = ??? /* {
     val streamId = proto.getStreamUuid
     val changeRequestId = proto.getChangeRequestId
     ChangeSubscriptionSuccessResult(streamId, changeRequestId, fromProto(proto.getTxTime))
-  }
+  } */
 }
 
 object ClosePubSubStreamResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[ClosePubSubStreamSuccessResult, ClosePubSubStreamSuccessProto] {
 
-  override def serialize(res: ClosePubSubStreamSuccessResult): ClosePubSubStreamSuccessProto = {
+  override def serialize(res: ClosePubSubStreamSuccessResult): ClosePubSubStreamSuccessProto = ??? /* {
     ClosePubSubStreamSuccessProto.newBuilder
       .setStreamUuid(res.streamId)
       .build
-  }
-  override def deserialize(proto: ClosePubSubStreamSuccessProto): ClosePubSubStreamSuccessResult = {
+  } */
+  override def deserialize(proto: ClosePubSubStreamSuccessProto): ClosePubSubStreamSuccessResult = ??? /* {
     ClosePubSubStreamSuccessResult(proto.getStreamUuid)
-  }
+  } */
 }
 
 object PubSubSowResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubSowResult, PubSubSowResultProto] {
 
-  override def serialize(res: PubSubSowResult): PubSubSowResultProto = {
+  override def serialize(res: PubSubSowResult): PubSubSowResultProto = ??? /* {
     val builder = PubSubSowResultProto.newBuilder
       .setStreamUuid(res.streamId)
       .setSubId(res.subId)
@@ -241,9 +241,9 @@ object PubSubSowResultSerializer
           .setPartialQueryResult(toProto(r.parRes))
     }
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: PubSubSowResultProto): PubSubSowResult = {
+  override def deserialize(proto: PubSubSowResultProto): PubSubSowResult = ??? /* {
     val streamId = proto.getStreamUuid
     val subId = proto.getSubId
     val txTime = fromProto(proto.getTxTime)
@@ -255,14 +255,14 @@ object PubSubSowResultSerializer
         val parQueryResult = fromProto(proto.getPartialQueryResult)
         PubSubSowPartialResult(streamId, subId, txTime, parQueryResult)
     }
-  }
+  } */
 }
 
 object PubSubNotificationResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubNotificationResult, PubSubNotificationProto] {
 
-  override def serialize(res: PubSubNotificationResult): PubSubNotificationProto = {
+  override def serialize(res: PubSubNotificationResult): PubSubNotificationProto = ??? /* {
     val builder = PubSubNotificationProto.newBuilder
       .setStreamUuid(res.streamId)
       .setTxTime(toProto(res.txTime))
@@ -297,9 +297,9 @@ object PubSubNotificationResultSerializer
           .setNumberOfOutOfLineNotificationEntries(rres.numberOfOutOfLineEntries)
     }
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: PubSubNotificationProto): PubSubNotificationResult = {
+  override def deserialize(proto: PubSubNotificationProto): PubSubNotificationResult = ??? /* {
     val streamId = proto.getStreamUuid
     val txTime = fromProto(proto.getTxTime)
     val writeReqId = if (proto.hasWriteRequestId) Some(proto.getWriteRequestId) else None
@@ -323,14 +323,14 @@ object PubSubNotificationResultSerializer
         entries,
         proto.getNumberOfOutOfLineNotificationEntries)
     }
-  }
+  } */
 }
 
 object PubSubNotificationPartialResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubNotificationPartialResult, PubSubNotificationPartialResultProto] {
 
-  override def serialize(res: PubSubNotificationPartialResult): PubSubNotificationPartialResultProto = {
+  override def serialize(res: PubSubNotificationPartialResult): PubSubNotificationPartialResultProto = ??? /* {
     val builder = PubSubNotificationPartialResultProto.newBuilder
       .setStreamUuid(res.streamId)
       .setTxTime(toProto(res.txTime))
@@ -366,9 +366,9 @@ object PubSubNotificationPartialResultSerializer
           .setNumberOfOutOfLineNotificationEntries(rres.numberOfOutOfLineEntries)
     }
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: PubSubNotificationPartialResultProto): PubSubNotificationPartialResult = {
+  override def deserialize(proto: PubSubNotificationPartialResultProto): PubSubNotificationPartialResult = ??? /* {
     val streamId = proto.getStreamUuid
     val isLast = proto.getIsLast
     val txTime = fromProto(proto.getTxTime)
@@ -394,30 +394,30 @@ object PubSubNotificationPartialResultSerializer
         isLast,
         proto.getNumberOfOutOfLineNotificationEntries)
     }
-  }
+  } */
 }
 
 object PubSubHeartbeatResultSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubHeartbeatResult, PubSubHeartbeatProto] {
 
-  override def serialize(res: PubSubHeartbeatResult): PubSubHeartbeatProto = {
+  override def serialize(res: PubSubHeartbeatResult): PubSubHeartbeatProto = ??? /* {
     val builder = PubSubHeartbeatProto.newBuilder
       .setStreamUuid(res.streamId)
       .setTxTime(toProto(res.txTime))
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: PubSubHeartbeatProto): PubSubHeartbeatResult = {
+  override def deserialize(proto: PubSubHeartbeatProto): PubSubHeartbeatResult = ??? /* {
     val streamId = proto.getStreamUuid
     val txTime = fromProto(proto.getTxTime)
     PubSubHeartbeatResult(streamId, txTime)
-  }
+  } */
 }
 
 object PubSubPartitionToSubIdsMapSerializer extends ProtoSerializer[Map[String, Seq[Int]], PartitionToSubIdsMapProto] {
 
-  override def serialize(partitionMap: Map[String, Seq[Int]]): PartitionToSubIdsMapProto = {
+  override def serialize(partitionMap: Map[String, Seq[Int]]): PartitionToSubIdsMapProto = ??? /* {
     val builder = PartitionToSubIdsMapProto.newBuilder
     val entries = partitionMap.map { case (par, subIds) =>
       val entryBuilder = PartitionToSubIdsEntryProto.newBuilder
@@ -427,21 +427,21 @@ object PubSubPartitionToSubIdsMapSerializer extends ProtoSerializer[Map[String, 
     }
     entries.foreach(builder.addEntries)
     builder.build
-  }
+  } */
 
-  override def deserialize(proto: PartitionToSubIdsMapProto): Map[String, Seq[Int]] = {
+  override def deserialize(proto: PartitionToSubIdsMapProto): Map[String, Seq[Int]] = ??? /* {
     proto.getEntriesList.asScala.map { entry =>
       val partition = entry.getPartition
       val subIds = entry.getSubIdsList.asScala.map(_.toInt).toList
       partition -> subIds
     } toMap
-  }
+  } */
 }
 
 object PubSubStreamEventSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubStreamResult, PubSubStreamEventProto] {
-  override def deserialize(proto: PubSubStreamEventProto): PubSubStreamResult = {
+  override def deserialize(proto: PubSubStreamEventProto): PubSubStreamResult = ??? /* {
     proto.getType match {
       case PubSubStreamEventProto.Type.PUBSUB_SOW_START =>
         PubSubSowStartResult(proto.getStreamUuid, fromProto(proto.getTxTime))
@@ -452,8 +452,8 @@ object PubSubStreamEventSerializer
       case PubSubStreamEventProto.Type.CATCHUP_COMPLETE =>
         PubSubCatchupCompleteResult(proto.getStreamUuid, fromProto(proto.getTxTime))
     }
-  }
-  override def serialize(res: PubSubStreamResult): PubSubStreamEventProto = {
+  } */
+  override def serialize(res: PubSubStreamResult): PubSubStreamEventProto = ??? /* {
     res match {
       case r: PubSubSowStartResult =>
         PubSubStreamEventProto.newBuilder
@@ -480,13 +480,13 @@ object PubSubStreamEventSerializer
           .setTxTime(toProto(r.txTime))
           .build
     }
-  }
+  } */
 }
 
 object PubSubGlobalEventSerializer
     extends PubSubResultProtoSerializationBase
     with ProtoSerializer[PubSubGlobalResult, PubSubGlobalEventProto] {
-  override def deserialize(proto: PubSubGlobalEventProto): PubSubGlobalResult = {
+  override def deserialize(proto: PubSubGlobalEventProto): PubSubGlobalResult = ??? /* {
     proto.getType match {
       case PubSubGlobalEventProto.Type.REPLAG_UNDERLIMIT_RESULT =>
         PubSubRepLagUnderlimitResult(proto.getStreamUuid, proto.getLagTime)
@@ -494,8 +494,8 @@ object PubSubGlobalEventSerializer
         PubSubRepLagOverlimitResult(proto.getStreamUuid, proto.getLagTime)
       case PubSubGlobalEventProto.Type.UPSTREAM_CHANGED_RESULT => PubSubUpstreamChangedResult(proto.getStreamUuid)
     }
-  }
-  override def serialize(res: PubSubGlobalResult): PubSubGlobalEventProto = {
+  } */
+  override def serialize(res: PubSubGlobalResult): PubSubGlobalEventProto = ??? /* {
     res match {
       case r: PubSubRepLagUnderlimitResult =>
         PubSubGlobalEventProto.newBuilder
@@ -517,5 +517,5 @@ object PubSubGlobalEventSerializer
       case cn: PubSubBrokerConnect    => throw new IllegalArgumentException(s"$cn not expected in request or response")
       case dn: PubSubBrokerDisconnect => throw new IllegalArgumentException(s"$dn not expected in request or response")
     }
-  }
+  } */
 }

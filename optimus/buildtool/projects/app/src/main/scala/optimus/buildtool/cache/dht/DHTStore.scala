@@ -39,7 +39,7 @@ import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.durationStringNanos
 import optimus.dht.client.api.DHTClient
-import optimus.dht.client.api.DHTClientBuilder
+// import optimus.dht.client.api.DHTClientBuilder
 import optimus.dht.client.api.kv.KVClient
 import optimus.dht.client.api.kv.KVKey
 import optimus.dht.client.api.kv.KVLargeEntry
@@ -94,15 +94,15 @@ object DHTStore extends Log {
     case _                           => ClusterType.Custom
   }
 
-  def ZkBuilder(zkPath: String): DHTClientBuilder =
-    DHTClientBuilder.create
+  def ZkBuilder(zkPath: String): Nothing = ???
+    /* DHTClientBuilder.create
       .zkPath(zkPath)
       .kerberos(true)
       .replicationStrategy(new SimpleReplicationStrategy(2))
       .readTimeout(Duration.ofSeconds(System.getProperty("obt.dht.readTimeoutSeconds", "60").toLong))
       .defaultOperationTimeout(
         Duration.ofSeconds(System.getProperty("obt.dht.defaultOperationTimeoutSeconds", "60").toLong))
-      .ioThreads(System.getProperty("obt.dht.ioThreads", "12").toInt)
+      .ioThreads(System.getProperty("obt.dht.ioThreads", "12").toInt) */
 
   private[cache] sealed trait StoredKey {
     val id: ScopeId
@@ -154,7 +154,7 @@ class DHTStore(
     clusterType: ClusterType = ClusterType.QA,
     artifactVersion: String,
     val cacheMode: CacheMode,
-    clientBuilder: DHTClientBuilder)
+    /* clientBuilder: DHTClientBuilder */)
     extends ArtifactStoreBase
     with RemoteAssetStore
     with MultiWriteableArtifactStore
@@ -162,7 +162,7 @@ class DHTStore(
   import DHTStore._
   override protected def cacheType: String = s"DHT $clusterType"
   override protected def stat: ObtStats.Cache = ObtStats.DHT
-  private val client: DHTClient = clientBuilder.build()
+  private val client: DHTClient = ??? /* clientBuilder.build() */
 
   override def toString: String = client.getServerConnectionsManager.toString
   private val lvClient = {

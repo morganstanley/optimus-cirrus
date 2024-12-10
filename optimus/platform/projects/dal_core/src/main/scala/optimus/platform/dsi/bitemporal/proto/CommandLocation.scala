@@ -17,15 +17,15 @@ import scala.jdk.CollectionConverters._
 final case class CommandLocation(location: String, commandIndices: Seq[Int])
 
 object CommandLocationSerializer {
-  final def toProto(commandLocation: CommandLocation): CommandLocationProto = {
+  final def toProto(commandLocation: CommandLocation): CommandLocationProto = ??? /* {
     CommandLocationProto.newBuilder
       .setLocation(commandLocation.location)
       .addAllCommandIndices(commandLocation.commandIndices map (_.asInstanceOf[Integer]) asJava)
       .build
-  }
-  final def fromProto(commandLocationProto: CommandLocationProto): CommandLocation = {
+  } */
+  final def fromProto(commandLocationProto: CommandLocationProto): CommandLocation = ??? /* {
     val location = commandLocationProto.getLocation()
     val indices = commandLocationProto.getCommandIndicesList.asScala.map(_.asInstanceOf[Int])
     CommandLocation(location, indices)
-  }
+  } */
 }

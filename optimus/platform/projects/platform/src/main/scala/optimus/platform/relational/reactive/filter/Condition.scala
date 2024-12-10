@@ -14,7 +14,7 @@ package optimus.platform.relational.reactive.filter
 import optimus.utils.datetime.ZoneIds
 import java.time._
 
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.platform.pickling._
 import optimus.platform.storable.{Entity, EntityImpl, EntityReference, ModuleEntityToken}
 import optimus.platform.dsi.bitemporal._
@@ -58,7 +58,7 @@ sealed trait Condition {
 
 object Condition {
   import BinaryOperator._
-  def fieldFor(tpe: NotificationMessageProto.Type): String = tpe match {
+  /* def fieldFor(tpe: NotificationMessageProto.Type): String = tpe match {
     case NotificationMessageProto.Type.HEARTBEAT          => "heart_beat"
     case NotificationMessageProto.Type.RESET_STATE        => "reset_state"
     case NotificationMessageProto.Type.BEGIN_TRANSACTION  => "begin_transaction"
@@ -96,7 +96,7 @@ object Condition {
           Seq(Binary(s"$field.context.type", EQ, ContextProto.Type.UNIQUE), Binary(s"$field.context.uuid", EQ, uuid)))
       case DefaultContext => Binary(s"$field.context.type", EQ, ContextProto.Type.DEFAULT)
     }
-  }
+  } */
   def ofClass(clazz: Class[_])(implicit filterClassOption: FilterClassOption.Value): Binary = {
     import FilterClassOption._
     filterClassOption match {
@@ -185,7 +185,7 @@ final case class PropertyCondition(
     val operator: BinaryOperator.Value = BinaryOperator.EQ,
     reverse: Boolean = false)
     extends Condition {
-  import FieldProto.Type._
+  // import FieldProto.Type._
 
   import scala.collection.mutable
 
@@ -228,7 +228,7 @@ final case class PropertyCondition(
       override def writeFloat(data: Float): Unit = ()
       override def writeInt(data: Int): Unit = ()
       override def writeLong(data: Long): Unit = ()
-      override def writeRawObject(data: AnyRef) = res = data match {
+      override def writeRawObject(data: AnyRef) = ??? /* res = data match {
         case lt: LocalTime =>
           s"""$valuePrefix.children[type = "$LOCAL_TIME" AND associated_key = "$valueName"].long_value ${op} ${lt.toNanoOfDay}"""
         case dt: LocalDate =>
@@ -271,7 +271,7 @@ final case class PropertyCondition(
           }
         case _ =>
           throw new UnsupportedFilterCondition(s"Unsupported filtering on ${valueName} of type ${data.getClass}")
-      }
+      } */
 
       def currentField: Option[String] = Some(valueName)
     }
@@ -346,7 +346,7 @@ final case class PropertyCondition(
       import scala.collection.mutable.ArrayBuffer
 
       private[this] val buf = ArrayBuffer[Any]()
-      private var tpe: FieldProto.Type = _
+      private var tpe: Any/* : FieldProto.Type */ = _
       private var valueType: String = _
 
       def getResult(): String = {
@@ -380,7 +380,7 @@ final case class PropertyCondition(
       override def writeFloat(data: Float): Unit = ()
       override def writeInt(data: Int): Unit = ()
       override def writeLong(data: Long): Unit = ()
-      override def writeRawObject(data: AnyRef) = data match {
+      override def writeRawObject(data: AnyRef) = ??? /* data match {
         case lt: LocalTime =>
           tpe = LOCAL_TIME
           valueType = "long_value"
@@ -448,7 +448,7 @@ final case class PropertyCondition(
 
         case unspported =>
           throw new UnsupportedFilterCondition(s"Unsupported filtering on ${name} of type ${data.getClass}")
-      }
+      } */
 
       def currentField: Option[String] = parent.currentField
     }

@@ -32,7 +32,7 @@ private[optimus] /*[platform]*/ object LoggingHelper {
 
   def checkAsyncEnabled(tree: AppenderAttachable[_]): Boolean = {
     tree.iteratorForAppenders.asScala.forall {
-      case _: ch.qos.logback.core.AsyncAppenderBase[_] | _: msjava.logbackutils.async.AsyncAppender[_] => true
+      case _: ch.qos.logback.core.AsyncAppenderBase[_] /* | _: msjava.logbackutils.async.AsyncAppender[_] */ => true
       case a if toleratedSyncLoggers.contains(a.getClass.getName)                                      => true
       case a: ch.qos.logback.core.spi.AppenderAttachable[_] => checkAsyncEnabled(a)
       case _                                                => false

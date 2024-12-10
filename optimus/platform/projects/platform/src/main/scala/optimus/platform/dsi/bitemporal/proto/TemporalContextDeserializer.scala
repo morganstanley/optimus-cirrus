@@ -31,7 +31,7 @@ object TemporalContextDeserializer
     extends BasicProtoSerialization
     with TemporalSurfaceMatcherDeserialization
     with ProtoSerializerFrom[TemporalContext, TemporalContextProto] {
-  private[this] def helper(proto: TemporalContextProto): TemporalSurface = {
+  private[this] def helper(proto: TemporalContextProto): TemporalSurface = ??? /* {
     val vt: Option[Instant] =
       if (proto.hasValidTime)
         Some(fromProto(proto.getValidTime))
@@ -89,7 +89,7 @@ object TemporalContextDeserializer
           tag
         )
     }
-  }
+  } */
 
   // Use a helper function so that we can cast the outer TemporalSurface to a
   // TemporalContext, but keep the possibility of having TemporalSurfaces

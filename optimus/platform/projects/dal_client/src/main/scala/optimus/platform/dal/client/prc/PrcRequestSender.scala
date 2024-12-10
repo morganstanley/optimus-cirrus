@@ -13,7 +13,7 @@ package optimus.platform.dal.client.prc
 
 import com.ms.silverking.cloud.dht.GetOptions
 import com.ms.silverking.cloud.dht.client.AsyncOperation
-import msjava.base.spring.lifecycle.BeanState
+// import msjava.base.spring.lifecycle.BeanState
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.dal.silverking.client.TraceableSkConverters
 import optimus.dsi.trace.TraceId
@@ -124,8 +124,8 @@ class PrcRequestSender(
   // each message carries the PrcUserOptions and the seqId of the message
   override type MessageType = PrcRequestSender.MessageType
 
-  private[this] val state = new BeanState()
-  state.initializeIfNotInitialized()
+  // private[this] val state = new BeanState()
+  // state.initializeIfNotInitialized()
 
   // NB we do not initialize this when instantiating the class as it has the side-effect of creating a connection to
   // an SK proxy. Rather we create the instance in start() below
@@ -134,9 +134,9 @@ class PrcRequestSender(
 
   override private[optimus] def start(): Unit = {
     try {
-      state.startIfNotRunning(() => {
+      /* state.startIfNotRunning(() => {
         namespaceProvider = mkNamespaceProvider()
-      })
+      }) */
     } catch {
       case NonFatal(ex) =>
         log.error("Caught exception when creating PrcNamespaceProvider", ex)
@@ -149,19 +149,19 @@ class PrcRequestSender(
   }
 
   override private[optimus] def shutdown(): Unit = {
-    state.destroyIfNotDestroyed(() => {
+    /* state.destroyIfNotDestroyed(() => {
       if (namespaceProvider ne null) {
         namespaceProvider.shutdown()
         // assertConnected relies on the null check
         namespaceProvider = null
       }
       redirectionCache.clear()
-    })
+    }) */
   }
 
   override private[optimus] def assertConnected(): Unit = synchronized {
     try {
-      state.throwIfNotRunning()
+      // state.throwIfNotRunning()
       require(namespaceProvider ne null, "Not connected to PRC.")
       // Can we get any info on whether the DHTSession connection is active?
     } catch {
@@ -214,7 +214,7 @@ class PrcRequestSender(
     )
   }
 
-  override private[optimus] def asyncSend(message: MessageType): Unit = {
+  override private[optimus] def asyncSend(message: MessageType): Unit = ??? /* {
     val (traceId, prcUserOpts, seqId, zoneId) = message
     val asyncOpBatchBldr = Map.newBuilder[Int, NonTemporalPrcKeyUserOpts]
     val asyncOpBatchListBldr = Seq.newBuilder[NonTemporalPrcKeyUserOpts] // keeping track of these separately for order
@@ -273,7 +273,7 @@ class PrcRequestSender(
       asyncOp.addListener(listener)
       notifyAsyncRetrieveStarted(asyncOp, listener)
     }
-  }
+  } */
 
   // test hooks
   protected def notifyAsyncRetrieveStarted(asyncOp: AsyncOperation, listener: PrcAsyncOperationListener): Unit = {}

@@ -212,15 +212,15 @@ abstract class DSIClient(
     }
   }
 
-  @tailrec
-  private[this] def shouldRetry(t: Throwable, requestType: DSIRequestProto.Type): Boolean = {
+  // @tailrec
+  private[this] def shouldRetry(t: Throwable, requestType: DSIRequestProto.Type): Boolean = ??? /* {
     val isRetryable = t.isInstanceOf[DALRetryableActionException] ||
       (requestType == DSIRequestProto.Type.WRITE && t.isInstanceOf[NonLeaderBrokerException]) ||
       (requestType == DSIRequestProto.Type.READ_ONLY && t.isInstanceOf[DsiSpecificTransientError])
     // has to be written like this so the recursive call is in tail position
     if (isRetryable) true
     else (t ne null) && shouldRetry(t.getCause, requestType)
-  }
+  } */
 
   private[this] def checkErrorResults(results: Seq[Result]): Unit = {
     import optimus.platform.dsi.bitemporal.ErrorResult
@@ -238,7 +238,7 @@ abstract class DSIClient(
       hasRetried: Boolean,
       attempts: Int,
       backoff: Long,
-      separateWriteBatcher: Boolean): Seq[Result] = {
+      separateWriteBatcher: Boolean): Seq[Result] = ??? /* {
     import DSIClient._
 
     var response: Response = null
@@ -335,7 +335,7 @@ abstract class DSIClient(
         }
 
     }
-  }
+  } */
 
   @async private final def executeCommands(
       cmds: Seq[Command],
@@ -404,12 +404,12 @@ abstract class DSIClient(
   }
 
   @async final override def executeLeadWriterCommands(cmds: Seq[LeadWriterCommand]): Seq[Result] =
-    executeCommands(cmds, DSIRequestProto.Type.WRITE)
+    ??? // executeCommands(cmds, DSIRequestProto.Type.WRITE)
 
   @async final override def executeServiceDiscoveryCommands(sds: Seq[ServiceDiscoveryCommand]): Seq[Result] =
-    executeCommands(sds, DSIRequestProto.Type.SERVICE_DISCOVERY)
+    ??? // executeCommands(sds, DSIRequestProto.Type.SERVICE_DISCOVERY)
 
-  @async final override def executeReadOnlyCommands(cmds: Seq[ReadOnlyCommand]): Seq[Result] = {
+  @async final override def executeReadOnlyCommands(cmds: Seq[ReadOnlyCommand]): Seq[Result] = ??? /* {
 
     // Use wall-clock time to estimate At.now, without actually calling DAL broker.
     val wallClock = patch.MilliInstant.now
@@ -469,7 +469,7 @@ abstract class DSIClient(
         }
       )
     }
-  }
+  } */
 
   override def executePubSubRequest(request: PubSubClientRequest): PubSubClientResponse = {
     require(pubSubRetryManager.isDefined, s"pubSubRetryMgr is not defined, but received: $request")

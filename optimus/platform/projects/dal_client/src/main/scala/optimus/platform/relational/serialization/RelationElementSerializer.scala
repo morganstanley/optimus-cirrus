@@ -22,13 +22,13 @@ trait RelationElementSerialization extends ProtoSerialization {
 }
 
 object RelationElementSerializer extends ProtoSerializer[RelationElementWrapper, RelationElementProto] {
-  override def serialize(re: RelationElementWrapper): RelationElementProto = {
+  override def serialize(re: RelationElementWrapper): RelationElementProto = ??? /* {
     RelationElementProto.newBuilder
       .setRelationTreeMessageBytes(ByteString.copyFrom(re.a))
       .build
-  }
+  } */
 
-  override def deserialize(proto: RelationElementProto): RelationElementWrapper = {
+  override def deserialize(proto: RelationElementProto): RelationElementWrapper = ??? /* {
     RelationElementWrapper(proto.getRelationTreeMessageBytes.toByteArray)
-  }
+  } */
 }

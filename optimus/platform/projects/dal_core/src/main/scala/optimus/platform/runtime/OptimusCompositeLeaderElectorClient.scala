@@ -17,13 +17,14 @@ import java.util.concurrent.CountDownLatch
 import msjava.base.slr.internal.NotificationPolicies
 import msjava.base.sr.ServiceAttributes.CommonKey
 import msjava.hdom.Document
+import msjava.hdom.Element
 import msjava.msxml.xpath.MSXPathUtils
 import msjava.slf4jutils.scalalog.getLogger
 import msjava.zkapi.internal.ZkaContext
-import msjava.zkapi.ZkaDirectoryWatcher
+/* import msjava.zkapi.ZkaDirectoryWatcher
 import msjava.zkapi.leader.LeaderSubscriber
 import msjava.zkapi.leader.LeaderSubscriberListener
-import msjava.zkapi.leader.internal.ZkaLeaderSubscriber
+import msjava.zkapi.leader.internal.ZkaLeaderSubscriber */
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
@@ -169,9 +170,9 @@ class OptimusCompositeLeaderElectorClient protected (
           val pointerName: String =
             if (ci_hot) OptimusCiSplitZkClientConstants.HotPointerName
             else OptimusCiSplitZkClientConstants.ColdPointerName
-          val compiledxPath = MSXPathUtils.compile(s"${OptimusCiSplitZkClientConstants.DsiNode}/$pointerName")
-          val elements = zksu.findElements(doc, compiledxPath)
-          val pointer: String = elements.head.getValueAsString
+          // val compiledxPath = MSXPathUtils.compile(s"${OptimusCiSplitZkClientConstants.DsiNode}/$pointerName")
+          val elements: List[Element] = ???
+          val pointer: String = ???
           log.info(s"found pointer: $pointer")
           DalEnv(pointer)
         case Failure(ex) =>
@@ -191,7 +192,7 @@ class OptimusCompositeLeaderElectorClient protected (
   private[this] val ignoreExhaustedBrokers =
     DiagnosticSettings.getBoolProperty("optimus.dsi.ignoreExhaustedBrokers", true)
 
-  private[this] val urlKey = CommonKey.url.name()
+  private[this] val urlKey: String = ???
   private[this] val random = new Random
 
   private[this] val listeners = mutable.Set.empty[LeaderElectorClientListener]
@@ -226,7 +227,7 @@ class OptimusCompositeLeaderElectorClient protected (
 
   private[this] val initCountDownLatch = new CountDownLatch(1)
 
-  private[this] val leaderSubscriberListener = new LeaderSubscriberListener {
+  /* private[this] val leaderSubscriberListener = new LeaderSubscriberListener {
     override def onLeaderUpdate(leaderSubscriber: LeaderSubscriber): Unit = update(leaderSubscriber)
     override def onInitialized(leaderSubscriber: LeaderSubscriber): Unit = update(leaderSubscriber)
     override def onCandidateUpdate(leaderSubscriber: LeaderSubscriber): Unit = update(leaderSubscriber)
@@ -256,7 +257,7 @@ class OptimusCompositeLeaderElectorClient protected (
         log.debug(s"modern ZK mode read brokers: ${readBrokerData.mkString(", ")}")
       }
     }
-  }
+  } */
 
   private[this] var legacyWriteBrokerDataRaw: Option[BrokerData] = None
   private[this] def legacyWriteBrokerData: Option[BrokerData] =
@@ -265,11 +266,7 @@ class OptimusCompositeLeaderElectorClient protected (
 
   private[this] val legacyListener: PathChildrenCacheListener = new PathChildrenCacheListener {
     override def childEvent(client: CuratorFramework, event: PathChildrenCacheEvent): Unit = {
-      val nodes: List[ChildData] = zkaDirectoryWatcher map {
-        _.getCurrentData.asScala.toList
-          .filter(legacyElectionNodeFilter)
-          .sortWith(legacyElectionNodeSorter)
-      } getOrElse Nil
+      val nodes: List[ChildData] = ???
 
       val writer = if (nodes.isEmpty) "" else new String(nodes.head.getData)
       val readers = if (nodes.isEmpty) nodes else nodes.drop(1)
@@ -335,15 +332,15 @@ class OptimusCompositeLeaderElectorClient protected (
 
   private[this] lazy val legacyBrokerBaseNode: String = legacyGetBrokersBaseNode(env.underlying)
 
-  private[this] val (leaderSubscriber, zkaDirectoryWatcher) = {
+  /* private[this] val (leaderSubscriber, zkaDirectoryWatcher) = {
     if (rootContext.exists(modernLePath, "/semaphore/locks") ne null)
       (
         Some(new ZkaLeaderSubscriber(modernLeContext, leaderSubscriberListener, NotificationPolicies.PASS_ALL_POLICY)),
         None)
     else (None, Some(new ZkaDirectoryWatcher(rootContext, legacyBrokerBaseNode, legacyListener)))
-  }
+  } */
 
-  val (zkaDirectoryWatcherTime, _): (Long, Unit) = timed {
+  /* val (zkaDirectoryWatcherTime, _): (Long, Unit) = timed {
     if (
       zkaDirectoryWatcher.isDefined && !ZkUtils.waitZdwForInitialization(
         zkaDirectoryWatcher.get,
@@ -361,31 +358,19 @@ class OptimusCompositeLeaderElectorClient protected (
         s"Timed out on initializing directory watcher for $legacyBrokerBaseNode. " +
           s"Error is fatal, cannot resolve read or write brokers.")
     }
-  }
-  Breadcrumbs.info(
+  } */
+  /* Breadcrumbs.info(
     ChainedID.root,
-    new PropertiesCrumb(_, DalZkCrumbSource, ("DalClientZkaDirectoryWatcher", zkaDirectoryWatcherTime.toString)))
+    new PropertiesCrumb(_, DalZkCrumbSource, ("DalClientZkaDirectoryWatcher", zkaDirectoryWatcherTime.toString))) */
 
-  val (leaderSubscriberTime, _): (Long, Unit) = timed {
-    if (leaderSubscriber.isDefined && !leaderSubscriber.get.waitForInitialization(ZkUtils.watcherTimeout)) {
-      try {
-        leaderSubscriber.foreach(_.close())
-      } catch {
-        case ex: Exception =>
-          log.error("Error closing LeaderSubscriber", ex)
-      }
-      throw new IOException(
-        s"Timed out on initializing subscribers for $modernLePath. " +
-          s"Error is fatal, cannot resolve read or write brokers.")
-    }
-  }
+  val (leaderSubscriberTime, _): (Long, Unit) = ???
   Breadcrumbs.info(
     ChainedID.root,
     new PropertiesCrumb(_, DalZkCrumbSource, ("DalClientLeaderSubscriber", leaderSubscriberTime.toString)))
 
   override def close(): Unit = {
-    zkaDirectoryWatcher foreach { _.close() }
-    leaderSubscriber foreach { _.close() }
+    // zkaDirectoryWatcher foreach { _.close() }
+    // leaderSubscriber foreach { _.close() }
   }
 
   private def obtainBiasedRandomBrokerFromList(brokersList: List[BrokerData]): BrokerData = {
@@ -493,7 +478,7 @@ class OptimusCompositeLeaderElectorClient protected (
 
   def getBrokerNodesAndData: List[(String, String)] = {
     try {
-      zkaDirectoryWatcher map { zkaDirWatcher =>
+      /* zkaDirectoryWatcher map { zkaDirWatcher =>
         zkaDirWatcher.getCurrentData.asScala.toList
           .filter(legacyElectionNodeFilter)
           .sortWith(legacyElectionNodeSorter) map { node =>
@@ -506,7 +491,8 @@ class OptimusCompositeLeaderElectorClient protected (
             (s"${rootContext.getRootNode}${modernLeContext.getBasePath}", node.asScala.getOrElse(urlKey, "").toString))
           allNodesAndData
         } getOrElse Nil
-      }
+      } */
+      Nil
     } catch {
       case e: Exception =>
         OptimusCompositeLeaderElectorClient.log

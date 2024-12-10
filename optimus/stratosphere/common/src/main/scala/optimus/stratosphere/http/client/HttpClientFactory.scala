@@ -16,8 +16,8 @@ import akka.http.scaladsl.model.HttpRequest
 import akka.http.scaladsl.model.HttpResponse
 import akka.http.scaladsl.model.Uri
 import akka.http.scaladsl.settings.ConnectionPoolSettings
-import optimus.security.akka.http.client.SimpleNoAuthenticationHttpClient
-import optimus.security.akka.http.common.AkkaConfigurations
+/* import optimus.security.akka.http.client.SimpleNoAuthenticationHttpClient
+import optimus.security.akka.http.common.AkkaConfigurations */
 import optimus.stratosphere.config.StratoWorkspaceCommon
 
 import java.util.concurrent.TimeUnit
@@ -77,7 +77,7 @@ class SimpleNoAuthenticationRestClient(
     jTimeout: Duration
 )(protected implicit val actorSystem: ActorSystem)
     extends RestClient {
-  private val innerClient = new SimpleNoAuthenticationHttpClient(rootUri)
+  // private val innerClient = new SimpleNoAuthenticationHttpClient(rootUri)
   protected val timeout: FiniteDuration = FiniteDuration.apply(jTimeout.toMillis, TimeUnit.MILLISECONDS)
 
   def hostName: String = rootUri.authority.host.toString()
@@ -85,17 +85,17 @@ class SimpleNoAuthenticationRestClient(
   override def request(
       pathQueryFragmentOrUri: String,
       modifier: HttpRequest => HttpRequest,
-      settingsOverride: Option[ConnectionPoolSettings]): Future[HttpResponse] =
-    innerClient.request(pathQueryFragmentOrUri, modifier, settingsOverride)
+      settingsOverride: Option[ConnectionPoolSettings]): Future[HttpResponse] = ???
+    // innerClient.request(pathQueryFragmentOrUri, modifier, settingsOverride)
 }
 
 class DefaultHttpClientFactory(stratoWorkspace: StratoWorkspaceCommon) extends HttpClientFactoryApi {
   // The class loader matters because of the plugin architecture of IntelliJ!
-  implicit val actorSystem: ActorSystem =
-    ActorSystem("http-clients", AkkaConfigurations.BasicClientConfiguration, getClass.getClassLoader)
+  /*  implicit val actorSystem: ActorSystem =
+    ActorSystem("http-clients", AkkaConfigurations.BasicClientConfiguration, getClass.getClassLoader) */
 
   stratoWorkspace.log.debug("Using DefaultHttpClientFactory")
 
-  def createClient(rootUri: Uri, targetSystemType: String, timeout: Duration, sendCrumbs: Boolean = false): RestClient =
-    new SimpleNoAuthenticationRestClient(stratoWorkspace, rootUri, timeout)
+  def createClient(rootUri: Uri, targetSystemType: String, timeout: Duration, sendCrumbs: Boolean = false): RestClient = ???
+    // new SimpleNoAuthenticationRestClient(stratoWorkspace, rootUri, timeout)
 }

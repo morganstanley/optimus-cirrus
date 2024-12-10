@@ -15,10 +15,10 @@ import java.io.ByteArrayInputStream
 
 import msjava.hdom.Document
 import msjava.hdom.Element
-import msjava.hdom.Node
+// import msjava.hdom.Node
 import msjava.hdom.input.SAXBuilder
-import msjava.hdom.xpath.HDOMXPathUtils
-import msjava.msxml.xpath.MSXPathUtils
+/* import msjava.hdom.xpath.HDOMXPathUtils
+import msjava.msxml.xpath.MSXPathUtils */
 import optimus.platform.dsi.bitemporal.DSISpecificError
 import optimus.platform.runtime.ZkUtils
 import org.apache.curator.framework.CuratorFramework
@@ -45,25 +45,25 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
       printFunc(documentToString(hdom.get))
   }
 
-  def printZkConfig(zkPath: String, xPath: String): Unit = {
+  def printZkConfig(zkPath: String, xPath: String): Unit = ??? /* {
     val hdom = readFromZooKeeper(zkPath)
     val compiledxPath = MSXPathUtils.compile(xPath)
     if (hdom.isSuccess) {
       val elements = findElements(hdom.get, compiledxPath)
       elements.foreach(e => printFunc(elementToString(e)))
     }
-  }
+  } */
 
   //
   // FIND NODE(s)
   //
-  def findNode(zkPath: String, xPath: String, nodeName: String): Try[List[String]] = {
+  def findNode(zkPath: String, xPath: String, nodeName: String): Try[List[String]] = ??? /* {
     readFromZooKeeper(zkPath) map { hdom =>
       (findElements(hdom, MSXPathUtils.compile(s"$xPath/$nodeName"), None), hdom)
     } map { case (s, _) =>
       s.map(_.getNodeValue)
     }
-  }
+  } */
 
   //
   // ADD NEW NODE
@@ -73,7 +73,7 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
       xPath: String,
       nodeName: String,
       nodeData: String,
-      skipWriteIfPresent: Boolean = false): Try[Unit] = {
+      skipWriteIfPresent: Boolean = false): Try[Unit] = ??? /* {
     readFromZooKeeper(zkPath) map { hdom =>
       (findElements(hdom, MSXPathUtils.compile(xPath + "/" + nodeName), Some(nodeData)), hdom)
     } map {
@@ -89,9 +89,9 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
         writeToZooKeeper(zkPath, hdom).get
         printFunc(s"Node <${nodeName}>${nodeData}</${nodeName}> successfully added.")
     }
-  }
+  } */
 
-  def addNodes(zkPath: String, xPath: String, nodeData: List[Element]): Try[Unit] = {
+  def addNodes(zkPath: String, xPath: String, nodeData: List[Element]): Try[Unit] = ??? /* {
     val nodeName = xPath.split("/").last
     readFromZooKeeper(zkPath) map { hdom =>
       (findElements(hdom, MSXPathUtils.compile(xPath), None), hdom)
@@ -116,12 +116,12 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
           printFunc(s"Node <${nodeName}>${nodeData}</${nodeName}> successfully added.")
         }
     }
-  }
+  } */
 
   //
   // DELETE NODE
   //
-  def deleteNode(zkPath: String, xPath: String, targetValue: Option[String] = None): Try[Unit] = {
+  def deleteNode(zkPath: String, xPath: String, targetValue: Option[String] = None): Try[Unit] = ??? /* {
     readFromZooKeeper(zkPath) map { hdom =>
       (findElements(hdom, MSXPathUtils.compile(xPath), targetValue), hdom)
     } map {
@@ -133,7 +133,7 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
         writeToZooKeeper(zkPath, hdom).get
         printFunc(s"${s.size} node(s) successfully deleted.")
     }
-  }
+  } */
 
   //
   // CHANGE NODE VALUE
@@ -143,7 +143,7 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
       xPath: String,
       newValue: String,
       targetValue: Option[String] = None,
-      createNew: Boolean = false): Try[Unit] = {
+      createNew: Boolean = false): Try[Unit] = ??? /* {
     readFromZooKeeper(zkPath) map { hdom =>
       (findElements(hdom, MSXPathUtils.compile(xPath), targetValue), hdom)
     } map {
@@ -174,7 +174,7 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
         throw new DSISpecificError(
           s"The xpath ${xPath} with value ${targetValue} refers to more than one element. Please check xpath and try again.")
     }
-  }
+  } */
 
   //
   // PRIVATE HELPERS
@@ -205,7 +205,7 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
     }
   }
 
-  def copyXPath(srcEnv: String, dstEnv: String, zkRootPath: String, xPath: String) = {
+  def copyXPath(srcEnv: String, dstEnv: String, zkRootPath: String, xPath: String) = ??? /* {
     val zkPath = zkRootPath + "/" + srcEnv
     val doc = readFromZooKeeper(zkPath)
     if (doc.isSuccess) {
@@ -236,5 +236,5 @@ class ZkStoreUtils(private val curator: CuratorFramework, printFunc: String => U
         changeNodeValue(zkDstPath, xPath, elem.getText, None, true)
     } else
       printFunc(s"The source environment [${srcEnv}] is not valid. Please try again.")
-  }
+  } */
 }

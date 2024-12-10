@@ -27,12 +27,11 @@ import java.time.ZonedDateTime
 import optimus.utils.datetime._
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.dsi.bitemporal.proto.Dsi.FieldProto
-import optimus.platform.dsi.bitemporal.proto.Dsi.PeriodProto
 import optimus.platform.dsi.bitemporal.DateTimeSerialization
 import optimus.platform.storable._
 
 import java.time.ZoneOffset
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.core.CoreHelpers
 
 object ProtoPickleSerializer {
@@ -49,7 +48,7 @@ object ProtoPickleSerializer {
   // arguments depending on the calling context:
   //     serialize normal values <=> associatedKey == None
   //     serialize Map values    <=> associatedKey == the associated key of that value
-  def propertiesToProto(o: Any, associatedKey: Option[String] = None): FieldProto = {
+  def propertiesToProto(o: Any, associatedKey: Option[String] = None): FieldProto = ??? /* {
     val builder = FieldProto.newBuilder
     if (associatedKey.isDefined) {
       builder.setAssociatedKey(associatedKey.get)
@@ -139,11 +138,11 @@ object ProtoPickleSerializer {
     }
 
     builder.build
-  }
+  } */
 
   private final case class MapEntry(key: String, value: Any)
 
-  def protoToProperties(proto: FieldProto): Any = {
+  def protoToProperties(proto: FieldProto): Any = ??? /* {
     val value = proto.getType match {
       case FieldProto.Type.INT     => proto.getIntValue
       case FieldProto.Type.STRING  => proto.getStringValue
@@ -224,5 +223,5 @@ object ProtoPickleSerializer {
       MapEntry(proto.getAssociatedKey, value)
     else
       value
-  }
+  } */
 }

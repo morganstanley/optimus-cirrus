@@ -18,7 +18,7 @@ import optimus.platform.dsi.bitemporal.proto.Dsi.RolesetProto
 import scala.jdk.CollectionConverters._
 
 trait RolesetSerialization extends ProtoSerialization {
-  final def toProto(rolesetMode: RolesetMode): RolesetModeProto = {
+  final def toProto(rolesetMode: RolesetMode): RolesetModeProto = ??? /* {
     val builder = RolesetModeProto.newBuilder()
     rolesetMode match {
       case RolesetMode.AllRoles              => builder.setType(RolesetModeProto.Type.ALL_ROLES)
@@ -27,21 +27,21 @@ trait RolesetSerialization extends ProtoSerialization {
         builder.setType(RolesetModeProto.Type.SPECIFIC_ROLESET).setSpecificRoleset(toProto(rs))
     }
     builder.build()
-  }
+  } */
 
-  final def fromProto(rolesetModeProto: RolesetModeProto): RolesetMode = rolesetModeProto.getType match {
+  final def fromProto(rolesetModeProto: RolesetModeProto): RolesetMode = ??? /* rolesetModeProto.getType match {
     case RolesetModeProto.Type.ALL_ROLES           => RolesetMode.AllRoles
     case RolesetModeProto.Type.LEGACY_ENTITLEMENTS => RolesetMode.UseLegacyEntitlements
     case RolesetModeProto.Type.SPECIFIC_ROLESET =>
       val roleset: Set[String] = fromProto(rolesetModeProto.getSpecificRoleset)
       RolesetMode.SpecificRoleset(roleset)
-  }
+  } */
 
-  final def fromProto(proto: RolesetProto): Set[String] = {
+  final def fromProto(proto: RolesetProto): Set[String] = ??? /* {
     proto.getRoleIdList.asScala.toSet
-  }
+  } */
 
-  final def toProto(roleSet: Set[String]): RolesetProto = {
+  final def toProto(roleSet: Set[String]): RolesetProto = ??? /* {
     RolesetProto.newBuilder().addAllRoleId(roleSet.asJava).build()
-  }
+  } */
 }

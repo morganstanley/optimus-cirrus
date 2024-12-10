@@ -35,7 +35,7 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
     this.host = unresolvedIsa.getHostName();
   }
 
-  @Override
+  
   public synchronized InetSocketAddress getInetSocketAddress() {
     ensureResolveAttempted();
     return lastMaybeResolvedIsa;
@@ -46,13 +46,13 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
    *
    * @return true if the address and port are valid.
    */
-  @Override
+  
   public synchronized boolean isValid() {
     ensureResolveAttempted();
     return !lastMaybeResolvedIsa.isUnresolved();
   }
 
-  @Override
+  
   public int getPort() {
     return unresolvedIsa.getPort();
   }
@@ -63,7 +63,7 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
    *
    * @return the hostname, or "any" for all local addresses.
    */
-  @Override
+  
   public String getHost() {
     return host;
   }
@@ -73,18 +73,18 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
    *
    * @return the InetAddress
    */
-  @Override
+  
   public synchronized InetAddress getInetAddress() {
     ensureResolveAttempted();
     return lastMaybeResolvedIsa.getAddress();
   }
 
-  @Override
+  
   public int hashCode() {
     return Objects.hash(host, getPort());
   }
 
-  @Override
+  
   public synchronized String toString() {
     if (lastMaybeResolvedIsa == null) {
       return host + ":" + getPort();
@@ -95,12 +95,12 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
     }
   }
 
-  @Override
+  
   public String getAddressString() {
     return host + ":" + getPort();
   }
 
-  @Override
+  
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null) return false;
@@ -126,7 +126,7 @@ public class AlwaysResolveMSNetInetAddressImpl implements MSNetInetAddressImpl {
   }
 
   // resolve is called by MSNet before each retry, from MSNetTCPConnection.retryHandler
-  @Override
+  
   public synchronized void resolve() {
     lastMaybeResolvedIsa =
         new InetSocketAddress(unresolvedIsa.getHostName(), unresolvedIsa.getPort());

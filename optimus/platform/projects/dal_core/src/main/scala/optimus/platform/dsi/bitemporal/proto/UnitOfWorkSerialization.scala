@@ -45,9 +45,9 @@ object UnitOfWorkSerialization extends UnitOfWorkSerialization {
   def prepareUnitOfWorkMessageB2B(
       actions: Seq[TxnAction],
       txTime: Instant,
-      excludePrevBusEvent: Boolean): UOWNotificationProto = {
+      excludePrevBusEvent: Boolean): UOWNotificationProto = ??? /* {
     toProto(prepareUnitOfWorkMessageB2BUOWNotification(actions, txTime, excludePrevBusEvent))
-  }
+  } */
 
   private[optimus] def prepareUnitOfWorkMessageB2BUOWNotification(
       actions: Seq[TxnAction],
@@ -85,9 +85,9 @@ object UnitOfWorkSerialization extends UnitOfWorkSerialization {
       actions: Seq[TxnAction],
       txTime: Instant,
       excludePrevBusEvent: Boolean,
-      numPartitionKeys: Option[Int]): PartitionedUOWNotificationProto = {
+      numPartitionKeys: Option[Int]): PartitionedUOWNotificationProto = ??? /* {
     toProto(preparePartitionedUOWNotification(actions, txTime, excludePrevBusEvent, numPartitionKeys))
-  }
+  } */
 
   private[optimus] def preparePartitionedUOWNotification(
       actions: Seq[TxnAction],
@@ -113,43 +113,43 @@ object UnitOfWorkSerialization extends UnitOfWorkSerialization {
 object UOWApplicationEventSerializer
     extends UnitOfWorkSerialization
     with ProtoSerializer[UOWApplicationEvent, UOWApplicationEventProto] {
-  override def serialize(appEvent: UOWApplicationEvent): UOWApplicationEventProto = {
+  override def serialize(appEvent: UOWApplicationEvent): UOWApplicationEventProto = ??? /* {
     UOWApplicationEventProto
       .newBuilder()
       .setEventRef(toProto(appEvent.id))
       .addAllBeRefs((appEvent.beRefs.map(beRef => toProto(beRef))).asJava)
       .build()
-  }
+  } */
 
-  override def deserialize(proto: UOWApplicationEventProto): UOWApplicationEvent = {
+  override def deserialize(proto: UOWApplicationEventProto): UOWApplicationEvent = ??? /* {
     val beRefs = proto.getBeRefsList().asScala.map(beproto => fromProto(beproto)).toSeq
     UOWApplicationEvent(fromProto(proto.getEventRef()), beRefs)
-  }
+  } */
 }
 
 object UOWNotificationSerializer
     extends UnitOfWorkSerialization
     with ProtoSerializer[UOWNotification, UOWNotificationProto] {
-  override def serialize(uowNotification: UOWNotification): UOWNotificationProto = {
+  override def serialize(uowNotification: UOWNotification): UOWNotificationProto = ??? /* {
     UOWNotificationProto
       .newBuilder()
       .setTxTime(toProto(uowNotification.tt))
       .addAllAppEvents((uowNotification.appEvents.map(ae => toProto(ae))).asJava)
       .build()
-  }
+  } */
 
-  override def deserialize(proto: UOWNotificationProto): UOWNotification = {
+  override def deserialize(proto: UOWNotificationProto): UOWNotification = ??? /* {
     val appEventProtos = proto.getAppEventsList().asScala
     val uowAppEvents = appEventProtos.map(proto => fromProto(proto)).toSeq
     val tt = fromProto(proto.getTxTime())
     UOWNotification(uowAppEvents, tt)
-  }
+  } */
 }
 
 object PartitionedUOWNotificationSerializer
     extends UnitOfWorkSerialization
     with ProtoSerializer[PartitionedUOWNotification, PartitionedUOWNotificationProto] {
-  override def serialize(partitionedUowNotification: PartitionedUOWNotification): PartitionedUOWNotificationProto = {
+  override def serialize(partitionedUowNotification: PartitionedUOWNotification): PartitionedUOWNotificationProto = ??? /* {
     val builder = PartitionedUOWNotificationProto
       .newBuilder()
       .addAllBeRefs((partitionedUowNotification.beRefs.map(be => toProto(be)).asJava))
@@ -158,29 +158,29 @@ object PartitionedUOWNotificationSerializer
       builder.setNumPartitionKeys(key)
     }
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: PartitionedUOWNotificationProto): PartitionedUOWNotification = {
+  override def deserialize(proto: PartitionedUOWNotificationProto): PartitionedUOWNotification = ??? /* {
     val beRefProtos = proto.getBeRefsList().asScala
     val beRefs = beRefProtos.map(proto => fromProto(proto)).toSeq
     val tt = fromProto(proto.getTxTime())
     val numPartitionKeys =
       if (proto.hasNumPartitionKeys) Some(proto.getNumPartitionKeys) else None
     PartitionedUOWNotification(beRefs, tt, numPartitionKeys)
-  }
+  } */
 }
 
 object PartitionedUOWNotificationKeyInfoSerializer
     extends ProtoSerializer[PartitionedUOWNotificationKey, PartitionedUOWNotificationKeyProto] {
-  override def serialize(notificationKey: PartitionedUOWNotificationKey): PartitionedUOWNotificationKeyProto = {
+  override def serialize(notificationKey: PartitionedUOWNotificationKey): PartitionedUOWNotificationKeyProto = ??? /* {
     PartitionedUOWNotificationKeyProto
       .newBuilder()
       .setClassName(notificationKey.className)
       .setKeyName(notificationKey.keyName)
       .setKeyValue(notificationKey.keyValue)
       .build()
-  }
+  } */
 
   override def deserialize(proto: PartitionedUOWNotificationKeyProto): PartitionedUOWNotificationKey =
-    PartitionedUOWNotificationKey(proto.getClassName(), proto.getKeyName(), proto.getKeyValue())
+    ??? // PartitionedUOWNotificationKey(proto.getClassName(), proto.getKeyName(), proto.getKeyValue())
 }

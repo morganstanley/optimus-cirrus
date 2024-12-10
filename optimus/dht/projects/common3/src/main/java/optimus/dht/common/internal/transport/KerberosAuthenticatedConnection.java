@@ -9,6 +9,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/*
 package optimus.dht.common.internal.transport;
 
 import optimus.dht.common.util.StringTool;
@@ -43,3 +44,4 @@ public class KerberosAuthenticatedConnection implements AuthenticatedConnection 
         + "]";
   }
 }
+*/

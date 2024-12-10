@@ -40,7 +40,7 @@ final case class PrcResponseWrapper(
     responseProto: PrcSingleKeyResponseProto,
     commandIndices: Seq[Int])
     extends DalServiceResponse {
-  override def results: Seq[ResultProto] = responseProto.getResultsList.asScala
+  override def results: Seq[ResultProto] = ??? // responseProto.getResultsList.asScala
   override def establishSessionResult: Option[Dsi.EstablishSessionResultProto] = None
   override def timings: Option[Dsi.TimingsProto] = None
 }

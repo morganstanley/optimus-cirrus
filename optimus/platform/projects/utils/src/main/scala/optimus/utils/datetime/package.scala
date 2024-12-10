@@ -193,7 +193,7 @@ package object datetime {
 
   object JSR310Conversions {
 
-    implicit class ConvertibleInstant(val instant: Instant) extends AnyVal {
+    /* implicit class ConvertibleInstant(val instant: Instant) extends AnyVal {
       def toEpochNano = toJSR310.toEpochNano
       def toJSR310: javax.time.Instant = javax.time.Instant.ofEpochSecond(instant.getEpochSecond, instant.getNano)
     }
@@ -236,7 +236,7 @@ package object datetime {
           zdt.getNanoOfSecond,
           ZoneId.of(zdt.getZone.getID, ZoneId.SHORT_IDS)
         )
-    }
+    } */
 
   }
 

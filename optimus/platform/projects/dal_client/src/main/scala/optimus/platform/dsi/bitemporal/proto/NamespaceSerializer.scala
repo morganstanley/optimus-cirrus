@@ -19,14 +19,14 @@ trait NamespaceSerialization extends ProtoSerialization {
 }
 
 object NamespaceSerializer extends ProtoSerializer[NamespaceWrapper, NamespaceProto] {
-  override def serialize(n: NamespaceWrapper): NamespaceProto = {
+  override def serialize(n: NamespaceWrapper): NamespaceProto = ??? /* {
     NamespaceProto.newBuilder
       .setFqPackageName(n.namespace)
       .setIncludesSubpackage(n.includesSubPackage)
       .build
-  }
+  } */
 
-  override def deserialize(proto: NamespaceProto): NamespaceWrapper = {
+  override def deserialize(proto: NamespaceProto): NamespaceWrapper = ??? /* {
     NamespaceWrapper(proto.getFqPackageName, proto.getIncludesSubpackage)
-  }
+  } */
 }

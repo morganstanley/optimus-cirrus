@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import msjava.msnet._
 import msjava.msnet.internal.MSNetProtocolConnectionConfigurationSupport
-import msjava.msnet.utils.MSNetConfiguration
+// import msjava.msnet.utils.MSNetConfiguration
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.ChainedID
 import optimus.platform.dal.ClientContext
@@ -151,7 +151,7 @@ object DALProtoClient {
         hostPort: String,
         kerberized: Boolean,
         clientName: String,
-        secureTransport: Boolean): MSNetProtocolConnectionConfigurationSupport = {
+        secureTransport: Boolean): MSNetProtocolConnectionConfigurationSupport = ??? /* {
       if (DalSSLConfig.enabledClientSSL) {
         MSNetConfiguration.setDefaultMSNetTCPSocketFactory(new MSNetSSLSocketFactory())
       }
@@ -174,7 +174,7 @@ object DALProtoClient {
       }
 
       c
-    }
+    } */
 
     def createTcpRequestSender(
         client: DalBrokerClient,
@@ -199,7 +199,7 @@ object DALProtoClient {
 
     // approximate value: will not start waiting for another item if exceeded (but will not interrupt a wait either)
     // TODO (OPTIMUS-11205): Waiting on msnet feature addition.
-    val maxMessageSize: Int = MSNetConfiguration.getDefaultMaxMessageSize()
+    val maxMessageSize: Int = ??? /* MSNetConfiguration.getDefaultMaxMessageSize() */
 
     // enableSyncOutOfOrderReception will take effect only in sync-mode( async=false )
     val enableSyncOutOfOrderReception = SupportedFeatures.enableSyncOutOfOrderReception

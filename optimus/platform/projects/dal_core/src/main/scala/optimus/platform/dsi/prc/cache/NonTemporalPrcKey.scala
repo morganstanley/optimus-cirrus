@@ -43,15 +43,15 @@ private[optimus] final case class NonTemporalPrcKey(
 
 private[optimus] object NonTemporalPrcKey {
   def apply(normalizedQuery: NormalizedCacheableQuery, context: Context): NonTemporalPrcKey =
-    apply(normalizedQuery, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
+    ??? // apply(normalizedQuery, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
 
   def apply(query: Query, context: Context, version: Int): NonTemporalPrcKey =
     apply(NormalizedCacheableQuery(query), context, version)
 
   def apply(normalizedPrcKeyComponent: NormalizedPrcKeyComponent, context: Context): NonTemporalPrcKey =
-    apply(normalizedPrcKeyComponent, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
+    ??? // apply(normalizedPrcKeyComponent, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
 
   def apply(query: Query, context: Context): NonTemporalPrcKey =
-    apply(query, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
+    ??? // apply(query, context, NonTemporalPrcKeyProto.Version.NORMALIZED_QUERY_PROTO.getNumber)
 
 }

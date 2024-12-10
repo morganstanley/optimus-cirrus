@@ -26,7 +26,7 @@ import optimus.buildtool.cache.dht.LocalDhtServer
 import optimus.buildtool.cache.silverking.SilverKingConfig
 import optimus.buildtool.cache.silverking.SilverKingStore
 import optimus.buildtool.utils.CompilePathBuilder
-import optimus.dht.client.api.DHTClientBuilder
+// import optimus.dht.client.api.DHTClientBuilder
 import optimus.dht.client.api.registry.StaticRegistryObserver
 import optimus.platform._
 import optimus.stratosphere.config.StratoWorkspace
@@ -91,7 +91,7 @@ import optimus.stratosphere.config.StratoWorkspace
     val forcedReadThroughStores: Set[DHTStore] = cmdLine.crossRegionReadThroughDHTLocations.apar
       .withFilter(!_.equalsIgnoreCase(NoneArg))
       .map { location =>
-        new DHTStore(pathBuilder, DHTStore.zkClusterType(location), version, cacheMode, DHTStore.ZkBuilder(location))
+        new DHTStore(pathBuilder, DHTStore.zkClusterType(location), version, cacheMode/* , DHTStore.ZkBuilder(location) */)
       }
       .toSet
     if (forcedReadThroughStores.nonEmpty) {
@@ -111,7 +111,7 @@ import optimus.stratosphere.config.StratoWorkspace
       version: String = defaultVersion,
       silverKing: String = cmdLine.silverKing,
       offlinePuts: Boolean = true,
-  ): RemoteArtifactCache = {
+  ): RemoteArtifactCache = ??? /* {
 
     val store = (silverKing, cmdLine.dhtRemoteStore) match {
       case (NoneArg, NoneArg) =>
@@ -161,7 +161,7 @@ import optimus.stratosphere.config.StratoWorkspace
         )
     }
     getCrossRegionPopulatingCache(store, cacheMode, version)
-  }
+  } */
 
 }
 

@@ -27,7 +27,7 @@ import optimus.platform.dsi.bitemporal.proto.ContextSerializer
 import optimus.platform.dsi.bitemporal.proto.Dsi.ContextProto
 import optimus.platform.dsi.bitemporal.proto.Prc.NonTemporalPrcKeyProto
 import optimus.platform.dsi.bitemporal.proto.Prc.NormalizedCacheableQueryProto
-import optimus.platform.dsi.bitemporal.proto.Prc.NormalizedCacheableQueryProto.QueryType
+// import optimus.platform.dsi.bitemporal.proto.Prc.NormalizedCacheableQueryProto.QueryType
 import optimus.platform.dsi.bitemporal.proto.Prc.NormalizedNonCacheableCommandProto
 
 import optimus.platform.dsi.bitemporal.proto.ProtoSerializer
@@ -39,7 +39,7 @@ private[optimus] trait NonTemporalPrcKeySerialization {
 }
 
 private[optimus] object NonTemporalPrcKeySerializer extends ProtoSerializer[NonTemporalPrcKey, NonTemporalPrcKeyProto] {
-  override def serialize(value: NonTemporalPrcKey): NonTemporalPrcKeyProto = {
+  override def serialize(value: NonTemporalPrcKey): NonTemporalPrcKeyProto = ??? /* {
     val contextProto: ContextProto = value.context.contextType match {
       case DefaultContextType | UniqueContextType => ContextSerializer.serialize(value.context)
       case _ =>
@@ -58,9 +58,9 @@ private[optimus] object NonTemporalPrcKeySerializer extends ProtoSerializer[NonT
           NormalizedNonCacheableCommandProto.newBuilder().setCommand(CommandSerializer.serialize(c.command)).build())
     }
     builder.build()
-  }
+  } */
 
-  override def deserialize(proto: NonTemporalPrcKeyProto): NonTemporalPrcKey = {
+  override def deserialize(proto: NonTemporalPrcKeyProto): NonTemporalPrcKey = ??? /* {
     require(
       proto.hasQuery ^ proto.hasNonCacheableCommand,
       "The nontemporal prc key must contain either a cacheable or a noncacheable component")
@@ -78,12 +78,12 @@ private[optimus] object NonTemporalPrcKeySerializer extends ProtoSerializer[NonT
     }
 
     NonTemporalPrcKey(normalizedKeyComponent, context, version)
-  }
+  } */
 }
 
 object NormalizedCacheableQuerySerialzer
     extends ProtoSerializer[NormalizedCacheableQuery, NormalizedCacheableQueryProto] {
-  override def deserialize(proto: NormalizedCacheableQueryProto): NormalizedCacheableQuery = {
+  override def deserialize(proto: NormalizedCacheableQueryProto): NormalizedCacheableQuery = ??? /* {
     proto.getQueryType match {
       case NormalizedCacheableQueryProto.QueryType.ENTITY_REFERENCE =>
         NormalizedEntityReferenceQuery(new RefHolder(proto.getEntityReference.toByteArray))
@@ -97,9 +97,9 @@ object NormalizedCacheableQuerySerialzer
       case NormalizedCacheableQueryProto.QueryType.UNKNOWN =>
         throw new IllegalArgumentException("Cannot deserialize unknown query type")
     }
-  }
+  } */
 
-  override def serialize(query: NormalizedCacheableQuery): NormalizedCacheableQueryProto = {
+  override def serialize(query: NormalizedCacheableQuery): NormalizedCacheableQueryProto = ??? /* {
     val builder = NormalizedCacheableQueryProto.newBuilder
     query match {
       case NormalizedEntityReferenceQuery(entityRefBytes) =>
@@ -112,5 +112,5 @@ object NormalizedCacheableQuerySerialzer
           .setEventReference(BusinessEventReferenceSerializer.serialize(ref))
     }
     builder.build()
-  }
+  } */
 }

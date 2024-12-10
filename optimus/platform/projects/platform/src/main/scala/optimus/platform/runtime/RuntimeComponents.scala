@@ -61,9 +61,9 @@ object RuntimeComponents {
     DALEntityResolver(dsi)
 
   /** Extracts [[InitialRuntime.initialTime]] from a scenario stack */
-  private[optimus] def getInitialRuntimeInitialTime(ss: ScenarioStack): Instant = {
+  private[optimus] def getInitialRuntimeInitialTime(ss: ScenarioStack): Instant = ??? /* {
     ss.getNode(InitialRuntime.initialTime.key).get
-  }
+  } */
 
   class WithConstantTime(rc: RuntimeConfiguration, t: Instant) extends RuntimeComponents(rc) {
     override protected[this] final def timeLookup(resolver: EntityResolver): Instant = t

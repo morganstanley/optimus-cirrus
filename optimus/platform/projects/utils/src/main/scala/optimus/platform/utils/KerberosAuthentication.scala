@@ -13,7 +13,7 @@ package optimus.platform.utils
 
 import javax.security.auth.login.AppConfigurationEntry
 import javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag
-import msjava.kerberos.auth.MSKerberosConfiguration
+// import msjava.kerberos.auth.MSKerberosConfiguration
 
 import scala.jdk.CollectionConverters._
 
@@ -26,14 +26,14 @@ trait KerberosAuthentication {
   }
 
   protected def setupKerberosCredentials(clientNames: List[String] = List("KafkaClient", "Client")): Unit = {
-    if (isKerberized) {
+    /* if (isKerberized) {
       MSKerberosConfiguration.setClientConfiguration()
       clientNames.foreach(clientName => registerAppConfigurationEntryFor(clientName))
-    }
+    } */
   }
 
   private def registerAppConfigurationEntryFor(clientName: String): Unit = {
-    MSKerberosConfiguration.registerAppConfigurationEntry(
+    /* MSKerberosConfiguration.registerAppConfigurationEntry(
       clientName,
       (_: String) =>
         Array(
@@ -48,6 +48,6 @@ trait KerberosAuthentication {
             ).asJava
           )
         )
-    )
+    ) */
   }
 }

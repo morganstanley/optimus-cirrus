@@ -41,7 +41,7 @@ object TemporalSurfaceMatcherDeserializer
     EntityInfoRegistry.getCompanion(fqn).asInstanceOf[EntityCompanionBase[_]]
   }
 
-  private[this] def allOrNoneMatcherRequirements(proto: TemporalSurfaceMatcherProto): Unit = {
+  private[this] def allOrNoneMatcherRequirements(proto: TemporalSurfaceMatcherProto): Unit = ??? /* {
     require(proto.getFqnsCount == 0, s"Expected 0 FQNs for ALL matcher but got ${proto.getFqnsList}")
     require(proto.getNamespacesCount == 0, s"Expected 0 Namespaces for ALL matcher but got ${proto.getNamespacesList}")
     require(
@@ -50,7 +50,7 @@ object TemporalSurfaceMatcherDeserializer
     require(
       proto.getListsOfRelationElementsCount == 0,
       s"Expected 0 ListOfRelationalElements for FOR_CLASS matcher but got ${proto.getListsOfRelationElementsList}")
-  }
+  } */
 
   private[this] def getAllTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {
     allOrNoneMatcherRequirements(proto)
@@ -62,7 +62,7 @@ object TemporalSurfaceMatcherDeserializer
     TemporalSurfaceMatchers.none
   }
 
-  private[this] def getForClassTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {
+  private[this] def getForClassTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = ??? /* {
     require(
       proto.getNamespacesCount == 0,
       s"Expected 0 Namespaces for FOR_CLASS matcher but got ${proto.getNamespacesList}")
@@ -78,9 +78,9 @@ object TemporalSurfaceMatcherDeserializer
           getEcb(fqn.getFqClassName)
         }
         .filter(_ ne null): _*)
-  }
+  } */
 
-  private[this] def getForPackageTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {
+  private[this] def getForPackageTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = ??? /* {
     require(proto.getFqnsCount == 0, s"Expected 0 FQNs for FOR_PACKAGE matcher but got ${proto.getFqnsList}")
     require(
       proto.getEntityInfosCount == 0,
@@ -91,9 +91,9 @@ object TemporalSurfaceMatcherDeserializer
     TemporalSurfaceMatchers.forQuery(proto.getNamespacesList.asScala.map(fromProto(_)).map { n: NamespaceWrapper =>
       from(Namespace(n.namespace, n.includesSubPackage))
     }: _*)
-  }
+  } */
 
-  private[this] def getForPriqlTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {
+  private[this] def getForPriqlTemporalSurfaceMatcher(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = ??? /* {
     require(proto.getFqnsCount == 0, s"Expected 0 FQNs for ALL matcher but got ${proto.getFqnsList}")
     require(proto.getNamespacesCount == 0, s"Expected 0 Namespaces for ALL matcher but got ${proto.getNamespacesList}")
     require(
@@ -113,9 +113,9 @@ object TemporalSurfaceMatcherDeserializer
             })
       }
     QueryBasedTemporalSurfaceMatchers.buildFromReactiveQueryProcessors(x)
-  }
+  } */
 
-  override def deserialize(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = {
+  override def deserialize(proto: TemporalSurfaceMatcherProto): TemporalSurfaceMatcher = ??? /* {
     proto.getType match {
       case TemporalSurfaceMatcherProto.Type.ALL         => getAllTemporalSurfaceMatcher(proto)
       case TemporalSurfaceMatcherProto.Type.NONE        => getNoneTemporalSurfaceMatcher(proto)
@@ -124,5 +124,5 @@ object TemporalSurfaceMatcherDeserializer
       case TemporalSurfaceMatcherProto.Type.PRIQL       => getForPriqlTemporalSurfaceMatcher(proto)
       case _                                            => throw new InvalidTemporalSurfaceMatcherException(proto)
     }
-  }
+  } */
 }

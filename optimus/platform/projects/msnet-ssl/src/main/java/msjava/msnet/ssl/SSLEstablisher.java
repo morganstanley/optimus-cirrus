@@ -24,7 +24,7 @@ import msjava.msnet.MSNetTCPConnection;
 import msjava.msnet.MSNetTCPSocket;
 import msjava.msnet.MSNetTCPSocketBuffer;
 import msjava.msnet.MSNetTCPSocketFactory;
-import msjava.msnet.utils.MSNetConfiguration;
+// import msjava.msnet.utils.MSNetConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

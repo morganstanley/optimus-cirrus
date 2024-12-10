@@ -36,7 +36,7 @@ package optimus.graph.diagnostics.ap
 import java.nio.charset.StandardCharsets
 import one.jfr.Dictionary
 import one.jfr.JfrReader
-import one.jfr.event.CustomSample
+// import one.jfr.event.CustomSample
 import one.jfr.event.Event
 import optimus.platform.util.Log
 import org.kohsuke.args4j.CmdLineException
@@ -189,7 +189,7 @@ object JFR2Speedscope extends App with Log {
           trace({ idx -= 1; idx }) = speedscope.methodIndex(methodName + FRAME_SUFFIX(types(i)))
         }
         val eventName = event match {
-          case c: CustomSample => c.info
+          // case c: CustomSample => c.info
           case _               => event.getClass.getSimpleName
         }
         speedscope.addTrace(eventName, value, trace)

@@ -66,10 +66,10 @@ class PluginData(private val global: Global) {
   def configureBasic(): Unit = {
     global.perRunCaches.recordCache(onCompileFinished)
     // always install the threshold profiler since it's lightweight and we always want to know about very slow compilation
-    val thresholdProfiler =
+    /* val thresholdProfiler =
       new ThresholdProfiler(global.reporter.echo(_, _), thresholdNs = slowCompilationWarningThresholdMs * 1000000)
     // keep the existing profiler (if any) so that we don't prevent -Yprofile from working
-    global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler))
+    global.currentRun.profiler = new DelegatingProfiler(Seq(global.currentRun.profiler, thresholdProfiler)) */
   }
 
   // warns if obtWarnConf is set

@@ -28,7 +28,7 @@ import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.stats.SourceCodeStats
 import optimus.platform._
-import optimus.tools.scalacplugins.entity.ThresholdProfiler
+// import optimus.tools.scalacplugins.entity.ThresholdProfiler
 import sbt.internal.inc.MiniSetupUtil
 import sbt.internal.prof.Zprof
 import sbt.internal.prof.Zprof.ZincRun
@@ -316,13 +316,15 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
    * clearly see them.
    */
   private def republishSlowCompilationWarnings(messages: Seq[CompilationMessage]): Seq[Double] = {
-    messages.collect {
+    //TODO
+    /* messages.collect {
       case CompilationMessage(pos, msg @ ThresholdProfiler.MessageString(_, durationInSecs), _, _, _, _, _) =>
         val posStr = pos.map(p => s"${p.filepath.split("/").last}:${p.startLine}").getOrElse("?:?")
         val str = s"$prefix$msg ($posStr)"
         log.warn(s"$prefix$msg")
         ObtTrace.warn(str)
         durationInSecs
-    }
+    } */
+    Seq.empty
   }
 }

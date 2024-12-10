@@ -9,18 +9,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ch.qos.logback.classic.pattern {
+/* package ch.qos.logback.classic.pattern {
   sealed abstract class NamedConverterExtension extends ClassOfCallerConverter {
     protected final def getAbbreviator = abbreviator
   }
-}
+} */
 
 package optimus.logging {
 
   import java.util.concurrent.ConcurrentHashMap
 
   import ch.qos.logback.classic.PatternLayout
-  import ch.qos.logback.classic.pattern.NamedConverterExtension
+  import ch.qos.logback.classic.pattern.ClassOfCallerConverter
   import ch.qos.logback.classic.spi.ILoggingEvent
 
   object OptimusLogging {
@@ -42,21 +42,23 @@ package optimus.logging {
     def install(): Unit = installed
   }
 
-  class CachedNamedConverter extends NamedConverterExtension {
+  class CachedNamedConverter extends /* NamedConverterExtension */ ClassOfCallerConverter {
 
     var cachedNames: ConcurrentHashMap[String, String] = null
 
     override def start(): Unit = {
       super.start()
-      if (getAbbreviator ne null) {
-        cachedNames = new ConcurrentHashMap[String, String]
-      }
+      // TODO
+      // if (getAbbreviator ne null) {
+      //   cachedNames = new ConcurrentHashMap[String, String]
+      // }
     }
     override def convert(event: ILoggingEvent): String = {
       // Note - After Java 11 migration this can be improved
       // to walk the stack
       val fqn: String = getFullyQualifiedName(event)
-      val abbreviator = getAbbreviator
+      // TODO
+      /* val abbreviator = getAbbreviator
 
       if (abbreviator eq null) fqn
       // the default abbreviator generates loads of garbage, so cache the responses
@@ -64,7 +66,8 @@ package optimus.logging {
         val exists = cachedNames.get(fqn)
         if (exists ne null) exists
         else cachedNames.computeIfAbsent(fqn, abbreviator.abbreviate)
-      }
+      } */
+      fqn
     }
   }
   class CachedLoggerConverter extends CachedNamedConverter {

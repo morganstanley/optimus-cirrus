@@ -13,7 +13,7 @@ package optimus.platform.dsi.protobufutils
 
 import com.google.protobuf.ByteString
 import msjava.msnet.MSNetMessage
-import msjava.protobufutils.generated.proto.Eai.RequestResponseEnvelope
+// import msjava.protobufutils.generated.proto.Eai.RequestResponseEnvelope
 import msjava.protobufutils.server.BackendException
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.graph.DiagnosticSettings
@@ -39,29 +39,29 @@ private[platform] final class DalBrokerResponseMessage(
     message: MSNetMessage,
     val protocolVersionOpt: Option[DalProtocolVersion])
     extends DalServiceResponseMessage {
-  private lazy val envelope = RequestResponseEnvelope.parseFrom(ProtoBufUtils.getCodedInputStream(message.getBytes))
-  private lazy val header = envelope.getHeader
+  /* private lazy val envelope = RequestResponseEnvelope.parseFrom(ProtoBufUtils.getCodedInputStream(message.getBytes)) */
+  /* private lazy val header = envelope.getHeader */
 
-  override def hasError: Boolean = header.hasError
-  override def hasPayload: Boolean = envelope.hasPayload
-  override def seqId: Int = header.getSeqId
-  def errorMessage: String = header.getError.getMessage
-  def payload: ByteString = envelope.getPayload
-  def getDalResponseProto: DalResponseProto = DalResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(payload))
+  override def hasError: Boolean = ??? // header.hasError
+  override def hasPayload: Boolean = ??? // envelope.hasPayload
+  override def seqId: Int = ??? // header.getSeqId
+  def errorMessage: String = ??? // header.getError.getMessage
+  def payload: ByteString = ??? // envelope.getPayload
+  def getDalResponseProto: DalResponseProto = ??? /* DalResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(payload)) */
 }
 
 private[platform] final case class DsiResponseWrapper(underlying: DSIResponseProto)
     extends AnyVal
     with DalServiceResponse {
-  override def isPartial: Boolean = underlying.getIsPartial
-  override def results: Seq[ResultProto] = underlying.getResultsList.asScala
-  override def commandIndices: Seq[Int] = underlying.getCommandIndicesList.asScala.map(_.intValue)
-  override def establishSessionResult: Option[EstablishSessionResultProto] =
-    if (underlying.hasEstablishSessionResult) Some(underlying.getEstablishSessionResult)
-    else None
-  override def timings: Option[TimingsProto] =
-    if (underlying.hasTimings) Some(underlying.getTimings)
-    else None
+  override def isPartial: Boolean = ??? // underlying.getIsPartial
+  override def results: Seq[ResultProto] = ??? // underlying.getResultsList.asScala
+  override def commandIndices: Seq[Int] = ??? // underlying.getCommandIndicesList.asScala.map(_.intValue)
+  override def establishSessionResult: Option[EstablishSessionResultProto] = ???
+    /* if (underlying.hasEstablishSessionResult) Some(underlying.getEstablishSessionResult)
+    else None */
+  override def timings: Option[TimingsProto] = ???
+    /* if (underlying.hasTimings) Some(underlying.getTimings)
+    else None */
 }
 
 object DalProtoClientMessageReceiver {
@@ -83,7 +83,7 @@ class DalProtoClientMessageReceiver(
       batchContext: BatchContext,
       now: Long,
       elapsed: => Long,
-      message: DalBrokerResponseMessage): Unit = {
+      message: DalBrokerResponseMessage): Unit = ??? /* {
     if (message.protocolVersionOpt.exists(_.isSince(GpbWithDalRequest))) {
       log.trace(s"${logPrefix(requestUuid, seqId)} parsing DALResponseProto")
       // parse a DalResponseProto
@@ -108,9 +108,9 @@ class DalProtoClientMessageReceiver(
       }
       unsafeParseResponse(requestUuid, seqId, now, elapsed, batchContext, DsiResponseWrapper(response))
     }
-  }
+  } */
 
-  override protected def unsafeParseError(response: DalBrokerResponseMessage): Unit = {
+  override protected def unsafeParseError(response: DalBrokerResponseMessage): Unit = ??? /* {
     val dalResponse = response.getDalResponseProto
     if (dalResponse.hasDsiResponse) {
       val dsiResponse = dalResponse.getDsiResponse
@@ -122,5 +122,5 @@ class DalProtoClientMessageReceiver(
     } else {
       throw new BackendException(response.errorMessage)
     }
-  }
+  } */
 }

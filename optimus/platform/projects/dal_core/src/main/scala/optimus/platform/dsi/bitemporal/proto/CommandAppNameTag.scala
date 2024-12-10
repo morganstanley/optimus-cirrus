@@ -17,15 +17,15 @@ import scala.jdk.CollectionConverters._
 final case class CommandAppNameTag(appNameTag: String, commandIndices: Seq[Int])
 
 object CommandAppNameTagSerialization {
-  final def toProto(commandAppNameTag: CommandAppNameTag): CommandAppNameTagProto = {
+  final def toProto(commandAppNameTag: CommandAppNameTag): CommandAppNameTagProto = ??? /* {
     CommandAppNameTagProto.newBuilder
       .setTag(commandAppNameTag.appNameTag)
       .addAllCommandIndices(commandAppNameTag.commandIndices map (_.asInstanceOf[Integer]) asJava)
       .build
-  }
-  final def fromProto(commandAppNameTagProto: CommandAppNameTagProto): CommandAppNameTag = {
+  } */
+  final def fromProto(commandAppNameTagProto: CommandAppNameTagProto): CommandAppNameTag = ??? /* {
     val tag = commandAppNameTagProto.getTag()
     val indices = commandAppNameTagProto.getCommandIndicesList.asScala.map(_.asInstanceOf[Int])
     CommandAppNameTag(tag, indices)
-  }
+  } */
 }

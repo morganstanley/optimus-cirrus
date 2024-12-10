@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.eaio.uuid.UUIDGen
 import com.google.common.hash.Hashing
 import com.google.common.primitives.Longs
-import net.iharder.base64.Base64
+import net.iharder.Base64
 import optimus.exceptions.RTExceptionTrait
 import optimus.graph.DiagnosticSettings
 

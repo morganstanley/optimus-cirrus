@@ -130,10 +130,10 @@ object ClientRequestBatcher extends Log {
     def requests: Vector[ClientRequest]
   }
   final case class ReadBatch(requests: Vector[ClientRequest]) extends Batch {
-    override def requestType: DSIRequestProto.Type = DSIRequestProto.Type.READ_ONLY
+    override def requestType: DSIRequestProto.Type = ??? /* DSIRequestProto.Type.READ_ONLY */
   }
   final case class WriteBatch(requests: Vector[ClientRequest]) extends Batch {
-    override def requestType: DSIRequestProto.Type = DSIRequestProto.Type.WRITE
+    override def requestType: DSIRequestProto.Type = ??? /* DSIRequestProto.Type.WRITE */
   }
 
   def splitIntoBatchesConsideringEntitlements(requests: Seq[ClientRequest]): Seq[Batch] = {

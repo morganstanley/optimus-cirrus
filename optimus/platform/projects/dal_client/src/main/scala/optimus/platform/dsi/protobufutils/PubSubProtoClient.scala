@@ -17,7 +17,7 @@ import java.util.concurrent.locks.ReadWriteLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import com.google.protobuf.ByteString
-import msjava.base.spring.lifecycle.BeanState
+// import msjava.base.spring.lifecycle.BeanState
 import msjava.msnet.MSNetMessage
 import msjava.protobufutils.server.BackendException
 import msjava.slf4jutils.scalalog.getLogger
@@ -33,8 +33,8 @@ import optimus.platform.dsi.Response
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.bitemporal.proto.CommandProtoSerialization
 import optimus.platform.dsi.bitemporal.proto.Dsi._
-import optimus.platform.dsi.bitemporal.proto.Envelope.DalProtocolStatus
-import optimus.platform.dsi.bitemporal.proto.Envelope.DalRequestResponseEnvelope
+/* import optimus.platform.dsi.bitemporal.proto.Envelope.DalProtocolStatus
+import optimus.platform.dsi.bitemporal.proto.Envelope.DalRequestResponseEnvelope */
 import optimus.platform.dsi.bitemporal.proto.NotificationEntrySerialization
 import optimus.platform.dsi.connection.DalProtocolVersion
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
@@ -73,9 +73,9 @@ object PubSubProtoClient {
   object AuxiliaryDataProcessor extends AuxiliaryDataProcessor
 
   abstract class AuxiliaryDataProcessor extends NotificationEntrySerialization {
-    protected def handleNotificationEntries(entryData: Iterable[ByteString]): Seq[NotificationEntry] = {
+    protected def handleNotificationEntries(entryData: Iterable[ByteString]): Seq[NotificationEntry] = ??? /* {
       entryData.map(NotificationEntryProto.parseFrom).map(fromProto(_)).toVector
-    }
+    } */
 
     def inline(results: Seq[Result], auxiliaryData: Iterable[ByteString]): Seq[Result] =
       results
@@ -136,8 +136,8 @@ class PubSubProtoClient(
   private val rShutdownLock = rwShutdownLock.readLock
   private val wShutdownLock = rwShutdownLock.writeLock
 
-  private[this] val state = new BeanState()
-  state.initializeIfNotInitialized()
+  // private[this] val state = new BeanState()
+  // state.initializeIfNotInitialized()
 
   private[this] val configSupport = config.createConfigSupport(hostPort, kerberized, clientName, secureTransport)
   private[this] val msgListener = (dalProtocolOpt: Option[DalProtocolVersion]) =>
@@ -195,7 +195,7 @@ class PubSubProtoClient(
 
   override def start(): Unit = {
     tcpRequestSender.start()
-    state.startIfNotRunning()
+    // state.startIfNotRunning()
   }
 
   def shutdown(cause: Option[DalBrokerClient.ShutdownCause]): Unit = {
@@ -205,7 +205,7 @@ class PubSubProtoClient(
         if (isRunning) {
           // to make sure we do not execute the shutdown logic multiple times
           // we do this stopIfRunning and have this whole method body wrapped in isRunning check
-          state.stopIfRunning()
+          // state.stopIfRunning()
           log.info(s"Shutting down ${outer}")
           tcpRequestSender.shutdown()
           log.info(s"${config.name} shut down")
@@ -225,13 +225,13 @@ class PubSubProtoClient(
         }
       } finally {
         wShutdownLock.unlock
-        state.destroyIfNotDestroyed
+        // state.destroyIfNotDestroyed
       }
     }
   }
-  def isRunning: Boolean = state.isRunning
+  def isRunning: Boolean = ??? // state.isRunning
 
-  private def checkAndThrowHeaderError(envelope: DalRequestResponseEnvelope): Unit = {
+  /* private def checkAndThrowHeaderError(envelope: DalRequestResponseEnvelope): Unit = {
     val response = DalResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(envelope.getPayload))
     if (response.hasDsiResponse) {
       val dsiResponse = response.getDsiResponse
@@ -267,9 +267,9 @@ class PubSubProtoClient(
         log.error(s"${toString}::Other result received: ${otherResult}")
         None // ignore all other results
     }
-  }
+  } */
 
-  def onMessage(message: MSNetMessage, dalProtocolOpt: Option[DalProtocolVersion]): Unit = {
+  def onMessage(message: MSNetMessage, dalProtocolOpt: Option[DalProtocolVersion]): Unit = ??? /* {
     rShutdownLock.lock
     try {
       if (isRunning) {
@@ -302,7 +302,7 @@ class PubSubProtoClient(
     } finally {
       rShutdownLock.unlock
     }
-  }
+  } */
 
   def onDisconnect(): Unit = {
     log.error(s"${toString} Received disconnect")

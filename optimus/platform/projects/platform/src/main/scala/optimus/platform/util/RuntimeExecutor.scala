@@ -41,7 +41,7 @@ object RuntimeExecutor {
 
       tb.eval(evalTree)
     } catch {
-      case ex: Exception  => throw msjava.base.lang.ExceptionUtils.getUltimateCause(ex)
+      case ex: Exception  => ??? // throw msjava.base.lang.ExceptionUtils.getUltimateCause(ex)
       case err: Throwable => throw new Exception("Dynamic code compile error! Please check your expression: " + code)
     }
 

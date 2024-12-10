@@ -41,22 +41,22 @@ class DalProtocolVersionEstablisher private (myProtocolVersion: DalProtocolVersi
 
   private var remoteDalProtocolVersion: DalProtocolVersion = DalProtocolVersion.EstablisherNotUsed
 
-  private var status = MSNetEstablishStatus.UNKNOWN
+  private var status: MSNetEstablishStatus = MSNetEstablishStatus.UNKNOWN
   private var conn: MSNetTCPConnection = _
   private val writeBuf = new MSNetTCPSocketBuffer
 
-  override def init(isServerSide: Boolean, conn: MSNetTCPConnection): Unit = {
+  /* override */ def init(isServerSide: Boolean, conn: MSNetTCPConnection): Unit = {
     require(this.conn eq null, s"Cannot reuse establisher with connection ${this.conn} for new connection $conn")
     log.trace(s"Initializing establisher for ${conn.getAddress}")
     this.conn = conn
   }
 
-  override def cleanup(): Unit = {
+  /* override */ def cleanup(): Unit = {
     log.trace(s"Clear write buffer for $conn")
     writeBuf.clear()
   }
 
-  override def establish(readBuf: MSNetTCPSocketBuffer): MSNetEstablishStatus = {
+  /* override */ def establish(readBuf: MSNetTCPSocketBuffer): MSNetEstablishStatus = {
     log.debug(s"Begin protocol version establishment for $conn")
     if (status.isUnknown) {
       // Write our own protocol data
@@ -78,11 +78,11 @@ class DalProtocolVersionEstablisher private (myProtocolVersion: DalProtocolVersi
     status
   }
 
-  override def getStatus: MSNetEstablishStatus = status
+  /* override */ def getStatus: MSNetEstablishStatus = status
 
-  override def getOutputBuffer: MSNetTCPSocketBuffer = writeBuf
+  /* override */ def getOutputBuffer: MSNetTCPSocketBuffer = writeBuf
 
-  override def getEstablisherName: String = "DalProtocolVersionEstablisher"
+  /* override */ def getEstablisherName: String = "DalProtocolVersionEstablisher"
 
   private def createProtocolData(): Array[Byte] = {
     val buff = ByteBuffer.allocate(MessageSize)
@@ -120,7 +120,7 @@ class DalProtocolVersionEstablisherFactory(protocolVersion: DalProtocolVersion) 
   val optionalProtoEstablisher =
     getBoolProperty("optimus.platform.dsi.connection.dalProtocolVersionEstablisher.optional", false)
 
-  override def createEstablisher(): MSNetEstablisher =
+  /* override */ def createEstablisher(): MSNetEstablisher =
     DalProtocolVersionEstablisher(protocolVersion, optional = optionalProtoEstablisher)
 }
 

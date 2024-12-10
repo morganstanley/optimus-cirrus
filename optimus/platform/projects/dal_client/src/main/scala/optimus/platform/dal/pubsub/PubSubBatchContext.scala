@@ -41,7 +41,7 @@ class PubSubBatchContext(
     appNameTag: Option[String])
     extends BatchContext {
 
-  override val requestType = DSIRequestProto.Type.PUBSUB
+  override val requestType: DSIRequestProto.Type = ??? // DSIRequestProto.Type.PUBSUB
   override val clientRequests: Vector[ClientRequest] = {
     val p: Promise[Response] = Promise()
     Vector(ClientRequest.read(CompletablePromise(p), chainedId, clientSessionContext, cmds, appNameTag = appNameTag))

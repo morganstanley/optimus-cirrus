@@ -23,10 +23,10 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Pathed
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.dht.client.internal.registry.ZookeeperRegistryObserver
-import optimus.dht.common.util.registry.ZKUtils
+/* import optimus.dht.common.util.registry.ZKUtils
 import optimus.dht.common.util.registry.ZkConfig
 import optimus.dht.server.api.registry.RegistryConsts
-import optimus.dht.server.management.DHTManagementInterface
+import optimus.dht.server.management.DHTManagementInterface */
 import optimus.platform._
 import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
 import optimus.platform.util.Log
@@ -155,7 +155,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
       DHTStore.zkClusterType(zkPath),
       artifactVersion,
       cacheMode = CacheMode.ReadWrite, // admin needs to be able to read and delete
-      DHTStore.ZkBuilder(zkPath)
+      /* DHTStore.ZkBuilder(zkPath) */
     )
 
   @entersGraph override def run(): Unit = {
@@ -181,7 +181,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
         DHTStore.zkClusterType(zkPath),
         artifactVersion,
         cacheMode = CacheMode.ReadOnly,
-        DHTStore.ZkBuilder(zkPath))
+        /* DHTStore.ZkBuilder(zkPath) */)
 
     val maybeResult = getArtifactKey match {
       case artifactKey: ArtifactKey =>
@@ -211,7 +211,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
 
   private def getAllKeys: Seq[StoredKey] = {
 
-    val keys: Seq[StoredKey] = jmxUrls.flatMap { jmxUrl =>
+    val keys: Seq[StoredKey] = ??? /* jmxUrls.flatMap { jmxUrl =>
       withDhtManagementBean(jmxUrl) { bean =>
         bean.returnKeyspaceKeys(keyspaceName, "", false).toSeq.map { case Array(maybeKey, _, _) =>
           Option(maybeKey).flatMap {
@@ -223,7 +223,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
           }
         }
       }
-    }.flatten
+    }.flatten */
 
     log.info(s"found ${keys.size} keys in total")
     if (keys.nonEmpty) {
@@ -260,7 +260,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
     keys
   }
 
-  private def getJmxUrls: Seq[String] = {
+  private def getJmxUrls: Seq[String] = ??? /* {
     val zkConfig = ZkConfig.parse(zkPath, true)
     val curatorFramework = ZKUtils.getFrameworkBuilder(zkConfig).build
     curatorFramework.start()
@@ -275,11 +275,11 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
 
       Option(zkaData.get(RegistryConsts.JMX_URL_KEY).asInstanceOf[String])
     }
-  }
+  } */
 
   private val dhtManagementObjectName = "com.dht:type=DHTManagement"
 
-  private def withDhtManagementBean[T](jmxUrlStr: String)(f: DHTManagementInterface => T): T = {
+  /* private def withDhtManagementBean[T](jmxUrlStr: String)(f: DHTManagementInterface => T): T = {
     val conn = Try {
       log.info(s"Connecting to DHT jmx interface with url: $jmxUrlStr")
       val jmxUrl = new JMXServiceURL(jmxUrlStr)
@@ -302,7 +302,7 @@ object ObtDhtCacheAdminApp extends OptimusApp[ObtDhtCacheAdminAppCmdLine] with L
     } finally {
       conn.close()
     }
-  }
+  } */
 
 }
 

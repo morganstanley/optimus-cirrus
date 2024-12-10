@@ -19,5 +19,5 @@ object DalConstValueProtoSerializer extends ConstValueSerializer {
 
   override def toBytes(o: Any): Array[Byte] = ProtoPickleSerializer.propertiesToProto(o, None).toByteArray
 
-  override def fromBytes(proto: Array[Byte]): Any = ProtoPickleSerializer.protoToProperties(FieldProto.parseFrom(proto))
+  override def fromBytes(proto: Array[Byte]): Any = ??? /* ProtoPickleSerializer.protoToProperties(FieldProto.parseFrom(proto)) */
 }

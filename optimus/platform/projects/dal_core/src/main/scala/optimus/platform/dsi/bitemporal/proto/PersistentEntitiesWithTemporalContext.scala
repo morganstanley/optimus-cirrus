@@ -14,13 +14,13 @@ package optimus.platform.dsi.bitemporal.proto
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.dsi.bitemporal.proto.Dsi.PersistentEntityWithTemporalContextProto
 import java.time.Instant
-import net.iharder.base64.Base64
+import net.iharder.Base64
 
 object PersistentEntitiesWithTemporalContextImpl {
 
-  def apply(buf: String) = {
+  def apply(buf: String) = ??? /* {
     PersistentEntityWithTemporalContextProto.parseFrom(Base64.decode(buf, Base64.DONT_GUNZIP))
-  }
+  } */
 
   def unapply(buf: PersistentEntityWithTemporalContextProto): String = {
     Base64.encodeBytes(buf.toByteArray())

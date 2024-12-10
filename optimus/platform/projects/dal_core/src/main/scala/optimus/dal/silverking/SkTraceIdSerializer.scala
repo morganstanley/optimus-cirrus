@@ -16,13 +16,11 @@ import com.ms.silverking.cloud.dht.trace.SkTraceId
 import optimus.dsi.trace.TraceId
 import optimus.platform.dsi.bitemporal.proto.ChainedIdSerializer
 import optimus.platform.dsi.bitemporal.proto.Prc.SilverKingTraceIdProto
-import optimus.platform.dsi.bitemporal.proto.Prc.SilverKingTraceIdProto.ForwardState
-import optimus.platform.dsi.bitemporal.proto.Prc.SilverKingTraceIdProto.Type
 import optimus.platform.dsi.bitemporal.proto.ProtoSerializer
 
 // Serializer for SilverKing's TraceId
 private[optimus] object SkTraceIdSerializer extends ProtoSerializer[SkTraceId, SilverKingTraceIdProto] {
-  private def fromProto(gpbState: ForwardState): SkForwardState = gpbState match {
+  /* private def fromProto(gpbState: ForwardState): SkForwardState = gpbState match {
     case ForwardState.NOT_FORWARDED    => SkForwardState.NotForwarded
     case ForwardState.LOCAL_FORWARDED  => SkForwardState.LocalForwarded
     case ForwardState.REMOTE_FORWARDED => SkForwardState.RemoteForwarded
@@ -32,9 +30,9 @@ private[optimus] object SkTraceIdSerializer extends ProtoSerializer[SkTraceId, S
     case SkForwardState.NotForwarded    => ForwardState.NOT_FORWARDED
     case SkForwardState.LocalForwarded  => ForwardState.LOCAL_FORWARDED
     case SkForwardState.RemoteForwarded => ForwardState.REMOTE_FORWARDED
-  }
+  } */
 
-  override def serialize(skTraceId: SkTraceId): SilverKingTraceIdProto = {
+  override def serialize(skTraceId: SkTraceId): SilverKingTraceIdProto = ??? /* {
     SilverKingTraceIdProto
       .newBuilder()
       .setType(Type.TRACE_ID)
@@ -42,9 +40,9 @@ private[optimus] object SkTraceIdSerializer extends ProtoSerializer[SkTraceId, S
       .setRequestUuid(skTraceId.getTraceId.requestId)
       .setChainedId(ChainedIdSerializer.serialize(skTraceId.getTraceId.chainedId))
       .build()
-  }
+  } */
 
-  override def deserialize(proto: SilverKingTraceIdProto): SkTraceId = proto.getType match {
+  override def deserialize(proto: SilverKingTraceIdProto): SkTraceId = ??? /* proto.getType match {
     case Type.TRACE_ID =>
       new SkTraceId(
         TraceId(
@@ -53,9 +51,9 @@ private[optimus] object SkTraceIdSerializer extends ProtoSerializer[SkTraceId, S
         ),
         fromProto(proto.getForwardState)
       )
-  }
+  } */
 
-  def traceIdToBytes(skTraceId: SkTraceId): Array[Byte] = serialize(skTraceId).toByteArray
+  def traceIdToBytes(skTraceId: SkTraceId): Array[Byte] = ??? // serialize(skTraceId).toByteArray
 
-  def bytesToTraceId(bytes: Array[Byte]): SkTraceId = deserialize(SilverKingTraceIdProto.parseFrom(bytes))
+  def bytesToTraceId(bytes: Array[Byte]): SkTraceId = ??? // deserialize(SilverKingTraceIdProto.parseFrom(bytes))
 }

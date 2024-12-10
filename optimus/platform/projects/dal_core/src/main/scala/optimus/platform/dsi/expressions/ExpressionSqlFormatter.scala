@@ -584,7 +584,7 @@ class DefaultConstFormatter extends ConstFormatter {
   }
 
   protected def formatInner(value: Any): String = {
-    def serialize(v: Any): Any = {
+    def serialize(v: Any): Any = ??? /* {
       v match {
         case e: EntityReference         => e.toString
         case be: BusinessEventReference => be.toString
@@ -606,7 +606,7 @@ class DefaultConstFormatter extends ConstFormatter {
 
         case _ => v
       }
-    }
+    } */
 
     serialize(value) match {
       case str: String => str

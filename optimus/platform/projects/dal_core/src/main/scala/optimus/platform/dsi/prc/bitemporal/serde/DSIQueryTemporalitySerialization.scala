@@ -26,14 +26,14 @@ private[optimus] object DSIQueryTemporalitySerializer
     extends ProtoSerializer[DSIQueryTemporality, TemporalityProto]
     with ExpressionEncoder
     with ExpressionDecoder {
-  override def serialize(value: DSIQueryTemporality): TemporalityProto = {
+  override def serialize(value: DSIQueryTemporality): TemporalityProto = ??? /* {
     val proto: TemporalityProto = encode(value)
     proto
-  }
-  override def deserialize(proto: TemporalityProto): DSIQueryTemporality = {
+  } */
+  override def deserialize(proto: TemporalityProto): DSIQueryTemporality = ??? /* {
     val temporality: DSIQueryTemporality = decode(proto)
     temporality
-  }
+  } */
   override protected def encode(id: Id): Int =
     throw new NotImplementedError(s"Cannot encode($id) with ${this.getClass.getSimpleName}")
   override protected def decode(id: Int): Id =

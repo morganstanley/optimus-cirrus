@@ -222,7 +222,7 @@ object EmbeddablePicklers extends StorableSerializer {
             }
           }
 
-          override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
+          override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = ??? /* {
             try {
               if (child eq versionResolver) {
                 val versionedPropMap = versionResolver.get
@@ -258,7 +258,7 @@ object EmbeddablePicklers extends StorableSerializer {
               if (i == unpicklers.length)
                 completeWithResult(ecb.fromArray(arr), eq)
             } catch { case e: Throwable => completeWithException(e, eq) }
-          }
+          } */
         }
     }
   }

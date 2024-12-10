@@ -14,7 +14,7 @@ package optimus.dsi.cli
 import msjava.hdom.Document
 import msjava.hdom.Element
 import msjava.hdom.output.XMLOutputter
-import msjava.hdom.xpath.HDOMXPathUtils
+// import msjava.hdom.xpath.HDOMXPathUtils
 import msjava.msxml.xpath.MSXPathExpression
 
 import scala.jdk.CollectionConverters._
@@ -23,7 +23,7 @@ trait HdomHelper {
   def findElements(
       hdom: Document,
       compiledxPath: MSXPathExpression,
-      targetValue: Option[String] = None): List[Element] = {
+      targetValue: Option[String] = None): List[Element] = ??? /* {
     val results = HDOMXPathUtils.getAllNodes(compiledxPath, hdom).asScala.asInstanceOf[Iterable[Element]]
 
     if (targetValue.isDefined) {
@@ -31,19 +31,19 @@ trait HdomHelper {
     } else {
       results.toList
     }
-  }
+  } */
 
-  def elementToString(element: Element): String = {
+  def elementToString(element: Element): String = ??? /* {
     val outputter = getXmlOutputter()
     outputter.outputString(element)
-  }
+  } */
 
-  def documentToString(doc: Document): String = {
+  def documentToString(doc: Document): String = ??? /* {
     val outputter = getXmlOutputter()
     outputter.outputString(doc)
-  }
+  } */
 
-  private def getXmlOutputter(): XMLOutputter = {
+  private def getXmlOutputter(): XMLOutputter = ??? /* {
     val outputter = new XMLOutputter()
     outputter.setIndent("  ")
     outputter.setNewlines(true)
@@ -52,5 +52,5 @@ trait HdomHelper {
     outputter.setOmitEncoding(true)
     outputter.setOmitDeclaration(true)
     outputter
-  }
+  } */
 }

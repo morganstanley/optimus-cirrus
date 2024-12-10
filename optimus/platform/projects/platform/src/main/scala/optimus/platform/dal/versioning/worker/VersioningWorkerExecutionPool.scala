@@ -16,8 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
-import msjava.pool.ManagedPool
-import msjava.pool.base.BasePoolableObjectFactory
+// import msjava.pool.ManagedPool
+// import msjava.pool.base.BasePoolableObjectFactory
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.config.OptimusConfigurationException
 import optimus.config.RuntimeConfiguration
@@ -58,7 +58,7 @@ private[optimus] class VersioningWorkerPool(runtimeConfig: RuntimeConfiguration)
     ThreadName
   )
 
-  private val pool =
+  /* private val pool =
     new ManagedPool[VersioningPoolWorker](new BasePoolableObjectFactory[VersioningPoolWorker] {
       override def createObject = {
         val worker =
@@ -76,16 +76,16 @@ private[optimus] class VersioningWorkerPool(runtimeConfig: RuntimeConfiguration)
     })
 
   pool.setMaxActive(poolSize)
-  pool.afterPropertiesSet
+  pool.afterPropertiesSet */
 
   def close(): Unit = {
-    pool.destroy()
+    // pool.destroy()
   }
 
   /**
    * Executes the passed block of code using the primary dsi and not with user specific dsi.
    */
-  def exec[T](f: => T): T = {
+  def exec[T](f: => T): T = ??? /* {
     val svc = pool.borrowObject()
     try {
       val ret = svc.exec(f)
@@ -93,12 +93,12 @@ private[optimus] class VersioningWorkerPool(runtimeConfig: RuntimeConfiguration)
     } finally {
       pool.returnObject(svc)
     }
-  }
+  } */
 
   /**
    * Executes the passed block of code using the user specific dsi.
    */
-  def exec[T](session: ClientSessionInfo)(f: => T): T = {
+  def exec[T](session: ClientSessionInfo)(f: => T): T = ??? /* {
     val svc = pool.borrowObject()
     try {
       val ret = svc.exec(session)(f)
@@ -106,7 +106,7 @@ private[optimus] class VersioningWorkerPool(runtimeConfig: RuntimeConfiguration)
     } finally {
       pool.returnObject(svc)
     }
-  }
+  } */
 
   private val untweakedScenarioStateCache = CacheBuilder
     .newBuilder()

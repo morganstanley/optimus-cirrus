@@ -30,7 +30,7 @@ import optimus.platform.dsi.protobufutils.DALProtoClient.{Configuration, Version
 import optimus.platform.dsi.versioning.PathHashT
 import optimus.platform.dsi.versioning.VersioningKey
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
-import optimus.platform.runtime.OptimusVersioningZkClient
+// import optimus.platform.runtime.OptimusVersioningZkClient
 
 import scala.annotation.tailrec
 import scala.util.Random
@@ -80,7 +80,7 @@ class VersioningServerManager(
       .concurrencyLevel(1)
       .removalListener(RemovalListener)
       .build(new CacheLoader[(ClientSessionContext, PathHashT), DalBrokerClient] {
-        override def load(key: (ClientSessionContext, PathHashT)) = {
+        override def load(key: (ClientSessionContext, PathHashT)) = ??? /* {
           val (sessionCtx, classpathHash) = key
           val zkClient = OptimusVersioningZkClient.getClient(brokerContext.broker)
           // TODO (OPTIMUS-14722): support server-side versioning for non-default DAL contexts
@@ -98,7 +98,7 @@ class VersioningServerManager(
             SharedRequestLimiter.write)
           protoClient.start()
           protoClient
-        }
+        } */
       })
   }
 
@@ -159,7 +159,7 @@ class VersioningServerManager(
               attempts -= 1
               DALEventMulticaster.dalVersioningRetryCallback(DALVersioningRetryEvent(ex))
               closeProtoClients(sessionCtx, redirectionInfo)
-              OptimusVersioningZkClient.reset()
+              // OptimusVersioningZkClient.reset()
               delay(backoff)
               backoff *= 2
               hasRetried = true
@@ -196,7 +196,7 @@ class VersioningServerManager(
   protected def createDALRecoveryEvent(client: Option[DalBrokerClient]): DALVersioningRecoveryEvent =
     DALVersioningRecoveryEvent(s"Connected to ${client.map(_.connectionString).getOrElse("<unknown>")}")
 
-  @tailrec private[this] def shouldRetry(t: Throwable, requestType: DSIRequestProto.Type): Boolean = {
+  /* @tailrec */ private[this] def shouldRetry(t: Throwable, requestType: DSIRequestProto.Type): Boolean = ??? /* {
     val isRetryable = (requestType == DSIRequestProto.Type.WRITE && t.isInstanceOf[NoVersioningServersException])
     // has to be written like this so the recursive call is in tail position
     if (isRetryable)
@@ -204,7 +204,7 @@ class VersioningServerManager(
     else
       (t ne null) && shouldRetry(t.getCause, requestType)
 
-  }
+  } */
 
   private class VersioningDsiClientBatchRetryManager(
       override val maxRetryAttempts: Int,
@@ -223,7 +223,7 @@ class VersioningServerManager(
       DALEventMulticaster.dalVersioningRecoveryCallback(outer.createDALRecoveryEvent(client))
     override protected def close(client: Option[DalBrokerClient], batch: BatchContext): Unit = {
       outer.closeProtoClients(batch.clientSessionContext, batch.redirectionInfo.get)
-      OptimusVersioningZkClient.reset()
+      // OptimusVersioningZkClient.reset()
     }
   }
 }

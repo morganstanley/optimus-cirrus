@@ -16,7 +16,6 @@ import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.pickling._
 import optimus.platform.storable.{EntityImpl, EntityReference}
 import optimus.platform.dsi.bitemporal._
-import optimus.platform.dsi.bitemporal.proto.Dsi.NotificationMessageProto.Type._
 import optimus.platform.relational.reactive.filter.Binary
 import optimus.platform.relational.reactive.{defaultFilterClassOption => _}
 import optimus.platform.relational.tree._

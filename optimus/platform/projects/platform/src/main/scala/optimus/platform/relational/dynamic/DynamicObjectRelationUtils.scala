@@ -11,7 +11,7 @@
  */
 package optimus.platform.relational.dynamic
 
-import javax.jms.IllegalStateException
+// import javax.jms.IllegalStateException
 import java.time.LocalDate
 
 import optimus.platform._

@@ -1,4 +1,4 @@
-/*
+/* /*
  * Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
  * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
  * See the NOTICE file distributed with this work for additional information regarding copyright ownership.
@@ -8,7 +8,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ 
 package msjava.logbackutils.async.internal;
 
 import java.time.Instant;
@@ -43,7 +43,7 @@ import msjava.base.multimeter.meters.YammerMeter;
 import msjava.threadmonitor.thread.MSThreadMonitor;
 import msjava.logbackutils.async.AsyncDispatcher;
 
-/** Provides common circular-logging guard functionality for async dispatchers. */
+/** Provides common circular-logging guard functionality for async dispatchers. 
 @ManagedResource
 public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
     implements AsyncDispatcher<E>, MSThreadMonitor.ExtraInfoProvider, SelfNaming {
@@ -118,7 +118,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
 
   private int bufferSize = 1000;
 
-  /** used for metrics and for logging */
+  /** used for metrics and for logging 
   private final ConcurrentHashMap<Thread, Long> threadsAndBlockTimes = new ConcurrentHashMap<>();
 
   private final AtomicLong totalBlockTime = new AtomicLong();
@@ -135,7 +135,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
 
   /**
    * @param metricsId a unique ID for naming published metrics, not null and not empty
-   */
+   
   protected AsyncDispatcherBasePatch(String metricsId) {
     this.metricsId = metricsId;
 
@@ -307,7 +307,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
    * Call to emit a warning if the application thread will be blocked
    *
    * @deprecated use {@link #emitQueueFullWarning(Object, boolean)}
-   */
+   
   @Deprecated
   public void emitQueueFullWarning() {
     emitQueueFullWarning(null, false);
@@ -320,7 +320,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
    *
    * @param event
    * @param willThrowAway rather than block, drop the event.
-   */
+   
   public void emitQueueFullWarning(E event, boolean willThrowAway) {
     try {
       if (event != null) {
@@ -384,7 +384,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
    * Call for metrics gathering after an event has been added to the event queue.
    *
    * @param event
-   */
+   
   protected void eventQueued(E event, boolean wasBlocked) {
     try {
       if (!DISABLE_MULTIMETER) this.numQueued.incrementAndGet();
@@ -411,7 +411,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
    * interrupted.
    *
    * @param event
-   */
+   
   protected void eventInterrupted(E event) {
     try {
       addEvent(event, true);
@@ -436,7 +436,7 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
    * Call for metrics gathering after an event has been flushed from the event queue.
    *
    * @param event
-   */
+   
   protected void eventFlushed(E event) {
     try {
       if (!DISABLE_MULTIMETER) numQueued.decrementAndGet();
@@ -606,13 +606,13 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
             .append(" ms)\n");
         if (includeBlockedThreadStacks) {
           sb.append("Stack trace:\n");
-          StackTraceUtils.appendStackTrace(sb, e.getKey().getStackTrace());
+          // StackTraceUtils.appendStackTrace(sb, e.getKey().getStackTrace());
           sb.append("\n");
         }
       }
     } catch (Exception e) {
       sb.append("Failed to get extra information: ").append(e.toString());
-      StackTraceUtils.appendStackTrace(sb, e.getStackTrace());
+      // StackTraceUtils.appendStackTrace(sb, e.getStackTrace());
     }
 
     return sb.toString();
@@ -995,3 +995,4 @@ public abstract class AsyncDispatcherBasePatch<E> extends ContextAwareBase
     }
   }
 }
+ */

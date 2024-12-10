@@ -507,7 +507,7 @@ object Crumb {
   private def newLocator(): String = ChainedID.root.base + "L" + count.incrementAndGet()
   private val log = LoggerFactory.getLogger("Crumbs")
 
-  import net.iharder.base64.Base64
+  import net.iharder.Base64
 
   sealed trait CrumbFlag
   object CrumbFlag {

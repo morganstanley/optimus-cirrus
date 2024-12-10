@@ -18,7 +18,7 @@ import optimus.platform.dsi.bitemporal.DalPrcRedirectionResult
 import optimus.platform.dsi.bitemporal.QueryTemporalityType.QueryTemporalityType
 import optimus.platform.dsi.bitemporal.ReadOnlyCommandWithTemporality
 import optimus.platform.dsi.bitemporal.proto.Dsi.ResultProto
-import optimus.platform.dsi.bitemporal.proto.Dsi.ResultProto.RedirectionReasonType
+// import optimus.platform.dsi.bitemporal.proto.Dsi.ResultProto.RedirectionReasonType
 import optimus.platform.dsi.prc.cache.NonTemporalPrcKeyUserOpts
 
 object PrcRedirectionCache {
@@ -41,7 +41,7 @@ class PrcRedirectionCache {
     rejectedQueryTypes.isEmpty && rejectedTempTypes.isEmpty && rejectedCommandTypes.isEmpty
   }
 
-  def update(userOpts: NonTemporalPrcKeyUserOpts, redirection: ResultProto): Unit = {
+  def update(userOpts: NonTemporalPrcKeyUserOpts, redirection: ResultProto): Unit = ??? /* {
     Option(redirection.getRedirectionReason).foreach {
       case RedirectionReasonType.UNSUPPORTED_COMMAND_TYPE => rejectedCommandTypes.add(userOpts.command.getClass)
       case RedirectionReasonType.UNSUPPORTED_QUERY_TYPE =>
@@ -59,7 +59,7 @@ class PrcRedirectionCache {
           RedirectionReasonType.PRC_READ_THROUGH_TIMEOUT_FAILURE =>
         ()
     }
-  }
+  } */
 
   def get(userOpts: NonTemporalPrcKeyUserOpts): Option[DalPrcRedirectionResult] = {
     // Check order now is same as server side: QueryType -> QueryTemporalityType

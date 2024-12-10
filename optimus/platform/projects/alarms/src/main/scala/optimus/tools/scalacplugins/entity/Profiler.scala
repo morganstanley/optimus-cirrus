@@ -9,7 +9,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.tools.scalacplugins.entity
+/* package optimus.tools.scalacplugins.entity
 
 import java.util.regex.Pattern
 import scala.reflect.internal.util.Position
@@ -112,4 +112,4 @@ object ThresholdProfiler {
       } else None
     }
   }
-}
+} */

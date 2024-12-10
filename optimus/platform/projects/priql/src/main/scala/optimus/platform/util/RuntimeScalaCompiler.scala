@@ -54,7 +54,7 @@ class RuntimeScalaCompiler(
 
   settings.pluginOptions.value ++= pluginOptions
 
-  settings.YaliasPackage.tryToSet(PackageAliases.aliases)
+  // settings.YaliasPackage.tryToSet(PackageAliases.aliases)
 
   val reporter = new StoreReporter(settings)
   val global = new Global(settings, reporter)

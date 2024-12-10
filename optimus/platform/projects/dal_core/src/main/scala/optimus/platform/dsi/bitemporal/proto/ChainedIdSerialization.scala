@@ -24,13 +24,13 @@ trait ChainedIdSerialization extends ProtoSerialization {
 }
 
 object ChainedIdSerializer extends ProtoSerializer[ChainedID, ChainedIdProto] {
-  final def serialize(chainedId: ChainedID): ChainedIdProto = {
+  final def serialize(chainedId: ChainedID): ChainedIdProto = ??? /* {
     ChainedIdProto.newBuilder
       .addAllData(chainedId.asList)
       .build
-  }
+  } */
 
-  final def deserialize(chainedIdProto: ChainedIdProto): ChainedID = {
+  final def deserialize(chainedIdProto: ChainedIdProto): ChainedID = ??? /* {
     ChainedID.fromList(chainedIdProto.getDataList)
-  }
+  } */
 }
