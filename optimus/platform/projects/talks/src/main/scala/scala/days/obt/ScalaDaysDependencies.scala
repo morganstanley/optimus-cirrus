@@ -11,15 +11,15 @@
  */
 package scala.days.obt
 
-import optimus.platform.reactive.DataSource
+/* import optimus.platform.reactive.DataSource
 import optimus.platform.reactive.OutputTick
-import optimus.platform.reactive.Target
+import optimus.platform.reactive.Target */
 import optimus.platform.util.Log
 import optimus.platform._
 
 import scala.util.Try
 
-class ExternalVersionUpdater(scope: ScopeId, firstVersionToPublish: Int) extends DataSource[Int] with Log {
+/* class ExternalVersionUpdater(scope: ScopeId, firstVersionToPublish: Int) extends DataSource[Int] with Log {
   private val versions: Iterator[Int] = Stream.from(firstVersionToPublish).iterator
 
   override def doStart(): Unit = {
@@ -39,11 +39,13 @@ class ExternalVersionUpdater(scope: ScopeId, firstVersionToPublish: Int) extends
   }
 }
 
+
 class BuildOutputTarget extends Target[BuildResult] with Log {
   override protected def output(t: Try[BuildResult], meta: OutputTick): Unit = {
     log.info(s"Received build output: ${t.get}")
   }
 }
+*/
 
 // helper to snap current version number for log display
 trait DisplayString { self: BuildResult =>

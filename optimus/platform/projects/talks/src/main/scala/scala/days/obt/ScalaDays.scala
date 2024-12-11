@@ -14,8 +14,8 @@ package scala.days.obt
 import optimus.platform.OptimusApp
 import optimus.platform._
 import optimus.platform.entersGraph
-import optimus.platform.reactive._
-import optimus.platform.reactive.dsl._
+/* import optimus.platform.reactive._
+import optimus.platform.reactive.dsl._ */
 import optimus.platform.util.Log
 
 import java.nio.file._
@@ -119,16 +119,16 @@ object ScalaDays extends OptimusApp with Log {
 
   // 4. simulate invalidating 'data' sources
   private val sourceToInvalidate = configSource(data)
-  private val updater = new ExternalVersionUpdater(data, firstVersionToPublish = 2)
-  private val target = new BuildOutputTarget
+  /* private val updater = new ExternalVersionUpdater(data, firstVersionToPublish = 2)
+  private val target = new BuildOutputTarget */
 
-  private val reactiveApplication: ReactiveApplication = react() {
+  /* private val reactiveApplication: ReactiveApplication = react() {
     updater --> sourceToInvalidate.codeVersion
     target <-- builder.build
-  }
+  } */
 
   @entersGraph override def run(): Unit = {
-    reactiveApplication.createEvaluator
+    // reactiveApplication.createEvaluator
     Thread.sleep(Integer.MAX_VALUE) // keep publishing until stopped
   }
 

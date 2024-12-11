@@ -13,6 +13,9 @@ object Platform {
     Compile / unmanagedSourceDirectories += (Compile / sourceDirectory).value / "loom-off",
   )
 
+  lazy val talks = Project("platformTalks", projectsDir / "talks")
+    .dependsOn(platform, entityPlugin, entityPluginJar % "plugin")
+
   lazy val platform = Project("platform", projectsDir / "platform")
     .settings(
       scalacOptions ++= ScalacOptions.common ++ ScalacOptions.macros ++ ScalacOptions.dynamics ++ Seq("-P:entity:enableStaging:true"),
