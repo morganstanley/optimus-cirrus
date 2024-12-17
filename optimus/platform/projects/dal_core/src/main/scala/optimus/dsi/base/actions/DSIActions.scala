@@ -32,6 +32,7 @@ import optimus.platform.storable._
 
 import java.time.Instant
 import java.util.Arrays
+import java.util.Objects
 import scala.collection.immutable
 
 sealed trait DSIAction
@@ -579,7 +580,7 @@ final case class PutAppEvent(
     reqId: String,
     reqHostPort: HostPort,
     auditDetails: Option[String],
-    dalTT: Option[Instant],
+    dalTTtoBeRemoved: Option[Instant],
     appId: DalAppId,
     zoneId: DalZoneId,
     elevatedForUser: Option[String],
@@ -588,7 +589,9 @@ final case class PutAppEvent(
     teaIds: Set[String])
     extends TxnAction {
 
-  def createAppEvent(tt: Instant): SerializedAppEvent =
+  def createAppEvent(tt: Instant, dalTt: Option[Instant]): SerializedAppEvent = {
+    // This is to keep backward compatibility, the dalTt field is to be present only when it is different from tt.
+    val finalDalTt = dalTt.filterNot(_.equals(tt))
     SerializedAppEvent(
       id,
       tt,
@@ -599,13 +602,15 @@ final case class PutAppEvent(
       reqId,
       reqHostPort,
       auditDetails,
-      dalTT,
+      finalDalTt,
       appId,
       zoneId,
       elevatedForUser,
       writerHostPort,
       receivedAt,
-      teaIds)
+      teaIds
+    )
+  }
 }
 
 final case class PutBusinessEventKey(key: BusinessEventKey) extends TxnAction
@@ -622,8 +627,12 @@ final case class PutBusinessEventIndexEntry(
   override def equals(o: Any): Boolean = o match {
     case entry: PutBusinessEventIndexEntry =>
       entry.id == id && entry.typeName == typeName &&
-      entry.properties == properties && entry.txTimeOpt == txTimeOpt && Arrays.equals(entry.hash, hash)
+      entry.properties == properties && Arrays.equals(entry.hash, hash)
     case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Objects.hash(id, typeName, properties, hash)
   }
 
   def createIndexEntry(tt: Instant): EventIndexEntry =

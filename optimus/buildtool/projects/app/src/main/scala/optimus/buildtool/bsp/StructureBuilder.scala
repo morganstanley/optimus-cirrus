@@ -354,7 +354,7 @@ object JsonImplicits {
     ProcessorConfiguration.apply)
 
   implicit val ScopePathsFormat: RootJsonFormat[ScopePaths] = jsonFormat10(ScopePaths.apply)
-  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat13(ScopeFlags.apply)
+  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat14(ScopeFlags.apply)
 
   implicit val interopConfigurationFormat: RootJsonFormat[InteropConfiguration] = jsonFormat2(
     InteropConfiguration.apply)

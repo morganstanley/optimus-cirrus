@@ -1,0 +1,83 @@
+// Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+// See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// TODO (OPTIMUS-13071): disabling the prohibition on event/entity trait only being allowed event/entity mixins
+all.scalac.warnings.overrides = ["nonfatal:optimus:12002", "nonfatal:optimus:17001", "nonfatal:optimus:22315"]
+
+main {
+  hasMacros = true
+  implementsMacros = true
+  compile {
+    modules = [
+      optimus.platform.breadcrumbs,
+      optimus.platform.collections,
+      optimus.platform.core,
+      optimus.platform.core_macro,
+      optimus.platform.dal_client,
+      optimus.platform.dal_core,
+      optimus.platform.entityagent,
+      optimus.platform.entityplugin,
+      optimus.platform.priql,
+      optimus.platform.priql_dal,
+      optimus.platform.priql_dal_persistence,
+      optimus.platform.utils,
+      optimus.platform.versioning_runtime
+    ]
+    libs = [
+      fsf.zookeeper,
+      msjava.base,
+      msjava.hdom,
+      msjava.logbackutils,
+      msjava.mqjms,
+      msjava.msnet,
+      msjava.pool,
+      msjava.tools,
+      msjava.zkapi,
+      ossjava.args4j,
+      ossjava.commons-lang3,
+      ossjava.curator,
+      ossjava.freemarker,
+      ossjava.guava,
+      ossjava.iharder-base64,
+      ossjava.jackson2,
+      ossjava.jackson2.jsr310,
+      ossjava.javamail,
+      ossjava.javassist,
+      ossjava.jsr305-annotations,
+      ossjava.logback,
+      ossjava.poi,
+      ossjava.protobuf-java,
+      ossjava.scannotation,
+      ossjava.slf4j.bridges,
+      ossjava.spring,
+      ossscala.jackson-module-scala,
+      ossscala.spray-json,
+      sam.zookeeper
+    ]
+  }
+  compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.attach
+  runtime {
+    modules = [
+      optimus.platform.platform_profiler
+    ]
+    libs = [
+      msjava.dbpool,
+      msjava.directory,
+      msjava.directory.testutils,
+      msjava.integrations,
+      msjava.protobufutils,
+      mskdb.kjava,
+      ossjava.commons-io,
+      ossjava.dom4j,
+      ossjava.javassist,
+      ossjava.reflections
+    ]
+  }
+}

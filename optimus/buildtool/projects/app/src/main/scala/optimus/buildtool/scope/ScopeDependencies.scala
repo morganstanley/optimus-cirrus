@@ -43,6 +43,7 @@ import scala.collection.immutable.Seq
 @entity class ScopeDependencies(
     val id: ScopeId,
     val mavenOnly: Boolean,
+    skipDependencyMappingValidation: Boolean,
     val dependencies: Dependencies,
     externalNativeDependencies: Seq[NativeDependencyDefinition],
     substitutions: Seq[Substitution],
@@ -85,7 +86,8 @@ import scala.collection.immutable.Seq
       directIds = distinctLast(externalDependencyIds()),
       indirectIds = distinctLast(upstreamExtDeps),
       substitutions = substitutions,
-      forbiddenDependencies = forbiddenDependencies
+      forbiddenDependencies = forbiddenDependencies,
+      skipDependencyMappingValidation = skipDependencyMappingValidation
     )
   }
 

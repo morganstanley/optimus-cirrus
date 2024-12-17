@@ -468,7 +468,6 @@ private[optimus] class DependencyTracker private[tracking] (
   }
 
   private[tracking] def notifyQueueIdle(lastAction: DependencyTrackerAction[_]): Unit = ()
-  private[tracking] def notifyActionCompleted(): Unit = ()
 
   /**
    * Get work count for this tracker, but not its children.

@@ -190,12 +190,12 @@ class ArchiveInstaller(installer: Installer) extends Log {
     val extraInJarFiles = {
       val max = (internalDeps ++ externalDeps).size - 1
       // prefix with index to prevent dupes and to ensure some level of classpath ordering
-      val copiedInternalDeps = internalDeps.zipWithIndex.map { case (a, i) =>
+      val copiedInternalDeps = internalDeps.sortBy(_.id.toString).zipWithIndex.map { case (a, i) =>
         val idx = Utils.sortableInt(i, max)
         ExtraFileInJar(RelativePath(s"$libDir/$idx-${a.id.tpe.name}-${a.file.name}"), a.path)
       }
       val externalOffset = internalDeps.size
-      val copiedExternalDeps = externalDeps.zipWithIndex.map { case (a, i) =>
+      val copiedExternalDeps = externalDeps.sortBy(_.id.toString).zipWithIndex.map { case (a, i) =>
         val idx = Utils.sortableInt(i + externalOffset, max)
         val filePath = a.file match {
           case f: JarHttpAsset =>

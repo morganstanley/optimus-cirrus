@@ -224,6 +224,9 @@ private[buildtool] case object DepCopyFromRemote extends CategoryTrace
 private[buildtool] case object InstallJar extends CategoryTrace
 private[buildtool] case object InstallSourceJar extends CategoryTrace
 private[buildtool] case object InstallPathingJar extends CategoryTrace
+private[buildtool] final case class InstallMavenJar(jarName: String) extends CategoryTrace {
+  override lazy val name: String = s"$categoryName($jarName)"
+}
 private[buildtool] case object InstallArchive extends CategoryTrace
 private[buildtool] case object InstallCpp extends CategoryTrace
 private[buildtool] case object InstallPython extends CategoryTrace
@@ -277,6 +280,9 @@ private[buildtool] object DeploymentScriptCommand extends AsyncCategoryTrace {
 }
 
 private[buildtool] case object GitDiff extends SingletonCategoryTrace
+private[buildtool] case object GitModifiedFiles extends SingletonCategoryTrace
+private[buildtool] case object GitModifiedLines extends SingletonCategoryTrace
+private[buildtool] case object GitUntrackedFiles extends SingletonCategoryTrace
 
 trait TraceFilter {
   import TraceFilter._

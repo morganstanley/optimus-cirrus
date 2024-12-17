@@ -75,8 +75,17 @@ abstract class RefCounter[T]() {
     }
   }
 
-  def emptyQueueAndTestWatermark(): Unit =
-    maybeBreachWatermark(cleared.addAndGet(cleanupLoop(0)))
+  private def emptyQueueAndTestWatermark(): Unit = {
+    // This method is hot, it runs whenever a ttrack ref is created.
+
+    // fast path: queue is empty, poll returns nothing, we exit immediately
+    val ref = queue.poll()
+    if (ref eq null) return
+
+    // ref wasn't null, so we did clear 1 item already
+    val found = cleanupLoop(1)
+    maybeBreachWatermark(cleared.addAndGet(found))
+  }
 
   def incrementCountManuallyForTestingAndTestWatermark(by: Int): Unit = {
     maybeBreachWatermark(cleared.addAndGet(by))
@@ -94,6 +103,7 @@ abstract class RefCounter[T]() {
   def snapshot: Acc = cleared.get()
 
   def createWeakReference(ref: T): WeakReference[T] = {
+    emptyQueueAndTestWatermark()
     new WeakReference[T](ref, queue)
   }
 }

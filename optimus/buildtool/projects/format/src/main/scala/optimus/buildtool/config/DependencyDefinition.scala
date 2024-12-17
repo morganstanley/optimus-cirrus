@@ -140,7 +140,8 @@ final case class DependencyDefinitions(
     directIds: Seq[DependencyDefinition],
     indirectIds: Seq[DependencyDefinition],
     substitutions: Seq[Substitution] = Nil,
-    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration] = Nil
+    forbiddenDependencies: Seq[ForbiddenDependencyConfiguration] = Nil,
+    skipDependencyMappingValidation: Boolean = false
 ) {
   val all: Seq[DependencyDefinition] = directIds ++ indirectIds
 }
@@ -199,11 +200,7 @@ final case class MavenDependencies(
     noVersionMavenDeps: Seq[DependencyDefinition]) {
   val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixModeMavenDeps
   // be used by transitive mapping validation
-  val allMappedMavenCoursierKey: Seq[DependencyCoursierKey] = {
-    (noVersionMavenDeps ++ mixModeMavenDeps).map { d =>
-      DependencyCoursierKey(d.group, d.name, d.configuration, d.version)
-    }
-  }
+  val allMappedMavenDeps: Seq[DependencyDefinition] = noVersionMavenDeps ++ mixModeMavenDeps
 }
 
 final case class MappedDependencyDefinitions(

@@ -118,7 +118,9 @@ public final class CoreHelpers {
       if (fullString.length() > maxChars) return fullString.substring(0, maxChars) + "...";
       else return fullString;
     } catch (Throwable ex) {
-      return (whenFailed == null) ? ex.toString() : o.getClass().getName() + whenFailed;
+      return (whenFailed == null)
+          ? ex.toString()
+          : o.getClass().getName() + whenFailed + " Exception was: " + ex;
     }
   }
 

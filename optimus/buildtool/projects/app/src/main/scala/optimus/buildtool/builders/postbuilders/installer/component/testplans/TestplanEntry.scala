@@ -180,3 +180,18 @@ final case class PactContractTestplanEntry(
     bind(value, replacements)
   }
 }
+
+final case class CustomPassfailTestplanEntry(
+    displayTestName: String,
+    groupName: String,
+    metaBundle: MetaBundle,
+    treadmillOpts: Map[String, String],
+    additionalBindings: Map[String, String],
+    testTasks: Seq[TestplanTask],
+    testTaskOverrides: Map[TestplanTask, Set[String]],
+    testModulesFileName: String)
+    extends TestplanEntry {
+  override def bind(value: String): String = bind(value, commonBindings ++ additionalBindings)
+  override def copyEntry(testTasks: Seq[TestplanTask], groupName: String): TestplanEntry =
+    this.copy(testTasks = testTasks, groupName = groupName)
+}

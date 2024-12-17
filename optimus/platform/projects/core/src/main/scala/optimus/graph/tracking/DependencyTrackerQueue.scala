@@ -283,8 +283,6 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     queueLock.synchronized { workQueue.iterator.toList }
 
   private def afterActionCompleted(completedAction: DependencyTrackerAction[_]): Unit = {
-    tracker.notifyActionCompleted()
-
     var immediate: ArrayBuffer[DependencyTrackerAction[_]] = null
     var nextIsUpdate = false
 

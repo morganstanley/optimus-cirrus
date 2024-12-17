@@ -48,17 +48,30 @@ object DSITxn {
 
   type Actions = Seq[TxnAction]
 
-  def replaceTt(txn: DSITxn[Seq[Result]], tt: Instant): DSITxn[Seq[Result]] = {
-    val ttLong = DateTimeSerialization.fromInstant(tt)
-    def updateAppEvent(appEvent: SerializedAppEvent) = {
-      if (appEvent.dalTT.isDefined) appEvent.copy(dalTT = Some(tt)) else appEvent.copy(tt = tt)
-    }
+  private def updateAppEvent(appEvent: SerializedAppEvent, tt: Instant) = {
+    if (appEvent.dalTT.isDefined) appEvent.copy(dalTT = Some(tt)) else appEvent.copy(tt = tt)
+  }
 
+  def replaceDalTt(txn: DSITxn[Seq[Result]], tt: Instant): DSITxn[Seq[Result]] = {
+    val updatedResults: Seq[Result] = txn.result.map {
+      case pae: PutApplicationEventResult => pae.copy(appEvent = updateAppEvent(pae.appEvent, tt))
+      case ga: GeneratedAppEventResult    => ga.copy(appEvent = updateAppEvent(ga.appEvent, tt))
+      case x                              => x
+    }
+    val updatedTxnActions = txn.actions.map {
+      case pae: PutAppEvent => pae.dalTTtoBeRemoved.map(_ => pae.copy(dalTTtoBeRemoved = Some(tt))).getOrElse(pae)
+      case x                => x
+    }
+    DSITxn(updatedResults, updatedTxnActions)
+  }
+
+  def replaceTtAndDalTt(txn: DSITxn[Seq[Result]], tt: Instant): DSITxn[Seq[Result]] = {
+    val ttLong = DateTimeSerialization.fromInstant(tt)
     val updatedResults: Seq[Result] = txn.result.map {
       case ga: GeneratedAppEventResult =>
         val putResults = ga.putResults.map(_.copy(txTime = tt, lockToken = ttLong))
         val invResults = ga.invResults.map(_.copy(txTime = tt))
-        GeneratedAppEventResult(updateAppEvent(ga.appEvent), ga.assertResults, putResults, invResults)
+        GeneratedAppEventResult(updateAppEvent(ga.appEvent, tt), ga.assertResults, putResults, invResults)
       case pae: PutApplicationEventResult =>
         val bes = pae.beResults.map { be =>
           val puts = be.putResults.map(_.copy(txTime = tt, lockToken = ttLong))
@@ -66,7 +79,7 @@ object DSITxn {
           val reverts = be.revertResults.map(_.copy(txTime = tt, lockToken = ttLong))
           be.copy(putResults = puts, revertResults = reverts, invResults = invalids, txTime = tt)
         }
-        pae.copy(appEvent = updateAppEvent(pae.appEvent), beResults = bes)
+        pae.copy(appEvent = updateAppEvent(pae.appEvent, tt), beResults = bes)
       case ic: InvalidateAllCurrentResult => ic
       case cs: CreateSlotsResult          => cs
       case atr: AccTableResult            => atr
@@ -79,8 +92,8 @@ object DSITxn {
     val updatedTxnActions = txn.actions.map {
       case poe: PutObliterateEffect          => PutObliterateEffect(poe.effect.copy(txTime = tt))
       case pbeie: PutBusinessEventIndexEntry => pbeie.copy(txTimeOpt = Some(tt))
-      case pae: PutAppEvent                  => pae.dalTT.map(_ => pae.copy(dalTT = Some(tt))).getOrElse(pae)
-      case pk: PutTemporalKey                => pk.copy(key = pk.key.copy(lockToken = ttLong))
+      case pae: PutAppEvent   => pae.dalTTtoBeRemoved.map(_ => pae.copy(dalTTtoBeRemoved = Some(tt))).getOrElse(pae)
+      case pk: PutTemporalKey => pk.copy(key = pk.key.copy(lockToken = ttLong))
       // UpdateEntityGrouping do have existing lock token but that doesn't required tt replacement
       case eg: EntityGroupingTxnAction     => eg
       case pie: PutIndexEntry              => pie

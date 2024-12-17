@@ -65,6 +65,8 @@ class ImmutableArray[A] private (private val as: Array[A])
     Array.copy(rawArray, 0, out, 0, rawArray.length)
     out
   }
+
+  def cloneUnderlying: Array[A] = as.clone()
 }
 
 object ImmutableArray {

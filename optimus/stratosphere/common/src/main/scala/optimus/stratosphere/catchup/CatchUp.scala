@@ -22,7 +22,9 @@ import optimus.stratosphere.utils.IntervalPrinter.timeThis
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.io.Source
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
@@ -42,6 +44,8 @@ object CatchUp {
   private val CatchupHead = "CATCHUP_HEAD"
 
   private val CommitTagExtractor = """(\w+)\s+refs/tags/(.*)""".r
+
+  private val CodetreeArchiveRemoteName = "codetree-archive"
 
   private object CatchupProgress {
     val postStateInit = 0.1
@@ -149,7 +153,9 @@ class CatchUp(
       if (isOnLocalBranch) gitUtil.createBranch(branchToUse, CatchupHead, force = true)
       else gitUtil.resetKeep(commit)
 
-      val result = if (isMerge) {
+      val result = if (migrateAfterTruncation(currBranch)) {
+        migrateBranchToTruncatedHistory(currBranch, commit)
+      } else if (isMerge) {
         logger.info(s"Merging latest good commit: $commit to current branch...")
         gitUtil.merge(commit)
       } else if (isOnLocalBranch) {
@@ -270,6 +276,42 @@ class CatchUp(
         case _          =>
       }
     }
+  }
+
+  private def migrateAfterTruncation(currentBranch: String): Boolean = {
+    val isOnLocalBranch = currentBranch != branchToUse
+    lazy val maybeNewRootCommit = ws.internal.historyTruncation.newRootCommit
+    lazy val isBranchMigrated = gitUtil.checkBranchContainsRevision(currentBranch, maybeNewRootCommit.get)
+    isOnLocalBranch && maybeNewRootCommit.isDefined && !isBranchMigrated
+  }
+
+  private def migrateBranchToTruncatedHistory(currentBranch: String, commit: String): String = {
+    logger.info(s"Migrating '$currentBranch' to truncated history...")
+    fetchCodetreeArchiveRepo()
+    val commitsDiff = calculateDiffWithArchivedHistory(currentBranch)
+    if (commitsDiff.isEmpty) {
+      throw new StratosphereException(
+        s"There is nothing to migrate on branch '$currentBranch'. Please cut a new one from '$branchToUse'")
+    }
+    gitUtil.resetKeep(commit)
+    logger.info("Applying commits on a new baseline...")
+    gitUtil.cherryPick(commitsDiff)
+  }
+
+  private def fetchCodetreeArchiveRepo(): Unit = {
+    logger.info("Fetching archived git history...")
+    if (!gitUtil.allRemoteNames().contains(CodetreeArchiveRemoteName)) {
+      val url = ws.internal.historyTruncation.codetreeArchiveUrl.get
+      gitUtil.addRemoteNoTags(CodetreeArchiveRemoteName, url)
+    }
+    gitUtil.fetch(CodetreeArchiveRemoteName, branchToUse)
+  }
+
+  private def calculateDiffWithArchivedHistory(currentBranch: String): Seq[String] = {
+    logger.info("Calculating diff with archived history...")
+    val result = gitUtil
+      .runGit("log", s"$CodetreeArchiveRemoteName/$branchToUse..$currentBranch", "--format=%H", "--no-merges")
+    Source.fromString(result).getLines().to(Seq)
   }
 
   private def step(fraction: Double, canCancel: Boolean = true): Unit = {

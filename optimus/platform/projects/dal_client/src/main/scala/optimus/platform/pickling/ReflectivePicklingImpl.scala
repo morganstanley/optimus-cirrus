@@ -84,7 +84,7 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       initInfo: InitInfo,
       info: Info,
       ref: Reference): Unit
-  protected[optimus] def missingProperty(name: String): Unit
+  protected[optimus] def missingProperty(name: String): Nothing
 
   def pickle(inst: Unpickled, out: PickledOutputStream): Unit = {
     inst.$info.unsafeFieldInfo.asyncOff.foreach { fieldInfo =>
@@ -116,7 +116,7 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       ref: Reference): Unpickled = {
     val inst = unsafe.allocateInstance(info.runtimeClass).asInstanceOf[Unpickled]
     initMetadata(inst, is, initInfo, info, ref)
-    unpickleFill(info, is, forceUnpickle, incomplete = false, inst)
+    unpickleFill(info, is, forceUnpickle, incomplete = false, isInplaceUpdate = false, inst)
     inst
   }
 
@@ -140,15 +140,16 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       is: PickledInputStream,
       forceUnpickle: Boolean,
       incomplete: Boolean,
+      isInplaceUpdate: Boolean,
       inst: Unpickled): Unit = {
     info.unsafeFieldInfo
       // TODO (OPTIMUS-22294): Asyncing the closure triggers sync stack detection.  Apparently sync stacks are ok.
       .asyncOff
-      .foreach { case UnsafeFieldInfo(pinfo, storageKind, initMethod, _, fieldSetter) =>
+      .foreach { case UnsafeFieldInfo(pinfo, storageKind, initMethod, fieldReader, fieldSetter) =>
         if (storageKind == UnsafeFieldInfo.StorageKind.Node) { // handle Entity/Option[Entity]/Collection[Entity] cases
           val hasValue = if (forceUnpickle) is.seek(pinfo.name, pinfo.unpickler) else is.seekRaw(pinfo.name)
           if (hasValue || !incomplete) {
-            val value = {
+            val value: PropertyNode[_] = {
               if (hasValue) {
                 if (forceUnpickle) new AlreadyCompletedPropertyNode(is.value, inst.asInstanceOf[Entity], pinfo)
                 else
@@ -163,7 +164,10 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
                 else missingProperty(pinfo.name)
               }
             }
-            fieldSetter.invokeExact(inst, value): Unit // Type ascription is not optional
+            if (isInplaceUpdate && DiagnosticSettings.reactiveWarnOnDangerousUpdates)
+              warnOnDangerousReactiveUpdate(inst, pinfo, fieldReader, value)
+
+            fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascriptions are not optional
           }
         } else { // handle non-entity types - primary types, embeddable, Option/Collection of such types
           val hasValue = is.seek(pinfo.name, pinfo.unpickler)
@@ -173,6 +177,10 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
               else if (initMethod.isDefined) initMethod.get.invoke(inst)
               else if (!incomplete) missingProperty(pinfo.name)
             }
+
+            if (isInplaceUpdate && DiagnosticSettings.reactiveWarnOnDangerousUpdates)
+              warnOnDangerousReactiveUpdate(inst, pinfo, fieldReader, value)
+
             try {
               fieldSetter.invokeExact(inst, value): Unit // Type ascription is not optional
             } catch {
@@ -195,7 +203,7 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
    *   The entity to update
    */
   def unpickleUpdate(is: PickledInputStream, entity: Unpickled): Unit = {
-    unpickleFill(entity.$info, is, forceUnpickle = false, incomplete = true, entity)
+    unpickleFill(entity.$info, is, forceUnpickle = false, incomplete = true, isInplaceUpdate = true, entity)
   }
 
   protected def resolveSetter(lookup: MethodHandles.Lookup, fld: Field, isVal: Boolean): MethodHandle = {
@@ -218,12 +226,25 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
     log.error(
       s"Can't find property $which in $where. Deserializing such an object will doubtlessly disappoint. (12000)")
   }
+
+  private def warnOnDangerousReactiveUpdate(
+      inst: Unpickled,
+      pinfo: PropertyInfo[_],
+      reader: MethodHandle,
+      current: Any): Unit = {
+    val info =
+      try {
+        val prev = reader.invokeExact(inst): AnyRef
+        s"$inst.${pinfo.name}: $prev => $current"
+      } catch { case t: Throwable => s"<error: ${t.getMessage}>" }
+    log.warn("Dangerous Reactive Update for " + info)
+  }
 }
 
 object ReflectiveEntityPicklingImpl // used in [core]o.p.pickling.ReflectiveEntityPickling.instance
     extends ReflectivePicklingImpl[EntityInfo, StorageInfo, EntityReference, Entity]
     with ReflectiveEntityPickling {
-  override protected[optimus] def missingProperty(name: String): Unit =
+  override protected[optimus] def missingProperty(name: String): Nothing =
     throw new IncompatibleVersionException(
       s"Cannot deserialize entity since the property \'$name\' was not found in the pickled stream. In order to facilitate data migration define a versioning transformer. Please check codetree docs for more details on DAL versioning.")
 
@@ -308,7 +329,7 @@ object ReflectiveEntityPicklingImpl // used in [core]o.p.pickling.ReflectiveEnti
 
 object ReflectiveEventPickling
     extends ReflectivePicklingImpl[EventInfo, DALEventInfo, BusinessEventReference, BusinessEvent] {
-  override protected[optimus] def missingProperty(name: String): Unit =
+  override protected[optimus] def missingProperty(name: String): Nothing =
     throw new IncompatibleVersionException(
       s"Cannot deserialize event since the property \'$name\' was not found in the pickled stream. In order to facilitate data migration define a versioning transformer. Please check codetree docs for more details on DAL versioning.")
 

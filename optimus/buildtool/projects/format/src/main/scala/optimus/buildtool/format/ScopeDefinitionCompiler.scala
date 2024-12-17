@@ -558,6 +558,7 @@ class ScopeDefinitionCompiler(
           bundle = config.optionalBoolean("bundle"),
           includeInClassBundle = config.optionalBoolean("includeInClassBundle"),
           mavenOnly = config.optionalBoolean(MavenOnlyKey),
+          skipDependencyMappingValidation = config.optionalBoolean("skipDependencyMappingValidation"),
           allowUnorderedAndDuplicateDependencies = scopeAllowUnorderedDependencies,
           relationships = (compileRels ++ compileOnlyRels ++ runtimeRels ++ webRels ++ electronRels).distinct,
           extraLibs = extraLibs,
@@ -764,6 +765,7 @@ class ScopeDefinitionCompiler(
 
         val isAgent = agentConf.isDefined
         val mavenOnly = resolvedConfiguration.mavenOnly.getOrElse(false)
+        val skipDependencyMappingValidation = resolvedConfiguration.skipDependencyMappingValidation.getOrElse(false)
 
         val scopePaths = ScopePaths(
           workspaceSrcRoot,
@@ -793,7 +795,8 @@ class ScopeDefinitionCompiler(
           installSources = resolvedConfiguration.installSources.getOrElse(false),
           installAppScripts = resolvedConfiguration.installAppScripts.getOrElse(false),
           pathingBundle = resolvedConfiguration.bundle.getOrElse(false),
-          mavenOnly = mavenOnly
+          mavenOnly = mavenOnly,
+          skipDependencyMappingValidation = skipDependencyMappingValidation
         )
 
         val cfg = ScopeConfiguration(

@@ -165,7 +165,8 @@ private[buildtool] final case class ScopeFlags(
     installSources: Boolean,
     installAppScripts: Boolean,
     pathingBundle: Boolean,
-    mavenOnly: Boolean
+    mavenOnly: Boolean,
+    skipDependencyMappingValidation: Boolean
 )
 object ScopeFlags {
   val empty: ScopeFlags = ScopeFlags(
@@ -181,7 +182,8 @@ object ScopeFlags {
     installSources = false,
     installAppScripts = false,
     pathingBundle = false,
-    mavenOnly = false
+    mavenOnly = false,
+    skipDependencyMappingValidation = false
   )
 }
 

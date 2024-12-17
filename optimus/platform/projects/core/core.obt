@@ -1,0 +1,75 @@
+// Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+// See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+main {
+  hasMacros = true
+  implementsMacros = true
+  transitiveScalacPlugins = false
+  compile {
+    modules = [
+      optimus.gsf.gsf_breadcrumbs,
+      optimus.platform.breadcrumbs,
+      optimus.platform.breadcrumbs.internal, // TODO (OPTIMUS-36426): this will need dealt with soon but not now
+      optimus.platform.core_config,
+      optimus.platform.core_macro,
+      optimus.platform.cppagent,
+      optimus.platform.debugger,
+      optimus.platform.entityagent,
+      optimus.platform.inputs,
+      optimus.platform.instrumentation,
+      optimus.platform.stagingplugin,
+      optimus.platform.utils
+    ]
+    libs = [
+      msjava.base,
+      msjava.tools,
+      msjava.zkapi,
+      optimus.async-profiler,
+      ossjava.args4j,
+      ossjava.caffeine,
+      ossjava.commons-lang3,
+      ossjava.commons-text,
+      ossjava.eaio-uuid-stephenc,
+      ossjava.fastutil,
+      ossjava.guava,
+      ossjava.iharder-base64,
+      ossjava.jackson2,
+      ossjava.jna,
+      ossjava.jodatime,
+      ossjava.jsr305-annotations,
+      ossjava.logback,
+      ossjava.opencsv,
+      ossjava.slf4j,
+      ossjava.spring,
+      ossscala.jackson-module-scala,
+      ossscala.scala-collection-compat,
+      ossscala.scala.tools,
+      sam.zookeeper
+    ]
+  }
+  compileOnly.modules = [
+    optimus.platform.legacy-jdk-api-stubs.mbeans,
+    optimus.platform.legacy-jdk-api-stubs.unsafe
+  ]
+  runtime {
+
+    modules = [
+      optimus.platform.breadcrumbs.auth, // ideally this would be an "internal" runtime dep of o.p.breadcrumbs.main but we can't do that so this instead
+      optimus.platform.dal_environment.internal
+    ]
+    libs = [
+      ossjava.commons-io,
+      ossscala.jackson-module-scala
+    ]
+  }
+}
+test {
+  open = true
+  compile {}
+}

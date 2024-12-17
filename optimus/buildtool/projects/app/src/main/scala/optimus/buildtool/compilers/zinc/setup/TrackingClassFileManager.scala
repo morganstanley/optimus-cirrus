@@ -49,9 +49,10 @@ class TrackingClassFileManager(previousAnalysis: Option[AnalysisContents]) exten
     _staleClasses.iterator.flatMap(asSources).toIndexedSeq
   }
 
-  def staleClasses: Seq[ClassInJarVirtualFile] = _staleClasses.flatten.toIndexedSeq
+  def noCompilations: Boolean = _generatedClasses.forall(_.isEmpty)
+  def onlyDeletions: Boolean = noCompilations && _staleClasses.exists(_.nonEmpty)
 
-  def generatedClasses: Seq[VirtualFile] = _generatedClasses.flatten.toIndexedSeq
-
-  def deletedClasses: Seq[ClassInJarVirtualFile] = staleClasses.filterNot(generatedClasses.contains)
+  def deletedClasses: Seq[ClassInJarVirtualFile] = _staleClasses.flatMap { sc =>
+    sc.filter(c => !_generatedClasses.exists(_.contains(c)))
+  }.toIndexedSeq
 }

@@ -156,6 +156,7 @@ object KnownProperties {
     def avgOverTime: Boolean = !sumOverTime
     def avgOverEngines: Boolean = !sumOverEngines
     def graphable: Boolean = (flags & UNGRAPHABLE) == 0
+    def isFlame: Boolean = (flags & FLAME) != 0
 
     def description =
       if (descriptionOverride.nonEmpty) descriptionOverride

@@ -13,10 +13,11 @@ package optimus.buildtool.utils
 
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.config.ScopeId
 
 import java.time.Instant
 import optimus.buildtool.files.Directory
-import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.trace._
 import optimus.platform._
 import optimus.stratosphere.config.StratoWorkspace
 import org.eclipse.jgit.diff.DiffEntry
@@ -49,21 +50,27 @@ trait FileDiff {
 
 class LazyGitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, baseline: String) extends FileDiff {
   private val diffFiles: CompletableFuture[Set[String]] = CompletableFuture.supplyAsync { () =>
-    val m = utils.diffFiles(baseline)
-    GitLog.log.debug(s"${m.size} modified files since baseline $baseline:\n\t${m.map(_.pathString).mkString("\n\t")}")
-    m.map(f => workspaceSourceRoot.relativize(f).pathString)
+    ObtTrace.traceTask(ScopeId.RootScopeId, GitModifiedFiles) {
+      val m = utils.diffFiles(baseline)
+      GitLog.log.debug(s"${m.size} modified files since baseline $baseline:\n\t${m.map(_.pathString).mkString("\n\t")}")
+      m.map(f => workspaceSourceRoot.relativize(f).pathString)
+    }
   }
   private val untrackedFiles: CompletableFuture[Set[String]] = CompletableFuture.supplyAsync { () =>
-    val u = utils.untrackedFiles()
-    GitLog.log.debug(s"${u.size} untracked files:\n\t${u.map(_.pathString).mkString("\n\t")}")
-    u.map(f => workspaceSourceRoot.relativize(f).pathString)
+    ObtTrace.traceTask(ScopeId.RootScopeId, GitUntrackedFiles) {
+      val u = utils.untrackedFiles()
+      GitLog.log.debug(s"${u.size} untracked files:\n\t${u.map(_.pathString).mkString("\n\t")}")
+      u.map(f => workspaceSourceRoot.relativize(f).pathString)
+    }
   }
   private val lines: CompletableFuture[Map[String, Set[Int]]] = CompletableFuture.supplyAsync { () =>
-    val m = utils.diffLines(baseline)
-    GitLog.log.debug(
-      s"${m.flatMap(_._2).sum} modified lines in ${m.size} files since baseline $baseline:\n\t${m.keys.map(_.pathString).mkString("\n\t")}"
-    )
-    m.map { case (f, ls) => (workspaceSourceRoot.relativize(f).pathString, ls) }
+    ObtTrace.traceTask(ScopeId.RootScopeId, GitModifiedLines) {
+      val m = utils.diffLines(baseline)
+      GitLog.log.debug(
+        s"${m.flatMap(_._2).sum} modified lines in ${m.size} files since baseline $baseline:\n\t${m.keys.map(_.pathString).mkString("\n\t")}"
+      )
+      m.map { case (f, ls) => (workspaceSourceRoot.relativize(f).pathString, ls) }
+    }
   }
 
   // Note: These should not be marked @impure since they're called from @nodes (eg. in ZincCompiler)

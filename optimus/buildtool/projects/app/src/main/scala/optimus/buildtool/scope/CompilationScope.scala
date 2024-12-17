@@ -325,6 +325,7 @@ object CompilationScope {
       ScopeDependencies(
         id = id,
         mavenOnly = config.flags.mavenOnly,
+        skipDependencyMappingValidation = config.flags.skipDependencyMappingValidation,
         dependencies = deps,
         externalNativeDependencies = nativeDeps,
         substitutions = config.dependencies.substitutions,

@@ -1566,7 +1566,8 @@ public abstract class NodeTask extends NodeAwaiter
 
   public final String resultAsString(int maxChars) {
     if (isDoneWithException()) return exception().toString();
-    else if (isDoneWithResult()) return CoreHelpers.safeToString(resultObject(), null, maxChars);
+    else if (isDoneWithResult())
+      return CoreHelpers.safeToString(resultObject(), " Could not display result!", maxChars);
     return "[..." + stateAsString() + "]";
   }
 

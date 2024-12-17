@@ -41,6 +41,7 @@ import optimus.graph.tracking.TraversalIdSource
 import optimus.platform.NodeHash
 import optimus.platform.Tweak
 import optimus.platform.TweakableListener
+import optimus.platform.util.Log
 
 /**
  * Tracks tweakable nodes and the nodes which depend on them. Supports cache invalidation of the dependent nodes - this
@@ -67,26 +68,7 @@ private[optimus] final class TweakableTracker(
   override val respondsToInvalidationsFrom: Set[TweakableListener] = parent.respondsToInvalidationsFrom + this
   override def isDisposed: Boolean = owner.isDisposed
 
-  private object RefCounterWatermark extends TrackingGraphCleanupTrigger
-  override val refQ: RefCounter[NodeTask] = new RefCounter[NodeTask] {
-    override def nextWatermark(currentWatermark: Acc): Acc = currentWatermark + Settings.ttrackClearedNodeRefWatermark
-
-    override def onWatermarkBreached(): Unit = {
-      // Breaching watermarks enqueues high prio cleanups that will jump the queue in front of other actions. Those
-      // cleanups are still subject to `cleanupRequired()` so they aren't guaranteed to run or cleanup anything, but they
-      // at least ensure that we will attempt some cleanups, even if action queues are consistently busy.
-      //
-      // This is called from the TTrackRef constructor (rarely but still!) so it needs to return asynchronously without
-      // waiting on the cleanup, otherwise there is a risk of deadlock. That is always the case because cleanups are
-      // always done asynchronously (through optimus.graph.tracking.DependencyTrackerQueue.executeAsync, which
-      // either enqueues or run through Scheduler.executeNodeAsync).
-      //
-      // The cleanup is not interruptable, which is important because the place where it becomes necessary is when
-      // queues are consistently busy. Were it interruptable, it would be interrupted immediately after starting.
-      log.info(s"Scheduling cleanup for ${owner.name} based on reference counter watermark")
-      owner.root.runCleanupNow(RefCounterWatermark)
-    }
-  }
+  override val refQ: RefCounter[NodeTask] = new RefQ(owner.root)
 
   private var collectedReferences: refQ.Acc = _
   protected[tracking] var ttracks: java.util.Map[TweakableKey, TTrackRoot] = new ConcurrentHashMap()
@@ -516,5 +498,26 @@ object TweakableTracker {
       s"[$name] Cleanup had cost:benefit ratio $costToBenefitRatio so next timed cleanup " +
         s"delay is adjusted from $currentDelay ms to $newDelay ms")
     newDelay
+  }
+
+  private object RefCounterWatermark extends TrackingGraphCleanupTrigger
+  private class RefQ(root: DependencyTrackerRoot) extends RefCounter[NodeTask] with Log {
+    override def nextWatermark(currentWatermark: Acc): Acc = currentWatermark + Settings.ttrackClearedNodeRefWatermark
+
+    override def onWatermarkBreached(): Unit = {
+      // Breaching watermarks enqueues high prio cleanups that will jump the queue in front of other actions. Those
+      // cleanups are still subject to `cleanupRequired()` so they aren't guaranteed to run or cleanup anything, but they
+      // at least ensure that we will attempt some cleanups, even if action queues are consistently busy.
+      //
+      // This is called from the TTrackRef constructor (rarely but still!) so it needs to return asynchronously without
+      // waiting on the cleanup, otherwise there is a risk of deadlock. That is always the case because cleanups are
+      // always done asynchronously (through optimus.graph.tracking.DependencyTrackerQueue.executeAsync, which
+      // either enqueues or run through Scheduler.executeNodeAsync).
+      //
+      // The cleanup is not interruptable, which is important because the place where it becomes necessary is when
+      // queues are consistently busy. Were it interruptable, it would be interrupted immediately after starting.
+      log.info(s"Scheduling cleanup for ${root.name} based on reference counter watermark")
+      root.runCleanupNow(RefCounterWatermark)
+    }
   }
 }

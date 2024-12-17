@@ -309,8 +309,8 @@ object InstallPathBuilder {
   def mavenRelease(installDir: Directory, installVersion: String): InstallPathBuilder =
     new MavenInstallPathBuilder(installDir, installVersion)
 
-  /** This one infers the version. */
-  def runtime(installDir: Directory): InstallPathBuilder = {
+  /** This one infers the version if none is provided. */
+  def runtime(installDir: Directory, maybeInstallVersion: Option[String]): InstallPathBuilder = {
     // We want to resolve symlinks defined in the context of Continuous Integration and quality assurance
     // (i.e. latest build, current QA release, etc.
     def resolveSymLinkButNotMountPoint(resolved: Directory, original: Directory): (Boolean, Directory) = {
@@ -343,7 +343,7 @@ object InstallPathBuilder {
     if (symLinkResolved)
       log.info(s"Symlink path found: $installDir -> $realInstallDir")
     val root = inferInstallRoot(realInstallDir)
-    val version = inferVersion(root, realInstallDir)
+    val version = maybeInstallVersion.getOrElse(inferVersion(root, realInstallDir))
     log.info(s"Inferred root '$root' and version '$version' from $realInstallDir for the installation.")
     if (root.isChildOf(NamingConventions.AfsDist))
       dist(version)
@@ -360,7 +360,7 @@ object InstallPathBuilder {
   def staging(installVersion: String, stagingDir: Directory): InstallPathBuilder =
     new DistInstallPathBuilder(installVersion, stagingDir)
 
-  def inferVersion(installRoot: Directory, installDir: Directory): String = {
+  private[files] def inferVersion(installRoot: Directory, installDir: Directory): String = {
     // Not using NamingConventions.MsDist here since it prevents testing on different filesystems
     val msDist = Directory(installDir.fileSystem.getPath(AfsNamingConventions.AfsDistStr))
     if (installDir isChildOf msDist) {
@@ -401,7 +401,7 @@ object InstallPathBuilder {
   private val linuxPartsForAfsRoot: Int = 6 // //afs/base is three parts, namely root (/), afs, path
   private val windowsPartsForAfsRoot: Int = 4 // //afs/base is one part on Windows OS
   private val thisOSPartsForAfsRoot: Int = if (OsUtils.isWindows) windowsPartsForAfsRoot else linuxPartsForAfsRoot
-  def inferInstallRoot(installLocation: Directory): Directory = {
+  private[files] def inferInstallRoot(installLocation: Directory): Directory = {
     def getParts(upToIndex: Int): Seq[Path] =
       (0 until upToIndex.min(installLocation.path.getNameCount)).map(installLocation.path.getName)
     def buildPath(parts: Seq[Path]): Path = {
@@ -426,7 +426,7 @@ object InstallPathBuilder {
     ) {
       Directory(buildPath(getParts(pathToInstallCommon.getNameCount - NamingConventions.InstallPathComponents)))
     } else {
-      log.debug(
+      log.warn(
         s"Not a known case (i.e. /afs/path/to/meta/PROJ/project/release, NFS build artifacts or workspace's install/): using $installLocation"
       )
       installLocation

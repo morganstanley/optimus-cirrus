@@ -226,6 +226,8 @@ public class NodeClsIDSupport {
   public static boolean equals(NodeKey<?> a, NodeKey<?> b) throws Throwable {
     if (a == b) return true;
     if (a == null || b == null) return false;
+    // Class equality check is ok here because proxies compare via their srcNodeTemplates
+    // [SEE_NO_SYMMETRY_EQUALS_FOR_CACHING]
     if (a.getClass() != b.getClass()) return false;
     FieldMap nclsID = a.propertyInfo().fieldMap;
     if (nclsID == null)

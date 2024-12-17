@@ -28,5 +28,6 @@ object MethodArgConstants {
   val reduce = "reduce"
   val right = "right"
   val rightDefault = "rightDefault"
+  val on = "on"
   val others = "others"
 }

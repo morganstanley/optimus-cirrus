@@ -179,7 +179,7 @@ object SourceFolder {
 }
 object FileSystemSourceFolder {
   // don't rehash source files unless we really need to (purely for performance reasons, hence
-  // why it uses the optimizerCache rather than reallyBigCache)
+  // why it uses the optimizerCache/sourceCache rather than reallyBigCache)
   hash.setCustomCache(NodeCaching.optimizerCache)
   SourceFile.hashedContent.setCustomCache(NodeCaching.sourceCache)
 

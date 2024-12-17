@@ -107,7 +107,7 @@ object ConfigUtils {
         expected: Keys.KeySet,
         filter: String => Boolean = _ => true
     ): Seq[Message] = {
-      val extraKeys = keys(origin).getOrElse(Nil).toSet.filter(filter) -- expected.all
+      val extraKeys = keys(origin).getOrElse(Nil).toSet.filter(filter) -- expected.all -- Keys.ignoredKeysForValidation
       def msg(key: String) = s"Unrecognized key: '$key', possible ones: ${expected.order.mkString(", ")}"
       extraKeys.map(k => origin.warningAt(conf.getValue(k), msg(k))).to(Seq)
     }

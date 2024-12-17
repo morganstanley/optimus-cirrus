@@ -281,7 +281,9 @@ abstract class BaseUNodeCache extends NodeCCache {
       else if (e.hash == hash) { // Quickest test
         collisionCount++; // Subtract later if we do find a match
 
+        // Value and key are not interchangeable here [SEE_NO_SYMMETRY_EQUALS_FOR_CACHING]
         if (!value.equalsForCaching(key)) continue;
+
         // isUsableWRTCS is arbitrarily slow in presence of exceptions, so keep this check first
         if (!policy.matchesScenario(value, key)) continue;
         // a.k.a. key or value or null
