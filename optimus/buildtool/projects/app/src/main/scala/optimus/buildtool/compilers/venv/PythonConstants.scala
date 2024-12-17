@@ -20,14 +20,22 @@ import optimus.buildtool.utils.Jars
 import java.nio.file.Path
 import java.nio.file.Paths
 import scala.collection.immutable.Seq
+import scala.util.Properties.isWin
 
 object PythonConstants {
   object tpa {
     val ConfigFileName: String = "config.json"
 
+    val username = System.getProperty("user.name")
+    val configDir: String = s"/var/tmp/$username/.tpa/config"
+    val uvConfigFilePath: String = s"$configDir/uv.toml"
+    val pipConfigFilePath: String = s"$configDir/pip.ini"
+    val UV_CONFIG_FILE: String = "UV_CONFIG_FILE"
+    val PIP_CONFIG_FILE: String = "PIP_CONFIG_FILE"
+
     def unpackedArtifact(artifactName: String, config: TpaConfig): Path = {
-      val user = System.getProperty("user.name")
-      Paths.get(s"/var/tmp/$user/.tpa/artifacts/.$artifactName.tpa-${config.id}")
+      if (isWin) throw new IllegalStateException("Windows is not supported")
+      else Paths.get(s"/var/tmp/$username/.tpa/artifacts/.$artifactName.tpa-${config.id}")
     }
 
     def unpackedArtifactSrc(artifactName: String, config: TpaConfig): Path =

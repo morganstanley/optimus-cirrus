@@ -12,6 +12,7 @@
 package optimus.buildtool.config
 
 import scala.collection.immutable.Seq
+import scala.util.matching.Regex
 
 private[buildtool] final case class RuleFilterConfiguration(
     filters: Seq[Filter]
@@ -24,8 +25,6 @@ private[buildtool] final case class Filter private (
     exclude: Seq[Group]
 )
 
-private[buildtool] final case class Group private (
-    name: String,
-    filePaths: Seq[String],
-    inScopes: Set[ScopeId]
-)
+private[buildtool] final case class Group private (name: String, filePaths: Seq[String], inScopes: Set[ScopeId]) {
+  @transient lazy val filePathRegexes: Seq[Regex] = filePaths.map(_.r)
+}

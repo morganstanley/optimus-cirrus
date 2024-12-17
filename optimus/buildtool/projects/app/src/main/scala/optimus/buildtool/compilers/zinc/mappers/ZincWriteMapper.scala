@@ -110,12 +110,11 @@ class ZincWriteMapper(
           else Seq(workspaceSubstitution)
 
         val substitutions = pathSubstitutions.filterNot(_.isSame)
-        buildSubstitutions(
-          StringUtils.replaceEach(
-            buildSubstitutions(separatorSubstitutions(text)),
-            substitutions.map(_.realDirectory).toArray,
-            substitutions.map(_.key).toArray))
-
+        StringUtils.replaceEach(
+          buildSubstitutions(separatorSubstitutions(text)),
+          substitutions.map(_.realDirectory).toArray,
+          substitutions.map(_.key).toArray
+        )
       }
     previousArg = Some(text)
     ret

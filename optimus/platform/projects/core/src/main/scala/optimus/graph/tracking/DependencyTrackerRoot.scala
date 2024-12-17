@@ -345,11 +345,6 @@ final class DependencyTrackerRoot private (
     maybeScheduleCleanup(lastAction)
   }
 
-  private[tracking] override def notifyActionCompleted(): Unit = {
-    // We may enqueue an immediate cleanup if the many ttrack refs were cleared since the last cleanup.
-    tweakableTracker.refQ.emptyQueueAndTestWatermark()
-  }
-
   // Insert a high-priority cleanup.
   //
   // The cleanup will be put at the head of queue but will not interrupt currently running actions, so it is safe to

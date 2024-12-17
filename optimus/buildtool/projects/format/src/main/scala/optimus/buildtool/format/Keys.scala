@@ -23,6 +23,9 @@ import scala.collection.immutable
 
 //noinspection TypeAnnotation
 object Keys {
+  val ignoredKeysForValidation =
+    sys.props.get("optimus.buildtool.ignoredInvalidKeys").map(_.split(",").toSet).getOrElse(Set.empty)
+
   // Order of this keys is used to format files
   final case class KeySet(order: immutable.Seq[String]) {
     val all = order.toSet
@@ -68,6 +71,7 @@ object Keys {
       "includeInClassBundle",
       "forbiddenDependencies",
       "allowUnorderedAndDuplicateDependencies",
+      "skipDependencyMappingValidation",
       Substitutions
     )
   val regexDefinition = KeySet("rules")

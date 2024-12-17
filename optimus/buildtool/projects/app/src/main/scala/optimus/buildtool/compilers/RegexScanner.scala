@@ -28,7 +28,6 @@ import optimus.buildtool.trace.RegexCodeFlagging
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.annotation.tailrec
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 
@@ -75,16 +74,17 @@ import scala.collection.immutable.SortedMap
       val fileContent = content.utf8ContentAsString
       val relevantRules = getRelevantRules(fileContent, applicableRules)
       if (relevantRules.nonEmpty) {
-        scanLines(id, fileContent.split('\n').zipWithIndex.toIndexedSeq, relevantRules)
+        scanLines(id, fileContent, relevantRules)
       } else Nil
     }
   }
 
   private def scanLines(
       id: SourceUnitId,
-      lines: Seq[(String, Int)],
-      applicableRules: Seq[CodeFlaggingRule]): Seq[CompilationMessage] =
-    scanNextLine(id, lines, 0, Nil, ignoring = false, applicableRules)
+      content: String,
+      applicableRules: Seq[CodeFlaggingRule]): Seq[CompilationMessage] = {
+    RegexScanner.scanLines(id, content, applicableRules)
+  }
 
 }
 
@@ -129,10 +129,9 @@ object RegexScanner {
 
   @node private def matchesGroup(group: Group, fileName: String, scopeId: ScopeId, all: Boolean): Boolean =
     if (group.filePaths.nonEmpty) {
-      val filePathRegexes = group.filePaths.map(_.r)
-      if (all) filePathRegexes.forall(_.findFirstIn(fileName).isDefined)
+      if (all) group.filePathRegexes.forall(_.findFirstIn(fileName).isDefined)
       else
-        filePathRegexes.exists(_.findFirstIn(fileName).isDefined)
+        group.filePathRegexes.exists(_.findFirstIn(fileName).isDefined)
     } else {
       group.inScopes.contains(scopeId)
     }
@@ -167,49 +166,54 @@ object RegexScanner {
 
   def scanLines(
       id: SourceUnitId,
-      lines: Seq[(String, Int)],
+      content: String,
       applicableRules: Seq[CodeFlaggingRule]
-  ): Seq[CompilationMessage] = scanNextLine(id, lines, 0, Nil, ignoring = false, applicableRules)
-
-  @tailrec def scanNextLine(
-      id: SourceUnitId,
-      remainingLines: Seq[(String, Int)],
-      currentOffset: Int,
-      accum: Seq[CompilationMessage],
-      ignoring: Boolean = false,
-      applicableRules: Seq[CodeFlaggingRule]
-  ): Seq[CompilationMessage] = remainingLines match {
-    case (line, _) +: _ if line.contains(IgnoreFileToken) =>
-      // skip the file
-      Nil
-    case (line, _) +: tail if line.contains(IgnoreEndToken) =>
-      // ignore this line but start scanning again from the next one
-      scanNextLine(id, tail, currentOffset + line.length + 1, accum, ignoring = false, applicableRules)
-    case (line, _) +: tail if ignoring || line.contains(IgnoreStartToken) =>
-      // ignore this line and following ones until we see an end token
-      scanNextLine(id, tail, currentOffset + line.length + 1, accum, ignoring = true, applicableRules)
-    case (line, _) +: (nextLine, _) +: tail if line.contains(IgnoreLineToken) =>
-      // skip a line
-      scanNextLine(
-        id,
-        tail,
-        currentOffset + line.length + nextLine.length + 2,
-        accum,
-        ignoring = false,
-        applicableRules)
-    case (line, lineNumber) +: tail =>
-      val lineMessages = applicableRules.flatMap { codingRule =>
-        val (excludes, includes) = codingRule.regexes.partition(_.exclude)
-        val anyExcludeMatches = excludes.exists(_.regex.findAllMatchIn(line).nonEmpty)
-        if (!anyExcludeMatches)
-          generateCompilationMessageForIncludes(includes, line, lineNumber, currentOffset, codingRule, id)
-        else Nil
+  ): Seq[CompilationMessage] = {
+    // Performance sensitive, hence use of iterator etc.
+    var lineNumber = 0
+    val it: Iterator[String] = content.linesWithSeparators
+    var ignoring = false
+    val messages = Vector.newBuilder[CompilationMessage]
+    var currentOffset = 0
+    while (it.hasNext) {
+      val line = it.next()
+      if (line.contains(IgnoreFileToken)) {
+        // ignore the entire file, discarding any messages accumulated already
+        return Seq()
+      } else if (line.contains(IgnoreEndToken)) {
+        ignoring = false
+        // ignore this line but start scanning again from the next one
+      } else if (line.contains(IgnoreStartToken)) {
+        // ignore this line and following ones until we see an end token
+        ignoring = true
+      } else if (line.contains(IgnoreLineToken)) {
+        if (it.hasNext) {
+          // Skip next line
+          lineNumber += 1
+          currentOffset += it.next().length
+        }
+      } else if (!ignoring) {
+        messages ++= scanLine(id, applicableRules, lineNumber, currentOffset, line)
       }
-      // +1 to include the stripped '\n'
-      scanNextLine(id, tail, currentOffset + line.length + 1, accum ++ lineMessages, ignoring = false, applicableRules)
+      currentOffset += line.length // linesWithSeparators includes newline, no need to +1
+      lineNumber += 1
+    }
+    messages.result()
+  }
 
-    case Seq() =>
-      accum
+  private def scanLine(
+      id: SourceUnitId,
+      applicableRules: Seq[CodeFlaggingRule],
+      lineNumber: Int,
+      currentOffset: Int,
+      line: String): Seq[CompilationMessage] = {
+    applicableRules.flatMap { codingRule =>
+      val (excludes, includes) = codingRule.regexes.partition(_.exclude)
+      val anyExcludeMatches = excludes.exists(_.regex.findAllMatchIn(line).nonEmpty)
+      if (!anyExcludeMatches)
+        generateCompilationMessageForIncludes(includes, line, lineNumber, currentOffset, codingRule, id)
+      else Nil
+    }
   }
 
   def generateCompilationMessageForIncludes(

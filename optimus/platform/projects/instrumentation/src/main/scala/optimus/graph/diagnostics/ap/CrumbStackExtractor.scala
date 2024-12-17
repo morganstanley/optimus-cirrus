@@ -55,7 +55,10 @@ object CrumbStackExtractor extends Log {
       samples: Array[Sample],
       sidFrames: Sid2Frames,
       speedscope: Speedscope,
-      failures: Array[String] = Array.empty)
+      sampleFailures: Array[String] = Array.empty,
+      psidFailures: Array[String] = Array.empty) {
+    def failures: Array[String] = sampleFailures ++ psidFailures
+  }
 
   final case class Sample(
       key: SampleKey,

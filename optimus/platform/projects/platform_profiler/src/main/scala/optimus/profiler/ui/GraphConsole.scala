@@ -13,8 +13,7 @@ package optimus.profiler.ui
 
 import optimus.graph.DiagnosticSettings
 import optimus.graph.diagnostics.DbgPreference
-import optimus.platform.PackageAliases
-import optimus.platform.ScenarioStack
+import optimus.platform._
 import optimus.platform.utils.ClassPathUtils
 import optimus.profiler.DebuggerUI
 import optimus.profiler.DebuggerUI.xval_any
@@ -290,10 +289,13 @@ class GraphConsole private extends JPanel2 {
         if (writeAction)
           write(action, inStyle)
 
-        GraphConsole.interpret(interpreter, action) match {
-          case Results.Success    => in.setText("")
-          case Results.Error      =>
-          case Results.Incomplete => in.setText("")
+        val ss = Option(DebuggerUI.replScenarioStack).getOrElse(EvaluationContext.scenarioStack)
+        DebuggerUI.underStackOf(ss) {
+          GraphConsole.interpret(interpreter, action) match {
+            case Results.Success    => in.setText("")
+            case Results.Error      =>
+            case Results.Incomplete => in.setText("")
+          }
         }
       }
       lastSetOfCandidates = Completions.NoCompletions

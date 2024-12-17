@@ -15,6 +15,8 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -153,19 +155,6 @@ public class StratosphereConfig {
         mapProperty(obtVersionProperty, tmpResolvedConfig);
       }
 
-      if (stratosphereInfraOverride != null) {
-        updateProperty(
-            stratosphereVersionProperty,
-            Paths.get(stratosphereInfraOverride)
-                .normalize()
-                .getParent()
-                .getParent()
-                .getFileName()
-                .toString());
-      } else {
-        mapProperty(stratosphereVersionProperty, tmpResolvedConfig);
-      }
-
       if (workspaceRoot != null) {
         /*
          * If sources with config are in other location than 'workspace' (build directories, ../.stratosphere/, etc.)
@@ -194,17 +183,37 @@ public class StratosphereConfig {
       // re-resolve to have region properties
       tmpResolvedConfig = config.resolve(allowUnresolved);
 
-      if (StratosphereChannelsConfig.shouldUseStratosphereChannels(
-          tmpResolvedConfig, stratosphereInfraOverride)) {
-        Channel selectedChannel = StratosphereChannelsConfig.selectChannel(tmpResolvedConfig);
-        if (selectedChannel != null) {
-          System.out.printf("Used Stratosphere Channel: %s\n", selectedChannel.name);
-          config = selectedChannel.config.withFallback(config);
-          tmpResolvedConfig = config.resolve(allowUnresolved);
+      if (StratosphereChannelsConfig.shouldUseStratosphereChannels(tmpResolvedConfig)) {
+        List<Channel> selectedChannels =
+            StratosphereChannelsConfig.selectAllChannels(tmpResolvedConfig);
+        if (selectedChannels != null && !selectedChannels.isEmpty()) {
+          for (Channel selectedChannel : selectedChannels) {
+            config = selectedChannel.config().withFallback(config);
+          }
+          Map<String, List<String>> channelCollisions =
+              StratosphereChannelsConfig.configCollisions(selectedChannels);
+          updateProperty(
+              StratosphereChannelsConfig.reportedChannelCollisions,
+              ConfigValueFactory.fromMap(channelCollisions));
+          updateProperty(
+              StratosphereChannelsConfig.usedChannelsKey,
+              selectedChannels.stream().map(Channel::name).toList());
         }
       }
 
-      if (stratosphereInfraOverride == null) {
+      tmpResolvedConfig = config.resolve(allowUnresolved);
+
+      if (stratosphereInfraOverride != null) {
+        updateProperty(
+            stratosphereVersionProperty,
+            Paths.get(stratosphereInfraOverride)
+                .normalize()
+                .getParent()
+                .getParent()
+                .getFileName()
+                .toString());
+      } else {
+        mapProperty(stratosphereVersionProperty, tmpResolvedConfig);
         String stratosphereVersion = config.getString(stratosphereVersionProperty);
         String resolvedSymlinkVersion = resolveSymlinkVersion(tmpResolvedConfig);
         if (!stratosphereVersion.equals(resolvedSymlinkVersion)) {
@@ -276,6 +285,11 @@ public class StratosphereConfig {
 
       if (!config.hasPath("stratosphereWsDir")) {
         updateProperty("stratosphereWsDir", stratosphereWsDir.toString());
+      }
+
+      if (!config.hasPath("intellijVersionMapped") && config.hasPath("intellij.version")) {
+        String mappedIjVersion = config.getString("intellij.version").replace('.', '-');
+        updateProperty("intellijVersionMapped", mappedIjVersion);
       }
 
       updateProperty("java.io.tmpdir", System.getProperty("java.io.tmpdir"));

@@ -104,7 +104,7 @@ class GenericRunnerInstaller(
           .orElse { sys.env.get("APP_DIR").map(p => Directory(Paths.get(p))) }
           .getOrElse {
             val alternative = install.binDir(mp)
-            log.warn(s"No OptimusAppRunner binary path: runner will point to ${alternative.pathString}")
+            log.debug(s"No OptimusAppRunner binary path: runner will point to ${alternative.pathString}")
             alternative
           }
 

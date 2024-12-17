@@ -12,89 +12,108 @@
 package optimus.stratosphere.bootstrap.config;
 
 import static optimus.stratosphere.bootstrap.config.StratosphereConfig.CONFIG_USERNAME;
-import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import com.typesafe.config.Config;
-import optimus.stratosphere.bootstrap.StratosphereException;
-
-final class Channel {
-  public final String name;
-  public final List<String> users;
-  public final Config config;
-
-  public Channel(Config config) {
-    this.name = config.getString("name");
-    if (config.hasPath("users")) {
-      this.users = config.getStringList("users");
-    } else {
-      this.users = Collections.emptyList();
-    }
-    this.config = config.getConfig("config");
-  }
-}
+import com.typesafe.config.ConfigFactory;
+import com.typesafe.config.ConfigResolveOptions;
 
 public class StratosphereChannelsConfig {
 
-  public static String configFile = "stratosphereChannels.conf";
-  public static String channelsListKey = "internal.channels.list";
-  public static String disableStratosphereChannels = "internal.channels.disable";
-  public static String stratosphereChannelKey = "stratosphereChannel";
+  public static final String configFile = "stratosphereChannels.conf";
+  public static final String keyPrefix = "internal.channels";
+  public static final String channelsListKey = keyPrefix + ".list";
+  public static final String ignoredChannelsKey = keyPrefix + ".ignored.list";
+  public static final String userSelectedChannelsKey = keyPrefix + ".selected.list";
+  public static final String useAutoIncludeFlagKey = keyPrefix + ".auto-include.enabled";
+  public static final String optOutUsersKey = keyPrefix + ".auto-include.opt-out-users";
+  public static final String disableStratosphereChannels = keyPrefix + ".disable";
+  public static final String legacyStratosphereChannelKey = "stratosphereChannel";
 
-  public static boolean shouldUseStratosphereChannels(
-      Config config, String stratosphereInfraOverride) {
+  //  synthetic config entries
+  public static final String usedChannelsKey = keyPrefix + ".used";
+  public static final String reportedChannelCollisions = keyPrefix + ".collisions";
+
+  public static boolean shouldUseStratosphereChannels(Config config) {
     boolean disableChannels =
         config.hasPath(disableStratosphereChannels)
             && config.getBoolean(disableStratosphereChannels);
-    return !disableChannels && stratosphereInfraOverride == null;
+    return !disableChannels;
   }
 
-  public static Channel selectChannel(Config stratosphereConfig) {
-    List<Channel> channels =
+  public static List<Channel> selectAllChannels(Config stratosphereConfig) {
+    List<Channel> allChannels =
         stratosphereConfig.getConfigList(channelsListKey).stream()
-            .map(Channel::new)
+            .map(Channel::create)
             .collect(Collectors.toList());
 
-    if (stratosphereConfig.hasPath(stratosphereChannelKey)) {
-      String selectedChannelName = stratosphereConfig.getString(stratosphereChannelKey);
-      return selectChannelByName(channels, selectedChannelName);
-    } else {
-      String userName = stratosphereConfig.getString(CONFIG_USERNAME);
-      return selectEligibleChannelsByUsername(channels, userName);
+    List<String> ignoredChannelNames = stratosphereConfig.getStringList(ignoredChannelsKey);
+    String userName = stratosphereConfig.getString(CONFIG_USERNAME);
+    boolean shouldUseAutoInclude = stratosphereConfig.getBoolean(useAutoIncludeFlagKey);
+    boolean userIsOptOutFromAutoIncludes =
+        stratosphereConfig.getStringList(optOutUsersKey).contains(userName);
+
+    List<String> userSelected = stratosphereConfig.getStringList(userSelectedChannelsKey);
+
+    if (stratosphereConfig.hasPath(legacyStratosphereChannelKey)) {
+      String selectedChannelName = stratosphereConfig.getString(legacyStratosphereChannelKey);
+      userSelected.add(selectedChannelName);
     }
+    List<Channel> selectedByUser = channelsSelectedByUser(allChannels, userSelected);
+    List<Channel> inUsersList = selectEligibleChannelsByUsernameList(allChannels, userName);
+    List<Channel> autoIncluded = new ArrayList<>();
+    if (shouldUseAutoInclude && !userIsOptOutFromAutoIncludes) {
+      autoIncluded = selectAutoIncludedChannels(allChannels, userName);
+    }
+
+    return Stream.of(selectedByUser, inUsersList, autoIncluded)
+        .flatMap(Collection::stream)
+        .filter(channel -> !ignoredChannelNames.contains(channel.name()))
+        .distinct()
+        .sorted(Comparator.comparing(allChannels::indexOf))
+        .collect(Collectors.toList());
   }
 
-  private static Channel selectChannelByName(List<Channel> channels, String selectedChannelName) {
-    List<Channel> nameChannels =
+  private static final ConfigResolveOptions allowUnresolved =
+      ConfigResolveOptions.defaults().setAllowUnresolved(true);
+
+  public static Map<String, List<String>> configCollisions(List<Channel> channels) {
+    Config merged =
         channels.stream()
-            .filter(channel -> channel.name.equals(selectedChannelName))
-            .collect(Collectors.toList());
-    if (nameChannels.size() == 1) {
-      return nameChannels.get(0);
-    } else if (nameChannels.size() > 1) {
-      throw new StratosphereException("Duplicated entries for channel: " + selectedChannelName);
-    } else {
-      throw new StratosphereException(
-          "Selected channel doesn't exist: "
-              + selectedChannelName
-              + " To fix this issue, you need to either update your branch using Git or manually remove the configured channel in <workspace>/config/custom.conf.");
-    }
+            .reduce(
+                ConfigFactory.empty(),
+                (config, channel) -> channel.config().withFallback(config),
+                Config::withFallback);
+
+    return merged.entrySet().stream()
+        .map(
+            entry ->
+                Map.entry(
+                    entry.getKey(),
+                    channels.stream()
+                        .filter(channel -> channel.config().hasPath(entry.getKey()))
+                        .map(Channel::name)
+                        .collect(Collectors.toList())))
+        .filter(entry -> entry.getValue().size() > 1)
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
   }
 
-  private static Channel selectEligibleChannelsByUsername(List<Channel> channels, String userName) {
-    List<Channel> eligibleChannels =
-        channels.stream()
-            .filter(config -> config.users.contains(userName))
-            .collect(Collectors.toList());
-    if (eligibleChannels.size() == 1) {
-      return eligibleChannels.get(0);
-    } else if (eligibleChannels.size() > 1) {
-      throw new StratosphereException(
-          String.format(
-              "User is added to multiple stratosphere channels: %s. Please make sure to select only one channel\n",
-              eligibleChannels.stream().map(channel -> channel.name).collect(Collectors.toList())));
-    } else {
-      return null;
-    }
+  private static List<Channel> selectEligibleChannelsByUsernameList(
+      List<Channel> channels, String userName) {
+    return channels.stream().filter(channel -> channel.users().contains(userName)).toList();
+  }
+
+  private static List<Channel> channelsSelectedByUser(
+      List<Channel> channels, List<String> selectedList) {
+    return channels.stream().filter(channel -> selectedList.contains(channel.name())).toList();
+  }
+
+  private static List<Channel> selectAutoIncludedChannels(List<Channel> channels, String userName) {
+    return channels.stream().filter(config -> config.checkUserIsAutoIncluded(userName)).toList();
   }
 }

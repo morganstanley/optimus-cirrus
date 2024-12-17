@@ -298,13 +298,19 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
 
   /**
    * Tests two PropertyNodes for equality, by checking: (entity, propertyInfo, args). Allows to tighten equality for the
-   * purposes of caching (as opposed to tweak equality) Note: for overriders it's always
-   * cachedValue.equalsForCaching(key) [SEE_NO_SYMMETRY_EQUALS_FOR_CACHING]
+   * purposes of caching (as opposed to tweak equality)
+   *
+   * Note: it's always cachedValue.equalsForCaching(key) because equalsForCaching isn't symmetric. Proxies override
+   * argsEqual so that they compare equal with their srcNodeTemplates (even if they aren't the same class) because a
+   * cached proxy should be reused on lookups of its srcNodeTemplate. Most other PN only compare with equal with nodes
+   * of the same class. [SEE_NO_SYMMETRY_EQUALS_FOR_CACHING]
    */
   final def equalsForCaching(key: PropertyNode[_]): Boolean = {
-    def propertyInfoMatches: Boolean = propertyInfo eq key.propertyInfo
-    def entityMatches: Boolean = entity.eq(key.entity) || entity.equalsForCachingInternal(key.entity)
-    (this eq key) || (propertyInfoMatches && entityMatches && argsEquals(key))
+    (this eq key) || (
+      (propertyInfo eq key.propertyInfo) && // Pinfo matches
+        (entity.eq(key.entity) || entity.equalsForCachingInternal(key.entity)) && // entities are equal
+        argsEquals(key) // args are equal too
+    )
   }
 
   /** Entity caches its own hashCode. To share most of the cost with hashForCaching we store partially computed value */

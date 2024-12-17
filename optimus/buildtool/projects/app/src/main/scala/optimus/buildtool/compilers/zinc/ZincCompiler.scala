@@ -268,9 +268,8 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
         case Success(r) =>
           log.debug(s"${prefix}Successfully compiled ${jars.outputJar.tempPath.pathString} with Zinc compiler: $r")
 
-          val compiledClasses = classFileManager.generatedClasses
-          val deletedClasses = classFileManager.deletedClasses
-          if (compiledClasses.isEmpty && deletedClasses.nonEmpty) {
+          if (classFileManager.onlyDeletions) {
+            val deletedClasses = classFileManager.deletedClasses
             // In this scenario incremental compiler didn't call scalac and there are removed files
             // so json files produced by entity-plugin need to be updated (we may need to remove some entries)
             val jsonUpdater = new IsolatedJsonUpdaterClient(compilationReporter, scopeId, traceType)
@@ -315,10 +314,8 @@ class ZincCompiler(settings: ZincCompilerFactory, scopeId: ScopeId, traceType: M
       val cancelScope = EvaluationContext.cancelScope
       if (cancelScope.isCancelled) throw cancelScope.cancellationCause
       else {
-        val compiledClasses = classFileManager.generatedClasses
-        // if nothing was compiled, the original signatures are still valid, and the signature callback won't have
-        // been invoked by Zinc, so we should invoke it now
-        if (compiledClasses.isEmpty && !messages.exists(_.isError))
+        // if nothing was compiled, the signature callback won't have been invoked by Zinc, so we should invoke it now
+        if (classFileManager.noCompilations && !messages.exists(_.isError))
           jars.signatureJar.foreach(j => if (j.tempPath.existsUnsafe) signatureConsumer.foreach(_()))
 
         val msgPath = Utils.outputPathForType(inputs.outPath, messageType)

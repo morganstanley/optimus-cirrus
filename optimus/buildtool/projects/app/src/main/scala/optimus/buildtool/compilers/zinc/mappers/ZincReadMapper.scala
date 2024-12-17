@@ -119,11 +119,10 @@ private[zinc] class ZincReadMapper(
 
     val substitutions = externalDepsSubstitutions.filterNot(_.isSame)
     val ret =
-      buildSubstitutions(
-        StringUtils.replaceEach(
-          separatorSubstitutions(text),
-          substitutions.map(_.key).toArray,
-          substitutions.map(_.realDirectory).toArray)
+      StringUtils.replaceEach(
+        buildSubstitutions(separatorSubstitutions(text)),
+        substitutions.map(_.key).toArray,
+        substitutions.map(_.realDirectory).toArray
       )
     previousArg = Some(text)
     ret

@@ -1,0 +1,49 @@
+// Morgan Stanley makes this available to you under the Apache License, Version 2.0 (the "License").
+// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
+// See the NOTICE file distributed with this work for additional information regarding copyright ownership.
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+all.scalac {
+  warnings.overrides = ["nonfatal:optimus:10600", "nonfatal:optimus:10601"]
+  options += "-P:entity:enableStaging:true"
+}
+
+main {
+  hasMacros = true
+  implementsMacros = true
+
+  generators {
+    protobuf {
+      templates = [resources/optimus/platform/relational]
+      configuration.execPath.windows = exec/msvc140_64/bin/protoc
+    }
+  }
+
+  compile {
+    modules = [
+      optimus.platform.collections,
+      optimus.platform.core,
+      optimus.platform.core_macro,
+      optimus.platform.entityagent,
+      optimus.platform.entityplugin,
+      optimus.platform.spray_json,
+      optimus.platform.utils
+    ]
+    libs = [
+      msjava.base,
+      ossjava.commons-io,
+      ossjava.commons-lang3,
+      ossjava.guava,
+      ossjava.poi,
+      ossjava.protobuf-java,
+      ossjava.slf4j,
+      ossjava.spring,
+      ossscala.scala-parser-combinators
+    ]
+  }
+  runtime.libs += msjava.protobufutils
+}

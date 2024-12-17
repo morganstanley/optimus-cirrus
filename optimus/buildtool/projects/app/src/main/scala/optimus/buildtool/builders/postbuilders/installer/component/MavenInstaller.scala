@@ -25,7 +25,7 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
-import optimus.buildtool.trace.InstallJar
+import optimus.buildtool.trace.InstallMavenJar
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Jars
@@ -83,12 +83,15 @@ class MavenInstaller(installer: Installer) extends ComponentInstaller {
 
 object MavenInstaller {
 
-  private[installer] def copyFile(scopeId: ScopeId, copyFrom: JarAsset, copyTo: JarAsset): Unit =
-    ObtTrace.traceTask(scopeId, InstallJar) {
-      Files.createDirectories(copyTo.parent.path)
+  private[installer] def copyFile(scopeId: ScopeId, copyFrom: JarAsset, copyTo: JarAsset): Unit = {
+    if (!Files.exists(copyTo.path)) {
       // the maven artifacts are immutable, we shouldn't copy them more than once to prevent file lock on windows
-      AssetUtils.atomicallyCopy(copyFrom, copyTo, replaceIfExists = false)
+      ObtTrace.traceTask(scopeId, InstallMavenJar(copyFrom.name)) {
+        Files.createDirectories(copyTo.parent.path)
+        AssetUtils.atomicallyCopy(copyFrom, copyTo, replaceIfExists = false)
+      }
     }
+  }
 
   def installMavenJars(scopeId: ScopeId, pathBuilder: InstallPathBuilder, jars: Seq[JarAsset]): Unit =
     jars.foreach { jar =>

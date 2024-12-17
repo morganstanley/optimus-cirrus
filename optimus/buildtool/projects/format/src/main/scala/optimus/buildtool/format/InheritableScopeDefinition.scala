@@ -59,6 +59,7 @@ final case class InheritableScopeDefinition(
     bundle: Option[Boolean],
     includeInClassBundle: Option[Boolean],
     mavenOnly: Option[Boolean],
+    skipDependencyMappingValidation: Option[Boolean],
     allowUnorderedAndDuplicateDependencies: Option[Boolean],
     relationships: Seq[ScopeRelationship],
     extraLibs: Dependencies,
@@ -97,6 +98,7 @@ final case class InheritableScopeDefinition(
       bundle = bundle.orElse(parent.bundle),
       includeInClassBundle = includeInClassBundle.orElse(parent.includeInClassBundle),
       mavenOnly = mavenOnly.orElse(parent.mavenOnly),
+      skipDependencyMappingValidation = skipDependencyMappingValidation.orElse(parent.skipDependencyMappingValidation),
       allowUnorderedAndDuplicateDependencies =
         allowUnorderedAndDuplicateDependencies.orElse(parent.allowUnorderedAndDuplicateDependencies),
       relationships = relationships ++ parent.relationships,
@@ -142,6 +144,7 @@ object InheritableScopeDefinition {
     bundle = None,
     includeInClassBundle = None,
     mavenOnly = None,
+    skipDependencyMappingValidation = None,
     allowUnorderedAndDuplicateDependencies = None,
     relationships = Nil,
     extraLibs = Dependencies.empty,

@@ -92,12 +92,10 @@ class FileSystemStore(pathBuilder: CompilePathBuilder, incrementalMode: Incremen
     val useIncrementalArtifacts = incrementalMode.useIncrementalArtifacts
     val ret = fingerprintHashes.apar.filter { fp =>
       val file = pathBuilder.outputPathFor(id, fp, tpe, discriminator)
-      file.existsUnsafe && (tpe.fromAsset(id, file) match {
-        case i: IncrementalArtifact if i.incremental && !useIncrementalArtifacts =>
-          false
-        case _ =>
-          true
-      })
+      file.existsUnsafe && (useIncrementalArtifacts || (tpe.fromAsset(id, file) match {
+        case i: IncrementalArtifact => !i.incremental
+        case _                      => true
+      }))
     }
     debug(s"[$id] Found $ret out of $fingerprintHashes")
     ret

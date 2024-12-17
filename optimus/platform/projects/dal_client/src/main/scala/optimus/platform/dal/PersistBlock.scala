@@ -295,26 +295,30 @@ abstract class AbstractPersistBlock[A](resolver: EntityResolverWriteImpl) extend
    *   Whether or not an entry already existed.
    */
   private def putOrUpgradeIfCompatible(key: CacheKey, newOp: PersistCacheEntry): Boolean = {
-    val existing = cache.get(key)
-    if (existing.isEmpty) {
-      cache(key) = newOp :: Nil
-      true
-    } else {
-      val oldOps = existing.get
-      val exists = oldOps exists { oldOp =>
-        if (oldOp == newOp)
-          true
-        else if ((oldOp.entity != newOp.entity || oldOp.getClass != newOp.getClass) && oldOp.vt == newOp.vt) {
-          throwConflictException(oldOp, newOp)
-          false
-        } else
-          false
+    var finished: Boolean = false
+    var exists: Boolean = false
+    while (!finished) {
+      cache.putIfAbsent(key, newOp :: Nil) match {
+        case None =>
+          finished = true
+          exists = false
+        case Some(oldOps) =>
+          exists = oldOps exists { oldOp =>
+            if (oldOp == newOp)
+              true
+            else if ((oldOp.entity != newOp.entity || oldOp.getClass != newOp.getClass) && oldOp.vt == newOp.vt) {
+              throwConflictException(oldOp, newOp)
+              false
+            } else
+              false
+          }
+          if (!exists)
+            finished = cache.replace(key, oldOps, newOp :: oldOps)
+          else
+            finished = true
       }
-      if (!exists)
-        cache(key) = newOp :: oldOps
-
-      !exists
     }
+    !exists
   }
 
   /**

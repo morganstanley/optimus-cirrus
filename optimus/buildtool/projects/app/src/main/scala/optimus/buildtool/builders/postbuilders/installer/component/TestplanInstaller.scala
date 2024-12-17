@@ -51,6 +51,7 @@ final class TestplanInstaller(
 ) extends ComponentInstaller
     with ComponentBatchInstaller
     with Log
+    with CustomPassfailTestplanInstaller
     with PactContractTestplanInstaller
     with PythonTestplanInstaller {
   import installer._
@@ -189,40 +190,61 @@ final class TestplanInstaller(
               testTaskOverrides = Map()
             ))
       }
-      if (testGroup.programmingLanguage == ProgrammingLanguage.Python) {
-        val entry = createPythonTestplanEntry(testType, testGroup, testTasks, additionalBindings, testplanConfig)
-        Seq(entry)
-      } else if (testGroup.programmingLanguage == ProgrammingLanguage.PactContract) {
-        // Special handling for pact contract testing - we need to work out if we are generating a test entry for
-        // both consumer and provider, or just consumer, or just provider.  We do this by scanning the rest of the
-        // scopes to see if there is a counterpart
-        val contractTestTypes = Set("consumerContractTest", "providerContractTest")
-        val testTaskOverrides = testTasks.map { task =>
-          val taskOverrides = includedScopes
-            .filter(s => s.fullModule == task.module && contractTestTypes.contains(s.tpe))
-            .map(_.tpe)
-          task -> taskOverrides
-        } toMap
 
-        if (testTaskOverrides.values.head.size == 0) {
-          // No pact contract testing in the defined scopes so skip this
-          Seq()
-        } else {
-          val entry = createPactContractTestplanEntry(
-            displayTestName = testType.displayName,
-            groupName = testGroup.name,
-            metaBundle = testGroup.metaBundle,
-            treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
-            additionalBindings = additionalBindings,
-            stratoOverride = stratoOverride,
-            testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-            testTasks = testTasks,
-            testTaskOverrides = testTaskOverrides
-          )
+      testGroup.programmingLanguage match {
+        case ProgrammingLanguage.CustomPassfail =>
+          val validBindings =
+            CustomPassfailTestplanTemplate.requiredAdditionalBindings.forall(additionalBindings.contains)
+          if (!validBindings)
+            throw new IllegalArgumentException(
+              s"Not all valid bindings provided for ${testGroup.name}: ${CustomPassfailTestplanTemplate.requiredAdditionalBindings
+                  .mkString(", ")}")
+          val entry =
+            createCustomPassfailTestplanEntry(
+              testType.displayName,
+              testGroup.name,
+              testGroup.metaBundle,
+              testType.treadmillOptsFor(testGroup, testplanConfig),
+              additionalBindings,
+              testTasks,
+              Map(),
+              testType.testGroupsOpts.testModulesFileName
+            )
           Seq(entry)
-        }
-      } else
-        testplanEntries
+        case ProgrammingLanguage.PactContract =>
+          // Special handling for pact contract testing - we need to work out if we are generating a test entry for
+          // both consumer and provider, or just consumer, or just provider.  We do this by scanning the rest of the
+          // scopes to see if there is a counterpart
+          val contractTestTypes = Set("consumerContractTest", "providerContractTest")
+          val testTaskOverrides = testTasks.map { task =>
+            val taskOverrides = includedScopes
+              .filter(s => s.fullModule == task.module && contractTestTypes.contains(s.tpe))
+              .map(_.tpe)
+            task -> taskOverrides
+          } toMap
+
+          if (testTaskOverrides.values.head.isEmpty) {
+            // No pact contract testing in the defined scopes so skip this
+            Seq()
+          } else {
+            val entry = createPactContractTestplanEntry(
+              displayTestName = testType.displayName,
+              groupName = testGroup.name,
+              metaBundle = testGroup.metaBundle,
+              treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
+              additionalBindings = additionalBindings,
+              stratoOverride = stratoOverride,
+              testModulesFileName = testType.testGroupsOpts.testModulesFileName,
+              testTasks = testTasks,
+              testTaskOverrides = testTaskOverrides
+            )
+            Seq(entry)
+          }
+        case ProgrammingLanguage.Python =>
+          val entry = createPythonTestplanEntry(testType, testGroup, testTasks, additionalBindings, testplanConfig)
+          Seq(entry)
+        case _ => testplanEntries
+      }
     }
   }
 
@@ -248,14 +270,25 @@ final class TestplanInstaller(
       if (filteredTestData.nonEmpty) {
         val os = testType.testGroupsOpts.os
 
-        val (pythonTestData, unitTestData, pactContractTestData) =
+        val (pythonTestData, unitTestData, pactContractTestData, customPassfailData) =
           filteredTestData.foldLeft(
-            (Seq.empty[PythonTestplanEntry], Seq.empty[ScalaTestplanEntry], Seq.empty[PactContractTestplanEntry])) {
-            case ((pythons, units, pacts), python: PythonTestplanEntry) => (pythons :+ python, units, pacts)
-            case ((pythons, units, pacts), unit: ScalaTestplanEntry)    => (pythons, units :+ unit, pacts)
-            case ((pythons, units, pacts), pact: PactContractTestplanEntry) =>
-              (pythons, units, pacts :+ pact)
+            (
+              Seq.empty[PythonTestplanEntry],
+              Seq.empty[ScalaTestplanEntry],
+              Seq.empty[PactContractTestplanEntry],
+              Seq.empty[CustomPassfailTestplanEntry])) {
+            case ((pythons, units, pacts, customPassfails), python: PythonTestplanEntry) =>
+              (pythons :+ python, units, pacts, customPassfails)
+            case ((pythons, units, pacts, customPassfails), unit: ScalaTestplanEntry) =>
+              (pythons, units :+ unit, pacts, customPassfails)
+            case ((pythons, units, pacts, customPassfails), pact: PactContractTestplanEntry) =>
+              (pythons, units, pacts :+ pact, customPassfails)
+            case ((pythons, units, pacts, customPassfails), customPassFail: CustomPassfailTestplanEntry) =>
+              (pythons, units, pacts, customPassfails :+ customPassFail)
           }
+
+        val customPassfailTestplans =
+          if (customPassfailData.nonEmpty) generateCustomPassfailTestplan(customPassfailData) else Seq.empty
 
         val pythonQualityTestplans =
           if (pythonTestData.nonEmpty) generatePythonQualityTestplan(os, pythonTestData) else Seq.empty
@@ -268,8 +301,14 @@ final class TestplanInstaller(
               generatePactContractTestplan(os, pactContractTestData),
               if (unitTests.nonEmpty) Seq(generateTestplan(unitTests, templatesPerOS(os))) else Seq.empty
             )
-          } else (Seq.empty, Seq(generateTestplan(unitTestData, templatesPerOS(os))))
-        val testplan = TestPlan.merge(pactContractTestplans ++ pythonQualityTestplans ++ unitTestplan)
+          } else {
+            (
+              Seq.empty,
+              if (unitTestData.nonEmpty) Seq(generateTestplan(unitTestData, templatesPerOS(os))) else Seq.empty)
+          }
+
+        val testplan =
+          TestPlan.merge(customPassfailTestplans ++ pactContractTestplans ++ pythonQualityTestplans ++ unitTestplan)
 
         val testModules =
           unitTestData.map(_.moduleName).distinct.sorted ++ pactContractTestData.map(_.moduleName).distinct.sorted

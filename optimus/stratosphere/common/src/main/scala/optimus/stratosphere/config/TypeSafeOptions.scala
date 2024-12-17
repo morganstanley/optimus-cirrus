@@ -12,6 +12,8 @@
 package optimus.stratosphere.config
 
 import com.typesafe.config.Config
+import optimus.stratosphere.bootstrap.config.Channel
+import optimus.stratosphere.bootstrap.config.StratosphereChannelsConfig
 import optimus.stratosphere.common.PluginBundle
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
@@ -188,6 +190,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
 
     object junit5 {
       def enabled: Boolean = self.select("intellij.junit5.enabled")
+      def dependenciesForMapping: Seq[String] = self.select("intellij.junit5.dependencies-for-mapping")
     }
 
     object location {
@@ -300,6 +303,18 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       )
     }
 
+    object channels {
+      private def listRaw: Seq[Config] = self.select(StratosphereChannelsConfig.channelsListKey)
+      def list: Seq[Channel] = listRaw.map(Channel.create)
+      def userSelected: Seq[String] = self.select(StratosphereChannelsConfig.userSelectedChannelsKey)
+      def useThresholds: Boolean = self.select(StratosphereChannelsConfig.useAutoIncludeFlagKey)
+      def ignoredChannels: Seq[String] = self.select(StratosphereChannelsConfig.ignoredChannelsKey)
+      def optOutUsers: Seq[String] = self.select(StratosphereChannelsConfig.optOutUsersKey)
+      def usedChannels: Seq[String] = self.select(StratosphereChannelsConfig.usedChannelsKey)
+      def channelCollisions: Map[String, Seq[String]] = self
+        .select(StratosphereChannelsConfig.reportedChannelCollisions)
+    }
+
     object environment {
       def proids: Seq[String] = self.select("internal.environment.proids")
     }
@@ -326,6 +341,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     object historyTruncation {
       def codetreeArchiveUrl: Option[RemoteUrl] = self.select("internal.history-truncation.codetree-archive-url")
       def isWorkspaceMigrated: Option[Boolean] = self.select("internal.history-truncation.is-workspace-migrated")
+      def newRootCommit: Option[String] = self.select("internal.history-truncation.new-root-commit")
     }
 
     object java {
@@ -366,6 +382,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def overridesStylesheetPath: Path = self.select("internal.markdown.overrides-stylesheet-path")
 
       def stratoReleaseNotes: Path = self.select("internal.markdown.strato-release-notes")
+      def newIdeMigrationDocs: Path = self.select("internal.markdown.new-ij-migration-docs")
 
       object graphviz {
         def path: Option[Path] = self.select("internal.markdown.graphviz.path")
@@ -592,6 +609,8 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
     def logo: Boolean = self.select("show.logo")
     def startupTooltips: Boolean = self.select("show.startup-tooltips")
     def commandTime: Boolean = self.select("show.command-time")
+    def channelsAutoInclude: Boolean = self.select("show.channels.auto-include")
+    def channelsConflicts: Boolean = self.select("show.channels.conflicts")
   }
 
   // please keep the object sorted

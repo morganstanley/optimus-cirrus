@@ -13,8 +13,6 @@ package optimus.buildtool.compilers.zinc
 
 import java.nio.file.Files
 import java.nio.file.attribute.FileTime
-import msjava.slf4jutils.scalalog.Logger
-import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.utils.MiscUtils.Optionable
 import optimus.buildtool.artifacts.AnalysisArtifact
@@ -252,11 +250,7 @@ final case class AnalysisLocatorImpl(
 
 }
 
-private[zinc] object AnalysisLookup {
-  private val log: Logger = getLogger(this.getClass)
-}
-
-private[zinc] abstract class AnalysisLookup(
+@entity private[zinc] abstract class AnalysisLookup(
     localArtifactStore: SearchableArtifactStore,
     remoteArtifactStore: Option[ArtifactReader],
     id: ScopeId,
@@ -264,7 +258,6 @@ private[zinc] abstract class AnalysisLookup(
     otherRequiredTypes: Seq[CachedArtifactType],
     optionalTypes: Seq[CachedArtifactType]
 ) {
-  import AnalysisLookup.log
 
   @async protected def analysisForLocator(locator: LocatorArtifact, locatorType: String): Option[AnalysisArtifact] = {
     val locatorPrefix = if (locatorType.nonEmpty) s"$locatorType " else ""
@@ -278,12 +271,17 @@ private[zinc] abstract class AnalysisLookup(
         log.debug(
           s"[$id] Trying ${locatorPrefix}locator in remote analysis store: ${locator.summary} -> ${locator.artifactHash}"
         )
-        getAnalysisForHash(store, locator.artifactHash)
+        getCachedAnalysisForHash(store, locator.artifactHash)
       }
     }
     analysis.foreach(a => log.debug(s"[$id] Located analysis: $a"))
     analysis
   }
+
+  // Reduce repeated queries to remote store. In practice, this isn't really RT but getting a stale value will, at
+  // worst, merely lead to overcompilation.
+  @node private def getCachedAnalysisForHash(store: ArtifactReader, fingerprintHash: String): Option[AnalysisArtifact] =
+    getAnalysisForHash(store, fingerprintHash)
 
   @async private def getAnalysisForHash(store: ArtifactReader, fingerprintHash: String): Option[AnalysisArtifact] = {
     // Ensure we've got all relevant artifacts for this analysis. Note that if the store is a remote store,
@@ -304,28 +302,7 @@ private[zinc] abstract class AnalysisLookup(
     }
 }
 
-object LookupByTimestamp {
-  def apply(
-      localStore: SearchableArtifactStore,
-      remoteStore: Option[ArtifactReader],
-      id: ScopeId,
-      analysisType: AnalysisArtifactType,
-      allLocalLocators: Seq[LocatorArtifact],
-      otherRequiredTypes: Seq[CachedArtifactType],
-      optionalTypes: Seq[CachedArtifactType]
-  ): LookupByTimestamp =
-    new LookupByTimestamp(
-      localStore,
-      remoteStore,
-      id,
-      analysisType,
-      allLocalLocators,
-      otherRequiredTypes,
-      optionalTypes
-    )
-}
-
-private[zinc] class LookupByTimestamp(
+@entity private[zinc] class LookupByTimestamp(
     localArtifactStore: SearchableArtifactStore,
     remoteArtifactStore: Option[ArtifactReader],
     id: ScopeId,
@@ -339,31 +316,7 @@ private[zinc] class LookupByTimestamp(
     findAnalysis(allLocalLocators, "local")
 }
 
-object LookupByCommit {
-  def apply(
-      localStore: SearchableArtifactStore,
-      remoteStore: Option[ArtifactReader],
-      id: ScopeId,
-      analysisType: AnalysisArtifactType,
-      allLocalLocatorsByCommitHash: Map[String, Seq[LocatorArtifact]],
-      remoteCommitHashes: Set[String],
-      otherRequiredTypes: Seq[CachedArtifactType],
-      optionalTypes: Seq[CachedArtifactType],
-      discriminator: Option[String]
-  ): LookupByCommit =
-    new LookupByCommit(
-      localStore,
-      remoteStore,
-      id,
-      analysisType,
-      allLocalLocatorsByCommitHash,
-      remoteCommitHashes,
-      otherRequiredTypes,
-      optionalTypes,
-      discriminator
-    )
-}
-private[zinc] class LookupByCommit(
+@entity private[zinc] class LookupByCommit(
     localArtifactStore: SearchableArtifactStore,
     remoteArtifactStore: Option[ArtifactReader],
     id: ScopeId,

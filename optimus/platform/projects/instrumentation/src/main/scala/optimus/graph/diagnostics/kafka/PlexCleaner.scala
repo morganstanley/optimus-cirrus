@@ -76,18 +76,30 @@ object PlexCleaner extends App with Log {
       val leaves = mutable.ArrayBuffer.empty[(Path, Long)]
       // Walk tree searching for either a parts directory, or some other leaf file.  Add these to collection of leaves,
       // along with their modification time.
+      var nDirs = 0
+      var nFiles = 0
+      def logWalking(p: Path): Unit = {
+        if ((nDirs + nFiles) % 10000 == 0)
+          log.info(
+            s"Walked $nDirs directories, $nFiles files so far; most recently $p ${Files.getLastModifiedTime(p)} ")
+      }
+
       Files.walkFileTree(
         plexDir,
-        new FileVisitor[Path] { p =>
+        new FileVisitor[Path] {
           override def preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult = {
             // If it's a .parts directory, it's effectively a leaf, and we'll either keep it or delete it
             // with its contents.
             if (dir.getFileName.toString.endsWith(partsSuffix)) {
+              nDirs += 1
+              logWalking(dir)
               leaves += dir -> Files.getLastModifiedTime(dir).toMillis
               FileVisitResult.SKIP_SUBTREE
             } else FileVisitResult.CONTINUE
           }
           override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+            nFiles += 1
+            logWalking(file)
             leaves += plexDir -> Files.getLastModifiedTime(plexDir).toMillis
             FileVisitResult.CONTINUE
           }
@@ -116,7 +128,7 @@ object PlexCleaner extends App with Log {
               log.warn(s"Failed to delete $entry")
           }
         }
-        if (((deleted + tooYoung) % 1000) == 0)
+        if (((deleted + tooYoung) % 10000) == 0)
           log.info(s"So far deleted $deleted entries so far, pardoned $tooYoung, most recent entry $entry from ${Instant
               .ofEpochMilli(t)}")
       }

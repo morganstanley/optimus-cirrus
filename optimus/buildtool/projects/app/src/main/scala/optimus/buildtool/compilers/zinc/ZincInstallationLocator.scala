@@ -144,9 +144,8 @@ class ZincClasspathResolver(
   }
 
   @node private def doCoursierZincResolve(zinc: DependencyDefinition): Seq[JarAsset] = {
-    // we skip mapping validation for zinc generator only, in order to resolve zinc for multiple scala versions
     val coursierResult =
-      dependencyResolver.resolveDependencies(DependencyDefinitions(Seq(zinc), Nil), validate = false)
+      dependencyResolver.resolveDependencies(DependencyDefinitions(Seq(zinc), Nil))
     val depCopied = coursierResult.resolvedArtifacts.apar.map(
       dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(_))
     depCopied.flatMap { a =>

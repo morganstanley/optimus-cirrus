@@ -181,7 +181,7 @@ abstract class BitBucket(protected val instance: String, val timeout: Duration =
     get[BrowseData](apiBrowseUrl(project, repo, browsePath, branchOption))
 
   def getAllCommitsByPrNumber(project: String, repo: String, prNumber: Long): Seq[CommitId] =
-    queryPaged[CommitId, CommitActivityRequest](apiGetAllCommitsByPrUrl(project, repo, prNumber))
+    queryPaged[CommitId, CommitActivityRequest](apiGetAllCommitsByPrUrl(project, repo, prNumber), generalPageSize = 500)
 
   def getChangedFilesByCommitId(project: String, repo: String, commitId: String): Seq[CommitFile] =
     queryPaged[CommitFile, CommitRequest](apiChangedFilesByCommitUrl(project, repo, commitId))

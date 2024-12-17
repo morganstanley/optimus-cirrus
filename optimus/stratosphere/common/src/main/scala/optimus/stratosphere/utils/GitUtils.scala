@@ -58,8 +58,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def diffNameOnly(commit: String, withPattern: String = ""): Seq[String] = {
     val pattern = if (withPattern.nonEmpty) Seq(withPattern) else Seq()
     val cmd = Seq("diff", "--name-only", commit) ++ pattern
-    val res = runGit(cmd: _*)
-    Source.fromString(res).getLines().to(Seq)
+    runGit(cmd: _*).getLines()
   }
 
   def add(what: String): String = runGit("add", what)
@@ -73,10 +72,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def undoReplace(source: String): String = runGit("replace", "-d", source)
 
-  def allReplaceRefs(): Seq[String] = {
-    val result = runGit("replace", "-l")
-    Source.fromString(result).getLines().to(Seq)
-  }
+  def allReplaceRefs(): Seq[String] = runGit("replace", "-l").getLines()
 
   def addRemote(name: String, location: RemoteUrl): String = runGit("remote", "add", name, location.url)
 
@@ -175,9 +171,11 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def currentBranch(): String = runGit("rev-parse", "--abbrev-ref", "HEAD").trim
 
+  def cherryPick(commits: Seq[String]): String = runGit("cherry-pick" +: commits: _*)
+
   def hasLocalChanges(): Boolean = localChanges().nonEmpty
 
-  def localChanges(): Seq[String] = Source.fromString(runGit("status", "--short")).getLines().to(Seq)
+  def localChanges(): Seq[String] = runGit("status", "--short").getLines()
 
   def currentCommitHash(): String = runGit("rev-list", "--max-count=1", "HEAD")
 
@@ -201,6 +199,11 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
 
   def fetch(remoteRepo: String): String = {
     val cmd = noGc ++ Seq("fetch", remoteRepo, "--no-tags")
+    runGit(cmd: _*)
+  }
+
+  def fetch(remoteRepo: String, branch: String): String = {
+    val cmd = noGc ++ Seq("fetch", remoteRepo, branch, "--no-tags")
     runGit(cmd: _*)
   }
 
@@ -229,20 +232,14 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def listBranchesContainingRevision(revision: String): Seq[String] = retrieveBranchesNames(
     runGit("branch", "--contains", revision))
 
-  def listDirectoryStructure(): Seq[String] = {
-    val result = runGit("ls-tree", "-d", "-r", "HEAD", "--name-only")
-    Source.fromString(result).getLines().to(Seq)
-  }
+  def listDirectoryStructure(): Seq[String] =
+    runGit("ls-tree", "-d", "-r", "HEAD", "--name-only").getLines()
 
-  def listDirectoryStructure(gitRef: String): Seq[String] = {
-    val result = runGit("ls-tree", "--name-only", gitRef)
-    Source.fromString(result).getLines().to(Seq)
-  }
+  def listDirectoryStructure(gitRef: String): Seq[String] =
+    runGit("ls-tree", "--name-only", gitRef).getLines()
 
-  def lsRemoteTag(remote: String, tagName: String): Seq[String] = {
-    val result = runGit("ls-remote", "--tags", remote, tagName)
-    Source.fromString(result).getLines().to(Seq)
-  }
+  def lsRemoteTag(remote: String, tagName: String): Seq[String] =
+    runGit("ls-remote", "--tags", remote, tagName).getLines()
 
   def merge(revisionOrBranch: String): String = runGit("merge", "--autostash", revisionOrBranch)
 
@@ -276,7 +273,7 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     val logList = gitLogs.split(logSeparator).filterNot(log => log.isEmpty || log.equals("\n"))
     logList.foldLeft(Map.empty[Path, Seq[GitLog]]) { (acc, log) =>
       try {
-        val Seq(commit, date, files @ _*) = Source.fromString(log).getLines().to(Seq).filterNot(line => line.isEmpty)
+        val Seq(commit, date, files @ _*) = log.getLines().filterNot(line => line.isEmpty)
         val gitLog = GitLog(commit, date)
         files.foldLeft(acc) { (innerAcc, file) =>
           val filePath = Paths.get(file)
@@ -288,10 +285,8 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
     }
   }
 
-  def countObjects(): Seq[String] = {
-    val result = runGit("count-objects", "--verbose")
-    Source.fromString(result).getLines().to(Seq)
-  }
+  def countObjects(): Seq[String] =
+    runGit("count-objects", "--verbose").getLines()
 
   private[utils] def retrieveBranchesNames(listBranchesOutput: String) =
     listBranchesOutput.split("""\s+|[\s*]+""").filter(_.nonEmpty).toList
@@ -302,5 +297,9 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
       "GIT_ASK_YESNO" -> "false",
     )
     CommonProcess.in(workspace).runGit(workspace.directoryStructure.sourcesDirectory, env)(args: _*)
+  }
+
+  private implicit class GitResultOps(result: String) {
+    def getLines(): Seq[String] = Source.fromString(result).getLines().to(Seq)
   }
 }

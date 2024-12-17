@@ -86,7 +86,7 @@ object DependenciesReport {
       testResolutions: Seq[ResolutionResult],
       extraCompileDeps: Set[DependencyDefinition],
       extraTestDeps: Set[DependencyDefinition]): Set[DependencyReport] = {
-    // we use resovled direct + transitive all artifacts to generate metadata
+    // we use resolved direct + transitive all artifacts to generate metadata
     val resolvedCompileArtifacts = compileResolutions.flatMap(_.resolvedArtifacts.map(_.id)).distinct
     val resolvedTestArtifacts =
       testResolutions.flatMap(_.resolvedArtifacts.map(_.id)).diff(resolvedCompileArtifacts).distinct

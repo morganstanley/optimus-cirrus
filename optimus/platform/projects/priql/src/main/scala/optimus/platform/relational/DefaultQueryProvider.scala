@@ -266,7 +266,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
       fRight: Option[Lambda1[R, MultiKey]] = None): JoinQuery[L, R] = {
 
     val MethodElement(methodCode, methodArgs, srcType, srcKey, pos) = src.element
-    if (methodArgs.exists(_.name == "on"))
+    if (methodArgs.exists(_.name == MethodArgConstants.on))
       throw new RelationalException("'on' was already called, it could only be called once")
     val argument = new Argument(srcType)
     val lArgument = new Argument(methodArgs(0).param.rowTypeInfo)
@@ -335,7 +335,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
           s"lambda(L, R => Boolean): $f and left/right lambda (L/R => MultiKey) cannot be null at the same time")
     }
     val newMethodArgs: List[MethodArg[RelationElement]] = methodArgs ::: List(
-      MethodArg[RelationElement]("on", onLambda),
+      MethodArg[RelationElement](MethodArgConstants.on, onLambda),
       MethodArg[RelationElement]("leftMultiKey", leftMultiKeyLambda),
       MethodArg[RelationElement]("rightMultiKey", rightMultiKeyLambda)
     )
@@ -345,7 +345,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
 
   def on[L, R](src: JoinQuery[L, R], fields: Seq[String]): JoinQuery[L, R] = {
     val MethodElement(methodCode, methodArgs, srcType, srcKey, pos) = src.element
-    if (methodArgs.exists(_.name == "on"))
+    if (methodArgs.exists(_.name == MethodArgConstants.on))
       throw new RelationalException("'on' was already called, it could only be called once")
     val lType = methodArgs(0).param.rowTypeInfo
     val lKey = DynamicKey(fields, lType)
@@ -376,7 +376,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     val fieldsElem: RelationElement = new ConstValueElement(fields, typeInfo[Seq[String]])
 
     val newMethodArgs: List[MethodArg[RelationElement]] = methodArgs ::: List(
-      MethodArg("on", onElem),
+      MethodArg(MethodArgConstants.on, onElem),
       MethodArg("leftMultiKey", lFuncElem),
       MethodArg("rightMultiKey", rFuncElem),
       MethodArg("fields", fieldsElem))
@@ -388,7 +388,7 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     import QueryMethod._
 
     val MethodElement(methodCode, methodArgs, _, srcKey: RelationKey[Any @unchecked], pos) = src.element
-    if (methodArgs.exists(_.name == "on"))
+    if (methodArgs.exists(_.name == MethodArgConstants.on))
       throw new RelationalException("'on' was already called!")
     val left = methodArgs(0).param
     val right = methodArgs(1).param

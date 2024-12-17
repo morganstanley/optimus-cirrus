@@ -21,6 +21,7 @@ import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.AwaitStackManagement
 import optimus.graph.DiagnosticSettings
+import optimus.graph.diagnostics.ap.CrumbStackExtractor.Sample
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
 import optimus.graph.diagnostics.sampling.FlameTreatment
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
@@ -47,6 +48,13 @@ import java.util.concurrent.TimeUnit
 import scala.collection.immutable
 
 object StackAnalysis {
+
+  val TotalName = "total"
+  val GCName = "GC"
+  val CompilerName = "Compiler"
+  val PrunedName = "Pruned"
+  val ReveredTotalName = s"$TotalName[without-$GCName-$CompilerName-$PrunedName]"
+  val HideInReverseView = Seq(GCName, CompilerName)
 
   import mutable.{LongMap => LM}
 
@@ -437,6 +445,13 @@ object StackAnalysis {
     def getTotal: Long = total
     def getSelf: Long = self
 
+    def updateForReverseStacksDisplay(): Unit = if (name == ReveredTotalName) {
+      // trim Compiler & GC
+      HideInReverseView.foreach(n => dropKid(CleanName.cleanName(n).id))
+      total = kiderator.map(_.getTotal).sum
+      self = total
+    }
+
     def terminalHash: Long = combineHashes(pathHash, stackHashTerminator)
 
     private[StackAnalysis] var kids: AnyRef = null // (StackNode | LongMap[StackNode])
@@ -532,6 +547,9 @@ object StackAnalysis {
       val names = splitInto(folded, ';', backer, 0, CleanName.internOnly(_))
       addPath(names, count)
     }
+
+    def addFrames(frames: Iterable[String], count: Long): StackNode =
+      addPath(frames.map(CleanName.internOnly), count)
 
     // Add self time to this node, and total time to all nodes back to root
     def add(t: Long, apsid: Long): StackNode = {
@@ -898,8 +916,8 @@ class StackAnalysis(
     val execRoot = rootStackNode("root")
     stackTypeToRoot += "cpu" -> execRoot
     // Combine everything that looks like GC or JIT, so we don't fill up splunk with these stacks.
-    val gc = execRoot.getOrCreateChildNode(cleanName("GC"))
-    val compiler = execRoot.getOrCreateChildNode(cleanName("Compiler"))
+    val gc = execRoot.getOrCreateChildNode(cleanName(GCName))
+    val compiler = execRoot.getOrCreateChildNode(cleanName(CompilerName))
     val javaRoot = execRoot.getOrCreateChildNode(cleanName("App"))
     stackTypeToRoot += "Free" -> cleanName("Free", CleanName.FREE).rootNode
     stackTypeToRoot += "FreeNative" -> cleanName("FreeNative", CleanName.FREE).rootNode

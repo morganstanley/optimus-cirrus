@@ -83,7 +83,7 @@ class JsonReporter(
             settings.installPathBuilder.primaryInstallDir(codetreeBundle, settings.leafDir.toString)
           val metaBundleReport = MetaBundleReport(settings, mavenBundle, id, compilation)
           val file = writeJsonFile(metadataDir, metaBundleReport, s"$mavenBundle-metadata.json")
-          log.info(s"Metadata for maven lib $mavenBundle generated - see ${file.pathString}")
+          log.debug(s"Metadata for maven lib $mavenBundle generated - see ${file.pathString}")
           file
         }
       } else if (isDocker) {
@@ -94,7 +94,7 @@ class JsonReporter(
           val metadataDir = settings.dockerDir.resolveDir(dockerBundle.meta)
           val metaBundleReport = MetaBundleReport(settings, dockerBundle, imageScopes)
           val file = writeJsonFile(metadataDir, metaBundleReport, s"${dockerBundle.bundle}-metadata.json")
-          log.info(s"Metadata for image $dockerBundle generated - see ${file.pathString}")
+          log.debug(s"Metadata for image $dockerBundle generated - see ${file.pathString}")
           file
         }
       } else {
@@ -103,7 +103,7 @@ class JsonReporter(
             val metaBundleReport = MetaBundleReport(settings, bundle, bundleCompilations)
             val metadataDir = settings.installPathBuilder.primaryInstallDir(bundle, settings.leafDir.toString)
             val file = writeJsonFile(metadataDir, metaBundleReport, s"$bundle-metadata.json")
-            log.info(s"Metadata for bundle $bundle generated - see ${file.pathString}")
+            log.debug(s"Metadata for bundle $bundle generated - see ${file.pathString}")
             file
         }
       }
