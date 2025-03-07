@@ -86,7 +86,6 @@ object RunConfSupport {
     val packageName = "package"
     val methodName = "method"
     val env = "env"
-    val agents = "agents"
     val launcher = "launcher"
     val allowDTC = "allowDTC"
     val condition = "condition"
@@ -109,5 +108,6 @@ object RunConfSupport {
     val jacocoOpts = "jacoco"
     val interopPython = "interopPython"
     val python = "python"
+    val linkedModuleName = "linkedModuleName"
   }
 }

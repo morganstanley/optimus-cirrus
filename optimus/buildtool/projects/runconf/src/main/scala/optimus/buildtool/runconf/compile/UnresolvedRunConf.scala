@@ -35,7 +35,6 @@ final case class UnresolvedRunConf(
     mainClassArgs: Seq[String],
     javaOpts: Seq[String],
     env: EnvInternal,
-    agents: Seq[String],
     isTemplate: Boolean,
     isTest: Boolean,
     parents: Seq[String],
@@ -66,7 +65,8 @@ final case class UnresolvedRunConf(
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
     interopPython: Option[Boolean],
-    python: Option[Boolean]
+    python: Option[Boolean],
+    linkedModuleName: Option[String]
 ) extends HasScopedName {
   def isApp: Boolean = !isTemplate && !isTest
 }

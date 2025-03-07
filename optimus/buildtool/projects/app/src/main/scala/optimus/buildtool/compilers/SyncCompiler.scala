@@ -118,5 +118,5 @@ trait SyncCompilerFactory {
 
   def fingerprint(traceType: MessageTrace): Seq[String]
   def newCompiler(scopeId: ScopeId, traceType: MessageTrace): SyncCompiler
-  @async def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = f()
+  @async def throttled[T](sizeBytes: Int)(f: NodeFunction0[T]): T = f()
 }

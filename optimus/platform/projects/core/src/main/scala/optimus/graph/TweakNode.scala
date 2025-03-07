@@ -17,13 +17,25 @@ import optimus.graph.loom.LNodeFunction
 import optimus.graph.loom.LNodeFunction0
 import optimus.graph.{PropertyNode => PN}
 import optimus.graph.{TweakNode => TN}
-import optimus.platform.util.PrettyStringBuilder
 import optimus.platform._
+import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.{RecordingScenarioStack => RSS}
 import optimus.platform.{ScenarioStack => SS}
 
 object TweakNode {
   private object UnknownValue
+
+  def areGeneratorsCompatible(genA: Any, genB: Any): Boolean = {
+    if (genA.getClass ne genB.getClass) {
+      (genA, genB) match {
+        case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithResult && nB.isDoneWithResult =>
+          nA.resultObject() == nB.resultObject()
+        case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithException && nB.isDoneWithException =>
+          nA.exception() == nB.exception()
+        case _ => false
+      }
+    } else NodeClsIDSupport.equals(genB, genA)
+  }
 }
 
 /**
@@ -53,7 +65,7 @@ object TweakNode {
  *   1. scenarioStack() on the tweak node itself is for caching identity (e.g. XSFT)
  */
 class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyPropertyNode[T] {
-  protected var computeNode: Node[T] = _
+  private var computeNode: Node[T] = _
   private var tweak: Tweak = _ // The original source tweak (this should not cause increased memory)
   private var givenSS: ScenarioStack = _ // ScenarioStack where the tweak was found
   protected var computeSS: ScenarioStack = _ // ScenarioStack for the right hand side
@@ -75,19 +87,8 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
    * This method is used in the context of ScenarioStack.equals need to check class due to the overrides for :*= :+=
    * etc.
    */
-  def equalsAsTemplates(other: TweakNode[_]): Boolean = {
-    def generatorsAreCompatible: Boolean =
-      if (computeGenerator.getClass ne other.computeGenerator.getClass) {
-        (computeGenerator, other.computeGenerator) match {
-          case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithResult && nB.isDoneWithResult =>
-            nA.resultObject() == nB.resultObject()
-          case (nA: NodeTask, nB: NodeTask) if nA.isDoneWithException && nB.isDoneWithException =>
-            nA.exception() == nB.exception()
-          case _ => false
-        }
-      } else NodeClsIDSupport.equals(other.computeGenerator, computeGenerator)
-    getClass == other.getClass && generatorsAreCompatible
-  }
+  def equalsAsTemplates(other: TweakNode[_]): Boolean =
+    getClass == other.getClass && TweakNode.areGeneratorsCompatible(computeGenerator, other.computeGenerator)
 
   def hashCodeAsTemplate: Int = NodeClsIDSupport.hashCode(computeGenerator)
 
@@ -100,12 +101,12 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
    * we find the same tweak to the same tweakable in the key ScenarioStack we'll then check (recursively) that these
    * dependencies *as seen from that new tweak* match those that we saw here. See [XS_BY_NAME_TWEAKS]
    */
-  protected final def finalizeTweakTreeNode(): Unit = {
+  private final def finalizeTweakTreeNode(): Unit = {
     if (scenarioStack.isTrackingOrRecordingTweakUsage) {
       val nestedTweakables = if (computeSS eq null) null else computeSS.tweakableListener.recordedTweakables
       tweakTreeNode = toTweakTreeNode(nestedTweakables)
       if (isXScenarioOwner)
-        scenarioStack.onXSOriginalCompleted(new RecordedTweakables(tweakTreeNode))
+        replace(scenarioStack().withRecorded(new RecordedTweakables(tweakTreeNode)))
     }
   }
 
@@ -123,23 +124,20 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
       throw new GraphInInvalidState("Asking to report not-recorded tweaks")
   }
 
-  final protected def initComputeScenarioStackAndNode(): Unit = if (!isDone) {
+  private final def initComputeScenarioStackAndNode(): Unit = if (!isDone) {
     // If we did get given a RecordingScenarioStack then we need to replace computeSS with an RS too so that we
     // capture the dependencies of this tweak. See [XS_BY_NAME_TWEAKS].
-    // Also set flag on SS to avoid waiting for XS node that might cause circular reference exception, because if the
-    // tweak's computeNode refers (in)directly back to the tweakable then XS will wait for the currently running
-    // tweakable to complete. This flag must be propagated transitively to all child XS nodes of the compute node.
-    // See [XS_NO_WAIT]
     if (scenarioStack.isRecordingTweakUsage) {
       val trackingProxy = scenarioStack.tweakableListener.trackingProxy
       if (scenarioStack.isRecordingWhenDependencies) {
-        val listener = new WhenNodeRecordingTweakableListener(computeSS, trackingProxy)
-        computeSS = RSS.withExistingListener(computeSS, listener, noWaitForXs = true)
+        val listener = new WhenNodeRecordingTweakableListener(computeSS, trackingProxy, scenarioStack.tweakableListener)
+        computeSS = RSS.withExistingListener(computeSS, listener)
       } else if (scenarioStack.tweakableListener ne computeSS.tweakableListener) {
         // ss.tweakableListener is the same as computeSS.tweakableListener in Tweak.bind case, in which case no need
         // to create a new listener for the computeSS (and doing so will result in a hang rather than a CircularReferenceException
         // in the case of Tweak.bind cycles [SEE_TWEAK_BIND_XS_CYCLE])
-        computeSS = RSS.withNewListener(computeSS, trackingProxy, noWaitForXs = true, earlyUpReport = true)
+        // need to use the tweakable listener from `scenarioStack` rather than from computeSS
+        computeSS = RSS.withNewListener(computeSS, trackingProxy, callingTl = scenarioStack.tweakableListener)
       }
     }
     computeNode = getComputeNode(computeSS, srcNodeTemplate)
@@ -273,6 +271,7 @@ class TweakNode[T](private[optimus] val computeGenerator: AnyRef) extends ProxyP
     case _ => false
   }
 
+  // noinspection HashCodeUsesVar (clone needs to set srcNodeTemplate, otherwise could have been a val)
   override def hashCode: Int = if (srcNodeTemplate eq null) hashCodeAsTemplate else super.hashCode
 
   override def name_suffix = ":="
@@ -380,7 +379,7 @@ sealed abstract class TweakNodeModifyOriginal[T, Self <: TweakNodeModifyOriginal
             completeWithResult(modifiedResult, ec)
 
           case otherwise =>
-            throw new GraphInInvalidState(s"impossible state ${otherwise}")
+            throw new GraphInInvalidState(s"impossible state $otherwise")
         }
       }
     }

@@ -17,7 +17,7 @@ import java.time._
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.datatype.Classification.DataSubjectCategory
-import optimus.datatype.FullName
+import optimus.datatype.PIIElement
 import optimus.graph.Node
 import optimus.platform.ImmutableArray
 import optimus.platform._
@@ -74,7 +74,7 @@ private[optimus] trait VersioningUtilsBase {
       else if (typeSig <:< types.msUnique) RegisteredFieldType.MsUnique
       else if (typeSig <:< types.javaEnum) RegisteredFieldType.JavaEnum(typeName)
       else if (typeSig <:< types.enumerationValue) RegisteredFieldType.ScalaEnum(typeName)
-      else if (typeSig <:< types.fullName) RegisteredFieldType.FullName
+      else if (typeSig <:< types.piiElement) RegisteredFieldType.PIIElement(typeName)
       else if (typeSig <:< types.tuple2 && typeArgs.size == 2) {
         val t1 = typeArgs(0).fieldType
         val t2 = typeArgs(1).fieldType
@@ -258,42 +258,42 @@ private[optimus] trait VersioningUtilsBase {
     lazy val javaLong = u.typeOf[java.lang.Long]
     lazy val javaShort = u.typeOf[java.lang.Short]
     lazy val javaString = u.typeOf[java.lang.String]
-    lazy val listMap = u.typeOf[ListMap[_, _]]
+    lazy val listMap = u.typeOf[ListMap[_, Any]]
     lazy val localDate = u.typeOf[LocalDate]
     lazy val localTime = u.typeOf[LocalTime]
     lazy val long = u.typeOf[Long]
-    lazy val map = u.typeOf[Map[_, _]]
+    lazy val map = u.typeOf[Map[_, Any]]
     lazy val msUnique = u.typeOf[MSUnique]
     lazy val msUuid = u.typeOf[MSUuid]
     lazy val chainedId = u.typeOf[ChainedID]
     lazy val node = u.typeOf[Node[Any]]
     lazy val offsetTime = u.typeOf[OffsetTime]
-    lazy val option = u.typeOf[Option[_]]
+    lazy val option = u.typeOf[Option[Any]]
     lazy val period = u.typeOf[Period]
     lazy val product = u.typeOf[Product]
     lazy val referenceHolder = u.typeOf[ReferenceHolder[_]]
     lazy val registeredFieldType = u.typeOf[RegisteredFieldType]
     lazy val sortedSet = u.typeOf[SortedSet[_]]
     lazy val set = u.typeOf[Set[_]]
-    lazy val seq = u.typeOf[Seq[_]]
+    lazy val seq = u.typeOf[Seq[Any]]
     lazy val short = u.typeOf[Short]
     lazy val string = u.typeOf[String]
-    lazy val treeMap = u.typeOf[TreeMap[_, _]]
-    lazy val tuple2 = u.typeOf[Tuple2[_, _]]
-    lazy val tuple3 = u.typeOf[Tuple3[_, _, _]]
-    lazy val tuple4 = u.typeOf[Tuple4[_, _, _, _]]
-    lazy val tuple5 = u.typeOf[Tuple5[_, _, _, _, _]]
-    lazy val tuple6 = u.typeOf[Tuple6[_, _, _, _, _, _]]
-    lazy val tuple7 = u.typeOf[Tuple7[_, _, _, _, _, _, _]]
-    lazy val tuple8 = u.typeOf[Tuple8[_, _, _, _, _, _, _, _]]
-    lazy val tuple9 = u.typeOf[Tuple9[_, _, _, _, _, _, _, _, _]]
-    lazy val tuple10 = u.typeOf[Tuple10[_, _, _, _, _, _, _, _, _, _]]
+    lazy val treeMap = u.typeOf[TreeMap[_, Any]]
+    lazy val tuple2 = u.typeOf[Tuple2[Any, Any]]
+    lazy val tuple3 = u.typeOf[Tuple3[Any, Any, Any]]
+    lazy val tuple4 = u.typeOf[Tuple4[Any, Any, Any, Any]]
+    lazy val tuple5 = u.typeOf[Tuple5[Any, Any, Any, Any, Any]]
+    lazy val tuple6 = u.typeOf[Tuple6[Any, Any, Any, Any, Any, Any]]
+    lazy val tuple7 = u.typeOf[Tuple7[Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple8 = u.typeOf[Tuple8[Any, Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple9 = u.typeOf[Tuple9[Any, Any, Any, Any, Any, Any, Any, Any, Any]]
+    lazy val tuple10 = u.typeOf[Tuple10[Any, Any, Any, Any, Any, Any, Any, Any, Any, Any]]
     lazy val unit = u.typeOf[Unit]
     lazy val yearMonth = u.typeOf[YearMonth]
     lazy val year = u.typeOf[Year]
     lazy val zonedDateTime = u.typeOf[ZonedDateTime]
     lazy val zoneId = u.typeOf[ZoneId]
-    lazy val fullName = u.typeOf[FullName[_ <: DataSubjectCategory]]
+    lazy val piiElement = u.typeOf[PIIElement[_ <: DataSubjectCategory]]
   }
 
   def backed(nme: String): String = s"backed$$$nme"

@@ -55,17 +55,6 @@ class DALMapping extends BasicMapping {
   }
 }
 
-class DALRegisteredIndexMapping extends DALMapping {
-  override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
-}
-
-object DALRegisteredIndexMapping {
-  def isProviderSupported(dp: DataProvider): Boolean = dp match {
-    case provider: DALProvider => provider.supportsRegisteredIndexes
-    case _                     => false
-  }
-}
-
 class DALMapper(m: DALMapping, t: QueryTranslator) extends BasicMapper(m, t) {
   override val binder: QueryBinder = DALBinder
 
@@ -74,4 +63,21 @@ class DALMapper(m: DALMapping, t: QueryTranslator) extends BasicMapper(m, t) {
     e = SpecialElementRewriter.rewrite(e)
     UnusedColumnRemover.remove(mapping, e)
   }
+}
+
+class DALRegisteredIndexMapping extends DALMapping {
+  override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
+  override def createMapper(translator: QueryTranslator): DALMapper = {
+    new DALRegisteredIndexMapper(this, translator)
+  }
+}
+object DALRegisteredIndexMapping {
+  def isProviderSupported(dp: DataProvider): Boolean = dp match {
+    case provider: DALProvider => provider.supportsRegisteredIndexes
+    case _                     => false
+  }
+}
+
+class DALRegisteredIndexMapper(m: DALMapping, t: QueryTranslator) extends DALMapper(m, t) {
+  override val binder: QueryBinder = DALRegisteredIndexBinder
 }

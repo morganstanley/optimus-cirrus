@@ -13,7 +13,7 @@ package optimus.graph.diagnostics.sampling
 import optimus.graph.OGLocalTables
 import optimus.graph.OGSchedulerContext
 import optimus.graph.TwkResolver
-import optimus.graph.cache.NodeCache
+import optimus.graph.cache.CacheSelector
 import optimus.graph.diagnostics.ap.FrameMatcherProvider
 import optimus.graph.diagnostics.ap.SampledTimersExtractor.FrameMatcher
 import optimus.graph.diagnostics.trace
@@ -39,11 +39,12 @@ class GraphFrameMatcherProvider extends FrameMatcherProvider {
     val ogscRun = isEqualTo(methodFrameString[OGSchedulerContext]("run"))
     val ogscRunAndWait = isEqualTo(methodFrameString[OGSchedulerContext]("runAndWait"))
     val ogObserver = startsWith(classString[trace.OGEventsObserver].dropRight("Observer".length))
-    val javaNano = isEqualTo("os::javaTimeNanos") or isEqualTo(methodFrameString[System]("nanoTime"))
+    val javaNano =
+      isEqualTo("os::javaTimeNanos") or isEqualTo(methodFrameString[System]("nanoTime")) or isEqualTo("__clock_gettime")
     Seq(
       matcher(graph, ogscRun or ogscRunAndWait),
       matcher(syncStack, ogscRun or ogscRunAndWait, ogscRunAndWait),
-      matcher(cache, isEqualTo(objectMethodFrameString(NodeCache, "cacheLookup"))),
+      matcher(cache, isEqualTo(methodFrameString[CacheSelector]("lookupAndInsert"))),
       matcher(tweakLUS, isEqualTo(methodFrameString[TwkResolver[_]]("syncResolve"))),
       matcher(tweakLUA, isEqualTo(methodFrameString[TwkResolver[_]]("asyncResolve"))),
       matcher(localTables, startsWith(methodFrameString[OGLocalTables]("forAllRemovables"))),

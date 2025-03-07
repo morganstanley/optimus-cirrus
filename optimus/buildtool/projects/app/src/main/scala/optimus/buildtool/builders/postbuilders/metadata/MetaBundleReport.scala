@@ -77,7 +77,7 @@ object MetaBundleReport {
       project = metaBundle.bundle,
       release = settings.installVersion,
       buildInfo = BuildInfoReport(settings.buildId),
-      artifacts = Seq(ArtifactReport(settings, ModuleId(id), compilationMap))
+      artifacts = Seq(ArtifactReport(settings, ModuleId(id.copy(meta = metaBundle.meta)), compilationMap))
     )
   }
 }

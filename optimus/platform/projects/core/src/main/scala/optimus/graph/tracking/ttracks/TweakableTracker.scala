@@ -11,9 +11,6 @@
  */
 package optimus.graph.tracking.ttracks
 
-import java.util
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.LongAdder
 import optimus.graph.GraphException
 import optimus.graph.GraphInInvalidState
 import optimus.graph.NodeTask
@@ -23,6 +20,7 @@ import optimus.graph.PropertyNode
 import optimus.graph.Settings
 import optimus.graph.TweakTreeNode
 import optimus.graph.TweakableKey
+import optimus.graph.TweakableListener
 import optimus.graph.cache.CacheFilter
 import optimus.graph.cache.Caches
 import optimus.graph.cache.CauseUntrackedTweakableTweaked
@@ -40,8 +38,11 @@ import optimus.graph.tracking.TrackingGraphCleanupTrigger
 import optimus.graph.tracking.TraversalIdSource
 import optimus.platform.NodeHash
 import optimus.platform.Tweak
-import optimus.platform.TweakableListener
 import optimus.platform.util.Log
+
+import java.util
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.LongAdder
 
 /**
  * Tracks tweakable nodes and the nodes which depend on them. Supports cache invalidation of the dependent nodes - this
@@ -151,7 +152,7 @@ private[optimus] final class TweakableTracker(
 
       // if (node.info() ne null) throw new GraphInInvalidState("This should no longer be allowed")
 
-      node.partialCombineInfo(useTTrack)
+      node.combineXinfo(useTTrack)
     }
   }
 
@@ -359,7 +360,7 @@ private[optimus] final class TweakableTracker(
   }
 
   protected[tracking] def selfAndAllDescendants: List[TweakableTracker] = {
-    this :: (children(null).iterator.flatMap { _.selfAndAllDescendants }.toList)
+    this :: children(null).iterator.flatMap { _.selfAndAllDescendants }.toList
   }
 
   override def toString: String = s"TweakableTracker($name)"
@@ -398,7 +399,7 @@ object TweakableTracker {
   /**
    * a partially complete cleanup is both a Result and a Request because it can be passed back in to resume the cleanup
    */
-  final case class PartiallyComplete(
+  private final case class PartiallyComplete(
       iterator: util.Iterator[util.Map.Entry[TweakableKey, TTrackRoot]],
       stats: CleanupStats)
       extends CleanupRequest
@@ -439,7 +440,7 @@ object TweakableTracker {
       redundantTTracksRemoved: Int,
       excessCapacityRemoved: Int) {
 
-    def merge(o: CleanupStats) = CleanupStats(
+    def merge(o: CleanupStats): CleanupStats = CleanupStats(
       edgesTraversed = this.edgesTraversed + o.edgesTraversed,
       edgesRemoved = this.edgesRemoved + o.edgesRemoved,
       rootsTraversed = this.rootsTraversed + o.rootsTraversed,
@@ -469,7 +470,7 @@ object TweakableTracker {
       excessCapacityRemoved = v.excessCapacityRemoved
     )
 
-    val zero = CleanupStats(0, 0, 0, 0, 0, 0, 0)
+    val zero: CleanupStats = CleanupStats(0, 0, 0, 0, 0, 0, 0)
   }
 
   /**

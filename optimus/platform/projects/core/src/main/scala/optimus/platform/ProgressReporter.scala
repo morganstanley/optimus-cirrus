@@ -24,6 +24,8 @@ import optimus.platform.annotations.nodeSync
 import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.util.Log
 
+import scala.util.control.NonFatal
+
 class ProgressMarker
 object DefaultMarker extends ProgressMarker
 case object TrackProgress extends ProgressMarker
@@ -98,25 +100,25 @@ trait CollectionProgressReporter {
 }
 
 object Progress extends Log {
-  private final class ProgressCompleter(marker: ProgressMarker) extends NodeAwaiter {
+  private final class ProgressCompleter(pr: ProgressReporter, marker: ProgressMarker) extends NodeAwaiter {
     override def onChildCompleted(q: EvaluationQueue, n: NodeTask): Unit = {
       EvaluationContext.asIfCalledFrom(n, q) {
-        onProgressCompleted(marker, n)
+        onProgressCompleted(pr, marker, n)
       }
     }
   }
 
-  private[optimus] def onProgressCompleted(marker: ProgressMarker, n: NodeTask): Unit = {
+  private[optimus] def onProgressCompleted(pr: ProgressReporter, marker: ProgressMarker, n: NodeTask): Unit = {
     val nEx = n.exception
     try {
       EvaluationContext.given(n.scenarioStack.siRoot) {
         if (nEx eq null)
-          n.scenarioStack.progressReporter.reportItemCompleted(marker)
+          pr.reportItemCompleted(marker)
         else
-          n.scenarioStack.progressReporter.reportItemCompletedWithFailure(marker, nEx)
+          pr.reportItemCompletedWithFailure(marker, nEx)
       }
     } catch { // under no circumstances may we throw in oCC!
-      case prEx: Throwable =>
+      case NonFatal(prEx) =>
         log.error(s"Error calling reportItemCompleted${if (nEx ne null) "WithFailure" else ""} for $n", prEx)
         n.attach(Warning(prEx))
     }
@@ -148,7 +150,7 @@ object Progress extends Log {
       if (pr ne null) {
         val newpr = pr.reportItemStarted(marker, weight)
         if (newpr ne pr) {
-          if (!f.tryAddToWaiterList(new ProgressCompleter(marker)))
+          if (!f.tryAddToWaiterList(new ProgressCompleter(newpr, marker)))
             newpr.reportItemCompleted(marker) // This handles the trivial case when a constant passed in
           f.replace(css.withProgressReporter(newpr))
         }

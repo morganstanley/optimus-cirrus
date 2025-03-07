@@ -11,44 +11,77 @@
  */
 package optimus.graph.cache;
 
-import java.lang.ref.SoftReference;
-
 import optimus.graph.PropertyNode;
 
-abstract class NCEntry {
+public class NCEntry {
+  protected PropertyNode<?> value;
   int hash; // It really is final, we just don't want to pay the price
-  NCEntry before, after; // Updated by cleanup thread only [updateLock]; this tracks the LRU list
-  NCEntry
-      next; // Set in constructor, updated only under [updateLock]. OK to see the old value!; this
-  // tracks the list in the bin
+  NCEntry next; // Updated only under [updateLock]. OK to see the old value!
+
+  public NCEntry(int hash, PropertyNode<?> value, NCEntry next) {
+    this.value = value;
+    this.next = next;
+    this.hash = hash;
+  }
+
+  /** Sanitized value */
+  PropertyNode<?> getValue() {
+    PropertyNode<?> r = value; // volatile read
+    return (r == null || r.isInvalidCache()) ? null : r;
+  }
+
+  boolean invalid() {
+    PropertyNode<?> r = value; // volatile read
+    return r == null || r.isInvalidCache();
+  }
+
+  /** Returns true if the entry was removed */
+  boolean removed() {
+    return value == null;
+  }
+
+  /** Remove ref to value and set a 'null' */
+  void removeValue() {
+    value = null; // lazySet()
+  }
+
+  void setInsertMark(int evictCount) {
+    // We don't record anything in a regular case
+  }
+
+  int getInsertMark() {
+    return 0; // Reasonable default
+  }
+
+  void setRequestCount(int requestCount) {
+    // We don't record anything in a regular case
+  }
+
+  int getRequestCount() {
+    return 0; // Reasonable default
+  }
+
+  int getSize() {
+    return 1; // Default size: 1
+  }
+
+  int remove() {
+    return 0; // Removed nothing
+  }
+
+  boolean inLedger() {
+    return false;
+  }
+}
+
+abstract class NCEntryLRU extends NCEntry {
+  NCEntryLRU before, after; // Updated by cleanup thread only [updateLock]; this tracks the LRU list
   boolean inLedger; // Set when added to a ledger. Cleared when the ledger is processed;
   int hitCount;
 
-  /** Sanitized value */
-  abstract PropertyNode<?> getValue();
-
-  /** Remove ref to value and set a 'null' */
-  abstract void removeValue();
-
-  abstract boolean invalid();
-
-  abstract boolean removed();
-
-  void setInsertMark(int evictCount) {} // We don't record anything in a regular case
-
-  int getInsertMark() {
-    return 0;
-  } // Reasonable default
-
-  void setRequestCount(int requestCount) {} // We don't record anything in a regular case
-
-  int getRequestCount() {
-    return 0;
-  } // Reasonable default
-
-  int getSize() {
-    return 1;
-  } // Default size: 1
+  public NCEntryLRU(int hash, PropertyNode<?> value, NCEntry next) {
+    super(hash, value, next);
+  }
 
   /**
    * Returns entry's size if in fact it was removed from the list, 0 otherwise Notes:
@@ -75,8 +108,12 @@ abstract class NCEntry {
     return 0;
   }
 
+  @Override
+  boolean inLedger() {
+    return inLedger;
+  }
   /** Inserts into the head [updateLock] */
-  final void addBefore(NCEntry existingEntry) {
+  final void addBefore(NCEntryLRU existingEntry) {
     after = existingEntry;
     before = existingEntry.before;
     before.after = this;
@@ -84,7 +121,7 @@ abstract class NCEntry {
   }
 
   /** Move from existing place to the head [updateLock] */
-  final void recordAccess(NCEntry header) {
+  final void recordAccess(NCEntryLRU header) {
     // Next 2 lines are remove() without deleting the value
     // Also no need to protect again before != null
     before.after = after;
@@ -93,42 +130,16 @@ abstract class NCEntry {
   }
 }
 
-class NCEntryV extends NCEntry {
-  protected PropertyNode<?> value;
+class NCEntryV extends NCEntryLRU {
 
   /* Special case of the root entry */
   NCEntryV() {
-    hash = -1;
+    super(-1, null, null);
     before = after = this;
   }
 
   NCEntryV(int hash, PropertyNode<?> value, NCEntry next) {
-    this.value = value;
-    this.next = next;
-    this.hash = hash;
-  }
-
-  /** Sanitized value */
-  @Override
-  PropertyNode<?> getValue() {
-    PropertyNode<?> r = value; // volatile read
-    return (r == null || r.isInvalidCache()) ? null : r;
-  }
-
-  @Override
-  boolean invalid() {
-    PropertyNode<?> r = value; // volatile read
-    return r == null || r.isInvalidCache();
-  }
-
-  @Override
-  boolean removed() {
-    return value == null;
-  }
-
-  @Override
-  void removeValue() {
-    value = null; // lazySet()
+    super(hash, value, next);
   }
 }
 
@@ -201,43 +212,6 @@ class NCEntryNotValidWithException extends NCEntryV {
   }
 }
 
-class NCSoftEntry extends NCEntry {
-  private SoftReference<PropertyNode<?>> value;
-
-  public NCSoftEntry(int hash, PropertyNode<?> value, NCEntry next) {
-    this.value = new SoftReference<>(value);
-    this.next = next;
-    this.hash = hash;
-  }
-
-  /** Sanitized value */
-  @Override
-  PropertyNode<?> getValue() {
-    SoftReference<PropertyNode<?>> sr = value; // volatile read
-    if (sr == null) return null;
-    PropertyNode<?> r = sr.get();
-    return (r == null || r.isInvalidCache()) ? null : r;
-  }
-
-  @Override
-  boolean invalid() {
-    SoftReference<PropertyNode<?>> sr = value; // volatile read
-    if (sr == null) return true;
-    PropertyNode<?> r = sr.get();
-    return r == null || r.isInvalidCache();
-  }
-
-  @Override
-  boolean removed() {
-    return value == null;
-  }
-
-  @Override
-  void removeValue() {
-    value = null; // lazySet()  }
-  }
-}
-
 /** Stores hinted size */
 class NCSizedEntryV extends NCEntryV {
   private final int size;
@@ -257,16 +231,12 @@ class NCSizedEntryV extends NCEntryV {
  * Not a real entry and will not be inserted into the table but only used to mark a place in to
  * doubly linked list
  */
-final class NCMarkerEntry extends NCEntry {
+final class NCMarkerEntry extends NCEntryLRU {
   public final int id;
 
   public NCMarkerEntry(int id) {
+    super(-1, null, null);
     this.id = id;
-  }
-
-  @Override
-  PropertyNode<?> getValue() {
-    return null;
   }
 
   @Override

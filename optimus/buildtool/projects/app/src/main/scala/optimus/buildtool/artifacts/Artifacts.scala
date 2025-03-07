@@ -35,6 +35,7 @@ import optimus.buildtool.trace.CategoryTrace
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.trace.Validation
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.Jars
@@ -44,7 +45,8 @@ import optimus.platform._
 
 import java.nio.file.Path
 import java.time.Instant
-import scala.collection.immutable.Seq
+import scala.collection.compat._
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters._
 
@@ -54,8 +56,37 @@ import scala.jdk.CollectionConverters._
   def hasErrors: Boolean = false
 }
 
+object Artifacts {
+  def validate(allArtifacts: Seq[Artifact]): Seq[Artifact] =
+    allArtifacts ++ checkDuplicates(allArtifacts)
+
+  def checkDuplicates(allArtifacts: Seq[Artifact]): Seq[Artifact] = {
+    val duplicateArtifacts = allArtifacts.groupBy(_.id).filter(_._2.size > 1)
+    val scopedDuplicates = duplicateArtifacts.groupBy {
+      case (InternalArtifactId(scopeId, _, _), _) =>
+        scopeId
+      case _ =>
+        RootScopeId
+    }
+    scopedDuplicates
+      .map { case (scopeId, dupes) =>
+        val messages = dupes
+          .map { case (id, as) =>
+            CompilationMessage.error(s"Multiple (${as.size}) artifacts for key $id\n\t${as.mkString("\n\t")}")
+          }
+          .to(Seq)
+        InMemoryMessagesArtifact(
+          InternalArtifactId(scopeId, ArtifactType.DuplicateMessages, None),
+          messages,
+          Validation
+        )
+      }
+      .to(Seq)
+  }
+}
+
 final case class Artifacts(scope: Seq[Artifact], upstream: Seq[Artifact]) {
-  lazy val all: Seq[Artifact] = scope ++ upstream
+  lazy val all: IndexedSeq[Artifact] = Vector(scope, upstream).flatten
 }
 
 private[buildtool] object PathedArtifact {
@@ -105,8 +136,9 @@ private[buildtool] object PathedArtifact {
   protected def writeAsJson(): Unit
 }
 
-private[buildtool] sealed trait IncrementalArtifact {
+@entity private[buildtool] sealed trait IncrementalArtifact extends Artifact {
   def incremental: Boolean
+  @node def withIncremental(incremental: Boolean): IncrementalArtifact
 }
 
 object Artifact {
@@ -124,7 +156,7 @@ object Artifact {
     }
   }
 
-  def onlyErrors[A <: Artifact](inputs: Seq[A]): Option[Seq[A]] = {
+  def onlyErrors[A <: Artifact](inputs: IndexedSeq[A]): Option[IndexedSeq[A]] = {
     val es = inputs.filter(_.hasErrors)
     if (es.isEmpty) None else Some(es)
   }
@@ -354,7 +386,31 @@ object GeneratedSourceArtifact {
       containsPlugin: Boolean = containsPlugin,
       containsAgent: Boolean = containsAgent,
       containsOrUsedByMacros: Boolean = containsOrUsedByMacros
+  ): InternalClassFileArtifact = copyArtifact(
+    file = file,
+    containsPlugin = containsPlugin,
+    containsAgent = containsAgent,
+    containsOrUsedByMacros = containsOrUsedByMacros
+  )
+
+  @node def copyArtifact(
+      file: JarAsset = file,
+      incremental: Boolean = incremental,
+      containsPlugin: Boolean = containsPlugin,
+      containsAgent: Boolean = containsAgent,
+      containsOrUsedByMacros: Boolean = containsOrUsedByMacros
   ): InternalClassFileArtifact =
+    InternalClassFileArtifact.create(
+      id,
+      file,
+      precomputedContentsHash,
+      incremental = incremental,
+      containsPlugin = containsPlugin,
+      containsAgent = containsAgent,
+      containsOrUsedByMacros = containsOrUsedByMacros
+    )
+
+  @node def withIncremental(incremental: Boolean): InternalClassFileArtifact =
     InternalClassFileArtifact.create(
       id,
       file,
@@ -781,6 +837,9 @@ object GenericFilesArtifact {
       precomputedContentsHash: String = precomputedContentsHash,
       incremental: Boolean = incremental
   ): SignatureArtifact = SignatureArtifact.create(id, signatureFile, precomputedContentsHash, incremental)
+
+  @node def withIncremental(incremental: Boolean): SignatureArtifact =
+    SignatureArtifact.create(id, signatureFile, precomputedContentsHash, incremental)
 }
 
 object SignatureArtifact {
@@ -811,6 +870,9 @@ object SignatureArtifact {
 ) extends PathedArtifact
     with IncrementalArtifact {
   override def path: Path = analysisFile.path
+
+  @node def withIncremental(incremental: Boolean): AnalysisArtifact =
+    AnalysisArtifact.create(id, analysisFile, incremental = incremental)
 }
 
 object AnalysisArtifact {
@@ -965,6 +1027,9 @@ object InMemoryMessagesArtifact {
   // exclude the actual messages since they can be huge
   override def toString: String =
     s"CompilerMessagesArtifact($id, $messageFile, [${MessagesArtifact.messageSummary(messages)}], $taskCategory, $incremental)"
+
+  @node def withIncremental(incremental: Boolean): CompilerMessagesArtifact =
+    CompilerMessagesArtifact.create(id, messageFile, messages, internalDeps, externalDeps, taskCategory, incremental)
 
   @node def copy(
       id: InternalArtifactId = id,
@@ -1142,37 +1207,6 @@ object LocatorArtifact {
       artifactHash: String,
       timestamp: Instant
   ): LocatorArtifact = LocatorArtifact(scopeId, analysisType, locatorFile, commitHash, artifactHash, timestamp)
-}
-
-/**
- * A Locator for the whole of codetree. Points from a commit to the artifact version and InternalArtifactIds for that
- * commit. Mostly used for "strato catchup" logic (i.e. finding which commits have full builds available).
- */
-@entity private[buildtool] final class RootLocatorArtifact private (
-    val locatorFile: JsonAsset,
-    val commitHash: String,
-    val artifactVersion: String
-) extends PathedArtifact
-    with StoreJson {
-
-  override def path: Path = locatorFile.path
-
-  override def id: InternalArtifactId = InternalArtifactId(RootScopeId, ArtifactType.RootLocator, None)
-  import JsonImplicits._
-  override protected def writeAsJson(): Unit =
-    locatorFile.storeJson(RootLocatorArtifact.Cached(commitHash, artifactVersion), replace = true)
-
-  override def toString: String =
-    s"${getClass.getSimpleName}($locatorFile, $commitHash)"
-}
-object RootLocatorArtifact {
-  final case class Cached(commitHash: String, artifactVersion: String)
-
-  @node def create(
-      locatorFile: JsonAsset,
-      commitHash: String,
-      artifactVersion: String
-  ): RootLocatorArtifact = RootLocatorArtifact(locatorFile, commitHash, artifactVersion).watchForDeletion()
 }
 
 @entity final class ProcessorArtifact private (

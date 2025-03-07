@@ -17,8 +17,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.PythonCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity class PythonScopedCompilation(
     override protected val scope: CompilationScope,
@@ -27,7 +26,7 @@ import scala.collection.immutable.Seq
     extends PartialScopedCompilation {
   import scope._
 
-  @node override protected def upstreamArtifacts: immutable.Seq[Artifact] = Nil
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
   @node override protected def containsRelevantSources: Boolean =
     scope.config.pythonConfig.isDefined && !sources.isEmpty
 

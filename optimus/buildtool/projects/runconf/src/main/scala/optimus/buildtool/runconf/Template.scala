@@ -35,7 +35,6 @@ final case class Template(
     packageName: Option[String],
     mainClass: Option[String],
     methodName: Option[String],
-    agents: Seq[ModuleRef],
     launcher: Launcher,
     includes: Seq[RunconfPattern],
     excludes: Seq[RunconfPattern],
@@ -59,7 +58,8 @@ final case class Template(
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
     interopPython: Boolean,
-    python: Boolean
+    python: Boolean,
+    linkedModuleName: Option[String]
 ) extends HasScopedName
     with HasNativeLibraries {
 
@@ -76,13 +76,13 @@ final case class Template(
       Some(
         TestRunConf(
           id = module.scope(scopeType.getOrElse(scopeTypeFallback)),
+          isLocal = false,
           name = name,
           env = env,
           javaOpts = javaOpts,
           packageName = packageName,
           mainClass = mainClass,
           methodName = methodName,
-          agents = agents,
           launcher = launcher,
           includes = includes,
           excludes = excludes,
@@ -104,7 +104,8 @@ final case class Template(
           flags = flags,
           jacocoOpts = jacocoOpts,
           interopPython = interopPython,
-          python = python
+          python = python,
+          linkedModuleName = linkedModuleName
         )
       )
     case _ =>
@@ -122,7 +123,6 @@ final case class Template(
        |  packageName = $packageName
        |  mainClass = $mainClass
        |  methodName = $methodName
-       |  agents = $agents
        |  launcher = $launcher
        |  includes = $includes
        |  excludes = $excludes
@@ -141,6 +141,7 @@ final case class Template(
        |  flags = $flags
        |  jacocoOpts = $jacocoOpts
        |  python = $python
+       |  linkedModuleName = $linkedModuleName
        |)""".stripMargin
   }
 

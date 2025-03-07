@@ -120,17 +120,9 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def allRemoteNames(): Seq[String] = allRemotes().map(_.name)
 
   def allRemotes(): Seq[RemoteSpec] =
-    Try(runGit("config", "--get-regexp", "remote\\..+\\.url")) match {
-      case Success(result) =>
-        result
-          .split(System.lineSeparator())
-          .collect { case RemoteUrlRegex(name, url) => RemoteSpec(name, RemoteUrl(url)) }
-          .toList
-          .distinct
-      // git will exit with 1 if no remotes
-      case Failure(_: StratosphereException) => List()
-      case Failure(throwable)                => throw throwable
-    }
+    getConfig("remote\\..+\\.url").collect { case RemoteUrlRegex(name, url) =>
+      RemoteSpec(name, RemoteUrl(url))
+    }.distinct
 
   def maybeLocalBranch(name: String): Option[LocalBranch] = {
     val localBranchExists = checkBranchExists(name)
@@ -149,6 +141,13 @@ final case class GitUtils(workspace: StratoWorkspaceCommon) {
   def showFileFromRevision(ref: String, filePath: String): Option[String] = {
     Try(runGit("show", s"$ref:$filePath")).map(Some(_)).getOrElse(None)
   }
+
+  def getConfig(regex: String): Seq[String] =
+    Try(runGit("config", "--get-regexp", regex)) match {
+      case Success(result)                   => result.getLines()
+      case Failure(_: StratosphereException) => Seq.empty // git will exit with 1 if no config is found
+      case Failure(throwable)                => throw throwable
+    }
 
   def commit(message: String): String = runGit("commit", "--message", Text.doubleQuote(message))
 

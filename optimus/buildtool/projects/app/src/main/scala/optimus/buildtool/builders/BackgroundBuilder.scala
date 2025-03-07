@@ -89,7 +89,7 @@ class BackgroundProcessBuilder protected (
           else Success(p.exitValue())
         }))
 
-    asyncGet(promise.node)
+    promise.await
   }
 
   @async def buildWithRetry(

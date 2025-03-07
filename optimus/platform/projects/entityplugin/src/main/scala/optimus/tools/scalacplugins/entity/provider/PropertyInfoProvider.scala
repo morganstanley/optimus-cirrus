@@ -51,7 +51,7 @@ class PropertyInfoProvider[A <: Global](pluginData: EntityPluginData, val global
     with BoundsResolvers {
   provider =>
 
-  private lazy val UntypedUtils = new UntypedUtils with NodeSynthesis {
+  private object UntypedUtils extends UntypedUtils with NodeSynthesis {
     override val global: provider.global.type = provider.global
     override val phaseInfo: OptimusPhaseInfo = OptimusPhaseInfo.NoPhase
     override val pluginData: PluginData = provider.pluginData

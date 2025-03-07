@@ -43,7 +43,8 @@ import scala.collection.mutable
 private[optimus] class DependencyTracker private[tracking] (
     rootParam: DependencyTrackerRoot,
     private[optimus] val scenarioReference: ScenarioReference,
-    protected[optimus] val parentScenarioStack: ScenarioStack)
+    protected[optimus] val parentScenarioStack: ScenarioStack,
+    appletName: String)
     extends DependencyTrackerChildren
     with TweakMutationActions
     with TTrackStatsActions
@@ -77,7 +78,7 @@ private[optimus] class DependencyTracker private[tracking] (
     if (scenarioReference.shareParentQueue) parent.queue // we know shareParentQueue is false if isRoot
     else new DependencyTrackerQueue(this)
 
-  private[optimus] val queueOwner = queue.tracker
+  private[optimus] def queueOwner = queue.tracker
 
   /** tracks tweakable usage in the underlay scenario stack(s) */
   private[optimus] final val underlayTweakableTracker: TweakableTracker =
@@ -133,12 +134,9 @@ private[optimus] class DependencyTracker private[tracking] (
   }
 
   private def newScenarioStack(cached: Boolean, nodeInputs: MutableNodeInputMap): ScenarioStack =
-    parentScenarioStack.createChildForTrackingScenario(
-      name,
-      tweakableTracker,
-      tweakContainer.cacheId,
-      cached,
-      nodeInputs)
+    parentScenarioStack
+      .createChildForTrackingScenario(name, tweakableTracker, tweakContainer.cacheId, cached, nodeInputs)
+      .withScopePath(appletName)
 
   private[optimus] final val scenarioStack: ScenarioStack = newScenarioStack(cached = true, nodeInputs)
   final val scenarioState: ScenarioState = scenarioStack.asScenarioState
@@ -472,7 +470,7 @@ private[optimus] class DependencyTracker private[tracking] (
   /**
    * Get work count for this tracker, but not its children.
    */
-  def getWorkCount = queue.outstandingWorkCount
+  def getWorkCount: Int = queue.outstandingWorkCount
 }
 
 object DependencyTracker {

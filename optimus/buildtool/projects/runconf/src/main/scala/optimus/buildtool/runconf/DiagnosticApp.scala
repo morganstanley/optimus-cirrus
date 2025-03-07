@@ -11,14 +11,14 @@
  */
 package optimus.buildtool.runconf
 
-import msjava.slf4jutils.scalalog.Logger
-import msjava.slf4jutils.scalalog.getLogger
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory.getLogger
 
 import java.lang.management.ManagementFactory
 import scala.jdk.CollectionConverters._
 
 object DiagnosticApp extends App {
-  protected val log: Logger = getLogger(this)
+  protected val log: Logger = getLogger(getClass)
 
   private val NewLineWithIndent = "\n  "
 

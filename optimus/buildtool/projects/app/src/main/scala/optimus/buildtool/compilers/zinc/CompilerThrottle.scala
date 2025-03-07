@@ -13,6 +13,7 @@ package optimus.buildtool.compilers.zinc
 
 import optimus.buildtool.utils.Utils
 import optimus.platform._
+import optimus.platform.throttle.ThrottleState
 import optimus.platform.util.Log
 
 import scala.collection.compat._
@@ -42,26 +43,28 @@ class CompilerThrottle(maxZincCompileBytes: Int, val maxNumZincs: Int) extends L
       log.debug(
         s"Creating zinc size throttle. Max size: ${Utils.bytesToString(zincByteLimit)}, max count: ${maxNumZincs}"
       )
-      Some(new AdvancedUtils.Throttle(zincByteLimit))
+      Some(AdvancedUtils.newThrottle(zincByteLimit))
     }
 
-  @async def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = zincSizeThrottle match {
+  @async def throttled[T](sizeBytes: Int)(f: NodeFunction0[T]): T = zincSizeThrottle match {
     case Some(st) =>
       val actualWeight = math.max(sizeBytes, zincMinWeight)
 
       st(
-        asNode { () =>
+        {
           stats.synchronized(stats += st.getCounters)
           f()
         },
-        NodeFunction1.identity[T],
-        nodeWeight = actualWeight
-      )
+        nodeWeight = actualWeight)
     case None => f()
   }
 
+  def snapStats(): Seq[ThrottleState] = stats.synchronized {
+    stats.to(Seq)
+  }
+
   def snapAndResetStats(): Seq[ThrottleState] = stats.synchronized {
-    val r = stats.to(Seq)
+    val r = snapStats()
     stats.clear()
     r
   }

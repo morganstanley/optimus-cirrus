@@ -11,13 +11,12 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component
 
-import java.nio.file.Files
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.builders.postbuilders.installer.BatchInstallableArtifacts
-import optimus.buildtool.format.JsonSupport
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
-import optimus.buildtool.builders.postbuilders.installer.component.testplans.Changes
+import optimus.buildtool.builders.postbuilders.installer.component.fingerprint_diffing.FingerprintDiffChanges
+import optimus.buildtool.builders.postbuilders.installer.component.testplans.GitChanges
 import optimus.buildtool.builders.postbuilders.installer.component.testplans._
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ScopeId
@@ -25,19 +24,23 @@ import optimus.buildtool.config.VersionConfiguration
 import optimus.buildtool.files.Directory.PathRegexFilter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.RelativePath
+import optimus.buildtool.format.JsonSupport
 import optimus.buildtool.format.WorkspaceStructure
 import optimus.buildtool.runconf.ModuleScopedName
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.TestRunConf
 import optimus.buildtool.utils.AssetUtils
-import optimus.scalacompat.collection._
-import optimus.platform.util.Log
+import optimus.buildtool.utils.GitLog
 import optimus.platform._
+import optimus.platform.util.Log
+import optimus.scalacompat.collection._
 import optimus.tools.testplan.model.TestplanField.TestCases
 
-import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
+import java.nio.file.Files
+import java.nio.file.Path
 import scala.collection.compat._
+import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
 
 final case class TestData(testType: TestType, testplan: TestPlan, testModules: Seq[String])
 
@@ -64,49 +67,78 @@ final class TestplanInstaller(
     val TestplanDir: RelativePath = RelativePath("config/testplans")
     val InModuleTestplanDir: RelativePath = RelativePath("testplans")
     def templateFile(os: String): RelativePath = RelativePath(s"testplan.$os.pre.template")
-    def testplanFile(suffix: String = "merged"): String = s"downstream-$suffix.testplan"
+    def testplanFile(suffix: String = "merged", prefix: String = ""): String = s"${prefix}downstream-$suffix.testplan"
   }
 
   @node private def testData(scopeIds: Set[ScopeId]): Seq[TestData] =
-    prepareFor(readTestTypes(), changes, scopeIds)
+    prepareFor(readTestTypes(), gitChanges, scopeIds)
 
-  @node private def changes: Changes = {
-    val git = if (testplanConfig.useDynamicTests) gitLog else None
-    Changes(git, scopeConfigSource, testplanConfig.ignoredPaths)
+  @node private def fingerprintDiffTestData(scopeIds: Set[ScopeId]): Seq[TestData] =
+    prepareFor(readTestTypes(), fingerprintChanges, scopeIds)
+
+  @node private def gitLogOpt: Option[GitLog] =
+    if (testplanConfig.useDynamicTests) gitLog else None
+
+  @node private def gitChanges: Changes = {
+    GitChanges(gitLogOpt, scopeConfigSource, testplanConfig.ignoredPaths)
   }
+
+  @node private def fingerprintChanges: Changes = {
+    val srcPath: Path = installer.sourceDir.path
+    FingerprintDiffChanges(scopeConfigSource, srcPath)
+  }
+
+  private val fingerprintPrefix = "fingerprint-"
 
   // We need to install testplans at the end because we need the access to all the built modules for scoping.
   @async def install(installable: BatchInstallableArtifacts): Seq[FileAsset] = {
     val scopes = Artifact.scopeIds(installable.artifacts)
     val metaBundles = scopes.map(_.metaBundle).distinct
+
+    val allScopeIds: Set[ScopeId] = installable.allScopes
+    val allTestData: Seq[TestData] = testData(allScopeIds)
+    val allFingerprintTestData: Seq[TestData] = fingerprintDiffTestData(allScopeIds)
+
     metaBundles.apar.flatMap { metaBundle =>
-      installTestplanFiles(metaBundle, installable.allScopes)
-    } ++ writeChangesFiles(changes)
+      installTestplanFiles(metaBundle, allTestData)
+      installTestplanFiles(metaBundle, allFingerprintTestData, fingerprintPrefix)
+    } ++ writeChangesFiles(gitChanges) ++
+      writeGitChangedFiles() ++
+      writeChangesFiles(fingerprintChanges, fingerprintPrefix)
   }
 
-  @async private def writeChangesFiles(changes: Changes): Seq[FileAsset] = {
+  @async private def writeGitChangedFiles(): Seq[FileAsset] = {
+    if (gitChanges.isDefined) {
+      val changedFilesFile = installDir.resolveFile("changed-files.txt")
+      val changedPaths: Set[Path] =
+        gitLogOpt.map(gitLog => GitChanges.changedPaths(gitLog, testplanConfig.ignoredPaths)).getOrElse(Set.empty)
+      AssetUtils.atomicallyWrite(changedFilesFile, replaceIfExists = true, localTemp = true) { tempPath =>
+        Files.write(tempPath, changedPaths.toSeq.sorted.mkString("\n").getBytes)
+      }
+
+      Seq(changedFilesFile)
+    } else Nil
+  }
+
+  @async private def writeChangesFiles(changes: Changes, prefix: String = ""): Seq[FileAsset] = {
     // This file is used to scope other test types on Jenkins, for example Quick Smokes
     if (changes.isDefined) {
       val directlyChangedScopes = changes.directlyChangedScopes
       val changedScopes = scopeConfigSource.compilationScopeIds.apar.filter(changes.scopeDependenciesChanged)
       val changedModules: Set[String] = changedScopes.map(_.fullModule.toString)
-      val changedModulesFile = installDir.resolveFile("changed-modules.txt")
+      val changedModulesFile = installDir.resolveFile(s"${prefix}changed-modules.txt")
       AssetUtils.atomicallyWrite(changedModulesFile, replaceIfExists = true, localTemp = true) { tempPath =>
         Files.write(tempPath, changedModules.mkString(",").getBytes)
       }
-      val changedScopesFile = installDir.resolveFile("changed-scopes.txt")
+      val changedScopesFile = installDir.resolveFile(s"${prefix}changed-scopes.txt")
       AssetUtils.atomicallyWrite(changedScopesFile, replaceIfExists = true, localTemp = true) { tempPath =>
         Files.write(tempPath, changedScopes.map(_.properPath).toSeq.sorted.mkString(",").getBytes)
       }
-      val directlyChangedScopesFile = installDir.resolveFile("directly-changed-scopes.txt")
+
+      val directlyChangedScopesFile = installDir.resolveFile(s"${prefix}directly-changed-scopes.txt")
 
       AssetUtils.atomicallyWrite(directlyChangedScopesFile, replaceIfExists = true, localTemp = true) { tempPath =>
         Files.write(tempPath, directlyChangedScopes.map(_.properPath).toSeq.sorted.mkString(",").getBytes)
-      }
-
-      val changedFilesFile = installDir.resolveFile("changed-files.txt")
-      AssetUtils.atomicallyWrite(changedFilesFile, replaceIfExists = true, localTemp = true) { tempPath =>
-        Files.write(tempPath, changes.changes.get.toSeq.sorted.mkString("\n").getBytes)
       }
 
       Seq(changedModulesFile, changedScopesFile, directlyChangedScopesFile)
@@ -153,45 +185,14 @@ final class TestplanInstaller(
   private def getData(testType: TestType, includedScopes: Set[ScopeId]): Seq[TestplanEntry] = {
     val estimates = testType.estimates
 
-    testType.testGroups.flatMap { testGroup =>
+    val allRows = testType.testGroups.flatMap { testGroup =>
       val testTasks = testGroup.entries.map { e =>
         TestplanTask(e.moduleId, e.testName.getOrElse(testType.testGroupsOpts.testGroupsName))
       }
       val additionalBindings =
         testType.bindingsFor(testGroup, versionConfig, testplanConfig, workspaceStructure)
-      val testplanEntries = estimates.get(testGroup.name) match {
-        case Some(estimatedNoContainers) if estimatedNoContainers > 1 =>
-          val projectsPerContainer = testTasks.size / estimatedNoContainers
-          testTasks.sliding(projectsPerContainer, projectsPerContainer).zipWithIndex.map {
-            case (subTestTasks, groupNo) =>
-              ScalaTestplanEntry(
-                displayTestName = testType.displayName,
-                groupName = s"${testGroup.name}-${groupNo + 1}",
-                metaBundle = testGroup.metaBundle,
-                treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
-                additionalBindings = additionalBindings,
-                stratoOverride = stratoOverride,
-                testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-                testTasks = subTestTasks,
-                testTaskOverrides = Map()
-              )
-          }
-        case _ =>
-          Seq(
-            ScalaTestplanEntry(
-              displayTestName = testType.displayName,
-              groupName = testGroup.name,
-              metaBundle = testGroup.metaBundle,
-              treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
-              additionalBindings = additionalBindings,
-              stratoOverride = stratoOverride,
-              testModulesFileName = testType.testGroupsOpts.testModulesFileName,
-              testTasks = testTasks,
-              testTaskOverrides = Map()
-            ))
-      }
 
-      testGroup.programmingLanguage match {
+      val allRowsForGroup = testGroup.programmingLanguage match {
         case ProgrammingLanguage.CustomPassfail =>
           val validBindings =
             CustomPassfailTestplanTemplate.requiredAdditionalBindings.forall(additionalBindings.contains)
@@ -243,9 +244,44 @@ final class TestplanInstaller(
         case ProgrammingLanguage.Python =>
           val entry = createPythonTestplanEntry(testType, testGroup, testTasks, additionalBindings, testplanConfig)
           Seq(entry)
-        case _ => testplanEntries
+        case _ =>
+          val entries = estimates.get(testGroup.name) match {
+            case Some(estimatedNoContainers) if estimatedNoContainers > 1 =>
+              val projectsPerContainer = testTasks.size / estimatedNoContainers
+              testTasks.sliding(projectsPerContainer, projectsPerContainer).zipWithIndex.map {
+                case (subTestTasks, groupNo) =>
+                  ScalaTestplanEntry(
+                    displayTestName = testType.displayName,
+                    groupName = s"${testGroup.name}-${groupNo + 1}",
+                    metaBundle = testGroup.metaBundle,
+                    treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
+                    additionalBindings = additionalBindings,
+                    stratoOverride = stratoOverride,
+                    testModulesFileName = testType.testGroupsOpts.testModulesFileName,
+                    testTasks = subTestTasks,
+                    testTaskOverrides = Map()
+                  )
+              }
+            case _ =>
+              Seq(
+                ScalaTestplanEntry(
+                  displayTestName = testType.displayName,
+                  groupName = testGroup.name,
+                  metaBundle = testGroup.metaBundle,
+                  treadmillOpts = testType.treadmillOptsFor(testGroup, testplanConfig),
+                  additionalBindings = additionalBindings,
+                  stratoOverride = stratoOverride,
+                  testModulesFileName = testType.testGroupsOpts.testModulesFileName,
+                  testTasks = testTasks,
+                  testTaskOverrides = Map()
+                ))
+          }
+          entries.toSeq
       }
+      allRowsForGroup
     }
+
+    allRows
   }
 
   @node private def prepareFor(
@@ -258,6 +294,7 @@ final class TestplanInstaller(
     }
 
     val allTestData = testTypes.apar.map(testType => testType -> getData(testType, includedScopes))
+
     // we cannot validate the entries until we have all of them
     validateTestplanEntries(includedScopes, allTestData.apar.flatMap(_._2))
 
@@ -293,22 +330,14 @@ final class TestplanInstaller(
         val pythonQualityTestplans =
           if (pythonTestData.nonEmpty) generatePythonQualityTestplan(os, pythonTestData) else Seq.empty
 
-        val (pactContractTestplans, unitTestplan) =
-          if (pactContractTestData.nonEmpty) {
-            val unitTests =
-              unitTestData.filterNot(u => pactContractTestData.exists(_.moduleName == u.moduleName))
-            (
-              generatePactContractTestplan(os, pactContractTestData),
-              if (unitTests.nonEmpty) Seq(generateTestplan(unitTests, templatesPerOS(os))) else Seq.empty
-            )
-          } else {
-            (
-              Seq.empty,
-              if (unitTestData.nonEmpty) Seq(generateTestplan(unitTestData, templatesPerOS(os))) else Seq.empty)
-          }
+        val pactContractTestplans =
+          if (pactContractTestData.nonEmpty) generatePactContractTestplan(os, pactContractTestData) else Seq.empty
+
+        val unitTestplans =
+          if (unitTestData.nonEmpty) Seq(generateTestplan(unitTestData, templatesPerOS(os))) else Seq.empty
 
         val testplan =
-          TestPlan.merge(customPassfailTestplans ++ pactContractTestplans ++ pythonQualityTestplans ++ unitTestplan)
+          TestPlan.merge(customPassfailTestplans ++ pactContractTestplans ++ pythonQualityTestplans ++ unitTestplans)
 
         val testModules =
           unitTestData.map(_.moduleName).distinct.sorted ++ pactContractTestData.map(_.moduleName).distinct.sorted
@@ -326,12 +355,11 @@ final class TestplanInstaller(
     val allTestTasks = testData.flatMap(_.testTasks).toSet
     val allTestTaskOverrides = testData
       .flatMap(_.testTaskOverrides)
-      .map(t => {
+      .flatMap(t => {
         val task = t._1
         val overrides = t._2
         overrides.map { o => task.forTestName(o).moduleScoped }
       })
-      .flatten
       .toSet
 
     // 1. Check for test runconfs for the scopes we've build that are defined in .runconf files but not mentioned
@@ -402,13 +430,14 @@ final class TestplanInstaller(
     // not just for the given scopeId.
     scopeIds.apar
       .flatMap(s => factory.scope(s).runConfigurations.filter(_.id == s))
-      .collect { case trc: TestRunConf => trc }
+      .collect { case trc: TestRunConf if !trc.isLocal => trc }
   }
 
-  @async private def installTestplanFiles(metaBundle: MetaBundle, allScopeIds: Set[ScopeId]): Seq[FileAsset] = {
+  @async private def installTestplanFiles(
+      metaBundle: MetaBundle,
+      allTestData: Seq[TestData],
+      testplanFilePrefix: String = ""): Seq[FileAsset] = {
     val testplansDir = pathBuilder.etcDir(metaBundle).resolveDir(PathNames.InModuleTestplanDir)
-
-    val allTestData = testData(allScopeIds)
 
     val testDataPerGroup: Map[String, Seq[TestData]] =
       allTestData.groupBy(_.testType.testGroupsOpts.testGroupsName)
@@ -420,8 +449,9 @@ final class TestplanInstaller(
       allTestData.groupBy(_.testType.testGroupsOpts.testModulesFileName)
     val testModulesFiles = testDataPerModule
       .map { case (testModuleFileName, elements) =>
+        val finalTestModuleFileName = s"$testplanFilePrefix$testModuleFileName"
         val testModules = elements.flatMap(_.testModules).sorted.mkString(",")
-        val testModulesFile = testplansDir.resolveFile(testModuleFileName)
+        val testModulesFile = testplansDir.resolveFile(finalTestModuleFileName)
         Files.createDirectories(testModulesFile.parent.path)
         AssetUtils.atomicallyWrite(testModulesFile, replaceIfExists = true, localTemp = true) { tempPath =>
           Files.write(tempPath, s"TEST_MODULE=$testModules".getBytes)
@@ -432,7 +462,7 @@ final class TestplanInstaller(
 
     val testplanFile: Option[FileAsset] =
       if (testplans.nonEmpty) {
-        val file = testplansDir.resolveFile(PathNames.testplanFile())
+        val file = testplansDir.resolveFile(PathNames.testplanFile(prefix = testplanFilePrefix))
         val mergedTestplan = TestPlan.merge(testplans)
 
         validateUniqueTestCaseNames(mergedTestplan)

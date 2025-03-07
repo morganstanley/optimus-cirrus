@@ -44,7 +44,18 @@ import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
 import scala.util.matching.Regex
 
-final case class RunConfSourceSubstitution(category: String, key: String, value: Option[String], optionalCheck: Boolean)
+final case class SourceLocation(
+    source: SourceUnitId,
+    oneBasedLineIndex: Int,
+    startInLine: Int,
+    endInLineExclusive: Int
+)
+final case class RunConfSourceSubstitution(
+    sourceLocation: Option[SourceLocation],
+    category: String,
+    key: String,
+    value: Option[String],
+    optionalCheck: Boolean)
     extends Ordered[RunConfSourceSubstitution] {
   val expression: String = s"$${${if (optionalCheck) "?" else ""}$category.$key}"
   val name: String = s"$category.$key"
@@ -55,7 +66,7 @@ final case class RunConfSourceSubstitution(category: String, key: String, value:
 }
 
 object RunConfSourceSubstitutions {
-  val workspaceDependencies: Seq[String] = Seq(
+  private val workspaceDependencies: Seq[String] = Seq(
     "javaProject",
     "javaVersion",
     "javaMeta"
@@ -77,51 +88,66 @@ class RunConfSourceSubstitutions(val obtWorkspaceProperties: Config, val validat
 
   private val substitutionPattern: Regex =
     new Regex("""\$\{([?]?)(([\w]+)\.([\w.]+))\}""", "optional", "whole", "category", "name")
-  // TODO (OPTIMUS-36135): Capture position (filepath, line and column)
-  @node def sourceSubstitutions(content: String): Seq[RunConfSourceSubstitution] =
-    substitutionPattern
-      .findAllMatchIn(content)
+
+  @node def sourceSubstitutions(source: SourceUnitId, content: String): Seq[RunConfSourceSubstitution] =
+    content
+      .split('\n')
+      .zipWithIndex
       .toIndexedSeq
       .apar
-      .flatMap { m =>
-        val name = m.group("name")
-        val category = m.group("category")
-        val optional = m.group("optional").nonEmpty
-        category match {
-          case "sys" =>
-            Some(RunConfSourceSubstitution(category, name, sys.props.get(name), optional))
-          case "env" =>
-            Some(RunConfSourceSubstitution(category, name, sys.env.get(name), optional))
-          case "config" =>
-            Some(workspaceDependency(category, name, optional))
-          case "properties" | "versions" =>
-            Some(
-              RunConfSourceSubstitution(
-                category,
-                name,
-                obtWorkspaceProperties.optionalString(m.group("whole")),
-                optional))
-          case "gradle" =>
-            None // Intrinsic to OBT and is essentially empty
-          case "module" | "this" =>
-            None // Reflexive access to runconf during compilation
-          case "os" =>
-            None // Stay platform agnostic
-          case unknownCategory =>
-            log.trace(s"WARN: we do not know how to handle '$unknownCategory' properties")
-            Some(RunConfSourceSubstitution(unknownCategory, name, None, optional))
-        }
+      .flatMap { case (line, lineIndex) =>
+        substitutionPattern
+          .findAllMatchIn(line)
+          .toIndexedSeq
+          .apar
+          .flatMap { m =>
+            val name = m.group("name")
+            val category = m.group("category")
+            val optional = m.group("optional").nonEmpty
+            val location = Some(SourceLocation(source, lineIndex + 1, m.start, m.end))
+            category match {
+              case "sys" =>
+                Some(RunConfSourceSubstitution(location, category, name, sys.props.get(name), optional))
+              case "env" =>
+                Some(RunConfSourceSubstitution(location, category, name, sys.env.get(name), optional))
+              case "config" =>
+                Some(workspaceDependency(location, category, name, optional))
+              case "properties" | "versions" =>
+                Some(
+                  RunConfSourceSubstitution(
+                    location,
+                    category,
+                    name,
+                    obtWorkspaceProperties.optionalString(m.group("whole")),
+                    optional))
+              case "gradle" =>
+                None // Intrinsic to OBT and is essentially empty
+              case "module" | "this" =>
+                None // Reflexive access to runconf during compilation
+              case "os" =>
+                None // Stay platform agnostic
+              case unknownCategory =>
+                log.trace(s"WARN: we do not know how to handle '$unknownCategory' properties")
+                Some(RunConfSourceSubstitution(location, unknownCategory, name, None, optional))
+            }
+          }
       }
       .sorted
 
   @node private[sources] def workspaceDependency(
+      sourceLocation: Option[SourceLocation],
       category: String,
       path: String,
       optionalCheck: Boolean): RunConfSourceSubstitution =
-    RunConfSourceSubstitution(category, path, obtWorkspaceProperties.optionalString(s"workspace.$path"), optionalCheck)
+    RunConfSourceSubstitution(
+      sourceLocation,
+      category,
+      path,
+      obtWorkspaceProperties.optionalString(s"workspace.$path"),
+      optionalCheck)
 
   @node def obtHardCodedWorkspaceDependencies: Seq[RunConfSourceSubstitution] =
-    workspaceDependencies.apar.map(workspaceDependency("workspace", _, optionalCheck = false))
+    workspaceDependencies.apar.map(workspaceDependency(None, "workspace", _, optionalCheck = false))
 }
 
 final case class UpstreamRunconfInputs(
@@ -161,6 +187,7 @@ object RunconfCompilationSources {
     // structure assumed to remain src/<meta>/<bundle>/projects/<project>
     // common runconf files can only be in
     //   - src/                  (name count is 1, including filename)
+    //   - src/<meta>            (name count is 2, including filename)
     //   - src/<meta>/<bundle>   (name count is 3, including filename)
     runConfRelativeLocation.getNameCount <= 3
   }
@@ -245,7 +272,7 @@ object RunconfCompilationSources {
       sourceFileContent._2.apar
         .collect {
           case (n, c) if n.suffix == RunConfFile.extension =>
-            substitutions.sourceSubstitutions(c.utf8ContentAsString)
+            substitutions.sourceSubstitutions(n, c.utf8ContentAsString)
         }
         .to(Vector)
         .flatten
@@ -265,9 +292,10 @@ object RunconfCompilationSources {
       s"[Substitution:$category]$kv"
     }
 
-    val blockedSubstitutionFingerprint = allBlockedSubstitutions.flatMap(_.fingerprint).map { case (category, kv) =>
-      s"[BlockedSubstitution:$category]$kv"
-    }
+    val blockedSubstitutionFingerprint =
+      allBlockedSubstitutions.apar.flatMap(_.fingerprint).map { case (category, kv) =>
+        s"[BlockedSubstitution:$category]$kv"
+      }
 
     val staticBindingSources = new StaticRunscriptCompilationBindingSources(obtWorkspaceProperties)
 
@@ -326,8 +354,8 @@ object RunconfCompilationSources {
       content = Seq(sourceFileContent),
       upstreamInputs = upstreamInputs,
       installVersion = _installVersion,
-      allSourceSubstitutions = allSourceSubstitutions.toVector,
-      allBlockedSubstitutions = allBlockedSubstitutions.toVector,
+      allSourceSubstitutions = allSourceSubstitutions,
+      allBlockedSubstitutions = allBlockedSubstitutions,
       fingerprint = fingerprintHash
     )
   }

@@ -26,7 +26,7 @@ import org.apache.kafka.common.config.TopicConfig
  * These classes should always be kept IN SYNC!!!
  */
 private[optimus] final class StreamsConfig private[config] (
-    val className: String,
+    val topicName: String,
     val partitions: Int,
     val cleanupPolicy: String,
     val retentionPeriodDays: Int,

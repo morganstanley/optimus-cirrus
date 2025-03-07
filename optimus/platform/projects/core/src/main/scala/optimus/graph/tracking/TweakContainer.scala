@@ -24,8 +24,6 @@ import optimus.platform._
 import optimus.platform.storable.Entity
 import optimus.ui.ScenarioReference
 
-import scala.collection.mutable.ArrayBuffer
-
 private[tracking] sealed abstract class TweakContainer(root: DependencyTrackerRoot, scenarioRef: ScenarioReference) {
   val cacheId: SSCacheID
 
@@ -128,46 +126,17 @@ private[tracking] final class MutableTweakContainer(
 
   // if keys is empty, we clear all tweaks on that entity
   override def doRemoveTweaksFromGivenEntity(entity: Entity, keys: Seq[NodeKey[_]], cause: EventCause): Unit = {
-    val it = cacheId.tweaks.values().iterator()
-    val tweaksToRemove = ArrayBuffer[Tweak]() // instance tweaks to remove
-    while (it.hasNext) {
-      val entry = it.next()
-      entry match {
-        case tweak: Tweak =>
-          tweak.target.hashKey match {
-            case instanceTweakTargetHashKey: NodeKey[_] =>
-              val entityMatch = entity == instanceTweakTargetHashKey.entity
-              if (entityMatch && (keys.isEmpty || keys.contains(instanceTweakTargetHashKey)))
-                tweaksToRemove += tweak
-            case _ =>
-          }
-        case _ =>
-      }
-    }
-
-    if (tweaksToRemove.nonEmpty) {
-      tweaksToRemove.foreach { tweak => cacheId.tweaks.entrySet.removeIf(entry => entry.getValue == tweak) }
-      snapshotter.invalidateSnapshot()
-      tweakableTracker.invalidateByTweaks(tweaksToRemove, cause)
-    }
+    // Note: This means that we *will* remove tweaks with instead-sets if keys is empty, i.e. if we are removing all
+    // tweaks from this entity! This is rather difficult to fix.
+    throwOnAlsoSetNodeKeyRemovals(keys)
+    val keySet = keys.toSet
+    doRemoveTweaksBasedOnPredicate(nk => nk.entity == entity && (keySet.isEmpty || keySet(nk)), cause)
   }
 
   def doRemoveTweaks(nks: Iterable[NodeKey[_]], cause: EventCause): Unit = {
-    val it = nks.iterator
-    var removed: List[Tweak] = Nil
-    while (it.hasNext) {
-      val nk = it.next()
-      if (nk.propertyInfo.hasTweakHandler)
-        throw new UnsupportedOperationException(
-          s"Tweak removal is not currently supported for nodes with tweak handlers (also known as 'also-sets' or 'instead-sets'), in this case ${nk.tidyKey.nodeName}")
-      val t = cacheId.remove(nk)
-      if (t ne null) removed ::= t
-    }
-    if (removed.nonEmpty) {
-      // scenarioStack may change so invalidate the snapshot
-      snapshotter.invalidateSnapshot()
-      tweakableTracker.invalidateByTweaks(removed, cause)
-    }
+    throwOnAlsoSetNodeKeyRemovals(nks)
+    val keySet = nks.toSet
+    doRemoveTweaksBasedOnPredicate(keySet, cause)
   }
 
   def doRemoveAllTweaks(cause: EventCause): Unit = {
@@ -180,6 +149,33 @@ private[tracking] final class MutableTweakContainer(
 
     cacheId.clearTweaks()
     cacheId.putAll(permanentTweaks)
+  }
+
+  private def doRemoveTweaksBasedOnPredicate(predicate: NodeKey[_] => Boolean, cause: EventCause): Unit = {
+    val removed = {
+      val removed = Seq.newBuilder[Tweak]
+      cacheId.removeTweaks { tweak =>
+        tweak.target.hashKey match {
+          case nk: NodeKey[_] if predicate(nk) =>
+            removed += tweak
+            true
+          case _ => false
+        }
+      }
+      removed.result()
+    }
+
+    if (removed.nonEmpty) {
+      snapshotter.invalidateSnapshot()
+      tweakableTracker.invalidateByTweaks(removed, cause)
+    }
+  }
+
+  private def throwOnAlsoSetNodeKeyRemovals(iter: Iterable[NodeKey[_]]): Unit = {
+    iter.find(_.propertyInfo.hasTweakHandler).foreach { nk =>
+      throw new UnsupportedOperationException(
+        s"Tweak removal is not currently supported for nodes with tweak handlers (also known as 'also-sets' or 'instead-sets'), in this case ${nk.tidyKey.nodeName}")
+    }
   }
 }
 

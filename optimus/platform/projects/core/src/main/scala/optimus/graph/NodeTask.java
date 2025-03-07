@@ -11,7 +11,11 @@
  */
 package optimus.graph;
 
+import static optimus.graph.OGScheduler.log;
 import static optimus.graph.OGScheduler.schedulerVersion;
+import static optimus.graph.OGTrace.ApSuffix;
+import static optimus.graph.OGTrace.AsyncSuffix;
+import static optimus.graph.OGTrace.CachedSuffix;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
 import static optimus.graph.cache.NCSupport.isProxy;
 import java.io.IOException;
@@ -32,7 +36,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import optimus.breadcrumbs.ChainedID;
@@ -53,6 +56,7 @@ import optimus.graph.diagnostics.ProfiledEvent;
 import optimus.graph.diagnostics.gridprofiler.GridProfiler;
 import optimus.graph.loom.LNodeClsID;
 import optimus.graph.tracking.CancelOrphanedDependencyTrackerNodesException;
+import optimus.graph.tracking.ttracks.TTrack;
 import optimus.platform.EvaluationQueue;
 import optimus.platform.RuntimeEnvironment;
 import optimus.platform.ScenarioStack;
@@ -94,7 +98,7 @@ import scala.Option;
 
 public abstract class NodeTask extends NodeAwaiter
     implements LNodeClsID, Launchable, NodeCause, DebugWaitChainItem, Serializable, Cloneable {
-  static final long serialVersionUID = 1;
+  @Serial private static final long serialVersionUID = 1;
   private static final VarHandle waiters_h;
   private static final VarHandle state_h;
   // Used to mark final state of CASed _waiters
@@ -138,7 +142,8 @@ public abstract class NodeTask extends NodeAwaiter
   private static final int STATE_INVALID_CACHE = 0x40; // Mark PropertyNode as invalid in cache
   // Has tracking information to pass to tweakable listener
   private static final int STATE_TRACKING_VALUE = 0x80;
-  private static final int STATE_XSCENARIO_OWNER = 0x100; // Owner of x-scenario
+  private static final int STATE_TWEAKABLE_OWNER = 0x100; // Owner of tweakable listener
+  private static final int STATE_XSCENARIO_OWNER = 0x200 | STATE_TWEAKABLE_OWNER; // Owns x-scenario
   // Currently used by remoting plugin in-proc test code
   private static final int STATE_REMOTED = 0x1000;
   private static final int STATE_ADAPTED = 0x2000; // Marks nodes as adapted,
@@ -448,11 +453,11 @@ public abstract class NodeTask extends NodeAwaiter
 
   public String flameFrameName(String extraMods) {
     var prefix = "@"; // for optimus-attuned eyes
-    var suffix = "_[a]"; // for categorization by async-profiler
+    var suffix = ApSuffix; // for categorization by async-profiler
     var pname = NodeName.profileFrom(this).toString();
     var info = executionInfo();
     // proxies already end in "~$"
-    var modifiers = (info.getCacheable() && !info.isProxy()) ? "$" : "";
+    var modifiers = (info.getCacheable() && !info.isProxy()) ? CachedSuffix : "";
     return prefix + pname + modifiers + extraMods + suffix;
   }
 
@@ -552,8 +557,9 @@ public abstract class NodeTask extends NodeAwaiter
 
   /**
    * Returns true if the node is tweakable/tweaked (aka TRACKING_VALUE or XS proxy) but not XS_OWNER
-   * Note: Need to exclude XS_OWNER because XS proxies transfer Tweak/Tweakable information manually
-   * See NCSupport#matchXscenario(NodeTask, ScenarioStack, RecordedTweakables) [XS_BY_NAME_TWEAKS]
+   *
+   * @implNote Need to exclude XS_OWNER because XS proxies transfer Tweak/Tweakable information
+   *     manually [XS_BY_NAME_TWEAKS].
    */
   private static boolean isTrackingValueNonXSOwner(int state) {
     return (state & (STATE_TRACKING_VALUE | STATE_XSCENARIO_OWNER)) == STATE_TRACKING_VALUE;
@@ -581,9 +587,18 @@ public abstract class NodeTask extends NodeAwaiter
     return (_state & STATE_XSCENARIO_OWNER) != 0;
   }
 
-  /** Note: NOT thread safe and can ONLY be called in the constructor of a derived class */
+  public final boolean isTweakableListenerOwner() {
+    return (_state & STATE_TWEAKABLE_OWNER) != 0;
+  }
+
+  /** Note: Thread safe but should ONLY be called before the node runs */
   public final void markAsXScenarioOwner() {
     state_h.setOpaque(this, _state | STATE_XSCENARIO_OWNER);
+  }
+
+  /** Note: Thread safe but should ONLY be called before the node runs */
+  public final void markAsTweakableListenerOwner() {
+    state_h.setOpaque(this, _state | STATE_TWEAKABLE_OWNER);
   }
 
   public final void markScenarioDependent() {
@@ -1177,12 +1192,23 @@ public abstract class NodeTask extends NodeAwaiter
         // If we were cancelled (and are completing *due to the cancellation*) then we aren't
         // actually using the value of the tweak for our result (which is a cancellation exception).
         if (!isCancelled)
-          _scenarioStack._tweakableListener().onTweakableNodeCompleted((PropertyNode<?>) this);
+          _scenarioStack.tweakableListener().onTweakableNodeCompleted((PropertyNode<?>) this);
         clearFlags = STATE_TRACKING_VALUE; // No point of reporting twice!
       }
 
-      if (!isCancelled) _xinfo.nodeCompleted(this);
-      else _xinfo.nodeCancelled(this);
+      executionInfo().updateDependsOnMask(this);
+      _xinfo.nodeCompleted(this, isCancelled);
+      if (isTweakableListenerOwner()) _scenarioStack.tweakableListener().onOwnerCompleted(this);
+
+      // Reset to the stable SS to save memory, UNLESS doing so would lose the CancellationScope in
+      // a case where it matters for caching (see NCSupport.isUsableWRTCancellationScope)
+      if (DiagnosticSettings.resetScenarioStackOnCompletion) {
+        var stableSS = _scenarioStack._stableSS();
+        if (isDoneWithUsableResult() || (_scenarioStack.cancelScope() == stableSS.cancelScope()))
+          _scenarioStack = stableSS; // [SEE_RESET_SS]
+      }
+
+      // IMPORTANT BARRIER: After the next line. All the information is visible!
 
       // call tryUpdateState after OGTrace.completed so that anyone who uses our result
       // and therefore calls OGTrace.dependency will get accurate ANC or reused node timings
@@ -1192,26 +1218,11 @@ public abstract class NodeTask extends NodeAwaiter
       if (isDone(prevState))
         logAndDie(new GraphException("Cannot complete node twice!", this.exception()));
 
-      executionInfo().updateDependsOnMask(this);
-
       if (DiagnosticSettings.awaitStacks && eq != null) eq.maybeSaveAwaitStack(this);
 
       /* Consider adding an assertion or even a permanent code to eq.setCurrentNode(null | nullTask) */
       notifyWaiters(eq);
 
-      // Reset to the stable SS to save memory, UNLESS doing so would lose the CancellationScope in
-      // a case where it matters for caching (see NCSupport.isUsableWRTCancellationScope)
-      if (DiagnosticSettings.resetScenarioStackOnCompletion) {
-
-        if (
-        // If we have a result, we can always reuse it and we don't care about the cancel scope:
-        isDoneWithUsableResult()
-            // if we have a non rt exception, we can still do the swap provided that the
-            // cancellation scope doesn't change when we do
-            || (_scenarioStack.cancelScope() == _scenarioStack._stableSS().cancelScope())) {
-          _scenarioStack = _scenarioStack._stableSS(); // [SEE_RESET_SS]
-        }
-      }
     } catch (Throwable e) {
       // If the above doesn't finish because of an error, we are probably heading for a bad
       // deadlock, so we panic and kill the process.
@@ -1223,10 +1234,9 @@ public abstract class NodeTask extends NodeAwaiter
 
   private void logAndDie(Throwable e) {
     synchronized (NodeTask.class) {
+      // Impossible... but the point of this method is to catch things that are impossible...
       if (inLogAndDie) {
-        // Should not be possible, but since the point of this method is to catch things that should
-        // be impossible....
-        OGScheduler.log.error("logAndDie called recursively!");
+        log.error("logAndDie called recursively!");
         return;
       }
       inLogAndDie = true;
@@ -1237,52 +1247,67 @@ public abstract class NodeTask extends NodeAwaiter
                   + " with state "
                   + this.stateAsString(),
               e);
-      OGScheduler.log.error("OGScheduler: unexpected error, exiting (121).", wrapped);
+      log.error("OGScheduler: unexpected error, exiting (121).", wrapped);
+      //noinspection CallToPrintStackTrace -- the robust logging is just above ...
       wrapped.printStackTrace();
       try {
-        OGScheduler.log.error(GraphDiagnostics.getGraphState());
+        log.error(GraphDiagnostics.getGraphState());
       } catch (Throwable t) {
-        OGScheduler.log.error("Error dumping graph state!");
+        log.error("Error dumping graph state!");
       }
 
-      InfoDumper.graphPanic("logAndDie", schedulerVersion + ": unexpected error", 121, wrapped);
+      InfoDumper.graphPanic(
+          "logAndDie", schedulerVersion + ": unexpected error", 121, wrapped, this);
     }
   }
 
   /** This is called for every child node, whose result is used by the parent */
   public final void combineInfo(NodeTask child, EvaluationQueue eq) {
+    combineInfoDirectCaller(child, eq);
+    combineXinfo(child._xinfo);
+    mergeTweakPropertyDependency(child);
+  }
+
+  final void combineInfoDirectCaller(NodeTask child, EvaluationQueue eq) {
+    if (Settings.schedulerAsserts) {
+      if ((eq instanceof OGSchedulerContext) && eq != OGSchedulerContext.current())
+        throw new GraphInInvalidState("Scheduler context is per thread");
+    }
+
     OGTrace.dependency(this, child, eq);
+
     // If child took scenario dependency so this node must too
     int state = _state;
     int childState = child._state;
     if (!isScenarioDependent(state) && isScenarioDependent(childState)) markScenarioDependent();
 
-    if (Settings.schedulerAsserts) {
-      if ((eq instanceof OGSchedulerContext) && eq != OGSchedulerContext.current())
-        throw new GraphInInvalidState("Scheduler context is per thread");
-
-      boolean recordingAndNotProxy =
-          scenarioStack().isRecordingTweakUsage() && !isDelayedProxy(this);
-      if (recordingAndNotProxy && child.scenarioStack().isTrackingIndividualTweakUsage())
-        throw new GraphInInvalidState("Should never combineInfo from tracked node into XS node");
-    }
-
-    // null += null == null and A += A == A
-    if (child._xinfo != _xinfo) _xinfo = _xinfo.combine(child._xinfo, this);
-
     if (DiagnosticSettings.traceTweaksEnabled) combineDebugInfo(child);
-
-    mergeTweakPropertyDependency(child);
 
     if (isTrackingValueNonXSOwner(childState) && _scenarioStack.isTrackingOrRecordingTweakUsage())
       child.reportTweakableUseBy(this); // [SEE_REC_REPORT]
   }
 
+  /**
+   * This method does a lot less than combineInfo, so be very careful when calling it! <br>
+   * Propagates warnings/notes/ttracks/audit info <br>
+   * TODO (OPTIMUS-13315): Change to protected.
+   */
+  public final void combineXinfo(NodeExtendedInfo childInfo) {
+    if (Settings.schedulerAsserts) {
+      var recordingAndNotProxy = scenarioStack().isRecordingTweakUsage() && !isDelayedProxy(this);
+      if (recordingAndNotProxy && childInfo instanceof TTrack)
+        throw new GraphInInvalidState("Should never combineInfo from tracked node into XS node");
+    }
+
+    // Invariants: null += null == null and A += A == A
+    if (childInfo != _xinfo) _xinfo = _xinfo.combine(childInfo, this);
+  }
+
   private void combineDebugInfo(NodeTask child) {
     // [SEE_XS_TWEAK_INFECTION]
     if (OGTrace.observer.traceTweaks() && !child.isXScenarioOwner()) {
-      SparseBitSet sbs = getTweakInfection();
-      SparseBitSet csbs = child.getTweakInfection();
+      var sbs = getTweakInfection();
+      var csbs = child.getTweakInfection();
       if (sbs == null) setTweakInfection(csbs);
       else if (csbs != null) setTweakInfection(sbs.merge(csbs));
     }
@@ -1296,16 +1321,6 @@ public abstract class NodeTask extends NodeAwaiter
    */
   protected void reportTweakableUseBy(NodeTask node) {
     throw new GraphInInvalidState();
-  }
-
-  /**
-   * TODO (OPTIMUS-13315): Change to protected.
-   *
-   * <p>This method does a lot less than combineInfo, so be very careful when calling it!
-   */
-  public final void partialCombineInfo(NodeExtendedInfo childInfo) {
-    // Invariants: null += null == null and A += A == A
-    if (childInfo != _xinfo) _xinfo = _xinfo.combine(childInfo, this);
   }
 
   public final void setInfo(NodeExtendedInfo inf) {
@@ -1461,7 +1476,7 @@ public abstract class NodeTask extends NodeAwaiter
     if (nThrown == null) nThrown = 0;
     else if (nThrown > Settings.maxTracedExceptionsPerClass) return;
     else if (nThrown == Settings.maxTracedExceptionsPerClass)
-      OGScheduler.log.warn("No longer capturing node traces on exception for " + cls.getName());
+      log.warn("No longer capturing node traces on exception for " + cls.getName());
 
     exceptionThrowerCache.put(cls, nThrown + 1);
 
@@ -1491,7 +1506,7 @@ public abstract class NodeTask extends NodeAwaiter
       String nodeTrace = sb.toString();
       nodeTraceStringMap.put(ex, nodeTrace);
       if (Settings.dumpNodeTraceOnException && !(ex instanceof FlowControlException)) {
-        OGScheduler.log.error("Node evaluation resulted in exception: " + ex + "\n" + nodeTrace);
+        log.error("Node evaluation resulted in exception: " + ex + "\n" + nodeTrace);
       }
     }
   }
@@ -1924,7 +1939,7 @@ public abstract class NodeTask extends NodeAwaiter
           }
           if (tsk.tryToRecoverFromCycle(mask, eq)) { // Note: this takes additional locks
             cycleIsUnrecoverable = false;
-            OGScheduler.log.warn("Recovering from XSFT cycle");
+            log.warn("Recovering from cycle on " + tsk.getClass().getSimpleName());
             MonitoringBreadcrumbs$.MODULE$.sendXSFTCycleRecoveryCrumb(tsk, sb.toString());
             break;
           }
@@ -2283,7 +2298,7 @@ public abstract class NodeTask extends NodeAwaiter
   }
 
   /* This function could be re-written by entityagent [SEE_MASK_SUPPORT_GENERATION] */
-  private void mergeTweakPropertyDependency(NodeTask child) {
+  final void mergeTweakPropertyDependency(NodeTask child) {
     _tpd0 |= child._tpd0;
     _tpd1 |= child._tpd1;
   }

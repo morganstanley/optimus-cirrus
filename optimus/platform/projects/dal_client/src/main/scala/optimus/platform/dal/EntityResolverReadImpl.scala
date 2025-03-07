@@ -31,7 +31,6 @@ import msjava.slf4jutils.scalalog.getLogger
 import optimus.platform.AsyncImplicits._
 import optimus.core.CoreAPI
 import optimus.platform.dsi.bitemporal.Query
-import optimus.platform.temporalSurface.TemporalSurfaceCacheManager
 
 import scala.reflect.ClassTag
 import optimus.scalacompat.collection._
@@ -334,7 +333,6 @@ trait EntityResolverReadImpl { this: DSIResolver =>
   }
   private[optimus] val dataAccess = new TemporalSurfaceCachedDataAccess(temporalContextEntityResolver)
 
-  def cacheManager: TemporalSurfaceCacheManager = dataAccess.cacheManager
   val executor: DSIExecutor = DALDSIExecutor
 
   @node @scenarioIndependent

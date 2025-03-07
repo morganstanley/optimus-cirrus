@@ -77,6 +77,7 @@ object NamingConventions {
   val MavenDepsCentralMeta = "optimus"
   val MavenDepsCentralBundle = "artifactory-deps"
   val MavenOnlyKey = "mavenOnly"
+  val IsAgentKey = "isAgent"
   val MavenLibsKey = "mavenLibs"
   val LibsKey = "libs"
 
@@ -89,6 +90,10 @@ object NamingConventions {
   val IdzExt = "idz"
   val RgzExt = "rgz"
   val MgzExt = "mgz"
+  // shell script extensions
+  val WindowsBatchExt = "bat"
+  val KshExt = "" // Omitted
+  val DockerBashExt = "dckr.sh"
 
   // unzip maven repo exts
   val UnzipMavenRepoExts: Seq[String] = Seq(ZipExt, TarGzExt)
@@ -148,6 +153,7 @@ object NamingConventions {
   val scalaPyLibVersion = "SCALAPY_PYTHON_LIBRARY"
   val pythonPath = "PYTHONPATH"
   val pythonHome = "PYTHONHOME"
+  val tpaPath = "TPA_PATH"
 
   val dockerMetadataProperties: Path = Paths.get("/etc/obt/version.properties")
 
@@ -294,4 +300,5 @@ object NamingConventions {
   def isTextExtension(extn: String): Boolean = textFileExtns(extn)
 
   def isWindowsTextExtension(extn: String): Boolean = windowsTextFileExtns(extn)
+
 }

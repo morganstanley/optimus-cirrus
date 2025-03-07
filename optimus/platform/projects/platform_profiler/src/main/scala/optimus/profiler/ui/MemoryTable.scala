@@ -123,7 +123,8 @@ class MemoryTable extends NPTable[MemoryView] with Filterable[MemoryView] {
         for (pnti <- getSelections) {
           miContr.setEnabled(!pnti.retainedClassNames.isEmpty)
           miSContr.setEnabled(!pnti.sharedRetainedClassNames.isEmpty)
-          miRoots.setEnabled(pnti.reachability != Reachability.Value)
+          // commented condition is always true
+          miRoots.setEnabled(true /*pnti.reachability != Reachability.Value*/)
         }
       }
     })

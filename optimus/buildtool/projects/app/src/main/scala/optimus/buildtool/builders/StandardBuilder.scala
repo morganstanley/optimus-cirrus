@@ -20,8 +20,8 @@ import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.Artifact.InternalArtifact
 import optimus.buildtool.artifacts.ArtifactType
+import optimus.buildtool.artifacts.Artifacts
 import optimus.buildtool.artifacts.CompilationMessage
-import optimus.buildtool.artifacts.InMemoryMessagesArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PathedArtifact
@@ -29,11 +29,9 @@ import optimus.buildtool.artifacts.Severity
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader
 import optimus.buildtool.builders.reporter.MessageReporter
-import optimus.buildtool.cache.RemoteArtifactCacheTracker
 import optimus.buildtool.compilers.CompilationException
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScopeId
-import optimus.buildtool.resolvers.DependencyDownloadTracker
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.buildtool.trace._
 import optimus.buildtool.utils.FileDiff
@@ -41,17 +39,15 @@ import optimus.buildtool.utils.Utils
 import optimus.buildtool.utils.Utils.OsVersionMismatch
 import optimus.graph.CancellationScope
 import optimus.graph.OptimusCancellationException
-import optimus.graph.cache.Caches
-import optimus.graph.diagnostics.EvictionReason
 import optimus.platform._
 
-import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.util.control.NonFatal
 
 sealed trait BuildResult {
   def artifacts: Seq[Artifact]
   def messageArtifacts: Seq[MessagesArtifact]
+  def messages: Seq[CompilationMessage]
   def errors: Int
   def successful: Boolean = errors == 0
   def artifactPaths: Seq[Path] = artifacts.collectInstancesOf[PathedArtifact].map(_.path)
@@ -63,27 +59,31 @@ object BuildResult {
   ) extends BuildResult {
 
     override val messageArtifacts: Seq[MessagesArtifact] = Artifact.messages(artifacts)
+    override val messages: Seq[CompilationMessage] = messageArtifacts.flatMap(messagesForArtifact)
     val scopeIds: Seq[ScopeId] = Artifact.scopeIds(artifacts)
 
     val errorsByArtifact: Seq[(MessagesArtifact, Seq[CompilationMessage])] = {
       messageArtifacts.flatMap { a =>
-        val errors = a.messages.collect {
-          case m if m.severity == Severity.Error =>
-            m
-          case m if m.isNew && m.pos.exists(p => modifiedFiles.exists(_.contains(p.filepath))) =>
-            m.copy(severity = Severity.Error)
-        }
+        val errors = messagesForArtifact(a).filter(_.isError)
         if (errors.nonEmpty) Some(a -> errors) else None
       }
     }
 
+    private def messagesForArtifact(a: MessagesArtifact): Seq[CompilationMessage] = a.messages.map {
+      case m if m.isNew && m.pos.exists(p => modifiedFiles.exists(_.contains(p.filepath))) =>
+        m.copy(severity = Severity.Error)
+      case m => m
+    }
+
     val errorArtifacts: Seq[MessagesArtifact] = errorsByArtifact.map(_._1)
+    val errorMessages: Seq[CompilationMessage] = errorsByArtifact.flatMap(_._2)
     val failedScopes: Seq[ScopeId] = errorArtifacts.map(_.id.scopeId).distinct
     override val errors: Int = errorsByArtifact.map(_._2.size).sum
   }
   final case class AbortedBuildResult(t: Throwable) extends BuildResult {
     override def artifacts: Seq[Artifact] = Nil
     override def messageArtifacts: Seq[MessagesArtifact] = Nil
+    override def messages: Seq[CompilationMessage] = Nil
     override def errors: Int = 1
   }
 
@@ -248,7 +248,7 @@ class StandardBuilder(
                 artifacts
               }.distinct
 
-              validate(factory.globalMessages ++ compiledArtifacts ++ bundleArtifacts)
+              Artifacts.validate(factory.globalMessages ++ compiledArtifacts ++ bundleArtifacts)
             }
           }
         )
@@ -290,13 +290,11 @@ class StandardBuilder(
       val midfix = if (res.successful) "" else "with failures "
       val msg = s"BUILD COMPLETED ${midfix}in $duration at $endTime"
 
-      if (res.successful) Utils.SuccessLog.info(msg) else Utils.FailureLog.error(msg)
+      if (res.successful) {
+        Utils.SuccessLog.info(msg)
+        logTimings(durationMillis, timingListener)
+      } else Utils.FailureLog.error(msg)
 
-      if (res.successful) logTimings(durationMillis, timingListener)
-      logCacheDetails()
-      DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty)(s =>
-        log.debug(s))
-      RemoteArtifactCacheTracker.summaryThenClean(RemoteArtifactCacheTracker.corruptedFiles.nonEmpty)(s => log.warn(s))
       messageReporter.foreach(_.writeReports(res, factory))
       log.info(Utils.LogSeparator)
       onBuildEnd.foreach(_())
@@ -332,31 +330,6 @@ class StandardBuilder(
     }
   }
 
-  private def validate(allArtifacts: Seq[Artifact]): Seq[Artifact] = {
-    val duplicateArtifacts = allArtifacts.groupBy(_.id).filter(_._2.size > 1)
-    val scopedDuplicates = duplicateArtifacts.groupBy {
-      case (InternalArtifactId(scopeId, _, _), _) =>
-        scopeId
-      case _ =>
-        RootScopeId
-    }
-    val duplicateMessageArtifacts = scopedDuplicates
-      .map { case (scopeId, dupes) =>
-        val messages = dupes
-          .map { case (id, as) =>
-            CompilationMessage.error(s"Multiple (${as.size}) artifacts for key $id\n\t${as.mkString("\n\t")}")
-          }
-          .to(Seq)
-        InMemoryMessagesArtifact(
-          InternalArtifactId(scopeId, ArtifactType.DuplicateMessages, None),
-          messages,
-          Validation)
-      }
-      .to(Seq)
-
-    allArtifacts ++ duplicateMessageArtifacts
-  }
-
   private def show(id: InternalArtifactId, ms: Seq[CompilationMessage]): Unit = ms.foreach { m =>
     val pos = m.pos.fold("")(p => s"${p.filepath}:${p.startLine}") // Intellij-friendly format (for copy-paste)
     log.error(s"[$id] $pos: ${m.msg}")
@@ -386,19 +359,4 @@ class StandardBuilder(
     )
   }
 
-  private def logCacheDetails(): Unit = {
-    val caches = Caches.allCaches()
-    val cacheDetails = caches.map { c =>
-      val counters = c.getCountersSnapshot
-      val evictions = EvictionReason.values().map(r => r -> counters.numEvictions(r)).collect {
-        case (r, n) if n > 0 =>
-          s"$r ($n)"
-      }
-      val evictionsStr =
-        if (evictions.nonEmpty) s" [Evictions: ${evictions.mkString(", ")}]"
-        else s" [Evictions: ${counters.insertCount - counters.indicativeCacheSize}]"
-      s"${c.getName}: ${counters.indicativeCacheSize}/${c.getMaxSize}$evictionsStr"
-    }
-    log.debug(s"Cache details: ${cacheDetails.mkString("\n\t", "\n\t", "")}")
-  }
 }

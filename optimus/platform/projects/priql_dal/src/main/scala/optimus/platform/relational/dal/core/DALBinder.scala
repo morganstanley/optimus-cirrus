@@ -442,46 +442,12 @@ class DALBinder protected (mapper: QueryMapper, root: RelationElement) extends D
             case BinaryExpressionType.GE => ElementFactory.lessThanOrEqual(c, v)
             case _                       => throw new RelationalUnsupportedException(s"Unsupported binary op: $op")
           }
-        // This is to allow "!dt.isAfter(someDt)" and "!dt.isBefore(someDt)" into <= and >=
-        // expressions respectively, where "dt" field is registered @indexed.
-        case BinaryExpressionElement(
-              EQ,
-              FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement),
-              ConstValueElement(false, _),
-              _) =>
-          mc.method.name match {
-            case "isAfter"  => ElementFactory.lessThanOrEqual(c, v)
-            case "isBefore" => ElementFactory.greaterThanOrEqual(c, v)
-            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
-          }
-        case BinaryExpressionElement(
-              EQ,
-              FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement),
-              ConstValueElement(false, _),
-              _) =>
-          mc.method.name match {
-            case "isAfter"  => ElementFactory.greaterThanOrEqual(c, v)
-            case "isBefore" => ElementFactory.lessThanOrEqual(c, v)
-            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
-          }
         case c: ContainsElement if c.element.isInstanceOf[ColumnElement] =>
           cond
         case c: ColumnElement =>
           ElementFactory.equal(c, ElementFactory.constant(true))
-        case FuncElement(mc: MethodCallee, List(v: ConstValueElement), c: ColumnElement) =>
-          mc.method.name match {
-            case "isAfter"  => ElementFactory.greaterThan(c, v)
-            case "isBefore" => ElementFactory.lessThan(c, v)
-            case "contains" => ElementFactory.equal(c, v)
-            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
-          }
-        case FuncElement(mc: MethodCallee, List(c: ColumnElement), v: ConstValueElement) =>
-          mc.method.name match {
-            case "isAfter"  => ElementFactory.lessThan(c, v)
-            case "isBefore" => ElementFactory.greaterThan(c, v)
-            case "contains" => ElementFactory.equal(c, v)
-            case unknown    => throw new RelationalUnsupportedException(s"Unsupported method: $unknown")
-          }
+        case FuncElement(_, List(v: ConstValueElement), c: ColumnElement) =>
+          ElementFactory.equal(c, v)
         case _ =>
           throw new RelationalUnsupportedException(s"Unsupported condition pattern: $cond")
       }

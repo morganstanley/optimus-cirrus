@@ -902,21 +902,19 @@ public class GCNative {
     if (!win) {
       if (tcmallocLoaded()) {
         log.info(
-            "libtcmalloc.so is loaded, will use generic.current_allocated_bytes to measure native memory use");
-        if (useMallocInfo) {
-          log.warn("malloc_info was enabled but will not be used");
-        }
+            "libtcmalloc.so is loaded; will use generic.current_allocated_bytes to measure native memory use");
+        if (useMallocInfo) log.warn("malloc_info was enabled but will not be used");
+      } else if (jemallocLoaded()) {
+        log.info("Using jemalloc; will use mallctl to measure native memory use");
+        if (useMallocInfo) log.warn("malloc_info was enabled but will not be used");
+        if (jemallocProfiling()) log.info("jemalloc profiling enabled");
+      } else if (useMallocInfo) {
+        log.info(
+            "custom allocator is not loaded, malloc_info enabled: will use malloc_info to measure native memory use");
       } else {
-        if (useMallocInfo) {
-          log.info(
-              "custom allocator is not loaded, malloc_info enabled: will use malloc_info to measure native memory use");
-        } else {
-          log.info(
-              "custom allocator is not loaded, malloc_info disabled: will use RSS-JVM to measure native memory use");
-        }
+        log.info(
+            "custom allocator is not loaded, malloc_info disabled: will use RSS-JVM to measure native memory use");
       }
-      if (jemallocLoaded()) log.info("Using jemalloc");
-      if (jemallocProfiling()) log.info("jemalloc profiling enabled");
     }
     try {
       Thread.sleep(

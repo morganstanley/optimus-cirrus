@@ -47,7 +47,9 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   private val intellijName = "IntelliJ"
 
-  def versionWithName(version: String = intellijVersion): String = s"$intellijName$version$ultimatePostfix"
+  def versionWithPostFix(version: String = intellijVersion): String = s"$version$ultimatePostfix"
+
+  def versionWithName(version: String = intellijVersion): String = s"$intellijName${versionWithPostFix(version)}"
 
   def installedIntellijs(): Seq[String] =
     ideConfigStoreDir.dir

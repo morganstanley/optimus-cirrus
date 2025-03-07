@@ -17,6 +17,7 @@ import optimus.graph.diagnostics.EvictionReason;
 import optimus.graph.diagnostics.sampling.Cardinality;
 import optimus.graph.diagnostics.sampling.KnownStackRecorders;
 import optimus.graph.diagnostics.sampling.StackRecorder;
+import optimus.utils.Log2Random;
 import scala.Enumeration;
 
 /**
@@ -28,6 +29,8 @@ public class RemovableLocalTables extends IndexedArrayList.IndexedItem {
   public final EnumCounter<EvictionReason> evictionCounter =
       new EnumCounter<>(EvictionReason.class);
   public final PluginType.PluginTracker pluginTracker = new PluginType.PluginTracker();
+
+  public final Log2Random logRandom = new Log2Random();
 
   public final KnownStackRecorders knownStackRecorders = new KnownStackRecorders();
 

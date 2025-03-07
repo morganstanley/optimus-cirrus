@@ -15,6 +15,9 @@ import optimus.breadcrumbs.ChainedID
 
 import java.time.Instant
 
+class OptimusConfigurationIOException(message: Option[String], cause: Option[Throwable])
+    extends OptimusConfigurationException(message, cause)
+
 class OptimusConfigurationException(val message: Option[String], val cause: Option[Throwable])
     extends RuntimeException(message.orNull, cause.orNull) {
   def this() = this(None, None)

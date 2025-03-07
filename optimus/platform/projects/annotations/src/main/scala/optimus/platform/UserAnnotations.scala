@@ -10,6 +10,8 @@
  * limitations under the License.
  */
 package optimus.platform
+import optimus.platform.catalog.Controls
+import optimus.platform.catalog.UpstreamDatasets
 
 import scala.annotation.meta._
 import scala.annotation._
@@ -156,13 +158,30 @@ class meta(
     /** Ownership - an object that extends OwnershipMetadata */
     val owner: OwnershipMetadata,
     /** Catalog - an object that extends DalMetadata */
-    val catalog: DalMetadata
+    val catalog: DalMetadata,
+    val description: String,
+    val dqControls: Controls,
+    val upstreamDatasets: UpstreamDatasets
 ) extends StaticAnnotation {
 // docs-snippet:MetaDeclaration
-  def this(owner: OwnershipMetadata) = this(owner = owner, catalog = null)
-  def this(catalog: DalMetadata) = this(owner = null, catalog = catalog)
+  def this(catalog: DalMetadata) =
+    this(owner = null, catalog = catalog, dqControls = null, upstreamDatasets = null, description = null)
+  def this(owner: OwnershipMetadata) =
+    this(owner = owner, catalog = null, dqControls = null, upstreamDatasets = null, description = null)
+  def this(owner: OwnershipMetadata, catalog: DalMetadata) =
+    this(owner = owner, catalog = catalog, description = null, dqControls = null, upstreamDatasets = null)
+  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String) =
+    this(owner = owner, catalog = catalog, description = description, dqControls = null, upstreamDatasets = null)
+  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String, dqControls: Controls) =
+    this(owner = owner, catalog = catalog, description = description, dqControls = dqControls, upstreamDatasets = null)
+  def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String, upstreamDatasets: UpstreamDatasets) =
+    this(
+      owner = owner,
+      catalog = catalog,
+      description = description,
+      dqControls = null,
+      upstreamDatasets = upstreamDatasets)
 }
-
 // You don't want to use this - the intellij plugin injects it to help with highlighting, but it
 // doesn't actually get compiled, and if it did it wouldn't do anything.
 class ofInterestInIDE(val reason: String = "optimus") extends StaticAnnotation

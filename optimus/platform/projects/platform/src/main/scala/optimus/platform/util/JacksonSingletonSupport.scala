@@ -11,7 +11,6 @@
  */
 package optimus.platform.util
 
-import java.util.concurrent.ConcurrentHashMap
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.BeanDescription
@@ -22,7 +21,6 @@ import com.fasterxml.jackson.databind.JsonSerializer
 import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.Module
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.databind.ObjectMapper.DefaultTyping
 import com.fasterxml.jackson.databind.SerializationConfig
 import com.fasterxml.jackson.databind.SerializerProvider
@@ -31,8 +29,10 @@ import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator
 import com.fasterxml.jackson.databind.jsontype.TypeSerializer
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ser.BeanSerializerModifier
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import optimus.core.utils.RuntimeMirror
+import optimus.platform.util.json.DefaultJsonMapper
+
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Jackson doesn't support Scala singleton objects (aka modules) correctly. In fact it reinstantiates the module class
@@ -43,10 +43,12 @@ import optimus.core.utils.RuntimeMirror
  * deserialization it looks up the original singleton instance using Scala reflection.
  *
  * You can use it with a Jackson mapper like this:
- *
- * val m = new ObjectMapper m.registerModule(DefaultScalaModule) m.registerModule(JacksonSingletonSupport.createModule)
+ * {{{
+ * val m = new ObjectMapper
+ * m.registerModule(DefaultScalaModule)
+ * m.registerModule(JacksonSingletonSupport.createModule)
  * m.enableDefaultTypingAsProperty(DefaultTyping.NON_FINAL, JacksonSingletonSupport.tpe)
- *
+ * }}}
  * Or just use the prebuilt mapper from createMapper
  */
 object JacksonSingletonSupport {
@@ -60,17 +62,13 @@ object JacksonSingletonSupport {
 
   def createMapper: ObjectMapper = {
     val ptv = BasicPolymorphicTypeValidator.builder.allowIfSubType(classOf[Any]).build
-    val x = new ObjectMapper
-    x.registerModule(new JavaTimeModule())
-    x.registerModule(DefaultScalaModule)
-    x.registerModule(createModule)
-    x.activateDefaultTyping(ptv, DefaultTyping.NON_FINAL)
-    x.activateDefaultTypingAsProperty(ptv, DefaultTyping.NON_FINAL, JacksonSingletonSupport.tpe)
-    x.enable(MapperFeature.USE_BASE_TYPE_AS_DEFAULT_IMPL)
-    x
+    DefaultJsonMapper.withJavaTimeBuilder
+      .addModule(createModule)
+      .activateDefaultTyping(ptv, DefaultTyping.NON_FINAL)
+      .activateDefaultTypingAsProperty(ptv, DefaultTyping.NON_FINAL, JacksonSingletonSupport.tpe)
+      .enable(MapperFeature.USE_BASE_TYPE_AS_DEFAULT_IMPL)
+      .build()
   }
-
-  import scala.reflect.runtime._
   private val mirror = RuntimeMirror.forClass(this.getClass)
 
   private val moduleCache: ConcurrentHashMap[Class[_], Option[Any]] = new ConcurrentHashMap()

@@ -20,7 +20,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 @entity private[scope] class JmhScopedCompilation(
     override protected val scope: CompilationScope,
@@ -31,10 +31,10 @@ import scala.collection.immutable.Seq
 ) extends PartialScopedClassCompilation {
   import scope._
 
-  @node def messages: Seq[Artifact] = compile(AT.JmhMessages, None)(Some(jmhc.messages(id, inputsN)))
-  @node def classes: Seq[Artifact] = compile(AT.Jmh, None)(jmhc.classes(id, inputsN))
+  @node def messages: IndexedSeq[Artifact] = compile(AT.JmhMessages, None)(Some(jmhc.messages(id, inputsN)))
+  @node def classes: IndexedSeq[Artifact] = compile(AT.Jmh, None)(jmhc.classes(id, inputsN))
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = scope.upstream.classesForOurCompiler
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = scope.upstream.classesForOurCompiler
   @node override protected def containsRelevantSources: Boolean = scope.config.jmh
 
   private val inputsN = asNode(() => inputs)

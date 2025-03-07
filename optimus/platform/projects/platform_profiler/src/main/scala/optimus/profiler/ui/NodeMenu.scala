@@ -17,6 +17,8 @@ import javax.swing.JMenu
 import javax.swing.JMenuItem
 import javax.swing.JOptionPane
 import javax.swing.KeyStroke
+import optimus.debug.EntityInstrumentationType.recordConstructedAt
+import optimus.debug.InstrumentationConfig.instrumentAllEntities
 import optimus.debugger.browser.ui.GraphBrowserAPI._
 import optimus.graph.ICallSite
 import optimus.graph.NodeTask
@@ -98,13 +100,17 @@ object NodeMenu {
       table: NPTable[RType]): JPopupMenu2 = {
     class JPopupMenu2WSelection extends JPopupMenu2 {
 
+      def disableOnCondition(mi: JMenuItem, flag: Boolean): Unit = addOnPopup(mi.setEnabled(flag))
       def disableOnNoSelection(mi: JMenuItem): Unit = addOnPopup(mi.setEnabled(hsn.getSelection != null))
       def disableOnNoLiveSelection(mi: JMenuItem): Unit = addOnPopup(mi.setEnabled(hsn.getSelectionLive != null))
 
       /* add menu for selection */
-      def addMenuFS(title: String, toolTip: String)(action: => Unit): Unit = {
+      def addMenuFS(title: String, toolTip: String, condition: Option[Boolean] = None)(action: => Unit): Unit = {
         val mi = addMenu(title, toolTip) { action }
-        disableOnNoSelection(mi)
+        condition match {
+          case Some(flag) => disableOnCondition(mi, flag)
+          case None       => disableOnNoSelection(mi)
+        }
       }
 
       /* add menu for selection */
@@ -339,11 +345,15 @@ object NodeMenu {
 
     menu.addMenuFS(
       "Print Entity Creation Stack",
-      "Print stack trace(s) of entity construction in the debugger's console") {
+      "Print stack trace(s) of entity construction in the debugger's console" +
+        "(require runconf javaArg '-Doptimus.instrument.cfg=yourWs/trace_config.sc' and recordAllEntityConstructorInvocationSites())",
+      Some(instrumentAllEntities == recordConstructedAt)
+    ) {
       hsn.getSelections.foreach { pnt =>
         val e = pnt.getEntity.asInstanceOf[ICallSite]
         if (e ne null)
-          e.getCallSite.asInstanceOf[Exception].printStackTrace()
+          new Exception(s"stack trace(s) for ${pnt.nodeName()}", e.getCallSite.asInstanceOf[Exception])
+            .printStackTrace()
       }
     }
 

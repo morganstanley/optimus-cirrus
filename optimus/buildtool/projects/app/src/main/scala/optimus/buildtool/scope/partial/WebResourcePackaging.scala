@@ -19,8 +19,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.WebCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 @entity class WebResourcePackaging(
     override protected val scope: CompilationScope,
@@ -29,7 +28,7 @@ import scala.collection.immutable.Seq
 ) extends PartialScopedCompilation {
   import scope._
 
-  @node override protected def upstreamArtifacts: immutable.Seq[Artifact] = Nil
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
   @node override protected def containsRelevantSources: Boolean = scope.config.webConfig.isDefined && !sources.isEmpty
 
   @node def artifacts: Seq[Artifact] =

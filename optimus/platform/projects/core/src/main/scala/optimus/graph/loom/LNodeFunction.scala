@@ -53,9 +53,9 @@ class SerializedNode(val className: String, val methodName: String, val localID:
 }
 
 //noinspection ScalaUnusedSymbol
-abstract class LNodeFunction0[R] extends LNodeFunction[R] with NodeFunction0NN[R] {
+abstract class LNodeFunction0[R] extends LNodeFunction[R] with NodeFunction0[R] {
   override def apply$queued(): NodeFuture[R] = apply$newNode().enqueue
-  override def apply$newNode(): Node[R] = new AsNode0(this)
+  def apply$newNode(): Node[R] = new AsNode0(this)
   // We override the key directly, because we don't need it to compute anything and can be null
   override def toNodeWith(key: PropertyNode[_]): Node[R] = new AsNode0(this)
   override def toNodeWith(entity: Entity, args: Array[AnyRef]): Node[R] =

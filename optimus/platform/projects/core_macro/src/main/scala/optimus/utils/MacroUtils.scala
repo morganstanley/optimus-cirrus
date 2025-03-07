@@ -66,7 +66,7 @@ object MacroUtils {
   // def foo(bar: Int)(implicit loc: SourceLocation) {
   //   println("called foo(" + bar + ") at " + loc)
   // }
-  final case class SourceLocation(line: Int, method: String, className: String, sourceName: String) {
+  final case class SourceLocation(column: Int, line: Int, method: String, className: String, sourceName: String) {
     override def toString: String = s"($className:$line)"
 
     /** Provide full details (method-class-line) on given SourceLocation. */
@@ -89,13 +89,14 @@ object MacroUtils {
     final def sourceLocationMacro(c: blackbox.Context): c.Expr[SourceLocation] = {
       import c.universe._
       val line = c.Expr[Int](Literal(Constant(c.enclosingPosition.line)))
+      val pos = c.Expr[Int](Literal(Constant(c.enclosingPosition.pos.column)))
       val sourceName = c.Expr[String](Literal(Constant(c.enclosingPosition.source.file.name)))
       val method = c.Expr[String](Literal(Constant(enclosingMethod(c).fullName)))
       val className = c.Expr[String](Literal(Constant(enclosingClass(c).fullName)))
-      reify(SourceLocation(line.splice, method.splice, className.splice, sourceName.splice))
+      reify(SourceLocation(pos.splice, line.splice, method.splice, className.splice, sourceName.splice))
     }
 
-    val Unknown = SourceLocation(-1, "Unknown", "Unknown", "Unknown")
+    val Unknown = SourceLocation(-1, -1, "Unknown", "Unknown", "Unknown")
   }
 
   /**
@@ -272,7 +273,10 @@ object MacroUtils {
       case Function(args, rhs)             => (args.asInstanceOf[List[ValDef]], rhs)
       case Block(Nil, Function(args, rhs)) => (args.asInstanceOf[List[ValDef]], rhs)
       case _ =>
-        OptimusReporter.alarm(c, CONFUSING_FUNCTION)(tree.pos, tree)
+        OptimusReporter.alarm(c, CONFUSING_FUNCTION)(
+          tree.pos,
+          tree,
+          "Only simple, one line functions are allowed here! Consider using andThen.")
         null
     }
   }
@@ -284,7 +288,10 @@ object MacroUtils {
     import c.universe._, c.internal._, decorators._
     val (vds, rhs) = MacroUtils.functionN(c)(f)
     if (vds.size != 1)
-      OptimusReporter.alarm(c, CONFUSING_FUNCTION)(argVal.pos, argVal)
+      OptimusReporter.alarm(c, CONFUSING_FUNCTION)(
+        argVal.pos,
+        argVal,
+        "Function can only take in exactly one argument!")
     val param = vds.head
     // Pull out the wrapped argument from implicit Endoish. We will be assigning this to the parameter.
     // At this point, pieces of the function are still owned by the closure anonfun, which we're about to

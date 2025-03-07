@@ -16,7 +16,7 @@ import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.compilers.AsyncSignaturesCompiler
 import optimus.buildtool.scope.CompilationScope
 import optimus.platform._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 @entity private[scope] class SignatureScopedCompilation(
     override protected val scope: CompilationScope,
@@ -27,12 +27,13 @@ import scala.collection.immutable.Seq
 
   @node override protected def containsRelevantSources: Boolean = !sources.isEmpty
 
-  @node def messages: Seq[Artifact] =
+  @node def messages: IndexedSeq[Artifact] =
     compile(AT.SignatureMessages, None)(Some(scalac.signatureMessages(id, scalacInputsN)))
 
-  @node def javaAndScalaSignatures: Seq[Artifact] =
+  @node def javaAndScalaSignatures: IndexedSeq[Artifact] =
     compile(AT.JavaAndScalaSignatures, None)(scalac.signatures(id, scalacInputsN))
 
-  @node def analysis: Seq[Artifact] = compile(AT.SignatureAnalysis, None)(scalac.signatureAnalysis(id, scalacInputsN))
+  @node def analysis: IndexedSeq[Artifact] =
+    compile(AT.SignatureAnalysis, None)(scalac.signatureAnalysis(id, scalacInputsN))
 
 }

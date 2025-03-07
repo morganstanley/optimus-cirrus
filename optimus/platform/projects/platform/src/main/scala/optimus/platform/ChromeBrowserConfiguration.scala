@@ -26,12 +26,15 @@ object ChromeBrowserConfiguration {
 
   private lazy val defaultWindows64BitsLocation = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
   private lazy val defaultWindows32BitsLocation = "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+  private lazy val defaultLinuxLocation = "/usr/bin/chromium-browser"
 
   def findChromeLocation: String = {
     if (new File(defaultWindows64BitsLocation).isFile) {
       defaultWindows64BitsLocation
     } else if (new File(defaultWindows32BitsLocation).isFile) {
       defaultWindows32BitsLocation
+    } else if (new File(defaultLinuxLocation).isFile) {
+      defaultLinuxLocation
     } else {
       throw new UnsupportedOperationException(
         s"Chrome executable not found in its default 64 or 32 bit locations. Please specify a custom location with -D$SystemPropertyName")

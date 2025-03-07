@@ -14,7 +14,9 @@ package optimus.graph
 import com.github.benmanes.caffeine.cache.Caffeine
 import msjava.base.util.uuid.MSUuid
 import optimus.graph.ProgressTracker.idToTracker
+import optimus.platform.EvaluationContext
 
+import java.util.Objects
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
@@ -84,13 +86,21 @@ private[optimus] class ProgressTracker private (val params: ProgressTrackerParam
    */
   @tailrec
   private final def reportProgress(state: ProgressTrackerState): Unit = {
-    val updatedState = update(state)
 
-    if (params.listener ne null)
+    // Tickles affect all exponential decays up to root
+    if (state.isTickle) {
+      if (params.progressType == ProgressType.ExponentialDecay) {
+        val updatedState = update(state)
+        reportToListener(updatedState)
+      }
+      if (Objects.nonNull(parent))
+        parent.reportProgress(state)
+    } else {
+      val updatedState = update(state)
       reportToListener(updatedState)
-
-    if (updatedState.shouldReportToParent && (parent ne null))
-      parent.reportProgress(updatedState)
+      if (Objects.nonNull(parent) && updatedState.shouldReportToParent)
+        parent.reportProgress(updatedState)
+    }
   }
 
   /**
@@ -101,7 +111,7 @@ private[optimus] class ProgressTracker private (val params: ProgressTrackerParam
    * @param state
    *   Progress tracker state.
    */
-  private[this] def reportToListener(state: ProgressTrackerState): Unit = {
+  private[this] def reportToListener(state: ProgressTrackerState): Unit = if (Objects.nonNull(params.listener)) {
     val maybeProgress = if (state.progressToListener >= 0) Some(state.progressToListener) else None
     val maybeMessage = Option(state.messageToListener)
 
@@ -227,6 +237,12 @@ object ProgressTracker {
       parentTracker.params.reportingIntervalMs
     else
       Settings.progressReportingTimeIntervalMs
+  }
+
+  private[optimus] def tickle(amt: Double): Unit = {
+    val progressTracker = EvaluationContext.scenarioStack.progressTracker
+    if (Objects.nonNull(progressTracker))
+      progressTracker.reportProgress(ProgressTrackerState(progress = amt, isTickle = true))
   }
 
   private[optimus] def fromID(id: UUID, params: ProgressTrackerParams): ProgressTracker =

@@ -23,8 +23,7 @@ import optimus.platform.relational.reactive.{
   FilterClassOption,
   MemberProperty,
   UnsupportedFilterCondition,
-  ValueProperty,
-  defaultFilterClassOption => _
+  ValueProperty
 }
 import optimus.utils.datetime.LocalDateOps
 

@@ -14,9 +14,6 @@ package optimus.dal.ssl
 import java.util.concurrent.atomic.AtomicBoolean
 import optimus.graph.DiagnosticSettings
 import optimus.platform.internal.SimpleStateHolder
-import org.springframework.context.annotation.Condition
-import org.springframework.context.annotation.ConditionContext
-import org.springframework.core.`type`.AnnotatedTypeMetadata
 
 final class DalSSLConfigParams {
   import DalSSLConfig._

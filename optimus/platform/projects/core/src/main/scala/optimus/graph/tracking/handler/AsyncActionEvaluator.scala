@@ -30,13 +30,13 @@ object AsyncActionEvaluator {
     def runAsync(onComplete: Try[List[Action]] => Unit, progressTracker: ProgressTracker = null): Unit
     def cause: EventCause
 
-    // Ensure callback is called even if an exception is thrown by the run method
+    // Ensure callback is called if any Throwable is thrown by the run method (we don't want to let even fatal errors
+    // escape here because then the caller never finds out about them and thinks the action is still running)
     def tryRunAsync(onComplete: Try[List[Action]] => Unit, progressTracker: ProgressTracker = null): Unit = {
       cause.counted {
-        val t = Try(runAsync(onComplete, progressTracker))
-        t match {
-          case Failure(_) => onComplete(t.map(_ => List[Action]()))
-          case _          =>
+        try runAsync(onComplete, progressTracker)
+        catch {
+          case t: Throwable => onComplete(Failure(t))
         }
       }
     }

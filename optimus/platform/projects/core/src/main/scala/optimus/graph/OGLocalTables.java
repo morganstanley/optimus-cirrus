@@ -12,6 +12,7 @@
 package optimus.graph;
 
 import static java.lang.System.nanoTime;
+import static optimus.graph.OGTrace.AsyncSuffix;
 import static optimus.graph.OGTrace.trace;
 import static optimus.graph.diagnostics.PNodeTaskInfoUtils.merge;
 import java.lang.ref.Reference;
@@ -302,7 +303,7 @@ public class OGLocalTables extends RemovableLocalTables {
             SchedulerProfileEntry sinceLast = localTable.ctx.observedValuesSinceLast(currentTime);
             if (m != null)
               // Consider: Threads with the same name!
-              m.putIfAbsent(localTable.ownerName + "@" + localTable.ownerID, sinceLast);
+              m.putIfAbsent(localTable.ownerName + AsyncSuffix + localTable.ownerID, sinceLast);
             total.mutateAdd(sinceLast);
           });
 

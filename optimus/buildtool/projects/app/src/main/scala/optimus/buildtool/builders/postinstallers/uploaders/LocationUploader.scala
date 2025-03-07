@@ -21,8 +21,8 @@ import optimus.buildtool.files.Directory
 import optimus.buildtool.trace.Upload
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils
-import optimus.platform.AdvancedUtils.Throttle
 import optimus.platform._
+import optimus.platform.throttle.Throttle
 import optimus.platform.util.Log
 
 import java.io.File
@@ -53,15 +53,13 @@ class LocationUploader(
   protected val exe: String = if (OsUtils.isWindows) ".exe" else ""
 
   @async def uploadToLocation(source: Asset, format: UploadFormat): Long =
-    throttle(asNode { () =>
-      {
-        log.debug(s"[$id] Starting upload for ${source.name}...")
-        val (durationInNanos, _) = AdvancedUtils.timed {
-          location.cmds(source, format).aseq.foreach(launchProcess)
-        }
-        durationInNanos
+    throttle {
+      log.debug(s"[$id] Starting upload for ${source.name}...")
+      val (durationInNanos, _) = AdvancedUtils.timed {
+        location.cmds(source, format).aseq.foreach(launchProcess)
       }
-    })
+      durationInNanos
+    }
 
   @async private def launchProcess(cmd: Seq[String]): Unit = {
     // waiting 1s the first time, 2s the second time, 3s the third time, etc..

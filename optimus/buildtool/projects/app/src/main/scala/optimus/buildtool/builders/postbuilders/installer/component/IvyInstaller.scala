@@ -19,6 +19,7 @@ import optimus.buildtool.builders.postbuilders.installer.BundleFingerprintsCache
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
 import optimus.buildtool.config.DependencyDefinition
+import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeConfiguration
 import optimus.buildtool.config.ScopeConfigurationSource
@@ -38,7 +39,8 @@ class IvyInstaller(
     scopeConfigSource: ScopeConfigurationSource,
     cache: BundleFingerprintsCache,
     pathBuilder: InstallPathBuilder,
-    installVersion: String
+    installVersion: String,
+    externalDependencies: ExternalDependencies
 ) extends ComponentInstaller {
 
   override val descriptor = "ivy files"
@@ -51,13 +53,19 @@ class IvyInstaller(
     // Don't install ivy artifacts for closed scopes
     includedScopeArtifacts.apar.flatMap { i =>
       val scopeId = i.scopeId
-      val ivyFile = this.ivyFile(scopeId)
 
       val scopeConfig = scopeConfigSource.scopeConfiguration(scopeId)
-      if (scopeConfig.open) {
-        val ivyDescriptor = this.ivyDescriptor(scopeId, timestamp, i.classJars.nonEmpty, scopeConfig)
+      if (scopeConfig.flags.open) {
+        // this is a hack to enable PredeploymentJiraFiltering to get internal dependencies from an ivy-like file
+        val includeExternalDeps = scopeConfig.flags.installIvy
+
+        val ivyDescriptor =
+          this.ivyDescriptor(scopeId, timestamp, i.classJars.nonEmpty, scopeConfig, includeExternalDeps)
         val timestampStr = IvyInstaller.timestampStr(timestamp)
         val newHash = Hashing.hashStrings(ivyDescriptor.map(_.replace(timestampStr, "<timestamp>")))
+
+        val ivyFile = this.ivyFile(scopeId, includeExternalDeps)
+
         cache.bundleFingerprints(scopeId).writeIfChanged(ivyFile, newHash) {
           ObtTrace.traceTask(scopeId, InstallIvyFile) {
             writeIvyFile(ivyFile, ivyDescriptor)
@@ -67,17 +75,29 @@ class IvyInstaller(
     }
   }
 
-  private[component] def ivyFile(scopeId: ScopeId): FileAsset = {
-    val ivyDir =
-      pathBuilder.etcDir(scopeId).resolveDir("ivys").resolveDir(NamingConventions.scopeOutputName(scopeId, suffix = ""))
-    ivyDir.resolveFile("ivy.xml")
+  private[component] def ivyFile(scopeId: ScopeId, includeExternalDeps: Boolean): FileAsset = {
+    if (includeExternalDeps) {
+      val ivyDir =
+        pathBuilder
+          .etcDir(scopeId)
+          .resolveDir("ivys")
+          .resolveDir(NamingConventions.scopeOutputName(scopeId, suffix = ""))
+      ivyDir.resolveFile("ivy.xml")
+    } else {
+      val ivyDir =
+        pathBuilder
+          .etcDir(scopeId)
+          .resolveDir("dependencies")
+      ivyDir.resolveFile(NamingConventions.scopeOutputName(scopeId, suffix = "xml"))
+    }
   }
 
-  def ivyDescriptor(
+  private[component] def ivyDescriptor(
       scopeId: ScopeId,
       timestamp: Instant,
       includeArtifact: Boolean,
-      scopeConfig: ScopeConfiguration
+      scopeConfig: ScopeConfiguration,
+      includeExternalDeps: Boolean
   ): Seq[String] = {
     IvyInstaller
       .ivyDescriptor(
@@ -87,13 +107,27 @@ class IvyInstaller(
         includeArtifact,
         scopeConfig.flags.installSources,
         scopeConfig.internalCompileDependencies,
-        scopeConfig.externalCompileDependencies,
+        if (includeExternalDeps) scopeConfig.externalCompileDependencies.map(toAfs(scopeId, _)) else Nil,
         scopeConfig.internalRuntimeDependencies,
-        scopeConfig.externalRuntimeDependencies
+        if (includeExternalDeps) scopeConfig.externalRuntimeDependencies.map(toAfs(scopeId, _)) else Nil
       )
   }
 
-  def writeIvyFile(ivyFile: FileAsset, descriptor: Seq[String]): Unit = {
+  private def toAfs(scopeId: ScopeId, d: DependencyDefinition): DependencyDefinition = {
+    val afsDep =
+      if (d.isMaven)
+        externalDependencies.mavenToAfsMap.getOrElse(
+          d,
+          throw new IllegalArgumentException(s"No AFS equivalent found for ${d.key} [$scopeId]"))
+      else d
+
+    if (afsDep.noVersion)
+      throw new IllegalArgumentException(s"No version specified for AFS dependency ${afsDep.key} [$scopeId]")
+
+    afsDep
+  }
+
+  private[component] def writeIvyFile(ivyFile: FileAsset, descriptor: Seq[String]): Unit = {
     Files.createDirectories(ivyFile.parent.path)
     AssetUtils.atomicallyWrite(ivyFile, replaceIfExists = true, localTemp = true) { tempPath =>
       Files.write(tempPath, descriptor.asJava)
@@ -104,7 +138,7 @@ class IvyInstaller(
 object IvyInstaller {
   private val timestampFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss").withZone(ZoneOffset.UTC)
 
-  def timestampStr(timestamp: Instant): String = timestampFormatter.format(timestamp)
+  private def timestampStr(timestamp: Instant): String = timestampFormatter.format(timestamp)
 
   private def ivyDescriptor(
       scopeId: ScopeId,
@@ -185,7 +219,7 @@ object IvyInstaller {
        |${externalDependencies.mkString("\n")}
        |  </dependencies>
        |</ivy-module>
-       |""".stripMargin.split("\r?\n").toIndexedSeq.filter(!_.isEmpty)
+       |""".stripMargin.split("\r?\n").toIndexedSeq.filter(_.nonEmpty)
   }
 
   private def dependencies[A](compile: Seq[A], runtime: Seq[A]): Seq[(A, Seq[String])] = {

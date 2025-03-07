@@ -107,14 +107,14 @@ class OptimusOffGraphExecutor(private[platform] val service: ExecutorService, va
       }
     }: Runnable)
     StallInfoAppender.attachExtraData(
-      promise.node,
+      promise.underlyingNode,
       () =>
         GraphStallInfo(
           pluginType,
           "OffGraphExecutor asynchronously executing",
           context.map { ctx => RequestsStallInfo(StallPlugin.DAL, 1, Seq(ctx)) })
     )
-    promise.node
+    promise.underlyingNode
   }
   private def executeAsyncCallback$withNode[T](f: NodePromise[T] => Unit, context: Option[String] = None): T =
     executeAsyncCallback$queued(f, context).get

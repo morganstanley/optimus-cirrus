@@ -18,6 +18,7 @@ import coursier.core.ArtifactSource
 import coursier.core.Authentication
 import coursier.core.Configuration
 import coursier.core.Extension
+import coursier.core.MinimizedExclusions
 import coursier.core.Publication
 import coursier.core.Repository
 import coursier.core.ResolutionProcess.fetchOne
@@ -85,7 +86,12 @@ object CoursierArtifactResolver {
   // regex-ignore-line this one is only for codegen
   private[buildtool] val Marker: String = "TODO"
   private val mavenDefaultConfigs =
-    Set(Configuration.compile, Configuration.default, Configuration.defaultCompile, Configuration.runtime)
+    Set(
+      Configuration.default,
+      Configuration.compile,
+      Configuration.defaultCompile,
+      Configuration.runtime,
+      Configuration.defaultRuntime)
   private[buildtool] val ObtMavenDefaultConfig = ""
 
   private[buildtool] def realConfigurationStr(rawConfiguration: String): String = {
@@ -182,10 +188,11 @@ object CoursierArtifactResolver {
   private val (globalConfigSpecificExcludes, globalNonConfigSpecificExcludes) =
     globalExcludes.partition(_.ivyConfiguration.isDefined)
 
-  @node private def globalCoursierExcludes = toCoursierExcludes(globalNonConfigSpecificExcludes, Nil)
+  @node private def globalCoursierExcludes: MinimizedExclusions =
+    toCoursierExcludes(globalNonConfigSpecificExcludes, Nil)
 
   @node private def getVersionLevelExcludesMap(
-      deps: Seq[DependencyDefinition]): Map[DependencyCoursierKey, Set[(Organization, ModuleName)]] =
+      deps: Seq[DependencyDefinition]): Map[DependencyCoursierKey, MinimizedExclusions] =
     deps.apar.map { d =>
       // note that JvmDependenciesLoader.readExcludes already checks for this and produces a nicer error - this check
       // is mostly here in case unit tests break the rules
@@ -224,13 +231,29 @@ object CoursierArtifactResolver {
       toModule(d) -> dependencyResolvers
     }.toMap
 
-  private val afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] =
-    externalDependencies.afsToMavenMap.map { case (afs, maven) =>
+  private val afsGroupNameToMavenMap: Map[MappingKey, Seq[DependencyDefinition]] = {
+    val keyToMaven = externalDependencies.afsToMavenMap.toSeq.map { case (afs, maven) =>
       MappingKey(afs.group, afs.name, afs.configuration) -> maven
     }
+    if (keyToMaven.size != externalDependencies.afsToMavenMap.size) {
+      val duplicates = keyToMaven.groupBy(_._1).filter(_._2.size > 1)
+      val originalKeys = externalDependencies.afsToMavenMap.filter { case (afs, _) =>
+        duplicates.contains(MappingKey(afs.group, afs.name, afs.configuration))
+      }
+
+      throw new IllegalStateException(
+        s"""There are multiple keys that will create the same mapping key. This should never happen.
+           |Following set of dependency definitions:
+           |${originalKeys.mkString("\n")}
+           |Creates a MappingKey collision in:
+           |${duplicates.mkString("\n")}
+           |""".stripMargin
+      )
+    } else keyToMaven.toMap
+  }
 
   private val allMappedMavenModules =
-    externalDependencies.mavenDependencies.allMappedMavenDeps.map(toModule).toSet
+    externalDependencies.mavenDependencies.allMappedMavenDeps.map(toModule).distinct
 
   private val localRepos: Seq[(String, MetadataPattern.Local)] =
     resolvers.defaultResolvers
@@ -339,7 +362,7 @@ object CoursierArtifactResolver {
         version = allVersions.allVersions.getOrElse(module, dep.version)
       )
       .withConfiguration(Configuration(dep.configuration))
-      .withExclusions(globalCoursierExcludes ++ toCoursierExcludes(dep.excludes, scopeSubstitutions))
+      .withMinimizedExclusions(globalCoursierExcludes join toCoursierExcludes(dep.excludes, scopeSubstitutions))
       .withTransitive(dep.transitive)
     CoursierInterner.internedDependency(dep.classifier match {
       case Some(str) =>
@@ -350,8 +373,8 @@ object CoursierArtifactResolver {
 
   @node private def toCoursierExcludes(
       excludes: Iterable[Exclude],
-      scopeSubstitutions: Seq[Substitution]): Set[(Organization, ModuleName)] =
-    excludes.apar.flatMap(toCoursierExclude(_, scopeSubstitutions)).toSet
+      scopeSubstitutions: Seq[Substitution]): MinimizedExclusions =
+    MinimizedExclusions(excludes.apar.flatMap(toCoursierExclude(_, scopeSubstitutions)).toSet)
 
   @node private def toCoursierExclude(
       exclude: Exclude,
@@ -384,9 +407,19 @@ object CoursierArtifactResolver {
   @node def resolveDependencies(deps: DependencyDefinitions): ResolutionResult = {
     // extra libs shouldn't be included for resolution, and they will be included in metadata & fingerprint
     val distinctDeps = distinctRequestedDeps(deps.all).filter(_.kind != ExtraLibDefinition)
-    val (mavenDeps, afsDeps) = distinctDeps.partition(_.isMaven)
-    val mappedAfsDepsResult = MavenUtils.applyDirectMapping(afsDeps, afsGroupNameToMavenMap)
-    val distinctDepsWithMapping = (mappedAfsDepsResult.allDepsAfterMapping ++ mavenDeps).to(Seq)
+
+    val mappedAfsDependencies = distinctDeps
+      .filter(!_.isMaven)
+      .apar
+      .map(dep => dep -> MavenUtils.applyDirectMapping(dep, afsGroupNameToMavenMap).to(Seq))
+      .filter(_._2.nonEmpty)
+      .toMap
+
+    // We have to keep original order dependencies, as we can shadow wrong classes by mistake
+    val distinctDepsWithMapping = distinctDeps.flatMap {
+      case dep if dep.isMaven => Seq(dep)
+      case dep                => mappedAfsDependencies.getOrElse(dep, Seq(dep))
+    }
 
     // note that requested dependencies always overwrite the defaults (only matters if they are variants requested),
     // and the first requested dependency version takes precedence over the others
@@ -424,7 +457,7 @@ object CoursierArtifactResolver {
       pluginModules = declaredPluginModules,
       macroModules = macroModules,
       mappingErrors = mixModeErrors,
-      mappedDeps = mappedAfsDepsResult.appliedAfsToMavenMap
+      mappedDeps = mappedAfsDependencies
     )
   }
 
@@ -542,8 +575,10 @@ object CoursierArtifactResolver {
       // dependency, but we also add in any exclusions specified for this dependency
       val exclusions =
         dependencySpecificCoursierExcludes.get(toDependencyCoursierKey(dep), variants)
-      val allExclusions = exclusions ++ dep.exclusions
-      val updatedDep = if (exclusions.nonEmpty) dep.withExclusions(allExclusions) else dep
+      val updatedDep = if (exclusions.nonEmpty) {
+        val allExclusions = exclusions.join(dep.minimizedExclusions)
+        dep.withMinimizedExclusions(allExclusions)
+      } else dep
       Some((fromConf, updatedDep))
     }
   }
@@ -587,7 +622,7 @@ object CoursierArtifactResolver {
       scopeSubstitutions: Seq[Substitution],
       forceVersions: Versions): Resolution = {
     val mapTo = substitutionsMap(scopeSubstitutions, forceVersions)
-    val res = Resolution(dependencies = directDeps.toSet.toSeq)
+    val res = Resolution(dependencies = directDeps.distinct)
       .withForceVersions(forceVersions.allVersions)
       .withMapDependencies(
         Some { fromDep =>
@@ -652,7 +687,7 @@ object CoursierArtifactResolver {
       .map { case (source, origProj) =>
         if (!dep.optional) {
           val containsPlugin = pluginModules.contains(dep.module)
-          val containsAgent = false
+          val containsAgent = this.defaultDefinitions.get(dep.module).exists(_.isAgent)
           val containsOrUsedByMacros = macroModules.contains(dep.module)
           val proj = extraPublications.get(dep.module) match {
             case Some(extra) => origProj.withPublications(origProj.publications ++ extra.map((Configuration.all, _)))
@@ -869,7 +904,7 @@ object CoursierArtifactResolver {
 
     val directMappedDependencies = mappedDeps.map { case (afs, equivalents) =>
       definitionToInfo(afs) -> equivalents.map(definitionToInfo)
-    }
+    }.toMap
 
     val transitiveMappedDependencies =
       externalDependencies.multiSourceDependencies.collect {
@@ -914,14 +949,14 @@ final case class CoursierArtifact(value: Artifact, publication: Publication) {
 // say "foo.2.0" with predefined "excludes",
 // in Coursier: "foo.1.0" (without excludes) -> evicted to "foo.2.0" (still without excludes) -> unexpected result
 final case class DependencySpecificCoursierExcludes(
-    versionLevel: Map[DependencyCoursierKey, Set[(Organization, ModuleName)]],
-    nameLevel: Map[DependencyCoursierKey, Set[(Organization, ModuleName)]]) {
-  def get(input: DependencyCoursierKey, variants: Seq[DependencyDefinition]): Set[(Organization, ModuleName)] = {
+    versionLevel: Map[DependencyCoursierKey, MinimizedExclusions],
+    nameLevel: Map[DependencyCoursierKey, MinimizedExclusions]) {
+  def get(input: DependencyCoursierKey, variants: Seq[DependencyDefinition]): MinimizedExclusions = {
     val useVariants = variants
       .find(v => v.group == input.org && v.name == input.name)
       .map(d => DependencyCoursierKey(d.group, d.name, d.configuration, d.version))
     // apply variants excludes setting if be used in module.obt directly
     val key = useVariants.getOrElse(input)
-    versionLevel.getOrElse(key, nameLevel.getOrElse(key.copy(version = ""), Set.empty))
+    versionLevel.getOrElse(key, nameLevel.getOrElse(key.copy(version = ""), MinimizedExclusions.zero))
   }
 }

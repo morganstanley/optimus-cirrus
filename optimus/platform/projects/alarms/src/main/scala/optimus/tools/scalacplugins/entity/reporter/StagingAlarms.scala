@@ -40,8 +40,9 @@ object CodeStyleNonErrorMessages extends OptimusNonErrorMessagesBase with Optimu
   val DISCOURAGED_CONSTRUCT =
     warning2(10006, StagingPhase.POST_TYPER_STANDARDS, "%s is discouraged because %s")
 
-  val MOCK_FINAL_CASE_CLASS =
-    warning0(10007, StagingPhase.POST_TYPER_STANDARDS, "Don't mock final case classes")
+  val OVERLY_SPECIFIC_LIST_PATTERN =
+    warning0(10008, StagingPhase.POST_TYPER_STANDARDS, "`::` and `List(...)` patterns should only be used on values of type `List` as they will not match other `Seq`-s which can be a source of bugs")
+
 }
 
 object Scala213MigrationMessages extends OptimusErrorsBase with OptimusPluginAlarmHelper {

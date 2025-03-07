@@ -19,7 +19,7 @@ import optimus.graph.PropertyNode;
  * exception). If re-use turns out to not be possible then this proxy runs the underlying key
  * directly.
  */
-public class DelayedCSProxyNode<T> extends DelayedProxyNode<T> {
+public class DelayedCSProxyNode<T> extends DelayedProxyNodeNoReEnqueue<T> {
   public DelayedCSProxyNode(PropertyNode<T> key, PropertyNode<T> hit) {
     super(key, hit);
   }

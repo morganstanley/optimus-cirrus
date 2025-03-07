@@ -62,6 +62,7 @@ final case class DalEnv(underlying: String) extends AnyVal with Env with DalLoca
 object DalEnv {
   val unknown = DalEnv("")
   val mock = DalEnv(KnownNames.EnvMock)
+  val none = DalEnv(KnownNames.EnvNone)
   val test = DalEnv(KnownNames.EnvTest)
   val prod = DalEnv("prod")
 
@@ -69,7 +70,6 @@ object DalEnv {
   val release = DalEnv("release")
   val perf_test = DalEnv("perf_test")
   val reg_test = DalEnv("reg_test")
-  val azure = DalEnv("azure")
   val dev = DalEnv(KnownNames.EnvDev)
   val devdev = DalEnv("devdev")
   val obt_build_cache_dev = DalEnv("obt-build-cache-dev")

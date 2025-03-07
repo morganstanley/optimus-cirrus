@@ -92,15 +92,24 @@ object CollectionUtils extends CollectionUtils {
     }
 
     /**
-     * An element of type A is returned if the Traversable is a singleton. Otherwise an exception flies.
+     * An element of type A is returned if the Traversable is a singleton. Otherwise an exception thrown.
      *
-     * @param f
-     *   a function that composes an exception message according to type A.
+     * @param f a function that composes an exception message according to type A.
      * @return
      */
     def singleOrThrow(f: Traversable[A] => String): A =
       if (zeroOneOrMany == 1) as.head
       else throw new IllegalArgumentException(f(as))
+
+    /**
+     * Resolution logic
+     *   - Returns Some(x) if there is a single element or None if empty.
+     *   - If more than 1 elements are found, this method throws.
+     *
+     * @param f a function that composes an exception message according to type A.
+     */
+    def singleOptionOrThrow(f: Traversable[A] => String): Option[A] =
+      singleOptionOr(throw new IllegalArgumentException(f(as)))
 
     /**
      * Returns Some(x) if there is a single element or None if empty. If more than 1 elements are found, use fallback
@@ -204,13 +213,20 @@ object CollectionUtils extends CollectionUtils {
       // which was fixed on 2.13.
       (TreeMap[A, A]()(O) ++ as.map(x => (x, x))).values.toVector
     }
+
+    def isDistinct: Boolean = as.toSet.size == as.size
   }
 
   class ExtraTraversableOps2[T, Repr[T] <: TraversableLike[T, Repr[T]]](underlying: Repr[T]) {
+
+    /** Execute an action if given Collection is empty, e.g. print a log line. */
     def onEmpty(action: => Unit): Repr[T] = { if (underlying.isEmpty) action else (); underlying }
 
+    /** In case of empty Collection return the provided fallback Collection. */
+    def ifEmpty(fallback: => Repr[T]): Repr[T] = if (underlying.isEmpty) fallback else underlying
+
     /**
-     * returns only those elements of the collection which are instances of the specified type
+     * Returns only those elements of the collection which are instances of the specified type
      *
      * (this is named 'collect' rather than 'filter' because the type of the returned collection is changed to be a
      * collection of T, and this follows the convention of collect in the scala api)

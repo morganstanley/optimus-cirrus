@@ -23,7 +23,7 @@ import optimus.buildtool.scope.sources.JavaAndScalaCompilationSources
 import optimus.buildtool.utils.Hide
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity class ScalaCompilationInputs(
     scope: CompilationScope,
@@ -34,7 +34,7 @@ import scala.collection.immutable.Seq
   import scope._
   import sources._
 
-  @node private[partial] def upstreamArtifacts: Seq[Artifact] = upstream.signaturesForOurCompiler
+  @node private[partial] def upstreamArtifacts: IndexedSeq[Artifact] = upstream.signaturesForOurCompiler
 
   private[partial] val scalacInputsN: NodeFunction0[SyncCompiler.Inputs] = asNode(() => scalacInputs)
 
@@ -84,10 +84,10 @@ import scala.collection.immutable.Seq
   protected def compilationInputs: ScalaCompilationInputs
   override protected def sources: JavaAndScalaCompilationSources = compilationInputs.sources
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = compilationInputs.upstreamArtifacts
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = compilationInputs.upstreamArtifacts
 
   // (the plugins can have errors too)
-  @node override protected def prerequisites: Seq[Artifact] =
+  @node override protected def prerequisites: IndexedSeq[Artifact] =
     super.prerequisites ++ scope.upstream.pluginsForOurCompiler
 
   // Note that the NF0 needs to be created in ScalaCompilationInputs to ensure that two similar NodeFunctions
@@ -105,14 +105,14 @@ import scala.collection.immutable.Seq
 
   @node override protected def containsRelevantSources: Boolean = sources.containsScala
 
-  @node def messages: Seq[Artifact] = compile(AT.ScalaMessages, None)(Some(scalac.messages(id, scalacInputsN)))
+  @node def messages: IndexedSeq[Artifact] = compile(AT.ScalaMessages, None)(Some(scalac.messages(id, scalacInputsN)))
 
-  @node def classes: Seq[Artifact] = compile(AT.Scala, None)(scalac.classes(id, scalacInputsN))
+  @node def classes: IndexedSeq[Artifact] = compile(AT.Scala, None)(scalac.classes(id, scalacInputsN))
 
-  @node def analysis: Seq[Artifact] =
-    analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).analysis
+  @node def analysis: IndexedSeq[Artifact] =
+    analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).analysis.toVector
 
-  @node def locator: Seq[Artifact] =
+  @node def locator: IndexedSeq[Artifact] =
     analysisWithLocator(scalaAnalysis, AT.ScalaAnalysis, analysisLocator).locator.toIndexedSeq
 
   @node protected def scalaAnalysis: Seq[Artifact] = compile(AT.ScalaAnalysis, None)(scalac.analysis(id, scalacInputsN))

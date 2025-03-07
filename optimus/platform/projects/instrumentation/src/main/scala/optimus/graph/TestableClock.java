@@ -16,10 +16,37 @@ import optimus.graph.diagnostics.ProfiledEvent;
 public class TestableClock {
 
   private static volatile NanoClock clock = null;
+  private static volatile long snappedTime = 0L;
 
   public static final String allowTestableClockSysProp = "optimus.scheduler.allowTestableClock";
   public static final boolean allowTestableClock =
       DiagnosticSettings.getBoolProperty(allowTestableClockSysProp, false);
+  private static final int threadTimerClock =
+      DiagnosticSettings.getIntProperty("optimus.scheduler.snapped.clock.ms", 0);
+
+  private static Thread timerClockThread =
+      new Thread() {
+        @Override
+        public void run() {
+          while (true) {
+            synchronized (this) {
+              try {
+                wait(threadTimerClock);
+              } catch (InterruptedException e) {
+              }
+              snappedTime = System.nanoTime();
+            }
+          }
+        }
+      };
+
+  static {
+    if (threadTimerClock > 0) {
+      timerClockThread.setName("SampledTimer");
+      timerClockThread.setDaemon(true);
+      timerClockThread.start();
+    }
+  }
 
   public static long nanoTime() {
     if (allowTestableClock) {
@@ -28,7 +55,9 @@ public class TestableClock {
         return c.nanoTime();
       }
     }
-    return System.nanoTime();
+
+    if (threadTimerClock > 0) return snappedTime;
+    else return System.nanoTime();
   }
 
   /**

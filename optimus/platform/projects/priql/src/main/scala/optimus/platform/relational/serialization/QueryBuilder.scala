@@ -826,8 +826,8 @@ object QueryBuilder {
     PermitTableScan(of(src), method.pos)
   }
 
-  private def takeParams(method: MethodElement, n: Int): Seq[RelationElement] = {
-    method.methodArgs.take(n).map(_.param)
+  private def takeParams(method: MethodElement, n: Int): List[RelationElement] = {
+    method.methodArgs.take(n).map(_.param).toList
   }
 
   private def toLambda1[A, R](c: ScalaLambdaCallee[A, R]): Lambda1[A, R] = {

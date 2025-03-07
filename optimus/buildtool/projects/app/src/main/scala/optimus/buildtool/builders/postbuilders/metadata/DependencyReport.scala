@@ -102,10 +102,11 @@ object DependencyReport {
       isTransitive = dependency.transitive
     )
 
-  def apply(scopeId: ScopeId, qualifiers: Set[QualifierReport], settings: MetadataSettings): DependencyReport = {
+  def apply(id: ScopeId, qualifiers: Set[QualifierReport], settings: MetadataSettings): DependencyReport = {
+    val scopeId = if (settings.generatePoms) id.forMavenRelease else id
     DependencyReport(
       namespace = if (settings.generatePoms) MavenNamespace else AfsNamespace,
-      meta = scopeId.meta,
+      meta = if (settings.generatePoms) s"com.ms." + scopeId.meta else scopeId.meta,
       project = scopeId.bundle,
       release = None,
       artifact =

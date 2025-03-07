@@ -30,16 +30,16 @@ trait DynamicDependencyDetector extends Log {
   def getDynamicDependencies(path: Path, excludeF: Path => Boolean): Set[Path] = {
 
     @tailrec
-    def loop(toVisit: Seq[Path], visited: Set[Path]): Set[Path] = toVisit match {
+    def loop(toVisit: List[Path], visited: Set[Path]): Set[Path] = toVisit match {
       case Nil =>
         log.debug(s"Found a total of ${visited.size} MS dynamic dependencies for path $path")
-        visited
+        visited.map(_.normalize()) // clean up relative paths in resolved dynamic deps, avoid docker load crash
       case head :: tail =>
         val newDeps = (lddCommand(head).filterNot(excludeF) -- visited)
         loop(tail ++ newDeps, visited ++ newDeps)
     }
 
-    if (shouldBeAnalyzed(path)) loop(toVisit = Seq(path), visited = Set.empty)
+    if (shouldBeAnalyzed(path)) loop(toVisit = Seq(path).toList, visited = Set.empty)
     else Set.empty
   }
 

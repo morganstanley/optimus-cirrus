@@ -11,6 +11,7 @@
  */
 package optimus.graph.tracking.handler
 
+import optimus.breadcrumbs.crumbs.Properties.profHandlerEventTime
 import optimus.graph.CompletableNodeM
 import optimus.graph.Node
 import optimus.graph.NodeTaskInfo
@@ -23,6 +24,8 @@ import optimus.graph.Scheduler
 import optimus.graph.diagnostics.messages.EventDescription
 import optimus.graph.diagnostics.messages.HandlerStepEvent
 import optimus.graph.diagnostics.messages.HandlerStepEventCounter
+import optimus.graph.diagnostics.sampling.BaseSamplers
+import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.graph.tracking.DependencyTracker
 import optimus.graph.tracking.DependencyTrackerBatchUpdater
 import optimus.graph.tracking.DependencyTrackerDisposedException
@@ -92,7 +95,7 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
   private case class ImmediatelyAction(details: ImmediatelyActionDetails) extends Action {
 
     override val cause: EventCause =
-      details.updater.cause.createProfiledChild("Immediately", details.sourceLocation)
+      details.updater.cause.createProfiledChild(HandlerResultEvaluator.Immediately, details.sourceLocation)
 
     override def runAsync(runFollowing: Try[List[Action]] => Unit, progressTracker: ProgressTracker): Unit = {
       cause.counted {
@@ -120,6 +123,7 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
           metadataToAdd = handlerResult.profilingMetadata,
           newGlobalTag = handlerResult.globalEventTag
         )
+        BaseSamplers.increment(profHandlerEventTime, (done - start) / SamplingProfiler.NANOSPERMILLI)
         val updater = details.updater
         runFollowing(Success(stepsToActions(handlerResult.nextSteps, updater, details)))
       }
@@ -256,6 +260,7 @@ private[optimus] trait HandlerResultEvaluatorBase extends Log {
 }
 
 private[optimus] object HandlerResultEvaluator extends HandlerResultEvaluatorBase {
+  val Immediately = "Immediately"
 
   private[optimus] final case class InBackgroundAction(
       evaluator: HandlerResultEvaluatorBase,

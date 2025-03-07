@@ -12,11 +12,13 @@
 package optimus.buildtool.compilers.venv
 
 import optimus.buildtool.artifacts.JsonImplicits._
+import optimus.buildtool.config.StaticConfig
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Jars
 
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import scala.collection.immutable.Seq
@@ -46,6 +48,12 @@ object PythonConstants {
       unpackedArtifactVenv(artifactName, config).resolve("bin").resolve("python")
     def unpackedArtifactScript(artifactName: String, script: String, config: TpaConfig): Path =
       unpackedArtifactSrc(artifactName, config).resolve(script)
+
+    def unpackCmdRawArgs(
+        artifact: Path,
+        tpaArgs: Seq[String]
+    ): String = (Seq("python", artifact.toString) ++ tpaArgs).mkString(" ")
+
     def unpackCmd(
         artifact: Path,
         cacheDir: Option[Path] = None,
@@ -77,6 +85,32 @@ object PythonConstants {
           AssetUtils.readJson[TpaConfig](metadataJson, unzip = false)
         }
       }
+    }
+  }
+
+  object pip {
+    def setupCmd: String = s"${StaticConfig.string(
+        "artifactorySetupUserPath")} -cli pypi -repo mspypi-local-only --config-root ${PythonConstants.tpa.configDir}"
+    def setupCmdIfNeeded: Option[String] = if (
+      !Files.exists(Paths.get(PythonConstants.tpa.uvConfigFilePath)) || !Files.exists(
+        Paths.get(PythonConstants.tpa.pipConfigFilePath))
+    ) Some(setupCmd)
+    else None
+
+    def download(
+        destination: Path,
+        requirements: Path,
+        cacheDir: Option[Path] = None,
+        requireHashes: Boolean = true): Seq[String] = {
+      val cacheString = Some(cacheDir.map(c => s"--cache-dir $c").getOrElse("--no-cache-dir"))
+      val destString = Some(s"--dest $destination")
+      val requirementsString = Some(s"--requirement $requirements")
+      val requireHashesString = if (requireHashes) Some("--require-hashes") else None
+      Seq(
+        "pip",
+        "download",
+        "--only-binary=:all:",
+        "--no-deps") ++ cacheString ++ requireHashesString ++ requirementsString ++ destString
     }
   }
 }

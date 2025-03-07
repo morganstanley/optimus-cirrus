@@ -14,10 +14,12 @@ package optimus.platform;
 public class ScenarioFlags {
   public static final int none = 0;
   public static final int hasReducibleToByValueTweaks = 1;
-  public static final int hasPossiblyRedundantTweaks = 2;
-  public static final int disableRemoveRedundant = 4;
-  public static final int hasUnresolvedOrMarkerTweaks = 8;
-  public static final int hasContextDependentTweaks = 16;
-  public static final int unorderedTweaks = 32;
-  public static final int markedForDebugging = 64;
+  public static final int hasPossiblyRedundantTweaks = 1 << 1;
+  public static final int disableRemoveRedundant = 1 << 2;
+  public static final int hasUnresolvedOrMarkerTweaks = 1 << 3;
+  public static final int hasContextDependentTweaks = 1 << 4;
+  public static final int hasWhenClauseTweaks = 1 << 5;
+  public static final int unorderedTweaks = 1 << 6;
+
+  public static final int markedForDebugging = 1 << 7;
 }

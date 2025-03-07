@@ -9,5 +9,8 @@
 // limitations under the License.
 all.javac.release = 11
 
-main.compile.libs += ossscala.scala.tools
+main {
+  compile.libs += ossscala.scala.tools
+  installIvy = true
+}
 test.compile.libs += ossjava.junit

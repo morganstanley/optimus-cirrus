@@ -253,6 +253,13 @@ object TraceEvent {
     val relevance: Relevance = One
   }
 
+  final case class WindowDelay(delay: Int) extends Event with ImpliesWallclockTiming {
+    val name = "WINDOW_DELAY"
+    val level: Level = Info
+    val phase: Phase = Execution
+    val relevance: Relevance = One
+  }
+
   final case class ChannelQ(id: CacheIdentity) extends Event with ImpliesWallclockTiming with ImpliesStallTiming {
     val name = "CHANNEL_Q"
     val level = Info
@@ -522,6 +529,20 @@ object TraceEvent {
     val level = Debug
     val phase = Execution
     val relevance = Seven
+  }
+
+  private[optimus] case object Commit extends Event with ImpliesWallclockTiming {
+    val name = "COMMIT"
+    val level = Info
+    val phase = Execution
+    val relevance = Seven // will publish breadcrumbs if the event took more than 100ms
+  }
+
+  private[optimus] case object PayloadStall extends Event with ImpliesWallclockTiming with ImpliesStallTiming {
+    val name = "PAYLOAD_STALL"
+    val level = Info
+    val phase = Queued
+    val relevance = Nine // will publish if the event takes more than 10ms, maybe it should be ten (>1ms)
   }
 
   /**
@@ -927,6 +948,9 @@ object TraceEvent {
   }
   case object EntitlementLoadCacheMiss extends EntitlementLoadEventBase {
     override val name = "ENTITLEMENT_LOAD_CACHE_MISS"
+  }
+  case object EntitlementLinkagesCheck extends EntitlementLoadEventBase {
+    override val name = "ENTITLEMENT_LINKAGES_CHECK"
   }
 
   /* Events used to trace query execution on server side */

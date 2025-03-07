@@ -50,7 +50,8 @@ object NodeView {
     val showScenarioStack = new JCheckBox("Scenarios")
     showScenarioStack.setToolTipText("Show scenarios")
     val showScenarioStackSmart = new JCheckBox("Focused Scenarios")
-    showXSTwks.setToolTipText("Show recorded tweaks/tweakables (for cross-scenario evaluation)")
+    showXSTwks.setToolTipText(
+      "<html>Show recorded tweaks/tweakables (for cross-scenario evaluation)<br>Black text: tweak was used by this task<br>Purple text: tweak was used by a different task for this node<br>Grey text: tweak was not used by this task or others</html>")
     showScenarioStackSmart.setToolTipText(
       "<html>Exclude common scenario stacks and unused tweaks<br>(if <i>Trace Tweaks</i> is enabled)</html>")
     showResultEntityTemporalInfo.setToolTipText("Show entity Valid Time and Transaction Time")

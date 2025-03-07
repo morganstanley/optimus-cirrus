@@ -20,7 +20,7 @@ public class PNodeTaskInfoLight implements Serializable {
   public transient int id;
   public long start; // Number of starts
 
-  public long cacheTime; // Time spent on lookup logic
+  public long cacheTime; // Time spent on lookup logic (ns)
   public long cacheHit; // Number of cache hits
   // Number of cache hits from different tasks that ran on this engine
   public long cacheHitFromDifferentTask;
@@ -28,11 +28,11 @@ public class PNodeTaskInfoLight implements Serializable {
   // Node Used Time = selfAndANCTime that would be computed without ANY caching
   // aka Time 'saved by caching' (over counted by 1 of selfAndANCTime)
   public long nodeUsedTime;
-  public long selfTime; // Total Self Time
-  public long ancAndSelfTime; // Total absorbed non-cached self time + selfTime
-  // Time between complete/suspend and stop (e.g notify waiters & process xinfo)
+  public long selfTime; // Total Self Time (ns)
+  public long ancAndSelfTime; // Total absorbed non-cached self time + selfTime (ns)
+  // Time between complete/suspend and stop (e.g notify waiters & process xinfo) (ns)
   public long postCompleteAndSuspendTime;
-  public long tweakLookupTime; // Time spent on looking up tweaks of this type
+  public long tweakLookupTime; // Time spent on looking up tweaks of this type (ns)
 
   /* required for hotspotsLight, but not pgo mode */
   // Number of (hash) collisions encountered when looking up NodeTasks in NodeCache
@@ -40,7 +40,7 @@ public class PNodeTaskInfoLight implements Serializable {
   public long evicted;
   public int invalidated;
   public int childNodeLookupCount;
-  public long childNodeLookupTime;
+  public long childNodeLookupTime; // Time spent on looking up child nodes (ns)
 
   public PNodeTaskInfoLight(int id) {
     this.id = id;

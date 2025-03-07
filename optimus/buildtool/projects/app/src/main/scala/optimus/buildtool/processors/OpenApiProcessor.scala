@@ -37,7 +37,7 @@ import optimus.platform.util.Log
 
 import java.nio.file.Files
 import scala.collection.compat._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.jdk.CollectionConverters._
 
 /**
@@ -83,7 +83,7 @@ import scala.jdk.CollectionConverters._
     )
   }
 
-  @node override def dependencies(scope: CompilationScope): Seq[Artifact] =
+  @node override def dependencies(scope: CompilationScope): IndexedSeq[Artifact] =
     super.dependencies(scope) ++ scope.upstream.allUpstreamArtifacts
       .filter(a =>
         a.id == OpenApiProcessor.EntityAgentPathingArtifactId || a.id == OpenApiProcessor.BuildToolRestScalaArtifactId)

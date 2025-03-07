@@ -173,7 +173,17 @@ object EventSerializer extends BusinessEventSerializer {
       cmid: Option[MSUuid] = None): SerializedBusinessEvent = doSerializeBusinessEvent(evt, entityReferences, cmid)
 }
 
-private[dal] final case class SerializedWithEref(se: Option[SerializedEntity], eref: EntityReference)
+private[dal] final case class SerializedWithEref(se: Option[SerializedEntity], eref: EntityReference) {
+  // This class is only used as a useful way to group an eref with its SerializedEntity for use in the
+  // serializedEntityFilter in UpsertableTransactionSerializer.deserializeAllEntities. Equals/Hashcode should be based
+  // only on the eref
+  override def hashCode(): Int = eref.hashCode
+  override def equals(obj: Any): Boolean = obj match {
+    case SerializedWithEref(_, otherRef) => eref.equals(otherRef)
+    case _                               => false
+  }
+}
+
 private object SerializedWithEref {
   def apply(se: SerializedEntity, eref: EntityReference): SerializedWithEref = SerializedWithEref(Some(se), eref)
   def apply(eref: EntityReference): SerializedWithEref = SerializedWithEref(None, eref)
@@ -283,7 +293,7 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
         data = data,
         loadContext = loadCtx,
         storageInfo = storageInfo,
-        instanceMap = Map.empty,
+        instanceMap = InlineEntityHolder.empty,
         temporary = temporary,
         // Eager unpickling instead of Lazy - see optimus.platform.pickling.ReflectivePicklingImpl.unpickleCreate
         forcePickle = true
@@ -399,6 +409,7 @@ private[optimus] object ContainedEventSerializer extends BusinessEventSerializer
     val ser = serMsg.sbe
     val erefToContainedEntityMap = serMsg.entityMap
     val deser = ContainedEntityDeserializer(erefToContainedEntityMap)
+    // Note: we don't expect 2 entries with same eref - if we did have duplicates this would keep only one in the map
     val erefMap = deser.deserEnts.map { case (serializedWithEref, entity) => serializedWithEref.eref -> entity }
 
     val evtProps = ser.properties.aseq.map { case (k, v) => k -> replaceRefs(v, erefMap) }

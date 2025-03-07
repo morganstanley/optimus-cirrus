@@ -11,22 +11,24 @@
  */
 package optimus.platform.temporalSurface
 
-import java.io.ObjectStreamException
-import java.io.Serializable
-import java.{util => ju}
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.cache.LoadingCache
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.datatype.DatatypeUtil
 import optimus.graph.Settings
 import optimus.platform.entity
-import optimus.platform.metadatas.internal.{ClassMetaData, EntityBaseMetaData}
-import optimus.platform.node
-import optimus.platform.util.{ClientEntityHierarchy, EntityHierarchyManager}
-import optimus.platform.storable.Entity
-import optimus.platform.temporalSurface.operations._
-import optimus.platform._
 import optimus.platform.metadatas.internal.PIIDetails
+import optimus.platform.metadatas.internal.ClassMetaData
+import optimus.platform.metadatas.internal.EntityBaseMetaData
+import optimus.platform.storable.Entity
+import optimus.platform.temporalSurface.MatchTable.MatchTableSpec
+import optimus.platform.temporalSurface.operations._
+import optimus.platform.util.HierarchyManager.entityHierarchyManager
+import optimus.platform.util.EntityHierarchyManager
 
+import java.io.ObjectStreamException
+import java.io.Serializable
+import java.{util => ju}
 import scala.collection.mutable
 
 object SerializableMatchTable {
@@ -36,14 +38,14 @@ object SerializableMatchTable {
   private[optimus /*platform*/ ] def clearCache(): Unit = { matchTableCache.invalidateAll() }
 
   private val matchTableCache: LoadingCache[SerializableMatchTable, MatchTable] =
-    CacheBuilder
+    Caffeine
       .newBuilder()
       .weakValues()
-      .maximumSize(Settings.matchTableDeserializeCacheSize)
-      .build(CacheLoader.from((smt: SerializableMatchTable) => {
+      .maximumSize(Settings.matchTableCacheSize)
+      .build { (smt: SerializableMatchTable) =>
         if (missListener ne null) missListener(smt)
-        MatchTable.buildImpl(smt.namespaces, smt.classNames)
-      }))
+        MatchTable.buildImpl(MatchTableSpec(smt.namespaces, smt.classNames))
+      }
 }
 
 final case class SerializableMatchTable(classNames: Set[String], namespaces: Set[(String, Boolean)]) {
@@ -98,15 +100,12 @@ private[optimus] final class MatchTable private (
 
   @throws(classOf[ObjectStreamException])
   def writeReplace(): AnyRef = {
-    assert(
-      hierarchy eq MatchTable.defaultEntityHierachyManager,
-      "only default entity hierarchy manager can be serialized")
+    assert(hierarchy eq entityHierarchyManager, "only default entity hierarchy manager can be serialized")
     SerializableMatchTable(classNames, namespaces)
   }
 }
 
 @entity private[optimus] object MatchTable {
-
   private val entityClassMetaData = {
 
     val piiElementList: Seq[PIIDetails] = DatatypeUtil.extractPiiElementsList(classOf[Entity].getDeclaredFields)
@@ -125,7 +124,6 @@ private[optimus] final class MatchTable private (
     )
     ClassMetaData(entityBaseMetaData)
   }
-  val defaultEntityHierachyManager = ClientEntityHierarchy.hierarchy
 
   private def createMatchTable(
       namespaces: Set[(String, Boolean)],
@@ -145,25 +143,32 @@ private[optimus] final class MatchTable private (
     }
   }
 
-  @entersGraph private[optimus] def build(
+  private[temporalSurface] final case class MatchTableSpec(
       namespaces: Set[(String, Boolean)],
       classNames: Set[String],
-      hierarchy: EntityHierarchyManager = defaultEntityHierachyManager): MatchTable =
-    buildCached(namespaces, classNames, hierarchy)
+      hierarchy: EntityHierarchyManager = entityHierarchyManager)
 
-  @scenarioIndependent @node private def buildCached(
+  private val cache: LoadingCache[MatchTableSpec, MatchTable] =
+    Caffeine
+      .newBuilder()
+      .maximumSize(Settings.matchTableCacheSize)
+      .build { (k: MatchTableSpec) => buildImpl(k) }
+
+  private[optimus] def build(
       namespaces: Set[(String, Boolean)],
       classNames: Set[String],
-      hierarchy: EntityHierarchyManager): MatchTable = buildImpl(namespaces, classNames, hierarchy)
+      hierarchy: EntityHierarchyManager = entityHierarchyManager): MatchTable =
+    cache.get(MatchTableSpec(namespaces, classNames, hierarchy))
 
-  private[temporalSurface] def buildImpl(
-      namespaces: Set[(String, Boolean)],
-      classNames: Set[String],
-      hierarchy: EntityHierarchyManager = defaultEntityHierachyManager): MatchTable = {
-    val classNamesMetaData = classNames.flatMap(c => hierarchy.metaData.get(c))
-    val allClassesInPackage = hierarchy.metaData.values.filter(md => inOneNamespace(md, namespaces)).toSeq
+  private[temporalSurface] def buildImpl(key: MatchTableSpec): MatchTable = {
+    val classNamesMetaData = key.classNames.flatMap(c => key.hierarchy.metaData.get(c))
+    val allClassesInPackage = key.hierarchy.metaData.values.filter(md => inOneNamespace(md, key.namespaces)).toSeq
 
-    getMatchTableForClassMetas(namespaces, classNames, classNamesMetaData ++ allClassesInPackage, hierarchy = hierarchy)
+    getMatchTableForClassMetas(
+      key.namespaces,
+      key.classNames,
+      classNamesMetaData ++ allClassesInPackage,
+      hierarchy = key.hierarchy)
   }
 
   private[optimus] def union(tables: Seq[MatchTable]): MatchTable = {
@@ -171,7 +176,7 @@ private[optimus] final class MatchTable private (
     val namespaces = tables.flatMap(_.namespaces).toSet
     val hierarchies = tables.map(_.hierarchy).distinct
     assert(hierarchies.size <= 1, "cross-universe MatchTable union... this should never happen")
-    val hierarchy = hierarchies.headOption.getOrElse(defaultEntityHierachyManager)
+    val hierarchy = hierarchies.headOption.getOrElse(entityHierarchyManager)
     build(namespaces, classes, hierarchy)
   }
 
@@ -207,7 +212,7 @@ private[optimus] final class MatchTable private (
       classNames: Set[String],
       classes: Set[ClassMetaData],
       includesSelf: Boolean = true,
-      hierarchy: EntityHierarchyManager = defaultEntityHierachyManager): MatchTable = {
+      hierarchy: EntityHierarchyManager = entityHierarchyManager): MatchTable = {
     val parentToChild = new mutable.HashMap[ClassMetaData, mutable.HashSet[ClassMetaData]]
     val alwaysMatch = new mutable.HashSet[ClassMetaData]
     val cantTell = new mutable.HashSet[ClassMetaData]

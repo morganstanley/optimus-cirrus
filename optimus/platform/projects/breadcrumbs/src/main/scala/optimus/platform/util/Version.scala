@@ -72,6 +72,7 @@ object Version extends Log {
       Properties.user -> LoggingInfo.getUser ::
       Properties.pid -> LoggingInfo.pid ::
       kv(Properties.idKvm, "ID_KVM", "ID_EXEC") ::
+      Properties.osName -> LoggingInfo.os ::
       Elems.Nil
   }
 

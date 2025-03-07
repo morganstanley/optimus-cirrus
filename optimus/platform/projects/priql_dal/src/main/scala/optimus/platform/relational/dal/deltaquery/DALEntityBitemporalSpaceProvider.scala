@@ -138,7 +138,7 @@ class DALEntityBitemporalSpaceProvider(
       .groupBy(_.eref)
       .iterator
       .flatMap { case (eref, rects) =>
-        val (from, to) = rects match {
+        val (from, to) = rects.toList match {
           case a :: Nil =>
             if (a.containsPoint(range.vtRange.from, range.ttRange.from)) {
               (Some(a), None)
@@ -198,7 +198,7 @@ class DALEntityBitemporalSpaceProvider(
     // after groupBy, we have to call '.toVector' to turn the collection type from Map[_,_] to Vector[_]
     // otherwise if multiple 'from's are None, we will get wrong results.
     entity.groupBy(_.serialized.entityRef).toVector.apar map { case (eref, ent) =>
-      val (from, to) = ent match {
+      val (from, to) = ent.toList match {
         case a :: Nil =>
           if (a.vtInterval.contains(range.vtRange.from) && a.txInterval.contains(range.ttRange.from)) {
             (Some(a), None)

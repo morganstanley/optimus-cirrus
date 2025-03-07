@@ -663,6 +663,7 @@ public class OGTraceStore {
         pnti.evicted,
         pnti.invalidated,
         pnti.reuseCycle,
+        pnti.reuseStats,
         pnti.selfTime,
         pnti.ancAndSelfTime,
         pnti.postCompleteAndSuspendTime,

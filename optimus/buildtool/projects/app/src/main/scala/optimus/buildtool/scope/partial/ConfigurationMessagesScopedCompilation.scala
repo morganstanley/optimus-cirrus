@@ -25,7 +25,7 @@ import optimus.buildtool.trace.ConfigurationValidation
 import optimus.platform._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity
 class ConfigurationMessagesScopedCompilation(
@@ -36,11 +36,11 @@ class ConfigurationMessagesScopedCompilation(
     extends PartialScopedCompilation {
 
   @node private def scopeId = scope.id
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Nil
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = Vector()
   @node override protected def containsRelevantSources: Boolean = forbiddenDependencies.nonEmpty
 
   @node
-  def messages: Seq[Artifact] =
+  def messages: IndexedSeq[Artifact] =
     compile(ArtifactType.ValidationMessages, None) {
       val artifactId = InternalArtifactId(scope.id, ArtifactType.ValidationMessages, None)
       val jsonFile = scope.pathBuilder

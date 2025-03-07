@@ -27,6 +27,7 @@ import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
 import org.apache.http.message.BasicHeader
 import org.apache.http.protocol.HttpContext
 import org.apache.http.HttpHeaders
+import org.apache.http.config.ConnectionConfig
 
 import java.util.UUID
 
@@ -55,6 +56,7 @@ object HttpClientOIDC {
 
     val httpClientBuilder =
       HttpClients.custom
+        .setDefaultConnectionConfig(ConnectionConfig.custom().setBufferSize(10 * 1000 * 1000).build())
         .setDefaultRequestConfig(requestConfig)
         .addInterceptorFirst(httpRequestInterceptor)
         .setDefaultCredentialsProvider(credentialsProvider)

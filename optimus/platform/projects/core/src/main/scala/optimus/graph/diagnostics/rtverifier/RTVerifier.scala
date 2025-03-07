@@ -16,6 +16,7 @@ import optimus.core.MonitoringBreadcrumbs
 import optimus.debug.InstrumentedModuleCtor
 import optimus.debug.InstrumentedNotRTFunction
 import optimus.debug.RTVerifierCategory
+import optimus.graph.OGTrace.CachedSuffix
 import optimus.graph.OGSchedulerContext
 import optimus.graph.PropertyNodeSync
 import optimus.graph.loom.AsNode
@@ -170,7 +171,7 @@ object RTVerifier {
   private val ctorMethods = List("<init>", "<clinit>")
   private def isFrameOfInterest(frame: StackFrame): String = {
     val clsName = frame.getDeclaringClass.getSimpleName
-    val isModule = clsName.endsWith("$")
+    val isModule = clsName.endsWith(CachedSuffix)
     val method = frame.getMethodName
 
     if (isModule && ctorMethods.contains(method)) // It's a module constructor

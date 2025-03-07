@@ -47,6 +47,7 @@ object RegisteredFieldType {
   @embeddable case object MsUnique extends RegisteredFieldType
   @embeddable final case class JavaEnum(className: String) extends RegisteredFieldType
   @embeddable final case class ScalaEnum(className: String) extends RegisteredFieldType
+  @embeddable final case class PIIElement(className: String) extends RegisteredFieldType
 
   // Tuples
   @embeddable final case class Product(className: String) extends RegisteredFieldType
@@ -128,7 +129,6 @@ object RegisteredFieldType {
   @embeddable case object LocalTime extends RegisteredFieldType
   @embeddable case object OffsetTime extends RegisteredFieldType
   @embeddable case object ZoneId extends RegisteredFieldType
-  @embeddable final case object FullName extends RegisteredFieldType
 
   // Collection types
   @embeddable final case class OrderedCollection(elemType: RegisteredFieldType, collectionType: String)
@@ -187,7 +187,6 @@ object RegisteredFieldType {
     case RegisteredFieldType.ZonedDateTime => FieldType.ZonedDateTime
     case RegisteredFieldType.LocalTime     => FieldType.LocalTime
     case RegisteredFieldType.LocalDate     => FieldType.LocalDate
-    case RegisteredFieldType.FullName      => FieldType.IterableOrString
     case RegisteredFieldType.String | _: RegisteredFieldType.Embeddable | RegisteredFieldType.Unit |
         RegisteredFieldType.BigDecimal | RegisteredFieldType.MsUuid | RegisteredFieldType.MsUnique |
         _: RegisteredFieldType.JavaEnum | _: RegisteredFieldType.ScalaEnum | _: RegisteredFieldType.Product |
@@ -200,7 +199,7 @@ object RegisteredFieldType {
         _: RegisteredFieldType.Array | _: RegisteredFieldType.ImmutableArray | _: RegisteredFieldType.Seq |
         _: RegisteredFieldType.Set | _: RegisteredFieldType.CovariantSet | _: RegisteredFieldType.SortedSet |
         _: RegisteredFieldType.TreeMap | _: RegisteredFieldType.ListMap | _: RegisteredFieldType.Map |
-        _: RegisteredFieldType.Knowable | RegisteredFieldType.ChainedID =>
+        _: RegisteredFieldType.Knowable | RegisteredFieldType.ChainedID | _: RegisteredFieldType.PIIElement =>
       FieldType.IterableOrString
     case RegisteredFieldType.Unknown(additionalInfo) =>
       try {

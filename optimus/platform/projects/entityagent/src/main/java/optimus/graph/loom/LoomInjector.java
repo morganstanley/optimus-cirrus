@@ -18,7 +18,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.security.ProtectionDomain;
 import optimus.BiopsyLab;
-import optimus.graph.loom.compiler.LError;
+import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassReaderEx;
 import org.objectweb.asm.ClassVisitor;
@@ -52,17 +52,19 @@ public class LoomInjector implements ClassFileTransformer {
     try {
       cls.accept(cw);
     } catch (Exception e) {
-      LError.fatal(e.getMessage());
+      LMessage.fatal(e.getMessage());
       throw e;
     }
 
     // used for testing purposes only!
     if (classNodeReporter != null) classNodeReporter.report(cls);
 
-    if (className.endsWith("ConcurrencyTestWIP$")) {
-      System.err.println("Writing out: " + className);
-      BiopsyLab.dumpClass(".", className, /*bytes*/ cwe.toByteArray());
-    }
+    // [SEE_LOOM_CM_PLAYGROUND]
+    // consider uncommenting these lines for easier debugging
+    //    if (className.endsWith("ConcurrencyTestWIP$")) {
+    //      System.err.println("Writing out: " + className);
+    //      BiopsyLab.dumpClass(".", className, /*bytes*/ cwe.toByteArray());
+    //    }
 
     return cwe.toByteArray();
   }

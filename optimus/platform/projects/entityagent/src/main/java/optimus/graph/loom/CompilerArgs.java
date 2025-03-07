@@ -11,11 +11,11 @@
  */
 package optimus.graph.loom;
 
-import static optimus.graph.DiagnosticSettings.loomCompilerAssumeGlobalMutation;
-import static optimus.graph.DiagnosticSettings.loomCompilerDebug;
-import static optimus.graph.DiagnosticSettings.loomCompilerLevel;
-import static optimus.graph.DiagnosticSettings.loomCompilerEnqueueEarlier;
-import static optimus.graph.DiagnosticSettings.loomCompilerQueueSizeSensitive;
+import static optimus.graph.DiagnosticSettings.lCompilerAssumeGlobalMutation;
+import static optimus.graph.DiagnosticSettings.lCompilerDebug;
+import static optimus.graph.DiagnosticSettings.lCompilerLevel;
+import static optimus.graph.DiagnosticSettings.lCompilerEnqueueEarlier;
+import static optimus.graph.DiagnosticSettings.lCompilerQueueSizeSensitive;
 import static optimus.graph.loom.LoomConfig.CompilerAssumeGlobalMutationParam;
 import static optimus.graph.loom.LoomConfig.CompilerDebugParam;
 import static optimus.graph.loom.LoomConfig.CompilerLevelParam;
@@ -60,11 +60,11 @@ public class CompilerArgs {
 
   public static final CompilerArgs Default =
       new CompilerArgs(
-          loomCompilerLevel,
-          loomCompilerDebug,
-          loomCompilerEnqueueEarlier,
-          loomCompilerQueueSizeSensitive,
-          loomCompilerAssumeGlobalMutation);
+          lCompilerLevel,
+          lCompilerDebug,
+          lCompilerEnqueueEarlier,
+          lCompilerQueueSizeSensitive,
+          lCompilerAssumeGlobalMutation);
 
   public static CompilerArgs parse(AnnotationNode ann, CompilerArgs defaultCArgs) {
     var values = ann.values;

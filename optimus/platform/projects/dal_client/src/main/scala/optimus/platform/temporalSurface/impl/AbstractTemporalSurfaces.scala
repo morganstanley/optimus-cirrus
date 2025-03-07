@@ -420,11 +420,6 @@ trait LeafTemporalSurfaceImpl extends LeafTemporalSurface with TemporalSurfaceIm
           currentTemporality == lts.currentTemporality
         case _ => false
       }
-
-  private[optimus] def getCachedPersistentEntity(
-      eRef: EntityReference,
-      temporality: QueryTemporality.At): Option[PersistentEntity]
-
 }
 
 @entity private[temporalSurface] object FixedTemporalContextCache {
@@ -448,10 +443,6 @@ trait FixedTemporalContextImpl extends TemporalContextImpl with FixedTemporalSur
   @scenarioIndependent @node private[temporalSurface] final def doLoad(
       pe: PersistentEntity,
       storageInfo: StorageInfo): Entity = load(pe, storageInfo)
-  private[optimus] final override def witnessVersion(e: Entity): Unit = {
-    e.optimus$requireConstructorComplete()
-  }
-
 }
 trait FixedLeafTemporalSurfaceImpl extends FixedTemporalSurface with LeafTemporalSurfaceImpl {
 
@@ -464,12 +455,6 @@ trait FixedLeafTemporalSurfaceImpl extends FixedTemporalSurface with LeafTempora
 
   // transient lazy vals as there are not required for all use cases, but may are still good to cache when generated
   @transient final protected[optimus] lazy val currentTemporality = QueryTemporality.At(vt, tt)
-
-  // for the moment there are no associated caches
-  // we should consider if there should be. The node cache TemporalSurfaceCacheManager have other caches though
-  override def getCachedPersistentEntity(
-      eRef: EntityReference,
-      temporality: QueryTemporality.At): Option[PersistentEntity] = None
 }
 
 /**

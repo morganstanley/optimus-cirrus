@@ -24,7 +24,7 @@ import optimus.buildtool.trace.WarSources
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 import scala.collection.immutable.SortedMap
 
 final case class HashedResources(
@@ -42,15 +42,15 @@ final case class HashedResources(
 
   @node override protected def containsRelevantSources: Boolean = !sources.isEmpty
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Seq()
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = Vector()
 
-  @node def resources: Seq[Artifact] =
+  @node def resources: IndexedSeq[Artifact] =
     compile(ArtifactType.Resources, None)(resourcePackager.artifact(id, resourcePackagerInputsN))
 
-  @node private[scope] def relevantResourcesForDownstreams: Seq[Artifact] = {
+  @node private[scope] def relevantResourcesForDownstreams: IndexedSeq[Artifact] = {
     val downstreamsNeedResources =
       config.containsMacros || config.containsPlugin || sources.containsFile(AnnotationProcessorSvcFile)
-    if (downstreamsNeedResources) resources else Nil
+    if (downstreamsNeedResources) resources else Vector()
   }
 
   private val resourcePackagerInputsN = asNode(() => resourcePackagerInputs)
@@ -82,9 +82,9 @@ private[scope] object ResourcePackaging {
 
   @node override protected def containsRelevantSources: Boolean = !sources.isEmpty
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Seq()
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
 
-  @node def archiveContents: Seq[Artifact] =
+  @node def archiveContents: IndexedSeq[Artifact] =
     compile(ArtifactType.ArchiveContent, None)(packager.artifact(id, packagerInputsN))
 
   private val packagerInputsN = asNode(() => packagerInputs)

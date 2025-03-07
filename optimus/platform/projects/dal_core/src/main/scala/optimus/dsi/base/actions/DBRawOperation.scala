@@ -12,7 +12,6 @@
 package optimus.dsi.base.actions
 
 import java.util.Arrays
-
 import net.iharder.base64.Base64
 import optimus.platform.dsi.bitemporal._
 import optimus.platform.storable.{EntityTimeSliceReference, SerializedAppEvent, SerializedKey, StorableReference}
@@ -23,6 +22,7 @@ import optimus.dsi.base.UnknownContainerName
 import optimus.dsi.shard.DefaultShardKey
 import optimus.dsi.shard.ShardKey
 import optimus.dsi.shard.ShardKeySupportedByAdminScript
+import optimus.platform.storable.SerializedEntity
 
 final case class ShardKeyAndValue[T](key: ShardKey[T] with ShardKeySupportedByAdminScript, value: T)
     extends Serializable
@@ -131,6 +131,9 @@ final case class DBRawReference(r: StorableReference) extends DBRawValue
 final case class DBRawSerializedKey(sk: SerializedKey) extends DBRawValue
 final case class DBRawLinkedTypes(lt: LinkedTypes) extends DBRawValue
 final case class DBRawSequence(seq: Seq[DBRawValue]) extends DBRawValue
+// to use as values for  keys "rawd" and "idxd" field for RegisteredIndexEntry
+final case class DBRawIdxSeq(idxFields: Seq[(String, Any)], dataTypeLabel: String, typeName: SerializedEntity.TypeRef)
+    extends DBRawValue
 
 sealed trait DBRawUpdateOps
 case object ClearField extends DBRawUpdateOps
@@ -153,6 +156,7 @@ object DBRawObjectTypename {
   val DBRawKeyGroupingT = 10
   val DBRawReferenceHolderT = 11
   val DBRawBackfilledTombstoneT = 12
+  val DBRawRegisteredIndexEntryT = 13
 }
 final case class DBRawUniqueIndexGrouping(g: UniqueIndexGrouping) extends DBRawObject {
   def typename = DBRawUniqueIndexGroupingT
@@ -163,7 +167,9 @@ final case class DBRawUniqueIndexTimeSlice(ts: UniqueIndexTimeSlice, classNameOp
 final case class DBRawIndexEntry(ie: IndexEntry) extends DBRawObject {
   def typename = DBRawIndexEntryT
 }
-// TODO (OPTIMUS-65890): Added DBRawRegisteredIndexEntry and related functionality similar to DBRawIndexEntry
+final case class DBRawRegisteredIndexEntry(rie: RegisteredIndexEntry) extends DBRawObject {
+  def typename = DBRawRegisteredIndexEntryT
+}
 final case class DBRawBusinessEventGrouping(g: BusinessEventGrouping) extends DBRawObject {
   def typename = DBRawBusinessEventGroupingT
 }

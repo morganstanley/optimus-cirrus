@@ -24,7 +24,8 @@ object Aggregation extends LegacyOptimusApp {
         val numPositions = posGrp.count
       }
 
-  val res = Query.execute(byPositions)
+  val res: Iterable[{ val portfolio: String; val maxQuantity: Int; val numPositions: Long }] =
+    Query.execute(byPositions)
   res.foreach(o =>
     println(
       " portfolio=" + o.portfolio

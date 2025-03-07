@@ -11,14 +11,10 @@
  */
 package optimus.platform.relational.reactive
 
-import optimus.entity.EntityInfoRegistry
 import optimus.platform.annotations.internal.EmbeddableMetaDataAnnotation
 import optimus.platform.pickling._
-import optimus.platform.storable.{EntityImpl, EntityReference}
-import optimus.platform.dsi.bitemporal._
-import optimus.platform.dsi.bitemporal.proto.Dsi.NotificationMessageProto.Type._
+import optimus.platform.storable.EntityImpl
 import optimus.platform.relational.reactive.filter.Binary
-import optimus.platform.relational.reactive.{defaultFilterClassOption => _}
 import optimus.platform.relational.tree._
 
 import scala.collection.mutable.ArrayBuffer
@@ -124,18 +120,3 @@ final case class MemberProperty(element: MemberElement) extends FilterElement {
   final lazy val names: Seq[String] = namesImpl.toList
 }
 final case class ValueProperty(value: Any) extends FilterElement
-
-object TemporalSurfaceRelationHelper {
-  def getPropertyInfo(e: MemberElement) = {
-    val name = e.memberName
-    val clazz = e.instanceProvider match {
-      case m: MemberElement =>
-        throw new UnsupportedOperation(s"Indirect property access: ${m.memberName}.$name")
-      case provider: ProviderRelation =>
-        provider.rowTypeInfo.runtimeClass
-      case t =>
-        throw new IllegalArgumentException("Unknow type " + t)
-    }
-    EntityInfoRegistry.getClassInfo(clazz).propertyMetadata(name)
-  }
-}

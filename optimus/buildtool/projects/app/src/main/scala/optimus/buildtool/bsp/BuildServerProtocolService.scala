@@ -26,6 +26,7 @@ import optimus.buildtool.builders.BuildResult
 import optimus.buildtool.builders.StandardBuilder
 import optimus.buildtool.builders.TrackedWorkspace
 import optimus.buildtool.builders.postbuilders.PostBuilder
+import optimus.buildtool.compilers.venv.PythonEnvironment
 import optimus.buildtool.config.HasScopeId
 import optimus.buildtool.config.ScopeId.RootScopeId
 import optimus.buildtool.config.ScalaVersionConfig
@@ -123,10 +124,7 @@ object BuildServerProtocolService {
   final case class PythonBspConfig(
       pythonEnabled: NodeFunction0[Boolean],
       extractVenvs: NodeFunction0[Boolean],
-      uvCache: Directory,
-      venvCache: Directory,
-      pipCredentialFile: String,
-      uvCredentialFile: String)
+      pythonEnvironment: PythonEnvironment)
 }
 
 private[bsp] trait BSPServiceTrait extends BuildServer with ScalaBuildServer with PythonBuildServer
@@ -535,7 +533,7 @@ class BuildServerProtocolService(
     case Some(gl) if gitAwareMessages =>
       workspace.run(cancellationScope, listener) {
         ObtTrace.traceTask(RootScopeId, GitDiff) {
-          gl.modifiedFiles()
+          gl.fileDiff()
         }
       }
     case _ => TrackedWorkspace.completed(None)

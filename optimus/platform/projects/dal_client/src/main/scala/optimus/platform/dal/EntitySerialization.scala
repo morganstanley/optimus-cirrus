@@ -245,7 +245,7 @@ trait EntitySerialization extends StorableSerializer {
       data: SerializedEntity,
       loadContext: TemporalContext,
       storageInfo: StorageInfo,
-      instanceMap: collection.Map[EntityReference, Entity],
+      instanceMap: InlineEntityHolder,
       temporary: Boolean = false,
       forcePickle: Boolean = false
   ): Entity = {
@@ -338,7 +338,7 @@ object EntitySerializer extends EntitySerialization {
   private[optimus] def deserializeTemporary(
       data: SerializedEntity,
       loadContext: TemporalContext,
-      instanceMap: collection.Map[EntityReference, Entity],
+      instanceMap: InlineEntityHolder,
       storageInfo: StorageInfo,
       entityRef: EntityReference
   ): Entity = {
@@ -350,7 +350,7 @@ object EntitySerializer extends EntitySerialization {
   private[optimus] final def deserializeTemporary(
       data: SerializedEntity,
       loadContext: TemporalContext,
-      instanceMap: collection.Map[EntityReference, Entity]
+      instanceMap: InlineEntityHolder
   ): Entity = deserializeTemporary(data, loadContext, instanceMap, AppliedStorageInfo, data.entityRef)
 
   @async
@@ -363,22 +363,26 @@ object EntitySerializer extends EntitySerialization {
     // the inline entities may refer to each other so they all need a copy of the full map - to resolve the chicken and
     // egg problem we use a mutable map. Note that they don't actually retrieve anything from the map until LPRs are
     // resolved (later on), so we can defer adding anything to that map until they are all deserialized
-    val inlineMap = if (data.inlinedEntities.nonEmpty) {
+    val inlineHolder = if (data.inlinedEntities.nonEmpty) {
       val inlineMap = new mutable.HashMap[EntityReference, Entity]()
+      // important to always use the same holder instance in all of the inlined entities - that is what works around the
+      // deserialization bug (see InlineEntityHolder class comment)
+      val inlineHolder = InlineEntityHolder(inlineMap)
       inlineMap ++= {
         data.inlinedEntities.map { ser =>
           // TODO (OPTIMUS-10933): We need to eliminate the assignment of dal$XXXX here, however, we're going to decommission inline entity soon
-          val d = deserializeTemporary(ser, loadContext, inlineMap, AppliedStorageInfo, ser.entityRef)
+          val d = deserializeTemporary(ser, loadContext, inlineHolder, AppliedStorageInfo, ser.entityRef)
           (ser.entityRef, d)
         }
       }
+      inlineHolder
     } else {
       // Lots of entities don't have inlined entities and having a singleton saves tones of memory
       // compared to a new mutable.HashMap even when empty
-      immutable.Map.empty[EntityReference, Entity]
+      InlineEntityHolder.empty
     }
 
-    deserializeTemporary(data, loadContext, inlineMap, storageInfo, data.entityRef)
+    deserializeTemporary(data, loadContext, inlineHolder, storageInfo, data.entityRef)
   }
 
   @async

@@ -17,7 +17,7 @@ import optimus.platform.dal.config.DalLocation
 import optimus.platform._
 
 object SimpleGraph extends OptimusApp {
-  override def dalLocation: DalLocation = DalEnv("none")
+  override def dalLocation: DalLocation = DalEnv.none
 
   @entersGraph override def run(): Unit = {
     val s = SimpleCalcs("id", 3, 4)

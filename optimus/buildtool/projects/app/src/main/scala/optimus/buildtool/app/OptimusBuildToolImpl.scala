@@ -22,6 +22,9 @@ import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postbuilders.codereview.CodeReviewSettings
 import optimus.buildtool.builders.postbuilders.installer.BundleFingerprintsCache
 import optimus.buildtool.builders.postbuilders.installer.Installer
+import optimus.buildtool.builders.postbuilders.installer.component.DockerGenericRunnerGenerator
+import optimus.buildtool.builders.postbuilders.installer.component.InstallTpa
+import optimus.buildtool.builders.postbuilders.installer.component.InstallTpaWithWheels
 import optimus.buildtool.builders.postbuilders.metadata.MetadataSettings
 import optimus.buildtool.builders.postbuilders.sourcesync.CppSourceSync
 import optimus.buildtool.builders.postbuilders.sourcesync.GeneratedScalaSourceSync
@@ -53,18 +56,16 @@ import optimus.buildtool.compilers.AsyncWebCompilerImpl
 import optimus.buildtool.compilers.GenericFilesPackager
 import optimus.buildtool.compilers.JarPackager
 import optimus.buildtool.compilers.ManifestGenerator
-import optimus.buildtool.compilers.RegexScanner
 import optimus.buildtool.compilers.cpp.CppCompilerFactory
 import optimus.buildtool.compilers.cpp.CppCompilerFactoryImpl
 import optimus.buildtool.compilers.runconfc.Templates
+import optimus.buildtool.compilers.venv.PythonEnvironment
 import optimus.buildtool.compilers.zinc.AnalysisLocatorImpl
 import optimus.buildtool.compilers.zinc.CompilerThrottle
-import optimus.buildtool.compilers.zinc.RootLocatorWriter
 import optimus.buildtool.compilers.zinc.ZincAnalysisCache
 import optimus.buildtool.compilers.zinc.ZincClassLoaderCaches
 import optimus.buildtool.compilers.zinc.ZincClasspathResolver
 import optimus.buildtool.compilers.zinc.ZincCompilerFactory
-import optimus.buildtool.config.DockerImage
 import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.MetaBundle
@@ -239,6 +240,9 @@ object OptimusBuildToolImpl {
   val venvCacheDir: Directory = depCopyRoot.resolveDir("venv-cache")
   val uvCacheDir: Directory = depCopyRoot.resolveDir("uv-cache")
 
+  val pythonEnvironment: PythonEnvironment =
+    PythonEnvironment(venvCacheDir, uvCacheDir, cmdLine.pypiCredentialsFile, cmdLine.pypiUvCredentialsFile)
+
   private val depCopyFileSystemAsset = Utils.isWindows && cmdLine.depCopyDir != NoneArg
 
   // scopes => build "scopes"; Set.empty => build previous scopes; Set("q") => quit
@@ -287,7 +291,7 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def combined(
       caches: Seq[ArtifactCache with HasArtifactStore]
   ): Option[ArtifactCache with HasArtifactStore] = {
-    if (caches.size > 1) Some(MultiLevelCache(caches.toSeq: _*))
+    if (caches.size > 1) Some(MultiLevelCache(caches: _*))
     else caches.headOption
   }
 
@@ -394,7 +398,6 @@ object OptimusBuildToolImpl {
       workspaceName,
       directoryFactory,
       git,
-      regexScanner,
       workspaceSourceRoot,
       configParams,
       cppOsVersions,
@@ -482,7 +485,7 @@ object OptimusBuildToolImpl {
 
   @node private def sourceGenerators =
     Seq(
-      CppBridgeGenerator(scalaCompiler),
+      CppBridgeGenerator(scalaCompiler, pathBuilder),
       FlatbufferGenerator(workspaceSourceRoot),
       JaxbGenerator(directoryFactory, workspaceSourceRoot),
       JxbGenerator(workspaceSourceRoot),
@@ -509,23 +512,15 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def cppCompiler =
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
-    AsyncPythonCompilerImpl(
-      venvCacheDir,
-      uvCacheDir,
-      sandboxFactory,
-      logDir,
-      cmdLine.pypiCredentials,
-      cmdLine.pypiUvCredentials,
-      asNode(() => globalConfig.pythonEnabled))
+    AsyncPythonCompilerImpl(sandboxFactory, logDir, pythonEnvironment, asNode(() => globalConfig.pythonEnabled))
   @node @scenarioIndependent private def webCompiler =
     AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node @scenarioIndependent private def electronCompiler =
     AsyncElectronCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node private def stratoConfig = StratoConfig.load(directoryFactory, workspaceSourceRoot)
   @node private def runconfCompiler =
-    AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig, buildDir)
+    AsyncRunConfCompilerImpl.load(obtConfig, scalaPath, stratoConfig, buildDir, dependencyCopier)
   @node @scenarioIndependent private def resourcePackager = JarPackager()
-  @node @scenarioIndependent private def regexScanner = RegexScanner()
   @node @scenarioIndependent private def genericFilesPackager = GenericFilesPackager(cmdLine.installVersion)
   @node @scenarioIndependent private def manifestGenerator = ManifestGenerator(dependencyCopier, cmdLine.cppFallback)
 
@@ -552,43 +547,8 @@ object OptimusBuildToolImpl {
     combined(freezerCache +: caches).get
   }
 
-  @node @scenarioIndependent private def rootLocatorWriter(
-      git: GitLog,
-      writerCache: HasArtifactStore): RootLocatorWriter =
-    new RootLocatorWriter(git, pathBuilder, writerCache.store)
-
-  @node private[buildtool] def scopesToInclude = {
-    if (cmdLine.scopesToBuild == Set(NoneArg))
-      Set.empty[ScopeId]
-    else if (cmdLine.scopesToBuild == Set(AllArg))
-      obtConfig.compilationScopeIds
-    else if (cmdLine.scopesToBuild.isEmpty && cmdLine.imagesToBuild.isEmpty && cmdLine.warScopes.isEmpty)
-      obtConfig.compilationScopeIds.apar.filter(obtConfig.local(_))
-    else
-      cmdLine.scopesToBuild.apar.flatMap(obtConfig.resolveScopes(_)) ++ scopesFromImages ++ warScopes
-  }
-
-  @node private[buildtool] def minimalInstallScopes: Option[Set[ScopeId]] =
-    if (cmdLine.minimalInstall)
-      Some(scopesToInclude -- scopesFromImages ++ predefinedDockerImages.flatten(_.directScopeIds))
-    else None
-
-  @node private[buildtool] def scopes: Set[ScopeId] = {
-    val scopesToExclude = cmdLine.scopesToExclude.apar.flatMap(obtConfig.resolveScopes(_))
-    scopesToInclude -- scopesToExclude
-  }
-
-  @node private def scopesFromImages: Set[ScopeId] = predefinedDockerImages.flatten(_.relevantScopeIds)
-
-  @node private def predefinedDockerImages: Set[DockerImage] =
-    if (cmdLine.imagesToBuild.nonEmpty) {
-      if (OsUtils.isWindows) {
-        throw new IllegalStateException("Building a docker image from Windows not supported. Please use a unix machine")
-      }
-      obtConfig.parseImages(dockerDir, cmdLine.imagesToBuild, cmdLine.imageTag)
-    } else Set.empty
-
-  @node private def warScopes = cmdLine.warScopes.apar.flatMap(obtConfig.resolveScopes(_))
+  @node private[buildtool] def scopeSelector =
+    ScopeSelector(ScopeArgs(cmdLine), obtConfig, workspaceSourceRoot, dockerDir)
 
   @node @scenarioIndependent private def scalacProfileDir: Option[Directory] =
     if (cmdLine.profileScalac) {
@@ -679,7 +639,6 @@ object OptimusBuildToolImpl {
             manifestGenerator = manifestGenerator,
             runconfc = runconfCompiler,
             jarPackager = resourcePackager,
-            regexScanner = regexScanner,
             genericFilesPackager = genericFilesPackager,
             analysisLocator = Some(
               new AnalysisLocatorImpl(
@@ -751,9 +710,12 @@ object OptimusBuildToolImpl {
       installTestplans = false,
       directoryFactory = directoryFactory,
       sparseOnly = sparseOnly,
-      warScopes = warScopes,
+      warScopes = scopeSelector.warScopes,
       bundleFingerprintsCache = bundleFingerprintsCache,
-      generatePoms = generatePoms
+      generatePoms = generatePoms,
+      useMavenLibs = useMavenLibs,
+      pythonConfiguration = InstallTpa,
+      externalDependencies = obtConfig.externalDependencies
     )
   }
 
@@ -763,7 +725,7 @@ object OptimusBuildToolImpl {
         log.info(s"Cleaning $buildDir...")
         AssetUtils.recursivelyDelete(buildDir)
       } else {
-        val snippets: Set[String] = scopes.map(_.properPath)
+        val snippets: Set[String] = scopeSelector.scopes().map(_.properPath)
         if (snippets.nonEmpty) {
           log.info(s"Cleaning $buildDir contents matching ${snippets.mkString("|")}")
           AssetUtils.recursivelyDelete(buildDir, d => snippets.exists(d.getFileName.toString.contains))
@@ -801,8 +763,8 @@ object OptimusBuildToolImpl {
     val buildCount = new AtomicInteger(0)
     val builder = trackingBuilder
 
-    @entersGraph @tailrec def buildLoop(scopesToBuild: Set[ScopeId]): Boolean = {
-      val buildResult = asyncResult(build(builder, buildCount.incrementAndGet(), scopesToBuild)._1) valueOrElse {
+    @entersGraph @tailrec def buildLoop(scopeSelector: ScopeSelector): Boolean = {
+      val buildResult = asyncResult(build(builder, buildCount.incrementAndGet(), scopeSelector)._1) valueOrElse {
         case NonFatal(ex) => // just say the build failed and let the user try again
           log.error("An exception occurred during the build", ex)
           false
@@ -819,33 +781,23 @@ object OptimusBuildToolImpl {
 
       if (requestedScopes contains "q") { // quit requested
         buildResult // stop looping and return
-      } else
-        buildLoop {
-          if (requestedScopes.nonEmpty) { // update scopes
-            // run in tracker to pick up potentially-changed obt files
-            dependencyTracker.executeEvaluate { () =>
-              NodeTry {
-                requestedScopes.apar.flatMap(obtConfig.resolveScopes(_))
-              }.getOrRecover { case e: IllegalArgumentException =>
-                log.error(e.getMessage)
-                Set.empty
-              }
-            }
-          } else scopesToBuild
-        }
+      } else {
+        val ss = if (requestedScopes.nonEmpty) scopeSelector.withIncludedScopes(requestedScopes) else scopeSelector
+        buildLoop(ss)
+      }
     }
 
-    buildLoop(scopes)
+    buildLoop(scopeSelector)
   }
   @entersGraph def build(): (Boolean, Option[BuildStatistics]) = {
-    val scopesToBuild = ObtTrace.withListeners(baseListeners) { scopes }
-    build(standardBuilder(), 0, scopesToBuild)
+    val ss = ObtTrace.withListeners(baseListeners) { scopeSelector }
+    build(standardBuilder(), 0, ss)
   }
 
   @async private def build(
       builder: Builder,
       buildCount: Int,
-      scopes: Set[ScopeId]
+      scopeSelector: ScopeSelector
   ): (Boolean, Option[BuildStatistics]) = {
     val buildId = s"$implId-$buildCount"
     val crumbListener = BreadcrumbTraceListener(
@@ -861,26 +813,14 @@ object OptimusBuildToolImpl {
       asyncTry {
         ObtTrace.startBuild()
         track {
-          val modifiedFiles = if (cmdLine.gitAwareMessages) gitLog.flatMap(_.modifiedFiles()) else None
-          val result = builder.build(scopes, modifiedFiles = modifiedFiles)
+          val modifiedFiles = if (cmdLine.gitAwareMessages) gitLog.flatMap(_.fileDiff()) else None
+          val scopesToBuild = scopeSelector.scopes(modifiedFiles)
+          val result = builder.build(scopesToBuild, modifiedFiles = modifiedFiles)
           success = result.successful
-          if (success && cmdLine.writeRootLocator) {
-            require(cmdLine.remoteCacheWritable, "You must use --remoteCacheWritable")
-            writeRootLocator(
-              remoteCaches.remoteBuildCache,
-              remoteCaches.remoteRootLocatorCache,
-              "write",
-              cmdLine.gitTag)
-
-          }
+          if (success) writeTagFile(remoteCaches.remoteBuildCache, cmdLine.gitTag)
         }
       } thenFinally {
         localStore.flush(cacheFlushTimeout)
-      } thenFinally {
-        if (success && cmdLine.writeRootLocator)
-          (remoteCaches.remoteRootLocatorCache).foreach(
-            _.store.flush(cacheFlushTimeout)
-          )
       } asyncFinally {
         // note that endBuild may have side effects so we always call it
         traceOk = ObtTrace.endBuild(success) || !cmdLine.failOnAnomalousTrace
@@ -891,27 +831,27 @@ object OptimusBuildToolImpl {
     (success && traceOk, crumbListener.map(_.buildStatistics))
   }
 
-  @async private def writeRootLocator(
+  @async private def writeTagFile(
       buildCache: Option[RemoteCacheProvider.RemoteArtifactCache],
-      rootLocatorCache: Option[HasArtifactStore],
-      writeType: String,
-      tagName: Option[String] = None
-  ): Unit =
+      tagName: Option[String] = None): Unit = {
     for {
-      bc <- buildCache
-      rlc <- rootLocatorCache
       git <- gitLog
+      tag <- tagName
+      currentHead <- git.updatedTagCommit(tag)
+      bc <- buildCache
     } {
       if (bc.store.incompleteWrites == 0) {
-        rootLocatorWriter(git, rlc).writeRootLocator(version)
-        tagName.foreach(tag => git.reportTagMovingForward(tag, installDir))
+        // Unfortunately, we cannot create the git tag ourselves as we don't have the permission to push the git tag
+        // so we delegate this for a more powerful user id (via Jenkins)
+        val taggingFile = installDir.resolveFile("tag.properties")
+        val properties = Map("tag.name" -> tag, "tag.hash" -> currentHead)
+        log.info(s"${taggingFile.pathString} created: tag $tagName should be moved to $currentHead (HEAD)")
+        Utils.writePropertiesToFile(taggingFile, properties)
       } else {
-        log.warn(s"Skipping root locator $writeType due to ${bc.store.incompleteWrites} incomplete writes")
-        tagName.foreach { tag =>
-          log.warn(s"Skipping $tag write due to ${bc.store.incompleteWrites} incomplete writes")
-        }
+        log.warn(s"Skipping $tag write due to ${bc.store.incompleteWrites} incomplete writes")
       }
     }
+  }
 
   @node @scenarioIndependent private def workspace: TrackedWorkspace =
     new TrackedWorkspace(dependencyTracker, directoryFactory, rubbishTidyer, mischiefOpts)
@@ -951,10 +891,7 @@ object OptimusBuildToolImpl {
       pythonBspConfig = PythonBspConfig(
         asNode(() => globalConfig.pythonEnabled),
         asNode(() => globalConfig.extractVenvs),
-        uvCacheDir,
-        venvCacheDir,
-        cmdLine.pypiCredentials,
-        cmdLine.pypiUvCredentials
+        pythonEnvironment
       ),
       depMetadataResolvers = asNode(() => dependencyMetadataResolvers.allResolvers),
       directoryFactory = directoryFactory,
@@ -1050,17 +987,20 @@ object OptimusBuildToolImpl {
           gitLog = gitLog,
           installTestplans = cmdLine.generateTestplans,
           directoryFactory = directoryFactory,
-          warScopes = warScopes,
+          warScopes = scopeSelector.warScopes,
           bundleFingerprintsCache = bundleFingerprintsCache,
           generatePoms = generatePoms,
+          useMavenLibs = useMavenLibs,
           minimal = cmdLine.minimalInstall,
-          bundleClassJars = cmdLine.bundleClassJars
+          bundleClassJars = cmdLine.bundleClassJars,
+          pythonConfiguration = if (globalConfig.installWheels) InstallTpaWithWheels(pythonEnvironment) else InstallTpa,
+          externalDependencies = obtConfig.externalDependencies
         )
       )
     } else None
 
     val imageBuilders = {
-      predefinedDockerImages.toIndexedSeq.apar.map { dockerImg =>
+      scopeSelector.imagesToBuild.toIndexedSeq.apar.map { dockerImg =>
         new oci.ImageBuilder(
           scopeConfigSource = obtConfig,
           versionConfig = globalConfig.versionConfig,
@@ -1075,7 +1015,8 @@ object OptimusBuildToolImpl {
           dockerImageCacheDir = dockerImageCacheDir,
           depCopyDir = depCopyRoot,
           useCrumbs = useCrumbs,
-          minimalInstallScopes = minimalInstallScopes
+          minimalInstallScopes = scopeSelector.minimalInstallScopes,
+          genericRunnerGenerator = DockerGenericRunnerGenerator(installPathBuilder, globalConfig.genericRunnerConfig)
         )
       }
     }
@@ -1146,7 +1087,7 @@ object OptimusBuildToolImpl {
             leafDir = RelativePath(StaticConfig.string("metadataLeaf")),
             buildId = cmdLine.buildId,
             generatePoms = generatePoms,
-            images = predefinedDockerImages
+            images = scopeSelector.imagesToBuild
           )
         )
       } else None
@@ -1172,7 +1113,7 @@ object OptimusBuildToolImpl {
       messageReporter = Some(messageReporter),
       assetUploader = assetUploader,
       uploadSources = cmdLine.uploadSources,
-      minimalInstallScopes = minimalInstallScopes
+      minimalInstallScopes = scopeSelector.minimalInstallScopes
     )
   }
 

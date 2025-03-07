@@ -11,9 +11,9 @@
  */
 package optimus.graph.tracking.ttracks;
 
+import static optimus.graph.OGTrace.AsyncSuffix;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.lang.ref.ReferenceQueue;
 
 import optimus.graph.GraphInInvalidState;
 import optimus.graph.NodeExtendedInfo;
@@ -172,7 +172,8 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
   }
 
   @Override
-  public void nodeCompleted(NodeTask ntsk) {
+  public void nodeCompleted(NodeTask ntsk, boolean isCancelled) {
+    if (isCancelled) return;
     // Technically, we could do this only if the ntsk was actually cached as opposed to cacheable,
     // but then we wouldn't be invalidating nodes that are captured by user code. This may or may
     // not be an issue.
@@ -223,10 +224,10 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
       // set the initial to Nil, not null, as this just makes the first cycle faster for normal
       // nodes
 
-      // TODO (OPTIMUS-65703): This reference queue is null for some ticking entities which don't
-      //  have a tweakable listener. Once the ticking reactive api is removed, we can verify here
-      //  that the reference queue isn't null.
+      // TODO (OPTIMUS-65703): This reference queue is null in some tests, which can cause memory
+      //  leaks. We should assert that it is not null here.
       var refQ = ntsk.scenarioStack().tweakableListener().refQ();
+
       do {
         initial = nodes;
         if (initial == null || initial == TTrackRef.Nil) result = new TTrackRef(ntsk, null, refQ);
@@ -246,11 +247,6 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
       // not concerned if we lose a race, it must be not null at the end of this call
       nodes_h.compareAndSet(this, null, TTrackRef.Nil);
     }
-  }
-
-  @Override
-  public void nodeCancelled(NodeTask ntsk) {
-    // Do nothing!
   }
 
   @Override
@@ -274,7 +270,7 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
       return ((PropertyNode<?>) node).propertyInfo().entityInfo.runtimeClass().getSimpleName()
           + "."
           + ((PropertyNode<?>) node).propertyInfo().name()
-          + "@"
+          + AsyncSuffix
           + node.scenarioStack().toShortString();
     else return node.executionInfo().name() + " " + node.toString();
   }

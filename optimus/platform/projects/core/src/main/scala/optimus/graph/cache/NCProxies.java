@@ -11,6 +11,8 @@
  */
 package optimus.graph.cache;
 
+import static optimus.graph.OGTrace.OfferValueSuffix;
+import static optimus.graph.OGTrace.ProcessOnChildCompletedSuffix;
 import static optimus.graph.OGTrace.observer;
 import static optimus.graph.cache.NCSupport.isDelayedProxy;
 import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScope;
@@ -29,7 +31,6 @@ import optimus.graph.OGTrace;
 import optimus.graph.PropertyNode;
 import optimus.graph.ProxyPropertyNode;
 import optimus.graph.RecordedTweakables;
-import optimus.graph.RecordingTweakableListener;
 import optimus.graph.Settings;
 import optimus.graph.TweakNode;
 import optimus.platform.EvaluationQueue;
@@ -83,18 +84,6 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
     }
   }
 
-  @Override
-  public void onChildCompleted(EvaluationQueue eq, NodeTask child) {
-    if (DiagnosticSettings.proxyChainStackLimit > -1) {
-      if (!eq.delayOnChildCompleted(this, child))
-        try {
-          processOnChildCompleted(eq, child);
-        } finally {
-          eq.afterOnChildCompleted();
-        }
-    } else processOnChildCompleted(eq, child);
-  }
-
   protected PropertyNode<T> keyForMatching() {
     return srcNodeTemplate();
   }
@@ -118,16 +107,13 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
         // Instead of copying them, just share the key (srcNodeTemplate) between proxies
         srcNodeTemplate_$eq(((ProxyPropertyNode<T>) (hit)).srcNodeTemplate());
       } else if (scenarioStack().isTrackingIndividualTweakUsage()) {
-        // XS Owner nodes are always evaluated in non-tracking scenarios, this call allows
-        // TrackingScenario
-        // To 'draw' ttracks to this proxy. Note: when we get the value from another proxy ttracks
-        // are already
-        // pointing to it and the call to completeFromNode below will draw an edge from one proxy to
-        // another (this)
+        // [SEE_TRK_REPORT] XS Owner nodes are always evaluated in non-tracking scenarios,
+        // this call allows TrackingScenario to 'draw' ttracks to this proxy.
+        // Note: when we get the value from another proxy ttracks are already pointing to it and the
+        // call to completeFromNode below will draw an edge from one proxy to another (this)
         try {
           key.scenarioStack().tweakableListener().reportTweakableUseBy(this);
-        } // [SEE_TRK_REPORT]
-        catch (Throwable e) {
+        } catch (Throwable e) {
           // reportTweakableUseBy can throw (see ScenarioStack.combineTweakData)
           // we're in an onChildCompleted callback, so unless we completeWithException here,
           // scheduler ends up in logAndDie
@@ -150,7 +136,7 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
                 .getTweakInfection());
       }
 
-      OGTrace.lookupEndProxy(eq, hit, this, hit != key, true, "pc");
+      OGTrace.lookupEndProxy(eq, hit, this, hit != key, true, ProcessOnChildCompletedSuffix);
       completeFromNode(hit, eq); // lookupEndProxy BEFORE completeFromNode
       hit = null; // cleanup
     } else {
@@ -166,6 +152,25 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
 
   boolean matchedXS(PropertyNode<T> key, PropertyNode<T> hit, EvaluationQueue eq) {
     return true;
+  }
+}
+
+/** If proxy guarantees not to call into graph */
+abstract class DelayedProxyNodeNoReEnqueue<T> extends DelayedProxyNode<T> {
+  DelayedProxyNodeNoReEnqueue(PropertyNode<T> key, PropertyNode<T> hit) {
+    super(key, hit);
+  }
+
+  @Override
+  public void onChildCompleted(EvaluationQueue eq, NodeTask child) {
+    if (DiagnosticSettings.proxyChainStackLimit > -1) {
+      if (!eq.delayOnChildCompleted(this, child))
+        try {
+          processOnChildCompleted(eq, child);
+        } finally {
+          eq.afterOnChildCompleted();
+        }
+    } else processOnChildCompleted(eq, child);
   }
 }
 
@@ -194,11 +199,37 @@ abstract class DelayedProxyNode<T> extends ProxyPropertyNode<T> {
 @SuppressWarnings("FieldMayBeFinal") // hot path, don't want the cost of a final on constructor
 // here
 final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
-  private BaseUNodeCache cache;
+  private NodeCCache cache;
 
-  DelayedXSProxyNode(BaseUNodeCache cache, PropertyNode<T> key) {
+  @Override
+  public void run(OGSchedulerContext ec) {
+    if (hit == null) hit = nextPossibleHit(ec);
+    if (hit.isDone()) processOnChildCompleted(ec, hit);
+    else {
+      ec.enqueue(hit);
+      hit.continueWith(this, ec);
+    }
+  }
+
+  /**
+   * It's currently possible to run into a fake cycle with a mix of when clauses. See
+   * XSDesignNotes.md
+   */
+  @Override
+  public boolean tryToRecoverFromCycle(TPDMask mask, EvaluationQueue eq) {
+    // hit == null if this proxy is run() -> nextPossibleHit() (likely another thread)
+    if (hit != null && hit != srcNodeTemplate() && hit.isXScenarioOwner()) {
+      hit = srcNodeTemplate();
+      eq.enqueue(this, hit);
+      hit.continueWith(this, eq);
+      return true;
+    }
+    return false;
+  }
+
+  DelayedXSProxyNode(NodeCacheBase cache, PropertyNode<T> key) {
     super(key, null);
-    this.cache = cache;
+    this.cache = scenarioStack().cacheSelector().cacheForXSOwner(key, cache);
 
     boolean tweakNode = key instanceof TweakNode<?>;
     // Note that TweakNodes may use XS proxies even when getFavorReuse is not enabled (see
@@ -207,16 +238,12 @@ final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
         && (!(key.propertyInfo().getFavorReuseIsXS() || tweakNode) || !key.isNew()))
       throw new GraphInInvalidState();
 
-    NodeTask infoTarget = scenarioStack().tweakableListener().trackingProxy();
-    if (infoTarget == null) infoTarget = this;
+    NodeTask trackingProxy = scenarioStack().tweakableListener().trackingProxy();
+    if (trackingProxy == null) trackingProxy = this;
 
     // Setup XS 'owner' that will also contain collected tweaks/tweakables on completion
     key.markAsXScenarioOwner();
-    // [XS_NO_WAIT] Propagate noWaitXS flag to the owner's SS so we don't accidentally wait for XS
-    // match on ourselves
-    key.replace(
-        RecordingScenarioStack.withNewListener(
-            scenarioStack(), infoTarget, scenarioStack().noWaitForXSNode() || tweakNode, true));
+    key.replace(RecordingScenarioStack.withNewListener(scenarioStack(), trackingProxy));
     // TweakNode is excluded here because it manually reports via onTweakUsedBy {@link
     // TweakNode#reportTweakableUseBy}
     if (key.isTrackingValue() && !tweakNode && !key.isDoneWithCancellation())
@@ -232,32 +259,16 @@ final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
 
   @Override
   public void cancelInsteadOfRun(EvaluationQueue eq) {
-    // If an XS proxy node is cancelled on first run(), it still needs to swap out its tweakable
-    // listener to a recorded tweakable. If that's the case, then (by definition) we don't have any
-    // recorded tweaks (checked in the assertion here).
-    //
-    // We do this because we will attempt to report used tweaks even for failed nodes (such as
-    // cancelled ones), as explained in OPTIMUS-69943 and related tests.
-    if (Settings.schedulerAsserts
-        && !((srcNodeTemplate().scenarioStack().tweakableListener()
-                instanceof RecordingTweakableListener rec
-            && rec._tweakable().isEmpty()
-            && rec._tweakableHashes().isEmpty()
-            && rec._tweaked().isEmpty()))) {
-      throw new GraphInInvalidState("cancel instead of run on a non-empty src node");
-    }
-
-    srcNodeTemplate().scenarioStack().onXSOriginalCompleted(RecordedTweakables.empty());
+    hit = null; // Clean up some memory
+    srcNodeTemplate().replace(scenarioStack().withRecorded(RecordedTweakables.empty()));
     super.cancelInsteadOfRun(eq);
   }
 
   @Override
-  protected void processOnChildCompleted(EvaluationQueue eq, NodeTask child) {
-    if (!isDelayedProxy(child)) {
-      ScenarioStack childSS = child.scenarioStack();
-      childSS.onXSOriginalCompleted(childSS.tweakableListener().recordedTweakables());
-    }
-    super.processOnChildCompleted(eq, child);
+  protected void onChildCompleted(EvaluationQueue eq, NodeTask child) {
+    if (child != hit)
+      return; // Cycle broken (tryToRecoverFromCycle) and child is now an outdated information.
+    super.onChildCompleted(eq, child);
   }
 
   private void assertMatchIsInCorrectState(PropertyNode<T> key, PropertyNode<T> hit) {
@@ -322,7 +333,7 @@ final class DelayedXSProxyNode<T> extends DelayedProxyNode<T> {
   "FieldMayBeFinal", // hot path, don't want the cost of a final on constructor here
   "unchecked" // Mostly around IPS
 })
-class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
+class DelayedXSFTProxyNode<T> extends DelayedProxyNodeNoReEnqueue<T> {
   enum State {
     ERROR,
     EVALUATE,
@@ -380,7 +391,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
 
     CompletedProxyPolicy(
         PropertyNode<?> nodeWithValue, long computedInCacheID, EvaluationQueue eq) {
-      super(true, false);
+      super(true, false, 0);
       this.nodeWithValue = nodeWithValue;
       this.computedInCacheID = computedInCacheID;
       this.eq = eq;
@@ -388,7 +399,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
 
     @Override
     <T> DelayedProxyNode<T> createProxy(
-        BaseUNodeCache cache, PropertyNode<T> nkey, PropertyNode<T> found) {
+        NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
       PropertyNode<T> typedValue = (PropertyNode<T>) nodeWithValue;
       DelayedXSFTProxyNode<T> proxy;
       if (observer.collectsAccurateCacheStats())
@@ -405,7 +416,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
 
   protected void setComputeInCacheID(long computedInCacheID) {}
 
-  private BaseUNodeCache cache;
+  private NodeCacheBase cache;
 
   InProgressState<T> ips; // State exists only while resolving values to save space in cache
 
@@ -478,7 +489,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
     return true;
   }
 
-  DelayedXSFTProxyNode(BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> possibleHit) {
+  DelayedXSFTProxyNode(NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> possibleHit) {
     super(key, possibleHit);
     this.cache = cache;
   }
@@ -486,14 +497,10 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
   /** Does this belong to ScenarioStack? */
   static ScenarioStack minimumScenario(TPDMask propertyMask, ScenarioStack ss) {
     // We can not re-use across different tweakableListeners because we don't retain any tweakable
-    // dependency details
-    // and will not be able to properly re-report them...
-    var tl = ss.tweakableListener();
+    // dependency details and will not be able to properly re-report them...
     // Find the minimum scenario stack we can use
     while (!ss._cacheID().mayContainTweak(propertyMask) && ss.isTransparentForCaching()) {
-      ScenarioStack parent = ss.parent();
-      if (parent.tweakableListener() != tl) break;
-      ss = parent;
+      ss = ss.parent();
     }
     return ss;
   }
@@ -617,7 +624,7 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
 
     if (canTake) {
       var cacheHit = !valueOwner && prev_ips.mustHaveValue;
-      OGTrace.lookupEndProxy(eq, nodeWithValue, this, cacheHit, valueOwner, "ov");
+      OGTrace.lookupEndProxy(eq, nodeWithValue, this, cacheHit, valueOwner, OfferValueSuffix);
       completeFromNode(nodeWithValue, eq); // lookupEndProxy BEFORE completeFromNode
     } else if (ips == COMPLETED) {
       super.cancelInsteadOfRun(eq);
@@ -765,11 +772,11 @@ class DelayedXSFTProxyNode<T> extends DelayedProxyNode<T> {
 final class PDelayedXSFTProxyNode<T> extends DelayedXSFTProxyNode<T> {
   private long computedInCacheID;
 
-  PDelayedXSFTProxyNode(BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> possibleHit) {
+  PDelayedXSFTProxyNode(NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> possibleHit) {
     super(cache, key, possibleHit);
   }
 
-  PDelayedXSFTProxyNode(BaseUNodeCache cache, PropertyNode<T> key, long computedInCacheID) {
+  PDelayedXSFTProxyNode(NodeCacheBase cache, PropertyNode<T> key, long computedInCacheID) {
     super(cache, key, null);
     this.computedInCacheID = computedInCacheID;
   }

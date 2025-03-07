@@ -120,7 +120,13 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
         ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
       case Some(_) =>
         val constant = ElementFactory.constant(value, optionType)
-        ElementFactory.makeBinary(op, e, wrapConstantAsOptionValue(constant))
+        val compare = ElementFactory.makeBinary(op, e, wrapConstantAsOptionValue(constant))
+        if (op == NE) {
+          val eNullCheck =
+            ElementFactory.makeBinary(EQ, e, wrapConstantAsOptionValue(ElementFactory.constant(None, optionType)))
+          ElementFactory.makeBinary(BOOLOR, eNullCheck, compare)
+        } else compare
+
       case _ => ElementFactory.constant(op == NE, TypeInfo.BOOLEAN)
     }
   }
@@ -131,10 +137,10 @@ class ComparisonRewriter extends DbQueryTreeVisitor {
       op: BinaryExpressionType): RelationElement = {
     val compare = ElementFactory.makeBinary(op, e1, e2)
     if (TypeInfo.underlying(e1.rowTypeInfo) eq e1.rowTypeInfo) {
-      val e1check = ElementFactory.makeBinary(op, e1, ElementFactory.constant(null, e1.rowTypeInfo))
-      val e2check = ElementFactory.makeBinary(op, e2, ElementFactory.constant(null, e2.rowTypeInfo))
-      val nullCheck = ElementFactory.makeBinary(if (op == EQ) BOOLAND else BOOLOR, e1check, e2check)
-      ElementFactory.makeBinary(if (op == EQ) BOOLOR else BOOLAND, compare, nullCheck)
+      val e1check = ElementFactory.makeBinary(EQ, e1, ElementFactory.constant(null, e1.rowTypeInfo))
+      val e2check = ElementFactory.makeBinary(EQ, e2, ElementFactory.constant(null, e2.rowTypeInfo))
+      val nullCheck = ElementFactory.makeBinary(if (op == EQ) BOOLAND else NE, e1check, e2check)
+      ElementFactory.makeBinary(BOOLOR, compare, nullCheck)
     } else compare
   }
 

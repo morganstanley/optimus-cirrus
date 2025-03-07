@@ -38,7 +38,7 @@ import optimus.buildtool.utils.Utils.{distinctLast, distinctLastBy}
 import optimus.platform._
 
 import scala.collection.compat._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity class ScopeDependencies(
     val id: ScopeId,
@@ -59,19 +59,19 @@ import scala.collection.immutable.Seq
   private def isMavenCompatible: Boolean =
     mavenOnly || (externalNativeDependencies.isEmpty && dependencies.hasMavenLibsOrEmpty)
 
-  @node def directScopeDependencies: Seq[CompilationNode] = {
+  @node def directScopeDependencies: IndexedSeq[CompilationNode] = {
     internalDependencyIds.distinct
       .sortBy(_.toString)
       .apar
       .flatMap(scopedCompilationFactory.lookupScope)
   }
 
-  @node def transitiveScopeDependencies: Seq[CompilationNode] =
+  @node def transitiveScopeDependencies: IndexedSeq[CompilationNode] =
     distinctLastBy(
       directScopeDependencies.apar
         .flatMap { d =>
           d +: ScopeDependencies.dependencies(tpe, d).transitiveScopeDependencies
-        })(_.id)
+        })(_.id).toVector
 
   @node def transitiveExternalDependencyIds: DependencyDefinitions = {
     val upstreamExtDeps = {
@@ -91,20 +91,20 @@ import scala.collection.immutable.Seq
     )
   }
 
-  @node def transitiveInternalDependencyIds: Seq[ScopeId] =
+  @node def transitiveInternalDependencyIds: IndexedSeq[ScopeId] =
     transitiveScopeDependencies.apar.flatMap(ScopeDependencies.dependencies(tpe, _).internalDependencyIds)
 
-  @node def transitiveInternalDependencyIdsAll: Seq[ScopeId] =
+  @node def transitiveInternalDependencyIdsAll: IndexedSeq[ScopeId] =
     (transitiveInternalDependencyIds ++ internalDependencyIds).distinct
 
   /** All JNI paths, both from our explicit declaration of native dependencies and from ivy files. */
-  @node def transitiveJniPaths: Seq[String] =
-    resolution.map(_.result.jniPaths).getOrElse(Nil) ++ transitiveNativeDependencies.flatMap(_.paths)
+  @node def transitiveJniPaths: IndexedSeq[String] =
+    (resolution.map(_.result.jniPaths).getOrElse(Nil) ++ transitiveNativeDependencies.flatMap(_.paths)).toVector
 
   @node def transitiveExtraFiles: Seq[Asset] = transitiveNativeDependencies.flatMap(_.extraPaths)
 
-  @node private def transitiveNativeDependencies: Seq[NativeDependencyDefinition] =
-    (externalNativeDependencies
+  @node private def transitiveNativeDependencies: IndexedSeq[NativeDependencyDefinition] =
+    (externalNativeDependencies.toVector
       ++ transitiveScopeDependencies.apar.flatMap(_.runtimeDependencies.transitiveNativeDependencies)).distinct
 
   @node def externalInputsHash: FingerprintArtifact = {
@@ -114,7 +114,7 @@ import scala.collection.immutable.Seq
     )
   }
 
-  @node def transitiveExternalArtifacts: Seq[Artifact] = resolution.to(Seq) ++
+  @node def transitiveExternalArtifacts: IndexedSeq[Artifact] = resolution.to(Vector) ++
     (if (ScopedCompilation.generate(tpe.fingerprintType)) Some(externalInputsHash) else None)
 
   @node def resolution: Option[ResolutionArtifact] =
@@ -138,19 +138,19 @@ import scala.collection.immutable.Seq
       }
     } else None
 
-  @node def transitiveExternalDependencies: Seq[ExternalClassFileArtifact] =
-    resolution.map(_.result.resolvedArtifacts).getOrElse(Nil)
+  @node def transitiveExternalDependencies: IndexedSeq[ExternalClassFileArtifact] =
+    resolution.map(_.result.resolvedArtifacts).getOrElse(Vector())
 
-  @node def internalDependencyIds: Seq[ScopeId] = dependencies.modules
+  @node def internalDependencyIds: IndexedSeq[ScopeId] = dependencies.modules.toVector
 
   /**
    * be used for fingerprint calculation or validator only
    * @return all predefined external dependencies in obt file (libs and mavenLibs)
    */
-  @node def dualExternalDependencyIds: Seq[DependencyDefinition] = dependencies.dualExternalDeps
+  @node def dualExternalDependencyIds: IndexedSeq[DependencyDefinition] = dependencies.dualExternalDeps.toVector
 
-  @node def externalDependencyIds(forMavenDownstream: Boolean = false): Seq[DependencyDefinition] =
-    dependencies.externalDeps(forMavenDownstream)
+  @node def externalDependencyIds(forMavenDownstream: Boolean = false): IndexedSeq[DependencyDefinition] =
+    dependencies.externalDeps(forMavenDownstream).toVector
 
   override def toString: String = s"ScopeDependencies($id)"
 }

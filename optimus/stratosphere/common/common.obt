@@ -27,6 +27,7 @@ main {
       ossjava.jackson2.jaxrs-json
       ossjava.jansi
       ossjava.jna
+      ossjava.junit
       ossscala.scala
       ossscala.scala-collection-compat
       ossscala.spray-json

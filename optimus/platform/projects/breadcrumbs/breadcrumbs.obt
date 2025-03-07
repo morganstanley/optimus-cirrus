@@ -48,6 +48,7 @@ main {
   copyFiles = [
     {from = "scripts", into = "etc/config/breadcrumbs/scripts"}
   ]
+  installIvy = true
 }
 
 // the kerberos-specific authentication code (must remain internal!)
@@ -58,12 +59,14 @@ auth {
     modules += optimus.platform.breadcrumbs.main
     libs += msjava.kerberos
   }
+  installIvy = true
 }
 
 internal {
   root = "src/internal"
   open = true
   compile.modules += optimus.platform.breadcrumbs.main
+  installIvy = true
 }
 
 apps {

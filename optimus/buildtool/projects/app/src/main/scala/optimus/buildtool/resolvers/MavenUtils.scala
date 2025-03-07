@@ -16,7 +16,6 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.cache.RemoteAssetStore
 import optimus.buildtool.config.DependencyDefinition
 import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
-import optimus.buildtool.config.MappedDependencyDefinitions
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.files.BaseHttpAsset
 import optimus.buildtool.files.Directory
@@ -149,7 +148,7 @@ import scala.util.control.NonFatal
     Some(localAsset).filter(checkLocalDisk)
   }
 
-  private def getMappedMavenDeps(
+  def getMappedMavenDeps(
       org: String,
       name: String,
       configuration: String,
@@ -164,25 +163,9 @@ import scala.util.control.NonFatal
   }
 
   @node def applyDirectMapping(
-      deps: Seq[DependencyDefinition],
+      dep: DependencyDefinition,
       afsToMavenMap: Map[MappingKey, Seq[DependencyDefinition]]
-  ): MappedDependencyDefinitions = {
-    import scala.collection.compat._
-    import scala.collection.immutable.Seq
-
-    if (deps.nonEmpty && afsToMavenMap.nonEmpty) {
-      val appliedMap: Map[DependencyDefinition, Seq[DependencyDefinition]] = deps
-        .map { d =>
-          d -> getMappedMavenDeps(d.group, d.name, d.configuration, afsToMavenMap).to(Seq)
-        }
-        .toMap
-        .filter(_._2.nonEmpty)
-      val mappedAfsDeps = appliedMap.keys.to(Seq)
-      val unMappedAfsDeps = deps.diff(mappedAfsDeps).to(Seq)
-
-      MappedDependencyDefinitions(appliedMap, unMappedAfsDeps)
-    } else MappedDependencyDefinitions(Map.empty, deps.to(Seq))
-  }
+  ): Seq[DependencyDefinition] = getMappedMavenDeps(dep.group, dep.name, dep.configuration, afsToMavenMap)
 
   def applyTransitiveMapping(
       org: String,

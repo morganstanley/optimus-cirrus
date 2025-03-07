@@ -41,7 +41,8 @@ final case class GlobalConfig(
     filesToExcludeFromUpload: Seq[Regex],
     genericRunnerAppDirOverride: Option[Directory],
     pythonEnabled: Boolean,
-    extractVenvs: Boolean
+    extractVenvs: Boolean,
+    installWheels: Boolean
 ) {
 
   val versionConfig: VersionConfiguration =
@@ -74,6 +75,7 @@ final case class GlobalConfig(
     // don't use stratoConfig.scalaHome (for now) -- java.home is the version we use to compile java (set by OBT runscript)
     val javaPath = Directory(mapDepCopyPath(depCopyRoot, tweakedJavaHome.path.toString, normalizeLib = false))
     val pythonEnabled = stratoConfig.config.booleanOrDefault("internal.obt.python-enabled", default = false)
+    val installWheels = stratoConfig.config.booleanOrDefault("internal.obt.python-install-wheels", default = false)
     val extractVenvs = stratoConfig.config.booleanOrDefault("internal.obt.python-extract-venvs", default = false)
 
     def obtTestplansConfigBoolean(key: String) = stratoConfig.config.getBoolean(s"obt.testplans.$key")
@@ -100,6 +102,7 @@ final case class GlobalConfig(
       stratoVersion = stratoConfig.stratoVersion,
       pythonEnabled = pythonEnabled,
       extractVenvs = extractVenvs,
+      installWheels = installWheels,
       workspaceName = workspaceName,
       workspaceRoot = workspaceRoot,
       workspaceSourceRoot = workspaceSourceRoot,

@@ -18,7 +18,7 @@ import optimus.platform.storable._
 import optimus.platform.temporalSurface._
 import optimus.platform.temporalSurface.impl._
 import optimus.platform.temporalSurface.operations._
-import optimus.platform.util.ClientEntityHierarchy
+import optimus.platform.util.HierarchyManager.entityHierarchyManager
 
 @entity
 object TemporalContextUtils {
@@ -79,8 +79,7 @@ object TemporalContextUtils {
       onlyStorable: Boolean,
       onlyConcrete: Boolean,
       isFullClassName: Boolean): Set[String] = {
-    val hierarchy = ClientEntityHierarchy.hierarchy
-    hierarchy.metaData
+    entityHierarchyManager.metaData
       .get(className)
       .map { cls =>
         val result = Function.chain[Set[ClassMetaData]](Seq(

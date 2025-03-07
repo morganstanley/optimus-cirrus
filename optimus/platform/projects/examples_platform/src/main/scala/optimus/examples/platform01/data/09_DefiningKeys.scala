@@ -30,7 +30,7 @@ class Person(val firstName: String, val secondName: String, @node val dob: Zoned
   @key def theKey = (firstName, secondName)
 }
 
-object DefiningKeys extends AdvancedOptimusApp {
+object DefiningKeys extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

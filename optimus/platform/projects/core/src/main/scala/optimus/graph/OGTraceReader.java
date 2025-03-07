@@ -167,7 +167,7 @@ public abstract class OGTraceReader {
 
   /** Returns true if there are some recorded tasks available */
   public boolean hasRecordedTasks() {
-    return tasks.size() > 0;
+    return !tasks.isEmpty();
   }
 
   public Collection<PNodeTask> getRawTasks(boolean includeProxies) {

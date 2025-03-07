@@ -64,7 +64,8 @@ object RegexConfigurationCompiler {
             filter = filter.getOrElse(None),
             severityLevel = severity.getOrElse(Severity.Error),
             regexes = regexes.getOrElse(Seq.empty),
-            isNew = config.booleanOrDefault("new", default = false)
+            isNew = config.booleanOrDefault("new", default = false),
+            upToLine = config.optionalInt("upToLine")
           )
         )(regexes, severity, filter)
       }

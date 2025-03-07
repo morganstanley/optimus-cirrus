@@ -126,6 +126,7 @@ private[optimus] trait VersioningMacroUtils[C <: Context] extends MacroBase with
       lazy val instant = reify(RegisteredFieldType.Instant).tree
       lazy val int = reify(RegisteredFieldType.Int).tree
       lazy val javaEnumApply = Select(reify(RegisteredFieldType.JavaEnum).tree, names.apply)
+      lazy val piiElementApply = Select(reify(RegisteredFieldType.PIIElement).tree, names.apply)
       lazy val knowableApply = Select(reify(RegisteredFieldType.Knowable).tree, names.apply)
       lazy val listMapApply = Select(reify(RegisteredFieldType.ListMap).tree, names.apply)
       lazy val localDate = reify(RegisteredFieldType.LocalDate).tree
@@ -164,7 +165,7 @@ private[optimus] trait VersioningMacroUtils[C <: Context] extends MacroBase with
       lazy val year = reify(RegisteredFieldType.Year).tree
       lazy val zonedDateTime = reify(RegisteredFieldType.ZonedDateTime).tree
       lazy val zoneId = reify(RegisteredFieldType.ZoneId).tree
-      lazy val fullName = reify(RegisteredFieldType.FullName).tree
+      lazy val piiElement = reify(RegisteredFieldType.PIIElement).tree
 
     }
 
@@ -193,7 +194,8 @@ private[optimus] trait VersioningMacroUtils[C <: Context] extends MacroBase with
       case RegisteredFieldType.MsUuid     => registeredFieldTypes.msUuid
       case RegisteredFieldType.MsUnique   => registeredFieldTypes.msUnique
       case RegisteredFieldType.ChainedID  => registeredFieldTypes.chainedId
-      case RegisteredFieldType.FullName   => registeredFieldTypes.fullName
+      case RegisteredFieldType.PIIElement(className) =>
+        Apply(registeredFieldTypes.piiElementApply, genConst(className) :: Nil)
       case RegisteredFieldType.JavaEnum(className) =>
         Apply(registeredFieldTypes.javaEnumApply, genConst(className) :: Nil)
       case RegisteredFieldType.ScalaEnum(className) =>

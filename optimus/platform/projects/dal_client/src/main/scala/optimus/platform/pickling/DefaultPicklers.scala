@@ -25,7 +25,7 @@ import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.pickling.ChainedIDPickler
 import optimus.datatype.Classification.DataSubjectCategory
-import optimus.datatype.FullName
+import optimus.datatype._
 import optimus.platform.Compressed
 import optimus.platform.Compressible
 import optimus.platform.CovariantSet
@@ -35,6 +35,7 @@ import optimus.platform.cm.Known
 import optimus.platform.cm.NotApplicable
 import optimus.platform.cm.Unknown
 import optimus.platform.dal.session.RolesetMode
+import optimus.platform.pickling.DefaultPicklers.stringPickler
 import optimus.platform.storable.Entity
 import optimus.platform.storable.EntityReferenceHolder
 import optimus.platform.storable.InMemoryReferenceHolder
@@ -152,7 +153,14 @@ class MSUUIdPickler extends Pickler[MSUuid] {
     visitor.writeEndArray()
   }
 }
-
+// docs-snippet:PIIElementPickler
+class PIIElementPickler[T <: DataSubjectCategory, E <: PIIElement[T]](stringPickler: Pickler[String])
+    extends Pickler[E] {
+  override def pickle(e: E, out: PickledOutputStream): Unit = {
+    this.stringPickler.pickle(e.sensitiveValue, out)
+  }
+}
+// docs-snippet:PIIElementPickler
 object ImmutableByteArrayPickler extends Pickler[ImmutableArray[Byte]] {
   override def pickle(data: ImmutableArray[Byte], visitor: PickledOutputStream) = {
     val mode = Compression.compressionMode(data.rawArray)
@@ -217,6 +225,8 @@ trait PicklersLow1 extends PicklersLow2 {
   }
 
   def javaEnumPickler[E <: Enum[E]]: Pickler[E] = new JavaEnumPickler[E]
+  def piiElementPickler[E <: DataSubjectCategory, T <: PIIElement[E]]: PIIElementPickler[E, T] =
+    new PIIElementPickler[E, T](stringPickler)
 
   def entityPickler[T <: Entity] = EntityPickler.asInstanceOf[Pickler[T]]
   def inonstringMapPickler[A, B](picklerA: Pickler[A], picklerB: Pickler[B]): Pickler[immutable.Map[A, B]] =
@@ -240,9 +250,6 @@ trait DefaultPicklers extends PicklersLow1 {
   val doublePickler: Pickler[Double] = new IdentityPickler[Double]
   val booleanPickler: Pickler[Boolean] = new IdentityPickler[Boolean]
   val stringPickler: ExplicitOutputPickler[String, String] = new IdentityPickler[String]
-  // docs-snippet:DefaultPickler
-  def fullNamePickler = new PIIElementPickler[DataSubjectCategory, FullName[DataSubjectCategory]](stringPickler)
-  // docs-snippet:DefaultPickler
   def compressedPickler[T, S <: AnyRef](
       pickler: ExplicitOutputPickler[T, S],
       compressible: Compressible[S]): Pickler[Compressed[T]] = new CompressedPickler[T, S](pickler, compressible)

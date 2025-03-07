@@ -128,11 +128,8 @@ sealed abstract class InstallPathBuilder(
     }.distinct
   }
 
-  def pathForTpa(scopeId: ScopeId): FileAsset =
-    dirForScope(scopeId, branch = ".exec")
-      .resolveDir(OsUtils.exec)
-      .resolveFile(s"${scopeId.module}.tpa")
-
+  def pathForTpa(scopeId: ScopeId): FileAsset = etcDir(scopeId).resolveFile(s"${scopeId.module}.tpa")
+  def wheelsDir(): Directory = etcDir(MetaBundle("optimus", "dependencies")).resolveDir("wheels")
 }
 
 class RelativeInstallPathBuilder(override protected val installVersion: String) extends CommonDirs {
@@ -145,6 +142,29 @@ class RelativeInstallPathBuilder(override protected val installVersion: String) 
       leaf: String,
       branch: String
   ): RelativePath = InstallPathBuilder.pathForMetaBundle(metaBundle, installVersion, leaf, branch)
+
+  def locationIndependentJar(scopeId: ScopeId, jar: JarAsset): Seq[String] = {
+    val mavenReleaseMetaBundle: MetaBundle =
+      MetaBundle(config.NamingConventions.MavenDepsCentralMeta, config.NamingConventions.MavenDepsCentralBundle)
+
+    val scopeBinPath = binDir(scopeId)
+    val mavenLibDir = libDir(mavenReleaseMetaBundle)
+    val pathFromBinToMavenLib = scopeBinPath.relativize(mavenLibDir)
+
+    val jarPath = jar.pathString match {
+      case NamingConventions.DepCopyMavenRoot(_, relativePath) =>
+        // put into sharable MetaBundle dir for AFS release
+        val localPath = s"$pathFromBinToMavenLib/$relativePath"
+        if (installVersion == NamingConventions.LocalVersion) {
+          Seq(localPath)
+        } else {
+          val distedPath = dirForDist(mavenReleaseMetaBundle).resolveDir("lib").resolveJar(relativePath).pathString
+          Seq(localPath, distedPath)
+        }
+      case _ => Seq.empty
+    }
+    jarPath
+  }
 
   def locationIndependentJar(scopeId: ScopeId, targetScopeId: ScopeId, jarName: String): Seq[String] = {
     val scopeBinPath = binDir(scopeId)
@@ -260,10 +280,11 @@ private final class MavenInstallPathBuilder(installDir: Directory, installVersio
     extends InstallPathBuilder(installVersion, NamingConventions.AfsDist) {
 
   def dirForMetaBundle(
-      metaBundle: MetaBundle,
+      rawMetaBundle: MetaBundle,
       leaf: String = "",
       branch: String = ""
   ): Directory = {
+    val metaBundle = rawMetaBundle.forMavenRelease()
     if (!metaBundle.isEmpty)
       installDir
         .resolveDir(

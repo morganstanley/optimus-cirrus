@@ -174,13 +174,21 @@ class AsyncGraphComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
         (sym ne null) && sym.isStable && !sym.hasAnnotation(NodeSyncAnnotation) && !sym.isLazy
       }
 
-      // if all elements in the tree are literals or stable (i.e. vals) and not nodes, the computation is really cheap
-      // so we do it right away in the $newNode method and stash it in an AC[P]N
-      forAll(arg) {
-        case _: Literal | _: This                  => true
-        case a @ (_: Select | _: Apply | _: Ident) => isStable(a)
-        case _                                     => false
+      // when people do Map/Seq/collection.empty we know this is simple so we can make it an ACPN
+      arg match {
+        case TypeApply(q: Select, _)
+            if q.symbol == SetEmpty || q.symbol == SeqEmpty || q.symbol == ListEmpty || q.symbol == MapEmpty =>
+          true
+        case _ =>
+          // if all elements in the tree are literals or stable (i.e. vals) and not nodes, the computation is really cheap
+          // so we do it right away in the $newNode method and stash it in an AC[P]N
+          forAll(arg) {
+            case _: Literal | _: This                  => true
+            case a @ (_: Select | _: Apply | _: Ident) => isStable(a)
+            case _                                     => false
+          }
       }
+
     }
 
     def transformFuncArgumentToNode(fun: Tree, arg: Tree, param: Symbol): Tree = {

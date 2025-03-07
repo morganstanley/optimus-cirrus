@@ -18,7 +18,7 @@ import optimus.platform._
 
 import java.net.URL
 
-@entity object EmptyCache extends SimpleArtifactCache(EmptyStore)
+@entity class EmptyCache extends SimpleArtifactCache(EmptyStore)
 
 object EmptyStore extends SearchableArtifactStore with WriteableArtifactStore {
   @async override protected[buildtool] def write[A <: CachedArtifactType](

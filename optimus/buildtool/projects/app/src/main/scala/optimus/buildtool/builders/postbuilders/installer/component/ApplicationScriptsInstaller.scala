@@ -13,13 +13,16 @@ package optimus.buildtool.builders.postbuilders.installer.component
 
 import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
+import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.Directory.fileNamePredicate
 import optimus.buildtool.files.Directory.EndsWithFilter
 import optimus.buildtool.files.Directory.Not
 import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.Directory.PredicateFilter
+import optimus.buildtool.files.Directory.UnionFilter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.InstallPathBuilder
 import optimus.buildtool.files.JarAsset
@@ -42,7 +45,6 @@ class ApplicationScriptsInstaller(
 ) extends ApplicationScriptsInstallerBase
     with ComponentInstaller
     with Log {
-  import ApplicationScriptsInstaller._
 
   override val descriptor = "application scripts"
 
@@ -79,10 +81,6 @@ class ApplicationScriptsInstaller(
   @async private def shouldBeInstalled(scopeId: ScopeId, transitive: Boolean): Boolean =
     !minimal || !transitive || scopeConfigSource.scopeConfiguration(scopeId).flags.installAppScripts
 
-  @async def installDockerApplicationScripts(targetDir: Directory, runconfJar: JarAsset): Seq[FileAsset] = {
-    installApplicationScriptsTo(targetDir, runconfJar, fileFilter = dockerScript)
-  }
-
 }
 
 class DockerApplicationScriptsInstaller extends ApplicationScriptsInstallerBase {
@@ -106,6 +104,10 @@ trait ApplicationScriptsInstallerBase {
 }
 
 object ApplicationScriptsInstaller {
-  val dockerScript = PredicateFilter(_.toString.endsWith(".dckr.sh"))
-  val nonDockerScript = Not(dockerScript)
+  val dockerScript: PathFilter = PredicateFilter(_.toString.endsWith(s".${NamingConventions.DockerBashExt}"))
+  // Note: We make an exception for `app-runner` script, which is distributed with OBT. We want to ensure we can
+  //       invoke from a Docker container with a runscript that is compatible with the OBT release.
+  val nonDockerScript: PathFilter = UnionFilter(
+    Not(dockerScript),
+    fileNamePredicate(s"${GenericRunnerInstaller.RunnerName}.${NamingConventions.DockerBashExt}"))
 }

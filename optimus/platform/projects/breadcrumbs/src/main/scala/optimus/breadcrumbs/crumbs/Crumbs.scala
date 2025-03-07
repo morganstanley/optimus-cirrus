@@ -25,6 +25,7 @@ import optimus.breadcrumbs.Breadcrumbs
 import org.slf4j.LoggerFactory
 import spray.json._
 import DefaultJsonProtocol._
+import optimus.breadcrumbs.BreadcrumbsPublisher
 import optimus.breadcrumbs.crumbs
 import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs.Crumb.Headers
@@ -141,10 +142,9 @@ private[breadcrumbs] class WithProperties(crumb: Crumb, elems: Elems)
   private[breadcrumbs] override def stringProperties: Map[String, String] = crumb.stringProperties
   private[breadcrumbs] override def jsonProperties: Map[String, JsValue] =
     crumb.jsonProperties ++ elems.toMap
-
 }
 
-private[breadcrumbs] class FlushMarker extends Crumb(ChainedID.root) {
+private[breadcrumbs] final case class FlushMarker(close: Boolean = false) extends Crumb(ChainedID.root) {
   val latch = new CountDownLatch(1)
   def await(to: Long): Boolean = latch.await(to, TimeUnit.MILLISECONDS)
   def flushed(): Unit = latch.countDown()
@@ -536,7 +536,7 @@ object Crumb {
     final private[breadcrumbs] val enqueueFailures = new AtomicInteger()
     final private[breadcrumbs] val sendCount = new AtomicInteger(0)
     final def getCount: Int = sendCount.get()
-    final def getKafkaCount: Int = kafkaCount.get()
+    def sentCount: Int = kafkaCount.get()
     final def getKafkaFailures: Int = kafkaFailures.get()
     final def getEnqueueFailures: Int = enqueueFailures.get()
     final override def equals(obj: Any): Boolean = obj match {
@@ -546,6 +546,7 @@ object Crumb {
     private[breadcrumbs] def sources: Seq[Source] = Seq(this)
     final override def hashCode(): Int = System.identityHashCode(this)
     def +(that: Source): MultiSource = new MultiSource(sources ++ that.sources)
+    def publisherOverride: Option[BreadcrumbsPublisher] = None
   }
 
   class MultiSource private[Crumb] (override private[breadcrumbs] val sources: Seq[Source]) extends Source {
@@ -561,10 +562,6 @@ object Crumb {
   object ObservableSource extends Source { override val name = "OBS" }
   object ProfilerSource extends Crumb.Source {
     override val name: String = "PROF"
-    override val flags = Set(CrumbFlag.DoNotReplicate)
-  }
-  object SamplingProfilerSource extends Crumb.Source {
-    override val name: String = "SP"
     override val flags = Set(CrumbFlag.DoNotReplicate)
   }
 

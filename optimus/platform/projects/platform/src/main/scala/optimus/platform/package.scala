@@ -16,6 +16,7 @@ import optimus.collection.OptimusSeq
 import optimus.core.CoreAPI
 import optimus.core.SourceAPI
 import optimus.graph._
+import optimus.platform.annotations.deprecating
 import optimus.platform.annotations.internal._fullTextSearch
 import optimus.platform.annotations.internal._projected
 import optimus.platform.annotations.internal._reified
@@ -51,6 +52,7 @@ package object platform
     with DefaultPicklers
     with DefaultUnpicklers
     with DALQueryExtensions
+    with IsolatedLazySeq
     with StorableConverterImplicits
     with SourceAPI
     with OrderingImplicits
@@ -58,7 +60,8 @@ package object platform
     with OptimusStringUtils
     with NodeTryUtils {
 
-  // TODO (OPTIMUS-29499): remove this compat stub
+  // TODO (OPTIMUS-71657): remove this compat stub
+  @deprecating("Use OptimusApp instead")
   type AdvancedOptimusApp[Args <: OptimusAppCmdLine] = OptimusApp[Args]
 
   type NodeFunction[-T, +R] = NodeFunction1[T, R]

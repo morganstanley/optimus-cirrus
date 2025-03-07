@@ -609,17 +609,27 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
       executeAsync(action, (_: Try[_]) => log.info(s"$action completed"), highPriority = true)
   }
 
+  /**
+   * Statistics are aggregated at the applet level.
+   *
+   * Note: there are dashboard that relies on this value, make sure to change them if you are modifiying this. There is
+   * a test verifying that the format doesn't change.
+   */
+  def nameForAggregatedStats: String = tracker.root.name
+
   // get statistics about the queue
   def snap: QueueStats = queueLock.synchronized {
     QueueStats(
-      added = workQueue.added + lowPriorityQueue.added,
-      removed = workQueue.removed + lowPriorityQueue.removed
+      cumulAdded = workQueue.added + lowPriorityQueue.added,
+      cumulRemoved = workQueue.removed + lowPriorityQueue.removed,
+      currentSize = workQueue.size + lowPriorityQueue.size
     )
   }
 
   // get additional information about the queues
   def summary: QueueActionSummary = queueLock.synchronized {
     QueueActionSummary(
+      nameForAggregatedStats,
       tracker.name,
       snap,
       workQueue.iterator.map(ActionSummary(_)).to(Vector),

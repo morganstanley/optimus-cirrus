@@ -48,17 +48,17 @@ object StreamsClusterKafkaConfig {
 
 sealed class StreamsClusterConfig(
     val kafkaConfig: StreamsClusterKafkaConfig,
-    @volatile private var _streamableClassConfig: Option[Set[StreamsConfig]])
+    @volatile private var _streamableTopicConfig: Option[Set[StreamsConfig]])
     extends ClusterConfig {
-  def streamableClassConfig: Set[StreamsConfig] = {
-    require(_streamableClassConfig.nonEmpty, s"streamableClasses must be set before accessing")
-    _streamableClassConfig.get
+  def streamableTopicConfig: Set[StreamsConfig] = {
+    require(_streamableTopicConfig.nonEmpty, s"streamableTopics must be set before accessing")
+    _streamableTopicConfig.get
   }
-  def streamableClassNames: Set[String] = streamableClassConfig.map(_.className)
+  def streamableTopicNames: Set[String] = streamableTopicConfig.map(_.topicName)
 
   // should be called exactly once after MessagesServer env initialization in runServer
-  private[optimus] def setStreamableClassConfig(config: Set[StreamsConfig]): Unit =
-    synchronized { _streamableClassConfig = Some(config) }
+  private[optimus] def setStreamableTopicConfig(config: Set[StreamsConfig]): Unit =
+    synchronized { _streamableTopicConfig = Some(config) }
 }
 
 case object EmptyStreamsClusterConfig
@@ -70,7 +70,7 @@ class StreamsClusterConfigGenerator(env: DalEnv)
   override protected def validate(xmlString: String): Boolean =
     XmlStreamsConfigurationValidator.validate(xmlString)
 
-  // streamableClasses set by optimus.dsi.messages.server.MessagesServer#runServer after intializing Evaluation Context
+  // streamableTopics set by optimus.dsi.messages.server.MessagesServer#runServer after intializing Evaluation Context
   val streamsClusterConfig: StreamsClusterConfig =
     new StreamsClusterConfig(
       StreamsClusterKafkaConfig(securityProtocol, servicePrincipal, seedURI.split(",").map(uri => HostPort(uri)).toSeq),

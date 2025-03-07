@@ -20,13 +20,13 @@ import javax.swing.border.EmptyBorder
 import optimus.profiler.ui.common.JPanel2
 
 class ConfigPreview extends JPanel2(new BorderLayout()) {
-  val configTextArea = new JTextArea()
-  val scrollConfig = new JScrollPane(configTextArea)
+  private val configTextArea = new JTextArea()
+  private val scrollConfig = new JScrollPane(configTextArea)
 
   setBorder(new EmptyBorder(2, 2, 2, 2))
-  init
+  init()
 
-  private def init: Unit = {
+  private def init(): Unit = {
     configTextArea.setEditable(false)
     add(scrollConfig, BorderLayout.CENTER)
   }

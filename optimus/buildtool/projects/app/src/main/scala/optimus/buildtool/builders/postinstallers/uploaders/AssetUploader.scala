@@ -89,7 +89,7 @@ class AssetUploader(
     // No need to upload the remaining files if the build was not successful
     if (successful) flush()
 
-  private val sharedThrottle = new AdvancedUtils.Throttle(maxConcurrentUploads)
+  private val sharedThrottle = AdvancedUtils.newThrottle(maxConcurrentUploads)
 
   protected object Tracker {
     // Note - we use Paths here so we're not comparing FileAsset timestamps

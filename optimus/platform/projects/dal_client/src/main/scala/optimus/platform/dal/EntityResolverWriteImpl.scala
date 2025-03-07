@@ -278,7 +278,12 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
     // TODO (OPTIMUS-24843): remove PutResult.txTime dependency
     val temporalContext =
       FlatTemporalContext(DataFreeTemporalSurfaceMatchers.all, result.vtInterval.from, result.txTime, None)
-    EntityReferenceHolder.fromJustStoredEntity(entity, result.permRef, temporalContext, result.versionedRef)
+    EntityReferenceHolder.fromJustStoredEntity(
+      entity,
+      result.permRef,
+      temporalContext,
+      result.txTime,
+      result.versionedRef)
   }
 
   // This entire API needs to be transposed to compute all effects to a single entity at one time

@@ -80,7 +80,6 @@ trait PluginUtils extends TreeDSL with OptimusNames with TreeDuplicator with Opt
       val missingProperty = newTermName("missingProperty")
       val disabledConstructorDefaultValues = newTermName("disabledConstructorDefaultValues")
       val safeResult = newTermName("safeResult")
-      val witnessVersion = newTermName("witnessVersion")
       val isTickableContext = newTermName("isTickableContext")
       val getEntityReference = newTermName("getEntityReference")
       val observedValueNode = newTermName("observedValueNode")

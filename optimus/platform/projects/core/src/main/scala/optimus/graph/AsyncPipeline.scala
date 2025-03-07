@@ -17,8 +17,10 @@ import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.annotations.scenarioIndependentTransparent
 import optimus.platform.util.Log
 import optimus.platform._
-import optimus.platform.AdvancedUtils.Throttle
+import optimus.platform.throttle.Throttle
 import optimus.platform.PluginHelpers.toNodeFactory
+import optimus.platform.throttle.OscillatingThrottleLimiter
+import optimus.platform.throttle.SimpleThrottleLimiter
 import optimus.scalacompat.collection.IterableLike
 
 import scala.collection.GenTraversableOnce
@@ -433,8 +435,8 @@ object AsyncPipeline extends Log {
         if (max > 0)
           if (min > 0) {
             require(max > min, "Max concurrency must be more than minimum concurrency!")
-            Some(new Throttle(max, Some(min)))
-          } else Some(new Throttle(max))
+            Some(new Throttle(new OscillatingThrottleLimiter(max, min)))
+          } else Some(new Throttle(new SimpleThrottleLimiter(max)))
         else None
       override protected final val next = createNextStage()
       override protected final def mapperNode(a: A): Node[BB] = switchState(ss, mapper(a))

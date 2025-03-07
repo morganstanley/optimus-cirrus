@@ -18,6 +18,7 @@ main {
       io.netty.netty-handler
     ]
   }
+  installIvy = true
 }
 
 // would used by interop which is used by Java 8 clients

@@ -144,7 +144,7 @@ final case class TypeClassInfo private (t: Type) extends ClassInfo {
   override def isMap: Boolean = t <:< typeOf[Map[_, _]]
   override def typeArgs: List[ClassInfo] =
     t.typeArgs.map { ClassInfo(_) }
-  override def className: String = fullName
+  override def className: String = ReflectionHelper.typeString(t, fqn = true, typeArgs = false)
   override def fullName: String = {
     ReflectionHelper.typeString(t, fqn = true, typeArgs = true)
   }

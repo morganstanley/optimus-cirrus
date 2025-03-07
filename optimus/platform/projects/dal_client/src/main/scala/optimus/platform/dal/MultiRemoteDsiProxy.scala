@@ -32,7 +32,7 @@ import java.net.URI
 
 abstract class AbstractMultiplexedDsiProxy extends ClientSideDSI {
   protected val leadWriter: ClientSideDSI
-  protected val replicaOpt: Option[ClientSideDSI] = None
+  protected def replicaOpt: Option[ClientSideDSI] = None
   protected val accOpt: Option[ClientSideDSI] = None
   protected val pubSubOpt: Option[ClientSideDSI] = None
   protected val messagesOpt: Option[ClientSideDSI] = None
@@ -98,7 +98,8 @@ final class MultiRemoteDsiProxy(
     cmdLimit: Int,
     asyncConfig: DalAsyncConfig,
     shouldLoadBalance: Boolean,
-    secureTransport: Boolean)
+    secureTransport: Boolean,
+    val maxBrokersAllowedForConnectionFromURI: Int = 1)
     extends AbstractMultiplexedDsiProxy {
   override protected[optimus] val leadWriter =
     new LeaderRemoteDSIProxy(
@@ -109,15 +110,23 @@ final class MultiRemoteDsiProxy(
       secureTransport
     )
   private[optimus] val replica =
-    new RandomRemoteDSIProxy(
-      ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, brokerVirtualHostname(env)),
+    new MultiReadBrokersDSIProxy(
+      baseContext: Context,
       brokerProviderResolver,
+      replicaBroker,
       partitionMap,
+      zone,
+      appId,
+      cmdLimit,
+      asyncConfig,
+      env,
       shouldLoadBalance,
-      secureTransport
+      secureTransport,
+      maxBrokersAllowedForConnectionFromURI
     )
 
-  override protected val replicaOpt: Option[ClientSideDSI] = Some(replica)
+  override protected def replicaOpt: Option[ClientSideDSI] = Some(replica)
+
   override protected val accOpt: Option[ClientSideDSI] = accBroker
     .filter(_ != replicaBroker)
     .map(accUri =>

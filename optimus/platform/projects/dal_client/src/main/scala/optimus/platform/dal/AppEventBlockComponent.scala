@@ -330,7 +330,8 @@ trait AppEventBlockComponent { resolver: EntityResolverWriteImpl =>
   private[this] def currentAppEvent: Option[AppEventBlock] =
     EvaluationContext.scenarioStack.findPluginTag(AppEventBlock)
 
-  private[dal] final def inAppEvent[T](f: => T): T = inAppEvent$NF(asAsync(() => f))
+  // identity(...) is required for Loom: without it, Scala optimizes this by calling f rather than creating () => f
+  private[dal] final def inAppEvent[T](f: => T): T = inAppEvent$NF(asAsync(() => identity(f)))
   @async private[dal] final def inAppEvent$NF[T](f: AsyncFunction0[T]): T = {
     val existing = currentAppEvent
     if (existing.isEmpty) {
@@ -341,7 +342,8 @@ trait AppEventBlockComponent { resolver: EntityResolverWriteImpl =>
     }
   }
 
-  private[dal] final def event[T](e: BusinessEvent)(f: => T): T = event$NF(e)(asAsync(() => f))
+  // identity(...) is required for Loom: without it, Scala optimizes this by calling f rather than creating () => f
+  private[dal] final def event[T](e: BusinessEvent)(f: => T): T = event$NF(e)(asAsync(() => identity(f)))
   @async private[dal] final def event$NF[T](e: BusinessEvent)(f: AsyncFunction0[T]): T = inAppEvent {
     currentAppEvent
       .getOrElse(throw new IllegalStateException("Cannot run outside AppEventBlock"))

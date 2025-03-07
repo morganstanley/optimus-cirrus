@@ -17,6 +17,7 @@ import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader.UploadF
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
 import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
@@ -212,22 +213,6 @@ private[buildtool] trait GitCmdLine { this: OptimusAppCmdLine =>
 }
 
 private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
-  // TODO (OPTIMUS-70130): delete once fully unused in obt.conf and CI jobs
-  @args.Option(
-    name = "--silverKing",
-    required = false,
-    aliases = Array("--sk", "--silverking"),
-    usage = "SilverKing location (defaults to SK disabled)"
-  )
-  val silverKing_DO_NOT_USE: String = NoneArg
-
-  // TODO (OPTIMUS-70130): delete once fully unused in obt.conf and CI jobs
-  @args.Option(
-    name = "--remoteStoreComparisonModeEnabled",
-    required = false,
-    usage = "Comparison mode [dis|en]abled for remote store (defaults to false/disabled)"
-  )
-  val comparisonMode_DO_NOT_USE: Boolean = false
 
   @args.Option(
     name = "--dhtRemoteStore",
@@ -272,9 +257,9 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     handler = classOf[MemSizeOptionHandler],
     required = false,
     usage =
-      "Threshold for cross-region read-through after write to current region (defaults to 100MB).  Artifacts larger than threshold value will be read through DHT from the remote DHTs."
+      "Threshold for cross-region read-through after write to current region (defaults to 50 MB). Artifacts larger than threshold value will be read through DHT from the remote DHTs."
   )
-  val crossRegionDHTSizeThreshold: MemSize = MemSize.of(100, MemUnit.MB)
+  val crossRegionDHTSizeThreshold: MemSize = MemSize.of(50, MemUnit.MB)
 }
 
 private[buildtool] class OptimusBuildToolCmdLine extends OptimusBuildToolCmdLineT
@@ -319,6 +304,20 @@ private[buildtool] trait OptimusBuildToolCmdLineT
     usage = "Scopes to include by attribute (eg. 'cpp')"
   )
   val scopeFilter: String = "none"
+
+  @args.Option(
+    name = "--buildModifiedScopes",
+    required = false,
+    usage = "Include scopes with git changes when building (defaults to false)"
+  )
+  val buildModifiedScopes: Boolean = false
+
+  @args.Option(
+    name = "--buildDownstreamScopes",
+    required = false,
+    usage = "Include downstream scopes when building (defaults to false)"
+  )
+  val buildDownstreamScopes: Boolean = false
 
   @args.Option(
     name = "--traceDir",
@@ -724,16 +723,6 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   )
   val breadcrumbs = true
 
-  /**
-   * OBT will write a "RootLocator" which indicates that
-   */
-  @args.Option(
-    name = "--writeRootLocator",
-    required = false,
-    usage = "Write root locator (for 'strato catchup') after successful build (defaults to false)"
-  )
-  val writeRootLocator = false
-
   @args.Option(
     name = "--mischief",
     required = false,
@@ -889,14 +878,17 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   @args.Option(
     name = "--pypiCredentials",
     required = false,
-    usage = "Location of the cached pip.ini credential file to load, used by pip to connect to Pypi Artifactory"
+    usage = "Location of the cached pip.ini credential file to load, used by pip to connect to Pypi Artifactory",
+    handler = classOf[StringOptionOptionHandler]
   )
-  val pypiCredentials: String = NoneArg
-
+  private val pypiCredentials: Option[String] = None
+  lazy val pypiCredentialsFile: Option[FileAsset] = pypiCredentials.map(f => FileAsset(Paths.get(f)))
   @args.Option(
     name = "--pypiUvCredentials",
     required = false,
-    usage = "Location of the cached uv.toml credential file to load, used by uv to connect to Pypi Artifactory"
+    usage = "Location of the cached uv.toml credential file to load, used by uv to connect to Pypi Artifactory",
+    handler = classOf[StringOptionOptionHandler]
   )
-  val pypiUvCredentials: String = NoneArg
+  private val pypiUvCredentials: Option[String] = None
+  lazy val pypiUvCredentialsFile: Option[FileAsset] = pypiUvCredentials.map(f => FileAsset(Paths.get(f)))
 }

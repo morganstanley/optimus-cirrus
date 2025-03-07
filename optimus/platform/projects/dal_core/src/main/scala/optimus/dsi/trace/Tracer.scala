@@ -633,6 +633,17 @@ object Tracer {
         })
   }
 
+  def getEntitlementLinkagesCheckWallClockTime(id: TraceId): Long = getEntitlementLinkagesCheckWallClockTime(Seq(id))
+  def getEntitlementLinkagesCheckWallClockTime(ids: Seq[TraceId]): Long = {
+    getWallClockTime(
+      ids,
+      (t: TraceEvent.Event) =>
+        t match {
+          case TraceEvent.EntitlementLinkagesCheck => true
+          case _                                   => false
+        })
+  }
+
   def getEntitlementWallclockTime(id: TraceId): Long = getEntitlementWallclockTime(Seq(id))
   def getEntitlementWallclockTime(ids: Seq[TraceId]): Long = {
     getWallClockTime(
@@ -1068,6 +1079,14 @@ object Tracer {
         }
       })
       .mapValuesNow(_.toString)
+  }
+
+  def getWindowDelay(ids: Seq[TraceId]): Int = {
+    val traces: Seq[TraceData] = ids flatMap { id =>
+      Option(TracerRegistry.get(id)) map { _.getTraces() } getOrElse Nil
+    }
+
+    (traces map { _.event } collect { case e: TraceEvent.WindowDelay => e.delay }).sum
   }
 
   private def cnfEventMatcher(event: TraceEvent.Event): Int = {

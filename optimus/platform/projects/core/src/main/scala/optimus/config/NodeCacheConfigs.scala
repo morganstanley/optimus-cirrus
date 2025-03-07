@@ -66,9 +66,10 @@ private[config] final case class InlineConfiguration(content: JsObject) extends 
 private[optimus] object OptconfProvider {
   val log: Logger = getLogger(OptconfProvider)
 
-  def fromPath(path: String): OptconfProvider = OptconfPath(path)
-  def fromContent(content: String, path: String = null): OptconfProvider =
-    if ((content ne null) && content.nonEmpty) OptconfContent(content, path) else EmptyOptconfProvider
+  def fromPath(path: String, scopePath: String = null): OptconfProvider = OptconfPath(path, Option(scopePath))
+  def fromContent(content: String, path: String = null, scopePath: String = null): OptconfProvider =
+    if ((content ne null) && content.nonEmpty) OptconfContent(content, path, Option(scopePath))
+    else EmptyOptconfProvider
 
   def readOptconfFile(path: String): Option[String] = {
     NodeCacheInfo.openOptimusConfigFile(path).map { stream =>
@@ -83,28 +84,36 @@ private[optimus] object OptconfProvider {
 
 private[optimus] sealed trait OptconfProvider {
   def nonEmpty: Boolean
-  val path: String
+  val optconfPath: String
   def jsonContent: String
+  def scopePath: Option[String]
 }
 
 private[optimus] case object EmptyOptconfProvider extends OptconfProvider {
   override def nonEmpty: Boolean = false
-  override val path: String = null
+  override val optconfPath: String = null
   override val jsonContent: String = emptyOptconf
   override def toString: String = "EmptyOptconfProvider"
+  override def scopePath: Option[String] = None
 }
 
-private[optimus] final case class OptconfPath(path: String) extends OptconfProvider {
+private[optimus] final case class OptconfPath(optconfPath: String, scopePath: Option[String] = None)
+    extends OptconfProvider {
   import OptconfProvider._
-  @transient lazy val jsonContent: String = readOptconfFile(path).getOrElse(emptyOptconf)
-  override def nonEmpty: Boolean = path ne null
+  @transient lazy val jsonContent: String = readOptconfFile(optconfPath).getOrElse(emptyOptconf)
+  override def nonEmpty: Boolean = optconfPath ne null
 }
 
-private[optimus] final case class OptconfContent(jsonContent: String, path: String = null) extends OptconfProvider {
+private[optimus] final case class OptconfContent(
+    jsonContent: String,
+    optconfPath: String = null,
+    scopePath: Option[String] = None)
+    extends OptconfProvider {
   override def nonEmpty: Boolean = jsonContent ne null
 
   // don't log the entire contents
-  override def toString: String = s"OptconfContent(${if (path ne null) path else "[content]"})"
+  override def toString: String =
+    s"OptconfContent(${if (optconfPath ne null) optconfPath else "[content]"}${scopePath.map(tp => s", $tp").getOrElse("")})"
 }
 
 // TODO (OPTIMUS-15654): improve syntax of type safe config to support
@@ -118,7 +127,7 @@ private[optimus] object CacheConfig {
       getDefaultSize(name)
     )
 
-  def getDefaultSize(name: String): Int =
+  private def getDefaultSize(name: String): Int =
     if (name == UNodeCache.globalCacheName) Settings.cacheSize
     else if (name == UNodeCache.globalSICacheName) Settings.cacheSISize
     else CacheDefaults.DEFAULT_SHARED_SIZE
@@ -203,6 +212,7 @@ private[optimus] final case class CacheConfig(
 private[optimus] sealed trait CachePolicyConfig {
   val cachePolicy: NCPolicy
   val cache: Option[CacheConfig]
+  val scopePath: Option[String] = None
   final def disableCache: Boolean = cachePolicy eq NCPolicy.DontCache
 }
 
@@ -221,7 +231,7 @@ object ConstructorConfig {
   def getCacheOption(cc: Option[ConstructorConfig]): Option[CacheConfig] = cc.flatMap(_.cache)
 }
 
-// e.g. { "cache": ${Caches.a2}, "gcntive": true, "localSlot": 5,  "cachePolicy": "BasicPolicy", "syncId": 6}
+// e.g. { "cache": ${Caches.a2}, "gcnative": true, "localSlot": 5,  "cachePolicy": "BasicPolicy", "syncId": 6}
 // n.b. we are using Java types in the Options because these fields are used from Java code
 // and Scala erases value types as Object so Java would see Option[Int] as Option[Object].
 private[optimus] final case class PropertyConfig(
@@ -233,13 +243,14 @@ private[optimus] final case class PropertyConfig(
     localSlot: Option[JInteger],
     twkID: Option[JInteger],
     dependsOnMask: Option[String],
-    trackForInvalidation: Option[JBoolean]
+    trackForInvalidation: Option[JBoolean],
+    override val scopePath: Option[String] // Currently only applied to cache policy
 ) extends CachePolicyConfig {
   def merge(that: PropertyConfig): PropertyConfig = {
     new PropertyConfig(
       name = that.name,
       cache = PropertyConfig.mergeCache(cache, that.cache, that.disableCache),
-      cachePolicy = PropertyConfig.mergeCachePolicy(this, that),
+      cachePolicy = PropertyConfig.mergeScopedCachePolicy(this, that),
       gcnative = that.gcnative,
       syncId = if (syncId == that.syncId) that.syncId else None,
       localSlot = if (localSlot == that.localSlot) that.localSlot else None,
@@ -247,7 +258,8 @@ private[optimus] final case class PropertyConfig(
       dependsOnMask =
         if (that.dependsOnMask.isDefined && that.dependsOnMask.get != "0") that.dependsOnMask else this.dependsOnMask,
       trackForInvalidation =
-        if (that.trackForInvalidation.isDefined) that.trackForInvalidation else this.trackForInvalidation
+        if (that.trackForInvalidation.isDefined) that.trackForInvalidation else this.trackForInvalidation,
+      scopePath = scopePath
     )
   }
 }
@@ -262,8 +274,10 @@ private[optimus] object PropertyConfig {
       localSlot: Option[Int],
       twkID: Option[Int],
       dependsOnTweakBits: Option[String],
-      // dummy implicit to avoid erased signature conflict with the compiler generated apply method
-      trackForInvalidation: Option[Boolean])(implicit dummy: DummyImplicit): PropertyConfig =
+      trackForInvalidation: Option[Boolean],
+      scopePath: Option[String])
+  // dummy implicit to avoid erased signature conflict with the compiler generated apply method
+  (implicit dummy: DummyImplicit): PropertyConfig =
     PropertyConfig(
       name: String,
       cachePolicy: NCPolicy,
@@ -274,7 +288,8 @@ private[optimus] object PropertyConfig {
       localSlot.map(x => x): Option[JInteger],
       twkID.asInstanceOf[Option[JInteger]],
       dependsOnTweakBits,
-      trackForInvalidation.map(x => x): Option[JBoolean]
+      trackForInvalidation.map(x => x): Option[JBoolean],
+      scopePath = scopePath
     )
 
   def mergeCache(
@@ -302,6 +317,16 @@ private[optimus] object PropertyConfig {
     }
   }
 
+  private def mergeScopedCachePolicy(propConf: CachePolicyConfig, otherPropConf: CachePolicyConfig): NCPolicy = {
+    if (propConf.scopePath == otherPropConf.scopePath)
+      mergeCachePolicy(propConf, otherPropConf)
+    else {
+      val targetPath = propConf.scopePath.getOrElse("")
+      val otherTargetPath = otherPropConf.scopePath.getOrElse("")
+      propConf.cachePolicy.combineWith(targetPath, otherPropConf.cachePolicy, otherTargetPath)
+    }
+  }
+
   def merge(propConfigs1: Option[PropertyConfig], propConfigs2: Option[PropertyConfig]): PropertyConfig = {
     (propConfigs1, propConfigs2) match {
       case (Some(p1), Some(p2)) => p1 merge p2
@@ -311,6 +336,7 @@ private[optimus] object PropertyConfig {
         new PropertyConfig(
           "",
           null,
+          None,
           None,
           None,
           None,
@@ -339,7 +365,8 @@ private[optimus] final case class NodeConfig(
     config: Option[PropertyConfig],
     cacheConfig: Option[CacheConfig],
     tweakConfig: Option[PropertyConfig],
-    isPgoGen: Boolean = false) {
+    isPgoGen: Boolean = false,
+    scopePath: String = null) {
   def apply(info: NodeTaskInfo): Unit = {
     val cachePolicy =
       if ((info.cachePolicy ne null) && (info.cachePolicy ne NCPolicy.Basic))
@@ -359,7 +386,13 @@ private[optimus] final case class NodeConfig(
       val mergedPropConfig = PropertyConfig.merge(config, that.config)
       val mergedCacheConfig = PropertyConfig.mergeCache(cacheConfig, that.cacheConfig, mergedPropConfig.disableCache)
       val mergedTweakConfig = PropertyConfig.merge(tweakConfig, that.tweakConfig)
-      NodeConfig(Some(mergedPropConfig), mergedCacheConfig, Some(mergedTweakConfig), isPgoGen && that.isPgoGen)
+      // scopePath should not merge if different
+      NodeConfig(
+        Some(mergedPropConfig),
+        mergedCacheConfig,
+        Some(mergedTweakConfig),
+        isPgoGen && that.isPgoGen,
+        scopePath)
     }
   }
 
@@ -371,6 +404,7 @@ private[optimus] object NodeCacheInfo {
   val configurationSuffix = s".${ProfilerOutputStrings.optconfExtension}"
 
   val ClasspathRegex: Regex = "classpath:/(.*)".r
+  val ScopePathRegex: Regex = "\\[(.*)](.*)".r
 
   def openOptimusConfigFile(pathStr: String): Option[InputStream] = Option(pathStr).map {
     case ClasspathRegex(path) => getClass.getClassLoader.getResourceAsStream(path)
@@ -380,8 +414,9 @@ private[optimus] object NodeCacheInfo {
   // check file suffix is .optconf
   private[config] def verifyConfigPath(path: String): Option[String] = {
     if ((path ne null) && path.nonEmpty) {
+      var br: BufferedReader = null
       try {
-        new BufferedReader(new InputStreamReader(openOptimusConfigFile(path).get))
+        br = new BufferedReader(new InputStreamReader(openOptimusConfigFile(path).get))
         if (!path.endsWith(NodeCacheInfo.configurationSuffix)) {
           val msg = "typesafe config file must have suffix '" + NodeCacheInfo.configurationSuffix + "'"
           throw new IllegalArgumentException(msg)
@@ -391,6 +426,8 @@ private[optimus] object NodeCacheInfo {
         case e: Exception =>
           log.error(s"Cannot read node cache configs from $path", e)
           None
+      } finally {
+        if (br != null) br.close()
       }
     } else {
       log.warn("Did you mean to pass an empty config path?")
@@ -409,6 +446,7 @@ private[optimus] object NodeCacheConfigs {
   private val log = getLogger(this.getClass)
 
   private def reapplyToConstructedEntities(): Unit = {
+    NCPolicy.resetCaches()
     // Re-apply the config to already-constructed entities
     // Entities that are not yet constructed will pick up the new config via EntityInfo.propertyMetadata)
     for ((oi, _) <- OptimusInfo.registry)
@@ -417,8 +455,8 @@ private[optimus] object NodeCacheConfigs {
 
   /**
    * The ID for a property that is configured in optconf might already exist because either:
-   *   1. this property is in Optimus registry, or was traced in NodeTrace.taskInfos (easy case), OR 2. a superclass was
-   *      registered as in (1) (slightly harder case)
+   *   1. this property is in Optimus registry, or was traced in NodeTrace.taskInfos (easy case), OR
+   *   1. a superclass was registered as in (1) (slightly harder case)
    *
    * To be safe, let's include all children of any registered properties as also 'registered'. Note: we could be less
    * aggressive about this and only look at child classes of properties if they actually are defined in optconf, but we
@@ -548,7 +586,7 @@ private[optimus] object NodeCacheConfigs {
     settingsConfig.copy(entityConfigs = remappedEntityConfigs)
   }
 
-  def getOptconfProviderPaths: Seq[String] = getOptconfProviders.map(_.path).filter(_ ne null)
+  def getOptconfProviderPaths: Seq[String] = getOptconfProviders.map(_.optconfPath).filter(_ ne null)
 
   // if same cache key in both optconfs, last one wins
   // otherwise add all cache configs
@@ -605,16 +643,17 @@ private[optimus] object NodeCacheConfigs {
     (conf1.lastOption, conf2.headOption) match {
       case (_, None) => conf1 // conf2 is empty
       case (None, _) => conf2 // conf1 is empty
-      // very common case - the adjacent configs are both PerProperty, so can be merged to make lookup more efficinet
-      case (Some(pp1: PerEntityConfigGroup), Some(pp2: PerEntityConfigGroup)) =>
+      // very common case - the adjacent configs are both PerProperty, so can be merged to make lookup more efficient
+      case (Some(pp1: PerEntityConfigGroup), Some(pp2: PerEntityConfigGroup)) if pp1.scopePath == pp2.scopePath =>
         conf1.init ++ (pp1.merge(pp2) +: conf2.tail)
-      case (_, _) => conf1 ++ conf2 // regex configs can't be (easily) merged with other configs
+      case (_, _) =>
+        conf1 ++ conf2 // regex configs and != scopePath can't be (easily) merged with other configs
     }
 
   /**
-   * applies the configuration specified in optconfProciders
+   * applies the configuration specified in optconfProviders
    *
-   * Must be always called under lock: this method is only called in the [[StateApplicator]] apply for some of the
+   * Must be always called under lock: this method is only called in the [[optimus.platform.inputs.StateApplicators.StateApplicator]] apply for some of the
    * optconf node inputs and the apply method is only called in ProcessState.setState and ProcessState.reapplyApplicator
    * both of which synchronize on the ProcessState
    */
@@ -662,14 +701,24 @@ private[optimus] object NodeCacheConfigs {
         s"Classes: ${nodeCountByEntity.size} Nodes: ${nodeCountByEntity.sum}")
   }
 
+  def applyScopeDependent(optconfProvider: OptconfProvider): Unit = {
+    val newConfig = NodeCacheConfigsParser.parse(optconfProvider)
+    val scopePath = optconfProvider.scopePath
+    initGlobals()
+    val newEntityCfg = newConfig.entityConfigs
+    val newEntityConfigs = settingsConfig.entityConfigs.filterNot(_.scopePath == scopePath) ++ newEntityCfg
+    settingsConfig = settingsConfig.copy(entityConfigs = newEntityConfigs)
+    reapplyToConstructedEntities()
+  }
+
   private def optconfPaths(optconfProviders: Seq[OptconfProvider]): String =
-    optconfProviders.map(_.path).filter(_ ne null).mkString(",")
+    optconfProviders.map(_.optconfPath).filter(_ ne null).mkString(",")
 
   private[config] def mergeOptconfs(optconfProviders: Seq[OptconfProvider]): NodeCacheConfigs = {
     optconfProviders.filter(_.nonEmpty).foldLeft(NodeCacheConfigs.empty) { (acc, p) =>
       val second = NodeCacheConfigsParser.parse(p)
       if (Settings.ignorePgoGraphConfig && second.isPgoGen) {
-        log.warn(s"PGO generated config file ${p.path} will be ignored since -Doptimus.config.pgo.ignore is set")
+        log.warn(s"PGO generated config file ${p.optconfPath} will be ignored since -Doptimus.config.pgo.ignore is set")
         acc
       } else acc.merge(second)
     }
@@ -701,20 +750,25 @@ private[optimus] object NodeCacheConfigs {
 
   @volatile private[this] var settingsConfig: NodeCacheConfigs = empty
 
-  private def confProvider(path: String): OptconfProvider = path match {
+  private def confProvider(path: String, scopePath: String): OptconfProvider = path match {
     case NodeCacheInfo.ClasspathRegex(classPath) =>
       log.info(s"Optconf exists on $classPath and path: $path")
-      OptconfProvider.fromPath(path)
+      OptconfProvider.fromPath(path, scopePath)
     case localPath =>
       log.info(s"Optconf is at path $localPath")
       OptconfProvider
         .readOptconfFile(localPath)
-        .map(content => OptconfProvider.fromContent(content, localPath))
+        .map(content => OptconfProvider.fromContent(content, localPath, scopePath))
         .getOrElse(EmptyOptconfProvider)
   }
 
-  private[optimus] def verifyPathAndCreateProvider(path: String): Option[OptconfProvider] =
-    NodeCacheInfo.verifyConfigPath(path).map(confProvider)
+  private[optimus] def verifyPathAndCreateProvider(path: String): Option[OptconfProvider] = {
+    val (scopePath, optconfPath) = path match {
+      case NodeCacheInfo.ScopePathRegex(targetPath, optconfPath) => (targetPath, optconfPath)
+      case _                                                     => (null, path)
+    }
+    NodeCacheInfo.verifyConfigPath(optconfPath).map(confProvider(_, scopePath))
+  }
 
   initGlobals()
   private def initGlobals(): Unit = {
@@ -727,7 +781,8 @@ private[optimus] object NodeCacheConfigs {
           maxSize = size,
           requestedConcurrency = Settings.cacheConcurrency,
           cacheBatchSize = NodeCCache.defaultCacheBatchSize,
-          cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding
+          cacheBatchSizePadding = NodeCCache.defaultCacheBatchSizePadding,
+          reduceMaxSizeByScopedCachesSize = name == UNodeCache.globalCacheName
         )
         require(c.sharable, s"cache must be sharable '$name'")
         require(config.isEmpty, s"duplicate shared name '$name'")
@@ -788,9 +843,12 @@ private[optimus] object NodeCacheConfigs {
 private[optimus] sealed trait EntityConfigGroup {
   def configForEntity(entityName: String): Option[NodeConfigGroup]
   def size: Int
+  def scopePath: Option[String] = None
 }
 // currently per entity configs always have per property configs (but this could be changed in future if needed)
-private[optimus] final case class PerEntityConfigGroup(entityToConfig: Map[String, PerPropertyConfigGroup])
+private[optimus] final case class PerEntityConfigGroup(
+    entityToConfig: Map[String, PerPropertyConfigGroup],
+    override val scopePath: Option[String] = None)
     extends EntityConfigGroup {
   override def configForEntity(entityName: String): Option[NodeConfigGroup] = entityToConfig.get(entityName)
   override def size: Int = entityToConfig.size
@@ -803,7 +861,9 @@ private[optimus] final case class PerEntityConfigGroup(entityToConfig: Map[Strin
     }
     PerEntityConfigGroup(merged.toMap)
   }
+
 }
+
 // currently regex entity configs always have all-property configs (but this could be changed in future if needed)
 private[optimus] final case class RegexEntityConfigGroup(entityRegex: Regex, config: AllPropertyConfigGroup)
     extends EntityConfigGroup {
@@ -816,9 +876,11 @@ private[optimus] sealed trait NodeConfigGroup {
   def configForNode(propertyName: String): Option[NodeConfig]
 }
 private[config] object PerPropertyConfigGroup {
-  val empty = PerPropertyConfigGroup(Map.empty)
+  val empty: PerPropertyConfigGroup = PerPropertyConfigGroup(Map.empty)
 }
-private[optimus] final case class PerPropertyConfigGroup(propertyToConfig: Map[String, NodeConfig])
+private[optimus] final case class PerPropertyConfigGroup(
+    propertyToConfig: Map[String, NodeConfig],
+    scopePath: String = null)
     extends NodeConfigGroup {
   override def configForNode(propertyName: String): Option[NodeConfig] =
     propertyToConfig.get(propertyName)
@@ -963,6 +1025,7 @@ private[optimus] object NodeCacheConfigsParser {
       val twkID = fields.get("twkID").map(_.convertTo[Int])
       val dependsOnTweakBits = fields.get("depOn").map(_.convertTo[String])
       val trackForInvalidation = fields.get("trackForInvalidation").map(_.convertTo[Boolean])
+      val scopePath = optconfProvider.scopePath
 
       PropertyConfig(
         name,
@@ -973,7 +1036,8 @@ private[optimus] object NodeCacheConfigsParser {
         localSlot,
         twkID,
         dependsOnTweakBits,
-        trackForInvalidation)
+        trackForInvalidation,
+        scopePath)
     }
 
     // Section Configs
@@ -1013,7 +1077,7 @@ private[optimus] object NodeCacheConfigsParser {
 
       def flushPerPropMap(): Unit = if (currentPerPropMap.nonEmpty) {
         val immutableMap = currentPerPropMap.iterator.map { case (k, v) => (k, PerPropertyConfigGroup(v.toMap)) }.toMap
-        configSets += PerEntityConfigGroup(immutableMap)
+        configSets += PerEntityConfigGroup(immutableMap, optconfProvider.scopePath)
         currentPerPropMap.clear()
       }
 
@@ -1128,7 +1192,7 @@ private[optimus] final case class NodeCacheConfigs(
         mergedConstructorConfigs,
         mergedCaches.toMap,
         isPgoGen && that.isPgoGen,
-        s"${source}+${that.source}")
+        s"$source+${that.source}")
     }
   }
 

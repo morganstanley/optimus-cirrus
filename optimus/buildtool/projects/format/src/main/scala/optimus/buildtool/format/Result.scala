@@ -98,7 +98,12 @@ object Result {
     catch {
       case e: ConfigException =>
         val actualLine = if (e.origin() != null) e.origin().lineNumber() else line
-        Error(e.getMessage, file, actualLine).failure
+        val message =
+          if (e.origin().filename() != null && e.origin().filename().endsWith(file.path.path.toString))
+            // the exception message contains the file and line number, so we strip it
+            e.getMessage.stripPrefix(e.origin.description + ": ")
+          else e.getMessage
+        Error(message, file, actualLine).failure
       case e: AssertionError =>
         Error(e.getMessage, file, line).failure
     }
@@ -112,13 +117,6 @@ object Result {
 
   def withProblemsFrom[A](v: A)(messagesSources: Result[_]*): Result[A] =
     Success(v, messagesSources.flatMap(_.problems).to(Seq))
-}
-
-trait ResultMapper {
-  def map[A, B, C](ra: Result[A], rb: Result[B])(op: (A, B) => C): Result[C] = (ra, rb) match {
-    case (Success(a, aProbs), Success(b, bProbs)) => Success(op(a, b), aProbs ++ bProbs)
-    case _                                        => Failure(ra.problems ++ rb.problems)
-  }
 }
 
 // Primarily intended for use to make for comprehensions easier
@@ -153,6 +151,11 @@ sealed trait ResultSeq[+A] {
     case f: FailureSeq      => f
   }
 
+  def withProblems(newProblems: Seq[Message]): ResultSeq[A] = this match {
+    case SuccessSeq(r, ps) => SuccessSeq(r, ps ++ newProblems)
+    case FailureSeq(ps)    => FailureSeq(ps ++ newProblems)
+  }
+
   def withProblems(newProblems: Seq[A] => Seq[Message]): ResultSeq[A] = this match {
     case SuccessSeq(rs, ps) => SuccessSeq(rs, ps ++ newProblems(rs))
     case f: FailureSeq      => f
@@ -171,11 +174,6 @@ sealed trait ResultSeq[+A] {
   def value: Result[Seq[A]] = this match {
     case SuccessSeq(rs, ps) => Success(rs, ps)
     case FailureSeq(ps)     => Failure(ps)
-  }
-
-  protected def withProblems(newProblems: Seq[Message]): ResultSeq[A] = this match {
-    case SuccessSeq(r, ps) => SuccessSeq(r, ps ++ newProblems)
-    case FailureSeq(ps)    => FailureSeq(ps ++ newProblems)
   }
 }
 final case class SuccessSeq[+A](results: Seq[A], problems: Seq[Message] = Nil) extends ResultSeq[A]

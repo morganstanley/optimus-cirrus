@@ -13,7 +13,6 @@ package optimus.platform.dsi.protobufutils
 
 import com.google.protobuf.ByteString
 import com.google.protobuf.MessageLite
-import msjava.base.spring.lifecycle.BeanState
 import msjava.msnet._
 import msjava.msnet.internal.MSNetProtocolConnectionConfigurationSupport
 import msjava.msnet.ssl.SSLEstablisherFactory
@@ -57,6 +56,7 @@ import optimus.platform.dsi.protobufutils.DALProtoClient.DsiServer
 import optimus.platform.dsi.protobufutils.DALProtoClient.VersioningServer
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
 import optimus.platform.internal.TemporalSource
+import optimus.platform.util.ObjectState
 import optimus.platform.util.PrettyStringBuilder
 import optimus.utils.PropertyUtils
 import optimus.utils.misc.Color
@@ -239,9 +239,10 @@ final class RequestSender(
       val writeReqSpecificProps =
         if (rc.requestType == DSIRequestProto.Type.WRITE) {
           val anyWriteReq = rc.clientRequests.collectFirst { case req: WriteClientRequest => req }
-          val re = anyWriteReq.flatMap(_.completable.env)
-          val maybeEnv = re.flatMap(r => Option(r.config)).map(_.runtimeConfig.mode)
-          Seq(Properties.`type` -> "write") ++ maybeEnv.map(env => Properties.env -> env)
+          val reqEnv = anyWriteReq.flatMap(_.completable.env)
+          val maybeEnv = reqEnv.flatMap(r => Option(r.config)).map(_.runtimeConfig.mode)
+          val tpe = if (anyWriteReq.exists(_.hasMessagesCommands)) "message" else "write"
+          Seq(Properties.`type` -> tpe) ++ maybeEnv.map(env => Properties.env -> env)
         } else Seq.empty
 
       if (requestCommandLocationProp.nonEmpty || writeReqSpecificProps.nonEmpty) {
@@ -390,7 +391,7 @@ private[optimus] class TcpRequestSender(
 
   private[this] var connection: MSNetTCPConnection = null
   private[this] var remoteProtocolVersion: Option[DalProtocolVersion] = null
-  private[this] val state = new BeanState()
+  private[this] val state = new ObjectState()
   private[optimus] def hostPort = configSupport.getHostPort
 
   private[this] def createConnection() = {

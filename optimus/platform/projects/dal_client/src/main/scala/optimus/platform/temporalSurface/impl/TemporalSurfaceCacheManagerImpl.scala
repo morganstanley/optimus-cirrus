@@ -166,77 +166,11 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
   private val dumpGetClassInfoStackTrace =
     DiagnosticSettings.getBoolProperty("optimus.platform.temporalSurface.dumpClassInfoSource", false)
 
-  object cacheManager extends TemporalSurfaceCacheManager {
-    def addMonotemporalCache(tt: Instant, cache: TemporalSurfaceCache) =
-      TemporalSurfaceCachedDataAccess.this.addMonotemporalCache(tt, cache)
-    def removeMonotemporalCache(tt: Instant, cache: TemporalSurfaceCache) =
-      TemporalSurfaceCachedDataAccess.this.removeMonotemporalCache(tt, cache)
-  }
-
-  val monotemporalCaches = new ConcurrentHashMap[Instant, Set[TemporalSurfaceCache]]()
-
-  @tailrec private def addMonotemporalCache(tt: Instant, cache: TemporalSurfaceCache): Unit = {
-    monotemporalCaches.get(tt) match {
-      case null     => if (null != monotemporalCaches.putIfAbsent(tt, Set(cache))) addMonotemporalCache(tt, cache)
-      case existing => if (!monotemporalCaches.replace(tt, existing, existing + cache)) addMonotemporalCache(tt, cache)
-    }
-  }
-
-  @tailrec private def removeMonotemporalCache(tt: Instant, cache: TemporalSurfaceCache): Unit = {
-    monotemporalCaches.get(tt) match {
-      case null =>
-      case existing =>
-        val newCaches = existing - cache
-        if (newCaches ne existing) {
-          if (newCaches.isEmpty) {
-            if (!monotemporalCaches.remove(tt, existing)) removeMonotemporalCache(tt, cache)
-          } else if (!monotemporalCaches.replace(tt, existing, newCaches)) removeMonotemporalCache(tt, cache)
-        }
-    }
-  }
-
-  // TODO (OPTIMUS-65703): Remove once we have fully deprecated implicit subscribing
-  private def maybeSubscribeToERef(
-      operation: TemporalSurfaceQuery,
-      sourceTemporalitySurface: LeafTemporalSurface): Unit = {
-    if (!(Settings.implicitlySubscribeTickingErefs && sourceTemporalitySurface.canTick)) return
-
-    operation match {
-      case op: QueryByEntityReference[_] =>
-        // This 1) proves via the compiler that currentTemporalityFor(op) can ONLY be of type QueryTemporality.At
-        // and 2) produces breadcrumbs as a side-effects
-        //
-        // (really, we should just get rid of the whole TemporalityType path dependent type)
-        (sourceTemporalitySurface.currentTemporalityFor(op): QueryTemporality.At)
-
-        TemporalSurfaceCacheFactory.cacheEntityReference(op.eRef, op.targetClass, sourceTemporalitySurface)
-      case _ =>
-    }
-  }
-
-  def foldCachesWithTimeUntilDefined[T](time: QueryTemporality, fn: TemporalSurfaceCache => Option[T]): Option[T] = {
-    val monoCaches = time match {
-      case QueryTemporality.At(vt, tt) => monotemporalCaches.get(tt)
-      case _ => throw new UnsupportedOperationException("Both vt and tt need to be specified to query the cache")
-    }
-
-    if (monoCaches == null || monoCaches.isEmpty) None
-    else
-      monoCaches.foldLeft[Option[T]](None) {
-        case (existing: Some[r], _)              => existing
-        case (None, cache: TemporalSurfaceCache) => fn(cache)
-      }
-  }
-
   // ItemKeys
   @scenarioIndependent @node private def resolverGetItemKeys(operation: TemporalSurfaceQuery)(
       sourceTemporality: operation.TemporalityType): Seq[operation.ItemKey] = {
     val result = resolver.getItemKeys(operation)(sourceTemporality)
     result
-  }
-  private def cacheGetItemKeys(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType): Option[Seq[operation.ItemKey]] = {
-    foldCachesWithTimeUntilDefined(sourceTemporality, { _.getItemKeys(operation)(sourceTemporality) })
   }
 
   @scenarioIndependent @node def getItemKeys(
@@ -253,16 +187,8 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
     type Key = operation.ItemKey
     val rec = recorder
     val sourceTemporality = sourceTemporalitySurface.currentTemporalityFor(operation)
-    rec.startCache
-    cacheGetItemKeys(operation)(sourceTemporality) match {
-      case r: Some[Seq[Key]] =>
-        rec.cacheHit; r.get // calling get rather than using unapply as this asyncs
-      case None =>
-        rec.cacheMiss
-        val result = resolverGetItemKeys(operation)(sourceTemporality)
-        if (result.isEmpty) rec.cacheMissEmpty
-        result
-    }
+    val result = resolverGetItemKeys(operation)(sourceTemporality)
+    result
   }
   // ItemData
   @scenarioIndependent @node private def resolverGetItemData(operation: TemporalSurfaceQuery)(
@@ -270,11 +196,6 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
       itemTemporality: operation.TemporalityType): Map[operation.ItemKey, operation.ItemData] = {
     val result = resolver.getItemData(operation)(sourceTemporality, itemTemporality)
     result
-  }
-  private def cacheGetItemData(operation: TemporalSurfaceQuery)(
-      sourceTemporality: operation.TemporalityType,
-      itemTemporality: operation.TemporalityType): Option[Map[operation.ItemKey, operation.ItemData]] = {
-    foldCachesWithTimeUntilDefined(sourceTemporality, { _.getItemData(operation)(sourceTemporality, itemTemporality) })
   }
 
   @scenarioIndependent @node def getItemData(
@@ -296,34 +217,8 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
     // <~ DALEntityResolver#findByIndex <~ DALExecutionProvider
     val sourceTemporality = sourceTemporalitySurface.currentTemporalityFor(operation)
     val itemTemporality = itemTemporalitySurface.currentTemporalityFor(operation)
-
-    rec.startCache
-    cacheGetItemData(operation)(sourceTemporality, itemTemporality) match {
-      case Some(r) =>
-        rec.cacheHit
-        r
-      case None =>
-        rec.cacheMiss
-        // first check the cache for the keys and values - we may have all, or some of the information that we need
-        // we don't want to call getItemkeys as this will fetch from the DAL, and if we fetch it should be a single hit
-
-        rec.startCache
-        cacheGetItemKeys(operation)(sourceTemporality) match {
-          case Some(keys) =>
-            rec.cacheHit
-            // we have the keys, so just fetch the data, but do this async so the DAL will batch it
-            val result: Map[operation.ItemKey, operation.ItemData] = keys.apar.map { key =>
-              key -> getSingleItemDataCallback(operation, itemTemporalitySurface)(key)
-            }(Map.breakOut)
-            result
-          case None =>
-            rec.cacheMiss
-            maybeSubscribeToERef(operation, sourceTemporalitySurface)
-            val result = resolverGetItemData(operation)(sourceTemporality, itemTemporality)
-            if (result isEmpty) rec.cacheMissEmpty
-            result
-        }
-    }
+    val result = resolverGetItemData(operation)(sourceTemporality, itemTemporality)
+    result
   }
   // SingleItemData
 
@@ -332,12 +227,6 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
       key: operation.ItemKey): operation.ItemData = {
     val result = resolver.getSingleItemData(operation)(temporality, key)
     result
-  }
-
-  private def cacheGetSingleItemData(operation: TemporalSurfaceQuery)(
-      temporality: operation.TemporalityType,
-      key: operation.ItemKey): Option[operation.ItemData] = {
-    foldCachesWithTimeUntilDefined(temporality, { _.getSingleItemData(operation)(temporality, key) })
   }
 
   @scenarioIndependent @node def getSingleItemData(
@@ -351,9 +240,7 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
       operation: TemporalSurfaceQuery,
       sourceTemporalitySurface: LeafTemporalSurface)(itemKey: operation.ItemKey): operation.ItemData = {
     val temporality = sourceTemporalitySurface.currentTemporalityFor(operation)
-    cacheGetSingleItemData(operation)(temporality, itemKey) getOrElse resolverGetSingleItemData(operation)(
-      temporality,
-      itemKey)
+    resolverGetSingleItemData(operation)(temporality, itemKey)
   }
 
   // classInfo

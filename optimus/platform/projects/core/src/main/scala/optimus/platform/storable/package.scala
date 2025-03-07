@@ -76,14 +76,7 @@ package object storable {
     private[optimus] final def dal$storageInfoUpdate(info: StorageInfo): Unit =
       EntityInternals.prepareMutate(e).dal$storageInfo = info
 
-    // this is used for ticking entities, which are DAL entities, they should be null if the ctor is still in process
-    private[optimus] final def optimus$requireConstructorComplete(): Unit = {
-      if ((e.dal$storageInfo eq null) && e.entityFlavorInternal.isInstanceOf[DALEntityFlavor]) {
-        e.log.warn("*****", new IllegalStateException("The constructor is still running"))
-      }
-    }
-
-    private[optimus] final def dal$inlineEntities: collection.Map[EntityReference, Entity] =
+    private[optimus] final def dal$inlineEntities: InlineEntityHolder =
       e.entityFlavorInternal.dal$inlineEntities
     final def dal$isTemporary: Boolean = e.entityFlavorInternal.dal$isTemporary
     private[optimus] final def dal$universe: EntityUniverse = e.entityFlavorInternal.universe

@@ -37,7 +37,6 @@ import java.util.function.Supplier;
 import msjava.slf4jutils.scalalog.package$;
 import optimus.breadcrumbs.crumbs.RequestsStallInfo;
 import optimus.core.ArrayListWithMarker;
-import optimus.core.CoreAPI$;
 import optimus.core.IndexedArrayList;
 import optimus.core.StallInfoAppender;
 import optimus.graph.diagnostics.GraphDiagnostics;
@@ -266,12 +265,12 @@ public class OGScheduler extends Scheduler {
   private final Contexts _externallyBlocked = new Contexts("externallyBlockedThreads");
 
   // Currently used under _lock, but consider removing lock completely on at least reduce contention
-  private final PriorityQueue<SchedulerCallback> _onStalledCallbacks =
-      new PriorityQueue<>(4, Comparator.comparingInt(SchedulerCallback::priority));
+  private final PriorityQueue<OutOfWorkListener> _onStalledCallbacks =
+      new PriorityQueue<>(4, Comparator.comparingInt(OutOfWorkListener::priority));
   // Support for re-adding callbacks in the callback()
   private boolean _onStalledCallbacksInProgress;
   // Pending callbacks to be added/re-added
-  private ArrayList<SchedulerCallback> _onStalledCallbacksPending;
+  private ArrayList<OutOfWorkListener> _onStalledCallbacksPending;
 
   /**
    * To avoid the issue where a cycle is not detected because no thread is waiting for any part of
@@ -484,7 +483,7 @@ public class OGScheduler extends Scheduler {
   }
 
   private void panic(Throwable e) {
-    InfoDumper.graphPanic("panic", schedulerVersion + ": panic called", 66, e);
+    InfoDumper.graphPanic("panic", schedulerVersion + ": panic called", 66, e, null);
   }
 
   /** Must be called under the same thread that will 'install' this evaluation context */
@@ -1449,7 +1448,7 @@ public class OGScheduler extends Scheduler {
   }
 
   /**
-   * Run all callbacks that were registered with addOnOutOfWorkListener
+   * Run all callbacks that were registered with addOutOfWorkListener
    *
    * <p>Note: Currently this must always be called while holding the _lock <br>
    * TODO (OPTIMUS-17080): Avoid calling the callbacks under lock
@@ -1491,7 +1490,9 @@ public class OGScheduler extends Scheduler {
         try {
           cb.onGraphStalled(OGScheduler.this, outstandingTasks);
         } catch (Throwable t) {
-          log.error("On stalled callbacks threw an exception", t);
+          // If the onGraphStalled callbacks threw, we are likely heading for a hang, so might as
+          // well panic right now.
+          panic(new GraphException("onGraphStalled threw an exception", t));
         }
         newWorkAdded = checkNewWorkAdded(initQSize);
       }
@@ -1532,21 +1533,31 @@ public class OGScheduler extends Scheduler {
    * Note: most often has a context but we should allow calling it from non-optimus thread and
    * therefore ctx should be assumed to be unavailable
    */
-  public final void addOnOutOfWorkListener(SchedulerCallback callback, boolean autoRemove) {
-    if (!autoRemove) throw new GraphException("AutoRemove=false is not yet supported");
+  public final void addOutOfWorkListener(OutOfWorkListener callback) {
     if (callback == null) throw new GraphException("callback can't be null");
+    var mustWait = callback.mustWaitDelay();
+    if (mustWait > 0) {
+      runDelayedTask(
+          // call the impl so that we aren't stuck in an infinite loop of mustWaits.
+          () -> addOutOfWorkListenerImpl(callback), mustWait, TimeUnit.MILLISECONDS);
+    } else {
+      addOutOfWorkListenerImpl(callback);
+    }
+  }
+
+  private void addOutOfWorkListenerImpl(OutOfWorkListener callback) {
+    // This contains the logic to add the callback, without the mustWait timing.
+
+    if (callback.mustCallDelay() > 0) {
+      // Fine to run if the callback has been removed or not added -- we just won't do very much!
+      runDelayedTask(
+          () -> runOutOfWorkListeners(t -> t == callback),
+          callback.mustCallDelay(),
+          TimeUnit.MILLISECONDS);
+    }
 
     synchronized (_lock) {
       if (_onStalledCallbacks.contains(callback)) return;
-
-      if (callback.timeout() > 0) {
-        CoreAPI$.MODULE$
-            .optimusScheduledThreadPool()
-            .schedule(
-                () -> this.runOutOfWorkListeners(t -> t == callback),
-                callback.timeout(),
-                TimeUnit.MILLISECONDS);
-      }
 
       if (_onStalledCallbacksInProgress) {
         if (_onStalledCallbacksPending == null) _onStalledCallbacksPending = new ArrayList<>();
@@ -1562,7 +1573,7 @@ public class OGScheduler extends Scheduler {
     }
   }
 
-  public final void removeOutOfWorkListener(SchedulerCallback callback) {
+  public final void removeOutOfWorkListener(OutOfWorkListener callback) {
     synchronized (_lock) {
       _onStalledCallbacks.remove(callback);
     }
@@ -1572,26 +1583,26 @@ public class OGScheduler extends Scheduler {
    * runs all callbacks with a .limitTag that matches the tag or any callbacks that matches the
    * passed in value
    */
-  public final void runOutOfWorkListeners(Predicate<SchedulerCallback> pred) {
+  public final void runOutOfWorkListeners(Predicate<OutOfWorkListener> pred) {
     // TODO (OPTIMUS-17080): don't hold the lock while we call the callbacks
     synchronized (_lock) {
       // First collect callbacks and then call them
       // The reason for this 2 pass:
       //  callback can be adding more callbacks during callback
-      ArrayList<SchedulerCallback> cbs = new ArrayList<>(); // Callbacks to run
-      Iterator<SchedulerCallback> it = _onStalledCallbacks.iterator();
+      ArrayList<OutOfWorkListener> cbs = new ArrayList<>(); // Callbacks to run
+      Iterator<OutOfWorkListener> it = _onStalledCallbacks.iterator();
       while (it.hasNext()) {
-        SchedulerCallback callback = it.next();
+        OutOfWorkListener callback = it.next();
         if (pred.test(callback)) {
           cbs.add(callback);
           it.remove(); // Note: O(n) but can be made O(1)
         }
       }
-      for (SchedulerCallback callback : cbs) {
+      for (OutOfWorkListener callback : cbs) {
         try {
           callback.onGraphStalled(this);
         } catch (Throwable t) {
-          log.error("On stalled callbacks threw an exception", t);
+          panic(new GraphException("onGraphStalled threw an exception", t));
         }
       }
     }
@@ -1708,7 +1719,7 @@ public class OGScheduler extends Scheduler {
     sb.indent();
 
     try {
-      ArrayList<SchedulerCallback> callbacks;
+      ArrayList<OutOfWorkListener> callbacks;
       synchronized (_lock) {
         // Copy under lock!
         callbacks = new ArrayList<>(_onStalledCallbacks);
@@ -1719,7 +1730,7 @@ public class OGScheduler extends Scheduler {
         if (cbCount > 0) {
           sb.startBlock();
           HashMap<String, Integer> schedulerCallBacksMap = new HashMap<>();
-          for (SchedulerCallback cb : callbacks) {
+          for (OutOfWorkListener cb : callbacks) {
             // getClass.toString vs toString: we don't want to trust toString on callback.
             if (cb != null) {
               String classStr = cb.getClass().toString();
@@ -1924,8 +1935,8 @@ public class OGScheduler extends Scheduler {
     NodeTask awaitedTask = awaitingCtx.awaitedTask;
     if (awaitedTask == null) return;
 
-    SchedulerPlugin awaitingPlugin = awaitingCtx.awaitedTaskPluginEndOfChain;
     NodeTask lastTask = lastTaskInWaitingChain(awaitingCtx);
+    SchedulerPlugin awaitingPlugin = lastTask == null ? null : lastTask.getPlugin();
     var nodeExtraInfo = StallInfoAppender.getExtraData(lastTask);
 
     if (awaitingPlugin != null || nodeExtraInfo != null) {

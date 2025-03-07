@@ -12,6 +12,7 @@
 package optimus.buildtool.format.docker
 
 import com.typesafe.config.Config
+import optimus.buildtool.config.ScopeId
 import optimus.buildtool.format.DockerConfig
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
@@ -26,12 +27,12 @@ object DockerStructure {
   private val images = "images"
   private val configuration = "configuration"
 
-  def load(loader: ObtFile.Loader): Result[DockerStructure] =
-    loader(origin).flatMap(load)
+  def load(loader: ObtFile.Loader, validScopes: Set[ScopeId]): Result[DockerStructure] =
+    loader(origin).flatMap(load(_, validScopes))
 
-  def load(config: Config): Result[DockerStructure] = for {
+  def load(config: Config, validScopes: Set[ScopeId]): Result[DockerStructure] = for {
     dockerConfig <- DockerConfiguration.load(origin, config, configuration)
-    imageDefs <- ImageDefinition.load(origin, config, images)
+    imageDefs <- ImageDefinition.load(origin, config, images, validScopes)
   } yield DockerStructure(
     dockerConfig,
     imageDefs

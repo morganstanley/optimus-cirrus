@@ -62,22 +62,19 @@ class PythonVenvExtractorPostBuilder(buildDir: Directory, pythonBspConfig: Pytho
           val (venv, _) = VenvProvider.ensureVenvExists(
             OverriddenCommands.empty,
             pythonArtifact.python,
-            pythonBspConfig.venvCache,
-            pythonBspConfig.pipCredentialFile,
-            pythonBspConfig.uvCredentialFile)
+            pythonBspConfig.pythonEnvironment)
 
           ThinPyappWrapper.runTpa(
             pythonArtifact.python,
             Seq(
               PythonConstants.tpa.unpackCmd(
                 tpaPath,
-                Some(pythonBspConfig.uvCache.path),
+                Some(pythonBspConfig.pythonEnvironment.uvCache.path),
                 Some(Paths.get(venvExtractionDest.name)),
                 Some(venv))
             ),
             Some(venvExtractionDest.parent),
-            pythonBspConfig.pipCredentialFile,
-            pythonBspConfig.uvCredentialFile
+            pythonBspConfig.pythonEnvironment
           )
         }
         latestVenvs.getAndUpdate(old => old.update(pythonArtifact, venvExtractionDest.path))

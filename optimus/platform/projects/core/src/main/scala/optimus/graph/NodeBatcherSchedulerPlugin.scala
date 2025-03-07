@@ -13,12 +13,12 @@ package optimus.graph
 
 import optimus.core.MonitoringBreadcrumbs
 import optimus.dist.DistPluginTags.GroupingNodeBatcherSchedulerPluginTag
+import optimus.observability._
 import optimus.platform.PluginHelpers.toNode
 import optimus.platform._
 import optimus.platform.annotations._
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.{ArrayList => JArrayList}
@@ -38,10 +38,25 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
 
   type GroupKeyT >: Null <: AnyRef
 
-  def batchTimeout: Long = Option(System.getProperty("optimus.batcher.timeout.second")) match {
-    case Some(argSetting) => TimeUnit.MILLISECONDS.convert(argSetting.toInt, TimeUnit.SECONDS)
-    case _                => -1L
-  }
+  /**
+   * Maximum time in millis that we will wait for new elements in an incomplete batch.
+   *
+   * If this delay is greater than zero, then we will trigger batches even if they are incomplete and there is the
+   * possibility that more work is incoming. This shouldn't be needed in most cases because we automatically trigger
+   * batches when the graph scheduler runs out of work. Applications that are very latency sensitive or that encounter
+   * hangs when using multiple independent graph schedulers might benefit from changing this value.
+   */
+  def mustCallDelay: Long = Settings.defaultBatcherMustCallDelay
+
+  /**
+   * Minimum time in millis that we will wait for new elements even if the graph has completely ran out of work.
+   *
+   * If this delay is greater than zero, then we will wait to trigger an incomplete batch even if we are completely out
+   * of work. This shouldn't be needed in most cases, and in fact it might severely impact performance by adding
+   * avoidable delays on every batched call. UI applications where we are usually stalling while waiting for user input
+   * can benefit from setting this to "debounce" expensive batchers under fast user action.
+   */
+  def mustWaitDelay: Long = Settings.defaultBatcherMustWaitDelay
 
   /**
    * By default this is max number of nodes to batch. By overriding getNodeWeight you effectively turning this value
@@ -67,7 +82,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
    * @return
    *   max batch size, given the group key
    */
-  protected def getGroupMaxBatchSize(grp: GroupKeyT): Int = maxBatchSize
+  protected def getGroupMaxBatchSize(grp: GroupKeyT, n: NodeTask): Int = maxBatchSize
 
   protected def onFirstRun(bnode: BNode, grpKey: GroupKeyT): Unit = {}
   protected def run(ec: OGSchedulerContext, bnode: BNode, grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Unit
@@ -106,16 +121,17 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
   /** For test diagnostics */
   def verifyExpectedState(scheduler: Scheduler, batchSize: Int): Unit = ()
 
-  protected class BNode(
+  final protected class BNode(
       override val priority: Int,
       useScope: Boolean,
       batchScopeKeys: Set[BatchScopeKey],
       initState: State,
       grpKey: GroupKeyT)
       extends CompletableNode[collection.Seq[T]]
-      with SchedulerCallback {
+      with OutOfWorkListener {
 
-    override def timeout(): Long = batchTimeout
+    override def mustCallDelay(): Long = batcher.mustCallDelay
+    override def mustWaitDelay(): Long = batcher.mustWaitDelay
 
     // Set an enqueuer arbitrarily from the first node in the batch, so at least something shows up
     // in profiling.  It's misleading surprisingly infrequently.
@@ -135,11 +151,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
     private val state = new AtomicReference(initState)
     // set to null after run takes all the nodes
     private var inputs: List[NodeT] = _
-    // Only set after the nodes starts to run
-    private var __k: NodeStateMachine = _
-    override def setContinuation(kx: NodeStateMachine): Unit = {
-      __k = kx
-    }
+    private var __stableCalcTags: Node[StableCalcTags] = _
 
     // It cannot be cloned as it has significant internal state
     // due to its batching nature (i.e., it accumulates nodes and then runs them in batch).
@@ -224,7 +236,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
       if (ready(outstandingTasks))
         tryToSchedule(scheduler)
       else if (batchSize > 0)
-        scheduler.addOnOutOfWorkListener(this, autoRemove = true) // Add ourselves back to queue
+        scheduler.addOutOfWorkListener(this) // Add ourselves back to queue
     }
 
     def tryToSchedule(eq: EvaluationQueue): Unit = {
@@ -270,7 +282,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
      *   1. [State(1, List(v))] Was not able to add to this batch node (lost race on adding)
      */
     def addNode(v: NodeT, weight: Int): State = {
-      val maxGrpSize = getGroupMaxBatchSize(grpKey)
+      val maxGrpSize = getGroupMaxBatchSize(grpKey, v)
 
       @tailrec
       def updateState(): State = {
@@ -300,19 +312,43 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
       updateState()
     }
 
-    // We specifically can't use the passed in `ec`, because it's captured and can be wrong
-    // If we execute continuation on a different thread
-    final override def run(ec: OGSchedulerContext): Unit = {
-      val lk = __k
-      if (lk ne null) {
-        __k = null
-        lk.run(this, ec)
+    private def scheduleStableCalcTags(ec: OGSchedulerContext): Unit = {
+      val nf = stableCalcTags$newNode(grpKey, inputs)
+      if (nf eq null) {
+        try {
+          __stableCalcTags = new AlreadyCompletedNode(stableCalcTags(grpKey, inputs))
+        } catch {
+          case e: Throwable =>
+            __stableCalcTags = new AlreadyFailedNode[StableCalcTags](e)
+        }
       } else {
-        // grpKey.hashCode sometimes makes graph calls!!!!!!!!!!!
-        // They should be correctly parented to the current batch node
-        // and executed on some graph thread, hence on the first run
-        onFirstRun(this, grpKey)
-        batcher.run(ec, this, grpKey, inputs)
+        __stableCalcTags = nf.asNode$
+        __stableCalcTags.attach(scenarioStack)
+        __stableCalcTags.enqueueAttached.continueWith(this, ec)
+      }
+    }
+
+    override def run(ec: OGSchedulerContext): Unit = {
+      if (__stableCalcTags eq null) scheduleStableCalcTags(ec)
+      // we don't use an `else` branch because __stableCalcTags might be an Already(Completed/Failed)Node
+      if (__stableCalcTags.isDoneEx) {
+        if (__stableCalcTags.isDoneWithException)
+          completeWithException(__stableCalcTags.exception, ec)
+        else {
+          // result could still be null if the method returns `null`
+          if (__stableCalcTags.result ne null) {
+            inputs.foreach { i =>
+              val ss = i.scenarioStack()
+              val newSS = ss.withPluginTag(StableCalcTags, __stableCalcTags.result)
+              i.replace(newSS)
+            }
+          }
+          // grpKey.hashCode sometimes makes graph calls!!!!!!!!!!!
+          // They should be correctly parented to the current batch node
+          // and executed on some graph thread, hence on the first run
+          onFirstRun(this, grpKey)
+          batcher.run(ec, this, grpKey, inputs)
+        }
       }
     }
 
@@ -322,23 +358,20 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
     }
 
     private def completeNodes(eq: EvaluationQueue, results: collection.Seq[T]): Unit = {
-      // Inlined version of Collection.foreach2
-      // TODO(OPTIMUS-10900): A cleaner solution is to change to use indexedSeq and just check the sizes and fail all nodes if the lengths don't match
-      val iit = inputs.iterator
-      val rit = results.iterator
-      while (iit.hasNext && rit.hasNext) {
-        val v = iit.next()
-        val res = rit.next()
+      val resultsIter = results.iterator
 
-        v.setWaitingOn(null)
-        v.combineInfo(this, eq)
-        v.completeWithResult(res, eq)
-      }
-      while (iit.hasNext) {
-        val v = iit.next()
-        v.setWaitingOn(null)
-        v.combineInfo(this, eq)
-        v.completeWithException(new GraphException("Batcher returned fewer results that number of batched nodes"), eq)
+      for (node <- inputs.iterator) {
+        if (resultsIter.hasNext) {
+          node.setWaitingOn(null)
+          node.combineInfo(this, eq)
+          node.completeWithResult(resultsIter.next(), eq)
+        } else {
+          node.setWaitingOn(null)
+          node.combineInfo(this, eq)
+          node.completeWithException(
+            new GraphException("Batcher returned fewer results that number of batched nodes"),
+            eq)
+        }
       }
     }
 
@@ -393,6 +426,11 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
   }
 
   protected def getBatchScopeKeys(v: NodeT): Set[BatchScopeKey] = NodeBatcherSchedulerPluginBase.defaultBatchScopeKeys
+
+  @nodeSync
+  def stableCalcTags(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): StableCalcTags = null
+  def stableCalcTags$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[StableCalcTags] = null
+  def stableCalcTags$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[StableCalcTags] = null
 }
 
 /**
@@ -428,7 +466,7 @@ class BatchLimitTagBase extends NonForwardingPluginTagKey[AtomicInteger] {
     val oaint = ec.scenarioStack.findPluginTag[AtomicInteger](key)
     if (oaint.isDefined) {
       if (oaint.get.addAndGet(count) == 0) {
-        ec.scheduler.runOutOfWorkListeners((t: SchedulerCallback) => t.limitTag() eq key)
+        ec.scheduler.runOutOfWorkListeners((t: OutOfWorkListener) => t.limitTag() eq key)
       }
     }
   }
@@ -502,7 +540,7 @@ abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
         }
       }
       if (registerCallback)
-        ec.scheduler.addOnOutOfWorkListener(curBatch, autoRemove = true)
+        ec.scheduler.addOutOfWorkListener(curBatch)
       else {
         val state = curBatch.addNode(node, weight)
         if (state ne null) {
@@ -655,7 +693,7 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
         // Effectively we are done
         null
       } else {
-        if (state.count == 1 && (weight < getGroupMaxBatchSize(grpKey))) {
+        if (state.count == 1 && (weight < getGroupMaxBatchSize(grpKey, node))) {
           // First time with this grpKey OR failed to add to previously scheduled batch node
           batch = new BNode(priority, scopedBatching, batchScopeKeys, state, grpKey)
           batches.put(grpKey, batch)
@@ -671,7 +709,7 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
     if (newBatch ne null) {
       newBatch.attach(ss)
       if (newBatch.priority == -1) newBatch.tryToSchedule(eq)
-      else eq.scheduler.addOnOutOfWorkListener(newBatch, autoRemove = true)
+      else eq.scheduler.addOutOfWorkListener(newBatch)
     }
 
     // Allow for semi-manual control of batcher nodes
@@ -681,7 +719,7 @@ abstract class GroupingNodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNod
       if (limit.isDefined) {
         val remainingItems = limit.get.decrementAndGet()
         if (remainingItems == 0) {
-          eq.scheduler.runOutOfWorkListeners((t: SchedulerCallback) => t.limitTag() eq limitType)
+          eq.scheduler.runOutOfWorkListeners((t: OutOfWorkListener) => t.limitTag() eq limitType)
         }
       }
     }

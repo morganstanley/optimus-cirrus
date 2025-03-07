@@ -67,6 +67,9 @@ final class Scenario private[optimus] (
   /** true if we have tweaks that depend on parent context */
   private[optimus] def hasContextDependentTweaks: Boolean = (flags & ScenarioFlags.hasContextDependentTweaks) != 0
 
+  /** true if we have tweaks that have when clause */
+  private[optimus] def hasWhenClauseTweaks: Boolean = (flags & ScenarioFlags.hasWhenClauseTweaks) != 0
+
   /** true to compare tweaks as set */
   private[optimus] def unorderedTweaks: Boolean = (flags & ScenarioFlags.unorderedTweaks) != 0
 
@@ -84,11 +87,13 @@ final class Scenario private[optimus] (
   /**
    * this is definitely not the function you are looking for
    *
-   * only used in client code once since they get the nested tweaks by applying them in a given then looking
-   * up the SS, but in that case we do not want to get rid of the redundant tweaks in that case
+   * only used in client code that does weird stuff:
+   *  1) they get the nested tweaks by applying them in a given then looking up the SS, but in that case we do not want
+   *  to get rid of the redundant tweaks
+   *  2) some cases where nodes are not rt
    */
   def disableRemoveRedundant(): Scenario =
-    new Scenario(_topLevelTweaks, nestedScenarios, flagsWithDisableRemoveRedundant)
+    new Scenario(_topLevelTweaks, nestedScenarios.map(_.disableRemoveRedundant()), flagsWithDisableRemoveRedundant)
 
   private[optimus] var _createdAt: Exception = _
   private[optimus] def createdAtAsString: String =
@@ -323,6 +328,7 @@ object Scenario {
       if (tweak.shouldCheckForRedundancy) flags |= ScenarioFlags.hasPossiblyRedundantTweaks
       if (tweak.target.isUnresolvedOrMarkerTweak) flags |= ScenarioFlags.hasUnresolvedOrMarkerTweaks
       if (tweak.isContextDependent) flags |= ScenarioFlags.hasContextDependentTweaks
+      if (tweak.hasWhenClause) flags |= ScenarioFlags.hasWhenClauseTweaks
       if (tweak.target.propertyInfo.tweakableID() == 1) flags |= ScenarioFlags.markedForDebugging
     }
     if (unorderedTweaks) flags |= ScenarioFlags.unorderedTweaks

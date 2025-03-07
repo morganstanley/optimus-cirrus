@@ -38,6 +38,14 @@ abstract class BaseHierarchyManager(
   }
 }
 
+object HierarchyManager {
+  lazy val entityHierarchyManager = new EntityHierarchyManager
+  private[optimus] lazy val storedHierarchyManager = new StoredHierarchyManager
+  private[optimus] lazy val embeddableHierarchyManager = new EmbeddableHierarchyManager
+  private[optimus] lazy val eventHierarchyManager = new EventHierarchyManager
+  private[optimus] lazy val metaHierarchyManager = new MetaHierarchyManager
+}
+
 private trait ClassLoaderHook
 object ClassLoaderHook {
   val currentClassLoader: ClassLoader = classOf[ClassLoaderHook].getClassLoader
@@ -53,22 +61,22 @@ class EntityHierarchyManager(
     emd.fullClassName != entityImplName && emd.fullClassName != entityName
 }
 
-class StoredHierarchyManager(
+private[optimus] class StoredHierarchyManager(
     resourceFinder: ResourceFinder = CurrentClasspathResourceFinder,
     classLoader: ClassLoader = ClassLoaderHook.currentClassLoader
 ) extends BaseHierarchyManager(resourceFinder, classLoader, MetaDataFiles.storedEntityMetaDataFileName)
 
-class EmbeddableHierarchyManager(
+private[optimus] class EmbeddableHierarchyManager(
     resourceFinder: ResourceFinder = CurrentClasspathResourceFinder,
     classLoader: ClassLoader = ClassLoaderHook.currentClassLoader
 ) extends BaseHierarchyManager(resourceFinder, classLoader, MetaDataFiles.embeddableMetaDataFileName)
 
-class EventHierarchyManager(
+private[optimus] class EventHierarchyManager(
     resourceFinder: ResourceFinder = CurrentClasspathResourceFinder,
     classLoader: ClassLoader = ClassLoaderHook.currentClassLoader
 ) extends BaseHierarchyManager(resourceFinder, classLoader, MetaDataFiles.eventMetaDataFileName)
 
-class MetaHierarchyManager(
+private[optimus] class MetaHierarchyManager(
     resourceFinder: ResourceFinder = CurrentClasspathResourceFinder,
     classLoader: ClassLoader = ClassLoaderHook.currentClassLoader
 ) extends BaseHierarchyManager(resourceFinder, classLoader, MetaDataFiles.metaSquaredDataFileName)

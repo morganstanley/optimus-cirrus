@@ -11,14 +11,7 @@
  */
 package optimus.platform.temporalSurface
 
-import java.time.Instant
-
 import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
-
-trait TemporalSurfaceCacheManager {
-  def addMonotemporalCache(txTime: Instant, cache: TemporalSurfaceCache): Unit
-  def removeMonotemporalCache(txTime: Instant, cache: TemporalSurfaceCache): Unit
-}
 
 trait TemporalSurfaceCache {
   def getItemKeys(operation: TemporalSurfaceQuery)(
@@ -29,6 +22,4 @@ trait TemporalSurfaceCache {
   def getSingleItemData(operation: TemporalSurfaceQuery)(
       temporality: operation.TemporalityType,
       key: operation.ItemKey): Option[operation.ItemData]
-
-  protected val cacheManager: TemporalSurfaceCacheManager
 }

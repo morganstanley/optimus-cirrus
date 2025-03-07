@@ -302,6 +302,11 @@ class OGTraceReaderEventProcessor(constructPNodes: Boolean, ignoreBlocks: Boolea
     pnti.reuseCycle = rcount
   }
 
+  override def reuseStats(pid: Int, register: Long): Unit = {
+    val pnti = infoOf(pid, OGTrace.BLOCK_ID_UNSCOPED)
+    pnti.reuseStats = register
+  }
+
   override def nodeHashCollision(pid: Int): Unit = {
     val pnti = infoOf(pid, OGTrace.BLOCK_ID_UNSCOPED)
     pnti.overInvalidated += 1
@@ -442,6 +447,7 @@ class OGTraceReaderEventProcessor(constructPNodes: Boolean, ignoreBlocks: Boolea
       evicted: Long,
       invalidated: Int,
       reuseCycle: Int,
+      reuseStats: Long,
       selfTime: Long,
       ancAndSelfTime: Long,
       postCompleteAndSuspendTime: Long,
@@ -460,6 +466,7 @@ class OGTraceReaderEventProcessor(constructPNodes: Boolean, ignoreBlocks: Boolea
     pnti.evicted = evicted
     pnti.invalidated = invalidated
     pnti.reuseCycle = reuseCycle
+    pnti.reuseStats = reuseStats
     pnti.selfTime = selfTime
     pnti.ancAndSelfTime = ancAndSelfTime
     pnti.postCompleteAndSuspendTime = postCompleteAndSuspendTime

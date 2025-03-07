@@ -140,7 +140,7 @@ class DSIFactory(config: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncCo
 
   private[optimus] def getPartitionBrokerLookup: PartitionBrokerLookup = PartitionBrokerLookup(config)
 
-  private def createRemoteDSIFactory() = new DSIFactoryImpl {
+  private def createRemoteDSIFactory(): DSIFactoryImpl = new DSIFactoryImpl {
     override def uriScheme: String = DSIURIScheme.TCP
 
     def createNonPartitionedDSI(arg: URI, context: Context): DSI = {
@@ -204,6 +204,9 @@ class DSIFactory(config: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncCo
         override def getReplicaRemoteDsiProxy(broker: String, cmdLimit: Int, shouldLB: Boolean): DSIClient = {
           new RemoteDSIProxy(ctx, arg.getHost, arg.getPort, false, this.partitionMap, false)
         }
+        protected[optimus] override lazy val replica: ClientSideDSI = {
+          new RemoteDSIProxy(ctx, arg.getHost, arg.getPort, false, this.partitionMap, false)
+        }
       }
     }
     override def createDSI(arg: URI, context: Context): DSI = {
@@ -238,6 +241,9 @@ class DSIFactory(config: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncCo
           log.info(s"unavailable partitions: ${unavailablePartitions.mkString(",")}")
         PartitionMap(partitionMap, unavailablePartitions)
       }
+      val maxBrokersAllowedForConnectionFromURI = replicaUriParts.maxReadConnections.getOrElse("1").toInt
+      log.info(
+        s"Value of maxBrokersAllowedForConnectionFromURI parameter is ${maxBrokersAllowedForConnectionFromURI}, hence will try to create ${maxBrokersAllowedForConnectionFromURI} read broker connections, if available")
 
       def createNonPartitionedDsiRemoteProxy = {
         replicaUriParts.writer match {
@@ -257,7 +263,8 @@ class DSIFactory(config: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncCo
               readCmdLimit,
               asyncConfig,
               shouldLoadBalance,
-              secureTransport
+              secureTransport,
+              maxBrokersAllowedForConnectionFromURI
             )
           case None =>
             new LeaderRemoteDSIProxy(
@@ -305,7 +312,8 @@ class DSIFactory(config: RuntimeConfiguration, asyncConfigOpt: Option[DalAsyncCo
               asyncConfig,
               env,
               shouldLoadBalance,
-              secureTransport
+              secureTransport,
+              maxBrokersAllowedForConnectionFromURI
             )
 
           case None =>

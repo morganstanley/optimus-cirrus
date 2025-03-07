@@ -183,6 +183,9 @@ class KtcpDSIFactoryImpl(config: RuntimeConfiguration, asyncConfigOpt: Option[Da
       override def getReplicaRemoteDsiProxy(broker: String, cmdLimit: Int, shouldLB: Boolean): DSIClient = {
         new RemoteDSIProxy(ctx, arg.getHost, arg.getPort, true, this.partitionMap, secureTransport)
       }
+      protected[optimus] override lazy val replica: ClientSideDSI = {
+        new RemoteDSIProxy(ctx, arg.getHost, arg.getPort, true, this.partitionMap, secureTransport)
+      }
     }
 
   }

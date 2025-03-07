@@ -89,15 +89,5 @@ trait ReflectiveEntityPickling {
       storageInfo: StorageInfo,
       ref: EntityReference): Entity
 
-  /**
-   * Apply an update to an entity from an unpickling stream.
-   *
-   * @param is
-   *   The stream from which to read data.
-   * @param entity
-   *   The entity to update
-   */
-  def unpickleUpdate(is: PickledInputStream, entity: Entity): Unit
-
   def prepareMeta(info: EntityInfo): collection.Seq[UnsafeFieldInfo]
 }

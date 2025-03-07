@@ -65,9 +65,7 @@ class GeneralAPICheckComponent(
     import CollectNoWarnsWithFilters._
     import global._
 
-    private val compilerSuppressions = OptimusPluginReporter.PerRunReporting_suppressions
-      .invoke(global.runReporting)
-      .asInstanceOf[mutable.LinkedHashMap[SourceFile, mutable.ListBuffer[Suppression]]]
+    private val compilerSuppressions = OptimusPluginReporter.suppressions(global)
 
     private val nowarns = mutable.ArrayBuffer.empty[OptimusNowarnWithFilters]
     private val unusedNoWarn = mutable.HashMap.empty[Regex, (Position, String)]
@@ -137,22 +135,12 @@ class GeneralAPICheckComponent(
       } finally inPattern = saved
     }
 
-    private var pathStack: Seq[Tree] = Seq.empty
-    def pathed[T](ts: Tree*)(f: Tree => T): T = {
-      pathStack = ts.reverse ++ pathStack
-      val ret = f(ts.last)
-      pathStack = pathStack.drop(ts.size)
-      ret
-    }
-    protected def path: Seq[Tree] = pathStack
-    def currentTree: Option[Tree] = pathStack.headOption
-
     def preTraverse(tree: Tree): Boolean // return true if should continue
     def checkUndesiredProperties(sym: Symbol, pos: Position): Unit
     def checkAnnotationProperties(ann: AnnotationInfo, annotated: Option[Symbol]): Unit = ()
     def checkCompanionApply(classSym: Symbol): Boolean = false
 
-    final override def traverse(tree: Tree): Unit = pathed(tree)(visit)
+    final override def traverse(tree: Tree): Unit = visit(tree)
 
     private def visit(tree: Tree): Unit = {
       val sym = tree.symbol
@@ -183,7 +171,7 @@ class GeneralAPICheckComponent(
             //         to:
             //            <synthetic> val x2: List[_] = (x1.asInstanceOf[List[_]]: List[_]);
             //                  matchEnd4({ x2; x2.reverse}) // case body is an argument to a label apply.
-            pathed(tree)(super.traverse)
+            super.traverse(tree)
           }
         case vd @ ValDef(_, _, _, rhs) if treeInfo.hasSynthCaseSymbol(tree) =>
           // https://github.com/scala/bug/issues/7716 Don't refcheck the tpt of the synthetic val that holds the selector.
@@ -224,14 +212,14 @@ class GeneralAPICheckComponent(
           checkSelect(x)
           qual.pos match {
             case NoPosition => checkUndesiredProperties(qual.symbol, x.pos)
-            case _          => pathed(x)(super.traverse)
+            case _          => super.traverse(x)
           }
 
         case _: Import =>
         // let it slide here, since we'll generate an error when it's used
 
         case _ =>
-          pathed(tree)(super.traverse)
+          super.traverse(tree)
       }
     }
 

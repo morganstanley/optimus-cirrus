@@ -218,17 +218,17 @@ import scala.util.Try
         publications: Seq[Publication]
     ): Seq[Either[String, CoursierArtifact]] =
       publications.distinct.map { publication =>
+        val vars = variables(
+          dependency.module,
+          Some(project.actualVersion),
+          publication.`type`.value,
+          publication.name,
+          publication.ext.value,
+          Some(publication.classifier.value).filter(_.nonEmpty)
+        )
         val uris =
           artifactPatterns
-            .flatMap(
-              _.substituteVariables(variables(
-                dependency.module,
-                Some(project.actualVersion),
-                publication.`type`.value,
-                publication.name,
-                publication.ext.value,
-                Some(publication.classifier.value).filter(_.nonEmpty)
-              )).toOption)
+            .flatMap(_.substituteVariables(vars).toOption)
 
         finder
           .findFirstExisting(uris)

@@ -221,6 +221,8 @@ object OptimusService {
               EvaluationContext.initializeWithNewInitialTimeSingleThreaded(env)
             else
               EvaluationContext.initializeWithNewInitialTime(env)
+            // Added below to load all user roles when roleset mode is All
+            env.entityResolver.reinitWithLocallyResolvedAllRoles(env.config)
           } catch {
             case NonFatal(ex) =>
               if (env.entityResolver ne null)

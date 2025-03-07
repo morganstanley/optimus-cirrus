@@ -15,8 +15,8 @@ import java.util
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.ChainedID
 import optimus.graph.NodeTask
+import optimus.graph
 import optimus.graph.Scheduler
-import optimus.graph.SchedulerCallback
 import optimus.platform.dal.session.ClientSessionContext
 import java.util.{ArrayList => JArrayList}
 
@@ -35,7 +35,7 @@ abstract class AsyncBatchingOutOfWorkQueueBase[A](
 
   override protected def isOutOfWorkToken(t: A): Boolean = t == outOfWorkToken
 
-  object OutOfWorkListener extends SchedulerCallback {
+  object OutOfWorkListener extends graph.OutOfWorkListener {
 
     /*
      * You're supposed to synchronize when making structural changes to IdentityHashMap according to doc but
@@ -51,9 +51,7 @@ abstract class AsyncBatchingOutOfWorkQueueBase[A](
        * and we need to resubscribe automatically independently of any batch starting so even batches of 1 can benefit
        */
       log.trace(s"scheduler sent onGraphStalled")
-
-      // TODO (OPTIMUS-21046): remove once scheduler supports permanent subscriptions
-      scheduler.addOnOutOfWorkListener(OutOfWorkListener, autoRemove = true)
+      scheduler.addOutOfWorkListener(OutOfWorkListener)
 
       /*
        * there might be room for improvement here. currently we send the token if *any* scheduler tells us they're
@@ -67,7 +65,7 @@ abstract class AsyncBatchingOutOfWorkQueueBase[A](
       if (!subscriptions.containsKey(scheduler)) {
         subscriptions.put(scheduler, ())
         log.info(s"new scheduler, subscribing to oow notifications")
-        scheduler.addOnOutOfWorkListener(OutOfWorkListener, autoRemove = true)
+        scheduler.addOutOfWorkListener(OutOfWorkListener)
       }
     }
 

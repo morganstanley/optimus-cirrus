@@ -17,6 +17,7 @@ import optimus.buildtool.config.PythonConfiguration.OverriddenCommands
 import optimus.buildtool.dependencies.PythonDefinition
 import optimus.buildtool.dependencies.PythonDependencyDefinition
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Sandbox
@@ -35,6 +36,13 @@ import scala.collection.mutable
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 
+final case class PythonEnvironment(
+    venvCache: Directory,
+    uvCache: Directory,
+    pipCredentialFile: Option[FileAsset],
+    pypiUvCredentialFile: Option[FileAsset]
+)
+
 object ThinPyappWrapper extends Log {
   private[buildtool] val Artifact = "{artifact}"
   private[buildtool] val Sources = "{sources}"
@@ -51,9 +59,8 @@ object ThinPyappWrapper extends Log {
       python: PythonDefinition,
       cmds: Seq[String],
       where: Option[Directory],
-      pipCredentialFile: String,
-      uvCredentialFile: String): Unit = {
-    val commands = PythonLauncher.prerequisites(pipCredentialFile, uvCredentialFile) ++ cmds
+      pythonEnvironment: PythonEnvironment): Unit = {
+    val commands = PythonLauncher.prerequisites(pythonEnvironment) ++ cmds
     val cmd = commands.mkString(" && ")
     PythonLauncher.launchWithPython(python, "ThinPyappLaunch", cmd, where)
   }
@@ -62,48 +69,40 @@ object ThinPyappWrapper extends Log {
       artifact: Path,
       pythonConfig: PythonConfiguration,
       sandbox: Sandbox,
-      venvCache: Directory,
-      uvCache: Directory,
-      pipCredentialFile: String,
-      uvCredentialFile: String): Seq[CompilationMessage] = {
+      pythonEnvironment: PythonEnvironment): Seq[CompilationMessage] = {
     import VenvProvider._
     import VenvUtils._
 
     val (venv, cacheMessages) =
-      ensureVenvExists(
-        pythonConfig.overriddenCommands,
-        pythonConfig.python,
-        venvCache,
-        pipCredentialFile,
-        uvCredentialFile)
+      ensureVenvExists(pythonConfig.overriddenCommands, pythonConfig.python, pythonEnvironment)
 
     val thinPyappCommand = {
       def injectVars(cmd: String): String = cmd
         .replace(Artifact, artifact.toString)
         .replace(Sources, sandbox.sourceDir.pathString)
-        .replace(VenvCache, venvCache.pathString)
+        .replace(VenvCache, pythonEnvironment.venvCache.pathString)
         .replace(RequirementsFile, sandbox.buildDir.resolveFile("requirements.txt").pathString)
         .replace(PthFile, sandbox.buildDir.resolveFile("libs.pth").pathString)
 
       val cmd = if (pythonConfig.isArtifactory) {
         createRequirements(sandbox.buildDir, pythonConfig)
-        s"thin-pyapp --cache-dir $uvCache --source ${sandbox.sourceDir} -r requirements.txt $artifact"
+        s"thin-pyapp --cache-dir ${pythonEnvironment.uvCache} --source ${sandbox.sourceDir} -r requirements.txt $artifact"
       } else {
         createPthFile(sandbox.buildDir, pythonConfig)
-        s"thin-pyapp --cache-dir $uvCache --source ${sandbox.sourceDir} --pth-file libs.pth $artifact"
+        s"thin-pyapp --cache-dir ${pythonEnvironment.uvCache} --source ${sandbox.sourceDir} --pth-file libs.pth $artifact"
       }
       pythonConfig.overriddenCommands.thinPyappCmd
         .map(injectVars)
         .getOrElse(cmd)
     }
 
-    val cmds = PythonLauncher.prerequisites(pipCredentialFile, uvCredentialFile) ++ Seq(
+    val cmds = PythonLauncher.prerequisites(pythonEnvironment) ++ Seq(
       s"source ${scripts(venv.toString)}activate",
       thinPyappCommand,
       "deactivate"
     )
 
-    PythonLauncher.launch("ThinPyappLaunch", cmds.mkString(" && "), Some(sandbox.buildDir)) {
+    PythonLauncher.launchCompilation("ThinPyappLaunch", cmds.mkString(" && "), Some(sandbox.buildDir)) {
       case out if out.contains("ERROR") =>
         CompilationMessage(None, out, Severity.Error)
     } ++ cacheMessages
@@ -138,7 +137,7 @@ object VenvUtils extends Log {
   private def pythonVenv(venvName: String, python: PythonDefinition): String =
     Seq(
       s"python -m venv --system-site-packages $venvName",
-      s"${scripts(venvName)}python -m pip --disable-pip-version-check install morganstanley-optimus-thin-pyapp==${python.thinPyapp}",
+      s"${scripts(venvName)}python -m pip --disable-pip-version-check install morganstanley-optimus-thin-pyapp==${python.thinPyapp}"
     ).mkString("&&")
 
   private def cacheName(python: PythonDefinition): String = python.hash
@@ -146,16 +145,17 @@ object VenvUtils extends Log {
   private def cachePath(python: PythonDefinition, cacheDir: Directory): Path =
     cacheDir.resolveDir(python.hash).path
 
-  private def cacheExists(python: PythonDefinition, cacheDir: Directory): (Boolean, Boolean) =
+  private def cacheExists(python: PythonDefinition, pythonEnvironment: PythonEnvironment): (Boolean, Boolean) = {
+    val cacheDir = pythonEnvironment.venvCache
     (cacheDir.resolveDir(python.hash).exists, cacheDir.resolveDir(python.hash).resolveFile(ValidCacheMarker).exists)
+  }
 
   @async private def create(
       overriddenCmds: OverriddenCommands,
       python: PythonDefinition,
-      venvCache: Directory,
-      pipCredentialFile: String,
-      uvCredentialFile: String): (Path, Seq[CompilationMessage]) = {
-    if (!venvCache.exists) Files.createDirectories(venvCache.path)
+      pythonEnvironment: PythonEnvironment): (Path, Seq[CompilationMessage]) = {
+    val venvCache = pythonEnvironment.venvCache
+    if (!pythonEnvironment.venvCache.exists) Files.createDirectories(venvCache.path)
     val cacheVenvName = cacheName(python)
 
     def injectVars(cmd: String): String = {
@@ -165,7 +165,7 @@ object VenvUtils extends Log {
     }
 
     val cmds = Seq(
-      PythonLauncher.prerequisites(pipCredentialFile, uvCredentialFile) ++
+      PythonLauncher.prerequisites(pythonEnvironment) ++
         Seq(
           overriddenCmds.pythonVenvCmd
             .map(injectVars)
@@ -182,11 +182,9 @@ object VenvUtils extends Log {
   @async private def recreate(
       overriddenCmds: OverriddenCommands,
       python: PythonDefinition,
-      venvCache: Directory,
-      pipCredentialFile: String,
-      uvCredentialFile: String): (Path, Seq[CompilationMessage]) = {
-    AssetUtils.recursivelyDelete(Directory(cachePath(python, venvCache)))
-    create(overriddenCmds, python, venvCache, pipCredentialFile, uvCredentialFile)
+      pythonEnvironment: PythonEnvironment): (Path, Seq[CompilationMessage]) = {
+    AssetUtils.recursivelyDelete(Directory(cachePath(python, pythonEnvironment.venvCache)))
+    create(overriddenCmds, python, pythonEnvironment)
   }
 
   /* node is used here in order to synchronize async calls,
@@ -194,15 +192,13 @@ object VenvUtils extends Log {
   @node def ensureVenvExists(
       overriddenCmds: OverriddenCommands,
       forPython: PythonDefinition,
-      venvCacheDir: Directory,
-      pipCredentialFile: String,
-      uvCredentialFile: String): (Path, Seq[CompilationMessage]) = {
-    val (exists, validCache) = cacheExists(forPython, venvCacheDir)
+      pythonEnvironment: PythonEnvironment): (Path, Seq[CompilationMessage]) = {
+    val (exists, validCache) = cacheExists(forPython, pythonEnvironment)
     if (exists) {
-      if (validCache) (cachePath(forPython, venvCacheDir), Nil)
-      else recreate(overriddenCmds, forPython, venvCacheDir, pipCredentialFile, uvCredentialFile)
+      if (validCache) (cachePath(forPython, pythonEnvironment.venvCache), Nil)
+      else recreate(overriddenCmds, forPython, pythonEnvironment)
     } else
-      create(overriddenCmds, forPython, venvCacheDir, pipCredentialFile, uvCredentialFile)
+      create(overriddenCmds, forPython, pythonEnvironment)
   }
 
   import optimus.buildtool.cache.NodeCaching.reallyBigCache
@@ -210,21 +206,19 @@ object VenvUtils extends Log {
 }
 
 object PythonLauncher extends Log {
-  def prerequisites(pipCredentialFile: String, uvPipCredentialFile: String): Seq[String] = {
+  def prerequisites(pythonEnvironment: PythonEnvironment): Seq[String] = {
     val setEnv = if (OsUtils.isWindows) "set" else "export"
 
-    def set(key: String, value: String): Seq[String] = {
-      if (Files.exists(Paths.get(value))) {
-        Seq(s"$setEnv $key=$value")
-      } else {
-        log.warn(s"$key not set; Pypi Artifactory access may fail")
-        Seq.empty
+    def set(key: String, value: Option[String]): Seq[String] =
+      value match {
+        case Some(value) if Files.exists(Paths.get(value)) => Seq(s"$setEnv $key=$value")
+        case _ =>
+          log.warn(s"$key not set; Pypi Artifactory access may fail")
+          Seq.empty
       }
-    }
 
-    set(ArtifactoryToolDownloader.PipConfigFile, pipCredentialFile) ++
-      set(ArtifactoryToolDownloader.UvConfigFile, uvPipCredentialFile)
-
+    set(ArtifactoryToolDownloader.PipConfigFile, pythonEnvironment.pipCredentialFile.map(_.pathString)) ++
+      set(ArtifactoryToolDownloader.UvConfigFile, pythonEnvironment.pypiUvCredentialFile.map(_.pathString))
   }
 
   @async def launchWithPython(
@@ -234,7 +228,7 @@ object PythonLauncher extends Log {
       workingDir: Option[Directory] = None): Seq[CompilationMessage] = {
     python.binPath match {
       case Some(pythonBinPath) =>
-        launch(prefix, cmdline, workingDir, Seq(pythonBinPath)) {
+        launchCompilation(prefix, cmdline, workingDir, Seq(pythonBinPath)) {
           case out if out.contains("ERROR:") =>
             CompilationMessage(None, out, Severity.Error)
         }
@@ -242,8 +236,10 @@ object PythonLauncher extends Log {
     }
   }
 
-  @async def launch(prefix: String, cmdLine: String, workingDir: Option[Directory], addToPath: Seq[String] = Seq.empty)(
-      pf: PartialFunction[String, CompilationMessage]): Seq[CompilationMessage] = {
+  @async def launch(
+      cmdLine: String,
+      workingDir: Option[Directory],
+      addToPath: Seq[String] = Seq.empty): (Int, Seq[String]) = {
     val cmds =
       if (Utils.isWindows) Seq("cmd.exe", "/c", cmdLine)
       else Seq("ksh", "-c", cmdLine)
@@ -268,16 +264,24 @@ object PythonLauncher extends Log {
     }
     logging += s"Return code: $returnCode"
 
-    val messages = logging.collect(pf)
-    val failed = returnCode != 0
+    (returnCode, logging.toIndexedSeq)
+  }
 
+  @async def launchCompilation(
+      prefix: String,
+      cmdLine: String,
+      workingDir: Option[Directory],
+      addToPath: Seq[String] = Seq.empty)(pf: PartialFunction[String, CompilationMessage]): Seq[CompilationMessage] = {
+    val (returnCode, logging) = launch(cmdLine, workingDir, addToPath)
+    val messages = logging.collect(pf).toBuffer
+    val failed = returnCode != 0
     if (failed) {
       logging.foreach(l => log.warn(s"$prefix $l"))
       val knownError = messages.exists(_.isError)
       if (!knownError)
         messages += CompilationMessage(
           None,
-          s"""Process ${cmds.mkString(" ")} ended up with status code: $returnCode,
+          s"""Process ${Seq(cmdLine).mkString(" ")} ended up with status code: $returnCode,
              |output: ${logging.mkString("\n")}""".stripMargin,
           Severity.Error
         )

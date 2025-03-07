@@ -18,6 +18,8 @@ import optimus.platform.relational.RelationalUnsupportedException
 import optimus.platform.relational.dal.DALProvider
 import optimus.platform.relational.dal.core.DALLanguage
 import optimus.platform.relational.dal.core.DALMapping
+import optimus.platform.relational.dal.core.DALRegisteredIndexLanguage
+import optimus.platform.relational.dal.core.DALRegisteredIndexMapping
 import optimus.platform.relational.dal.core.ExpressionQuery
 import optimus.platform.relational.dal.core.IndexColumnInfo
 import optimus.platform.relational.data.DbQueryTreeReducerBase
@@ -115,4 +117,15 @@ object DALEntityBitemporalSpaceReducer {
       DALEntityBitemporalSpaceMappingEntityFactory.create(info, shape, shape.runtimeClassName)
     }
   }
+}
+
+class DALRegisteredIndexEntityBitemporalSpaceReducer(override val provider: DALProvider)
+    extends DALEntityBitemporalSpaceReducer(provider) {
+  override def createMapping(): QueryMapping = new DALRegisteredIndexMapping {
+    protected override def getEntityImpl(shape: TypeInfo[_]): MappingEntity = {
+      val info = EntityInfoRegistry.getClassInfo(shape.clazz)
+      DALEntityBitemporalSpaceMappingEntityFactory.create(info, shape, shape.runtimeClassName)
+    }
+  }
+  override def createLanguage(lookup: MappingEntityLookup): QueryLanguage = new DALRegisteredIndexLanguage(lookup)
 }

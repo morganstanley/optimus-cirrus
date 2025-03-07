@@ -39,7 +39,7 @@ object JarDefinition {
 }
 
 // eg. compile.modules += a.b.c in d.obt:25 => ScopeRelationship(a.b.c.main, d.obt, 25)
-final case class ScopeRelationship(target: ScopeId, origin: ObtFile, line: Int)
+final case class ScopeRelationship(target: ScopeId, custom: Boolean, origin: ObtFile, line: Int)
 
 final case class ScopeDefinition(
     id: ScopeId,

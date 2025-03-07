@@ -186,10 +186,7 @@ private[debugger] class DebuggerViewModel(val interpreter: HtmlInterpreters.Type
           hb ++= ArgumentHeader("arg " + i)
           hb.newLine()
           val argStr = safeToString(a)
-          if (wrap)
-            hb ++= ("ArgumentValue", argStr)
-          else
-            hb ++= PreFormatted(argStr)
+          hb ++= PreFormatted(argStr, wrap)
 
           a match {
             case Some(viewable: GraphDebuggerValueDetailsViewable) =>
@@ -250,17 +247,14 @@ private[debugger] class DebuggerViewModel(val interpreter: HtmlInterpreters.Type
       scenarioStack(task.scenarioStack, hb, minDepth)
     }
 
-  def nodeDetails(hb: HtmlBuilder, showIndex: Boolean, minScenarioStackDepth: Int, outpane: JTextPane): HtmlBuilder = {
+  def nodeDetails(hb: HtmlBuilder, showIndex: Boolean, minScenarioStackDepth: Int, outpane: JTextPane): Unit = {
     if (showIndex) hb ++= Break("#" + review.task.id)
     if (hb.cfg.tweakDiffs) writeTweakDiffs(hb)
     if (hb.cfg.xsTweaks) writeXSTweaks(hb)
 
     if (hb.cfg.result) {
       hb.separated(2) {
-        if (hb.cfg.wrap)
-          hb.noStyle("NodeResult", review.task.resultDisplayString)
-        else
-          hb ++= PreFormatted(review.task.resultDisplayString)
+        hb ++= PreFormatted(review.task.resultDisplayString, hb.cfg.wrap)
 
         review.task.resultKey() match {
           case Some(viewable: GraphDebuggerValueDetailsViewable) =>
@@ -278,8 +272,6 @@ private[debugger] class DebuggerViewModel(val interpreter: HtmlInterpreters.Type
     if (hb.cfg.args) nodeArguments(hb, hb.cfg.wrap)
     if (hb.cfg.entity) nodeEntity(hb, hb.cfg.properties)
     if (hb.cfg.scenarioStack) scenarioStacks(hb, minScenarioStackDepth)
-
-    hb
   }
 }
 

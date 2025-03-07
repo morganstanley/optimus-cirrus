@@ -186,7 +186,7 @@ class ZincClasspathResolver(
       group: String,
       name: String,
       scalaVersion: String): Seq[JarAsset] = {
-    val predefinedZincMavenLib = findZincDep(group, name)
+    val predefinedZincMavenLib = findZincDep(group, name).toList
     predefinedZincMavenLib match {
       case mavenZinc :: otherScalaVersions =>
         val zincName = nameWithScalaVer(mavenZinc.name.substring(0, mavenZinc.name.indexOf("_")), scalaVersion)
@@ -202,7 +202,7 @@ class ZincClasspathResolver(
       version: Option[String] = None): Seq[JarAsset] =
     (group, name, version) match {
       case (Some(newGroup), Some(newName), Some(newMavenZincVer)) =>
-        val predefinedZinc = findZincDep(newGroup, newName)
+        val predefinedZinc = findZincDep(newGroup, newName).toList
         val newZincDep = predefinedZinc match {
           // we only defined single version of zinc as dependency, should inherit zinc setting for all scala versions
           case loadedZinc :: _ if loadedZinc.group == newGroup && loadedZinc.name.contains(newName) =>

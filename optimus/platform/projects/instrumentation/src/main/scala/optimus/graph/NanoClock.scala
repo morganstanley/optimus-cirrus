@@ -23,5 +23,5 @@ trait NanoClock {
   def consumeTimeInMs(ms: Long, topic: NanoClockTopic): Unit = ()
 }
 
-private[optimus] trait NanoClockTopic
+trait NanoClockTopic
 private[graph] object CacheTopic extends NanoClockTopic

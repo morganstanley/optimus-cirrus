@@ -22,6 +22,11 @@ import optimus.graph.diagnostics.PNodeTaskInfoLight
 import optimus.graph.{OGLocalTables => LT}
 import optimus.graph.{PropertyNode => PN}
 import optimus.platform.{EvaluationQueue => EQ}
+import optimus.utils.LogLogHistogram
+
+// Cache reuse histogram.  Each bucket is a factor of 8, i.e. 1st bucket means re-use within 1-2^3, then 9-2^6, up to 2^36 (12 buckets)
+// Each bucket counts up to 2^(2^5)
+object ReuseHistogram extends LogLogHistogram(3, 5)
 
 class OGEventsNewHotspotsObserver private[trace] extends OGEventsGlobalGraphObserver {
   override def name: String = if (OGTraceMode.testNewHS) "hotspots" else "hotspotsLight"
@@ -34,6 +39,19 @@ class OGEventsNewHotspotsObserver private[trace] extends OGEventsGlobalGraphObse
   override def recordLostConcurrency: Boolean = true
   override def collectsHotspots: Boolean = true
   override def collectsAccurateCacheStats: Boolean = true
+  override def collectsCacheDetails(): Boolean = true
+
+  override def reuseUpdate(task: NodeTask, rcount: Int): Unit = {
+    val info = task.executionInfo()
+    // accumulate histogram
+    val lt = LT.getOrAcquire()
+    val reg: Long = ReuseHistogram.add(info.reuseStats, rcount, lt.logRandom) // accumulate histogram
+    lt.release()
+    info.reuseStats = reg
+    // accumulate maximum
+    if (rcount > info.reuseCycle)
+      info.reuseCycle = rcount
+  }
 
   override def dependency(fromTask: NodeTask, toTask: NodeTask, eq: EQ): Unit = {
     if (!toTask.executionInfo.getCacheable)

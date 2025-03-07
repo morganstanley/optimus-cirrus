@@ -15,6 +15,9 @@ import optimus.dht.common.util.StringTool;
 
 public class ReceivedMessageMetrics {
 
+  public static final ReceivedMessageMetrics NOT_RECEIVED =
+      new ReceivedMessageMetrics(0, 0, 0, 0, 0, 0, 0, 0);
+
   private final long bytesRead;
   private final long firstReadNanoTs;
   private final long firstReadMilliTs;

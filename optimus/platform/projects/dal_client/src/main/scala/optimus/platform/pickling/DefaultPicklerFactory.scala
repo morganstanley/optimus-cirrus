@@ -34,7 +34,7 @@ import scala.collection.immutable
 import scala.collection.SortedSet
 import scala.reflect.runtime.universe._
 import optimus.breadcrumbs.ChainedID
-import optimus.datatype.FullName
+import optimus.datatype._
 import optimus.platform.dal.session.RolesetMode
 import optimus.platform.storable
 import optimus.platform.storable.ReferenceHolder
@@ -68,7 +68,6 @@ class DefaultPicklerFactory extends PicklerFactory with DefaultFactory[Pickler] 
     classKeyOf[Byte] -> typeParams0(bytePickler),
     classKeyOf[BigDecimal] -> typeParams0(bdPickler),
     classKeyOf[Char] -> typeParams0(charPickler),
-    classKeyOf[FullName[_]] -> typeParams1(t => fullNamePickler),
 
     /* one type argument */
     classKeyOf[Compressed[_]] -> {
@@ -134,7 +133,8 @@ class DefaultPicklerFactory extends PicklerFactory with DefaultFactory[Pickler] 
     classKeyOf[Enum[_]] -> (_ => Some(javaEnumPickler)),
     classKeyOf[BusinessEvent] -> (_ => Some(BusinessEvent.eventpickler)),
     classKeyOf[MSUnique] -> (_ => Some(MSUnique.MSUniquePickler)),
-    classKeyOf[storable.Embeddable] -> (tpe => Some(EmbeddablePicklers.picklerForType(tpe)))
+    classKeyOf[storable.Embeddable] -> (tpe => Some(EmbeddablePicklers.picklerForType(tpe))),
+    classKeyOf[PIIElement[_]] -> (tpe => Some(piiElementPickler))
   )
 
   def pickleableClasses: Set[String] = values.keySet ++ superclassValues.keySet

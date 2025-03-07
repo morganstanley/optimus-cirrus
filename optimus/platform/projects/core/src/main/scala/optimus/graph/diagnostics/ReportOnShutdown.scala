@@ -58,14 +58,15 @@ private[optimus] object Report {
     sendSummaryCrumb()
     writePgoData(fileStamp)
 
-    csvDir.foreach { dir =>
-      Files.createDirectories(dir)
-
-      writeCSVFilesAndCrumbs(dir, fileStamp, defaultCSVResultsExtractor)
-      writeOGTrace(dir, fileStamp)
-      writeDiagnostics(dir, fileStamp)
+    csvDir match {
+      case Some(dir) =>
+        Files.createDirectories(dir)
+        writeCSVFilesAndCrumbs(dir, fileStamp, defaultCSVResultsExtractor)
+        writeOGTrace(dir, fileStamp)
+        writeDiagnostics(dir, fileStamp)
+      case None =>
+        filterAndSendHotspotsCrumbs()
     }
-
     writeHtmlReport(csvDir, fileStamp)
   }
 

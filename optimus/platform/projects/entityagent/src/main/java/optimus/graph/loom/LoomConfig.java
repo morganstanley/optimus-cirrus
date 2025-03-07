@@ -20,6 +20,9 @@ import org.objectweb.asm.commons.Method;
 import org.objectweb.asm.tree.MethodInsnNode;
 
 public class LoomConfig {
+
+  public static final int COLUMN_NA = Integer.MIN_VALUE;
+
   static final int NF_EXPOSE_ARGS_TRAIT = 1;
   static final int NF_PLAIN_ASYNC = 1 << 1;
   static final int NF_PLAIN_LAMBDA = 1 << 2;
@@ -47,12 +50,6 @@ public class LoomConfig {
 
   public static final String ScenarioIndependentAnnotation =
       "Loptimus/platform/scenarioIndependent;";
-
-  public static final String LOOM_SUFFIX = "$_";
-  public static final String PLAIN_SUFFIX = "__";
-  public static final String NEW_NODE_SUFFIX = "$newNode";
-  public static final String QUEUED_SUFFIX = "$queued";
-  public static final String IMPL_SUFFIX = "$impl";
 
   public static final String TO_VALUE_PREFIX = "toValue$";
 
@@ -110,9 +107,21 @@ public class LoomConfig {
   public static final String CMD_GET = "get";
   public static final String CMD_GETSI = "getSI";
 
-  public static final String BSM_DESC =
-      "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;II[Ljava/lang/String;)Ljava/lang/invoke/CallSite;";
+  private static final Type STRING_TYPE = Type.getObjectType("java/lang/String");
 
+  public static final String BSM_DESC =
+      Type.getMethodDescriptor(
+          Type.getObjectType("java/lang/invoke/CallSite"), // ...return...
+          Type.getObjectType("java/lang/invoke/MethodHandles$Lookup"), // ...args...
+          STRING_TYPE, // cmd
+          Type.getObjectType("java/lang/invoke/MethodType"),
+          Type.getObjectType("java/lang/invoke/MethodHandle"),
+          STRING_TYPE, // source
+          Type.INT_TYPE, // line
+          Type.INT_TYPE, // nodeFlags
+          Type.getObjectType("[Ljava/lang/String;"));
+
+  // TODO (OPTIMUS-66991): revisit once we are on Scala 2.13 only
   private static Class<?> seqClass() {
     try {
       return Class.forName("scala.collection.Seq");
@@ -132,7 +141,7 @@ public class LoomConfig {
 
   private static final String FLOW_CONTROL = "optimus/platform/FlowControl";
   private static final String TURN_OFF_REORDER = "turOffNodeReorder";
-  private static final String ASSUME_GLOBAL_MUTATION = "assumeGlobalMutation";
+  private static final String ASSUME_GLOBAL_MUTATION = "mutatesGlobalState";
 
   public static boolean enableCompilerDebug(MethodInsnNode mi) {
     return mi.getOpcode() == INVOKESTATIC

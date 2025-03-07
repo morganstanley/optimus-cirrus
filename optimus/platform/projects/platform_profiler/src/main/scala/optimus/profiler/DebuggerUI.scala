@@ -17,16 +17,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.function.Predicate
 import java.util.{ArrayList => JArrayList}
 import java.util.{IdentityHashMap => JIdentityHashMap}
-import optimus.graph.DiagnosticSettings
-import optimus.graph.JMXConnection
-import optimus.graph.NodeTask
-import optimus.graph.NodeTaskInfo
-import optimus.graph.NodeTrace
-import optimus.graph.OGTraceReader
-import optimus.graph.PropertyNode
-import optimus.graph.RecordedTweakables
-import optimus.graph.TweakNode
-import optimus.graph.TweakTreeNode
+import optimus.graph._
 import optimus.graph.cache.Caches
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
@@ -413,6 +404,8 @@ object DebuggerUI extends Log {
    * disregarding SI etc.
    */
   final def underStackOf[T](ssIn: ScenarioStack)(f: => T): T = {
+    if (!SchedulerIsInitialized.ready) return f
+
     var r: T = null.asInstanceOf[T]
     var saved_ss: ScenarioStack = null
     var cn: NodeTask = null

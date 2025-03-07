@@ -14,8 +14,7 @@ package optimus.platform.pickling
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.pickling.ChainedIDUnpickler
-import optimus.datatype.Classification.DataSubjectCategory
-import optimus.datatype.FullName
+import optimus.datatype._
 import optimus.platform.AsyncImplicits._
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
@@ -217,7 +216,7 @@ class CollectionUnpickler[T, Impl <: Iterable[T]](private[optimus] val innerUnpi
 class EntityUnpickler[T <: Entity: Manifest] extends Unpickler[T] {
   @node def unpickle(s: Any, ctxt: PickledInputStream): T = s match {
     case ref: EntityReference =>
-      val inlined = ctxt.inlineEntitiesByRef.get(ref)
+      val inlined = ctxt.inlineEntitiesByRef.refToEntity.get(ref)
       val resolver = EvaluationContext.entityResolver.asInstanceOf[EntityResolverReadImpl]
       val actualType = manifest[T].runtimeClass.asSubclass(classOf[Entity])
       inlined
@@ -346,9 +345,6 @@ trait DefaultUnpicklers extends UnpicklersLow1 {
     new KnowableUnpickler(under)(manifest)
   def optionUnpickler[T](under: Unpickler[T], manifest: Manifest[T]): Unpickler[Option[T]] =
     new OptionUnpickler(under)(manifest)
-  // docs-snippet:DefaultUnpickler
-  def fullNameUnpickler = new PIIElementUnpickler[DataSubjectCategory, FullName[DataSubjectCategory]](FullName.apply)
-  // docs-snippet:DefaultUnpickler
   def unitUnpickler: Unpickler[Unit] = UnitUnpickler
 
   def seqUnpickler[T: Manifest](inner: Unpickler[T]): Unpickler[Seq[T]] =

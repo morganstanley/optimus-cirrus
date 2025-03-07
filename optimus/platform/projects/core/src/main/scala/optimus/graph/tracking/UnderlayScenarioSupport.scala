@@ -46,7 +46,7 @@ private[tracking] trait UnderlayScenarioSupport {
    * @param scenario
    *   The new scenario to insert as the underlay scenario.
    */
-  def regenerateUnderlay(scenario: Scenario, ss: ScenarioStack, cause: EventCause): ScenarioStack = {
+  private def regenerateUnderlay(scenario: Scenario, ss: ScenarioStack, cause: EventCause): ScenarioStack = {
     // n.b. we invalidate all tweaks from the old underlay and the new underlay - this leads to over
     // invalidation (if the same byValue tweak is applied in new and old stack it does not need invalidating.
     // This leads to correct but potentially sub-optimal performance.
@@ -125,7 +125,7 @@ private[tracking] trait UnderlayScenarioSupport {
         // change tweakable listener and depth to match our underlay tracker (it's fine for all of the underlay stacks
         // to have the same depth - it's only used by the tracker for figuring out whether or not the tweaks came
         // from above or below it)
-        _tweakableListener = tweakableListener,
+        tweakableListener = tweakableListener,
         // depth is flat because we have a single tweak listener
         trackingDepth = depth,
         // important: give the SS a unique ID otherwise if two sibling DependencyTrackers have underlays of the same

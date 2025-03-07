@@ -90,8 +90,10 @@ object Events extends KnownEvents {
   val ClientLog = event("ClientLog")
 
   val Completed = event("Completed")
+
   val AppStarted = event("AppStarted")
   val AppCompleted = event("AppCompleted")
+
   val RuntimeCreated = event("RuntimeCreated")
   val RuntimeShutDown = event("RuntimeShutDown")
 

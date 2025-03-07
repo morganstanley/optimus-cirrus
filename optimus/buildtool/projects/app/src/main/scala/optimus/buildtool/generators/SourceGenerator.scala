@@ -38,7 +38,7 @@ import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 import scala.reflect._
 
@@ -48,7 +48,7 @@ import scala.reflect._
 
   type Inputs <: SourceGenerator.Inputs
 
-  @node def dependencies(scope: CompilationScope): Seq[Artifact] = Nil
+  @node def dependencies(scope: CompilationScope): IndexedSeq[Artifact] = Vector()
 
   // Returned as a NodeFunction0 to prevent Inputs (which will often contain full sources) being inadvertently
   // cached as an argument to other @nodes

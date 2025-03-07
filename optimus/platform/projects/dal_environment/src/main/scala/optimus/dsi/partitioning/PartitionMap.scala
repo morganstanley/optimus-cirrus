@@ -12,7 +12,6 @@
 package optimus.dsi.partitioning
 
 import java.util.concurrent.ConcurrentHashMap
-
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.ms.zookeeper.clientutils.ZkEnv
@@ -27,13 +26,15 @@ import optimus.platform.runtime.ZkOpsTimer
 import optimus.platform.runtime.ZkUtils
 import optimus.platform.runtime.ZkXmlConfigurationLoader
 import org.apache.curator.framework.CuratorFramework
+import optimus.breadcrumbs.RetryWithExponentialBackoff
 
 import scala.collection.mutable
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
-
 import PartitionMap.TypeRef
+import msjava.slf4jutils.scalalog.Logger
+import optimus.config.OptimusConfigurationIOException
 
 trait PartitionMap {
   def partitions: Set[NamedPartition]
@@ -45,14 +46,22 @@ trait PartitionMap {
   def validate(typ: TypeRef): Unit
 }
 
-object PartitionMap {
+object PartitionMap extends RetryWithExponentialBackoff {
   private val PartitionRootProp = "partitions"
   private val wordRegex = "\\w".r
   private val wildcardChar = "*"
-  private[this] val log = getLogger[PartitionMap.type]
   val PartitionMapProperty = "optimus.dsi.partitioning.PartitionMap"
   private[optimus] val empty: PartitionMap = new PartitionMapImpl(Set.empty, Map.empty, Set.empty)
   private[partitioning] type TypeRef = String
+
+  override protected val log: Logger = getLogger[PartitionMap.type]
+
+  // Will allow a retry for all exceptions that are thrown, and not used to set the cache to an empty partition map
+  override def isExpectedException(e: Throwable): Boolean = {
+    e match {
+      case _ => true
+    }
+  }
 
   private lazy val cache = {
     CacheBuilder
@@ -60,21 +69,38 @@ object PartitionMap {
       .build(new CacheLoader[(String, ZkEnv), PartitionMap] with WithZkOpsMetrics {
         override def load(dalAndZkEnv: (String, ZkEnv)): PartitionMap = {
           val env = dalAndZkEnv._1
+
           if (env == "mock") PartitionMap.empty
           else {
             val zkEnv = dalAndZkEnv._2
             val path = s"/partitions/$env"
 
-            Try(withZkOpsMetrics(ChainedID.root) { timer =>
-              ZkXmlConfigurationLoader.readConfig(path, zkEnv, timer)
-            }) match {
-              case Success(config) => createPartitionMap(config, env)
-              case Failure(ex) =>
-                log.info(
-                  s"Could not read partition map config at ZK path: $path, setting it as empty. " +
-                    s"(error message: ${Option(ex.getCause).map(_.getMessage).getOrElse("<no cause could be found>")})"
-                )
-                PartitionMap.empty
+            // Retry the partition map from ZooKeeper 3 times if you run into an IO Exception
+            // For other exceptions, it will set the partition map to empty
+            withRetry(3, "Fetching partition map from ZooKeeper") {
+              Try(withZkOpsMetrics(ChainedID.root) { timer =>
+                ZkXmlConfigurationLoader.readConfig(path, zkEnv, timer)
+              }) match {
+                case Success(config) => createPartitionMap(config, env)
+                case Failure(ex) =>
+                  ex match {
+                    case ex: OptimusConfigurationIOException => {
+                      log.info(
+                        s"Could not read partition map config at ZK path: $path, due to IOException. Will retry " +
+                          s"(error message: ${Option(ex.getCause).map(_.getMessage).getOrElse("<no cause could be found>")})"
+                      )
+                      throw ex
+                    }
+                    case _ => {
+                      log.info(
+                        s"Could not read partition map config at ZK path: $path, setting it as empty. " +
+                          s"(error message: ${Option(ex.getCause).map(_.getMessage).getOrElse("<no cause could be found>")})"
+                      )
+
+                      PartitionMap.empty
+                    }
+                  }
+              }
             }
           }
         }

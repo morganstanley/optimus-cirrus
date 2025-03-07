@@ -11,8 +11,6 @@
  */
 package optimus.graph;
 
-import java.util.ArrayList;
-
 import optimus.platform.EvaluationQueue;
 
 /**
@@ -51,7 +49,7 @@ public abstract class NodeAwaiter {
   protected abstract void onChildCompleted(EvaluationQueue eq, NodeTask node);
 
   /** Used for dependency walkers */
-  public NodeCause awaiter() {
+  NodeCause awaiter() {
     return null;
   }
 

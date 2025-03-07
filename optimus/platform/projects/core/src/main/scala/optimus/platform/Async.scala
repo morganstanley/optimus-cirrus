@@ -196,15 +196,29 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   import AsyncBase._
 
   if (streamWarnElements >= 0) {
-    c match {
-      case s: Stream[_] =>
-        if (s.isDefinedAt(streamWarnElements)) {
-          val msg =
-            s"Found potentially infinite stream with more than $streamWarnElements elements of ${s.head.getClass}"
-          log.warn(msg)
-          log.debug("Stack", new Exception(msg))
-        }
-      case _ =>
+    def streamWarn(): Unit = {
+      val msg =
+        s"Found potentially infinite stream with more than $streamWarnElements elements of ${c.head.getClass}"
+      log.warn(msg)
+      log.debug("Stack", new Exception(msg))
+    }
+    // We have to leave this apparently undefined to avoid an unused import error. This method
+    // is recognized stringly in the staging plugin.
+    if (scalaVersionRange("2.13:"): @staged) {
+      import scala.collection.LinearSeq
+      c.asInstanceOf[Iterable[_]] match {
+        case s @ (_: LazyList[_] | _: Stream[_]) =>
+          if (s.asInstanceOf[LinearSeq[_]].isDefinedAt(streamWarnElements))
+            streamWarn()
+        case _ =>
+      }
+    } else { // LazyList doesn't exist in 2.12
+      c match {
+        case s: Stream[_] =>
+          if (s.isDefinedAt(streamWarnElements))
+            streamWarn()
+        case _ =>
+      }
     }
   }
 
@@ -348,7 +362,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   def flatMap[B, That](@nodeLift f: A => GenTraversableOnce[B])(implicit cbf: BuildFrom[CC, B, That]): That =
     flatMap$withNode { toNodeFactory(f) }
   def flatMap$queued[B, That](f: A => Node[GenTraversableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
-    flatMap$newNode(f).enqueue
+    flatMap$newNode(toNodeFQ(f)).enqueue
   def flatMap$queued[B, That](f: A => GenTraversableOnce[B], cbf: BuildFrom[CC, B, That]): NodeFuture[That] =
     flatMap$newNode(toNodeFactory(f))(cbf).enqueue
   def flatMap$withNode[B, That](f: A => Node[GenTraversableOnce[B]])(implicit cbf: BuildFrom[CC, B, That]): That =
@@ -400,7 +414,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
       "absolutely must use foldLeft",
     since = "2020-11-02")
   def foldLeft[B](z: B)(@nodeLift op: (B, A) => B): B = needsPlugin
-  def foldLeft$queued[B](z: B)(op: (B, A) => Node[B]): Node[B] = foldLeft$newNode(z)(toNodeFQ(op)).enqueue
+  def foldLeft$queued[B](z: B)(op: (B, A) => Node[B]): NodeFuture[B] = foldLeft$newNode(z)(toNodeFQ(op)).enqueue
   def foldLeft$withNode[B](z: B)(op: (B, A) => Node[B]): B = foldLeft$newNode(z)(op).get
   protected def foldLeft$newNode[B](z: B)(op: (B, A) => Node[B]): Node[B] =
     if (isEmpty) new AlreadyCompletedNode(z)
@@ -423,7 +437,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   def filter(@nodeLift f: A => Boolean): CC = filter$withNode(toNodeFactory(f))
-  def filter$queued(f: A => Node[Boolean]): NodeFuture[CC] = filter$newNode(f).enqueue
+  def filter$queued(f: A => Node[Boolean]): NodeFuture[CC] = filter$newNode(toNodeFQ(f)).enqueue
   def filter$withNode(f: A => Node[Boolean]): CC = filter$newNode(f).get
   final private[this] def filter$newNode(f: A => Node[Boolean]): Node[CC] =
     if (isEmpty) new AlreadyCompletedNode(c)
@@ -440,7 +454,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def filterNot(@nodeLift f: A => Boolean): CC = filterNot$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def filterNot$queued(f: A => Node[Boolean]): NodeFuture[CC] = filterNot$newNode(f).enqueue
+  def filterNot$queued(f: A => Node[Boolean]): NodeFuture[CC] = filterNot$newNode(toNodeFQ(f)).enqueue
   def filterNot$withNode(f: A => Node[Boolean]): CC = filterNot$newNode(f).get
   final private[this] def filterNot$newNode(f: A => Node[Boolean]): Node[CC] =
     if (isEmpty) new AlreadyCompletedNode(c)
@@ -465,7 +479,8 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentTransparent
-  def flatMop[B, That](@nodeLift f: A => Option[B])(implicit cbf: BuildFrom[CC, B, That]): That = needsPlugin
+  def flatMop[B, That](@nodeLift f: A => Option[B])(implicit cbf: BuildFrom[CC, B, That]): That = flatMop$withNode(
+    toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
   def flatMop$queued[B, That](f: A => Node[Option[B]])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
     flatMop$newNode(f).enqueue
@@ -555,7 +570,7 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   @scenarioIndependentTransparent
   def forall(@nodeLift f: A => Boolean): Boolean = forall$withNode(toNodeFactory(f))
   // noinspection ScalaUnusedSymbol
-  def forall$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = forall$newNode(f).enqueue
+  def forall$queued(f: A => Node[Boolean]): NodeFuture[Boolean] = forall$newNode(toNodeFQ(f)).enqueue
   def forall$withNode(f: A => Node[Boolean]): Boolean = forall$newNode(f).get
   final private[this] def forall$newNode(f: A => Node[Boolean]) =
     if (isEmpty) trueNode
@@ -618,7 +633,8 @@ private[optimus] abstract class AsyncBase[A, CC <: Iterable[A]](
   def collectPF[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): That =
     collectPF$withNode(pf)
   // noinspection ScalaUnusedSymbol
-  def collectPF$queued[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): Node[That] =
+  def collectPF$queued[B, That](pf: OptimusPartialFunction[A, B])(implicit
+      cbf: BuildFrom[CC, B, That]): NodeFuture[That] =
     collectPF$newNode(pf).enqueue
   def collectPF$withNode[B, That](pf: OptimusPartialFunction[A, B])(implicit cbf: BuildFrom[CC, B, That]): That =
     collectPF$newNode(pf).get
@@ -902,7 +918,7 @@ sealed class asyncSeq[A, CC <: Iterable[A]](
   @nodeSyncLift
   @scenarioIndependentTransparent
   override def foldLeft[B](z: B)(@nodeLift op: (B, A) => B): B = foldLeft$withNode(z)(toNodeFactory(op))
-  override def foldLeft$queued[B](z: B)(op: (B, A) => Node[B]): Node[B] = super.foldLeft$queued(z)(op)
+  override def foldLeft$queued[B](z: B)(op: (B, A) => Node[B]): NodeFuture[B] = super.foldLeft$queued(z)(op)
   override def foldLeft$newNode[B](z: B)(op: (B, A) => Node[B]): Node[B] = super.foldLeft$newNode(z)(op)
   override def foldLeft$withNode[B](z: B)(op: (B, A) => Node[B]): B = super.foldLeft$withNode(z)(op)
 }

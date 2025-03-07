@@ -55,7 +55,7 @@ object ArrangeHelper {
       // step two: sort on real key since they have same key hashcode
       rangedQuickSortOnKey(data, from, to, keys, key)
     }
-    data
+    data.toVector
   }
 
   def quickSort[T](values: Array[Int], adjoint: Array[T]): Unit = {

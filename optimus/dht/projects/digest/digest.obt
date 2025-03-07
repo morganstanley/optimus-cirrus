@@ -7,6 +7,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+all.javac.release = 11
 main.compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.unsafe
 
 test.compile.libs = [

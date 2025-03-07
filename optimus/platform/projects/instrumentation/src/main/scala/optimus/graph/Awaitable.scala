@@ -11,9 +11,9 @@
  */
 package optimus.graph
 
-import optimus.breadcrumbs.ChainedID;
+import optimus.breadcrumbs.ChainedID
 
-trait AwaitableContext;
+trait AwaitableContext
 
 /**
  * Contains the minimal interface required to implement the chaining part of the await stack.

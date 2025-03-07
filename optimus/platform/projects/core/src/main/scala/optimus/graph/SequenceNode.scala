@@ -63,7 +63,8 @@ object ConcurrentAggregatorNode {
    * It's possible to get into deadlock if there is a resource dependency between iterations.
    * Setting this flag to true, would simply allow one to test this theory.
    */
-  val DEBUG_CONTINUE_GENERATE_ITERATIONS_ON_EXCEPTION: Boolean = getBoolProperty("optimus.graph.cgi_on_ex", false)
+  private val DEBUG_CONTINUE_GENERATE_ITERATIONS_ON_EXCEPTION: Boolean =
+    getBoolProperty("optimus.graph.cgi_on_ex", false)
 
   private[graph] val WillCompleteWithException: AnyRef = new AnyRef
 
@@ -116,7 +117,7 @@ abstract class ConcurrentAggregatorNode[B, ResultT] extends CompletableNode[Resu
    * Note: iterationsInFlight < 0 means stop processing. isDone() avoided because we want to complete() outside of
    * any locks and iterationsInFlight dropping below 0 is done under lock
    */
-  protected[this] var iterationsInFlight: Int = _
+  private var iterationsInFlight: Int = _
   final protected def isDoneProcessing: Boolean = iterationsInFlight < 0
   final protected def willCompleteWithException: Boolean = {
     if (DEBUG_CONTINUE_GENERATE_ITERATIONS_ON_EXCEPTION) isDoneWithException
@@ -141,13 +142,6 @@ abstract class ConcurrentAggregatorNode[B, ResultT] extends CompletableNode[Resu
 
   override def executionInfo: NodeTaskInfo = sequenceExecutionInfo
   protected def sequenceExecutionInfo: SequenceNodeTaskInfo
-
-  protected final def reportIterationComplete(iteration: Iteration): Unit = {
-    val tracker = iteration.node.scenarioStack.progressTracker
-
-    if (tracker ne null)
-      tracker.progressComplete()
-  }
 
   protected def getAndRunNextIteration(completedIteration: Iteration, eq: EvaluationQueue): Unit = {
     var prev = completedIteration
@@ -270,6 +264,9 @@ abstract class ConcurrentAggregatorNode[B, ResultT] extends CompletableNode[Resu
     override def awaiter: NodeCause = ConcurrentAggregatorNode.this
     var next: Iteration = _ // used to maintain doubly-linked list
     var prev: Iteration = _ //
+    var progressTrackerOrReporter: AnyRef = _
+    def progressTracker: ProgressTracker = progressTrackerOrReporter.asInstanceOf[ProgressTracker]
+    def progressReporter: ProgressReporter = progressTrackerOrReporter.asInstanceOf[ProgressReporter]
     def item: Any = null // optional used by reporters
     override def onChildCompleted(eq: EvaluationQueue, ntsk: NodeTask): Unit = getAndRunNextIteration(this, eq)
     final override def addToWaitChain(appendTo: util.ArrayList[DebugWaitChainItem], includeProxies: Boolean): Unit = {
@@ -334,15 +331,18 @@ abstract class CollectionAggregatorNode[B, R](
 
   private def reportProgress(it: Iteration): Unit = {
     marker match {
-      case TrackProgress => reportIterationComplete(it)
-      case _             =>
+      case TrackProgress =>
+        val tracker = it.progressTracker
+        if (tracker ne null)
+          tracker.progressComplete()
+      case _ =>
+        if (colReporter ne null)
+          Progress.onProgressCompleted(it.progressReporter, marker, it.node)
     }
-    if (colReporter ne null)
-      Progress.onProgressCompleted(marker, it.node)
   }
 
   /* Note: under lock */
-  protected def processCompletedIteration(it: Iteration, eq: EvaluationQueue): Boolean = {
+  private def processCompletedIteration(it: Iteration, eq: EvaluationQueue): Boolean = {
     if (it.next eq null) return true // Was previously processed
 
     removeIteration(it)
@@ -393,7 +393,7 @@ abstract class CollectionAggregatorNode[B, R](
     continue
   }
 
-  protected[this] var colReporter: CollectionProgressReporter = _
+  private var colReporter: CollectionProgressReporter = _
   def collection: AnyRef = null // Optional to implement, used only for progress reporting
 
   override protected def initializeLoopReporting(): Unit = {
@@ -415,7 +415,7 @@ abstract class CollectionAggregatorNode[B, R](
   }
 
   private[this] var started = false
-  protected final def instrumentIteration(iteration: Iteration): Unit = {
+  private final def instrumentIteration(iteration: Iteration): Unit = {
     val node = iteration.node
     var ss = node.scenarioStack()
     val pr =
@@ -456,7 +456,9 @@ abstract class CollectionAggregatorNode[B, R](
           else
             ss = ss.withProgressTracker(ProgressTrackerParams(weight = 1.0))
         }
+        iteration.progressTrackerOrReporter = ss.progressTracker
       case _ =>
+        iteration.progressTrackerOrReporter = pr
     }
 
     node.replace(ss)

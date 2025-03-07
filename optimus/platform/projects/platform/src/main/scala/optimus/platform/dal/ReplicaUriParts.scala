@@ -21,7 +21,8 @@ private[optimus] final case class ReplicaUriParts(
     prc: Option[String],
     loadbalance: Option[String],
     messagesBrk: Option[String],
-    secureCon: Option[String]
+    secureCon: Option[String],
+    maxReadConnections: Option[String] = Some("1")
 ) {
   def toReplicaUri: String = {
     val queryParams = List(
@@ -31,7 +32,8 @@ private[optimus] final case class ReplicaUriParts(
       prc.map(p => s"prcsk=$p"),
       loadbalance.map(lb => s"loadbalance=$lb"),
       messagesBrk.map(m => s"msgsbrk=$m"),
-      secureCon.map(sc => s"secureTransport=$sc")
+      secureCon.map(sc => s"secureTransport=$sc"),
+      maxReadConnections.map(m => s"maxReadConnections=$m")
     ).flatten
     val queryStr = if (queryParams.nonEmpty) queryParams.mkString("&") else null
     val uri = new URI(DSIURIScheme.REPLICA, replica, null, queryStr, null)
@@ -53,7 +55,8 @@ private[optimus] object ReplicaUriParts {
       prc = queryMap.get("prcsk"),
       loadbalance = queryMap.get("loadbalance"),
       messagesBrk = queryMap.get("msgsbrk"),
-      secureCon = queryMap.get("secureTransport")
+      secureCon = queryMap.get("secureTransport"),
+      maxReadConnections = Some(queryMap.getOrElse("maxReadConnections", "1"))
     )
   }
 }

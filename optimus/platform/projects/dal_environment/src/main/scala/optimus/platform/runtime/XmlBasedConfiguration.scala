@@ -13,15 +13,17 @@ package optimus.platform.runtime
 
 import java.io.ByteArrayInputStream
 import java.time.Instant
-
 import com.ms.zookeeper.clientutils.ZkEnv
 import msjava.hdom.Document
 import msjava.hdom.Element
 import msjava.hdom.input.SAXBuilder
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.config.OptimusConfigurationException
+import optimus.config.OptimusConfigurationIOException
 import org.apache.curator.framework.CuratorFramework
+import org.apache.curator.framework.CuratorFrameworkFactory
 
+import java.io.IOException
 import scala.jdk.CollectionConverters._
 
 trait XmlBasedConfiguration {
@@ -222,6 +224,11 @@ object ZkXmlConfigurationLoader {
     } catch {
       // The only possible zk related exception is KeeperException.ConnectionLossException when the connection to zk couldn't be really established
       // within the connection timeout (after all the retries as specified in RetryPolicy in ZkConfigClient
+      case x: IOException =>
+        throw new OptimusConfigurationIOException(
+          Some(s"Encountered IO Exception when reading config from path: $path"),
+          Some(x)
+        )
       case x: Exception =>
         throw new OptimusConfigurationException(
           Some(s"Could not read configuration from ZooKeeper (path: ${path})"),

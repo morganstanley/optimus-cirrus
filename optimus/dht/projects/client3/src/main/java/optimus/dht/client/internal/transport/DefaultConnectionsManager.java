@@ -390,27 +390,37 @@ public class DefaultConnectionsManager implements ConnectionsManager, ClientModu
     @Override
     public void addMessage(
         short moduleId,
-        MessageGenerator message,
+        MessageGenerator messageGenerator,
         @Nullable Consumer<SentMessageMetrics> metricsCallback) {
       Integer protocolVersion = negotiatedProtocolVersions.get(Integer.valueOf(moduleId));
-      messagesQueue.addMessage(
-          moduleId,
-          message.build(protocolVersion),
-          MutableSentMessageMetrics.connected(),
-          metricsCallback);
+
+      MessageStream message = messageGenerator.build(protocolVersion);
+
+      if (message != null) {
+        messagesQueue.addMessage(
+            moduleId, message, MutableSentMessageMetrics.connected(), metricsCallback);
+      } else if (metricsCallback != null) {
+        metricsCallback.accept(SentMessageMetrics.NOT_SENT);
+      }
     }
 
     @Override
     public boolean offerMessage(
         short moduleId,
-        MessageGenerator message,
+        MessageGenerator messageGenerator,
         @Nullable Consumer<SentMessageMetrics> metricsCallback) {
       Integer protocolVersion = negotiatedProtocolVersions.get(Integer.valueOf(moduleId));
-      return messagesQueue.offerMessage(
-          moduleId,
-          message.build(protocolVersion),
-          MutableSentMessageMetrics.connected(),
-          metricsCallback);
+
+      MessageStream message = messageGenerator.build(protocolVersion);
+
+      if (message != null) {
+        return messagesQueue.offerMessage(
+            moduleId, message, MutableSentMessageMetrics.connected(), metricsCallback);
+      } else if (metricsCallback != null) {
+        metricsCallback.accept(SentMessageMetrics.NOT_SENT);
+      }
+
+      return false;
     }
 
     @Override

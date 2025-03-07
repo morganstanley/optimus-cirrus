@@ -59,6 +59,9 @@ class CommonDirectoryStructure(
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src/profiles
   val profilesDir: Path = sourcesDirectory.resolve("profiles")
 
+  // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src/intellij.yaml
+  val projectSharedIndexesConfig: Path = sourcesDirectory.resolve("intellij.yaml")
+
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/src/profiles/sparse-profiles
   val sparseProfilesDir: Path = profilesDir.resolve("sparse-profiles")
 

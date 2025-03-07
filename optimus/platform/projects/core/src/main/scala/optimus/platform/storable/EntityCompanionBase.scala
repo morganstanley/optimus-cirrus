@@ -16,7 +16,7 @@ import optimus.entity._
 import optimus.platform.node
 import optimus.platform.pickling.PicklingException
 import optimus.platform.relational.tree.MemberDescriptor
-import optimus.platform.util.ClientEmbeddableHierarchy
+import optimus.platform.util.HierarchyManager.embeddableHierarchyManager
 
 import scala.reflect.runtime.JavaUniverse
 import scala.reflect.runtime.{universe => ru}
@@ -88,7 +88,7 @@ trait EmbeddableTraitCompanionBase {
   /** all transitive concrete subtypes of this @embeddable trait from the current classpath, keyed by class simple name */
   @transient final lazy val subtypeSimpleNameToClass: Map[String, Class[Embeddable]] = {
     val traitName = getClass.getName.stripSuffix("$")
-    val meta = ClientEmbeddableHierarchy.hierarchy.metaData(traitName)
+    val meta = embeddableHierarchyManager.metaData(traitName)
     meta.allChildren
       .map(m => Class.forName(m.fullClassName).asInstanceOf[Class[Embeddable]])
       // interfaces (traits) can't be directly instantiated so we'll never be pickling an instance of them, and so it's

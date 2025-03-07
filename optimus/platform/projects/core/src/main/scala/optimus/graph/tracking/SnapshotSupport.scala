@@ -172,11 +172,12 @@ final case class SnapshotScenarioStack(
 }
 
 object SnapshotScenarioStack {
-  val Dummy = SnapshotScenarioStack(ScenarioReference.Dummy, null, null, null)
+  val Dummy: SnapshotScenarioStack = SnapshotScenarioStack(ScenarioReference.Dummy, null, null, null)
 
   private[optimus] def current(ss: ScenarioStack): SnapshotScenarioStack = {
     val n = ScenarioReference.currentSnapshot$newNode
-    val snapshotTweak = ss.getTweak(n.propertyInfo, n)
+    // No Tracking is valid here because there are no when clauses for currentSnapshot
+    val snapshotTweak = ss.getTweakNoWhenClauseTracking(n)
     if (snapshotTweak eq null)
       throw new IllegalArgumentException("Cannot use overlay in non-tracking scenario (unless in snapshot)")
     snapshotTweak.tweakValue.asInstanceOf[SnapshotScenarioStack]

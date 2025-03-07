@@ -15,6 +15,7 @@ import optimus.platform.relational.KeyPropagationPolicy
 import optimus.platform.relational.csv.{AbstractCsvSource, CsvMultiRelation, CsvSource}
 import optimus.platform.relational.excel.{ExcelMultiRelation, ExcelSource}
 import optimus.platform.relational.inmemory.ScalaTypeMultiRelation
+import optimus.platform.relational.internal.StreamsHelpers
 import optimus.platform.relational.namespace.{Namespace, NamespaceMultiRelation}
 import optimus.platform.relational.tree.{MethodPosition, TypeInfo}
 import optimus.platform.storable.Entity
@@ -87,7 +88,10 @@ object QueryConverter extends LowPriorityConverters {
     def convert[T <: E](src: Query[T], key: RelationKey[T], p: QueryProvider)(implicit
         itemType: TypeInfo[T],
         pos: MethodPosition): Query[T] = {
-      src
+      if (StreamsHelpers.findFirstEventSrc(src.element).isEmpty) src
+      else
+        throw new IllegalArgumentException(
+          "from(events(Entity)) queries require TableConverter, import optimus.platform.relational.streams._")
     }
   }
 

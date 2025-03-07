@@ -11,21 +11,22 @@
  */
 package optimus.graph
 
-import java.io.Serializable
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import optimus.core.SparseBitSet
+import optimus.core.TPDMask
+import optimus.graph.tracking.ttracks.RefCounter
 import optimus.graph.{PropertyNode => PN}
 import optimus.platform.NodeHash
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
-import optimus.platform.TweakableListener
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.html._
 
-import scala.jdk.CollectionConverters._
+import java.io.Serializable
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 // format: off
 /*
@@ -130,9 +131,9 @@ final class TweakTreeNode(val tweak: Tweak, val key: PN[_], val trackingDepth: I
 }
 
 private[optimus] object RecordedTweakables {
-  val emptyTweakables = new Array[PropertyNode[_]](0)
-  val emptyTweakableHashes = new Array[NodeHash](0)
-  val emptyTweakTreeNodes = new Array[TweakTreeNode](0)
+  private val emptyTweakables = new Array[PropertyNode[_]](0)
+  private val emptyTweakableHashes = new Array[NodeHash](0)
+  private val emptyTweakTreeNodes = new Array[TweakTreeNode](0)
   val empty = new RecordedTweakables(emptyTweakables, emptyTweakableHashes, emptyTweakTreeNodes)
 
   def apply(ttns: Array[TweakTreeNode]): RecordedTweakables = {
@@ -317,19 +318,19 @@ private[optimus] class WhenXSDiffer extends XSDiffer(null, null, null, stopEarly
   override def addMissingTweak(t: TweakTreeNode): Unit = ()
   override def addMismatchedTweaks(t0: TweakTreeNode, t1: TweakTreeNode): Unit = ()
 
-  def tweakablesEqual(rt1: RecordedTweakables, rt2: RecordedTweakables): Boolean = (rt1, rt2) match {
+  private def tweakablesEqual(rt1: RecordedTweakables, rt2: RecordedTweakables): Boolean = (rt1, rt2) match {
     case (null, null)          => true
     case (_, null) | (null, _) => false
     case (a, b) => tweakablesEqual(a.tweakable, b.tweakable) && tweakablesEqual(a.tweakableHashes, b.tweakableHashes)
   }
 
-  def tweakablesEqual[A](t1: Array[A], t2: Array[A]): Boolean = (t1, t2) match {
+  private def tweakablesEqual[A](t1: Array[A], t2: Array[A]): Boolean = (t1, t2) match {
     case (null, null)          => true
     case (_, null) | (null, _) => false
     case (a, b)                => a.toSet == b.toSet
   }
 
-  def whenClauseEqual(wc1: Map[WhenNodeKey, Boolean], wc2: Map[WhenNodeKey, Boolean]): Boolean = {
+  private def whenClauseEqual(wc1: Map[WhenNodeKey, Boolean], wc2: Map[WhenNodeKey, Boolean]): Boolean = {
     for ((k, v) <- wc1) {
       if (!wc2.contains(k)) return false
       if (wc2(k) != v) return false
@@ -356,24 +357,76 @@ private[optimus] class WhenXSDiffer extends XSDiffer(null, null, null, stopEarly
   }
 }
 
+abstract class ForwardingTweakableListener(val originalTl: TweakableListener) extends TweakableListener {
+  /** Listener that should be used for scenario stack sensitive batchers */
+  override def underlyingListener: TweakableListener = originalTl
+
+  override def onTweakableNodeCompleted(node: PropertyNode[_]): Unit = originalTl.onTweakableNodeCompleted(node)
+
+  override def onTweakableNodeUsedBy(key: PropertyNode[_], node: NodeTask): Unit =
+    originalTl.onTweakableNodeUsedBy(key, node)
+
+  override def onTweakableNodeHashUsedBy(key: NodeHash, node: NodeTask): Unit =
+    originalTl.onTweakableNodeHashUsedBy(key, node)
+
+  override def onTweakUsedBy(ttn: TweakTreeNode, node: NodeTask): Unit = originalTl.onTweakUsedBy(ttn, node)
+
+  override def reportTweakableUseBy(node: NodeTask): Unit = originalTl.reportTweakableUseBy(node)
+
+  override def respondsToInvalidationsFrom: Set[TweakableListener] = originalTl.respondsToInvalidationsFrom
+  override def isDisposed: Boolean = originalTl.isDisposed
+  override def refQ: RefCounter[NodeTask] = originalTl.refQ
+
+  override def trackingProxy: NodeTask = originalTl.trackingProxy
+
+  override def reportWhenClause(key: PropertyNode[_], predicate: AnyRef, res: Boolean, rt: RecordedTweakables): Unit =
+    originalTl.reportWhenClause(key, predicate, res, rt)
+
+  override def recordedTweakables: RecordedTweakables = originalTl.recordedTweakables
+
+  override def extraFlags: Int = originalTl.extraFlags
+
+  override def dependencyTrackerRootName: String = originalTl.dependencyTrackerRootName
+}
+
+trait WithRecordingParentTweakableListener {
+  self: TweakableListener =>
+  // keeps track of our tweakable listener parent which helps avoid cycles
+  @transient protected var _waiterTls: Set[TweakableListener] = _
+  @transient private[this] var _visisted: Boolean = _
+  override def getWaiterTls: Set[TweakableListener] = _waiterTls
+  // Called under TweakableListener.updateParentLock
+  override def recordWaiter(waiter: TweakableListener): Unit = _waiterTls += waiter
+
+  override def visited: Boolean = _visisted
+  override def visited_=(v: Boolean): Unit = _visisted = v
+}
+
 /* While XS node is executing this Listener will be collecting the tweaks and tweakables */
 class RecordingTweakableListener(
     var scenarioStack: ScenarioStack,
     @transient override val trackingProxy: NodeTask,
-    var parent: ScenarioStack,
-    earlyUpReport: Boolean)
+    parent: ScenarioStack,
+    earlyUpReport: Boolean,
+    waiterTl: TweakableListener = NoOpTweakableListener)
     extends TweakableListener
+    with WithRecordingParentTweakableListener
     with Serializable {
-
   /* This ctor call is running (potentially) concurrently with speculative nodes reporting */
-  override def recordedTweakables = new RecordedTweakables(this)
+  override def recordedTweakables: RecordedTweakables = new RecordedTweakables(this)
+
+  override def onOwnerCompleted(task: NodeTask): Unit = {
+    task.replace(task.scenarioStack.withRecorded(recordedTweakables))
+    _waiterTls = Set.empty
+  }
 
   /** It is critical that this and other tables allow for concurrent iteration and publishing */
-  @transient private[optimus] var _tweakable: ConcurrentHashMap[PropertyNode[_], PropertyNode[_]] = _
-  @transient private[optimus] var _tweakableHashes: ConcurrentHashMap[NodeHash, NodeHash] = _
-  @transient private[optimus] var _tweaked: ConcurrentHashMap[PropertyNode[_], TweakTreeNode] = _
+  @transient private[graph] var _tweakable: ConcurrentHashMap[PropertyNode[_], PropertyNode[_]] = _
+  @transient private[graph] var _tweakableHashes: ConcurrentHashMap[NodeHash, NodeHash] = _
+  @transient private[graph] var _tweaked: ConcurrentHashMap[PropertyNode[_], TweakTreeNode] = _
 
   {
+    _waiterTls = if (waiterTl eq NoOpTweakableListener) Set.empty else Set(waiterTl)
     _tweakable = new ConcurrentHashMap[PropertyNode[_], PropertyNode[_]]
     _tweakableHashes = new ConcurrentHashMap[NodeHash, NodeHash]
     _tweaked = new ConcurrentHashMap[PropertyNode[_], TweakTreeNode]
@@ -396,29 +449,37 @@ class RecordingTweakableListener(
   /** Save the relevant info, and automatically downgrade tweakables into tweak hashes based on the property info */
   override def onTweakableNodeUsedBy(key: PropertyNode[_], node: NodeTask): Unit = {
     if (key.propertyInfo.trackTweakableByHash) {
+      val hashes = _tweakableHashes
+      if (hashes == null) return // XSOwner already completed
       val hash = NodeHash(key, opaqueIndexForHash(key))
-      val prev = _tweakableHashes.putIfAbsent(hash, hash)
+      val prev = hashes.putIfAbsent(hash, hash)
       if (shouldUpReport && prev == null) {
         if (parent.isRecordingWhenDependencies) parent.combineTweakableData(key, node)
         else parent.combineTweakableData(hash, node)
       }
     } else {
+      val tweakable = _tweakable
+      if (tweakable == null) return // XSOwner already completed
       val tkey = key.tidyKey
-      val prev = _tweakable.putIfAbsent(tkey, tkey)
+      val prev = tweakable.putIfAbsent(tkey, tkey)
       if (shouldUpReport && prev == null) parent.combineTweakableData(tkey, node)
     }
   }
 
   /** Save the relevant info */
   override def onTweakableNodeHashUsedBy(hash: NodeHash, node: NodeTask): Unit = {
-    val prev = _tweakableHashes.putIfAbsent(hash, hash)
+    val hashes = _tweakableHashes
+    if (hashes == null) return // XSOwner already completed
+    val prev = hashes.putIfAbsent(hash, hash)
     if (shouldUpReport && prev == null) parent.combineTweakableData(hash, node)
   }
 
   /** Save the relevant info */
   override def onTweakUsedBy(ttn: TweakTreeNode, node_not_tobe_used: NodeTask): Unit = {
     if (ttn.trackingDepth <= scenarioStack.trackingDepth) {
-      val prev = _tweaked.putIfAbsent(ttn.key, ttn)
+      val tweaked = _tweaked
+      if (tweaked == null) return // XSOwner already completed
+      val prev = tweaked.putIfAbsent(ttn.key, ttn)
       if (Settings.schedulerAsserts && (prev ne null) && prev != ttn)
         throw new GraphException(s"Inconsistent TweakTreeNodes: $ttn vs $prev")
 
@@ -432,6 +493,35 @@ class RecordingTweakableListener(
       scenarioStack.combineTrackData(ttn.nested, node_not_tobe_used)
     }
   }
+}
+
+final class WhenTargetTweakableListener(whenTarget: Node[_], original: TweakableListener)
+    extends ForwardingTweakableListener(original) {
+
+  whenTarget.markAsTweakableListenerOwner()
+
+  override def extraFlags: Int = 0
+  override def withWhenTarget(givenNode: Node[_]): TweakableListener =
+    new WhenTargetTweakableListener(givenNode, original)
+
+  private[this] val tpdMask = new TPDMask()
+
+  override def mergeWhenNodeTPD(task: NodeTask): Boolean = {
+    synchronized { task.mergeTweakPropertyDependenciesInto(tpdMask) }
+    false
+  }
+
+  override def onOwnerCompleted(task: NodeTask): Unit = {
+    task.mergeTweakPropertyDependenciesInto(tpdMask)
+    task.setTweakPropertyDependency(tpdMask)
+  }
+}
+
+// class used just to keep track of waiting tls to avoid cycles, otherwise just forwards call onto original listener
+final class TrackParentRecordingTweakableListener(original: TweakableListener, waiterTl: TweakableListener)
+    extends ForwardingTweakableListener(original)
+    with WithRecordingParentTweakableListener {
+  _waiterTls = Set(waiterTl)
 }
 
 private[optimus] final class WhenNodeRecordedTweakables(
@@ -491,21 +581,18 @@ final case class WhenNodeKey(predicate: AnyRef, key: PropertyNode[_], opaqueInde
 
 final class WhenNodeRecordingTweakableListener(
     parent: ScenarioStack,
-    trackingProxy: NodeTask,
+    trackingProxy: NodeTask = null,
+    waiter: TweakableListener = NoOpTweakableListener,
     earlyUpReport: Boolean = true)
-    extends RecordingTweakableListener(parent, trackingProxy, parent, earlyUpReport) {
+    extends RecordingTweakableListener(parent, trackingProxy, parent, earlyUpReport, waiter) {
 
-  def this(parent: ScenarioStack) = this(parent, null)
-
-  def this(parent: ScenarioStack, earlyUpReport: Boolean) = this(parent, null, earlyUpReport)
-
-  val _opaqueIndexCounter = new AtomicInteger(0)
-  val _opaqueIndexForHash = new ConcurrentHashMap[PropertyNode[_], Int]
+  private val _opaqueIndexCounter = new AtomicInteger(0)
+  private val _opaqueIndexForHash = new ConcurrentHashMap[PropertyNode[_], Int]
   val _whenNodes = new ConcurrentHashMap[WhenNodeKey, Boolean]
 
   override def recordedTweakables = new WhenNodeRecordedTweakables(this)
 
-  override def extraFlags: Int = EvaluationState.RECORD_WHEN_DEPENDENCIES
+  override def extraFlags: Int = EvaluationState.RECORD_WHEN_DEPENDENCIES | super.extraFlags
 
   override def opaqueIndexForHash(key: PropertyNode[_]): Int =
     _opaqueIndexForHash.getOrDefault(key, super.opaqueIndexForHash(key))

@@ -386,6 +386,7 @@ class OptimusCompositeLeaderElectorClient protected (
   override def close(): Unit = {
     zkaDirectoryWatcher foreach { _.close() }
     leaderSubscriber foreach { _.close() }
+    modernLeContext.close()
   }
 
   private def obtainBiasedRandomBrokerFromList(brokersList: List[BrokerData]): BrokerData = {
@@ -422,11 +423,26 @@ class OptimusCompositeLeaderElectorClient protected (
 
   def getReadBrokers: List[String] = getReadBrokersData.map(_.address)
 
+  def getAllBrokersAddress: List[String] = getAllBrokersWithData.map(_.address)
+
   def withReadBroker[T](f: Option[String] => T): T = {
     lock synchronized {
       val readBrokers = getReadBrokersData.filter(_.address.nonEmpty)
       val broker = if (readBrokers.isEmpty) None else Some(randomFromList(readBrokers))
       f(broker)
+    }
+  }
+
+  override def withMultiReadBrokers[T](maxBrokers: Int)(f: Option[String] => T): Seq[T] = {
+    val brokers = getAllBrokersAddress
+    val maxBrokersAllowedForConnection =
+      if (brokers.size < maxBrokers)
+        brokers.size
+      else maxBrokers
+
+    lock synchronized {
+      val brokersList = Random.shuffle(brokers).take(maxBrokersAllowedForConnection)
+      brokersList.map(broker => f(Some(broker)))
     }
   }
 

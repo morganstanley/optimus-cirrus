@@ -65,6 +65,8 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
   def hasNoSourceInvalidations(cycles: Seq[Zprof.CycleInvalidation], compileResult: Option[CompileResult]): Boolean =
     cycles.isEmpty && compileResult.isDefined // Cycles are often empty if the build failed
 
+  def isJavaOnlySignatureCompilation(invalidatedSources: Int): Boolean = traceType == Scala && invalidatedSources == 0
+
   def logAndTraceProfileStats(
       compileResult: Option[CompileResult],
       activeTask: Task,
@@ -159,6 +161,11 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
       val msg = s"${prefix}No source invalidations"
       log.info(msg)
       ObtTrace.info(msg)
+    } else if (isJavaOnlySignatureCompilation(invalidatedSources)) {
+      val msg =
+        s"${prefix}No ${traceType.name} invalidations (${ObtStats.CompilationsDueToNonIncrementalJavaSignatures.str})"
+      log.info(msg)
+      ObtTrace.info(msg)
     } else {
       val analysisStr = reason match {
         case Some((r @ ObtStats.CompilationsDueToNoAnalysis, _)) => s" (${r.str})"
@@ -171,11 +178,11 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
         val msg: String = if (invalidatedSources.isEmpty) {
           s"Cycle ${index + 1}, No ${traceType.name} invalidations"
         } else {
-          val srcst = invalidatedSources.take(10).map(Paths.get(_).getFileName.toString)
+          val srcs = invalidatedSources.take(10).map(Paths.get(_).getFileName.toString)
           val ddd =
-            if (invalidatedSources.size > srcst.size) s"... ${invalidatedSources.size - srcst.size} more"
+            if (invalidatedSources.size > srcs.size) s"... ${invalidatedSources.size - srcs.size} more"
             else ""
-          s"Cycle ${index + 1}, ${invalidatedSources.size}/$totalSources ${traceType.name} invalidations$analysisStr: ${srcst.toSeq.sorted
+          s"Cycle ${index + 1}, ${invalidatedSources.size}/$totalSources ${traceType.name} invalidations$analysisStr: ${srcs.toSeq.sorted
               .mkString("", ", ", ddd)}"
         }
 
@@ -217,7 +224,13 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
     discardReason.getOrElse {
       val externalChanges = rs.run.getInitial.getExternalChangesList.asScala
       val reason = {
-        if (previousAnalysis.isEmpty)
+        if (isJavaOnlySignatureCompilation(invalidatedSources))
+          // If we get an OBT cache miss on a scope with java sources, we always have
+          // to rerun signature compilation since our previous (scala) analysis doesn't
+          // contain details of java signatures. Fortunately, these compilations are generally
+          // pretty fast.
+          ObtStats.CompilationsDueToNonIncrementalJavaSignatures
+        else if (previousAnalysis.isEmpty)
           ObtStats.CompilationsDueToNoAnalysis
         else if (rs.changed > 0)
           ObtStats.CompilationsDueToSourceChanges
@@ -231,13 +244,7 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
           ObtStats.CompilationsDueToUpstreamMacroChanges
         else if (rs.changedExternalDependencies.nonEmpty)
           ObtStats.CompilationsDueToExternalDependencyChanges
-        else if (invalidatedSources == 0 && traceType == Scala) {
-          // If we get an OBT cache miss on a scope with java sources, we always have
-          // to rerun signature compilation since our previous (scala) analysis doesn't
-          // contain details of java signatures. Fortunately, these compilations are generally
-          // pretty fast.
-          ObtStats.CompilationsDueToNonIncrementalJavaSignatures
-        } else {
+        else {
           log.debug(s"${prefix}Compilation for unknown reason detected: $profile")
           ObtStats.CompilationsDueToUnknownReason
         }
@@ -274,7 +281,7 @@ class ZincProfiler(scopeId: ScopeId, traceType: MessageTrace, compilerInputs: Co
       optionType: MessageTrace
   ): Option[(ObtStats.CompilationReason, Option[String])] = {
     def isParam(s: String) = !s.startsWith("-")
-    def toMap(opts: Seq[String]): Map[String, Option[String]] = opts match {
+    def toMap(opts: Seq[String]): Map[String, Option[String]] = opts.toList match {
       case opt :: param :: rest if isParam(param) =>
         if (opt != pickleWriteFlag) toMap(rest) + (opt -> Some(param))
         else toMap(rest)

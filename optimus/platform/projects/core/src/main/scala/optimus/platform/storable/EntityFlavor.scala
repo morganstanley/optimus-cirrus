@@ -37,7 +37,7 @@ private[optimus] sealed abstract class EntityFlavor extends Serializable {
   def dal$cmid: Option[MSUuid]
   def dal$storageInfo: StorageInfo
   def dal$loadContext: TemporalContext
-  def dal$inlineEntities: collection.Map[EntityReference, Entity]
+  def dal$inlineEntities: InlineEntityHolder
   final def dal$temporalContext: TemporalContext = dal$loadContext
 
   // General purpose methods - these work on all EntityFlavors
@@ -84,7 +84,7 @@ private[optimus] sealed trait NonDALEntityFlavor extends EntityFlavor {
   final def dal$loadContext_=(in: TemporalContext): Unit =
     throw new IllegalStateException("cannot mutate load context of default entity flavor")
 
-  override final def dal$inlineEntities: Map[EntityReference, Entity] = Map.empty
+  override final def dal$inlineEntities: InlineEntityHolder = InlineEntityHolder.empty
 
 }
 
@@ -133,7 +133,7 @@ private[optimus] sealed abstract class HybridEntityFlavor extends EntityFlavor {
 
   final def dal$loadContext: TemporalContext = dalEntityFlavor.dal$loadContext
 
-  final var dal$inlineEntities: collection.Map[EntityReference, Entity] = dalEntityFlavor.dal$inlineEntities
+  final var dal$inlineEntities: InlineEntityHolder = dalEntityFlavor.dal$inlineEntities
 }
 
 /**
@@ -214,7 +214,19 @@ private[optimus] final class DALEntityFlavor extends EntityFlavor {
     _dal$loadContext = in
   }
 
-  var dal$inlineEntities: collection.Map[EntityReference, Entity] = Map.empty
+  var dal$inlineEntities: InlineEntityHolder = InlineEntityHolder.empty
+}
+
+// In Scala 2.13, collections are writeReplaced with scala.collection.generic.DefaultSerializationProxy which then
+// readResolves back to the collection. However, readResolve DOES NOT WORK in the presence of cycles such as
+// a --> collection --> b --> (same) collection. After deserialization, b will point to the non-readResolved proxy (or
+// you'll get a ClassCastException if the field in b cannot point to the proxy).
+// We can work around this by putting a wrapper around the collection, but it MUST always be the SAME wrapper for a
+// given collection instance. Then we have a --> c --> collection --> b --> (same) c and the problem doesn't occur.
+// It matters here because @inlined entities point to the refToEntity map and it points back to them (in a cycle).
+final case class InlineEntityHolder(refToEntity: collection.Map[EntityReference, Entity])
+object InlineEntityHolder {
+  val empty = InlineEntityHolder(Map.empty)
 }
 
 /**

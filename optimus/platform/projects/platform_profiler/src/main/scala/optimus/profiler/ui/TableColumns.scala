@@ -11,6 +11,9 @@
  */
 package optimus.profiler.ui
 
+import optimus.breadcrumbs.crumbs.Properties.Key
+import optimus.breadcrumbs.crumbs.Properties.hotspotPropertyFlags
+
 import java.awt.Color
 import java.util.regex.Pattern
 import java.util.regex.Pattern._
@@ -63,6 +66,7 @@ object TableColumnCategories {
 final case class Category(name: String, sortingID: Int = 0)
 
 abstract class TableColumn[RType](var name: String, val width: Int = 0) {
+  val property: Option[Key[_]] = None // If the column is a property be used in profire, this should be set
   private var _category: Category = TableColumnCategories.Other
   final def category: Category = _category
   final def setCategory(c: Category): Unit = _category = c
@@ -72,7 +76,8 @@ abstract class TableColumn[RType](var name: String, val width: Int = 0) {
   def getCellCustomColor(selected: Boolean, row: RType, row2: RType): Color = null
   def getHeaderColor: Color = null
   def parsedFilter(filter: String): (RType, RType) => Boolean = null
-  def toolTip: String = null
+  // we will print the name by default, so no need to repeat it in the tooltip
+  def toolTip: String = property.fold("")(_.meta.description)
   def compareColumn: TableColumn[RType] = null
   def sort(data: Iterable[RType], order: Boolean): Iterable[RType] = data
   // if you want to show the data alongside the deltas
@@ -153,6 +158,7 @@ object TableColumnFlags {
   }
   private val flags = Vector(
     FlagBits("$", NodeTaskInfo.DONT_CACHE, 0, NodeTaskInfo.DONT_CACHE),
+    new FlagBits("w", NodeTaskInfo.PROFILER_IGNORE),
     new FlagBits("x", NodeTaskInfo.FAVOR_REUSE),
     new FlagBits("=", NodeTaskInfo.TWEAKABLE),
     new FlagBits("i", NodeTaskInfo.WAS_INSTANCE_TWEAKED),
@@ -223,6 +229,7 @@ class TableColumnFlags(name: String, width: Int = 0) extends TableColumn[PNodeTa
         org
       }
     }
+  override val property: Option[Key[_]] = Some(hotspotPropertyFlags)
 }
 
 abstract class TableColumnUTC[RType](nano2utc: Long => String, name: String, width: Int = 0)

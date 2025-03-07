@@ -12,6 +12,7 @@ all.javac.release = 11
 main {
   compile.modules += optimus.platform.breadcrumbs
   runtime.modules += optimus.platform.breadcrumbs.auth
+  installIvy = true
 }
 
 internal {
@@ -21,6 +22,7 @@ internal {
     optimus.gsf.gsf_breadcrumbs.main,
     optimus.platform.breadcrumbs.internal // TODO (OPTIMUS-36426): this will need dealt with soon but not now
   ]
+  installIvy = true
 }
 
 test {

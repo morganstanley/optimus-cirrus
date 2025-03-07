@@ -11,14 +11,11 @@
  */
 package optimus.tools.scalacplugins.entity
 
-import optimus.exceptions.RTExceptionInterface
-import optimus.exceptions.RTExceptionTrait
 import optimus.exceptions.RTListStatic
 import optimus.tools.scalacplugins.entity.reporter._
 
 import scala.collection.mutable
 import scala.reflect.internal.Flags
-import scala.reflect.internal.Mode
 import scala.tools.nsc.transform.Transform
 import scala.tools.nsc.transform.TypingTransformers
 import scala.util.Failure
@@ -224,15 +221,11 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
   }
 
-  var containsMock = false
-  //  Possibly speedier match of ".*[mM]ock.*".r
-  def maybeMock(s: String): Boolean = {
-    val i = s.indexOf("ock")
-    i > 0 && { val m: Char = s(i - 1); m == 'm' || m == 'M' }
+  def maybeMock(s: Name): Boolean = {
+    s.containsName("Mock") || s.containsName("mock")
   }
 
   def newTransformer0(unit: CompilationUnit) = {
-    containsMock = maybeMock(String.valueOf(unit.source.content))
     new AutoAsync(unit)
   }
 
@@ -1295,9 +1288,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       private def B(ts: Tree*): Block = Block(ts: _*)
 
       private type Sy = Symbol
-      private type Tr = Tree
       private type VD = ValDef
-      private val ET = typeOf[Either[_, _]]
 
       // Given a symbol qs of type Either[A,B] and a tree bx of type C, wrap bx as a Right[A,C]
       private def asRight(qs: Symbol, bx: Tree): Tree = {
@@ -1727,8 +1718,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
         // Detect and warn about applying what looks like a mocking library to an entity.
         case TypeApply(fun, args)
-            if containsMock &&
-              maybeMock(fun.symbol.toString) &&
+            if maybeMock(fun.symbol.name) &&
               args.exists(i => isEntity(i.symbol)) =>
           alarm(OptimusNonErrorMessages.MOCK_ENTITY(), args.head.pos)
           inContext()(super.transform(tree))
@@ -1809,7 +1799,7 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
         case FullMethodApply(f, ts, argss, paramss)
             if !pluginSupportSymbol.exists(_ == f.symbol.owner.module) => { // plugin support is exempt
 
-          if (containsMock && maybeMock(f.toString) && ts.exists(tt => isEntity(tt.symbol)))
+          if (maybeMock(f.symbol.name) && ts.exists(tt => isEntity(tt.symbol)))
             alarm(OptimusNonErrorMessages.MOCK_ENTITY(), ts.head.pos)
 
           // If a method has @nodeLift, then arguments will be converted to NodeKeys rather than

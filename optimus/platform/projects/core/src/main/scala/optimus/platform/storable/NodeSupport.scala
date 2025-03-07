@@ -12,7 +12,7 @@
 package optimus.platform.storable
 
 import optimus.graph._
-import optimus.graph.cache.NodeCache
+import optimus.graph.cache.CacheSelector
 
 object NodeSupport {
 
@@ -24,9 +24,9 @@ object NodeSupport {
        * really what we want, but fixing that would be very complicated. */
       // relying on OGSchedulerContext.current() here is not an RT violation because the constructor itself is RT
       val ec = OGSchedulerContext._TRACESUPPORT_unsafe_current()
-      val privateCache = if (ec eq null) null else ec.scenarioStack().privateCache
+      val privateCache = if (ec eq null) CacheSelector.DEFAULT else ec.scenarioStack().cacheSelector.withoutScope()
       val cNode = new ConstructorNode[T](t, pInfo)
-      val n = NodeCache.lookupAndInsert(pInfo, cNode, privateCache, null)
+      val n = privateCache.lookupAndInsert(pInfo, cNode, null)
       n.result // no isDoneWithResult check because these are always SI ACPNs
     } else
       t

@@ -40,6 +40,7 @@ import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.ThreadDumper.ThreadInfos
 import org.slf4j.LoggerFactory
 
+import java.util.concurrent.TimeUnit
 import java.util.function.Predicate
 import scala.util.Failure
 import scala.util.Success
@@ -47,8 +48,17 @@ import scala.util.Try
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
 class GraphSchedulerCounter extends SchedulerCounter {
-  override def getCounts: SchedulerCounts = Scheduler.getCounts
-  override def numThreads: Option[Int] = Scheduler.numThreads
+  override def getCounts: SchedulerCounts =
+    if (SchedulerIsInitialized.ready) Scheduler.getCounts else SchedulerCounts.empty
+  override def numThreads: Option[Int] = if (SchedulerIsInitialized.ready) Scheduler.numThreads else None
+}
+
+object SchedulerIsInitialized {
+  @volatile
+  private[this] var schedulerIsInitialized = false
+  def ready: Boolean = schedulerIsInitialized
+  def onSchedulerInitialized(): Unit = schedulerIsInitialized = true
+
 }
 
 object Scheduler {
@@ -155,6 +165,8 @@ object Scheduler {
   def numThreads: Option[Int] = if (EvaluationContext.isInitialised)
     Try(currentOrDefault.getIdealThreadCount).toOption
   else None
+
+  SchedulerIsInitialized.onSchedulerInitialized()
 }
 
 private object PT {
@@ -420,11 +432,23 @@ abstract class Scheduler extends EvaluationQueue {
     evaluateAsyncSAS(EvaluationContext.scenarioStack)(f, maySAS = true, null)
   }
 
+  /**
+   * Run a Runnable on a graph thread, enqueued after a delay.
+   */
+  def runDelayedTask(task: Runnable, delay: Long, unit: TimeUnit): Unit = {
+    // This could use the scheduler's own pool instead of a global one.
+    ScheduledNodeTask.fromRunnable(this, task).schedule(delay, unit)
+  }
+
   override def scheduler: Scheduler = this
 
-  def addOnOutOfWorkListener(callback: SchedulerCallback, autoRemove: Boolean): Unit
-  def removeOutOfWorkListener(callback: SchedulerCallback): Unit
-  def runOutOfWorkListeners(predicate: Predicate[SchedulerCallback]): Unit
+  /**
+   * Add a callback that will be called when the graph runs out of work.
+   */
+  def addOutOfWorkListener(callback: OutOfWorkListener): Unit
+  def removeOutOfWorkListener(callback: OutOfWorkListener): Unit
+  def runOutOfWorkListeners(predicate: Predicate[OutOfWorkListener]): Unit
+
   def reportCallsInFlightCountCleared(): Unit = ()
 
   /**

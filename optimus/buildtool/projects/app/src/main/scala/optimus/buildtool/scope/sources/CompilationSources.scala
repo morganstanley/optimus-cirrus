@@ -19,7 +19,7 @@ import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 
 private[sources] final case class SourceFileContent(
@@ -46,7 +46,7 @@ private[sources] final case class HashedSourcesImpl(
   @node def content: Seq[(String, SortedMap[SourceUnitId, HashedContent])] = hashedSources.content
   @node def compilationSources: SortedMap[SourceUnitId, HashedContent] = hashedSources.sourceFiles
   @node def compilationFingerprint: FingerprintArtifact = hashedSources.fingerprint
-  @node def generatedSourceArtifacts: Seq[Artifact] = hashedSources.generatedSourceArtifacts
+  @node def generatedSourceArtifacts: IndexedSeq[Artifact] = hashedSources.generatedSourceArtifacts.toVector
   @node def isEmpty: Boolean = compilationSources.isEmpty
   @node def containsFile(name: RelativePath): Boolean =
     compilationSources.keySet.exists(_.sourceFolderToFilePath == name)

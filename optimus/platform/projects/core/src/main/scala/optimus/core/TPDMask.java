@@ -131,13 +131,13 @@ public final class TPDMask implements Serializable, Cloneable {
   public static String stringEncoded(long[] mask) {
     StringBuilder r = new StringBuilder();
     for (int i = mask.length - 1; i >= 0; i--) {
-      if (r.length() > 0) r.append('_');
+      if (!r.isEmpty()) r.append('_');
       if (mask[i] != 0) {
         // avoid negative sign when top bit is set
         r.append(StringUtils.stripStart(Long.toHexString(mask[i]), "0"));
-      } else if (r.length() > 0) r.append('0');
+      } else if (!r.isEmpty()) r.append('0');
     }
-    return r.length() == 0 ? "0" : r.toString();
+    return r.isEmpty() ? "0" : r.toString();
   }
 
   public static TPDMask stringDecoded(String str) {
@@ -156,7 +156,7 @@ public final class TPDMask implements Serializable, Cloneable {
   public static String stringEncodedFixedWidth(long[] mask) {
     StringBuilder r = new StringBuilder();
     for (int i = mask.length - 1; i >= 0; i--) {
-      if (r.length() > 0) r.append('_');
+      if (!r.isEmpty()) r.append('_');
       r.append(Strings.padStart(Long.toHexString(mask[i]), 16, '0'));
     }
     return r.toString().toUpperCase();
@@ -174,7 +174,7 @@ public final class TPDMask implements Serializable, Cloneable {
     // overflow / many tweaks can result in all bits being set
     // seems dangerous to potentially conflate the two
     // ideally would stop last bit ever being set unless poison
-    for (int i = 0; i < mask.length; i++) if (mask[i] != -1L) return false;
+    for (long l : mask) if (l != -1L) return false;
     return true;
   }
 

@@ -15,21 +15,25 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.function.Supplier;
 
+import javax.annotation.Nullable;
 import optimus.dht.client.api.kv.KVLargeValue;
+import optimus.dht.client.api.kv.KVStreamValue;
+import optimus.dht.common.api.transport.DataStreamConsumer;
 import optimus.dht.client.internal.kv.message.KVGenericResponse;
 import optimus.dht.client.internal.kv.message.KVResponse;
 import optimus.dht.client.internal.kv.message.KVValueResponse;
+import optimus.dht.client.internal.kv.message.KVValueStreamResponse;
 import optimus.dht.common.util.transport.RawStreamReader;
+import optimus.dht.common.util.transport.UserCallbackExceptionContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import optimus.dht.client.api.callback.CallbackRegistry;
-import optimus.dht.client.api.kv.KVValue;
 import optimus.dht.client.api.servers.ServerConnection;
 import optimus.dht.common.api.kv.KVResponseType;
 import optimus.dht.common.api.transport.CorruptedStreamException;
@@ -82,10 +86,15 @@ public class KVClientEstablishedStreamHandlerV1
   protected void processProtobufHeader(ValueResponseMessage message) {
     long requestId = message.getRequestId();
 
+    var customData = callbackRegistry.getData(serverNode, requestId);
     if (message.hasErrorDetails()) {
       String errorCode = message.getErrorDetails().getErrorCode();
       String errorText = message.getErrorDetails().getErrorText();
-      currentMessage = new KVValueResponse(requestId, null, errorCode, errorText);
+      if (customData instanceof KVValueStreamConsumerSupplierContainer) {
+        currentMessage = new KVValueStreamResponse(requestId, null, errorCode, errorText);
+      } else {
+        currentMessage = new KVValueResponse(requestId, null, errorCode, errorText);
+      }
     } else {
       int valuesCount = message.getValuesCount();
 
@@ -94,45 +103,93 @@ public class KVClientEstablishedStreamHandlerV1
       }
 
       payloadsToRead = new ArrayDeque<>(valuesCount);
-      List<KVLargeValue> values = new ArrayList<>(valuesCount);
 
-      List<ValueEntryMessage> valuesList = message.getValuesList();
-      for (int i = 0; i < valuesCount; ++i) {
-        ValueEntryMessage valueMessage = valuesList.get(i);
-        long valueLength = valueMessage.getValueLength();
-        if (valueLength == -1) {
-          values.add(null);
-        } else {
-          String entryInfo = valueMessage.hasEntryInfo() ? valueMessage.getEntryInfo() : null;
-          Instant expiry =
-              valueMessage.hasExpiry() ? Instant.ofEpochMilli(valueMessage.getExpiry()) : null;
+      if (customData instanceof KVValueStreamConsumerSupplierContainer) {
+        KVValueStreamConsumerSupplierContainer<DataStreamConsumer> container =
+            (KVValueStreamConsumerSupplierContainer) customData;
+        processStreamGet(message, container.streamConsumerSupplier());
+      } else {
+        processNonStreamGet(message);
+      }
+    }
+  }
 
-          if (valueLength < Integer.MAX_VALUE) {
-            byte[] value = new byte[(int) valueLength];
-            KVLargeValue valueEntry =
-                new KVLargeValue(new ByteBuffer[] {ByteBuffer.wrap(value)}, entryInfo, expiry);
-            values.add(valueEntry);
-            payloadsToRead.add(RawStreamReader.create(value));
-          } else {
-            int fullDirectBuffers = (int) (valueLength >> DIRECT_BUFFER_SIZE_SHIFT);
-            int lastDirectBufferSize = (int) (valueLength & (DIRECT_BUFFER_SIZE - 1));
-            ByteBuffer[] directBuffers =
-                new ByteBuffer[fullDirectBuffers + (lastDirectBufferSize > 0 ? 1 : 0)];
-            for (int j = 0; j < fullDirectBuffers; ++j) {
-              directBuffers[j] = ByteBuffer.allocateDirect(DIRECT_BUFFER_SIZE);
-              payloadsToRead.add(RawStreamReader.create(directBuffers[j]));
-            }
-            if (lastDirectBufferSize > 0) {
-              directBuffers[fullDirectBuffers] = ByteBuffer.allocateDirect(lastDirectBufferSize);
-              payloadsToRead.add(RawStreamReader.create(directBuffers[fullDirectBuffers]));
-            }
-            KVLargeValue valueEntry = new KVLargeValue(directBuffers, entryInfo, expiry);
-            values.add(valueEntry);
-          }
+  private void processStreamGet(
+      ValueResponseMessage message, Supplier<DataStreamConsumer> streamConsumerSupplier) {
+    long requestId = message.getRequestId();
+    int valuesCount = message.getValuesCount();
+    List<KVStreamValue> values = new ArrayList<>(valuesCount);
+    List<ValueEntryMessage> valuesList = message.getValuesList();
+
+    for (int i = 0; i < valuesCount; ++i) {
+      ValueEntryMessage valueMessage = valuesList.get(i);
+      long valueLength = valueMessage.getValueLength();
+      if (valueLength == -1) {
+        values.add(null);
+      } else {
+        String entryInfo = valueMessage.hasEntryInfo() ? valueMessage.getEntryInfo() : null;
+        Instant expiry =
+            valueMessage.hasExpiry() ? Instant.ofEpochMilli(valueMessage.getExpiry()) : null;
+
+        try {
+          var streamConsumer = streamConsumerSupplier.get();
+          streamConsumer.prepare(valueLength);
+
+          KVStreamValue streamValue = new KVStreamValue(streamConsumer, entryInfo, expiry);
+          values.add(streamValue);
+          payloadsToRead.add(
+              RawStreamReader.create(
+                  streamConsumer, valueLength, this::processUserCallbackException));
+        } catch (Exception e) {
+          processUserCallbackException(e);
+          return;
         }
       }
-      currentMessage = new KVValueResponse(requestId, values, null, null);
     }
+    currentMessage = new KVValueStreamResponse(requestId, values, null, null);
+  }
+
+  protected void processNonStreamGet(ValueResponseMessage message) {
+    long requestId = message.getRequestId();
+    int valuesCount = message.getValuesCount();
+    List<KVLargeValue> values = new ArrayList<>(valuesCount);
+    List<ValueEntryMessage> valuesList = message.getValuesList();
+
+    for (int i = 0; i < valuesCount; ++i) {
+      ValueEntryMessage valueMessage = valuesList.get(i);
+      long valueLength = valueMessage.getValueLength();
+      if (valueLength == -1) {
+        values.add(null);
+      } else {
+        String entryInfo = valueMessage.hasEntryInfo() ? valueMessage.getEntryInfo() : null;
+        Instant expiry =
+            valueMessage.hasExpiry() ? Instant.ofEpochMilli(valueMessage.getExpiry()) : null;
+
+        if (valueLength < Integer.MAX_VALUE) {
+          byte[] value = new byte[(int) valueLength];
+          KVLargeValue valueEntry =
+              new KVLargeValue(new ByteBuffer[] {ByteBuffer.wrap(value)}, entryInfo, expiry);
+          values.add(valueEntry);
+          payloadsToRead.add(RawStreamReader.create(value));
+        } else {
+          int fullDirectBuffers = (int) (valueLength >> DIRECT_BUFFER_SIZE_SHIFT);
+          int lastDirectBufferSize = (int) (valueLength & (DIRECT_BUFFER_SIZE - 1));
+          ByteBuffer[] directBuffers =
+              new ByteBuffer[fullDirectBuffers + (lastDirectBufferSize > 0 ? 1 : 0)];
+          for (int j = 0; j < fullDirectBuffers; ++j) {
+            directBuffers[j] = ByteBuffer.allocateDirect(DIRECT_BUFFER_SIZE);
+            payloadsToRead.add(RawStreamReader.create(directBuffers[j]));
+          }
+          if (lastDirectBufferSize > 0) {
+            directBuffers[fullDirectBuffers] = ByteBuffer.allocateDirect(lastDirectBufferSize);
+            payloadsToRead.add(RawStreamReader.create(directBuffers[fullDirectBuffers]));
+          }
+          KVLargeValue valueEntry = new KVLargeValue(directBuffers, entryInfo, expiry);
+          values.add(valueEntry);
+        }
+      }
+    }
+    currentMessage = new KVValueResponse(requestId, values, null, null);
   }
 
   protected void processProtobufHeader(GenericResponseMessage message) {
@@ -158,13 +215,50 @@ public class KVClientEstablishedStreamHandlerV1
 
   @Override
   protected void processMessageCompleted(ReceivedMessageMetrics metrics) {
-    if (!callbackRegistry.complete(
-        serverNode, currentMessage.requestId(), currentMessage, metrics)) {
+    if (currentMessage != null
+        && !callbackRegistry.complete(
+            serverNode, currentMessage.requestId(), currentMessage, metrics)) {
       logger.warn(
           "Unable to find callback for server={}, requestId={}, receivedMessageMetrics={}",
           serverNode,
           currentMessage.requestId(),
           metrics);
+      maybeDisposeOrphanedStreams();
+    }
+  }
+
+  protected void processUserCallbackException(Exception e) {
+    if (!callbackRegistry.complete(
+        serverNode,
+        currentMessage.requestId(),
+        new UserCallbackExceptionContainer(e),
+        ReceivedMessageMetrics.NOT_RECEIVED)) {
+      logger.warn(
+          "Unable to find callback for user callback exception, server={}, requestId={}",
+          serverNode,
+          currentMessage.requestId(),
+          e);
+    }
+    maybeDisposeOrphanedStreams();
+    skipMessage();
+  }
+
+  @Override
+  public void connectionClosed(@Nullable Throwable exception) {
+    maybeDisposeOrphanedStreams();
+  }
+
+  private void maybeDisposeOrphanedStreams() {
+    if (currentMessage instanceof KVValueStreamResponse) {
+      KVValueStreamResponse<DataStreamConsumer> streamMessage =
+          (KVValueStreamResponse) currentMessage;
+      for (var streamValue : streamMessage.values()) {
+        try {
+          streamValue.streamConsumer().dispose();
+        } catch (Exception e) {
+          logger.warn("Ignoring exception from DataStreamConsumer.dispose()", e);
+        }
+      }
     }
   }
 }

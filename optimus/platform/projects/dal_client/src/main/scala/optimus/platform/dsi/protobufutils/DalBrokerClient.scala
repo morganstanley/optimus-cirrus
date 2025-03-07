@@ -11,7 +11,6 @@
  */
 package optimus.platform.dsi.protobufutils
 
-import msjava.base.spring.lifecycle.BeanState
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.Partition
@@ -25,6 +24,7 @@ import optimus.platform.dsi.Response
 import optimus.platform.dsi.bitemporal.Command
 import optimus.platform.dsi.bitemporal.proto.Dsi.DSIRequestProto
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
+import optimus.platform.util.ObjectState
 
 import java.util.concurrent.locks.ReadWriteLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -66,7 +66,7 @@ abstract class BatchedDalBrokerClient(
   private val rwShutdownLock: ReadWriteLock = new ReentrantReadWriteLock
   private val rShutdownLock = rwShutdownLock.readLock
   private val wShutdownLock = rwShutdownLock.writeLock
-  private val state = new BeanState()
+  private val state = new ObjectState()
   state.initializeIfNotInitialized()
 
   // Needs to be lazy because creating the RequestSender might be side-effecting, for instance by spawning threads etc.

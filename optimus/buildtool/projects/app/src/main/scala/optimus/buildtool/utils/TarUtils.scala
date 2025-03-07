@@ -84,8 +84,12 @@ object TarUtils extends Log {
   ): FileAsset = {
     populateTarGzStream(tarAsset) { taos =>
       files.foreach { f =>
-        require(f.file.exists, s"File $f does not exist")
-        def addFile(): Unit = addFileToTarGz(taos, f.file, f.targetPath)
+        def addFile(): Unit = {
+          require(
+            Files.exists(f.file.path),
+            s"Failed to create ${tarAsset.pathString} - file ${f.file.pathString} does not exist")
+          addFileToTarGz(taos, f.file, f.targetPath)
+        }
         // We try to add the file twice before giving up
         Try(addFile()).getOrElse(addFile())
       }

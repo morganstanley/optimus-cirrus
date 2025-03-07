@@ -12,7 +12,6 @@
 package optimus.platform.dal
 
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.core.CoreAPI.asyncResult
 import optimus.dsi.partitioning.DefaultPartition
 import optimus.dsi.partitioning.NamedPartition
 import optimus.dsi.partitioning.Partition
@@ -28,7 +27,6 @@ import optimus.platform.dal.messages.MessagesBrokerDsiProxy
 import optimus.platform.dal.pubsub.PubSubClientRequest
 import optimus.platform.dal.pubsub.PubSubClientResponse
 import optimus.platform.dal.session.ClientSessionContext.SessionData
-import optimus.platform.dsi.Feature
 import optimus.platform.dsi.Feature.LeadWriterPartitioning
 import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal._
@@ -41,7 +39,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import scala.concurrent._
 import scala.concurrent.duration.Duration
-import scala.util.Try
 import scala.util.control.NonFatal
 
 class PartitionedDsiProxy(
@@ -59,9 +56,10 @@ class PartitionedDsiProxy(
     val appId: DalAppId,
     cmdLimit: Int,
     asyncConfig: DalAsyncConfig,
-    env: DalEnv,
+    val env: DalEnv,
     shouldLoadBalance: Boolean,
-    secureTransport: Boolean
+    secureTransport: Boolean,
+    val maxBrokersAllowedForConnectionFromURI: Int = 1
 ) extends PrcBrokerMultiplexingProxy
     with ClientSideDSI {
   import PartitionedDsiProxy._
@@ -86,8 +84,21 @@ class PartitionedDsiProxy(
       .toMap
   }
 
-  protected[optimus] override lazy val replica =
-    getReplicaRemoteDsiProxy(replicaBroker, cmdLimit, shouldLoadBalance)
+  protected[optimus] override lazy val replica: ClientSideDSI = new MultiReadBrokersDSIProxy(
+    baseContext: Context,
+    brokerProviderResolver,
+    replicaBroker,
+    partitionMap,
+    zone,
+    appId,
+    cmdLimit,
+    asyncConfig,
+    env,
+    shouldLoadBalance,
+    secureTransport,
+    maxBrokersAllowedForConnectionFromURI
+  )
+
   protected[optimus] override lazy val prcProxyOpt = getPrcRemoteDsiProxy(prcSkLoc)
 
   private[optimus] lazy val messagesBrokerProxy: Option[MessagesBrokerDsiProxy] = messagesBroker.map { messagesUri =>
@@ -189,7 +200,7 @@ class PartitionedDsiProxy(
             partitionMap,
             skLoc,
             new PrcKeyProvider(baseContext),
-            replica
+            replica.asInstanceOf[MultiReadBrokersDSIProxy].getDSIClient
           ))
       } catch {
         case NonFatal(ex) =>
@@ -205,7 +216,7 @@ class PartitionedDsiProxy(
     }
   }
 
-  override def sessionData: SessionData = replica.sessionCtx.sessionData
+  override def sessionData: SessionData = replica.sessionData
 
   override private[optimus] def setEstablishSession(command: => EstablishSession): Unit = {
     val establishSession = command

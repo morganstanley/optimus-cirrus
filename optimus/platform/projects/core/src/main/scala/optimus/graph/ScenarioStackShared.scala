@@ -15,8 +15,8 @@ import optimus.breadcrumbs.ChainedID
 import optimus.config.RuntimeComponents
 import optimus.config.scoped.ScopedSchedulerPlugin
 import optimus.core.MonitoringBreadcrumbs
+import optimus.graph.cache.CacheSelector
 import optimus.graph.cache.NodeCCache
-import optimus.graph.cache.PrivateCache
 import optimus.graph.cache.UNodeCache
 import optimus.platform.RuntimeEnvironment
 import optimus.platform.RuntimeEnvironmentKnownNames._
@@ -28,6 +28,7 @@ import optimus.platform.util.html.HtmlBuilder
 import optimus.platform.util.html.NoStyleNamed
 
 import java.util.concurrent.ConcurrentMap
+import scala.util.control.NonFatal
 
 /**
  * This is a private object and a private class for ScenarioStack and we just don't want ScenarioStack class to get even
@@ -55,7 +56,7 @@ private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
   private[optimus] def apply(
       env: RuntimeEnvironment,
       siParams: SIParams,
-      privateCacheMoniker: PrivateCache.Moniker,
+      privateCacheMoniker: CacheSelector.Moniker,
       uniqueID: Boolean): ScenarioStackShared = {
     val cacheID =
       if (uniqueID) SSCacheID.newUnique()
@@ -70,7 +71,7 @@ private[optimus /*ScenarioStack*/ ] object ScenarioStackShared {
 
     if (privateCacheMoniker ne null) {
       ss = ss.withPrivateProvidedCache(
-        createPrivateCache(privateCacheMoniker.cache),
+        createPrivateCache(privateCacheMoniker.cacheName),
         privateCacheMoniker.readFromGlobalCaches)
     }
 
@@ -140,7 +141,7 @@ private[optimus /*ScenarioStack*/ ] final class ScenarioStackShared private (val
           val topLevelScenarioString = scenario.toString + scenario.createdAtAsString
           MonitoringBreadcrumbs.sendEvilScenarioStackInitTimeRandom(topLevelScenarioString, foundScenarioString)
         } catch {
-          case _: Throwable =>
+          case NonFatal(_) =>
         }
       true
     } else

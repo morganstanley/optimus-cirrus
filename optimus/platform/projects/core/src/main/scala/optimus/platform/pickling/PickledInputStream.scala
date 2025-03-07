@@ -12,7 +12,8 @@
 package optimus.platform.pickling
 
 import optimus.platform.TemporalContext
-import optimus.platform.storable.{Entity, EntityReference, StorableReference}
+import optimus.platform.storable.InlineEntityHolder
+import optimus.platform.storable.StorableReference
 
 /**
  * This interface has 'seek' methods instead of 'read' methods. Eventually 'seek' returns boolean so to enable detection
@@ -32,7 +33,7 @@ trait PickledInputStream {
 
   def seekRaw(k: String): Boolean
 
-  def inlineEntitiesByRef: collection.Map[EntityReference, Entity] = Map.empty
+  def inlineEntitiesByRef: InlineEntityHolder = InlineEntityHolder.empty
   def reference: StorableReference
 
   def charValue: Char

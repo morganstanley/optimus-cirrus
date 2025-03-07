@@ -30,7 +30,9 @@ import optimus.graph.diagnostics.configmetrics.ConfigMetrics
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.Metric
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.ProfilerOutputStrings
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
+import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.graph.diagnostics.Report
+import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getConfigMetricSummary
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getDefaultLevel
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getHotspots
@@ -46,6 +48,8 @@ import optimus.graph.diagnostics.pgo.ConfigWriterSettings
 import optimus.graph.diagnostics.pgo.DisableCache
 import optimus.graph.diagnostics.pgo.PGOMode
 import optimus.graph.diagnostics.pgo.Profiler
+import optimus.graph.diagnostics.sampling.SamplingProfilerSource
+import optimus.graph.diagnostics.trace.ReuseHistogram
 import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
@@ -111,18 +115,20 @@ object GridProfilerUtils {
   import optimus.breadcrumbs.crumbs.{Properties => P}
   // not a val because Version.properties is already lazily evaluated so the whole call is very fast after the
   // first invocation.
-  def appProperties: Properties.Elems = Version.verboseProperties + (P.appId -> appIdForCrumbs)
+  def appProperties: Properties.Elems = Version.properties + (P.appId -> appIdForCrumbs)
 
   def fallBackName: String = {
     // First optimus/app/etc class name on the stack
     val clsNames = new Exception().getStackTrace map (_.getClassName)
     val idx = clsNames.lastIndexWhere(x => !x.matches("(scala|java|sun|com|org).*"))
     val clsName = if (idx >= 0) clsNames(idx) else ""
-    val cls = if (clsName.indexOf("$") > 0) clsName.take(clsName.indexOf("$")) else clsName
+    val cls =
+      if (clsName.indexOf(OGTrace.CachedSuffix) > 0) clsName.take(clsName.indexOf(OGTrace.CachedSuffix)) else clsName
 
     // The PID
     val vmName = java.lang.management.ManagementFactory.getRuntimeMXBean.getName
-    val pid = if (vmName.indexOf('@') >= 0) "_" + vmName.take(vmName.indexOf('@')) else ""
+    val pid =
+      if (vmName.indexOf(OGTrace.AsyncSuffix) >= 0) "_" + vmName.take(vmName.indexOf(OGTrace.AsyncSuffix)) else ""
 
     // example: "myapp.app.common.apprunner.RunCalc_7848"
     if (cls.isEmpty) s"AppNameUnknown$pid" else s"$cls$pid"
@@ -272,7 +278,8 @@ object GridProfilerUtils {
   private[optimus] def getLocalAndRemoteHotspots: (Metric.Hotspots, Map[String, Metric.Hotspots]) =
     (Profiler.getLocalHotspots(), getHotspots.filterKeysNow(_ != GridProfiler.clientKey))
 
-  private[gridprofiler] def writeHotspots(writer: Writer): Unit = {
+  private[optimus] def filterAndSendHotspotsCrumbs(): Unit = writeHotspots(writer = None)
+  private[gridprofiler] def writeHotspots(writer: Option[Writer]): Unit = {
     val (rawLocal, rawRemote) = getLocalAndRemoteHotspots
     val aggregated =
       GridProfilerData.aggregateSingle(rawRemote, Some(rawLocal), GridProfilerDefaults.defaultAggregationType)
@@ -283,7 +290,7 @@ object GridProfilerUtils {
         filtered
       }
     val filteredCnt = aggregated.values.map(_.size).sum - filtered.values.map(_.size).sum
-    PNodeTaskInfo.printCSV(filtered.mapValuesNow(_.asJava).asJava, filteredCnt, writer)
+    writer.foreach(PNodeTaskInfo.printCSV(filtered.mapValuesNow(_.asJava).asJava, filteredCnt, _))
     sendHotspotCrumbs(filtered)
     Breadcrumbs.flush()
   }
@@ -296,16 +303,59 @@ object GridProfilerUtils {
       more = collection.Seq(P.taskId -> taskId, P.engine -> engine, P.tasksExecutedOnEngine -> nodesExecuted))
   }
 
+  private def ms(us: Long): Long = us / 1000000L
+
+  private def hotspotInfo(
+      pnti: PNodeTaskInfo,
+      spName: String = "",
+      propertyNode: String = "",
+      engine: String = "",
+      subNode: String = "",
+      debug: Seq[String] = Seq.empty): Elems = Elems(
+    P.hotspotEngine -> engine,
+    P.hotspotPropertyName -> propertyNode,
+    P.spPropertyName -> spName,
+    P.hotspotStart -> pnti.start,
+    P.hotspotEvicted -> pnti.evicted,
+    P.hotspotInvalidated -> pnti.invalidated,
+    P.hotspotCacheMiss -> pnti.cacheMiss,
+    P.hotspotCacheHit -> pnti.cacheHit,
+    P.hotspotCacheCycle -> pnti.reuseCycle,
+    P.hotspotCacheCycleStats.maybe(pnti.reuseStats != 0, ReuseHistogram.yAxis(pnti.reuseStats)),
+    P.hotspotCacheHisto.maybe(pnti.reuseStats != 0, ReuseHistogram.barChart(pnti.reuseStats)),
+    P.hotspotCacheHitFromDifferentTasks -> pnti.cacheHitFromDifferentTask,
+    P.hotspotNodeReusedTime -> ms(pnti.nodeReusedTime),
+    P.hotspotCacheBenefit -> ms(pnti.cacheBenefit),
+    P.hotspotAvgCacheTime -> ms(pnti.avgCacheTime),
+    P.hotspotAncSelfTime -> ms(pnti.ancSelfTime),
+    P.hotspotPostCompleteTime -> ms(pnti.postCompleteAndSuspendTime),
+    P.hotspotWallTime -> ms(pnti.wallTime),
+    P.hotspotSelfTime -> ms(pnti.selfTime),
+    P.hotspotTweakLookupTime -> ms(pnti.tweakLookupTime),
+    P.hotspotChildNodeLookupCount -> pnti.childNodeLookupCount,
+    P.hotspotChildNodeLookupTime -> pnti.childNodeLookupTime,
+    P.hotspotCollisionCount -> pnti.collisionCount,
+    P.hotspotCacheable -> Some(pnti.getCacheable),
+    P.hotspotFavorReuse -> Some(pnti.getFavorReuse),
+    P.hotspotIsScenarioIndependent -> Some(pnti.isScenarioIndependent),
+    P.hotspotPropertyFlags -> pnti.flags,
+    P.hotspotPropertyFlagsString -> pnti.flagsAsString,
+    P.hotspotRunningNode -> subNode,
+    P.hotspotPropertySource -> pnti.source,
+    P.debug -> debug.mkString(";")
+  )
+
   private def sendHotspotCrumbs(agg: Map[String, ArrayBuffer[PNodeTaskInfo]]): Unit = {
     if (Breadcrumbs.isInfoEnabled) {
-      def ms(us: Long): Long = us / 1000000L
       for {
         (engine, pntis) <- agg
         pnti <- pntis.take(hardCrumbMax)
       } {
         val enq = pnti.enqueuingPropertyName
         val pname = pnti.fullName()
+        val spName = StackAnalysis.dromedize(pname)
         val debug = mutable.ArrayBuffer.empty[String]
+        pnti.name
         val (propertyNode, subNode) =
           if (enq eq null) {
             debug += "enq=null"
@@ -316,36 +366,16 @@ object GridProfilerUtils {
           ChainedID.root,
           PropertiesCrumb(
             _,
-            ProfilerSource,
+            ProfilerSource + SamplingProfilerSource,
             appProperties + P.Elems(
-              P.hotspotEngine -> engine,
-              P.hotspotPropertyName -> propertyNode,
-              P.hotspotStart -> pnti.start,
-              P.hotspotEvicted -> pnti.evicted,
-              P.hotspotInvalidated -> pnti.invalidated,
-              P.hotspotCacheMiss -> pnti.cacheMiss,
-              P.hotspotCacheHit -> pnti.cacheHit,
-              P.hotspotCacheHitFromDifferentTasks -> pnti.cacheHitFromDifferentTask,
-              P.hotspotNodeReusedTime -> ms(pnti.nodeReusedTime),
-              P.hotspotCacheBenefit -> ms(pnti.cacheBenefit),
-              P.hotspotAvgCacheTime -> ms(pnti.avgCacheTime),
-              P.hotspotAncSelfTime -> ms(pnti.ancSelfTime),
-              P.hotspotPostCompleteTime -> ms(pnti.postCompleteAndSuspendTime),
-              P.hotspotWallTime -> ms(pnti.wallTime),
-              P.hotspotSelfTime -> ms(pnti.selfTime),
-              P.hotspotTweakLookupTime -> ms(pnti.tweakLookupTime),
-              P.hotspotChildNodeLookupCount -> pnti.childNodeLookupCount,
-              P.hotspotChildNodeLookupTime -> pnti.childNodeLookupTime,
-              P.hotspotCollisionCount -> pnti.collisionCount,
-              P.hotspotCacheable -> Some(pnti.getCacheable),
-              P.hotspotFavorReuse -> Some(pnti.getFavorReuse),
-              P.hotspotIsScenarioIndependent -> Some(pnti.isScenarioIndependent),
-              P.hotspotPropertyFlags -> pnti.flags,
-              P.hotspotPropertyFlagsString -> pnti.flagsAsString,
-              P.hotspotRunningNode -> subNode,
-              P.hotspotPropertySource -> pnti.source,
-              P.debug -> debug.mkString(";")
-            )
+              hotspotInfo(
+                pnti,
+                spName,
+                propertyNode,
+                engine,
+                subNode,
+                debug
+              ))
           )
         )
       }
@@ -417,7 +447,7 @@ object GridProfilerUtils {
   def hotspotsContent: Option[String] =
     if (getDefaultLevel >= HOTSPOTSLIGHT && !DiagnosticSettings.profilerDisableHotspotsCSV) {
       val sw = new StringWriter()
-      writeHotspots(sw)
+      writeHotspots(Some(sw))
       Some(sw.toString)
     } else None
 

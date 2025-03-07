@@ -20,7 +20,7 @@ import scala.collection.mutable
 
 // Splits read command execution between read broker and PRC server
 abstract class PrcBrokerMultiplexingProxy { self: ClientSideDSI =>
-  protected def replica: DSIClient
+  protected def replica: ClientSideDSI
   protected def prcProxyOpt: Option[PrcRemoteDsiProxy]
 
   private lazy val prcResultTracer = PrcResultTracerState.getPrcResultTracer

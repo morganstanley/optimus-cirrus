@@ -64,8 +64,9 @@ final case class DependencyDefinition(
     isScalacPlugin: Boolean = false,
     ivyArtifacts: Seq[IvyArtifact] = Nil,
     isMaven: Boolean = false,
+    isAgent: Boolean = false,
     isExtraLib: Boolean = false // for metadata generation only
-) extends OrderedElement {
+) extends OrderedElement[DependencyId] {
 
   def noVersion: Boolean = version.isEmpty
 
@@ -127,7 +128,7 @@ final case class NativeDependencyDefinition(
     paths: Seq[String],
     // TODO (OPTIMUS-37398): this will likely be desirous of includes/excludes and such
     extraPaths: Seq[Asset]
-) extends OrderedElement {
+) extends OrderedElement[NativeDependencyId] {
   def id: NativeDependencyId = NativeDependencyId(name)
 }
 
@@ -164,6 +165,14 @@ final case class ExternalDependencies(afsDependencies: AfsDependencies, mavenDep
   // be used for afs to maven mapping
   def afsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]] =
     multiSourceDependencies.map(d => d.definition -> d.equivalents).toMap
+
+  lazy val mavenToAfsMap: Map[DependencyDefinition, DependencyDefinition] = {
+    for {
+      dep <- multiSourceDependencies
+      afsDep = dep.definition
+      mavenDep <- dep.equivalents
+    } yield mavenDep -> afsDep
+  }.toMap
 }
 
 object AfsDependencies {
@@ -201,13 +210,6 @@ final case class MavenDependencies(
   val allMavenDeps: Seq[DependencyDefinition] = unmappedMavenDeps ++ mixModeMavenDeps
   // be used by transitive mapping validation
   val allMappedMavenDeps: Seq[DependencyDefinition] = noVersionMavenDeps ++ mixModeMavenDeps
-}
-
-final case class MappedDependencyDefinitions(
-    appliedAfsToMavenMap: Map[DependencyDefinition, Seq[DependencyDefinition]],
-    unMappedAfsDeps: Seq[DependencyDefinition]) {
-  val allDepsAfterMapping: Seq[DependencyDefinition] =
-    unMappedAfsDeps ++ appliedAfsToMavenMap.values.flatten.toIndexedSeq
 }
 
 final case class DependencyCoursierKey(org: String, name: String, configuration: String, version: String) {

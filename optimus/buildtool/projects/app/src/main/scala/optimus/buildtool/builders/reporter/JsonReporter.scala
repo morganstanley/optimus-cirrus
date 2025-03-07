@@ -75,7 +75,8 @@ class JsonReporter(
       }
 
       if (isMavenRelease) {
-        scopeCompilations.toIndexedSeq.apar.map { case (id, compilation) =>
+        scopeCompilations.toIndexedSeq.apar.map { case (scopeId, compilation) =>
+          val id = scopeId.forMavenRelease
           val mavenBundle = MetaBundle("com.ms." + id.metaBundle.toString, id.module)
           val metaBundle = NamingConventions.MavenCIScope.split("/")
           val codetreeBundle = MetaBundle(metaBundle(0), metaBundle(1))

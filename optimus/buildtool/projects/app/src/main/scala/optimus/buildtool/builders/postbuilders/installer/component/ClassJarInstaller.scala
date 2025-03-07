@@ -115,7 +115,9 @@ class ClassJarInstaller(
             else None
           val installJar =
             if (generatePoms)
-              pathBuilder.mavenDir(scopeId).resolveJar(s"${scopeId.module}-${installer.installVersion}.jar")
+              pathBuilder
+                .mavenDir(scopeId.forMavenRelease)
+                .resolveJar(s"${scopeId.forMavenRelease.module}-${installer.installVersion}.jar")
             else jar
           val manifest = manifestResolver.manifestFromConfig(scopeId)
           val fingerprint = Jars.fingerprint(manifest) ++ classJars.map(Hashing.hashFileContent)

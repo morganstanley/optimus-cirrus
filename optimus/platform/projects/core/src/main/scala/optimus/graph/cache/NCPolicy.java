@@ -14,19 +14,21 @@ package optimus.graph.cache;
 import static optimus.graph.cache.DelayedXSFTProxyNode.canUseValue;
 import static optimus.graph.cache.NCSupport.isDirectlyReusableWRTCancelScope;
 import static optimus.graph.cache.NCSupport.matchXscenario;
-
 import java.io.Serial;
 import java.io.Serializable;
-
+import java.util.HashMap;
+import java.util.Map;
 import optimus.core.TPDMask;
 import optimus.entity.EntityInfo;
 import optimus.graph.GraphInInvalidState;
 import optimus.graph.NodeTask;
 import optimus.graph.NodeTaskInfo;
+import optimus.graph.OGScheduler;
 import optimus.graph.OGTrace;
 import optimus.graph.PropertyInfo;
 import optimus.graph.PropertyNode;
 import optimus.graph.Settings;
+import optimus.graph.TweakableListener$;
 import optimus.platform.EvaluationQueue;
 import optimus.platform.ScenarioStack;
 import optimus.platform.storable.Entity;
@@ -50,11 +52,19 @@ public abstract class NCPolicy implements Serializable {
 
   public static final NCPolicy DontCache = new DontCachePolicy();
 
+  private static final HashMap<String, Integer> scopePathToIDs = new HashMap<>();
+
   final boolean alwaysNeedsProxy;
   final boolean acceptAnyUsableCS;
-  public final long associatedFlags;
-  // the same as associatedFlags in all cases except SI and RuntimeEnv
-  public final long clearFlags;
+  /** True for DontCache policy only */
+  public final boolean noCache;
+
+  public static void resetCaches() {
+    synchronized (scopePathToIDs) {
+      scopePathToIDs.clear();
+    }
+    NCPolicyComposite.policyCache.clear();
+  }
 
   /** Returns user filterable name for anything but default policies */
   public String policyName() {
@@ -70,8 +80,13 @@ public abstract class NCPolicy implements Serializable {
    * Under some conditions (e.g. tracking scenario), might need to 'downgrade' policy (e.g. from
    * XSFT to Default)
    */
-  public <T> NCPolicy switchPolicy(PropertyNode<T> key) {
+  public NCPolicy switchPolicy(PropertyNode<?> key) {
     return this;
+  }
+
+  /** Check if the policy is the same as the given policy or it's composite and contains it */
+  public boolean contains(NCPolicy policy) {
+    return this == policy;
   }
 
   static class LookupResult<T> {
@@ -118,41 +133,77 @@ public abstract class NCPolicy implements Serializable {
     };
   }
 
+  public NCPolicy combineWith(String currentTargetPath, NCPolicy policy, String targetPath) {
+    // currentTargetPath empty means `this` is the default
+    if (currentTargetPath.isEmpty()) return composite(this, policy, targetPath);
+    else return composite(null, this, currentTargetPath).combineWith("IGNORED", policy, targetPath);
+  }
+
+  public static int scopeMaskFromPath(String scopedPath) {
+    if (scopedPath == null || scopedPath.isEmpty()) return 0;
+    return 1 << scopeIDFromPath(scopedPath);
+  }
+
+  public static int profileBlockIDFromPath(String scopedPath) {
+    return scopeIDFromPath(scopedPath) + OGTrace.BLOCK_ID_UNSCOPED;
+  }
+
+  public static int scopeIDFromPath(String scopedPath) {
+    if (scopedPath == null || scopedPath.isEmpty()) return 0;
+    int scopeID;
+    synchronized (scopePathToIDs) {
+      scopeID = scopePathToIDs.computeIfAbsent(scopedPath, path -> scopePathToIDs.size());
+    }
+    // TODO(OPTIMUS-72345): path based mask could overflow
+    if (scopeID > 30) OGScheduler.log.error("Too many scoped paths: " + scopeID);
+    return scopeID;
+  }
+
+  public static Map<String, Integer> registeredScopedPathAndProfileBlockID() {
+    var r = new HashMap<String, Integer>();
+    synchronized (scopePathToIDs) {
+      for (var kv : scopePathToIDs.entrySet()) {
+        r.put(kv.getKey(), kv.getValue() + OGTrace.BLOCK_ID_UNSCOPED);
+      }
+    }
+    return r;
+  }
+
+  /** Returns new policy with path-independent policy set if one wasn't provide before */
+  public NCPolicy withPathIndependentIfNotSet(NCPolicy scopeIndependent) {
+    return this; // Since default is pathIndependent, it's always already set
+  }
+
+  /** Every policy other than composite is always pathIndependent */
+  public NCPolicy pathIndependent() {
+    return this;
+  }
+
+  public static NCPolicy composite(NCPolicy defaultPolicy, NCPolicy policy, String targetPath) {
+    return new NCPolicyComposite.CompositeN(defaultPolicy, policy, scopeMaskFromPath(targetPath));
+  }
+
+  /** Really for testing only */
+  public static NCPolicy composite(
+      NCPolicy defaultPolicy, NCPolicy policy1, int mask1, NCPolicy policy2, int mask2) {
+    return new NCPolicyComposite.CompositeN(
+        defaultPolicy,
+        new NCPolicyComposite.PolicyMask[] {
+          new NCPolicyComposite.PolicyMask(policy1, mask1),
+          new NCPolicyComposite.PolicyMask(policy2, mask2)
+        });
+  }
+
   NCPolicy() {
+    noCache = false;
     alwaysNeedsProxy = false;
     acceptAnyUsableCS = false;
-    associatedFlags = 0L;
-    clearFlags = 0L;
-  }
-
-  NCPolicy(long associatedFlags) {
-    alwaysNeedsProxy = false;
-    acceptAnyUsableCS = false;
-    this.associatedFlags = associatedFlags;
-    // deliberately the same as associatedFlags except for SI and RuntimeEnv
-    this.clearFlags = associatedFlags;
-  }
-
-  NCPolicy(long associatedFlags, long clearFlags) {
-    alwaysNeedsProxy = false;
-    acceptAnyUsableCS = false;
-    this.associatedFlags = associatedFlags;
-    this.clearFlags = clearFlags;
-  }
-
-  NCPolicy(boolean alwaysNeedsProxy, boolean acceptAnyUsableCS) {
-    this.alwaysNeedsProxy = alwaysNeedsProxy;
-    this.acceptAnyUsableCS = acceptAnyUsableCS;
-    this.associatedFlags = 0L;
-    this.clearFlags = 0L;
   }
 
   NCPolicy(boolean alwaysNeedsProxy, boolean acceptAnyUsableCS, long associatedFlags) {
+    this.noCache = (associatedFlags & NodeTaskInfo.DONT_CACHE) != 0;
     this.alwaysNeedsProxy = alwaysNeedsProxy;
     this.acceptAnyUsableCS = acceptAnyUsableCS;
-    this.associatedFlags = associatedFlags;
-    // deliberately the same as associatedFlags except for SI and RuntimeEnv
-    this.clearFlags = associatedFlags;
   }
 
   @Override
@@ -176,7 +227,7 @@ public abstract class NCPolicy implements Serializable {
   }
 
   final <T> DelayedProxyNode<T> updateProxy(
-      BaseUNodeCache cache,
+      NodeCacheBase cache,
       PropertyNode<T> key,
       PropertyNode<T> found,
       DelayedProxyNode<T> prevProxy) {
@@ -186,12 +237,12 @@ public abstract class NCPolicy implements Serializable {
   }
 
   <T> DelayedProxyNode<T> createProxy(
-      BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> found) {
+      NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
     return new DelayedCSProxyNode<>(key, found);
   }
 
-  <T> boolean tryLocalCache(PropertyNode<T> nkey) {
-    return nkey.propertyInfo().tryLocalCache();
+  <T> boolean tryLocalCache(PropertyNode<T> key) {
+    return key.propertyInfo().tryLocalCache();
   }
 
   <T> PropertyNode<T> localMatch(PropertyNode<T> key) {
@@ -221,7 +272,7 @@ public abstract class NCPolicy implements Serializable {
   }
 
   <T> LookupResult<T> alternativeLookup(
-      BaseUNodeCache cache, PropertyNode<T> nkey, EvaluationQueue eq) {
+      NodeCacheBase cache, PropertyNode<T> key, EvaluationQueue eq) {
     //noinspection unchecked
     return (LookupResult<T>) LookupResult.empty;
   }
@@ -269,7 +320,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     SIPolicy() {
-      super(NodeTaskInfo.SCENARIOINDEPENDENT, 0L);
+      super(false, false, NodeTaskInfo.SCENARIOINDEPENDENT);
     }
 
     @Override
@@ -288,7 +339,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     RuntimeEnvPolicy() {
-      super(NodeTaskInfo.GIVEN_RUNTIME_ENV, 0L);
+      super(false, false, NodeTaskInfo.GIVEN_RUNTIME_ENV);
     }
   }
 
@@ -302,7 +353,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     DontCachePolicy() {
-      super(NodeTaskInfo.DONT_CACHE);
+      super(false, false, NodeTaskInfo.DONT_CACHE);
     }
 
     @Override
@@ -332,7 +383,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     XSFTPolicy() {
-      super(true, false);
+      super(true, false, 0);
     }
 
     @Override
@@ -342,7 +393,7 @@ public abstract class NCPolicy implements Serializable {
 
     @Override
     <T> DelayedProxyNode<T> createProxy(
-        BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> found) {
+        NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
       if (OGTrace.observer.collectsAccurateCacheStats())
         return new PDelayedXSFTProxyNode<>(cache, key, found);
       else return new DelayedXSFTProxyNode<>(cache, key, found);
@@ -355,7 +406,7 @@ public abstract class NCPolicy implements Serializable {
     }
 
     @Override
-    public <T> NCPolicy switchPolicy(PropertyNode<T> key) {
+    public NCPolicy switchPolicy(PropertyNode<?> key) {
       return key.scenarioStack().isTrackingIndividualTweakUsage() ? NCPolicy.Basic : this;
     }
 
@@ -365,7 +416,7 @@ public abstract class NCPolicy implements Serializable {
     */
     @Override
     <T> LookupResult<T> alternativeLookup(
-        BaseUNodeCache cache, PropertyNode<T> key, EvaluationQueue eq) {
+        NodeCacheBase cache, PropertyNode<T> key, EvaluationQueue eq) {
       ScenarioStack ss = key.scenarioStack();
       TPDMask dependsOnTweakMask = key.propertyInfo().dependsOnTweakMask();
       // [SEE_XSFT_SPECULATIVE_PROXY]
@@ -398,14 +449,14 @@ public abstract class NCPolicy implements Serializable {
   private static class XSFTInnerPolicy extends XSFTPolicy {
     @Override
     <T> LookupResult<T> alternativeLookup(
-        BaseUNodeCache cache, PropertyNode<T> key, EvaluationQueue eq) {
+        NodeCacheBase cache, PropertyNode<T> key, EvaluationQueue eq) {
       //noinspection unchecked
       return (LookupResult<T>) LookupResult.empty;
     }
 
     @Override
     <T> DelayedProxyNode<T> createProxy(
-        BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> found) {
+        NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
       if (OGTrace.observer.collectsAccurateCacheStats())
         return new PDelayedXSFTProxyNode<>(cache, key, null);
       else return new DelayedXSFTProxyNode<>(cache, key, null);
@@ -437,7 +488,7 @@ public abstract class NCPolicy implements Serializable {
 
     @Override
     <T> DelayedProxyNode<T> createProxy(
-        BaseUNodeCache cache, PropertyNode<T> key, PropertyNode<T> found) {
+        NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
       return new DelayedXSProxyNode<>(cache, key);
     }
 
@@ -454,7 +505,7 @@ public abstract class NCPolicy implements Serializable {
     // if we are ready to insert XSOwner we definitively already tried a match with a different
     // CancellationScope
     XSOwnerPolicy() {
-      super(false, true);
+      super(false, true, 0);
     }
 
     @Override
@@ -465,7 +516,7 @@ public abstract class NCPolicy implements Serializable {
 
     @Override
     <T> DelayedProxyNode<T> createProxy(
-        BaseUNodeCache cache, PropertyNode<T> nkey, PropertyNode<T> found) {
+        NodeCacheBase cache, PropertyNode<T> key, PropertyNode<T> found) {
       throw new GraphInInvalidState();
     }
 
@@ -475,13 +526,15 @@ public abstract class NCPolicy implements Serializable {
         ScenarioStack k_ss = key.scenarioStack();
         ScenarioStack v_ss = cValue.scenarioStack();
         if (cValue.isDone()) {
-          return isDirectlyReusableWRTCancelScope(key, cValue)
-              && matchXscenario(cValue, k_ss, v_ss);
-        } else if (Settings.delayResolveXSCache && !k_ss.noWaitForXSNode()) {
-          // [XS_NO_WAIT] Check to avoid waiting on incomplete XS node that could cause circular
-          // reference
+          return isDirectlyReusableWRTCancelScope(key, cValue) && matchXscenario(key, k_ss, v_ss);
+        } else if (Settings.delayResolveXSCache) {
           // Quick check of current recorded tweakables to see if this node is not a match
-          return NCSupport.partialMatchXS(cValue, k_ss, v_ss);
+          var partialMatch = NCSupport.partialMatchXS(cValue, k_ss, v_ss);
+          // Do not match on anything that has a tweakable listener in our own tweakable
+          // listener parent chain otherwise we would have a cycle.
+          // Note the order of testing could make a perf difference. Needs more testing/research
+          return partialMatch
+              && !TweakableListener$.MODULE$.intersectsAndRecordParent(k_ss, v_ss, key);
         }
       }
       return false;

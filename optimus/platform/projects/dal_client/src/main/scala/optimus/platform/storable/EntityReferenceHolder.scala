@@ -102,9 +102,14 @@ object EntityReferenceHolder {
     new EntityReferenceHolder[T](EntityReference(bytes), tc, None).withTypeInfo(clazz, false)
   }
 
-  def withoutStorageInfo[T <: Entity](t: T): EntityReferenceHolder[T] = {
+  def fromEntity[T <: Entity](t: T): EntityReferenceHolder[T] = {
     require(!t.dal$isTemporary, s"Cannot create a EntityReferenceHolder for heap entity: $t")
-    val efh = new EntityReferenceHolder[T](t.dal$entityRef, t.dal$temporalContext, None)
+    // to work around mockito SmartNullPointer problem
+    val txTimeOpt = t.dal$storageInfo match {
+      case d: DSIStorageInfo => Option(d.txTime)
+      case _                 => None
+    }
+    val efh = new EntityReferenceHolder[T](t.dal$entityRef, t.dal$temporalContext, txTimeOpt)
     efh.setCache(t)
     efh
   }
@@ -140,8 +145,9 @@ object EntityReferenceHolder {
       t: T,
       permRef: EntityReference,
       tc: TemporalContext,
+      storageTxTime: Instant,
       versionedRef: VersionedReference): EntityReferenceHolder[T] = {
-    new EntityReferenceHolder[T](permRef, tc)
+    new EntityReferenceHolder[T](permRef, tc, Option(storageTxTime))
       .withTypeInfo(t.getClass(), true)
       .withVersionedReference(versionedRef)
   }

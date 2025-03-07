@@ -11,8 +11,6 @@
  */
 package optimus.platform
 
-import optimus.platform.annotations.closuresEnterGraph
-
 trait Apars {
 
   @node def apar[T1, T2](x1: => T1, x2: => T2): (T1, T2) =

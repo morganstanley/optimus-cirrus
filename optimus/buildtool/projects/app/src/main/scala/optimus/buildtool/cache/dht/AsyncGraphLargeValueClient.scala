@@ -20,10 +20,8 @@ import optimus.dht.client.api.kv.KVLargeValue
 import optimus.dht.client.api.servers.ServerConnectionState
 import optimus.dht.client.api.transport.OperationDetails
 import optimus.dht.common.api.Keyspace
-import optimus.graph.Node
 import optimus.graph.NodePromise
 import optimus.platform._
-import optimus.platform.annotations.nodeSync
 import optimus.platform.util.Log
 
 import java.lang
@@ -142,17 +140,16 @@ class AsyncGraphLargeValueClient(kvClient: KVClient[KVKey]) extends Log {
     val promises = keys.map(k => k -> NodePromise[Option[lang.Boolean]]()).toMap
     val completions = promises.map { case (k, p) => k -> (r => p.complete(r)) }
     this._contains(keyspace, keys, correlationName)(completions)
-    val results = promises.apar.map { case (k, p) => k -> asyncGet(p.node) }
+    val results = promises.apar.map { case (k, p) => k -> p.await }
     if (results.values.forall(_.isDefined)) Some(results.collect { case (k, r) if r.contains(true) => k }.toSet)
     else None
   }
 
-  @nodeSync
-  private def impl[A](f: (Try[A] => Unit) => Unit): A = impl$queued(f).get
-  private def impl$queued[A](f: (Try[A] => Unit) => Unit): Node[A] = {
+  @async
+  private def impl[A](f: (Try[A] => Unit) => Unit): A = {
     val promise = NodePromise[A]()
     f(promise.complete)
-    promise.node
+    promise.await
   }
 
 }

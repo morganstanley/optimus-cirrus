@@ -11,40 +11,18 @@
  */
 package optimus.buildtool.builders.postbuilders.installer.component.testplans
 
-import java.nio.file.Path
-import java.nio.file.Paths
 import optimus.buildtool.config.ScopeConfigurationSource
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.runconf.RunConf
-import optimus.buildtool.utils.GitLog
 import optimus.platform._
-import org.eclipse.jgit.diff.DiffEntry.ChangeType
+
+import java.nio.file.Path
+import java.nio.file.Paths
 
 @entity object Changes {
-
   private val prefix = "[Dynamic Scoping] "
 
-  @node def apply(
-      git: Option[GitLog],
-      scopeConfigSource: ScopeConfigurationSource,
-      ignoredPaths: Seq[String]
-  ): Changes = {
-    val changes = git.map(g => changedPaths(g, ignoredPaths))
-    Changes(changes, scopeConfigSource)
-  }
-
-  @node private def changedPaths(git: GitLog, ignoredPaths: Seq[String]): Set[Path] = {
-    val ignoredPatterns = ignoredPaths.map(_.r.pattern)
-    git
-      .diff("HEAD^1", "HEAD")
-      .map { entry =>
-        Paths.get(if (entry.getChangeType == ChangeType.DELETE) entry.getOldPath else entry.getNewPath)
-      }
-      .filterNot(p => ignoredPatterns.exists(_.matcher(p.toString).matches))
-      .toSet
-  }
-
-  @node private def pathToScopes(path: Path, scopeConfigSource: ScopeConfigurationSource): Set[ScopeId] = {
+  @node def pathToScopes(path: Path, scopeConfigSource: ScopeConfigurationSource): Set[ScopeId] = {
     val partialId = maybeScopeId(path, scopeConfigSource)
 
     scopeConfigSource.tryResolveScopes(partialId).getOrElse {
@@ -54,7 +32,23 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
     }
   }
 
-  @node private def maybeScopeId(path: Path, scopeConfigSource: ScopeConfigurationSource): String = {
+  @node def changesAsScopes(
+      changes: Option[Set[Path]],
+      scopeConfigSource: ScopeConfigurationSource): Option[Set[ScopeId]] =
+    changes
+      .map {
+        // optimization for huge PRs, map to parent dir to get the # of entries lower
+        _.apar.map(path => Option(path.getParent).getOrElse(Paths.get("")))
+      }
+      .map { paths =>
+        paths.apar.flatMap { path =>
+          val scopes = Changes.pathToScopes(path, scopeConfigSource)
+          log.debug(s"${Changes.prefix}Mapped $path to $scopes")
+          scopes
+        }
+      }
+
+  @node def maybeScopeId(path: Path, scopeConfigSource: ScopeConfigurationSource): String = {
     // find a sub-scope that matches
     scopeConfigSource.compilationScopeIds
       .find { scopeId =>
@@ -70,25 +64,10 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
 
 }
 
-@entity final class Changes private (
-    private[installer] val changes: Option[Set[Path]],
-    scopeConfigSource: ScopeConfigurationSource
+@entity class Changes(
+    val changes: Option[Set[ScopeId]],
+    val scopeConfigSource: ScopeConfigurationSource,
 ) {
-  @node def changesAsScopes: Option[Set[ScopeId]] =
-    changes
-      .map {
-        // optimization for huge PRs, map to parent dir to get the # of entries lower
-        _.apar.map(path => Option(path.getParent).getOrElse(Paths.get("")))
-      }
-      .map { paths =>
-        paths.apar.flatMap { path =>
-          val scopes = Changes.pathToScopes(path, scopeConfigSource)
-          log.debug(s"${Changes.prefix}Mapped $path to $scopes")
-          scopes
-        }
-      }
-
-  changes.foreach(c => log.debug(s"Changed file paths: $c"))
 
   def isDefined: Boolean = changes.isDefined
 
@@ -106,22 +85,36 @@ import org.eclipse.jgit.diff.DiffEntry.ChangeType
     else None
   }
 
-  @node def directlyChangedScopes: Set[ScopeId] = changesAsScopes.getOrElse(Set.empty)
+  @node def directlyChangedScopes: Set[ScopeId] = changes.getOrElse(Set.empty)
 
   @node private def taskDependenciesChanged(task: TestplanTask, includedRunconfs: Set[RunConf]): Boolean = {
     val contractTestNames = Set("consumerContractTest", "providerContractTest")
     val scope = includedRunconfs
       .find(r => {
-        r.runConfId.moduleScoped == task.moduleScoped || task.testName == "pactContractTest" && contractTestNames
-          .contains(r.runConfId.name)
+        val isMatchingModule = r.runConfId.moduleScoped == task.moduleScoped
+
+        // Special handling for pact testing where the scope type is different
+        // TODO (OPTIMUS-70267):  Rework this as part of restructuring contract testing logic
+        val isMatchingPactContractModule =
+          r.runConfId.scope.fullModule == task.module && task.testName == "pactContractTest" && contractTestNames
+            .contains(r.runConfId.name)
+
+        isMatchingModule || isMatchingPactContractModule
       })
       .map(_.runConfId.scope)
-    scope.exists(scopeDependenciesChanged)
+
+    val scopeExists = scope.exists(scopeDependenciesChanged)
+
+    log.debug(
+      s"dependencies for module: ${task.module}, testName: ${task.testName}, scope: ${scope}, scopeExists: ${scopeExists}")
+
+    scopeExists
   }
 
-  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = changesAsScopes.forall { c =>
+  @node def scopeDependenciesChanged(scopeId: ScopeId): Boolean = changes.forall { c =>
     val allDeps = dependencies(scopeId)
-    allDeps.intersect(c).nonEmpty
+    val hasScope = allDeps.intersect(c).nonEmpty
+    hasScope
   }
 
   @node private def dependencies(id: ScopeId): Set[ScopeId] = {

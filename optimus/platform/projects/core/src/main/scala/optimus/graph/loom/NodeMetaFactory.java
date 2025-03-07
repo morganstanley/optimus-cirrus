@@ -18,9 +18,13 @@ import static java.lang.invoke.MethodHandles.foldArguments;
 import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.lang.invoke.MethodType.methodType;
 import static optimus.CoreUtils.stripFromLast;
-import static optimus.CoreUtils.stripSuffix;
 import static optimus.graph.DiagnosticSettings.injectNodeMethods;
+import static optimus.graph.OGTrace.CachedSuffix;
+import static optimus.graph.loom.LPropertyDescriptor.register;
 import static optimus.graph.loom.LoomConfig.*;
+import static optimus.graph.loom.NameMangler.stripImplSuffix;
+import static optimus.graph.loom.NameMangler.stripNewNodeSuffix;
+import static optimus.graph.loom.NameMangler.unmangleName;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.ConstantCallSite;
 import java.lang.invoke.MethodHandle;
@@ -78,7 +82,8 @@ public class NodeMetaFactory {
       String cmd,
       MethodType factoryType,
       MethodHandle nodeMethod,
-      int clsID,
+      String source,
+      int line,
       int nodeFlags,
       String... params)
       throws IllegalAccessException, NoSuchMethodException {
@@ -109,7 +114,10 @@ public class NodeMetaFactory {
         yield mkConstantCallSite(insertArguments(mhIncomplete, 1, propertyID), factoryType);
       }
       case CMD_NODE, CMD_ASYNC -> {
-        LPropertyDescriptor.get(clsID).methodType = info.getMethodType();
+        var methodName = unmangleName(entityCls, info.getName());
+        var clsID = register(entityCls, methodName, source, line, COLUMN_NA, -1);
+        var pd = LPropertyDescriptor.get(clsID);
+        pd.methodType = info.getMethodType();
         // Consider: Making all of the flags should come from byte code
         var customTrait = (nodeFlags & NF_EXPOSE_ARGS_TRAIT) != 0;
         var async = cmd.startsWith(CMD_ASYNC);
@@ -121,7 +129,7 @@ public class NodeMetaFactory {
         var gen = new NodeClassGenerator(propertyID, info, factoryType, flags);
         gen.argNames = params;
         gen.clsID = clsID;
-        if (propertyID < 0) assignProfileID(clsID); // For profiling of non-nodes
+        if (propertyID < 0) assignProfileID(pd); // For profiling of non-nodes
         yield mkConstantCallSite(mkCtorHandle(caller, gen), factoryType);
       }
       case CMD_GET -> {
@@ -177,22 +185,28 @@ public class NodeMetaFactory {
   @SuppressWarnings("unused") // used by entityagent
   public static CallSite handleFactory(
       MethodHandles.Lookup caller, String invokedName, MethodType localType, Object... args) {
-
     var interfaceMethodType = (MethodType) args[0];
     var implementation = (MethodHandle) args[1];
     var invokedType = (MethodType) args[2];
     var lambdaFlags = (int) args[3];
-    var clsID = (int) args[4];
+    var methodName = (String) args[4];
+    var source = (String) args[5];
+    var lineNumber = (int) args[6];
+    var columnNumber = (int) args[7];
+    var localId = (int) args[8];
 
+    var entityCls = caller.lookupClass();
     var info = caller.revealDirect(implementation);
     int flags = NF_NODE_FUNCTION;
     flags |= lambdaFlags & NF_TRIVIAL;
+
+    var clsID = register(entityCls, methodName, source, lineNumber, columnNumber, localId);
+    assignProfileID(LPropertyDescriptor.get(clsID));
+
     var gen = new NodeClassGenerator(1, info, invokedType, flags);
     gen.runMethod = invokedName;
     gen.runMethodType = interfaceMethodType;
     gen.clsID = clsID;
-
-    assignProfileID(clsID);
 
     var cls = mkClass(caller, gen);
     return new ConstantCallSite(MethodHandles.constant(Class.class, cls));
@@ -209,9 +223,8 @@ public class NodeMetaFactory {
     return new ConstantCallSite(mh.asType(invokedType));
   }
 
-  private static void assignProfileID(int clsID) {
+  private static void assignProfileID(LPropertyDescriptor pd) {
     // If debugging/tracing enabled allocate independent profile info per property
-    var pd = LPropertyDescriptor.get(clsID);
     pd.profileID = injectNodeMethods ? NodeTaskInfoRegistry.nextId() : NodeTaskInfo.Default.profile;
   }
 
@@ -220,7 +233,8 @@ public class NodeMetaFactory {
    * not be exposed!) -- see currentClass and tryModule
    */
   private static int getPropertyID(Class<?> entityCls, MethodHandleInfo info) {
-    var methodName = stripSuffix(stripSuffix(info.getName(), NEW_NODE_SUFFIX), IMPL_SUFFIX);
+    var unmangledName = unmangleName(entityCls, info.getName());
+    var methodName = stripImplSuffix(stripNewNodeSuffix(unmangledName));
     int id;
     String currentClass = entityCls.getName();
     boolean tryModule = true;
@@ -228,10 +242,10 @@ public class NodeMetaFactory {
       id = NodeTaskInfoRegistry.getId(entityCls.getName(), methodName);
       if (id > 0) return id;
 
-      if (tryModule && !currentClass.endsWith("$")) {
+      if (tryModule && !currentClass.endsWith(CachedSuffix)) {
         tryModule = false;
         try {
-          Class.forName(currentClass + "$", true, entityCls.getClassLoader());
+          Class.forName(currentClass + CachedSuffix, true, entityCls.getClassLoader());
         } catch (ClassNotFoundException ignored) {
         }
         continue;

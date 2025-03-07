@@ -17,7 +17,7 @@ import optimus.examples.platform.entities._
 
 // This example shows how the user can create their own sandboxed bit of datastore
 // this is useful when testing and experimenting.
-object UserDatabase extends AdvancedOptimusApp {
+object UserDatabase extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

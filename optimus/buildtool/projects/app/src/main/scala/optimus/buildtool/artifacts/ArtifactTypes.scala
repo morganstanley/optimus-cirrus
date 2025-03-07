@@ -456,18 +456,6 @@ object ArtifactType {
       )
     }
   }
-  case object RootLocator extends BaseArtifactType("root-locator") with CachedArtifactType {
-    type A = RootLocatorArtifact
-    override val suffix = IdzExt
-
-    override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
-    @node override def fromAsset(id: ScopeId, a: Asset): RootLocatorArtifact = {
-      val locatorFile = JsonAsset(a.path)
-      import JsonImplicits._
-      val cached = AssetUtils.readJson[RootLocatorArtifact.Cached](locatorFile)
-      RootLocatorArtifact.create(locatorFile, cached.commitHash, cached.artifactVersion)
-    }
-  }
   case object Velocity extends BaseArtifactType("velocity") with ProcessorArtifactType
   case object DeploymentScript extends BaseArtifactType("deployment-script") with ProcessorArtifactType
   case object Freemarker extends BaseArtifactType("freemarker") with ProcessorArtifactType

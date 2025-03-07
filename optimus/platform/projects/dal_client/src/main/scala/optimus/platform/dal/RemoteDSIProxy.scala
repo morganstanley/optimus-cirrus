@@ -12,14 +12,21 @@
 package optimus.platform.dal
 
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.core.CoreAPI.asyncResult
 import optimus.dsi.partitioning.Partition
 import optimus.dsi.partitioning.PartitionMap
+import optimus.dsi.session.EstablishSession
+import optimus.dsi.session.EstablishedClientSession
 import optimus.graph.DiagnosticSettings
 import optimus.platform.dal.DALPubSub.ClientStreamId
 import optimus.platform._
+import optimus.platform.dal.config.DalAppId
+import optimus.platform.dal.config.DalAsyncConfig
+import optimus.platform.dal.config.DalEnv
+import optimus.platform.dal.config.DalZoneId
 import optimus.platform.dal.pubsub.PubSubClientHandler
+import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal._
-import optimus.platform.dsi.protobufutils
 import optimus.platform.dsi.protobufutils.DALProtoClient
 import optimus.platform.dsi.protobufutils.DalBrokerClient
 import optimus.platform.dsi.protobufutils.PubSubProtoClient
@@ -28,6 +35,9 @@ import optimus.platform.runtime.BrokerProviderResolver
 import optimus.platform.runtime.Brokers
 import optimus.platform.runtime.LeaderElectorClientListener
 import optimus.platform.runtime.OptimusCompositeLeaderElectorClient
+
+import java.util.concurrent.atomic.AtomicReference
+import scala.collection.mutable.ArrayBuffer
 
 abstract class AbstractRemoteDSIProxy(ctx: ClientBrokerContext) extends DSIClient(ctx) {
   protected def createBrokerClient(): DalBrokerClient
@@ -237,6 +247,307 @@ class RandomRemoteDSIProxy(
     val readBrokers = brokers.readBrokers
     writeBroker.isDefined && connStr.isDefined &&
     writeBroker.get != connStr.get && !readBrokers.contains(connStr.get)
+  }
+
+}
+
+class MultiReadBrokersDSIProxy(
+    val baseContext: Context,
+    val brokerProviderResolver: BrokerProviderResolver,
+    val replicaBroker: String,
+    val partitionMap: PartitionMap,
+    val zone: DalZoneId,
+    val appId: DalAppId,
+    val cmdLimit: Int,
+    val asyncConfig: DalAsyncConfig,
+    val env: DalEnv,
+    val shouldLoadBalance: Boolean,
+    val secureTransport: Boolean,
+    val maxBrokersAllowedForConnectionFromURI: Int = 1)
+    extends ClientSideDSI {
+
+  private val log = getLogger(this)
+
+  lazy val brokerProvider = brokerProviderResolver.resolve(replicaBroker)
+
+  lazy val fixedReadRemoteDSIProxyList: Option[FixedReadRemoteDSIProxyList] = {
+    if (maxBrokersAllowedForConnectionFromURI > 1) {
+      Some(
+        new FixedReadRemoteDSIProxyList(
+          brokerProvider,
+          maxBrokersAllowedForConnectionFromURI,
+          ClientBrokerContext(
+            baseContext,
+            replicaBroker,
+            zone,
+            appId,
+            cmdLimit,
+            asyncConfig,
+            brokerVirtualHostname(env)),
+          partitionMap,
+          secureTransport,
+          shouldLoadBalance
+        ))
+    } else None
+  }
+
+  lazy val fixedReplica = new RandomRemoteDSIProxy(
+    ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, brokerVirtualHostname(env)),
+    brokerProviderResolver,
+    partitionMap,
+    shouldLoadBalance,
+    secureTransport
+  )
+
+  protected[optimus] def replica = {
+    if (maxBrokersAllowedForConnectionFromURI == 1) {
+      fixedReplica
+    } else {
+      fixedReadRemoteDSIProxyList.get.chosenReplica
+    }
+  }
+
+  private[optimus] def getDSIClient = {
+    replica
+  }
+
+  private[optimus] def connectionSession(): Option[EstablishedClientSession] =
+    getDSIClient.sessionCtx.connectionSession()
+
+  @async def executeReplicaReadOnlyCommands(
+      chosenReplica: DSIClient,
+      replicaCmds: Seq[ReadOnlyCommand],
+      attempts: Int): Seq[Result] = {
+    asyncResult(chosenReplica.executeReadOnlyCommands(replicaCmds)) match {
+      case NodeFailure(ex) =>
+        if (ex.isInstanceOf[DalBrokerClientInitializedException]) {
+          log.error(
+            s"Got exception with read broker - ${chosenReplica}, removing from the list of connected read brokers")
+
+          fixedReadRemoteDSIProxyList.get.removeReplicaFromAvailableConnections(chosenReplica)
+
+          if (attempts > 0 && fixedReadRemoteDSIProxyList.get.getAvailableConnections.size > 0) {
+            log.info("Choosing different read broker to serve this request")
+            executeReplicaReadOnlyCommands(replica, replicaCmds, attempts - 1)
+          } else {
+            log.error("Either max retry is exhausted or no brokers are available to serve this request")
+            throw ex
+          }
+        } else
+          throw ex
+      case NodeSuccess(results) => results
+    }
+  }
+
+  @async def executeRoundRobinReadOnlyCommands(replicaCmds: Seq[ReadOnlyCommand]): Seq[Result] = {
+    val chosenReplica = replica.asInstanceOf[FixedReadRemoteDSIProxy]
+    executeReplicaReadOnlyCommands(chosenReplica, replicaCmds, chosenReplica.maxRetryCount)
+  }
+
+  @async override def executeReadOnlyCommands(replicaCmds: Seq[ReadOnlyCommand]): Seq[Result] = {
+    if (maxBrokersAllowedForConnectionFromURI > 1) {
+      executeRoundRobinReadOnlyCommands(replicaCmds)
+    } else replica.executeReadOnlyCommands(replicaCmds)
+  }
+
+  @async override def executeLeadWriterCommands(cmds: Seq[LeadWriterCommand]): Seq[Result] = {
+    throw new UnsupportedOperationException(s"LeadWriterCommands are not supported!")
+  }
+
+  override def sessionData: optimus.platform.dal.session.ClientSessionContext.SessionData =
+    replica.sessionCtx.sessionData
+
+  override private[optimus] def bindSessionFetcher(sessionFetcher: SessionFetcher): Unit = {
+    if (fixedReadRemoteDSIProxyList.isDefined) {
+      fixedReadRemoteDSIProxyList.get.bindSessionFetcher(sessionFetcher)
+    } else { fixedReplica.bindSessionFetcher(sessionFetcher) }
+  }
+
+  override protected[optimus] def close(shutdown: Boolean): Unit = {
+    if (fixedReadRemoteDSIProxyList.isDefined) {
+      fixedReadRemoteDSIProxyList.get.getAvailableConnections.foreach(replica => replica.close(shutdown))
+    } else fixedReplica.close(shutdown)
+  }
+
+  override private[optimus] def setEstablishSession(establishSession: => EstablishSession): Unit = {
+    if (fixedReadRemoteDSIProxyList.isDefined) {
+      fixedReadRemoteDSIProxyList.get.setEstablishSession(establishSession)
+    } else { fixedReplica.setEstablishSession(establishSession) }
+  }
+
+  override protected[optimus] def serverFeatures(): SupportedFeatures = replica.serverFeatures()
+}
+
+class DalBrokerClientInitializedException(message: String, cause: Throwable, client: Option[DalBrokerClient])
+    extends DALNonRetryableActionException(message, cause, client) {
+  def this(msg: String, client: Option[DalBrokerClient]) = this(msg, null, client)
+}
+
+class FixedReadRemoteDSIProxy(
+    ctx: ClientBrokerContext,
+    brokerProvider: BrokerProvider,
+    override val partitionMap: PartitionMap,
+    val secureTransport: Boolean,
+    readBroker: Option[String],
+    shouldLB: Boolean
+) extends AbstractRemoteDSIProxyWithLeaderElector(ctx, brokerProvider) {
+  val maxRetryCount = retryAttempts
+  var initializedBefore = false
+  def this(
+      ctx: ClientBrokerContext,
+      brokerProviderResolver: BrokerProviderResolver,
+      partitionMap: PartitionMap,
+      secureTransport: Boolean,
+      readBroker: Option[String],
+      shouldLB: Boolean) =
+    this(
+      ctx,
+      if (shouldLB) brokerProviderResolver.resolveWithLoadBalance(ctx.broker)
+      else brokerProviderResolver.resolve(ctx.broker),
+      partitionMap,
+      secureTransport,
+      readBroker,
+      shouldLB
+    )
+  override protected def createBrokerClient(): DalBrokerClient = {
+    this synchronized {
+      if (initializedBefore)
+        throw new DalBrokerClientInitializedException(
+          "This Broker Client has already been initialized before, will retry with other broker client",
+          None)
+
+      initializedBefore = true
+      connStr = Some(readBroker getOrElse {
+        throw new DALRetryableActionException(s"No broker registered of type: ${ctx.broker}", None)
+      })
+
+      DALProtoClient(
+        connStr.get,
+        ctx.clientContext,
+        requestLimiter,
+        batchRetryManager,
+        Some(new DALProtoClient.Configuration(ctx.asyncConfig, batchRetryManagerOpt = batchRetryManager)),
+        None,
+        secureTransport,
+        writeRequestLimiter
+      )
+    }
+  }
+
+  override protected def shouldCloseClient(brokers: Brokers): Boolean = {
+    val writeBroker = brokers.writeBroker
+    val readBrokers = brokers.readBrokers
+    writeBroker.isDefined && connStr.isDefined &&
+    writeBroker.get != connStr.get && !readBrokers.contains(connStr.get)
+  }
+
+  def getReadBrokerConnectionString: Option[String] = readBroker
+
+}
+
+class FixedReadRemoteDSIProxyList(
+    brokerProvider: BrokerProvider,
+    maxBrokersAllowedForConnectionFromURI: Int = 1,
+    val ctx: ClientBrokerContext,
+    val partitionMap: PartitionMap,
+    secureTransport: Boolean,
+    shouldLB: Boolean) {
+
+  private val log = getLogger(this)
+
+  lazy val readRemoteDSIProxyList = {
+    brokerProvider.withMultiReadBrokers(maxBrokersAllowedForConnectionFromURI) { readBroker =>
+      {
+        new FixedReadRemoteDSIProxy(ctx, brokerProvider, partitionMap, secureTransport, readBroker, shouldLB)
+      }
+    }
+  }
+
+  private lazy val availableConnections: ArrayBuffer[DSIClient] = ArrayBuffer(readRemoteDSIProxyList: _*)
+
+  def addReplicaToAvailableConnections(replica: DSIClient): Unit = this synchronized {
+    availableConnections += replica
+  }
+
+  def removeReplicaFromAvailableConnections(replica: DSIClient): Unit = {
+    this synchronized {
+      availableConnections -= replica
+    }
+    electionClientListener.update(brokerProvider.asInstanceOf[OptimusCompositeLeaderElectorClient].getAllBrokers)
+  }
+
+  def getAvailableConnections = this synchronized {
+    availableConnections.toSeq
+  }
+
+  private var roundRobinIndex = -1
+
+  def chosenReplica = {
+    this synchronized {
+      roundRobinIndex = roundRobinIndex + 1
+      getAvailableConnections(roundRobinIndex % getAvailableConnections.size)
+    }
+  }
+
+  val establishedSession: AtomicReference[EstablishSession] = new AtomicReference[EstablishSession]()
+  val establishedSessionFetcher: AtomicReference[SessionFetcher] = new AtomicReference[SessionFetcher]()
+
+  val electionClientListener = new LeaderElectorClientListener {
+    override def update(brokers: Brokers): Unit = {
+      val listOfAllBrokers: List[String] = brokers.readBrokers ++ List(brokers.writeBroker.getOrElse(""))
+      val currentConnections = getAvailableConnections
+      if (
+        maxBrokersAllowedForConnectionFromURI > currentConnections.size && currentConnections.size < listOfAllBrokers.size
+      ) {
+        val currentConnectedBrokers = currentConnections.map(conn =>
+          conn
+            .asInstanceOf[FixedReadRemoteDSIProxy]
+            .getReadBrokerConnectionString
+            .getOrElse({
+              log.error(
+                s"No broker registered for ${conn} connection, removing from the current connected brokers list")
+              removeReplicaFromAvailableConnections(conn)
+            }))
+
+        val availableBrokersToConnect = listOfAllBrokers.filter(currentBroker => {
+          !currentConnectedBrokers.contains(currentBroker)
+        })
+
+        val numBrokersDeficit = maxBrokersAllowedForConnectionFromURI - currentConnectedBrokers.size
+        val numBrokersToConnect =
+          if (availableBrokersToConnect.size < numBrokersDeficit) availableBrokersToConnect.size
+          else numBrokersDeficit
+
+        if (numBrokersToConnect == 0)
+          log.info(
+            s"No more brokers to connect or ${maxBrokersAllowedForConnectionFromURI} number of brokers are already connected as required")
+        else {
+          val brokersListToConnect = availableBrokersToConnect.take(numBrokersToConnect)
+          log.info(
+            s"Creating ${numBrokersToConnect} more read broker connection(s) as maxBrokersAllowedForConnectionFromURI value is greater than the current connections and read brokers are available")
+          val newConnections = brokersListToConnect.map(broker => {
+            new FixedReadRemoteDSIProxy(ctx, brokerProvider, partitionMap, secureTransport, Some(broker), shouldLB)
+          })
+          newConnections.foreach(conn => {
+            conn.setEstablishSession(establishedSession.get())
+            conn.bindSessionFetcher(establishedSessionFetcher.get())
+            addReplicaToAvailableConnections(conn)
+          })
+        }
+      }
+    }
+  }
+
+  brokerProvider.addListener(electionClientListener, immediateSynchronization = true)
+
+  private[optimus] def setEstablishSession(command: EstablishSession): Unit = {
+    establishedSession.set(command)
+    readRemoteDSIProxyList.foreach(_.setEstablishSession(command))
+  }
+
+  private[optimus] def bindSessionFetcher(sessionFetcher: SessionFetcher): Unit = {
+    establishedSessionFetcher.set(sessionFetcher)
+    readRemoteDSIProxyList.foreach(_.bindSessionFetcher(sessionFetcher))
   }
 }
 

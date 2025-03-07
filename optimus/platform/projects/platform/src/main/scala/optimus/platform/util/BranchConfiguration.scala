@@ -11,33 +11,14 @@
  */
 package optimus.platform.util
 
-import optimus.platform.platform.config.StaticConfig
-import java.io.FileInputStream
-import java.util.Properties
 import org.apache.commons.text.CaseUtils
 
-import scala.jdk.CollectionConverters._
-import optimus.scalacompat.collection._
-
 object BranchConfiguration {
-  private lazy val branchConfig: Map[String, String] = {
-    val environmentPath = System.getenv().getOrDefault("ENVIRONMENT_PATH", StaticConfig.string("environmentPath"))
-    val fis = new FileInputStream(environmentPath + "/BranchConfig.py")
-
-    try {
-      val prop = new Properties
-      prop.load(fis)
-      prop.asScala.toMap.mapValuesNow(_.stripPrefix("\"").stripSuffix("\""))
-    } finally {
-      fis.close()
-    }
-  }
-
-  lazy val Main: String = branchConfig("MAIN_BRANCH")
-  lazy val Staging: String = branchConfig("STAGING_BRANCH")
-  lazy val StagingArtifactNamingSuffix: String = branchConfig("STAGING_ARTIFACT_NAMING_SUFFIX")
-  lazy val StagingArtifactLatestSymlink: String = branchConfig("STAGING_ARTIFACT_LATEST_SYMLINK")
-  lazy val StagingJenkinsJobNamePart: String = branchConfig("STAGING_JENKINS_JOB_NAME_PART")
+  lazy val Main: String = "main"
+  lazy val Staging: String = "staging"
+  lazy val StagingArtifactNamingSuffix: String = "-codetree-staging"
+  lazy val StagingArtifactLatestSymlink: String = "staging-latest"
+  lazy val StagingJenkinsJobNamePart: String = "staging"
 
   lazy val StagingCamelCase: String = CaseUtils.toCamelCase(Staging, true, '-', '_')
 }

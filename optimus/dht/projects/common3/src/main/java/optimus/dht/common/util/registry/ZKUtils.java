@@ -12,8 +12,8 @@
 package optimus.dht.common.util.registry;
 
 import com.ms.infra.zookeeper.utils.ConnectionInfo;
+import com.ms.infra.zookeeper.utils.curator.ExponentialBackoffRetryForever;
 import com.ms.infra.zookeeper.utils.hosted.ZkConnectionResolver;
-import msjava.zkapi.internal.ZkaResourceContext;
 import org.apache.curator.ensemble.fixed.FixedEnsembleProvider;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.yaml.snakeyaml.error.YAMLException;
@@ -39,7 +39,7 @@ public class ZKUtils {
     return CuratorFrameworkFactory.builder()
         .dontUseContainerParents()
         .ensembleProvider(new FixedEnsembleProvider(config.getRootNode()))
-        .retryPolicy(ZkaResourceContext.RETRY_POLICY)
+        .retryPolicy(ExponentialBackoffRetryForever.builder().build())
         .zookeeperFactory(
             new ZkClientUtilsZookeeperFactory(
                 config, connectionInfo.connectString(), connectionInfo.proid()));

@@ -13,7 +13,7 @@ package optimus.platform.pickling
 
 import msjava.base.util.uuid.MSUuid
 import optimus.breadcrumbs.ChainedID
-import optimus.datatype.FullName
+import optimus.datatype._
 import optimus.platform.BusinessEvent
 import optimus.platform.Compressed
 import optimus.platform.CovariantSet
@@ -68,7 +68,6 @@ class DefaultUnpicklerFactory extends UnpicklerFactory with DefaultFactory[Unpic
     classKeyOf[YearMonth] -> typeParams0(yearMonthUnpickler),
     classKeyOf[Year] -> typeParams0(yearUnpickler),
     classKeyOf[MSUuid] -> typeParams0(msuuidUnpickler),
-    classKeyOf[FullName[_]] -> typeParams1(t => fullNameUnpickler),
 
     /* one type argument*/
     classKeyOf[Compressed[_]] -> {
@@ -202,6 +201,7 @@ class DefaultUnpicklerFactory extends UnpicklerFactory with DefaultFactory[Unpic
     classKeyOf[Enum[_]] -> (tpe => Some(javaEnumUnpickler(manifestOf(tpe)))),
     classKeyOf[BusinessEvent] -> (_ => Some(BusinessEvent.eventunpickler)),
     classKeyOf[MSUnique] -> (_ => Some(MSUnique.MSUniqueUnpickler)),
-    classKeyOf[storable.Embeddable] -> (tpe => Some(EmbeddablePicklers.unpicklerForType(tpe)))
+    classKeyOf[storable.Embeddable] -> (tpe => Some(EmbeddablePicklers.unpicklerForType(tpe))),
+    classKeyOf[PIIElement[_]] -> (tpe => Some(PIIElementUnpickler(tpe)))
   )
 }

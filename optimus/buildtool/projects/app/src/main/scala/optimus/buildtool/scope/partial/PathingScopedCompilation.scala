@@ -27,7 +27,7 @@ import optimus.buildtool.utils.Jars
 import optimus.platform._
 
 import java.util.jar
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 // Note: PathingScopedCompilation doesn't extend PartialScopedCompilation; we don't want remote caching
 // of pathing jars (since they contain workspace-specific paths)
@@ -41,9 +41,9 @@ import scala.collection.immutable.Seq
     cppFallback: Boolean
 ) {
 
-  @node def pathing: Seq[Artifact] = PathingScopedCompilation.artifacts(generator, scope, runtimeArtifacts)
+  @node def pathing: IndexedSeq[Artifact] = PathingScopedCompilation.artifacts(generator, scope, runtimeArtifacts)
 
-  @node private def upstreamArtifacts: Seq[Artifact] = scope.upstream.artifactsForOurRuntime
+  @node private def upstreamArtifacts: IndexedSeq[Artifact] = scope.upstream.artifactsForOurRuntime
 
   @node private def runtimeArtifacts =
     scala.classes ++ java.classes ++ resources.resources ++ jmh.classes ++ upstreamArtifacts
@@ -55,8 +55,8 @@ import scala.collection.immutable.Seq
   @node def artifacts(
       generator: ManifestGenerator,
       scope: CompilationScope,
-      allRuntimeArtifacts: Seq[Artifact]
-  ): Seq[Artifact] = if (ScopedCompilation.generate(AT.Pathing)) {
+      allRuntimeArtifacts: IndexedSeq[Artifact]
+  ): IndexedSeq[Artifact] = if (ScopedCompilation.generate(AT.Pathing)) {
     val manifest = generator.manifest(
       scope.id,
       scope.config,
@@ -65,8 +65,8 @@ import scala.collection.immutable.Seq
       scope.upstream.agentsForOurRuntimeArtifacts)
     val f = fingerprint(manifest, scope)
     val p = pathing(manifest, f, scope)
-    Seq(f, p)
-  } else Nil
+    Vector(f, p)
+  } else Vector()
 
   @node private def fingerprint(manifest: jar.Manifest, scope: CompilationScope): FingerprintArtifact = {
     val fingerprint = Jars.fingerprint(manifest)

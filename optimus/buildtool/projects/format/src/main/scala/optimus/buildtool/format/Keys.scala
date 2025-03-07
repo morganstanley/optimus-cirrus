@@ -13,10 +13,13 @@ package optimus.buildtool.format
 
 import optimus.buildtool.config.NamingConventions.LibsKey
 import optimus.buildtool.config.NamingConventions.MavenOnlyKey
+import optimus.buildtool.config.NamingConventions.IsAgentKey
 import optimus.buildtool.dependencies.JvmDependenciesLoader._
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Extends
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Maven
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.NoAfs
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Scala
 import optimus.buildtool.format.MavenDefinition.MavenOnlyExcludeKey
 
 import scala.collection.immutable
@@ -67,11 +70,13 @@ object Keys {
       "empty",
       "installSources",
       "requiredAppScripts",
+      "installIvy",
       "bundle",
       "includeInClassBundle",
       "forbiddenDependencies",
       "allowUnorderedAndDuplicateDependencies",
       "skipDependencyMappingValidation",
+      IsAgentKey,
       Substitutions
     )
   val regexDefinition = KeySet("rules")
@@ -155,7 +160,7 @@ object Keys {
   val postInstallApp = KeySet("name", "args", "afterInstall")
 
   val codeFlaggingRule =
-    KeySet("key", "title", "file-patterns", "filter", "description", "severity-level", "patterns", "new")
+    KeySet("key", "title", "file-patterns", "filter", "description", "severity-level", "patterns", "new", "upToLine")
   val pattern = KeySet("pattern", "exclude", "message")
 
   // filters file
@@ -167,6 +172,14 @@ object Keys {
   val moduleOwnership = KeySet("owner", "group")
 
   val bundleDefinition = KeySet("modulesRoot", Names.ForbiddenDependencies)
+
+  val ModuleSets = "module-sets"
+  val moduleSetsDefinition = KeySet(ModuleSets)
+
+  val CanDependOn = "can-depend-on"
+  val Public = "public"
+  val Private = "private"
+  val moduleSetDefinition = KeySet(CanDependOn, Public, Private)
 
   // TODO (OPTIMUS-65072): Delete legacy forbidden dependency keys
   val legacyForbiddenDependencyKeys = KeySet(
@@ -204,14 +217,15 @@ object Keys {
     )
 
   val dependencyDefinition = commonDependencyDefinition ++
-    KeySet(Variants, Names.Configurations, Resolvers, Classifier)
+    KeySet(Variants, Names.Configurations, Resolvers, Classifier, Scala)
   val variantDefinition = commonDependencyDefinition ++ KeySet("reason")
 
   val nativeDependencyDefinition = KeySet("paths", "extraFiles")
-  val jvmDependencyDefinition = KeySet(Maven, Afs, NoAfs, Variants, "scala", IvyConfigurations)
+  val jvmDependencyDefinition = KeySet(Maven, Afs, NoAfs, Variants, Scala, IvyConfigurations, IsAgentKey)
   val substitutionsConfig = KeySet("fromGroup", "fromName", "fromConfig", "toGroup", "toName", "toConfig")
   val excludesConfig = KeySet(Group, Name)
   val excludesWithIvyConfig = KeySet(Group, Name, IvyConfiguration)
+  val ivyConfiguration = KeySet(Extends, Maven)
 
   // resolvers file
   val resolversFile =

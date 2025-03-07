@@ -51,6 +51,24 @@ object ConfigUtils {
         Success(conf.root().entrySet().asScala.map(e => (e.getKey, e.getValue)).to(Seq))
       }
 
+    def configEntries(origin: ObtFile, depth: Int): Result[Seq[(String, ConfigValue)]] = {
+      def join(prefix: String, key: String) = if (prefix.isEmpty) key else s"$prefix.$key"
+
+      def inner(cfg: Config, prefix: String, remaining: Int): Result[Seq[(String, ConfigValue)]] =
+        if (remaining == 1)
+          Success(cfg.root().entrySet().asScala.map(e => (join(prefix, e.getKey), e.getValue)).to(Seq))
+        else
+          ResultSeq
+            .traverse(cfg.root().entrySet().asScala.to(Seq)) { e =>
+              ResultSeq(asObject(origin)((e.getKey, e.getValue)).flatMap { case (k, v) =>
+                inner(v, join(prefix, k), remaining - 1)
+              })
+            }
+            .value
+
+      inner(conf, "", depth)
+    }
+
     def resolveWithReferences(other: Config): Config = {
       // Why are we not using resolveWith()? Because it doesn't always work with optional overrides
       // see https://github.com/lightbend/config/issues/332#issuecomment-127078621
@@ -68,6 +86,9 @@ object ConfigUtils {
 
     def nested(origin: ObtFile): Result[Seq[(String, Config)]] =
       Result.traverse(configEntries(origin))(asObject(origin))
+
+    def nested(origin: ObtFile, depth: Int): Result[Seq[(String, Config)]] =
+      Result.traverse(configEntries(origin, depth))(asObject(origin))
 
     def keys(origin: ObtFile): Result[Seq[String]] = configEntries(origin).map(_.map(_._1))
 
@@ -171,6 +192,10 @@ object ConfigUtils {
 
     def stringListOrEmpty(path: String): Seq[String] = optionalStringList(path) getOrElse Nil
 
+    def stringConfigListOrEmpty(path: String): Seq[(String, ConfigValue)] =
+      if (conf.hasPath(path)) conf.getStringList(path).asScala.to(Seq) zip conf.getList(path).asScala.to(Seq)
+      else Nil
+
     def optionalBoolean(path: String): Option[Boolean] = if (conf.hasPath(path)) Some(conf.getBoolean(path)) else None
 
     def optionalValue(path: String): Option[ConfigValue] = if (conf.hasPath(path)) Some(conf.getValue(path)) else None
@@ -179,6 +204,8 @@ object ConfigUtils {
 
     def optionalConfigList(path: String): Option[Seq[Config]] =
       if (conf.hasPath(path)) Some(conf.getConfigList(path).asScala.to(Seq)) else None
+
+    def optionalInt(path: String): Option[Int] = if (conf.hasPath(path)) Some(conf.getInt(path)) else None
 
     def intOrDefault(path: String, default: Int): Int =
       if (conf.hasPath(path)) conf.getInt(path) else default

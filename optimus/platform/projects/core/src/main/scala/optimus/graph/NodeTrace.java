@@ -134,6 +134,10 @@ public class NodeTrace {
     return sb.toString();
   }
 
+  public static String dependsOnTweakableString(NodeTaskInfo nti) {
+    return dependsOnTweakableString(nti.dependsOnTweakMask().toArray());
+  }
+
   // blakedav - this isn't reliable when id > qword*64 (it wraps around)
   public static String dependsOnTweakableString(NodeTask tsk) {
     TPDMask mask = new TPDMask();

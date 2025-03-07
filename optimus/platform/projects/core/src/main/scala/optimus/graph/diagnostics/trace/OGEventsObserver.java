@@ -15,7 +15,6 @@ import optimus.graph.NodeAwaiter;
 import optimus.graph.NodeTask;
 import optimus.graph.NodeTaskInfo;
 import optimus.graph.OGLocalTables;
-import optimus.graph.OGTrace;
 import optimus.graph.PluginType;
 import optimus.graph.PropertyNode;
 import optimus.graph.diagnostics.messages.OGEvent;

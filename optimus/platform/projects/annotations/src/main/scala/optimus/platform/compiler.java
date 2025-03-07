@@ -31,4 +31,9 @@ public @interface compiler {
   boolean assumeGlobalMutation() default false;
 
   boolean queueSizeSensitive() default false;
+
+  /**
+   * TODO (OPTIMUS-66991): a few more ideas of other options we could add: assumeNoAliasing,
+   * inlineLoops, hoistNodeCallsFromLoops, and more!
+   */
 }
