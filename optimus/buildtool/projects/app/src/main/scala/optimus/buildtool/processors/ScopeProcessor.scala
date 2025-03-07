@@ -37,7 +37,7 @@ import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity trait ScopeProcessor {
   import ScopeProcessor._
@@ -47,7 +47,7 @@ import scala.collection.immutable.Seq
 
   type Inputs <: ScopeProcessor.Inputs
 
-  @node def dependencies(scope: CompilationScope): Seq[Artifact] =
+  @node def dependencies(scope: CompilationScope): IndexedSeq[Artifact] =
     scope.upstream.allCompileDependencies.apar.flatMap(_.resolution) ++
       scope.upstream.signaturesForOurCompiler
 

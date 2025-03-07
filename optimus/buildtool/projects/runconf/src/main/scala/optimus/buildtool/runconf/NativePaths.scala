@@ -12,6 +12,7 @@
 package optimus.buildtool.runconf
 
 import java.io.File
+import scala.util.Properties
 
 final case class NativePaths(jniPath: String, preloadPath: String)
 
@@ -25,4 +26,7 @@ object NativePaths {
   def stringifyBackwardCompatible(paths: Seq[FilePath]): String = {
     "\"" + stringify(paths) + "\""
   }
+
+  def normalizeForOs(path: String): String =
+    if (Properties.isWin) path.stripPrefix("/").replace('/', '\\') else path
 }

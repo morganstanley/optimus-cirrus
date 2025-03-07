@@ -47,7 +47,7 @@ final class DependencyTrackerRoot private (
     parentScenarioStack: ScenarioStack,
     val timedScheduler: TimedScheduler,
     val appletName: String)
-    extends DependencyTracker(null, ScenarioReference.Root, parentScenarioStack)
+    extends DependencyTracker(null, ScenarioReference.Root, parentScenarioStack, appletName = appletName)
     with CallbackSupport
     with GarbageCollectionSupport
     with TraversalIdSource {
@@ -59,8 +59,8 @@ final class DependencyTrackerRoot private (
   if (appletName.nonEmpty)
     nodeInputs.addInput(AppletNameTag, appletName)
 
-  override def name =
-    if (appletName.nonEmpty) s"${ScenarioReference.Root.name}-${appletName}" else ScenarioReference.Root.name
+  override def name: String =
+    if (appletName.nonEmpty) s"${ScenarioReference.Root.name}-$appletName" else ScenarioReference.Root.name
 
   /**
    * Internal method to register a shutdown hook on the containing environment. We use a WeakReference because roots may
@@ -170,7 +170,7 @@ final class DependencyTrackerRoot private (
     if (namedStructureDependency == null) {
       namedStructureDependency = new TTrack(null)
     }
-    EvaluationContext.currentNode.partialCombineInfo(namedStructureDependency)
+    EvaluationContext.currentNode.combineXinfo(namedStructureDependency)
   }
   private def fireNamedStructureDependency(): Unit = {
     if (namedStructureDependency != null) {
@@ -210,10 +210,12 @@ final class DependencyTrackerRoot private (
       if (takeDependency) allNamedChildren(takeDependency).get(name) else namedStructureBuilder.get(name)
     }
 
-  private[optimus] def getOrCreateScenario(ref: ScenarioReference): DependencyTracker = getOrCreateScenario(ref, false)
-  private[optimus] def getScenarioOrThrow(ref: ScenarioReference): DependencyTracker = getOrCreateScenario(ref, true)
+  private[optimus] def getOrCreateScenario(ref: ScenarioReference): DependencyTracker =
+    getOrCreateScenario(ref, failRatherThanCreate = false)
+  private[optimus] def getScenarioOrThrow(ref: ScenarioReference): DependencyTracker =
+    getOrCreateScenario(ref, failRatherThanCreate = true)
   private[optimus] def getScenarioIfExists(ref: ScenarioReference): Option[DependencyTracker] =
-    Try(getOrCreateScenario(ref, true)).toOption
+    Try(getOrCreateScenario(ref, failRatherThanCreate = true)).toOption
 
   private[this] def getOrCreateScenario(ref: ScenarioReference, failRatherThanCreate: Boolean): DependencyTracker =
     withNameLock {
@@ -241,7 +243,7 @@ final class DependencyTrackerRoot private (
               case None =>
                 if (failRatherThanCreate) throw new GraphInInvalidState(s"Requested scenario $ref does not exist")
                 val parent = getOrCreateScenario(parentRef, failRatherThanCreate)
-                log.debug(s"Creating scenario '${name}' as child of parent '${parent.name}'")
+                log.debug(s"Creating scenario '$name' as child of parent '${parent.name}'")
                 parent.newChildScenario(ref)
             }
           case None =>
@@ -291,7 +293,7 @@ final class DependencyTrackerRoot private (
 
   DependencyTrackerRoot.recordRoot(this)
 
-  private def reevaluateTrackedNodesAsyncImpl[M](
+  private def reevaluateTrackedNodesAsyncImpl(
       cause: EventCause,
       allNodes: collection.Seq[TrackedNode[_]],
       eachCallback: Try[Unit] => Unit): Int = {
@@ -304,7 +306,7 @@ final class DependencyTrackerRoot private (
     byTracker.size
   }
 
-  def reevaluateTrackedNodesAsync[M](
+  def reevaluateTrackedNodesAsync(
       cause: EventCause,
       nodes: collection.Seq[TrackedNode[_]],
       callback: Try[Unit] => Unit = null): Unit = {
@@ -314,7 +316,8 @@ final class DependencyTrackerRoot private (
       else {
         val counter = new AtomicInteger(0)
 
-        def newCallback(ignored: Try[Unit]) = {
+        // noinspection ScalaUnusedSymbol
+        def newCallback(ignored: Try[Unit]): Unit = {
           if (counter.decrementAndGet() == 0) callback(Success(()))
         }
 
@@ -326,7 +329,7 @@ final class DependencyTrackerRoot private (
     }
   }
 
-  private[tracking] def clearAllTrackingAsync(callback: (Try[Unit]) => Unit): Unit =
+  private[tracking] def clearAllTrackingAsync(callback: Try[Unit] => Unit): Unit =
     queue.executeAsync(clearTrackingAction, callback)
 
   private[graph] def clearAllTracking(): Unit =
@@ -361,7 +364,7 @@ object DependencyTrackerRoot {
   private[tracking] val log = msjava.slf4jutils.scalalog.getLogger(getClass)
   private[this] val roots = new mutable.WeakHashMap[DependencyTrackerRoot, Unit]()
 
-  private def recordRoot(root: DependencyTrackerRoot) = roots.synchronized {
+  private def recordRoot(root: DependencyTrackerRoot): Unit = roots.synchronized {
     roots.update(root, ())
   }
   private[tracking] def removeRoot(ts: DependencyTrackerRoot): Unit = roots.synchronized {
@@ -415,9 +418,19 @@ object DependencyTrackerRoot {
       .flatMap(walkChildren(_))
       .map(_.queue)
       .distinct // multiple trackers might share a queue
-      .groupBy(queue => queue.tracker.name)
-      // we sum up the counts for all the queues with the same name
-      .map { case (k, v) => k -> v.foldLeft(QueueStats.zero)(QueueStats.accumulate) }
+      .groupBy(queue => queue.nameForAggregatedStats)
+      // we sum up the counts for all the queues originating from the same root, which is a useful but not overwhelming
+      // granularity
+      .map { case (k, v) =>
+        k -> v.foldLeft(QueueStats.zero) { case (cumul, tracker) =>
+          val snap = tracker.snap
+          QueueStats(
+            cumul.cumulAdded + snap.cumulAdded,
+            cumul.cumulRemoved + snap.cumulRemoved,
+            cumul.currentSize + snap.currentSize // we sum the size for trackers with the same name.
+          )
+        }
+      }
 
   /**
    * Grab queue state summaries for all queues. Note that this isn't atomic over multiple queues.
@@ -440,7 +453,7 @@ object DependencyTrackerRoot {
   def ttrackStatsForAllRoots(cleanup: Boolean = false): Map[DependencyTrackerRoot, TTrackStats] = {
     rootsList.map { root =>
       val promise = Promise[TTrackStats]()
-      root.getTTrackStats(cleanup, (t) => promise.complete(t))
+      root.getTTrackStats(cleanup, t => promise.complete(t))
       root -> Await.result(promise.future, 1 minute)
     }.toMap
   }
@@ -491,7 +504,7 @@ object DependencyTrackerRoot {
     val size = new AtomicLong
     private class DependencyTrackerActionStats {
       val totalDurationNs = new AtomicLong
-      override def toString: String = s"${totalDurationNs}"
+      override def toString: String = s"$totalDurationNs"
     }
     private val times = new util.EnumMap[DependencyTrackerActionProgress, DependencyTrackerActionStats](
       classOf[DependencyTrackerActionProgress])
@@ -510,7 +523,7 @@ object DependencyTrackerRoot {
         this.size.addAndGet(-size)
       }
       val sb = new StringBuilder(s"for ${actionType.getSimpleName},$count,$size")
-      for ((k, v) <- times.asScala) {
+      for ((_, v) <- times.asScala) {
         val ns = v.totalDurationNs.get()
         if (reset) v.totalDurationNs.addAndGet(-ns)
         sb.append(s",${ns / 1000 / 1000.0},${if (count == 0) "" else ns / 1000 / 1000.0 / count}")
@@ -522,7 +535,7 @@ object DependencyTrackerRoot {
     def statsHeading: String = {
       val sb = new StringBuilder(s"Name, count, size")
       for (name <- DependencyTrackerActionProgress.values) {
-        sb.append(s",${name} total ms, ${name} ave ms")
+        sb.append(s",$name total ms, $name ave ms")
       }
       sb.toString
     }
@@ -601,7 +614,7 @@ private[optimus] final class DependencyTrackerRootWeakReference(
 
 import optimus.graph.tracking.DependencyTrackerRootWeakReferenceHelper.currentProperty
 private[tracking] object DependencyTrackerRootWeakReference extends FakeModuleEntity(currentProperty :: Nil) {
-  val Empty: DependencyTrackerRootWeakReference = new DependencyTrackerRootWeakReference(null)
+  private val Empty: DependencyTrackerRootWeakReference = new DependencyTrackerRootWeakReference(null)
 
   def create(root: DependencyTrackerRoot): DependencyTrackerRootWeakReference = {
     require(root ne null)

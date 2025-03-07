@@ -10,15 +10,13 @@
  * limitations under the License.
  */
 package optimus.graph.diagnostics
+
 import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
+import optimus.platform.util.json
 
 private[graph] object JsonMapper {
   lazy val mapper = {
-    val m = new ObjectMapper() with ScalaObjectMapper
-    m.registerModule(DefaultScalaModule)
+    val m = json.DefaultJsonMapper.legacy
     m.setConfig(m.getDeserializationConfig.without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES))
     m
   }

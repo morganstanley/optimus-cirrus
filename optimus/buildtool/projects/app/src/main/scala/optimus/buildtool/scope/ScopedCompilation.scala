@@ -38,7 +38,6 @@ import optimus.buildtool.compilers.AsyncWebCompiler
 import optimus.buildtool.compilers.GenericFilesPackager
 import optimus.buildtool.compilers.JarPackager
 import optimus.buildtool.compilers.ManifestGenerator
-import optimus.buildtool.compilers.RegexScanner
 import optimus.buildtool.compilers.zinc.AnalysisLocator
 import optimus.buildtool.config._
 import optimus.buildtool.generators.GeneratorType
@@ -82,7 +81,7 @@ import optimus.core.needsPlugin
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.compat._
 
 object ScopedCompilation {
@@ -117,7 +116,6 @@ trait ScopedCompilation {
 
   @node def runConfigurations: Seq[RunConf]
   @node def runconfArtifacts: Seq[Artifact]
-  @node def regexMessageArtifacts: Seq[Artifact]
   @node def runtimeArtifacts: Artifacts
   @node def allArtifacts: Artifacts
   @node def bundlePathingArtifacts(compiledArtifacts: Seq[Artifact]): Seq[Artifact]
@@ -135,12 +133,12 @@ trait CompilationNode extends ScopedCompilation {
   // Ideally we would mark the other methods on ScopedCompilationImpl as private[this] but you can't do that with
   // @nodes.
   private[scope] def upstream: UpstreamArtifacts
-  @node private[buildtool] def signaturesForDownstreamCompilers: Seq[Artifact]
-  @node private[buildtool] def classesForDownstreamCompilers: Seq[Artifact]
-  @node private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact]
-  @node private[buildtool] def agentsForDownstreamRuntimes: Seq[Artifact]
-  @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact]
-  @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact]
+  @node private[buildtool] def signaturesForDownstreamCompilers: IndexedSeq[Artifact]
+  @node private[buildtool] def classesForDownstreamCompilers: IndexedSeq[Artifact]
+  @node private[buildtool] def pluginsForDownstreamCompilers: IndexedSeq[Artifact]
+  @node private[buildtool] def agentsForDownstreamRuntimes: IndexedSeq[Artifact]
+  @node private[buildtool] def cppForDownstreamCompilers: IndexedSeq[Artifact]
+  @node private[buildtool] def artifactsForDownstreamRuntimes: IndexedSeq[Artifact]
   @node private[buildtool] def scopeMessages: MessagesArtifact
 }
 
@@ -178,7 +176,7 @@ trait CompilationNode extends ScopedCompilation {
   private def allDependencies = allCompileDependencies :+ runtimeDependencies
   override def toString: String = s"ScopedCompilation($id)"
 
-  @node private[buildtool] def signaturesForDownstreamCompilers: Seq[Artifact] =
+  @node private[buildtool] def signaturesForDownstreamCompilers: IndexedSeq[Artifact] =
     // if we have macros (or we've disabled pipelining), any downstream compilers need our jars
     // and analysis
     if (config.containsMacros || !config.usePipelining) {
@@ -188,13 +186,13 @@ trait CompilationNode extends ScopedCompilation {
     else {
       distinctArtifacts("signature artifacts for downstreams") {
         apar(
-          signatureErrorsOr(signatures.javaAndScalaSignatures ++ signatures.messages ++ signatures.analysis),
+          signatureErrorsOr(signatures.javaAndScalaSignatures.toVector ++ signatures.messages ++ signatures.analysis),
           upstream.signaturesForDownstreamCompilers
         )
       }
     }
 
-  @node private[buildtool] def classesForDownstreamCompilers: Seq[Artifact] =
+  @node private[buildtool] def classesForDownstreamCompilers: IndexedSeq[Artifact] =
     distinctArtifacts("class artifacts for downstreams") {
       val (ourArtifacts, theirArtifacts, relevantResources) = apar(
         if (config.usePipelining) signatureErrorsOr(signatures.analysis ++ ourClasses)
@@ -215,15 +213,15 @@ trait CompilationNode extends ScopedCompilation {
       (ourArtifacts ++ relevantResources, upstreamArtifacts)
     }
 
-  @node override private[buildtool] def agentsForDownstreamRuntimes: Seq[Artifact] =
+  @node override private[buildtool] def agentsForDownstreamRuntimes: IndexedSeq[Artifact] =
     distinctArtifacts("agents artifacts for downstreams") {
       apar(
         if (config.containsAgent) scala.classes ++ java.classes else Nil,
-        upstream.agentsForOurRuntime
+        upstream.internalAgentsForOurRuntime
       )
     }
 
-  @node override private[buildtool] def pluginsForDownstreamCompilers: Seq[Artifact] =
+  @node override private[buildtool] def pluginsForDownstreamCompilers: IndexedSeq[Artifact] =
     distinctArtifacts("plugin artifacts for downstreams") {
       apar(
         if (config.containsPlugin) ourClasses ++ resources.resources else Nil,
@@ -231,15 +229,13 @@ trait CompilationNode extends ScopedCompilation {
       )
     }
 
-  @node private def ourClasses: Seq[Artifact] = scala.classes ++ scala.messages ++ java.classes ++ java.messages
+  @node private def ourClasses: IndexedSeq[Artifact] = scala.classes ++ scala.messages ++ java.classes ++ java.messages
 
-  @node def runconfArtifacts: Seq[Artifact] = distinctArtifacts("runconf artifacts") {
+  @node def runconfArtifacts: IndexedSeq[Artifact] = distinctArtifacts("runconf artifacts") {
     (runconf.runConfArtifacts, Nil)
   }
 
-  @node def regexMessageArtifacts: Seq[Artifact] = regexMessages.messages
-
-  @node private[buildtool] def cppForDownstreamCompilers: Seq[Artifact] =
+  @node private[buildtool] def cppForDownstreamCompilers: IndexedSeq[Artifact] =
     distinctArtifacts("cpp artifacts for downstreams") {
       apar(
         cpp.artifacts,
@@ -247,7 +243,7 @@ trait CompilationNode extends ScopedCompilation {
       )
     }
 
-  @node private[buildtool] def artifactsForDownstreamRuntimes: Seq[Artifact] =
+  @node private[buildtool] def artifactsForDownstreamRuntimes: IndexedSeq[Artifact] =
     distinctArtifacts("runtime artifacts for downstreams", track = true) {
       apar(
         signatureErrorsOr(ourJvmRuntimeArtifacts) ++ ourOtherRuntimeArtifacts,
@@ -294,7 +290,7 @@ trait CompilationNode extends ScopedCompilation {
     val scopesForBundle = upstream.runtimeDependencies.transitiveScopeDependencies.map(_.id).toSet + scope.id
     val artifactsForBundle = compiledArtifacts.collect {
       case a @ InternalClassFileArtifact(id, _) if scopesForBundle.contains(id.scopeId) => a
-    }
+    }.toVector
     PathingScopedCompilation.artifacts(manifestGenerator, scope, artifactsForBundle)
   } else Nil
 
@@ -302,7 +298,7 @@ trait CompilationNode extends ScopedCompilation {
   @alwaysAutoAsyncArgs
   private def distinctArtifacts(artifactType: String, track: Boolean = false, includeFingerprints: Boolean = false)(
       f: => (Seq[Artifact], Seq[Artifact])
-  ): Seq[Artifact] = needsPlugin
+  ): IndexedSeq[Artifact] = needsPlugin
   // noinspection ScalaUnusedSymbol
   @node private def distinctArtifacts$NF(
       artifactType: String,
@@ -310,14 +306,14 @@ trait CompilationNode extends ScopedCompilation {
       includeFingerprints: Boolean = false
   )(
       f: NodeFunction0[(Seq[Artifact], Seq[Artifact])]
-  ): Seq[Artifact] = {
+  ): IndexedSeq[Artifact] = {
     def fingerprintFilter(as: Seq[Artifact]) =
       if (includeFingerprints) as else as.filter(!_.isInstanceOf[FingerprintArtifact])
     import optimus.platform.{track => doTrack}
     val (scope, upstream) = distinctLast(if (track) doTrack(f()) else f())
     val filteredScope = fingerprintFilter(scope)
     log.debug(s"[$id] Returning ${filteredScope.size} $artifactType: $filteredScope")
-    filteredScope ++ upstream
+    Vector(filteredScope, upstream).flatten
   }
 
   // noinspection ScalaUnusedSymbol
@@ -342,25 +338,35 @@ trait CompilationNode extends ScopedCompilation {
   // All artifact methods (directly or otherwise) depends on successful signatures, so short-circuit if we have
   // signature errors (which also includes errors from signature upstreams).
   @alwaysAutoAsyncArgs
-  private def signatureErrorsOr(res: => Seq[Artifact]): Seq[Artifact] = needsPlugin
+  private def signatureErrorsOr(res: => IndexedSeq[Artifact]): IndexedSeq[Artifact] = needsPlugin
   // noinspection ScalaUnusedSymbol
-  @node private def signatureErrorsOr$NF(res: NodeFunction0[Seq[Artifact]]): Seq[Artifact] =
+  @node private def signatureErrorsOr$NF(res: NodeFunction0[IndexedSeq[Artifact]]): IndexedSeq[Artifact] =
     if (config.usePipelining) Artifact.onlyErrors(signatures.messages) getOrElse res()
     else
       res()
 
-  @node private def ourJvmRuntimeArtifacts: Seq[Artifact] =
-    scala.classes ++ scala.messages ++
-      java.classes ++ java.messages ++
-      resources.resources ++ packaging.archiveContents ++
-      jmh.classes ++ jmh.messages
+  @node private def ourJvmRuntimeArtifacts: IndexedSeq[Artifact] =
+    Vector(
+      scala.classes,
+      scala.messages,
+      java.classes,
+      java.messages,
+      resources.resources,
+      packaging.archiveContents,
+      jmh.classes,
+      jmh.messages).flatten
 
-  @node private def ourOtherRuntimeArtifacts: Seq[Artifact] =
-    cpp.artifacts ++ web.artifacts ++ electron.artifacts ++ python.artifacts ++
-      runconf.runConfArtifacts ++ runconf.messages ++
-      genericFiles.files
+  @node private def ourOtherRuntimeArtifacts: IndexedSeq[Artifact] =
+    Vector(
+      cpp.artifacts,
+      web.artifacts,
+      electron.artifacts,
+      python.artifacts,
+      runconf.runConfArtifacts,
+      runconf.messages,
+      genericFiles.files).flatten
 
-  @node def runConfigurations: Seq[RunConf] = runconf.runConfigurations
+  @node def runConfigurations: IndexedSeq[RunConf] = runconf.runConfigurations
 
   @node private def sourcesAreEmpty: Boolean = {
     val searchFolders =
@@ -405,7 +411,6 @@ private[buildtool] object ScopedCompilationImpl {
       manifestGenerator: ManifestGenerator,
       runconfc: AsyncRunConfCompiler,
       jarPackager: JarPackager,
-      regexScanner: RegexScanner,
       genericFilesPackager: GenericFilesPackager,
       analysisLocator: Option[AnalysisLocator],
       incrementalMode: IncrementalMode,
@@ -447,7 +452,7 @@ private[buildtool] object ScopedCompilationImpl {
 
     val globalRules = scopeConfigSource.globalRules
     val regexSources = RegexMessagesCompilationSources(scope, sources, resourceSources, globalRules)
-    val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, regexScanner, globalRules)
+    val regexMessages = RegexMessagesScopedCompilation(scope, regexSources, globalRules)
 
     val forbiddenDependencies = scope.config.dependencies.forbiddenDependencies
     val allDependencies = scope.upstream.allCompileDependencies :+ scope.upstream.runtimeDependencies

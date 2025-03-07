@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import it.unimi.dsi.fastutil.ints.IntIntImmutablePair;
 import optimus.core.MonitoringBreadcrumbs;
 import optimus.graph.diagnostics.NodeName;
 import optimus.graph.diagnostics.OGSchedulerNonConcurrentLoopKey;
@@ -45,7 +46,7 @@ public class OGSchedulerLostConcurrency {
 
   public abstract static class UniqueCounts extends AtomicInteger implements Serializable {
     public static final int SYNC_STACK_CRUMB_THRESHOLD = 1000;
-    public int threshold = 1; // To support multiple warning with back-off logic
+    private volatile int threshold = 1; // To support multiple warning with back-off logic
     public PluginType pluginType = uniqueCountPluginType;
     public String aggregationKey;
     public final String tpe;
@@ -58,6 +59,25 @@ public class OGSchedulerLostConcurrency {
       super(count);
       this.tpe = tpe;
       this.pluginType = pluginType;
+    }
+
+    /**
+     * increments counter and returns a pair of the new count and the threshold that was breached
+     * (or -1 if no threshold was breached)
+     */
+    public IntIntImmutablePair incrementAndGetCountAndBreachedThreshold() {
+      int c = incrementAndGet();
+      int breached = -1;
+      if (c >= threshold) {
+        // recheck under lock - another thread might have also breached the threshold
+        synchronized (this) {
+          if (c >= threshold) {
+            breached = threshold;
+            threshold *= 10;
+          }
+        }
+      }
+      return new IntIntImmutablePair(c, breached);
     }
 
     protected abstract UniqueCounts combineSameType(UniqueCounts other);
@@ -188,9 +208,8 @@ public class OGSchedulerLostConcurrency {
                 int newCount = ncld.incrementAndGet();
                 // Consider: distinguishing by iteration (ensure different iteration)
 
-                if (newCount
-                    == 2) // don't report if only one iteration made a call to an adapted node
-                report(ntsk, pluginType, ncld.getNameAndSource(), ncld);
+                // don't report if only one iteration made a call to an adapted node
+                if (newCount == 2) report(ntsk, pluginType, ncld.getNameAndSource(), ncld);
                 return null;
               });
     }
@@ -215,7 +234,9 @@ public class OGSchedulerLostConcurrency {
     // potentially this is useful information, maybe can control this via a flag if desired
 
     UniqueCounts counts = uniqueStrings.computeIfAbsent(desc, (String) -> defaultCounts);
-    int newCount = counts.incrementAndGet();
+    var countAndBreachedThreshold = counts.incrementAndGetCountAndBreachedThreshold();
+    int newCount = countAndBreachedThreshold.firstInt();
+    int breached = countAndBreachedThreshold.secondInt();
     if (stalledOn != PluginType.None()) counts.pluginType = stalledOn;
 
     boolean isCriticalSS = counts.tpe.equals(CriticalSyncStack.tpe);
@@ -229,7 +250,7 @@ public class OGSchedulerLostConcurrency {
       OGScheduler.log.warn("Hit awfulness threshold " + newCount + " for sync stack: " + desc);
 
     /* Note: we can record based on level, but will dump into logs only if dumpCriticalSyncStacks is set */
-    if (Settings.dumpCriticalSyncStacks && isCriticalSS && newCount >= counts.threshold) {
+    if (Settings.dumpCriticalSyncStacks && isCriticalSS && breached > 0) {
       StringBuilder sb = new StringBuilder();
       NodeTask.NodeStackVisitor v =
           ntsk.waitersToNodeStack(
@@ -241,14 +262,12 @@ public class OGSchedulerLostConcurrency {
       sb.append("\npaths=").append(v.paths).append(", maxdepth=").append(v.maxDepth);
       String legacyGrepTarget = newCount == 1 ? LEGACY_SYNC_STACK_GREP_TARGET : "";
       String message =
-          "Critical >= " + counts.threshold + "\n" + legacyGrepTarget + desc + "Node Trace\n" + sb;
+          "Critical >= " + breached + "\n" + legacyGrepTarget + desc + "Node Trace\n" + sb;
       OGScheduler.log.info(message);
 
       if (newCount >= UniqueCounts.SYNC_STACK_CRUMB_THRESHOLD) {
         MonitoringBreadcrumbs.sendCriticalSyncStackCrumb(desc, newCount);
       }
-
-      counts.threshold *= 10;
     }
 
     // store in GridProfiler to be sent back over distribution and aggregated across engines

@@ -45,8 +45,9 @@ public class JndiDefanger implements ClassFileTransformer {
       byte[] classfileBuffer) {
 
     if (className != null && className.endsWith("/JndiLookup")) {
-      String msg = "Defanging" + className + " (" + loader + ")";
-      IllegalAccessError t = new IllegalAccessError(msg);
+      String msg =
+          "Not an error; harmless but necessary: Defanging " + className + " (" + loader + ")";
+      JndiDefangerClassLoadingPoint t = new JndiDefangerClassLoadingPoint(msg);
       t.printStackTrace(System.err);
       t.printStackTrace(System.out);
       ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);

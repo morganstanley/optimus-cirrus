@@ -39,7 +39,7 @@ class PluginData(private val global: Global) {
     private def closeClassLoader(): Unit = {
       // if the compiler's classpath caching is not enabled, manually close the classloader else it can be left open
       // which causes the file lock on the Jar to be held, preventing recompilation of the plugin
-      val noCache = global.settings.CachePolicy.None
+      val noCache = global.settings.CachePolicy.None.name
       if (
         global.settings.YcacheMacroClassLoader.value == noCache && global.settings.YcachePluginClassLoader.value == noCache
       ) {

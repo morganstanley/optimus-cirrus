@@ -12,15 +12,21 @@
 package optimus.buildtool.trace
 
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.buildtool.cache.RemoteArtifactCacheTracker
 import optimus.buildtool.compilers.zinc.CompilerThrottle
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
+import optimus.buildtool.resolvers.DependencyDownloadTracker
 import optimus.buildtool.utils.Utils
 import optimus.graph.GCMonitor
 import optimus.graph.GCMonitor.CumulativeGCStats
+import optimus.graph.cache.Caches
+import optimus.graph.diagnostics.EvictionReason
 
 import java.nio.file.Files
 import java.time.Instant
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.collection.mutable
@@ -31,6 +37,10 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
   private val log = getLogger(this)
 
   @volatile private var startTime: Instant = _
+
+  private val timer = new Timer
+  @volatile private var timerTask: Option[TimerTask] = None
+
   private val stats = new ConcurrentHashMap[ObtStat, Long]()
   private val statsSets = new ConcurrentHashMap[ObtStat, mutable.Set[Any]]()
   private val gcMonitor = GCMonitor.instance
@@ -53,6 +63,14 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
     stats.clear()
     statsSets.clear()
     gcMonitor.snapAndResetStats(GcMonitorConsumerName)
+    val task = new TimerTask() {
+      override def run(): Unit = {
+        logCacheDetails()
+        logStats(buildComplete = false)
+      }
+    }
+    timerTask = Some(task)
+    timer.scheduleAtFixedRate(task, 600000, 600000)
   }
 
   def storeStats(): Unit = {
@@ -80,9 +98,33 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
       (_, current) => if (current == null) value.to(mutable.Set).asInstanceOf[mutable.Set[Any]] else current ++= value)
 
   override def endBuild(success: Boolean): Boolean = {
-
+    timerTask.foreach(_.cancel())
     storeStats()
+    DependencyDownloadTracker.summaryThenClean(DependencyDownloadTracker.downloadedHttpFiles.nonEmpty)(s =>
+      log.debug(s))
+    RemoteArtifactCacheTracker.summaryThenClean(RemoteArtifactCacheTracker.corruptedFiles.nonEmpty)(s => log.warn(s))
+    logCacheDetails()
+    logStats(buildComplete = true)
+    true
+  }
 
+  private def logCacheDetails(): Unit = {
+    val caches = Caches.allCaches()
+    val cacheDetails = caches.map { c =>
+      val counters = c.getCountersSnapshot
+      val evictions = EvictionReason.values().map(r => r -> counters.numEvictions(r)).collect {
+        case (r, n) if n > 0 =>
+          s"$r ($n)"
+      }
+      val evictionsStr =
+        if (evictions.nonEmpty) s" [Evictions: ${evictions.mkString(", ")}]"
+        else s" [Evictions: ${counters.insertCount - counters.indicativeCacheSize}]"
+      s"${c.getName}: ${counters.indicativeCacheSize}/${c.getMaxSize}$evictionsStr"
+    }
+    log.debug(s"Cache details: ${cacheDetails.mkString("\n\t", "\n\t", "")}")
+  }
+
+  private def logStats(buildComplete: Boolean): Unit = {
     val endTime = patch.MilliInstant.now
     val durationMillis = endTime.toEpochMilli - startTime.toEpochMilli
 
@@ -196,7 +238,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
     }
 
     def jvmThrottleSummary: String = {
-      val stats = compilerThrottle.snapAndResetStats()
+      val stats = if (buildComplete) compilerThrottle.snapAndResetStats() else compilerThrottle.snapStats()
       if (stats.nonEmpty) {
         val maxWeight = stats.map(_.inflightWeight).max.toInt
         val concurrency = stats.map(_.nInFlight)
@@ -222,7 +264,9 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
     }
 
     def gcSummary: String = {
-      val gcStats = gcMonitor.snapAndResetStats(GcMonitorConsumerName)
+      val gcStats =
+        if (buildComplete) gcMonitor.snapAndResetStats(GcMonitorConsumerName)
+        else gcMonitor.snapStats(GcMonitorConsumerName)
       if (gcStats != CumulativeGCStats.empty) {
         val gcDurationMillis = gcStats.duration
         val gcPercent = gcDurationMillis * 100.0 / durationMillis
@@ -234,30 +278,31 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
       }
     }
 
-    if (success) {
-      val jvmSummary =
-        s"""\tJava/Scala:
-           |$jvmHitsSummary
-           |$jvmScopeCompilationSummary
-           |$jvmCompilationSummary""".stripMargin
+    val jvmSummary =
+      s"""\tJava/Scala:
+         |$jvmHitsSummary
+         |$jvmScopeCompilationSummary
+         |$jvmCompilationSummary""".stripMargin
 
-      val pythonSummary =
-        s"""\tPython:
-           |$pythonHitsSummary""".stripMargin
+    val pythonSummary =
+      s"""\tPython:
+         |$pythonHitsSummary""".stripMargin
 
-      val msg = Seq(
-        "Build Summary:",
-        s"$totalScopesSummary",
-        s"$workspaceChangesSummary",
-        s"$jvmSummary",
-        jvmThrottleSummary,
-        s"$pythonSummary",
-        gcSummary
-      ).filter(!_.isBlank).mkString("\n")
+    val msg = Seq(
+      "Build Summary:",
+      s"$totalScopesSummary",
+      s"$workspaceChangesSummary",
+      s"$jvmSummary",
+      jvmThrottleSummary,
+      s"$pythonSummary",
+      gcSummary
+    ).filter(!_.isBlank).mkString("\n")
+
+    if (buildComplete) {
       log.info(msg)
       ObtTrace.info(msg)
+    } else {
+      log.debug(msg)
     }
-
-    true
   }
 }

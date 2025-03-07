@@ -92,5 +92,5 @@ private[optimus] object RegisteredIndexConfig extends SimpleStateHolder(() => ne
   def BaseTypeWithIndexFieldShouldFailRegistrationPropName =
     "optimus.dal.registered.indexes.baseTypeWithIndexFieldShouldFailRegistration"
   def baseTypeWithIndexFieldShouldFailRegistration: Boolean =
-    DiagnosticSettings.getBoolProperty(BaseTypeWithIndexFieldShouldFailRegistrationPropName, true)
+    DiagnosticSettings.getBoolProperty(BaseTypeWithIndexFieldShouldFailRegistrationPropName, false)
 }

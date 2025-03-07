@@ -51,6 +51,10 @@ public class Settings {
   public static boolean throwOnDuplicateInstanceTweaks =
       getBoolProperty("optimus.compat.throwOnDuplicate", false);
 
+  public static boolean scopeXSCache = getBoolProperty("optimus.cache.scopeXS", true);
+  public static boolean scopedCachesReducesGlobalSize =
+      getBoolProperty("optimus.cache.scopedCachesReducesGlobalSize", scopeXSCache);
+
   public static final String ShowDuplicateInstanceTweakValuesProp =
       "optimus.graph.showDuplicateInstanceTweakValues";
   public static boolean showDuplicateInstanceTweakValues =
@@ -62,6 +66,8 @@ public class Settings {
 
   public static boolean throwOnInvalidSIToRuntimeEnvUsage =
       getBoolProperty("optimus.compat.throwOnInvalidSIToRuntimeEnvUsage", true);
+
+  public static boolean perAppletProfile = getBoolProperty("optimus.graph.perAppletProfile", false);
 
   public static final boolean convertByNameToByValue =
       getBoolProperty("optimus.compat.byName2byValue", true);
@@ -95,6 +101,9 @@ public class Settings {
   public static final boolean limitThreads =
       getBoolProperty("optimus.graph.limitThreads", !useVirtualThreads);
 
+  // marks tests that need a loom review -- mainly because of yet to be implemented features
+  public static final boolean loomReview = !limitThreads;
+
   public static final boolean dangerousIncludeAwaitedTaskInSchedulerString =
       getBoolProperty("optimus.graph.includeAwaitedTaskInSchedulerString", false);
 
@@ -110,6 +119,7 @@ public class Settings {
         AuditVisitor visitor = (AuditVisitor) ctor.newInstance();
         AuditTrace.register(visitor, false);
       } catch (Exception e) {
+        //noinspection CallToPrintStackTrace
         e.printStackTrace();
       }
     }
@@ -127,12 +137,6 @@ public class Settings {
 
   public static final boolean ignorePgoGraphConfig =
       getBoolProperty("optimus.config.pgo.ignore", false);
-
-  // If this property is set to true then profiler results will be returned from interop invocations
-  // if the client
-  // app has profiling enabled.
-  public static final boolean acceptInteropProfilerResults =
-      getBoolProperty("optimus.profiler.acceptInteropResults", false);
 
   // TODO (OPTIMUS-25496): set through build system
   public static final String graphConfigOutputDir = System.getProperty("optimus.config.output.dir");
@@ -267,6 +271,22 @@ public class Settings {
   public static final boolean useScopedBatcher =
       getBoolProperty("optimus.scheduler.scopedBatcher", true);
 
+  /**
+   * Maximum time that we will wait for new elements in an incomplete batch. This is a default
+   * applied to all NodeBatcherSchedulerPlugin. See
+   * optimus.graph.NodeBatcherSchedulerPluginBase#mustCallDelay() for more info.
+   */
+  public static final int defaultBatcherMustCallDelay =
+      getIntProperty("optimus.batcher.must.call.delay", -1);
+
+  /**
+   * Minimum time that we will wait for new elements in an incomplete batch. This is a default
+   * applied to all NodeBatcherSchedulerPlugin. See
+   * optimus.graph.NodeBatcherSchedulerPluginBase#mustWaitDelay() for more info.
+   */
+  public static final int defaultBatcherMustWaitDelay =
+      getIntProperty("optimus.batcher.must.wait.delay", -1);
+
   // Diagnostics helpers
   static final boolean throwOnCriticalSyncStack =
       getBoolProperty("optimus.scheduler.throwOnCriticalSyncStack", false);
@@ -329,13 +349,6 @@ public class Settings {
   static final double parDecayRate =
       1.0 / getDoubleProperty("optimus.scheduler.parDecayTime", 250.0);
 
-  public static final int logCollTimeMin = getIntProperty("optimus.collections.logCollTimeMin", 50);
-  public static final int maxCollTraces = getIntProperty("optimus.collections.maxCollTraces", 10);
-
-  public static final double logParMin = getDoubleProperty("optimus.collections.logParMin", 0.5);
-  public static final int logCollLengthMin =
-      getIntProperty("optimus.collections.logCollLengthMin", Integer.MAX_VALUE);
-
   // these can change in distribution, when processing a DistTask with trace enabled
   // set to true if you want profiler to collect temporal context data, including tweaked vt/tt,
   // vt/tt access,
@@ -379,7 +392,7 @@ public class Settings {
   public static final boolean enableTraceSurfaceDefaultValue = true;
   public static final boolean enableTraceSurface =
       getBoolProperty("optimus.temporalContext.enableTraceSurface", enableTraceSurfaceDefaultValue);
-  public static final int matchTableDeserializeCacheSize =
+  public static final int matchTableCacheSize =
       getIntProperty("optimus.temporalContext.matchTableCache", 1000);
 
   /** time and log TrackingScenario update commands */
@@ -439,16 +452,6 @@ public class Settings {
           || warnOnVtTtAccessed
           || traceFailedLegacyTurnoff
           || traceDalAccessOrTemporalSurfaceCommands;
-
-  // TODO (OPTIMUS-65703): Please delete me because it never worked.
-  /**
-   * When an entity reference query is resolved by a ticking temporal surface, we make a
-   * subscription for this eref for future changes. This will be changed to true by default when the
-   * feature is stable.
-   */
-  public static final boolean implicitlySubscribeTickingErefs =
-      getBoolProperty("optimus.temporalSurface.implicitlySubscribeErefs", true);
-
   public static final boolean syncStacksDetectionEnabled =
       allowFailOnSyncStacks || traceOnSyncStacks;
 
@@ -615,48 +618,31 @@ public class Settings {
   public static final int detectStallMaxRequests =
       getIntProperty("optimus.graph.detectStallMaxRequests", 64);
 
-  public static final int detectStallOutstandingDalRequestCrumbPublishingThreshold =
-      getIntProperty("optimus.graph.detectStallDalRequestCrumbPublishingThreshold", 8);
-
-  private static final String handlerProfilingDataPublishProp =
-      "optimus.handler.publishProfilingData";
-  public static final boolean handlerProfilingDataPublish =
-      getBoolProperty(handlerProfilingDataPublishProp, false);
-
   public static final boolean allowTestableClock = TestableClock.allowTestableClock;
 
-  private static final String publishThrottledHandlerProfilingStatsProp =
-      "optimus.handler.publishThrottledHandlerProfilingStats";
+  public static final boolean handlerProfilingDataPublish =
+      getBoolProperty("optimus.handler.publishProfilingData", false);
+
   public static final boolean publishThrottledHandlerProfilingStats =
-      getBoolProperty(publishThrottledHandlerProfilingStatsProp, false);
+      getBoolProperty("optimus.handler.publishThrottledHandlerProfilingStats", false);
 
-  private static final String publishUiWorkerStatsProp = "optimus.handler.publishUiWorkerStats";
   public static final boolean publishUiWorkerStats =
-      getBoolProperty(publishUiWorkerStatsProp, false);
+      getBoolProperty("optimus.handler.publishUiWorkerStats", false);
 
-  private static final String profilingStatsSendNonConfigEventsProp =
-      "optimus.handler.profilingStatsSendNonConfigEvents";
   public static final boolean profilingStatsSendNonConfigEvents =
-      getBoolProperty(profilingStatsSendNonConfigEventsProp, false);
+      getBoolProperty("optimus.handler.profilingStatsSendNonConfigEvents", false);
 
-  private static final String profilingStatsSendThrottledEventsProp =
-      "optimus.handler.profilingStatsSendThrottledEvents";
   public static final boolean profilingStatsSendThrottledEvents =
-      getBoolProperty(profilingStatsSendThrottledEventsProp, false);
+      getBoolProperty("optimus.handler.profilingStatsSendThrottledEvents", false);
 
-  private static final String profilingStatsDumpToFileProp =
-      "optimus.handler.profilingStatsDumpToFile";
   public static final boolean profilingStatsDumpToFile =
-      getBoolProperty(profilingStatsDumpToFileProp, false);
+      getBoolProperty("optimus.handler.profilingStatsDumpToFile", false);
 
-  private static final String throttledHandlerProfilingConfigFileProp =
-      "optimus.handler.publishProfilingDataConfigFile";
   public static final String throttledHandlerProfilingConfigFile =
-      getStringProperty(throttledHandlerProfilingConfigFileProp, "");
+      getStringProperty("optimus.handler.publishProfilingDataConfigFile", "");
 
   public static final boolean isLocationTagRT =
       getBoolProperty("optimus.graph.isLocationTagRT", true);
-
   public static final boolean interceptFiles =
       getBoolProperty("optimus.graph.fileinterceptor", false);
 

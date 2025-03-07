@@ -61,11 +61,12 @@ private[optimus] object UNodeCache {
 final class UNodeCache(
     name: String,
     maxSize: Int,
-    val requestedConcurrency: Int,
+    requestedConcurrency: Int,
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int,
-    evictOnOverflow: Boolean = true)
-    extends BaseUNodeCache(
+    evictOnOverflow: Boolean = true,
+    reduceMaxSizeByScopedCachesSize: Boolean = false)
+    extends NodeCacheWithLRU(
       name,
       maxSize,
       evictOnOverflow,
@@ -86,10 +87,13 @@ final class UNodeCache(
     )
   }
 
-  /**
-   * UNode based cache is recorded via Caches.register(this), as it is accessed via named ids, rather that usage count
-   */
-  private[optimus] def sharable: Boolean = true
+  /** Allows on the fly temporary adjustment of maxSize */
+  override protected def adjustedMaxSize(maxSize: Int): Int = {
+    if (Settings.scopedCachesReducesGlobalSize && reduceMaxSizeByScopedCachesSize) {
+      // Safety check for now, not to reduce more than 3/4 of cache size
+      Math.max(maxSize >> 2, maxSize - NodeScopedCache.getScopedCachesTotalSize)
+    } else maxSize
+  }
 }
 
 private[cache] abstract class BasePerPropertyCache(
@@ -99,7 +103,7 @@ private[cache] abstract class BasePerPropertyCache(
     requestedConcurrency: Int,
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int)
-    extends BaseUNodeCache(
+    extends NodeCacheWithLRU(
       name,
       maxSize,
       evictOnOverflow,
@@ -113,7 +117,7 @@ private[cache] abstract class BasePerPropertyCache(
   override final private[cache] def recordNotInUse(): Unit = synchronized {
     if ({ inUseCount -= 1; inUseCount } == 0) Caches.notInUse(this)
   }
-  private[optimus] final def sharable: Boolean = false
+  override private[optimus] final def sharable: Boolean = false
 }
 object PerPropertyCache {
   val defaultName = "perPropertyCache"
@@ -162,25 +166,6 @@ final class PerPropertyCache(
 }
 
 /**
- * Experimental class (do NOT use it unless you talk to graph team SMEs first)
- */
-final class PerPropertySoftCache(
-    name: String,
-    maxSize: Int,
-    requestedConcurrency: Int,
-    cacheBatchSize: Int,
-    cacheBatchSizePadding: Int)
-    extends BasePerPropertyCache(name, maxSize, true, requestedConcurrency, cacheBatchSize, cacheBatchSizePadding) {
-  @deprecated("only used by C2 edge build and should be removed", "Nov 2017")
-  def this(size: Int) = {
-    this("", size, 1, 1, 1)
-  }
-
-  override protected def newNCEntry(hash: Int, value: PropertyNode[_], next: NCEntry): NCEntry =
-    new NCSoftEntry(hash, value, next)
-}
-
-/**
  * Cache for property nodes with custom sizes
  */
 final class PerPropertySizedCache(
@@ -192,6 +177,6 @@ final class PerPropertySizedCache(
     sizeOf: NodeKey[_] => Integer)
     extends BasePerPropertyCache(name, maxSize, true, requestedConcurrency, cacheBatchSize, cacheBatchSizePadding) {
 
-  override protected def newNCEntry(hash: Int, value: PropertyNode[_], next: NCEntry): NCEntry =
+  override protected def newNCEntry(hash: Int, value: PropertyNode[_], next: NCEntry, kgp: Boolean): NCEntry =
     new NCSizedEntryV(hash, value, sizeOf(value), next)
 }

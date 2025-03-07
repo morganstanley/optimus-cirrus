@@ -15,13 +15,7 @@ import java.awt.Color
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import java.util.prefs.Preferences
-import javax.swing.event.ChangeEvent
-import javax.swing.event.ListSelectionEvent
-import javax.swing.event.TableColumnModelEvent
-import javax.swing.event.TableColumnModelListener
-import javax.swing.table
 import javax.swing.table.TableCellRenderer
-import javax.swing.table.TableColumnModel
 import optimus.EntityAgent
 import optimus.core.CoreHelpers
 import optimus.debug.InstrumentationConfig
@@ -48,10 +42,7 @@ import optimus.profiler.ui.ValueTreeTable.RowState
 import optimus.profiler.ui.common.JPopupMenu2
 
 import java.util.Objects
-import scala.annotation.tailrec
-import scala.jdk.CollectionConverters._
 import scala.collection.compat._
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{mutable => m}
 import scala.util.control.NonFatal
@@ -304,7 +295,7 @@ object ValueTreeTable {
       fields.put(RowID("tweakTemplate"), tweak.tweakTemplate)
     })
     .put[TweakNode[_]]((tn, fields) => {
-      fields.put(RowID("computeGenerator"), tn.computeGenerator)
+      fields.put(RowID("computeGenerator"), new ComputeGenViewer(tn.computeGenerator))
     })
     .put[InstancePropertyTarget[_, _]]((ipt, fields) => {
       fields.put(RowID("key"), ipt.key)
@@ -421,6 +412,11 @@ object ValueTreeTable {
   }
 
   final case class RowState(open: Boolean, hasDiffs: SelectionFlag)
+
+  final class ComputeGenViewer(computeGen: AnyRef) {
+    override def equals(other: Any): Boolean = TweakNode.areGeneratorsCompatible(computeGen, other)
+    override def hashCode: Int = computeGen.hashCode()
+  }
 }
 
 class ValueTreeTable(title: String = "value") extends NPTreeTable[ValueViewRow] {

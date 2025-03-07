@@ -13,7 +13,6 @@ package optimus.buildtool.compilers.runconfc
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-
 import optimus.buildtool.config.{NamingConventions, ScopeId}
 import optimus.buildtool.files.{FileAsset, RelativePath}
 import optimus.buildtool.runconf.{AppRunConf, RunConfType}
@@ -21,19 +20,37 @@ import optimus.buildtool.utils.ConsistentlyHashedJarOutputStream
 
 import scala.io.Source
 
-final case class RunConfInventoryEntry(scopeId: ScopeId, name: String, tpe: RunConfType) {
-  def serialized: String = s"$scopeId/$name/$tpe"
+final case class RunConfInventoryEntry(
+    scopeId: ScopeId,
+    name: String,
+    tpe: RunConfType,
+    relativeSourcePath: Option[String]) {
+  import optimus.buildtool.compilers.runconfc.RunConfInventoryEntry.sourceQualifier
+
+  // For RT-ness, we do not include the source file. The source file is only to be used for error messages.
+  def serialized: String =
+    (Seq(scopeId, name, tpe) ++ relativeSourcePath.map(path => s"$sourceQualifier$path")).mkString("/")
   override def toString: String = serialized
   def isApp: Boolean = tpe == AppRunConf
 }
 
 object RunConfInventoryEntry {
-  def parseFrom(str: String): Option[RunConfInventoryEntry] = PartialFunction.condOpt(str.split("/", 3)) {
-    case Array(scopeId, possiblyScopedName, RunConfType(tpe)) if !scopeId.startsWith("#") =>
-      // backward-compatibility for inventory files written by older OBT versions
-      val name = possiblyScopedName.split('.').last
-      RunConfInventoryEntry(ScopeId.parse(scopeId), name, tpe)
-  }
+  private val sourceQualifier = "sourceFile="
+
+  // backward-compatibility for inventory files written by older OBT versions
+  private def upgradeName(possiblyScopedName: String): String =
+    possiblyScopedName.split('.').last
+
+  def parseFrom(str: String): Option[RunConfInventoryEntry] =
+    PartialFunction.condOpt(str.split("/", 4)) {
+      case Array(scopeId, possiblyScopedName, RunConfType(tpe), relativeSourcePath) if !scopeId.startsWith("#") =>
+        val name = upgradeName(possiblyScopedName)
+        RunConfInventoryEntry(ScopeId.parse(scopeId), name, tpe, Some(relativeSourcePath.stripPrefix(sourceQualifier)))
+
+      case Array(scopeId, possiblyScopedName, RunConfType(tpe)) if !scopeId.startsWith("#") =>
+        val name = upgradeName(possiblyScopedName)
+        RunConfInventoryEntry(ScopeId.parse(scopeId), name, tpe, None)
+    }
 }
 
 object RunConfInventory {

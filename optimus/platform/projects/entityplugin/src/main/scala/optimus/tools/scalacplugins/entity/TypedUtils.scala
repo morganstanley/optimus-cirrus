@@ -36,6 +36,7 @@ trait SharedUtils extends TreeDSL { this: OptimusNames =>
   lazy val CollectionSeqClass = rootMirror.requiredClass[scala.collection.Seq[_]]
 
   lazy val EmbeddableAnnotation = rootMirror.getRequiredClass("optimus.platform.embeddable")
+  lazy val FieldMetaAnnotation = rootMirror.getRequiredClass("optimus.datatype.datacatalog.fieldMeta")
   lazy val StableAnnotation = rootMirror.getRequiredClass("optimus.platform.stable")
   lazy val NotPartOfIdentityAnnotation = rootMirror.getRequiredClass("optimus.platform.notPartOfIdentity")
 
@@ -220,7 +221,10 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
 
   lazy val KnowableClass = rootMirror.getRequiredClass("optimus.platform.cm.Knowable")
   lazy val OwnershipMetadata = rootMirror.getRequiredClass("optimus.platform.OwnershipMetadata")
+  lazy val Controls = rootMirror.getRequiredClass("optimus.platform.catalog.Controls")
+
   lazy val DalMetadata = rootMirror.getRequiredClass("optimus.platform.DalMetadata")
+  lazy val UpstreamDatasets = rootMirror.getRequiredClass("optimus.platform.catalog.UpstreamDatasets")
   lazy val OptOut = rootMirror.getRequiredClass("optimus.platform.OptOut")
   // User code annotations
   lazy val EntityAnnotation = rootMirror.getRequiredClass("optimus.platform.entity")
@@ -416,6 +420,21 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val OptAsyncClass = rootMirror.getRequiredClass("optimus.platform.OptAsync")
   lazy val AsyncLazyClass = rootMirror.getRequiredClass("optimus.platform.asyncLazyWithAnyRuntimeEnv.Lazy")
 
+  lazy val SetEmpty =
+    if (scalaVersionRange("2.13:"): @staged)
+      definitions.getMember(rootMirror.getRequiredModule("scala.collection.immutable.Set"), names.empty)
+    else
+      definitions.getMember(rootMirror.getRequiredClass("scala.collection.generic.ImmutableSetFactory"), names.empty)
+  lazy val SeqEmpty =
+    if (scalaVersionRange("2.13:"): @staged)
+      definitions.getMember(rootMirror.getRequiredModule("scala.collection.immutable.Seq"), names.empty)
+    else
+      definitions.getMember(rootMirror.getRequiredClass("scala.collection.generic.GenericCompanion"), names.empty)
+  lazy val ListEmpty =
+    definitions.getMember(rootMirror.getRequiredModule("scala.collection.immutable.List"), names.empty)
+  lazy val MapEmpty =
+    definitions.getMember(rootMirror.getRequiredModule("scala.collection.immutable.Map"), names.empty)
+
   def setOfSymbols(prefix: String, additionalSymbols: String*) = {
     val syms = HashSet.empty[Symbol]
     var i = 0
@@ -490,7 +509,8 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
 
   lazy val TweakTarget = rootMirror.getRequiredClass("optimus.graph.TweakTarget")
   lazy val TweakTargetColonEquals = definitions.getMember(TweakTarget, names.colonEquals)
-
+  lazy val ScalaCollectionPackage = rootMirror.getPackage("scala.collection")
+  lazy val ScalaCollectionPackageClass = ScalaCollectionPackage.moduleClass.asClass
   lazy val SeqOfTweaksType =
     TypeRef(NoType, rootMirror.requiredClass[collection.Seq[_]], List(TypeRef(NoType, Tweak, Nil)))
   lazy val ImmutableSetClass = rootMirror.getRequiredClass("scala.collection.immutable.Set")
@@ -523,8 +543,8 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     requiredClassForScalaVersion("scala.collection.GenTraversableOnce", "scala.collection.IterableOnce")
   lazy val HasDefaultUnpickleableClass =
     rootMirror.getRequiredClass("optimus.platform.storable.HasDefaultUnpickleableValue")
-  lazy val piiElement = rootMirror.getRequiredClass("optimus.datatype.PIIElement")
-  lazy val dataSubjectCategory = rootMirror.getModuleByName("optimus.datatype.Classification$DataSubjectCategory")
+  lazy val PiiElement = rootMirror.getRequiredClass("optimus.datatype.PIIElement")
+  lazy val DataSubjectCategory = rootMirror.getModuleByName("optimus.datatype.Classification$DataSubjectCategory")
 
   // mixed-in will be disabled for these annotations!
   private lazy val optimusGraphAnnos: Set[String] = Set(
@@ -593,11 +613,10 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     optimusGraphAnnos.contains(anno.symbol.fullNameString)
 
   def requiredClassForScalaVersion(scala212: String, scala213: String): ClassSymbol =
-    if (scalaVersionRange("2.13:"): @staged) {
+    if (scalaVersionRange("2.13:"): @staged)
       rootMirror.getRequiredClass(scala213)
-    } else {
+    else
       rootMirror.getRequiredClass(scala212)
-    }
 
   lazy val RTExceptionTraitTpe = typeOf[RTExceptionTrait]
   lazy val RTExceptionInterfaceTpe = typeOf[RTExceptionInterface]
@@ -769,7 +788,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
     // until we have some kind of tool to inspect the bytecode and figure out which library functions are
     // SI transparent (i.e. execute any function arguments internally), let's just assume that methods in the Scala
     // collections that have Function/PartialFunction params _ARE_.
-    (sym != NoSymbol && sym.owner != NoSymbol && sym.owner.fullName.startsWith("scala.collection") &&
+    (sym != NoSymbol && sym.owner != NoSymbol && sym.owner.hasTransOwner(ScalaCollectionPackageClass) &&
       mexists(sym.info.paramss)(param =>
         isFunctionOrPF(definitions.dropByName(definitions.dropRepeated(param.info)).typeSymbol)))
   }

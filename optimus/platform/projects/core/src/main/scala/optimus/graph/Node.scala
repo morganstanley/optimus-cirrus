@@ -11,26 +11,24 @@
  */
 package optimus.graph
 
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import optimus.core.CoreAPI
 import optimus.graph.tracking.ttracks.TTrack
 import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
 import optimus.platform.PluginHelpers.wrapped
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
-import optimus.platform.TweakableListener
 import optimus.platform.annotations.miscFlags
 import optimus.platform.annotations.nodeSync
 import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.util.PrettyStringBuilder
-import optimus.tools.scalacplugins.entity.MiscFlags
-import optimus.scalacompat.collection._
 import optimus.scalacompat.collection.BuildFrom
+import optimus.scalacompat.collection._
+import optimus.tools.scalacplugins.entity.MiscFlags
 
 import java.util.Objects
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import scala.concurrent.TimeoutException
 import scala.util.Failure
 import scala.util.Success
@@ -167,16 +165,16 @@ trait NodeFuture[+T] {
    * Note: it looks like get... but this will start changing
    * Why a new function? Because we will modify this without breaking the existing code!
    */
-  final def toValue$V: Unit = get$ // void
-  final def toValue$Z: Boolean = get$.asInstanceOf[Boolean]
-  final def toValue$C: Char = get$.asInstanceOf[Char]
-  final def toValue$B: Byte = get$.asInstanceOf[Byte]
-  final def toValue$S: Short = get$.asInstanceOf[Short]
-  final def toValue$I: Int = get$.asInstanceOf[Int]
-  final def toValue$F: Float = get$.asInstanceOf[Float]
-  final def toValue$J: Long = get$.asInstanceOf[Long]
-  final def toValue$D: Double = get$.asInstanceOf[Double]
-  final def toValue$ : T = get$ // object
+  def toValue$V(): Unit = get$ // void
+  def toValue$Z: Boolean = get$.asInstanceOf[Boolean]
+  def toValue$C: Char = get$.asInstanceOf[Char]
+  def toValue$B: Byte = get$.asInstanceOf[Byte]
+  def toValue$S: Short = get$.asInstanceOf[Short]
+  def toValue$I: Int = get$.asInstanceOf[Int]
+  def toValue$F: Float = get$.asInstanceOf[Float]
+  def toValue$J: Long = get$.asInstanceOf[Long]
+  def toValue$D: Double = get$.asInstanceOf[Double]
+  def toValue$ : T = get$ // object
 }
 
 /*
@@ -206,6 +204,12 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
     else throw new GraphException("Cannot request result of a node before its completion")
 
   /**
+   * If this node has failed, return it as a Node[Nothing] and throw otherwise.
+   */
+  def asFailure: Node[Nothing] = if (isDoneWithException) this.asInstanceOf[Node[Nothing]]
+  else throw new GraphException("Node was incomplete or did not complete with a failure")
+
+  /**
    * Currently there are 2 classes of everything Sync/Async (eventually this will go away) There are times where certain
    * optimizations are possible if it's known in advance what type of a Node this is This way def run can overriden and
    * customized.
@@ -222,6 +226,17 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   @miscFlags(MiscFlags.NODESYNC_ONLY)
   override def get$ : T = getInternal
   override def exception$ : Throwable = exception
+
+  override final def toValue$V(): Unit = getInternal // void
+  override final def toValue$Z: Boolean = getInternal.asInstanceOf[Boolean]
+  override final def toValue$C: Char = getInternal.asInstanceOf[Char]
+  override final def toValue$B: Byte = getInternal.asInstanceOf[Byte]
+  override final def toValue$S: Short = getInternal.asInstanceOf[Short]
+  override final def toValue$I: Int = getInternal.asInstanceOf[Int]
+  override final def toValue$F: Float = getInternal.asInstanceOf[Float]
+  override final def toValue$J: Long = getInternal.asInstanceOf[Long]
+  override final def toValue$D: Double = getInternal.asInstanceOf[Double]
+  override final def toValue$ : T = getInternal // object
 
   /**
    * [PLUGIN_ENTRY] Looks up the node in cache, applies tweaks, blocks until node executes and returns result
@@ -360,7 +375,7 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
   }
 
   // Given source node, produce a Node representing the transformed value.
-  final def flatMap[B](f: T => Node[B]): Node[B] = new FlatMapNode(this, f, true)
+  final def flatMap[B](f: T => Node[B], attach: Boolean = true): Node[B] = new FlatMapNode(this, f, attach)
 
   protected def throwNodeCompletionException(otherNode: Node[_]): Unit = {
     import scala.jdk.CollectionConverters._
@@ -702,10 +717,10 @@ class AlreadyCompletedNodeWithTweakInfo[A](
 
 class AlreadyFailedNode[A](val ex: Throwable) extends AlreadyCompletedOrFailedNode[A] {
   initAsFailed(ex)
-  override def result = throw wrapped(ex)
+  override def result: A = throw wrapped(ex)
   override def reset(): Unit = {}
   override def isStable = true
-  override def func = throw wrapped(ex)
+  override def func: A = throw wrapped(ex)
   override def exception: Throwable = ex
   override def run(ec: OGSchedulerContext): Unit = throw new GraphException("Can't run AlreadyFailedNode")
   override def executionInfo: NodeTaskInfo = NodeTaskInfo.Constant
@@ -738,22 +753,21 @@ class NodeAwaiterWithLatch(size: Int) extends NodeAwaiter() {
 }
 
 /**
- * Enable integration with other async APIs. See [[FutureNode]] and [[optimus.core.CoreAPI.delay$queued]] for example
- * usage.
+ * A node that can be completed externally.
+ *
+ * NodePromise is used to interface with non-optimus asynchronous APIs such as those based on [[scala.concurrent.Future]].
+ * It is roughly based on [[java.util.concurrent.CompletableFuture]].
+ *
+ * The result of a node promise is obtained using the [[await]] method, which will suspend until a result is available
+ * in an Optimus-friendly way. The result is set externally using one of the [[complete]] methods.
+ *
+ * NodePromise is cancellable by default and will automatically complete when the Cancellation Scope it was created in is
+ * cancelled. Use `NodePromise.uncancellable()` to get a NodePromise that is not cancellable.
  */
-class NodePromise[A] private (
-    executionInfo: NodeTaskInfo,
-    timeoutMillis: Option[Int],
-    scheduler0: Scheduler,
-    ss0: ScenarioStack) {
+class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option[Int], cancelScope: CancellationScope) {
   outer =>
 
-  import scala.util.Failure
-  import scala.util.Success
-  import scala.util.Try
-
-  private val ss: ScenarioStack = if (ss0 ne null) ss0 else EvaluationContext.scenarioStack
-  private val scheduler = if (scheduler0 ne null) scheduler0 else EvaluationContext.scheduler
+  import scala.util.{Failure, Success, Try}
 
   /**
    * Asynchronously wait for the result from this promise. If the promise was completed with an exception, this call
@@ -768,17 +782,48 @@ class NodePromise[A] private (
   def await$queued: NodeFuture[A] = promisedNode.await$queued
 
   /**
-   * Note that this doesn't propagate xInfo, and therefore should only be used to integrate with frameworks which don't
-   * call back into the graph.
+   * Complete the node promise with a result. This will cause all current (and future) awaiters to wake up.
+   *
+   * Returns false if the promise was already completed, like [[java.util.concurrent.CompletableFuture[T].complete(v: T)]].
+   *
+   * Note: If you are completing based on information obtained from another node, you *MUST* use [[completeFromNode]] or
+   * [[completeWithExtraInfo]] so that tweak dependency information propagates correctly. This is critical for XSFT to
+   * work correctly.
    */
   def complete(result: Try[A]): Boolean = promisedNode.completeWithTry(result, None)
 
   /**
-   * Like complete, but also does a combineInfo with child.
+   * Complete using the result of a completed node.
+   *
+   * This method correctly propagate dependency info from the node to the promise awaiters.
    */
-  def completeWithChild(result: Try[A], child: NodeTask): Boolean = promisedNode.completeWithTry(result, Some(child))
+  def completeFromNode(node: Node[A]): Boolean = promisedNode.completeWithTry(node.safeResult, Some(node))
 
-  def node: CompletableNode[A] = promisedNode
+  /**
+   * Complete with a result, with tweak dependency info from another node.
+   *
+   * This is rather specialized, and you should prefer completeFromNode if possible. You should use this method if you
+   * want to propagate tweak dependency information from a node which is not completed or which completed with an
+   * exception that you want to discard.
+   */
+  def completeWithExtraInfo(result: Try[A], withInfoFrom: NodeTask): Boolean =
+    promisedNode.completeWithTry(result, Some(withInfoFrom))
+
+  /**
+   * Get the node underlying this promise.
+   *
+   * This is also rather specialized, and you should use [[await]] instead.
+   *
+   * The only reason to call this as opposed to [[await]] is that you are writing code in core which isn't
+   * plugin-transformed.
+   */
+  def underlyingNode: Node[A] = promisedNode
+
+  // Implementation
+  // --------------
+  // We use the current or default scheduler at the time we create the promise, for historical reason. It probably could
+  // be changed without issues, if need be.
+  private val scheduler = Scheduler.currentOrDefault
 
   // Note that this needs to be a val + class (rather than an inner object) since the PromisedNode
   // must be created eagerly, in the same thread as the NodePromise creation. Inner objects are lazy,
@@ -786,39 +831,29 @@ class NodePromise[A] private (
   // would result in a null EvaluationContext.scenarioStack.
   private[this] val promisedNode = new PromisedNode
 
+  // Install the timeout if necessary. At this point we know for a fact that the node is initialized, which is important
+  // because the timeout might immediately complete it in another thread.
+  timeoutMillis.foreach(t =>
+    scheduler.runDelayedTask(
+      () =>
+        promisedNode.completeWithTry(
+          Failure(new TimeoutException(s"${outer.executionInfo} cancelled after timeout of $t millis")),
+          None),
+      t,
+      TimeUnit.MILLISECONDS
+    ))
+
   private[this] class PromisedNode extends CompletableNode[A] {
-
-    initAsRunning(ss)
-
-    if (outer.executionInfo.reportingPluginType(ss) != null) {
-      markAsHavingPluginType()
-      // Normally this would happen in the scheduler, but this node doesn't actually get run.
-      PluginType.fire(this)
-    }
-
-    // if we get cancelled at any point then abort immediately
-    private[this] val cancelHandler: CancellationScope => Unit = { cs =>
-      tryCompleteWithException(cs.cancellationCause, scheduler)
-    }
-    scenarioStack.cancelScope.addListener(cancelHandler)
-
-    private val timeout = timeoutMillis.map { t =>
-      CoreAPI.optimusScheduledThreadPool.schedule(
-        () =>
-          tryCompleteWithException(
-            new TimeoutException(s"$executionInfo cancelled after timeout of $t millis"),
-            scheduler),
-        t,
-        TimeUnit.MILLISECONDS
-      )
-    }
-
+    initAsRunning(ScenarioStack.constantNC)
     override def executionInfo: NodeTaskInfo = outer.executionInfo
 
-    private[graph] def completeWithTry(result: Try[A], child: Option[NodeTask]): Boolean = {
-      scenarioStack.cancelScope.removeListener(cancelHandler)
-      timeout.foreach(_.cancel(false))
-      child.foreach(promisedNode.combineInfo(_, scheduler))
+    val cancelHandler = (cs: CancellationScope) => (completeWithTry(Failure(cs.cancellationCause), None): Unit)
+    // Note that this might run completeWithTry in the same thread right now if the CS is already cancelled!
+    cancelScope.addListener(cancelHandler)
+
+    private[NodePromise] def completeWithTry(result: Try[A], withInfoFrom: Option[NodeTask]): Boolean = {
+      cancelScope.removeListener(cancelHandler)
+      withInfoFrom.foreach(promisedNode.combineInfo(_, scheduler))
       val wasIncomplete = result match {
         case Success(value)     => tryCompleteWithResult(value, scheduler)
         case Failure(exception) => tryCompleteWithException(exception, scheduler)
@@ -827,45 +862,37 @@ class NodePromise[A] private (
     }
   }
 }
+
 object NodePromise {
+  private def currentCScopeOrNullScope =
+    Option(EvaluationContext.scenarioStackOrNull).map(_.cancelScope).getOrElse(NullCancellationScope)
+
+  /**
+   * Create a NodePromise.
+   *
+   * The node promise will complete automatically when the current cancellation scope is cancelled.
+   */
   def apply[A](executionInfo: NodeTaskInfo = NodeTaskInfo.Promise): NodePromise[A] =
-    new NodePromise[A](executionInfo, None, null, null)
+    new NodePromise[A](executionInfo, None, currentCScopeOrNullScope)
 
-  private[optimus] def createWithSpecificScheduler[A](
-      executionInfo: NodeTaskInfo,
-      scheduler: Scheduler,
-      ss: ScenarioStack): NodePromise[A] =
-    new NodePromise[A](executionInfo, None, scheduler, ss)
-
+  /**
+   * Create a NodePromise that will auto complete on a timeout.
+   *
+   * The timer starts now, when the node promise is created.
+   */
   def withTimeout[A](
       executionInfo: NodeTaskInfo = NodeTaskInfo.Promise,
       timeoutMillis: Int
   ): NodePromise[A] =
-    new NodePromise[A](executionInfo, Some(timeoutMillis), null, null)
-}
+    new NodePromise[A](executionInfo, Some(timeoutMillis), currentCScopeOrNullScope)
 
-object FutureNode {
-  import scala.concurrent.ExecutionContext
-  import scala.concurrent.Future
-
-  def apply[A](future: Future[A], executionContext: ExecutionContext, timeoutMillis: Option[Int] = None): Node[A] = {
-    future.value match {
-      case None =>
-        val promise = timeoutMillis match {
-          case Some(millis) => NodePromise.withTimeout[A](NodeTaskInfo.Future, millis)
-          case _            => NodePromise[A](NodeTaskInfo.Future)
-        }
-        future.onComplete(promise.complete)(executionContext)
-        promise.node
-      case Some(Success(value)) =>
-        new AlreadyCompletedNode[A](value) {
-          override def executionInfo: NodeTaskInfo = NodeTaskInfo.Future
-        }
-      case Some(Failure(exception)) =>
-        new AlreadyFailedNode[A](exception) {
-          override def executionInfo: NodeTaskInfo = NodeTaskInfo.Future
-        }
-    }
+  /**
+   * Create a NodePromise that is not cancellable. This is required when creating a NodePromise from outside of graph.
+   */
+  def uncancellable[A](
+      executionInfo: NodeTaskInfo = NodeTaskInfo.Promise,
+      timeoutMillis: Option[Int] = None): NodePromise[A] = {
+    new NodePromise[A](executionInfo, timeoutMillis, NullCancellationScope)
   }
 }
 

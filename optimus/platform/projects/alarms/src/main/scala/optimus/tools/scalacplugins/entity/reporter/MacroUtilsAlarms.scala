@@ -24,5 +24,5 @@ object MacroUtilsAlarms extends OptimusMacroAlarmsBase with OptimusMacroAlarmHel
     error2(110001, s"$internalError tree produced by macro failed to typecheck: %s (error: %s)")
   val UNTYPECHECKED_TREE = error1(110002, s"$internalError found untypechecked tree  %s inside typechecked tree")
   val NO_SYMBOL = error1(110003, s"$internalError found tree with no symbol %s")
-  val CONFUSING_FUNCTION = error1(110004, s"$internalError Unable to extract function from %s")
+  val CONFUSING_FUNCTION = error2(110004, s"$internalError Unable to extract function from %s. %s")
 }

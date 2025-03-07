@@ -44,7 +44,4 @@ public class KVClientInitialStreamHandlerV1 implements ClientInitialStreamHandle
   public EstablishedStreamHandler createEstablishedHandler(ServerConnection serverNode) {
     return new KVClientEstablishedStreamHandlerV1(serverNode, callbackRegistry);
   }
-
-  @Override
-  public void connectionClosed(Throwable exception) {}
 }

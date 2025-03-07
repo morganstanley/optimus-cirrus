@@ -45,6 +45,7 @@ class GraphSamplers extends SamplerProvider {
     // graph, cache, self-time during epoch
     ss += new Sampler(
       sp,
+      "hotspots",
       snapper = _ => OGLocalTables.getSchedulerTimes,
       process = (prev: Option[SchedulerProfileEntry], sp: SchedulerProfileEntry) => {
         prev.fold(SchedulerProfileEntry())(sp.since(_))
@@ -63,6 +64,7 @@ class GraphSamplers extends SamplerProvider {
 
     ss += new Sampler(
       sp,
+      "evictions",
       snapper = _ => {
         var snaps: List[EnumCounter[EvictionReason]] = Nil
         OGLocalTables.forAllRemovables { (table: RemovableLocalTables) =>
@@ -101,12 +103,13 @@ class GraphSamplers extends SamplerProvider {
     // Number of nodes started during period, and number of nodes currently waiting
     ss += new Sampler[PluginType.PluginTracker, PluginData](
       sp,
+      "plugin tracker",
       snapper = (_: Boolean) => PluginType.snapAggregatePluginCountsIntoGlobalBuffer(),
       process = { (prevOpt: Option[PluginType.PluginTracker], curr: PluginType.PluginTracker) =>
         prevOpt.fold {
           PluginData(curr.cumulativeCounts, curr.snapCounts, curr.fullWaitTimes.toMapMillis, curr.overflow.toMap)
         } { prev =>
-          val diff = curr.diff(prev)
+          val diff = curr.diffCounters(prev)
           if (diff.activity > 0)
             sp.recordActivity()
           PluginData(diff.cumulativeCounts, curr.snapCounts, diff.fullWaitTimes.toMapMillis, diff.overflow.toMap)
@@ -124,6 +127,7 @@ class GraphSamplers extends SamplerProvider {
     if (sp.propertyUtils.get("optimus.sampling.cardinalities", false))
       ss += new Sampler(
         sp,
+        "cardinalities",
         snapper = _ => {
           val counters = new Cardinality.Counters()
           OGLocalTables.forAllRemovables((table: RemovableLocalTables) => counters.add(table.getCardinalities))
@@ -156,6 +160,7 @@ class GraphSamplers extends SamplerProvider {
 
     ss += new Sampler[PluginType.Counter, Map[String, Long]](
       sp,
+      "stall times",
       snapper = (_: Boolean) => OGSchedulerTimes.snapCumulativePluginStallTimes(),
       process = (prevOption: Option[PluginType.Counter], c: PluginType.Counter) =>
         prevOption.fold[Map[String, Long]](Map.empty) { prev =>
@@ -173,36 +178,37 @@ class GraphSamplers extends SamplerProvider {
 
     // State of DependencyTracker queues
     {
-      type DTSnap = Map[String, QueueStats]
+      type Cumul = Map[String, QueueStats]
+      type Snap = Map[String, QueueStats.Snap]
       ss += new Sampler(
         sp,
+        "dep tracker",
         snapper = _ => DependencyTrackerRoot.snap(),
-        process = (prev: Option[DTSnap], newSnap: DTSnap) =>
-          prev.fold(Map.empty: DTSnap) { prev =>
-            val builder = Map.newBuilder[String, QueueStats]
-            val keys = newSnap.keySet ++ prev.keySet
-            for (k <- keys) {
-              (prev.get(k), newSnap.get(k)) match {
-                case (prev, Some(current)) =>
-                  builder += k -> (current - prev.getOrElse(QueueStats.zero))
+        process = (previousSnap: Option[Cumul], newSnap: Cumul) => {
+          val prev = previousSnap.getOrElse(Map.empty)
+          val builder = Map.newBuilder[String, QueueStats.Snap]
+          val keys = newSnap.keySet ++ prev.keySet
+          for (k <- keys) {
+            (prev.get(k), newSnap.get(k)) match {
+              case (prev, Some(current)) =>
+                builder += k -> QueueStats.diff(prev, current)
 
-                // Special case for when the tracker has been GC-ed, we publish no new added tasks, and all remaining
-                // tasks as removed:
-                case (Some(prev), None) =>
-                  builder += k -> QueueStats(0, prev.added - prev.removed)
+              case (Some(prev), None) =>
+                builder += k -> QueueStats.gced(prev)
 
-                case (None, None) =>
-              }
+              case (None, None) =>
             }
+          }
 
-            builder.result()
-          },
-        publish = (diff: DTSnap) =>
-          if (diff.isEmpty) Elems.Nil
+          builder.result()
+        },
+        publish = (snap: Snap) =>
+          if (snap.isEmpty) Elems.Nil
           else
             Elems(
-              profDepTrackerTaskAdded -> diff.mapValuesNow(_.added),
-              profDepTrackerTaskProcessed -> diff.mapValuesNow(_.removed)
+              profDepTrackerTaskAdded -> snap.mapValuesNow(_.added),
+              profDepTrackerTaskProcessed -> snap.mapValuesNow(_.removed),
+              profDepTrackerTaskQueued -> snap.mapValuesNow(_.currentSize)
             )
       )
     }
@@ -210,6 +216,7 @@ class GraphSamplers extends SamplerProvider {
     // GC costs, according to GCMonitor
     ss += new SamplingProfiler.Sampler[GCMonitor.CumulativeGCStats, GCMonitor.CumulativeGCStats](
       sp,
+      "GCMonitor cumulative",
       snapper = _ => GCMonitor.instance.snapAndResetStatsForSamplingProfiler(),
       process = (_, c) => c,
       publish = c => c.elems
@@ -221,6 +228,7 @@ class GraphSamplers extends SamplerProvider {
     }
     ss += new Sampler[Seq[AccumulatedValue], Seq[AccumulatedValue]](
       sp,
+      "accumulating counters",
       snapper = (_: Boolean) => accumulatingCounters.map(_.snap),
       process = (prevOption: Option[Seq[AccumulatedValue]], curr: Seq[AccumulatedValue]) =>
         prevOption.fold[Seq[AccumulatedValue]](Seq.empty) { prev: Seq[AccumulatedValue] =>
@@ -239,6 +247,7 @@ class GraphSamplers extends SamplerProvider {
     if (GCNative.usingJemalloc())
       ss += new Sampler[GCNative.JemallocSizes, Map[String, Int]](
         sp,
+        "jemalloc stats",
         snapper = _ => GCNative.jemallocSizes(),
         process = (_, c) => c.toMapMB.asScala.toMap.mapValuesNow(_.toInt),
         publish = c => Elems(gcNativeStats -> c)

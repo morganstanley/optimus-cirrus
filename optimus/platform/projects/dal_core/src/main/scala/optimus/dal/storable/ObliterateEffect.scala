@@ -22,4 +22,4 @@ import java.time.Instant
  * XXX: the app event reference will be used as identifier. we may need to change it to have its own id if we want to
  * allow multiple obliterates in one single app event.
  */
-final case class ObliterateEffect(id: AnyRef, appEventId: AppEventReference, obliterate: Obliterate, txTime: Instant)
+final case class ObliterateEffect(id: AnyRef, appEventId: AppEventReference, obliterate: Obliterate)

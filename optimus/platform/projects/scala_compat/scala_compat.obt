@@ -15,8 +15,6 @@ main {
       ossscala.scala-collection-compat,
       ossscala.scala.tools
     ]
-    mavenLibs = [
-      org.scala-lang.modules.scala-collection-compat_2.12 //force 2.12 be used for release, pay attention here when 2.13 arrived.
-    ]
   }
+  installIvy = true
 }

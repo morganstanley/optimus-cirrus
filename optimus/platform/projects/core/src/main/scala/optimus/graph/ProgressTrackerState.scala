@@ -38,4 +38,6 @@ private[graph] final case class ProgressTrackerState(
     messageToListener: String = null,
     shouldReportToParent: Boolean = false,
     shouldWaitBeforeReportingToParent: Boolean = false,
-    isUpdateFromChild: Boolean = false)
+    isUpdateFromChild: Boolean = false,
+    isTickle: Boolean = false
+)

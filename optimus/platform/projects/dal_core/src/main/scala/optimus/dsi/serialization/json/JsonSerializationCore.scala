@@ -12,8 +12,6 @@
 package optimus.dsi.serialization.json
 
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import optimus.dsi.base.RefHolder
 import optimus.dsi.serialization.ReferenceTransformer
 import optimus.dsi.serialization.TypedReferenceAwareTransformer
@@ -28,6 +26,7 @@ import optimus.platform.storable.SerializedEntity
 import optimus.platform.storable.SerializedEntity.EntityLinkage
 import optimus.platform.storable.SerializedKey
 import optimus.platform.storable.StorableReference
+import optimus.platform.util.json.DefaultJsonMapper
 
 import java.time.Instant
 import scala.collection.immutable
@@ -175,6 +174,7 @@ trait JsonSerializationBase {
 
     val Type = "type"
     val Data = "data"
+    val EncryptedFields = "enc"
     val Hash = "hash"
 
     val ParentRefLabel = "pr"
@@ -229,11 +229,60 @@ trait JsonSerializationBase {
 
     // this is to capture information in an entity timeslice if it is created by an advance operation e.g. revert
     val AdvanceOp = "ao"
+
+    val DbRawIdxDataTypeLabel = "dbRawIdxDataType"
   }
+}
+
+trait JsonPayloadEncryptionUtil {
+  def maybeEncryptFields(
+      className: String,
+      allFields: Map[String, Any]
+  ): (Map[String, Any], Iterable[String])
+
+  def maybeEncryptFields(
+      className: String,
+      allFields: Seq[(String, Any)]
+  ): (Seq[(String, Any)], Iterable[String])
+
+  def maybeDecryptFields(
+      allFields: Map[String, Any],
+      encryptedFieldNames: Set[String]
+  ): Map[String, Any]
+
+  def maybeDecryptFields(
+      allFields: Seq[(String, Any)],
+      encryptedFieldNames: Set[String]
+  ): Seq[(String, Any)]
+}
+
+object NoopJsonPayloadEncryption extends JsonPayloadEncryptionUtil {
+  override def maybeEncryptFields(
+      className: String,
+      allFields: Map[String, Any]
+  ): (Map[String, Any], Iterable[String]) = (allFields, Nil) // noop
+
+  override def maybeEncryptFields(
+      className: String,
+      allFields: Seq[(String, Any)]
+  ): (Seq[(String, Any)], Iterable[String]) = (allFields, Nil) // noop
+
+  override def maybeDecryptFields(
+      allFields: Map[String, Any],
+      encryptedFieldNames: Set[String]
+  ): Map[String, Any] = allFields // noop
+
+  override def maybeDecryptFields(
+      allFields: Seq[(String, Any)],
+      encryptedFieldNames: Set[String]
+  ): Seq[(String, Any)] = allFields // noop
 }
 
 trait JsonSerialization[T] extends JsonSerializationBase {
   import JacksonObjectMapper.mapper
+
+  val payloadEncryption: JsonPayloadEncryptionUtil = NoopJsonPayloadEncryption
+
   def toJson(p: T): String = mapper.writeValueAsString(toJsonMap(p))
   def toJsonBytes(p: T): Array[Byte] = mapper.writeValueAsBytes(toJsonMap(p))
   def toJsonBytesSeq(p: Seq[T]): Array[Byte] = mapper.writeValueAsBytes(p.map(toJsonMap))
@@ -252,6 +301,8 @@ trait JsonSerialization[T] extends JsonSerializationBase {
 }
 
 abstract class SerializedKeySerializationBase extends JsonSerialization[SerializedKey] {
+  def withEncryption(encryption: JsonPayloadEncryptionUtil): SerializedKeySerializationBase = this // noop
+
   def keyToJsonString(skey: SerializedKey): String = {
     JacksonObjectMapper.mapper.writeValueAsString(toJsonMap(skey))
   }
@@ -264,8 +315,19 @@ class SerializedEntitySerialization(
     serializedKeySerialization: SerializedKeySerializationBase,
     excludeNonUniqueKeys: Boolean,
     verboseEntityRef: Boolean,
-    includeLinkages: Boolean
+    includeLinkages: Boolean,
+    override val payloadEncryption: JsonPayloadEncryptionUtil = NoopJsonPayloadEncryption
 ) extends JsonSerialization[SerializedEntity] {
+
+  def withEncryption(
+      encryption: JsonPayloadEncryptionUtil
+  ): SerializedEntitySerialization = new SerializedEntitySerialization(
+    serializedKeySerialization = serializedKeySerialization.withEncryption(encryption),
+    excludeNonUniqueKeys = excludeNonUniqueKeys,
+    verboseEntityRef = verboseEntityRef,
+    includeLinkages = includeLinkages,
+    payloadEncryption = encryption
+  )
 
   def toJsonMap(p: SerializedEntity): Map[String, Any] = {
     val keys = p.keys
@@ -281,28 +343,34 @@ class SerializedEntitySerialization(
     m += (Labels.Ref -> eref)
 
     p.cmid.foreach(cmid => m += Labels.CmId -> cmid)
-    val linkages = if (includeLinkages) p.linkages.map { links =>
-      val m = immutable.ListMap.newBuilder[String, Any]
-      links.foreach { case (property, entities) =>
-        val (temps, finals) = entities.map(_.link).partition(_.isTemporary)
-        m += (property.propertyName -> Map(
-          Labels.EntityLinkagePropertyType -> property.typeName,
-          Labels.EntityLinkageTemporaryRefs -> temps.map(_.toString),
-          Labels.EntityLinkageFinalRefs -> finals.map(f => (f.toString, f.getTypeId)).toMap
-        ))
+    val linkages =
+      if (includeLinkages) p.linkages.map { links =>
+        val m = immutable.ListMap.newBuilder[String, Any]
+        links.foreach { case (property, entities) =>
+          val (temps, finals) = entities.map(_.link).partition(_.isTemporary)
+          m += (property.propertyName -> Map(
+            Labels.EntityLinkagePropertyType -> property.typeName,
+            Labels.EntityLinkageTemporaryRefs -> temps.map(_.toString),
+            Labels.EntityLinkageFinalRefs -> finals.map(f => (f.toString, f.getTypeId)).toMap
+          ))
+        }
+        m.result()
       }
-      m.result()
-    }
-    else None
+      else None
+
+    val (encryptedProps, encryptedFieldNames) = payloadEncryption.maybeEncryptFields(p.className, p.properties)
+
     m ++= List(
       Labels.ClassName -> p.className,
       Labels.Keys -> serKeys,
-      Labels.Data -> TypedRefAwareJsonTypeTransformer.serialize(p.properties),
+      Labels.Data -> TypedRefAwareJsonTypeTransformer.serialize(encryptedProps),
       Labels.Types -> TypedRefAwareJsonTypeTransformer.serialize(p.types),
       Labels.Inlined -> inlined,
       Labels.HasLinkages -> p.linkages.isDefined,
       Labels.Slot -> p.slot
     )
+    if (encryptedFieldNames.nonEmpty)
+      m += Labels.EncryptedFields -> TypedRefAwareJsonTypeTransformer.serialize(encryptedFieldNames)
     if (includeLinkages) m += Labels.EntityLinkages -> TypedRefAwareJsonTypeTransformer.serialize(linkages)
     m.result()
   }
@@ -314,6 +382,10 @@ class SerializedEntitySerialization(
     val inlinedStrings = getOrElse[Seq[String]](map, Labels.Inlined, Nil)
     val inlined = inlinedStrings.map(fromJson)
     val props = getTypedOrElse[Map[String, Any]](map, Labels.Data, Map.empty[String, Any])
+    val encryptedFieldNames = getTypedOrElse[Seq[String]](map, Labels.EncryptedFields, Seq.empty[String])
+    val decryptedProps =
+      if (encryptedFieldNames.nonEmpty) payloadEncryption.maybeDecryptFields(props, encryptedFieldNames.toSet)
+      else props
     val encodedEref: Any = get[Any](map, Labels.Ref)
     val eref: EntityReference = encodedEref match {
       case e: EntityReference => e
@@ -349,7 +421,7 @@ class SerializedEntitySerialization(
       entityRef = eref,
       cmid = cmid,
       className = className,
-      properties = props,
+      properties = decryptedProps,
       keys = keys,
       types = types,
       inlinedEntities = inlined,
@@ -426,11 +498,7 @@ object PropertySerialization {
 }
 
 object JacksonObjectMapper {
-  val mapper = {
-    val map = new ObjectMapper
-    map.registerModule(DefaultScalaModule)
-    map
-  }
+  val mapper = DefaultJsonMapper.legacy
 
   def readJsonMap(data: String) = JacksonObjectMapper.mapper.readValue(data, classOf[Map[String, Any]])
 }

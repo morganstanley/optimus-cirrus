@@ -11,7 +11,7 @@
  */
 package optimus.buildtool.config
 
-trait OrderedElement {
+trait OrderedElement[+A] {
   def line: Int
-  def id: Id
+  def id: A
 }

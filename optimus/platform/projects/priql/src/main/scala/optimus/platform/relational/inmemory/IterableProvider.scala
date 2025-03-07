@@ -307,11 +307,11 @@ object IterableProvider {
     val nodeFunction1 = asNode.apply$withNode[Any, Any](nf)
     val r: Array[(Any, Any)] = src.apar(PriqlSettings.concurrencyLevel).map(t => (nodeFunction1(t), t))(Array.breakOut)
     Arrays.sort(r, ordering.asInstanceOf[Ordering[Any]].on((t: (Any, Any)) => t._1))
-    r.iterator.map(_._2).toSeq
+    r.iterator.map(_._2).toVector
   }
 
   def sortBySync(src: Iterable[Any], f: Any => Any, ordering: Ordering[_]): Iterable[Any] =
-    src.toSeq.sortBy(f)(ordering.asInstanceOf[Ordering[Any]])
+    src.toVector.sortBy(f)(ordering.asInstanceOf[Ordering[Any]])
 
   def shapeToUntypeSync(src: Iterable[Any], f: Any => Any, shapeToType: TypeInfo[_]): Iterable[Any] = {
     if (src.isEmpty) src

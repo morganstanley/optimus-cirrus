@@ -27,4 +27,5 @@ main {
       org.slf4j.slf4j-api
     ]
   }
+  installIvy = true
 }

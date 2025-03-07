@@ -18,6 +18,9 @@ import optimus.stratosphere.common.PluginBundle
 import optimus.stratosphere.common.PluginInfo
 import optimus.stratosphere.common.RemoteIntellijLocation
 import optimus.stratosphere.indexing.IndexingFilterConfig
+import optimus.stratosphere.indexing.JdkSharedIndexesConfig
+import optimus.stratosphere.indexing.ProjectSharedIndexesConfig
+import optimus.stratosphere.indexing.SharedIndexesConfig
 import optimus.stratosphere.utils.RemoteUrl
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
@@ -62,7 +65,6 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   def historyMerges: Seq[Config] = self.select("history-merges")
 
   def obtDhtLocation: Option[String] = self.select("obt.dht.location")
-  def obtSilverkingLocation: Option[String] = self.select("obt.silverking-location")
   def obtVersion: String = self.select("obt-version")
 
   def profile: Option[String] = self.select("profile")
@@ -125,11 +127,18 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
   object formatter {
     def consoleLength: Int = self.select("formatter.console-length")
 
+    // Keeps the formatter configuration more legible. The behavior is described in the file.
+    private def relativeAndAbsolutePathRegex(regexExpr: String): String =
+      if (regexExpr.startsWith(".*")) regexExpr else s".*$regexExpr"
+
+    private def extractRegexes(configName: String): Set[Regex] =
+      self.select[Option[Seq[String]]](configName).getOrElse(Seq.empty).map(relativeAndAbsolutePathRegex).map(_.r).toSet
+
     def excludesJava: Option[Seq[String]] = self.select("formatter.excludesJava")
     def excludes: Set[Regex] =
-      self.select[Option[Seq[String]]]("formatter.excludes").getOrElse(Seq.empty).map(_.r).toSet
+      extractRegexes("formatter.excludes")
     def includes: Set[Regex] =
-      self.select[Option[Seq[String]]]("formatter.includes").getOrElse(Seq.empty).map(_.r).toSet
+      extractRegexes("formatter.includes")
   }
 
   object git {
@@ -257,6 +266,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def enabled: Boolean = self.select("intellij.proxy.enabled")
       def server: String = self.select("intellij.proxy.server")
       def port: Int = self.select("intellij.proxy.port")
+      def exceptions: Seq[String] = self.select("intellij.proxy.exceptions")
     }
 
     object telemetry {
@@ -282,6 +292,16 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
         disabledIfInJars = self.select[Set[String]]("intellij.indexing.filter.disabled-if-in-jars"),
         disabledIfLarge = self.select[Set[String]]("intellij.indexing.filter.disabled-if-large"),
         largeFileSizeInBytes = self.select[Int]("intellij.indexing.filter.large-file-size-in-bytes"),
+      )
+      def shared: SharedIndexesConfig = SharedIndexesConfig(
+        jdk = JdkSharedIndexesConfig(
+          enabled = self.select[Boolean]("intellij.indexing.shared.jdk.enabled"),
+          urlTemplate = self.select[String]("intellij.indexing.shared.jdk.url-template"),
+        ),
+        project = ProjectSharedIndexesConfig(
+          enabled = self.select[Boolean]("intellij.indexing.shared.project.enabled"),
+          urlTemplate = self.select[String]("intellij.indexing.shared.project.url-template"),
+        )
       )
     }
   }
@@ -475,6 +495,7 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def artifactoryBug: String = self.select("internal.urls.artifactory-bug")
       def indexerExclusions: String = self.select("internal.urls.indexer-exclusions")
       def codetreeRelease: RemoteUrl = RemoteUrl(self.select("internal.urls.codetree-release"))
+      def codetreeReleaseBrowser: String = self.select("internal.urls.codetree-release-browser")
       def gitVersion: String = self.select("internal.urls.git-version")
       def jenkinsLibrary: String = self.select("internal.urls.jenkins-library")
       def jenkinsLibraryBrowser: String = self.select("internal.urls.jenkins-library-browser")
@@ -487,9 +508,11 @@ trait TypeSafeOptions { self: StratoWorkspaceCommon =>
       def stratoRecentIssues: String = self.select("internal.urls.strato-recent-issues")
 
       object bitbucket {
-        def blue: String = self.select("internal.urls.bitbucket.blue")
-        def red: String = self.select("internal.urls.bitbucket.red")
-        def all: Map[String, String] = self.select("internal.urls.bitbucket")
+        def blue: HostnamePort = HostnamePort(self.select[Config]("internal.urls.bitbucket.blue"))
+        def red: HostnamePort = HostnamePort(self.select[Config]("internal.urls.bitbucket.red"))
+        def all: Map[String, HostnamePort] = self
+          .select[Map[String, String]]("internal.urls.bitbucket")
+          .map { case (name, value) => (name, HostnamePort.parse(value)) }
       }
 
       object migration {

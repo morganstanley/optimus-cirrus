@@ -15,7 +15,7 @@ import optimus.examples.platform.entities.SimpleEvent
 import optimus.examples.platform.entities.SimpleIndexedEntity
 import optimus.platform._
 
-object SimpleFindByIndex extends AdvancedOptimusApp {
+object SimpleFindByIndex extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

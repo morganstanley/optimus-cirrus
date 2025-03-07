@@ -117,7 +117,8 @@ case object CacheGroupOthers extends CacheGroup {
 }
 
 object CacheCountersSnapshot {
-  val Empty = CacheCountersSnapshot(0L, 0L, EvictionReason.values.map(_ -> 0L).toMap, 0L, 0, 0, 0)
+  val Empty: CacheCountersSnapshot =
+    CacheCountersSnapshot(0L, 0L, EvictionReason.values.map(_ -> 0L).toMap, 0L, 0, 0, 0)
 
   // be careful to differentiate between absolute and relative (delta)
   def diff(start: CacheCountersSnapshot, end: CacheCountersSnapshot): CacheCountersSnapshot = {

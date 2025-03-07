@@ -19,23 +19,22 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.RegexMessagesCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity
 class RegexMessagesScopedCompilation(
     val scope: CompilationScope,
     val sources: RegexMessagesCompilationSources,
-    regexScanner: RegexScanner,
     rules: Seq[CodeFlaggingRule]
 ) extends PartialScopedCompilation {
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Nil
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = Vector()
   @node override protected def containsRelevantSources: Boolean =
     sources.nonEmpty && rules.nonEmpty
 
   @node
-  def messages: Seq[Artifact] = compile(ArtifactType.RegexMessages, None) {
-    Some(regexScanner.messages(scope.id, inputsN))
+  def messages: IndexedSeq[Artifact] = compile(ArtifactType.RegexMessages, None) {
+    Some(RegexScanner.messages(scope.id, inputsN))
   }
 
   private val inputsN = asNode(() => inputs)

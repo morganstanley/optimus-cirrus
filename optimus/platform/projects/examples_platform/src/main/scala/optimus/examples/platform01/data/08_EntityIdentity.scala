@@ -15,7 +15,7 @@ import optimus.platform._
 import optimus.examples.platform.entities.SimpleEntity
 import optimus.examples.platform.entities.SimpleEvent
 
-object EntityIdentity extends AdvancedOptimusApp {
+object EntityIdentity extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

@@ -14,6 +14,7 @@ package optimus.breadcrumbs.util
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -46,20 +47,19 @@ object CrumbJsonModule
 
 object CrumbJsonUtils {
   def defaultObjectMapper(): ObjectMapper = {
-    val objectMapper = new ObjectMapper() with ScalaObjectMapper
-    objectMapper.registerModule(DefaultScalaModule)
-
     val ToStringModule = new SimpleModule()
     ToStringModule.addSerializer(classOf[AnyRef], ToStringSerializer.instance)
-    objectMapper.registerModule(ToStringModule)
-    objectMapper.registerModule(CrumbJsonModule)
 
-    objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
-    objectMapper.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false)
-    objectMapper.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, false)
-    objectMapper.setSerializationInclusion(Include.ALWAYS)
-
-    objectMapper
+    JsonMapper
+      .builder()
+      .addModule(DefaultScalaModule)
+      .addModule(ToStringModule)
+      .addModule(CrumbJsonModule)
+      .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
+      .configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false)
+      .configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, false)
+      .serializationInclusion(Include.ALWAYS)
+      .build()
   }
 
   def objectToJsValue[T](obj: T): JsValue = {
@@ -70,13 +70,14 @@ object CrumbJsonUtils {
   }
 
   def objectToRichJsValue[T](obj: T): JsValue = {
-    val objectMapper = new ObjectMapper() with ScalaObjectMapper
-    objectMapper.registerModule(DefaultScalaModule)
-
-    objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
-    objectMapper.configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false)
-    objectMapper.configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, false)
-    objectMapper.setSerializationInclusion(Include.ALWAYS)
+    val objectMapper = JsonMapper
+      .builder()
+      .addModule(DefaultScalaModule)
+      .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false)
+      .configure(SerializationFeature.FAIL_ON_SELF_REFERENCES, false)
+      .configure(SerializationFeature.FAIL_ON_UNWRAPPED_TYPE_IDENTIFIERS, false)
+      .serializationInclusion(Include.ALWAYS)
+      .build()
 
     import spray.json.enrichString
     objectMapper.writeValueAsString(obj).parseJson

@@ -21,7 +21,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 import optimus.scalacompat.collection._
 
@@ -39,7 +39,8 @@ private[sources] final case class HashedJavaAndScalaSources(
 
   override def id: ScopeId = scope.id
 
-  @node def externalCompileDependencies: Seq[ResolutionArtifact] = hashedSources.externalCompileDependencies
+  @node def externalCompileDependencies: IndexedSeq[ResolutionArtifact] =
+    hashedSources.externalCompileDependencies.toVector
 
   @node protected def hashedSources: HashedJavaAndScalaSources = {
     // the source files could be changing while the build is running (e.g. developer is still editing files in the IDE),

@@ -87,7 +87,7 @@ trait ExperimentalAsyncIterator2[A] {
         }
       }
 
-      private val coordinator = new ConcurrencyManager {
+      private val coordinator: ConcurrencyManager = new ConcurrencyManager {
         override def maxConcurrency: Int = {
           // This will slow down the rate of taking,
           // At the same time, we'll give nextIteration a node that just waits until preFetch is reduced
@@ -171,14 +171,15 @@ trait ExperimentalAsyncIterator2[A] {
         override def onChildCompleted(eq: EvaluationQueue, node: NodeTask): Unit = {
           logger.debug(s"$id-cleanup")
           assert(node eq coordinator)
-          var os = new ArrayBuffer[CO[A]]()
+          val os = new ArrayBuffer[CO[A]]()
           ai.synchronized {
             last = terminal()
             preLaunched.offer(last)
             while (!offered.isEmpty) os += offered.remove()
           }
           os.foreach { o =>
-            o.attach(node.scenarioStack())
+            if (o.scenarioStack == null)
+              o.attach(node.scenarioStack)
             eq.enqueue(o)
             last.continueWith(o, eq)
           }

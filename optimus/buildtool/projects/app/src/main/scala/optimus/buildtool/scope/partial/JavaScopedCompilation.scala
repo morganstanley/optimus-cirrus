@@ -32,7 +32,7 @@ import optimus.buildtool.utils.OsUtils
 import optimus.buildtool.utils.Utils.distinctLast
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity object JavaScopedCompilation {
   object Config {
@@ -76,7 +76,7 @@ import scala.collection.immutable.Seq
 
   @node override protected def containsRelevantSources: Boolean = sources.containsJava
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = distinctLast {
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = distinctLast {
     val scalaClasses = scala.classes.filter(!_.isInstanceOf[FingerprintArtifact])
     val scalaMessages = scala.messages.filter(!_.isInstanceOf[FingerprintArtifact])
     // if we don't have scala classes, then we don't need the signature analysis for them
@@ -85,19 +85,20 @@ import scala.collection.immutable.Seq
       else if (scalaClasses.nonEmpty) scalaClasses ++ scalaMessages ++ scala.analysis
       else scalaMessages
     scalaArtifacts.filter(!_.isInstanceOf[FingerprintArtifact]) ++ upstream.classesForOurCompiler
-  }
+  }.toVector
 
-  @node def messages: Seq[Artifact] = compile(AT.JavaMessages, None)(Some(javac.messages(id, javacInputsN)))
+  @node def messages: IndexedSeq[Artifact] = compile(AT.JavaMessages, None)(Some(javac.messages(id, javacInputsN)))
 
-  @node def classes: Seq[Artifact] = compile(AT.Java, None)(javac.classes(id, javacInputsN))
+  @node def classes: IndexedSeq[Artifact] = compile(AT.Java, None)(javac.classes(id, javacInputsN))
 
-  @node def analysis: Seq[Artifact] =
-    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).analysis
+  @node def analysis: IndexedSeq[Artifact] =
+    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).analysis.toVector
 
-  @node def locator: Seq[Artifact] =
-    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).locator.toIndexedSeq
+  @node def locator: IndexedSeq[Artifact] =
+    analysisWithLocator(javaAnalysis, AT.JavaAnalysis, analysisLocator).locator.toVector
 
-  @node protected def javaAnalysis: Seq[Artifact] = compile(AT.JavaAnalysis, None)(javac.analysis(id, javacInputsN))
+  @node protected def javaAnalysis: IndexedSeq[Artifact] =
+    compile(AT.JavaAnalysis, None)(javac.analysis(id, javacInputsN))
 
   private val javacInputsN = asNode(() => javacInputs)
 

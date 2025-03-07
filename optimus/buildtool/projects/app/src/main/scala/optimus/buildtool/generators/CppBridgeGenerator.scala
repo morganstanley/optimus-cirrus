@@ -35,21 +35,23 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.trace.GenerateSource
 import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AsyncUtils
+import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.HashedContent
 import optimus.buildtool.utils.Hide
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 
-@entity class CppBridgeGenerator(scalac: AsyncClassFileCompiler) extends SourceGenerator {
+@entity class CppBridgeGenerator(scalac: AsyncClassFileCompiler, pathBuilder: CompilePathBuilder)
+    extends SourceGenerator {
   override val artifactType: GeneratedSourceArtifactType = ArtifactType.CppBridge
 
   override type Inputs = CppBridgeGenerator.Inputs
 
-  @node override def dependencies(scope: CompilationScope): Seq[Artifact] =
+  @node override def dependencies(scope: CompilationScope): IndexedSeq[Artifact] =
     scope.upstream.allCompileDependencies.apar.flatMap(_.resolution) ++
       scope.upstream.signaturesForOurCompiler
 
@@ -76,11 +78,6 @@ import scala.collection.immutable.SortedMap
 
     val fingerprintHash = scope.hasher.hashFingerprint(fingerprint, ArtifactType.GenerationFingerprint, Some(name))
 
-    // we don't actually care about the compiled artifacts created, so just put them in a
-    // temporary location which we'll delete after the compile. they do need to be in the `scala` directory
-    // though otherwise PathedArtifact validation will complain.
-    val tempOutputJar = NamingConventions.tempFor(scope.pathBuilder.scalaOutPath(scope.id, fingerprintHash.hash)).asJar
-
     val allInputArtifacts = scope.upstream.signaturesForOurCompiler ++
       scope.upstream.allCompileDependencies.apar
         .flatMap(_.transitiveExternalDependencies)
@@ -89,7 +86,6 @@ import scala.collection.immutable.SortedMap
       name,
       templateContent,
       fingerprintHash,
-      tempOutputJar,
       scope.config.scalacConfig,
       scope.config.javacConfig,
       allInputArtifacts.apar.map(scope.dependencyCopier.atomicallyDepCopyArtifactsIfMissing),
@@ -115,12 +111,19 @@ import scala.collection.immutable.SortedMap
         val tempJar = JarAsset(tempOut)
         val tempDir = tempJar.parent.resolveDir(tempJar.name.stripSuffix(".jar"))
         Utils.createDirectories(tempDir)
+
+        // we don't actually care about the compiled artifacts created, so just put them in a
+        // temporary location which we'll delete after the compile. they do need to be in the `scala` directory
+        // though otherwise PathedArtifact validation will complain.
+        val tempOutputJar =
+          NamingConventions.tempFor(pathBuilder.scalaOutPath(scopeId, resolvedInputs.fingerprint.hash)).asJar
+
         val scalaOutDir = tempDir.resolveDir(CppBridgeGenerator.ScalaPath)
         val cppOutDir = tempDir.resolveDir(CppBridgeGenerator.CppPath)
 
         val msgArtifact = scalac.messages(
           scopeId.copy(tpe = s"${scopeId.tpe}-${tpe.name}"),
-          asNode(() => scalacInputs(scopeId, inputs, scalaOutDir, cppOutDir))
+          asNode(() => scalacInputs(scopeId, inputs, tempOutputJar, scalaOutDir, cppOutDir))
         )
 
         val artifact = GeneratedSourceArtifact.create(
@@ -141,7 +144,7 @@ import scala.collection.immutable.SortedMap
             tempDir
           )()
         } asyncFinally {
-          if (resolvedInputs.tempOutputJar.existsUnsafe) Files.delete(resolvedInputs.tempOutputJar.path)
+          if (tempOutputJar.existsUnsafe) Files.delete(tempOutputJar.path)
         }
         Some(artifact)
       }
@@ -151,6 +154,7 @@ import scala.collection.immutable.SortedMap
   @node private def scalacInputs(
       scopeId: ScopeId,
       inputs: NodeFunction0[Inputs],
+      outputJar: JarAsset,
       scalaOutDir: Directory,
       cppOutDir: Directory
   ): SyncCompiler.Inputs = {
@@ -169,7 +173,7 @@ import scala.collection.immutable.SortedMap
       sourceFiles = resolvedInputs.templateContent,
       fingerprint = resolvedInputs.fingerprint,
       bestPreviousAnalysis = Hide(None),
-      outPath = resolvedInputs.tempOutputJar,
+      outPath = outputJar,
       signatureOutPath = None,
       scalacConfig = scalaParams,
       javacConfig = resolvedInputs.javacConfig,
@@ -193,7 +197,6 @@ object CppBridgeGenerator {
       generatorName: String,
       templateContent: SortedMap[SourceUnitId, HashedContent],
       fingerprint: FingerprintArtifact,
-      tempOutputJar: JarAsset,
       scalacConfig: ScalacConfiguration,
       javacConfig: JavacConfiguration,
       allInputArtifacts: Seq[Artifact],
@@ -206,4 +209,8 @@ object CppBridgeGenerator {
   // since _inputs holds the template files and the hash, it's important that it's frozen for the duration of
   // a compilation (so that we're sure what we hashed is what we used for generation)
   _inputs.setCustomCache(reallyBigCache)
+
+  // we want to guard against calling scalac more than once; normally this would happen by virtue of using
+  // reallyBigCache for AsyncScalaCompiler but we use a random output jar path so that cache won't save us
+  generateSource.setCustomCache(reallyBigCache)
 }

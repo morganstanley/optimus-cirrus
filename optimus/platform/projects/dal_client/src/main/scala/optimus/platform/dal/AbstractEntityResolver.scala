@@ -290,7 +290,7 @@ trait DSIResolver extends EntityResolver with HasLastWitnessedTime with HasParti
     try {
       work
     } catch {
-      case e: bitemporal.DSISpecificError if (e.getMessage.contains(getTTTooFarAheadMsgPrefix)) =>
+      case e: bitemporal.DSIException if (e.getMessage.contains(getTTTooFarAheadMsgPrefix)) =>
         throw new TTTooFarAheadException(e)
       case e: bitemporal.DSISpecificError => throw new UnboundDSIException(e)
       case e: bitemporal.DSIException     => throw new UnboundDSIException(e)

@@ -257,7 +257,7 @@ class ClassEntityInfo(
  *
  * @param runtimeClass
  *   The class of the module
- * @param properties
+ * @param props
  *   The properties for the module
  * @param parents
  *   The superclasses of the module

@@ -158,11 +158,6 @@ public class PluginHelpers {
     }
   }
 
-  public static void witnessVersion(Entity e) {
-    TemporalContext tc = e.entityFlavorInternal().dal$temporalContext();
-    if (tc != null) tc.witnessVersion(e);
-  }
-
   // called from entityplugin generated argsHash methods for inner entities
   @SuppressWarnings("unused")
   public static int outerHash(Entity e) {

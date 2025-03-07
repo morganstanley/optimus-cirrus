@@ -15,6 +15,7 @@ import optimus.core.utils.RuntimeMirror
 import optimus.exceptions.RTException
 import optimus.platform._
 import optimus.platform.annotations.handle
+import optimus.platform.annotations.valAccessor
 import optimus.scalacompat.reflect.NamedArgTree
 
 import java.lang.reflect.InvocationTargetException
@@ -27,7 +28,20 @@ import scala.reflect.runtime.universe._
   @node def reflectValue(instance: Any, symbol: Symbol): Any = {
 
     val reflectedValue = NodeTry {
-      val r = mirror(instance.getClass.getClassLoader).reflect(instance)
+      reflectValueOrException(instance, symbol)
+    } getOrRecover {
+      case e: InvocationTargetException =>
+        Option(e.getTargetException).map { _.getMessage } getOrElse { "[error]" }
+      case _: ScalaReflectionException => "[unused]"
+      case e @ RTException             => s"Exception when accessing field $symbol on $instance: ${e.getMessage}"
+    }
+    if (reflectedValue == null) "[null]" else reflectedValue
+  }
+
+  @node def reflectValueOrException(instance: Any, symbol: Symbol): Any = {
+
+    val reflectedValue = {
+      val r = mirror(this.getClass.getClassLoader).reflect(instance)
       symbol match {
         case m: MethodSymbol @unchecked => r.reflectMethod(m)()
         case f: TermSymbol @unchecked   =>
@@ -36,19 +50,10 @@ import scala.reflect.runtime.universe._
           // The scala compiler removes any unused fields so reflection
           // fails on them. This is fixed in 2.12 but we're not on that
           // version yet.
-          NodeTry {
-            r.reflectField(f).get
-          } getOrRecover {
-            case e: InvocationTargetException =>
-              Option(e.getTargetException).map { _.getMessage } getOrElse { "[error]" }
-            case _: ScalaReflectionException => "[unused]"
-            case e @ RTException             => s"Exception when accesing field $f on $instance: ${e.getMessage}"
-          }
+          r.reflectField(f).get
       }
-    } getOrRecover { case e @ RTException =>
-      s"Exception when invoking $symbol on $instance: ${e.getMessage}"
     }
-    if (reflectedValue == null) "[null]" else reflectedValue
+    if (reflectedValue == null) null else reflectedValue
   }
 
   def mirror(clsLoader: ClassLoader): Mirror = {
@@ -137,6 +142,9 @@ import scala.reflect.runtime.universe._
   @scenarioIndependent @node def candidateMembersFor(tpe: Type): Iterable[TermSymbol] = {
 
     def consideredSideEffecting(m: MethodSymbol) = {
+      // we support Unit vals and we support @key defs of Unit type so have to special case them
+      // all other Unit types are going to be considered side effecting defs.
+      !m.annotations.exists(a => a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[valAccessor]) &&
       m.returnType.finalResultType.dealias =:= typeOf[Unit] ||
       m.annotations.exists { a =>
         val aType = a.tree.tpe
@@ -174,7 +182,14 @@ import scala.reflect.runtime.universe._
 
   def typeString(t: Type, fqn: Boolean, typeArgs: Boolean): String = {
     if (t <:< typeOf[Enumeration#Value]) {
-      t.toString
+      // Need to replace the final '.' with '$' else the class name
+      // won't be loadable with Class.forName
+      val typeStr = t.toString
+      if (typeStr != "Enumeration#Value") {
+        val loc = typeStr.lastIndexOf('.')
+        val dollar = "$"
+        s"${typeStr.substring(0, loc)}$dollar${typeStr.substring(loc + 1, typeStr.length)}"
+      } else typeStr
     } else {
       (fqn, typeArgs) match {
         case (_, true) =>

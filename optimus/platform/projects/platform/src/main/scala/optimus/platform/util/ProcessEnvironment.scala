@@ -13,11 +13,10 @@ package optimus.platform.util
 
 import com.fasterxml.jackson.core.util.DefaultIndenter
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.ObjectWriter
 import com.fasterxml.jackson.databind.SerializationFeature
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import optimus.platform.AgentInfo
+import optimus.platform.util.json.DefaultJsonMapper
 
 import java.lang.management.ManagementFactory
 import java.nio.charset.StandardCharsets
@@ -83,8 +82,7 @@ object ProcessEnvironment {
   }
 
   private[util] def jsonWriter: ObjectWriter = {
-    val mapper = new ObjectMapper
-    mapper.registerModule(DefaultScalaModule)
+    val mapper = DefaultJsonMapper.legacy
     mapper.enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
     val printer = new DefaultPrettyPrinter()
     printer.indentArraysWith(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE)

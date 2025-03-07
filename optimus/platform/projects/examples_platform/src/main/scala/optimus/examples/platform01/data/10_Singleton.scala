@@ -67,7 +67,7 @@ object ExampleSingleton {
   }
 }
 
-object Singleton extends AdvancedOptimusApp {
+object Singleton extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

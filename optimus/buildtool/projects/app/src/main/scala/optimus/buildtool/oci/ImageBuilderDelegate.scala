@@ -15,9 +15,12 @@ package oci
 import com.google.cloud.tools.jib.api._
 import buildplan._
 import optimus.buildtool.format.docker.ImageLocation
+import optimus.buildtool.oci.ImageBuilderDelegate.newLayerDirsMap
 import optimus.buildtool.utils.BlockingQueue
 import org.slf4j.LoggerFactory
 
+import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import scala.util.control.NonFatal
 
@@ -25,7 +28,7 @@ import scala.util.control.NonFatal
 trait ImageBuilderDelegate[Result] {
   def addFileLayerBuilder(builder: FileEntriesLayer.Builder): Unit
   def addEnvVariable(name: String, value: String): Unit
-  def finish(): Result
+  def finish(layerToDirs: ConcurrentHashMap[FileEntriesLayer.Builder, Set[Path]] = newLayerDirsMap): Result
 }
 
 object ImageBuilderDelegate {
@@ -40,10 +43,14 @@ object ImageBuilderDelegate {
 
   private[buildtool] def fileChangedMsg(name: String) = s"Files have changed during the docker build for image $name"
 
+  private[buildtool] def newLayerDirsMap: ConcurrentHashMap[FileEntriesLayer.Builder, Set[Path]] = new ConcurrentHashMap
+
   type Result = (List[FileEntriesLayer], List[(String, String)])
 
   private[buildtool] def outputTarRetryIfFileChanged[T](
       toName: String,
+      jib: JibContainerBuilder,
+      layerToDirs: ConcurrentHashMap[FileEntriesLayer.Builder, Set[Path]],
       retry: Int = maxRetry,
       retryIntervalSeconds: Int = retryIntervalSeconds)(f: => T): T =
     try f
@@ -51,9 +58,12 @@ object ImageBuilderDelegate {
       // This could happen if files changed while building the layers and tar
       case NonFatal(ex) if tarExceptionsWhenFileChanged.exists(ex.getMessage.contains) =>
         if (retry > 0) {
+          // clear the layers to avoid the duplications when retry
+          layerToDirs.clear()
+          jib.setFileEntriesLayers(new java.util.ArrayList[FileEntriesLayer]())
           log.warn(s"Retrying $retry/$maxRetry: ${fileChangedMsg(toName)}", ex)
           Thread.sleep(TimeUnit.SECONDS.toMillis(retryIntervalSeconds))
-          outputTarRetryIfFileChanged(toName, retry - 1)(f)
+          outputTarRetryIfFileChanged(toName, jib, layerToDirs, retry - 1)(f)
         } else throw new Exception(s"Retried $maxRetry times: ${fileChangedMsg(toName)}", ex)
     }
 
@@ -66,7 +76,8 @@ object ImageBuilderDelegate {
         layers.synchronized(layers += builder.build())
       }
       def addEnvVariable(name: String, value: String): Unit = envVariables.synchronized(envVariables += name -> value)
-      def finish(): Result = layers.result() -> envVariables.result()
+      def finish(layerToDirs: ConcurrentHashMap[FileEntriesLayer.Builder, Set[Path]] = newLayerDirsMap): Result =
+        layers.result() -> envVariables.result()
     }
 
   /** Create an [[ImageBuilderDelegate]] which actually builds an image. */
@@ -88,7 +99,7 @@ object ImageBuilderDelegate {
 
     def addFileLayerBuilder(builder: FileEntriesLayer.Builder): Unit = layerBuilders.put(builder)
 
-    def finish(): JibContainer = {
+    def finish(layerToDirs: ConcurrentHashMap[FileEntriesLayer.Builder, Set[Path]]): JibContainer = {
       val builders = layerBuilders.pollAll()
 
       def buildLayersAndTar = {
@@ -100,7 +111,7 @@ object ImageBuilderDelegate {
         jib.containerize(containerizer)
       }
 
-      outputTarRetryIfFileChanged(to.name)(buildLayersAndTar)
+      outputTarRetryIfFileChanged(to.name, jib, layerToDirs)(buildLayersAndTar)
     }
   }
 

@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.config
 
+import optimus.buildtool.config.MetaBundle.toMavenCompatibleStr
+
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.util.hashing.MurmurHash3
@@ -50,6 +52,10 @@ sealed trait HasMetaBundle extends Id {
   def metaBundle: MetaBundle
 }
 
+sealed trait HasModuleId extends HasMetaBundle {
+  def fullModule: ModuleId
+}
+
 /**
  * Represents a compilation scope (i.e. a set of sources that are compiled together).
  *
@@ -62,14 +68,16 @@ sealed trait HasMetaBundle extends Id {
  * @param tpe
  *   The source type, e.g. "main", "test" or "uiTest"
  */
-final case class ScopeId(meta: String, bundle: String, module: String, tpe: String) extends HasMetaBundle {
+final case class ScopeId(meta: String, bundle: String, module: String, tpe: String) extends HasModuleId {
+  def forMavenRelease: ScopeId =
+    new ScopeId(toMavenCompatibleStr(meta), toMavenCompatibleStr(bundle), toMavenCompatibleStr(module), tpe)
   def tuple: (String, String, String, String) = (meta, bundle, module, tpe)
   override def elements: Seq[String] = Seq(meta, bundle, module, tpe)
   def isMain: Boolean = tpe == "main"
   def isTest: Boolean = tpe.toLowerCase contains "test"
   def isRoot: Boolean = this == ScopeId.RootScopeId
   def metaBundle: MetaBundle = MetaBundle(meta, bundle)
-  def fullModule: ModuleId = ModuleId(meta, bundle, module)
+  override def fullModule: ModuleId = ModuleId(meta, bundle, module)
   override def contains(scopeId: ScopeId): Boolean = this == scopeId
   override def toString: String =
     if (Seq(meta, bundle, module, tpe).forall(_.isEmpty)) "." else super.toString
@@ -79,6 +87,8 @@ final case class ScopeId(meta: String, bundle: String, module: String, tpe: Stri
 }
 
 object ScopeId {
+  implicit val ordering: Ordering[ScopeId] = Ordering.by(s => (s.meta, s.bundle, s.module, s.tpe))
+
   val RootScopeId: ScopeId = ScopeId("", "", "", "")
 
   def parse(str: String): ScopeId = str match {
@@ -108,7 +118,7 @@ object ScopeId {
 
 /** An extractor for ScopeIds from Strings */
 object ScopeIdString {
-  private val ScopeIdFormat = """([\w\-]*)\.([\w\-]*)\.([\w\-]*)\.([\w\-]*)""".r
+  private[config] val ScopeIdFormat = """([\w\-]*)\.([\w\-]*)\.([\w\-]*)\.([\w\-]*)""".r
 
   def unapply(str: String): Option[ScopeId] = str match {
     case ScopeIdFormat(meta, bundle, module, tpe) => Some(ScopeId(meta, bundle, module, tpe))
@@ -140,6 +150,25 @@ final case class PartialScopeId(
 
 object PartialScopeId {
   val RootPartialScopeId: PartialScopeId = PartialScopeId(Some(""), Some(""), Some(""), Some(""))
+
+  def parse(str: String): PartialScopeId = str match {
+    case "." | ""                      => RootPartialScopeId
+    case PartialScopeIdString(scopeId) => scopeId
+    case _ =>
+      throw new IllegalArgumentException(
+        s"Expected a string of form '<meta>.<bundle>.<module>.<type>' but found '$str'")
+  }
+}
+
+/** An extractor for PartialScopeIds from Strings */
+object PartialScopeIdString {
+  private def opt(s: String): Option[String] = Some(s).filter(_.nonEmpty)
+
+  def unapply(str: String): Option[PartialScopeId] = str match {
+    case ScopeIdString.ScopeIdFormat(meta, bundle, module, tpe) =>
+      Some(PartialScopeId(opt(meta), opt(bundle), opt(module), opt(tpe)))
+    case _ => None
+  }
 }
 
 object RelaxedIdString {
@@ -174,11 +203,12 @@ trait HasScopeId {
   def id: ScopeId
 }
 
-final case class ModuleId(meta: String, bundle: String, module: String) extends ParentId with HasMetaBundle {
+final case class ModuleId(meta: String, bundle: String, module: String) extends ParentId with HasModuleId {
   def metaBundle: MetaBundle = MetaBundle(meta, bundle)
   def scope(tpe: String): ScopeId = ScopeId(meta, bundle, module, tpe)
   override def elements: Seq[String] = Seq(meta, bundle, module)
   override def contains(scopeId: ScopeId): Boolean = this == scopeId.fullModule
+  override def fullModule: ModuleId = this
 }
 
 object ModuleId {
@@ -202,6 +232,7 @@ object ModuleId {
 }
 
 final case class MetaBundle(meta: String, bundle: String) extends ParentId with HasMetaBundle {
+  def forMavenRelease(): MetaBundle = new MetaBundle(toMavenCompatibleStr(meta), toMavenCompatibleStr(bundle))
   def fullMeta: MetaId = MetaId(meta)
   def module(name: String): ModuleId = ModuleId(meta, bundle, name)
   override def elements: Seq[String] = Seq(meta, bundle)
@@ -209,7 +240,11 @@ final case class MetaBundle(meta: String, bundle: String) extends ParentId with 
   override def metaBundle: MetaBundle = this
   def isEmpty: Boolean = meta.isEmpty && bundle.isEmpty
 }
+
 object MetaBundle {
+
+  def toMavenCompatibleStr(s: String): String = s.replaceAll("_", "-").toLowerCase
+
   implicit val ord: Ordering[MetaBundle] = Ordering.by(mb => (mb.meta, mb.bundle))
 
   def parse(str: String): MetaBundle = str.split("\\.") match {
@@ -225,6 +260,7 @@ object MetaBundle {
 }
 
 final case class MetaId(meta: String) extends ParentId {
+  def bundle(name: String): MetaBundle = MetaBundle(meta, name)
   override def elements: Seq[String] = Seq(meta)
   override def contains(scopeId: ScopeId): Boolean = this == scopeId.fullModule.metaBundle.fullMeta
 }

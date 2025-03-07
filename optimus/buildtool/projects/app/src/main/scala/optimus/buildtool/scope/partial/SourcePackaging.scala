@@ -20,7 +20,7 @@ import optimus.buildtool.scope.sources.SourceCompilationSources
 import optimus.buildtool.trace.Sources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 @entity private[scope] class SourcePackaging(
     override protected val scope: CompilationScope,
@@ -36,9 +36,9 @@ import scala.collection.immutable.Seq
   @node override protected def containsRelevantSources: Boolean =
     !sources.isEmpty && (!scopeConfigSource.local(scope.id) || scope.config.flags.installSources)
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Seq()
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
 
-  @node def packagedSources: Seq[Artifact] =
+  @node def packagedSources: IndexedSeq[Artifact] =
     compile(ArtifactType.Sources, None)(sourcePackager.artifact(id, sourcePackagerInputsN))
 
   private val sourcePackagerInputsN = asNode(() => sourcePackagerInputs)

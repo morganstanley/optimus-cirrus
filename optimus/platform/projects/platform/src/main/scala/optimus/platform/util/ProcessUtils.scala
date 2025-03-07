@@ -10,11 +10,21 @@
  * limitations under the License.
  */
 package optimus.platform.util
+import java.util.concurrent.CompletableFuture
 
 object ProcessUtils {
   def killProcessAndDescendants(p: Process): Unit = {
     val ph = p.toHandle
-    ph.descendants().forEach(_.destroy(): Unit)
+    val victims = Seq.newBuilder[CompletableFuture[_]]
+    ph.descendants().forEach { descendant =>
+      descendant.destroy()
+      victims += descendant.onExit()
+    }
     p.destroy()
+    victims += p.onExit()
+
+    // java.lang.Process is synchronous right? Nope! For some reason, process termination is async! It's the only method
+    // for which that is the case! Isn't that an exciting source of "fun"?
+    CompletableFuture.allOf(victims.result(): _*).join()
   }
 }

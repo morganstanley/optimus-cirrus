@@ -17,7 +17,7 @@ import optimus.examples.platform.entities._
 
 // This example demonstrates the use of the DAL debug interface
 
-object DALDebugTools extends AdvancedOptimusApp {
+object DALDebugTools extends OptimusApp {
   val user = System.getProperty("user.name")
 
   override def setup(): Unit = {

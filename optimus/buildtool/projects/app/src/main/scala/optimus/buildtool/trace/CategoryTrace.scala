@@ -229,7 +229,8 @@ private[buildtool] final case class InstallMavenJar(jarName: String) extends Cat
 }
 private[buildtool] case object InstallArchive extends CategoryTrace
 private[buildtool] case object InstallCpp extends CategoryTrace
-private[buildtool] case object InstallPython extends CategoryTrace
+private[buildtool] case object InstallPythonArtifact extends CategoryTrace
+private[buildtool] case object InstallPythonWheels extends CategoryTrace
 private[buildtool] case object InstallIvyFile extends CategoryTrace
 private[buildtool] case object InstallPomFile extends CategoryTrace
 private[buildtool] case object InstallGenericFiles extends CategoryTrace

@@ -130,6 +130,7 @@ class BundleRunConfsInstaller(
       venvs: SortedMap[String, String]): FileAsset = {
     val archive = runConfArchive(metaBundle)
     Utils.atomicallyWrite(archive) { tempJar =>
+      Files.createDirectories(tempJar.getParent)
       // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
       val tempJarStream =
         new ConsistentlyHashedJarOutputStream(JarAsset(tempJar), None, compressed = true)
@@ -171,11 +172,29 @@ class BundleRunConfsInstaller(
               }
           }
 
+        val distinctInventory = summary.inventory.distinct.sortBy(_.name)
+
         // Analyze collisions among apps in this m/b and complain if found
-        summary.inventory.filter(_.isApp).groupBy(_.name).foreach { case (name, hits) =>
+        distinctInventory.filter(_.isApp).groupBy(_.name).foreach { case (name, hits) =>
           if (hits.length > 1) {
-            val message =
-              s"The application '$name' is found in multiple places: ${hits.map(_.scopeId).mkString(", ")}"
+            val locations =
+              hits
+                .flatMap { hit =>
+                  hit.relativeSourcePath
+                    .map { file =>
+                      s"$file (${hit.scopeId})"
+                    }
+                    .orElse(Some(hit.scopeId.toString)) // backward compatibility
+                }
+                .mkString(", ")
+            val impactedScopes = hits.map(_.scopeId.toString).distinct.sorted.mkString(", ")
+            val message = {
+              Seq(
+                s"The application '$name' is found in multiple places: $locations.",
+                "Possible solutions: consolidate, rename or remove as appropriate.",
+                s"If the problem persist, rebuild $impactedScopes."
+              ).mkString(" ")
+            }
             log.error(message)
             throw new IllegalStateException(message)
           }
@@ -188,7 +207,7 @@ class BundleRunConfsInstaller(
           )
         }
 
-        RunConfInventory.writeFile(tempJarStream, summary.inventory)
+        RunConfInventory.writeFile(tempJarStream, distinctInventory)
         VenvProperties.writeFile(tempJarStream, venvs)
       } asyncFinally {
         tempJarStream.close()

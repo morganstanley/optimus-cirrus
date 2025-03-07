@@ -16,6 +16,8 @@ import optimus.tools.scalacplugins.entity.Attachment.NodeFieldType
 import scala.tools.nsc.Global
 import scala.tools.nsc.symtab.Flags._
 import CollectionUtils._
+import optimus.tools.scalacplugins.entity.staged.scalaVersionRange
+
 import scala.reflect.internal.util.{ListOfNil, TriState}
 
 trait TypedNodeSynthesis { this: GenerateNodeMethodsComponent =>
@@ -136,6 +138,12 @@ trait TypedNodeSynthesis { this: GenerateNodeMethodsComponent =>
       }
     createNodeSym.setInfo(createNodeType)
     resetOverrideIfNecessary(createNodeSym)
+
+    if (scalaVersionRange("2.13:"): @staged) {
+      // ensure all `match` trees are desugared, including those that could be emitted as switches.
+      // the async transform doesn't handle match trees correctly (OPTIMUS-69378).
+      createNodeSym.updateAttachment(ForceMatchDesugar)
+    }
 
     if (nodeSym.isSuperAccessor) {
       val referee = nodeSym.asTerm.referenced

@@ -24,6 +24,7 @@ import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters._
+import scala.collection.compat._
 import scala.collection.mutable
 
 /**
@@ -184,18 +185,33 @@ sealed private[optimus] class SSCacheID {
    *   1. propertyInfo -> Tweak [aka full blown property tweak]
    *   1. propertyInfo -> KeyExtractor [aka faster property tweaks]
    *   1. ExtractorTweakableKey -> Tweak [second part of faster property tweaks]
+   *
+   * These types are represented in the two getters below.
    */
-  protected[graph] var tweaks: JHashMap[AnyRef, AnyRef] = new JHashMap()
+  protected var tweaks: JHashMap[AnyRef, AnyRef] = new JHashMap()
+  @volatile // This field also serves as isInitialized in a classic double checked locking
+  protected var twkHash: JHashMap[AnyRef, AnyRef] = _ // Node hash or NodeTaskInfo hash
+  protected var tweakMask: TPDMask = TPDMask.empty
+  // Note! It is important to keep the state of the three variables above in sync, which is why they need to be
+  // protected.
+
+  /** returns the instance tweak for key, if one exists, else null */
+  def get(key: TweakableKey): Tweak = tweaks.get(key).asInstanceOf[Tweak]
+
+  /**
+   * Returns the property tweak for key, if one exists, else null. Does *not* check for property tweaks affecting
+   * parents of key (i.e. the same properties on super-types of the owning entity)
+   *
+   * Returns KeyExtractor for propertyTweaks that support quick lookup
+   */
+  def get(key: NodeTaskInfo): AnyRef = tweaks.get(key)
 
   /** Don't use system one, this one is probably better and faster! */
   // noinspection HashCodeUsesVar (id is basically a val, but during deserialization needs to be updated)
   override def hashCode(): Int = id.asInstanceOf[Int]
 
-  @volatile // This field also serves as isInitialized in a classic double checked locking
-  protected[graph] var twkHash: JHashMap[AnyRef, AnyRef] = _ // Node hash or NodeTaskInfo hash
-  protected[graph] var tweakMask: TPDMask = TPDMask.empty
-
   def tweakMaskString = tweakMask.stringEncoded()
+  def size: Int = tweaks.size()
 
   def this(original: SSCacheID) = {
     this()
@@ -219,11 +235,12 @@ sealed private[optimus] class SSCacheID {
     }
   }
 
-  def allTweaksAsIterable: Iterable[Tweak] = tweaks.values().asScala.collect { case twk: Tweak => twk }
+  // Following methods are not safe under concurrent modification.
+  def allTweaksAsIterable: Seq[Tweak] = tweaks.values().iterator().asScala.collect { case twk: Tweak => twk }.to(Seq)
   def allInstanceTweaksInfos: Seq[NodeTaskInfo] =
-    tweaks.keySet().asScala.collect { case key: PropertyNode[_] => key.propertyInfo }.toSeq
+    tweaks.keySet().iterator().asScala.collect { case key: PropertyNode[_] => key.propertyInfo }.to(Seq)
   def allPropertyTweaksInfos: Seq[NodeTaskInfo] =
-    tweaks.keySet().asScala.collect { case nti: NodeTaskInfo => nti }.toSeq
+    tweaks.keySet().iterator().asScala.collect { case nti: NodeTaskInfo => nti }.to(Seq)
 
   // use unordered API since SnapshotScenarioStack identity uses Scenario.equals and hashcode (for better reuse)
   @nowarn("msg=10500 optimus.platform.Scenario.unordered")
@@ -235,16 +252,6 @@ sealed private[optimus] class SSCacheID {
 
   /** Valid for CacheID created from a set of tweaks aka Scenario */
   def inputScenario: Scenario = toScenario
-
-  /** returns the instance tweak for key, if one exists, else null */
-  def get(key: TweakableKey): Tweak = tweaks.get(key).asInstanceOf[Tweak]
-
-  /**
-   * Returns the property tweak for key, if one exists, else null. Does *not* check for property tweaks affecting
-   * parents of key (i.e. the same properties on super-types of the owning entity) OR Returns KeyExtractor for
-   * propertyTweaks that support quick lookup
-   */
-  def get(key: NodeTaskInfo): AnyRef = tweaks.get(key)
 
   def containsInstanceTweak(key: TweakableKey): Boolean = tweaks.containsKey(key)
 
@@ -440,32 +447,32 @@ final private[optimus] class MutableSSCacheID extends SSCacheID {
     super.put(key, twk)
   }
 
-  def remove(key: NodeKey[_]): Tweak = {
-    copyOnWrite()
-    val result = tweaks.remove(key)
-    recomputeTweakMask()
-    result.asInstanceOf[Tweak]
-  }
-
-  /* Note: removes property tweaks and tweak extractor tweaks */
-  def remove(info: NodeTaskInfo): Unit = {
-    copyOnWrite()
-    val it = tweaks.keySet().iterator()
-    while (it.hasNext) {
-      val key = it.next()
-      key match {
-        case nti: NodeTaskInfo if nti == info                         => it.remove()
-        case xkey: ExtractorTweakableKey if xkey.propertyInfo == info => it.remove()
-        case _                                                        =>
-      }
-    }
-    recomputeTweakMask()
-  }
-
   def clearTweaks(): Unit = {
     copyOnWrite()
     tweaks.clear()
     recomputeTweakMask()
+  }
+
+  def removeTweaks(predicate: Tweak => Boolean): Boolean = {
+    copyOnWrite()
+    var mutated = false
+    try {
+      val iter = tweaks.entrySet().iterator()
+
+      while (iter.hasNext) {
+        iter.next().getValue match {
+          case tweak: Tweak if predicate(tweak) =>
+            mutated = true
+            iter.remove()
+          case _ =>
+        }
+      }
+
+      mutated
+    } finally {
+      if (mutated) recomputeTweakMask()
+    }
+
   }
 }
 
@@ -474,7 +481,7 @@ final private class SSForwardingCacheID(val orgID: SSCacheID) extends SSCacheID 
   override def dup: SSCacheID = orgID.dup
   override def isEmpty: Boolean = orgID.isEmpty
 
-  override def allTweaksAsIterable: Iterable[Tweak] = orgID.allTweaksAsIterable
+  override def allTweaksAsIterable: Seq[Tweak] = orgID.allTweaksAsIterable
 
   override def get(key: TweakableKey): Tweak = orgID.get(key)
   override def get(key: NodeTaskInfo): AnyRef = orgID.get(key)

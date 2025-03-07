@@ -53,7 +53,7 @@ public class DefaultRawServerAccess implements RawServerAccess {
     MessageGenerator messageGenerator = messageGeneratorFactory.build(requestId);
     AtomicReference<SentMessageMetrics> sentMetrics = new AtomicReference<>();
     callbackRegistry.registerCallbackWithTimeout(
-        server, requestId, operationTimeout, ctx -> callback.act(sentMetrics.get(), ctx));
+        server, requestId, operationTimeout, ctx -> callback.act(sentMetrics.get(), ctx), null);
     connectionsManager.sendMessage(server, moduleId, messageGenerator, sentMetrics::set);
   }
 }

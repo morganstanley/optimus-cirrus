@@ -18,7 +18,7 @@ import optimus.platform.util.Log
 import optimus.platform._
 
 object BasicTweaks extends OptimusApp with Log {
-  override def dalLocation: DalLocation = DalEnv("none")
+  override def dalLocation: DalLocation = DalEnv.none
 
   @entersGraph override def run(): Unit = {
     // entity properties can be tweaked, this example shows tweaking of in memory

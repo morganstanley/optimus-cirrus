@@ -149,6 +149,7 @@ trait OptimusNames {
     val orElse: TermName = newTermName("orElse")
     val isDefined: TermName = newTermName("isDefined")
     val collect: TermName = newTermName("collect")
+    val empty: TermName = newTermName("empty")
 
     val AppliedStorageInfo: TermName = newTermName("AppliedStorageInfo")
     val UniqueStorageInfo: TermName = newTermName("UniqueStorageInfo")

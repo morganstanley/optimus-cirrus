@@ -24,6 +24,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.cache.LoadingCache
 import com.google.cloud.tools.jib.api._
 import com.google.cloud.tools.jib.api.buildplan._
+import com.google.cloud.tools.jib.api.buildplan.FilePermissions.DEFAULT_FOLDER_PERMISSIONS
 import optimus.buildtool.app.ScopedCompilationFactory
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
@@ -36,6 +37,7 @@ import optimus.buildtool.builders.postbuilders.installer.ScopeArtifacts
 import optimus.buildtool.builders.postbuilders.installer.component.DockerApplicationScriptsInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.CopyFilesInstaller
 import optimus.buildtool.builders.postbuilders.installer.component.CppInstaller
+import optimus.buildtool.builders.postbuilders.installer.component.DockerGenericRunnerGenerator
 import optimus.buildtool.builders.postbuilders.installer.component.FileCopySpec
 import optimus.buildtool.builders.postbuilders.installer.component.InstallJarMapping
 import optimus.buildtool.config.DockerConfigurationSupport
@@ -56,6 +58,7 @@ import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.docker.DockerConfiguration
 import optimus.buildtool.format.docker.ExtraImageDefinition
 import optimus.buildtool.format.docker.ImageLocation
+import optimus.buildtool.oci.ImageBuilderDelegate.newLayerDirsMap
 import optimus.buildtool.runconf.AppRunConf
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Commit
@@ -73,13 +76,16 @@ import optimus.platform._
 import optimus.platform.util.Log
 import optimus.platform.util.Version
 
+import java.nio.charset.StandardCharsets
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Properties
 import scala.util.Try
+import scala.util.matching.Regex
 
-object ImageBuilder {
-  lazy val initSpecialSystemProperties: () => Unit = {
+object AbstractImageBuilder {
+  private lazy val initSpecialSystemProperties: () => Unit = {
     sys.env.get("CINITCCNAME").filter(_.nonEmpty).foreach { certPath => // be safe and treat set-but-empty as unset
       sys.props("javax.net.ssl.keyStore") = s"$certPath/${StaticConfig.string("sslKeyStoreSuffix")}"
       sys.props("javax.net.ssl.keyStoreType") = StaticConfig.string("sslKeyStoreType")
@@ -95,16 +101,27 @@ object ImageBuilder {
     () => ()
   }
 
-  type LayersBuilder[Key] = LoadingCache[Key, FileEntriesLayer.Builder]
+  private final case class FileToPut(src: FileAsset, dst: FileAsset, mode: OctalMode)
+
+  private type LayersBuilder[Key] = LoadingCache[Key, FileEntriesLayer.Builder]
   def newLayersBuilder[Key <: AnyRef](): LayersBuilder[Key] =
     Caffeine
       .newBuilder()
       .build(id => FileEntriesLayer.builder().setName(id.toString))
 
-  object Layers {
+  private object Layers {
     val metadata = "<metadata>"
     val jdk = "<JDK>"
   }
+
+  private val BuildtoolMetaBundle: MetaBundle = MetaBundle("optimus", "buildtool")
+  private val oarPathingJar = "runner-runtimeAppPathing.jar"
+  private val oarRunscript = "app-runner"
+
+  private val InstalledArtifactPattern: Regex = """([^/]+)/([^/]+)/([^/]+)/install/common/(.*)""".r
+
+  private def resolveLib(root: Path, fileName: String): JarAsset = JarAsset(root.resolve("lib").resolve(fileName))
+  private def resolveBin(root: Path, fileName: String): FileAsset = FileAsset(root.resolve("bin").resolve(fileName))
 }
 
 final case class DependencyFile(bucketId: Int, absFilePath: Path, inOutputTarPath: Path)
@@ -124,7 +141,8 @@ class ImageBuilder(
     val dockerImageCacheDir: Directory,
     val depCopyDir: Directory,
     val useCrumbs: Boolean,
-    val minimalInstallScopes: Option[Set[ScopeId]]
+    val minimalInstallScopes: Option[Set[ScopeId]],
+    val genericRunnerGenerator: DockerGenericRunnerGenerator
 ) extends AbstractImageBuilder {
 
   override protected lazy val dynamicDependencyDetector: DynamicDependencyDetector = DynamicDependencyDetector
@@ -151,7 +169,7 @@ class ImageBuilder(
 }
 
 abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with SymLinkSearch with Log {
-  import ImageBuilder.Layers
+  import AbstractImageBuilder._
 
   val sourceDir: WorkspaceSourceRoot
   val workDir: Directory
@@ -166,20 +184,21 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   val dockerImageCacheDir: Directory
   val depCopyDir: Directory
   val dstImage: ImageLocation = dockerImage.location
-  val relevantScopes: Set[ScopeId] = dockerImage.relevantScopeIds
+  private val relevantScopes: Set[ScopeId] = dockerImage.relevantScopeIds
   val extraImages: Set[ExtraImageDefinition] = dockerImage.extraImages
   val useCrumbs: Boolean
   val minimalInstallScopes: Option[Set[ScopeId]]
+  val genericRunnerGenerator: DockerGenericRunnerGenerator
 
   private val relevantBundles: Set[MetaBundle] = relevantScopes.map(_.metaBundle)
   private val stagingDir = Directory.temporary()
   protected val pathBuilder: InstallPathBuilder = InstallPathBuilder.dist(installVersion)
   protected def dynamicDependencyDetector: DynamicDependencyDetector
-  protected val dependencyStripper = new DependencyStripper(stagingDir.resolveDir("stripped-dependencies"))
+  private val dependencyStripper = new DependencyStripper(stagingDir.resolveDir("stripped-dependencies"))
 
   // The staging path builder is used by regular installers
   // and we then map those paths to the regular path builder.
-  val stagingPathBuilder: InstallPathBuilder = InstallPathBuilder.staging(installVersion, stagingDir)
+  private val stagingPathBuilder: InstallPathBuilder = InstallPathBuilder.staging(installVersion, stagingDir)
   private val fingerprintsCache = new DisabledBundleFingerprintsCache(stagingPathBuilder)
 
   private val manifestResolver = ManifestResolver(scopeConfigSource, versionConfig, pathBuilder)
@@ -194,6 +213,45 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   )
 
   private val distMavenLibDir = pathBuilder.dirForMetaBundle(pathBuilder.mavenReleaseMetaBundle, "lib")
+
+  private val layerToDirs = newLayerDirsMap
+
+  private def addEntryWithParents(layer: FileEntriesLayer.Builder, fileEntry: FileEntry): Unit = {
+    val dst = fileEntry.getExtractionPath.toString
+    var currentParent: Path = Paths.get(dst).getParent
+    val parents = new ArrayBuffer[Path]()
+
+    // Collect all parent directories
+    while (currentParent != null && currentParent != currentParent.getRoot) {
+      if (layerToDirs.getOrDefault(layer, Set.empty).contains(currentParent)) currentParent = null
+      else {
+        parents += currentParent
+        currentParent = currentParent.getParent
+      }
+    }
+
+    // add all parent directories first, we can't trust Jib automatically create parent directories
+    parents.reverse.foreach { parent =>
+      layerToDirs.compute(
+        layer,
+        (_, existing) => {
+          val updated = if (existing != null) existing + parent else Set(parent)
+          layer.addEntry(
+            NamingConventions.AfsDist.path,
+            absoluteUnixPath(parent),
+            DEFAULT_FOLDER_PERMISSIONS,
+            Instant.EPOCH)
+          updated
+        }
+      )
+    }
+
+    // then add the target file
+    if (Files.exists(fileEntry.getSourceFile)) layer.addEntry(fileEntry)
+    else // avoid OBT generate broken docker image
+      throw new IllegalArgumentException(
+        s"File ${fileEntry.getSourceFile} does not exist! This may be due to AFS not being able to copy the file.")
+  }
 
   private def isMavenReleasePath(distPath: Path): Boolean = distMavenLibDir.contains(FileAsset(distPath))
 
@@ -216,11 +274,11 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     dockerConfiguration.excludes.map(f => fileSystem.getPathMatcher(s"glob:$f"))
   }
 
-  private val internalLayers = ImageBuilder.newLayersBuilder[MetaBundle]()
+  private val internalLayers = AbstractImageBuilder.newLayersBuilder[MetaBundle]()
   private val processedDependencies = new ConcurrentHashMap[Path, Set[DependencyFile]]()
   private val processedJDKs = new ConcurrentHashMap[Path, Set[Path]]()
 
-  ImageBuilder.initSpecialSystemProperties()
+  AbstractImageBuilder.initSpecialSystemProperties()
 
   // This part require docker daemon to download source images
   private val dockerUtils = new DockerUtils(dockerImageCacheDir, useCrumbs)
@@ -263,7 +321,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
     analyzeDependencies(
       resolvedExtraImagesFiles.keys,
-      Some(resolvedExtraImagesFiles.map { case (inTarPath, file) => inTarPath -> file }))
+      extraImagePaths = Some(resolvedExtraImagesFiles.map { case (inTarPath, file) => inTarPath -> file }))
   }
 
   analyzeDependencies(dockerConfiguration.extraDependencies)
@@ -286,6 +344,8 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
         relevantMetaBundles.contains(s.metaBundle) && scopeConfigSource.scopeConfiguration(s).pathingBundle
       }
       analyzeArtifacts(relevantTransitivePathingScopes, artifacts, transitive = true)
+
+      addOptimusAppRunner()
 
       addMetadataLayer()
       addEnvVariables()
@@ -331,19 +391,24 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
         writeClassJar(classJars, manifest, stagingJar)
 
         putFile(scopeId.metaBundle, stagingJar, installJar.jar, OctalMode.Default)
-
-        val targetBundles = scopeConfigSource.scopeConfiguration(scopeId).targetBundles.toSet
-        targetBundles.intersect(relevantBundles).foreach { targetBundle =>
-          // path of installJar relative to our common dir (so basically lib/entityagent.jar)
-          val relpath = pathBuilder.dirForScope(scopeId).relativize(installJar.jar)
-          // path in target meta/bundle (so basically /AFS/path/to/bundle/$version/common/lib/entityagent.jar)
-          val targetInstallJar = pathBuilder.dirForMetaBundle(targetBundle).resolveFile(relpath)
-          putFile(targetBundle, stagingJar, targetInstallJar, OctalMode.Default)
-        }
       }
     }
 
-  @async private def analyzeRunconfJars(relevantRunconfJars: Seq[(ScopeId, JarAsset)]): Unit =
+  @async private def analyzeRunconfJars(relevantRunconfJars: Seq[(ScopeId, JarAsset)]): Unit = {
+    // Generate bundle-level run scripts
+    relevantRunconfJars.apar.map { case (scopeId, _) => scopeId.metaBundle }.distinct.sorted.foreach { metaBundle =>
+      val runContent = genericRunnerGenerator.dockerContent(obtVersion, metaBundle)
+      val installDir = pathBuilder.dirForDist(metaBundle, "bin")
+      putFileFromContent(
+        metaBundle,
+        runContent,
+        installDir.resolveFile("run"),
+        OctalMode.Execute,
+        hint = "run",
+        extension = s".${NamingConventions.DockerBashExt}"
+      )
+    }
+
     relevantRunconfJars.apar.foreach { case (scopeId, runConfJar) =>
       val hash = Hashing.hashFileContent(runConfJar)
       val stagingDir = stagingSubdir(scopeId, hash) resolveDir "bin"
@@ -372,6 +437,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
         jdks.foreach(jdk => processedJDKs.computeIfAbsent(jdk, p => processPath(p, withDynamicDeps = false)))
       }
     }
+  }
 
   @async private def analyzePathingJars(
       scopes: Set[ScopeId],
@@ -444,7 +510,10 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     putFiles(scopeId.metaBundle, filesToPut)
   }
 
-  private def analyzePathingJarDependencies(jarAsset: JarAsset, manifest: jar.Manifest): Unit =
+  private def analyzePathingJarDependencies(
+      jarAsset: JarAsset,
+      manifest: jar.Manifest,
+      inTarPathToAddFct: Path => Path = identity): Unit =
     analyzeDependencies(
       Jars.extractManifestClasspath(jarAsset, manifest).map(_.path) ++
         Seq(
@@ -453,10 +522,14 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
           nme.PreloadDebugFallbackPath,
           nme.ExternalJniPath,
           nme.ExtraFiles
-        ).flatMap { k => JarUtils.load(manifest, k, ";").map(Paths.get(_)) }
+        ).flatMap { k => JarUtils.load(manifest, k, ";").map(Paths.get(_)) },
+      inTarPathToAddFct
     )
 
-  private def analyzeDependencies(paths: Iterable[Path], extraImagePaths: Option[Map[Path, Path]] = None): Unit = {
+  private def analyzeDependencies(
+      paths: Iterable[Path],
+      inTarPathToAddFct: Path => Path = identity,
+      extraImagePaths: Option[Map[Path, Path]] = None): Unit = {
     def pickBucketId(path: Path): Int = {
       // Dependencies tend to be by far our biggest layer
       // here we try to split them in an idempotent way
@@ -488,13 +561,14 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       processedDependencies.computeIfAbsent(
         dependency,
         { d =>
-          processPath(d, withDynamicDeps = true).map { inTarPathToAdd =>
+          processPath(d, withDynamicDeps = true).map { sourcePathToAdd =>
             val fileAbsPath = extraImagePaths match {
-              case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(inTarPathToAdd) =>
-                extraImagePathMap(inTarPathToAdd) // get local disk path
+              case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(sourcePathToAdd) =>
+                extraImagePathMap(sourcePathToAdd) // get local disk path
               case _ => // when not for extraImage(should also consider not in extraImagePathMap case when concurrent)
-                getFileAbsPath(inTarPathToAdd)
+                getFileAbsPath(sourcePathToAdd)
             }
+            val inTarPathToAdd = inTarPathToAddFct(sourcePathToAdd)
             DependencyFile(pickBucketId(inTarPathToAdd), fileAbsPath, inTarPathToAdd)
           }
         }
@@ -507,6 +581,83 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val pathsToAdd = processedJDKs.values().asScala.toSet.flatten
     pathsToAdd.toSeq.sorted.foreach(p => addEntryToLayer(layer, p, p))
     jib.addFileLayerBuilder(layer)
+  }
+
+  @node private def runnerLocation = genericRunnerGenerator.genericRunnerAppDir(BuildtoolMetaBundle)
+  @node private def obtVersion: String = {
+    // Check if we are sourcing OBT from its distribution or from this build's output
+    val localBuildtoolInstall = pathBuilder.binDir(BuildtoolMetaBundle)
+    if (localBuildtoolInstall == runnerLocation) NamingConventions.LocalVersion else versionConfig.obtVersion
+  }
+
+  @node private def BuildtoolLayerMetaBundle: MetaBundle = MetaBundle("<optimus.buildtool", s"$obtVersion>")
+  @async private def addOptimusAppRunner(): Unit = {
+    // It is important to use the same version as OBT release making the build because:
+    //  - we do not want to have duplicate files with same target paths
+    //  - OBT release has different versions of a number of Codetree libraries, which is incompatible with the built
+    //    image's libraries
+    val runnerInstallPath = runnerLocation.parent.path
+    val sourceDockerOarRunscript = resolveBin(runnerInstallPath, s"$oarRunscript.dckr.sh")
+    if (!sourceDockerOarRunscript.exists) {
+      log.warn(s"Missing OptimusAppRunner (OAR) runscript for Docker ($sourceDockerOarRunscript): skipping OAR layer")
+    } else {
+      val afsRoot = Paths.get(StaticConfig.string("afsRoot"))
+      val runnerFromAfs = runnerInstallPath.startsWith(afsRoot)
+
+      val currentObtVersion = obtVersion
+      val targetInstallPath = genericRunnerGenerator.targetObtInstallDir(currentObtVersion)
+
+      val inTarPathToAddFct: Path => Path =
+        if (runnerFromAfs) identity
+        else {
+          // Go to the root of install/ folder (e.g. remove trailing optimus/buildtool/<version>/install/common)
+          val sourceInstallPath = (1 to NamingConventions.InstallPathComponents).foldLeft(runnerInstallPath) {
+            case (p, _) => p.getParent
+          }
+
+          def toAfsLayout(sourceFile: Path): Path =
+            if (sourceFile.startsWith(afsRoot)) sourceFile
+            else {
+              // Coming from local build artifacts or NFS; must translate into AFS path for layer layout RT-ness
+              val layerTargetPath =
+                sourceInstallPath.relativize(sourceFile).toString match {
+                  case InstalledArtifactPattern("optimus", "buildtool", _, artifact) =>
+                    targetInstallPath.resolve(artifact)
+                  case InstalledArtifactPattern(meta, project, _, artifact) =>
+                    afsRoot
+                      .resolve("dist")
+                      .resolve(meta)
+                      .resolve("PROJ")
+                      .resolve(project)
+                      .resolve(currentObtVersion)
+                      .resolve(NamingConventions.Common)
+                      .resolve(artifact)
+                }
+              log.info(s"$sourceFile -> $layerTargetPath")
+              layerTargetPath
+            }
+
+          toAfsLayout
+        }
+
+      putFile(
+        BuildtoolLayerMetaBundle,
+        sourceDockerOarRunscript,
+        resolveBin(targetInstallPath, oarRunscript),
+        OctalMode.Execute)
+
+      // Copy pathing jar and capture jdk, java and native deps
+      val sourcePathingJar = resolveLib(runnerInstallPath, oarPathingJar)
+      putFile(
+        BuildtoolLayerMetaBundle,
+        sourcePathingJar,
+        resolveLib(genericRunnerGenerator.targetObtInstallDir(obtVersion), oarPathingJar),
+        OctalMode.Default)
+      val manifest = Jars
+        .readManifestJar(sourcePathingJar)
+        .getOrElse(throw new IllegalArgumentException(s"Jar $sourcePathingJar is missing manifest"))
+      analyzePathingJarDependencies(sourcePathingJar, manifest, inTarPathToAddFct)
+    }
   }
 
   @async private def addMetadataLayer(): Unit = {
@@ -524,7 +675,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       new FileEntry(file.path, dest, readOnlyPerm, Instant.EPOCH)
     }
 
-    layer.addEntry(metadataFileEntry)
+    addEntryWithParents(layer, metadataFileEntry)
     jib.addFileLayerBuilder(layer)
   }
 
@@ -539,7 +690,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   }
 
   @async private def addDependenciesLayers(): Unit = {
-    val layers = ImageBuilder.newLayersBuilder[String]()
+    val layers = AbstractImageBuilder.newLayersBuilder[String]()
 
     val pathsWithBucketsToAdd = processedDependencies.values().asScala.toSet.flatten
     val (extraImagesPaths, depsPaths) = pathsWithBucketsToAdd.partition { depDef =>
@@ -615,7 +766,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val dst = absoluteUnixPath(inTarDst)
     val perms = copyPermissions(file)
     val reduced = if (stripDependencies) dependencyStripper.copyWithoutDebugSymbols(file) else None
-    layer addEntry new FileEntry(reduced.getOrElse(file), dst, perms, Instant.EPOCH)
+    addEntryWithParents(layer, new FileEntry(reduced.getOrElse(file), dst, perms, Instant.EPOCH))
   }
 
   private def copyPermissions(srcPath: Path): FilePermissions =
@@ -632,7 +783,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
   override def complete(successful: Boolean): Unit =
     if (successful) {
-      handleResult(jib.finish())
+      handleResult(jib.finish(layerToDirs))
       log.info(s"[${dstImage.name}] Built image as $dstImage")
     } else log.warn(s"[${dstImage.name}] Build was not successful; skipping image creation")
 
@@ -642,7 +793,17 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   private def absoluteUnixPath(path: Path): AbsoluteUnixPath =
     AbsoluteUnixPath.get(PathUtils.platformIndependentString(path))
 
-  private case class FileToPut(src: FileAsset, dst: FileAsset, mode: OctalMode)
+  private def putFileFromContent(
+      mb: MetaBundle,
+      content: String,
+      dst: FileAsset,
+      mode: OctalMode,
+      hint: String = "tmp",
+      extension: String = ".tmp"): Unit = {
+    val tmpFile = Files.createTempFile(hint, extension)
+    Files.write(tmpFile, content.getBytes(StandardCharsets.UTF_8))
+    putFile(mb, FileAsset(tmpFile), dst, mode)
+  }
 
   private def putFile(mb: MetaBundle, src: FileAsset, dst: FileAsset, mode: OctalMode): Unit = {
     putFiles(mb, Seq(FileToPut(src, dst, mode)))
@@ -653,11 +814,14 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     val layer = internalLayers.get(mb)
     layer.synchronized { // "layer" is basically just ArrayList[FileEntry] so we need to sync ourselves. Sorry.
       filesToPut.foreach { fileToPut =>
-        layer addEntry new FileEntry(
-          fileToPut.src.path,
-          absoluteUnixPath(fileToPut.dst.path),
-          FilePermissions.fromPosixFilePermissions(PosixPermissionUtils.fromMode(fileToPut.mode)),
-          Instant.EPOCH // keepin' it RT in here (or something like it)
+        addEntryWithParents(
+          layer,
+          new FileEntry(
+            fileToPut.src.path,
+            absoluteUnixPath(fileToPut.dst.path),
+            FilePermissions.fromPosixFilePermissions(PosixPermissionUtils.fromMode(fileToPut.mode)),
+            Instant.EPOCH // keepin' it RT in here (or something like it)
+          )
         )
       }
     }

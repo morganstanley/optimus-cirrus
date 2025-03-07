@@ -65,7 +65,7 @@ private[buildtool] final case class ZincCompilerFactory(
     compilerThrottle: CompilerThrottle
 ) extends SyncCompilerFactory {
 
-  @async override def throttled[T](sizeBytes: Int)(f: NodeFunction0NN[T]): T = compilerThrottle.throttled(sizeBytes)(f)
+  @async override def throttled[T](sizeBytes: Int)(f: NodeFunction0[T]): T = compilerThrottle.throttled(sizeBytes)(f)
 
   private[zinc] val zincClasspathForInterfaceJar = getZincClasspath
 

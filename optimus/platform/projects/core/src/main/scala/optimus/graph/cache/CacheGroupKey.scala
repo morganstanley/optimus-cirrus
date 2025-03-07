@@ -21,9 +21,9 @@ import java.util.concurrent.ConcurrentHashMap
  */
 //noinspection ScalaFileName
 private[cache] class NCGroupedChildren(val current: NCEntryGrouped) {
-  val children = new ConcurrentHashMap[NCEntryGrouped, BaseUNodeCache]()
+  val children = new ConcurrentHashMap[NCEntryGrouped, NodeCacheBase]()
 
-  def add(newChild: NCEntryGrouped, cache: BaseUNodeCache): Unit = children.putIfAbsent(newChild, cache)
+  def add(newChild: NCEntryGrouped, cache: NodeCacheBase): Unit = children.putIfAbsent(newChild, cache)
 
   def requeryAllChildren(): Unit = {
     val it = children.entrySet().iterator()
@@ -31,7 +31,7 @@ private[cache] class NCGroupedChildren(val current: NCEntryGrouped) {
       val child = it.next()
       val ncentry = child.getKey
       if (!ncentry.inLedger) {
-        child.getValue.updateLedger(ncentry)
+        child.getValue.touchEntry(ncentry)
         ncentry.groupedChildren.requeryAllChildren()
       }
     }
@@ -42,7 +42,7 @@ private[cache] class NCGroupedChildren(val current: NCEntryGrouped) {
  * Support markGroupCached() functionality See tests in AdvancedCacheTests (groupCache and others)
  */
 object CacheGroupKey extends NonForwardingPluginTagKey[NCGroupedChildren] {
-  private def linkupToParent(parentGroup: NCGroupedChildren, key: NCEntryGrouped, cache: BaseUNodeCache): Unit = {
+  private def linkupToParent(parentGroup: NCGroupedChildren, key: NCEntryGrouped, cache: NodeCacheBase): Unit = {
     parentGroup.add(key, cache)
   }
 
@@ -50,7 +50,7 @@ object CacheGroupKey extends NonForwardingPluginTagKey[NCGroupedChildren] {
    *   1. top level aka root of the CacheGroupKey tree and NEW in cache (aka found.cacheUnderlying eq key)
    *   1. have a parent and NEW in cache (aka found.cacheUnderlying eq key)
    */
-  def onNodeInserted(cache: BaseUNodeCache, key: PropertyNode[_], entry: NCEntry): Unit = {
+  def onNodeInserted(cache: NodeCacheBase, key: PropertyNode[_], entry: NCEntry): Unit = {
     // Cast is always valid because we only get a call to this methods for property nodes
     val groupedEntry = entry.asInstanceOf[NCEntryGrouped]
 
@@ -70,7 +70,7 @@ object CacheGroupKey extends NonForwardingPluginTagKey[NCGroupedChildren] {
    *   1. top level aka root of the CacheGroupKey tree but was cached from before
    *   1. have a parent but was cached from before
    */
-  def onNodeFound(cache: BaseUNodeCache, key: PropertyNode[_], entry: NCEntry): Unit = {
+  def onNodeFound(cache: NodeCacheBase, key: PropertyNode[_], entry: NCEntry): Unit = {
     entry match {
       case groupedEntry: NCEntryGrouped =>
         val parentGroup = key.scenarioStack.findPluginTag(CacheGroupKey)

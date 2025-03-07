@@ -26,7 +26,7 @@ import optimus.platform.ScenarioStack;
 import optimus.platform.storable.Entity;
 
 public class PNodeTaskLive extends PNodeTask {
-  private NodeTask ntsk; // For live traces this points to a underlying NodeTask
+  private final NodeTask ntsk; // For live traces this points to a underlying NodeTask
 
   public PNodeTaskLive(NodeTask ntsk) {
     if (ntsk == null) throw new IllegalArgumentException("task argument cannot be null");

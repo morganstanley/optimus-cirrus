@@ -208,6 +208,9 @@ class Tweak private[optimus] (
   private[optimus] final def isContextDependent =
     !tweakTemplate.resultIsScenarioIndependent() || target.hasWhenClause || target.unresolved
 
+  /** True for tweaks whose target has when clause */
+  private[optimus] final def hasWhenClause = target.hasWhenClause
+
   /** If all the inputs into RHS of the tweak are known at the entry into a given block, can replace with byValue RHS */
   private[optimus] final def isReducibleToByValue: Boolean =
     (evaluateIn == Tweak.evaluateInParentOfGiven) && tweakTemplate.isReducibleToByValue && !keepLazyEval

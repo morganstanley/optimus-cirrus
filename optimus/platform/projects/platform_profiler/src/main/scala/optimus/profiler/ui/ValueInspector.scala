@@ -92,10 +92,7 @@ class ValueInspector(values: Array[Any], ss: ScenarioStack) extends JPanel2 {
   private def buildUpRow(interpreter: HtmlInterpreters.Type, hb: HtmlBuilder, obj: Any): HtmlBuilder = {
     val str = DebuggerUI.underStackOf(ss)(CoreHelpers.safeToString(obj))
     hb.separated(2) {
-      if (wrap)
-        hb.noStyle("NodeResult", str)
-      else
-        hb ++= PreFormatted(str)
+      hb ++= PreFormatted(str, wrap)
 
       obj match {
         case Some(viewable: GraphDebuggerValueDetailsViewable) =>

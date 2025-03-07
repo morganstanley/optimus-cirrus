@@ -153,7 +153,8 @@ object ScopePaths {
 }
 
 private[buildtool] final case class ScopeFlags(
-    open: Boolean,
+    open: Boolean, // Can be a dependency of other scopes
+    public: Boolean, // Can be a dependency of scopes in other module sets
     containsPlugin: Boolean,
     containsAgent: Boolean,
     definesMacros: Boolean, // contains def foo: Int = macro foo_impl
@@ -164,6 +165,7 @@ private[buildtool] final case class ScopeFlags(
     empty: Boolean,
     installSources: Boolean,
     installAppScripts: Boolean,
+    installIvy: Boolean,
     pathingBundle: Boolean,
     mavenOnly: Boolean,
     skipDependencyMappingValidation: Boolean
@@ -171,6 +173,7 @@ private[buildtool] final case class ScopeFlags(
 object ScopeFlags {
   val empty: ScopeFlags = ScopeFlags(
     open = false,
+    public = false,
     containsPlugin = false,
     containsAgent = false,
     definesMacros = false,
@@ -181,6 +184,7 @@ object ScopeFlags {
     empty = false,
     installSources = false,
     installAppScripts = false,
+    installIvy = false,
     pathingBundle = false,
     mavenOnly = false,
     skipDependencyMappingValidation = false
@@ -188,6 +192,7 @@ object ScopeFlags {
 }
 
 private[buildtool] final case class ScopeConfiguration(
+    moduleSet: ModuleSet,
     paths: ScopePaths,
     flags: ScopeFlags,
     generatorConfig: Seq[(GeneratorType, GeneratorConfiguration)],

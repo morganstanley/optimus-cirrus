@@ -22,7 +22,7 @@ public final class FlowControl {
   /**
    * Entire @node reordering will assume that all non-immutable functions mutate some global state
    */
-  public static void assumeGlobalMutation() {}
+  public static void mutatesGlobalState() {}
 
   /** Allow user to 'declare' dependency in flow */
   public static <T> boolean waitFor(T v) {

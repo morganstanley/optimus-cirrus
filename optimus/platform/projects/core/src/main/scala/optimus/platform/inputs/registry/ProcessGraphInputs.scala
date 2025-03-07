@@ -43,6 +43,7 @@ import optimus.graph.diagnostics.gridprofiler.Level
 import optimus.graph.diagnostics.gridprofiler.Level.Level
 import optimus.graph.diagnostics.trace.OGEventsObserver
 import optimus.graph.diagnostics.trace.OGTraceMode
+import optimus.platform.inputs.StateApplicators.StateApplicator
 
 private[registry] object GraphInputLogger {
   val log: Logger = getLogger(this)
@@ -325,7 +326,7 @@ object ProcessGraphInputs {
 
 object ProcessGraphApplicators {
   import ProcessGraphInputs._
-  val OptconfApplicator = new StateApplicators.StateApplicator4[
+  val OptconfApplicator: StateApplicator = new StateApplicators.StateApplicator4[
     util.List[OptconfProvider],
     util.List[OptconfProvider],
     OptconfProvider,
@@ -356,7 +357,7 @@ object ProcessGraphApplicators {
     override private[inputs] def resetState(): Unit = NodeCacheConfigs.reset()
   }
 
-  val XSFTApplicator = new StateApplicators.StateApplicator1[JBool] {
+  val XSFTApplicator: StateApplicator = new StateApplicators.StateApplicator1[JBool] {
     override def nodeInput: ProcessSINodeInput[JBool] = EnableXSFT
     @nowarn("msg=deprecated")
     override private[inputs] def apply(enableXSFT: JBool, firstTime: Boolean): Unit =
@@ -366,7 +367,7 @@ object ProcessGraphApplicators {
     override private[inputs] def resetState(): Unit = apply(ProcessGraphDefaults.enableXSFTDefault, firstTime = false)
   }
 
-  val ProfileLevelApplicator = new StateApplicators.StateApplicator1[Level] {
+  val ProfileLevelApplicator: StateApplicator = new StateApplicators.StateApplicator1[Level] {
     override def nodeInput: ProcessSINodeInput[Level] = ProfileLevel
     @nowarn("msg=deprecated")
     override private[inputs] def apply(lvl: Level, firstTime: Boolean): Unit = {

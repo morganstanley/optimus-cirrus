@@ -402,7 +402,7 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
       path: Path,
       var tPrinted: Long,
       var tFlushed: Long,
-      var bytesWritten: Int = 0)
+      var bytesWritten: Long = 0)
   private val files = new java.util.HashMap[String, FileEntry] // so we can iterate and delete
 
   private def isBadSeed(uuid: String) = {
@@ -659,8 +659,8 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
         nFlushed += 1
       }
       if (parts) {
-        val sizePath = path.getParent.resolve(path.getFileName.toString + ".size")
-        val prevSize = Try(Files.readString(sizePath).toInt).getOrElse(0)
+        val sizePath = path.getParent.resolve(path.getFileName.toString + sizeSuffix)
+        val prevSize = Try(Files.readString(sizePath).toLong).getOrElse(0L)
         val newSize = prevSize + bytesWritten
         fe.bytesWritten = 0
         Files.writeString(sizePath, newSize.toString)

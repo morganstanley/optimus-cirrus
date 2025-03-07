@@ -78,6 +78,36 @@ public class OGTrace {
       4 /* sizeOf(FORMAT) */ + 16 /* millis, nano sync */ + Table.HEADER_SIZE;
 
   private static final OGTraceReader liveReader;
+
+  // Make sure logging functions are initialized before possible need to log.
+  static final Logger log = package$.MODULE$.getLogger("OGTrace");
+
+  /**
+   * In traceNodes when graph is doing a LOT of work and profiler is publishing a LOT of data, our
+   * file backing store can run out of space altogether. Attempting to continue tracing causes
+   * runtime exceptions later because e.g. storage fails to be allocated for tables, and later
+   * attempts to read those tables crash with buffer positions out of bounds. Rather than crashing
+   * the entire process, we should stop tracing, warn loudly, and continue.
+   */
+  private static int panicRecursion = 0;
+
+  private static final int MAX_PANIC_RECURSION = 5;
+
+  public static synchronized void panic(Exception e, File fileLocation) {
+    if (panicRecursion > MAX_PANIC_RECURSION) {
+      log.javaLogger().error("To much recursive panic!");
+    } else {
+      panicRecursion++;
+      var fileStr = (fileLocation == null) ? "[null fileLocation]" : fileLocation.toString();
+      var msg = "Failed to write to " + fileStr + ", stopping tracing";
+      if (panicRecursion > 0) msg += " (" + panicRecursion + ")";
+      log.javaLogger().error(msg, e);
+      MonitoringBreadcrumbs$.MODULE$.sendOGTraceStoreProblemCrumb(fileStr, e.toString());
+      GraphInputConfiguration$.MODULE$.setTraceMode(OGTraceMode.none);
+      panicRecursion--;
+    }
+  }
+
   static final ProfilerMessagesGenerator gen =
       ProfilerMessagesGenerator.create(ProfilerMessages.class);
   static final ProfilerEventsWriter writer_proto =
@@ -96,8 +126,6 @@ public class OGTrace {
     reader_proto = (ProfilerMessagesReader) gen.createReaderObject(ProfilerMessagesReader.class);
     liveReader = new OGTraceReaderLive(trace);
   }
-
-  static final Logger log = package$.MODULE$.getLogger("OGTrace");
 
   // Special profiled block IDs (see GridProfiler.scopeToBlockID).
   // Defined here because OGTrace is its main user
@@ -136,6 +164,14 @@ public class OGTrace {
     return reader_proto.nameOfEvent(evt);
   }
 
+  public static String CachedSuffix = "$"; // for cached nodes
+  public static String AsyncSuffix = "@"; // for async
+  public static String XsSuffix = "x"; // for cross-scenario cache hits
+  public static String TrivialSuffix = "t"; // for trivial cache hits
+  public static String ProcessOnChildCompletedSuffix = "pc"; // for process on child completed
+  public static String OfferValueSuffix = "ov"; // for offer value
+  public static String ApSuffix = "_[a]"; // for categorization by async-profiler
+
   private static void verifyEntityAgentInjectedTheFields() {
     if (DiagnosticSettings.traceAvailable) {
       NodeTask acn = new AlreadyCompletedNode<>(null);
@@ -166,6 +202,7 @@ public class OGTrace {
                   try {
                     liveReader.liveCatchUp();
                   } catch (Exception ex) {
+                    //noinspection CallToPrintStackTrace
                     ex.printStackTrace();
                   }
                 }
@@ -300,9 +337,10 @@ public class OGTrace {
     if (DiagnosticSettings.samplingProfilerStatic) {
       if (candidate != lookupResult.cacheUnderlyingNode()) {
         if (candidate.scenarioStack()._cacheID() != lookupResult.scenarioStack()._cacheID()) {
-          lCtx.stackRecorder(cacheHitIdx).accrueAndMaybeRecord(candidate, 1, "x"); // xs
+          lCtx.stackRecorder(cacheHitIdx).accrueAndMaybeRecord(candidate, 1, XsSuffix); // xs
         } else {
-          lCtx.stackRecorder(cacheHitIdx).accrueAndMaybeRecord(candidate, 1, "t"); // trivial
+          lCtx.stackRecorder(cacheHitIdx)
+              .accrueAndMaybeRecord(candidate, 1, TrivialSuffix); // trivial
         }
       }
     }
@@ -386,21 +424,6 @@ public class OGTrace {
    */
   public static void publishSerializedNodeResultArrived(@SuppressWarnings("unused") NodeTask task) {
     // observer.publishSerializedNodeResultArrived(task);
-  }
-
-  /**
-   * In traceNodes when graph is doing a LOT of work and profiler is publishing a LOT of data, our
-   * file backing store can run out of space altogether. Attempting to continue tracing causes
-   * runtime exceptions later because e.g. storage fails to be allocated for tables, and later
-   * attempts to read those tables crash with buffer positions out of bounds. Rather than crashing
-   * the entire process, we should stop tracing, warn loudly, and continue.
-   */
-  public static void panic(Exception e, File fileLocation) {
-    var fileStr = (fileLocation == null) ? "[null fileLocation]" : fileLocation.toString();
-    var msg = "Failed to write to " + fileStr + ", stopping tracing";
-    log.javaLogger().error(msg, e);
-    MonitoringBreadcrumbs$.MODULE$.sendOGTraceStoreProblemCrumb(fileStr, e.toString());
-    GraphInputConfiguration$.MODULE$.setTraceMode(OGTraceMode.none);
   }
 
   /**
@@ -488,13 +511,13 @@ public class OGTrace {
       // When this scheduler stalls it's 'quiet' so now's a good time for whoever was waiting to do
       // its thing
       var oowListener =
-          new SchedulerCallback() {
+          new OutOfWorkListener() {
             @Override
             public void onGraphStalled(Scheduler scheduler, ArrayList<NodeTask> tasks) {
               latch.countDown();
             }
           };
-      ogScheduler.addOnOutOfWorkListener(oowListener, true);
+      ogScheduler.addOutOfWorkListener(oowListener);
 
       // avoid deadlock if the scheduler ran out of work in between when we asked above and when we
       // registered the
@@ -547,6 +570,7 @@ public class OGTrace {
         countDownTime--;
         if (countDownTime == 0) return false;
       } catch (InterruptedException e) {
+        //noinspection CallToPrintStackTrace
         e.printStackTrace();
         return false;
       }

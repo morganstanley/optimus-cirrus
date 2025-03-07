@@ -15,6 +15,7 @@ import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.{ArtifactType => AT}
 import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.ElectronArtifact
+import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
@@ -48,6 +49,7 @@ import scala.collection.immutable.Seq
       runtimeDependencies.transitiveExternalDependencies.apar.map { a =>
         dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(a)
       }
+
     val classFileArtifacts = internalClassFileArtifacts ++ externalClassFileArtifacts
 
     val scopeClassFileArtifacts = internalClassFileArtifacts.collect {
@@ -126,18 +128,26 @@ import scala.collection.immutable.Seq
         )
       }
       .getOrElse(None, classFileArtifacts)
+
     val electronMetadata = allRuntimeArtifacts
       .collect { case e: ElectronArtifact =>
         s"${e.scopeId};${e.pathString};${e.mode};${e.executables.mkString(",")}"
       }
       .mkString(" ")
+
+    val allAgentPaths = agentArtifacts.apar.map {
+      case internal: InternalClassFileArtifact => internal
+      case external: ExternalClassFileArtifact =>
+        dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(external)
+    }
+
     Jars.updateManifest(
       Jars.createPathingManifest(filteredArtifacts.map(_.path), premainOption),
       JarUtils.nme.ClassJar -> scopeClassFileArtifacts.map(_.pathString).mkString(";"),
       JarUtils.nme.ExtraFiles -> extraFiles.map(_.pathString).mkString(";"),
       JarUtils.nme.ExternalJniPath -> externalJniPaths.mkString(";"),
       JarUtils.nme.JniScopes -> jniScopes.map(_.properPath).mkString(";"),
-      JarUtils.nme.AgentsPath -> agentArtifacts.map(_.path).mkString(";"),
+      JarUtils.nme.AgentsPath -> allAgentPaths.map(_.pathString).mkString(";"),
       JarUtils.nme.PackagedJniLibs -> packagedJniLibs.map(_.pathString).mkString(";"),
       JarUtils.nme.JniFallbackPath -> jniFallbackPaths.map(_.pathString).mkString(";"),
       JarUtils.nme.PreloadReleaseScopes -> preloadReleaseScopes.map(_.properPath).mkString(";"),

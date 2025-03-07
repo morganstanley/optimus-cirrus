@@ -20,6 +20,7 @@ import optimus.buildtool.artifacts.ClassFileArtifact
 import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.CompiledRunconfArtifact
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
+import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
 import optimus.buildtool.artifacts.MessagePosition
@@ -48,6 +49,7 @@ import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.format.Names
 import optimus.buildtool.format.RunConfSubstitutions
 import optimus.buildtool.format.RunConfSubstitutionsValidator
+import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.runconf.AppRunConf
 import optimus.buildtool.runconf.RunConf
 import optimus.buildtool.runconf.RunConfFile
@@ -83,7 +85,7 @@ import optimus.platform._
 
 import scala.jdk.CollectionConverters._
 import scala.collection.compat._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 import scala.collection.immutable.SortedMap
 import scala.util.Failure
 import scala.util.Success
@@ -109,8 +111,8 @@ final case class RunConfCompilerOutput(
     output(scopeId, inputs).messages
   @node final def runConfigurations(
       scopeId: ScopeId,
-      inputs: NodeFunction0[AsyncRunConfCompiler.Inputs]): Seq[RunConf] =
-    output(scopeId, inputs).configs
+      inputs: NodeFunction0[AsyncRunConfCompiler.Inputs]): IndexedSeq[RunConf] =
+    output(scopeId, inputs).configs.toVector
 
   @node protected def output(
       scopeId: ScopeId,
@@ -131,14 +133,15 @@ object AsyncRunConfCompiler {
   )
 }
 
+final case class AnnotatedRunconf(sourceLocation: String, rc: RunConf)
 final case class RunConfCompilationResult(
-    rootRunConfs: Seq[RunConf],
-    localRunConfs: Seq[RunConf],
+    rootRunConfs: Seq[AnnotatedRunconf],
+    localRunConfs: Seq[AnnotatedRunconf],
     problems: Seq[Problem],
     extraMessages: Seq[CompilationMessage])
 final case class ApplicationScriptResult(fileName: String, content: Either[String, Seq[CompilationMessage]])
 
-final case class RunConfCompileGroup(files: Seq[InputFile], isLocal: Boolean)
+final case class RunConfCompileGroup(sourceFile: InputFile, dependencyFiles: Seq[InputFile], isLocal: Boolean)
 
 final class StaticRunscriptCompilationBindingSources(
     obtWorkspaceProperties: Config
@@ -192,7 +195,8 @@ final class StaticRunscriptCompilationBindingSources(
     obtConfig: ObtConfig,
     scalaHomePath: Directory,
     stratoConfig: Config,
-    buildDir: Directory
+    buildDir: Directory,
+    dependencyCopier: DependencyCopier
 ) extends AsyncRunConfCompiler {
   val obtWorkspaceProperties: Config =
     obtConfig.properties.fold(ConfigFactory.empty)(_.config)
@@ -296,7 +300,7 @@ final class StaticRunscriptCompilationBindingSources(
       arc: AppRunConf,
       upstreamInputs: UpstreamRunconfInputs,
       installVersion: String,
-    upstreamAgents: Seq[ClassFileArtifact]
+      upstreamAgents: Seq[ClassFileArtifact]
   ): Map[String, Any] = {
     import AsyncRunConfCompilerImpl.dirNameEnvVar
     import optimus.buildtool.utils.CrossPlatformSupport.convertToLinuxVariables
@@ -360,16 +364,18 @@ final class StaticRunscriptCompilationBindingSources(
       fileName = CppUtils.linuxNativeLibrary(_, preloadBuildType)
     )
 
-    val agentScopes = upstreamAgents.collect { case internalArtifact: InternalClassFileArtifact =>
-      internalArtifact.id.scopeId
+    val allAgents = upstreamAgents.apar.flatMap {
+      case internal: InternalClassFileArtifact =>
+        val internalAgentScope = internal.id.scopeId
+        pathBuilder.locationIndependentJar(scopeId, internalAgentScope, internalAgentScope.module)
+      case external: ExternalClassFileArtifact =>
+        val externalAgentJar = dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(external).file
+        pathBuilder.locationIndependentJar(scopeId, externalAgentJar)
     }.distinct
 
-    val agentsJarPaths =
-      agentScopes.flatMap(agentScope => pathBuilder.locationIndependentJar(scopeId, agentScope, agentScope.module))
-
-    val linuxAgentsJarPaths = agentsJarPaths.map(agentJarPath =>
-      if (agentJarPath.startsWith("..")) s"$linuxDirVar/$agentJarPath" else agentJarPath)
-    val windowsAgentsJarPaths = agentsJarPaths.map(_.replace('/', '\\'))
+    val linuxAgentsJarPaths =
+      allAgents.map(agentJarPath => if (agentJarPath.startsWith("..")) s"$linuxDirVar/$agentJarPath" else agentJarPath)
+    val windowsAgentsJarPaths = allAgents.map(_.replace('/', '\\'))
 
     val linuxJavaOpts = arc.javaOptsForLinux
     val windowsJavaOpts = arc.javaOptsForWindows
@@ -426,7 +432,7 @@ final class StaticRunscriptCompilationBindingSources(
     ) ++ arc.scriptTemplates.customVariables.filterNot(isSpecialPurposeCustomVariable)
   }
 
-  @node def generateApplicationScripts(
+  @node private def generateApplicationScripts(
       scopeId: ScopeId,
       templates: Seq[InputFile],
       javaModule: Option[JavaModule],
@@ -436,17 +442,21 @@ final class StaticRunscriptCompilationBindingSources(
       upstreamAgents: Seq[ClassFileArtifact]
   ): Seq[ApplicationScriptResult] = {
     runConfs.apar.collect {
-      case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe && !arc.strictRuntime.enabled.getOrElse(false) =>
+      case arc: AppRunConf
+          if unquote(arc.id.tpe) == scopeId.tpe && !arc.strictRuntime.enabled.getOrElse(
+            false) && !arc.python && !arc.interopPython =>
+        //
+        // Note about the behavior of Windows, Linux and Docker templates:
+        //
+        //   - They all are generated here, and stored in the runconf build output jar
+        //   - The `ApplicationScriptsInstaller` will only copy Windows and Linux runscripts and ignore Docker,
+        //     with one exception: `app-runner`, which must be callable in Docker container for the OBT distribution.
+        //   - The Docker `ImageBuilder` will copy the Docker runscripts and ignore the others
+        //
         Templates.getTemplateDescriptions(templates, arc.name, arc.scriptTemplates).apar.map {
           case Left(templateDescription) =>
             val bindings =
-              contextBindings(
-                scopeId,
-                javaModule,
-                arc,
-                upstreamInputs,
-                installVersion,
-                upstreamAgents)
+              contextBindings(scopeId, javaModule, arc, upstreamInputs, installVersion, upstreamAgents)
             val applicationScriptName =
               AsyncRunConfCompilerImpl
                 .getTemplateFilenameOverride(arc, templateDescription)
@@ -463,6 +473,18 @@ final class StaticRunscriptCompilationBindingSources(
           case Right(compilationMessages) =>
             ApplicationScriptResult(arc.name, Right(compilationMessages))
         }
+      case arc: AppRunConf if unquote(arc.id.tpe) == scopeId.tpe && (arc.python || arc.interopPython) =>
+        val msg = s"Skipping runscript generation for python enabled runconf '${arc.name}'"
+        log.info(msg)
+        Seq(
+          ApplicationScriptResult(
+            arc.name,
+            Right(
+              Seq(
+                CompilationMessage.info(msg)
+              )
+            )
+          ))
     }.flatten
   }
 
@@ -472,7 +494,7 @@ final class StaticRunscriptCompilationBindingSources(
       rootFiles: Seq[InputFile],
       sourceSubstitutions: Seq[RunConfSourceSubstitution],
       applicationScripts: Seq[ApplicationScriptResult],
-      runConfs: Seq[RunConf],
+      runConfs: Seq[AnnotatedRunconf],
       jar: FileAsset
   ): CompiledRunconfArtifact = {
     Utils.atomicallyWrite(jar) { tempJar =>
@@ -520,8 +542,8 @@ final class StaticRunscriptCompilationBindingSources(
           tempJarStream,
           runConfs.apar
             .collect {
-              case rc if unquote(rc.id.tpe) == scopeId.tpe =>
-                RunConfInventoryEntry(scopeId, rc.name, rc.tpe)
+              case AnnotatedRunconf(sourceLocation, rc) if unquote(rc.id.tpe) == scopeId.tpe =>
+                RunConfInventoryEntry(scopeId, rc.name, rc.tpe, Some(sourceLocation))
             }
         )
 
@@ -616,19 +638,28 @@ final class StaticRunscriptCompilationBindingSources(
     val (localRootFiles, rootFiles) = allRootFiles.partition { f => RunConfFile.isLocal(f.fileName) }
     // Compile groups are bunches of root files for which the lst depends on the others
     val compileGroups =
-      rootFiles.map(f => RunConfCompileGroup(Seq(f), isLocal = false)) ++ localRootFiles.map(f =>
-        RunConfCompileGroup(rootFiles ++ Seq(f), isLocal = true))
+      rootFiles.map(f => RunConfCompileGroup(f, Seq.empty, isLocal = false)) ++
+        localRootFiles.map(f => f.copy(isLocal = true)).map(f => RunConfCompileGroup(f, rootFiles, isLocal = true))
 
-    val badReferenceMessages = blockedSubstitutions
+    val (blockedWithoutLocation, blockedWithLocation) = blockedSubstitutions.partition(_.sourceLocation.isEmpty)
+    val badReferenceMessagesWithoutLocation = blockedWithoutLocation
       .map(_.expression)
       .distinct
       .sorted
       .map { expr =>
         import RunConfSubstitutionsValidator._
-        // TODO (OPTIMUS-36135): these messages should be positioned
         CompilationMessage.error(
           s"Substitution $expr is blocked. Please edit '${RunConfSubstitutions.path}' in sections ${names.allowList} or ${names.ignoreList}.")
       }
+
+    val badReferenceMessagesWithLocation = blockedWithLocation
+      .flatMap { blocked => blocked.sourceLocation.map { loc => (blocked.expression, loc) } }
+      .map { case (expr, loc) =>
+        import RunConfSubstitutionsValidator._
+        CompilationMessage.error(
+          s"${loc.source.localRootToFilePath}[${loc.oneBasedLineIndex}:${loc.startInLine}] Substitution $expr is blocked. Please edit '${RunConfSubstitutions.path}' in sections ${names.allowList} or ${names.ignoreList}.")
+      }
+
     // Allow duplication between common and project (e.g. ird/hedgesumo/projects/hedgesumo)
     def computeDuplicates(files: Seq[InputFile]): Map[String, Seq[InputFile]] =
       files.groupBy(_.origin.toFile.getName).filter(_._2.size > 1)
@@ -642,7 +673,7 @@ final class StaticRunscriptCompilationBindingSources(
       .map { compileGroup =>
         Try {
           RunconfCompiler.compile(
-            files = commonFiles ++ compileGroup.files,
+            files = commonFiles ++ compileGroup.dependencyFiles ++ Seq(compileGroup.sourceFile),
             sourceRoot = workspaceSourceRoot.path,
             config = stratoConfig,
             runEnv = runEnv,
@@ -651,15 +682,17 @@ final class StaticRunscriptCompilationBindingSources(
             envProperties = envProperties,
             systemProperties = systemProperties,
             validator = Some(obtConfig.appValidator),
-            generateCrossPlatformEnvVars = false
+            generateCrossPlatformEnvVars = false,
+            isLocal = compileGroup.isLocal
           )
         } match {
           case Success(CompileResult(problems, runConfs, _)) =>
             val extraWarnings = validateArguments(runConfs)
+            val annotatedRunconfs = runConfs.map(rc => AnnotatedRunconf(compileGroup.sourceFile.origin.toString, rc))
             if (compileGroup.isLocal)
-              RunConfCompilationResult(Seq.empty, runConfs, problems, extraWarnings)
+              RunConfCompilationResult(Seq.empty, annotatedRunconfs, problems, extraWarnings)
             else
-              RunConfCompilationResult(runConfs, Seq.empty, problems, extraWarnings)
+              RunConfCompilationResult(annotatedRunconfs, Seq.empty, problems, extraWarnings)
           case Failure(e) =>
             RunConfCompilationResult(Seq.empty, Seq.empty, Seq.empty, Seq(CompilationMessage.error(e)))
         }
@@ -672,12 +705,15 @@ final class StaticRunscriptCompilationBindingSources(
           acc.extraMessages ++ partialResults.extraMessages
         )
       }
+    val rootRunConfNames = resultWithDuplicatesInLocalRunConfs.rootRunConfs.map(_.rc.name)
     val result =
       resultWithDuplicatesInLocalRunConfs.copy(
         // Since we need the root files to compile the local runconf, we end up with "duplicates".
         // We need to remove to avoid false report of actual duplicate names.
-        localRunConfs =
-          resultWithDuplicatesInLocalRunConfs.localRunConfs.diff(resultWithDuplicatesInLocalRunConfs.rootRunConfs)
+        localRunConfs = resultWithDuplicatesInLocalRunConfs.localRunConfs
+          .filterNot { lrc =>
+            rootRunConfNames.contains(lrc.rc.name)
+          }
       )
 
     val applicationScripts =
@@ -685,7 +721,7 @@ final class StaticRunscriptCompilationBindingSources(
         scopeId,
         templates,
         AsyncRunConfCompilerImpl.getJavaModule(obtWorkspaceProperties),
-        result.rootRunConfs, // We do not generate runscripts for local runconfs
+        result.rootRunConfs.apar.map(_.rc), // We do not generate runscripts for local runconfs
         upstreamInputs,
         installVersion,
         upstreamAgents
@@ -693,7 +729,9 @@ final class StaticRunscriptCompilationBindingSources(
 
     val allRunConfs = result.rootRunConfs ++ result.localRunConfs
     val compiledArtifact: Option[CompiledRunconfArtifact] =
-      if (badReferenceMessages.nonEmpty || duplicationMessages.nonEmpty || result.extraMessages.nonEmpty)
+      if (
+        badReferenceMessagesWithoutLocation.nonEmpty || badReferenceMessagesWithLocation.nonEmpty || duplicationMessages.nonEmpty || result.extraMessages.nonEmpty
+      )
         None
       else
         Some(
@@ -716,9 +754,9 @@ final class StaticRunscriptCompilationBindingSources(
         convertToMessages(result.problems) ++ result.extraMessages ++ applicationScripts.flatMap {
           case ApplicationScriptResult(_, Right(messages)) => messages
           case _                                           => None
-        } ++ badReferenceMessages ++ duplicationMessages
+        } ++ badReferenceMessagesWithoutLocation ++ badReferenceMessagesWithLocation ++ duplicationMessages
       ),
-      allRunConfs
+      allRunConfs.apar.map(_.rc)
     )
 
     runconfTrace.complete(Try(output).map(_.messages.messages))
@@ -753,7 +791,8 @@ final class StaticRunscriptCompilationBindingSources(
       obtConfig: ObtConfig,
       scalaHomePath: Directory,
       stratoConfig: StratoConfig,
-      buildDir: Directory): AsyncRunConfCompiler = {
+      buildDir: Directory,
+      dependencyCopier: DependencyCopier): AsyncRunConfCompiler = {
 
     // Ensure some level of RT-ness by not passing along paths (the format may change, so it will be a rabbit chase)
     val rtIshConfig = stratoConfig.config
@@ -763,7 +802,7 @@ final class StaticRunscriptCompilationBindingSources(
       .withValue("stratosphereSrcDir", noPath)
       .withValue("userHome", noPath)
 
-    AsyncRunConfCompilerImpl(obtConfig, scalaHomePath, rtIshConfig, buildDir)
+    AsyncRunConfCompilerImpl(obtConfig, scalaHomePath, rtIshConfig, buildDir, dependencyCopier)
   }
 
   @node private[compilers] def getJavaModule(c: Config): Option[JavaModule] =

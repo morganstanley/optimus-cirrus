@@ -13,9 +13,9 @@ package optimus.tools.scalacplugins.entity
 package reporter
 
 import java.lang.{reflect => jlr}
-
 import scala.collection.mutable
 import scala.reflect.internal.util.Position
+import scala.reflect.internal.util.SourceFile
 import scala.tools.nsc.Global
 import scala.tools.nsc.Reporting
 
@@ -58,7 +58,7 @@ trait OptimusPluginReporter {
     if (alarm.toString().contains("@nowarn"))
       false // Very silly to suppress an error that's already about illegal suppression
     else if (global.currentRun eq null) {
-      /* In testing, there is no currentRun, and so therefore calling PerRunReporting_isSuppressed below causes a NPE.
+      /* In testing, there is no currentRun, and so therefore calling nowarnAction below causes a NPE.
        * We still want to be able to test that suppressing work as expected so we put a test hook in here.
        */
       suppressOverrideInTesting(alarm.id)
@@ -66,7 +66,7 @@ trait OptimusPluginReporter {
       // using alarm.id.sn rather than just alarm.toString here because all we want to support is @nowarn("msg=17001")
       val asMessage =
         OptimusReporterCompat.Message(pos, alarm.id.sn.toString, Reporting.WarningCategory.Other, site = "")
-      val suppressed = PerRunReporting_isSuppressed.invoke(global.runReporting, asMessage).asInstanceOf[Boolean]
+      val suppressed = isSuppressed(global, asMessage)
       if (suppressed && alarm.id.tpe != OptimusAlarmType.WARNING) {
         // If we report this as an error, we'll abort before showing the actual illegal suppression, so make it a warning.
         import optimus.tools.scalacplugins.entity.reporter.OptimusAlarmType._
@@ -129,10 +129,37 @@ trait OptimusPluginReporter {
 }
 
 object OptimusPluginReporter {
-  val PerRunReporting_isSuppressed: jlr.Method = reflect.ensureAccessible {
+  import Reporting._
+
+  private val is212 = try {
+    Class.forName("scala.collection.TraversableLike")
+    true
+  } catch {
+    case _: ClassNotFoundException => false
+  }
+
+  private lazy val PerRunReporting_isSuppressed: jlr.Method = reflect.ensureAccessible {
     classOf[Reporting#PerRunReporting].getDeclaredMethod("isSuppressed", classOf[Reporting.Message])
   }
-  val PerRunReporting_suppressions: jlr.Method = reflect.ensureAccessible {
+
+  private lazy val PerRunReporting_nowarnAction: jlr.Method = reflect.ensureAccessible {
+    classOf[Reporting#PerRunReporting].getDeclaredMethod("nowarnAction", classOf[Reporting.Message])
+  }
+
+  def nowarnAction(global: Global, msg: Message): Action =
+    PerRunReporting_nowarnAction.invoke(global.runReporting, msg).asInstanceOf[Action]
+
+  def isSuppressed(global: Global, msg: Message): Boolean = {
+    if (is212) PerRunReporting_isSuppressed.invoke(global.runReporting, msg).asInstanceOf[Boolean]
+    else nowarnAction(global, msg) == Reporting.Action.Silent
+  }
+
+  private val PerRunReporting_suppressions: jlr.Method = reflect.ensureAccessible {
     classOf[Reporting#PerRunReporting].getDeclaredMethod("suppressions")
   }
+
+  def suppressions(global: Global): mutable.LinkedHashMap[SourceFile, mutable.ListBuffer[Suppression]] =
+    PerRunReporting_suppressions
+      .invoke(global.runReporting)
+      .asInstanceOf[mutable.LinkedHashMap[SourceFile, mutable.ListBuffer[Suppression]]]
 }

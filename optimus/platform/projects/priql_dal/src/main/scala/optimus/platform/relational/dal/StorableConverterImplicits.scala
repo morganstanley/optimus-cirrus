@@ -40,6 +40,7 @@ trait StorableConverterImplicits { self: DalAPI =>
   implicit def entityConverter[E <: Entity]: QueryConverter[E, EntityCompanionBase] = macro entityConvImpl[E]
   implicit def entityClassConverter[E <: Entity]: QueryConverter[E, Class] = macro entityClassConvImpl[E]
   implicit def eventConverter[E <: BusinessEvent]: QueryConverter[E, EventCompanionBase] = macro eventConvImpl[E]
+  implicit def eventClassConverter[E <: BusinessEvent]: QueryConverter[E, Class] = macro eventClassConvImpl[E]
 
   def mkEntityConverter[E <: Entity]: QueryConverter[E, EntityCompanionBase] = new EntityConverter[E]
   private class EntityConverter[E <: Entity] extends QueryConverter[E, EntityCompanionBase] {
@@ -79,6 +80,20 @@ trait StorableConverterImplicits { self: DalAPI =>
       p.createQuery(e)
     }
   }
+
+  def mkEventClassConverter[E <: BusinessEvent]: QueryConverter[E, Class] = new EventClassConverter[E]
+  private class EventClassConverter[E <: BusinessEvent] extends QueryConverter[E, Class] {
+    def convert[T <: E](src: Class[T], key: RelationKey[T], p: QueryProvider)(implicit
+        itemType: TypeInfo[T],
+        pos: MethodPosition): Query[T] = {
+
+      val event = EntityInfoRegistry.getCompanion(src).asInstanceOf[EventCompanionBase[T]]
+
+      val e = EventMultiRelation[T](event.info, key, pos)(itemType, self)
+      p.createQuery(e)
+    }
+  }
+
 }
 
 object StorableConverterImplicits {
@@ -108,4 +123,14 @@ object StorableConverterImplicits {
       OptimusReporter.abort(c, RelationalAlarms.NOPRIQL_ERROR)(c.enclosingPosition, sym, sym.name)
     reify { c.prefix.splice.mkEventConverter[T] }
   }
+
+  def eventClassConvImpl[T <: BusinessEvent: c.WeakTypeTag](
+      c: Context { type PrefixType = StorableConverterImplicits }): c.Expr[QueryConverter[T, Class]] = {
+    import c.universe._
+    val sym = symbolOf[T]
+    if (sym.annotations.exists(an => an.tree.tpe =:= typeOf[noDalPriql]))
+      OptimusReporter.abort(c, RelationalAlarms.NOPRIQL_ERROR)(c.enclosingPosition, sym, sym.name)
+    reify { c.prefix.splice.mkEventClassConverter[T] }
+  }
+
 }

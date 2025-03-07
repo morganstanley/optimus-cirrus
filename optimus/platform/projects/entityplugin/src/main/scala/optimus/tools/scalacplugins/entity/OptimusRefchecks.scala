@@ -254,6 +254,8 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
         // for 2.12, if we have valAccessor, it comes from val definition, which is fine for index
         case DefDef(_, _, _, _, _, sel @ Select(_, _))
             if isOverridingKeyOrIndex && !defSym.hasAnnotation(ValAccessorAnnotation) =>
+          if (!isKeyOrIndex(defSym))
+            defSym.addAnnotation(EntersGraphAnnotation)
           val isEmbeddablePath = checkPathIsEmbeddable(defSym.owner, sel)
           if (!isEmbeddablePath)
             alarm(OptimusErrors.INDEX_MUST_EMBEDDABLE_PATH, dd.pos)
@@ -272,6 +274,8 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
                 (Function(p :: Nil, body @ Select(_, _)) :: Nil) :: _))
             if isOverridingKeyOrIndex && s1.name == nme.map && s1.symbol.owner.isNonBottomSubClass(
               TraversableLikeClass) =>
+          if (!isKeyOrIndex(defSym))
+            defSym.addAnnotation(EntersGraphAnnotation)
           val mapOnEmbeddables = isValidEmbeddableCollToMapOver(s2.symbol.tpe.resultType)
           val mapToEntityField = isEntity(body.tpe.typeSymbol)
           val embeddablePath = checkPathIsEmbeddable(p.symbol, body, expectThis = false)
@@ -280,6 +284,8 @@ class OptimusRefchecksComponent(val plugin: EntityPlugin, val phaseInfo: Optimus
         // for @indexed def and rhs is Tuple Apply
         case DefDef(_, _, _, _, _, ap @ Apply(f, args))
             if isOverridingKeyOrIndex && f.toString().startsWith(s"scala.Tuple${args.length}.apply") =>
+          if (!isKeyOrIndex(defSym))
+            defSym.addAnnotation(EntersGraphAnnotation)
           args foreach {
             case sel @ Select(_: This | _: Super, x) =>
               if (

@@ -12,11 +12,11 @@
 package optimus.platform.pickling
 
 import java.util.concurrent.ConcurrentHashMap
-
 import optimus.platform.util.RuntimeServicesLoader
 
 import scala.reflect.runtime.universe._
 import PicklingReflectionUtils._
+import optimus.core.config.StaticConfig
 
 /**
  * CentralRegistry for values of type Pickler.
@@ -24,7 +24,7 @@ import PicklingReflectionUtils._
 private[pickling] class PicklerRegistry extends RuntimeServicesLoader[PicklerFactory] with CentralRegistry[Pickler] {
   protected val factories: List[Factory[Pickler]] = services
 
-  protected val hint: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
+  protected val hintMsg: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
     "If not, rather than defining custom picklers, have you considered using transformers instead?"
 
   def pickleableClasses: Set[String] = services.flatMap { _.classKeys }.toSet
@@ -38,7 +38,7 @@ private[pickling] class UnpicklerRegistry
     with CentralRegistry[Unpickler] {
   protected val factories: List[Factory[Unpickler]] = services
 
-  protected val hint: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
+  protected val hintMsg: String = "Have you forgotten any Optimus annotation, such as @embeddable and @entity? " +
     "If not, rather than defining custom unpicklers, have you considered using transformers instead?"
 }
 
@@ -50,7 +50,7 @@ private[pickling] class UnpicklerRegistry
 private[pickling] class OrderingRegistry extends RuntimeServicesLoader[OrderingFactory] with CentralRegistry[Ordering] {
   protected val factories: List[Factory[Ordering]] = services
 
-  protected val hint: String = "You may need to register your custom ordering using an OrderingFactory instance."
+  protected val hintMsg: String = "You may need to register your custom ordering using an OrderingFactory instance."
 }
 
 /**
@@ -75,7 +75,15 @@ trait CentralRegistry[Value[_]] {
 
   protected def factories: List[Factory[Value]]
   private lazy val nonDefaultFactories = factories.filterNot(_.isInstanceOf[DefaultFactoryTrait])
-  protected def hint: String
+  protected def hintMsg: String
+  protected def hint: String = {
+    val docStr = {
+      val loadDoc = StaticConfig.string("customPicklerDocs")
+      if (loadDoc.nonEmpty) s" For more information, see $loadDoc"
+      else ""
+    }
+    hintMsg + docStr
+  }
 
   private val cache: ConcurrentHashMap[Type, LazyWrapper[Value[_]]] = new ConcurrentHashMap()
 

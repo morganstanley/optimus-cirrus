@@ -368,7 +368,7 @@ import scala.util.control.NonFatal
    * instead distinctLast, we get A B C. In general, every entry will appear in its lowest precedence, allowing anyone
    * who depends on it (and may therefore patch it) to go first.
    */
-  def distinctLast[A](s: Seq[A]): Seq[A] = s.reverse.distinct.reverse
+  def distinctLast[A](s: Seq[A]): Seq[A] = s.toVector.reverse.distinct.reverse
   def distinctLast[A](s: (Seq[A], Seq[A])): (Seq[A], Seq[A]) = (distinctLast(s._1), distinctLast(s._2))
   def distinctLast[A](as: Artifacts): Artifacts = Artifacts(distinctLast(as.scope), distinctLast(as.upstream))
   def distinctLastBy[A, B](s: Seq[A])(f: A => B): Seq[A] = s.reverse.groupByStable(f).map(_._2.head).reverse

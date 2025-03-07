@@ -45,8 +45,12 @@ private[buildtool] final case class CodeFlaggingRule private (
     filter: Option[Filter],
     severityLevel: Severity,
     regexes: Seq[Pattern],
-    isNew: Boolean
-) extends CodeFlaggingRule.Fields
+    isNew: Boolean,
+    upToLine: Option[Int]
+) extends CodeFlaggingRule.Fields {
+  @transient val (excludes, includes) = regexes.partition(_.exclude)
+
+}
 
 object CodeFlaggingRule {
 

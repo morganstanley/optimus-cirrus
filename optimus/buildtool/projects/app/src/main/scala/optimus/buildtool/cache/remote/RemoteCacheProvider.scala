@@ -69,14 +69,6 @@ import optimus.platform._
     }
   }
 
-  // root locators are used for "strato catchup" and the local artifact version of OBT at the point catchup is run
-  // may not match the artifact version of OBT that build the latest staging, so the remote cache for locators
-  // is version independent (artifactVersion = "rootLocator" instead of version)
-  @node @scenarioIndependent def remoteRootLocatorCache: Option[RemoteArtifactCache] =
-    if (isEnabled()) {
-      Some(getCache("rootLocator", version = "rootLocator"))
-    } else None
-
   @node @scenarioIndependent private def getCrossRegionPopulatingCache(
       store: WriteableArtifactStore,
       cacheMode: CacheMode,

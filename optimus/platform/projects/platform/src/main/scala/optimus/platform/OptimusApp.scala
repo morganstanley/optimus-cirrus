@@ -16,7 +16,6 @@ import msjava.tools.util.MSProcess
 import optimus.breadcrumbs.BreadcrumbsSendLimit.OnceByCrumbEquality
 import optimus.breadcrumbs._
 import optimus.breadcrumbs.crumbs.Crumb.RuntimeSource
-import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs._
 import optimus.breadcrumbs.crumbs.{Properties => BCProps}
 import optimus.config.OptconfProvider
@@ -44,6 +43,7 @@ import optimus.graph.diagnostics.gridprofiler.Level.Level
 import optimus.graph.diagnostics.heap.HeapSampling
 import optimus.graph.diagnostics.messages.StartupEventCounter
 import optimus.graph.diagnostics.sampling.SamplingProfiler
+import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.trace.OGTraceMode
 import optimus.graph.diagnostics.tsprofiler.TemporalSurfProfilingLevel.TemporalSurfProfilingLevel
 import optimus.graph.diagnostics.tsprofiler.TemporalSurfaceProfilingUtils
@@ -77,9 +77,12 @@ import optimus.platform.inputs.registry.SharedProcessGraphInputNames
 import optimus.platform.inputs.registry.SharedProcessGraphInputNames.hotspotFilterExplanation
 import optimus.platform.inputs.registry.SharedProcessGraphInputNames.profileHotspotfilter
 import optimus.platform.installcommonpath.InstallCommonPath
+import optimus.platform.runtime.OptimusCompositeLeaderElectorClient
 import optimus.platform.runtime.OptimusEarlyInitializer
+import optimus.platform.runtime.ZkUtils
 import optimus.platform.util.ArgHandlers.DelimitedStringOptionHandler
 import optimus.platform.util.ArgumentPublisher
+import optimus.platform.util.ArgumentPublisher.parseOptimusArgsToMap
 import optimus.platform.util.AutoSysUtils
 import optimus.platform.util.LoggingHelper
 import optimus.platform.util.ProcessEnvironment
@@ -292,6 +295,8 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
 
   protected val useInMemoryCaching: Boolean = false
 
+  protected def residentZkaContexts: Boolean = false
+
   protected def appDryRun: Boolean = sys.props.get("optimus.app.dry.run").contains("true")
   protected def appLogJson: Boolean = sys.props.get("optimus.app.log.launch").contains("true")
 
@@ -431,7 +436,8 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
     DalAppId(System.getProperty("APP_NAME", cmdOrEnv))
   }
 
-  protected override def scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = cmdLine.scopedConfiguration.map(_.scopedPlugins).orNull
+  protected override def scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] =
+    cmdLine.scopedConfiguration.map(_.scopedPlugins).orNull
 
   private def setSystemPropertyOverrides(): Unit = {
     // always set this property to use non kerberos connections to zk on client side
@@ -482,6 +488,11 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       case t: Throwable =>
         val expOpt = Some(new RuntimeException(t))
         defaultExitHandler(expOpt, System.currentTimeMillis(), 1, false)
+    } finally {
+      if (thisIsMainClass && !residentZkaContexts) {
+        ZkUtils.unregisterContexts()
+        OptimusCompositeLeaderElectorClient.reset()
+      }
     }
   }
 
@@ -679,7 +690,9 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       BCProps.pid -> MSProcess.getPID,
       BCProps.host -> LoggingInfo.getHost,
       BCProps.logFile -> LoggingInfo.getLogFile,
-      BCProps.args -> (if (truncatedArgs.length < argsSeq.length) truncatedArgs :+ "..." else argsSeq),
+      BCProps.argsMap -> parseOptimusArgsToMap(
+        if (truncatedArgs.length < argsSeq.length) truncatedArgs :+ "..." else argsSeq,
+        parser),
       BCProps.event -> Events.AppStarted.name,
       BCProps.className -> this.getClass.getName,
       BCProps.appDir -> Option(System.getenv("APP_DIR")).getOrElse("unknown"),
@@ -707,7 +720,7 @@ trait OptimusAppTrait[Args <: OptimusAppCmdLine] extends OptimusTask {
       )
     )
 
-    ArgumentPublisher.publishArgs(argsSeq)
+    ArgumentPublisher.publishArgs(argsSeq, parser)
 
     // Send as separate crumb to avoid size filter.  Hide behind property until we figure out how
     // to get this not to break DTC.

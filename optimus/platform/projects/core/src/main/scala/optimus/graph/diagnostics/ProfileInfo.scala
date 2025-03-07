@@ -19,6 +19,7 @@ import optimus.graph.JobNonForwardingPluginTagKey
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerLostConcurrency.NonConcurrentLoopDesc
 import optimus.graph.OGTrace
+import optimus.graph.OGTrace.CachedSuffix
 import optimus.graph.PropertyNode
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.platform.util.PrettyStringBuilder
@@ -152,7 +153,7 @@ final class GivenBlockProfile(val location: StackTraceElement, val level: Int) e
   override def title: String = name(false)
   def name(full: Boolean): String = {
     var className = location.getClassName
-    if (full || className.indexOf("$") < 0) className + "." + location.getMethodName
+    if (full || className.indexOf(CachedSuffix) < 0) className + "." + location.getMethodName
     else {
       className = NodeName.cleanNodeClassName(className, '.')
       className

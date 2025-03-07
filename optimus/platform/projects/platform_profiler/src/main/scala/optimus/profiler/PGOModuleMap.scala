@@ -11,10 +11,8 @@
  */
 package optimus.profiler
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
 import optimus.platform.util.Log
+import optimus.platform.util.json.DefaultJsonMapper
 import spray.json._
 
 object PGOModuleMap extends Log {
@@ -36,8 +34,7 @@ object PGOModuleMap extends Log {
 }
 
 object PGOModuleParser {
-  val mapper = new ObjectMapper() with ScalaObjectMapper
-  mapper.registerModule(DefaultScalaModule)
+  val mapper = DefaultJsonMapper.legacy
 
   def toMap[V](json: String)(implicit m: Manifest[V]): Map[String, V] = fromJson[Map[String, V]](json)
 

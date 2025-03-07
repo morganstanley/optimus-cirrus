@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import static optimus.debug.CommonAdapter.asJavaName;
 import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.File;
@@ -687,8 +688,8 @@ class ObtJarMetadata {
         String loadedClassName = loadedClassAndLoader.getFirst();
         String newHash = newHashes.get(loadedClassName);
         if (newHash != null && !newHash.equals(currentClassesToHashes.get(loadedClassName))) {
-          Class<?> loadedClass =
-              loadedClassAndLoader.getSecond().loadClass(loadedClassName.replace('/', '.'));
+          var secondClassLoader = loadedClassAndLoader.getSecond();
+          Class<?> loadedClass = secondClassLoader.loadClass(asJavaName(loadedClassName));
           changedClasses.add(loadedClass);
         } else if (newHash == null) {
           HotCodeReplaceTransformer.log(

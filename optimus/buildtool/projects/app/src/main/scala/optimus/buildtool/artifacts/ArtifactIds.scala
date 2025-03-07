@@ -13,6 +13,7 @@ package optimus.buildtool.artifacts
 
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Asset
+import optimus.platform._
 
 import scala.collection.mutable
 
@@ -28,6 +29,7 @@ private[buildtool] sealed trait ArtifactId {
 
 // Discriminator is additional information used to disambiguate IDs, though in general it will be `None`.
 // For example: C++ osVersion or generated source template name.
+@stable
 private[buildtool] final case class InternalArtifactId(
     scopeId: ScopeId,
     tpe: ArtifactType,

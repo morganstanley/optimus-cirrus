@@ -32,6 +32,7 @@ import java.lang.management.MemoryMXBean
 import java.lang.management.MemoryUsage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Objects
+import java.util.concurrent.atomic.AtomicInteger
 import java.{util => jutil}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Failure
@@ -130,7 +131,8 @@ class BaseSamplers extends SamplerProvider {
     import util._
 
     val ss = ArrayBuffer.empty[SamplerTrait[_, _]]
-    // Various OS bean stats
+    // Various OS bean stats.  Note that the snap might throw, in which case the
+    // individual snapper will be disabled.
     ss += Diff(_ => osBean.getProcessCpuTime / NANOSPERMILLI, profJvmCPUTime)
     ss += Snap(_ => osBean.getSystemCpuLoad, profSysCPULoad)
     ss += Snap(_ => osBean.getProcessCpuLoad, profJvmCPULoad)
@@ -151,6 +153,7 @@ class BaseSamplers extends SamplerProvider {
     val memBean: MemoryMXBean = ManagementFactory.getMemoryMXBean
     ss += new Sampler[MemoryUsage, MemoryUsage](
       sp,
+      "GCMonitor heap",
       snapper = _ => memBean.getHeapMemoryUsage,
       process = LATEST,
       publish = (usage: MemoryUsage) =>
@@ -161,6 +164,7 @@ class BaseSamplers extends SamplerProvider {
     )
     ss += new Sampler[MemoryUsage, MemoryUsage](
       sp,
+      "GCMonitor non-heap",
       snapper = _ => memBean.getNonHeapMemoryUsage,
       process = LATEST,
       publish = (usage: MemoryUsage) =>
@@ -180,7 +184,7 @@ class BaseSamplers extends SamplerProvider {
     ss += SnapNonZero(_ => Breadcrumbs.getKafkaFailures.stringMap, kafkaFailures)
     ss += SnapNonZero(_ => Breadcrumbs.getEnqueueFailures.stringMap, enqueueFailures)
 
-    var maxPsFailures = 10
+    var maxPsFailures = new AtomicInteger(10)
 
     if (!DiagnosticSettings.isWindows)
       ss += Snap(_ => {
@@ -193,16 +197,19 @@ class BaseSamplers extends SamplerProvider {
             var rss = 0
             var cpu = 0.0
             i.foreach { line =>
-              val Array(r, c) = line.trim.split("\\s+")
-              rss += r.toInt
-              cpu += c.toDouble
+              line.trim.split("\\s+") match {
+                case Array(r, c) =>
+                  rss += r.toInt
+                  cpu += c.toDouble
+                case _ =>
+                  SamplingProfiler.warn(s"Unexpected ps output: $line", new MatchError(line), maxPsFailures)
+              }
             }
             Elems(childProcessCount -> directCount, childProcessRSS -> rss / 1024, childProcessCPU -> cpu / 100.0)
           } match {
             case Success(value) => value
             case Failure(e) =>
-              maxPsFailures -= 1
-              if (maxPsFailures <= 0) throw e
+              if (maxPsFailures.getAndDecrement() <= 0) throw new Exception(s"Failure processing ps", e)
               Elems.Nil
           }
         }
@@ -211,6 +218,7 @@ class BaseSamplers extends SamplerProvider {
     // Diff of all bespoke counters
     ss += new Sampler[Map[Key[Long], Long], Map[Key[Long], Long]](
       sp,
+      "Bespoke counters",
       snapper = _ => snapCountersMap,
       process = MINUS,
       publish = diff => Elems(diff.map(Elem(_)).toSeq: _*)
@@ -218,6 +226,7 @@ class BaseSamplers extends SamplerProvider {
 
     ss += new Sampler[Map[Key[Long], Long], Map[Key[Long], Long]](
       sp,
+      "Bespoke gauges",
       snapper = _ => snapGaugesMap,
       process = LATEST,
       publish = es => Elems(es.map(Elem(_)).toSeq: _*)
@@ -226,6 +235,7 @@ class BaseSamplers extends SamplerProvider {
     // Internal stats
     ss += new Sampler[Map[String, StatsAccumulator], Map[String, StatsAccumulator]](
       sp,
+      "Internal stats",
       snapper = _ => snapStats(),
       process = LATEST,
       publish = stats => {

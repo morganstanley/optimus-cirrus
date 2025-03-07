@@ -112,7 +112,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
   }
 
   def runNodeScript(
-      pathToScript: Path,
+      script: String,
       runInDir: Path,
       nodeVersion: String,
       processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false)
@@ -126,10 +126,11 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
             "export WORKSPACE=/var/tmp/$$_$USER",
             s"export NODE_VERSION=$nodeVersion",
             "export NPM_CONFIG_USERCONFIG=/var/tmp/$$_$USER/.npmrc",
+            "export NPM_CONFIG_CACHE=/var/tmp/$$_$USER/npm-cache",
             "module load msde/artifactory-eng-tools/prod",
             "setup_user -cli npm",
             s"module load ossjs/node/$nodeVersion",
-            s"node ${pathToScript.toString}"
+            script
           ).mkString(" && "))
       else
         CommonProcess.preamble ++ Seq(
@@ -138,7 +139,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
             "module load msde/artifactory-eng-tools/prod",
             "setup_user -cli npm",
             s"module load ossjs/node/$nodeVersion",
-            s"node ${pathToScript.toString}"
+            script
           ).mkString(" && "))
 
     runAndWaitFor(args, dir = Some(runInDir), processLogger = processLogger)

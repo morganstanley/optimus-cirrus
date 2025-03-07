@@ -44,9 +44,9 @@ class MavenPomInstaller(
 
   @async private def installPomFiles(includedScopeArtifacts: Seq[ScopeArtifacts]): Seq[FileAsset] =
     includedScopeArtifacts.filter(_.scopeId.tpe == mavenInstallScope).apar.flatMap { i =>
-      val scopeId = i.scopeId
+      val scopeId = i.scopeId.forMavenRelease
       val pomFile = this.pomFile(scopeId, pathBuilder.mavenDir(scopeId))
-      val scopeConfig = scopeConfigSource.scopeConfiguration(scopeId)
+      val scopeConfig = scopeConfigSource.scopeConfiguration(i.scopeId)
       val pomDescriptor = this.pomDescriptor(scopeId, installVersion, scopeConfig)
       val newHash = Hashing.hashStrings(pomDescriptor)
       cache.bundleFingerprints(scopeId).writeIfChanged(pomFile, newHash) {
@@ -58,13 +58,14 @@ class MavenPomInstaller(
     }
 
   private[component] def pomFile(scopeId: ScopeId, root: Directory): FileAsset =
-    root.resolveFile(s"${scopeId.module}-$installVersion.pom")
+    root.resolveFile(s"${scopeId.forMavenRelease.module}-$installVersion.pom")
 
   def pomDescriptor(
-      scopeId: ScopeId,
+      id: ScopeId,
       installVersion: String,
       scopeConfiguration: ScopeConfiguration
   ): Seq[String] = {
+    val scopeId = id.forMavenRelease
     val prefix = "com.ms."
     val pomHead =
       s"""<?xml version="1.0" encoding="UTF-8"?>
@@ -90,7 +91,8 @@ xmlns="http://maven.apache.org/POM/4.0.0"
 
     def internalString(deps: Seq[ScopeId], scope: String): String = {
       if (deps.nonEmpty) {
-        deps.map { dep =>
+        deps.map { rawdep =>
+          val dep = rawdep.forMavenRelease
           if (dep.metaBundle == scopeId.metaBundle && dep.module == scopeId.module) ""
           else
             s"""    <dependency>

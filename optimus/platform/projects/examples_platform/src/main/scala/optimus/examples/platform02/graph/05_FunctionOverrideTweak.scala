@@ -17,7 +17,7 @@ import optimus.platform.dal.config.DalEnv
 import optimus.platform.dal.config.DalLocation
 
 object FunctionOverrideTweak extends OptimusApp {
-  protected override def dalLocation: DalLocation = DalEnv("none")
+  protected override def dalLocation: DalLocation = DalEnv.none
 
   @entersGraph override def run(): Unit = {
     // entity properties can be tweaked, this example shows tweaking of in memory entities for simplicity.

@@ -64,6 +64,7 @@ final class MinimumUnitCostResult(
     val graphEntry: PNodeTask,
     val reachableCostlyFunctions: Long,
     val cost: Int,
+    /** For a given function of interest how many of those nodes can be observed executing in parallel */
     val maxScaling: Int,
     val syncPoints: Array[SyncPointReport],
     val sourceEntries: Array[SyncBranch]

@@ -59,6 +59,8 @@ object UpsertableTransactionSerializer extends Log {
     ContainedEventSerializer
       .ContainedEntityDeserializer(storedEntities ++ heapEnts)
       .deserEnts
+      // TODO (OPTIMUS-71331): once stored entities within events are supported for streams we will need to revisit
+      // since the optional SerializedEntity on SerializedWithEref will always be None
       .filter { case (serializedWithEref, _) => serializedWithEref.se.forall(serializedEntityFilter) }
       .values
       .toSeq

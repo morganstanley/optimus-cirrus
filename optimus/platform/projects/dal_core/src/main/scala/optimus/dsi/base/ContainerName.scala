@@ -19,6 +19,7 @@ object ContainerName {
     case GroupingsContainerName.name        => GroupingsContainerName
     case TimesliceContainerName.name        => TimesliceContainerName
     case IndexContainerName.name            => IndexContainerName
+    case RegisteredIndexContainerName.name  => RegisteredIndexContainerName
     case ErefIndexContainerName.name        => ErefIndexContainerName
     case EventIndexContainerName.name       => EventIndexContainerName
     case LinkageContainerName.name          => LinkageContainerName
@@ -45,6 +46,7 @@ case object UnqIdxTimeslicesContainerName extends ContainerName { val name = "un
 case object GroupingsContainerName extends ContainerName { val name = "groupings" }
 case object TimesliceContainerName extends ContainerName { val name = "timeslices" }
 case object IndexContainerName extends ContainerName { val name = "index" }
+case object RegisteredIndexContainerName extends ContainerName { val name = "regindex" }
 case object ErefIndexContainerName extends ContainerName { val name = "erefindex" }
 case object EventIndexContainerName extends ContainerName { val name = "eventindex" }
 case object LinkageContainerName extends ContainerName { val name = "linkages" }

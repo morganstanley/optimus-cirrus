@@ -12,9 +12,9 @@
 package optimus.graph.loom;
 
 import static java.lang.invoke.MethodHandles.filterReturnValue;
-import static optimus.CoreUtils.stripSuffix;
-import static optimus.graph.loom.LoomConfig.LOOM_SUFFIX;
-import static optimus.graph.loom.LoomConfig.NEW_NODE_SUFFIX;
+import static optimus.graph.loom.NameMangler.mangleName;
+import static optimus.graph.loom.NameMangler.mkLoomName;
+import static optimus.graph.loom.NameMangler.stripNewNodeSuffix;
 import static optimus.graph.loom.NodeMetaFactory.mhLookupAndGet;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleInfo;
@@ -49,6 +49,16 @@ public class CallSiteHolder {
     refreshTarget();
   }
 
+  /**
+   * TODO (OPTIMUS-66991): A few improvements to consider before using this in PROD (this is
+   * currently behind a flag!):
+   * <li>Consider threading implications
+   * <li>Consider generating a handle once, store/cache it...
+   * <li>Maybe hold off less items here (e.g, info, nti also can be passed in)
+   * <li>NTI.callSite should be private
+   * <li>Tweaked should probably go via specialized path as well
+   * <li>OGTrace observer switch should flip the call sites
+   */
   public void refreshTarget() {
     var handle = needsLookup() ? mhWithLookup() : mhLoom();
     mutableCallsite.setTarget(handle.asType(mutableCallsite.type()));
@@ -61,7 +71,7 @@ public class CallSiteHolder {
 
   // e.g., foo$_
   private MethodHandle mhLoom() {
-    var name = stripSuffix(info.getName(), NEW_NODE_SUFFIX) + LOOM_SUFFIX;
+    var name = mkLoomName(mangleName(entityCls), stripNewNodeSuffix(info.getName()));
     var factoryType = mutableCallsite.type();
     var methodType = info.getMethodType().changeReturnType(factoryType.returnType());
     try {
@@ -71,7 +81,7 @@ public class CallSiteHolder {
     }
   }
 
-  // we are not ready yet...
+  // we are not ready yet! (see comment on top of the file)
   private static final boolean disableOpt =
       DiagnosticSettings.getBoolProperty("optimus.loom.disableMCS", true);
 

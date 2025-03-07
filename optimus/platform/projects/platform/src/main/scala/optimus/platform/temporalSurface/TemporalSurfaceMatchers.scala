@@ -25,7 +25,6 @@ import optimus.platform.storable.EntityReference
 import optimus.platform.storable.PersistentEntity
 import optimus.platform.temporalSurface.impl.TemporalSurfaceMatcherImpl
 import optimus.platform.temporalSurface.operations._
-import optimus.platform.util.ClientEntityHierarchy
 import optimus.platform._
 import optimus.platform.dsi.bitemporal.proto.TemporalSurfaceMatcherT
 import optimus.platform.priql.NamespaceWrapper
@@ -37,6 +36,7 @@ import optimus.platform.relational.reactive._
 import optimus.platform.relational.tree.RelationElement
 import optimus.platform.relational.reactive.ReactiveQueryProcessorT
 import optimus.platform.storable.SortedPropertyValues
+import optimus.platform.util.HierarchyManager.entityHierarchyManager
 
 import scala.annotation.tailrec
 
@@ -72,14 +72,7 @@ object TemporalSurfaceMatchers {
   }
 }
 
-private[optimus] trait WithHierarchyManager {
-  def hierarchy = ClientEntityHierarchy.hierarchy
-}
-
-// In cases where we need just a WithHierarchyManager, use an object.
-object HierarchyManager extends WithHierarchyManager
-
-private[optimus] class TemporalSurfaceMatchers extends WithHierarchyManager with Serializable {
+private[optimus] class TemporalSurfaceMatchers extends Serializable {
   def forClass(types: EntityCompanionBase[_]*): ClassTemporalSurfaceMatcher = {
     val classes = types.map(_.info.runtimeClass)
     buildClassBased(classes.toSet, Set.empty)
@@ -129,7 +122,7 @@ private[optimus] class TemporalSurfaceMatchers extends WithHierarchyManager with
   }
 
   protected def buildClassBased(classes: Set[Class[_ <: Entity]], namespaces: Set[Namespace[_]]) =
-    ClassTemporalSurfaceMatcher(classes, namespaces, this)
+    ClassTemporalSurfaceMatcher(classes, namespaces)
 }
 
 private[temporalSurface] object DisjunctiveTemporalSurfaceMatcher {
@@ -186,7 +179,7 @@ private[temporalSurface] final case class DisjunctiveTemporalSurfaceMatcher(
       val classically = {
         val classes = this.classically.classes | that.classically.classes
         val namespaces = this.classically.namespaces | that.classically.namespaces
-        ClassTemporalSurfaceMatcher(classes, namespaces, this.classically.hierarchyManager)
+        ClassTemporalSurfaceMatcher(classes, namespaces)
       }
       val querulously = {
         val parsedRelations = this.querulously.parsedRelations ++ that.querulously.parsedRelations
@@ -199,7 +192,7 @@ private[temporalSurface] final case class DisjunctiveTemporalSurfaceMatcher(
       val classically = {
         val classes = this.classically.classes | that.classes
         val namespaces = this.classically.namespaces | that.namespaces
-        ClassTemporalSurfaceMatcher(classes, namespaces, this.classically.hierarchyManager)
+        ClassTemporalSurfaceMatcher(classes, namespaces)
       }
       new DisjunctiveTemporalSurfaceMatcher(classically, querulously)
     case that: QueryBasedTemporalSurfaceMatchers =>
@@ -341,13 +334,13 @@ private[temporalSurface] final case class ConstTemporalSurfaceMatcherWithPartiti
 }
 
 private[temporalSurface] object ClassTemporalSurfaceMatcher {
-  def apply(classes: Set[Class[_ <: Entity]], namespaces: Set[Namespace[_]], hierarchyManager: WithHierarchyManager) = {
+  def apply(classes: Set[Class[_ <: Entity]], namespaces: Set[Namespace[_]]) = {
     val allNames: Set[String] = classes map (_.getName)
     val matchTable =
-      MatchTable.build(namespaces.map(n => (n.namespace -> n.includesSubPackage)), allNames, hierarchyManager.hierarchy)
+      MatchTable.build(namespaces.map(n => (n.namespace -> n.includesSubPackage)), allNames, entityHierarchyManager)
     new ClassTemporalSurfaceMatcher(classes, allNames, namespaces, matchTable)
   }
-  private[temporalSurface] val empty = this(Set.empty, Set.empty, HierarchyManager)
+  private[temporalSurface] val empty = this(Set.empty, Set.empty)
 }
 
 private[temporalSurface] class ClassTemporalSurfaceMatcher(
@@ -379,8 +372,6 @@ private[temporalSurface] class ClassTemporalSurfaceMatcher(
       NamespaceWrapper(n.namespace, n.includesSubPackage)
     }
   }
-
-  private[optimus] def hierarchyManager = HierarchyManager
 
   override def toString = s"ClassTemporalSurfaceMatcher[classes=$allNames, namespaces=$namespaces]"
 
@@ -417,7 +408,7 @@ private[temporalSurface] class ClassTemporalSurfaceMatcher(
     val sortedClassNames = in.readObject().asInstanceOf[List[String]]
     _allNames = sortedClassNames.toSet
 
-    val classLoader = hierarchyManager.hierarchy.classLoader
+    val classLoader = entityHierarchyManager.classLoader
     _classes = _allNames.map(classLoader.loadClass(_)).asInstanceOf[Set[Class[_ <: Entity]]]
     _hashCode = calcHashCode()
   }
@@ -458,7 +449,7 @@ object QueryBasedTemporalSurfaceMatchers {
       PreparedMatchInfo(
         p.entityInfo.runtimeClass,
         allFilters.map(PersistentEntityCondition.parseCondition(_)),
-        MatchTable.build(Set.empty, Set(p.entityInfo.runtimeClass.getName), HierarchyManager.hierarchy)
+        MatchTable.build(Set.empty, Set(p.entityInfo.runtimeClass.getName), entityHierarchyManager)
       )
     }
     new QueryBasedTemporalSurfaceMatchers(parsedRelations)(queries, rqps)

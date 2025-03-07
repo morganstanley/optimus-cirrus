@@ -11,7 +11,6 @@
  */
 package optimus.graph
 
-import optimus.graph.cache.NodeCache
 import optimus.platform.EvaluationQueue
 import optimus.platform.RecordingScenarioStack
 import optimus.platform.ScenarioStack
@@ -38,14 +37,13 @@ object TwkResolver {
 /* To avoid allocation on a common path of not finding anything TwkResolver also implements PropertyNode
     @requestingNode reported if SI violation detected (getNode sets this)
  */
-final private[optimus] class TwkResolver[R](
-    requestingNode: NodeTask,
-    info: NodeTaskInfo,
-    key: NodeKey[R],
-    startSS: ScenarioStack)
-    extends PropertyNode[R] {
+final class TwkResolver[R](requestingNode: NodeTask, key: NodeKey[R], startSS: ScenarioStack, trackWhenClause: Boolean)
+    extends PropertyNode[R]
+    with TwkResolution {
 
+  private[this] val info = key.propertyInfo
   initAsRunning(startSS)
+
   override def run(ec: OGSchedulerContext): Unit = throw new GraphInInvalidState("Can't run TwkResolver")
   override def entity: Entity = null
 
@@ -58,48 +56,45 @@ final private[optimus] class TwkResolver[R](
    * <br> -1 Property tweaks
    * <br> 0+ Property tweaks on the parent classes/interfaces of this property info
    */
-  var matchOnIdx: Int = -2
-  var infoTarget: NodeTask = _ // If provided, will be the target of combineInfo
-  var cur: ScenarioStack = startSS
+  private[this] var matchOnIdx: Int = -2
+  private[this] var cur: ScenarioStack = startSS
   var evaluateInSS: ScenarioStack = _ // used when evaluating underlying node (if no tweak) - set during asyncResolve
 
   // If we have a when clause, this is the node that computes the when predicate.
-  var whenNode: Node[Boolean] = _
+  private[this] var whenNode: Node[Boolean] = _
+  // The outer most proxy when transitioned from tracking s
+  private[this] var trackingProxy: NodeTask = _
 
   var tweak: Tweak = _ // Result of resolution of this tweak
   var resolved = false
 
-  private def valueOfWhenClause(eq: EvaluationQueue): Boolean = {
-    val trackingProxy = if (infoTarget ne null) infoTarget else startSS.tweakableListener.trackingProxy
-    if (trackingProxy ne null) {
-      // trackingProxy can be shared in xs resolving cases (overall an unusual case)
-      trackingProxy.synchronized { trackingProxy.combineInfo(whenNode, eq) }
-    } else {
-      this.combineInfo(whenNode, eq)
-    }
+  override def foundInScenarioStack: ScenarioStack = cur
 
-    // If the when node fail, we want to fail the lookup. There are two ways we could do this:
-    //   - we could assume that the lookup is just always "false", and not apply our tweak and throw our exception out
-    //   - we can make the lookup throw the exception to the user
-    //
-    // The second one is obviously better in terms of user-friendliness, but it leads to an annoying issue when we
-    // consider reuse under different scenario stacks (XS etc.): if our resolution threw, do we really depend on the
-    // tweak? We don't even have a value for it, or even know whether it would have been tweaked!
-    //
-    // To get the exception to appear to the user, we set our tweak value to the exception, which achieves our goal
-    // while also ensuring that we properly recorded that we depend on this tweak. This means that, in effect, this
-    //
-    //   given(Tweak.byName(A.b when { en => if (pred(en)) throw new exception else ... } := ...)) { ... }
-    //
-    // is equivalent to
-    //
-    //   given(Tweak.byName(A.b when { en => pred(en) }  := throw new exception)) { ... }
-    //
-    // This is related to OPTIMUS-69943.
+  private def valueOfWhenClause(eq: EvaluationQueue): Boolean = {
+    // Invariants: pairwise not equals (whenInfoTarget != trackingProxy != this)
+    val notGivenBlock = cur.tweakableListener.mergeWhenNodeTPD(whenNode)
+    if (notGivenBlock && trackWhenClause)
+      this.mergeTweakPropertyDependency(whenNode)
+    /* else OK to drop! e.g. when entry already had a fully specified scenarioStack */
+
+    if (trackingProxy ne null)
+      trackingProxy.synchronized { trackingProxy.combineXinfo(whenNode._xinfo) }
+    else if (trackWhenClause)
+      this.combineXinfo(whenNode._xinfo)
+    /* else OK to drop! e.g. when entry already had a fully specified scenarioStack */
+
+    // Propagate: edge, tweak infection, scenario independence
+    if (trackWhenClause)
+      this.combineInfoDirectCaller(whenNode, eq)
+    else if (trackingProxy ne null)
+      trackingProxy.synchronized { trackingProxy.combineInfoDirectCaller(whenNode, eq) }
+    /*else throw new GraphException("How?")*/
+
     resolved = whenNode.isDoneWithException || whenNode.result
-    if (whenNode.isDoneWithException) {
+    // [SEE_WHEN_CLAUSE_DEPENDENCIES] XSDesignNodes.md
+    // Failed `when` clause is the same as Tweak.byName(A.b when predicateThatThrows := throw new exception)
+    if (whenNode.isDoneWithException)
       tweak = tweak.reduceToByValue(new AlreadyFailedNode[R](whenNode.exception()))
-    }
 
     if (startSS.isRecordingWhenDependencies) {
       val whenNodeRT = whenNode.scenarioStack().tweakableListener.recordedTweakables
@@ -133,7 +128,7 @@ final private[optimus] class TwkResolver[R](
       tweakNode.markAsTrackingValue()
 
       val rss =
-        if (shouldCache) NodeCache.lookupAndInsert(tweakInfo, tweakNode, startSS.privateCache, ec)
+        if (shouldCache) startSS.cacheSelector.lookupAndInsert(tweakInfo, tweakNode, ec)
         else tweakNode
       rss
     }
@@ -150,11 +145,20 @@ final private[optimus] class TwkResolver[R](
           tweak = cacheID.get(extractorKey)
 
         case propertyTweak: Tweak =>
+          type WhenNodeTl = WhenNodeRecordingTweakableListener
           tweak = propertyTweak
           whenNode = tweak.target.whenClauseNode(key, cur.parent)
-          if ((whenNode ne null) && startSS.isRecordingWhenDependencies) {
-            val whenClauseRTL = new WhenNodeRecordingTweakableListener(whenNode.scenarioStack())
-            whenNode.replace(RecordingScenarioStack.withExistingListener(whenNode.scenarioStack(), whenClauseRTL))
+          if (whenNode ne null) {
+            val orgWhenSS = whenNode.scenarioStack
+            val whenSS = if (startSS.isRecordingWhenDependencies) {
+              val tl = new WhenNodeTl(orgWhenSS, null, waiter = startSS.tweakableListener)
+              RecordingScenarioStack.withExistingListener(orgWhenSS, tl)
+            } else if (startSS.isRecordingTweakUsage) {
+              if (orgWhenSS.isTrackingIndividualTweakUsage) trackingProxy = startSS.tweakableListener.trackingProxy
+              val tl = new TrackParentRecordingTweakableListener(orgWhenSS.tweakableListener, startSS.tweakableListener)
+              orgWhenSS.copy(tweakableListener = tl)
+            } else orgWhenSS
+            whenNode.replace(whenSS)
           }
         case _ =>
       }

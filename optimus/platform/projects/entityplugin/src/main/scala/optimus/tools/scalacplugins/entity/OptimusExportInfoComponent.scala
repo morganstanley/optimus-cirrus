@@ -56,6 +56,8 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
   sealed trait EntityTypes
   case object IsEmbeddable extends EntityTypes
   case object HasSensitiveField extends EntityTypes
+  case object IsFieldMetaAnnotated extends EntityTypes
+  case object IsOptionalWithSensitiveField extends EntityTypes
 
   private def currentOutputDir: Option[Path] = {
     if (plugin.settings.disableExportInfo)
@@ -118,8 +120,12 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       }
     }
 
-    case class CatalogingMetadata(owner: String, catalog: String)
-
+    case class CatalogingMetadata(
+        owner: String,
+        catalog: String,
+        controls: String,
+        upstreamDataset: String,
+        description: String)
     case class Metadatas(
         entities: Map[String, EntityBaseMetaData],
         storables: Map[String, EntityBaseMetaData],
@@ -182,16 +188,27 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
 
         def isFieldTypeSensitive(tpe: Type): Boolean = {
           // Cached :: to not repeat the expensive search over all different Types
-          sensitiveTypeCache.getOrElseUpdate(tpe, tpe.baseClasses.contains(piiElement))
+          sensitiveTypeCache.getOrElseUpdate(tpe, tpe.baseClasses.contains(PiiElement))
+        }
+
+        def isFieldOptionalWithTypeSensitive(tpe: Type): Boolean = {
+          tpe match {
+            case TypeRef(_, sym, args) if sym == definitions.OptionClass =>
+              sensitiveTypeCache.getOrElseUpdate(args.single, args.single.baseClasses.contains(PiiElement))
+            case _ => false
+          }
         }
 
         def isDataSubjectCategory(sym: Symbol): Boolean = {
-          !sym.isTrait && !sym.isRefinementClass && sym.baseClasses.contains(dataSubjectCategory.companion)
+          !sym.isTrait && !sym.isRefinementClass && sym.baseClasses.contains(DataSubjectCategory.companion)
         }
 
         def getMemberType(member: Symbol): Option[EntityTypes] = {
           if (member.isField && isEmbeddable(member.tpe.typeSymbol)) Some(IsEmbeddable)
-          else if (member.isField && isFieldTypeSensitive(member.typeOfThis)) Some(HasSensitiveField)
+          else if (member.isField && isFieldTypeSensitive(member.originalInfo)) Some(HasSensitiveField)
+          else if (member.isField && isFieldOptionalWithTypeSensitive(member.originalInfo))
+            Some(IsOptionalWithSensitiveField)
+          else if (member.isMethod && member.hasAnnotation(FieldMetaAnnotation)) Some(IsFieldMetaAnnotated)
           else None
         }
 
@@ -203,6 +220,39 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
               .map(_.nameString.split('$').last),
             fullyQualifiedName = sym.typeOfThis.directObjectString
           )
+        }
+
+        def getPIIDetailsForOptionalSymbol(sym: Symbol, prefix: Option[String]): PIIDetails = {
+          PIIDetails(
+            name = s"${prefix.getOrElse("")}${sym.nameString.replace(suffixes.IMPL, "")}",
+            dataSubjectCategories = sym.originalInfo.typeArguments.single.typeArguments.single.baseClasses
+              .filter(baseClass => isDataSubjectCategory(baseClass))
+              .map(_.nameString.split('$').last),
+            fullyQualifiedName = sym.originalInfo.typeArguments.single.typeSymbol.fullNameString
+          )
+        }
+
+        def getPIIDetailsFromFieldMetaAnnotation(sym: Symbol): List[PIIDetails] = {
+          val piiName = sym.nameString
+          val annInfo = sym
+            .getAnnotation(FieldMetaAnnotation)
+            .getOrElse(throw new IllegalStateException(s"FieldMetaAnnotation not found for $sym"))
+          val constructor: Symbol = exitingTyper(typer.typed(New(annInfo.atp, annInfo.args: _*))) match {
+            case Apply(constr @ Select(New(_), nme.CONSTRUCTOR), _) => constr.symbol
+            case _                                                  => annInfo.atp.typeSymbol.primaryConstructor
+          }
+          val paramNames = constructor.paramss.head.map(_.nameString)
+          paramNames.zip(annInfo.args).toMap.get("piiClassification") match {
+            case Some(value) =>
+              value.children.tail.map { arg =>
+                val fullyQualifiedName = arg.tpe.typeSymbol.fullNameString
+                val dataSubjectCategories = arg.tpe.typeArguments.single.baseClasses
+                  .filter(baseClass => isDataSubjectCategory(baseClass))
+                  .map(_.nameString.split('$').last)
+                PIIDetails(piiName, fullyQualifiedName, dataSubjectCategories)
+              }.toList
+            case None => List.empty
+          }
         }
 
         def handleEntityMetaData(sym: Symbol): Unit = {
@@ -222,7 +272,9 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
           def getPIIElementList(sym: Symbol, visited: Set[Type], prefix: Option[String]): Seq[PIIDetails] = {
             sym.info.members.foldLeft(List.empty[PIIDetails]) { (list, member) =>
               getMemberType(member) match {
-                case Some(HasSensitiveField) => list :+ getPIIDetailsForSymbol(member, prefix)
+                case Some(HasSensitiveField)            => list :+ getPIIDetailsForSymbol(member, prefix)
+                case Some(IsOptionalWithSensitiveField) => list :+ getPIIDetailsForOptionalSymbol(member, prefix)
+                case Some(IsFieldMetaAnnotated)         => list ++ getPIIDetailsFromFieldMetaAnnotation(member)
                 case Some(IsEmbeddable) if (!visited.contains(member.typeSignature)) =>
                   val newVisited = visited + member.typeSignature
                   val embeddablePrefix = s"${prefix.getOrElse("")}${member.nameString}."
@@ -307,12 +359,20 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
 
     val classes = new mutable.ListBuffer[MemberDef]
     val packageObjects = Map.newBuilder[String, CatalogingMetadata]
+    object MetaKey {
+      val Owner = "Owner"
+      val DalMetadata = "DalMetadata"
+      val Controls = "Controls"
+      val UpstreamDataset = "UpstreamDataset"
+      val Description = "Description"
+    }
     def extractMetaParams(sym: Symbol, metaType: MetaType): CatalogingMetadata = {
       // this is the main extractor of fqcn for classes related to cataloguing
       // gives you both owner and catalog fqcn to be stored in the meta.json for runtime reflection
+
       val metaSym = sym.getAnnotation(MetaAnnotation).get.tree
       val parentTypes: Seq[Seq[Symbol]] = metaSym match {
-        case Apply(_, args) => args.map(s => s.symbol.tpe.parents.map(_.typeSymbol))
+        case Apply(_, args) => args.filter(_.symbol != null).map(s => s.symbol.tpe.parents.map(_.typeSymbol))
         case _              => Seq.empty[Seq[Symbol]]
       }
 
@@ -322,16 +382,32 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       if (metaType.equals(Meta) && !isValidMeta(parentTypes))
         alarm(OptimusErrors.OWNER_ONLY_META_DEFINITION, sym.pos, sym.fullName)
 
-      val metaMap = Map.newBuilder[ClassSymbol, String]
+      val metaMap = Map.newBuilder[String, String]
       metaSym match {
         case Apply(_, args) =>
           args foreach {
+            // Package object
             case sel @ Select(MetaFieldPackage(_), _) if sel.symbol.isModule =>
               if (sel.symbol.typeSignature.baseClasses.contains(OwnershipMetadata)) {
-                metaMap += (OwnershipMetadata -> sel.symbol.fullName)
+                metaMap += (MetaKey.Owner -> sel.symbol.fullName)
               } else if (sel.symbol.typeSignature.baseClasses.contains(DalMetadata)) {
-                metaMap += (DalMetadata -> sel.symbol.fullName)
+                metaMap += (MetaKey.DalMetadata -> sel.symbol.fullName)
+              } else if (sel.symbol.typeSignature.baseClasses.contains(Controls)) {
+                metaMap += (MetaKey.Controls -> sel.symbol.fullName)
+              } else if (sel.symbol.typeSignature.baseClasses.contains(UpstreamDatasets)) {
+                metaMap += (MetaKey.UpstreamDataset -> sel.symbol.fullName)
               }
+            case sel @ Literal(Constant(value: String)) =>
+              metaMap += (MetaKey.Description -> value)
+            // case object
+            case sel @ RefTree(_, _) if sel.symbol.isModule =>
+              if (sel.symbol.typeSignature.baseClasses.contains(UpstreamDatasets))
+                metaMap += (MetaKey.UpstreamDataset -> sel.symbol.fullName)
+              else if (sel.symbol.typeSignature.baseClasses.contains(Controls)) {
+                metaMap += (MetaKey.Controls -> sel.symbol.fullName)
+              } else
+                alarm(OptimusErrors.INCORRECT_META_FIELDS, sel.pos, sel.symbol.fullName)
+
             case other =>
               alarm(OptimusErrors.INCORRECT_META_FIELDS, other.pos, other.symbol.fullName)
           }
@@ -339,11 +415,13 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       }
       val mapResult = metaMap.result()
       CatalogingMetadata(
-        mapResult.getOrElse(OwnershipMetadata, ""),
-        mapResult.getOrElse(DalMetadata, "")
+        mapResult.getOrElse(MetaKey.Owner, ""),
+        mapResult.getOrElse(MetaKey.DalMetadata, ""),
+        mapResult.getOrElse(MetaKey.Controls, ""),
+        mapResult.getOrElse(MetaKey.UpstreamDataset, ""),
+        mapResult.getOrElse(MetaKey.Description, "")
       )
     }
-
     def collectPackageMeta(pkgName: String, impl: Template): (String, CatalogingMetadata) = {
       // we are using 'find' here as the scala package object is indistinguishable from the actual package where the
       // annotation is located, we don't care which ones we use to get to the annotation as they are both
@@ -353,7 +431,7 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         case Some(e) =>
           val metaParams = extractMetaParams(e.symbol, PackageMeta)
           (pkgName, metaParams)
-        case None => ("", CatalogingMetadata("", ""))
+        case None => ("", CatalogingMetadata("", "", "", "", ""))
       }
     }
 
@@ -371,10 +449,10 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         case PackageDef(_, stats) => stats foreach gen
         case cd @ ClassDef(mods, name, tparams, impl) if isSymbolContainsMetadata(cd.symbol) =>
           classes += cd
-          impl foreach gen
+          impl.body foreach gen
         case md @ ModuleDef(mods, name, impl) if isSymbolContainsMetadata(md.symbol) =>
           classes += md
-          impl foreach gen
+          impl.body foreach gen
         case pko @ ClassDef(_, _, _, impl) if pko.symbol.isPackageObjectClass =>
           packageObjects += collectPackageMeta(pko.symbol.fullName.stripSuffix(".package"), impl)
         case _ => ()

@@ -20,7 +20,6 @@ object PlatformSpecific {
   /**
    * If file exists then canonical path on Windows, absolute path on Linux. Original path otherwise
    */
-  // TODO (OPTIMUS-14326): Always return full path, fail otherwise
   def fullPath(path: Path): Path = {
     val absolutePath = if (OsSpecific.isWindows) path.toFile.getCanonicalFile else path.toFile.getAbsoluteFile
     /*

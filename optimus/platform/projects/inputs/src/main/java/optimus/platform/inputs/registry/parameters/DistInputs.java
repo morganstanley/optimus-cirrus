@@ -28,7 +28,6 @@ public class DistInputs {
     public static final String CancelTasksOnExit = "client.cancelTasksOnExit";
     public static final String EngineCmdLine = "client.engine.cmdLine";
     public static final String AfsOnly = "client.engine.afsOnly";
-    public static final String ProvideEngineClasspath = "client.engine.provideClasspath";
     public static final String ProvideEngineEnv = "client.engine.provideEngineEnv";
     public static final String EngineEnv = "client.engine.env";
     public static final String EngineExecutablePath = "client.engine.execCmd.path";
@@ -253,14 +252,6 @@ public class DistInputs {
           "Restart engine if it's running from a release link, and the release link is flipped",
           false,
           Source.fromBoolJavaProperties(prefixed(SourceNames.MonitorReleaseLink)),
-          CombinationStrategies.distCombinator());
-
-  public static final ScopedSINodeInput<Boolean> ProvideEngineClasspath =
-      NodeInputs.newSerializableWithDefault(
-          "ProvideEngineClasspath",
-          "I am not sure!!!",
-          true,
-          Source.fromBoolJavaProperties(prefixed(SourceNames.ProvideEngineClasspath)),
           CombinationStrategies.distCombinator());
 
   public static final ScopedSINodeInput<Boolean> ProvideEngineEnv =

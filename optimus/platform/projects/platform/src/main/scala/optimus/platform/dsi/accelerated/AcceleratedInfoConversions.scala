@@ -32,6 +32,7 @@ object AcceleratedInfoConversions {
               RegisteredFieldType.BusinessEventReference(mapValue.getOrElse("className", ""))
             case "Embeddable" => RegisteredFieldType.Embeddable(mapValue.getOrElse("className", ""))
             case "JavaEnum"   => RegisteredFieldType.JavaEnum(mapValue.getOrElse("className", ""))
+            case "PIIElement" => RegisteredFieldType.PIIElement(mapValue.getOrElse("className", ""))
             case "ScalaEnum"  => RegisteredFieldType.ScalaEnum(mapValue.getOrElse("className", ""))
             case "Array"      => RegisteredFieldType.Array(convertToRegisterFieldType(mapValue.getOrElse("t", "")))
             case "ImmutableArray" =>
@@ -181,8 +182,7 @@ object AcceleratedInfoConversions {
     "Year" -> RegisteredFieldType.Year,
     "ZoneId" -> RegisteredFieldType.ZoneId,
     "OffsetTime" -> RegisteredFieldType.OffsetTime,
-    "LocalTime" -> RegisteredFieldType.LocalTime,
-    "FullName" -> RegisteredFieldType.FullName
+    "LocalTime" -> RegisteredFieldType.LocalTime
   )
 
   private val collFlagMap =

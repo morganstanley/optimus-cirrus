@@ -23,6 +23,7 @@ sealed trait MessagesPayloadBase {
   def clientAppId: ClientAppIdentifier
   def user: String
   def publisherChainId: ChainedID
+  // rId = requestId
   def rId: String
 }
 

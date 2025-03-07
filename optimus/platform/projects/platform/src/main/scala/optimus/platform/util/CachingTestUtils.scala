@@ -11,7 +11,6 @@
  */
 package optimus.platform.util
 
-import optimus.platform.ScenarioStack
 import optimus.graph.NodeTaskInfo
 import optimus.graph.PropertyInfo
 import optimus.graph.SchedulerPlugin

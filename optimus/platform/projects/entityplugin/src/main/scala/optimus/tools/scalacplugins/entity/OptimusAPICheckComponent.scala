@@ -60,14 +60,14 @@ class OptimusAPICheckComponent(val plugin: EntityPlugin, override val phaseInfo:
           if dd.symbol.hasAnnotation(NodeSyncAnnotation) || dd.symbol.nameString.endsWith("$withNode") =>
         val saved = inNodeSync
         inNodeSync = true
-        pathed(dd, rhs)(traverse)
+        traverse(rhs)
         inNodeSync = saved
         false
 
       case Apply(TypeApply(Select(_, names.ignoreWithin), _), Literal(Constant(arg: String)) :: within :: Nil) =>
         val saved = ignoranceWithin
         ignoranceWithin = arg :: saved
-        pathed(tree, within)(traverse)
+        traverse(within)
         ignoranceWithin = saved
         false
 

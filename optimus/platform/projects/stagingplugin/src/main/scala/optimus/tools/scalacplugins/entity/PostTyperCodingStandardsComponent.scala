@@ -35,7 +35,8 @@ class PostTyperCodingStandardsComponent(
   lazy val jdkCollectionConverters = rootMirror.getModuleIfDefined("scala.jdk.CollectionConverters")
 
   val lazyListFactoryFunctions: Set[Name] =
-    Set("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "unfold", "concat", "range").map(TermName(_))
+    Set("cons", "empty", "iterate", "from", "continually", "fill", "tabulate", "unfold", "concat", "range").map(
+      TermName(_))
 
   override def newPhase(prev: Phase): Phase = new StdPhase(prev) {
     override def apply(unit: CompilationUnit): Unit = {
@@ -182,7 +183,9 @@ class PostTyperCodingStandardsComponent(
               ()
             }
             super.traverse(tree)
-
+          case Match(sel, cases) =>
+            cases.foreach(c => checkCase(sel, c))
+            super.traverse(tree)
           case _ => super.traverse(tree)
         }
       finally {
@@ -268,18 +271,13 @@ class PostTyperCodingStandardsComponent(
     def checkApplication(tree: Tree, fun: Tree, targs: List[Tree], argss: List[List[Tree]]): Unit = {
       val sym = fun.symbol
 
-      if (sym.name.toString == "mock" && targs.nonEmpty) {
-        val clazz = rootMirror.getClassIfDefined(targs.head.tpe.toLongString)
-        if (clazz.isCaseClass && clazz.isFinal)
-          alarm(CodeStyleNonErrorMessages.MOCK_FINAL_CASE_CLASS, tree.pos)
-      }
-
       if ((sym == Predef_augmentString || sym == Predef_wrapString) && !argss.exists(_.exists(_.pos.isOffset))) {
         enclosingTrees(1) match {
-          case _: Select => // okay, e.g. "".exists(f)
-          case _: Apply  => // okay, e.g. def foo(s: Seq[Char]); foo("")
-          case _: Typed  => // okay, "": Seq[Char]
-          case _         =>
+          case _: Select  => // okay, e.g. "".exists(f)
+          case _: Apply   => // okay, e.g. def foo(s: Seq[Char]); foo("")
+          case _: Typed   => // okay, "": Seq[Char]
+          case _: DefTree => // okay, typically a `val x$1 = augmentString(s)` in an application with default args
+          case _          =>
             // dangerous:
             // xs.flatMap(x => if (cond) "s" else List("")  // should be List("s")
             // (sb: StringBuffer) => sb ++ "foo" (should be ++=)
@@ -420,6 +418,40 @@ class PostTyperCodingStandardsComponent(
           case _ =>
         }
       }
+    }
+    def checkCase(selector: Tree, caseDef: CaseDef): Unit = {
+      object traverser extends Traverser {
+        var selType = selector.tpe
+        override def traverse(tree: Tree): Unit = tree match {
+          case Annotated(annot, tree) => traverse(tree)
+
+          case Apply(fun, arg :: Nil)
+              if fun.tpe.isInstanceOf[MethodType] && !fun.tpe.params.head.info.typeSymbol
+                .isNonBottomSubClass(definitions.ListClass) && arg.tpe.typeSymbol == definitions.ConsClass =>
+            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, arg.pos)
+            super.traverse(tree)
+
+          case Apply(fun, (u @ UnApply(unapplyFun, _)) :: Nil)
+              if fun.tpe.isInstanceOf[MethodType] && !fun.tpe.params.head.info.typeSymbol
+                .isNonBottomSubClass(definitions.ListClass) && u.tpe.typeSymbol == definitions.ListClass =>
+            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, u.pos)
+            super.traverse(tree)
+          case _ =>
+            super.traverse(tree)
+        }
+      }
+      caseDef.pat match {
+        case p @ Apply(fun, args) if fun.tpe.resultType.typeSymbol == definitions.ConsClass =>
+          if (!selector.tpe.typeSymbol.isNonBottomSubClass(definitions.ListClass)) {
+            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, p.pos)
+          }
+        case u @ UnApply(unapplyFun, _)
+            if !selector.tpe.typeSymbol.isNonBottomSubClass(
+              definitions.ListClass) && u.tpe.typeSymbol == definitions.ListClass =>
+          alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, u.pos)
+        case _ =>
+      }
+      traverser.traverse(caseDef.pat)
     }
   }
 

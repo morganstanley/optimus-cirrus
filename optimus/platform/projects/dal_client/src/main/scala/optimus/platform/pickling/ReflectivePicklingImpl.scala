@@ -116,7 +116,7 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       ref: Reference): Unpickled = {
     val inst = unsafe.allocateInstance(info.runtimeClass).asInstanceOf[Unpickled]
     initMetadata(inst, is, initInfo, info, ref)
-    unpickleFill(info, is, forceUnpickle, incomplete = false, isInplaceUpdate = false, inst)
+    unpickleFill(info, is, forceUnpickle, incomplete = false, inst)
     inst
   }
 
@@ -140,7 +140,6 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
       is: PickledInputStream,
       forceUnpickle: Boolean,
       incomplete: Boolean,
-      isInplaceUpdate: Boolean,
       inst: Unpickled): Unit = {
     info.unsafeFieldInfo
       // TODO (OPTIMUS-22294): Asyncing the closure triggers sync stack detection.  Apparently sync stacks are ok.
@@ -164,8 +163,6 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
                 else missingProperty(pinfo.name)
               }
             }
-            if (isInplaceUpdate && DiagnosticSettings.reactiveWarnOnDangerousUpdates)
-              warnOnDangerousReactiveUpdate(inst, pinfo, fieldReader, value)
 
             fieldSetter.invokeExact(inst, value: AnyRef): Unit // Type ascriptions are not optional
           }
@@ -178,9 +175,6 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
               else if (!incomplete) missingProperty(pinfo.name)
             }
 
-            if (isInplaceUpdate && DiagnosticSettings.reactiveWarnOnDangerousUpdates)
-              warnOnDangerousReactiveUpdate(inst, pinfo, fieldReader, value)
-
             try {
               fieldSetter.invokeExact(inst, value): Unit // Type ascription is not optional
             } catch {
@@ -192,18 +186,6 @@ abstract class ReflectivePicklingImpl[Info <: StorableInfo, InitInfo, Reference,
           }
         }
       }
-  }
-
-  /**
-   * Apply an update to an entity from an unpickling stream.
-   *
-   * @param is
-   *   The stream from which to read data.
-   * @param entity
-   *   The entity to update
-   */
-  def unpickleUpdate(is: PickledInputStream, entity: Unpickled): Unit = {
-    unpickleFill(entity.$info, is, forceUnpickle = false, incomplete = true, isInplaceUpdate = true, entity)
   }
 
   protected def resolveSetter(lookup: MethodHandles.Lookup, fld: Field, isVal: Boolean): MethodHandle = {

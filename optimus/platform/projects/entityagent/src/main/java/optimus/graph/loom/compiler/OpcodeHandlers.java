@@ -11,85 +11,95 @@
  */
 package optimus.graph.loom.compiler;
 
+import static optimus.debug.InstrumentationConfig.OBJECT_TYPE;
+import static optimus.graph.loom.LoomConfig.*;
 import static optimus.graph.loom.compiler.LInsnDiGraphWriter.asString;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.IntInsnNode;
 import org.objectweb.asm.tree.InvokeDynamicInsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.TypeInsnNode;
 
+/** Defines how to convert a bytecode instruction into an operation. */
 class OpcodeHandlers implements Opcodes {
   static final Handler[] opcodes = new Handler[255];
+  static final Type[] typeAsOffsets =
+      new Type[] {
+        Type.INT_TYPE,
+        Type.LONG_TYPE,
+        Type.FLOAT_TYPE,
+        Type.DOUBLE_TYPE,
+        OBJECT_TYPE,
+        Type.BOOLEAN_TYPE,
+        Type.CHAR_TYPE,
+        Type.SHORT_TYPE
+      };
 
   static void fill(int start, int end, Handler op) {
     for (int i = start; i <= end; i++) opcodes[i] = op;
   }
 
   static {
-    Handler unknown =
-        (c, i) -> {
-          throw new RuntimeException("LERROR: Unsupported bytecode: " + asString(i));
-        };
+    Handler unknown = (c, i) -> LMessage.fatal("Unsupported bytecode: " + asString(i));
     fill(0, opcodes.length - 1, unknown);
 
-    var oneTrue = new Trivial(1, true);
-    var oneFalse = new Trivial(1, false);
-    var threeFalse = new Trivial(3, false);
+    var oneFalse = new Trivial(1);
 
-    fill(ICONST_M1, ICONST_5, new Trivial(0, true, -ILOAD));
-    fill(LCONST_0, LCONST_1, new Trivial(0, true, -LLOAD));
-    fill(FCONST_0, FCONST_2, new Trivial(0, true, -FLOAD));
-    fill(DCONST_0, DCONST_1, new Trivial(0, true, -DLOAD));
-    fill(BIPUSH, SIPUSH, new Trivial(0, true, -ILOAD));
+    fill(ICONST_M1, ICONST_5, new Trivial(0, Type.INT_TYPE));
+    fill(LCONST_0, LCONST_1, new Trivial(0, Type.LONG_TYPE));
+    fill(FCONST_0, FCONST_2, new Trivial(0, Type.FLOAT_TYPE));
+    fill(DCONST_0, DCONST_1, new Trivial(0, Type.DOUBLE_TYPE));
+    fill(BIPUSH, SIPUSH, new Trivial(0, Type.INT_TYPE));
 
-    for (var i = IASTORE; i <= SASTORE; i++) opcodes[i] = threeFalse;
+    fill(IALOAD, SALOAD, new Primitive(2, IALOAD));
+    fill(IASTORE, SASTORE, Parser::handleArrayStore);
 
-    fill(IADD, DADD, new Trivial(2, true, IADD));
-    fill(ISUB, DSUB, new Trivial(2, true, ISUB));
-    fill(IMUL, DMUL, new Trivial(2, true, IMUL));
-    fill(IDIV, DDIV, new Trivial(2, true, IDIV));
-    fill(IREM, DREM, new Trivial(2, true, IREM));
-    fill(INEG, DNEG, new Trivial(1, true, INEG));
+    fill(IADD, DADD, new Primitive(2, IADD));
+    fill(ISUB, DSUB, new Primitive(2, ISUB));
+    fill(IMUL, DMUL, new Primitive(2, IMUL));
+    fill(IDIV, DDIV, new Primitive(2, IDIV));
+    fill(IREM, DREM, new Primitive(2, IREM));
+    fill(INEG, DNEG, new Primitive(1, INEG));
 
-    fill(ISHL, LSHR, new Trivial(2, true, ISHL));
-    fill(IUSHR, LUSHR, new Trivial(2, true, IUSHR));
-    fill(IAND, LAND, new Trivial(2, true, IAND));
-    fill(IOR, LOR, new Trivial(2, true, IOR));
-    fill(IXOR, LXOR, new Trivial(2, true, IXOR));
+    fill(ISHL, LSHR, new Primitive(2, ISHL));
+    fill(IUSHR, LUSHR, new Primitive(2, IUSHR));
+    fill(IAND, LAND, new Primitive(2, IAND));
+    fill(IOR, LOR, new Primitive(2, IOR));
+    fill(IXOR, LXOR, new Primitive(2, IXOR));
 
     opcodes[POP] = oneFalse;
-    opcodes[POP2] = LCompiler::handlePop2;
+    opcodes[POP2] = Parser::handlePop2;
 
-    var zeroTrueALOAD = new Trivial(0, true, -ALOAD);
-    var oneTrueALOAD = new Trivial(1, true, -ALOAD);
     var zeroTrueDynamic = new Dynamic(0, true);
+    var oneTrueDynamic = new Dynamic(1, true);
     var oneFalseDynamic = new Dynamic(1, false);
 
-    opcodes[ACONST_NULL] = zeroTrueALOAD;
-    opcodes[CHECKCAST] = oneTrueALOAD;
+    opcodes[ACONST_NULL] = new Trivial(0, OBJECT_TYPE);
+    opcodes[CHECKCAST] = oneTrueDynamic;
 
     opcodes[GETSTATIC] = zeroTrueDynamic;
     opcodes[PUTSTATIC] = oneFalseDynamic;
-    opcodes[GETFIELD] = zeroTrueDynamic;
+    opcodes[GETFIELD] = oneTrueDynamic;
     opcodes[PUTFIELD] = oneFalseDynamic;
     opcodes[LDC] = zeroTrueDynamic;
 
-    opcodes[NEWARRAY] = oneTrue;
-    opcodes[ANEWARRAY] = oneTrue;
-    opcodes[INSTANCEOF] = oneTrueALOAD;
-    opcodes[NEW] = zeroTrueALOAD;
+    var oneToInt = new Trivial(1, Type.INT_TYPE);
+    opcodes[NEWARRAY] = oneTrueDynamic;
+    opcodes[ANEWARRAY] = oneTrueDynamic;
+    opcodes[ARRAYLENGTH] = oneToInt;
+    opcodes[INSTANCEOF] = oneToInt;
+    opcodes[NEW] = zeroTrueDynamic;
 
-    opcodes[LCMP] = new Trivial(2, true, -LLOAD);
+    fill(ILOAD, ALOAD, Parser::loadVar);
+    fill(ISTORE, ASTORE, Parser::storeVar);
 
-    fill(ILOAD, ALOAD, LCompiler::loadVar);
-    fill(ISTORE, ASTORE, LCompiler::storeVal);
-
-    Handler oneToLong = new Trivial(1, true, -LLOAD);
-    Handler oneToFloat = new Trivial(1, true, -FLOAD);
-    Handler oneToDouble = new Trivial(1, true, -DLOAD);
-    Handler oneToInt = new Trivial(1, true, -ILOAD);
+    Handler oneToLong = new Trivial(1, Type.LONG_TYPE);
+    Handler oneToFloat = new Trivial(1, Type.FLOAT_TYPE);
+    Handler oneToDouble = new Trivial(1, Type.DOUBLE_TYPE);
     opcodes[I2L] = oneToLong;
     opcodes[I2F] = oneToFloat;
     opcodes[I2D] = oneToDouble;
@@ -106,53 +116,61 @@ class OpcodeHandlers implements Opcodes {
     opcodes[I2C] = oneToInt;
     opcodes[I2S] = oneToInt;
 
-    opcodes[DUP] = LCompiler::handleDup;
+    opcodes[DUP] = Parser::handleDup;
+
+    fill(LCMP, DCMPG, new Trivial(2, Type.INT_TYPE));
 
     var condJumpOne = new ConditionalJump(1);
     fill(IFEQ, IFLE, condJumpOne);
     fill(IF_ICMPEQ, IF_ACMPNE, new ConditionalJump(2));
     fill(IFNULL, IFNONNULL, condJumpOne);
 
-    opcodes[GOTO] = LCompiler::handleJump;
+    opcodes[GOTO] = Parser::handleUnconditionalJump;
+    opcodes[TABLESWITCH] = Parser::handleTableSwitch;
+    opcodes[LOOKUPSWITCH] = Parser::handleLookupSwitch;
 
-    Handler returnsOne = handleReturn(1);
-    fill(IRETURN, ARETURN, returnsOne);
-    opcodes[RETURN] = handleReturn(0); // we don't pop with return!
-    opcodes[ATHROW] = returnsOne;
+    fill(IRETURN, ARETURN, Parser::handleReturnValue);
+    opcodes[RETURN] = Parser::handleReturnVoid; // we don't pop with return!
+    opcodes[ATHROW] = Parser::handleThrow;
 
-    fill(INVOKEVIRTUAL, INVOKEINTERFACE, (c, i) -> c.handleInvoke(((MethodInsnNode) i).desc, i));
-    opcodes[INVOKEDYNAMIC] = (c, i) -> c.handleInvoke(((InvokeDynamicInsnNode) i).desc, i);
-  }
-
-  private static Handler handleReturn(int popCount) {
-    return (c, i) -> {
-      c.handleFrameOp(i, popCount);
-      c.assertEmptyStack();
-    };
+    fill(INVOKEVIRTUAL, INVOKEINTERFACE, (p, i) -> p.handleInvoke(((MethodInsnNode) i).desc, i));
+    opcodes[INVOKEDYNAMIC] = (p, i) -> p.handleInvoke(((InvokeDynamicInsnNode) i).desc, i);
   }
 
   interface Handler {
-    void handle(LCompiler compiler, AbstractInsnNode i);
+    void handle(Parser parser, AbstractInsnNode i);
   }
 
   private static class Trivial implements Handler {
-    final int loadOpBase; // Result load Op
+    final Type resultType;
     int popCount;
-    boolean hasResult;
 
-    public Trivial(int popCount, boolean hasResult, int loadOpBase) {
+    public Trivial(int popCount, Type resultType) {
       this.popCount = popCount;
-      this.hasResult = hasResult;
-      this.loadOpBase = loadOpBase;
+      this.resultType = resultType;
     }
 
-    public Trivial(int popCount, boolean hasResult) {
-      this(popCount, hasResult, -1);
+    public Trivial(int popCount) {
+      this(popCount, null);
     }
 
-    public void handle(LCompiler compiler, AbstractInsnNode i) {
-      var loadOp = loadOpBase < 0 ? -loadOpBase : ILOAD + i.getOpcode() - loadOpBase;
-      compiler.handleOp(i, popCount, hasResult, loadOp);
+    public void handle(Parser parser, AbstractInsnNode i) {
+      parser.handleOp(i, popCount, resultType != null, resultType);
+    }
+  }
+
+  private static class Primitive implements Handler {
+    int popCount;
+    int baseOpcode;
+
+    public Primitive(int popCount, int baseOpcode) {
+      this.popCount = popCount;
+      this.baseOpcode = baseOpcode;
+    }
+
+    public void handle(Parser parser, AbstractInsnNode i) {
+      var tpe = typeAsOffsets[i.getOpcode() - baseOpcode];
+      parser.handleOp(i, popCount, true, tpe);
     }
   }
 
@@ -166,27 +184,50 @@ class OpcodeHandlers implements Opcodes {
     }
 
     @Override
-    public void handle(LCompiler compiler, AbstractInsnNode i) {
-      var type = getType(i);
-      var loadOp = type != null ? type.getOpcode(ILOAD) : -1;
-      compiler.handleOp(i, popCount, hasResult, loadOp);
+    public void handle(Parser parser, AbstractInsnNode i) {
+      var resultType = hasResult ? getType(i) : null;
+      parser.handleOp(i, popCount, hasResult, resultType);
     }
 
     private Type getType(AbstractInsnNode i) {
-      Type type = null;
       if (i instanceof FieldInsnNode) {
         var fi = (FieldInsnNode) i;
-        type = Type.getObjectType(fi.desc);
-      } else if (i instanceof LdcInsnNode) {
+        return Type.getType(fi.desc);
+      }
+
+      if (i instanceof LdcInsnNode) {
         var ldci = (LdcInsnNode) i;
         var clazz = ldci.cst.getClass();
-        if (clazz == Integer.class) type = Type.INT_TYPE;
-        else if (clazz == Long.class) type = Type.LONG_TYPE;
-        else if (clazz == Float.class) type = Type.FLOAT_TYPE;
-        else if (clazz == Double.class) type = Type.DOUBLE_TYPE;
-        else type = Type.getType(ldci.cst.getClass());
+        if (clazz == Integer.class) return Type.INT_TYPE;
+        if (clazz == Long.class) return Type.LONG_TYPE;
+        if (clazz == Float.class) return Type.FLOAT_TYPE;
+        if (clazz == Double.class) return Type.DOUBLE_TYPE;
+        return Type.getType(ldci.cst.getClass());
       }
-      return type;
+
+      if (i instanceof TypeInsnNode) {
+        var ti = (TypeInsnNode) i;
+        if (i.getOpcode() == ANEWARRAY) return Type.getObjectType("[L" + ti.desc + ";");
+        return Type.getObjectType(ti.desc);
+      }
+
+      if (i instanceof IntInsnNode) { // specific for NEWARRAY
+        // this should match what is in org.objectweb.asm.util.Printer#TYPES !
+        var operand = ((IntInsnNode) i).operand;
+        if (operand == 4) return ARRAY_BOOLEAN_TYPE;
+        if (operand == 5) return ARRAY_CHAR_TYPE;
+        if (operand == 6) return ARRAY_FLOAT_TYPE;
+        if (operand == 7) return ARRAY_DOUBLE_TYPE;
+        if (operand == 8) return ARRAY_BYTE_TYPE;
+        if (operand == 9) return ARRAY_SHORT_TYPE;
+        if (operand == 10) return ARRAY_INT_TYPE;
+        if (operand == 11) return ARRAY_LONG_TYPE;
+        LMessage.fatal("unknown operand " + operand + " for " + asString(i));
+        return null;
+      }
+
+      LMessage.fatal("Cannot get type for instruction " + i.getClass());
+      return null;
     }
   }
 
@@ -198,8 +239,8 @@ class OpcodeHandlers implements Opcodes {
     }
 
     @Override
-    public void handle(LCompiler compiler, AbstractInsnNode i) {
-      compiler.handleConditionalJump(popCount, i);
+    public void handle(Parser parser, AbstractInsnNode i) {
+      parser.handleConditionalJump(popCount, i);
     }
   }
 }

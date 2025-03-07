@@ -18,7 +18,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.GenericFilesCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 @entity private[scope] class GenericFilesScopedCompilation(
     override protected val scope: CompilationScope,
@@ -27,10 +27,10 @@ import scala.collection.immutable.Seq
 ) extends PartialScopedCompilation {
   import scope._
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = Nil
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = IndexedSeq()
   @node override protected def containsRelevantSources: Boolean = !sources.isEmpty
 
-  @node def files: Seq[Artifact] =
+  @node def files: IndexedSeq[Artifact] =
     compile(ArtifactType.GenericFiles, None)(genericFilesPackager.files(id, genericFilesPackagerInputsN))
 
   private val genericFilesPackagerInputsN = asNode(() => genericFilesPackagerInputs)

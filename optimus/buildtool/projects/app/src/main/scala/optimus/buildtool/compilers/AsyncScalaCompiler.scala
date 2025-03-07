@@ -93,7 +93,7 @@ import scala.util.control.NonFatal
     // to get notified by the usual continueWith mechanism
     val completion = new Callback(() => completeSigs(scopeId, outputNode, sigPromise))
     outputNode.continueWithIfEverRuns(completion, EvaluationContext.current)
-    (outputNode, sigPromise.node)
+    (outputNode, sigPromise.underlyingNode)
   }
 
   // noinspection ScalaUnusedSymbol - `outputVersions` is passed to ensure we get a cache miss when artifacts
@@ -145,10 +145,10 @@ import scala.util.control.NonFatal
     // If we're not done and the outputNode didn't fail, it should only be because (a) there were no sources to compile
     // or (b) it has fatal compilation messages; in case (b) we should propagate them so that people expecting to find
     // signatures will find those messages instead.
-    if (!signaturePromise.node.isDone) {
+    if (!signaturePromise.underlyingNode.isDone) {
       val more =
         if (outputNode.isDoneWithException) {
-          signaturePromise.completeWithChild(Failure(outputNode.exception()), outputNode)
+          signaturePromise.completeFromNode(outputNode.asFailure)
           s"exception=${outputNode.exception()}"
         } else if (outputNode.isDoneWithResult) {
           val scalaOutput: CompilerOutput = outputNode.result
@@ -157,7 +157,7 @@ import scala.util.control.NonFatal
 
           if (scalaOutput.isEmpty) {
             val sigOutput = SignatureCompilerOutput.empty(scopeId, sigMessageFile)
-            signaturePromise.completeWithChild(Success(sigOutput), outputNode)
+            signaturePromise.completeWithExtraInfo(Success(sigOutput), outputNode)
           } else if (scalaOutput.messages.hasErrors) {
             // Watched via `outputVersions` in `AsyncScalaCompiler.output`/`AsyncScalaCompiler.signatureOutput`, which
             // are the leaf nodes that call this code
@@ -173,7 +173,7 @@ import scala.util.control.NonFatal
             val signatureOutput = SignatureCompilerOutput(None, signatureMessages, None)
             Utils.FailureLog.error(s"[$scopeId:scala] Completing signature compilation with errors")
             log.debug(s"[$scopeId:scala] Signature errors: $signatureOutput")
-            signaturePromise.completeWithChild(Success(signatureOutput), outputNode)
+            signaturePromise.completeWithExtraInfo(Success(signatureOutput), outputNode)
             s"errors=${scalaOutput.messages.messages.count(_.severity == CompilationMessage.Error)}"
           } else {
             log.debug(
@@ -258,7 +258,7 @@ import scala.util.control.NonFatal
                 case Failure(_) =>
                 // do nothing
               }
-              signaturePromise.completeWithChild(result, outputNode)
+              signaturePromise.completeWithExtraInfo(result, outputNode)
             } else {
               log.warn(
                 "Signatures callback was called twice (perhaps Zinc decided to retry compilation due to errors?). " +
@@ -268,7 +268,7 @@ import scala.util.control.NonFatal
         } else {
           // if pipelined signatures are disabled, we record the entire scalac time as Scalac
           scalacTrace = ObtTrace.startTask(scopeId, Scala)
-          signaturePromise.completeWithChild(
+          signaturePromise.completeWithExtraInfo(
             Success(SignatureCompilerOutput.empty(scopeId, inputs.outputFile(ArtifactType.SignatureMessages).asJson)),
             outputNode
           )
@@ -327,5 +327,5 @@ object AsyncScalaCompiler {
   private def dbgStr(node: NodeTask): String = s"$node@${System.identityHashCode(node)}"
 
   private def dbgStr(outputNode: NodeTask, sigPromise: SignaturePromise): String =
-    s"${dbgStr(outputNode)} -> ${dbgStr(sigPromise.node)}"
+    s"${dbgStr(outputNode)} -> ${dbgStr(sigPromise.underlyingNode)}"
 }

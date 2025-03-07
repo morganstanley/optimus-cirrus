@@ -13,7 +13,7 @@ main {
   compile {
     modules = [
       optimus.buildtool.core,
-      optimus.platform.annotations
+      optimus.platform.annotations // needed for @impure
     ]
 
     libs = [

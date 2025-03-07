@@ -11,10 +11,10 @@
  */
 package optimus.profiler.ui
 
+import optimus.breadcrumbs.crumbs.Properties.hotspotCacheBenefit
 import optimus.graph.diagnostics.pgo.PNTIStats
 
 import java.awt.Color
-import optimus.profiler.ui.HotspotsTable.c_cacheBenefitToolTip
 import optimus.profiler.ui.HotspotsTable.c_cacheTimeToolTip
 
 import scala.collection.mutable
@@ -39,7 +39,7 @@ object DecisionDifferenceTable {
   }
   private[ui] val c_cacheBenefit = new TableColumnLong[PNTIStats]("CacheBenefit", 100) {
     override def valueOf(row: PNTIStats): Long = row.cacheBenefit
-    override def toolTip: String = c_cacheBenefitToolTip
+    override def toolTip: String = hotspotCacheBenefit.meta.description
     override def getHeaderColor: Color = HotspotsTable.nodeCacheSectionColor
   }
   private[ui] val c_cacheTime = new TableColumnLong[PNTIStats]("CacheTime", 100) {

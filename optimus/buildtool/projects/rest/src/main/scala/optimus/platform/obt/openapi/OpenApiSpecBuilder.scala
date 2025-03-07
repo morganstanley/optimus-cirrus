@@ -12,7 +12,7 @@
 package optimus.platform.obt.openapi
 
 import msjava.slf4jutils.scalalog.getLogger
-import optimus.platform.AdvancedOptimusApp
+import optimus.platform.OptimusApp
 import optimus.platform.entersGraph
 
 import java.net.HttpURLConnection
@@ -25,7 +25,7 @@ import java.nio.file.StandardCopyOption
 // Invokes a given rest app class in a simple mode (mock dal, no entitlements, etc), captures the OpenApi spec
 // from the endpoint, then dumps it to a file. This should be used as part of a build task to ensure a correct
 // spec is available for a given rest framework at build time, which can then be disted out.
-object OpenApiSpecBuilder extends AdvancedOptimusApp[OpenApiSpecBuilderCmdLine] {
+object OpenApiSpecBuilder extends OptimusApp[OpenApiSpecBuilderCmdLine] {
 
   private val log = getLogger(this)
 

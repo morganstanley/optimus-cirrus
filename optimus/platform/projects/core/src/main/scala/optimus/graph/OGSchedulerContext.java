@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import optimus.breadcrumbs.Breadcrumbs;
 import optimus.core.MonitoringBreadcrumbs$;
+import optimus.graph.diagnostics.InfoDumper$;
 import optimus.graph.diagnostics.ProfiledEvent;
 import optimus.graph.diagnostics.rtverifier.RTVerifierNodeRerunner$;
 import optimus.platform.EvaluationQueue;
@@ -900,11 +901,8 @@ public class OGSchedulerContext extends EvaluationQueue
               "Node trace where adapt threw: " + ntsk.waitersToNodeStack(false, false, false, -1));
         } catch (Throwable ignored) {
         }
-        MonitoringBreadcrumbs$.MODULE$.sendGraphFatalErrorCrumb(
-            "Exception thrown from plugin adapt method", ntsk, e, null, null);
-        Breadcrumbs.flush();
-
-        System.exit(1);
+        InfoDumper$.MODULE$.graphPanic(
+            "adapt error", "Exception was thrown from adapt method", 1, e, ntsk);
       }
     }
 

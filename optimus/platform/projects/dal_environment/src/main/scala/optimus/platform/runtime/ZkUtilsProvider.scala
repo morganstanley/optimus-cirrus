@@ -68,6 +68,8 @@ trait ZkUtilsProvider {
 
   def isTestMode(mode: String): Boolean
 
+  private[optimus] def unregisterContexts(): Unit
+
   private[optimus] def legacyZkLeaderElectionBaseNode: String
 
   private[optimus] def modernZkLeaderElectionBaseNode: String

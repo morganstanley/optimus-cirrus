@@ -34,6 +34,7 @@ import optimus.platform.relational.dal.accelerated.ProjectedViewOnlyReducer
 import optimus.platform.relational.dal.core.ExpressionQuery
 import optimus.platform.relational.dal.core.ParameterReplacer
 import optimus.platform.relational.dal.deltaquery.DALEntityBitemporalSpaceReducer
+import optimus.platform.relational.dal.deltaquery.DALRegisteredIndexEntityBitemporalSpaceReducer
 import optimus.platform.relational.dal.fullTextSearch.FullTextSearchOnlyReducer
 import optimus.platform.relational.dal.sampling.DALSamplingReducer
 import optimus.platform.relational.dal.serialization.DALFrom
@@ -84,10 +85,12 @@ class DALProvider(
       if (this.supportsRegisteredIndexes) mkDALRegisteredIndexReferenceReducer else new core.DALReferenceReducer(this)
     def mkAccReducer = new accelerated.DALAccReducer(this)
     def mkAccReferenceReducer = new accelerated.DALAccReferenceReducer(this)
-    def mkDeltaReducer = new DALEntityBitemporalSpaceReducer(this)
+    def mkDeltaReducer = if (this.supportsRegisteredIndexes) mkDALRegsiteredIndexDeltaReducer
+    else new DALEntityBitemporalSpaceReducer(this)
     def mkSamplingReducer = new DALSamplingReducer(this)
     def mkDALRegisteredIndexReducer = new core.DALRegisteredIndexReducer(this)
     def mkDALRegisteredIndexReferenceReducer = new core.DALRegisteredIndexReferenceReducer(this)
+    def mkDALRegsiteredIndexDeltaReducer = new DALRegisteredIndexEntityBitemporalSpaceReducer(this)
     def mkDALFullTextSearchReducer = new fullTextSearch.DALFullTextSearchReducer(this)
     def mkDALFullTextSearchReferenceReducer = new fullTextSearch.DALFullTextSearchReferenceReducer(this)
     category match {

@@ -11,16 +11,17 @@
  */
 package optimus.platform.pickling
 
-import optimus.platform.TemporalContext
-import optimus.platform.storable.{Entity, EntityReference, StorableReference}
 import optimus.platform.AdvancedUtils
+import optimus.platform.TemporalContext
+import optimus.platform.storable.InlineEntityHolder
+import optimus.platform.storable.StorableReference
 
 // This class is Serializable only to enable inlined entities to be serialized.
 final class PickledMapWrapper(
     val properties: Map[String, Any],
     val temporalContext: TemporalContext = null,
     val reference: StorableReference = null,
-    override val inlineEntitiesByRef: collection.Map[EntityReference, Entity] = Map.empty)
+    override val inlineEntitiesByRef: InlineEntityHolder = InlineEntityHolder.empty)
     extends PickledInputStream
     with Serializable {
 

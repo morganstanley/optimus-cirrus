@@ -11,14 +11,14 @@
  */
 package optimus.platform
 
-import optimus.platform._
 import optimus.platform.annotations.deprecating
-import optimus.platform.storable.Entity
-import optimus.platform.storable.EntityCompanionBase
+import optimus.platform.relational.dal.streams.EventProvider
 import optimus.platform.relational.tree.MethodPosition
 import optimus.platform.relational.tree.TypeInfo
-import optimus.platform.relational.{KeyPropagationPolicy => KeyPolicy, _}
-import optimus.platform.relational.dal.streams.EventProvider
+import optimus.platform.relational.{KeyPropagationPolicy => KeyPolicy}
+import optimus.platform.relational._
+import optimus.platform.storable.Entity
+import optimus.platform.storable.EntityCompanionBase
 
 trait QueryApi {
   def fromWithKey[T, F[_ <: T]](src: F[T], key: RelationKey[T], policy: KeyPolicy = KeyPolicy.EntityAndDimensionOnly)(

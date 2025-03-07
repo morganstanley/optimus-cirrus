@@ -40,9 +40,9 @@ object JobValue {
   def toJobValue(o: Any, debugValue: AnyRef = null): JobValue = o match {
     case o: OptconfProvider =>
       // only store content in dal if it does not have a classpath
-      if ((o.path eq null) || !o.path.startsWith("classpath"))
+      if ((o.optconfPath eq null) || !o.optconfPath.startsWith("classpath"))
         PrefixedJobValue(makePrefixedOptconfValue(PrefixedJobValue.optconfContent, o.jsonContent))
-      else PrefixedJobValue(makePrefixedOptconfValue(PrefixedJobValue.optconfPath, o.path))
+      else PrefixedJobValue(makePrefixedOptconfValue(PrefixedJobValue.optconfPath, o.optconfPath))
     case hf: HotspotFilter =>
       PrefixedJobValue(s"${PrefixedJobValue.hotspotFilter}[${hf.filter};${hf.ftype};${hf.ratio}]")
     case tl: TemporalSurfProfilingLevel =>

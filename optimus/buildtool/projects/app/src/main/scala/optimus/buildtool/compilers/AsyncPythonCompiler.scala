@@ -18,6 +18,7 @@ import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.artifacts.PythonArtifact
 import optimus.buildtool.artifacts.PythonMetadata
 import optimus.buildtool.compilers.AsyncPythonCompiler.Inputs
+import optimus.buildtool.compilers.venv.PythonEnvironment
 import optimus.buildtool.compilers.venv.ThinPyappWrapper
 import optimus.buildtool.config.PythonConfiguration
 import optimus.buildtool.config.ScopeId
@@ -57,12 +58,9 @@ object AsyncPythonCompiler {
 }
 
 @entity private[buildtool] class AsyncPythonCompilerImpl(
-    venvCache: Directory,
-    uvCache: Directory,
     sandboxFactory: SandboxFactory,
     logDir: Directory,
-    pipCredentialFile: String,
-    uvCredentialFile: String,
+    pythonEnvironment: PythonEnvironment,
     pythonEnabled: NodeFunction0[Boolean])
     extends AsyncPythonCompiler {
 
@@ -90,14 +88,7 @@ object AsyncPythonCompiler {
 
       val (compilationFailed, compilationMessages) = {
         val messages =
-          ThinPyappWrapper.createTpa(
-            outputTpa.path,
-            pythonConfig,
-            sandbox,
-            venvCache,
-            uvCache,
-            pipCredentialFile,
-            uvCredentialFile)
+          ThinPyappWrapper.createTpa(outputTpa.path, pythonConfig, sandbox, pythonEnvironment)
         (MessagesArtifact.hasErrors(messages), messages)
       }
 

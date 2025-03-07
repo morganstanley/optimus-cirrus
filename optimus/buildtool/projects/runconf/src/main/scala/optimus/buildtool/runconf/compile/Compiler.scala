@@ -68,7 +68,8 @@ object Compiler {
       installPathOverride: Option[Path] = None,
       generateCrossPlatformEnvVars: Boolean = true,
       modifier: Option[(ScopedName, Endo[UnresolvedRunConf])] = None,
-      reportDuplicates: Boolean = false
+      reportDuplicates: Boolean = false,
+      isLocal: Boolean = false
   ): CompileResult = {
     val compiler = new Compiler(
       envProperties,
@@ -84,7 +85,8 @@ object Compiler {
       validator,
       generateCrossPlatformEnvVars,
       modifier,
-      reportDuplicates
+      reportDuplicates,
+      isLocal
     )
     compiler.compile(files)
   }
@@ -101,7 +103,6 @@ object Compiler {
       names.packageName -> T.String,
       names.isTest -> T.Boolean,
       names.methodName -> T.String,
-      names.agents -> T.Array(T.String),
       names.launcher -> T.Union(Launcher.names.map(T.StringLiteral)),
       names.allowDTC -> T.Boolean,
       names.condition -> T.Any,
@@ -122,7 +123,8 @@ object Compiler {
       names.flags -> T.Object(T.Union(Set(T.String, T.String))),
       names.jacocoOpts -> T.Object(T.Union(Set(T.String, T.Any))),
       names.interopPython -> T.Boolean,
-      names.python -> T.Boolean
+      names.python -> T.Boolean,
+      names.linkedModuleName -> T.String
     )
   }
 
@@ -151,7 +153,8 @@ object Compiler {
     names.category,
     names.owner,
     names.flags,
-    names.jacocoOpts
+    names.jacocoOpts,
+    names.linkedModuleName
   )
 
   object defaults {
@@ -184,7 +187,9 @@ class Compiler(
     /** Modify the runconf with the given scoped name thus. */
     modifier: Option[(ScopedName, Endo[UnresolvedRunConf])] = None,
     // for now reporting of duplicates, on compiler level, will only be enabled in IDE
-    reportDuplicates: Boolean = false
+    reportDuplicates: Boolean = false,
+    // Marker for local.runconf
+    isLocal: Boolean = false
 ) {
   import Compiler._
 
@@ -381,7 +386,7 @@ class Compiler(
       Right(resolve(unresolvedConfigs))
     } catch {
       case e: ConfigException.UnresolvedSubstitution =>
-        val BadSubstitution = """.+: (\d+): Could not resolve substitution to a value: \$\{(.*)\}""".r
+        val BadSubstitution = """.+: (\d+): Could not resolve substitution to a value: \$\{(.*)}""".r
         e.getMessage match {
           case BadSubstitution(line, substPath) =>
             val message = Messages.invalidSubstitution(substPath)
@@ -520,7 +525,6 @@ class Compiler(
         mainClassArgs = extractSeq(names.mainClassArgs),
         javaOpts = extractSeq(names.javaOpts),
         env = extractEnvMap(names.env),
-        agents = extractSeq(names.agents),
         isTemplate = block == names.templatesBlock,
         parents = extractSeq(names.parents),
         isTest = isTest,
@@ -551,7 +555,8 @@ class Compiler(
         flags = extractMap(names.flags).mapValuesNow(_.toString),
         jacocoOpts = extractJacocoOpts(names.jacocoOpts),
         interopPython = extractBoolean(names.interopPython),
-        python = extractBoolean(names.python)
+        python = extractBoolean(names.python),
+        linkedModuleName = extractString(names.linkedModuleName)
       )
     }
   }
@@ -782,7 +787,6 @@ class Compiler(
       mainClassArgs = merger.merge(_.mainClassArgs),
       javaOpts = merger.merge(_.javaOpts),
       env = merger.merge(_.env),
-      agents = merger.mergeDistinct(_.agents),
       isTemplate = source.isTemplate,
       isTest = target.isTest || source.isTest,
       parents = source.parents, // so that we know which parents was the config defined with
@@ -813,7 +817,8 @@ class Compiler(
       flags = merger.mergeMaps(_.flags),
       jacocoOpts = JacocoOptionsSupport.mergeJacocoOpts(target.jacocoOpts, source.jacocoOpts),
       interopPython = merger.merge(_.interopPython),
-      python = merger.merge(_.python)
+      python = merger.merge(_.python),
+      linkedModuleName = merger.merge(_.linkedModuleName)
     )
   }
 
@@ -877,6 +882,7 @@ class Compiler(
       case names.owner                    => runConf.owner.isDefined
       case names.flags                    => runConf.flags.nonEmpty
       case names.jacocoOpts               => runConf.jacocoOpts.isDefined
+      case names.linkedModuleName         => runConf.linkedModuleName.isDefined
     }
 
     def isDefined(propertyName: String): Boolean = {
@@ -944,12 +950,12 @@ class Compiler(
   private def createAppRunConf(runConf: UnresolvedRunConf, mainClass: String): AppRunConf = {
     AppRunConf(
       scope(runConf.id, runConf.scopeType.getOrElse(defaults.defaultAppScopeType)),
+      isLocal,
       runConf.name,
       mainClass,
       runConf.mainClassArgs,
       runConf.javaOpts,
       resolveEnv(runConf),
-      runConf.agents,
       runConf.launcher.getOrElse(defaults.launcher),
       runConf.nativeLibraries,
       runConf.moduleLoads,
@@ -967,13 +973,13 @@ class Compiler(
   private def createTestRunConf(runConf: UnresolvedRunConf, scopeType: String): TestRunConf = {
     TestRunConf(
       id = scope(runConf.id, scopeType),
+      isLocal = isLocal,
       name = runConf.name,
       env = resolveEnv(runConf),
       javaOpts = runConf.javaOpts,
       packageName = runConf.packageName,
       mainClass = runConf.mainClass,
       methodName = runConf.methodName,
-      agents = runConf.agents,
       launcher = runConf.launcher.getOrElse(defaults.launcher),
       includes = runConf.includes,
       excludes = runConf.excludes,
@@ -996,7 +1002,8 @@ class Compiler(
       strictRuntime = runConf.strictRuntime,
       jacocoOpts = runConf.jacocoOpts,
       interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython),
-      python = runConf.python.getOrElse(defaults.defaultPython)
+      python = runConf.python.getOrElse(defaults.defaultPython),
+      linkedModuleName = runConf.linkedModuleName
     )
   }
 
@@ -1017,7 +1024,6 @@ class Compiler(
       packageName = runConf.packageName,
       mainClass = runConf.mainClass,
       methodName = runConf.methodName,
-      agents = runConf.agents,
       launcher = runConf.launcher.getOrElse(defaults.launcher),
       includes = runConf.includes,
       excludes = runConf.excludes,
@@ -1042,7 +1048,8 @@ class Compiler(
       strictRuntime = runConf.strictRuntime,
       jacocoOpts = runConf.jacocoOpts,
       interopPython = runConf.interopPython.getOrElse(defaults.defaultInteropPython),
-      python = runConf.python.getOrElse(defaults.defaultPython)
+      python = runConf.python.getOrElse(defaults.defaultPython),
+      linkedModuleName = runConf.linkedModuleName
     )
   }
 

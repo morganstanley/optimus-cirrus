@@ -25,6 +25,8 @@ This product includes software developed by other groups and added in accordance
     - used in optimus/buildtool/projects/app/src/main/scala/io/opencensus/contrib/http/util/HttpPropagationUtil.java
   - https://github.com/corretto/hotpatch-for-apache-log4j2
     - used in optimus/platform/projects/entityagent/src/main/java/optimus/JndiDefanger.java
+  - https://github.com/FasterXML/jackson-module-scala
+    - used in optimus/platform/projects/core/src/main/scala/optimus/platform/util/json/JsonSerializer.scala
   - https://github.com/google/guava
     - used in optimus/dht/projects/common3/src/main/java/optimus/dht/common/util/WrappingExecutorService.java
     - and in WrappingScheduledExecutorService.java

@@ -24,8 +24,8 @@ import optimus.debug.InstrumentationConfig
 import optimus.graph.DiagnosticSettings
 import optimus.graph.Exceptions
 import optimus.graph.NodeTask
-import optimus.graph.OGSchedulerContext
 import optimus.graph.diagnostics.rtverifier.Violation
+import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.logging.LoggingInfo
 import optimus.platform.EvaluationContext
 import optimus.platform.ForwardingPluginTagKey
@@ -68,14 +68,19 @@ object MonitoringBreadcrumbs {
 
   private def toPublishLoc(sl: SourceLocation) = PublishLocation(sl.sourceName, sl.line, -1)
 
-  def OnceByAppId(ntsk: NodeTask): OnceByKey = {
+  private def OnceByAppId(ntsk: NodeTask): OnceByKey =
     OnceBy("appId", getAppId(ntsk).getOrElse("unknown"))
+
+  def sendXSLockContentionCrumb(time: Long, taskName: String): Unit = {
+    BaseSamplers.increment(P.xsLockContention, time)
+    warn(
+      OnceBySourceLoc thenBackoff,
+      P.event -> "XSLockContention" :: P.name -> taskName :: P.duration -> time :: Elems.Nil)
   }
 
   // TODO (OPTIMUS-54358): JVM uptime is fine for now, but needs consideration once treadmill hosts are pre-started
-  def sendStartupTimeCrumb(eventName: String): Unit = {
+  def sendStartupTimeCrumb(eventName: String): Unit =
     note(OnceBySourceLoc, P.event -> eventName :: jvmUptime -> DiagnosticSettings.jvmUpTimeInMs :: Elems.Nil)
-  }
 
   // For snapping current time of an event
   // [SEE_BREADCRUMB_FILTERING]: these are wrapped in PropertiesCrumb because of the confusing filtering that is
@@ -227,29 +232,6 @@ object MonitoringBreadcrumbs {
         P.tsQueryClassName -> targetClass ::
         P.tsQueryType -> queryType ::
         V.properties)
-  }
-
-  private[optimus] def sendTrackingTemporalContextInvalidAssertion(): Unit = {
-    sendWithStackAsProperties(OnceBySourceLoc, "temporalContextTrackingFailedAssertion", EvaluationContext.currentNode)
-  }
-
-  private[optimus] def sendTrackingTemporalContextTurnedOn(loc: SourceLocation): Unit = {
-    val key = OnceBySourceLoc(toPublishLoc(loc)) // we publish once per source location *for the reactive binding*
-
-    val nodeInfos = for {
-      node <- Option(OGSchedulerContext.current()).map(_.getCurrentNodeTask)
-      info <- Option(node.info)
-    } yield P.node -> info.toString ::
-      P.nodeStack -> node.waitersToNodeStack(false, true, false, -1) ::
-      Elems.Nil
-
-    val props: Elems = P.event -> "temporalContextNeedsTracking" ::
-      P.file -> loc.sourceName ::
-      P.methodName -> loc.method ::
-      P.line -> loc.line ::
-      P.stackTrace -> Thread.currentThread().getStackTrace.map(_.toString) ::
-      nodeInfos.getOrElse(Elems.Nil) ::: V.properties
-    warn(key, props)
   }
 
   private[optimus] def sendBadSchedulerStateCrumb(schedulerState: String): Unit =

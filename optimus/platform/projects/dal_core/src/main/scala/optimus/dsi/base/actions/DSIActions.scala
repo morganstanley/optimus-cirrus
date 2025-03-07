@@ -20,6 +20,7 @@ import optimus.dsi.base.SlottedVersionedReference
 import optimus.graph.DiagnosticSettings
 import optimus.platform.TimeInterval
 import optimus.platform.ValidTimeInterval
+import optimus.platform.bitemporal.BitemporalSpace
 import optimus.platform.bitemporal.Rectangle
 import optimus.platform.bitemporal.Segment
 import optimus.platform.bitemporal.ValidSegment
@@ -42,9 +43,9 @@ object EmptyKeySpaceActionsDebugging {
   private lazy val emptyKeySpaceActionsDebugging =
     DiagnosticSettings.getBoolProperty("optimus.dsi.emptyKeySpaceActionsDebugging", false)
   private lazy val log = getLogger[TxnAction]
-  def validateKeyGrouping(key: KeyGrouping, action: String): Unit = {
+  def validatePutTemporalKey(key: PutTemporalKey, action: String): Unit = {
     if (key.s.all.isEmpty) {
-      val msg = s"KeyGrouping space is empty for action:${action} KeyGrouping:${key}"
+      val msg = s"Space is empty for action:${action} PutTemporalKey:${key}"
       log.warn(msg)
       if (emptyKeySpaceActionsDebugging) throw new DSISpecificError(msg)
     }
@@ -55,12 +56,52 @@ sealed trait TxnAction extends DSIAction
 
 //These actions should only be written to worklog and replicate through b2b replication
 //they should not have any impact on the data stored in Mongo
-sealed trait WorklogOnlyTxnAction extends TxnAction
+sealed trait WorklogOnlyTxnAction extends TxnAction {
+  val className: String
+}
 
 //We generate this action when business event is loaded from DAl and reused to write
 //a new transaction. This is used by Uow matching logic to match against business event types
 final case class ReuseBusinessEvent(eventRef: TypedBusinessEventReference, className: String, types: Seq[String])
     extends WorklogOnlyTxnAction
+
+//We generate this action when business event is loaded from DAl and reused to write
+//a new transaction. This is used by Partitioned Keyed UowKafka matching logic to
+//extract partition keys from business event payload if configured as such.
+final case class ReuseBusinessEventBlobAction(
+    eventRef: TypedBusinessEventReference,
+    className: String,
+    serializedBusinessEvent: Option[SerializedBusinessEvent])
+    extends WorklogOnlyTxnAction {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case rbeba: ReuseBusinessEventBlobAction =>
+        rbeba.eventRef == eventRef && rbeba.className == className
+      case _ => false
+    }
+  }
+  override def hashCode(): Int = Objects.hash(eventRef, className)
+  override def toString: String = s"ReuseBusinessEventBlobAction($eventRef, $className)"
+}
+//We generate this action when an entity is reverted to an existing version using DAL.revert.
+//This is used by Partitioned Keyed UowKafka matching logic to extract partition keys from
+//entity payload. This is also used to perform matching in UowKafka matcher if a priql expression
+//is defined as matching rule.
+final case class RevertEntityBlobAction(
+    entityRef: FinalTypedReference,
+    vref: VersionedReference,
+    className: String,
+    serializedEntity: Option[SerializedEntity])
+    extends WorklogOnlyTxnAction {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case reba: RevertEntityBlobAction =>
+        reba.entityRef == entityRef && reba.vref == vref && reba.className == className
+    }
+  }
+  override def hashCode(): Int = Objects.hash(entityRef, vref, className)
+  override def toString: String = s"RevertEntityBlobAction($entityRef, $vref, $className)"
+}
 
 // accInfoOpt is filled by Acc replica when AccAwareWriter collectActions if it is Create or Refresh action
 final case class AccAction(
@@ -72,10 +113,19 @@ final case class AccAction(
     forceCreateIndex: Boolean)
     extends TxnAction
 
-// TODO (OPTIMUS-16878): refactor the key actions once the migration has been completed
-// TODO (OPTIMUS-24842): remove the dependency on KeyGrouping
-final case class PutTemporalKey(key: KeyGrouping) extends TxnAction {
-  EmptyKeySpaceActionsDebugging.validateKeyGrouping(key, "PutTemporalKey")
+final case class PutTemporalKey(
+    key: SerializedKey,
+    id: RefHolder,
+    s: BitemporalSpace[EntityReference],
+    classIdOpt: Option[Int])
+    extends TxnAction {
+  EmptyKeySpaceActionsDebugging.validatePutTemporalKey(this, "PutTemporalKey")
+  def createKeyGrouping(tt: Instant): KeyGrouping = {
+    createKeyGrouping(DateTimeSerialization.fromInstant(tt))
+  }
+  def createKeyGrouping(token: Long): KeyGrouping = {
+    KeyGrouping(key, id, s, token, classIdOpt)
+  }
 }
 
 /*
@@ -561,7 +611,6 @@ object PutAppEvent {
       appEvent.reqId,
       appEvent.reqHostPort,
       appEvent.auditDetails,
-      appEvent.dalTT,
       appEvent.appId,
       appEvent.zoneId,
       appEvent.elevatedForUser,
@@ -580,7 +629,6 @@ final case class PutAppEvent(
     reqId: String,
     reqHostPort: HostPort,
     auditDetails: Option[String],
-    dalTTtoBeRemoved: Option[Instant],
     appId: DalAppId,
     zoneId: DalZoneId,
     elevatedForUser: Option[String],
@@ -614,13 +662,11 @@ final case class PutAppEvent(
 }
 
 final case class PutBusinessEventKey(key: BusinessEventKey) extends TxnAction
-// TODO (OPTIMUS-24842): remove txTimeOpt after 29/04/2019
 final case class PutBusinessEventIndexEntry(
     id: AnyRef,
     eventRef: BusinessEventReference,
     typeName: String,
     properties: Seq[(String, Any)],
-    val txTimeOpt: Option[Instant],
     hash: Array[Byte])
     extends TxnAction {
 

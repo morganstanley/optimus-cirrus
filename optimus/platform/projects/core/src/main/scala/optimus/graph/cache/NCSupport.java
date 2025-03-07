@@ -11,10 +11,10 @@
  */
 package optimus.graph.cache;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
-
 import optimus.graph.CacheTopic$;
 import optimus.graph.CancellationScope;
 import optimus.graph.DiagnosticSettings;
@@ -31,17 +31,16 @@ import optimus.platform.Tweak;
 import optimus.platform.Tweak$;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.Tuple2;
 
 public class NCSupport {
   public static class JVMInfo implements Serializable {
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
     long retainedSize;
     public JVMClassInfo[] clsInfos;
   }
 
   public static class JVMClassInfo implements Serializable {
-    private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 1L;
     public transient Class<?> cls;
     // classes whose instances are retained in the node cache
     // and which are reachable from a cached instance of this
@@ -262,7 +261,7 @@ public class NCSupport {
   private static String dbgNameToTriggerOn;
 
   // make sure that we only hit breakpoints in this thread
-  private static ThreadLocal<Boolean> dbgTraceEnabled = new ThreadLocal<>();
+  private static final ThreadLocal<Boolean> dbgTraceEnabled = new ThreadLocal<>();
 
   private static <T> void enableOnPropertyNode(PropertyNode<T> value) {
     if (value.propertyInfo().name().equals(dbgNameToTriggerOn)) {
@@ -333,12 +332,10 @@ public class NCSupport {
         return false;
       }
 
-      NodeTask infoTarget = kss.tweakableListener().trackingProxy();
-
       // Take a snapshot of current reported tweakables to match against
       RecordedTweakables rt = css.tweakableListener().recordedTweakables();
 
-      return matchXscenario(infoTarget, kss, rt) != null; // Verifies all tweaks match
+      return matchXscenario(kss, rt) != null; // Verifies all tweaks match
     } finally {
       if (DiagnosticSettings.enableXSReporting) disableOnPropertyNode();
     }
@@ -365,14 +362,13 @@ public class NCSupport {
    *
    * @param kss (key scenario stack) RecordingScenarioStack of the requested node
    * @param css (cached scenario stack) RecordingScenarioStack of a completed cached node
-   * @param dbgPropertyNode the cached node we might have a potential match on (used only for
-   *     diagnostics if trace is enabled or -Doptimus.profile.xsreporting is explicitly set to true)
+   * @param key the cached node we might have a potential match on (used only for diagnostics if
+   *     trace is enabled or -Doptimus.profile.xsreporting is explicitly set to true)
    * @return true if scenario stacks can be re-used AND kss tracking info will be filled in at this
    *     point! false if it's not a match! NOTE: there are a LOT optimizations possible!!!!
    */
-  public static boolean matchXscenario(
-      PropertyNode<?> dbgPropertyNode, ScenarioStack kss, ScenarioStack css) {
-    if (DiagnosticSettings.enableXSReporting) enableOnPropertyNode(dbgPropertyNode);
+  public static boolean matchXscenario(PropertyNode<?> key, ScenarioStack kss, ScenarioStack css) {
+    if (DiagnosticSettings.enableXSReporting) enableOnPropertyNode(key);
 
     OGTrace.consumeTimeInMs(OGTrace.TESTABLE_FIXED_DELAY_XS, CacheTopic$.MODULE$);
     try {
@@ -397,16 +393,15 @@ public class NCSupport {
       // css is fine though because we only look at recordedTweakables, which is not mutable.
       if (kss.cancelScope().isCancelled()) return false;
 
-      NodeTask infoTarget = kss.tweakableListener().trackingProxy();
       RecordedTweakables rt = css.tweakableListener().recordedTweakables();
       // Verifies all tweakables but returns (re)mappedTweaks
-      TweakTreeNode[] mappedTweaks = matchXscenario(infoTarget, kss, rt);
+      TweakTreeNode[] mappedTweaks = matchXscenario(kss, rt);
       if (mappedTweaks == null) return false;
 
       // Besides (re)mappedTweaks, other tweakables and tweak hashes remain unchanged). See
       // [XS_BY_NAME_TWEAKS]
       // [SEE_XS_COMPLETED] cannot complete if not reusable w.r.t. CS
-      kss.onXSOriginalCompleted(rt.withTweaked(mappedTweaks));
+      key.replace(key.scenarioStack().withRecorded(rt.withTweaked(mappedTweaks)));
       return true;
     } finally {
       if (DiagnosticSettings.enableXSReporting) disableOnPropertyNode();
@@ -420,14 +415,13 @@ public class NCSupport {
    * @return returns null (as opposed to even empty TweakTreeNode[0] to signify that the match has
    *     failed
    */
-  private static TweakTreeNode[] matchXscenario(
-      NodeTask infoTarget, ScenarioStack kss, RecordedTweakables tcss) {
-    TweakTreeNode[] matchedTweaks = matchTweaks(infoTarget, kss, tcss);
+  private static TweakTreeNode[] matchXscenario(ScenarioStack kss, RecordedTweakables tcss) {
+    TweakTreeNode[] matchedTweaks = matchTweaks(kss, tcss);
     if (matchedTweaks == null) return null;
 
     if (mayHaveTweaksForHashes(kss, tcss.tweakableHashes())) return null;
 
-    if (hasTweaksForTweakables(infoTarget, kss, tcss.tweakable())) return null;
+    if (hasTweaksForTweakables(kss, tcss.tweakable())) return null;
 
     return matchedTweaks;
   }
@@ -440,7 +434,7 @@ public class NCSupport {
    *     failed
    */
   private static TweakTreeNode[] matchTweaks(
-      NodeTask infoTarget, ScenarioStack kss, RecordedTweakables cachedTweakables) {
+      ScenarioStack kss, RecordedTweakables cachedTweakables) {
     TweakTreeNode[] cachedTweaks = cachedTweakables.tweaked();
     if (cachedTweaks.length == 0) return cachedTweaks;
 
@@ -450,9 +444,9 @@ public class NCSupport {
     // Check that all previously tweaked properties are still tweaked and the tweaks match
     for (TweakTreeNode ttn : cachedTweaks) {
       PropertyNode<?> key = ttn.key();
-      NodeTaskInfo info = key.propertyInfo();
-      Tuple2<Tweak, ScenarioStack> ktwk_ss = kss.getTweakAndScenarioStack(info, key, infoTarget);
+      var ktwk_ss = kss.getTweakAndScenarioStackNoWhenClauseTracking(key);
       if (ktwk_ss == null) {
+        NodeTaskInfo info = key.propertyInfo();
         log.error(
             "Unexpected, Optimus Graph Team (info = "
                 + info.toString()
@@ -462,7 +456,7 @@ public class NCSupport {
         Thread.dumpStack();
         return null;
       }
-      Tweak ktwk = ktwk_ss._1();
+      Tweak ktwk = ktwk_ss.tweak();
       if (ktwk == null) { // [2] Was tweaked, but it's not now!
         if (DiagnosticSettings.enableXSReporting) reportMissingTweak();
         return null;
@@ -474,7 +468,7 @@ public class NCSupport {
         return null;
       }
 
-      ScenarioStack ktwkss = ktwk_ss._2();
+      ScenarioStack ktwkss = ktwk_ss.foundInScenarioStack();
       TweakTreeNode mapped;
       // If this tweak depended on other tweakables, (e.g. Tweak.byName(a := b), or even
       // Tweak.byName(a := a + 1)), then
@@ -488,7 +482,7 @@ public class NCSupport {
           if (DiagnosticSettings.enableXSReporting) reportEvaluateInNotSupported();
           return null; // Currently only evaluateInParentOfGiven is supported
         }
-        TweakTreeNode[] subMatch = matchXscenario(infoTarget, ktwkss.parent(), ttn.nested());
+        TweakTreeNode[] subMatch = matchXscenario(ktwkss.parent(), ttn.nested());
         if (subMatch == null) {
           if (DiagnosticSettings.enableXSReporting) reportSubMatchFailed();
           return null;
@@ -502,7 +496,7 @@ public class NCSupport {
   }
 
   private static boolean mayHaveTweaksForHashes(ScenarioStack kss, NodeHash[] hashes) {
-    if (hashes != null && hashes.length > 0) {
+    if (hashes != null) {
       for (NodeHash hash : hashes) {
         // if we have a tweak now for something we didn't have before we don't match
         // Note: missing on a possible match where default computed value would be the same as the
@@ -517,11 +511,9 @@ public class NCSupport {
     return false;
   }
 
-  private static boolean hasTweaksForTweakables(
-      NodeTask infoTarget, ScenarioStack kss, PropertyNode<?>[] tweakable) {
+  private static boolean hasTweaksForTweakables(ScenarioStack kss, PropertyNode<?>[] tweakable) {
     for (PropertyNode<?> key : tweakable) {
-      NodeTaskInfo info = key.propertyInfo();
-      if (info.wasTweakedAtLeastOnce() && kss.getTweak(info, key, infoTarget) != null) {
+      if (kss.getTweakNoWhenClauseTracking(key) != null) {
         // [1] We have a tweak now for something we didn't have before
         if (DiagnosticSettings.enableXSReporting) reportHaveExtraTweak();
         return true;

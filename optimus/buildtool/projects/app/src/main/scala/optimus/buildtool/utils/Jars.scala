@@ -121,7 +121,7 @@ object Jars {
   }
 
   def manifestPath(formattedPaths: Seq[String]): String = {
-    val sb = new StringBuilder(formattedPaths.map(_.length + 1).sum)
+    val sb = new mutable.StringBuilder(formattedPaths.map(_.length + 1).sum)
     formattedPaths.addString(sb, " ").toString
   }
 
@@ -711,6 +711,8 @@ private object JarHashingUtils {
     }
 
     def getHash: String = s"HASH${hasher.hash()}"
+
+    override def close(): Unit = underlying.close()
   }
 }
 

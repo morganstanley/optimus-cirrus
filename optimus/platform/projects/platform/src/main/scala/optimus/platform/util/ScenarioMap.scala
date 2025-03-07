@@ -10,14 +10,47 @@
  * limitations under the License.
  */
 package optimus.platform.util
+import optimus.core.needsPlugin
 import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
-import optimus.ui.ClearEntityInstanceTweaksGesture
-import optimus.ui.ClearTweaksGesture
+import optimus.platform.annotations.withLocationTag
+import optimus.platform.util.scenariomap.AsyncIndex
+import optimus.platform.util.scenariomap.Builder
+import optimus.platform.util.scenariomap.Index
+import optimus.platform.util.scenariomap.IndexMap
+import optimus.platform.util.scenariomap.Parameters
+import optimus.platform.util.scenariomap.Store
+import optimus.platform.util.scenariomap.SyncIndex
 import optimus.ui.HandlerResult
 import optimus.ui.Immediately
 
+import scala.collection.compat._
+
+object ScenarioMap {
+  def uniqueInstance[K, V]: ScenarioMap[K, V] = builder[K, V].build
+
+  @withLocationTag
+  def apply[K, V](): ScenarioMap[K, V] = needsPlugin
+  def apply$LT[K, V](tag: LocationTag): ScenarioMap[K, V] = builder[K, V].build(tag)
+
+  /**
+   * Builder for creating new ScenarioMap with more control over parameters and allowing for additional indices.
+   */
+  def builder[K, V]: Builder[K, V] = Builder.empty
+
+  /**
+   * Create an auxiliary index that can be used to obtain an automatically updated view of a scenario map.
+   */
+  def index[K, K1](f: K => K1): Index[K, K1] = SyncIndex(f)
+  def index$NF[K, K1](f: K => K1 @node): Index[K, K1] = AsyncIndex(f)
+
+  // Only "materialize" does actual work outside of tweak resolution.
+  ScenarioMap.get.setCacheable(false)
+  ScenarioMap.keySet.setCacheable(false)
+}
+
 /**
+ * ==Overview==
  * A map-like collection encoded in the scenario using tweaks.
  *
  * ScenarioMap is setup to reduce as much as possible looking at any tweaks that aren't needed. This is a powerful
@@ -47,39 +80,55 @@ import optimus.ui.Immediately
  * [[ScenarioMap]] instance. The builder needs to be converted into a [[HandlerResult]] for its change to be reflected
  * into the scenario.
  *
- * ScenarioMap is meant as a drop-in replacement for TweakableMap / TweakableBackedMap
+ * ScenarioMap is meant as a drop-in replacement for TweakableMap / TweakableBackedMap.
+ *
+ * ==Indices==
+ * [[ScenarioMap]] provides an API to get automatically updated alternate indices, which must be built at the same time
+ * as the [[ScenarioMap]] instance. For example,
+ *
+ * {{{
+ *   val (map, bySize, byFirstElement) = {
+ *     import ScenarioMap._
+ *     val index1 = index((s: Seq[Int]) => s.size)
+ *     val index2 = index((s: Seq[Int]) => s.headOption)
+ *     val entity = builder[Seq[Int], Int]
+ *       .withIndex(index1)
+ *       .withIndex(index2)
+ *       .build
+ *
+ *     // Note! calling indexed without withIndex will throw
+ *     (entity, entity.indexed(index1), entity.indexed(index2))
+ *   }
+ * }}}
+ *
+ * produces a `ScenarioMap[Seq[Int], Int]` and two automatically updated views from the `size` or `headOption` of each
+ * key. This makes it easier to create high-performance alternative groupings of a given scenario map. Indices that are
+ * node functions *must* be scenario independent.
+ *
+ * Note that alternate indices will be updated and materialized in the scenario whenever the set of keys in the map
+ * changes even if they aren't actually used.
  */
-@entity class ScenarioMap[K, V](tag: LocationTag) extends ScenarioMapImpl[K, V](tag) {
+@entity class ScenarioMap[K, V](tag: LocationTag, params: Parameters[K]) extends ScenarioMapImpl[K, V](tag, params) {
 
   /**
    * Get the value associated with a specific key.
    *
    * This call will be invalidated only if the key's value changes.
    */
-  @node def get(k: K): Option[V] = getImpl(k)
-
-  /**
-   * Create a lazy view of this map. See [[ScenarioMapView]] for details.
-   */
-  def view: ScenarioMapView[K, V] = asView
+  @node def get(k: K): Option[V] = store.get(k)
 
   /**
    * Create an updater for this map. See [[ScenarioMapUpdater]] for details. Note that updates will only be applied
    * as part of the `HandleResult` returned by the updater
    * @return
    */
-  def updater: ScenarioMapUpdater[K, V] = createUpdater
+  def updater: ScenarioMapUpdater[K, V] = emptyUpdater
 
   /**
    * Transforms the [[ScenarioMap]] into a standard immutable Scala map. This is an expensive method that will create
    * invalidations on every update of the [[ScenarioMap]] and should be avoided whenever possible.
    */
-  @node def materialize: Map[K, V] = {
-    keysImpl.apar
-      .map(k => k -> getImpl(k))
-      .collect { case (k, Some(m)) => k -> m }
-      .toMap
-  }
+  @node def materialize: Map[K, V] = store.transformIntoMap
 
   /**
    * Keys that this map has in the current scenario, as a standard Scala immutable Set.
@@ -87,7 +136,13 @@ import optimus.ui.Immediately
    * This call will be invalidated whenever the key set changes (that is, when keys are added or removed), but not when
    * values are updated.
    */
-  @node def keySet: Set[K] = keysImpl
+  @node def keySet: Set[K] = store.keySet
+
+  /**
+   * Return a view that will remain in sync and remain materialized based on an index. The index must have been one that
+   * was passed to [[ScenarioMap.builder]].
+   */
+  def indexed[K1](index: Index[K, K1]): ScenarioMapView[K1, Set[V]] = indexFor(index)
 }
 
 /**
@@ -100,8 +155,9 @@ import optimus.ui.Immediately
  * This means that they can be shared or stored without any issues, so long as they are still used within the correct
  * scenarios.
  */
-@entity abstract class ScenarioMapView[K, V] extends MapOrView[K, V] {
+@entity abstract class ScenarioMapView[K, V] {
   @node def get(k: K): Option[V]
+  @node def keySet: Set[K]
 
   /**
    * Create a view that lazily maps values to a new type.
@@ -121,12 +177,24 @@ import optimus.ui.Immediately
   /**
    * Create a view that aggregates keys differently.
    *
-   * The view `.get()` method will be invalidated whenever the key set on the map changes (that is, when elements are
-   * added or removed, but not when elements are updated.)
+   * The view `.get()` method will be invalidated whenever the key set on the parent view changes -- that is, when
+   * elements are added or removed, but not when they are updated.
+   *
+   * Indices provided a similar mechanism with fewer invalidations, at the cost of more expensive updates.
    */
   @alwaysAutoAsyncArgs
-  def groupBy[K1](f: K => K1): ScenarioMapView[K1, Seq[V]] = ???
-  def groupBy[K1](f: K => K1 @node): ScenarioMapView[K1, Seq[V]] = Views.GroupBy(this, f)
+  def groupBy[K1](f: K => K1): ScenarioMapView[K1, Set[V]] = ???
+  def groupBy[K1](f: K => K1 @node): ScenarioMapView[K1, Set[V]] = Views.GroupBy(this, f)
+}
+
+/**
+ * Marker trait for views that can be Materialized by an updater.
+ */
+sealed trait Materializable {
+  type Data
+  @async def materializeView(): HandlerResult
+  @async def dematerializeView(): HandlerResult
+  def source: ScenarioMap[_, _]
 }
 
 /**
@@ -171,23 +239,28 @@ sealed trait ScenarioMapUpdater[K, V] {
   /**
    * Create a handler result that encodes all the updates in this updater.
    */
-  @async def toHandlerResult: HandlerResult
+  def toHandlerResult: HandlerResult
 }
 
-// Implementation
-@entity private[util] sealed trait MapOrView[K, V] {
-  @node def get(k: K): Option[V]
-  @node def keySet: Set[K]
-}
-
-@entity private[util] sealed abstract class ScenarioMapImpl[K, V](tag: AnyRef) extends MapOrView[K, V] { outer =>
+@entity private[util] sealed abstract class ScenarioMapImpl[K, V](tag: AnyRef, params: Parameters[K])
+    extends ScenarioMapView[K, V] { outer: ScenarioMap[K, V] =>
   import ScenarioMapImpl._
 
   @node def keySet: Set[K]
-  @node(tweak = true) protected def getImpl(k: K): Option[V] = None
-  @node(tweak = true) protected def keysImpl: Set[K] = Set.empty
-  protected def createUpdater: ScenarioMapUpdater[K, V] = new ScenarioMapUpdaterImpl(Nil)
-  protected val asView = Views.Identity(this)
+
+  // View overrides
+  final protected val emptyUpdater: ScenarioMapUpdater[K, V] = new ScenarioMapUpdaterImpl(Nil)
+
+  final protected def indexFor[K1](target: Index[K, K1]): ScenarioMapView[K1, Set[V]] = {
+    // Impressive inference by the scala compiler right here.
+    params.indices.collectFirst { case `target` => target } match {
+      case None =>
+        throw new NoSuchElementException(s"index ${target} wasn't built into this map")
+      case Some(index) =>
+        // Ok to "recreate" because of Entity identity semantics
+        IndexMap.from(this, index)
+    }
+  }
 
   private class ScenarioMapUpdaterImpl(log: List[UpdateLog[K, V]]) extends ScenarioMapUpdater[K, V] {
     private def copy(newLog: List[UpdateLog[K, V]]) = new ScenarioMapUpdaterImpl(newLog)
@@ -212,70 +285,70 @@ sealed trait ScenarioMapUpdater[K, V] {
       case otherwise            => Remove(ks.toSet) :: otherwise
     })
 
+    // Both replace and clear don't need earlier steps at all
     def clear: ScenarioMapUpdater[K, V] = copy(ScenarioMapImpl.clear[K, V] :: Nil)
+    def replace(m: Map[K, V]): ScenarioMapUpdater[K, V] = copy(Replace(m) :: Nil)
 
-    def replace(m: Map[K, V]): ScenarioMapUpdater[K, V] = clear.putAll(m)
+    def toHandlerResult: HandlerResult = {
+      // Order here is important!
+      //
+      // The materialization step will need to look at the newly inserted tweaks so it needs to happen at the end!
 
-    @async def toHandlerResult: HandlerResult = {
-      log.reverse.foldLeft(HandlerResult.empty) {
-        // on clear, we drop previous updates and replace everything with a clear entity instance
-        case (_, _: Clear.type) => HandlerResult.withGesture(ClearEntityInstanceTweaksGesture(outer))
-        case (prev, Put(updated)) =>
-          prev.andThen(
-            Immediately(
-              newKeys(updated.keySet) ++
-                updated.toSeq.map { case (k, v) => Tweak.byValue(outer.getImpl(k) := Some(v)) })
-          )
-        case (prev, Remove(dropped)) =>
-          prev.andThen(
-            Immediately(
-              HandlerResult.withGesture(
-                ClearTweaksGesture(dropped.map(k => nodeKeyOf(outer.getImpl(k))))
-              )
-            )
-          )
-      }
+      // applies all the update steps to this map
+      val updates = log.reverse
+        .foldLeft(HandlerResult.empty) {
+          // On clear, we drop previous updates and replace everything with a clear entity instance.
+          case (_, _: Clear.type)      => Immediately(store.clear)
+          case (prev, Put(updated))    => prev.andThen(Immediately(store.put(updated)))
+          case (prev, Remove(dropped)) => prev.andThen(Immediately(store.drop(dropped)))
+          case (prev, Replace(newMap)) => prev.andThen(Immediately(store.replace(newMap)))
+        }
+      params.indices.foldLeft(updates) { case (hr, index) => hr.andThen(IndexMap.from(outer, index).update) }
     }
   }
 
-  @async private def newKeys(added: Set[K]): Seq[Tweak] = {
-    val before = keysImpl
-    val after = before ++ added
-    if (after == before) Nil
-    else Tweaks.byValue(keysImpl := after)
+  // also used by indices!
+  private[util] def createStore[K, V](whoFor: AnyRef): Store[K, V] = {
+    params.storageType match {
+      case Builder.Direct => Store.direct(whoFor)
+    }
   }
-  @async private def removedKeys(removed: Set[K]): Seq[Tweak] = {
-    val before = keysImpl
-    val after = before -- removed
-    if (after == before) Nil
-    else Tweaks.byValue(keysImpl := after)
-  }
+
+  protected val store: Store[K, V] = createStore(this)
 }
 
 object Views {
-  @entity class Identity[K, V](orig: MapOrView[K, V]) extends ScenarioMapView[K, V] {
-    @node override def get(k: K): Option[V] = orig.get(k)
-    @node override def keySet: Set[K] = orig.keySet
+  @entity class MapValues[K, V1, V](val parent: ScenarioMapView[K, V1], mapping: V1 => V @node)
+      extends ScenarioMapView[K, V] {
+    @node override def get(k: K): Option[V] = parent.get(k).map(mapping.apply)
+    @node override def keySet: Set[K] = parent.keySet
   }
+  MapValues.get.setCacheable(false)
+  MapValues.keySet.setCacheable(false)
 
-  @entity class MapValues[K, V1, V](orig: MapOrView[K, V1], f: V1 => V @node) extends ScenarioMapView[K, V] {
-    @node override def get(k: K): Option[V] = orig.get(k).map(f.apply)
-    @node override def keySet: Set[K] = orig.keySet
+  @entity class FilterKeys[K, V](val parent: ScenarioMapView[K, V], filter: K => Boolean @node)
+      extends ScenarioMapView[K, V] {
+    @node override def get(k: K): Option[V] = if (filter(k)) parent.get(k) else None
+    @node override def keySet: Set[K] = parent.keySet.aseq.filter(filter(_))
   }
+  FilterKeys.get.setCacheable(false)
+  FilterKeys.keySet.setCacheable(false)
 
-  @entity class FilterKeys[K, V](orig: MapOrView[K, V], filter: K => Boolean @node) extends ScenarioMapView[K, V] {
-    @node override def get(k: K): Option[V] = if (filter(k)) orig.get(k) else None
-    @node override def keySet: Set[K] = orig.keySet.apar.filter(filter.apply)
+  @entity class GroupBy[K1, K, V](val parent: ScenarioMapView[K1, V], groupBy: K1 => K @node)
+      extends ScenarioMapView[K, Set[V]] {
+
+    @node override def get(k: K): Option[Set[V]] = {
+      parent.keySet.aseq.groupBy(groupBy(_)).get(k).map(_.aseq.flatMap(parent.get))
+    }
+
+    @node override def keySet: Set[K] = {
+      val out = Set.newBuilder[K]
+      for { k <- parent.keySet } out += groupBy(k)
+      out.result()
+    }
   }
-
-  @entity class GroupBy[K1, K, V](orig: MapOrView[K1, V], groupBy: K1 => K @node) extends ScenarioMapView[K, Seq[V]] {
-    @async private def keyMap = orig.keySet.apar.groupBy(groupBy.apply)
-
-    @node override def get(k: K): Option[Seq[V]] =
-      keyMap.get(k).map { k => k.toSeq.apar.flatMap(orig.get) }
-
-    @node override def keySet: Set[K] = keyMap.keySet
-  }
+  GroupBy.get.setCacheable(false)
+  GroupBy.keySet.setCacheable(false)
 }
 
 object ScenarioMapImpl {
@@ -285,4 +358,5 @@ object ScenarioMapImpl {
   private final case object Clear extends UpdateLog[Nothing, Nothing]
   private final case class Put[K, +V](map: Map[K, V]) extends UpdateLog[K, V]
   private final case class Remove[K, V](k: Set[K]) extends UpdateLog[K, V]
+  private final case class Replace[K, V](map: Map[K, V]) extends UpdateLog[K, V]
 }

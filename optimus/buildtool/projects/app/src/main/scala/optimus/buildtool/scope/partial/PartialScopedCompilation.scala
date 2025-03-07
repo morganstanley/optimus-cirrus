@@ -28,7 +28,7 @@ import optimus.platform._
 import optimus.platform.annotations.alwaysAutoAsyncArgs
 
 import java.time.Instant
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity private[partial] trait PartialScopedCompilation {
   protected def scope: CompilationScope
@@ -36,10 +36,10 @@ import scala.collection.immutable.Seq
 
   @node protected def fingerprint: FingerprintArtifact = sources.compilationFingerprint
 
-  @node protected def upstreamArtifacts: Seq[Artifact]
+  @node protected def upstreamArtifacts: IndexedSeq[Artifact]
 
   // generatedSourceArtifacts can have errors too
-  @node protected def prerequisites: Seq[Artifact] = sources.generatedSourceArtifacts ++ upstreamArtifacts
+  @node protected def prerequisites: IndexedSeq[Artifact] = sources.generatedSourceArtifacts ++ upstreamArtifacts
   @node private def upstreamErrors: Option[Seq[Artifact]] = Artifact.onlyErrors(prerequisites)
 
   @node protected def containsRelevantSources: Boolean
@@ -47,7 +47,7 @@ import scala.collection.immutable.Seq
   @alwaysAutoAsyncArgs
   protected def compile[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
       f: => Option[A#A]
-  ): Seq[Artifact] = needsPlugin
+  ): IndexedSeq[Artifact] = needsPlugin
   @node protected def compile$NF[A <: CachedArtifactType](tpe: A, discriminator: Option[String])(
       f: NodeFunction0[Option[A#A]]
   ): Seq[Artifact] = {
@@ -63,7 +63,7 @@ import scala.collection.immutable.Seq
         case x => x
       } :+ fingerprint
     }
-    else Seq(fingerprint)
+    else IndexedSeq(fingerprint)
   }
 
   override def toString: String = s"${getClass.getSimpleName}(${scope.id})"
@@ -75,7 +75,8 @@ private[buildtool] final case class AnalysisWithLocator(analysis: Seq[Artifact],
   protected def sources: JavaAndScalaCompilationSources
 
   // externalCompileDependencies can have errors too
-  @node override protected def prerequisites: Seq[Artifact] = sources.externalCompileDependencies ++ super.prerequisites
+  @node override protected def prerequisites: IndexedSeq[Artifact] =
+    sources.externalCompileDependencies ++ super.prerequisites
 
   @node protected def analysisWithLocator(
       analysis: Seq[Artifact],

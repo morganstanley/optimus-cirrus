@@ -278,7 +278,7 @@ class ScalaRepl private (val intp: ScalaInterpreter, replSettings: ScalaReplSett
 
   private def init(): Unit = {
     // for clarity, not strictly needed; passing a non-null `in` to `new ILoop` also disables JLine
-    if (!replSettings.jLine) settings.Xjline.value = "off"
+    if (!replSettings.jLine) settings.Xnojline.value = true
   }
 
   def start(): Boolean = iLoop.run(settings)

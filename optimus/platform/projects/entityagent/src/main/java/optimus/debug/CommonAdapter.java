@@ -238,6 +238,10 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
     return access & ~ACC_PUBLIC & ~ACC_PROTECTED | ACC_PRIVATE;
   }
 
+  public static int makePublic(int access) {
+    return access & ~ACC_PROTECTED & ~ACC_PRIVATE | ACC_PUBLIC;
+  }
+
   public static int invokeStaticOrVirtual(int access) {
     return isStatic(access) ? INVOKESTATIC : INVOKEVIRTUAL;
   }
@@ -304,6 +308,10 @@ public class CommonAdapter extends AdviceAdapter implements AutoCloseable {
 
   public static Handle dupNamed(Handle h, String name) {
     return new Handle(h.getTag(), h.getOwner(), name, h.getDesc(), h.isInterface());
+  }
+
+  public static String asJavaName(String bytecodeName) {
+    return bytecodeName.replace('/', '.');
   }
 
   @Override

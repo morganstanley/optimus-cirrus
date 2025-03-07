@@ -11,15 +11,16 @@
  */
 package optimus.buildtool.format
 
+import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.fasterxml.jackson.module.scala.ScalaObjectMapper
+import optimus.buildtool.files.FileAsset
 
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
-import com.fasterxml.jackson.databind.DeserializationFeature
-import optimus.buildtool.files.FileAsset
 
 object JsonSupport {
 

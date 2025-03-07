@@ -15,8 +15,10 @@ import optimus.breadcrumbs.crumbs.RequestsStallInfo
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.NodeInfoAppender
 import optimus.core.StallInfoAppender
+import optimus.graph.diagnostics.sampling.SamplingProfiler
 import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
 import optimus.platform.EvaluationQueue
+import optimus.platform.util.Log
 
 import java.lang.ref.WeakReference
 import java.util
@@ -70,7 +72,14 @@ final class PluginType private (val name: String, @transient private var id: Int
   def readResolve(): AnyRef = PluginType.apply(name)
 }
 
-object PluginType {
+object PluginType extends Log {
+
+  // See https://bugs.openjdk.org/browse/JDK-8310126 in which, essentially
+  //   WeakReference r = null;
+  //   r == null ? null : r.get
+  // will result in calling the intrinsic for get, even though r is  null.
+  // In  tests, trivially extending WeakReference seems to allow us to catch an NPE rather than crash.
+  private class WR8310126(ref: NodeTask) extends WeakReference[NodeTask](ref)
 
   final class GuaranteedSnapped[T](val getSafe: T) extends AnyVal
   def guaranteeSnapped[T](t: T): GuaranteedSnapped[T] = new GuaranteedSnapped[T](t)
@@ -93,6 +102,8 @@ object PluginType {
       })
   }
   def maxId: Int = nextId.get()
+
+  private val warningCounter = new AtomicInteger(5)
 
   // Core plugin types are defined here.  Business-specific plugins should be defined within their own
   // packages using the same apply method.
@@ -139,7 +150,7 @@ object PluginType {
       guaranteeSnapped(c)
     }
 
-    def diff(pc: Counter*): Counter = {
+    private[PluginType] def diff(pc: Counter*): Counter = {
       val c = snap().getSafe
       pc.foreach(c.accumulate(_, -1))
       c
@@ -181,7 +192,7 @@ object PluginType {
 
   // Record all nodes adapted by a plugin, so we can sample them periodically.
   private final class AdaptedNodesOfOnePlugin {
-    private var nodes: Array[WeakReference[NodeTask]] = new Array(minNodeArraySize)
+    private var nodes: Array[WR8310126] = new Array(minNodeArraySize)
     private var nNodes = 0
     private var nextForcedCompact = forceCompactFloor
     private var resizes = 0
@@ -195,29 +206,31 @@ object PluginType {
       nNodes = 0
     }
 
-    private def track(ref: WeakReference[NodeTask]): Boolean = this.synchronized {
+    private def track(ref: WR8310126): Boolean = this.synchronized {
       if (nNodes > nextForcedCompact)
         removeCollectedOrCompleted()
       if (nNodes > maxNodeArraySize)
         false
       else {
-        if (nNodes == nodes.length) {
-          nodes = util.Arrays.copyOf(nodes, nodes.length * 2)
+        if (nNodes >= nodes.length) {
+          if (nNodes > nodes.length)
+            log.warn(s"Unexpected nNodes=$nNodes, nodes.size=${nodes.size}")
+          nodes = util.Arrays.copyOf(nodes, nNodes * 2)
           if (nodes.size > maxSize)
             maxSize = nodes.size
           resizes += 1
         }
         nodes(nNodes) = ref
         nNodes += 1
+        true
       }
-      true
     }
-    private[graph] def track(ntsk: NodeTask): Boolean = track(new WeakReference[NodeTask](ntsk))
+    private[graph] def track(ntsk: NodeTask): Boolean = track(new WR8310126(ntsk))
 
     // Called by AdaptedNodesOfAllPlugins.accumulate under forAllRemovables lock
     def accumulateAdaptedNodesFromOnePlugin(other: GuaranteedSnapped[AdaptedNodesOfOnePlugin]): Unit =
       this.synchronized {
-        val snapped = other.getSafe
+        val snapped: AdaptedNodesOfOnePlugin = other.getSafe
         val nNodesOther = snapped.nNodes
         val nNodesNew = nNodes + nNodesOther
         if (nNodesNew > nodes.length)
@@ -225,7 +238,13 @@ object PluginType {
         var i = 0
         val os = snapped.nodes
         while (i < nNodesOther) {
-          nodes(nNodes + i) = os(i)
+          // Still don't know how this can happen, but if it does, throw with slightly more information now,
+          // before we hit the error in the next couple of lines.
+          if (i >= os.length || (nNodes + i) >= nodes.length)
+            throw new ArrayIndexOutOfBoundsException(
+              s"accumulateANFOP i=$i nNodes=$nNodes nNodesNew=$nNodesNew/${nodes.length} nNodesOther=$nNodesOther/${os.length}")
+          val ref = os(i)
+          nodes(nNodes + i) = ref
           i += 1
         }
         nNodes = nNodesNew
@@ -235,12 +254,35 @@ object PluginType {
 
     // Remove any nodes that are complete or collected.  This should always be called under lock.
     private def removeCollectedOrCompleted(): Int = this.synchronized {
+      if (nNodes > nodes.size) {
+        if (warningCounter.get > 0) {
+          SamplingProfiler.warn(
+            s"removeCollectedOrCompleted entry $nNodes ${nodes.size}",
+            new ArrayIndexOutOfBoundsException(),
+            warningCounter)
+          nNodes = nodes.size
+        }
+      }
       var i = 0
       while (nNodes > i) {
-        val wr = nodes(i)
+        val wr: WR8310126 = nodes(i)
         val doRemove = Objects.isNull(wr) || {
-          val ntsk = wr.get
-          Objects.isNull(ntsk) || ntsk.isDone
+          try {
+            // See https://bugs.openjdk.org/browse/JDK-8310126. Experimentally, calling get on a sub-class of
+            // WeakReference will allow us to catch an NPE even if the preceeding isNull check failed to detect
+            // the null.
+            val ntsk = wr.get
+            Objects.isNull(ntsk) || ntsk.isDone
+          } catch {
+            case _: NullPointerException =>
+              if (warningCounter.get > 0) {
+                SamplingProfiler.warn(
+                  s"removeCollectedOrCompleted impossible null",
+                  new IllegalStateException(),
+                  warningCounter)
+              }
+              true
+          }
         }
         if (doRemove) {
           nNodes -= 1
@@ -252,11 +294,28 @@ object PluginType {
         }
       }
       // Ideal size is next power of 2
-      val newSize = Math.max(minNodeArraySize, 2 * Integer.highestOneBit(nNodes + 1))
+      var newSize = Math.max(minNodeArraySize, 2 * Integer.highestOneBit(nNodes + 1))
+      if (newSize <= nNodes) {
+        if (warningCounter.get() > 0)
+          SamplingProfiler.warn(
+            s"removeCollectedOrCompleted bizarre 1 nNodes=$nNodes newSize=$newSize",
+            new ArrayIndexOutOfBoundsException(),
+            warningCounter)
+        newSize = minNodeArraySize
+        while (newSize <= nNodes)
+          newSize *= 2
+      }
       // Resize if this shrinks us by more than a factor of 10 (by default)
       if (newSize < nodes.size / DiagnosticSettings.minPluginNodeResizeRatio) {
         nodes = util.Arrays.copyOf(nodes, newSize)
         resizes += 1
+      }
+      if (nNodes > nodes.size && warningCounter.get > 0) {
+        SamplingProfiler.warn(
+          s"removeCollectedOrCompleted bizarre 2 nNodes=$nNodes newSize=$newSize ${nodes.size}",
+          new ArrayIndexOutOfBoundsException(),
+          warningCounter)
+        nNodes = nodes.size
       }
       // Force a compaction after another nNodes are accumulated
       nextForcedCompact = Math.max(forceCompactFloor, 2 * nNodes)
@@ -268,18 +327,21 @@ object PluginType {
         // If snapping into the persistent global store we only grow the array, never shrink it.
         if (Objects.isNull(snapBuffer))
           snapBuffer = new AdaptedNodesOfOnePlugin
-        if (snapBuffer.nodes.length < nodes.length)
-          snapBuffer.nodes = new Array(nodes.length * 3 / 2)
-        System.arraycopy(nodes, 0, snapBuffer.nodes, 0, nNodes)
-        snapBuffer
+        snapBuffer.synchronized {
+          if (snapBuffer.nodes.length < nodes.length)
+            snapBuffer.nodes = new Array(nodes.length * 3 / 2)
+          System.arraycopy(nodes, 0, snapBuffer.nodes, 0, nNodes)
+          snapBuffer.nNodes = nNodes
+          snapBuffer
+        }
       } else {
         // Compact if we're not snapping into the global store, in which case compaction will occur later.
         removeCollectedOrCompleted()
         val nt = new AdaptedNodesOfOnePlugin
         nt.nodes = util.Arrays.copyOf(nodes, nodes.length)
+        nt.nNodes = nNodes
         nt
       }
-      nt.nNodes = nNodes
       nt.resizes = resizes
       nt.maxSize = maxSize
       guaranteeSnapped(nt)
@@ -382,11 +444,11 @@ object PluginType {
     }
 
     def accumulate(from: AdaptedNodesOfAllPlugins, intoBuffer: Boolean): Unit = if (from.individualPlugins.length > 0) {
-      ensureAlloc(from.individualPlugins.length - 1)
       val c: Array[GuaranteedSnapped[AdaptedNodesOfOnePlugin]] = from.snapArray(intoBuffer).getSafe
+      ensureAlloc(from.individualPlugins.length - 1)
       c.indices.foreach { id =>
-        val us = individualPlugins(id)
-        val them = c(id)
+        val us: AdaptedNodesOfOnePlugin = individualPlugins(id)
+        val them: GuaranteedSnapped[AdaptedNodesOfOnePlugin] = c(id)
         if (Objects.nonNull(us) && nonNullSnapped(them))
           us.accumulateAdaptedNodesFromOnePlugin(them)
         else if (Objects.isNull(us))
@@ -446,21 +508,26 @@ object PluginType {
         "neverFired" -> neverFired.toMap)
     def snapCounts: Map[String, Map[String, Long]] = Map("inFlight" -> inFlight.toMap, "unFired" -> unFired.toMap)
 
-    def diff(rhs: PluginTracker): PluginTracker = {
+    def diffCounters(rhs: PluginTracker): PluginTracker = {
       val pt = new PluginTracker
-      pt.accumulate(from = this, mult = 1, intoBuffer = false)
-      pt.accumulate(from = rhs, mult = -1, intoBuffer = false)
+      pt.accumulateCounters(from = this, mult = 1)
+      pt.accumulateCounters(from = rhs, mult = -1)
       pt
     }
 
     override def toString: String =
       s"$cumulativeCounts $snapCounts fullWaitTimes=$fullWaitTimes adaptedNodes=${adaptedNodes.stats()}"
-    def accumulate(from: PluginTracker, mult: Long, intoBuffer: Boolean): Unit = {
+
+    private def accumulateCounters(from: PluginTracker, mult: Long): Unit = {
       var i = 0
       while (i < nCounters) {
         counters(i).accumulate(from.counters(i), mult)
         i += 1
       }
+    }
+
+    def accumulate(from: PluginTracker, mult: Long, intoBuffer: Boolean): Unit = {
+      accumulateCounters(from, mult)
       adaptedNodes.accumulate(from.adaptedNodes, intoBuffer)
     }
   }

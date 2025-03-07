@@ -755,7 +755,7 @@ object EntityEventModule {
 
   class EntityCompanionOps[A <: Entity](val companion: EntityCompanionBase[A]) extends TemporalContextAPI {
 
-    @node @scenarioIndependent def entityVersionsInRange(
+    @node def entityVersionsInRange(
         fromTemporalContext: TemporalContext,
         appId: Option[String] = None,
         userId: Option[String] = None): Seq[EntityVersionHolder[A]] = {
@@ -765,7 +765,7 @@ object EntityEventModule {
         .getEntityVersionsInRangeWithoutManifest(fromTemporalContext, loadContext, typeName, rangeQueryOpts)
     }
 
-    @node @scenarioIndependent def entityChangesInRange(
+    @node def entityChangesInRange(
         fromTemporalContext: TemporalContext,
         appId: Option[String] = None,
         userId: Option[String] = None): Seq[Seq[EntityChange[A]]] = {

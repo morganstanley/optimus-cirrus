@@ -112,6 +112,10 @@ final class BitbucketApiRestClient(workspace: StratoWorkspaceCommon)(
     getValues(s"projects/$project/repos/$repository/pull-requests").map(_.getLong("id"))
   }
 
+  def allPullRequests(project: String, repository: String): Seq[Config] = {
+    getValues(s"projects/$project/repos/$repository/pull-requests")
+  }
+
   def allOpenPullRequestsOfCurrentUser(): Seq[Config] =
     getValues("dashboard/pull-requests", "state" -> "OPEN", "role" -> "AUTHOR")
 

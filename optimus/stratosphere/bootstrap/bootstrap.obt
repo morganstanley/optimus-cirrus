@@ -21,6 +21,7 @@ main {
     "PYTHON_ULTIMATE_PLUGIN_VERSION" = ${versions.intellij.plugins.python-ultimate}
     "HOCON_PLUGIN_VERSION" = ${versions.intellij.plugins.hocon}
     "MATERIAL_THEME_PLUGIN_VERSION" = ${versions.intellij.plugins.material-theme-ui}
+    "CODY_PLUGIN_VERSION" = ${versions.intellij.plugins.cody}
     "COPILOT_PLUGIN_VERSION" = ${versions.intellij.plugins.copilot}
     "DISABLE_ASYNC_STACK_TRACES" = ${workspace.intellij.compat.disable-async-stack-traces}
     "LINUX_INTELLIJ_JDK" = ${workspace.intellij.compat.linux-jdk}

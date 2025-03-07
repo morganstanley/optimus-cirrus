@@ -44,6 +44,7 @@ import optimus.graph.DiagnosticSettings
 import optimus.graph.EfficientSchedulerLogging
 import optimus.graph.Exceptions
 import optimus.graph.GCNative
+import optimus.graph.NodeTask
 import optimus.graph.Scheduler
 import optimus.logging.LoggingInfo
 import optimus.platform.util.InfoDump
@@ -205,10 +206,10 @@ object InfoDumper extends Log {
   /**
    * For graph-side panics, like logAndDie.
    */
-  def graphPanic(prefix: String, logMsg: String, code: Int, exception: Throwable): Unit = {
+  def graphPanic(prefix: String, logMsg: String, code: Int, exception: Throwable, ntsk: NodeTask): Unit = {
     MonitoringBreadcrumbs.sendGraphFatalErrorCrumb(
       logMsg + s", exiting with code ${code}",
-      null,
+      ntsk,
       exception,
       LoggingInfo.getLogFile,
       prefix)

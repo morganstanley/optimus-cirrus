@@ -50,7 +50,9 @@ trait AsyncResultAPI {
 }
 
 trait NodeAPI {
-
+  // TODO (OPTIMUS-69067): Remove this once user code stops adding references to it
+  @deprecatingNew("Use NodeFunction0 instead")
+  type NodeFunction0NN[T] = NodeFunction0[T]
   // methods to get nodes
 
   /**
@@ -120,12 +122,12 @@ trait NodeAPI {
    * to get back to optimus way of coding
    */
   @nodeSync
-  final def asyncGetWithoutEnqueue[T](node: Node[T]): T = needsPlugin
+  final def asyncGetWithoutEnqueue[T](node: Node[T]): T = asyncGetWithoutEnqueue$queued(node).get
   final def asyncGetWithoutEnqueue$queued[T](node: Node[T]): Node[T] = node
 
   /** You almost certainly don't want to use this. */
   @nodeSync
-  final def asyncGetAttached[T](node: Node[T]): T = needsPlugin
+  final def asyncGetAttached[T](node: Node[T]): T = asyncGetAttached$queued(node).get
   final def asyncGetAttached$queued[T](node: Node[T]): Node[T] = node.enqueueAttached
 
   /**
@@ -136,8 +138,8 @@ trait NodeAPI {
    */
   @nodeSync
   final def asyncGetFuture[A](f: Future[A], timeoutMillis: Option[Int] = None): A = needsPlugin
-  final def asyncGetFuture$queued[A](f: Future[A], timeoutMillis: Option[Int] = None): Node[A] =
-    FutureNode(f, sameThreadExecutionContext, timeoutMillis).enqueue
+  final def asyncGetFuture$queued[A](f: Future[A], timeoutMillis: Option[Int] = None): NodeFuture[A] =
+    AsyncInterop.future$queued(f, timeoutMillis)(sameThreadExecutionContext)
 
   private val sameThreadExecutionContext = ExecutionContext.fromExecutor(_.run())
 }
@@ -150,7 +152,8 @@ trait CoreAPI
     with AsyncCollectionHelpers
     with AsyncImplicits
     with AsyncResultAPI
-    with BreadcrumbRegistration {
+    with BreadcrumbRegistration
+    with NodeFunctionImplicits {
 
   @nodeSync
   @nodeSyncLift
@@ -283,8 +286,8 @@ trait CoreAPI
   def delay(msDelay: Long): Unit = delay$queued(msDelay).get$ // NOT Thread.sleep - need to support Cancellation
   def delay$queued(msDelay: Long): NodeFuture[Unit] = {
     val promise = NodePromise[Unit](NodeTaskInfo.Delay)
-    delayPromise(promise, msDelay, TimeUnit.MILLISECONDS)
-    promise.node
+    delayPromise(promise, msDelay, TimeUnit.MILLISECONDS, ())
+    promise.underlyingNode
   }
 
   // Delay with forced dependency just to be careful
@@ -293,7 +296,7 @@ trait CoreAPI
   def delay$queued[X](msDelay: Long, x: X): Node[X] = {
     val promise = NodePromise[X](NodeTaskInfo.Delay)
     delayPromise(promise, msDelay, TimeUnit.MILLISECONDS, x)
-    promise.node
+    promise.underlyingNode
   }
 
   def attachWarning(warning: String): Unit = {
@@ -413,6 +416,7 @@ trait CoreAPI
     withProgressListener$withNode(listener, reportingIntervalMs)(toNode(f _))
   def withProgressListener$withNode[T](listener: ProgressListener, reportingIntervalMs: Long)(f: Node[T]): T =
     new NodeResultProgressNode(f, listener, reportingIntervalMs).get
+  // noinspection ScalaUnusedSymbol
   def withProgressListener$queued[T](listener: ProgressListener, reportingIntervalMs: Long)(f: Node[T]): Node[T] =
     new NodeResultProgressNode(f, listener, reportingIntervalMs).enqueue
 
@@ -421,6 +425,10 @@ trait CoreAPI
 
     if (progressTracker ne null)
       progressTracker.sendProgressMessage(message)
+  }
+
+  final def tickleProgress(amt: Double): Unit = {
+    ProgressTracker.tickle(amt)
   }
 
   /**
@@ -526,10 +534,6 @@ object CoreAPI extends AsyncResultAPI {
     pool.setRemoveOnCancelPolicy(true)
     pool
   }
-
-  /* Probably not the API you are looking for, this is meant for internal graph uses only! */
-  private[optimus] def delayPromise(promise: NodePromise[Unit], msDelay: Long, unit: TimeUnit): Unit =
-    delayPromise[Unit](promise, msDelay, unit, op = ())
 
   /* Probably not the API you are looking for, this is meant for internal graph uses only! */
   private[optimus] def delayPromise[X](promise: NodePromise[X], msDelay: Long, unit: TimeUnit, op: => X): Unit = {

@@ -88,7 +88,7 @@ public class GitProcess {
   }
 
   public static boolean isUsingGitFromTools() {
-    return OsSpecific.isWindows;
+    return OsSpecific.isWindows && !OsSpecific.isCi();
   }
 
   public Path getGitExecPath() {

@@ -32,6 +32,7 @@ import optimus.graph.PThreadContext;
 import optimus.graph.cache.NCPolicy;
 import optimus.graph.cache.NCSupport;
 import optimus.graph.cache.NodeCCache;
+import optimus.graph.diagnostics.trace.ReuseHistogram;
 
 /**
  * Summary of execution for all NodeTasks that report executionInfo as the same NodeTaskInfo ~201
@@ -124,6 +125,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
 
   public int overInvalidated;
   public int reuseCycle;
+  public long reuseStats;
   // specific to XSFT - top-level hits on the proxy are 'trivial'. If all hits are trivial, it's not
   // worth using xsft
   public int cacheHitTrivial;
@@ -348,6 +350,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
     wallTime = 0L;
     overInvalidated = 0;
     reuseCycle = 0;
+    reuseStats = 0L;
     cacheHitTrivial = 0;
     returnType = null;
     cacheName = null;
@@ -430,6 +433,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
       flags |= tc.flags;
       overInvalidated += tc.overInvalidated;
       reuseCycle = Math.max(reuseCycle, tc.reuseCycle);
+      reuseStats = ReuseHistogram.combine(reuseStats, tc.reuseStats);
       cacheHitTrivial += tc.cacheHitTrivial;
       wallTime += tc.wallTime;
     }
@@ -446,6 +450,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
     if (nti != null) {
       flags = nti.snapFlags();
       reuseCycle = nti.reuseCycle;
+      reuseStats = nti.reuseStats;
       tweakID = nti.tweakableID();
       // ensure frozen version is a duplicate!
       tweakDependencies = nti.dependsOnTweakMask().dup();
@@ -523,6 +528,7 @@ public class PNodeTaskInfo extends PNodeTaskInfoLight {
         && wallTime == t.wallTime
         && overInvalidated == t.overInvalidated
         && reuseCycle == t.reuseCycle
+        && reuseStats == t.reuseStats
         && cacheHitTrivial == t.cacheHitTrivial
         && Objects.equals(returnType, t.returnType)
         && Objects.equals(cacheName, t.cacheName)

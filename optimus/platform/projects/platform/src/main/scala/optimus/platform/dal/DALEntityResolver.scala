@@ -33,6 +33,7 @@ import optimus.platform.dsi.bitemporal.QueryResult
 import optimus.platform.dsi.bitemporal.QueryResultSet
 import optimus.platform.dsi.bitemporal.SelectResult
 import optimus.platform.dsi.bitemporal.TemporalityQueryCommand
+import optimus.platform.dsi.bitemporal.UnsupportedSessionException
 import optimus.platform.pickling.ImmutableByteArray
 import optimus.platform.relational.PriqlSettings
 import optimus.platform.relational.RelationalException
@@ -259,6 +260,36 @@ class DALEntityResolver(override val dsi: bitemporal.DSI) extends ResolverImpl w
         initSession(dsi, config.runtimeConfig, Some(RolesetMode.fromSeqSetString(rolesets)))
       }
     }
+  }
+
+  /** returns true only if this EntityResolver would return the same result from any call as the other */
+  override def equivalentTo(other: EntityResolver): Boolean = (this eq other) ||
+    (other match {
+      case other: DALEntityResolver =>
+        (dsi eq other.dsi) || ((dsi, other.dsi) match {
+          // currently only implemented for partitioned DSI (which is what we always have in practice)
+          case (p1: PartitionedDsiProxy, p2: PartitionedDsiProxy) =>
+            // different regions (e.g. devln) of the DAL have the same data as long as the env.mode (e.g. dev) and the
+            // contexts are the same. Also sessions (entitlements etc.) need to match otherwise one resolver might throw
+            // entitlement errors when the other would not
+            try {
+              p1.env.mode == p2.env.mode && p1.baseContext == p2.baseContext &&
+              relevantSessionInfo(dsi) == relevantSessionInfo(other.dsi)
+            } catch {
+              // some DSIs don't support getSession
+              case _: UnsupportedSessionException => false
+            }
+          // returning false is always safe (might just cause lower performance if the other resolver was somehow
+          // "better" than this, e.g. different region or zone)
+          case _ => false
+        })
+      case _ => false
+    })
+
+  @entersGraph private def relevantSessionInfo(dsi: bitemporal.DSI): Product = {
+    val info = dsi.getSession(true).establishingCommand.sessionInfo
+    // appId, zone etc. doesn't affect the results of queries (only the performance) so we don't need to consider them
+    (info.realId, info.effectiveId, info.rolesetMode, info.establishmentTime, info.onBehalfSessionToken)
   }
 }
 

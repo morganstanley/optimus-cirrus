@@ -15,7 +15,6 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.common.annotations.VisibleForTesting
 import com.google.common.hash.Hashing
 import optimus.breadcrumbs.ChainedID
-import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.Properties.Key
@@ -26,6 +25,8 @@ import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
 import optimus.graph.diagnostics.sampling.FlameTreatment
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
+import optimus.graph.diagnostics.sampling.SamplingProfiler
+import optimus.graph.diagnostics.sampling.SamplingProfilerSource
 import optimus.graph.diagnostics.sampling.TimedStack
 import optimus.platform.util.Log
 
@@ -45,10 +46,12 @@ import java.lang.{Integer => JInteger, Long => JLong}
 import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable
 
 object StackAnalysis {
 
+  val AppName = "App"
   val TotalName = "total"
   val GCName = "GC"
   val CompilerName = "Compiler"
@@ -334,6 +337,8 @@ object StackAnalysis {
     def rootNode = new StackNode(this, 0, hash)
   }
 
+  def dromedize(frame: String): String = CleanName.dromedize(0, frame.size, frame)
+
   object CleanName {
     val FREE = 1
     val LIVE = 2
@@ -355,6 +360,43 @@ object StackAnalysis {
 
     def internOnly(frame: String): CleanName = {
       frameNameCache.get(frame, frame => CleanName(frame, frame, 0, 0, hashString(frame)))
+    }
+
+    def dromedize(start: Int, methodEnd: Int, frame: String): String = {
+      var i = start
+      var methodStart = methodEnd - 1
+      while (methodStart >= i && frame(methodStart) != '.' && frame(methodStart) != '/') { methodStart -= 1 }
+
+      if (methodStart < i)
+        return frame.substring(i, methodEnd)
+
+      val method = {
+        if (methodStart == methodEnd - 1) ""
+        else frame.substring(methodStart, methodEnd)
+      }
+
+      val pack = if (methodStart > 0) {
+        // construct op.gr.OGSchCon, e.g.
+        val sb = new StringBuilder()
+        var charsToKeep = camelHumpWidth
+        while (i < methodStart) {
+          val c = frame(i)
+          i += 1
+          if (c == '.' || c == '/') {
+            charsToKeep = camelHumpWidth
+            sb += '.'
+          } else if (c.isUpper || c == '$' || c == '@' || (c >= '0' && c <= '9')) {
+            charsToKeep = camelHumpWidth
+            sb += c
+          } else if (charsToKeep > 0) {
+            charsToKeep -= 1
+            sb += c
+          }
+        }
+        sb.toString
+      } else ""
+
+      pack + method
     }
 
     def cleanName(frame: String, hasFrameNum: Boolean, abbreviate: Boolean, flags: Int): CleanName = {
@@ -385,38 +427,7 @@ object StackAnalysis {
         if (!abbreviate)
           CleanName(frame.substring(i, methodEnd).replaceAllLiterally("/", "."), frame, flags, predMask, hash)
         else {
-          // method starts at the last separator
-          var methodStart = methodEnd - 1
-          while (methodStart >= i && frame(methodStart) != '.' && frame(methodStart) != '/') { methodStart -= 1 }
-          if (methodStart < i)
-            return CleanName(frame.substring(i, methodEnd), frame, flags, predMask, hash)
-
-          val method = {
-            if (methodStart == methodEnd - 1) ""
-            else frame.substring(methodStart, methodEnd)
-          }
-
-          val pack = if (methodStart > 0) {
-            // construct op.gr.OGSchCon, e.g.
-            val sb = new StringBuilder()
-            var charsToKeep = camelHumpWidth
-            while (i < methodStart) {
-              val c = frame(i)
-              i += 1
-              if (c == '.' || c == '/') {
-                charsToKeep = camelHumpWidth
-                sb += '.'
-              } else if (c.isUpper || c == '$' || c == '@' || (c >= '0' && c <= '9')) {
-                charsToKeep = camelHumpWidth
-                sb += c
-              } else if (charsToKeep > 0) {
-                charsToKeep -= 1
-                sb += c
-              }
-            }
-            sb.toString
-          } else ""
-          val shortened = pack + method
+          val shortened = dromedize(i, methodEnd, frame)
           CleanName(shortened, frame, flags, predMask, hash)
         }
       }
@@ -918,7 +929,7 @@ class StackAnalysis(
     // Combine everything that looks like GC or JIT, so we don't fill up splunk with these stacks.
     val gc = execRoot.getOrCreateChildNode(cleanName(GCName))
     val compiler = execRoot.getOrCreateChildNode(cleanName(CompilerName))
-    val javaRoot = execRoot.getOrCreateChildNode(cleanName("App"))
+    val javaRoot = execRoot.getOrCreateChildNode(cleanName(AppName))
     stackTypeToRoot += "Free" -> cleanName("Free", CleanName.FREE).rootNode
     stackTypeToRoot += "FreeNative" -> cleanName("FreeNative", CleanName.FREE).rootNode
 
@@ -1103,41 +1114,59 @@ class StackAnalysis(
     nativeTracking.resetLiveForTestingOnly()
   }
 
+  private val mergeWarningCounter = new AtomicInteger(1)
+  private val MAX_MERGE_DEPTH = 500
+
   private def mergeAllocationsIntoLive(liveTracking: LiveTracking, allocRoot: StackNode): Unit = {
     val liveRoot = liveTracking.root
     val liveNodes = liveTracking.nodes
     var added = 0
     var merged = 0
+    var truncated = 0
     var alloc = 0L
     val errors = ArrayBuffer.empty[String]
-    def mergeDfs(liveNode: StackNode, allocNode: StackNode): Unit = {
-      merged += 1
-      liveNode.self += allocNode.self
-      liveNode.total += allocNode.total
-      if (allocNode.kids eq null) {
-        alloc += liveNode.total
-        if (allocNode.apsids.isEmpty && errors.size < 10) errors += s"Zero apsid for $allocNode"
-        allocNode.apsids.foreach { apsid => liveNodes += apsid -> liveNode }
-        liveNode.apsids ++= allocNode.apsids
+    // Merge allocations into live, depth first.
+    var mergeStack: List[(StackNode, StackNode, Int)] = (liveRoot, allocRoot, 0) :: Nil
+    while (mergeStack.nonEmpty) {
+      val (liveNode, allocNode, depth) :: rest = mergeStack
+      mergeStack = rest
+      if (depth > MAX_MERGE_DEPTH) {
+        truncated += 1
+        if (mergeWarningCounter.get > 0)
+          SamplingProfiler.warn(
+            s"Maximum merge depth exceeded, node=${allocNode.name}",
+            new StackOverflowError(),
+            mergeWarningCounter)
       } else {
-        allocNode.kiderator.foreach { allocChild =>
-          val liveChild = liveNode.getOrUpdateChildNode(
-            allocChild.nameId,
-            () => {
-              val kidHash = combineHashes(liveNode.pathHash, allocChild.cn.hash)
-              val kid = new StackNode(allocChild.cn, liveNode.depth + 1, kidHash)
-              added += 1
-              kid.parent = liveNode
-              kid
-            }
-          )
-          mergeDfs(liveChild, allocChild)
+        merged += 1
+        liveNode.self += allocNode.self
+        liveNode.total += allocNode.total
+        if (allocNode.kids eq null) {
+          alloc += liveNode.total
+          if (allocNode.apsids.isEmpty && errors.size < 10) errors += s"Zero apsid for $allocNode"
+          allocNode.apsids.foreach { apsid => liveNodes += apsid -> liveNode }
+          liveNode.apsids ++= allocNode.apsids
+        } else {
+          allocNode.kiderator.foreach { allocChild =>
+            val liveChild = liveNode.getOrUpdateChildNode(
+              allocChild.nameId,
+              () => {
+                val kidHash = combineHashes(liveNode.pathHash, allocChild.cn.hash)
+                val kid = new StackNode(allocChild.cn, liveNode.depth + 1, kidHash)
+                added += 1
+                kid.parent = liveNode
+                kid
+              }
+            )
+            mergeStack = (liveChild, allocChild, depth + 1) :: mergeStack
+          }
         }
       }
     }
-    mergeDfs(liveRoot, allocRoot)
-    log.debug(s"Merged $merged allocations, added $added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
+    log.debug(
+      s"Merged $merged allocations, truncated $truncated, added $added, alloc=$alloc, apsids=${liveNodes.size}, errors=$errors")
   }
+
   private def mergeFreesIntoLive(liveTracking: LiveTracking, freeRoot: StackNode): Unit = {
     val liveNodes = liveTracking.nodes
     var merged = 0

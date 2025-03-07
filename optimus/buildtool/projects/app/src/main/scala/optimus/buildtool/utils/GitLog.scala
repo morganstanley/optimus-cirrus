@@ -14,9 +14,8 @@ package optimus.buildtool.utils
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.ScopeId
-
-import java.time.Instant
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.RelativePath
 import optimus.buildtool.trace._
 import optimus.platform._
 import optimus.stratosphere.config.StratoWorkspace
@@ -30,10 +29,11 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.AbstractTreeIterator
 import org.eclipse.jgit.treewalk.CanonicalTreeParser
 
+import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 import scala.util.matching.Regex
@@ -43,7 +43,9 @@ object Commit {
   def apply(rev: RevCommit): Commit = Commit(rev.getName, Instant.ofEpochSecond(rev.getCommitTime))
 }
 
+// filePaths are relative to workspace source root
 trait FileDiff {
+  def modifiedFiles: Set[RelativePath]
   def contains(filePath: String): Boolean
   def contains(filePath: String, startLine: Int, endLine: Int): Boolean
 }
@@ -73,7 +75,10 @@ class LazyGitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, bas
     }
   }
 
-  // Note: These should not be marked @impure since they're called from @nodes (eg. in ZincCompiler)
+  override def modifiedFiles: Set[RelativePath] =
+    (diffFiles.get(120, TimeUnit.SECONDS) ++ untrackedFiles.get(120, TimeUnit.SECONDS)).map(RelativePath(_))
+
+// Note: These should not be marked @impure since they're called from @nodes (eg. in ZincCompiler)
   override def contains(filePath: String): Boolean =
     diffFiles.get(120, TimeUnit.SECONDS).contains(filePath) ||
       untrackedFiles.get(120, TimeUnit.SECONDS).contains(filePath)
@@ -82,6 +87,7 @@ class LazyGitFileDiff(utils: NativeGitUtils, workspaceSourceRoot: Directory, bas
 }
 
 object EmptyFileDiff extends FileDiff {
+  override def modifiedFiles: Set[RelativePath] = Set.empty
   override def contains(filePath: String): Boolean = false
   override def contains(filePath: String, startLine: Int, endLine: Int): Boolean = false
 }
@@ -107,8 +113,9 @@ object GitLog {
   @node def recentCommits(from: String = Constants.HEAD): Seq[Commit]
   @async def baseline(from: String = Constants.HEAD): Option[Commit]
   // Diff between the baseline of `from` and current working tree
-  @async @impure def modifiedFiles(from: String = Constants.HEAD): Option[FileDiff]
-  @async @impure def reportTagMovingForward(tagName: String, dir: Directory): Unit
+  @async @impure def fileDiff(from: String = Constants.HEAD): Option[FileDiff]
+  // If current HEAD is a descendant of tag then return the current head commit, otherwise return None
+  @async @impure def updatedTagCommit(tagName: String): Option[String]
 }
 
 /**
@@ -257,21 +264,20 @@ object GitLog {
   }
 
   // Diff between the baseline of `from` and current working tree
-  @async @impure def modifiedFiles(from: String): Option[FileDiff] = baselineHash(from).map { hash =>
+  @async @impure def fileDiff(from: String): Option[FileDiff] = baselineHash(from).map { hash =>
     new LazyGitFileDiff(native, workspaceSourceRoot, hash)
   }
 
-  @async @impure def reportTagMovingForward(tagName: String, dir: Directory): Unit = {
+  @async @impure def updatedTagCommit(tagName: String): Option[String] = {
     val currentHead = HEAD.fold("UNKNOWN")(_.hash)
     val movingForward = isMovingForward(tagName)
     if (movingForward) {
-      // Unfortunately, we cannot create the git tag ourselves as we don't have the permission to push the git tag
-      // so we delegate this for a more powerful user id (via Jenkins)
-      val taggingFile = dir.resolveFile("tag.properties")
-      val properties = Map("tag.name" -> tagName, "tag.hash" -> currentHead)
-      Utils.writePropertiesToFile(taggingFile, properties)
-      log.info(s"${taggingFile.pathString} created: tag $tagName should be moved to $currentHead (HEAD)")
-    } else log.info(s"Skipping tag request for $tagName as only forward tagging are allowed (HEAD is $currentHead)")
+      log.info(s"Moving tag: $tagName to $currentHead.")
+      Some(currentHead)
+    } else {
+      log.info(s"Skipping tag request for $tagName as only forward tagging are allowed (HEAD is $currentHead)")
+      None
+    }
   }
 
   @async @impure private def isMovingForward(tagName: String): Boolean = {
@@ -289,7 +295,7 @@ object GitLog {
 
     currentRemoteHash.forall { remoteHash =>
       log.info(s"Tag $tagName is currently pointing to $remoteHash")
-      utils.repo.hasObject(ObjectId.fromString(remoteHash))
+      utils.repo.getObjectDatabase.has(ObjectId.fromString(remoteHash))
     }
   }
 }

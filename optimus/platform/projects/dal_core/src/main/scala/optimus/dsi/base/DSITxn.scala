@@ -27,8 +27,7 @@ import optimus.platform.internal.SimpleStateHolder
 import optimus.platform.storable.SerializedAppEvent
 
 object DSITxn {
-  private def lift(act: TxnAction): Seq[TxnAction] = act :: Nil
-
+  type Actions = Seq[TxnAction]
   def sequence[A](txns: Seq[DSITxn[A]]): DSITxn[Seq[A]] = {
     val resultBuilder = Vector.newBuilder[A]
     val actionBuilder = Vector.newBuilder[TxnAction]
@@ -46,8 +45,6 @@ object DSITxn {
   def pure[A](a: A) = DSITxn(a, Vector.empty)
   def actions(acts: Actions) = DSITxn((), acts)
 
-  type Actions = Seq[TxnAction]
-
   private def updateAppEvent(appEvent: SerializedAppEvent, tt: Instant) = {
     if (appEvent.dalTT.isDefined) appEvent.copy(dalTT = Some(tt)) else appEvent.copy(tt = tt)
   }
@@ -58,11 +55,7 @@ object DSITxn {
       case ga: GeneratedAppEventResult    => ga.copy(appEvent = updateAppEvent(ga.appEvent, tt))
       case x                              => x
     }
-    val updatedTxnActions = txn.actions.map {
-      case pae: PutAppEvent => pae.dalTTtoBeRemoved.map(_ => pae.copy(dalTTtoBeRemoved = Some(tt))).getOrElse(pae)
-      case x                => x
-    }
-    DSITxn(updatedResults, updatedTxnActions)
+    DSITxn(updatedResults, txn.actions)
   }
 
   def replaceTtAndDalTt(txn: DSITxn[Seq[Result]], tt: Instant): DSITxn[Seq[Result]] = {
@@ -89,43 +82,9 @@ object DSITxn {
        */
       case ns => throw new IllegalArgumentException(s"replaceTt called with unsupported result type: $ns")
     }
-    val updatedTxnActions = txn.actions.map {
-      case poe: PutObliterateEffect          => PutObliterateEffect(poe.effect.copy(txTime = tt))
-      case pbeie: PutBusinessEventIndexEntry => pbeie.copy(txTimeOpt = Some(tt))
-      case pae: PutAppEvent   => pae.dalTTtoBeRemoved.map(_ => pae.copy(dalTTtoBeRemoved = Some(tt))).getOrElse(pae)
-      case pk: PutTemporalKey => pk.copy(key = pk.key.copy(lockToken = ttLong))
-      // UpdateEntityGrouping do have existing lock token but that doesn't required tt replacement
-      case eg: EntityGroupingTxnAction     => eg
-      case pie: PutIndexEntry              => pie
-      case cie: CloseIndexEntry            => cie
-      case ptie: PutRegisteredIndexEntry   => ptie
-      case ctie: CloseRegisteredIndexEntry => ctie
-      case lnk: PutLinkageEntry            => lnk
-      case clnk: CloseLinkageEntry         => clnk
-      case pts: PutBusinessEventTimeSlice  => pts
-      //  UpdateBusinessEventGrouping do have existing lock token but that doesn't required tt replacement
-      case grp: BusinessEventGroupingTxnAction => grp
-      case rgrp: ReuseBusinessEvent            => rgrp
-      case cbets: CloseBusinessEventTimeSlice  => cbets
-      case pbek: PutBusinessEventKey           => pbek
-      // tt interval is only passed by tombstone backfiller admin script and that doesn't required tt replacement
-      case pets: PutEntityTimeSlice   => pets
-      case cets: CloseEntityTimeSlice => cets
-      case pcr: PutCmReference        => pcr
-      //  UpdateUniqueIndexGrouping do have existing lock token but that doesn't required tt replacement
-      case uita: UniqueIndexGroupingTxnAction   => uita
-      case uitsa: UniqueIndexTimeSliceTxnAction => uitsa
-      case eo: ExecuteObliterate                => eo
-      case pdre: PutDBRawEffect                 => pdre
-      case dra: DBRawAction                     => dra
-      case ass: AddWriteSlots                   => ass
-      case fws: FillWriteSlot                   => fws
-      // tt is coming from acc cmd so don't required tt replacement
-      case acc: AccAction         => acc
-      case pcm: PutClassIdMapping => pcm
-    }
-    DSITxn(updatedResults, updatedTxnActions)
+    DSITxn(updatedResults, txn.actions)
   }
+  private def lift(act: TxnAction): Seq[TxnAction] = act :: Nil
 }
 
 final class DSITxnActionsConfigValues {
@@ -158,55 +117,101 @@ final case class DSITxn[+A](result: A, actions: Seq[TxnAction]) {
     case _ => false
   }
 
-  def actionsSizeBySource(): Map[String, Int] = {
+  def actionsSizeBySourceInfo(): Map[String, Int] = {
     var r = Map[String, Int]()
     if (DSITxnActionsConfig.getIncludeTxnActionSize) {
       r ++= Map("tx_acs" -> actions.size)
       if (DSITxnActionsConfig.getIncludeTxnActionSizeBySource) {
         r ++= actions.groupBy(actionToSourceGroup).map { case (k, v) =>
-          k -> v.size
+          k.toString -> v.size
         }
       }
     }
 
     r
   }
-
-  private def actionToSourceGroup(action: TxnAction): String = {
+  private def actionToSourceGroup(action: TxnAction): TxnActionGroup = {
     action match {
-      case _: AccAction                   => "tx_o" // other
-      case _: PutTemporalKey              => "tx_enk" // entityKey
-      case _: PutRegisteredIndexEntry     => "tx_enri" // entityRegisteredIndex
-      case _: CloseRegisteredIndexEntry   => "tx_enri" // entityRegisteredIndex
-      case _: PutIndexEntry               => "tx_eni" // entityIndex
-      case _: CloseIndexEntry             => "tx_eni" // entityIndex
-      case _: PutLinkageEntry             => "tx_envl" // entityLinkage
-      case _: CloseLinkageEntry           => "tx_envl" // entityLinkage
-      case _: PutAppEvent                 => "tx_ae" // appEvent
-      case _: PutBusinessEventKey         => "tx_evk" // eventKey
-      case _: PutObliterateEffect         => "tx_o" //
-      case _: ExecuteObliterate           => "tx_ob" // obliterate
-      case _: DBRawAction                 => "tx_dbr" // dbRaw
-      case _: PutDBRawEffect              => "tx_dbr" // dbRaw
-      case _: AddWriteSlots               => "tx_o" // other
-      case _: FillWriteSlot               => "tx_o" // other
-      case _: PutClassIdMapping           => "tx_o" // other
-      case _: ReuseBusinessEvent          => "tx_o" // other
-      case _: PutEntityGrouping           => "tx_engts" // entityGroupingTimeslice
-      case _: UpdateEntityGrouping        => "tx_engts" // entityGroupingTimeslice
-      case _: PutUniqueIndexGrouping      => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
-      case _: UpdateUniqueIndexGrouping   => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
-      case _: PutBusinessEventGrouping    => "tx_evgts" // eventGroupingTimeslice
-      case _: UpdateBusinessEventGrouping => "tx_evgts" // eventGroupingTimeslice
-      case _: PutEntityTimeSlice          => "tx_engts" // entityGroupingTimeslice
-      case _: CloseEntityTimeSlice        => "tx_engts" // entityGroupingTimeslice
-      case _: PutUniqueIndexTimeSlice     => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
-      case _: CloseUniqueIndexTimeSlice   => "tx_enuigts" // entityUniqueIndexGroupingTimeslice
-      case _: PutBusinessEventTimeSlice   => "tx_evgts" // eventGroupingTimeslice
-      case _: CloseBusinessEventTimeSlice => "tx_evgts" // eventGroupingTimeslice
-      case _: PutCmReference              => "tx_m" // metadata
-      case _: PutBusinessEventIndexEntry  => "tx_evi" // eventIndex
+      case _: AccAction                 => OtherGroup // other
+      case _: PutTemporalKey            => EntityKeyGroup // entityKey
+      case _: PutRegisteredIndexEntry   => EntityRegisteredIndexGroup // entityRegisteredIndex
+      case _: CloseRegisteredIndexEntry => EntityRegisteredIndexGroup // entityRegisteredIndex
+      case _: PutIndexEntry             => EntityIndexGroup // entityIndex
+      case _: CloseIndexEntry           => EntityIndexGroup // entityIndex
+      case _: PutLinkageEntry           => EntityLinkageGroup // entityLinkage
+      case _: CloseLinkageEntry         => EntityLinkageGroup // entityLinkage
+      case _: PutAppEvent               => AppEventGroup // appEvent
+      case _: PutBusinessEventKey       => EventKeyGroup // eventKey
+      case _: PutObliterateEffect       => OtherGroup // other
+      case _: ExecuteObliterate         => ObliterateGroup // obliterate
+      case _: DBRawAction               => DbRawGroup // dbRaw
+      case _: PutDBRawEffect            => DbRawGroup // dbRaw
+      case _: AddWriteSlots             => OtherGroup // other
+      case _: FillWriteSlot             => OtherGroup // other
+      case _: PutClassIdMapping         => OtherGroup // other
+      case _: WorklogOnlyTxnAction      => OtherGroup // other
+      case _: PutEntityGrouping         => EntityGroupingTimesliceGroup // entityGroupingTimeslice
+      case _: UpdateEntityGrouping      => EntityGroupingTimesliceGroup // entityGroupingTimeslice
+      case _: PutUniqueIndexGrouping    => EntityUniqueIndexGroupingTimesliceGroup // entityUniqueIndexGroupingTimeslice
+      case _: UpdateUniqueIndexGrouping => EntityUniqueIndexGroupingTimesliceGroup // entityUniqueIndexGroupingTimeslice
+      case _: PutBusinessEventGrouping  => EventGroupingTimeslice // eventGroupingTimeslice
+      case _: UpdateBusinessEventGrouping => EventGroupingTimeslice // eventGroupingTimeslice
+      case _: PutEntityTimeSlice          => EntityGroupingTimesliceGroup // entityGroupingTimeslice
+      case _: CloseEntityTimeSlice        => EntityGroupingTimesliceGroup // entityGroupingTimeslice
+      case _: PutUniqueIndexTimeSlice   => EntityUniqueIndexGroupingTimesliceGroup // entityUniqueIndexGroupingTimeslice
+      case _: CloseUniqueIndexTimeSlice => EntityUniqueIndexGroupingTimesliceGroup // entityUniqueIndexGroupingTimeslice
+      case _: PutBusinessEventTimeSlice => EventGroupingTimeslice // eventGroupingTimeslice
+      case _: CloseBusinessEventTimeSlice => EventGroupingTimeslice // eventGroupingTimeslice
+      case _: PutCmReference              => MetadataGroup // metadata
+      case _: PutBusinessEventIndexEntry  => EventIndexGroup // eventIndex
     }
   }
 
+  def actionsSizeBySource(): Map[TxnActionGroup, Int] = {
+    actions.groupBy(actionToSourceGroup).map { case (k, v) => (k, v.size) }
+  }
+}
+
+sealed trait TxnActionGroup
+case object OtherGroup extends TxnActionGroup {
+  override def toString: String = "tx_o"
+}
+case object EntityKeyGroup extends TxnActionGroup {
+  override def toString: String = "tx_enk"
+}
+case object EntityRegisteredIndexGroup extends TxnActionGroup {
+  override def toString: String = "tx_enri"
+}
+case object EntityIndexGroup extends TxnActionGroup {
+  override def toString: String = "tx_eni"
+}
+case object EntityLinkageGroup extends TxnActionGroup {
+  override def toString: String = "tx_enl"
+}
+case object AppEventGroup extends TxnActionGroup {
+  override def toString: String = "tx_ae"
+}
+case object EventKeyGroup extends TxnActionGroup {
+  override def toString: String = "tx_evk"
+}
+case object ObliterateGroup extends TxnActionGroup {
+  override def toString: String = "tx_ob"
+}
+case object DbRawGroup extends TxnActionGroup {
+  override def toString: String = "tx_dbr"
+}
+case object EntityGroupingTimesliceGroup extends TxnActionGroup {
+  override def toString: String = "tx_engts"
+}
+case object EntityUniqueIndexGroupingTimesliceGroup extends TxnActionGroup {
+  override def toString: String = "tx_enuigts"
+}
+case object EventGroupingTimeslice extends TxnActionGroup {
+  override def toString: String = "tx_evgts"
+}
+case object MetadataGroup extends TxnActionGroup {
+  override def toString: String = "tx_m"
+}
+case object EventIndexGroup extends TxnActionGroup {
+  override def toString: String = "tx_evi"
 }

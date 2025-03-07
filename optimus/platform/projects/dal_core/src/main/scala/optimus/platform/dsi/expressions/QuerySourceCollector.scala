@@ -105,7 +105,7 @@ object PropertyCollector {
 
 private[optimus] object QueryClassPathValidator extends Log {
   def validate(e: Expression): Unit = {
-    val entityName = e.asInstanceOf[Select].from.asInstanceOf[Entity].name
+    val entityName = getEntityName(e)
     val indexesFromEntity = getIndexesFromClassPath(entityName)
     val indexesFromExpression = getIndexesFromExpression(e, entityName)
     assertAllIndexesFromExpressionExistsInClasspath(indexesFromExpression, indexesFromEntity, entityName)
@@ -163,5 +163,9 @@ private[optimus] object QueryClassPathValidator extends Log {
             s"Indexes from expression have property type: ${indexExpr.propType}, please checkout expression.")
       }
     })
+  }
+
+  def getEntityName(e: Expression): String = {
+    e.asInstanceOf[Select].from.asInstanceOf[Entity].name
   }
 }

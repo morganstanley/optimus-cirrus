@@ -15,7 +15,6 @@ import msjava.zkapi.internal.ZkaContext
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
-import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.config.RuntimeConfiguration
@@ -31,6 +30,7 @@ import spray.json._
 import java.util.Objects
 import scala.util.Random
 import scala.util.control.NonFatal
+import optimus.platform.util.Version
 
 object SamplingProfilerSwitch extends Log {
   // subnodes will be bas, reg, etc., ...
@@ -39,6 +39,9 @@ object SamplingProfilerSwitch extends Log {
   // {
   //   "enabled" : true
   // }
+
+  private val requiredCrumbSources = Seq(SamplingProfilerSource)
+
   private final case class SPSwitchConfig(enabled: Option[Boolean], random: Option[Double] = None) {
     def enables = enabled.contains(true)
     def disables = enabled.contains(false)
@@ -67,7 +70,10 @@ object SamplingProfilerSwitch extends Log {
       log.warn(msg)
       Breadcrumbs.warn(
         ChainedID.root,
-        PropertiesCrumb(_, ProfilerSource, Properties.logMsg -> msg, Properties.severity -> "WARN")
+        PropertiesCrumb(
+          _,
+          ProfilerSource,
+          Properties.logMsg -> msg :: Properties.severity -> "WARN" :: Version.properties)
       )
       SamplingProfiler.shutdownNow()
       true
@@ -108,30 +114,31 @@ object SamplingProfilerSwitch extends Log {
             }
             val checkMsg =
               (if (listenForUpdates) "Listening" else "Checking") + s" for SamplingProfiler shutdown at $path"
-            // Ensure that both SP and PROF crumbs are going to kafka be sending out probes and flushing.
-            // There are so many possible configurations and filters that could block one or both source
+            // Ensure that SP crumbs are going to kafka by sending out probes and flushing.
+            // There are so many possible configurations and filters that could block us that
             // that this is the only reliable way to find out.
-            val sources = Seq(SamplingProfilerSource, ProfilerSource)
-            sources.foreach { source =>
+            requiredCrumbSources.foreach { source =>
               Breadcrumbs.info(
                 ChainedID.root,
                 PropertiesCrumb(
                   _,
                   source,
-                  Properties.logMsg -> checkMsg,
-                  Properties.crumbplexerIgnore -> "SamplingProfilerSwitch"))
+                  Properties.logMsg -> checkMsg ::
+                    Properties.crumbplexerIgnore -> "SamplingProfilerSwitch" :: Version.properties))
             }
             Breadcrumbs.flush()
+            SamplingProfilerSource.flush()
             // If either source is blocked, we might as well shut off profiling, since the data would never
             // escape the process.
-            if (sources.exists(_.getKafkaCount == 0)) {
-              val noCrumbMsg = "Shutting off SamplingProfiler since crumb counts " +
-                sources.map(s => s"$s -> ${s.getKafkaCount}").mkString(", ")
+            if (requiredCrumbSources.exists(_.sentCount == 0)) {
+              val noCrumbMsg =
+                s"Shutting off SamplingProfiler since we are unable to publish crumbs to ${requiredCrumbSources.mkString(", ")}! " +
+                  requiredCrumbSources.map(s => s"$s -> ${s.sentCount}").mkString(", ")
               log.warn(noCrumbMsg)
               // Send the warning somewhere other than PROF or SP...
               Breadcrumbs.warn(
                 ChainedID.root,
-                PropertiesCrumb(_, GraphDiagnosticsSource, Properties.logMsg -> noCrumbMsg))
+                PropertiesCrumb(_, GraphDiagnosticsSource, Properties.logMsg -> noCrumbMsg :: Version.properties))
               maybeShutDown(path)(OFF)
             } else {
               log.info(checkMsg)

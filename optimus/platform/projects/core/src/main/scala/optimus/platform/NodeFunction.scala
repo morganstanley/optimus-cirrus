@@ -125,19 +125,11 @@ trait AsyncFunction9[-T1, -T2, -T3, -T4, -T5, -T6, -T7, -T8, -T9, +R] extends Se
   def apply$queued(v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): NodeFuture[R]
 }
 
-trait HasNewNode[+R] {
-  // We need the default because of NodeFunction extensions outside of platform where it might not be
-  // possible to return an unqueued node.
-  def apply$newNode(): Node[R]
-}
-
 trait NodeFunction0[+R] extends AsyncFunction0[R] {
   @nodeSync
   def apply(): R
   def apply$queued(): NodeFuture[R]
 }
-
-trait NodeFunction0NN[+R] extends NodeFunction0[R] with HasNewNode[R]
 
 trait NodeFunction1[-T1, +R] extends AsyncFunction1[T1, R] {
   @nodeSync
@@ -393,7 +385,7 @@ object asNodeInnards {
 
   // used for both by-name and nilary cases to save typing
   private[optimus /*platform*/ ] sealed abstract class NodeFunction0ImplBase[+R](private val equalikey: AnyRef)
-      extends NodeFunction0NN[R] {
+      extends NodeFunction0[R] {
     override def equals(o: Any): Boolean = o match {
       case that: NodeFunction0ImplBase[_] =>
         NodeClsIDSupport.equals(this.equalikey, that.equalikey)
@@ -416,7 +408,7 @@ object asNodeInnards {
     def apply(): R = apply$queued().get$
     def apply$queued(): NodeFuture[R] = apply$newNode().enqueue
     @nowarn("msg=10500 optimus.graph.UnsafeInternal.clone")
-    override def apply$newNode(): Node[R] = template match {
+    def apply$newNode(): Node[R] = template match {
       case acn: AlreadyCompletedNode[R] => acn
       case _                            => UnsafeInternal.clone(template)
     }
@@ -598,18 +590,18 @@ sealed trait asNodeInnards {
   // Lift a by-name argument to a NodeFunction0, which will need to be deref'd manually with ().
   @nodeSyncLift
   @nodeLiftByName @captureByValue
-  def apply0[R](@nodeLift @nodeLiftByName @withNodeClassID @captureByValue f: => R): NodeFunction0NN[R] =
-    (f _).asInstanceOf[NodeFunction0NN[R]]
+  def apply0[R](@nodeLift @nodeLiftByName @withNodeClassID @captureByValue f: => R): NodeFunction0[R] =
+    (f _).asInstanceOf[NodeFunction0[R]]
 
   @captureByValue
-  def apply0$withNode[R](@captureByValue templ: Node[R]): NodeFunction0NN[R] = new NodeFunctionByNameImpl[R](templ)
+  def apply0$withNode[R](@captureByValue templ: Node[R]): NodeFunction0[R] = new NodeFunctionByNameImpl[R](templ)
 
   @nodeSyncLift
   @nodeLiftByName @captureByValue
-  def apply[R](@nodeLift @withNodeClassID @captureByValue f: () => R): NodeFunction0NN[R] =
-    f.asInstanceOf[NodeFunction0NN[R]]
+  def apply[R](@nodeLift @withNodeClassID @captureByValue f: () => R): NodeFunction0[R] =
+    f.asInstanceOf[NodeFunction0[R]]
   @captureByValue
-  def apply$withNode[R](@captureByValue vn: () => Node[R]): NodeFunction0NN[R] = new NodeFunction0Impl(vn)
+  def apply$withNode[R](@captureByValue vn: () => Node[R]): NodeFunction0[R] = new NodeFunction0Impl(vn)
 
   @nodeSyncLift
   @nodeLiftByName @captureByValue
@@ -871,4 +863,26 @@ object asyncLazyWithAnyRuntimeEnv {
   def apply[R](@nodeLiftByName @nodeLift @captureByValue v: => R): Lazy[R] = new Lazy[R](toNode(v _))
   @captureByValue
   def apply$withNode[R](@captureByValue v: Node[R]) = new Lazy[R](v)
+}
+
+// these are defined here rather than directly on NodeFunctions because app code has some @entity implementations
+// of NodeFunctions which would then trigger error code 22318
+trait NodeFunctionImplicits {
+  implicit class NodeFunction0Ops[R](f: NodeFunction0[R]) {
+    def andThenCall[T](f2: NodeFunction1[R, T]): NodeFunction0[T] = new NodeFunction0[T] {
+      @nodeSync
+      def apply(): T = apply$queued().get$
+      def apply$queued(): NodeFuture[T] =
+        f.apply$queued().asNode$.flatMap(f2.apply$queued(_).asNode$, attach = false).enqueue
+    }
+  }
+
+  implicit class NodeFunction1Ops[T1, R](f: NodeFunction1[T1, R]) {
+    def andThenCall[R2](f2: NodeFunction1[R, R2]): NodeFunction1[T1, R2] = new NodeFunction1[T1, R2] {
+      @nodeSync
+      def apply(v1: T1): R2 = apply$queued(v1).get$
+      def apply$queued(v1: T1): NodeFuture[R2] =
+        f.apply$queued(v1).asNode$.flatMap(f2.apply$queued(_).asNode$, attach = false).enqueue
+    }
+  }
 }

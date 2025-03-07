@@ -13,22 +13,11 @@ package optimus.platform.reactive.pubsub
 
 import java.time.Instant
 import optimus.dsi.notification.NotificationEntry
-import optimus.dsi.pubsub.Subscription
-import optimus.platform.temporalSurface.cache.DalPSNotificationSliceCache
-
-private[optimus] trait ErefSubscription {
-  val subscriptionId: Int
-  def remove(): Unit
-}
 
 private[optimus] trait NotificationEntryHandler {
   def handleNotificationEntries(tt: Instant, notificationEntries: Seq[NotificationEntry]): Unit
 }
 
-private[optimus] trait StreamManager {
-  def implicitErefCache: Option[DalPSNotificationSliceCache]
-}
+private[optimus] trait StreamManager
 
-private[optimus] trait PSStreamManager extends StreamManager {
-  def createErefSubscription(subscription: Subscription, callback: NotificationEntryHandler): ErefSubscription
-}
+private[optimus] trait PSStreamManager extends StreamManager

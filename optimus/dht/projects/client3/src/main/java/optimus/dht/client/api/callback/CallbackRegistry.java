@@ -75,10 +75,22 @@ public interface CallbackRegistry {
     void completed();
   }
 
-  void registerCallback(@Nullable ServerConnection node, Object key, Callback callback);
+  void registerCallback(
+      @Nullable ServerConnection node, Object key, Callback callback, Object data);
 
   void registerCallbackWithTimeout(
-      @Nullable ServerConnection node, Object key, Duration timeout, Callback callback);
+      @Nullable ServerConnection node,
+      Object key,
+      Duration timeout,
+      Callback callback,
+      Object data);
+
+  /**
+   * Retrieves optional custom data stored for the given key.
+   *
+   * @return custom data for key, if found and exist
+   */
+  Object getData(@Nullable ServerConnection node, Object key);
 
   /**
    * Fires an UPDATE callback. May be called multiple times. Does not clear the timeout.

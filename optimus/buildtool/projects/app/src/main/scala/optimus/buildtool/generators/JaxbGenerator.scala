@@ -113,7 +113,7 @@ import scala.xml.InputSource
         .get("bindings")
         .map { b =>
           val paths = b.split(",").map(RelativePath(_)).toIndexedSeq
-          SourceGenerator.templates(
+          SourceGenerator.rootedTemplates(
             internalFolders,
             externalFolders,
             EndsWithFilter(paths: _*),
@@ -167,7 +167,7 @@ import scala.xml.InputSource
       pkg,
       pkgs,
       templateFiles,
-      bindingFiles.getOrElse(SortedMap.empty),
+      bindingFiles.getOrElse(Nil),
       rootFiles.map(_.map(_._2).merge).getOrElse(SortedMap.empty),
       fingerprintHash,
       plugins
@@ -181,10 +181,9 @@ import scala.xml.InputSource
       scopeId: ScopeId,
       inputs: NodeFunction0[Inputs],
       outputJar: JarAsset
-  ): Option[GeneratedSourceArtifact] = JaxbGenerator.oneAtTheTime(asNode { () =>
+  ): Option[GeneratedSourceArtifact] = JaxbGenerator.oneAtTheTime {
     val resolvedInputs = inputs()
     import resolvedInputs._
-    val allTemplates = templateFiles.map(_._2).merge
     ObtTrace.traceTask(scopeId, GenerateSource) {
       val artifact = Utils.atomicallyWrite(outputJar) { tempOut =>
         val tempJar = JarAsset(tempOut)
@@ -212,7 +211,7 @@ import scala.xml.InputSource
             }
 
             // noinspection ScalaDeprecation
-            bindingFiles.foreach { case (f, c) =>
+            bindingFiles.map(_._2).merge.foreach { case (f, c) =>
               val s = new InputSource(c.contentAsInputStream)
               s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
               compilerSettings.addBindFile(s)
@@ -220,6 +219,7 @@ import scala.xml.InputSource
 
             compiler.setEntityResolver(new ObtEntityResolver(workspaceSourceRoot, rootFiles))
 
+            val allTemplates = templateFiles.map(_._2).merge
             allTemplates.foreach { case (f, c) =>
               val s = new InputSource(c.contentAsInputStream)
               s.setSystemId(JaxbGenerator.systemId(workspaceSourceRoot, f))
@@ -246,10 +246,17 @@ import scala.xml.InputSource
               SourceGenerator.validateFiles(d, files)
             }
             val validatedTemplateFiles = validatedTemplates.flatMap(_.files)
+            val validatedBindings = bindingFiles.apar
+              .map { case (d, files) =>
+                SourceGenerator.validateFiles(d, files)
+              }
+              .flatMap(_.files)
             validatedTemplateFiles
               .flatMap { f =>
                 val args = Seq("-autoNameResolution") ++
-                  (pkgs ++ pkg.toSeq).flatMap(p => Seq("-p", s"$p")) ++
+                  (pkgs ++ pkg.toSeq).flatMap(p => Seq("-p", p)) ++
+                  validatedBindings.flatMap(b => Seq("-b", b.pathString)) ++
+                  plugins.map(p => s"-xjc-${p.getOptionName}") ++
                   Seq("-d", outputDir.pathString, PathUtils.mappedUriString(f.path))
 
                 val wsdlToJava = new WSDLToJava(args.toArray)
@@ -273,7 +280,7 @@ import scala.xml.InputSource
       }
       Some(artifact)
     }
-  })
+  }
 
   protected def createSchemaCompiler(): SchemaCompiler = new SchemaCompilerImpl()
 }
@@ -283,7 +290,7 @@ object JaxbGenerator extends Log {
   // xjc is not thread-safe, so we need to make sure we don't call it from more than one thread at the same time
   // see https://javaee.github.io/jaxb-v2/doc/user-guide/ch06.html#d0e6879 and
   // https://discuss.gradle.org/t/parallelizable-jaxb-xjc-plugin-task/14855
-  private val oneAtTheTime = new AdvancedUtils.Throttle(1)
+  private val oneAtTheTime = AdvancedUtils.newThrottle(1)
 
   private val SourcePath = RelativePath("src")
   private def sourcePredicate(t: JaxbType) = t match {
@@ -304,7 +311,7 @@ object JaxbGenerator extends Log {
       pkg: Option[String],
       pkgs: Seq[String],
       templateFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
-      bindingFiles: SortedMap[FileAsset, HashedContent],
+      bindingFiles: Seq[(Directory, SortedMap[FileAsset, HashedContent])],
       rootFiles: SortedMap[FileAsset, HashedContent],
       fingerprint: FingerprintArtifact,
       plugins: Seq[Plugin]
@@ -344,7 +351,7 @@ object JaxbGenerator extends Log {
       inputs.getOrElse(systemId, null)
   }
 
-  class ObtXjcErrorListener(id: ScopeId, generatorName: String) extends ErrorListener {
+  private class ObtXjcErrorListener(id: ScopeId, generatorName: String) extends ErrorListener {
     private[generators] val _messages = mutable.Buffer[CompilationMessage]()
 
     private def append(severity: CompilationMessage.Severity, e: SAXParseException): Unit = {
@@ -360,7 +367,7 @@ object JaxbGenerator extends Log {
     def messages: Seq[CompilationMessage] = _messages.toIndexedSeq
   }
 
-  class ObtWsdlErrorListener(id: ScopeId, generatorName: String) extends ToolErrorListener {
+  private class ObtWsdlErrorListener(id: ScopeId, generatorName: String) extends ToolErrorListener {
     private val _messages = mutable.Buffer[CompilationMessage]()
 
     override def addError(file: String, line: Int, column: Int, message: String): Unit = {

@@ -142,7 +142,9 @@ public class InstrumentationInjector implements ClassFileTransformer {
   }
 
   private boolean shouldInstrumentEntity(String className, ClassReaderEx crSource) {
-    return crSource.hasAnnotation(ENTITY_ANNOTATION) && !isModuleOrEntityExcluded(className);
+    return crSource.hasAnnotation(ENTITY_ANNOTATION)
+        && !isModuleOrEntityExcluded(className)
+        && ((crSource.getAccess() & ACC_INTERFACE) == 0); // excludes interfaces
   }
 
   private boolean shouldInstrumentModuleCtor(ClassLoader loader, String className) {

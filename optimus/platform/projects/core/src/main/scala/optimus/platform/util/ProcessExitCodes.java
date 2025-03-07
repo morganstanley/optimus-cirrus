@@ -21,4 +21,5 @@ public class ProcessExitCodes {
 
   public static final int OOM = 159;
   public static final int BAD_STATE = 193;
+  public static final int XMX_PLUS_NATIVE_EXCEEDS_RSS = 194;
 }

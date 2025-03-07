@@ -39,7 +39,8 @@ public abstract class BaseHybridEstablishedStreamHandler<T, S> implements Establ
   public enum State {
     PREHEADER,
     HEADER,
-    PAYLOAD
+    PAYLOAD,
+    SKIP
   }
 
   private State state = State.PREHEADER;
@@ -66,6 +67,9 @@ public abstract class BaseHybridEstablishedStreamHandler<T, S> implements Establ
           break;
         case PAYLOAD:
           processPayload(buf);
+          break;
+        case SKIP:
+          processSkip(buf);
           break;
       }
     }
@@ -127,10 +131,22 @@ public abstract class BaseHybridEstablishedStreamHandler<T, S> implements Establ
               buf.readableBytes(), (int) Math.min(Integer.MAX_VALUE, currentPayload.remaining()));
       currentPayload.read(buf, toRead);
 
-      if (currentPayload.remaining() == 0) {
+      // currentPayload may be null if handling user's callback exception
+      if (currentPayload != null && currentPayload.remaining() == 0) {
         currentPayload = payloadsToRead.poll();
       }
     }
+  }
+
+  protected void processSkip(ByteBuf buf) {
+    buf.skipBytes(buf.readableBytes());
+  }
+
+  protected void skipMessage() {
+    resetPayloads();
+    state = State.SKIP;
+    messageType = null;
+    currentMessage = null;
   }
 
   @Override
@@ -138,6 +154,8 @@ public abstract class BaseHybridEstablishedStreamHandler<T, S> implements Establ
     state = State.PREHEADER;
     resetPayloads();
     processMessageCompleted(metrics);
+    messageType = null;
+    currentMessage = null;
   }
 
   protected void resetPayloads() {

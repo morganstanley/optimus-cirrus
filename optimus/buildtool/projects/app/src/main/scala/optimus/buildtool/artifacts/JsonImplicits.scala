@@ -32,6 +32,7 @@ import optimus.buildtool.resolvers.DependencyInfo
 import optimus.buildtool.trace.MessageTrace
 import optimus.buildtool.trace.ResolveTrace
 import optimus.buildtool.utils.PathUtils
+import org.apache.commons.lang3.StringUtils
 
 import java.net.URI
 
@@ -113,8 +114,6 @@ private[buildtool] object JsonImplicits {
     CompilerMessagesArtifact.Cached.apply)
   implicit val LocatorArtifactFormatter: RootJsonFormat[LocatorArtifact.Cached] = jsonFormat4(
     LocatorArtifact.Cached.apply)
-  implicit val RootLocatorArtifactFormatter: RootJsonFormat[RootLocatorArtifact.Cached] = jsonFormat2(
-    RootLocatorArtifact.Cached.apply)
 
   implicit object ExternalArtifactTypeFormat extends RootJsonFormat[ExternalArtifactType] {
     override def write(t: ExternalArtifactType): JsValue = t.name.toJson
@@ -180,13 +179,13 @@ private[buildtool] object JsonImplicits {
   implicit val visualizerInfoFormatter: JsonFormat[DependencyInfo] =
     new JsonFormat[DependencyInfo] {
       private val delimiter = ",,"
-      private val delimiterPattern = delimiter.r
       override def write(obj: DependencyInfo): JsValue = {
         JsString(Seq(obj.group, obj.name, obj.config, obj.version, obj.isMaven.toString).mkString(delimiter))
       }
       override def read(json: JsValue): DependencyInfo = {
         val obj = json.convertTo[String]
-        val Array(group, name, config, version, isMaven) = delimiterPattern.pattern.split(obj, 5)
+        val Array(group, name, config, version, isMaven) =
+          StringUtils.splitByWholeSeparatorPreserveAllTokens(obj, delimiter)
         DependencyInfo(group, name, config, version, isMaven.toBoolean)
       }
     }

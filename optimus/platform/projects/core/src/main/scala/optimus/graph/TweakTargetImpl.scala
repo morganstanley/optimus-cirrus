@@ -241,11 +241,7 @@ final case class PredicatedPropertyTweakTarget[E, WhenT <: AnyRef, SetT, R](
   override def whenPredicate: AnyRef = predicate
   override def whenClauseNode(key: NodeKey[_], scenarioStack: ScenarioStack): Node[Boolean] = {
     val node = key.argsCopy(predicate).asInstanceOf[Node[Boolean]]
-    // [XS_NO_WAIT]
-    // whenNode is evaluated synchronously (runAndWait) during XS matching
-    // Can deadlock if we wait for an XS match on an owner that triggered this whenNode to run
-    val newSS = scenarioStack.withFlag(EvaluationState.NO_WAIT_FOR_XS_NODE)
-    node.attach(newSS)
+    node.attach(scenarioStack)
     node
   }
 

@@ -11,6 +11,8 @@
  */
 
 package optimus.graph.tracking.monitoring
+
+import optimus.graph.OGTrace.AsyncSuffix
 import optimus.graph.Settings
 import optimus.graph.tracking.DependencyTrackerAction
 import optimus.graph.tracking.DependencyTrackerQueue
@@ -98,17 +100,28 @@ object QueueMonitor {
 }
 
 // A few classes that exist mainly to decouple the monitoring from the actual actions that are not thread safe to
-// access.
-final case class QueueStats(added: Int, removed: Int) {
-  def `+`(o: QueueStats): QueueStats = QueueStats(added + o.added, removed + o.removed)
-  def `-`(o: QueueStats): QueueStats = QueueStats(added - o.added, removed - o.removed)
-}
+// access. QueueStats represents "cumulative" statistics (+ currentSize). It is turned into a snap form for
+// SamplingProfiler in diff().
+final case class QueueStats(cumulAdded: Int, cumulRemoved: Int, currentSize: Int)
 object QueueStats {
-  val zero: QueueStats = QueueStats(0, 0)
-  def accumulate(accum: QueueStats, o: DependencyTrackerQueue): QueueStats = accum + o.snap
+  final case class Snap private (added: Int, removed: Int, currentSize: Int)
+
+  def diff(prev: Option[QueueStats], newSnap: QueueStats): Snap = {
+    val p = prev.getOrElse(zero)
+    Snap(newSnap.cumulAdded - p.cumulAdded, newSnap.cumulRemoved - p.cumulRemoved, newSnap.currentSize)
+  }
+
+  def gced(prev: QueueStats): Snap = {
+    // If the tracker has been gced, we create a new snap that assumes all previous task were processed and no
+    // new tasks were added.
+    Snap(0, prev.cumulAdded - prev.cumulRemoved, 0)
+  }
+
+  val zero: QueueStats = QueueStats(0, 0, 0)
 }
 
 final case class QueueActionSummary(
+    root: String,
     tracker: String,
     stats: QueueStats,
     workQueue: Seq[ActionSummary],
@@ -119,15 +132,15 @@ final case class QueueActionSummary(
       if (q.isEmpty) s"  $name is empty."
       else {
         s"""
-           | $name(size=${q.size})
+           | $name(size=${q.size}) (applet ${root}}
            |${q.map(a => "    " + a.formatted).mkString("\n")}
            |""".stripMargin
       }
 
     s"""|Queue summary for ${tracker}
         |  cumulative statistics:
-        |    actions added:     ${stats.added}
-        |    actions processed: ${stats.removed}
+        |    actions added:     ${stats.cumulAdded}
+        |    actions processed: ${stats.cumulRemoved}
         |
         |${formatQueue("Work queue", workQueue)}
         |
@@ -138,7 +151,7 @@ final case class QueueActionSummary(
 
 object ActionSummary {
   def apply(a: DependencyTrackerAction[_]): ActionSummary = ActionSummary(
-    a.getClass.getSimpleName + "@" + System.identityHashCode(a).toHexString,
+    a.getClass.getSimpleName + AsyncSuffix + System.identityHashCode(a).toHexString,
     a.cause.cause,
     a.cause.root.cause,
     a.isLowPriority)

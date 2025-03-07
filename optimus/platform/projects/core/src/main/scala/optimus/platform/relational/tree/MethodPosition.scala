@@ -11,12 +11,36 @@
  */
 package optimus.platform.relational.tree
 
-import scala.reflect.macros.whitebox.Context
 import optimus.utils.MacroUtils.relativeSourcePath
+
+import scala.reflect.macros.whitebox.Context
 
 final case class MethodPosition(posInfo: String) {
   def orElse(pos: MethodPosition): MethodPosition = if (posInfo.isEmpty) pos else this
-  def lineNum: Int = posInfo.split(',')(1).split('-')(1).toInt
+  def lineNum: Int = fileNameLineAndColumn._2
+
+  def fileNameLineAndColumn: (String, Int, Int) =
+    try {
+      val details = posInfo.split(',')
+      val file = details(0).split('/').last
+      val line = details(1).split('-')(1).toInt
+      val col = details(3).split('=')(1).toInt
+      (file, line, col)
+    } catch {
+      case _: Exception => (posInfo, 0, 0)
+    }
+
+  // non ascii except for ., _, -
+  def cleanName: String = {
+    val (file, line, col) = fileNameLineAndColumn
+    s"$file-$line-$col"
+  }
+
+  // for IDE console navigation
+  def clickableName: String = {
+    val (file, line, _) = fileNameLineAndColumn
+    s".($file:$line)"
+  }
 }
 
 /**

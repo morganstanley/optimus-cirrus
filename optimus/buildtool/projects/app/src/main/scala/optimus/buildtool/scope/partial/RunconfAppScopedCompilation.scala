@@ -19,7 +19,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.RunconfCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
 
 // Must be in the short-circuit signature in ScopedCompilation as we need to make sure dependencies are resolved
 @entity private[scope] class RunconfAppScopedCompilation(
@@ -29,12 +29,14 @@ import scala.collection.immutable.Seq
 ) extends PartialScopedCompilation {
   import scope._
 
-  @node def messages: Seq[Artifact] = compile(AT.CompiledRunconfMessages, None)(Some(runconfc.messages(id, inputsN)))
-  @node def runConfArtifacts: Seq[Artifact] = compile(AT.CompiledRunconf, None)(runconfc.runConfArtifact(id, inputsN))
-  @node def runConfigurations: Seq[RunConf] = runconfc.runConfigurations(id, inputsN)
+  @node def messages: IndexedSeq[Artifact] =
+    compile(AT.CompiledRunconfMessages, None)(Some(runconfc.messages(id, inputsN)))
+  @node def runConfArtifacts: IndexedSeq[Artifact] =
+    compile(AT.CompiledRunconf, None)(runconfc.runConfArtifact(id, inputsN))
+  @node def runConfigurations: IndexedSeq[RunConf] = runconfc.runConfigurations(id, inputsN)
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] =
-    Seq.empty // Unless we want to find the mainClass, we depend on nothing
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] =
+    IndexedSeq.empty // Unless we want to find the mainClass, we depend on nothing
   @node override protected def containsRelevantSources: Boolean = sources.containsRunconf
 
   private val inputsN = asNode(() => inputs)

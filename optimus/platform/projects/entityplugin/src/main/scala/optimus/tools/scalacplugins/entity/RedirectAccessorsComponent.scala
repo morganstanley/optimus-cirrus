@@ -167,14 +167,14 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
     // removes the original vals
     // For classes: when we find a @stored or @node ValDef, synthesize:
     //   @s <synthetic> private[this] var foo$impl: X = ...
-    //   <accessor> private def foo$impl = {optimus.platform.PluginHelpers.witnessVersion(CC.this); CC.this.foo$impl}
+    //   <accessor> private def foo$impl = { CC.this.foo$impl }
     // and drop the ValDef itself.
     //
     // For traits: when we find the ValDef corresponding to val sym / ValDef pairs (as there currently is no accessor),
     // synthesize:
     //   <synthetic> <accessor> private[this] def foo$backing_=(x$1: X): Unit
     //   @s @backingStore <synthetic> <accessor> private[this] var foo$backing: Int = 1
-    //   <synthetic> private def foo$impl: Int = { PluginHelpers.witnessVersion(TT.this);  this.foo$backing }
+    //   <synthetic> private def foo$impl: Int = { this.foo$backing }
     //   [whatever flags were on valdef] def foo = ...
     private[this] def rewriteWithValBackingFields(tree: ImplDef, body: List[Tree]): List[Tree] = flatMapConserve(body) {
       case vd: ValDef if vd.symbol.hasAttachment[Stored] || vd.symbol.hasAttachment[Node] =>
@@ -287,7 +287,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       val dollarImplName = mkImplName(propName)
 
       // For ...... found in trait, synthesize getter
-      // <synthetic> private def foo$impl: Int = { optimus.platform.PluginHelpers.witnessVersion(TT.this);  this.foo$backing }
+      // <synthetic> private def foo$impl: Int = { this.foo$backing }
       val backingValDef: Tree = {
         // For classes, synthesize:
         //   @s <synthetic> private[this] val foo$impl: X = ...
@@ -471,13 +471,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         .setFlag(flags)
         .setInfo(NullaryMethodType(if (tpe ne null) tpe else symbol.tpe))
       entityCls.info.decls enter getterSym
-      val block = {
-        val expr = gen.mkAttributedRef(symbol)
-        if (entityCls.hasAnnotation(StoredAnnotation) && entityCls.hasAnnotation(EntityAnnotation)) {
-          val stat = q"optimus.platform.PluginHelpers.witnessVersion(${This(entityCls)})"
-          Block(stat :: Nil, expr)
-        } else expr
-      }
+      val block = gen.mkAttributedRef(symbol)
       localTyper.typedPos(valDef.pos) { DefDef(getterSym, block) }.asInstanceOf[DefDef]
     }
 

@@ -13,10 +13,12 @@ package optimus.graph.diagnostics.sampling
 
 import com.sun.management.OperatingSystemMXBean
 import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.BreadcrumbsLocalPublisher
+import optimus.breadcrumbs.BreadcrumbsPublisher
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
+import optimus.breadcrumbs.crumbs.Crumb.CrumbFlag
 import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
-import optimus.breadcrumbs.crumbs.Crumb.SamplingProfilerSource
 import optimus.breadcrumbs.crumbs.Crumb.Source
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties._
@@ -32,10 +34,12 @@ import optimus.platform.util.InfoDump
 import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
 import optimus.platform.util.Version
+import optimus.utils.MacroUtils.SourceLocation
 import optimus.utils.MiscUtils.ThenSome
 import optimus.utils.PropertyUtils
 
 import java.lang.management.ManagementFactory
+import java.nio.file.Paths
 import java.time.Instant
 import java.util
 import java.util.Objects
@@ -50,6 +54,19 @@ import scala.util.control.NonFatal
 trait SamplerProvider {
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]]
   val priority: Int = Int.MaxValue
+}
+
+object SamplingProfilerSource extends Crumb.Source {
+  override val name: String = "SP"
+  override val flags = Set(CrumbFlag.DoNotReplicate)
+  private val localPublisher: Option[BreadcrumbsLocalPublisher] =
+    PropertyUtils.get("optimus.sampling.gzip.path").map { path =>
+      new BreadcrumbsLocalPublisher(Paths.get(path))
+    }
+  override val publisherOverride: Option[BreadcrumbsPublisher] = localPublisher
+
+  def flush(): Unit = localPublisher.foreach(_.flush())
+  override def sentCount: Int = localPublisher.fold(super.sentCount)(_.getPrinted)
 }
 
 trait SampleCrumbConsumer {
@@ -104,8 +121,6 @@ class SamplingProfiler private[diagnostics] (
 
   private val samplerProviders = ServiceLoaderUtils.all[SamplerProvider].sortBy(_.priority)
 
-  val Name = "SamplingProfiler"
-
   val propertyUtils = new PropertyUtils(properties)
 
   private val pauseInactive = propertyUtils.get("optimus.sampling.pause.inactive", false)
@@ -116,9 +131,25 @@ class SamplingProfiler private[diagnostics] (
   // Give the first publication a freebie.
   private val activityMeritingPublication = new AtomicInteger(1)
 
+  private[sampling] def warn(msg: String, t: Throwable, counter: AtomicInteger = GlobalMaxWarnings): Unit = {
+    log.warn(logPrefix + msg, t)
+    if (counter.getAndUpdate(i => if (i > 0) i - 1 else 0) > 0) {
+      Breadcrumbs.warn(
+        sp.ownerId,
+        PropertiesCrumb(
+          _,
+          ProfilerSource,
+          logMsg -> s"SamplingProfiler warning: $msg " ::
+            severity -> "Warn" ::
+            stackTrace -> Exceptions.minimizeTrace(t, 10, 3) :: Version.properties)
+      )
+    }
+  }
+
   def recordActivity(): Unit = activityMeritingPublication.incrementAndGet()
 
-  log.info(s"Starting SamplingProfiler $ownerId period=$periodSec")
+  // warn log level for higher verbosity
+  log.warn(s"${logPrefix}Starting SamplingProfiler ownerId=$ownerId period=$periodSec")
 
   private val sp = this
 
@@ -167,7 +198,7 @@ class SamplingProfiler private[diagnostics] (
             else {
               val msg =
                 s"SamplingProfiler $ownerId has not snapped in ${System.currentTimeMillis() - _currentSnapTime} ms"
-              log.warn(msg)
+              log.warn(logPrefix + msg)
               InfoDump.dump("sampling", msg :: Nil)
               delay * 2
             }
@@ -183,22 +214,21 @@ class SamplingProfiler private[diagnostics] (
   {
     // All metrics:
     val ss = ArrayBuffer.empty[SamplerTrait[_, _]]
-    type Overview = (TaskTracker.Cycle, SchedulerCounts)
+    _snappedMeta = LoadData(cpuLoad = 0.0, graphUtilization = 0.0)
 
-    // This sampler should occur first, so _publishAppInstances and _sharedMetaData are available to later ones.
-    ss += new Sampler[Overview, Overview](
+    // These samplers should occur first, so _publishAppInstances and _snappedMetaData are available to later ones.
+    ss += new Sampler[TaskTracker.Cycle, TaskTracker.Cycle](
       sp,
+      "task_cycle",
       snapper = (_: Boolean) => {
         val cycle = TaskTracker.cycle()
         // Expose outside of this sampler, so we can publish to these roots.
         _publishAppInstances = if (cycle.appInstances.isEmpty) Seq(defaultAppInstance) else cycle.appInstances
-        val counts = schedulerCounters.map(_.getCounts).foldLeft(SchedulerCounts.empty)((l, r) => l + r)
-        _snappedMeta = LoadData(osBean.getProcessCpuLoad, counts.working.toDouble / numThreads)
-        (cycle, counts)
+        _snappedMeta = _snappedMeta.copy(cpuLoad = osBean.getProcessCpuLoad)
+        cycle
       },
-      process = (_: Option[Overview], c: Overview) => c,
-      publish = (o: Overview) => {
-        val (cycle, counts) = o
+      process = LATEST,
+      publish = (cycle: TaskTracker.Cycle) => {
         val relevantApIds =
           if (cycle.appInstances.isEmpty && !initialAppId.isEmpty) Seq(initialAppId)
           else cycle.appInstances.map(_.appId)
@@ -213,14 +243,30 @@ class SamplingProfiler private[diagnostics] (
           appIds -> relevantApIds,
           distLostTasks -> cycle.numLost,
           distTaskDuration -> cycle.avgDuration / NANOSPERMILLI,
-          profWorkThreads -> counts.working,
-          graphUtil -> counts.working.toDouble / numThreads,
-          profWaitThreads -> counts.waiting,
-          profBlockedThreads -> counts.waiting,
-          numCrumbFailures -> crumbConsumer.errors,
-          crumbQueueLength -> Breadcrumbs.queueLength
         )
       }
+    )
+    val util = new Util(this)
+    import util._
+    ss += SnapNonZero(_ => crumbConsumer.errors, numCrumbFailures)
+    ss += SnapNonZero(_ => Breadcrumbs.queueLength, crumbQueueLength)
+
+    // This sampler might get disabled if there are in fact no properly initialized schedulers.
+    ss += new Sampler[SchedulerCounts, SchedulerCounts](
+      sp,
+      "scheduler_counts",
+      snapper = (_: Boolean) => {
+        val counts = schedulerCounters.map(_.getCounts).foldLeft(SchedulerCounts.empty)((l, r) => l + r)
+        _snappedMeta = _snappedMeta.copy(graphUtilization = counts.working.toDouble / numThreads)
+        counts
+      },
+      process = LATEST,
+      publish = (c: SchedulerCounts) =>
+        Elems(
+          graphUtil -> c.working.toDouble / numThreads,
+          profWaitThreads -> c.waiting,
+          profBlockedThreads -> c.waiting,
+          profWorkThreads -> c.working)
     )
 
     if (asyncProfiler)
@@ -232,6 +278,7 @@ class SamplingProfiler private[diagnostics] (
 
     ss += new Sampler[Seq[TopicCountSnap], Seq[TopicCountSnap]](
       sp,
+      "topics",
       snapper = (_: Boolean) => topicAccumulators.values().asScala.map(_.snap).toSeq,
       process = (prevOpt: Option[Seq[TopicCountSnap]], curr: Seq[TopicCountSnap]) =>
         prevOpt.fold(curr)(curr.zip(_).map { case (c, p) =>
@@ -245,6 +292,7 @@ class SamplingProfiler private[diagnostics] (
     // This sampler must come last
     ss += new Sampler(
       sp,
+      "duration",
       (_: Boolean) => System.currentTimeMillis() - _currentSnapTime,
       LATEST[Long],
       PUB(snapDuration))
@@ -271,11 +319,16 @@ class SamplingProfiler private[diagnostics] (
       try {
         runSamplingThread()
       } catch {
-        case t: Throwable =>
-          log.error("SamplingProfiler thread threw exception", t)
-          throw t
+        case NonFatal(t) =>
+          warn("SamplingProfiler thread threw exception.  Shutting down.", t)
+          try {
+            shutdownNow()
+          } catch {
+            case NonFatal(t) =>
+              warn("Exception shutting down samplers", t)
+          }
       }
-      log.info(s"Exiting $this")
+      log.info(s"${logPrefix}Exiting $this")
     }
   }
 
@@ -311,7 +364,7 @@ class SamplingProfiler private[diagnostics] (
         _snapAndPublishImmediately
       }
       if (doSnapNow) {
-        log.info(s"Triggering off-cycle snap and publish.")
+        log.info(s"${logPrefix}Triggering off-cycle snap and publish.")
         snap()
         publish()
         waiter.synchronized {
@@ -389,7 +442,7 @@ class SamplingProfiler private[diagnostics] (
                   pulse -> pulseData :: identificationData
 
               if (isCanonical)
-                log.debug(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
+                log.debug(s"${logPrefix}Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
               crumbConsumer.consume(id, source, toPublish)
             }
             batchesForAllSamplers = rest.filter(_.nonEmpty)
@@ -427,7 +480,7 @@ class SamplingProfiler private[diagnostics] (
   def shutdown(waitMs: Long): Unit = {
     waiter.synchronized {
       if (_stillPulsing && samplingThread.isAlive) {
-        log.info("Shutting down sampling")
+        log.info(s"${logPrefix}Shutting down sampling")
         enabled = false
         _snapAndPublishImmediately = waitMs > 0
         _stillPulsing = false
@@ -455,8 +508,10 @@ trait SchedulerCounter {
 object SamplingProfiler extends Log {
   @volatile private[diagnostics] var configured = false
 
+  val Name = "SamplingProfiler"
+  val logPrefix = s"[$Name-${ChainedID.root}] "
   val stackDataSource: Crumb.Source = SamplingProfilerSource
-  val periodSamplesSource: Crumb.Source = SamplingProfilerSource + ProfilerSource
+  val periodicSamplesSource: Crumb.Source = SamplingProfilerSource + ProfilerSource
 
   // minimum publication interval in the presence of "activity" (e.g. a distributed task completion)
   private val activityIntervalMs = PropertyUtils.get("optimus.sampling.activity.sec", 30) * 1000L
@@ -479,7 +534,7 @@ object SamplingProfiler extends Log {
     enabled && AsyncProfilerSampler.numPrunedStacks > 0 &&
       AsyncProfilerIntegration.ensureLoadedIfEnabled() &&
       (!AsyncProfilerIntegration.isProfiling || {
-        log.warn("async-profiler already running")
+        log.warn(s"${logPrefix}async-profiler already running")
         false
       })
 
@@ -527,10 +582,13 @@ object SamplingProfiler extends Log {
               val msg = s"Permanently disabling SP: Not configured within $configTimeoutSec seconds"
               SamplingProfiler.shutdownNow()
               configured = true
-              log.warn(msg)
+              log.warn(logPrefix + msg)
               Breadcrumbs.warn(
                 ChainedID.root,
-                PropertiesCrumb(_, ProfilerSource, Properties.logMsg -> msg, Properties.severity -> "WARN")
+                PropertiesCrumb(
+                  _,
+                  ProfilerSource,
+                  Properties.logMsg -> msg :: Properties.severity -> "WARN" :: Version.properties)
               )
             }
           }
@@ -553,7 +611,11 @@ object SamplingProfiler extends Log {
     enabled = false
   }
 
-  def activity(): Unit = instance().foreach(_.snapAndPublish(activityIntervalMs))
+  // Ensure snap and publication if imminent shutdown is possible.
+  def recordNowHint(): Unit = instance().foreach(_.snapAndPublish(activityIntervalMs))
+
+  // Wake up publication if inactivity pause is in effect.
+  def recordActivity(): Unit = instance().foreach(_.recordActivity())
 
   // Report the latest snapped value
   def LATEST[A]: (Option[A], A) => A = (_: Option[A], v: A) => v
@@ -561,18 +623,24 @@ object SamplingProfiler extends Log {
   // Publish a single metric as a crumb property
   def PUB[V](key: Key[V]): (V, ChainedID) => Elems = (v: V, _) => Elems(key -> v)
 
+  private val GlobalMaxWarnings = new AtomicInteger(100)
+
+  def warn(msg: String, t: Throwable, counter: AtomicInteger = GlobalMaxWarnings): Unit =
+    instance().foreach(_.warn(msg, t, counter))
+
   // for testing
   def NOPUB: Any => Elems = (v: Any) => Elems.Nil
 
   final class Util(sp: SamplingProfiler) {
     object Snap {
       // Create a simple scalar sampler that publishes to a single key.
-      def apply[N](snapper: Boolean => N, key: Key[N]): Sampler[N, N] = new Sampler(sp, snapper, LATEST[N], PUB(key))
+      def apply[N](snapper: Boolean => N, key: Key[N])(implicit loc: SourceLocation): Sampler[N, N] =
+        new Sampler(sp, loc.toString, snapper, LATEST[N], PUB(key))
 
       // Create an almost-simple-sampler with just one callback that produces Elems ready
       // for publication.
-      def apply(snapper: Boolean => Elems) =
-        new Sampler[Elems, Elems](sp, snapper, LATEST[Elems], (elems, _) => elems)
+      def apply(snapper: Boolean => Elems)(implicit loc: SourceLocation) =
+        new Sampler[Elems, Elems](sp, loc.toString, snapper, LATEST[Elems], (elems, _) => elems)
     }
 
     trait Minus[N] {
@@ -613,17 +681,21 @@ object SamplingProfiler extends Log {
     }
 
     // Simple snap, publishing difference from previous numeric value to a single property
-    def Diff[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
-      new Sampler(sp, snapper, MINUS(num), PUB(key))
+    def Diff[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N], loc: SourceLocation): Sampler[N, N] = {
+      new Sampler(sp, loc.toString, snapper, MINUS(num), PUB(key))
     }
 
     // Like Diff, but never publishes zero diffs
-    def DiffNonZero[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
-      new Sampler(sp, snapper, MINUS(num), (v, _) => Elems(key.maybe(num.nonZero(v))))
+    def DiffNonZero[N](snapper: Boolean => N, key: Key[N])(implicit
+        num: Minus[N],
+        loc: SourceLocation): Sampler[N, N] = {
+      new Sampler(sp, loc.toString, snapper, MINUS(num), (v, _) => Elems(key.maybe(num.nonZero(v))))
     }
 
-    def SnapNonZero[N](snapper: Boolean => N, key: Key[N])(implicit num: Minus[N]): Sampler[N, N] = {
-      new Sampler(sp, snapper, LATEST[N], (v, _) => Elems(key.maybe(num.nonZero(v))))
+    def SnapNonZero[N](snapper: Boolean => N, key: Key[N])(implicit
+        num: Minus[N],
+        loc: SourceLocation): Sampler[N, N] = {
+      new Sampler(sp, loc.toString, snapper, LATEST[N], (v, _) => Elems(key.maybe(num.nonZero(v))))
     }
 
   }
@@ -641,19 +713,27 @@ object SamplingProfiler extends Log {
 
   private[sampling] final class Sampler[T, V](
       owner: SamplingProfiler,
+      name: String,
       snapper: Boolean => T,
       process: (Option[T], T) => V,
-      publish: (V, ChainedID) => Elems)
-      extends SamplerTrait[T, V] {
+      publish: (V, ChainedID) => Elems,
+  ) extends SamplerTrait[T, V] {
+
+    override def toString: String = s"${super.toString}($name)"
 
     override val sp: SamplingProfiler = owner
     override protected def snap(firstTime: Boolean): T = snapper(firstTime)
     override protected def transform(prev: Option[T], curr: T): V = process(prev, curr)
     override protected def elemss(result: V, id: ChainedID): Map[Source, List[Elems]] =
-      Map(periodSamplesSource -> (publish(result, id) :: Nil))
+      Map(periodicSamplesSource -> (publish(result, id) :: Nil))
 
-    def this(owner: SamplingProfiler, snapper: Boolean => T, process: (Option[T], T) => V, publish: V => Elems) =
-      this(owner, snapper, process, (v: V, _: ChainedID) => publish(v))
+    def this(
+        owner: SamplingProfiler,
+        name: String,
+        snapper: Boolean => T,
+        process: (Option[T], T) => V,
+        publish: V => Elems) =
+      this(owner, name, snapper, process, (v: V, _: ChainedID) => publish(v))
 
     override def shutdown(): Unit = {}
   }
@@ -676,34 +756,33 @@ object SamplingProfiler extends Log {
 
     private var enabled = true
 
-    final def snap(): Unit = {
+    private def disable(where: String, t: Throwable): Unit = if (enabled) {
+      sp.warn(s"Disabling sampler $this due to error $where; other samplers should be unaffected.", t)
+      enabled = false
+      try {
+        shutdown()
+      } catch {
+        case NonFatal(t) =>
+          sp.warn(s"Error shutting down sampler $this, but it remains disabled.", t)
+      }
+    }
+
+    private def safe[T](where: String, default: => T)(f: => T): T = if (enabled) {
+      try (f)
+      catch {
+        case t: Throwable => // Want to catch errors like NoSuchMethod, so use Throwable here
+          disable(where, t)
+          default
+      }
+    } else default
+
+    final def snap(): Unit = safe("snap", ()) {
       // Only snap once per epoch
-      if (enabled && (lastSnapTime < _currentSnapTime || currSample.isEmpty)) {
-        try {
-          val t = snap(currSample.isEmpty)
-          prevSample = currSample
-          currSample = Some(t)
-          lastSnapTime = _currentSnapTime
-        } catch {
-          case NonFatal(t) =>
-            log.warn(s"Disabling sampler $this", t)
-            Breadcrumbs.warn(
-              sp.ownerId,
-              PropertiesCrumb(
-                _,
-                ProfilerSource,
-                logMsg -> s"Disabling sampler $this $t",
-                severity -> "Warn",
-                stackTrace -> Exceptions.minimizeTrace(t, 10, 3))
-            )
-            enabled = false
-            try {
-              shutdown()
-            } catch {
-              case NonFatal(t) =>
-                log.warn(s"Error shutting down sampler $this", t)
-            }
-        }
+      if (lastSnapTime < _currentSnapTime || currSample.isEmpty) {
+        val t = snap(currSample.isEmpty)
+        prevSample = currSample
+        currSample = Some(t)
+        lastSnapTime = _currentSnapTime
       }
     }
 
@@ -714,22 +793,24 @@ object SamplingProfiler extends Log {
           ret
         case _ =>
           snap()
-          currSample.map { t =>
-            val v = transform(prevSample, t)
-            lastProcessTime = _currentSnapTime
-            currValue = Some(v)
-            v
+          safe[Option[V]]("processing", None) {
+            currSample.map { t =>
+              val v = transform(prevSample, t)
+              lastProcessTime = _currentSnapTime
+              currValue = Some(v)
+              v
+            }
           }
       }
     }
 
     final def elemss(id: ChainedID): Map[Source, List[Elems]] =
-      if (enabled)
+      safe[Map[Source, List[Elems]]]("elem generating", Map.empty) {
         processedValue() match {
           case Some(v) => elemss(v, id)
           case None    => Map.empty
         }
-      else Map.empty
+      }
   }
 
   final case class SchedulerCounts(working: Int, waiting: Int, blocked: Int) {

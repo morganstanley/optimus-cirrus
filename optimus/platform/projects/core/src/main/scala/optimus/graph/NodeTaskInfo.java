@@ -11,14 +11,14 @@
  */
 package optimus.graph;
 
+import static optimus.graph.OGTrace.AsyncSuffix;
+import static optimus.graph.OGTrace.CachedSuffix;
+import static optimus.graph.OGTrace.XsSuffix;
 import static optimus.graph.Settings.defaultCacheByNameTweaks;
-
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.Arrays;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import optimus.breadcrumbs.Breadcrumbs;
 import optimus.breadcrumbs.ChainedID$;
 import optimus.breadcrumbs.crumbs.Crumb;
@@ -116,7 +116,7 @@ public class NodeTaskInfo {
   public static final long PROFILER_PROXY = 1L << 31; // Proxy
   // Mostly helper nodes, all have custom executionInfo
   public static final long PROFILER_INTERNAL = 1L << 32;
-  private static final long PROFILER_IGNORE = 1L << 33; // unstable non-RT nodes
+  public static final long PROFILER_IGNORE = 1L << 33; // unstable non-RT nodes
 
   // While profiling this flag will set if at least once at least one child was adapted (i.e. real
   // async was used)
@@ -127,7 +127,7 @@ public class NodeTaskInfo {
 
   private static final long EXCLUDE_FROM_RTV_NODE_RERUNNER = 1L << 36;
 
-  private static final long DONT_REMOVE_REDUNDANT = 1L << 37;
+  private static final long DISABLE_REMOVE_REDUNDANT = 1L << 37;
 
   @SuppressWarnings("FieldMayBeFinal") // Set atomically via Unsafe
   private volatile long _flags;
@@ -426,11 +426,11 @@ public class NodeTaskInfo {
   }
 
   public final boolean canRemoveRedundant() {
-    return (_flags & DONT_REMOVE_REDUNDANT) == 0;
+    return (_flags & DISABLE_REMOVE_REDUNDANT) == 0;
   }
 
-  public final void dontRemoveRedundant() {
-    updateFlags(DONT_REMOVE_REDUNDANT, true);
+  public final void disableRemoveRedundant() {
+    updateFlags(DISABLE_REMOVE_REDUNDANT, true);
   }
 
   public int syncID;
@@ -439,6 +439,7 @@ public class NodeTaskInfo {
   private NodeCCache _ccache;
   public int localCacheSlot;
   public int reuseCycle;
+  public long reuseStats;
 
   public final NCPolicy cachePolicy() {
     return _cachePolicy;
@@ -721,7 +722,11 @@ public class NodeTaskInfo {
   private void setConfig(PropertyConfig config) {
     NCPolicy policy = config.cachePolicy();
     if (policy != null) {
-      setPolicyExternal(policy);
+      var resolvedPolicy =
+          config.scopePath().isDefined() && policy.pathIndependent() == policy
+              ? NCPolicy.composite(null, policy, config.scopePath().get())
+              : policy;
+      setPolicyExternal(resolvedPolicy);
     }
 
     NodeCCache cache = extractCacheFromConfig(config);
@@ -880,7 +885,8 @@ public class NodeTaskInfo {
       // forever.
       return requestingSS
           .initialRuntimeScenarioStack()
-          .withCancellationScopeRaw(requestingSS.cancelScope());
+          .withCancellationScopeAndCache(
+              requestingSS.cancelScope(), requestingSS.cacheSelector().withoutScope());
     }
     return requestingSS;
   }
@@ -932,23 +938,35 @@ public class NodeTaskInfo {
       return false;
     }
     if ((isScenarioIndependent() && !policy.appliesToScenarioIndependent())
+        || (!isScenarioIndependent() && policy == NCPolicy.SI)
         || (isRecursive() && !policy.appliesToRecursive())) {
-      // To verbose otherwise
+      // Too verbose otherwise
       if (Settings.schedulerAsserts) OGScheduler.log.warn("Incompatible NCPolicy, ignoring!");
       return false;
     }
 
     // set new flag, drop the old one
-    updateFlags(policy.associatedFlags, _cachePolicy.clearFlags);
-    _cachePolicy = policy; // set policy must be AFTER update flags
+    var containsXS = policy.contains(NCPolicy.XS);
+    var setFlags = (policy.noCache ? DONT_CACHE : 0) | (containsXS ? FAVOR_REUSE : 0);
+    var clearFlags = (policy.noCache ? 0 : DONT_CACHE) | (containsXS ? 0 : FAVOR_REUSE);
+    updateFlags(setFlags, clearFlags);
+    // set policy must be AFTER update flags
+    // for composite policies if path independent is not set, retain the old value
+    _cachePolicy = policy.withPathIndependentIfNotSet(_cachePolicy.pathIndependent());
     return true;
   }
 
   private void checkAndSetPolicy(String entryPoint, NCPolicy policy) {
     requireNonAbstract(true);
+    // Tweaks are already XSFT by design. Minimum SS is THE given block. Wrapping into proxy is a
+    // waste
+    if (NAME_MODIFIER_TWEAK.equals(this.modifier()) && policy == NCPolicy.XSFT)
+      policy = NCPolicy.Basic;
+
     if (!warnIfExternallyConfigured(EXTERNALLY_CONFIGURED_POLICY, entryPoint)) {
       setPolicy(policy);
     }
+
     if (callSiteHolder != null) callSiteHolder.refreshTarget();
   }
 
@@ -1097,7 +1115,7 @@ public class NodeTaskInfo {
   }
 
   public final boolean getFavorReuseIsXS() {
-    return _cachePolicy == NCPolicy.XS;
+    return _cachePolicy.contains(NCPolicy.XS);
   }
 
   /** The following set of flags support tweaking and optimization around tweaking */
@@ -1194,9 +1212,8 @@ public class NodeTaskInfo {
   final void updateDependsOnMask(NodeTask nodeTask) {
     if (getCacheable() && !nodeTask.isTweakPropertyDependencySubsetOf(dependsOnTweakMask)) {
       synchronized (this) {
-        // We specifically allocate a new instance to allow easy detection of
+        // We specifically allocate a new instance to allow easy detection of change
         TPDMask newMask = new TPDMask();
-        // change
         newMask.merge(dependsOnTweakMask);
         nodeTask.mergeTweakPropertyDependenciesInto(newMask);
         dependsOnTweakMask = newMask;
@@ -1459,13 +1476,15 @@ public class NodeTaskInfo {
       }
     }
 
+    if ((flags & PROFILER_IGNORE) != 0 && !forTest) sb.append("w");
+
     if ((flags & DONT_CACHE) == 0) {
       if (!forTest) {
-        sb.append("$");
+        sb.append(CachedSuffix);
       }
       if ((flags & FAVOR_REUSE) != 0) {
         if (!forTest) {
-          sb.append("x");
+          sb.append(XsSuffix);
         } else {
           sb.append(" | NodeTaskInfo.FAVOR_REUSE");
         }
@@ -1506,7 +1525,7 @@ public class NodeTaskInfo {
     if ((flags & EXTERNALLY_CONFIGURED_CUSTOM_CACHE) != 0
         || (flags & EXTERNALLY_CONFIGURED_POLICY) != 0) {
       if (!forTest) {
-        sb.append("@");
+        sb.append(AsyncSuffix);
       } else {
         sb.append(" | NodeTaskInfo.EXTERNALLY_CONFIGURED_"); // deliberate _
       }
@@ -1728,12 +1747,14 @@ public class NodeTaskInfo {
   static final NodeTaskInfo EndOfChain = internal("[endOfChain]");
   public static final NodeTaskInfo Delay =
       internal("[delay]").setReportingPluginType(PluginType.apply("Delay"));
+  public static final NodeTaskInfo Scheduled = internal("[scheduled]");
   public static final NodeTaskInfo DelayOnChildCompleted = internal("[delayOnChildCompleted]");
   public static final NodeTaskInfo Start = internalCached("[start]", AT_MOST_ONE_WAITER);
   public static final NodeTaskInfo UITrackDebug =
       internalCached("[uiTrackDebug]", AT_MOST_ONE_WAITER);
   public static final NodeTaskInfo When = internal("[whenClause]");
   public static final NodeTaskInfo Given = internal("[given]", AT_MOST_ONE_WAITER);
+  public static final NodeTaskInfo RecursiveTranslate = internal("[recursiveTranslate]");
   public static final SequenceNodeTaskInfo Sequence = sequence("[sequence]");
   public static final SequenceNodeTaskInfo Map = sequence("[map]");
   public static final SequenceNodeTaskInfo Recover = sequence("[recover]");
@@ -1780,8 +1801,6 @@ public class NodeTaskInfo {
   public static final NodeTaskInfo ProfilerResult = internal("[profilerResult]");
   public static final NodeTaskInfo ThenFinally = internal("[thenFinally]");
   public static final NodeTaskInfo RecoverAndGet = internal("[recoverAndGet]");
-  public static final NodeTaskInfo ToOption = internal("[toOption]");
-  public static final NodeTaskInfo ToTry = internal("[toTry]");
   public static final NodeTaskInfo Promise = internal("[promise]");
   public static final NodeTaskInfo Future = internal("[future]");
   public static final NodeTaskInfo AsyncUsing = internal("[asyncUsing]");

@@ -465,9 +465,13 @@ public class OGEventsHotspotsObserver extends OGEventsGlobalGraphObserver {
 
   @Override
   public void reuseUpdate(NodeTask task, int rcount) {
-    OGLocalTables lCtx = OGLocalTables.getOrAcquire();
-    lCtx.eventsTrace.reuseCycle(task.getProfileId(), rcount);
-    lCtx.release();
+    NodeTaskInfo info = task.executionInfo();
+    if (rcount > info.reuseCycle) {
+      info.reuseCycle = rcount;
+      OGLocalTables lCtx = OGLocalTables.getOrAcquire();
+      lCtx.eventsTrace.reuseCycle(task.getProfileId(), rcount);
+      lCtx.release();
+    }
   }
 
   /**************************************************************************************************************

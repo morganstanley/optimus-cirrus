@@ -12,7 +12,8 @@
 package optimus.graph;
 
 import static optimus.CoreUtils.merge;
-import static optimus.graph.loom.LoomConfig.NEW_NODE_SUFFIX;
+import static optimus.graph.loom.NameMangler.mangleName;
+import static optimus.graph.loom.NameMangler.mkNewNodeName;
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -86,7 +87,8 @@ public class HNCMoniker implements Externalizable {
     try {
       var lookup = MethodHandles.privateLookupIn(clazz, MethodHandles.lookup());
       var newNodeType = MethodType.methodType(Node.class, methodType.parameterArray());
-      var method = lookup.findSpecial(clazz, methodName + NEW_NODE_SUFFIX, newNodeType, clazz);
+      var newNodeName = mkNewNodeName(mangleName(clazz), methodName);
+      var method = lookup.findSpecial(clazz, newNodeName, newNodeType, clazz);
       node = (CompletableNode<Object>) method.invokeWithArguments(merge(entity, args));
     } catch (Throwable e) {
       throw new RuntimeException(e);

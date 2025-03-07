@@ -73,16 +73,14 @@ public class InternalCallbackRegistry implements CallbackRegistry {
 
   private static class CallbackContainer {
     private final Callback callback;
+    private final Object data;
     private ScheduledFuture<?> timeoutFuture;
     private boolean completed = false;
 
-    CallbackContainer(Callback callback, ScheduledFuture<?> timeoutFuture) {
+    CallbackContainer(Callback callback, Object data, ScheduledFuture<?> timeoutFuture) {
       this.callback = callback;
+      this.data = data;
       this.timeoutFuture = timeoutFuture;
-    }
-
-    CallbackContainer(Callback callback) {
-      this(callback, null);
     }
   }
 
@@ -185,7 +183,8 @@ public class InternalCallbackRegistry implements CallbackRegistry {
   }
 
   @Override
-  public void registerCallback(@Nullable ServerConnection server, Object key, Callback callback) {
+  public void registerCallback(
+      @Nullable ServerConnection server, Object key, Callback callback, Object data) {
     // node may be null if e.g. implementing operation-level callbacks
     Lock lock = (server != null) ? stripedLock.get(server) : null;
     MapKey mapKey = new MapKey(server, key);
@@ -198,7 +197,8 @@ public class InternalCallbackRegistry implements CallbackRegistry {
         connectionLost = true;
         return;
       }
-      CallbackContainer existing = callbacks.putIfAbsent(mapKey, new CallbackContainer(callback));
+      CallbackContainer existing =
+          callbacks.putIfAbsent(mapKey, new CallbackContainer(callback, data, null));
       if (existing != null) {
         throw new IllegalArgumentException("Callback already registered under the specified key");
       }
@@ -216,7 +216,11 @@ public class InternalCallbackRegistry implements CallbackRegistry {
 
   @Override
   public void registerCallbackWithTimeout(
-      @Nullable ServerConnection server, Object key, Duration timeout, Callback callback) {
+      @Nullable ServerConnection server,
+      Object key,
+      Duration timeout,
+      Callback callback,
+      Object data) {
     // node may be null if e.g. implementing operation-level callbacks
     Lock lock = (server != null) ? stripedLock.get(server) : null;
     MapKey mapKey = new MapKey(server, key);
@@ -235,7 +239,7 @@ public class InternalCallbackRegistry implements CallbackRegistry {
               timeout.toMillis(),
               TimeUnit.MILLISECONDS);
       CallbackContainer existing =
-          callbacks.putIfAbsent(mapKey, new CallbackContainer(callback, future));
+          callbacks.putIfAbsent(mapKey, new CallbackContainer(callback, data, future));
       if (existing != null) {
         future.cancel(true);
         throw new IllegalArgumentException("Callback already registered under the specified key");
@@ -271,6 +275,13 @@ public class InternalCallbackRegistry implements CallbackRegistry {
         }
       }
     }
+  }
+
+  @Override
+  public Object getData(@Nullable ServerConnection server, Object key) {
+    MapKey mapKey = new MapKey(server, key);
+    CallbackContainer callbackContainer = callbacks.get(mapKey);
+    return callbackContainer != null ? callbackContainer.data : null;
   }
 
   @Override

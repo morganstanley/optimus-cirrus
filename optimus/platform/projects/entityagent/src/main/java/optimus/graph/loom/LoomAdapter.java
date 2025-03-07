@@ -14,28 +14,22 @@ package optimus.graph.loom;
 import static optimus.CoreUtils.stripPrefix;
 import static optimus.CoreUtils.stripSuffix;
 import static optimus.debug.CommonAdapter.dupNamed;
-import static optimus.debug.CommonAdapter.isInterface;
 import static optimus.debug.CommonAdapter.makePrivate;
 import static optimus.debug.CommonAdapter.sameArguments;
-import static optimus.graph.loom.LPropertyDescriptor.COLUMN_NA;
-import static optimus.graph.loom.LPropertyDescriptor.register;
 import static optimus.graph.loom.LoomConfig.AsyncAnnotation;
+import static optimus.graph.loom.LoomConfig.COLUMN_NA;
 import static optimus.graph.loom.LoomConfig.CompilerAnnotation;
 import static optimus.graph.loom.LoomConfig.DESERIALIZE;
 import static optimus.graph.loom.LoomConfig.DESERIALIZE_BSM_MT;
 import static optimus.graph.loom.LoomConfig.DESERIALIZE_MT;
 import static optimus.graph.loom.LoomConfig.ExposeArgTypesParam;
-import static optimus.graph.loom.LoomConfig.IMPL_SUFFIX;
-import static optimus.graph.loom.LoomConfig.LOOM_SUFFIX;
 import static optimus.graph.loom.LoomConfig.LoomAnnotation;
 import static optimus.graph.loom.LoomConfig.LoomImmutablesParam;
 import static optimus.graph.loom.LoomConfig.LoomLambdasParam;
 import static optimus.graph.loom.LoomConfig.LoomLcnParam;
 import static optimus.graph.loom.LoomConfig.LoomNodesParam;
-import static optimus.graph.loom.LoomConfig.NEW_NODE_SUFFIX;
 import static optimus.graph.loom.LoomConfig.NF_TRIVIAL;
 import static optimus.graph.loom.LoomConfig.NodeAnnotation;
-import static optimus.graph.loom.LoomConfig.QUEUED_SUFFIX;
 import static optimus.graph.loom.LoomConfig.SCALA_ANON_PREFIX;
 import static optimus.graph.loom.LoomConfig.ScenarioIndependentAnnotation;
 import static optimus.graph.loom.LoomConfig.bsmScalaFunc;
@@ -44,12 +38,20 @@ import static optimus.graph.loom.LoomConfig.enableCompilerDebug;
 import static optimus.graph.loom.LoomConfig.setCompilerLevelZero;
 import static optimus.graph.loom.LoomConfig.setAssumeGlobalMutation;
 import static optimus.graph.loom.LoomConfig.setTurnOffNodeReorder;
+import static optimus.graph.loom.NameMangler.isImpl;
+import static optimus.graph.loom.NameMangler.isNewNode;
+import static optimus.graph.loom.NameMangler.isQueued;
+import static optimus.graph.loom.NameMangler.mangleName;
+import static optimus.graph.loom.NameMangler.mkLoomName;
+import static optimus.graph.loom.NameMangler.stripImplSuffix;
+import static optimus.graph.loom.NameMangler.stripNewNodeSuffix;
+import static optimus.graph.loom.NameMangler.stripQueuedSuffix;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import optimus.graph.loom.compiler.LCompiler;
-import optimus.graph.loom.compiler.LError;
+import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.Opcodes;
@@ -79,6 +81,11 @@ public class LoomAdapter implements Opcodes {
   private final HashMap<String, HashSet<String>> superTypes = new HashMap<>();
   private final HashMap<String, ArrayList<String>> superTypesPerType = new HashMap<>();
 
+  // keeps track of all the compiler settings found in method
+  // (even not asyncMethod ones as we may contained node lifted lambdas!)
+  // so that we can more easily propagate them
+  private final HashMap<String, CompilerArgs> compilerArgsPerMethod = new HashMap<>();
+
   public boolean needsToComputeFrames(String name, String descriptor) {
     return recomputeFrames.contains(new LNodeCall("", name, descriptor));
   }
@@ -94,7 +101,7 @@ public class LoomAdapter implements Opcodes {
     for (var st : superTypes2) {
       if (visited.contains(st)) return st;
     }
-    LError.fatal("Cannot find a common super type " + type1 + " & " + type2);
+    LMessage.fatal("Cannot find a common super type " + type1 + " & " + type2);
     return null;
   }
 
@@ -159,14 +166,13 @@ public class LoomAdapter implements Opcodes {
   public final HashSet<String> immutableTypes = new HashSet<>() {};
 
   public final ClassNode cls;
-  private final String privatePrefix;
+  public final String mangledClsName;
 
   private CompilerArgs classCompilerArgs = CompilerArgs.Default;
 
   public LoomAdapter(ClassNode cls) {
     this.cls = cls;
-    var suffix = isInterface(cls.access) ? "$$" : "$";
-    this.privatePrefix = cls.name.replace('/', '$') + suffix;
+    this.mangledClsName = mangleName(cls.name);
   }
 
   public void transform() {
@@ -197,7 +203,7 @@ public class LoomAdapter implements Opcodes {
             else if (name.equals(LoomLcnParam)) lcns = asInts(value);
             else if (name.equals(LoomImmutablesParam)) immutableTypes.addAll(asStrings(value));
           }
-          LError.require(lambdas.size() == lcns.size(), "Same size for lambdas and lcn expected");
+          LMessage.require(lambdas.size() == lcns.size(), "Same size for lambdas and lcn expected");
           for (var i = 0; i < lambdas.size(); i++) {
             lambdasWithCN.put(lambdas.get(i), lcns.get(i));
           }
@@ -229,7 +235,7 @@ public class LoomAdapter implements Opcodes {
     // Extract information about fields
     for (var field : cls.fields) {
       var name = field.name;
-      if (name.endsWith(IMPL_SUFFIX)) implFieldMap.put(stripSuffix(name, IMPL_SUFFIX), field.desc);
+      if (isImpl(name)) implFieldMap.put(stripImplSuffix(name), field.desc);
     }
   }
 
@@ -237,8 +243,7 @@ public class LoomAdapter implements Opcodes {
     // Extract information about methods
     for (var method : cls.methods) {
       var name = method.name;
-      if (name.endsWith(IMPL_SUFFIX))
-        implMethodMap.put(stripSuffix(name, IMPL_SUFFIX), method.desc);
+      if (isImpl(name)) implMethodMap.put(stripImplSuffix(name), method.desc);
     }
   }
 
@@ -249,11 +254,17 @@ public class LoomAdapter implements Opcodes {
         enrichMethod(method, asyncMethod);
         asyncMethods.add(asyncMethod);
       } else if (lambdasWithCN.containsKey(method.name)) {
-        var lambda = new TransformableMethod(method, classCompilerArgs);
+        var compilerArgs = findLambdasCompilerArgs(method);
+        var lambda = new TransformableMethod(method, compilerArgs);
         enrichMethod(method, lambda);
         lambdaMethods.add(lambda);
       } else enrichMethod(method, null);
     }
+  }
+
+  private CompilerArgs findLambdasCompilerArgs(MethodNode method) {
+    var enclosedMethod = stripPrefix(method.name, SCALA_ANON_PREFIX).replaceAll("\\$\\d+$", "");
+    return compilerArgsPerMethod.getOrDefault(enclosedMethod, classCompilerArgs);
   }
 
   /** tmethod might be null if we don't care to set other values */
@@ -266,7 +277,6 @@ public class LoomAdapter implements Opcodes {
         lineNumber = ((LineNumberNode) instr).line;
         if (tmethod != null && tmethod.lineNumber == 0) {
           tmethod.lineNumber = lineNumber;
-          if (tmethod.clsID > 0) LPropertyDescriptor.get(tmethod.clsID).lineNumber = lineNumber;
         }
       } else if (instr instanceof MethodInsnNode) {
         trivial = false;
@@ -296,8 +306,7 @@ public class LoomAdapter implements Opcodes {
       else if (instr.getOpcode() == PUTFIELD || instr.getOpcode() == PUTSTATIC) {
         trivial = false;
         if (tmethod != null && !tmethod.asyncOnly) {
-          var methodName = cls.name + "." + method.name;
-          System.err.println("LWARNING: Method " + methodName + " is unsafe to transform!");
+          LMessage.warning("Unsafe to transform ", tmethod, cls);
           tmethod.unsafeToReorder = true;
         }
       }
@@ -313,11 +322,11 @@ public class LoomAdapter implements Opcodes {
     var methodCount = 0;
     for (var method : asyncMethods) {
       method.id = methodCount++;
-      LCompiler.transform(method, this);
+      LCompiler.transform(method, this, true);
     }
     for (var method : lambdaMethods) {
       method.id = methodCount++;
-      LCompiler.transform(method, this);
+      LCompiler.transform(method, this, false);
     }
   }
 
@@ -394,19 +403,21 @@ public class LoomAdapter implements Opcodes {
       var indy = patch.indy;
       var methodTarget = patch.getTarget();
       var en = nameTranslate.get(stripSuffix(methodTarget.getName(), "$adapted"));
-      var cleanName = enrichedName(methodTarget.getName(), en); // [INNER_NAME]
-      var col = en == null ? COLUMN_NA : en.columnNumber;
-      var clsID = register(cls, cleanName, patch.lineNumber, col, patch.localID);
+      var cleanMethodName = enrichedName(methodTarget.getName(), en); // [INNER_NAME]
       var bsmDesc = DESERIALIZE_BSM_MT.toMethodDescriptorString();
       var handle = dupNamed(indy.bsm, "handleFactory");
       // this needs to match NodeMetaFactory.handleFactory!
       var factoryType = Type.getMethodType(indy.desc);
-      var args = new Object[5];
+      var args = new Object[9];
       args[0] = indy.bsmArgs[0];
       args[1] = methodTarget;
       args[2] = factoryType;
       args[3] = trivialMethods.contains(methodTarget.getName()) ? NF_TRIVIAL : 0;
-      args[4] = clsID;
+      args[4] = cleanMethodName;
+      args[5] = cls.sourceFile;
+      args[6] = patch.lineNumber;
+      args[7] = en == null ? COLUMN_NA : en.columnNumber;
+      args[8] = patch.localID;
 
       mv.visitLabel(labels[patch.localID]);
       mv.visitFrame(Opcodes.F_SAME, 0, null, 0, null);
@@ -439,7 +450,7 @@ public class LoomAdapter implements Opcodes {
       if (nm.implFieldDesc != null) {
         cls.methods.remove(nm.method);
       } else {
-        nm.method.name = nm.method.name + LOOM_SUFFIX;
+        nm.method.name = mkLoomName(mangledClsName, nm.method.name);
         // we can just drop the annotations
         nm.method.visibleAnnotations = null;
         nm.method.invisibleAnnotations = null;
@@ -450,8 +461,7 @@ public class LoomAdapter implements Opcodes {
   }
 
   /** Find matching NodeMethod using clean names. */
-  private NodeMethod findMethod(MethodNode mn, String suffix) {
-    var cleanName = stripSuffix(stripPrefix(mn.name, privatePrefix), suffix);
+  private NodeMethod findMethod(MethodNode mn, String cleanName) {
     for (var m : asyncMethods) {
       if (m.cleanName.equals(cleanName) && sameArguments(mn.desc, m.method.desc)) return m;
     }
@@ -462,14 +472,16 @@ public class LoomAdapter implements Opcodes {
     if ((method.access & ACC_BRIDGE) != 0) return false;
     if (asyncMethods.isEmpty()) return false;
 
-    if (method.name.endsWith(QUEUED_SUFFIX)) {
-      var nodeMethod = findMethod(method, QUEUED_SUFFIX);
+    if (isQueued(method.name)) {
+      // no need to unmangle the name, as we know that $queued is not mangled
+      var nodeMethod = findMethod(method, stripQueuedSuffix(method.name));
       if (nodeMethod != null) {
         nodeMethod.queuedMethod = method;
         return true;
       }
-    } else if (method.name.endsWith(NEW_NODE_SUFFIX)) {
-      var nodeMethod = findMethod(method, NEW_NODE_SUFFIX);
+    } else if (isNewNode(method.name)) {
+      // no need to unmangle the name, as we know that $newNode is not mangled
+      var nodeMethod = findMethod(method, stripNewNodeSuffix(method.name));
       if (nodeMethod != null) {
         nodeMethod.newNodeMethod = method;
         return true;
@@ -505,14 +517,14 @@ public class LoomAdapter implements Opcodes {
         compilerArgs = CompilerArgs.parse(ann, compilerArgs);
       }
     }
+    if (compilerArgs != classCompilerArgs) compilerArgsPerMethod.put(method.name, compilerArgs);
     if (asyncAnnotation == null) return null;
 
-    var asyncMethod = new NodeMethod(cls, privatePrefix, method, compilerArgs);
+    var asyncMethod = new NodeMethod(cls, mangledClsName, method, compilerArgs);
     asyncMethod.isScenarioIndependent = scenarioIndependent;
     asyncMethod.implFieldDesc = implFieldMap.get(method.name);
     asyncMethod.implMethodDesc = implMethodMap.get(method.name);
     asyncMethod.asyncOnly = asyncOnly;
-    asyncMethod.clsID = register(cls, method.name, asyncMethod.lineNumber, COLUMN_NA, -1);
     parseAsyncAnnotation(asyncMethod, asyncAnnotation);
     return asyncMethod;
   }

@@ -17,7 +17,6 @@ import java.util.concurrent.locks.ReadWriteLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import com.google.protobuf.ByteString
-import msjava.base.spring.lifecycle.BeanState
 import msjava.msnet.MSNetMessage
 import msjava.protobufutils.server.BackendException
 import msjava.slf4jutils.scalalog.getLogger
@@ -38,6 +37,7 @@ import optimus.platform.dsi.bitemporal.proto.Envelope.DalRequestResponseEnvelope
 import optimus.platform.dsi.bitemporal.proto.NotificationEntrySerialization
 import optimus.platform.dsi.connection.DalProtocolVersion
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
+import optimus.platform.util.ObjectState
 
 import scala.jdk.CollectionConverters._
 import optimus.dal.ssl.DalSSLConfig
@@ -136,7 +136,7 @@ class PubSubProtoClient(
   private val rShutdownLock = rwShutdownLock.readLock
   private val wShutdownLock = rwShutdownLock.writeLock
 
-  private[this] val state = new BeanState()
+  private[this] val state = new ObjectState()
   state.initializeIfNotInitialized()
 
   private[this] val configSupport = config.createConfigSupport(hostPort, kerberized, clientName, secureTransport)
@@ -225,7 +225,7 @@ class PubSubProtoClient(
         }
       } finally {
         wShutdownLock.unlock
-        state.destroyIfNotDestroyed
+        state.destroyIfNotDestroyed()
       }
     }
   }

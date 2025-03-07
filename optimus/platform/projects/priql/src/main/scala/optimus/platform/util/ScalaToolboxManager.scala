@@ -30,7 +30,7 @@ private[optimus] /*[util]*/ class ScalaToolboxManager {
   private val compilerOpts = {
     val plugins = ScalaCompilerUtils.entityJars
     val aliases = PackageAliases.aliasFlags.mkString(" ")
-    s"-Xplugin-require:entity -Xplugin:$plugins -Xprint:all $aliases"
+    s"-Xplugin-require:entity -Xplugin:$plugins $aliases"
   }
 
   // I've measured it to be quite a lot faster to re-use the same toolbox rather than creating a new one for each compilation

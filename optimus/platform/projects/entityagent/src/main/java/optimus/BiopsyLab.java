@@ -11,6 +11,7 @@
  */
 package optimus;
 
+import static optimus.debug.CommonAdapter.asJavaName;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -87,7 +88,7 @@ public class BiopsyLab {
       if (folder != null) {
         File parent = new File(folder);
         if (!parent.exists()) throw new VerifyError("could not read output directory " + folder);
-        File classOutfile = new File(parent, className.replace('/', '.') + ".class");
+        File classOutfile = new File(parent, asJavaName(className) + ".class");
         try (FileOutputStream fos = new FileOutputStream(classOutfile)) {
           fos.write(classfileBuffer);
         }

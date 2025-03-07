@@ -35,9 +35,12 @@ sealed abstract class ScenarioState extends Serializable {
 }
 
 /** Represent fully specified Scenario Stacks and therefore currently executing evaluation environment */
-class FullySpecifiedScenarioState private[optimus /*platform*/ ] (
-    private[optimus /*platform*/ ] val scenarioStack: ScenarioStack)
-    extends ScenarioState {
+class FullySpecifiedScenarioState private[optimus /*platform*/ ] (_scenarioStack: ScenarioStack) extends ScenarioState {
+
+  private[optimus /*platform*/ ] val scenarioStack: ScenarioStack =
+    if (_scenarioStack.isTrackingOrRecordingTweakUsage) _scenarioStack
+    else _scenarioStack.withoutWhenTarget
+
   override def hashCode(): Int = scenarioStack._cacheID.hashCode()
   override def equals(obj: scala.Any): Boolean = obj match {
     case otherState: FullySpecifiedScenarioState => otherState.scenarioStack._cacheID eq this.scenarioStack._cacheID

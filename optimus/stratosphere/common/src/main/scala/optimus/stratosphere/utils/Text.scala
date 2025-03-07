@@ -18,4 +18,7 @@ object Text {
 
   def bind(str: String, replacements: Map[String, String]): String =
     replacements.foldLeft(str) { case (str, (key, value)) => str.replace(key, value) }
+
+  def pluralize(i: Int, noun: String): String =
+    if (i == 1) noun else s"${noun}s"
 }

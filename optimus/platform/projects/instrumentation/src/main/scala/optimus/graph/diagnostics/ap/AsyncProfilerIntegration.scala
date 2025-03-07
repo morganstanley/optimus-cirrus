@@ -473,6 +473,18 @@ object AsyncProfilerIntegration extends Log {
   def externalContext(ctx: Long, shmPath: String): Unit =
     if (ensureLoadedIfEnabled()) profiler.externalContext(ctx, shmPath)
 
+  def internalStats(): Map[String, Double] = {
+    if (!ensureLoadedIfEnabled()) Map.empty
+    else
+      try {
+        val internals: Array[Long] = profiler.getInternals();
+        val allocMB = if (internals.size > 0) internals(0) * 1.0e-6 else -1.0
+        Map("alloc" -> allocMB)
+      } catch {
+        case t: Throwable => Map.empty
+      }
+  }
+
   lazy val overflowMarker: Long = saveString("OverflowMarker")
   lazy val errorMarker: Long = saveString("ErrorMarker")
 

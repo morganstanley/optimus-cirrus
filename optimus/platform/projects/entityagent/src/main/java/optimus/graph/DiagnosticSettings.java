@@ -128,18 +128,19 @@ public class DiagnosticSettings {
   public static final boolean loomTransformations =
       getBoolProperty("optimus.loom.transformations", LoomDefaults.enabled);
 
-  public static final int loomCompilerLevel = getIntProperty("optimus.loom.compiler.level", 0);
+  public static final int lCompilerLevel =
+      getIntProperty("optimus.loom.compiler.level", LoomDefaults.enabled ? 1 : 0);
 
-  public static final boolean loomCompilerDebug =
+  public static final boolean lCompilerDebug =
       getBoolProperty("optimus.loom.compiler.debug", false);
 
-  public static final boolean loomCompilerEnqueueEarlier =
+  public static final boolean lCompilerEnqueueEarlier =
       getBoolProperty("optimus.loom.compiler.enqueueEarlier", false);
 
-  public static final boolean loomCompilerQueueSizeSensitive =
+  public static final boolean lCompilerQueueSizeSensitive =
       getBoolProperty("optimus.loom.compiler.queueSizeSensitive", false);
 
-  public static final boolean loomCompilerAssumeGlobalMutation =
+  public static final boolean lCompilerAssumeGlobalMutation =
       getBoolProperty("optimus.loom.compiler.assumeGlobalMutation", false);
 
   /** Report exactly why a cross-scenario lookup failed (for nodes with favorReuse = true) */
@@ -364,15 +365,6 @@ public class DiagnosticSettings {
   // these should be set when ensuring the specific SWIG objects are loaded
   public static String disposableInterfaceToRewrite = null;
   public static String disposablePackageToRewrite = null;
-
-  // TODO (OPTIMUS-65703): Remove this option when asSignalEvents is gone.
-  public static final boolean inReactiveTestSuites =
-      getBoolProperty("optimus.reactive.in.test", false);
-
-  // TODO (OPTIMUS-65703): Diagnostic option to rapidly track reactive inplace updates from the
-  //  deprecated signalAsEvents API.
-  public static final boolean reactiveWarnOnDangerousUpdates =
-      getBoolProperty("optimus.reactive.warnOnDangerousUpdates", false);
 
   @SuppressWarnings("unused") // Invoked by reflection
   public static List<String> forwardedProperties() {

@@ -26,6 +26,7 @@ package optimus.buildtool.utils
 import org.apache.commons.compress.archivers.zip.ZipUtil
 import sbt.internal.inc.IndexBasedZipOps
 
+import java.io.BufferedOutputStream
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -338,7 +339,7 @@ abstract class TruncatingIndexBasedZipOps extends IndexBasedZipOps {
     setCentralDirStart(centralDir, centralDirStart)
     target.position(centralDirStart)
 
-    Using.resource(Channels.newOutputStream(target)) { outputStream =>
+    Using.resource(new BufferedOutputStream(Channels.newOutputStream(target))) { outputStream =>
       writeCentralDir(centralDir, outputStream)
     }
   }

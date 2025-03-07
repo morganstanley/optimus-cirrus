@@ -55,7 +55,7 @@ object AsyncNpmCommandRunner extends Log {
       )
   }
 
-  @node def runNpmCmd(
+  @async def runNpmCmd(
       id: ScopeId,
       commandTemplate: String,
       nodeVersion: String,

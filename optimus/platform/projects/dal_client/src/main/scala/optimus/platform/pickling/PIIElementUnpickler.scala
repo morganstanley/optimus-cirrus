@@ -11,17 +11,43 @@
  */
 // docs-snippet:PIIElementUnpickler
 package optimus.platform.pickling
-
-import optimus.datatype.Classification.DataSubjectCategory
+import optimus.datatype.Classification.Client
+import optimus.datatype.Classification.Worker
 import optimus.datatype.FullName
 import optimus.datatype.PIIElement
 import optimus.platform.annotations.nodeSync
+import optimus.scalacompat.collection._
 
-class PIIElementUnpickler[T <: DataSubjectCategory, E <: PIIElement[T]](createInstance: String => E)
-    extends Unpickler[E] {
-  @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): E = {
+import scala.collection.compat._
+import java.util.concurrent.ConcurrentHashMap
+import scala.reflect.runtime.universe._
+import scala.reflect.runtime.universe.{Try => _}
+
+object PIIElementUnpickler {
+  private val constructorCache = new ConcurrentHashMap[String, MethodMirror]()
+  private def getConstructor(tpe: Type): MethodMirror = {
+    val className = tpe.typeSymbol.asClass.fullName
+    constructorCache.computeIfAbsent(
+      className,
+      { _ =>
+        val constructor = tpe.decl(termNames.CONSTRUCTOR).asMethod
+        val mirror = runtimeMirror(getClass.getClassLoader)
+        mirror.reflectClass(tpe.typeSymbol.asClass).reflectConstructor(constructor)
+      }
+    )
+  }
+  def apply(tpe: Type): Unpickler[PIIElement[_]] = new PIIElementUnpickler(tpe)
+}
+
+class PIIElementUnpickler(tpe: Type) extends Unpickler[PIIElement[_]] {
+  @nodeSync def unpickle(pickled: Any, is: PickledInputStream): PIIElement[_] = {
     pickled match {
-      case value: String => createInstance(value)
+      case null => null
+      case value: String =>
+        val constructor = PIIElementUnpickler.getConstructor(tpe)
+        val instance = constructor(value)
+        instance.asInstanceOf[PIIElement[_]]
+      case _ => throw new IllegalArgumentException(s"Cannot unpickle PIIElement from $pickled for type $tpe")
     }
   }
 }

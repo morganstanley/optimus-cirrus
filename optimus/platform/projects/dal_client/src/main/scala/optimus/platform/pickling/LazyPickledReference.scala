@@ -83,10 +83,7 @@ final class LazyPickledReference[A <: AnyRef](
         // pickled state will have been cleared)
         if (isDone) this
         else {
-          // take the SI params (including CancelScope, ChainedID, profiler block ID, NodeInputs including GridProfiler)
-          // from the requesting scenario stack so that we handle errors and attribution correctly, but use the
-          // RuntimeEnvironment from the SI stack that the LPR was created with (see the attach above)
-          val mergedSS = scenarioStack().withSIParamsFrom(ss)
+          val ssForUnpickling = scenarioStackForUnpickling(ss)
 
           // Note that entries are retained until the LPR is completed with an RT result so that we don't keep
           // retrying to resolve in the same CancellationScope (i.e. we follow normal CS semantics)
@@ -94,17 +91,37 @@ final class LazyPickledReference[A <: AnyRef](
           unpickleByCs.computeIfAbsent(
             ss.cancelScope,
             { _ =>
-              val unpickleWrapper = getOrCreateUnpickleWrapper(mergedSS)
+              val unpickleWrapper = getOrCreateUnpickleWrapper(ssForUnpickling)
               // optimization: if unpickleWrapper is already in cs (which happens when we created
               // it rather than getting an existing one), we can use it directly without a proxy
               if (unpickleWrapper.scenarioStack.cancelScope eq ss.cancelScope) unpickleWrapper
-              else new UnpickleCSProxy(mergedSS, unpickleWrapper)
+              else new UnpickleCSProxy(ssForUnpickling, unpickleWrapper)
             }
           )
         }
       }
   }
 
+  // Creates a ScenarioStack using the value-affecting configuration that the LPR was created with (so that we will
+  // always return the same value), but the non-value-affecting configuration from the current SS (so that profiling
+  // and performance-affecting settings from the requester are used).
+  private def scenarioStackForUnpickling(requestingSS: ScenarioStack): ScenarioStack = {
+    val requestingResolver = requestingSS.env.entityResolver
+    val originalResolver = scenarioStack.env.entityResolver
+
+    // If the requesting scenario stack ss has an EntityResolver which is equivalent (same data and entitlements) as the
+    // one we were created with (i.e. the one our parent entity was loaded with), then use the requesting one
+    // (it might be configured with a different replica or zone, for better performance).
+    val differentButEquivalentEntityResolver = (requestingResolver ne originalResolver) &&
+      requestingResolver.equivalentTo(originalResolver)
+    val rootSS =
+      if (differentButEquivalentEntityResolver) requestingSS.siRoot
+      else scenarioStack // this is already the siRoot
+
+    // Take the SI params (including CancelScope, ChainedID, profiler block ID, NodeInputs including GridProfiler) from
+    // the requesting scenario stack so that we handle errors and attribution correctly.
+    rootSS.withSIParamsFrom(requestingSS)
+  }
   private def getOrCreateUnpickleWrapper(ss: ScenarioStack): MaybePickledReference[A] = synchronized {
     // we only ever complete the LPR with an RT result (usable from any CS), so there's no need to create a new proxy
     if (isDone) this

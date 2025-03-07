@@ -150,6 +150,15 @@ trait HasArtifactStore {
   @async override def close(): Unit = store.close()
 }
 
+object ArtifactCacheBase {
+  import optimus.buildtool.cache.NodeCaching.reallyBigCache
+  // Ensure that we get consistent results from the cache - among other things this helps protect against
+  // "Multiple (2) artifacts for key xxx" errors due to non-RT compilers like AsyncWebCompiler (since in
+  // some cases we can get a cache miss initially causing compilation, and then a remote cache hit later
+  // for the same key).
+  getOrCompute$NF.setCustomCache(reallyBigCache)
+}
+
 @entity class SimpleArtifactCache[+A <: ArtifactStore](
     override val store: A,
     override val cacheMode: CacheMode = CacheMode.ReadWrite,

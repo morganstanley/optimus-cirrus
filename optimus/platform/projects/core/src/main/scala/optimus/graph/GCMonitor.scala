@@ -153,6 +153,9 @@ final class GCMonitor(allowForceGCOnEviction: Boolean = GCMonitor.defaultForceGC
   // stats objects (note that we can't do delta-based reporting because min/max fields are not delta-able)
   private val gcStatsByConsumer = new ConcurrentHashMap[String, CumulativeGCStats]()
 
+  def snapStats(consumer: String): CumulativeGCStats =
+    Option(gcStatsByConsumer.get(consumer)).getOrElse(CumulativeGCStats.empty)
+
   def snapAndResetStats(consumer: String): CumulativeGCStats =
     Option(gcStatsByConsumer.put(consumer, CumulativeGCStats.empty)).getOrElse(CumulativeGCStats.empty)
 
@@ -538,7 +541,7 @@ object GCMonitor {
       )
 
       // don't report min/max if we are empty (because they are 0 and MaxValue which is not useful to see)
-      if (this == CumulativeGCStats.empty) always
+      if (this == CumulativeGCStats.empty || (nMajor == 0 & nMinor == 0)) always
       else
         always ::: Elems(
           Properties.gcMaxUsedHeapAfterGC -> maxAfter,

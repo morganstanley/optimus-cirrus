@@ -12,15 +12,19 @@ all.javac.release = ${versions.javac.release.jetfireDependency}
 main.compile {
   modules = [
     optimus.buildtool.core
-    optimus.platform.core_macro
-    optimus.platform.utils
   ]
 
   libs = [
+    ossjava.junit
+    ossjava.logback
     ossjava.typesafeconfig
   ]
 }
 
 test {
   includeInClassBundle = false // prevent class with buildtool.format resources
+
+  compile.libs = [
+    ossjava.junit
+  ]
 }

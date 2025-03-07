@@ -35,7 +35,7 @@ private[tracking] trait DependencyTrackerChildren {
     if (childrenDependency == null) {
       childrenDependency = new TTrack(null)
     }
-    EvaluationContext.currentNode.partialCombineInfo(childrenDependency)
+    EvaluationContext.currentNode.combineXinfo(childrenDependency)
   }
 
   private def fireChildDependency(): Unit = dependencyLock.synchronized {
@@ -66,9 +66,6 @@ private[tracking] trait DependencyTrackerChildren {
     childrenImpl
   }
 
-  /** children with non-null names */
-  private[optimus] def namedChildren: List[DependencyTracker] = children.filter(_.scenarioReference.name != null)
-
   /**
    * Creates a new child tracking scenario Note: keeps track between parent and child
    */
@@ -89,10 +86,10 @@ private[tracking] trait DependencyTrackerChildren {
   @nodeLiftByName
   def newChildScenario(ref: ScenarioReference, tweaks: Tweak*): DependencyTracker = {
     val nm = ref.name
-    if ((nm ne null) && root.childByName(nm, false).isDefined)
+    if ((nm ne null) && root.childByName(nm, takeDependency = false).isDefined)
       throw new IllegalArgumentException("Scenario names must be unique :" + nm)
     require(ref != ScenarioReference.Dummy, s"cannot create DependencyTracker for ScenarioReference '$nm'")
-    val child = new DependencyTracker(root, ref, scenarioStack)
+    val child = new DependencyTracker(root, ref, scenarioStack, null)
     child.addTweaks(tweaks, throwOnDuplicate = true)
     addChild(child)
     root.addedChild(child)

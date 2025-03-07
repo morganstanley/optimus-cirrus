@@ -37,10 +37,13 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipFile
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.util.Using
 import scala.util.control.NonFatal
 
 object FileUtils extends Log {
@@ -135,7 +138,7 @@ object FileUtils extends Log {
 
   lazy val diagnosticDumpDir = Files.createDirectories(Paths.get(diagnosticDumpDirName))
 
-  private val formatter = DateTimeFormatter.ofPattern("YYYY-MM-DD_HHmmss").withZone(ZoneId.systemDefault)
+  private val formatter = DateTimeFormatter.ofPattern("yyyy-MM-DD_HHmmss").withZone(ZoneId.systemDefault)
 
   def tmpPath(prefix: String): Path = {
     tmpPathWithSuffixOption(prefix, None)
@@ -182,5 +185,21 @@ object FileUtils extends Log {
     val dirs = this.synchronized(toDelete.toList)
     dirs.foreach(deleteRecursively)
   }
+
+  def gzip(from: Path, to: Path): Try[Long] =
+    Using.Manager { use =>
+      Files.deleteIfExists(to)
+      val in = use(Files.newInputStream(from))
+      val out = use(new GZIPOutputStream(Files.newOutputStream(to)))
+      in.transferTo(out)
+    }
+
+  def gunzip(from: Path, to: Path): Try[Long] =
+    Using.Manager { use =>
+      Files.deleteIfExists(to)
+      val in = use(new GZIPInputStream(Files.newInputStream(from)))
+      val out = use(Files.newOutputStream(to))
+      in.transferTo(out)
+    }
 
 }

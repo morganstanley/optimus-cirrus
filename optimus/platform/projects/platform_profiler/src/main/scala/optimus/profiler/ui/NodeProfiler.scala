@@ -11,38 +11,14 @@
  */
 package optimus.profiler.ui
 
-import java.awt.BorderLayout
-import java.awt.Component
-import java.awt.Container
-import java.awt.Desktop
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
-import java.awt.Insets
-import java.awt.event.ActionEvent
-import java.awt.event.KeyEvent
-import java.io._
-import java.lang.Double
-import java.net.URI
-import java.util
-import java.util.prefs.Preferences
-import javax.swing.BoxLayout
-import javax.swing.JCheckBox
-import javax.swing.JFileChooser
-import javax.swing.JLabel
-import javax.swing.JMenu
-import javax.swing.JMenuItem
-import javax.swing.JOptionPane
-import javax.swing.JPanel
-import javax.swing.JTabbedPane
-import javax.swing.JTextField
-import javax.swing.KeyStroke
-import javax.swing.border.EmptyBorder
 import optimus.graph.DiagnosticSettings
 import optimus.graph.JMXConnection
 import optimus.graph.NodeTrace
 import optimus.graph.OGSchedulerTimes
 import optimus.graph.OGTrace
 import optimus.graph.OGTraceReader
+import optimus.graph.Settings
+import optimus.graph.cache.NCPolicy.registeredScopedPathAndProfileBlockID
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.SchedulerProfileEntryForUI
@@ -67,21 +43,29 @@ import optimus.profiler.MergeTraces
 import optimus.profiler.PGOModuleMap
 import optimus.profiler.ProfilerUI
 import optimus.profiler.TraceHelper
-import optimus.profiler.ui.common.ConfigSettings
-import optimus.profiler.ui.common.FileChooser
-import optimus.profiler.ui.common.JMenu2
-import optimus.profiler.ui.common.JPanel2
-import optimus.profiler.ui.common.JToolBar2
-import optimus.profiler.ui.common.JUIUtils
-import optimus.profiler.ui.common.ProvidesMenus
-import optimus.profiler.ui.common.StoreSettings
+import optimus.profiler.ui.common._
 import optimus.profiler.ui.controls.SingleImageButton
 import optimus.profiler.utils.NodePntiWriter
 
-import scala.jdk.CollectionConverters._
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Container
+import java.awt.Desktop
+import java.awt.GridBagConstraints
+import java.awt.GridBagLayout
+import java.awt.Insets
+import java.awt.event.ActionEvent
+import java.awt.event.KeyEvent
+import java.io._
+import java.lang.Double.parseDouble
+import java.net.URI
+import java.util
+import java.util.prefs.Preferences
+import javax.swing._
+import scala.collection.compat._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.compat._
+import scala.jdk.CollectionConverters._
 
 object NodeProfiler extends ConfigSettings {
   private var panel: NodeProfiler = _
@@ -128,15 +112,15 @@ object NodeProfiler extends ConfigSettings {
 
   def refreshCacheView(): ArrayBuffer[CacheView] = CacheViewHelper.getCache
 
-  def collectProfile(includeTweakableNotTweaked: Boolean): ArrayBuffer[PNodeTaskInfo] = {
+  def collectProfile(includeTweakableNotTweaked: Boolean, blockID: Int): ArrayBuffer[PNodeTaskInfo] = {
     if (DiagnosticSettings.outOfProcess)
       ArrayBuffer(JMXConnection.graph.collectProfile(resetAfter = false, alsoClearCache = false): _*)
     else
-      Profiler.getProfileData(alwaysIncludeTweaked = true, includeTweakableNotTweaked = includeTweakableNotTweaked)
+      Profiler.getProfileData(alwaysIncludeTweaked = true, includeTweakableNotTweaked, blockID)
   }
 
   def collectProfile: ArrayBuffer[PNodeTaskInfo] = {
-    collectProfile(false)
+    collectProfile(includeTweakableNotTweaked = false, OGTrace.BLOCK_ID_ALL)
   }
 
   private[profiler] def getProfilerData
@@ -158,13 +142,13 @@ object NodeProfiler extends ConfigSettings {
 
 final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout(5, 5)) with Log with ProvidesMenus {
   val tabs = new JTabbedPane
-  val hotspotsTable = new HotspotsTable(reader)
-  val ss_table = new SSUsageTable()
-  val bl_table = new BlockingNodesTable()
+  private val hotspotsTable = new HotspotsTable(reader)
+  private val ss_table = new SSUsageTable()
+  private val bl_table = new BlockingNodesTable()
   val lc_table = new LostConcurrencyTable()
   val ns_table = new NodeStacksTable(reader)
-  val gp_table = new GridProfilerTable()
-  val configPreview = new ConfigPreview()
+  private val gp_table = new GridProfilerTable()
+  private val configPreview = new ConfigPreview()
 
   private var disabledRowsOnly: Boolean = _
   private var defaultSelectOptconfTuningView: Boolean = _
@@ -178,7 +162,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
   hotspotsTable.ns_table = ns_table
   hotspotsTable.ns_tab = tabs
 
-  setBorder(new EmptyBorder(2, 2, 2, 2))
+  setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2))
 
   private val toolBar = {
     val toolBar = new JToolBar2()
@@ -295,7 +279,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
   add(toolBar, BorderLayout.NORTH)
   add(tabs, BorderLayout.CENTER)
 
-  def cmdRefreshHotspots(): Unit = hotspotsTable.cmdRefresh()
+  private def cmdRefreshHotspots(): Unit = hotspotsTable.cmdRefresh()
 
   def cmdRefreshPreviewConfig(config: String): Unit = {
     cmdRefreshHotspots()
@@ -410,7 +394,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     gp_table.init()
   }
 
-  def cmdRefreshNodeStacks(): Unit = {
+  private def cmdRefreshNodeStacks(): Unit = {
     ns_table.setList(ProfilerUI.getNodeStacks(NodeProfiler.getNodeStack))
     ns_table.showMessage("Node Stacks refreshed")
     hotspotsTable.showMessage("Node Stacks refreshed")
@@ -501,7 +485,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
   }
 
-  def loadAndMergeTraces(): Unit = {
+  private def loadAndMergeTraces(): Unit = {
     val fc = FileChooser.traceFileChooser
     val files: ArrayBuffer[String] = ArrayBuffer[String]()
     JUIUtils.readFromFile(this, fc, multiple = true) { file =>
@@ -513,10 +497,10 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     val reader: OGTraceReader = OGTrace.readingFromLocal(pntis.toArray)
     DebuggerUI.previewConfig(reader, config, "merged")
   }
-  val LN_FILER: String = StaticConfig.string("filer.ln")
-  val VI_FILER: String = StaticConfig.string("filer.vi")
+  private val LN_FILER: String = StaticConfig.string("filer.ln")
+  private val VI_FILER: String = StaticConfig.string("filer.vi")
 
-  def loadGroupAndMergeTraces(): Unit = {
+  private def loadGroupAndMergeTraces(): Unit = {
     val dialog = new GroupMergeDialog()
     // TODO (OPTIMUS-65137): Initialize PgoModuleMap using pgo_modules.json in environment repo
     val (rootDir, artifactsPath, names, withDisableXSFT) = dialog.groupTracesInput()
@@ -618,7 +602,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
   }
 
-  def loadRecordedTrace(): Unit =
+  private def loadRecordedTrace(): Unit =
     DebuggerUI.loadTrace(
       OGTrace.readingFromLiveBackingStore,
       showTimeLine = true,
@@ -641,7 +625,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
   }
 
-  def cmdSnapToCompare(): Unit = {
+  private def cmdSnapToCompare(): Unit = {
     try {
       val copy = duplicateProfilerData(Profiler.getProfileData())
       hotspotsTable.setCompareToList(copy)
@@ -685,6 +669,8 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       new JCheckBox("Auto Suggest Disable Caching for Nodes", pref.getBoolean("ExportConfig.autoDisableCaching", true))
     val includePrevDisabledCache =
       new JCheckBox("Include Previously Configured", pref.getBoolean("ExportConfig.includePrevConfigured", true))
+    val generateScopedConfigs =
+      new JCheckBox("Generate Config Per Scope/Applet", pref.getBoolean("ExportConfig.generateScopedConfigs", false))
     val autoTrimCaches =
       new JCheckBox("Auto Suggest Trim Caches", pref.getBoolean("ExportConfig.autoTrimCaches", false))
     val autoDisableXSFT =
@@ -701,7 +687,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     val cacheConfigHitRatio = new JTextField(
       pref.get("ExportConfig.cacheConfigHitRatio", cfg.hitRatio.toString)
     )
-    val cacheConfigThresholdPanel: JPanel = createThresholdPanel(
+    private val cacheConfigThresholdPanel: JPanel = createThresholdPanel(
       (new JLabel("No Hit Threshold"), cacheConfigNeverHitThreshold),
       (new JLabel("Cache Benefit Threshold (ms)"), cacheConfigBenefitThresholdMs),
       (new JLabel("Hit Ratio Threshold"), cacheConfigHitRatio)
@@ -719,11 +705,11 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       )
       pref.putDouble(
         "ExportConfig.cacheConfigBenefitThresholdMs",
-        Double.parseDouble(cacheConfigBenefitThresholdMs.getText().trim())
+        parseDouble(cacheConfigBenefitThresholdMs.getText().trim())
       )
       pref.putDouble(
         "ExportConfig.cacheConfigHitRatio",
-        Double.parseDouble(cacheConfigHitRatio.getText().trim())
+        parseDouble(cacheConfigHitRatio.getText().trim())
       )
     }
 
@@ -735,9 +721,17 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
       "To disable caching 'Cache Benefit' must be less than 'Cache Benefit Threshold'")
     cacheConfigHitRatio.setToolTipText(
       "'Hit Ratio Threshold' indicates how low the hit ratio must be for caching to actually be disabled. Calculated as hits/(hits + misses)")
+
+    if (!Settings.perAppletProfile) {
+      generateScopedConfigs.setEnabled(false)
+      generateScopedConfigs.setSelected(false)
+      generateScopedConfigs.setToolTipText("Enable by setting -Doptimus.graph.perAppletProfile=true")
+    }
+
     setLayout(new BoxLayout(this, BoxLayout.Y_AXIS))
     add(autoDisableCaching)
     add(autoDisableXSFT)
+    add(generateScopedConfigs)
     add(autoTrimCaches)
     add(includePrevDisabledCache)
     add(copyConfigLine)
@@ -749,25 +743,42 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     JUIUtils.saveToFile(this, FileChooser.optConfFileChooser(options)) { file =>
       val modes = PGOMode.fromUIOptions(options.autoDisableCaching.isSelected, options.autoDisableXSFT.isSelected)
       val includePreviouslyConfigured = options.includePrevDisabledCache.isSelected
+      val generateScopedConfigs = options.generateScopedConfigs.isSelected
       val autoTrim = options.autoTrimCaches.isSelected
 
       val cfg = AutoPGOThresholds(
         neverHitThreshold = Integer.parseInt(options.cacheConfigNeverHitThreshold.getText.trim),
-        benefitThresholdMs = Double.parseDouble(options.cacheConfigBenefitThresholdMs.getText.trim),
-        hitRatio = Double.parseDouble(options.cacheConfigHitRatio.getText.trim)
+        benefitThresholdMs = parseDouble(options.cacheConfigBenefitThresholdMs.getText.trim),
+        hitRatio = parseDouble(options.cacheConfigHitRatio.getText.trim)
       )
 
       val settings = ConfigWriterSettings(modes, cfg, includePreviouslyConfigured, autoTrim)
 
-      // always generate optconf based on all data, not just filtered rows in the UI
-      val pntis =
-        if (!reader.isLive) reader.getHotspots(hotspotsTable.aggregateProxies).asScala else NodeProfiler.collectProfile
+      var configGraphForClipboard = "--config-graph " + file.getAbsolutePath
 
-      val summary = Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
-      if (options.copyConfigLine.isSelected) {
-        val clip = "--config-graph " + file.getAbsolutePath
-        SClipboard.copy(clip, clip)
+      var summary: String = ""
+      if (reader.isLive) {
+        if (generateScopedConfigs) {
+          val blocks = registeredScopedPathAndProfileBlockID()
+          for ((scope, blockID) <- blocks.asScala) {
+            val pntis = NodeProfiler.collectProfile(includeTweakableNotTweaked = false, blockID)
+            // Generate new file name by appending the scope to the file name but keep the extension
+            val newFileName = file.getAbsolutePath.replace(".optconf", s"_$scope.optconf")
+            configGraphForClipboard += s",[$scope]$newFileName"
+            Profiler.autoGenerateConfig(newFileName, pntis, settings)
+          }
+          val pntis = NodeProfiler.collectProfile(includeTweakableNotTweaked = false, OGTrace.BLOCK_ID_ALL)
+          Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
+        }
+        val pntis = NodeProfiler.collectProfile
+        summary = Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
+      } else {
+        // always generate optconf based on all data, not just filtered rows in the UI
+        val pntis = reader.getHotspots(true).asScala
+        summary = Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
       }
+
+      if (options.copyConfigLine.isSelected) SClipboard.copy(configGraphForClipboard, configGraphForClipboard)
       hotspotsTable.showMessage(summary)
     }
   }

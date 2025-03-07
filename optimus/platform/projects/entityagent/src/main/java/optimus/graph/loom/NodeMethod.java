@@ -12,12 +12,14 @@
 package optimus.graph.loom;
 
 import static optimus.CoreUtils.merge;
-import static optimus.CoreUtils.stripPrefix;
-import static optimus.debug.CommonAdapter.makePrivate;
+import static optimus.graph.loom.NameMangler.mkImplName;
+import static optimus.graph.loom.NameMangler.unmangleName;
+import static optimus.debug.CommonAdapter.makePublic;
 import static optimus.debug.CommonAdapter.newMethod;
 import static optimus.graph.loom.LoomConfig.*;
 import static org.objectweb.asm.Opcodes.*;
 import optimus.debug.CommonAdapter;
+import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
@@ -28,6 +30,7 @@ import org.objectweb.asm.tree.MethodNode;
 public class NodeMethod extends TransformableMethod {
 
   private final ClassNode cls;
+  private final String mangledClsName;
   final String cleanName; // Unmangled name (gets mangled when private function is accessed
   private final Type returnType; // Computed in ctor
   private final String[] argNames; // Computed in ctor
@@ -42,10 +45,11 @@ public class NodeMethod extends TransformableMethod {
   String implMethodDesc; // null if not a simple ($impl) method, else no need to create nodeClass
   boolean isScenarioIndependent;
 
-  public NodeMethod(ClassNode cls, String privatePrefix, MethodNode method, CompilerArgs cArgs) {
+  public NodeMethod(ClassNode cls, String mangledClsName, MethodNode method, CompilerArgs cArgs) {
     super(method, cArgs);
     this.cls = cls;
-    this.cleanName = stripPrefix(method.name, privatePrefix);
+    this.mangledClsName = mangledClsName;
+    this.cleanName = unmangleName(this.mangledClsName, method.name);
     this.isInterface = CommonAdapter.isInterface(cls.access);
     if (method.parameters == null) this.argNames = null;
     else this.argNames = method.parameters.stream().map(p -> p.name).toArray(String[]::new);
@@ -54,21 +58,23 @@ public class NodeMethod extends TransformableMethod {
 
   public void writeNodeSyncFunc(ClassVisitor cv) {
     var cmd = isScenarioIndependent ? CMD_GETSI : CMD_GET;
-    writeInvokeNewNode(cv, cmd, method, returnType);
+    writeInvokeNewNode(cv, cmd, method, returnType, method.access);
   }
 
   public void writeQueuedFunc(ClassVisitor cv) {
-    writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_FUTURE_TYPE);
+    // $queued must be public to make it accessible to private inner classes when enqueuing
+    var newAccess = makePublic(queuedMethod.access);
+    writeInvokeNewNode(cv, CMD_QUEUED, queuedMethod, NODE_FUTURE_TYPE, newAccess);
   }
 
-  private void writeInvokeNewNode(ClassVisitor cv, String cmd, MethodNode org, Type returnType) {
+  private void writeInvokeNewNode(
+      ClassVisitor cv, String cmd, MethodNode org, Type returnType, int access) {
     if (newNodeMethod == null) {
-      throw new IllegalStateException(
-          "FATAL: Could not find matching $newNode method! " + cls.name + "." + org.name);
+      LMessage.fatal("Could not find matching $newNode method! " + cls.name + "." + org.name);
     }
 
     var desc = Type.getMethodDescriptor(returnType, argTypes);
-    try (var mv = newMethod(cv, org.access, org.name, desc)) {
+    try (var mv = newMethod(cv, access, org.name, desc)) {
       mv.visitLineNumber(lineNumber, new Label());
       var newNodeDesc = Type.getMethodDescriptor(NODE_TYPE, argTypes);
       var newNodeName = newNodeMethod.name;
@@ -79,21 +85,20 @@ public class NodeMethod extends TransformableMethod {
 
   public void writeNewNodeFunc(ClassVisitor cv) {
     if (newNodeMethod == null) {
-      throw new IllegalStateException(
-          "FATAL: Could not find matching $newNode method! " + cls.name + ".");
+      LMessage.fatal("Could not find matching $newNode method! " + cls.name + ".");
     }
     var newDesc = Type.getMethodDescriptor(NODE_TYPE, argTypes);
     try (var mv = newMethod(cv, newNodeMethod.access, newNodeMethod.name, newDesc)) {
       if (NODE_DESC.equals(implFieldDesc) || NODE_GETTER_DESC.equals(implMethodDesc)) {
         mv.loadThis();
         var instr = NODE_DESC.equals(implFieldDesc) ? INVOKEVIRTUAL : INVOKEINTERFACE;
-        mv.visitMethodInsn(
-            instr, cls.name, method.name + IMPL_SUFFIX, NODE_GETTER_DESC, isInterface);
+        var implName = mkImplName(mangledClsName, method.name);
+        mv.visitMethodInsn(instr, cls.name, implName, NODE_GETTER_DESC, isInterface);
         mv.returnValue();
         return;
       }
       var needsImplSuffix = implFieldDesc != null || implMethodDesc != null;
-      var methodToCall = needsImplSuffix ? method.name + IMPL_SUFFIX : method.name;
+      var methodToCall = needsImplSuffix ? mkImplName(mangledClsName, method.name) : method.name;
       var cmd = asyncOnly ? CMD_ASYNC : CMD_NODE; // Default....
       if (implFieldDesc != null) cmd = CMD_NODE_ACPN;
       else if (implMethodDesc != null) cmd = CMD_OBSERVED_VALUE_NODE;
@@ -115,7 +120,8 @@ public class NodeMethod extends TransformableMethod {
     var descX = Type.getMethodDescriptor(returnType, merge(methodOwner, argTypes));
 
     int flags = (trivial ? NF_TRIVIAL : 0) | (trait ? NF_EXPOSE_ARGS_TRAIT : 0);
-    var bsmParams = merge(new Object[] {handle, clsID, flags}, argNames);
+    var dflt = new Object[] {handle, cls.sourceFile, lineNumber, flags};
+    var bsmParams = merge(dflt, argNames);
     mv.visitInvokeDynamicInsn(cmd, descX, bsmHandle, bsmParams);
     mv.returnValue();
   }

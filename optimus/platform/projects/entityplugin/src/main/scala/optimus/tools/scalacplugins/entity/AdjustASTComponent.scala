@@ -1393,14 +1393,15 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
         treeCopy.Block(base, stmts, base.expr)
       case md @ ModuleDef(mods, name, _) =>
         atNode(mods, isModuleDef = true) {
+          val hasEntityAnno = isEntity(mods)
           if (isEvent(mods)) alarm(OptimusErrors.EVENT_WITH_OBJECT, tree.pos)
-          if (isEntity(mods)) {
+          if (hasEntityAnno) {
             if (mods.hasAnnotationNamed(tpnames.transient))
               alarm(OptimusErrors.ENTITY_WITH_TRANSIENT, tree.pos)
           }
 
           val t1 =
-            if (isEntity(mods))
+            if (hasEntityAnno)
               treeCopy.ModuleDef(tree, mods, name, transformStorableTemplate(isModDef = true, md))
             else
               treeCopy.ModuleDef(tree, mods, name, transformRawNodeTemplate(mods, name, md))
@@ -1408,13 +1409,13 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           val (t2, props) = inScope(t1)
 
           val (newMods, newParents) = if (hasAnnotation(mods, tpnames.embeddable)) {
-            if (isEntity(mods)) alarm(OptimusErrors.EMBEDDABLE_AND_ENTITY, tree.pos)
+            if (hasEntityAnno) alarm(OptimusErrors.EMBEDDABLE_AND_ENTITY, tree.pos)
             if (!mods.hasFlag(Flag.CASE)) alarm(OptimusErrors.EMBEDDABLE_ONLY_WITH_CASE_OBJECT, tree.pos)
             (addEmbeddableMetaData(mods, isModule = true), t2.impl.parents :+ EmbeddableType)
           } else {
             (repackageAnnotations(mods), t2.impl.parents)
           }
-          val newModsL = addLoomAnnotationIfNeeded(newMods, t2.pos)
+          val newModsL = addLoomAnnotationIfNeeded(newMods, t2.pos, hasEntityAnno)
           val newBody = addPropsToModuleDef(t2.impl.body, props)
           val newTemplate = treeCopy.Template(t2.impl, newParents, t2.impl.self, newBody)
           treeCopy.ModuleDef(t2, newModsL, t2.name, newTemplate)
@@ -1435,7 +1436,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           val (t2, props) = inScope(t1)
 
           val newMods = repackageAnnotations(t2.mods &~ INTERFACE, isModule = false)
-          val newModsL = addLoomAnnotationIfNeeded(newMods, t2.pos)
+          val newModsL = addLoomAnnotationIfNeeded(newMods, t2.pos, isEntity = true)
           val newBody = addPropsToModuleDef(t2.impl.body, props)
           val newTemplate = treeCopy.Template(t2.impl, t2.impl.parents, t2.impl.self, newBody)
           treeCopy.ClassDef(t2, newModsL, t2.name, t2.tparams, newTemplate)
@@ -1508,8 +1509,8 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
       case _                                                => super.transform(tree)
     }
 
-    private def addLoomAnnotationIfNeeded(mods: Modifiers, pos: Position): Modifiers = {
-      if (plugin.settings.loom && !hasAnyAnnotation(mods, Seq(tpnames.loom, tpnames.loomOff)))
+    private def addLoomAnnotationIfNeeded(mods: Modifiers, pos: Position, isEntity: Boolean): Modifiers = {
+      if (isEntity && plugin.settings.loom && !hasAnyAnnotation(mods, Seq(tpnames.loom, tpnames.loomOff)))
         mods.withAnnotations(mkAnnotation(LoomAnnotation, pos) :: Nil)
       else mods
     }

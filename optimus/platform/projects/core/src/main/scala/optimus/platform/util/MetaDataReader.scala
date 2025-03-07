@@ -32,14 +32,6 @@ import scala.collection.compat._
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-object ClientEntityHierarchy {
-  private[optimus] val hierarchy = new EntityHierarchyManager
-}
-
-object ClientEmbeddableHierarchy {
-  private[optimus] val hierarchy = new EmbeddableHierarchyManager
-}
-
 trait EntityMetaDataManager {
 
   def getEntityInfo(clz: Class[_ <: Entity]): Option[EntityBaseMetaData]

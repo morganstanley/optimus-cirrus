@@ -11,27 +11,26 @@
  */
 package optimus.graph
 
-import java.io.Externalizable
-import java.io.IOException
-import java.io.ObjectInput
-import java.io.ObjectOutput
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
 import optimus.config.NodeCacheConfigs
 import optimus.debug.InstrumentationConfig
 import optimus.debug.InstrumentedHashCodes
-import optimus.graph.cache.NCPolicy
 import optimus.graph.cache.UNodeCache
 import optimus.graph.diagnostics.NodeName
 import optimus.graph.loom.LNodeFunction1
 import optimus.graph.loom.TrivialNode
-import optimus.platform.PluginHelpers
+import optimus.graph.OGTrace.AsyncSuffix
 import optimus.platform._
 import optimus.platform.storable.Entity
 import optimus.platform.temporalSurface.TemporalSurface
 import optimus.platform.util.PrettyStringBuilder
 
+import java.io.Externalizable
+import java.io.IOException
+import java.io.ObjectInput
 import java.io.ObjectInputStream
+import java.io.ObjectOutput
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 import scala.util.control.NonFatal
 
 /** Mostly a marker interface for DependencyTracker */
@@ -89,7 +88,7 @@ sealed trait NodeKey[+T] extends TweakableKey {
   /**
    * NodeKey can be prepared to become a full Node at any point.
    *
-   * @returns a fully computable Node in the given scenarioStack
+   * @return a fully computable Node in the given scenarioStack
    */
   def prepareForExecutionIn(scenarioStack: ScenarioStack): PropertyNode[_]
 
@@ -102,7 +101,7 @@ sealed trait NodeKey[+T] extends TweakableKey {
   def toKeyString: String
 
   protected[optimus] def toDebugString: String =
-    getClass.getName + "@" + System.identityHashCode(this) + ":" + toKeyString
+    getClass.getName + AsyncSuffix + System.identityHashCode(this) + ":" + toKeyString
 }
 
 object PropertyNode {
@@ -346,7 +345,8 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
   }
 
   def toKeyString: String =
-    (if (entity ne null) entity.getClass.getSimpleName + "@" + System.identityHashCode(entity).toHexString else "-") +
+    (if (entity ne null) entity.getClass.getSimpleName + AsyncSuffix + System.identityHashCode(entity).toHexString
+     else "-") +
       "." + (if (propertyInfo ne null) propertyInfo.name else "-") +
       (if (!args.isEmpty) "(" + args.mkString(",") + ")" else "")
 
@@ -463,7 +463,6 @@ class InitedPropertyNodeSync[T](
 
   final def refreshedValue: T = propertyInfo.createNodeKey(entity).asInstanceOf[InitedPropertyNodeSync[T]].v
   override def func: T = {
-    PluginHelpers.witnessVersion(entity)
     refreshedValue
   }
 
@@ -556,9 +555,8 @@ class ConstructorNode[T](v: T, propertyInfo: NodeTaskInfo)
   final override def argsHash: Int = v.##
   final override def argsEquals(other: NodeKey[_]): Boolean = {
     other match {
-      case cNode: ConstructorNode[_] =>
-        cNode.result == result
-      case _ => false
+      case cNode: ConstructorNode[T @unchecked] => cNode.result == result
+      case _                                    => false
     }
   }
   final override def run(ec: OGSchedulerContext): Unit = {
@@ -568,16 +566,15 @@ class ConstructorNode[T](v: T, propertyInfo: NodeTaskInfo)
 
 private[optimus] object ConstructorNode {
   final val suffix = "-constructor"
-  private val class2ConctructorInfo: ConcurrentMap[Class[_], NodeTaskInfo] = new ConcurrentHashMap
+  private val class2ConstructorInfo: ConcurrentMap[Class[_], NodeTaskInfo] = new ConcurrentHashMap
 
   def buildConstructorInfo(cls: Class[_]): NodeTaskInfo = {
-    val nti = class2ConctructorInfo.computeIfAbsent(
+    val nti = class2ConstructorInfo.computeIfAbsent(
       cls,
       key => {
         // default settings for constructor node
-        val ctorInfo = new NodeTaskInfo(s"${key.getName}$suffix", 0)
+        val ctorInfo = new NodeTaskInfo(s"${key.getName}$suffix", NodeTaskInfo.SCENARIOINDEPENDENT)
         ctorInfo.setCustomCache(UNodeCache.constructorNodeGlobal)
-        ctorInfo.setCachePolicy(NCPolicy.SI)
         ctorInfo
       }
     )

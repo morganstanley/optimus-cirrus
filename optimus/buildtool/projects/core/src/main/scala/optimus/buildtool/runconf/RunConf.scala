@@ -41,7 +41,6 @@ sealed trait RunConf extends HasNativeLibraries {
   def name: String
   def javaOpts: Seq[String]
   def env: Map[String, String]
-  def agents: Seq[ModuleRef]
   def launcher: Launcher
   def modifyStrings(modify: String => String): RunConf
   def javaModule: JavaModule
@@ -51,6 +50,7 @@ sealed trait RunConf extends HasNativeLibraries {
   def strictRuntime: StrictRuntime
   def interopPython: Boolean
   def python: Boolean
+  def isLocal: Boolean
 
   def tpe: RunConfType // this can be made more "type safe" with lots of magic but I trust that we can keep it straight
 
@@ -85,12 +85,12 @@ object AppRunConf extends RunConfType("app") {
 }
 final case class AppRunConf(
     id: ScopeId,
+    isLocal: Boolean,
     name: String, // app name
     mainClass: String,
     mainClassArgs: Seq[String],
     javaOpts: Seq[String],
     env: Map[String, String],
-    agents: Seq[ModuleRef],
     launcher: Launcher,
     nativeLibraries: NativeLibraries,
     moduleLoads: Seq[String],
@@ -123,14 +123,15 @@ final case class AppRunConf(
   override def toString: String = {
     s"""AppRunConf(
        |  id = $id
+       |  isLocal = $isLocal
        |  name = $name
        |  mainClass = $mainClass
        |  mainClassArgs = $mainClassArgs
        |  javaOpts = $javaOpts
        |  env = $env
-       |  agents = $agents
        |  launcher = $launcher
        |  nativeLibraries = $nativeLibraries
+       |  moduleLoads = $moduleLoads
        |  javaModule = $javaModule
        |  strictRuntime = $strictRuntime
        |  scriptTemplates = $scriptTemplates
@@ -150,13 +151,13 @@ object TestRunConf extends RunConfType("test") {
 }
 final case class TestRunConf(
     id: ScopeId,
+    isLocal: Boolean,
     name: String, // block name in runconf - typically matches id.tpe but may differ (eg. "testJava8")
     env: Map[String, String],
     javaOpts: Seq[String],
     packageName: Option[String],
     mainClass: Option[String],
     methodName: Option[String],
-    agents: Seq[ModuleRef],
     launcher: Launcher,
     includes: Seq[RunconfPattern],
     excludes: Seq[RunconfPattern],
@@ -178,7 +179,8 @@ final case class TestRunConf(
     flags: Map[String, String],
     jacocoOpts: Option[JacocoOpts],
     interopPython: Boolean,
-    python: Boolean
+    python: Boolean,
+    linkedModuleName: Option[String]
 ) extends RunConf {
 
   def modifyStrings(modify: String => String): TestRunConf = {
@@ -195,13 +197,13 @@ final case class TestRunConf(
   override def toString: String = {
     s"""TestRunConf(
        |  id = $id
+       |  isLocal = $isLocal,
        |  name = $name
        |  env = $env
        |  javaOpts = $javaOpts
        |  packageName = $packageName
        |  mainClass = $mainClass
        |  methodName = $methodName
-       |  agents = $agents
        |  launcher = $launcher
        |  includes = $includes
        |  excludes = $excludes
@@ -214,13 +216,17 @@ final case class TestRunConf(
        |  credentialGuardCompatibility = $credentialGuardCompatibility
        |  debugPreload = $debugPreload
        |  suites = $suites
-       |  treadmillOpts: $treadmillOpts,
-       |  extraExecOpts: $extraExecOpts
+       |  additionalScope = $additionalScope
+       |  treadmillOpts = $treadmillOpts
+       |  extraExecOpts = $extraExecOpts
        |  category = $category
+       |  groups = $groups
        |  owner = $owner
        |  flags = $flags
        |  jacocoOpts: $jacocoOpts
        |  interopPython = $interopPython
+       |  python = $python
+       |  linkedModuleName = $linkedModuleName
        |)""".stripMargin
   }
 }

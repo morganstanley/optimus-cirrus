@@ -20,6 +20,7 @@ import optimus.platform.relational.data.FieldReader
 import optimus.platform.relational.data.QueryCommand
 import optimus.platform.relational.tree.ExecuteOptions
 import optimus.platform.relational.tree.MethodPosition
+import optimus.platform.relational.tree.MultiRelationElement
 import optimus.platform.relational.tree.ProviderRelation
 import optimus.platform.relational.tree.TypeInfo
 
@@ -33,11 +34,12 @@ private[platform] trait ProviderWithEntityInfo { self: ProviderRelation =>
   }
 }
 
-final case class EventProvider(
+private[platform] final case class EventProvider(
     classEntityInfo: ClassEntityInfo,
     override val typeInfo: TypeInfo[_],
     override val key: RelationKey[_],
-    override val pos: MethodPosition)
+    override val pos: MethodPosition,
+    underlying: Option[MultiRelationElement] = None)
     extends DataProvider(typeInfo, key, pos, keyPolicy = KeyPropagationPolicy.NoKey)
     with ProviderWithEntityInfo {
 
@@ -59,5 +61,6 @@ final case class EventProvider(
       executeOptions: ExecuteOptions): ProviderRelation = throw new UnsupportedOperationException(msg)
 
   override def getProviderName: String = "EventProvider"
-  override def makeKey(newKey: RelationKey[_]): ProviderRelation = EventProvider(classEntityInfo, typeInfo, newKey, pos)
+  override def makeKey(newKey: RelationKey[_]): ProviderRelation =
+    copy(classEntityInfo = classEntityInfo, typeInfo = typeInfo, key = newKey, pos = pos)
 }

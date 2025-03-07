@@ -310,6 +310,22 @@ object BreadcrumbsSchema {
       final val latency = "lat"
       final val queueTime = "q_t"
       final val topic = "topic"
+      final val backfillerEnv = "backfiller_env"
+      final val zookeeper = "zookeeper"
+      final val zkEnv = "zk_env"
+      final val zkPath = "zk_path"
+      final val pollerPerThreadFlag = "poller_per_thread_flag"
+      final val batchCommitSize = "batch_commit_size"
+      final val propagateCpsFlag = "propagate_cps_flag"
+      final val waitInMillisForConnectionIssues = "wait_in_millis_for_connection_issues"
+      final val checkForZKNode = "check_for_zk_node"
+      final val bridgeMode = "bridge_mode"
+      final val mqManager = "mq_manager"
+      final val queueName = "queue_name"
+      final val errorMqManager = "error_mq_manager"
+      final val errorQueueName = "error_queue_name"
+      final val messageKafkaKeyRegexes = "message_kafka_key_regexes"
+      final val concurrencyLevel = "concurrency_level"
     }
   }
 

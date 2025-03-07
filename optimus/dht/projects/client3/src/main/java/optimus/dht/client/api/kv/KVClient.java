@@ -11,13 +11,13 @@
  */
 package optimus.dht.client.api.kv;
 
-import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import optimus.dht.client.api.Key;
 import optimus.dht.client.api.module.ModuleClient;
+import optimus.dht.common.api.transport.DataStreamConsumer;
 import optimus.dht.client.api.transport.OperationDetails;
 import optimus.dht.common.api.Keyspace;
 
@@ -117,4 +117,11 @@ public interface KVClient<K extends Key> extends ModuleClient {
       KVLargeEntry<K> entry,
       String correlationName,
       Callback<Boolean> resultCallback);
+
+  <S extends DataStreamConsumer> void streamingGet(
+      Keyspace keyspace,
+      K key,
+      String correlationName,
+      Supplier<S> streamConsumerSupplier,
+      Callback<KVStreamEntry<K, S>> resultCallback);
 }

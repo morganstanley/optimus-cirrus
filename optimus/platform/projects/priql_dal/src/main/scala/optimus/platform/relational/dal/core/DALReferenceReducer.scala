@@ -145,7 +145,7 @@ object DALReferenceReducer {
     override val binder: QueryBinder = DALReferenceBinder
   }
 
-  private class DALReferenceBinder(mapper: QueryMapper, root: RelationElement) extends DALBinder(mapper, root) {
+  class DALReferenceBinder(mapper: QueryMapper, root: RelationElement) extends DALBinder(mapper, root) {
     override def bind(e: RelationElement): RelationElement = {
       visitElement(e) match {
         case x: ProjectionElement =>
@@ -208,7 +208,7 @@ object DALReferenceReducer {
     }
   }
 
-  private object DALReferenceBinder extends DALQueryBinder {
+  object DALReferenceBinder extends DALQueryBinder {
     def bind(mapper: QueryMapper, e: RelationElement): RelationElement = {
       new DALReferenceBinder(mapper, e).bind(e)
     }
@@ -246,7 +246,14 @@ object DALRegisteredIndexReferenceReducer {
     }
   }
 
+  class DALRegisteredIndexReferenceMapper(m: DALMapping, t: QueryTranslator) extends DALMapper(m, t) {
+    override val binder: QueryBinder = DALRegisteredIndexReferenceBinder
+  }
+
   class DALRegisteredIndexReferenceMapping extends DALReferenceMapping {
     override def isProviderSupported(dp: DataProvider): Boolean = DALRegisteredIndexMapping.isProviderSupported(dp)
+    override def createMapper(translator: QueryTranslator): DALMapper = {
+      new DALRegisteredIndexReferenceMapper(this, translator)
+    }
   }
 }

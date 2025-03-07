@@ -41,7 +41,7 @@ public final class EvaluationState {
   public static final int TRACK_TWEAK_USAGE_PER_NODE = 0x20;
   /** Set on scenario stacks that have to collect tweaks usage for when-clauses */
   public static final int RECORD_WHEN_DEPENDENCIES = 0x40;
-  /** At least some tweak/dal usage trackingis ON */
+  /** Recording or dependency tracking is enabled */
   public static final int TRACK_OR_RECORD_TWEAKS = RECORD_TWEAK_USAGE | TRACK_TWEAK_USAGE_PER_NODE;
   /** At least some tweak/dal usage is ON */
   public static final int NON_BASIC_STACK =
@@ -54,13 +54,11 @@ public final class EvaluationState {
    * concurrency == 1
    */
   public static final int IN_NON_CONCURRENT_SEQ = 0x100;
-  /** Flag is set if a false circular reference could be caused by waiting for an XS node */
-  public static final int NO_WAIT_FOR_XS_NODE = 0x200;
   /** Flag is set to true on stateless "constant" scenario stacks where node evaluation is banned */
-  public static final int CONSTANT = 0x400;
+  public static final int CONSTANT = 0x200;
 
   /** Allow auditor to execute node on graph and being able to ignore those */
-  public static final int AUDITOR_CALLBACKS_DISABLED = 0x800;
+  public static final int AUDITOR_CALLBACKS_DISABLED = 0x400;
 
   /**
    * Do not cache across this scenario stack barrier, because it could cause (for example) batching
@@ -87,10 +85,9 @@ public final class EvaluationState {
   }
 
   /** Updates flags for usage by RecordingScenarioStack */
-  public static int flagsForRecordingScenarioStack(int state, boolean noWaitForXS) {
-    int flags = (state & ~TRACK_TWEAK_USAGE_PER_NODE) | RECORD_TWEAK_USAGE | CACHED_TRANSITIVELY;
-    if (noWaitForXS) flags = flags | NO_WAIT_FOR_XS_NODE;
-    return flags;
+  public static int flagsForRecordingScenarioStack(int state) {
+    var turnOn = RECORD_TWEAK_USAGE | CACHED_TRANSITIVELY;
+    return (state | turnOn) & ~TRACK_TWEAK_USAGE_PER_NODE;
   }
 
   public static final int TRACKING_SCENARIO_STACK_FLAGS =
@@ -101,19 +98,16 @@ public final class EvaluationState {
           | IN_NON_CONCURRENT_SEQ
           | SCENARIO_INDEPENDENT_STACK
           | RECORD_TWEAK_USAGE
-          | RECORD_WHEN_DEPENDENCIES
-          | NO_WAIT_FOR_XS_NODE;
-
+          | RECORD_WHEN_DEPENDENCIES;
   public static final int FLAGS_TO_PROPAGATE_TO_SI_STACK =
       IGNORE_SYNC_STACKS
           | CACHED_TRANSITIVELY
           | AUDITOR_CALLBACKS_DISABLED
           | FAIL_ON_SYNC_STACKS
-          | IN_NON_CONCURRENT_SEQ
-          | NO_WAIT_FOR_XS_NODE;
+          | IN_NON_CONCURRENT_SEQ;
 
   public static final int ENGINE_PROPAGATION_CLEAR_FLAGS =
-      IGNORE_SYNC_STACKS | FAIL_ON_SYNC_STACKS | IN_NON_CONCURRENT_SEQ | NO_WAIT_FOR_XS_NODE;
+      IGNORE_SYNC_STACKS | FAIL_ON_SYNC_STACKS | IN_NON_CONCURRENT_SEQ;
 
   /** Updates flags for usage by DependencyTracker */
   public static int flagsForMutableScenarioStack(int state) {
@@ -126,13 +120,13 @@ public final class EvaluationState {
         + (((flags & RECORD_TWEAK_USAGE) != 0) ? ".rec" : "") // Recording
         + (((flags & TRACK_TWEAK_USAGE_PER_NODE) != 0) ? ".trk" : "") // Tracking
         + (((flags & CACHED_TRANSITIVELY) != 0) ? "" : ".-$") // No caching is not a common case
+        + (((flags & NOT_TRANSPARENT_FOR_CACHING) != 0) ? "_" : "") // XSFT uses as cache barrier
         + (((flags & IGNORE_SYNC_STACKS) != 0) ? ".-sync" : "") //
         + (((flags & SCENARIO_INDEPENDENT_STACK) != 0) ? ".si" : "") // See comments in flags
         + (((flags & (SCENARIO_INDEPENDENT_STACK | SCENARIO_INDEPENDENT_SELF_OR_ANCESTOR))
                 == SCENARIO_INDEPENDENT_SELF_OR_ANCESTOR)
             ? ".sip"
             : "") // i.e. SCENARIO_INDEPENDENT_SELF_OR_ANCESTOR but not SCENARIO_INDEPENDENT_STACK
-        + (((flags & NO_WAIT_FOR_XS_NODE) != 0) ? ".XS-nw" : "")
         + (((flags & CONSTANT) != 0) ? ".const" : "");
   }
 }

@@ -53,6 +53,17 @@ final case class PythonDependencies(
     }
 }
 
+object PythonDefinition {
+  def apply(
+      version: String,
+      path: String,
+      thinPyapp: String,
+      variant: Option[PythonDependencies.Variant]): PythonDefinition = {
+    val fixedPath = path.replaceAll("/+", "/")
+    new PythonDefinition(version, fixedPath, thinPyapp, variant)
+  }
+}
+
 final case class PythonDefinition(
     version: String,
     path: String,

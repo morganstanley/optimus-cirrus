@@ -107,7 +107,8 @@ object TemporalSource {
   def uninitializedInitialTime(): Instant = {
     val msg = s"nodestack=${GraphException.pathAsString()}; scenarioStack=${GraphException.scenarioStackString()}"
     val e = new UninitializedInitialTimeException(msg)
-    if (Settings.killOnUninitializedTime) InfoDumper.graphPanic("panic", s"Uninitialized initialTime $msg", 121, e)
+    if (Settings.killOnUninitializedTime)
+      InfoDumper.graphPanic("panic", s"Uninitialized initialTime $msg", 121, e, null)
     throw e
   }
 

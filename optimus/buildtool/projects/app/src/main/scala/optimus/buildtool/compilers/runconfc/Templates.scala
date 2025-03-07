@@ -13,6 +13,7 @@ package optimus.buildtool.compilers.runconfc
 
 import java.nio.file.Paths
 import optimus.buildtool.artifacts.CompilationMessage
+import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.runconf.compile.InputFile
 import optimus.buildtool.runconf.plugins.ScriptTemplates
@@ -50,11 +51,11 @@ object Templates {
 
   @node def defaultTemplates(templates: Seq[InputFile]): Seq[TemplateDescription] = templates.collect {
     case templateInput if isMatchingPlatformTemplateName(templateInput, unixTemplateFileNames) =>
-      TemplateDescription(linuxTemplateName, templateInput, "")
+      TemplateDescription(linuxTemplateName, templateInput, NamingConventions.KshExt)
     case templateInput if isMatchingPlatformTemplateName(templateInput, windowsTemplateFileNames) =>
-      TemplateDescription(windowsTemplateName, templateInput, ".bat", "\r\n")
+      TemplateDescription(windowsTemplateName, templateInput, NamingConventions.WindowsBatchExt, "\r\n")
     case templateInput if isMatchingPlatformTemplateName(templateInput, dockerTemplateFileNames) =>
-      TemplateDescription(dockerTemplateName, templateInput, ".dckr.sh")
+      TemplateDescription(dockerTemplateName, templateInput, NamingConventions.DockerBashExt)
   }
 
   def linuxShellVariableNameWrapper(varName: String): String = s"$${$varName}"

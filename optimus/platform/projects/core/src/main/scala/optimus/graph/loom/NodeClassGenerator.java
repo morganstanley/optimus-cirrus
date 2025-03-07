@@ -17,7 +17,10 @@ import static optimus.CoreUtils.stripPrefix;
 import static optimus.debug.CommonAdapter.asTypes;
 import static optimus.debug.CommonAdapter.newMethod;
 import static optimus.debug.InstrumentationConfig.*;
+import static optimus.graph.OGTrace.CachedSuffix;
 import static optimus.graph.loom.LoomConfig.*;
+import static optimus.graph.loom.NameMangler.mangleName;
+import static optimus.graph.loom.NameMangler.mkLoomName;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandleInfo;
@@ -160,8 +163,8 @@ public class NodeClassGenerator implements Opcodes {
 
   private String exposeArgsTraitName() {
     var owner = methodOwner.getInternalName();
-    var separator = owner.endsWith("$") ? "" : "$";
-    return owner + separator + methodName + "$node";
+    var separator = owner.endsWith(CachedSuffix) ? "" : CachedSuffix;
+    return owner + separator + methodName + CachedSuffix + "node";
   }
 
   private String[] getInterfaces() {
@@ -242,10 +245,11 @@ public class NodeClassGenerator implements Opcodes {
         var forwardedArgs = methodType.dropParameterTypes(0, cArgs.length).parameterArray();
         mv.loadArgsWithCast(forwardedArgs);
       }
-      var methodName = isLambda() ? this.methodName : this.methodName + LOOM_SUFFIX;
-      var methodOwner = this.methodOwner.getInternalName();
+      var jvmClsName = this.methodOwner.getInternalName();
+      var mangledClsName = mangleName(jvmClsName);
+      var methodName = isLambda() ? this.methodName : mkLoomName(mangledClsName, this.methodName);
       var opCode = isStatic ? INVOKESTATIC : isInterface ? INVOKEINTERFACE : INVOKEVIRTUAL;
-      mv.visitMethodInsn(opCode, methodOwner, methodName, methodDesc, isInterface);
+      mv.visitMethodInsn(opCode, jvmClsName, methodName, methodDesc, isInterface);
       if (methodType.returnType() != runMethodType.returnType()) mv.valueOfForScala(returnType);
       mv.returnValue();
     }

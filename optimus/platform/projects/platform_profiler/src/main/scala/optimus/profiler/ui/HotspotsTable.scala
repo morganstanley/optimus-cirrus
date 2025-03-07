@@ -11,6 +11,9 @@
  */
 package optimus.profiler.ui
 
+import optimus.breadcrumbs.crumbs.Properties.Key
+import optimus.breadcrumbs.crumbs.Properties._
+
 import java.awt.Color
 import java.util
 import javax.swing.JMenuItem
@@ -20,8 +23,8 @@ import optimus.config.NodeCacheConfigs
 import optimus.debugger.browser.ui.GraphBrowserAPI
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
+import optimus.graph.OGTrace
 import optimus.graph.OGTraceReader
-import optimus.graph.PluginType
 import optimus.graph.PropertyNode
 import optimus.graph.Settings
 import optimus.graph.cache.Caches
@@ -34,6 +37,7 @@ import optimus.graph.diagnostics.NodeName
 import optimus.graph.diagnostics.PNodeTask
 import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.SelectionFlags
+import optimus.graph.diagnostics.trace.ReuseHistogram
 import optimus.profiler.DebuggerUI
 import optimus.profiler.ProfilerUI
 import optimus.profiler.recipes.GraphAlgos
@@ -63,13 +67,13 @@ object HotspotsTable {
 
   private[ui] val c_started = new TableColumnLong[PNodeTaskInfo]("Started", 60) {
     override def valueOf(row: PNodeTaskInfo): Long = row.start
-    override def toolTip = "Nodes started"
     override def getHeaderColor: Color = nodeCacheSectionColor
+    override val property: Option[Key[_]] = Some(hotspotStart)
   }
   private val c_evicted = new TableColumnLong[PNodeTaskInfo]("Evicted", 60) {
     override def valueOf(row: PNodeTaskInfo): Long = row.evicted
-    override def toolTip = "Nodes evicted from cache"
     override def getHeaderColor: Color = nodeCacheSectionColor
+    override val property: Option[Key[_]] = Some(hotspotEvicted)
   }
   private val c_retained = new TableColumnLong[PNodeTaskInfo]("Retained", 60) {
     override def valueOf(row: PNodeTaskInfo): Long =
@@ -90,10 +94,12 @@ object HotspotsTable {
   private[ui] val c_cacheHit = new TableColumnLong[PNodeTaskInfo]("Cache Hit", 60) {
     override def valueOf(row: PNodeTaskInfo): Long = row.cacheHit
     override def getHeaderColor: Color = nodeCacheSectionColor
+    override val property: Option[Key[_]] = Some(hotspotCacheHit)
   }
   private[ui] val c_cacheMiss = new TableColumnLong[PNodeTaskInfo]("Cache Miss", 60) {
     override def valueOf(row: PNodeTaskInfo): Long = row.cacheMiss
     override def getHeaderColor: Color = nodeCacheSectionColor
+    override val property: Option[Key[_]] = Some(hotspotCacheMiss)
   }
   private val c_cacheHitRatio = new TableColumnTime[PNodeTaskInfo]("Cache Hit Ratio", 80) {
     override def valueOf(row: PNodeTaskInfo): Double =
@@ -130,8 +136,8 @@ object HotspotsTable {
 
   private val c_tweakLookupTime = new TableColumnTime[PNodeTaskInfo]("Tweak Lookup Time (ms)", 60) {
     override def valueOf(row: PNodeTaskInfo): Double = row.tweakLookupTime * 1e-6
-    override def toolTip = "Time spent looking up tweak of a given property"
     override def getHeaderColor: Color = nodeTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotTweakLookupTime)
   }
 
   private val c_tweakID = new TableColumnCount[PNodeTaskInfo]("Tweak ID", 60) {
@@ -334,11 +340,8 @@ object HotspotsTable {
   }
   private val c_cacheReuseTime = new TableColumnTime[PNodeTaskInfo]("Node Reused Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.nodeReusedTime * 1e-6
-    override def toolTip: String =
-      "Total time saved by using result from cache, rather than recalculating" +
-        "<br>This can be inaccurate because first evaluation of a @node can trigger classloading, (lazy) val evaluation (such as one-time hashCode calculation), JIT compilation etc" +
-        "<br>So benefit can be over-inflated, and vary from run to run, as node evaluation order is non-deterministic"
     override def getHeaderColor: Color = cacheTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotNodeReusedTime)
   }
   private val c_nodeUseTime = new TableColumnTime[PNodeTaskInfo]("Node Used Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.nodeUsedTime * 1e-6
@@ -346,13 +349,10 @@ object HotspotsTable {
       "Total time this node would run without any caching, ie, number of times called * (self + anc time)"
     override def getHeaderColor: Color = cacheTimingSectionColor
   }
-  private[ui] val c_cacheBenefitToolTip: String = "Derived Definition: Reused Node Time - Cache Time" +
-    "<br>Calculated cache benefit of this node" +
-    "<br>Note warnings on Reused Node Time tooltip"
   private val c_cacheBenefit = new TableColumnTime[PNodeTaskInfo]("Cache Benefit (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.cacheBenefit * 1e-6
-    override def toolTip: String = c_cacheBenefitToolTip
     override def getHeaderColor: Color = cacheTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotCacheBenefit)
   }
   private val c_cacheReuseTimeAmortized = new TableColumnTime[PNodeTaskInfo]("Reused Node Time (Amortized) (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double =
@@ -382,17 +382,13 @@ object HotspotsTable {
 
   private val c_children = new TableColumnCount[PNodeTaskInfo]("Children Lookup", 60) {
     override def valueOf(row: PNodeTaskInfo): Int = row.childNodeLookupCount
-    override def toolTip = "Total number of child nodes looked up"
     override def getHeaderColor: Color = cacheTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotChildNodeLookupCount)
   }
   private val c_childCacheTime = new TableColumnTime[PNodeTaskInfo]("Child Cache Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.childNodeLookupTime * 1e-6
-    override def toolTip: String =
-      "Time spent looking up child nodes in cache" +
-        "<br>This is included in the Self Time of node" +
-        "<br>If Self Time and Child Node Lookup Time are close, it implies the node does little work" +
-        "<br>Child Node Lookup Time is the Cache Time"
     override def getHeaderColor: Color = cacheTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotChildNodeLookupTime)
   }
 
   private val c_childrenPerNode = new TableColumnTime[PNodeTaskInfo]("Children per Node", 60) {
@@ -424,32 +420,20 @@ object HotspotsTable {
   }
   private[ui] val c_selfTime = new TableColumnTime[PNodeTaskInfo]("Self Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.selfTime * 1e-6
-    override def toolTip: String =
-      "Total CPU time, across multiple invocations<br><br>" +
-        "<i>Note - includes: <br>" +
-        "Cache lookup time of its children<br>" +
-        "Tweak lookup time<br>" +
-        "Some args hash time for tweakable nodes in XS scope</i><br>" +
-        "See docs for more detail"
     override def getHeaderColor: Color = nodeTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotSelfTime)
   }
+
   private val c_ancTime = new TableColumnTime[PNodeTaskInfo]("ANC Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.ancSelfTime * 1e-6
-    override def toolTip: String =
-      "Ancillary Self Time<br>Defined as sum of self times of all non-cached child nodes<br><br>" +
-        "<div style='font-family:consolas;font-size:12pt'><span style='color:blue'>def</span> g = given(tweaks) { <span style='color:green'>some_code</span> }</div>" +
-        "<span style='color:green'>some_code</span> is represented by a node (<i>g_given_12</i> where 12 is the line number in the source file)" +
-        "<br>ANC Time for node <i>g</i> will be the selfTime of the <i>g_given_12</i> node"
     override def getHeaderColor: Color = nodeTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotAncSelfTime)
   }
 
   private val c_postCompleteAndSuspendTime = new TableColumnTime[PNodeTaskInfo]("Post Complete/Suspend Time (ms)", 80) {
     override def valueOf(row: PNodeTaskInfo): Double = row.postCompleteAndSuspendTime * 1e-6
-    override def toolTip: String =
-      "Time between node completing/suspending and stopping, across multiple invocations<br><br>" +
-        "<i>Most of this time is taken notifying the waiters of this node.<br>" +
-        "It's a graph internal time, not related to the user code in this node</i>"
     override def getHeaderColor: Color = nodeTimingSectionColor
+    override val property: Option[Key[_]] = Some(hotspotPostCompleteTime)
   }
 
   private val c_wallTime_perStart = new TableColumnTime[PNodeTaskInfo]("Wall Time per Node (ms)", 80) {
@@ -491,12 +475,13 @@ object HotspotsTable {
     override def valueOf(row: PNodeTaskInfo): String = row.fullName()
     override def getHeaderColor: Color = nodeInfoSectionColor
     override def summaryType: TableColumn.SummaryType = TableColumn.SummaryType.Count
+    override val property: Option[Key[_]] = Some(hotspotPropertyName)
   }
   private val c_propertyShort = new TableColumnString[PNodeTaskInfo]("Property/Node Short", 200) {
     override def valueOf(row: PNodeTaskInfo): String = row.fullNamePackageShortened()
-    override def toolTip = "Shortened Property/Node Name"
     override def summaryType: TableColumn.SummaryType = TableColumn.SummaryType.Count
     override def getHeaderColor: Color = nodeInfoSectionColor
+    override val property: Option[Key[_]] = Some(spPropertyName)
   }
 
   // PNodeTaskInfo (ie, hotspot row) ID to list of applet names
@@ -529,8 +514,15 @@ object HotspotsTable {
   private val c_cachedCount = new TableColumnCount[PNodeTaskInfo]("Cached Count", 80) {
     override def valueOf(row: PNodeTaskInfo): Int = if (row.jvmInfo eq null) 0 else row.jvmInfo.count
   }
+
   private val c_reuseCycle = new TableColumnCount[PNodeTaskInfo]("Reuse Cycle", 80) {
     override def valueOf(row: PNodeTaskInfo): Int = row.reuseCycle
+  }
+
+  private val c_reuseStats = new TableColumnString[PNodeTaskInfo]("Cycle Stats", 80) {
+    override def valueOf(row: PNodeTaskInfo): String =
+      ReuseHistogram.barChart(row.reuseStats) + ":" + ReuseHistogram.yAxis(row.reuseStats).mkString(",")
+    override val property: Option[Key[_]] = Some(hotspotCacheHisto)
   }
   private val c_simpleMatch = new TableColumnCount[PNodeTaskInfo]("Simple Match", 80) {
     override def valueOf(row: PNodeTaskInfo): Int = row.cacheHitTrivial
@@ -656,7 +648,7 @@ object HotspotsTable {
   memColumns.foreach(_.setCategory(memoryCategory))
 
   val cacheDetailsColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
-    ArrayBuffer(c_reuseCycle, c_simpleMatch, c_cacheName)
+    ArrayBuffer(c_reuseCycle, c_simpleMatch, c_cacheName, c_reuseStats)
   cacheDetailsColumns.foreach(_.setCategory(cacheCategory))
 
   val internalColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
@@ -730,7 +722,7 @@ class HotspotsTable(reader: OGTraceReader)
   private val showAllTweakables: DbgPreference = DbgPreference("Show All Tweakables", default = false)
   private[ui] val showAllTweakablesFn: Boolean => Unit = { b =>
     showAllTweakables.set(b)
-    HotspotsTable.this.setList(NodeProfiler.collectProfile(b))
+    HotspotsTable.this.setList(NodeProfiler.collectProfile(b, OGTrace.BLOCK_ID_ALL))
   }
 
   private def select: PNodeTaskInfo = {

@@ -13,13 +13,12 @@ package optimus.graph.diagnostics.tsprofiler
 
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.fasterxml.jackson.module.scala.ScalaObjectMapper
 import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils
-import optimus.platform.temporalSurface.tsprofiler.TemporalSurfaceProfilingDataManager
 import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.platform.temporalSurface.tsprofiler.TemporalSurfaceProfilingData
+import optimus.platform.temporalSurface.tsprofiler.TemporalSurfaceProfilingDataManager
 import optimus.platform.util.Log
+import optimus.platform.util.json.DefaultJsonMapper
 
 object TemporalSurfaceProfilingUtils extends Log {
   private val jsonFileExt = "json"
@@ -44,9 +43,7 @@ object TemporalSurfaceProfilingUtils extends Log {
   }
 
   private def initializeMapper(): ObjectMapper = {
-    val mapper = new ObjectMapper() with ScalaObjectMapper
-
-    mapper.registerModule(DefaultScalaModule)
+    val mapper = DefaultJsonMapper.legacy
     mapper.setConfig(mapper.getDeserializationConfig.without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES))
     mapper
   }

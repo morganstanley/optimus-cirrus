@@ -19,6 +19,7 @@ import optimus.buildtool.artifacts._
 import optimus.buildtool.builders.postbuilders.PostBuilder
 import optimus.buildtool.builders.postbuilders.installer.component._
 import optimus.buildtool.builders.postinstallers.PostInstaller
+import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GenericRunnerConfiguration
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ObtConfig
@@ -70,7 +71,10 @@ class Installer(
     warScopes: Set[ScopeId] = Set.empty,
     bundleFingerprintsCache: BundleFingerprintsCache,
     protected[installer] val generatePoms: Boolean = false,
-    protected val bundleClassJars: Boolean = false
+    useMavenLibs: Boolean = false,
+    protected val bundleClassJars: Boolean = false,
+    pythonConfiguration: PythonInstallerConfiguration,
+    externalDependencies: ExternalDependencies
 ) extends BaseInstaller
     with PostBuilder
     with Log {
@@ -118,11 +122,19 @@ class Installer(
     else {
       val fileInstaller = new FileInstaller(pathBuilder)
       val archiveInstaller = new ArchiveInstaller(this)
-      val ivyInstaller = new IvyInstaller(scopeConfigSource, bundleFingerprintsCache, pathBuilder, installVersion)
+      val ivyInstaller =
+        if (useMavenLibs) None
+        else
+          Some(
+            new IvyInstaller(
+              scopeConfigSource,
+              bundleFingerprintsCache,
+              pathBuilder,
+              installVersion,
+              externalDependencies))
       Seq(
         classJarInstaller,
         new SourceJarInstaller(this),
-        ivyInstaller,
         new PathingJarInstaller(this, manifestResolver),
         new CppInstaller(pathBuilder, bundleFingerprintsCache),
         new ApplicationScriptsInstaller(this, pathBuilder, scopeConfigSource, minimal),
@@ -133,8 +145,8 @@ class Installer(
         new WarInstaller(this, archiveInstaller, warScopes),
         new MavenInstaller(this),
         new ElectronInstaller(this, pathBuilder),
-        new PythonVenvInstaller(pathBuilder, bundleFingerprintsCache)
-      ) ++ testplanInstaller
+        new PythonInstaller(pathBuilder, bundleFingerprintsCache, pythonConfiguration)
+      ) ++ ivyInstaller ++ testplanInstaller
     }
   }
 
@@ -148,7 +160,6 @@ class Installer(
       Seq(
         new VersionInstaller(bundleFingerprintsCache, pathBuilder, installVersion, sys.env.get("GIT_COMMIT")),
         new BundleRunConfsInstaller(this, factory, pathBuilder),
-        new MultiBundleJarInstaller(this),
         new GenericRunnerInstaller(bundleFingerprintsCache, pathBuilder, genericRunnerConfiguration),
         new DependencyFileInstaller(this),
         new BuildPropertiesInstaller(this, pathBuilder, versionConfig)

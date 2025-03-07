@@ -22,5 +22,4 @@ public interface CloseableStreamHandler {
    * @param exception an exception that caused the connection to be closed, if known
    */
   default void connectionClosed(@Nullable Throwable exception) {}
-  ;
 }

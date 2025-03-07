@@ -198,8 +198,10 @@ trait RootEventCause extends EventCause {
 
     // callback outside the lock (out of an abundance of caution). This is safe because we never count down to zero
     // and then back up again when isComplete is true
-    if (isInBackgroundComplete)
+    if (isInBackgroundComplete) {
+      profile.markCompleted()
       onBackgroundComplete()
+    }
   }
 
   /**
@@ -210,8 +212,10 @@ trait RootEventCause extends EventCause {
 
   override protected def countDown(token: EventCause.Token): Unit = {
     super.countDown(token)
-    if (isInBackgroundComplete)
+    if (isInBackgroundComplete) {
+      profile.markCompleted()
       onBackgroundComplete()
+    }
   }
 }
 
@@ -248,8 +252,6 @@ private[optimus] trait EventCause {
     if (counter == 0) {
       if (completed) throwOrLogException(s"Already completed EventCause $this", token)
       else {
-        // Note: because onComplete will publish the profile, the order of the following two lines matter.
-        profile.markCompleted()
         onComplete()
         notifyAll()
         completed = true

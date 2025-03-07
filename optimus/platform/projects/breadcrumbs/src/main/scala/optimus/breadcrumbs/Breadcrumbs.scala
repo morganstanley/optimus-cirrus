@@ -31,6 +31,7 @@ import optimus.breadcrumbs.routing.CrumbRoutingRule
 import optimus.breadcrumbs.zookeeper.BreadcrumbsPropertyConfigurer
 import optimus.cloud.CloudUtil
 import optimus.logging.ThrottledWarnOrDebug
+import optimus.platform.util.Log
 import optimus.utils.PropertyUtils
 import org.apache.kafka.clients.producer.Callback
 import org.apache.kafka.clients.producer.KafkaProducer
@@ -39,6 +40,12 @@ import org.apache.kafka.clients.producer.RecordMetadata
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import java.io.BufferedOutputStream
+import java.io.PrintStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.zip.GZIPOutputStream
 import java.util.Objects
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
@@ -51,6 +58,9 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 import optimus.scalacompat.collection._
+
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 object BreadcrumbConsts {
   val CrumbBundle = "_crumbs" // compressed, encoded stream of serialized crumbs
@@ -550,16 +560,20 @@ abstract class BreadcrumbsPublisher extends Filterable {
   final protected[breadcrumbs] def send(crumb: Crumb): Boolean = {
     if (crumb.source.isShutdown) false
     else if (crumb.uuid.base.length > 0) {
-      def sendCrumbsForOneSource(c: Crumb) = {
-        val cReplicated = Breadcrumbs.replicateToUuids(c)
-        val s = c.source
-        val count = s.sendCount.addAndGet(cReplicated.size)
-        knownSource.put(s, s)
-        if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
-          cReplicated.map(sendInternal).forall(identity)
-        else {
-          s.shutdown()
-          false
+      def sendCrumbsForOneSource(c: Crumb): Boolean = {
+        if (c.source.publisherOverride.isDefined) {
+          c.source.publisherOverride.exists(_.sendInternal(c))
+        } else {
+          val cReplicated = Breadcrumbs.replicateToUuids(c)
+          val s = c.source
+          val count = s.sendCount.addAndGet(cReplicated.size)
+          knownSource.put(s, s)
+          if (s.maxCrumbs < 1 || count <= s.maxCrumbs)
+            cReplicated.map(sendInternal).forall(identity)
+          else {
+            s.shutdown()
+            false
+          }
         }
       }
       crumb.source match {
@@ -770,6 +784,70 @@ class BreadcrumbsLoggingPublisher(cfg: BreadcrumbConfig = new BreadcrumbConfigFr
   }
 }
 
+/**
+ * Publish into a local gzip file.
+ */
+class BreadcrumbsLocalPublisher(gzpath: Path, flushSec: Int = 10) extends BreadcrumbsPublisher with Log {
+  private val ps = new PrintStream(new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(gzpath), true)))
+  private val printed = new AtomicInteger()
+  def getPrinted: Int = printed.get
+  private val queue = new LinkedBlockingQueue[Crumb]
+  @volatile private var open = true
+  private val thread = new Thread {
+    override def run(): Unit = {
+      var flushPending = false
+      try {
+        while (open) {
+          queue.poll(flushSec, TimeUnit.SECONDS) match {
+            case null =>
+              // Flush every flushSec seconds if idle
+              if (flushPending) ps.flush()
+              flushPending = false
+            case f: FlushMarker =>
+              // Explicit flush. Notify requester on completion.
+              if (flushPending) ps.flush()
+              flushPending = false
+              if (f.close) {
+                open = false
+                queue.clear()
+                ps.close()
+              }
+              f.flushed()
+            case c =>
+              // Just another line.
+              ps.println(c.asJSON.toString)
+              printed.incrementAndGet()
+              flushPending = true
+          }
+        }
+      } catch {
+        // No point excluding fatals; the thread is existing anyway.
+        case t: Throwable =>
+          open = false
+          log.error("Publication error", t)
+      }
+    }
+  }
+  thread.setDaemon(true)
+  thread.setName("BreadcrumbsLocalPublisher")
+  thread.start()
+
+  override def collecting: Boolean = open
+  override def init(): Unit = {}
+  override protected[breadcrumbs] def sendInternal(c: Crumb): Boolean = queue.offer(c)
+  override def flush(): Unit = {
+    val fm = FlushMarker()
+    queue.offer(FlushMarker())
+    fm.await(1000)
+  }
+  override def shutdown(): Unit = {
+    val fm = FlushMarker(close = true)
+    queue.offer(FlushMarker(close = true))
+    fm.await(1000)
+  }
+  sys.addShutdownHook(shutdown())
+}
+
 object BreadcrumbsKafkaPublisher {
   private[breadcrumbs] val TopicMapKey: String = "topicMap"
 }
@@ -906,7 +984,7 @@ class BreadcrumbsKafkaPublisher private[breadcrumbs] (props: jMap[String, Object
   }
 
   override def flush(): Unit = {
-    val f = new FlushMarker
+    val f = FlushMarker()
     if (Breadcrumbs.queue.offer(f))
       if (!f.await(Breadcrumbs.drainTime)) {
         val unsentCrumbCount = Breadcrumbs.queue.size - 1

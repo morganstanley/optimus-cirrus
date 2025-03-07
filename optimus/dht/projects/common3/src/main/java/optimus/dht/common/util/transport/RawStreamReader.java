@@ -12,8 +12,10 @@
 package optimus.dht.common.util.transport;
 
 import java.nio.ByteBuffer;
+import java.util.function.Consumer;
 
 import io.netty.buffer.ByteBuf;
+import optimus.dht.common.api.transport.DataStreamConsumer;
 
 public interface RawStreamReader {
 
@@ -33,5 +35,10 @@ public interface RawStreamReader {
 
   static RawStreamReader create(ByteBuffer buffer) {
     return new ByteBufferStreamReader(buffer);
+  }
+
+  static RawStreamReader create(
+      DataStreamConsumer streamConsumer, long size, Consumer<Exception> userExceptionCallback) {
+    return new DataStreamConsumerStreamReader(streamConsumer, size, userExceptionCallback);
   }
 }

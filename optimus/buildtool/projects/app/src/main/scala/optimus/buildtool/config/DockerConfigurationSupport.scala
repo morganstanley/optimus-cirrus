@@ -34,7 +34,7 @@ import optimus.platform._
       throw new IllegalArgumentException(msg)
     }
     imageDefs.apar.map { imageDef =>
-      val scopeIds = imageDef.scopes.apar.flatMap(resolveScopes).toSet
+      val scopeIds = imageDef.scopes.toSet
       val relevantScopeIds = dockerRelevantScopeIds(scopeIds)
 
       DockerImage(outputDir, tag, dockerStructure.configuration.defaults, imageDef, scopeIds, relevantScopeIds)

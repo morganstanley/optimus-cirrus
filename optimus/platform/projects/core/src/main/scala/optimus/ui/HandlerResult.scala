@@ -46,6 +46,7 @@ final case class HandlerResult(
     widgets: collection.Seq[BaseWidget] = collection.Seq.empty,
     scenarioToTweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]] = Map.empty,
     private val reevaluationPostponed: Boolean = false,
+    private val noLazyEvaluation: Boolean = false,
     private val nextStepsBuilder: List[HandlerStep] = Nil,
     private[optimus] val profilingMetadata: Map[String, String] = Map.empty,
     private[optimus] val globalEventTag: Option[String] = None
@@ -68,6 +69,16 @@ final case class HandlerResult(
 
   private[optimus] def skipReevaluation: Boolean =
     (tweaks.isEmpty && scenarioToTweakLambdas.isEmpty) || reevaluationPostponed
+
+//   Provide a way to turn off the lazyEval feature.
+//   Considering the case that some Tweaks will cause a ViewerViewable to reevaluate where it contains sth like
+//    Label(_.afterRenderHandler --> HandlerResult.withGui(
+//      gui {
+//        Dialog(_.title := "Label is renderred")
+//      })
+//   when lazyEval is on, the new gui block will not get evaluated when the invalidated nodes from the tweaks are in invisible applet, hence dialog won't popup.
+//   but sometimes users are keen to always have immediate side effects after that Tweaks have been applied.
+  private[optimus] def isLazyEvalutionOff: Boolean = noLazyEvaluation
 
   @deprecating("Temporary method during HandlerResultMigration")
   def mergeWithNewTweakLambdas(
@@ -256,6 +267,7 @@ final case class HandlerResult(
     andThen(WaitForAllPrevious(ScenarioReference.current, sourceLocation))
 
   def postponeReevaluation: HandlerResult = copy(reevaluationPostponed = true)
+  def noLazyEval: HandlerResult = copy(noLazyEvaluation = true)
 }
 
 object HandlerResult {

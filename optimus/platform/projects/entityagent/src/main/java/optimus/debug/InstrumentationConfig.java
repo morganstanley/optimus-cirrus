@@ -57,7 +57,7 @@ public class InstrumentationConfig {
   public static final Type OBJECT_TYPE = Type.getObjectType(OBJECT_CLS_NAME);
 
   private static final String ENTITY_TYPE = "optimus/platform/storable/Entity";
-  static final String ENTITY_ANNOTATION = "Loptimus/platform/entity;";
+  public static final String ENTITY_ANNOTATION = "Loptimus/platform/entity;";
   private static final String SS_TYPE = "optimus/platform/ScenarioStack";
   public static final String OGSC_TYPE = "optimus/graph/OGSchedulerContext";
   public static final String IS = "optimus/graph/InstrumentationSupport";

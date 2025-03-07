@@ -18,6 +18,7 @@ import optimus.buildtool.format.Result
 import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Success
 
+import scala.collection.compat._
 import scala.collection.immutable.Seq
 
 final case class MultiSourceDependencies(loaded: Seq[MultiSourceDependency]) {
@@ -36,7 +37,7 @@ final case class MultiSourceDependency(
     maven: Seq[DependencyDefinition],
     line: Int,
     ivyConfig: Boolean = false)
-    extends OrderedElement {
+    extends OrderedElement[DependencyId] {
   private def mavenDefinition: DependencyDefinition = maven match {
     case Seq(mavenAlone) => mavenAlone // for maven-only mixed mode definitions
     case multipleMaven
@@ -71,22 +72,20 @@ final case class MultiSourceDependency(
 
 object MultiSourceDependency {
   private[buildtool] val MultipleAfsError = "only one afs dependency should be defined!"
-  private[buildtool] def NoMavenVariantError(name: String) = s"'$name' no maven equivalent variant found!"
   private[buildtool] val NoVersionError = "maven version must be defined in order to map afs dependency!"
-  private[buildtool] def emptyDepError(name: String) = s"'$name' is empty!"
+  private[buildtool] def emptyDepError(name: String) =
+    s"'$name' has no maven definition or explicit runtime ivy configuration!"
 
-  def apply(
+  def expandDependencyDefinitions(
       obtFile: ObtFile,
       confValue: ConfigValue,
       name: String,
       afsDep: Option[DependencyDefinition],
+      afsVariants: Seq[DependencyDefinition],
       mavenDeps: Seq[DependencyDefinition],
-      ivyCfgsMap: Map[DependencyDefinition, Seq[DependencyDefinition]],
+      maybeOverridenRuntime: Option[MultiSourceDependency],
       line: Int): Result[Seq[MultiSourceDependency]] = {
     val emptyError = Failure(Seq(obtFile.errorAt(confValue, emptyDepError(name))))
-    val loadedIvyCfgs = ivyCfgsMap.map { case (ivy, equivalents) =>
-      MultiSourceDependency(s"$name.${ivy.configuration}", Some(ivy), equivalents, ivy.line, ivyConfig = true)
-    }
 
     def getMavenVariants(mavenVariants: Seq[DependencyDefinition]) =
       mavenVariants.map { d =>
@@ -94,7 +93,7 @@ object MultiSourceDependency {
           case Some(mavenVar) => s"$name.variant.${mavenVar.name}" // for example: foo.variant.bar
           case None           => name
         }
-        MultiSourceDependency(nameWithVariant, None, Seq(d), line)
+        MultiSourceDependency(nameWithVariant, None, Seq(d), d.line)
       }
 
     def getMavenDependencies =
@@ -119,17 +118,38 @@ object MultiSourceDependency {
 
     afsDep match {
       case Some(afs) =>
-        if (mavenDeps.isEmpty) emptyError
+        // Remove the comments after next obt release.
+        if (maybeOverridenRuntime.isDefined /* && mavenDeps.nonEmpty */ ) Success(Nil)
+        /* Failure(Seq(obtFile.errorAt(confValue, "There is a runtime override present in `ivyConfigurations` at line ${maybeOverridenRuntime.get.line}")), please remove this line and add this dependency inside ivyConfigurations along with including it in `runtime.extends` list */
+        else if (mavenDeps.isEmpty) emptyError
         else if (mavenDeps.exists(_.version.isEmpty))
           Failure(Seq(obtFile.errorAt(confValue, NoVersionError)))
         else {
+          val afsVariantMap = toMap(afsVariants)
           val (mavenVariants, mavenLibs) = mavenDeps.partition(_.variant.isDefined)
-          val mapped = MultiSourceDependency(name, Some(afs), mavenLibs, line)
-          val notMapped = getMavenVariants(mavenVariants) // variants only be used for forced version
-          Success(notMapped ++ loadedIvyCfgs :+ mapped)
+          val mavenVariantsMap = mavenVariants.groupBy(_.variant.map(_.name))
+          val mappedVariants = mavenVariantsMap.to(Seq).map { case (variantName, mavenDeps) =>
+            afsVariantMap.get(variantName) -> mavenDeps
+          }
+          val mapped = MultiSourceDependency(name, Some(afs), mavenLibs, line) +: mappedVariants
+            .collect { case (Some(afs), mavens) =>
+              MultiSourceDependency(name, Some(afs), mavens, line)
+            }
+            .to(Seq)
+          val notMapped = getMavenVariants(
+            mappedVariants.collect { case (None, mavens) => mavens }.flatten.to(Seq)
+          ) // variants only be used for forced version
+          Success(notMapped ++ mapped)
         }
       case None => getMavenDependencies
     }
 
   }
+
+  private def toMap(libs: Seq[DependencyDefinition]): Map[Option[String], DependencyDefinition] =
+    libs.groupBy(_.variant.map(_.name)).map {
+      case (k, Seq(v)) => k -> v
+      case (k, vs) =>
+        throw new IllegalArgumentException(s"Multiple definitions for variant $k: ${vs.map(_.key).mkString(", ")}")
+    }
 }

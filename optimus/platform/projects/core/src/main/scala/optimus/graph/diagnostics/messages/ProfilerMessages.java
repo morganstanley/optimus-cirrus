@@ -66,6 +66,8 @@ public abstract class ProfilerMessages {
 
   public void reuseCycle(int pid, int rcount) {}
 
+  public void reuseStats(int pid, long rcount) {}
+
   public void nodeHashCollision(int pid) {}
 
   public void counterEvent(byte[] serializedEvent) {}
@@ -116,6 +118,7 @@ public abstract class ProfilerMessages {
       long evicted,
       int invalidated,
       int reuseCycle,
+      long reuseStats,
       long selfTime,
       long ancAndSelfTime,
       long postCompleteAndSuspendTime,

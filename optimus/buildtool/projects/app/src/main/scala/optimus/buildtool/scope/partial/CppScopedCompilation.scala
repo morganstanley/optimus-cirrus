@@ -18,7 +18,7 @@ import optimus.buildtool.scope.CompilationScope
 import optimus.buildtool.scope.sources.CppCompilationSources
 import optimus.platform._
 
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity private[scope] class CppScopedCompilation(
     scope: CompilationScope,
@@ -44,10 +44,10 @@ import scala.collection.immutable.Seq
 ) extends PartialScopedCompilation {
   import scope._
 
-  @node override protected def upstreamArtifacts: Seq[Artifact] = upstream.cppForOurOsCompiler(sources.osVersion)
+  @node override protected def upstreamArtifacts: IndexedSeq[Artifact] = upstream.cppForOurOsCompiler(sources.osVersion)
   @node override protected def containsRelevantSources: Boolean = !cppFallback && !sources.isEmpty
 
-  @node def artifacts: Seq[Artifact] =
+  @node def artifacts: IndexedSeq[Artifact] =
     compile(ArtifactType.Cpp, Some(sources.osVersion))(compiler.artifact(id, compilerInputsN))
 
   @node private def compilerInputsN = asNode(() => compilerInputs)

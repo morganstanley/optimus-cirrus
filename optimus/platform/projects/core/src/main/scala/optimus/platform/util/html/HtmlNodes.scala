@@ -154,11 +154,15 @@ final case class Bold(contents: StringContents = classOf[Bold]) extends StyledLe
   override def isDescriptive = false // Bold is not descriptive of contents
 }
 object PreFormatted {
-  def apply(str: String) = new PreFormatted(StringContents(str, pre = true))
+  def apply(str: String, wrap: Boolean = true) = new PreFormatted(StringContents(str), wrap)
 }
-final case class PreFormatted(contents: StringContents = classOf[PreFormatted]) extends StyledLeafHtmlNode {
-  override def css = "font-family: monospace; white-space: pre;"
-  override def withDefaultStringContents = PreFormatted()
+final case class PreFormatted(contents: StringContents, wrap: Boolean) extends StyledLeafHtmlNode {
+  // Note: there is a bug in javax.swing.text.html.InlineView.setPropertiesFromAttributes which means that
+  // white-space: pre isn't supported, only "nowrap".
+  //
+  // Also it won't attempt to break within words at all.
+  override def css = "font-family: monospace;" + (if (!wrap) " white-space: nowrap;" else "")
+  override def withDefaultStringContents = PreFormatted(classOf[PreFormatted], false)
 }
 
 /**
@@ -167,12 +171,8 @@ final case class PreFormatted(contents: StringContents = classOf[PreFormatted]) 
 sealed trait HtmlNodeContents {
   def isEmpty: Boolean
 }
-final case class StringContents(str: String, pre: Boolean = false) extends HtmlNodeContents {
-  override def toString: String = {
-    val escaped = StringEscapeUtils.escapeHtml4(str)
-    // workaround because white-space: pre does not seem to work in JTextPane
-    if (pre) escaped.replaceAll(" ", "&nbsp;") else escaped
-  }
+final case class StringContents(str: String) extends HtmlNodeContents {
+  override def toString: String = StringEscapeUtils.escapeHtml4(str)
   override def isEmpty: Boolean = str.isEmpty
 }
 object StringContents {

@@ -48,45 +48,9 @@ sealed trait CommandRecorder {
   def complete: Unit
 
   /**
-   * some data for extensions to use. Not used by optimus
-   */
-  var userData: AnyRef
-
-  /**
    * does this counter have any useful data
    */
   def used: Boolean
-
-  /**
-   * start of a cache access
-   */
-  def startCache: Unit
-
-  /**
-   * records that a temporal surface cache could satisfy the data request
-   */
-  def cacheHit: Unit
-
-  /**
-   * records that a temporal surface cache could not satisfy the data request
-   */
-  def cacheMiss: Unit
-
-  /**
-   * records that the ClassInfo cache could satisfy the data request
-   */
-  def classCacheHit: Unit
-
-  /**
-   * records that the ClassInfo cache could not satisfy the data request
-   */
-  def classCacheMiss: Unit
-
-  /**
-   * records that a temporal surface cache miss resulted in no data from the DAL. Note this is included in the count of
-   * cache miss
-   */
-  def cacheMissEmpty: Unit
 
   /**
    * the recorded start time
@@ -98,15 +62,7 @@ object NoCommandRecorder extends CommandRecorder {
   override def recordDalAccess(n: NodeTask, eq: EvaluationQueue): Unit = {}
   override def childRecorder(start: Boolean) = this
   override def complete: Unit = {}
-  override def userData = null
-  override def userData_=(x: AnyRef) = ???
   override def used = false
-  override def startCache: Unit = {}
-  override def cacheHit: Unit = {}
-  override def cacheMiss: Unit = {}
-  override def cacheMissEmpty: Unit = {}
-  override def classCacheHit: Unit = {}
-  override def classCacheMiss: Unit = {}
   override def startTime = 0L
 }
 final class StatsCommandRecorder(val parent: StatsCommandRecorder, _startNow: Boolean)
@@ -131,44 +87,8 @@ final class StatsCommandRecorder(val parent: StatsCommandRecorder, _startNow: Bo
 
   private val _completionTime = new AtomicLong
 
-  private val _cacheHits = new AtomicLong
-  private val _cacheMiss = new AtomicLong
-  private val _cacheMissNoData = new AtomicLong
-
-  private val _classCacheHits = new AtomicLong
-  private val _classCacheMiss = new AtomicLong
-
-  override def startCache = {
-    if (_startTime.get < 0) ensureStarted(-1L)
-  }
-
-  private def cacheAccess: Unit = { _end.set(System.nanoTime()) }
-
-  override def cacheHit = {
-    cacheAccess
-    _cacheHits.incrementAndGet()
-  }
-  override def cacheMiss = {
-    cacheAccess
-    _cacheMiss.incrementAndGet()
-  }
-  override def cacheMissEmpty = {
-    _cacheMissNoData.incrementAndGet()
-  }
-  override def classCacheHit = {
-    cacheAccess
-    _classCacheHits.incrementAndGet()
-  }
-  override def classCacheMiss = {
-    cacheAccess
-    _classCacheMiss.incrementAndGet()
-  }
-
   override def used =
-    _cacheHits.get == 0 && _cacheMiss.get == 0 && _totalDalCommands.get == 0L && _completionTime.get == 0L
-
-  // for user info, extended plugins etc
-  var userData: AnyRef = _
+    _totalDalCommands.get == 0L && _completionTime.get == 0L
 
   override def complete: Unit = {
     // currently child node may complete multiple times as the key ( the temporal surface) may be revisited
@@ -226,14 +146,8 @@ final class StatsCommandRecorder(val parent: StatsCommandRecorder, _startNow: Bo
   }
 
   override def toString = {
-    val cacheTotal = _cacheHits.get + _cacheMiss.get
-    val cacheStats =
-      if (cacheTotal == 0) "NA of 0"
-      else
-        s"${_cacheHits.get * 100 / cacheTotal}% of ${cacheTotal} (${_cacheMissNoData} of ${_cacheMiss} were empty misses)"
-
     s"[ DAL commands ${_totalDalCommands} in ${_totalDalBatches} batches took ${_totalElapsedDalTimeNs}ns (OS = ${_dalOperationsInProgress})] wall clock ${if (_end.get() == 0L) "**NA**"
-      else _end.get() - startTime}ns]; CACHE $cacheStats"
+      else _end.get() - startTime}ns]"
   }
   override def childRecorder(start: Boolean) = new StatsCommandRecorder(this, start)
 

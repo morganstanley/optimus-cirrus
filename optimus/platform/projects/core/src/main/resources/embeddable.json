@@ -19,5 +19,26 @@
       "scala.Serializable",
       "optimus.platform.storable.Embeddable"
     ]
+  },
+  {
+    "fullClassName": "optimus.observability.StableCalcTags",
+    "packageName": "optimus.observability",
+    "isTrait": true,
+    "parentNames": [
+      "java.lang.Object",
+      "optimus.platform.storable.Embeddable"
+    ]
+  },
+  {
+    "fullClassName": "optimus.observability.MissingStableCalcTags$",
+    "packageName": "optimus.observability",
+    "isObject": true,
+    "parentNames": [
+      "java.lang.Object",
+      "optimus.observability.StableCalcTags",
+      "scala.Product",
+      "scala.Serializable",
+      "optimus.platform.storable.Embeddable"
+    ]
   }
 ]

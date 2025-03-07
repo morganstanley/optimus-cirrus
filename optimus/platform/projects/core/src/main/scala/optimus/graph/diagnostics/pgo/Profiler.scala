@@ -272,8 +272,15 @@ object Profiler {
   final def getProfileData(
       alwaysIncludeTweaked: Boolean = false,
       includeTweakableNotTweaked: Boolean = false): ArrayBuffer[PNodeTaskInfo] = {
+    getProfileData(alwaysIncludeTweaked, includeTweakableNotTweaked, OGTrace.BLOCK_ID_ALL)
+  }
+
+  final def getProfileData(
+      alwaysIncludeTweaked: Boolean,
+      includeTweakableNotTweaked: Boolean,
+      blockID: Int): ArrayBuffer[PNodeTaskInfo] = {
     val pntis =
-      OGTrace.liveReader.getScopedTaskInfos(OGTrace.BLOCK_ID_ALL, alwaysIncludeTweaked, includeTweakableNotTweaked)
+      OGTrace.liveReader.getScopedTaskInfos(blockID, alwaysIncludeTweaked, includeTweakableNotTweaked)
     ArrayBuffer(pntis.asScala: _*)
   }
 

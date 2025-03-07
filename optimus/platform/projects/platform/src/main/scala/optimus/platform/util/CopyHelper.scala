@@ -15,12 +15,11 @@ import optimus.entity.EntityInfoRegistry
 import optimus.entity.StorableInfo
 import optimus.graph.PropertyInfo
 import optimus.platform._
-import optimus.platform.dal.EventSerializer
 import optimus.platform.pickling.PickledMapWrapper
 import optimus.platform.pickling.Pickler
 import optimus.platform.storable.Entity
-import optimus.platform.storable.EntityReference
 import optimus.platform.storable.EventInfo
+import optimus.platform.storable.InlineEntityHolder
 import optimus.platform.storable.SerializedBusinessEvent
 import optimus.platform.storable.SerializedEntity
 import optimus.platform.storable.Storable
@@ -73,7 +72,7 @@ object CopyHelper {
 
   def toUniqueInstanceEntity(
       serializedEntity: SerializedEntity,
-      eref2Entity: Map[EntityReference, Entity] = Map.empty): Entity = {
+      eref2Entity: InlineEntityHolder = InlineEntityHolder.empty): Entity = {
     val className = serializedEntity.className
     val uinst =
       EntityInfoRegistry

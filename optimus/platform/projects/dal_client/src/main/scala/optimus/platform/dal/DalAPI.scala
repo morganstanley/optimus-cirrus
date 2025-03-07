@@ -131,6 +131,10 @@ object PartitionMapAPI {
   }
 }
 
+// For optimus projects that don't want to depend on optimus.platform.package
+object DalAPI extends DalAPI
+object DALModuleAPI extends DALModuleAPI
+
 private[optimus] trait DalAPI extends TemporalContextAPI with PartitionMapAPI {
   @async final def newTransaction[T](f: => T): PersistResult = newTransactionImpl(asAsync(() => f), None)
   @async final def newTransaction[T](f: AsyncFunction0[T]): PersistResult = newTransactionImpl(f, None)

@@ -816,9 +816,8 @@ object OptimusErrors extends OptimusErrorsBase with OptimusPluginAlarmHelper {
     error1(
       29201,
       OptimusPhases.EXPORTINFO,
-      "This Catalog/Owner %s needs to be defined outside of your project, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
+      "This Catalog/Owner %s needs to be defined outside of your project &  Upstream/Controls needs to be defined package or case object, preferably in the datacatalog_api project, this error can also be triggered if you're passing a function, a class, or any other way that alters the structure. Please refer to DefaultTradeCatalog or DefaultOwner for an example"
     )
-
   val INCORRECT_PACKAGE_META_DEFINITION =
     error1(
       29202,

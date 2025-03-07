@@ -15,7 +15,6 @@ import com.sun.management.GarbageCollectionNotificationInfo
 import msjava.base.util.uuid.MSUuid
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.config.scoped.ScopedSchedulerPlugin
-import optimus.core.CoreAPI
 import optimus.core.MonitoringBreadcrumbs
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayKey
 import optimus.core.MonitoringBreadcrumbs.InGivenOverlayTag
@@ -23,29 +22,34 @@ import optimus.core.needsPlugin
 import optimus.graph.CompletableNode
 import optimus.graph.DiagnosticSettings.getBoolProperty
 import optimus.graph.GraphInInvalidState
-import optimus.graph.NodeTask.ScenarioStackNullTask
 import optimus.graph._
 import optimus.graph.cache.CacheFilter
 import optimus.graph.cache.Caches
 import optimus.graph.cache.CauseDisposePrivateCache
 import optimus.graph.cache.ClearCacheCause
+import optimus.graph.cache.NCPolicy
 import optimus.graph.cache.NCSupport
 import optimus.graph.cache.NodeCCache
 import optimus.graph.cache.UNodeCache
 import optimus.graph.tracking.SnapshotScenarioStack
-import optimus.platform.PluginHelpers.{toNode, toNodeFactory}
+import optimus.platform.PluginHelpers.toNode
+import optimus.platform.PluginHelpers.toNodeFactory
 import optimus.platform.annotations.closuresEnterGraph
 import optimus.platform.annotations.nodeLift
 import optimus.platform.annotations.nodeLiftByName
 import optimus.platform.annotations.nodeSync
 import optimus.platform.annotations.nodeSyncLift
 import optimus.platform.inputs.NodeInputs.ScopedSINodeInput
-import optimus.platform.inputs.loaders.OptimusNodeInputStorage.OptimusStorageUnderlying
 import optimus.platform.inputs.loaders.Loaders
 import optimus.platform.inputs.loaders.OptimusNodeInputStorage
+import optimus.platform.inputs.loaders.OptimusNodeInputStorage.OptimusStorageUnderlying
 import optimus.platform.inputs.loaders.ProcessSINodeInputMap
 import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.platform.storable.Entity
+import optimus.platform.throttle.LiveThrottleLimiter
+import optimus.platform.throttle.SimpleThrottleLimiter
+import optimus.platform.throttle.Throttle
+import optimus.platform.throttle.ThrottleLimiter
 import optimus.ui.ScenarioReference
 import optimus.ui.ScenarioReferencePropertyHelper.currentSnapshotScenarioProp
 import optimus.utils.AdvancedUtilsMacros
@@ -56,16 +60,11 @@ import java.io.InputStream
 import java.lang.management.ManagementFactory
 import java.lang.{Long => JLong}
 import java.time.Instant
-import java.util.PriorityQueue
-import java.util.concurrent.TimeUnit
-import java.util.{LinkedList => JLinkedList}
-import java.util.{Queue => JQueue}
 import javax.management.Notification
 import javax.management.NotificationEmitter
 import javax.management.NotificationListener
 import javax.management.openmbean.CompositeData
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Try
@@ -797,12 +796,12 @@ object AdvancedUtils {
     // overriding the tweak in the childmost scenario to refer to the entry-point scenarioStack (ie, the scenario that
     // the handler is bound to in UI)
     val correctScenarioOverlaySS = correctCurrentScenario(overlaySS, currentScenarioReference)
-    addCurrentSpanshotScenarioTweakDependency(f)
+    addCurrentSnapshotScenarioTweakDependency(f)
     f.replace(correctScenarioOverlaySS.withPluginTag(InGivenOverlayKey, InGivenOverlayTag))
     f
   }
 
-  private def addCurrentSpanshotScenarioTweakDependency[T](f: Node[T]): Unit =
+  private def addCurrentSnapshotScenarioTweakDependency[T](f: Node[T]): Unit =
     // [SEE_SCENARIO_REF_ARGUMENT] adding this as a dependency so that we do not get false cache reuse between calls
     // that take in scenario references (the references might have changed in meaning between calls)
     f.setTweakPropertyDependency(currentSnapshotScenarioProp.tweakMask())
@@ -848,7 +847,7 @@ object AdvancedUtils {
   @nodeSyncLift
   final def evaluateIn[T](scenRef: ScenarioReference)(@nodeLift @nodeLiftByName f: => T): T =
     evaluateIn$withNode(scenRef)(toNode(f _))
-  // noinspection ScalaUnusedSymbol
+  // noinspection ScalaUnusedSymbol,ScalaWeakerAccess
   final def evaluateIn$withNode[T](scenRef: ScenarioReference)(f: Node[T]): T = evaluateIn$newNode(scenRef)(f).get
   // noinspection ScalaUnusedSymbol
   final def evaluateIn$queued[T](scenRef: ScenarioReference)(f: Node[T]): Node[T] =
@@ -889,7 +888,7 @@ object AdvancedUtils {
         f.replace(newSS)
       }
     }
-    addCurrentSpanshotScenarioTweakDependency(f)
+    addCurrentSnapshotScenarioTweakDependency(f)
     f
   }
 
@@ -925,7 +924,9 @@ object AdvancedUtils {
       (curScenarioStack.tweakableListener ne newScenarioStack.tweakableListener) &&
       (newScenarioStack.tweakableListener ne NoOpTweakableListener)
     )
-      throw new GraphException("Cannot restore state across different tracking contexts!") // Currently
+      throw new GraphException(
+        s"Cannot restore state across different tracking contexts! \nContext 1: ${curScenarioStack.tweakableListener}\n Context 2: ${newScenarioStack.tweakableListener}"
+      ) // Currently
 
     val newSS: ScenarioStack =
       newScenarioStack.withNonScenarioPropertiesFrom(curScenarioStack, clearFlags = EvaluationState.CONSTANT)
@@ -945,7 +946,6 @@ object AdvancedUtils {
   // noinspection ScalaUnusedSymbol
   final def givenWithNestedPluginTag$queued[T](key: NestedTag[_], tag: AnyRef, s: Scenario, f: => T): NodeFuture[T] =
     givenWithNestedPluginTag$queued(key.asInstanceOf[NestedTag[AnyRef]], tag, s)(toNode(f _))
-  // noinspection ScalaUnusedSymbol
   final def givenWithNestedPluginTag$withNode[T, V <: AnyRef](key: NestedTag[V], tag: V, s: Scenario)(f: Node[T]): T =
     givenWithNestedPluginTag$newNode(key, tag, s)(f).get
   final private[this] def givenWithNestedPluginTag$newNode[T, V <: AnyRef](key: NestedTag[V], tag: V, s: Scenario)(
@@ -989,8 +989,7 @@ object AdvancedUtils {
   @nodeSync
   @nodeSyncLift
   final def givenWithPluginTags[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(
-      @nodeLift @nodeLiftByName f: => T): T =
-    needsPlugin
+      @nodeLift @nodeLiftByName f: => T): T = needsPlugin
   final def givenWithPluginTags$queued[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): Node[T] =
     givenWithPluginTags$newNode(kvs, s)(f).enqueueAttached
   final def givenWithPluginTags$withNode[T](kvs: collection.Seq[PluginTagKeyValue[_]], s: Scenario)(f: Node[T]): T =
@@ -1002,6 +1001,23 @@ object AdvancedUtils {
   }
 
   /**
+   * Sets up the inner code to be sensitive to configured policies that specified targetPath
+   */
+  @nodeSync
+  @nodeSyncLift
+  final def withConfigTargetPath[T](targetPath: String)(@nodeLift @nodeLiftByName f: => T): T =
+    withConfigTargetPath$withNode(targetPath)(toNode(f _))
+  // noinspection ScalaUnusedSymbol
+  final def withConfigTargetPath$queued[T](targetPath: String)(f: Node[T]): Node[T] =
+    withConfigTargetPath$newNode(targetPath)(f).enqueueAttached
+  final def withConfigTargetPath$withNode[T](targetPath: String)(f: Node[T]): T =
+    withConfigTargetPath$newNode(targetPath)(f).get
+  final private[this] def withConfigTargetPath$newNode[T](targetPath: String)(f: Node[T]) = {
+    val ss = EvaluationContext.scenarioStack.withPathMask(NCPolicy.scopeMaskFromPath(targetPath))
+    EvaluationContext.given(ss, f)
+  }
+
+  /**
    * Function that will merge node inputs from an input stream into the existing SS's scoped node input map and use that
    * as the new scoped node input map for your scenario stack
    *
@@ -1010,7 +1026,7 @@ object AdvancedUtils {
   @nodeSync
   @nodeSyncLift
   final def givenWithScopedNodeInputsFromFile[T](is: InputStream)(@nodeLift @nodeLiftByName f: => T): T =
-    needsPlugin
+    givenWithScopedNodeInputsFromFile$withNode(is)(toNode(f _))
   // noinspection ScalaUnusedSymbol
   final def givenWithScopedNodeInputsFromFile$queued[T](is: InputStream)(f: Node[T]): Node[T] =
     givenWithScopedNodeInputsFromFile$newNode(is)(f).enqueueAttached
@@ -1146,7 +1162,7 @@ object AdvancedUtils {
       val nodes = props map { _.createNodeKey(ent) }
       val ss = EvaluationContext.scenarioStack
       nodes flatMap { n =>
-        Option(ss.getTweak(n.propertyInfo, n))
+        Option(ss.getTweakNoWhenClauseTracking(n))
       }
     }
 
@@ -1198,307 +1214,27 @@ object AdvancedUtils {
   final def timedValueSink[T](startTime: Long, computedValue: T): (Long, T) =
     (OGTrace.nanoTime() - startTime, computedValue)
 
-  /**
-   * Each time Throttle.apply is called, it queues up its first nodeFunction argument (nf1), allowing at most limit
-   * weights of nf1 (by default weight is 1 so weights equals number of instances) to be scheduled at the same time.
-   * Whenever nf1 completes, its result is passed to nf2 and nf1 is destroyed.
-   *
-   * usage: & object MyThrottle extends AdvancedUtils.Throttle(3) // here 3 is the max number of nf1's in flight
-   * MyThrottle( asNode( () => hugeNode(args) ), asNode ( (hugeNode's Result) => gateNode) )
-   *
-   * The motivating use case is generating a complex request that causes a huge node expansion (nf1), which is then
-   * consumed by a slow async server (nf2). To avoid OOM when thousands of such requests are expanded before any of nf2s
-   * complete, this Throttle provides the gating mechanism.
-   */
-  class Throttle(
-      private var limit: Int,
-      minConcurrencyOpt: Option[Int] = None,
-      enablePriority: Boolean = false,
-      liveWeigher: Option[() => Int] =
-        None, // Optionally compute total weight in real-time (e.g. from memory allocator)
-      decayTimeMs: Long = 0) { // Optionally decay estimated total weight
-    private val minConcurrency = minConcurrencyOpt.getOrElse(limit)
-    private val origLimit = limit
-    if (minConcurrencyOpt.isDefined && liveWeigher.isDefined)
-      throw new IllegalStateException("We do not support minimum concurrency with a live weigher")
-    require(
-      minConcurrency >= 0 && minConcurrency <= limit,
-      "Minimum concurrency must be a positive number less than limit!")
-    require(origLimit >= 0, "Limit must be positive (or 0)")
-    private val live = liveWeigher.isDefined
-    private val timerIntervalMs = decayTimeMs
-    private val decayRateNs = if (decayTimeMs > 0) 1.0e-6 / decayTimeMs else 0
+  final def newThrottle(maxConcurrent: Int): Throttle = newThrottle(new SimpleThrottleLimiter(maxConcurrent))
+  final def newThrottle(policy: ThrottleLimiter): Throttle = new Throttle(policy)
 
-    private def decayFactor(t0Ns: Long) =
-      if (decayRateNs > 0.0) Math.exp(-decayRateNs * (OGTrace.nanoTime() - t0Ns)) else 1.0
+  final def newThrottleWithPriority(maxConcurrent: Int): Throttle =
+    new Throttle(new SimpleThrottleLimiter(maxConcurrent), enablePriority = true)
 
-    @nodeSync
-    @nodeSyncLift
-    def apply[R1](@nodeLift @nodeLiftByName f: => R1): R1 = apply$withNode(toNode(f _))
-    def apply$withNode[R1](f: Node[R1]): R1 = apply$queued(f).get
-    def apply$queued[R1](f: Node[R1]): Node[R1] = {
-      val nf = asNode.apply0$withNode(f)
-      apply$queued(nf)
-    }
+  final def newNativeMemoryThrottle(frac: Double, decayTimeMs: Long = 1000): Throttle =
+    newNativeMemoryThrottle((GCNative.getEmergencyWatermarkMB * frac).toInt, decayTimeMs)
 
-    @nodeSync
-    def apply[R1](nf1: NodeFunction0NN[R1]): R1 = apply$queued(nf1).get
-    def apply$queued[R1](nf1: NodeFunction0NN[R1]): Node[R1] = apply$queued(nf1, NodeFunction1.identity[R1])
-
-    /*
-     * nodeWeight is used to determine the weight used calculate inflight total weight, nodes will only be scheduled
-     * when total weight is less than limit.
-     *
-     * nodePriority is used to determine which node runs first if enablePriority is true.
-     */
-    @nodeSync
-    def apply[R1, R2](
-        nf1: NodeFunction0NN[R1],
-        nf2: NodeFunction1[R1, R2],
-        nodeWeight: Int = 1,
-        nodePriority: Int = Int.MaxValue): R2 = {
-      apply$queued(nf1, nf2, nodeWeight, nodePriority).get
-    }
-    def apply$queued[R1, R2](
-        nf1: NodeFunction0NN[R1],
-        nf2: NodeFunction1[R1, R2],
-        nodeWeight: Int = 1,
-        nodePriority: Int = Int.MaxValue): Node[R2] = {
-      if (minConcurrencyOpt.isDefined && nodeWeight != 1)
-        throw new IllegalArgumentException("Can only use weights of 1 when using minimum concurrency")
-      val ec = OGSchedulerContext.current()
-      val ss = ec.scenarioStack
-      var pnode: PNode[R1] = null
-      val node1: Node[R2] = new CompletableNode[R2] {
-        var node2: Node[R2] = _
-        initAsRunning(ss)
-        override def run(ec: OGSchedulerContext): Unit = throw new GraphInInvalidState()
-        override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-          if (child eq node2) {
-            // nf2 completed; take its result to return from this apply and schedule another nf1
-            releaseThrottling(eq, nodeWeight * decayFactor(pnode.tStarted), this)
-            completeFromNode(node2, eq)
-            node2 = null
-          } else {
-            // nf1 completed: schedule nf2 with nf1's result and subscribe to it as an awaiter
-            combineInfo(child, eq)
-            if (child.isDoneWithException) {
-              releaseThrottling(eq, nodeWeight * decayFactor(pnode.tStarted), this)
-              completeWithException(child.exception, eq)
-            } else {
-              val resultOfNode1 = child.resultObject().asInstanceOf[R1]
-              node2 = EvaluationContext.asIfCalledFrom(this, eq) {
-                nf2.apply$queued(resultOfNode1).asNode$
-              }
-              node2.continueWith(this, eq)
-            }
-          }
-        }
-      }
-      pnode = PNode(nf1, ss, node1, nodeWeight, nodePriority)
-      enqueueThrottling(pnode, ec)
-      node1
-    }
-
-    // All nodes queued inside the throttle wait on this, and this waits on an incomplete (running) node that is no longer
-    // waiting in the throttle. That way we always have a waitingOn edge from the stuff stuck in the throttle to the
-    // stuff that already made it through the throttle. The former is of course waiting on the latter to finish so that
-    // it can get through the throttle queue.
-    private object WaitingOnThrottle extends Node {
-      initAsRunning(ScenarioStack.constantNC)
-      override def executionInfo(): NodeTaskInfo = NodeTaskInfo.Throttled
-    }
-
-    private case class PNode[R](
-        nf: NodeFunction0NN[R],
-        ss: ScenarioStack,
-        awaiter: NodeTask,
-        weight: Int,
-        priority: Int
-    ) extends Comparable[PNode[_]] {
-      override def compareTo(o: PNode[_]): Int = this.priority.compareTo(o.priority)
-      var tStarted: Long = 0 // modified under queue.synchronized
-      var debugIdx: Int = 0
-    }
-    private val queue: JQueue[PNode[_]] =
-      if (enablePriority) new PriorityQueue[PNode[_]]() else new JLinkedList[PNode[_]]()
-
-    def getCounters: ThrottleState = queue.synchronized {
-      val nQueued = queue.size
-      ThrottleState(inflightWeightStatic, nInFlight, nBardo, nPnode, nQueued)
-    }
-
-    private var inflightWeightStatic = 0.0 // modified under queue.synchronized
-    private var nBardo = 0 // modified under queue.synchronized
-    private var nInFlight = 0
-    private var nPnode = 0 // for diagnostics only
-    private val inflightNodes = mutable.Set[NodeTask]() // modified under own lock
-    private def enqueueThrottling(pnode: PNode[_], eq: EvaluationQueue): Unit = tryRunNext(pnode, eq, None)
-    private def releaseThrottling(eq: EvaluationQueue, nodeWeight: Double, previousAwaiter: NodeTask): Unit = {
-      inflightNodes.synchronized {
-        inflightNodes.remove(previousAwaiter)
-        // ensure that we are always waiting on an (arbitrary) incomplete node
-        if (WaitingOnThrottle.getWaitingOn eq previousAwaiter) {
-          if (inflightNodes.nonEmpty) {
-            // flip the dependency between inflightNodes.head and WaitingOnThrottle
-            if (inflightNodes.head.getWaitingOn eq WaitingOnThrottle) {
-              inflightNodes.head.setWaitingOn(null) // to avoid cyclic dependency
-            }
-            WaitingOnThrottle.setWaitingOn(inflightNodes.head)
-          }
-        }
-      }
-      tryRunNext(null, eq, Some(nodeWeight))
-    }
-
-    private var prevDecayEvent: Long = 0
-    private def checkAllowReleaseAndUpdateWeights(
-        possibleNext: PNode[_],
-        releasedOld: Double,
-        delayNode: Boolean): Boolean = queue.synchronized {
-      val haveNext = possibleNext ne null
-      val estimatedNew: Double = if (haveNext) possibleNext.weight else 0.0
-      val liveWeight = liveWeigher.fold(0)(_())
-      val t = OGTrace.nanoTime()
-      val old = inflightWeightStatic
-      // Decay the static weight if required and return the factor for logging purposes
-      val decay = if (live && decayRateNs > 0.0 && prevDecayEvent > 0) {
-        val d = decayFactor(prevDecayEvent)
-        inflightWeightStatic *= d
-        d
-      } else 1.0
-      // The released weight (if any) will have already been decayed (if required)
-      inflightWeightStatic -= releasedOld
-      // see below for why exact equality is ok here
-      if (minConcurrencyOpt.isDefined && inflightWeightStatic == minConcurrency) limit = origLimit
-      prevDecayEvent = t
-      val doReleaseNew =
-        haveNext && (nInFlight == 0 || (limit >= inflightWeightStatic + liveWeight + estimatedNew))
-
-      // minConcurrency is only supported with all tasks having equal weight of one and no live weigher so we can do exact equality check here since all the weights are 1 and we asserted above that
-      if (minConcurrencyOpt.isDefined && (inflightWeightStatic + estimatedNew) == limit) limit = minConcurrency
-
-      if (doReleaseNew) {
-        // If we're allowing the delayNode to release, then the bardo is now empty
-        if (delayNode) { assert(nBardo == 1); nBardo = 0 }
-        nInFlight += 1
-        // Add in the estimated weight of the new calculation
-        inflightWeightStatic += estimatedNew
-      }
-
-      // Clean up any roundoff error
-      if (nInFlight == 0) {
-        assert(inflightWeightStatic < 0.1) // if this isn't true, our book-keeping is very off
-        inflightWeightStatic = 0.0
-      }
-      log.debug(
-        s"Checking release: (old=$old)*(decay=$decay)-(released=$releasedOld)+(est=$estimatedNew) -> $inflightWeightStatic, live=$liveWeight, limit=$limit -> $doReleaseNew; bardo=$nBardo inFlight=$nInFlight")
-      doReleaseNew
-    }
-
-    // nf == null means release else enqueue
-    // nodeWeight is only used when releasing
-    private def tryRunNext(runme: PNode[_], evq: EvaluationQueue, nodeWeight: Option[Double]): Unit = {
-      var runNF: PNode[_] = null
-      var releaseImmediately = false
-
-      queue.synchronized {
-        val releasedWeight: Double = if (runme ne null) {
-          queue.offer(runme)
-          WaitingOnThrottle.replace(runme.ss)
-          runme.awaiter.setWaitingOn(WaitingOnThrottle)
-          0.0
-        } else {
-          require(nodeWeight.isDefined, "Missing nodeWeight when calling release")
-          nInFlight -= 1
-          nodeWeight.get
-        }
-
-        val possibleNext = queue.peek()
-        releaseImmediately = checkAllowReleaseAndUpdateWeights(possibleNext, releasedWeight, delayNode = false)
-
-        // if there's capacity to schedule another nf1, take it off the wait list
-        if ((possibleNext ne null) && (releaseImmediately || (live && nBardo == 0))) {
-          runNF = queue.poll()
-          nPnode += 1
-          runNF.debugIdx = nPnode
-          if (releaseImmediately)
-            runNF.tStarted = OGTrace.nanoTime()
-          else
-            nBardo += 1
-          log.debug(s"Will launch $nPnode, immediate=$releaseImmediately, delayed=$nBardo")
-        }
-      }
-
-      // if an nf1 was taken off the waitlist, convert to node and schedule
-      if (runNF ne null) {
-        inflightNodes.synchronized {
-          // flip the dependency between runNF.awaiter and WaitingOnThrottle
-          if (runNF.awaiter.getWaitingOn eq WaitingOnThrottle)
-            runNF.awaiter.setWaitingOn(null) // to avoid cyclic dependency
-          WaitingOnThrottle.setWaitingOn(runNF.awaiter)
-          inflightNodes.add(runNF.awaiter)
-        }
-        val node = if (releaseImmediately) {
-          val node = runNF.nf.apply$newNode()
-          node.attach(runNF.ss)
-          evq.enqueue(node)
-          node
-        } else {
-          assert(live)
-          delayUntilReleased(runNF)
-        }
-        node.continueWith(runNF.awaiter, evq)
-      }
-    }
-
-    // Keep delaying for msDelay until doRelease returns true
-    private def delayUntilReleased[A](runNF: PNode[A]): Node[A] = {
-      val node: CompletableNode[A] = new CompletableNode[A] {
-        override def run(ec: OGSchedulerContext): Unit = onChildCompleted(ec, null)
-        var delayNode: Node[_] = _
-        override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-          if (child eq delayNode) {
-            if ((child ne null) && checkAllowReleaseAndUpdateWeights(runNF, 0, delayNode = true)) {
-              log.debug(s"Releasing delayed ${runNF.debugIdx}")
-              val node = runNF.nf.apply$newNode()
-              node.attach(runNF.ss)
-              // Launch on the global queue, because we were completed by a timer thread.
-              eq.scheduler.enqueue(node)
-              node.continueWith(this, eq)
-            } else {
-              log.debug(s"Delaying ${runNF.debugIdx}")
-              val promise =
-                NodePromise.createWithSpecificScheduler[Unit](NodeTaskInfo.Delay, eq.scheduler, scenarioStack())
-              CoreAPI.delayPromise(promise, timerIntervalMs, TimeUnit.MILLISECONDS)
-              delayNode = promise.node
-              delayNode.continueWith(this, eq)
-            }
-          } else {
-            completeFromNode(child.asInstanceOf[Node[A]], eq)
-          }
-        }
-      }
-      node.enqueue
-    }
-  }
-
-  class NativeMemoryThrottle(limitMB: Int, decayTimeMs: Long)
-      extends Throttle(
-        limit = limitMB,
-        liveWeigher = Some(() => GCNative.getNativeAllocationMB),
-        decayTimeMs = decayTimeMs) {
+  final def newNativeMemoryThrottle(limitMB: Int, decayTimeMs: Long): Throttle = {
     assert(GCNative.altMallocLoaded())
-    def this(frac: Double, decayTimeMs: Long = 1000) =
-      this((GCNative.getEmergencyWatermarkMB * frac).toInt, decayTimeMs)
-    @nodeSync
-    def apply[R1](nf1: NodeFunction0NN[R1], estimatedMB: Int): R1 = apply$queued(nf1).get
-    def apply$queued[R1](nf1: NodeFunction0NN[R1], estimatedMB: Int): Node[R1] =
-      apply$queued(nf1, NodeFunction1.identity[R1], estimatedMB)
+    new Throttle(
+      new LiveThrottleLimiter(
+        limit = limitMB,
+        liveWeigher = GCNative.getNativeAllocationMB _,
+        decayTimeMs = decayTimeMs))
   }
 
-  class ManagedMemoryThrottle(limitMB: Int, decayTimeMs: Long)
-      extends Throttle(limit = limitMB, liveWeigher = Some(() => GCNative.managedSizeMB()), decayTimeMs = decayTimeMs)
+  final def newManagedMemoryThrottle(limitMB: Int, decayTimeMs: Long): Throttle =
+    new Throttle(
+      new LiveThrottleLimiter(limit = limitMB, liveWeigher = GCNative.managedSizeMB _, decayTimeMs = decayTimeMs))
 
   /**
    * Suppress sync-stack warnings and assertions while executing f. Only for use inside optimus.platform code where such
@@ -1525,35 +1261,48 @@ object AdvancedUtils {
    * input, enters the resulting scenario in a nested given block, and so forth recursively. Returns the corresponding
    * nesting of the resulting scenarios
    */
-  def translateScenariosRecursively[T](inputs: Seq[T])(translator: T => Scenario): Scenario = {
-    // we create a temporary node that will accumulate our scenarios. Note that this function *must* be sync stacked,
-    // because we really don't want this node to be taken over by more than one thread!
-    val cn = new ScenarioStackNullTask(EvaluationContext.currentNode)
+  @nodeSync @nodeSyncLift
+  def translateScenariosRecursively[T](inputs: Seq[T])(@nodeLift translator: T => Scenario): Scenario =
+    translateScenariosRecursively$withNode[T](inputs)(toNodeFactory(translator))
+  def translateScenariosRecursively$withNode[T](inputs: Seq[T])(translator: T => Node[Scenario]): Scenario =
+    translateScenariosRecursively$queued[T](inputs)(translator).get
+  def translateScenariosRecursively$queued[T](inputs: Seq[T])(translator: T => Node[Scenario]): Node[Scenario] = {
+    new CompletableNode[Scenario] {
+      private var toTranslate: List[T] = inputs.toList // remaining inputs to process
+      private var translatorNode: Node[Scenario] = _ // currently running translation
+      private var scenarioAccumulator: Scenario = Scenario.empty // nested scenario of translated inputs (result)
 
-    try {
-      var scenario: Scenario = Scenario.empty
-      var step: Scenario = Scenario.empty
-      inputs.foreach { input =>
-        // replace the scenario stack on cn with one that nests the previous step
-        if (step.nonEmpty) {
-          val nss = cn.scenarioStack.createChild(step, this)
-          cn.replace(nss)
+      override def executionInfo(): NodeTaskInfo = NodeTaskInfo.RecursiveTranslate
+
+      override def run(ec: OGSchedulerContext): Unit = {
+        // on all but the first run, we have been called because the current translator node has completed
+        if (translatorNode ne null) {
+          if (translatorNode.isDoneWithException) completeFromNode(translatorNode, ec)
+          else {
+            // accumulate result into nested scenario
+            combineInfo(translatorNode, ec)
+            val scenario = translatorNode.result
+            scenarioAccumulator = scenarioAccumulator.nest(scenario)
+            // if there is more translation to do, update the current scenario stack (each translation is supposed to
+            // run with the previous scenario applied)
+            if (toTranslate.nonEmpty) replace(scenarioStack.createChild(scenario, this))
+          }
         }
-
-        // Update our output value.
-        //
-        // The "asIfCalledFrom()" here is absolutely mandatory because it sets the scenario stack for the translator!
-        // This is unlike any other usages of asIfCalledFrom!
-        step = EvaluationContext.asIfCalledFrom(cn, null) { translator(input) }
-        scenario = scenario.nest(step)
+        if (!isDone) {
+          // on all but the final run, we need to kick off the next translation (which will use our current scenarioStack
+          // as per the usual rules)
+          toTranslate match {
+            case next :: rest =>
+              toTranslate = rest
+              translatorNode = translator(next)
+              translatorNode.enqueue
+              translatorNode.continueWith(this, ec)
+            case Nil =>
+              completeWithResult(scenarioAccumulator, ec)
+          }
+        }
       }
-
-      scenario
-    } finally {
-      // the translator may have tweak dependencies or other xinfo - very important to report that back to the caller,
-      // even if the translator threw.
-      cn.orgTask.combineInfo(cn, EvaluationContext.current)
-    }
+    }.enqueue
   }
 
   /**
@@ -1567,6 +1316,7 @@ object AdvancedUtils {
     asyncUsing$withNode(resource)(toNodeFactory(f))
   def asyncUsing$withNode[R <: AutoCloseable, B](resource: => R)(f: R => Node[B]): B =
     new AsyncUsingNode[R, B](() => resource, f).get
+  // noinspection ScalaWeakerAccess
   def asyncUsing$queued[R <: AutoCloseable, B](resource: => R)(f: R => Node[B]): Node[B] =
     new AsyncUsingNode[R, B](() => resource, f).enqueue
   // noinspection ScalaUnusedSymbol
@@ -1574,5 +1324,3 @@ object AdvancedUtils {
     asyncUsing$queued(resource)(toNodeFactory(f))
 
 }
-
-final case class ThrottleState(inflightWeight: Double, nInFlight: Int, nBardo: Int, nPnode: Int, nQueued: Int)

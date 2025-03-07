@@ -12,12 +12,12 @@
 package optimus.platform.relational.dal.accelerated
 
 import optimus.breadcrumbs.ChainedID
-import optimus.datatype.FullName
+import optimus.datatype.Classification.DataSubjectCategory
+import optimus.datatype._
 import optimus.platform._
 import optimus.platform.annotations.nodeSync
 import optimus.platform.cm.Knowable
 import optimus.platform.pickling.DefaultPicklers._
-import optimus.platform.pickling.DefaultPicklers.fullNamePickler
 import optimus.platform.pickling.DefaultUnpicklers._
 import optimus.platform.pickling._
 import optimus.platform.relational.RelationalUnsupportedException
@@ -95,6 +95,7 @@ object PicklerSelector {
       case be: BusinessEvent       => BusinessEventPickler
       case enum: Enumeration#Value => enumPickler[Enumeration]
       case enum: Enum[_]           => JavaEnumPickler
+      case _: PIIElement[_]        => piiElementPickler[DataSubjectCategory, PIIElement[DataSubjectCategory]]
 
       case map: Map[_, _] =>
         val (pickler1, pickler2) =
@@ -122,8 +123,6 @@ object PicklerSelector {
       case kn: Knowable[_] =>
         val pickler = kn.map(t => getPickler(t)).getOrElse(IdentityPickler)
         knowablePickler(pickler)
-
-      case _: FullName[_] => fullNamePickler
 
       case _ =>
         // Tuple pickler
@@ -172,10 +171,10 @@ object PicklerSelector {
       case _ if target == classOf[Duration]           => durationUnpickler
       case _ if target == classOf[YearMonth]          => yearMonthUnpickler
       case _ if target == classOf[Year]               => yearUnpickler
-      case _ if target == classOf[FullName[_]]        => fullNameUnpickler
       case _ if target == classOf[EntityReference]    => EntityReferenceUnpickler
       case _ if target == classOf[VersionedReference] => VersionedReferenceUnpickler
       case _ if target == classOf[BusinessEvent]      => BusinessEventUnpickler
+      case _ if info <:< classOf[PIIElement[_]]       => PIIElementUnpickler(cm.classSymbol(target).toType)
       case _ if target.isEnum                         => javaEnumUnpickler(ManifestFactory.classType(target))
       case _ if info <:< classOf[Enumeration]         => enumUnpickler(ManifestFactory.classType(target))
 

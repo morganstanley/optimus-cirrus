@@ -13,8 +13,6 @@ package optimus.graph
 
 import java.io.Serializable
 
-import scala.collection.immutable.Set
-
 /**
  * Contains extra info attached to the node. The design is somewhat insane. We assume that there are three types of
  * extra info:
@@ -34,8 +32,7 @@ import scala.collection.immutable.Set
  */
 abstract class NodeExtendedInfo extends Serializable {
   /* Feeds back the node information to the NEI it's attached to */
-  def nodeCompleted(ntsk: NodeTask): Unit = {}
-  def nodeCancelled(ntsk: NodeTask): Unit = nodeCompleted(ntsk)
+  def nodeCompleted(ntsk: NodeTask, isCancelled: Boolean): Unit = {}
 
   // The following would be "sealed methods" if those existed.
   // We don't want them extended outside of the file, but we can't make them normal final methods
@@ -164,7 +161,8 @@ final class StdNodeExtendedInfo(val _exception: Throwable, val _warnings: Set[Wa
   /* Feeds back the node information to the NEI it's attached to */
   def this(ex: Throwable) = this(ex, Set.empty, null)
   def this(warning: Warning) = this(null, Set(warning), null)
-  override def nodeCompleted(ntsk: NodeTask): Unit = if (_info != null) _info.nodeCompleted(ntsk)
+  override def nodeCompleted(ntsk: NodeTask, isCancelled: Boolean): Unit =
+    if (_info != null) _info.nodeCompleted(ntsk, isCancelled)
 
   /**
    * See rules from NodeExtendedInfo

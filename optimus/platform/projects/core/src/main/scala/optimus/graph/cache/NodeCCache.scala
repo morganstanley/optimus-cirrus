@@ -19,7 +19,6 @@ import optimus.graph.{PropertyNode => PN}
 import optimus.platform.EvaluationQueue
 
 import java.util.function.Predicate
-import scala.annotation.tailrec
 
 final case class CleanupStats(removed: Long, remaining: Long) {
   def +(other: CleanupStats): CleanupStats = CleanupStats(removed + other.removed, remaining + other.remaining)
@@ -38,7 +37,7 @@ abstract class NodeCCache {
 
   /** This is for profile display only */
   def getName: String = "auto" + System.identityHashCode(this)
-  def setName(name: String): Unit
+  def setName(name: String): Unit = {}
 
   /**
    * If you are thinking about using this PLEASE consider concurrency - this is NOT reliable and depends on requested
@@ -47,11 +46,11 @@ abstract class NodeCCache {
   def getSize: Int = Integer.MIN_VALUE
 
   def getSizeIndicative: Int = Integer.MIN_VALUE
-  def getCountersSnapshot: CacheCountersSnapshot
+  def getCountersSnapshot: CacheCountersSnapshot = CacheCountersSnapshot.Empty
 
   /** Cache size limit if available */
   def getMaxSize: Int = Integer.MIN_VALUE
-  def setMaxSize(newMaxSize: Int): Unit
+  def setMaxSize(newMaxSize: Int): Unit = {}
 
   /** Cache size actually used */
   def profMaxSizeUsed: Int = Integer.MIN_VALUE
@@ -60,14 +59,17 @@ abstract class NodeCCache {
   def profCacheBatchSize: Int = CacheDefaults.DEFAULT_BATCH_SIZE
   def profCacheBatchSizePadding: Int = CacheDefaults.DEFAULT_BATCH_SIZE_PADDING
   def profNumEvictions(reason: EvictionReason): Long = Integer.MIN_VALUE
-  def getCacheConcurrency: Int
-  def isEvictOnOverflow: Boolean
+  def getCacheConcurrency: Int = 0
+  def isEvictOnOverflow: Boolean = false
+
+  /** For scoped caches that temporarily decrease the size of the global cache, restore the count */
+  def resetSizeReporting(): Unit = {}
 
   /** Clear oldest items */
-  def clearOldest(ratio: Double, cause: ClearCacheCause): CleanupStats
+  def clearOldest(ratio: Double, cause: ClearCacheCause): CleanupStats = CleanupStats(0, 0)
 
   /** Clear entire cache */
-  def clear(cause: ClearCacheCause): Long
+  def clear(cause: ClearCacheCause): Long = 0
 
   /** Update stats */
   def updateStats(): Unit = {}
@@ -75,10 +77,10 @@ abstract class NodeCCache {
   def foreach(consumer: Consumer[PropertyNode[_]]): Unit
 
   /** Verify that cache obeys some invariants. This is very expensive! Throws if the invariants are not satisfied. */
-  def verifyInvariants(): Unit
+  def verifyInvariants(): Unit = {}
 
   /** Remove items that match filter */
-  def clear(filter: Predicate[PropertyNode[_]], cause: ClearCacheCause): Long
+  def clear(filter: Predicate[PropertyNode[_]], cause: ClearCacheCause): Long = 0
 
   final private[cache] def putIfAbsent[T](info: NodeTaskInfo, key: PN[T], eq: EvaluationQueue): PN[T] = {
     putIfAbsent(info.cachePolicy(), key, eq)
@@ -107,43 +109,15 @@ abstract class NodeCCache {
   private[cache] def recordNotInUse(): Unit = {}
 
   /**
-   * the batch size used in the cache See the implementation notes in [[BaseUNodeCache]]
+   * the batch size used in the cache See the implementation notes in [[NodeCacheWithLRU]]
    */
-  private[optimus] def cacheBatchSize: Int
+  private[optimus] def cacheBatchSize: Int = 0
 
   /**
-   * the batch padding size See the implementation notes in [[BaseUNodeCache]]
+   * the batch padding size See the implementation notes in [[NodeCacheWithLRU]]
    */
-  private[optimus] def cacheBatchSizePadding: Int
+  private[optimus] def cacheBatchSizePadding: Int = 0
 
   // indicates if the cache is a shared cache or a per property cache
-  private[optimus] def sharable: Boolean
-}
-
-/**
- * A container for informations about global caches.
- */
-final class PrivateCache(val cache: NodeCCache, val readFrom: PrivateCacheParent) extends PrivateCacheParent {
-  import PrivateCache._
-  def toMoniker: Moniker = {
-    @tailrec def readFromGlobalCaches(parent: PrivateCacheParent): Boolean = parent match {
-      case cache: PrivateCache       => readFromGlobalCaches(cache.readFrom)
-      case PrivateCache.NoOtherCache => false
-      case PrivateCache.GlobalCaches => true
-    }
-
-    // Monikers don't need to carry the entire set of nested caches because on the remote side the caches aren't
-    // themselves cached from one call to the next, so you won't get reuse.
-    Moniker(cache.getName, readFromGlobalCaches(readFrom))
-  }
-}
-
-sealed trait PrivateCacheParent
-
-object PrivateCache {
-  case object NoOtherCache extends PrivateCacheParent
-  case object GlobalCaches extends PrivateCacheParent
-
-  final case class Moniker(cache: String, readFromGlobalCaches: Boolean)
-
+  private[optimus] def sharable: Boolean = true
 }

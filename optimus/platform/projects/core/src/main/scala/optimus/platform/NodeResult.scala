@@ -278,6 +278,7 @@ private[optimus] class NodeResultProgressNode[T](
     listener: ProgressListener,
     reportingIntervalMs: Long)
     extends CompletableNodeM[T] {
+  private[this] var progressTracker: ProgressTracker = _
 
   def this(cn: Node[T], weight: Double, message: String, reportingIntervalMs: Long) =
     this(cn, weight, message, null, reportingIntervalMs)
@@ -294,8 +295,9 @@ private[optimus] class NodeResultProgressNode[T](
         reportingIntervalMs = reportingIntervalMs)
 
     val newSS = scenarioStack.withProgressTracker(params)
+    progressTracker = newSS.progressTracker
 
-    ProgressTracker.sendInitialMessageIfPossible(newSS.progressTracker)
+    ProgressTracker.sendInitialMessageIfPossible(progressTracker)
 
     cn.replace(newSS)
     ec.enqueue(cn)
@@ -303,8 +305,6 @@ private[optimus] class NodeResultProgressNode[T](
   }
 
   final override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-    val progressTracker = cn.scenarioStack.progressTracker
-
     // report that this child has been completed; this means its progress now is 100%
     // and if it has a weight associated, it will propagate its contribution up to parents
     ProgressTracker.reportCompleteIfPossible(progressTracker)
@@ -577,6 +577,7 @@ class NodeTryImpl[+T] private[optimus] (private val node: Node[T]) extends NodeT
   @scenarioIndependentTransparent
   def recoverPF[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeTry[U] = recoverPF$withNode(pf)
   def recoverPF$withNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): NodeTry[U] = recoverPF$newNode(pf).get
+  // noinspection ScalaUnusedSymbol
   def recoverPF$queued[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[NodeTry[U]] =
     recoverPF$newNode(pf).enqueue
   def recoverPF$newNode[U >: T](pf: OptimusPartialFunction[Throwable, U]): Node[NodeTry[U]] = new NTCN[U] {

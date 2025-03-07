@@ -10,7 +10,6 @@
 applications {
 
   OpenApiSpecBuilder {
-    parents += EntityAgent
     mainClass = "optimus.platform.obt.openapi.OpenApiSpecBuilder"
   }
 

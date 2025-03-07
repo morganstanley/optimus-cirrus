@@ -19,7 +19,7 @@ import optimus.buildtool.config.DependencyDefinitions
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.utils.Hashing
 import optimus.platform._
-import scala.collection.immutable.Seq
+import scala.collection.immutable.{IndexedSeq, Seq}
 
 @entity abstract class ExternalDependencyResolver(val loadedDefinitions: Seq[DependencyDefinition]) {
   val (extraLibsDefinitions, dependencyDefinitions) = loadedDefinitions.partition(_.isExtraLib)
@@ -76,7 +76,7 @@ final case class ResolutionResult(
     finalDependencies: Map[DependencyInfo, Seq[DependencyInfo]],
     mappedDependencies: Map[DependencyInfo, Seq[DependencyInfo]]
 ) {
-  lazy val resolvedArtifacts: Seq[ExternalClassFileArtifact] = resolvedArtifactsToDepInfos.map(_._1)
+  lazy val resolvedArtifacts: IndexedSeq[ExternalClassFileArtifact] = resolvedArtifactsToDepInfos.map(_._1).toVector
   def dependencies: Set[DependencyInfo] = resolvedArtifactsToDepInfos.flatMap(_._2).toSet
 }
 

@@ -25,7 +25,7 @@ import optimus.graph.diagnostics.ap.StackAnalysis.StackData
 import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.ap.StackAnalysis.StacksAndTimers
 import optimus.graph.diagnostics.sampling.SamplingProfiler.NANOSPERMILLI
-import optimus.graph.diagnostics.sampling.SamplingProfiler.periodSamplesSource
+import optimus.graph.diagnostics.sampling.SamplingProfiler.periodicSamplesSource
 import optimus.graph.diagnostics.sampling.SamplingProfiler.stackDataSource
 import optimus.logging.Pid
 import optimus.platform.util.Log
@@ -55,6 +55,8 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
   import AsyncProfilerSampler._
 
   val stackAnalysis = new StackAnalysis(sp)
+
+  override def toString: String = s"${super.toString}(async-profiler)"
 
   private val inactiveThreshNs = sp.propertyUtils.get("optimus.sampling.inactive.cpu.thresh.ms", 1000) * 1000L * 1000L
 
@@ -195,11 +197,13 @@ class AsyncProfilerSampler(override val sp: SamplingProfiler, extraStackSamplers
         key -> map.mapValuesNow(key.meta.units.fromStackCount)
       }
 
-    val profElems =
-      numSamplesPublished -> data.stacks.size :: samplingPauseTime -> data.dtStopped / NANOSPERMILLI :: timersToElems(
+    val profElems = {
+      apInternalStats -> AsyncProfilerIntegration
+        .internalStats() :: numSamplesPublished -> data.stacks.size :: samplingPauseTime -> data.dtStopped / NANOSPERMILLI :: timersToElems(
         data.timers) ++ rootElems
+    }
     Map(
-      periodSamplesSource -> (profElems :: Nil),
+      periodicSamplesSource -> (profElems :: Nil),
       stackDataSource -> data.stacks.grouped(40).map(stackToElems).toList
     )
   }

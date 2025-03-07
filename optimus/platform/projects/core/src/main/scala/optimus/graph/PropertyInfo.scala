@@ -202,8 +202,17 @@ class ReallyNontweakablePropertyInfo[E <: Storable, R](
 
   private lazy val getValueMethod = lookupMethod(entityInfo.runtimeClass, name)
 
-  def getValue(e: E): R = getValueMethod.invoke(e).asInstanceOf[R]
-
+  def getValue(e: E): R = {
+    val raw = getValueMethod.invoke(e)
+    val res =
+      if (raw == null && getValueMethod.getReturnType == Void.TYPE)
+        // Java reflection will return null for scala methods with Unit return type.
+        // We still invoked the method because the node might actually be an @async.
+        ()
+      else
+        raw
+    res.asInstanceOf[R]
+  }
 }
 
 class GenPropertyInfo(name: String, flags: Long, annotations: collection.Seq[StaticAnnotation] = Nil)

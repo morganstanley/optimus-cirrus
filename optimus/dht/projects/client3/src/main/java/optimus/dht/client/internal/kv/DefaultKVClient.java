@@ -11,7 +11,7 @@
  */
 package optimus.dht.client.internal.kv;
 
-import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
@@ -33,16 +33,20 @@ import optimus.dht.client.api.callback.TimeoutsConfig;
 import optimus.dht.client.api.callback.CallbackRegistry.CallbackContext;
 import optimus.dht.client.api.callback.CallbackRegistry.CallbackReason;
 import optimus.dht.client.api.exceptions.DHTRemoteException;
+import optimus.dht.client.api.exceptions.DHTUserCallbackException;
 import optimus.dht.client.api.hash.HashCalculator;
 import optimus.dht.client.api.kv.KVClient;
 import optimus.dht.client.api.kv.KVEntry;
 import optimus.dht.client.api.kv.KVLargeEntry;
 import optimus.dht.client.api.kv.KVLargeValue;
+import optimus.dht.client.api.kv.KVStreamEntry;
+import optimus.dht.client.api.kv.KVStreamValue;
 import optimus.dht.client.api.kv.KVValue;
 import optimus.dht.client.api.replication.BatchOperationTemplate;
 import optimus.dht.client.api.replication.ReplicationStrategy;
 import optimus.dht.client.api.servers.ServerConnection;
 import optimus.dht.client.api.servers.ServerConnectionsManager;
+import optimus.dht.common.api.transport.DataStreamConsumer;
 import optimus.dht.client.api.transport.MessageSender;
 import optimus.dht.client.api.transport.OperationDetails;
 import optimus.dht.client.api.transport.RequestIdGenerator;
@@ -52,11 +56,14 @@ import optimus.dht.client.internal.kv.message.KVLargePutRequestGenerator;
 import optimus.dht.client.internal.kv.message.KVPutRequestGenerator;
 import optimus.dht.client.internal.kv.message.KVRemoveTransientKeyspaceRequestGenerator;
 import optimus.dht.client.internal.kv.message.KVValueResponse;
+import optimus.dht.client.internal.kv.message.KVValueStreamResponse;
+import optimus.dht.client.internal.kv.stream.KVValueStreamConsumerSupplierContainer;
 import optimus.dht.common.api.Keyspace;
 import optimus.dht.common.api.kv.KVRequestType;
 import optimus.dht.common.api.transport.MessageGenerator;
 import optimus.dht.common.api.transport.SentMessageMetrics;
 import optimus.dht.common.util.DHTUtil;
+import optimus.dht.common.util.transport.UserCallbackExceptionContainer;
 
 @Singleton
 public class DefaultKVClient<K extends Key> implements KVClient<K> {
@@ -632,7 +639,7 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
 
       // first register operation-level timeout
       callbackRegistry.registerCallbackWithTimeout(
-          null, this, timeoutsConfig.defaultOperationTimeout(), this::operationCallback);
+          null, this, timeoutsConfig.defaultOperationTimeout(), this::operationCallback, null);
       long requestId = idGenerator.next();
       KVRemoveTransientKeyspaceRequestGenerator requestGenerator =
           new KVRemoveTransientKeyspaceRequestGenerator(requestId, keyspace, correlationName);
@@ -646,7 +653,8 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
             activeServer,
             requestId,
             timeoutsConfig.readTimeout(),
-            ctx -> requestCallback(ctx, sentMetricsRef.get()));
+            ctx -> requestCallback(ctx, sentMetricsRef.get()),
+            null);
         messageSender.sendMessage(activeServer, requestGenerator, sentMetricsRef::set);
       }
     }
@@ -868,6 +876,113 @@ public class DefaultKVClient<K extends Key> implements KVClient<K> {
       @Override
       protected void handleEmptyResult(List<KVLargeEntry<K>> entries, OperationDetails opDetails) {
         resultCallback.result(false, opDetails);
+      }
+    }.run();
+  }
+
+  @Override
+  public <S extends DataStreamConsumer> void streamingGet(
+      Keyspace keyspace,
+      K key,
+      String correlationName,
+      Supplier<S> streamConsumerSupplier,
+      Callback<KVStreamEntry<K, S>> resultCallback) {
+
+    key.ensureHash(hashCalculator);
+
+    new BatchOperationTemplate<K, K>(
+        timeoutsConfig.readTimeout(),
+        timeoutsConfig.defaultOperationTimeout(),
+        replicationStrategy,
+        nodesManager,
+        idGenerator,
+        callbackRegistry,
+        messageSender,
+        Arrays.asList(key)) {
+
+      @Override
+      public K key(K e) {
+        return e;
+      }
+
+      @Override
+      protected MessageGenerator generateMessage(
+          long requestId, ServerConnection server, List<K> items) {
+        return new KVKeyOnlyRequestGenerator(
+            KVRequestType.GET, requestId, keyspace, items, correlationName);
+      }
+
+      @Override
+      protected void registerMessageCallbackWithTimeout(
+          ServerConnection server,
+          long requestId,
+          Duration timeout,
+          CallbackRegistry.Callback callback) {
+        callbackRegistry.registerCallbackWithTimeout(
+            server,
+            requestId,
+            timeout,
+            callback,
+            new KVValueStreamConsumerSupplierContainer<>(streamConsumerSupplier));
+      }
+
+      @Override
+      protected List<K> handleResult(
+          CallbackContext ctx, List<K> entries, OperationDetails opDetails) {
+
+        if (ctx.param() instanceof UserCallbackExceptionContainer) {
+          // if user's stream handler threw an exception, we handle it the same way as other failed
+          // requests
+          var userException = ((UserCallbackExceptionContainer) ctx.param()).exception();
+          handleFailureInResponse(
+              ctx.server(), entries, new DHTUserCallbackException(userException), opDetails);
+          return Collections.emptyList();
+        }
+
+        KVValueStreamResponse<S> response = (KVValueStreamResponse) ctx.param();
+
+        if (response.errorCode() != null) {
+          DHTRemoteException exception =
+              new DHTRemoteException(response.errorCode(), response.errorText(), keys(entries));
+          handleFailureInResponse(ctx.server(), entries, exception, opDetails);
+          return Collections.emptyList();
+        }
+
+        for (int i = 0; i < entries.size(); ++i) {
+          K key = entries.get(i);
+          KVStreamValue<S> kvValue = response.values().get(i);
+
+          decrementPending(
+              key,
+              (pendingServers, responseCommitted) -> {
+                if (kvValue != null) {
+                  if (!responseCommitted) {
+                    resultCallback.result(new KVStreamEntry<>(key, kvValue), opDetails);
+                    return true;
+                  } else {
+                    response.values().forEach(x -> x.streamConsumer().dispose());
+                  }
+                } else if (pendingServers == 0) {
+                  if (!responseCommitted) {
+                    resultCallback.result(new KVStreamEntry<>(key, null), opDetails);
+                    return true;
+                  }
+                }
+                return false;
+              });
+        }
+
+        return entries;
+      }
+
+      @Override
+      protected void handleFail(List<K> failedEntries, Exception e, OperationDetails opDetails) {
+        resultCallback.error(e, opDetails);
+      }
+
+      @Override
+      protected void handleEmptyResult(List<K> entries, OperationDetails opDetails) {
+        resultCallback.result(new KVStreamEntry<>(entries.get(0), null), opDetails);
       }
     }.run();
   }

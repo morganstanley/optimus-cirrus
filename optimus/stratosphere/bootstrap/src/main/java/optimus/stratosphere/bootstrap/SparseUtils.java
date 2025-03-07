@@ -24,7 +24,7 @@ public abstract class SparseUtils {
 
   private static final String ROOT_DIR_PATTERN = "/*";
   private static final String SPARSE_CONFIG_PATH = ".git/info/sparse-checkout";
-  private static final List<String> REQUIRED_DIRS = List.of("config", "profiles");
+  private static final List<String> REQUIRED_DIRS = List.of("profiles");
   private static final String BROKEN_SPARSE_MESSAGE =
       "Detected malformed sparse configuration. Run following commands to recover:\n\n"
           + "git sparse-checkout disable\n"

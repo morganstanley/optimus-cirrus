@@ -21,6 +21,7 @@ import optimus.graph.ProxyPropertyNode
 import optimus.graph.SourceLocator
 import optimus.graph.TweakNode
 import optimus.graph.loom.LNodeClsID
+import optimus.graph.loom.LoomConfig.COLUMN_NA
 import optimus.graph.loom.LPropertyDescriptor
 
 import java.util.concurrent.ConcurrentHashMap
@@ -233,7 +234,7 @@ object NodeName {
     val desc = LPropertyDescriptor.get(clsID._clsID())
     val nn = from(clsID.stackTraceElem())
     // This logic matches that of from(ntsk.executionInfo(), class).
-    if (desc.columnNumber < 0 && desc.columnNumber != LPropertyDescriptor.COLUMN_NA)
+    if (desc.columnNumber < 0 && desc.columnNumber != COLUMN_NA)
       nn.copy(modifier = NodeTaskInfo.StoredNodeFunction.rawName())
     else nn
   }

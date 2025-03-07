@@ -18,9 +18,13 @@ import optimus.buildtool.runconf.compile.InputFile
 final case class TemplateDescription(
     name: String,
     templateInput: InputFile,
-    outputFileExtension: String,
+    noDotOutputFileExtension: String,
     lineFeed: String = "\n" // Default is to unix format
 ) {
+  require(!noDotOutputFileExtension.startsWith("."), "It says in the name, no dot!")
+
   lazy val template: Template =
     Mustache.compiler().compile(templateInput.content.replace("\r\n", "\n").replace("\n", lineFeed))
+
+  val outputFileExtension: String = if (noDotOutputFileExtension.nonEmpty) s".$noDotOutputFileExtension" else ""
 }

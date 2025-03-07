@@ -31,6 +31,7 @@ import scala.language.implicitConversions
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
+import scala.util.control.NonFatal
 
 abstract class KnownProperties extends Enumeration {
   import Properties.Elem
@@ -41,7 +42,7 @@ abstract class KnownProperties extends Enumeration {
   private def nextNameOrNull = if (nextName != null && nextName.hasNext) nextName.next() else null
   abstract class EnumeratedKey[A: JsonReader: JsonWriter](nme: String) extends Val(nextId, nme) with Key[A] {
     def this() = this(nextNameOrNull)
-    override def name: String = toString
+    override lazy val name: String = toString
     override def source: String = Crumb.Headers.DefaultSource
     def parse(s: String): A = s.parseJson.convertTo[A]
     def parse(js: JsValue): A = js.convertTo[A]
@@ -131,11 +132,13 @@ object PropertyUnits {
   }
   case object Count extends Units("")
   case object BareNumber extends Units("")
+  case object Percentage extends Units("%")
   case object Bytes extends Units("B")
 
 }
 
 object KnownProperties {
+  val DefaultDescription = "Property"
   abstract class Set private[crumbs] (val kps: KnownProperties*)
   private[crumbs] lazy val allKnownProperties = {
     Properties.values.map(_.asInstanceOf[KnownProperties#EnumeratedKey[_]]) | {
@@ -157,11 +160,12 @@ object KnownProperties {
     def avgOverEngines: Boolean = !sumOverEngines
     def graphable: Boolean = (flags & UNGRAPHABLE) == 0
     def isFlame: Boolean = (flags & FLAME) != 0
+    def isTime: Boolean = units == Millis || units == Nanoseconds
 
     def description =
       if (descriptionOverride.nonEmpty) descriptionOverride
       else if (Objects.nonNull(owner)) owner.name
-      else "Property"
+      else DefaultDescription
 
     def apply(description: String): MetaData = copy(descriptionOverride = description)
 
@@ -179,10 +183,11 @@ object KnownProperties {
 
   val NullMeta = MetaData(0, BareNumber)
   val TimeSpent = MetaData(AGG_ALL, Millis)
+  val TimeSpentNs = MetaData(AGG_ALL, Nanoseconds)
   val AllocSamples = MetaData(AGG_ALL, MegaBytes)
   val MemoryInUse = MetaData(AGG_OVER_ENGINES, MegaBytes)
-  val ItemCount = MetaData(AGG_OVER_ENGINES, Count)
-  val EventCount = MetaData(AGG_ALL, Count)
+  val UnintegrableCount = MetaData(AGG_OVER_ENGINES, Count)
+  val IntegrableCount = MetaData(AGG_ALL, Count)
   val CumulativeEventCount = MetaData(AGG_OVER_ENGINES, Count)
   val GaugeLevel = MetaData(0, BareNumber)
 
@@ -515,7 +520,7 @@ object Properties extends KnownProperties {
       try {
         js.convertTo[String]
       } catch {
-        case _: Throwable => js.toString
+        case NonFatal(_) => js.toString
       }
     override def toJson(a: String): JsValue = a.toJson
     override def equals(obj: Any): Boolean = obj match {
@@ -566,7 +571,7 @@ object Properties extends KnownProperties {
   private[optimus] val _meta = prop[MetaDataType.Value]
 
   val breadcrumbsSentSoFar = propL
-  val crumbsSent = prop[Map[String, Int]].withMeta(EventCount)
+  val crumbsSent = prop[Map[String, Int]].withMeta(IntegrableCount)
   val kafkaFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
   val enqueueFailures = prop[Map[String, Int]].withMeta(CumulativeEventCount)
 
@@ -608,6 +613,7 @@ object Properties extends KnownProperties {
   val debug = prop[String]
   val priority = prop[String]
   val tasksExecutedOnEngine = propL
+  val xsLockContention = propL
 
   val logLevel = prop[String]
   val logMsg = prop[String]
@@ -616,26 +622,24 @@ object Properties extends KnownProperties {
   val clazz = prop[String]
 
   val gcCause = prop[String]
-  val gcRatio = propD
-  val gcTimeWindow = propI
-  val gcUsedHeapBeforeGC = propD
-  val gcUsedOldGenBeforeGC = propD
-  val gcUsedHeapAfterGC = propD
-  val gcUsedOldGenAfterCleanup = propD
-  val gcMaxOldGen = propD
-  val gcMaxHeap = propD
+  val gcRatio = propD.withMeta(GaugeLevel)
+  val gcUsedHeapBeforeGC = propD.withMeta(MemoryInUse)
+  val gcUsedOldGenBeforeGC = propD.withMeta(MemoryInUse)
+  val gcUsedHeapAfterGC = propD.withMeta(MemoryInUse)
+  val gcUsedOldGenAfterCleanup = propD.withMeta(MemoryInUse)
+  val gcMaxOldGen = propD.withMeta(MemoryInUse)
+  val gcMaxHeap = propD.withMeta(MemoryInUse)
   val gcPools = prop[(Map[String, String], Map[String, String])]
-  val gcBackOffAfter = propI
-  val gcHeapOkRatio = propD
-  val gcFinalizerCount = propI
-  val gcFinalizerCountAfter = propI
+  val gcHeapOkRatio = propD.withMeta(GaugeLevel, "For unit tests only")
+  val gcFinalizerCount =
+    propI.withMeta(UnintegrableCount)
+  val gcFinalizerCountAfter =
+    propI.withMeta(UnintegrableCount)
   val gcFinalizerQueue = prop[String]
   val gcNative = prop[String]
   val gcNativeIndex = propI
-  val gcNativeExplicitlyRequested = propB
-  val gcNativeVersion = propI
   val gcNativePath = prop[String]
-  val gcNativeEvicted = propL
+  val gcNativeEvicted = propL.withMeta(MemoryInUse)
   val gcNativeAllocation = propL
   val gcNativeAllocator = prop[String]
   val gcNativeWatermark = propL
@@ -644,104 +648,133 @@ object Properties extends KnownProperties {
   val gcNativeCacheClearCount = propI
   val gcRSSLimit = propL
   val gcNativeInvocations = propL
-  val gcNativeAllocAfter = propL
-  val gcNativeHeapChange = propL // note, this is not the difference of the previous two
-  val gcNativeJVMFootprint = propI
-  val gcNativeJVMHeap = propI // different from GCMonitor properties in that it's not correlated with a GC
-  val gcNativeAlloc = propI
-  val gcNativeManagedAlloc = propI
-  val gcNativeRSS = propI
-  val gcNativeSurrogateRSS = propI
-  val cacheClearCount = propL
-  val gcNativeCacheClearCountGC = propL
-  val gcNativeCacheClearCountMain = propL
-  val gcNativeCacheClearCountGlobal = propL
-  val gcNativeCacheClearCountGlobalCallbacks = propL
-  val gcNativeStats = prop[Map[String, Int]]
+  val gcNativeAllocAfter = propL.withMeta(MemoryInUse)
+  val gcNativeHeapChange = propL.withMeta(MemoryInUse) // note, this is not the difference of the previous two
+  val gcNativeJVMFootprint = propI.withMeta(MemoryInUse)
+  val gcNativeJVMHeap = propI.withMeta(MemoryInUse)
+  val gcNativeAlloc = propI.withMeta(MemoryInUse)
+  val gcNativeManagedAlloc = propI.withMeta(MemoryInUse)
+  val gcNativeRSS = propI.withMeta(MemoryInUse)
+  val gcNativeSurrogateRSS = propI.withMeta(MemoryInUse)
+  val cacheClearCount = propL.withMeta(IntegrableCount)
+  val gcNativeCacheClearCountGC = propL.withMeta(IntegrableCount)
+  val gcNativeCacheClearCountMain = propL.withMeta(IntegrableCount)
+  val gcNativeCacheClearCountGlobal = propL.withMeta(IntegrableCount)
+  val gcNativeCacheClearCountGlobalCallbacks = propL.withMeta(IntegrableCount)
+  val gcNativeStats = prop[Map[String, Int]].withMeta(MemoryInUse)
   val gcAction = prop[String]
   val gcName = prop[String]
-  val gcDuration = propL
-  val gcTotalPausesInCycle = propL
-  val gcMaxPauseInCycle = propL
-  val gcCacheRemoved = propI
-  val gcCacheRemaining = propI
-  val gcCleanupsFired = propL
-  val gcMinorsSinceMajor = propL
-  val gcCacheMemoryUsage = propL
-  val gcNonCacheMemoryUsage = propL
-  val gcMemoryLimit = propL
+  val gcDuration =
+    propL.withMeta(TimeSpent, "Total of GC times that were reported to GCMonitor during this sampling interval")
+  val gcTotalPausesInCycle = propL.withMeta(IntegrableCount)
+  val gcMaxPauseInCycle = propL.withMeta(UnintegrableCount)
+  val gcCacheRemoved = propI.withMeta(IntegrableCount)
+  val gcCacheRemaining = propI.withMeta(UnintegrableCount)
+  val gcCleanupsFired = propL.withMeta(IntegrableCount)
+  val gcMinorsSinceMajor = propL.withMeta(IntegrableCount)
+  val gcCacheMemoryUsage = propL.withMeta(MemoryInUse)
+  val gcNonCacheMemoryUsage = propL.withMeta(MemoryInUse)
+  val gcMemoryLimit = propL.withMeta(MemoryInUse)
 
   val allocationName = prop[String]
   val allocationInfo = prop[String]
-  val allocationEntriesCount = propL
-  val allocationMemoryUsage = propL
-  val allocationKeyspacesCount = propL
+  val allocationEntriesCount = propL.withMeta(UnintegrableCount)
+  val allocationMemoryUsage = propL.withMeta(MemoryInUse)
+  val allocationKeyspacesCount = propL.withMeta(IntegrableCount)
 
-  val evictionTime = propL // eviction time in ns
+  val evictionTime = propL.withMeta(TimeSpentNs) // eviction time in ns
   val expiredCount = propL
-  val expiredMemory = propL
+  val expiredMemory = propL.withMeta(MemoryInUse)
   val evictedCount = propL
-  val evictedMemory = propL
+  val evictedMemory = propL.withMeta(MemoryInUse)
   val youngestEvictedAccessTime = prop[Instant]
   val youngestEvictedCreationTime = prop[Instant]
 
-  //
-  val gcMinUsedHeapAfterGC = propD
-  val gcMinUsedHeapBeforeGC = propD
-  val gcMaxUsedHeapAfterGC = propD
-  val gcMaxUsedHeapBeforeGC = propD
-  val gcUsedOldGenAfterGC = propD
-  val gcUsedHeapAfterCleanup = propD
+  val gcMinUsedHeapAfterGC = propD.withMeta(MemoryInUse)
+  val gcMinUsedHeapBeforeGC = propD.withMeta(MemoryInUse)
+  val gcMaxUsedHeapAfterGC = propD.withMeta(MemoryInUse)
+  val gcMaxUsedHeapBeforeGC = propD.withMeta(MemoryInUse)
+  val gcUsedOldGenAfterGC = propD.withMeta(MemoryInUse)
+  val gcUsedHeapAfterCleanup = propD.withMeta(MemoryInUse)
   val gcNumMinor = propI
   val gcNumMajor = propI
 
   val clearCacheLevel = propL
-  val triggerRatio = propD
+  val triggerRatio = propD.withMeta(GaugeLevel)
   val includeSI = propB
 
-  val profStarts = propL
-  val profTimes = propL
-  val profWallTime = propL
-  val profGraphTime = propL
-  val profSelfTime = propL
-  val profGraphSpinTime = propL
-  val profGraphCpuTime = propL
-  val profGraphWaitTime = propL
-  val profGraphIdleTime = propL
-  val profDalReads = propL
-  val profDalEntities = propL
-  val profDalWrites = propL
-  val profUnderUtilizedTime = propL
-  val profCacheTime = propL
-  val profDalRequestsDist = propI
-  val profDalWritesDist = propI
-  val profDalResultsDist = propI
-  val profMaxHeap = propL.withMeta(MemoryInUse)
-  val profCurrHeap = propL.withMeta(MemoryInUse)
-  val profMaxNonHeap = propL.withMeta(MemoryInUse)
-  val profCurrNonHeap = propL.withMeta(MemoryInUse)
-  val profJvmCPUTime = propL.withMeta(TimeSpent)
-  val profJvmCPULoad = propD.withMeta(GaugeLevel)
-  val profSysCPULoad = propD.withMeta(GaugeLevel)
-  val profLoadAvg = propD.withMeta(GaugeLevel)
+  val profStarts = propL.withMeta(IntegrableCount)
+  val profTimes = propL.withMeta(TimeSpent)
+  val profWallTime = propL.withMeta(
+    TimeSpent,
+    "This is the sum of system clock times from when nodes enters the graph to when it completes."
+  )
+  val profGraphTime = propL.withMeta(
+    TimeSpent,
+    "Sum of clock time spent in body of node/async methods, does not include explicit wait time." +
+      "\nIf there are other threads consuming cpu, this includes time when we're swapped out." +
+      "\nNote: might be different from graphCpuTime, that none of these prof times include overhead e.g. OG*sth*.java"
+  )
+  val profSelfTime = propL.withMeta(
+    TimeSpent,
+    "Sum of all the nodes self times" +
+      "\nSelf time for a node = time spent directly in a node, ignoring any other nodes/async calls it makes" +
+      "\nNote: probably the same as profGraphTime "
+  )
+  val profGraphSpinTime = propL.withMeta(TimeSpent, "Total time spent spinning(read for work) in graph execution")
+  val profGraphCpuTime = propL.withMeta(
+    TimeSpent,
+    "This is explicit cpu time from ThreadMXBean#getCurrentThreadCpuTime spent inside graph (node/async) methods" +
+      "\nNote: this one doesn't include either explicit wait (e.g. DAL)," +
+      " or slowdown due to other threads (like GC or compiler) consuming cpu."
+  )
+  val profGraphWaitTime =
+    propL.withMeta(
+      TimeSpent,
+      "Aggregated wall time excludes spin that any graph scheduler threads spent waiting for work to do")
+  val profGraphIdleTime = propL.withMeta(TimeSpent, "Total time spent by scheduler threads off-graph, parked")
+  val profDalReads = propL.withMeta(IntegrableCount, "Total requests sent to DAL")
+  val profDalEntities = propL.withMeta(IntegrableCount, "Total number of entities returned by those DAL read commands")
+  val profDalWrites = propL.withMeta(IntegrableCount, "Total number of DAL write commands")
+  val profUnderUtilizedTime = propL.withMeta(TimeSpent)
+  val profCacheTime = propL.withMeta(TimeSpent, "Total time spent looking up nodes in cache")
+  val profDalRequestsDist = propI.withMeta(IntegrableCount)
+  val profDalWritesDist = propI.withMeta(IntegrableCount)
+  val profDalResultsDist = propI.withMeta(IntegrableCount)
+  val profMaxHeap = propL.withMeta(MemoryInUse, "Current maximum heap memory that can be used(e.g. -Xmx limit)")
+  val profCurrHeap = propL.withMeta(MemoryInUse, "Current heap memory used")
+  val profMaxNonHeap = propL.withMeta(MemoryInUse, "Current maximum non-heap memory that can be used(e.g. -Xmx limit)")
+  val profCurrNonHeap = propL.withMeta(MemoryInUse, "Current non-heap memory used")
+  val profJvmCPUTime = propL.withMeta(TimeSpent, "JVM CPU time used(OS bean stats)")
+  val profJvmCPULoad = propD.withMeta(GaugeLevel, "Percentage of CPU used by the JVM(OS bean stats)")
+  val profSysCPULoad =
+    propD.withMeta(GaugeLevel, "Percentage of system CPU that was used by all processes(OS bean stats)")
+  val profLoadAvg =
+    propD.withMeta(UnintegrableCount, "Average number of runnable threads over the last minute(OS bean stats)")
   val profGcStopTheWorld = propL.withMeta(TimeSpent)
-  val profGcTimeAll = propL.withMeta(TimeSpent)
-  val profGcCount = propL.withMeta(EventCount)
-  val profJitTime = propL.withMeta(TimeSpent)
-  val profClTime = propL.withMeta(TimeSpent)
-  val profEngineReuse = propI
-  val profDistOverhead = propL
-  val profDistOverheadAtEngine = propL
-  val profDistTasks = propI.withMeta(ItemCount)
-  val profNodeExecutionTime = propL
+  val profGcTimeAll = propL.withMeta(
+    TimeSpent,
+    "Total time spent in GC, " +
+      "reported by ManagementFactory.getGarbageCollectorMXBeans during the sampling interval")
+  val profGcCount = propL.withMeta(IntegrableCount, "Number of GC events")
+  val profJitTime = propL.withMeta(TimeSpent, "JIT compiler time (always parallel, this contributes to the CPU time)")
+  val profClTime = propL.withMeta(TimeSpent, "The accumulated elapsed time spent by class loading")
+  val profDistOverheadAtEngine = propL.withMeta(TimeSpent)
+  val profDistTasks = propI.withMeta(IntegrableCount)
+  val profNodeExecutionTime = propL.withMeta(TimeSpent)
   val profThreads = prop[Map[String, Map[String, Long]]]
   val profCaches = prop[Map[String, Map[String, Long]]]
   val profMetricsDiff = prop[Map[String, Map[String, Array[Double]]]]
   val profSS = prop[Map[String, Array[String]]]
-  val profEvictions = prop[Map[String, Long]]
+  val profEvictions =
+    prop[Map[String, Long]].withMeta(IntegrableCount, "Total number of nodes evicted from cache, for various reasons")
 
-  val profDepTrackerTaskAdded = prop[Map[String, Int]]
-  val profDepTrackerTaskProcessed = prop[Map[String, Int]]
+  // Events about DependencyTracker queue sizes
+  // Technically, Queued = Added - Processed but in practice it might differ slightly depending on when snaps are
+  // published.
+  val profDepTrackerTaskAdded = prop[Map[String, Int]].withMeta(IntegrableCount)
+  val profDepTrackerTaskProcessed = prop[Map[String, Int]].withMeta(IntegrableCount)
+  val profDepTrackerTaskQueued = prop[Map[String, Int]].withMeta(UnintegrableCount)
 
   val cardEstimated = prop[Map[String, Int]].withMeta(MetaData(AGG_HYPER | UNGRAPHABLE, PropertyUnits.Count))
   val cardRaw = prop[Map[String, Long]]
@@ -749,20 +782,20 @@ object Properties extends KnownProperties {
   val cardEstimators =
     prop[Map[String, Map[String, Int]]].withMeta(MetaData(AGG_HYPER | UNGRAPHABLE, PropertyUnits.Count))
 
-  val profStallTime = propL
-  val pluginCounts = prop[Map[String, Map[String, Long]]].withMeta(EventCount)
-  val pluginSnaps = prop[Map[String, Map[String, Long]]].withMeta(ItemCount)
+  val profStallTime = propL.withMeta(TimeSpent)
+  val pluginCounts = prop[Map[String, Map[String, Long]]].withMeta(IntegrableCount)
+  val pluginSnaps = prop[Map[String, Map[String, Long]]].withMeta(UnintegrableCount)
   val pluginStateTimes = prop[Map[String, Map[String, Long]]].withMeta(TimeSpent)
   val pluginFullWaitTimes = prop[Map[String, Long]].withMeta(TimeSpent)
   val pluginStallTimes = prop[Map[String, Long]].withMeta(TimeSpent)
-  val pluginNodeOverflows = prop[Map[String, Long]].withMeta(EventCount)
-  val profDALBatches = propI.withMeta(EventCount)
-  val profDALCommands = propI.withMeta(EventCount)
+  val pluginNodeOverflows = prop[Map[String, Long]].withMeta(IntegrableCount)
+  val profDALBatches = propI.withMeta(IntegrableCount)
+  val profDALCommands = propI.withMeta(IntegrableCount)
   val profGCDuration = propL.withMeta(TimeSpent)
   val profGCMajorDuration = propL.withMeta(TimeSpent)
   val profGCMinorDuration = propL.withMeta(TimeSpent)
-  val profGCMajors = propI.withMeta(EventCount)
-  val profGCMinors = propI.withMeta(EventCount)
+  val profGCMajors = propI.withMeta(IntegrableCount)
+  val profGCMinors = propI.withMeta(IntegrableCount)
   val profCommitedMB = propL.withMeta(MemoryInUse)
   val profHeapMB = propL.withMeta(MemoryInUse)
   val profNonAuxBlockingTime = propL.withMeta(TimeSpent)
@@ -771,9 +804,9 @@ object Properties extends KnownProperties {
 
   val snapTimeMs = propL.withMeta(TimeSpent)
   val snapTimeUTC = prop[String]
-  val snapEpochId = propL
-  val snapPeriod = propL
-  val snapDuration = propL
+  val snapEpochId = propL.withMeta(TimeSpent)
+  val snapPeriod = propL.withMeta(TimeSpent)
+  val snapDuration = propL.withMeta(TimeSpent)
   val snapBatch = propI
   val canonicalPub = propB
 
@@ -796,7 +829,8 @@ object Properties extends KnownProperties {
   val user = prop[String]
   val clusterName = prop[String]
   val server = prop[Map[String, JsValue]]
-  val args = prop[Seq[String]]
+  val args = prop[Seq[String]].withMeta(NullMeta, "for risk related usages")
+  val argsMap = prop[Map[String, String]].withMeta(NullMeta, "for profiling related usages")
   val argsType = prop[String]
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
@@ -915,72 +949,130 @@ object Properties extends KnownProperties {
   val artifacts = prop[String]
 
   val hotspotEngine = prop[String]
-  val hotspotStart = propL
-  val hotspotEvicted = propL
-  val hotspotInvalidated = propI
-  val hotspotCacheHit = propL
-  val hotspotCacheHitFromDifferentTasks = propL
-  val hotspotCacheMiss = propL
-  val hotspotCacheTime = propL
-  val hotspotXsLookupTime = propL
-  val hotspotNodeReusedTime = propL
-  val hotspotCacheBenefit = propL
-  val hotspotAvgCacheTime = propL
-  val hotspotAncSelfTime = propL
-  val hotspotPostCompleteTime = propL
-  val hotspotWallTime = propL
-  val hotspotSelfTime = propL
-  val hotspotTweakLookupTime = propL
-  val hotspotIsScenarioIndependent = prop[Option[Boolean]]
+  val hotspotStart: Properties.EnumeratedKeyLong = propL.withMeta(IntegrableCount, "Number of node starts")
+  val hotspotEvicted = propL.withMeta(IntegrableCount, "Nodes evicted from cache")
+  val hotspotInvalidated = propI.withMeta(IntegrableCount, "Number of invalidations for NodeTasks")
+  val hotspotCacheHit = propL.withMeta(IntegrableCount, "Number of cache hits")
+  val hotspotCacheHitFromDifferentTasks =
+    propL.withMeta(NullMeta, "Number of cache hits from different tasks")
+  val hotspotCacheMiss = propL.withMeta(IntegrableCount, "Number of cache misses")
+  val hotspotCacheTime = propL.withMeta(TimeSpent, "Time spent on cache lookup logic")
+  val hotspotCacheCycle =
+    propL.withMeta(UnintegrableCount, "The maximum depth in the LRU cache at which we re-used (re-cycled) the node")
+  val hotspotCacheCycleStats =
+    prop[Seq[Long]]
+      .withMeta(NullMeta, "Histogram Y-axis of the LRU depths(log_2 of the count that occurred at this depth)")
+  val hotspotCacheHisto = prop[String].withMeta(NullMeta, "Histogram of LRU depths")
+  val hotspotXsLookupTime = propL.withMeta(TimeSpent, "Time spent in cross scenario lookups")
+  val hotspotNodeReusedTime = propL.withMeta(
+    TimeSpent,
+    "Total time saved by using result from cache, rather than recalculating" +
+      "<br>This can be inaccurate because first evaluation of a @node can trigger classloading, (lazy) val evaluation (such as one-time hashCode calculation), JIT compilation etc" +
+      "<br>So benefit can be over-inflated, and vary from run to run, as node evaluation order is non-deterministic"
+  )
+  val hotspotCacheBenefit = propL.withMeta(
+    TimeSpent,
+    "Derived Definition: Reused Node Time - Cache Time" +
+      "<br>Calculated cache benefit of this node" +
+      "<br>Note warnings on Reused Node Time tooltip"
+  )
+  val hotspotAvgCacheTime = propL.withMeta(TimeSpent, "Average cache time: time/(hit+miss)")
+  val hotspotAncSelfTime = propL.withMeta(
+    TimeSpent,
+    "Ancillary Self Time<br>Defined as sum of self times of all non-cached child nodes<br><br>" +
+      "<div style='font-family:consolas;font-size:12pt'><span style='color:blue'>def</span> g = given(tweaks) { <span style='color:green'>some_code</span> }</div>" +
+      "<span style='color:green'>some_code</span> is represented by a node (<i>g_given_12</i> where 12 is the line number in the source file)" +
+      "<br>ANC Time for node <i>g</i> will be the selfTime of the <i>g_given_12</i> node"
+  )
+  val hotspotPostCompleteTime =
+    propL.withMeta(
+      TimeSpent,
+      "Time between node completing/suspending and stopping, across multiple invocations<br><br>" +
+        "<i>Most of this time is taken notifying the waiters of this node.<br>" +
+        "It's a graph internal time, not related to the user code in this node</i>"
+    )
+  val hotspotWallTime =
+    propL.withMeta(TimeSpent, "Total Wall Time (Warning not-additive and therefore could be useless)")
+  val hotspotSelfTime = propL.withMeta(
+    TimeSpent,
+    "Total CPU time, across multiple invocations<br><br>" +
+      "<i>Note - includes: <br>" +
+      "Cache lookup time of its children<br>" +
+      "Tweak lookup time<br>" +
+      "Some args hash time for tweakable nodes in XS scope</i><br>" +
+      "See docs for more detail"
+  )
+  val hotspotTweakLookupTime = propL.withMeta(TimeSpent, "Time spent looking up tweak of a given property")
+  val hotspotIsScenarioIndependent =
+    prop[Option[Boolean]]
   val hotspotFavorReuse = prop[Option[Boolean]]
   val hotspotCacheable = prop[Option[Boolean]]
   val hotspotPropertyName = prop[String]
+  val spPropertyName = prop[String].withMeta(NullMeta, "Shortened Property/Node Name")
   val hotspotPropertyFlagsString = prop[String]
   val hotspotPropertyFlags = propL
   val hotspotRunningNode = prop[String]
   val hotspotPropertySource = prop[String]
-  val hotspotCollisionCount = propI
-  val hotspotChildNodeLookupCount = propI
-  val hotspotChildNodeLookupTime = propL
+  val hotspotCollisionCount =
+    propI.withMeta(IntegrableCount, "Number of (hash) collisions encountered when looking up NodeTasks in NodeCache")
+  val hotspotChildNodeLookupCount = propI.withMeta(IntegrableCount, "Total number of child nodes looked up")
+  val hotspotChildNodeLookupTime = propL.withMeta(
+    TimeSpent,
+    "Time spent looking up child nodes in cache" +
+      "<br>This is included in the Self Time of node" +
+      "<br>If Self Time and Child Node Lookup Time are close, it implies the node does little work" +
+      "<br>Child Node Lookup Time is the Cache Time"
+  )
 
+  val mergedAppName = prop[String].withMeta(NullMeta, "The merged application name for optimus app")
   val smplTimes = prop[Map[String, Long]].withMeta(TimeSpent)
-  val flameTimes = prop[Map[String, Long]].withMeta(TimeSpent.withFlags(FLAME))
-  val flameLive = prop[Map[String, Long]].withMeta(MemoryInUse.withFlags(FLAME))
-  val flameAlloc = prop[Map[String, Long]].withMeta(AllocSamples.withFlags(FLAME))
-  val flameCounts = prop[Map[String, Long]].withMeta(EventCount.withFlags(FLAME))
+  val flameTimes = prop[Map[String, Long]]
+    .withMeta(TimeSpent.withFlags(FLAME), "root total time for a sample that is published as a flame graph")
+  val flameLive = prop[Map[String, Long]]
+    .withMeta(
+      MemoryInUse.withFlags(FLAME),
+      "root total live memory used for a sample that is published as a flame graph")
+  val flameAlloc =
+    prop[Map[String, Long]].withMeta(
+      AllocSamples.withFlags(FLAME),
+      "root total memory allocated for a sample that is published as a flame graph")
+  val flameCounts = prop[Map[String, Long]]
+    .withMeta(IntegrableCount.withFlags(FLAME), "root total value for a sample that is published as a flame graph")
   val samplingPauseTime = propL.withMeta(TimeSpent)
-  val childProcessCount = propI.withMeta(ItemCount)
-  val childProcessCPU = propD.withMeta(GaugeLevel)
-  val childProcessRSS = propL.withMeta(MemoryInUse)
+  val childProcessCount = propI.withMeta(UnintegrableCount, "Number of child processes")
+  val childProcessCPU = propD.withMeta(GaugeLevel, "Total CPU load of all child processes")
+  val childProcessRSS = propL.withMeta(MemoryInUse, "Total resident memory size of all child processes")
   val spInternalStats = prop[Map[String, Map[String, Double]]]
+  val apInternalStats = prop[Map[String, Double]]
 
   val crumbplexerIgnore = prop[String] // tells crumbplexer to ignore the whole crumb; value is the reason
-  val plexerCountPrinted = propL.withMeta(EventCount)
-  val plexerCountDeduped = propL.withMeta(EventCount)
-  val plexerCountDropped = propL.withMeta(EventCount)
-  val plexerCountParseError = propL.withMeta(EventCount)
-  val plexerSnapRootCount = propL.withMeta(EventCount)
+  val plexerCountPrinted = propL.withMeta(IntegrableCount)
+  val plexerCountDeduped = propL.withMeta(IntegrableCount)
+  val plexerCountDropped = propL.withMeta(IntegrableCount)
+  val plexerCountParseError = propL.withMeta(IntegrableCount)
+  val plexerSnapRootCount = propL.withMeta(IntegrableCount)
   val plexerSnapLagClient = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since crumb time"))
   val plexerSnapLagKafka = propL.withMeta(MetaData(0, PropertyUnits.Millis, "Lag since kafka publish"))
   val plexerSnapLagQueue = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Millis, "Lag since enqueued"))
   val plexerSnapQueueSize = propL.withMeta(MetaData(AVG_OVER, PropertyUnits.Count))
 
-  val profDmcCacheAttemptCount = propL.withMeta(EventCount)
-  val profDmcCacheMissCount = propL.withMeta(EventCount)
-  val profDmcCacheHitCount = propL.withMeta(EventCount)
-  val profDmcCacheComputeCount = propL.withMeta(EventCount)
-  val profDmcCacheDeduplicationCount = propL.withMeta(EventCount)
+  val profDmcCacheAttemptCount = propL.withMeta(IntegrableCount)
+  val profDmcCacheMissCount = propL.withMeta(IntegrableCount)
+  val profDmcCacheHitCount = propL.withMeta(IntegrableCount)
+  val profDmcCacheComputeCount = propL.withMeta(IntegrableCount)
+  val profDmcCacheDeduplicationCount = propL.withMeta(IntegrableCount)
   val profStats = prop[Map[String, String]]
   val profStatsType = prop[String]
   val profSummary = prop[Map[String, JsObject]]
   val profOpenedFiles = prop[Seq[String]]
   val miniGridMeta = prop[JsObject]
   val profStacks = prop[Seq[Elems]]
-  val numStacksPublished = propL.withMeta(EventCount)
-  val numStacksReferenced = propL.withMeta(EventCount)
-  val numSamplesPublished = propL.withMeta(EventCount)
-  val numCrumbFailures = propI.withMeta(EventCount)
-  val crumbQueueLength = propI
+  val numStacksPublished = propL.withMeta(IntegrableCount)
+  val numStacksReferenced = propL.withMeta(IntegrableCount)
+  val numSamplesPublished =
+    propL.withMeta(IntegrableCount, "Number of stacks published from sampling profiler during this sampling interval")
+  val numCrumbFailures = propI.withMeta(IntegrableCount)
+  val crumbQueueLength = propI.withMeta(UnintegrableCount)
   val stackElem = prop[String]
   val pTpe = prop[String]
   val jfrSize = propL
@@ -997,8 +1089,8 @@ object Properties extends KnownProperties {
 
   val distWallTime = propL.withMeta(TimeSpent)
   val distTaskDuration = propL.withMeta(TimeSpent)
-  val distTasksComplete = propI.withMeta(EventCount)
-  val distTasksRcvd = propI.withMeta(EventCount)
+  val distTasksComplete = propI.withMeta(IntegrableCount)
+  val distTasksRcvd = propI.withMeta(IntegrableCount)
   val distBytesRcvd = propL.withMeta(AllocSamples)
   val distBytesSent = propL.withMeta(AllocSamples)
 

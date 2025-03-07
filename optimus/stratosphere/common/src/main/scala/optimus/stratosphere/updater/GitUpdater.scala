@@ -16,6 +16,7 @@ import optimus.stratosphere.bootstrap.GitProcess
 import optimus.stratosphere.bootstrap.OsSpecific
 import optimus.stratosphere.bootstrap.StratosphereException
 import optimus.stratosphere.common.SemanticVersion
+import optimus.stratosphere.config.HostnamePort
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.filesanddirs.PathsOpts._
 import optimus.stratosphere.telemetry.CrumbSender
@@ -35,15 +36,20 @@ import scala.util.matching.Regex
 object GitUpdater {
   def gitVersion(stratoWorkspace: StratoWorkspaceCommon): Option[SemanticVersion] = {
     if (!stratoWorkspace.hasGitInWorkspace) {
-      None
+      try {
+        val cmd = Seq("git", "--version")
+        val result = new CommonProcess(stratoWorkspace).runAndWaitFor(cmd)
+        Some(getGitSemanticVersion(result))
+      } catch {
+        case NonFatal(e) =>
+          stratoWorkspace.log.warning(s"Failed to get git version: ${e.getMessage}")
+          None
+      }
     } else {
       Some(
-        SemanticVersion.parse(
+        getGitSemanticVersion(
           new CommonProcess(stratoWorkspace)
-            .runGit(stratoWorkspace.directoryStructure.sourcesDirectory)("--version")
-            .stripPrefix("git version ")
-            .trim
-        ))
+            .runGit(stratoWorkspace.directoryStructure.sourcesDirectory)("--version")))
     }
   }
 
@@ -55,6 +61,9 @@ object GitUpdater {
       else catchUpRemoteUrl
     RemoteUrl(configuredCatchUpRemoteUrl)
   }
+
+  private def getGitSemanticVersion(gitVersion: String): SemanticVersion =
+    SemanticVersion.parse(gitVersion.stripPrefix("git version ").trim)
 
   private def urlContainsUsername(url: String): Boolean =
     UserInURLPattern.findFirstIn(url).isDefined
@@ -74,7 +83,8 @@ object GitUpdater {
 class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
   import GitUpdater._
   private val overwrittenHookNames = List("pre-commit", "prepare-commit-msg", "pre-push")
-  private val bitbucketInstances = stratoWorkspace.internal.urls.bitbucket.all.values.toSeq
+  private val bitbucketInstances: Map[String, HostnamePort] = stratoWorkspace.internal.urls.bitbucket.all
+  private val bitbucketHostnames: Iterable[String] = bitbucketInstances.values.map(_.hostname)
 
   def configureRepo(): Unit = {
     adjustSettings()
@@ -101,7 +111,7 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
       filter: (String, String) => Boolean = (_, _) => true): Unit = {
     val result = getGitConfig(regexp, system).collect {
       case ConfigPattern(configKey, configValue)
-          if bitbucketInstances.exists(i => configValue.contains(i)) && filter(configKey, configValue) =>
+          if bitbucketHostnames.exists(i => configValue.contains(i)) && filter(configKey, configValue) =>
         mapper(configKey, configValue)
     }
     result.foreach { case (key, value) =>
@@ -112,8 +122,8 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
 
   private def systemConfigArgs(key: String, value: String) = Seq("config", "--system", key, value)
 
-  def reportResolutionFailures(value: Map[String, String]): Unit = {
-    val missing = bitbucketInstances.filterNot(value.contains)
+  def reportResolutionFailures(value: Map[HostnamePort, String]): Unit = {
+    val missing = bitbucketInstances.values.filterNot(value.contains)
     if (missing.nonEmpty) {
       val warning = s"""Could not resolve the following stash instances to host names:
                        |${missing.mkString("\n")}""".stripMargin
@@ -127,9 +137,9 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     removeInsteadOfs()
     removeExtraHeaders()
     removeEmptyAuth()
-    val resolved: Map[String, String] = bitbucketInstances.flatMap { instance =>
+    val resolved: Map[HostnamePort, String] = bitbucketInstances.flatMap { case (_, instance) =>
       Try {
-        val addr = InetAddress.getByName(instance)
+        val addr = InetAddress.getByName(instance.hostname)
         addr.getCanonicalHostName
       } match {
         case Success(name) => Some((instance, name))
@@ -141,13 +151,15 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
     stratoWorkspace.log.debug(s"""resolved stash instances to names: ${resolved.mkString(",")}""")
     reportResolutionFailures(resolved)
     val configureRepositoryCommands: Seq[Seq[String]] = resolved.flatMap { case (instance, name) =>
+      val hostname = instance.hostname
       Seq(
-        systemConfigArgs(s"url.http://$name.insteadOf", s"http://$instance"),
+        systemConfigArgs(s"url.http://$name.insteadOf", s"http://$hostname"),
         // slash at the end is intentional - we don't want multiple mappings under the same key
-        systemConfigArgs(s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$instance/"),
+        systemConfigArgs(s"url.http://$name/.insteadOf", s"http://${stratoWorkspace.userName}@$hostname/"),
         // this is for urls containing port
-        systemConfigArgs(s"url.http://$name:.insteadOf", s"http://${stratoWorkspace.userName}@$instance:"),
-        systemConfigArgs(s"http.http://$name.extraHeader", s"Host: $instance")
+        systemConfigArgs(s"url.http://$name:.insteadOf", s"http://${stratoWorkspace.userName}@$hostname:"),
+        systemConfigArgs(s"http.http://$name.extraHeader", s"Host: $hostname"),
+        systemConfigArgs(s"http.http://$name:${instance.port}.extraHeader", s"Host: $hostname")
       )
     }.toSeq
     configureRepositoryCommands.foreach { args => runGit(args.toSeq: _*) }
@@ -195,7 +207,7 @@ class GitUpdater(stratoWorkspace: StratoWorkspaceCommon) {
   }
 
   def ensureGitInstalled(useGitFromArtifactory: Boolean): Unit =
-    if (OsSpecific.isWindows && !OsSpecific.isCi) {
+    if (GitProcess.isUsingGitFromTools) {
       stratoWorkspace.log.info("Updating git settings...")
 
       val gitProcess = new GitProcess(stratoWorkspace.config)

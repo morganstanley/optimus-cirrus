@@ -16,6 +16,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.config.ConfigValue
 import optimus.buildtool.config.MetaBundle
 import optimus.buildtool.config.ModuleId
+import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.NamingConventions
 import optimus.buildtool.config.OrderedElement
 import optimus.buildtool.config.ParentId
@@ -23,6 +24,7 @@ import optimus.buildtool.config.WorkspaceId
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.RelativePath
 import optimus.buildtool.format.ConfigUtils._
+import optimus.buildtool.format.OrderingUtils._
 import optimus.platform._
 
 import java.nio.file.Path
@@ -125,6 +127,7 @@ object MavenDependenciesConfig extends TopLevelConfig("dependencies/maven-depend
 object BuildDependenciesConfig extends TopLevelConfig("dependencies/build-dependencies.obt")
 object JdkDependenciesConfig extends TopLevelConfig("dependencies/jdk.obt")
 object BundlesConfig extends TopLevelConfig("bundles.obt")
+object ModuleSetsConfig extends TopLevelConfig("config/module-sets.obt")
 object ApplicationValidation extends TopLevelConfig("app-validation.obt")
 object RunConfSubstitutions extends TopLevelConfig("runconf-substitutions.obt")
 object DockerConfig extends TopLevelConfig("docker.obt")
@@ -141,15 +144,20 @@ final case class Module(
     owningGroup: String,
     line: Int
 ) extends ObtFile
-    with OrderedElement
+    with OrderedElement[ModuleId]
 
 final case class Bundle(id: MetaBundle, eonId: Option[String], modulesRoot: String, root: Boolean, line: Int)
     extends ObtFile
-    with OrderedElement {
+    with OrderedElement[MetaBundle] {
   def path: RelativePath = RelativePath(s"${id.meta}/${id.bundle}/bundle.obt")
 }
 
-final case class WorkspaceStructure(name: String, bundles: Seq[Bundle], modules: Map[ModuleId, Module]) {
+final case class WorkspaceStructure(
+    name: String,
+    bundles: Set[Bundle],
+    modules: Map[ModuleId, Module],
+    moduleSets: Map[ModuleSetId, ModuleSetDefinition]
+) {
   def allFiles: Seq[ObtFile] = TopLevelConfig.allFiles ++ bundles ++ modules.values
 
   def lineInBundlesFileFor(file: ObtFile): Option[Int] = file match {
@@ -164,7 +172,7 @@ final case class WorkspaceStructure(name: String, bundles: Seq[Bundle], modules:
 }
 
 object WorkspaceStructure {
-  val Empty: WorkspaceStructure = WorkspaceStructure("", Seq.empty, Map.empty)
+  val Empty: WorkspaceStructure = WorkspaceStructure("", Set.empty, Map.empty, Map.empty)
 
   private def loadBundleDef(meta: String, name: String, config: Config): Result[Bundle] = {
     val modulesRoot = if (config.hasPath(Names.ModulesRoot)) config.getString(Names.ModulesRoot) else s"$meta/$name"
@@ -186,6 +194,18 @@ object WorkspaceStructure {
         )
       }
     )
+
+  private def checkModulesMavenName(modules: Seq[Module], defaultModules: Seq[Module]): Seq[Error] = {
+    val incompatibleModules = modules.groupBy(_.id.scope("main").forMavenRelease.fullModule).filter(_._2.size > 1)
+
+    for {
+      (id, modules) <- incompatibleModules.to(Seq)
+      m <- modules
+    } yield {
+      val file = if (defaultModules.contains(m)) BundlesConfig else ModuleSetsConfig
+      Error(s"Duplicate (lower-case) module name: '$id'", file, m.line)
+    }
+  }
 
   def loadModuleStructure(name: String, loader: ObtFile.Loader): Result[WorkspaceStructure] =
     BundlesConfig.tryWith {
@@ -216,28 +236,51 @@ object WorkspaceStructure {
         else Nil
       }
 
-      val modules: ResultSeq[Module] = for {
+      val bundles = validatedBundleAndModulesConf
+        .map { case (bundle, _) => bundle }
+        .value
+        .withProblems(bundles => OrderingUtils.checkOrderingIn(BundlesConfig, bundles))
+
+      val defaultModules = (for {
         (bundle, bundleConfig) <- validatedBundleAndModulesConf
         (name, moduleConfig) <- ResultSeq(bundleConfig.nested(BundlesConfig))
         module <- ResultSeq.single(
           genModule(name, bundle, moduleConfig).withProblems(
             moduleConfig.checkExtraProperties(BundlesConfig, Keys.moduleOwnership)))
-      } yield module
+      } yield module).value.withProblems(mods => OrderingUtils.checkOrderingIn(BundlesConfig, mods))
 
-      val workspaceStructure: Result[WorkspaceStructure] = for {
-        bmc <- bundleAndModulesConf.value
-        mods <- modules.value
-      } yield WorkspaceStructure(
-        name,
-        bmc.map { case (bundle, _) => bundle },
-        mods.map { module => module.id -> module }.toMap
-      )
+      val moduleSets = bundles.flatMap(ModuleSetDefinition.load(loader, _))
 
-      workspaceStructure.withProblems { ws =>
-        val bundleOrderingsErrors = OrderingUtils.checkOrderingIn(BundlesConfig, ws.bundles)
-        val moduleOrderingsErrors =
-          OrderingUtils.checkOrderingIn(BundlesConfig, ws.modules.values.to(Seq))
-        bundleOrderingsErrors ++ moduleOrderingsErrors
+      for {
+        bundles <- bundles
+        defaultMods <- defaultModules
+        moduleSets <- moduleSets
+        allModules <- Success(
+          defaultMods ++ moduleSets.flatMap(_.publicModules) ++ moduleSets.flatMap(_.privateModules)
+        ).withProblems(mods => checkModulesMavenName(mods, defaultMods))
+      } yield {
+        val allModuleSets = if (defaultMods.nonEmpty) {
+          moduleSets.find(_.moduleSet.id == ModuleSetId.Default) match {
+            case Some(default) =>
+              val newDefault = default.copy(publicModules = default.publicModules ++ defaultMods.toSet)
+              moduleSets.filter(_.moduleSet.id != ModuleSetId.Default) :+ newDefault
+            case None =>
+              val newDefault = ModuleSetDefinition(
+                id = ModuleSetId.Default,
+                publicModules = defaultMods.toSet,
+                privateModules = Set.empty,
+                canDependOn = Set.empty,
+                line = 0
+              )
+              moduleSets :+ newDefault
+          }
+        } else moduleSets
+        WorkspaceStructure(
+          name,
+          bundles.toSet,
+          allModules.map { module => module.id -> module }.toMap,
+          allModuleSets.map { moduleSet => moduleSet.moduleSet.id -> moduleSet }.toMap
+        )
       }
     }
 

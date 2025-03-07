@@ -20,7 +20,6 @@ import optimus.platform.annotations.nodeSync
 import optimus.platform.internal.ClassInfo
 import optimus.platform.relational.tree.MultiRelationElement
 import optimus.platform.storable._
-import optimus.platform.temporalSurface.TemporalSurfaceCacheManager
 import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
 import optimus.platform.TemporalContext
 import optimus.platform.Tweak
@@ -187,7 +186,8 @@ trait EntityResolver {
 
   protected[optimus] /*[platform]*/ def serverInfo: ServerInfo
 
-  def cacheManager: TemporalSurfaceCacheManager
+  /** returns true only if this EntityResolver would return the same result from any call as the other */
+  def equivalentTo(other: EntityResolver): Boolean
 }
 
 /**

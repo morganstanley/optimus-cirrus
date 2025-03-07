@@ -24,7 +24,7 @@ import TimeInterval.instantDiscrete
 final case class TimeInterval(from: Instant, to: Instant) extends bitemporal.Interval[Instant] {
   import TimeInterval.log
   if (!isBeforeOrEqual(from, to)) {
-    val msg = s"requirement failed: from ($from) should not be after to ($to)"
+    val msg = s"requirement failed: tt from ($from) should not be after tt to ($to)"
     val ex = new IllegalArgumentException(msg)
     log.error(msg, ex)
     throw ex
@@ -127,7 +127,7 @@ object TimeInterval {
 }
 
 final case class ValidTimeInterval(from: Instant, to: Instant) extends bitemporal.Interval[Instant] {
-  require(isBeforeOrEqual(from, to))
+  require(isBeforeOrEqual(from, to), s"vt from ${from} is greater than vt to ${to}")
 
   private[this] def ordering = implicitly[Ordering[Instant]]
 

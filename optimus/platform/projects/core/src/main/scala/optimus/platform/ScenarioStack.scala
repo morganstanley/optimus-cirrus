@@ -17,14 +17,12 @@ import optimus.graph
 import optimus.graph.EvaluationState
 import optimus.graph.OGTrace
 import optimus.graph._
-import optimus.graph.cache.NodeCache
 import optimus.graph.cache._
 import optimus.graph.diagnostics.GivenBlockProfile
 import optimus.graph.diagnostics.PScenarioStack
 import optimus.graph.diagnostics.pgo.Profiler
 import optimus.graph.tracking.DependencyTracker
 import optimus.graph.tracking.SnapshotScenarioStack
-import optimus.graph.tracking.ttracks.RefCounter
 import optimus.observability.JobConfiguration
 import optimus.platform.inputs.NodeInputMapValue
 import optimus.platform.inputs.NodeInputs.ScopedSINodeInput
@@ -67,7 +65,8 @@ object ScenarioStack {
   val constantNC: ScenarioStack = createConstantStack(0)
 
   private def equivSIParams(lhs: ScenarioStack, rhs: ScenarioStack): Boolean = {
-    ((lhs.flags & rhs.flags & ~EvaluationState.ALL_SI_FLAGS) == 0) && (lhs.privateCache eq rhs.privateCache) &&
+    ((lhs.flags & rhs.flags & ~EvaluationState.ALL_SI_FLAGS) == 0) && (lhs.cacheSelector
+      .withoutScope() eq rhs.cacheSelector) &&
     ((lhs.siParams eq rhs.siParams) || lhs.siParams.equals(rhs.siParams))
   }
 
@@ -149,12 +148,13 @@ final case class ScenarioStack private[optimus] (
     /** the parent is only used to navigate through the tweaks, so not preserved in the case of a non si -> Si call */
     private var _parent: ScenarioStack = null,
     private[optimus] val _cacheID: SSCacheID = SSCacheID.newUnique(),
-    private[optimus] val flags: Int = 0,
+    private[optimus] var flags: Int = 0,
+    private[optimus] val pathMask: Int = 0,
     // this should be transient (used in NodeExecutor.hasRecordingSS - replace with RECORD_TWEAK_USAGE flag?
-    @volatile private[optimus] var _tweakableListener: TweakableListener = NoOpTweakableListener,
+    private[optimus] val tweakableListener: TweakableListener = NoOpTweakableListener,
     private[optimus] val siParams: SIParams = ScenarioStack.emptySIParams,
     private[optimus] val ssShared: ScenarioStackShared = null,
-    private[optimus] val privateCache: PrivateCache = null,
+    private[optimus] val cacheSelector: CacheSelector = CacheSelector.DEFAULT,
     /**
      * Keep a reference to a 'stable' SS. This reference will be reset when:
      *   1. A cache ID is passed in the constructor, i.e., not copied from an existing SS.
@@ -168,6 +168,8 @@ final case class ScenarioStack private[optimus] (
 
   if (_stableSS eq null)
     _stableSS = this
+
+  flags |= tweakableListener.extraFlags
 
   if ((siParams.scopedPlugins ne null) && (isRoot || (siParams.scopedPlugins eq parent.siParams.scopedPlugins)))
     // invoked every time we create a scenario stack (even on engines via deserialization in `ScenarioStackMoniker`)
@@ -188,7 +190,10 @@ final case class ScenarioStack private[optimus] (
     val key = ScenarioReference.current$newNode
 
     while (!cur.isRoot) {
-      val (snapshotTweak, ss) = cur.getTweakAndScenarioStack(key.propertyInfo, key, null)
+      // No Tracking is valid here because there are no when clauses for scenario refs
+      val twkResolution = cur.getTweakAndScenarioStackNoWhenClauseTracking(key)
+      val snapshotTweak = twkResolution.tweak
+      val ss = twkResolution.foundInScenarioStack
       if (snapshotTweak != null) {
         val res = snapshotTweak.tweakValue.asInstanceOf[ScenarioReference]
         if (res.name == scenRef.name)
@@ -212,7 +217,7 @@ final case class ScenarioStack private[optimus] (
           val si =
             ssShared.siStack.copy(
               siParams = siParams,
-              privateCache = privateCache,
+              cacheSelector = cacheSelector.withoutScope(),
               flags = ssShared.siStack.flags | flagsToPropagate)
 
           if (NodeTrace.profileSSUsage.getValue && (locMarker ne null))
@@ -223,7 +228,7 @@ final case class ScenarioStack private[optimus] (
 
         // it's only safe to use cache if none of the flags that get propagated were set and there isn't a private
         // cache (since we don't currently include any of this information in the cache key)
-        if (Settings.reuseSIStacks && (flagsToPropagate == 0) && (privateCache eq null))
+        if (Settings.reuseSIStacks && (flagsToPropagate == 0) && (cacheSelector eq CacheSelector.DEFAULT))
           ssShared.siRootCache.computeIfAbsent(siParams, _ => newSIStack)
         else newSIStack
       }
@@ -247,7 +252,7 @@ final case class ScenarioStack private[optimus] (
           // Also of possible interest is the fact that tweakableListener is a var. This means that it is possible to
           // have scenario stacks that compare equals but have different hashcodes, if the hashcodes were computed
           // before an update to the tweakableListeners. I don't think this ever happens currently.
-          (tweakableListener eq that.tweakableListener) &&
+          (tweakableListener.underlyingListener eq that.tweakableListener.underlyingListener) &&
             that.getClass == getClass &&
             that.trackingDepth == trackingDepth &&
             // Optimizations using reference compare of the roots.
@@ -274,7 +279,7 @@ final case class ScenarioStack private[optimus] (
       // roots.
       val hc = {
         41 * (41 * (41 * (41
-          + System.identityHashCode(_tweakableListener))
+          + System.identityHashCode(tweakableListener.underlyingListener))
           + trackingDepth)
           + (if (scenario == null) 0 else scenario.hashCode))
       } + (if (_parent == null) 0 else _parent.hashCode)
@@ -354,7 +359,6 @@ final case class ScenarioStack private[optimus] (
   def givenBlockProfile: GivenBlockProfile = if (pss eq null) null else pss.givenProfile
   def jobConfiguration: JobConfiguration = siParams.jobConfiguration
   def requireJobConfiguration[T <: JobConfiguration]: T = jobConfiguration.asInstanceOf[T]
-  def tweakableListener: TweakableListener = _tweakableListener
   def ignoreSyncStacks: Boolean = (flags & EvaluationState.IGNORE_SYNC_STACKS) != 0
   def failOnSyncStacks: Boolean = (flags & EvaluationState.FAIL_ON_SYNC_STACKS) != 0
   def auditorCallbacksDisabled: Boolean = (flags & EvaluationState.AUDITOR_CALLBACKS_DISABLED) != 0
@@ -369,7 +373,12 @@ final case class ScenarioStack private[optimus] (
    */
   def isTrackingIndividualTweakUsage: Boolean = (flags & EvaluationState.TRACK_TWEAK_USAGE_PER_NODE) != 0
 
-  /** Return true for stacks that introduced NonTransparentForCaching plugin tag and the immediate child */
+  /**
+   * Return true for stacks that serve as a barrier for XSFT minimum scenario stack search.
+   *  - Root is always marked
+   *  - Most tweakableListeners (tracking/recording) are not prepared for this sharing (currently)
+   *  - NonTransparentForCaching marked plugin tag and the immediate child
+   */
   def isTransparentForCaching: Boolean = (flags & EvaluationState.NOT_TRANSPARENT_FOR_CACHING) == 0
 
   /** Return true for a scenario stack that records tweaks as part of XS evaluation. */
@@ -380,9 +389,6 @@ final case class ScenarioStack private[optimus] (
 
   /** Returns true for XS when when-node tracking is enabled */
   def isRecordingWhenDependencies: Boolean = (flags & EvaluationState.RECORD_WHEN_DEPENDENCIES) != 0
-
-  /** Returns true in some special cases where not safe to wait for XS node to complete. See TweakNode#cloneWith */
-  def noWaitForXSNode: Boolean = (flags & EvaluationState.NO_WAIT_FOR_XS_NODE) != 0
 
   def isConstant: Boolean = (flags & EvaluationState.CONSTANT) != 0
 
@@ -422,8 +428,11 @@ final case class ScenarioStack private[optimus] (
    *   Scenario to use as the top of the child stack - may be nested
    * @param nodeInputs
    *   The node inputs to add to the child scenario stack.
-   * @param profMark
-   *   A location marker for profiling.
+   * @param extraFlags
+   *   Extra flags to set on scenario stack
+   * @param givenNode
+   *   Given block node if creating scenario stack as part of given() { givenBlockNode }
+   *   A location marker for profiling otherwise
    * @return
    *   The child ScenarioStack with scenario as its top, which may be a cached previously-created stack.
    */
@@ -431,21 +440,15 @@ final case class ScenarioStack private[optimus] (
       scenario: Scenario,
       nodeInputs: FrozenNodeInputMap,
       extraFlags: Int,
-      profMark: AnyRef,
+      givenNode: AnyRef,
       squashIfNoContent: Boolean = true,
-      name: String = null
-  ): ScenarioStack = {
-    var r = createChildInternal(scenario.withoutNested, nodeInputs, extraFlags, profMark, squashIfNoContent, name)
+      name: String = null): ScenarioStack = {
+    var r = createChildInternal(scenario.withoutNested, nodeInputs, extraFlags, givenNode, squashIfNoContent, name)
     var ns = scenario.nestedScenarios
     while (ns.nonEmpty) {
+      val flatScenario = ns.head.withoutNested
       // n.b. we added the plugin tag kvs already to the first ss so they are already inherited by this one
-      r = r.createChildInternal(
-        ns.head.withoutNested,
-        FrozenNodeInputMap.empty,
-        extraFlags,
-        profMark,
-        squashIfNoContent,
-        name)
+      r = r.createChildInternal(flatScenario, FrozenNodeInputMap.empty, extraFlags, givenNode, squashIfNoContent, name)
       ns = ns.tail
     }
     r
@@ -460,8 +463,9 @@ final case class ScenarioStack private[optimus] (
    *   Scenario to use as the top of the child stack - must be non-nested
    * @param frozen
    *   The plugin tags to add to the child scenario stack.
-   * @param entryNodeForProfiling
-   *   A location marker for profiling.
+   * @param givenNode
+   *   Given block node if creating scenario stack as part of given() { givenBlockNode }
+   *   A location marker for profiling otherwise
    * @return
    *   The child ScenarioStack with scenario as its top, which may be a cached previously-created stack.
    */
@@ -469,13 +473,18 @@ final case class ScenarioStack private[optimus] (
       scenario: Scenario,
       frozen: FrozenNodeInputMap,
       extraFlags: Int,
-      entryNodeForProfiling: AnyRef,
+      givenNode: AnyRef,
       squashIfNoContent: Boolean = true,
       name: String = null
   ): ScenarioStack = {
+    val tl =
+      if (scenario.hasWhenClauseTweaks && givenNode.isInstanceOf[Node[_]])
+        tweakableListener.withWhenTarget(givenNode.asInstanceOf[Node[_]])
+      else tweakableListener
+
     if (scenario.isEmptyShallow && squashIfNoContent) {
       if (frozen.isEmpty) this
-      else initChild(scenario, frozen, extraFlags, _tweakableListener, _cacheID, name)
+      else initChild(scenario, frozen, extraFlags, tl, _cacheID, name)
     } else {
       val expandedScenario = if (scenario.hasUnresolvedOrMarkerTweaks) {
         TweakExpander.expandTweaks(scenario, this)
@@ -486,11 +495,11 @@ final case class ScenarioStack private[optimus] (
       val cacheID = CacheIDs.putIfAbsent(cacheKey, freshCacheID)
       // tweaks effecting values (aka RT) are the same but other flags are not.
       // create a new child sharing the cacheID of the one we got from cache
-      val ss = initChild(scenario, frozen, extraFlags, _tweakableListener, cacheID, name)
+      val ss = initChild(scenario, frozen, extraFlags, tl, cacheID, name)
       // the line above will cause expansion of tweaks if needed
 
       if (NodeTrace.profileSSUsage.getValue)
-        Profiler.t_sstack_usage(ss, entryNodeForProfiling, cacheID ne freshCacheID)
+        Profiler.t_sstack_usage(ss, givenNode, cacheID ne freshCacheID)
       ss
     }
   }
@@ -507,7 +516,7 @@ final case class ScenarioStack private[optimus] (
       flags = if (cacheable) tsFlags else tsFlags & ~EvaluationState.CACHED_TRANSITIVELY,
       _parent = this,
       scenario = Scenario.empty,
-      _tweakableListener = tweakableListener,
+      tweakableListener = tweakableListener,
       _cacheID = cacheId,
       _stableSS = null,
       trackingDepth = trackingDepth + 2,
@@ -544,7 +553,7 @@ final case class ScenarioStack private[optimus] (
       _parent = this,
       trackingDepth = trackingDepth + 1,
       scenario = scenario,
-      _tweakableListener = tweakableListener,
+      tweakableListener = tweakableListener,
       _cacheID = cacheID,
       _stableSS = null,
       siParams = newSiParams,
@@ -594,24 +603,37 @@ final case class ScenarioStack private[optimus] (
       flags = flags | EvaluationState.RECORD_TWEAK_USAGE,
       trackingDepth = trackingDepth + 1,
       scenario = Scenario.empty,
-      _tweakableListener = new CollectingTweakableListener(tweakableListener, trackingDepth, collector),
+      tweakableListener = new CollectingTweakableListener(tweakableListener, trackingDepth, collector),
       _cacheID = SSCacheID.newUnique(), // Do NOT share cache!
       _stableSS = null
     )
 
-  private[optimus] def withRecording(
-      listener: RecordingTweakableListener,
-      noWaitForXs: Boolean,
-      extraFlags: Int,
-      cacheID: SSCacheID = SSCacheID.newUnique() /* don't share cache by default */ ): ScenarioStack =
+  /**
+   * Called on a completion of a node marked as XSOwner
+   *  - Remove parent and freeze RecordedTweakables
+   *    - saves memory
+   *    - keeping the original ScenarioStack is misleading (e.g. parent is TrackingScenarioStack that keeps on mutating)
+   *  - Do preserve cacheID, siParams, flags, trackingDepth and scenario (which is empty)
+   *  - Invariant: Only proxies are listeners to XSOriginal, everything else sees the proxy
+   */
+  private[optimus] def withRecorded(rt: RecordedTweakables): ScenarioStack =
+    copy(
+      _parent = ssShared.scenarioStack, // "remove" all the parents
+      tweakableListener = rt,
+      cacheSelector = cacheSelector.onOwnerReset(), // drop scoped cache if enabled
+      _stableSS = null, // Make stableSS to be the same as new SS
+    )
+
+  private[optimus] def withRecording(listener: RecordingTweakableListener): ScenarioStack =
     copy(
       _parent = this,
-      _tweakableListener = listener,
+      tweakableListener = listener,
       trackingDepth = trackingDepth + 1,
       scenario = Scenario.empty,
-      _cacheID = cacheID,
+      _cacheID = SSCacheID.newUnique() /* don't share cache by default */,
       _stableSS = null,
-      flags = EvaluationState.flagsForRecordingScenarioStack(flags | extraFlags, noWaitForXs)
+      cacheSelector = if (Settings.scopeXSCache) cacheSelector.newScoped() else cacheSelector,
+      flags = EvaluationState.flagsForRecordingScenarioStack(flags | listener.extraFlags)
     )
 
   /** snapshot overlay */
@@ -689,7 +711,7 @@ final case class ScenarioStack private[optimus] (
       name = overlayScenarioRef.name,
       trackingDepth = trackingDepth + 1,
       siParams = siParams.copy(nodeInputs = overlayInputs),
-      _tweakableListener = overlayListener,
+      tweakableListener = overlayListener,
       _cacheID = overlayCacheID,
       _stableSS = null
     )
@@ -711,7 +733,7 @@ final case class ScenarioStack private[optimus] (
   private[optimus] def withCacheableTransitively: ScenarioStack = {
     def canUseCached = {
       val ss = _stableSS
-      ss.cachedTransitively && (ss.siParams eq siParams) && (ss.privateCache eq privateCache)
+      ss.cachedTransitively && (ss.siParams eq siParams) && (ss.cacheSelector eq cacheSelector)
     }
 
     if (cachedTransitively) this
@@ -729,17 +751,29 @@ final case class ScenarioStack private[optimus] (
       }
   }
 
+  private[optimus] def withScopePath(scopePath: String): ScenarioStack = {
+    if (scopePath == null || scopePath.isEmpty) this
+    else {
+      val profileBlockID =
+        if (Settings.perAppletProfile) NCPolicy.profileBlockIDFromPath(scopePath) else OGTrace.BLOCK_ID_UNSCOPED
+      val scopeMask = NCPolicy.scopeMaskFromPath(scopePath)
+      if (this.pathMask == scopeMask && this.profileBlockID == profileBlockID) this
+      else copy(pathMask = scopeMask, siParams = siParams.copy(profileBlockID = profileBlockID))
+    }
+  }
+
+  private[optimus] def withPathMask(pathMask: Int): ScenarioStack = {
+    if (this.pathMask == pathMask) this
+    else copy(pathMask = pathMask)
+  }
+
   private[optimus] def withoutPrivateCache: ScenarioStack = {
-    if (privateCache eq null) this
-    else copy(privateCache = null)
+    if (cacheSelector eq CacheSelector.DEFAULT) this
+    else copy(cacheSelector = CacheSelector.DEFAULT)
   }
 
   private[optimus] def withPrivateProvidedCache(cache: UNodeCache, readFromOutside: Boolean): ScenarioStack = {
-    val parent = if (readFromOutside) {
-      if (privateCache eq null) PrivateCache.GlobalCaches
-      else privateCache
-    } else PrivateCache.NoOtherCache
-    copy(privateCache = new PrivateCache(cache, parent))
+    copy(cacheSelector = cacheSelector.newPrivate(cache, readFromOutside))
   }
 
   /** Create identical scenario stack with new BatchScope */
@@ -802,6 +836,12 @@ final case class ScenarioStack private[optimus] (
     else copy(siParams = siParams.copy(cancelScope = cs))
   }
 
+  private[optimus] def withCancellationScopeAndCache(cs: CancellationScope, cache: CacheSelector): ScenarioStack = {
+    if ((cs eq this.cancelScope) && (cache eq this.cacheSelector)) this
+    // Note: cacheID is the same so that we can share computed result
+    else copy(siParams = siParams.copy(cancelScope = cs), cacheSelector = cache)
+  }
+
   def withBlockID(blk: Int): ScenarioStack =
     if (blk == this.profileBlockID) this else copy(siParams = siParams.copy(profileBlockID = blk))
 
@@ -830,7 +870,7 @@ final case class ScenarioStack private[optimus] (
   private[optimus] def withScopedNodeInput[T](ni: ScopedSINodeInput[T], v: T) =
     copy(siParams = siParams.copy(nodeInputs = siParams.nodeInputs.freeze.withExtraInput(ni, v)))
 
-  private[platform] def withFullySpecifiedScopedNodeInputMap[T](scopedMap: FrozenNodeInputMap) =
+  private[platform] def withFullySpecifiedScopedNodeInputMap(scopedMap: FrozenNodeInputMap) =
     copy(siParams = siParams.copy(nodeInputs = scopedMap))
 
   def withProgressReporter(pr: ProgressReporter): ScenarioStack = {
@@ -959,9 +999,9 @@ final case class ScenarioStack private[optimus] (
   }
 
   /** Creates TwkResolver if tweak is possible or null otherwise * */
-  private def getTweakResolver[R](requesting: NodeTask, info: NodeTaskInfo, key: NodeKey[R]): TwkResolver[R] = {
-    if (info.wasTweakedAtLeastOnce) {
-      new TwkResolver(requesting, info, key, startSS = this)
+  private def getTweakResolver[R](requesting: NodeTask, key: NodeKey[R], trackWhenClause: Boolean): TwkResolver[R] = {
+    if (key.propertyInfo.wasTweakedAtLeastOnce) {
+      new TwkResolver(requesting, key, startSS = this, trackWhenClause)
     } else if (isSelfOrAncestorScenarioIndependent) {
       // If the node was wasTweakedAtLeastOnce then the TwkResolver will take care of SI checking, but if not we must
       // check it here. If we or any of our ancestors are SI then we immediately know that this tweakble lookup is
@@ -971,25 +1011,30 @@ final case class ScenarioStack private[optimus] (
     } else null
   }
 
-  /** Called from NCSuport#matchXscenario that supplies infoTarget */
-  private[optimus] def getTweakAndScenarioStack(info: NodeTaskInfo, key: NodeKey[_], infoTarget: NodeTask) = {
-    val tr = getTweakResolver(infoTarget, info, key)
-    if (tr ne null) { tr.infoTarget = infoTarget; tr.syncResolve(); (tr.tweak, tr.cur) }
+  /**
+   * Called from NCSuport#hasTweaksForTweakables
+   * Note: executes when clauses and not just lookup the tweak!
+   * For non-xs usages consider adding an argument that will throw if when clause is needed!
+   */
+  private[optimus] def getTweakAndScenarioStackNoWhenClauseTracking(key: NodeKey[_]): TwkResolution = {
+    val tr = getTweakResolver(null, key, trackWhenClause = false)
+    if (tr ne null) { tr.syncResolve(); tr }
     else null
   }
 
-  /** Called from NCSuport#hasTweaksForTweakables that supplies infoTarget and getTweak() below */
-  def getTweak(info: NodeTaskInfo, key: NodeKey[_], infoTarget: NodeTask): Tweak = {
-    val tr = getTweakResolver(infoTarget, info, key)
-    if (tr ne null) { tr.infoTarget = infoTarget; tr.syncResolve().tweak }
-    else null
+  /**
+   * Looks up the tweak in the current scenario stack
+   * @note see comments for [[getTweakAndScenarioStackNoWhenClauseTracking]]
+   */
+  def getTweakNoWhenClauseTracking(key: NodeKey[_]): Tweak = {
+    val tweakAndSS = getTweakAndScenarioStackNoWhenClauseTracking(key)
+    if (tweakAndSS eq null) null else tweakAndSS.tweak
   }
-
-  def getTweak(info: NodeTaskInfo, key: NodeKey[_]): Tweak = getTweak(info, key, null)
 
   /** Last step in the resolution of a PropertyNode that didn't end up being tweaked */
   private[optimus] def completeGetNode[R](info: NodeTaskInfo, pnode: PropertyNode[R], ec: OGSchedulerContext) =
-    if (info.getCacheable && !pnode.isStable) NodeCache.lookupAndInsert(info, pnode, privateCache, ec)
+    if (info.getCacheable && !pnode.isStable)
+      pnode.scenarioStack().cacheSelector.lookupAndInsert(info, pnode, ec)
     else pnode
 
   private[optimus] def initialRuntimeScenarioStack: ScenarioStack = ssShared.scenarioStackWithInitialTime
@@ -1048,7 +1093,7 @@ final case class ScenarioStack private[optimus] (
       val requestingNode = ec.getCurrentNodeTask
       // Why is this OK even if propertyInfo.executionInfo.isScenarioIndependent? [SEE_AUDIT_TRACE_SI]
       requestingNode.markScenarioDependent() // Could be looking up tweaks, that makes current node "scenario dependent"
-      getTweakResolver(requestingNode, info, key)
+      getTweakResolver(requestingNode, key, trackWhenClause = true)
     } else null
 
     // Note: tracing and debugging are injected as suffix [SEE_verifyScenarioStackGetNode]
@@ -1101,38 +1146,17 @@ final case class ScenarioStack private[optimus] (
   private def asBasicScenarioStackWithParent(parentScenarioStack: ScenarioStack, flagsToClear: Int): ScenarioStack =
     copy(
       _parent = parentScenarioStack,
-      flags = flags & ~flagsToClear,
+      flags = flags & ~(flagsToClear | tweakableListener.extraFlags),
       scenario = Scenario.empty,
       // Usually just root (except in some edge cases where trackDependencies is used)
-      _tweakableListener = parentScenarioStack.tweakableListener,
+      tweakableListener = parentScenarioStack.tweakableListener,
       _cacheID = _cacheID.dup,
       _stableSS = null
     )
 
-  /**
-   * Called by a DelayedXSProxyNode to cleanup/freeze the tweakable listener of the XSOriginal node
-   *
-   * Notes:
-   *  - No need to retain full tweaks (i.e. ScenarioStack), some might not even be used and could be large so reset
-   *    _parent = root
-   *      - The relevant tweakables are all in 'rt' which are 'Recorded' (i.e. frozen)
-   *      - Keeping original ScenarioStack could be misleading if _parent is TrackingScenarioStack and keeps on mutating
-   *  - Invariant: Only proxies are listeners to XSOriginal, everything else sees the proxy
-   *  - Multiple proxies can wait on a single XSOriginal and will call this function which appears like a race...
-   *    - But it's a benign race, because it will be settings the same value
-   */
-  private[optimus] def onXSOriginalCompleted(rt: RecordedTweakables): Unit = {
-    if (Settings.schedulerAsserts) {
-      if (!isRecordingTweakUsage)
-        throw new GraphInInvalidState("Attempted to setRecordedTweakables on a non-recording ScenarioStack")
-      if (_tweakableListener.isInstanceOf[RecordedTweakables] && (rt != _tweakableListener))
-        throw new GraphInInvalidState("Attempted to overwrite RecordedTweakables with different value")
-    }
-    if (_parent ne ssShared.scenarioStack) {
-      _tweakableListener = rt // First so that visibility of _parent write implies visibility of this write
-      _parent = ssShared.scenarioStack
-      _stableSS = this // stableSS is already always equals to `this`, except that dist managed to modify stableSS
-    }
+  def withoutWhenTarget: ScenarioStack = tweakableListener match {
+    case wttl: WhenTargetTweakableListener => copy(tweakableListener = wttl.originalTl)
+    case _                                 => this
   }
 
   private[optimus] def combineTrackData(rTweakables: RecordedTweakables, node: NodeTask): Unit = {
@@ -1159,15 +1183,15 @@ final case class ScenarioStack private[optimus] (
   }
 
   private[optimus] def combineTweakableData(tweakable: PropertyNode[_], node: NodeTask): Unit = {
-    _tweakableListener.onTweakableNodeUsedBy(tweakable, node)
+    tweakableListener.onTweakableNodeUsedBy(tweakable, node)
   }
 
   private[optimus] def combineTweakableData(tweakableHash: NodeHash, node: NodeTask): Unit = {
-    _tweakableListener.onTweakableNodeHashUsedBy(tweakableHash, node)
+    tweakableListener.onTweakableNodeHashUsedBy(tweakableHash, node)
   }
 
   private[optimus] def combineTweakData(ttn: TweakTreeNode, node: NodeTask): Unit = {
-    _tweakableListener.onTweakUsedBy(ttn, node)
+    tweakableListener.onTweakUsedBy(ttn, node)
     // note that we don't need to report nested dependency information up if node is recording because any such
     // information was already reported up by the XS Proxy created for each TweakNode. See [XS_BY_NAME_TWEAKS]
     if ((ttn.nested ne null) && !node.scenarioStack().isRecordingTweakUsage) {
@@ -1197,8 +1221,8 @@ final case class ScenarioStack private[optimus] (
     var reportTo = this
     while (!reportTo.isRoot) {
       // Avoid reporting to the same listener
-      if (listener ne reportTo._tweakableListener) {
-        listener = reportTo._tweakableListener
+      if (listener ne reportTo.tweakableListener) {
+        listener = reportTo.tweakableListener
         listener.reportWhenClause(key, predicate, res, rt)
       }
       reportTo = reportTo.parent
@@ -1279,73 +1303,6 @@ final case class ScenarioStack private[optimus] (
     val trackerName = if (isTrackingIndividualTweakUsage) "." + name else ""
     trackingDepth + flagsAsString + trackerName + "@" + System.identityHashCode(this).toHexString
   }
-
-}
-
-// this is an abstract class rather than a trait because class methods are slightly faster to invoke than interface methods
-private[optimus] abstract class TweakableListener {
-
-  /** Logically a val, but to save space it's a def */
-  def respondsToInvalidationsFrom: Set[TweakableListener] = Set.empty
-  def isDisposed: Boolean = false
-
-  /**
-   * Counts TTrackRefs that referred to GC-ed nodes.
-   *
-   * This is used as a heuristic to determine whether a DependencyTracker cleanup or can be skipped.
-   */
-  def refQ: RefCounter[NodeTask] = null
-
-  /** Returns outer tracking proxy -> a node that is in the original TrackingScenario... Not in the RecordingScenario */
-  def trackingProxy: NodeTask = null
-
-  /** Callback to ScenarioStacks. Currently only TrackingScenario */
-  def onTweakableNodeCompleted(node: PropertyNode[_]): Unit
-
-  /** Callback to ScenarioStacks. TrackingScenario uses node argument and RecordingScenario doesn't */
-  def onTweakableNodeUsedBy(key: PropertyNode[_], node: NodeTask): Unit
-
-  /** Callback to ScenarioStacks. TrackingScenario uses node argument and RecordingScenario doesn't */
-  def onTweakableNodeHashUsedBy(key: NodeHash, node: NodeTask): Unit
-
-  /**
-   * Callback to ScenarioStacks. ttn.trackingDepth -> to quickly filter out interest in the tweaks (Tracking &
-   * Recording) ttn.key -> to identify ttrack roots (Tracking and not Recording) ttn.node -> to attach ttracks (Tracking
-   * and not Recording)
-   */
-  def onTweakUsedBy(ttn: TweakTreeNode, node: NodeTask): Unit
-
-  /** ScenarioStacks that retain tweakable data will pass it onto node */
-  def reportTweakableUseBy(node: NodeTask): Unit
-
-  /** Listeners interested in when-clauses are given opportunity to collect that info */
-  def reportWhenClause(key: PropertyNode[_], predicate: AnyRef, res: Boolean, rt: RecordedTweakables): Unit = {}
-
-  /** Avoid annoying casts all over */
-  def recordedTweakables: RecordedTweakables = null
-
-  /** Allow TweakableListener to add flags when constructing ScenarioStack */
-  def extraFlags: Int = 0
-
-  /** If tweakablelistener has owner with type dependencyTrackerRoot, return its name */
-  def dependencyTrackerRootName: String = "[not tracking]"
-}
-
-private[optimus] object NoOpTweakableListener extends TweakableListener with Serializable {
-  private val moniker: AnyRef = new Serializable {
-    // noinspection ScalaUnusedSymbol @Serial
-    def readResolve(): AnyRef = NoOpTweakableListener
-  }
-  // noinspection ScalaUnusedSymbol @Serial
-  private def writeReplace(): AnyRef = moniker
-
-  // we don't respond to invalidations from anyone, not even ourselves
-  override def respondsToInvalidationsFrom: Set[TweakableListener] = Set.empty
-  override def onTweakableNodeCompleted(node: PropertyNode[_]): Unit = {}
-  override def onTweakableNodeUsedBy(key: PropertyNode[_], node: NodeTask): Unit = {}
-  override def onTweakableNodeHashUsedBy(key: NodeHash, node: NodeTask): Unit = {}
-  override def onTweakUsedBy(ttn: TweakTreeNode, node: NodeTask): Unit = {}
-  override def reportTweakableUseBy(node: NodeTask): Unit = {}
 }
 
 private[optimus] class NodeHash(
@@ -1394,24 +1351,18 @@ private[optimus] object NodeHash {
 }
 
 object RecordingScenarioStack {
-  def withNewListener(
-      from: ScenarioStack,
-      trackingProxy: NodeTask,
-      noWaitForXs: Boolean,
-      earlyUpReport: Boolean): ScenarioStack = {
-    val listener = new RecordingTweakableListener(null, trackingProxy, from, earlyUpReport)
-    val stack = from.withRecording(listener, noWaitForXs = noWaitForXs, extraFlags = 0)
+  def withNewListener(from: ScenarioStack, trackingProxy: NodeTask): ScenarioStack =
+    withNewListener(from, trackingProxy, from.tweakableListener)
+
+  def withNewListener(from: ScenarioStack, trackingProxy: NodeTask, callingTl: TweakableListener): ScenarioStack = {
+    val listener = new RecordingTweakableListener(null, trackingProxy, from, earlyUpReport = true, callingTl)
+    val stack = from.withRecording(listener)
     listener.scenarioStack = stack
     stack
   }
 
-  def withExistingListener(
-      from: ScenarioStack,
-      listener: RecordingTweakableListener,
-      noWaitForXs: Boolean = false): ScenarioStack = {
-    val stack = from.withRecording(listener, noWaitForXs = noWaitForXs, extraFlags = listener.extraFlags)
-    stack
-  }
+  def withExistingListener(from: ScenarioStack, listener: RecordingTweakableListener): ScenarioStack =
+    from.withRecording(listener)
 }
 
 trait FreezableNodeInputMap extends Serializable {

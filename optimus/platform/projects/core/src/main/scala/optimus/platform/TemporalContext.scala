@@ -67,8 +67,6 @@ trait TemporalContext extends TemporalSurface with HasTTContext {
     throw new GenericRTException(
       s"illegal call to unsafeTxTime on a ${this}. Node Stack: ${Node.getTraceForNodeAsString(EvaluationContext.currentNode)}")
 
-  private[optimus] def witnessVersion(e: Entity): Unit
-
   @nodeSync
   private[optimus] def deserialize(pe: PersistentEntity, storageInfo: StorageInfo): Entity
   private[optimus] def deserialize$queued(pe: PersistentEntity, storageInfo: StorageInfo): NodeFuture[Entity]

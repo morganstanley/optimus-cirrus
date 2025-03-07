@@ -131,7 +131,8 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
             if (ctx.reason() == CallbackRegistry.CallbackReason.TIMEOUT) {
               handleOperationTimeout(OperationDetails.EMPTY);
             }
-          });
+          },
+          null);
 
       remainingItems.set(allItems.size());
       Map<ServerConnection, List<E>> initialRequests = new HashMap<>();
@@ -203,9 +204,17 @@ public abstract class BatchOperationTemplate<K extends Key, E> {
       }
     }
     Callback callback = new Callback();
-    callbackRegistry.registerCallbackWithTimeout(server, requestId, readTimeout, callback::process);
+    registerMessageCallbackWithTimeout(server, requestId, readTimeout, callback::process);
     messageSender.sendMessage(
         server, generateMessage(requestId, server, items), callback::sentMessageMetrics);
+  }
+
+  protected void registerMessageCallbackWithTimeout(
+      ServerConnection server,
+      long requestId,
+      Duration timeout,
+      CallbackRegistry.Callback callback) {
+    callbackRegistry.registerCallbackWithTimeout(server, requestId, timeout, callback, null);
   }
 
   protected abstract K key(E e);

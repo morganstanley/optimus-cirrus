@@ -52,7 +52,7 @@ class OptimusVersioningZkClient private (val instance: String, private[this] val
 
   val serviceUri = ZkUtils.createVersioningServerZkUri(rootContext, instance)
 
-  val serviceConsumer = new ServiceDescriptionSetConsumer {
+  object serviceConsumer extends ServiceDescriptionSetConsumer {
     override def consume(data: util.Collection[ServiceDescription]): Unit = {
       servers = data.asScala.groupBy(_.get(ZkUtils.versioningKeyAttributeName).toString).mapValuesNow(_.toList)
     }

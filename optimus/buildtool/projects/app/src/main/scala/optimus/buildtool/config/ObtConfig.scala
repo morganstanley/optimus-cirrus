@@ -17,7 +17,6 @@ import com.typesafe.config.ConfigFactory
 import optimus.buildtool.artifacts._
 import optimus.buildtool.builders.reporter.ErrorReporter
 import optimus.buildtool.compilers.RegexScanner
-import optimus.buildtool.dependencies.MultiSourceDependencies
 import optimus.buildtool.files.Directory
 import optimus.buildtool.files.Directory.ExclusionFilter
 import optimus.buildtool.files.Directory.NotHiddenFilter
@@ -29,6 +28,7 @@ import optimus.buildtool.format.AppValidator
 import optimus.buildtool.format.Bundle
 import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Message
+import optimus.buildtool.format.Module
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.PostInstallApp
 import optimus.buildtool.format.ProjectProperties
@@ -55,7 +55,6 @@ import optimus.platform._
 import java.nio.file.Path
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
-import scala.collection.immutable.Set
 import scala.collection.immutable.SortedMap
 
 /**
@@ -98,13 +97,16 @@ import scala.collection.immutable.SortedMap
   @node override def bundleConfiguration(metaBundle: MetaBundle): Option[Bundle] =
     workspaceStructure.bundles.find(_.id == metaBundle)
 
+  @node override def moduleConfiguration(module: ModuleId): Option[Module] =
+    workspaceStructure.modules.get(module)
+
   // Note: We can only include a scope in the class bundle if:
   // - it's a main scope (otherwise test discovery on the jar will pick up the test for all the scopes in the bundle)
   // - it's not an agent
   // - it's not going to be copied to other bundles
   @node override def includeInClassBundle(id: ScopeId): Boolean = {
     val cfg = scopeConfiguration(id)
-    id.isMain && scopeDefinitions(id).includeInClassBundle && cfg.agentConfig.isEmpty && cfg.targetBundles.isEmpty
+    id.isMain && scopeDefinitions(id).includeInClassBundle && cfg.agentConfig.isEmpty
   }
 
   @node def copyFilesConfiguration(id: ScopeId): Option[CopyFilesConfiguration] =
@@ -146,7 +148,6 @@ import scala.collection.immutable.SortedMap
       workspaceName: String,
       directoryFactory: DirectoryFactory,
       git: Option[GitUtils],
-      regexScanner: RegexScanner,
       workspaceSrcRoot: WorkspaceSourceRoot,
       configParams: Map[String, String],
       cppOsVersions: Seq[String],
@@ -198,31 +199,14 @@ import scala.collection.immutable.SortedMap
           val scannerInputs =
             asNode(() => RegexScanner.ScanInputs(sourceFiles, ws.globalRules.rules.map(_.rules).getOrElse(Nil)))
           val rulesMessages = Map(
-            (ArtifactType.RegexMessages, RegexCodeFlagging) -> regexScanner.scan(ScopeId.RootScopeId, scannerInputs)
+            (ArtifactType.RegexMessages, RegexCodeFlagging) -> RegexScanner.scan(ScopeId.RootScopeId, scannerInputs)
           )
-
-          val allExternalDependencies: ExternalDependencies = {
-            val loadedMultiSourceDeps =
-              ws.dependencies.jvmDependencies.multiSourceDependencies.getOrElse(MultiSourceDependencies(Seq.empty))
-            val afsMappedDeps = loadedMultiSourceDeps.multiSourceDeps.map(_.asExternalDependency)
-            val unmappedAfsDeps =
-              ws.dependencies.jvmDependencies.dependencies ++ loadedMultiSourceDeps.afsOnlyDeps.map(_.definition)
-            val unmappedMavenDeps = ws.dependencies.jvmDependencies.mavenDependencies
-            val mappedMavenDeps = afsMappedDeps.flatMap(_.equivalents).distinct
-            val mixModeMavenDeps = mappedMavenDeps ++ loadedMultiSourceDeps.mavenOnlyDeps.map(_.definition)
-            // only be used for transitive mapping without forced version
-            val noVersionMavenDeps = loadedMultiSourceDeps.noVersionMavenDeps.map(_.definition)
-
-            val allAfs = AfsDependencies(unmappedAfsDeps, afsMappedDeps)
-            val allMaven = MavenDependencies(unmappedMavenDeps, mixModeMavenDeps, noVersionMavenDeps)
-            ExternalDependencies(allAfs, allMaven)
-          }
 
           ObtConfig(
             workspaceSrcRoot = workspaceSrcRoot,
             directoryFactory = directoryFactory,
             properties = Some(ws.config),
-            externalDependencies = allExternalDependencies,
+            externalDependencies = ws.dependencies.externalDependencies,
             nativeDependencies = ws.dependencies.jvmDependencies.nativeDependencies,
             globalSubstitutions = ws.dependencies.jvmDependencies.globalSubstitutions.toIndexedSeq,
             globalExcludes = ws.dependencies.jvmDependencies.globalExcludes.toIndexedSeq,

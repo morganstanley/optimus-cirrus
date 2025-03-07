@@ -11,22 +11,13 @@
  */
 package optimus.graph.loom;
 
-import static optimus.CoreUtils.merge;
-import static optimus.graph.loom.LoomConfig.NEW_NODE_SUFFIX;
-import java.io.Externalizable;
-import java.io.IOException;
-import java.io.ObjectInput;
-import java.io.ObjectOutput;
 import java.io.Serial;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import optimus.graph.GraphInInvalidState;
 import optimus.graph.HNCMoniker;
 import optimus.graph.Node;
 import optimus.graph.NodeExtendedInfo;
 import optimus.graph.PropertyNodeSync;
 import optimus.platform.ScenarioStack;
-import optimus.platform.storable.Entity;
 import scala.Function1;
 import scala.Function2;
 import scala.Function3;

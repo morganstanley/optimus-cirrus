@@ -269,7 +269,7 @@ object JsonImplicits {
   implicit val IvyArtifactFormat: RootJsonFormat[IvyArtifact] = jsonFormat3(IvyArtifact.apply)
   implicit val ModuleIdFormat: RootJsonFormat[ModuleId] = jsonFormat3(ModuleId.apply)
 
-  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat18(
+  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat19(
     DependencyDefinition.apply)
   implicit val NativeDependencyDefinitionFormat: RootJsonFormat[NativeDependencyDefinition] = jsonFormat4(
     NativeDependencyDefinition.apply)
@@ -291,7 +291,7 @@ object JsonImplicits {
 
   implicit val GroupFormat: RootJsonFormat[Group] = jsonFormat3(Group.apply)
   implicit val FilterFormat: RootJsonFormat[Filter] = jsonFormat4(Filter.apply)
-  implicit val CodeFlaggingRuleFormat: RootJsonFormat[CodeFlaggingRule] = jsonFormat8(CodeFlaggingRule.apply)
+  implicit val CodeFlaggingRuleFormat: RootJsonFormat[CodeFlaggingRule] = jsonFormat9(CodeFlaggingRule.apply)
   implicit val RegexConfigurationFormat: RootJsonFormat[RegexConfiguration] = jsonFormat1(RegexConfiguration.apply)
 
   implicit val OutputTypeFormat: JsonFormat[OutputType] = new JsonFormat[OutputType] {
@@ -353,8 +353,10 @@ object JsonImplicits {
   implicit val ProcessorConfigurationFormat: RootJsonFormat[ProcessorConfiguration] = jsonFormat7(
     ProcessorConfiguration.apply)
 
+  implicit val ModuleSetIdFormat: RootJsonFormat[ModuleSetId] = jsonFormat1(ModuleSetId.apply)
+  implicit val ModuleSetFormat: RootJsonFormat[ModuleSet] = jsonFormat2(ModuleSet.apply)
   implicit val ScopePathsFormat: RootJsonFormat[ScopePaths] = jsonFormat10(ScopePaths.apply)
-  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat14(ScopeFlags.apply)
+  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat16(ScopeFlags.apply)
 
   implicit val interopConfigurationFormat: RootJsonFormat[InteropConfiguration] = jsonFormat2(
     InteropConfiguration.apply)
@@ -390,7 +392,7 @@ object JsonImplicits {
 
   implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat4(PythonConfiguration.apply)
 
-  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat18(ScopeConfiguration.apply)
+  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat19(ScopeConfiguration.apply)
 
   implicit val ExternalClassFileArtifactFormat: JsonFormat[ExternalClassFileArtifact] =
     new JsonFormat[ExternalClassFileArtifact] {

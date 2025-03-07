@@ -33,10 +33,6 @@ main {
       ossjava.hkdf,
       ossjava.jakarta.activation,
       ossjava.javamail,
-      // TODO (OPTIMUS-62064): javassist is only here so that we can patch javassist.bytecode.MethodParametersAttribute.
-      // Remove the javassist dependency once we no longer need that patch
-      ossjava.javassist,
-      ossjava.javax.activation,
       ossjava.jettison,
       ossjava.logback,
       ossjava.netty,
@@ -63,15 +59,13 @@ main {
       org.apache.curator.curator-recipes,
       org.apache.zookeeper.zookeeper,
       org.codehaus.jettison.jettison,
-      // TODO (OPTIMUS-62064): javassist is only here so that we can patch javassist.bytecode.MethodParametersAttribute.
-      // Remove the javassist dependency once we no longer need that patch
-      org.javassist.javassist,
-      org.scala-lang.modules.scala-xml_2.12,
+      org.scala-lang.modules.scala-xml_2.13,
       org.slf4j.slf4j-api
     ]
   }
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.mbeans
   runtime.libs += msjava.jprofiler
+  installIvy = true
 }
 
 test {

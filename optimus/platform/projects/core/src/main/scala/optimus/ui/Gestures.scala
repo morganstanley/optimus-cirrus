@@ -55,8 +55,11 @@ final case class ClearEntityInstanceTweaksGesture private (
 object ClearEntityInstanceTweaksGesture {
   @handle def apply(entityInstance: Entity): ClearEntityInstanceTweaksGesture =
     new ClearEntityInstanceTweaksGesture(ScenarioReference.current, entityInstance)
+
+  // TODO (OPTIMUS-72542): If nodeKeys is empty, then all tweaks are cleared! That should probably be changed.
   @handle def apply(entityInstance: Entity, nodeKeys: Traversable[NodeKey[_]]): ClearEntityInstanceTweaksGesture =
     new ClearEntityInstanceTweaksGesture(ScenarioReference.current, entityInstance, Some(nodeKeys))
+
   @handle def apply(scenario: ScenarioReference, entityInstance: Entity): ClearEntityInstanceTweaksGesture =
     new ClearEntityInstanceTweaksGesture(scenario, entityInstance)
   @handle def apply(

@@ -81,11 +81,11 @@ object WorkspaceDefinition {
       cppOsVersions,
       useMavenLibs
     ).compile(workspaceSrcRoot)
-
-    rules <- RulesStructure.load(loadFile, scopes.keySet)
+    validScopes = scopes.keySet
+    rules <- RulesStructure.load(loadFile, validScopes)
     appValidator <- AppValidator.load(loadFileWithProperties)
     runConfSubstitutions <- RunConfSubstitutionsValidator.load(loadFileWithProperties)
-    dockerStructure <- DockerStructure.load(loadFileWithProperties)
+    dockerStructure <- DockerStructure.load(loadFileWithProperties, validScopes)
   } yield {
     WorkspaceDefinition(
       workspace,
