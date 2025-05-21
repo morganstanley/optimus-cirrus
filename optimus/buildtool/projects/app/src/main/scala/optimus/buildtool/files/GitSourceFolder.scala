@@ -11,40 +11,29 @@
  */
 package optimus.buildtool.files
 
-import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.attribute.FileTime
 import optimus.buildtool.files.Directory.PathFilter
-import optimus.buildtool.trace.ObtStats
-import optimus.buildtool.trace.ObtTrace
+import optimus.buildtool.utils.GitFile
+import optimus.buildtool.utils.GitUtils
 import optimus.buildtool.utils.HashedContent
-import optimus.buildtool.utils.Hashing
-import optimus.buildtool.utils.PathUtils
 import optimus.platform._
 import org.eclipse.jgit.lib.ObjectId
-import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
-import org.eclipse.jgit.treewalk.TreeWalk
-import org.eclipse.jgit.treewalk.filter.TreeFilter
-import org.eclipse.jgit.treewalk.filter.{PathFilter => GitPathFilter}
 
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
-import scala.collection.mutable
 
 // Note: Do not add constructor arguments to GitSourceFolder without considering cache misses due to entity
 // inequality (it's for this reason that commit/commitId are not constructor arguments)
 @entity class GitSourceFolder private[files] (
     val workspaceSrcRootToSourceFolderPath: RelativePath,
     val workspaceSourceRoot: Directory,
-    private[files] val repo: Repository,
+    private[files] val gitUtils: GitUtils,
     factory: SourceFolderFactory,
     treeId: ObjectId
 ) extends SourceFolder {
-  import GitSourceFolder._
 
+  private val dir = workspaceSourceRoot.resolveDir(workspaceSrcRootToSourceFolderPath)
   private val relSourceFolderPath = workspaceSrcRootToSourceFolderPath.pathString.stripSuffix("/")
-  private val hashing = GitHashing(workspaceSrcRootToSourceFolderPath, repo)
 
   @node override def exists: Boolean = treeId != ObjectId.zeroId
 
@@ -54,7 +43,17 @@ import scala.collection.mutable
       scopeArtifacts: Boolean
   ): SortedMap[SourceFileId, HashedContent] = {
     val files = gitFiles(filter, maxDepth)
-    hashing.hash(files, scopeArtifacts)
+    gitUtils.hash(files).map { case (f, h) =>
+      val workspaceSrcRootToSourceFilePath = RelativePath(f.path)
+      val id = if (scopeArtifacts) {
+        val sourceFolderToSourceFilePath =
+          workspaceSrcRootToSourceFolderPath.relativize(workspaceSrcRootToSourceFilePath)
+        SourceFileId(workspaceSrcRootToSourceFilePath, sourceFolderToSourceFilePath)
+      } else {
+        SourceFileId(workspaceSrcRootToSourceFilePath, workspaceSrcRootToSourceFilePath)
+      }
+      id -> h
+    }
   }
 
   @node override protected def findFilesAbove(
@@ -74,120 +73,21 @@ import scala.collection.mutable
   @node private def gitFiles(
       filter: PathFilter,
       maxDepth: Int = Int.MaxValue
-  ): Seq[GitFile] =
-    if (exists) {
-      val reader = repo.newObjectReader()
-      val treeWalk = new TreeWalk(repo, reader)
-      val absSourceFolderPath = workspaceSourceRoot.resolveDir(workspaceSrcRootToSourceFolderPath).pathString
-      treeWalk.setFilter(new Filter(None, filter, maxDepth, absSourceFolderPath))
-      treeWalk.reset(treeId)
-      treeWalk.setRecursive(true)
-
-      val files = mutable.Buffer[GitFile]()
-      while (treeWalk.next()) {
-        val path =
-          if (workspaceSrcRootToSourceFolderPath == RelativePath.empty) treeWalk.getPathString
-          else s"$relSourceFolderPath/${treeWalk.getPathString}"
-
-        files += GitFile(path, treeWalk.getObjectId(0))
-      }
-      files.toIndexedSeq
-    } else Nil
+  ): Seq[GitFile] = gitUtils.findFilesWithId(dir, treeId, filter, maxDepth)
 
   override def toString: String =
-    s"${getClass.getSimpleName}($relSourceFolderPath, ${PathUtils.platformIndependentString(repo.getWorkTree.toString)}, $treeId)"
+    s"${getClass.getSimpleName}($relSourceFolderPath, $treeId)"
 }
 
 @entity object GitSourceFolder {
-  final case class GitFile(path: String, id: ObjectId)
-
-  object GitFileAttributes extends BasicFileAttributes {
-    private val EPOCH = FileTime.fromMillis(0)
-
-    override def lastModifiedTime(): FileTime = EPOCH
-    override def lastAccessTime(): FileTime = EPOCH
-    override def creationTime(): FileTime = EPOCH
-    override def isRegularFile: Boolean = true // git only stores files
-    override def isDirectory: Boolean = false
-    override def isSymbolicLink: Boolean = false
-    override def isOther: Boolean = false
-    override def size(): Long = 0
-    override def fileKey(): AnyRef = null
-  }
-
-  class Filter(
-      root: Option[GitPathFilter],
-      filter: PathFilter,
-      maxDepth: Int,
-      absSourceFolderPath: String
-  ) extends TreeFilter {
-    override def include(walker: TreeWalk): Boolean = matchFilter(walker) <= 0
-
-    override def matchFilter(walker: TreeWalk): Int = {
-      if (walker.getDepth >= maxDepth) 1 // definitely no match
-      else {
-        val rootMatch = root.map(_.matchFilter(walker)).getOrElse(0)
-        if (rootMatch == 1) 1 // definitely no match
-        else if (rootMatch == 0 && filter(abs(walker.getPathString), GitFileAttributes)) 0 // definitely a match
-        else if (walker.isSubtree) -1 // a subtree might match the PathFilter
-        else 1 // definitely no match
-      }
-    }
-
-    private def abs(pathString: String): String = s"$absSourceFolderPath/$pathString"
-
-    override def shouldBeRecursive(): Boolean = true
-
-    override def clone(): Filter = this
-  }
-
   @node def apply(
       workspaceSrcRootToSourceFolderPath: RelativePath,
       workspaceSourceRoot: Directory,
-      repo: Repository,
+      gitUtils: GitUtils,
       factory: SourceFolderFactory,
       commit: RevCommit
   ): GitSourceFolder = {
-    if (workspaceSrcRootToSourceFolderPath == RelativePath.empty) {
-      GitSourceFolder(workspaceSrcRootToSourceFolderPath, workspaceSourceRoot, repo, factory, commit.getTree)
-    } else {
-      val walk = TreeWalk.forPath(repo, workspaceSrcRootToSourceFolderPath.pathString, commit.getTree)
-      val tree = if (walk != null) walk.getObjectId(0) else ObjectId.zeroId
-      GitSourceFolder(workspaceSrcRootToSourceFolderPath, workspaceSourceRoot, repo, factory, tree)
-    }
-  }
-}
-
-@entity private[files] class GitHashing(workspaceSrcRootToSourceFolderPath: RelativePath, repo: Repository) {
-  import GitSourceFolder._
-
-  // In a separate entity to prevent cache misses due to treeId changes
-  @node def hash(
-      files: Seq[GitFile],
-      scopeArtifacts: Boolean
-  ): SortedMap[SourceFileId, HashedContent] = {
-    log.debug(s"Hashing ${files.size} git source files for ${workspaceSrcRootToSourceFolderPath.pathString}")
-    val reader = repo.newObjectReader()
-    val queue = reader.open(files.map(_.id).asJava, false)
-    val pathsIter = files.map(_.path).iterator
-
-    val contents = mutable.Buffer[(SourceFileId, HashedContent)]()
-    while (queue.next()) {
-      val p = pathsIter.next()
-      val workspaceSrcRootToSourceFilePath = RelativePath(p)
-      val id = if (scopeArtifacts) {
-        val sourceFolderToSourceFilePath =
-          workspaceSrcRootToSourceFolderPath.relativize(workspaceSrcRootToSourceFilePath)
-        SourceFileId(workspaceSrcRootToSourceFilePath, sourceFolderToSourceFilePath)
-      } else {
-        SourceFileId(workspaceSrcRootToSourceFilePath, workspaceSrcRootToSourceFilePath)
-      }
-
-      ObtTrace.addToStat(ObtStats.ReadGitSourceFiles, 1)
-      ObtTrace.addToStat(ObtStats.ReadDistinctGitSourceFiles, Set(workspaceSrcRootToSourceFilePath.pathString))
-      val hashedContent = Hashing.hashFileInputStreamWithContent(p, () => queue.open().openStream())
-      contents += ((id, hashedContent))
-    }
-    SortedMap(contents: _*)
+    val tree = gitUtils.treeId(workspaceSourceRoot.resolveDir(workspaceSrcRootToSourceFolderPath), commit)
+    GitSourceFolder(workspaceSrcRootToSourceFolderPath, workspaceSourceRoot, gitUtils, factory, tree)
   }
 }

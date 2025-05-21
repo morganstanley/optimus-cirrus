@@ -31,10 +31,10 @@ import optimus.platform.stats.Utils
 import java.io._
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.mutable.ArrayBuffer
 
 //dont use scala StringBuilder
 import java.lang.{StringBuilder => JStringBuilder}
-import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 object Profiler {
@@ -139,7 +139,7 @@ object Profiler {
   // Public API/main entry point for writing optconf file
   def autoGenerateConfig(
       confName: String,
-      allProfileData: Seq[PNodeTaskInfo],
+      allProfileData: Iterable[PNodeTaskInfo],
       settings: ConfigWriterSettings = ConfigWriterSettings.default,
       isPgoGen: Boolean = false): String = {
     val (combinedProfileData, cacheConfigs) = combineData(allProfileData)
@@ -150,7 +150,7 @@ object Profiler {
     DisableCache.autoConfigure(pnti, ConfigWriterSettings.default.thresholds)
 
   /** For testing only, note the cacheConfigs = NodeCacheConfigs.getCacheConfigs.values */
-  def autoGenerateConfig(out: Writer, allProfileData: Seq[PNodeTaskInfo], settings: ConfigWriterSettings): Unit = {
+  def autoGenerateConfig(out: Writer, allProfileData: Iterable[PNodeTaskInfo], settings: ConfigWriterSettings): Unit = {
     val combinedProfileData = combineTraces(allProfileData)
     val cacheConfigs = NodeCacheConfigs.getCacheConfigs.values
     try {
@@ -161,7 +161,7 @@ object Profiler {
 
   def autoGenerateConfig(
       out: Writer,
-      allProfileData: Seq[PNodeTaskInfo],
+      allProfileData: Iterable[PNodeTaskInfo],
       cacheConfigs: Iterable[CacheConfig],
       settings: ConfigWriterSettings): Unit = {
     val combinedProfileData = combineTraces(allProfileData)
@@ -224,11 +224,11 @@ object Profiler {
   }
 
   // combine all PNTIs that have the same fullName
-  private[optimus] def combineTraces(pntis: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] =
+  private[optimus] def combineTraces(pntis: Iterable[PNodeTaskInfo]): Seq[PNodeTaskInfo] =
     combinePNTIs(pntis).values.toSeq
 
   // combine all PNTIs that have the same fullName, enriched by enqueuer name.
-  private[optimus] def combinePNTIs(pntis: Seq[PNodeTaskInfo]): Map[String, PNodeTaskInfo] = {
+  private[optimus] def combinePNTIs(pntis: Iterable[PNodeTaskInfo]): Map[String, PNodeTaskInfo] = {
     val byName = pntis.groupBy(_.fullName)
     val eid2name: Map[Int, String] = for {
       (k, pntis) <- byName
@@ -260,14 +260,14 @@ object Profiler {
   }
 
   private[diagnostics] def combineData(
-      allProfileData: Seq[PNodeTaskInfo]): (Seq[PNodeTaskInfo], Iterable[CacheConfig]) = {
+      allProfileData: Iterable[PNodeTaskInfo]): (Seq[PNodeTaskInfo], Iterable[CacheConfig]) = {
     val combinedProfileData = combineTraces(allProfileData)
     val cacheNames = getCaches(combinedProfileData)
     (combinedProfileData, getConfigs(cacheNames))
   }
 
   final def getLocalHotspots(blk: Int = OGTrace.BLOCK_ID_ALL): Map[String, PNodeTaskInfo] =
-    Profiler.combinePNTIs(OGTrace.liveReader.getScopedTaskInfos(blk).asScala)
+    Profiler.combinePNTIs(OGTrace.liveReader.getScopedTaskInfos(blk).asScalaUnsafeImmutable)
 
   final def getProfileData(
       alwaysIncludeTweaked: Boolean = false,
@@ -281,7 +281,7 @@ object Profiler {
       blockID: Int): ArrayBuffer[PNodeTaskInfo] = {
     val pntis =
       OGTrace.liveReader.getScopedTaskInfos(blockID, alwaysIncludeTweaked, includeTweakableNotTweaked)
-    ArrayBuffer(pntis.asScala: _*)
+    ArrayBuffer.from(pntis.asScala)
   }
 
   final def resetAll(): Unit = {

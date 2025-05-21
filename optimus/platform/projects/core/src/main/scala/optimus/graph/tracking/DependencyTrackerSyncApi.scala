@@ -31,13 +31,13 @@ trait DependencyTrackerSyncApi {
     track(key, scope, scope.defaultMemo(key, this))
 
   def track[T, M >: Null <: TrackingMemo](key: NodeKey[T], scope: TrackingScope[M], memo: M): TrackedNode[T] =
-    userNodeTracker.userTrackUpdate(key, scope, (_: M) => memo)
+    userNodeTracker(scope).userTrackUpdate(key, (_: M) => memo)
 
   def trackUpdate[T, M >: Null <: TrackingMemo](
       key: NodeKey[T],
       scope: TrackingScope[M],
       memoUpdater: M => M): TrackedNode[T] = {
-    userNodeTracker.userTrackUpdate(key, scope, memoUpdater)
+    userNodeTracker(scope).userTrackUpdate(key, memoUpdater)
   }
 
   def executeBatchUpdate[R](cause: EventCause, update: DependencyTrackerBatchUpdater => R): R = {
@@ -49,12 +49,18 @@ trait DependencyTrackerSyncApi {
     queue.execute(new TSA_BatchUpdate(cause, update, Scheduler.currentOrDefault))
   }
 
+  private[tracking] def executeBatchUpdateIgnoreDisposed(
+      cause: EventCause,
+      update: DependencyTrackerBatchUpdater => Unit): Unit =
+    if (!isDisposed) queue.execute(new TSA_BatchUpdateIgnoreDisposed(cause, update, Scheduler.currentOrDefault))
+
   /** evaluate node key in sync */
-  def evaluateNodeKey[T](key: NodeKey[T], cause: EventCause): T = queue.execute(new EvaluateNodeKeyAction(key, cause))
+  def evaluateNodeKey[T](key: NodeKey[T], cause: EventCause, trackingScope: TrackingScope[_]): T =
+    queue.execute(new EvaluateNodeKeyAction(key, cause, trackingScope))
 
   /** evaluate node keys in sync */
-  def evaluateNodeKeys(keys: collection.Seq[NodeKey[_]], cause: EventCause): Unit =
-    queue.execute(new EvaluateNodeKeysAction(keys, cause))
+  def evaluateNodeKeys(keys: Seq[NodeKey[_]], cause: EventCause, trackingScope: TrackingScope[_]): Unit =
+    queue.execute(new EvaluateNodeKeysAction(keys, cause, trackingScope))
 
   /** Generally pass through, but maintain order */
   @closuresEnterGraph
@@ -71,30 +77,34 @@ trait DependencyTrackerSyncApi {
    *   Whether to fail if there are any duplicates.
    */
   def addTweaks(tweaks: Iterable[Tweak], throwOnDuplicate: Boolean = false): Unit = {
-    if (tweaks.nonEmpty) queue.execute(new TSA_AddTweaks(tweaks, throwOnDuplicate))
+    if (tweaks.nonEmpty) executeBatchUpdate(NoEventCause, _.addTweaksImmediate(tweaks.toSeq, throwOnDuplicate))
   }
 
   /** test helpers only */
-  private[tracking] def removeTweak(nk: NodeKey[_]): Unit = queue.execute(new TSA_RemoveTweak(nk :: Nil))
+  private[tracking] def removeTweak(nk: NodeKey[_]): Unit =
+    executeBatchUpdate(NoEventCause, _.removeTweaksImmediate(Seq(nk)))
 
-  private[tracking] def removeTweakByEntity(entity: Entity, nk: Option[NodeKey[_]]): Unit = {
-    val nks = nk.map(Seq(_)).getOrElse(Seq.empty[NodeKey[_]])
-    queue.execute(new TSA_RemoveTweakByEntity(entity, nks))
-  }
+  private[tracking] def removeAllTweaks(): Unit =
+    executeBatchUpdate(NoEventCause, _.removeAllTweaksImmediate())
 
-  private[tracking] def removeAllTweaks(): Unit = queue.execute(new TSA_RemoveAllTweaks())
+  private[tracking] def removeTweakByEntity(
+      entity: Entity,
+      nk: Option[NodeKey[_]],
+      excludes: Option[NodeKey[_]]): Unit =
+    executeBatchUpdate(NoEventCause, _.removeTweaksForEntityInstanceWithKeysImmediate(entity, nk.toSeq, excludes.toSeq))
 
   /**
    * Dispose this tracking scenario, its underlying scenario, and all of its tracking information
    */
-  def dispose(clearCacheOfDisposedNodes: Boolean = true, immediate: Boolean = false): Unit = {
+  def dispose(cacheClearMode: CacheClearMode = AsyncClear): Unit = {
     // Note - we execute the dispose on root queue as Dispose can modify the parent and root view of child scenarios
     // keep this in step with disposeAsync
-    root.queue.execute(new TSA_Dispose(clearCacheOfDisposedNodes, immediate))
+    root.executeBatchUpdateIgnoreDisposed(NoEventCause, _.updaterFor(this).disposeImmediate(cacheClearMode))
   }
 
   /**
    * Set the underlay scenario. See documentation on SetUnderlayGesture.
    */
-  private[optimus] def setUnderlay(scenario: Scenario): Unit = queue.execute(new TSA_SetUnderlay(scenario))
+  private[optimus] def setUnderlay(scenario: Scenario): Unit =
+    executeBatchUpdate(NoEventCause, _.setUnderlayImmediate(scenario, NoEventCause))
 }

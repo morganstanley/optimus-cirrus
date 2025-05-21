@@ -187,7 +187,7 @@ final case class MetricDiff(firstRun: ConfigMetrics, secondRun: ConfigMetrics) {
     percentageChangeDalRequests,
     percentageChangeEngineWallTime
   )
-  val pgoDecisionSummary = collection.Seq(
+  val pgoDecisionSummary = Seq(
     DecisionMetric("CPU Change", percentageChangeCpuTime),
     DecisionMetric("Cache Time", percentageChangeCacheTime),
     DecisionMetric("Max Heap", percentageChangeMaxHeap),
@@ -212,26 +212,22 @@ final case class MetricDiff(firstRun: ConfigMetrics, secondRun: ConfigMetrics) {
 //  maybe relax here to 4% when tests are done
   val conditionalCpuImprovement = -0.05 // at least 5% improvement in CPU required when compared with heap
 
-  def regressedMeasures(decisionMetrics: collection.Seq[DecisionMetric]): collection.Seq[DecisionMetric] =
+  def regressedMeasures(decisionMetrics: Seq[DecisionMetric]): Seq[DecisionMetric] =
     decisionMetrics.filter(metric => metric.metricValue > 0.0)
 
-  def nbRegressedMeasures(decisionMetrics: collection.Seq[DecisionMetric]): Int =
+  def nbRegressedMeasures(decisionMetrics: Seq[DecisionMetric]): Int =
     regressedMeasures(decisionMetrics).length
 
-  def breachingMeasures(
-      decisionMetrics: collection.Seq[DecisionMetric],
-      threshold: Double): collection.Seq[DecisionMetric] =
+  def breachingMeasures(decisionMetrics: Seq[DecisionMetric], threshold: Double): Seq[DecisionMetric] =
     decisionMetrics.filter(metric => metric.metricValue > threshold)
 
-  def nbBreachingMeasures(decisionMetrics: collection.Seq[DecisionMetric], threshold: Double): Int =
+  def nbBreachingMeasures(decisionMetrics: Seq[DecisionMetric], threshold: Double): Int =
     breachingMeasures(decisionMetrics, threshold).length
 
-  def improvedMeasuresBy(
-      decisionMetrics: collection.Seq[DecisionMetric],
-      threshold: Double): collection.Seq[DecisionMetric] =
+  def improvedMeasuresBy(decisionMetrics: Seq[DecisionMetric], threshold: Double): Seq[DecisionMetric] =
     decisionMetrics.filter(metric => metric.metricValue <= -threshold)
 
-  def nbImprovedMeasures(decisionMetrics: collection.Seq[DecisionMetric], threshold: Double): Int =
+  def nbImprovedMeasures(decisionMetrics: Seq[DecisionMetric], threshold: Double): Int =
     improvedMeasuresBy(decisionMetrics, threshold).length
 
   override def toString = s"$firstRun\n$secondRun\n" + summary.toString
@@ -560,17 +556,15 @@ object ConfigMetrics {
   def writeMetricDiffsValidationCsv(
       defaultFilePath: String,
       resultsByTest: Map[String, MetricDiff],
-      total: MetricDiff,
       groupedTotals: Map[String, MetricDiff]): Unit = {
     val contents = printString(ps => {
       val writer = new StringWriter
       val csvWriter = new CSVWriter(writer)
       val header = "" /* blank cell for test name */ +: percentageChangeHeaderNames
       val data = for ((test, metrics) <- resultsByTest) yield diffSummaryColumns(test, metrics)
-      val totalRow = diffSummaryColumns("Total", total)
       val groupedTotalRows = groupedTotals map { case (groupName, diff) => diffSummaryColumns(groupName, diff) }
       val rows = data.toSeq ++ groupedTotalRows.toSeq
-      csvWriter.writeAll((header +: rows :+ totalRow).asJava)
+      csvWriter.writeAll((header +: rows).asJava)
       ps.print(writer.toString)
     })
     writeFile(defaultFilePath, contents)

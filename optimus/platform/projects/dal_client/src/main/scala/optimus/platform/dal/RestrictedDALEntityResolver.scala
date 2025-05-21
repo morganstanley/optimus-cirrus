@@ -95,6 +95,7 @@ object RestrictedEntityResolverException
   protected[optimus] /*[platform]*/ def serverInfo = throwException
   def cacheManager = throwException
   protected[optimus] /*[platform]*/ def serverTime = throwException
+  protected[optimus] /*[platform]*/ def serverTimeWithWitnessTimeUpdated(source: String) = throwException
 
   // it's always safe to return false
   override def equivalentTo(other: EntityResolver): Boolean = false

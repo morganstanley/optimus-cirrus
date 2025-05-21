@@ -12,16 +12,23 @@
 package optimus.buildtool.format
 
 import optimus.buildtool.config.Id
+import optimus.buildtool.config.ModuleSet
+import optimus.buildtool.config.ModuleSetId
 import optimus.buildtool.config.ScopeId
 
 final case class ConditionalDefaults(
     name: String,
     ids: Seq[Id],
+    moduleSets: Seq[ModuleSetId],
     defaults: ScopeDefaults,
     exclude: Boolean
 ) {
 
-  private def checkMavenDef(id: ScopeId, loadedAfDef: MavenDefinition, useMavenOnlyRules: Boolean): Boolean = {
+  private def checkMavenDef(
+      id: ScopeId,
+      moduleSet: ModuleSet,
+      loadedAfDef: MavenDefinition,
+      useMavenOnlyRules: Boolean): Boolean = {
     val tpe = id.tpe
     val includeTpe = loadedAfDef.includeConditionals.getOrElse(name, "")
     val excludeTpe = loadedAfDef.excludeConditionals.getOrElse(name, "")
@@ -29,26 +36,25 @@ final case class ConditionalDefaults(
       false // force exclude target for mavenOnly modules
     else if (includeTpe == tpe || includeTpe == "all") true // force af build include target Conditional for tpe
     else if (excludeTpe == tpe || excludeTpe == "all") false // force af build exclude target from tpe
-    else checkExclude(id) // not covered in MavenDefinition, back to Exclude checking
+    else checkExclude(id, moduleSet) // not covered in MavenDefinition, back to Exclude checking
   }
 
-  def checkExclude(id: ScopeId): Boolean = {
-    val matches = ids.exists(_.contains(id))
+  private def checkExclude(id: ScopeId, moduleSet: ModuleSet): Boolean = {
+    val matches = ids.exists(_.contains(id)) || moduleSets.contains(moduleSet.id)
     if (exclude) !matches else matches
   }
 
   def appliesTo(
       id: ScopeId,
-      mavenDefinition: Option[MavenDefinition],
+      moduleSet: ModuleSet,
+      mavenDefinition: MavenDefinition,
       useMavenDepsRules: Boolean,
       useMavenOnlyRules: Boolean
   ): Boolean = {
-    mavenDefinition match {
-      case Some(afDef) if useMavenDepsRules => // for maven build or mavenOnly scope
-        checkMavenDef(id, afDef, useMavenOnlyRules)
-      case _ =>
-        checkExclude(id)
-    }
+    if (useMavenDepsRules) // for maven build or mavenOnly scope
+      checkMavenDef(id, moduleSet, mavenDefinition, useMavenOnlyRules)
+    else
+      checkExclude(id, moduleSet)
   }
 
   def isForbiddenDependencyConditional: Boolean =
@@ -63,7 +69,8 @@ final case class ScopeDefaults(
 
   def forScope(
       id: ScopeId,
-      mavenDefinition: Option[MavenDefinition],
+      moduleSet: ModuleSet,
+      mavenDefinition: MavenDefinition,
       useMavenDepsRules: Boolean,
       useMavenOnlyRules: Boolean
   ): InheritableScopeDefinition = {
@@ -72,11 +79,14 @@ final case class ScopeDefaults(
       if (
         conditional.appliesTo(
           id,
+          moduleSet,
           mavenDefinition,
           useMavenDepsRules,
           useMavenOnlyRules) || conditional.isForbiddenDependencyConditional
       )
-        conditional.defaults.forScope(id, mavenDefinition, useMavenDepsRules, useMavenOnlyRules).withParent(parent)
+        conditional.defaults
+          .forScope(id, moduleSet, mavenDefinition, useMavenDepsRules, useMavenOnlyRules)
+          .withParent(parent)
       else parent
     }
     val combinedDefault = depsAndSources.get(id.tpe).foldRight(combinedParent) { _.withParent(_) }

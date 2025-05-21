@@ -24,6 +24,7 @@ import optimus.graph.diagnostics.PNodeTaskInfo
 import optimus.graph.diagnostics.SchedulerProfileEntryForUI
 import optimus.graph.diagnostics.WaitProfile
 import optimus.graph.diagnostics.gridprofiler.GridProfiler
+import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils
 import optimus.graph.diagnostics.gridprofiler.SummaryTable
 import optimus.graph.diagnostics.pgo.AutoPGOThresholds
 import optimus.graph.diagnostics.pgo.ConfigWriterSettings
@@ -63,6 +64,7 @@ import java.util
 import java.util.prefs.Preferences
 import javax.swing._
 import scala.collection.compat._
+import scala.collection.compat.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -185,7 +187,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
     toolBar.addSeparator()
     toolBar.addButton("Generate Optconf", "Generate optconf (property configuration)") {
-      cmdExportCachePropertiesFile()
+      cmdExportOptconfs()
     }
     toolBar.addSeparator()
     toolBar
@@ -306,6 +308,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     menuView.setMnemonic(KeyEvent.VK_V)
     add(menuView, "Save Profile...", saveProfile())
       .setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, ActionEvent.CTRL_MASK))
+    add(menuView, "Save All Profiling Data (summary table, hotspots, optconf)...", saveAllProfilingData())
     add(menuView, "Open Profile...", loadProfile(false))
       .setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, ActionEvent.CTRL_MASK))
     add(menuView, "Open Profile To Compare...", loadProfile(true))
@@ -487,12 +490,12 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
 
   private def loadAndMergeTraces(): Unit = {
     val fc = FileChooser.traceFileChooser
-    val files: ArrayBuffer[String] = ArrayBuffer[String]()
+    val files = ArraySeq.newBuilder[String]
     JUIUtils.readFromFile(this, fc, multiple = true) { file =>
-      files.append(file.toString)
+      files += file.toString
     }
 
-    val (config, pntis) = MergeTraces.mergeTracesConfigPreview(files)
+    val (config, pntis) = MergeTraces.mergeTracesConfigPreview(files.result())
 
     val reader: OGTraceReader = OGTrace.readingFromLocal(pntis.toArray)
     DebuggerUI.previewConfig(reader, config, "merged")
@@ -625,6 +628,16 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     }
   }
 
+  def saveAllProfilingData(): Unit = {
+    JUIUtils.saveToFile(this, FileChooser.allProfileFileChooser) { file =>
+      GridProfilerUtils.writeData(
+        file.getName,
+        autoGenerateConfig = true,
+        suppliedDir = file.getParent
+      )
+    }
+  }
+
   private def cmdSnapToCompare(): Unit = {
     try {
       val copy = duplicateProfilerData(Profiler.getProfileData())
@@ -738,7 +751,7 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
     add(cacheConfigThresholdPanel)
   }
 
-  def cmdExportCachePropertiesFile(): Unit = {
+  def cmdExportOptconfs(): Unit = {
     val options = new ExportConfigOptions(ProfilerUI.pref)
     JUIUtils.saveToFile(this, FileChooser.optConfFileChooser(options)) { file =>
       val modes = PGOMode.fromUIOptions(options.autoDisableCaching.isSelected, options.autoDisableXSFT.isSelected)
@@ -754,32 +767,24 @@ final class NodeProfiler(reader: OGTraceReader) extends JPanel2(new BorderLayout
 
       val settings = ConfigWriterSettings(modes, cfg, includePreviouslyConfigured, autoTrim)
 
-      var configGraphForClipboard = "--config-graph " + file.getAbsolutePath
-
+      var configGraphForClipboard = "--config-graph "
       var summary: String = ""
-      if (reader.isLive) {
-        if (generateScopedConfigs) {
-          val blocks = registeredScopedPathAndProfileBlockID()
-          for ((scope, blockID) <- blocks.asScala) {
-            val pntis = NodeProfiler.collectProfile(includeTweakableNotTweaked = false, blockID)
-            // Generate new file name by appending the scope to the file name but keep the extension
-            val newFileName = file.getAbsolutePath.replace(".optconf", s"_$scope.optconf")
-            configGraphForClipboard += s",[$scope]$newFileName"
-            Profiler.autoGenerateConfig(newFileName, pntis, settings)
-          }
-          val pntis = NodeProfiler.collectProfile(includeTweakableNotTweaked = false, OGTrace.BLOCK_ID_ALL)
-          Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
-        }
-        val pntis = NodeProfiler.collectProfile
-        summary = Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
-      } else {
-        // always generate optconf based on all data, not just filtered rows in the UI
-        val pntis = reader.getHotspots(true).asScala
-        summary = Profiler.autoGenerateConfig(file.getAbsolutePath, pntis, settings)
-      }
 
-      if (options.copyConfigLine.isSelected) SClipboard.copy(configGraphForClipboard, configGraphForClipboard)
-      hotspotsTable.showMessage(summary)
+      if (reader.isLive) {
+        val generatedOptconfsInfo = if (generateScopedConfigs) {
+          val pntis = NodeProfiler.collectProfile
+          GridProfilerUtils.writeOptconfs(pntis, settings, file.getAbsolutePath)
+        } else {
+          // always generate optconf based on all data, not just filtered rows in the UI
+          val pntis = reader.getHotspots(true).asScala
+          GridProfilerUtils.writeOptconfs(pntis, settings, file.getAbsolutePath, generateScopedOptconfs = false)
+        }
+        summary = generatedOptconfsInfo._1
+        configGraphForClipboard += generatedOptconfsInfo._2
+
+        if (options.copyConfigLine.isSelected) SClipboard.copy(configGraphForClipboard, configGraphForClipboard)
+        hotspotsTable.showMessage(summary)
+      }
     }
   }
 

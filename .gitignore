@@ -23,6 +23,7 @@ docs/css/overridesIJ23.css
 
 # Python
 .mypy_cache/
+.ruff_cache/
 *.pyc
 *.egg-info/
 

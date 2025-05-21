@@ -16,7 +16,6 @@ import java.util.{ArrayDeque => JArrayDeque}
 import java.util.{ArrayList => JArrayList}
 import java.util.{Arrays => JArrays}
 import java.util.{Iterator => JIterator}
-
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.PropertyNode
@@ -29,6 +28,8 @@ import optimus.profiler.recipes.NodeGraphVisitor.Observer
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 import optimus.core.CoreHelpers.between
+
+import scala.collection.immutable.ArraySeq
 
 object NodeGraphVisitor {
 
@@ -91,8 +92,8 @@ object NodeGraphVisitor {
     commonParent // Return computed commonParent if any was found
   }
 
-  def topParents(tasks: Seq[PNodeTask]): ArrayBuffer[PNodeTask] = {
-    val r = new ArrayBuffer[PNodeTask]()
+  def topParents(tasks: Seq[PNodeTask]): ArraySeq[PNodeTask] = {
+    val r = ArraySeq.newBuilder[PNodeTask]
     val visitor = new NodeGraphVisitor(visitParents = true)
     val observer = new Observer {
       override def visit(task: PNodeTask): Unit = if (isEntryPoint(task)) r += task
@@ -101,7 +102,7 @@ object NodeGraphVisitor {
     for (task <- tasks) { visitor.bfs(task, observer) }
 
     visitor.resetVisited()
-    r.sortBy(_.firstStartTime)
+    r.result().sortBy(_.firstStartTime)
   }
 
   final class NodeToUTrackToInvalidate(val utrack: PropertyNode[_]) {
@@ -109,7 +110,7 @@ object NodeGraphVisitor {
     var invalidatingTweak: Tweak = _ // tweak that caused invalidation and recomputing of node
   }
 
-  def nodeToUTrackToInvalidate(ntsks: ArrayBuffer[PNodeTask]): ArrayBuffer[NodeToUTrackToInvalidate] = {
+  def nodeToUTrackToInvalidate(ntsks: ArraySeq[PNodeTask]): ArrayBuffer[NodeToUTrackToInvalidate] = {
     val visitor = new NodeGraphVisitor(visitParents = true)
     val utrackToNUI = new util.IdentityHashMap[PropertyNode[_], NodeToUTrackToInvalidate]()
     // Just visit all parents and collect utracks

@@ -99,6 +99,9 @@ object Feature {
 
   case object RoleMembershipQueryWithClientSessionInfo extends Feature(value = 49)
 
+  // TODO (OPTIMUS-71946): remove this once monoTemporal feature is fully supported
+  case object SupportMonoTemporal extends Feature(value = 50)
+
   def fromValue(value: Id, registeredEntities: Set[SerializedEntity.TypeRef] = Set.empty): Feature = value match {
     case 1  => ExtendedChunkedResponses
     case 4  => RangeQuery
@@ -145,6 +148,7 @@ object Feature {
     case 47 => SetStreamsACLs
     case 48 => SerializedKeyBasedFilterForAccelerator
     case 49 => RoleMembershipQueryWithClientSessionInfo
+    case 50 => SupportMonoTemporal
     case _  => Unknown(value)
   }
 
@@ -248,6 +252,9 @@ private object FeatureSets {
   private val disableSerializedKeyBasedFilterForAccelerator =
     DiagnosticSettings.getBoolProperty("optimus.dsi.server.disableSerializedKeyBasedFilterForAccelerator", false)
 
+  private val enableSupportMonoTemporal =
+    DiagnosticSettings.getBoolProperty("optimus.dsi.enableSupportMonoTemporal", false)
+
   // avoid class loading on startup
   lazy val All: SupportedFeatures = {
     val allFeatures = SupportedFeatures(
@@ -301,6 +308,7 @@ private object FeatureSets {
         ++ (if (!disableTypeInfoQueries) Set(Feature.EventEntitiesWithType) else Set.empty)
         ++ (if (!disableSerializedKeyBasedFilterForAccelerator) Set(Feature.SerializedKeyBasedFilterForAccelerator)
             else Set.empty)
+        ++ (if (enableSupportMonoTemporal) Set(Feature.SupportMonoTemporal) else Set.empty)
     )
     validate(allFeatures)
     allFeatures

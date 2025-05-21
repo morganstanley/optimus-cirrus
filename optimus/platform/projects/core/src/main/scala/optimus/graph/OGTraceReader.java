@@ -162,7 +162,15 @@ public abstract class OGTraceReader {
   protected ProfilerMessagesReader eventReader;
 
   public final Collection<PNodeTask> getRawTasks() {
-    return getRawTasks(true);
+    return getRawTasks(true, true, true);
+  }
+
+  public final Collection<PNodeTask> getRawTasks(
+      boolean includeUnattachedNodes,
+      boolean includeSpeculativeProxies,
+      boolean includeNonCacheableNodes) {
+    return getRawTasks(
+        true, false, includeUnattachedNodes, includeSpeculativeProxies, includeNonCacheableNodes);
   }
 
   /** Returns true if there are some recorded tasks available */
@@ -170,11 +178,20 @@ public abstract class OGTraceReader {
     return !tasks.isEmpty();
   }
 
-  public Collection<PNodeTask> getRawTasks(boolean includeProxies) {
+  public Collection<PNodeTask> getRawTasks(
+      boolean includeProxies,
+      boolean includeRoot,
+      boolean includeUnattachedNodes,
+      boolean includeSpeculativeProxies,
+      boolean includeNonCacheableNodes) {
     List<PNodeTask> r = new ArrayList<>();
+    if (includeRoot) r.add(root);
     for (PNodeTaskRecorded p : tasks) {
       // Only partial information is available if the task is started and then just dropped
       if (p.info == PNodeTaskRecorded.fakeInfo) continue;
+      if (!includeUnattachedNodes && p.isUnattachedNode()) continue;
+      if (!includeSpeculativeProxies && p.isSpeculativeProxy()) continue;
+      if (!includeNonCacheableNodes && !p.isCacheable()) continue;
       if (includeProxies || !p.isProxy()) r.add(p);
     }
     return r;
@@ -337,13 +354,14 @@ public abstract class OGTraceReader {
       PNodeTask from = eventProcessor.taskOf(idFrom);
 
       int sizeOrType = table.getInt();
-      int size;
+      int size = sizeOrType;
       if (sizeOrType < 0) {
         from.callees = EdgeList.newSeqOps(-sizeOrType);
         size = table.getInt();
-      } else {
+      } else if (from.callees
+          == null) { // start node edges aren't added all at once so we don't want to clear once we
+        // see it once
         from.callees = EdgeList.newDefault();
-        size = sizeOrType;
       }
 
       for (int i = 0; i < size; i++) {
@@ -752,7 +770,12 @@ class OGTraceReaderLive extends OGTraceReader implements StoreTraceObserver {
   }
 
   @Override
-  public Collection<PNodeTask> getRawTasks(boolean includeProxies) {
+  public Collection<PNodeTask> getRawTasks(
+      boolean includeProxies,
+      boolean includeRoot,
+      boolean includeUnattachedNodes,
+      boolean includeSpeculativeProxies,
+      boolean includeNonCacheableNodes) {
     return NodeTrace.getTraceBy(n -> true, includeProxies);
   }
 

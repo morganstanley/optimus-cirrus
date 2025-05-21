@@ -29,16 +29,16 @@ object GridProfilerDefaults {
   // set by OptimusApp, commandline option --config-folder
   private[gridprofiler] var defaultConfigFolder = ""
 
-  private[gridprofiler] var defaultPgoModes = collection.Seq.empty[PGOMode]
+  private[gridprofiler] var defaultPgoModes = Seq.empty[PGOMode]
   private[gridprofiler] var defaultPgoFolder = ""
 
   // set by OptimusApp, commandline option --profile-aggregation
   private[optimus] var defaultAggregationType = AggregationType.DEFAULT
 
-  private[optimus] def configurePGOModesFromNames(pgoModes: collection.Seq[String], pgoFolder: String): Unit =
+  private[optimus] def configurePGOModesFromNames(pgoModes: Seq[String], pgoFolder: String): Unit =
     configurePGOModes(pgoModes.map(PGOMode.fromName), pgoFolder)
 
-  private[optimus] def configurePGOModes(pgoModes: collection.Seq[PGOMode], pgoFolder: String): Unit = {
+  private[optimus] def configurePGOModes(pgoModes: Seq[PGOMode], pgoFolder: String): Unit = {
     require(pgoFolder.nonEmpty)
     defaultPgoModes = pgoModes
     defaultPgoFolder = pgoFolder
@@ -54,7 +54,7 @@ object GridProfilerDefaults {
       aggregationType: AggregationType.Value,
       customMetrics: Array[String],
       configOutputDir: String,
-      pgoModes: collection.Seq[String] = Nil,
+      pgoModes: Seq[String] = Nil,
       pgoFolder: String = ""): Unit = {
     if (pgoModes.nonEmpty) configurePGOModesFromNames(pgoModes, pgoFolder)
 
@@ -78,7 +78,7 @@ object GridProfilerDefaults {
       customHotspots: Array[String],
       customMetrics: Array[String],
       configOutputDir: String,
-      pgoModes: collection.Seq[String] = Nil,
+      pgoModes: Seq[String] = Nil,
       pgoFolder: String = ""): Unit = {
     setProfileCsvFolder(dir)
     if (!ProcessGraphInputs.ProfileLevel.currentSource.contains(LoaderSource.SYSTEM_PROPERTIES))

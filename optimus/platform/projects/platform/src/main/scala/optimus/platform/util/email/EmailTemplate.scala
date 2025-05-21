@@ -72,6 +72,7 @@ object EmailTemplate {
   lazy val requestHTMLTemplate = config.getTemplate("request/HtmlRequest.ftl")
   lazy val entitlementRequestHTMLTemplate = config.getTemplate("request/HtmlEntitlementRequest.ftl")
   lazy val entitlementViolationTemplate = config.getTemplate("entitlement/ViolationReport.ftl")
+  lazy val entitlementGroupViolationTemplate = config.getTemplate("entitlement/GroupViolationReport.ftl")
   lazy val entitlementReviewTableTemplate = config.getTemplate("entitlement/EntitlementReviewTable.ftl")
   lazy val entitlementAnnouncementTemplate = config.getTemplate(StaticConfig.string("entitlementAnnouncementTemplate"))
   lazy val entitlementReviewOverviewTemplate = config.getTemplate("entitlement/EntitlementReviewOverview.ftl")

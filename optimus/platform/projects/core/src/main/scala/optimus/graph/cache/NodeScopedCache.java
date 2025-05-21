@@ -55,6 +55,23 @@ public class NodeScopedCache extends NodeCacheBase {
   @Override
   public void foreach(Consumer<PropertyNode<?>> consumer) {}
 
+  /**
+   * This is really for debugging only. To clear some cycles while inspecting the memory In general
+   * scope cache is just dropped!
+   *
+   * @param cause Ignored
+   * @return size before clear...
+   */
+  @Override
+  public long clear(ClearCacheCause cause) {
+    synchronized (this) {
+      int prevSize = size;
+      size = 0;
+      this.table = new NCEntry[minimumCacheSize];
+      return prevSize;
+    }
+  }
+
   public NodeScopedCache(int initialSize) {
     int capacity = NCSupport.roundUpToPowerOf2(minimumCacheSize, initialSize);
     threshold = (int) (capacity * loadFactor);
@@ -99,7 +116,7 @@ public class NodeScopedCache extends NodeCacheBase {
     if (Settings.scopedCachesReducesGlobalSize && prevSize >= 0) totalSize.increment();
     if (prevSize > threshold) {
       synchronized (this) {
-        resize();
+        if (prevSize > threshold) resize();
       }
     }
   }

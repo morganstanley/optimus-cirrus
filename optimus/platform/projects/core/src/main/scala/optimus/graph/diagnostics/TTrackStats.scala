@@ -24,7 +24,7 @@ final case class PerTrackerStatsKey(rootID: Int, tracker: DependencyTracker)
 object TTrackStats {
   def propertiesSortedByTrackingGraphSize(
       subset: Map[NodeTaskInfo, PerPropertyStats]
-  ): collection.Seq[(NodeTaskInfo, PerPropertyStats)] =
+  ): Seq[(NodeTaskInfo, PerPropertyStats)] =
     subset.toSeq.sortWith(_._2.numNodes > _._2.numNodes)
 }
 
@@ -43,9 +43,7 @@ final case class TTrackStats(
     def totalNodesTracked(subset: Map[NodeTaskInfo, PerPropertyStats] = perPropertyStats): Int =
       subset.values.map { _.numTrackedTweakables }.sum
 
-    def sortedAsString(
-        results: collection.Seq[(NodeTaskInfo, PerPropertyStats)],
-        includeIsTweaked: Boolean = false): collection.Seq[String] =
+    def sortedAsString(results: Seq[(NodeTaskInfo, PerPropertyStats)], includeIsTweaked: Boolean = false): Seq[String] =
       results.map { case (pinfo, stats) =>
         val isTweaked =
           if (includeIsTweaked)

@@ -25,23 +25,31 @@ import java.util.List;
 public class TestMethodResult {
   private final long id;
   private final String name;
+  private final String displayName;
   private TestResult.ResultType resultType;
   private long duration;
   private long endTime;
   private List<TestFailure> failures = new ArrayList<TestFailure>();
 
-  public TestMethodResult(long id, String name) {
+  public TestMethodResult(long id, String name, String displayName) {
     this.id = id;
     this.name = name;
+    this.displayName = displayName;
   }
 
   public TestMethodResult(
-      long id, String name, TestResult.ResultType resultType, long duration, long endTime) {
+      long id,
+      String name,
+      String displayName,
+      TestResult.ResultType resultType,
+      long duration,
+      long endTime) {
     if (id < 1) {
       throw new IllegalArgumentException("id must be > 0");
     }
     this.id = id;
     this.name = name;
+    this.displayName = displayName;
     this.resultType = resultType;
     this.duration = duration;
     this.endTime = endTime;
@@ -65,6 +73,10 @@ public class TestMethodResult {
 
   public String getName() {
     return name;
+  }
+
+  public String getDisplayName() {
+    return displayName;
   }
 
   public List<TestFailure> getFailures() {

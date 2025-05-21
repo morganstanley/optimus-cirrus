@@ -23,7 +23,7 @@ import org.eclipse.jgit.lib.Constants
 
 final case class ScanDetails(watchedPaths: Set[Path], scannedFiles: Int)
 object ScanDetails {
-  val empty = ScanDetails(Set.empty, 0)
+  val empty: ScanDetails = ScanDetails(Set.empty, 0)
 }
 
 @entity trait SourceFolderFactory {
@@ -134,7 +134,7 @@ object ScanDetails {
     val gitSource = GitSourceFolder(
       workspaceSourceRootToSourceFolder,
       workspaceSourceRoot,
-      utils.repo,
+      utils,
       this,
       utils.commit(Constants.HEAD)
     )

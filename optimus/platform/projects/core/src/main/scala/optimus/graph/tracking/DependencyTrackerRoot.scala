@@ -156,8 +156,8 @@ final class DependencyTrackerRoot private (
   // TODO (OPTIMUS-14037): ReportChange should be driven by the TrackingScope, or removed
   var reportChange = false
 
-  def getScenarioReferences: collection.Seq[ScenarioReference] = {
-    def getScenarioReferences(ts: DependencyTracker): collection.Seq[ScenarioReference] = {
+  def getScenarioReferences: Seq[ScenarioReference] = {
+    def getScenarioReferences(ts: DependencyTracker): Seq[ScenarioReference] = {
       ts.scenarioReference +: ts.children.flatMap(getScenarioReferences)
     }
     getScenarioReferences(this)
@@ -174,7 +174,7 @@ final class DependencyTrackerRoot private (
   }
   private def fireNamedStructureDependency(): Unit = {
     if (namedStructureDependency != null) {
-      Invalidators.invalidate(namedStructureDependency, this)
+      Invalidators.invalidate(namedStructureDependency, this, unbatchedTrackedNodeInvalidationObserver())
       namedStructure = null
     }
     namedStructureDependency = null
@@ -295,24 +295,28 @@ final class DependencyTrackerRoot private (
 
   private def reevaluateTrackedNodesAsyncImpl(
       cause: EventCause,
-      allNodes: collection.Seq[TrackedNode[_]],
-      eachCallback: Try[Unit] => Unit): Int = {
+      allNodes: Seq[TrackedNode[_]],
+      eachCallback: Try[Unit] => Unit,
+      trackingScope: TrackingScope[_]): Int = {
     val byTracker = allNodes.groupBy(_.dependencyTracker)
     byTracker foreach { case (tracker, nodesInScenario) =>
       require(tracker.root eq this, "wrong tracking scenario")
       tracker.queue
-        .executeAsync(tracker.reevaluateTrackedNodesAction(cause, nodesInScenario map (_.underlying)), eachCallback)
+        .executeAsync(
+          tracker.reevaluateTrackedNodesAction(cause, nodesInScenario map (_.underlying), trackingScope),
+          eachCallback)
     }
     byTracker.size
   }
 
   def reevaluateTrackedNodesAsync(
       cause: EventCause,
-      nodes: collection.Seq[TrackedNode[_]],
+      nodes: Seq[TrackedNode[_]],
+      trackingScope: TrackingScope[_],
       callback: Try[Unit] => Unit = null): Unit = {
     if (nodes nonEmpty) {
       if (callback eq null)
-        reevaluateTrackedNodesAsyncImpl(cause, nodes, null)
+        reevaluateTrackedNodesAsyncImpl(cause, nodes, null, trackingScope)
       else {
         val counter = new AtomicInteger(0)
 
@@ -321,7 +325,7 @@ final class DependencyTrackerRoot private (
           if (counter.decrementAndGet() == 0) callback(Success(()))
         }
 
-        counter.addAndGet(1 + reevaluateTrackedNodesAsyncImpl(cause, nodes, newCallback))
+        counter.addAndGet(1 + reevaluateTrackedNodesAsyncImpl(cause, nodes, newCallback, trackingScope))
         newCallback(null)
       }
     } else if (callback ne null) {
@@ -330,17 +334,10 @@ final class DependencyTrackerRoot private (
   }
 
   private[tracking] def clearAllTrackingAsync(callback: Try[Unit] => Unit): Unit =
-    queue.executeAsync(clearTrackingAction, callback)
+    executeBatchUpdateIgnoreDisposedAsync(NoEventCause, _.clearTracking(), callback)
 
   private[graph] def clearAllTracking(): Unit =
-    queue.execute(clearTrackingAction)
-
-  private def clearTrackingAction = new DependencyTrackerActionUpdate[Unit] with InScenarioAction {
-    final override private[tracking] def alreadyDisposedResult: Try[Unit] = Success(())
-    override protected def doUpdate(): Unit = {
-      doClearTracking()
-    }
-  }
+    executeBatchUpdateIgnoreDisposed(NoEventCause, _.clearTracking())
 
   private[tracking] override def notifyQueueIdle(lastAction: DependencyTrackerAction[_]): Unit = {
     // We'll enqueue a delayed cleanup every time the queue goes idle.
@@ -386,21 +383,18 @@ object DependencyTrackerRoot {
     }
 
     toDispose.foreach { _.dispose() }
+
+    QueueStatsLock.synchronized { disposedQueueStats = QueueStats.zero }
   }
 
   // called in client's ProcessMemoryWatcher and in core tools (GCMonitor, GCNative)
   def runCleanupNow(triggeredBy: TrackingGraphCleanupTrigger): Unit =
     rootsList.foreach(_.runCleanupNow(triggeredBy))
 
-  def getAllWorkCount = rootsList.flatMap(walkChildren(_)).map(_.getWorkCount).sum
-
   def getAllWorkInfo(includeUTracks: Boolean): String = {
     val sb = new PrettyStringBuilder
     sb.appendln("Work info for all dependency tracker queues")
-    val depTrackQueues = rootsList
-      .flatMap(walkChildren(_))
-      .map(_.queue)
-      .distinct
+    val depTrackQueues = rootsList.flatMap(allQueues)
     if (depTrackQueues.isEmpty) {
       sb.appendln("No dependency tracker queues found")
     }
@@ -413,33 +407,58 @@ object DependencyTrackerRoot {
   }
 
   // Snap statistics from all dependency tracker queues
-  def snap(): Map[String, QueueStats] =
+  def snapQueueStats(): Map[String, QueueStats] = {
     rootsList
-      .flatMap(walkChildren(_))
-      .map(_.queue)
-      .distinct // multiple trackers might share a queue
+      .flatMap(allQueues)
       .groupBy(queue => queue.nameForAggregatedStats)
       // we sum up the counts for all the queues originating from the same root, which is a useful but not overwhelming
       // granularity
       .map { case (k, v) =>
         k -> v.foldLeft(QueueStats.zero) { case (cumul, tracker) =>
-          val snap = tracker.snap
+          val snap = tracker.snapQueueStats
           QueueStats(
             cumul.cumulAdded + snap.cumulAdded,
-            cumul.cumulRemoved + snap.cumulRemoved,
+            cumul.cumulProcessed + snap.cumulProcessed,
             cumul.currentSize + snap.currentSize // we sum the size for trackers with the same name.
           )
         }
       }
+  }
+
+  // keep cumulative stats for disposed queues so that our totals don't drop back (causing negative spikes in deltas)
+  private object QueueStatsLock
+  private var disposedQueueStats = QueueStats.zero
+  private[tracking] def collectDisposedQueueStats(queue: DependencyTrackerQueue): Unit = QueueStatsLock.synchronized {
+    // after calling this queue.snapQueueStats will return zero, so we won't double count in snapTotalQueueStats
+    val stats = queue.collectFinalQueueStats()
+    disposedQueueStats = QueueStats(
+      cumulAdded = disposedQueueStats.cumulAdded + stats.cumulAdded,
+      // add 1 for the processing of the current running dispose (we'll miss its completion since it happens after final snap)
+      cumulProcessed = disposedQueueStats.cumulProcessed + stats.cumulProcessed + 1,
+      currentSize = 0
+    )
+
+  }
+
+  def snapTotalQueueStats(): QueueStats = QueueStatsLock.synchronized {
+    rootsList
+      .flatMap(allQueues)
+      .foldLeft(disposedQueueStats) { case (cumul, tracker) =>
+        val snap = tracker.snapQueueStats
+        QueueStats(
+          cumul.cumulAdded + snap.cumulAdded,
+          cumul.cumulProcessed + snap.cumulProcessed,
+          cumul.currentSize + snap.currentSize
+        )
+      }
+  }
 
   /**
    * Grab queue state summaries for all queues. Note that this isn't atomic over multiple queues.
    */
   def summarize(): Seq[QueueActionSummary] =
     rootsList
-      .flatMap(walkChildren(_))
-      .map(_.queue)
-      .distinct // multiple trackers might share a queue
+      .flatMap(allQueues)
       // we sum up the counts for all the queues with the same name
       .map { q => q.summary }
 
@@ -458,13 +477,27 @@ object DependencyTrackerRoot {
     }.toMap
   }
 
-  private def walkChildren(tracker: DependencyTracker): collection.Seq[DependencyTracker] = {
+  private def allChildren(tracker: DependencyTracker): Seq[DependencyTracker] = {
     if (tracker.children.isEmpty) tracker :: Nil // leaf
-    else tracker +: tracker.children.flatMap(walkChildren)
+    else tracker :: tracker.children.flatMap(allChildren)
   }
 
-  private[tracking] def childListForRoot(root: DependencyTrackerRoot): collection.Seq[DependencyTracker] =
-    walkChildren(root)
+  /**
+   * Gets all unique queues for this root (only works if we start from a root, not an arbitrary tracker, otherwise
+   * we could miss the top-most queue (if it's owned by a parent of the starting point)
+   */
+  private def allQueues(root: DependencyTrackerRoot): Seq[DependencyTrackerQueue] = {
+    def recurse(t: DependencyTracker): Seq[DependencyTrackerQueue] = {
+      val children = if (t.children.isEmpty) Nil else t.children.flatMap(recurse)
+      // only include queue if it's owned by t (queues can be shared by multiple trackers but are owned by exactly one)
+      if (t.queueOwner eq t) t.queue :: children
+      else children
+    }
+    recurse(root)
+  }
+
+  private[tracking] def childListForRoot(root: DependencyTrackerRoot): Seq[DependencyTracker] =
+    allChildren(root)
 
   /**
    * Callable from evaluate in Debugger or in graph console It's more like a placeholder, while debugging feel free to
@@ -590,7 +623,7 @@ object DependencyTrackerRoot {
   /*
    * API for evaluating tweak lambdas in multiple scenarios and adding tweaks to each scenario (in an atomic action)
    */
-  type TweakLambda = AsyncFunction0[collection.Seq[Tweak]]
+  type TweakLambda = AsyncFunction0[Seq[Tweak]]
 }
 
 /**

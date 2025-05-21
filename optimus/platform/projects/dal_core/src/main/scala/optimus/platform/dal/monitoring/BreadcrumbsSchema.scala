@@ -142,7 +142,7 @@ object BreadcrumbsSchema {
       final val zappPlant = "zPlant"
       final val zappEnv = "zEnv"
       final val bounceMethod = "bm"
-      final val parallelHc = "phc"
+      final val numThreads = "nt"
       final val autosysEnv = "autosys"
       final val interactive = "int"
       final val parallelBouncePercentage = "pbp"
@@ -199,6 +199,16 @@ object BreadcrumbsSchema {
     }
   }
 
+  object Tr {
+    object Properties {
+      final val entityType = "entityType"
+      final val entityClass = "entityClass"
+      final val eref = "eref"
+      final val fieldName = "fld"
+      final val tf = "tf"
+      final val vf = "vf"
+    }
+  }
   object Deriv1ProcessingStage {
     object Properties {
       final val brokerReceive = "brokerReceive"
@@ -318,7 +328,8 @@ object BreadcrumbsSchema {
       final val batchCommitSize = "batch_commit_size"
       final val propagateCpsFlag = "propagate_cps_flag"
       final val waitInMillisForConnectionIssues = "wait_in_millis_for_connection_issues"
-      final val checkForZKNode = "check_for_zk_node"
+      final val enableLeaderWatcherOnSelf = "enable_leader_watcher"
+      final val enableRecorderFlowWithoutZkArgs = "enable_recorder_flow_without_zk_args"
       final val bridgeMode = "bridge_mode"
       final val mqManager = "mq_manager"
       final val queueName = "queue_name"

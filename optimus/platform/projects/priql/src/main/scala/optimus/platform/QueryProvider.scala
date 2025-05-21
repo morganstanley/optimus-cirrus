@@ -219,6 +219,8 @@ trait QueryProvider extends Serializable {
 
   def replaceValue[T, U >: T: TypeInfo](src: Query[T], repVal: U)(implicit pos: MethodPosition): Query[T]
 
+  def extendTypedOrReplaceValue[T, U: TypeInfo](src: Query[T], value: U)(implicit pos: MethodPosition): Query[T with U]
+
   /**
    * The sortBy operator will sort row based on user specified fields
    */

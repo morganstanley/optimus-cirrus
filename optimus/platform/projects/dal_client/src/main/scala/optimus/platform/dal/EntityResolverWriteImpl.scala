@@ -12,7 +12,6 @@
 package optimus.platform.dal
 
 import java.time.Instant
-
 import msjava.base.util.uuid.MSUuid
 import msjava.protobufutils.server.BackendException
 import msjava.slf4jutils.scalalog.getLogger
@@ -28,22 +27,24 @@ import optimus.graph.diagnostics.gridprofiler.GridProfiler
 import optimus.platform._
 import optimus.platform.annotations.deprecating
 import optimus.platform.AsyncImplicits._
+import optimus.platform.dal.RequestGenerator.checkMonoTemporalSupported
 import optimus.platform.dal.config.DALEnvs
 import optimus.platform.dal.config.DalEnv
 import optimus.platform.dsi.Feature
 import optimus.platform.dsi.bitemporal
 import optimus.platform.dsi.bitemporal.Query
 import optimus.platform.dsi.bitemporal.{
-  SecureEntityException => _,
   DuplicateStoredKeyException => _,
   DuplicateUniqueIndexException => _,
   OutdatedVersionException => _,
+  SecureEntityException => _,
   _
 }
 import optimus.platform.storable._
 import optimus.platform.temporalSurface.DataFreeTemporalSurfaceMatchers
 import optimus.platform.temporalSurface.impl.FlatTemporalContext
 import optimus.scalacompat.collection._
+import optimus.platform.dsi.bitemporal.EventQuery
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -217,21 +218,21 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
     }
 
     // We can only correctly match the first PutApplicationEvent as on the server side we merge the sequence and return only one result
-    val cmdsToResults = result.head match {
+    val (cmdsToResults, isEmptyTransaction) = result.head match {
       case err: ErrorResult =>
         if (err.readAfter != null)
           updateLastWitnessedTime(Map(partition -> err.readAfter))
         throw convertDSIException(extractEntityRef(err.error), err.error)
-      case VoidResult => Seq.empty // can be returned if some other business event failed with exception
+      case VoidResult => Seq.empty -> false // can be returned if some other business event failed with exception
       case r: PutApplicationEventResult => {
         updateLastWitnessedTime(Map(partition -> r.txTime))
         (appEvtCmd.bes zip r.beResults).flatMap { case (busEvt, busEvtResult) =>
           busEvt.puts zip busEvtResult.putResults
-        }
+        } -> (r.txTime == TimeInterval.NegInfinity)
       }
       case tr: TimestampedResult =>
         updateLastWitnessedTime(Map(partition -> tr.txTime))
-        Seq.empty
+        Seq.empty -> false
       // NB: Updating in-memory entity state was a mistake.
       // Let's try to get away with not doing it in the new event API.
       //            putResults foreach { pr =>
@@ -243,10 +244,10 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
 
     if (mutateEntities) {
       mutateEntiesWithAppEventResult(cmdsToResults, cmdToEntity)
-      PersistResult(lastWitnessedTime(partition))
+      PersistResult(lastWitnessedTime(partition), Map.empty, isEmptyTransaction)
     } else {
       val entityRefs = getEntityToReferenceHolderMap(cmdsToResults, cmdToEntity)
-      PersistResult(lastWitnessedTime(partition), entityRefs)
+      PersistResult(lastWitnessedTime(partition), entityRefs, isEmptyTransaction)
     }
   }
 
@@ -335,7 +336,9 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
     val persistRequest = persists.map { case (ser, entity, upsert) =>
       val se = ser.someSlot
       val lockToken = getLockToken(entity, upsert)
-      WriteBusinessEvent.Put(se, lockToken) -> entity
+      val monoTemporal = entity.$info.monoTemporal
+      if (monoTemporal) checkMonoTemporalSupported(serverFeatures, entity.$info.runtimeClass.getName)
+      WriteBusinessEvent.Put(se, lockToken, monoTemporal) -> entity
     }.toMap
 
     val multiSlotPersistRequest = multiSlotPersists.map { case (ses, entity, upsert) =>
@@ -345,14 +348,20 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
 
     val invalidateRequest: Seq[InvalidateRevertProps] = invalidatedEntities.iterator.map { entity =>
       val lt = entity.dal$storageInfo.lockToken getOrElse { throw new UnsavedEntityUpdateException(entity) }
-      InvalidateRevertProps(entity.dal$entityRef, lt, entity.getClass.getName)
+      val monoTemporal = entity.$info.monoTemporal
+      if (monoTemporal) checkMonoTemporalSupported(serverFeatures, entity.$info.runtimeClass.getName)
+      InvalidateRevertProps(entity.dal$entityRef, lt, entity.getClass.getName, monoTemporal = monoTemporal)
     }.toIndexedSeq
 
     val invalidateByRefRequest: Seq[InvalidateRevertProps] = invalidateByRefs.iterator.map { case (eref, className) =>
-      InvalidateRevertProps(eref, -1, className)
+      val info = EntityInfoRegistry.getClassInfo(className)
+      val monoTemporal = info.monoTemporal
+      if (monoTemporal) checkMonoTemporalSupported(serverFeatures, className)
+      InvalidateRevertProps(eref, -1, className, monoTemporal)
     }.toIndexedSeq
 
     val revertRequest: Seq[InvalidateRevertProps] = revertedEntities.iterator.map { entity =>
+      require(!entity.$info.monoTemporal, "Cannot revert a monotemporal entity")
       val lt = entity.dal$storageInfo.lockToken getOrElse { throw new UnsavedEntityUpdateException(entity) }
       InvalidateRevertProps(entity.dal$entityRef, lt, entity.getClass.getName)
     }.toIndexedSeq
@@ -683,6 +692,16 @@ trait EntityResolverWriteImpl extends EntityResolverWriteOps { this: DSIResolver
   override def obliterateEvent(key: Key[_]): Unit = {
     val q = new EventSerializedKeyQuery(key.toSerializedKey)
     executeObliterate(q)
+  }
+
+  override def obliterateEvents(refs: Seq[BusinessEventReference], classNameOpt: Option[String] = None): Unit = {
+    val qs = refs.map(r =>
+      new EventReferenceQuery(r) {
+        override val className: Option[String] = classNameOpt
+      })
+    val os = qs.map(Obliterate.apply)
+    val oblQuery = Obliterate.lift(os)
+    executeObliterates(Seq(oblQuery))
   }
 
   override def obliterateEvent(ref: BusinessEventReference): Unit = {

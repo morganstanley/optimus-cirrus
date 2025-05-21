@@ -18,7 +18,7 @@ final case class Group(name: String, description: String, children: Iterable[Col
     s""""$name": { "title": "$description", ${children.map(_.toJson(s)).mkString(",\n")} }"""
 }
 
-final class ColGroup(val col: Col, val children: collection.Seq[ColGroup]) {
+final class ColGroup(val col: Col, val children: Seq[ColGroup]) {
   private def buildJson(s: SummaryTable, sb: PrettyStringBuilder): PrettyStringBuilder = {
     sb.append(s""""${col.name}": """)
       .startBlock()

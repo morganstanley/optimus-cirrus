@@ -75,7 +75,7 @@ object XSFTRemapper {
     hotspots.toMap
   }
 
-  private def remap(pntis: collection.Seq[PNodeTaskInfo]): collection.Seq[PNodeTaskInfo] = {
+  private def remap(pntis: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] = {
     val remappedIds = mutable.Map[Int, Int](1 -> 1) // internal tweakables (1)
 
     // step 1: get a whole set of fresh IDs for each unique name in our traces
@@ -96,9 +96,7 @@ object XSFTRemapper {
     remapped.values.toSeq
   }
 
-  def combineDependencies(
-      trace: collection.Seq[PNodeTaskInfo],
-      otherTrace: collection.Seq[PNodeTaskInfo]): collection.Seq[PNodeTaskInfo] = {
+  def combineDependencies(trace: Seq[PNodeTaskInfo], otherTrace: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] = {
     val remappedTrace = remap(trace)
     val remappedOtherTrace = remap(otherTrace)
 

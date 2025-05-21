@@ -35,6 +35,9 @@ import scala.util.Try
 import PartitionMap.TypeRef
 import msjava.slf4jutils.scalalog.Logger
 import optimus.config.OptimusConfigurationIOException
+import optimus.dsi.partitioning.PartitionMapState.enableAllowedPartitionsForEventReuseThroughConfigProperty
+
+import java.util.HashSet
 
 trait PartitionMap {
   def partitions: Set[NamedPartition]
@@ -44,14 +47,18 @@ trait PartitionMap {
   def partitionTypeRefMap: Map[Partition, Set[TypeRef]]
   def isEmpty: Boolean
   def validate(typ: TypeRef): Unit
+  // This API will return the allowed partitions for event reuse for the given event type including the partition that event belongs to, even if its not passed in allowedPartitionsForEventReuse zk config.
+  // But, ideally, we should pass event's own partition in zk config itself.
+  def allowedPartitionsForEventReuse(typ: TypeRef): Set[Partition]
 }
 
 object PartitionMap extends RetryWithExponentialBackoff {
   private val PartitionRootProp = "partitions"
+  private val AllowedPartitionsForEventReuseRootProp = "allowedPartitionsForEventReuse"
   private val wordRegex = "\\w".r
   private val wildcardChar = "*"
   val PartitionMapProperty = "optimus.dsi.partitioning.PartitionMap"
-  private[optimus] val empty: PartitionMap = new PartitionMapImpl(Set.empty, Map.empty, Set.empty)
+  private[optimus] val empty: PartitionMap = new PartitionMapImpl(Set.empty, Map.empty, Set.empty, Map.empty)
   private[partitioning] type TypeRef = String
 
   override protected val log: Logger = getLogger[PartitionMap.type]
@@ -130,11 +137,58 @@ object PartitionMap extends RetryWithExponentialBackoff {
     map.map { case (k, v) => v + k }.toSeq
   }
 
+  private def validateAllowedPartitionsForEventReuseConfig(
+      partitionsEventAttribute: List[Map[String, String]]): Unit = {
+    val checkDuplicateEventTypes = new HashSet[String]
+    partitionsEventAttribute.map {
+      case eventType if eventType.contains("name") =>
+        val evtName = eventType.get("name").get
+        if (checkDuplicateEventTypes.contains(evtName))
+          throw new OptimusConfigurationException(
+            s"AllowedPartitionsForEventReuse should not contain duplicate fully qualified event class names. Duplicate found for ${evtName}")
+
+        checkDuplicateEventTypes.add(evtName)
+        val lastWord = evtName.trim.last.toString
+        if (PartitionMap.wordRegex.findFirstIn(lastWord).isEmpty)
+          throw new OptimusConfigurationException(
+            s"AllowedPartitionsForEventReuse should contain only fully qualified event class names and not ending with any wild chars. But it found ${evtName}")
+    }
+  }
+
+  private def createAllowedPartitionsForEventReuseMap(
+      config: XmlBasedConfiguration,
+      env: String): Map[TypeRef, Set[Partition]] = {
+    config.getProperties(AllowedPartitionsForEventReuseRootProp) match {
+      case None =>
+        log.info(s"No reuse event type to partition mapping config found for env $env.")
+        Map.empty
+      case Some(_) =>
+        val typeProp = s"$AllowedPartitionsForEventReuseRootProp.eventType"
+        val partitionsEventAttribute = config.getStringListWithAttributes(typeProp)
+        validateAllowedPartitionsForEventReuseConfig(partitionsEventAttribute.map(_._2))
+        partitionsEventAttribute.map {
+          case (allowedPartitions, eventType) if eventType.contains("name") =>
+            val evtName = eventType.get("name").get
+            val partitions = allowedPartitions
+              .split(",")
+              .map(_.trim)
+              .map {
+                case DefaultPartition.name => DefaultPartition
+                case name =>
+                  NamedPartition(name)
+                    .asInstanceOf[Partition]
+              }
+              .toSet
+            evtName -> partitions
+        }.toMap
+    }
+  }
+
   private def createPartitionMap(config: XmlBasedConfiguration, env: String = "test"): PartitionMap = {
     config.getProperties(PartitionRootProp) match {
       case None =>
         log.info(s"No type to partition mapping config found for env $env.")
-        new PartitionMapImpl(Set.empty, Map.empty, Set.empty)
+        empty
       case Some(partitionStrings) =>
         if (partitionStrings.size != partitionStrings.toSet.size)
           throw new OptimusConfigurationException("More than one tag for a partition found, expected only one.")
@@ -160,10 +214,16 @@ object PartitionMap extends RetryWithExponentialBackoff {
 
           }
 
+        val allowedPartitionsEventMap: Map[TypeRef, Set[Partition]] =
+          if (enableAllowedPartitionsForEventReuseThroughConfigProperty)
+            createAllowedPartitionsForEventReuseMap(config, env)
+          else Map.empty
+
         log.info(s"Type to partition mapping config is present for env $env. Partitions: $partitions")
         log.info(s"Ignored TypeRefs for overlapping are $ignoredTypeRefSet")
+        log.info(s"Allowed partitions for event reuse config is ${allowedPartitionsEventMap}")
 
-        new PartitionMapImpl(partitions, typePartitionPairs, ignoredTypeRefSet)
+        new PartitionMapImpl(partitions, typePartitionPairs, ignoredTypeRefSet, allowedPartitionsEventMap)
     }
   }
 
@@ -175,7 +235,11 @@ object PartitionMap extends RetryWithExponentialBackoff {
 
   def apply(map: Map[TypeRef, NamedPartition] = Map.empty): PartitionMap =
     if (map.isEmpty) empty
-    else new PartitionMapImpl(map.values.toSet, map, Set.empty)
+    else new PartitionMapImpl(map.values.toSet, map, Set.empty, Map.empty)
+
+  def apply(map: Map[TypeRef, NamedPartition], eventReuseMap: Map[TypeRef, Set[Partition]]): PartitionMap =
+    if (map.isEmpty) empty
+    else new PartitionMapImpl(map.values.toSet, map, Set.empty, eventReuseMap)
 
   // Specifically for tests..
   def apply(path: String, curator: CuratorFramework): PartitionMap = {
@@ -219,6 +283,13 @@ object PartitionMap extends RetryWithExponentialBackoff {
     def validate(typ: TypeRef): Unit = {
       partitionForType(typ)
     }
+    override def allowedPartitionsForEventReuse(typ: TypeRef): Set[Partition] = {
+      val p = partitionMap.allowedPartitionsForEventReuse(typ)
+      if (p.exists(partition => unavailablePartitions.contains(partition.name))) {
+        throw new IllegalArgumentException(s"attempt to access unavailable partition(s) in $p")
+      }
+      p
+    }
   }
 
   /**
@@ -228,7 +299,8 @@ object PartitionMap extends RetryWithExponentialBackoff {
   private class PartitionMapImpl(
       val partitions: Set[NamedPartition],
       typeMap: Map[TypeRef, Partition],
-      ignoreOverlapCheckForTypes: Set[TypeRef])
+      ignoreOverlapCheckForTypes: Set[TypeRef],
+      allowedPartitionsForEventReuseMap: Map[TypeRef, Set[Partition]])
       extends PartitionMap {
     // checks we need to when we create the PartitionMap
     if (typeMap.nonEmpty) {
@@ -261,6 +333,17 @@ object PartitionMap extends RetryWithExponentialBackoff {
 
     val allPartitions: Set[Partition] = partitions.asInstanceOf[Set[Partition]] + DefaultPartition
 
+    if (allowedPartitionsForEventReuseMap.nonEmpty) {
+      val multiPartitionEventsSet = allowedPartitionsForEventReuseMap.values.flatten.toSet
+      log.info(
+        s"Multi partition allowed events' partition set ${multiPartitionEventsSet} and all configured partitions ${allPartitions}")
+      require(
+        multiPartitionEventsSet.subsetOf(allPartitions),
+        s"Unknown partition configured in multiPartitionEventsSet as all supported partitions does not contain ${multiPartitionEventsSet
+            .diff(allPartitions)}. Please check the multi partition allowed event config."
+      )
+    }
+
     private[this] val partitionForTypeCache = new ConcurrentHashMap[TypeRef, Partition]()
     def partitionForType(typ: TypeRef): Partition =
       partitionForTypeCache.computeIfAbsent(
@@ -285,11 +368,21 @@ object PartitionMap extends RetryWithExponentialBackoff {
     def isEmpty: Boolean = partitions.isEmpty
 
     def validate(typ: TypeRef): Unit = {}
+
+    override def allowedPartitionsForEventReuse(typ: TypeRef): Set[Partition] = {
+      allowedPartitionsForEventReuseMap.getOrElse(typ, Set.empty) ++
+        // Ensuring that the allowed partitions set contains the partition the event belongs to
+        Set(partitionForType(typ))
+    }
   }
 }
 
 class PartitionMapState {
+  import PartitionMapState._
   private var partitionMap: Option[Map[TypeRef, NamedPartition]] = None
+  @volatile var enableAllowedPartitionsForEventReuseThroughConfigProperty =
+    enableAllowedPartitionsForEventReuseThroughConfigDefault
+
 }
 
 object PartitionMapState extends SimpleStateHolder(() => new PartitionMapState) {
@@ -300,4 +393,20 @@ object PartitionMapState extends SimpleStateHolder(() => new PartitionMapState) 
   def getPartitionMapOpt = getState.partitionMap
 
   def clearPartitionMap: Unit = getState.synchronized { getState.partitionMap = None }
+
+  val enableAllowedPartitionsForEventReuseThroughConfigDefault =
+    System.getProperty("optimus.dsi.partitioning.enableAllowedPartitionsForEventReuse", "false").toBoolean
+
+  def setEnableAllowedPartitionsForEventReuseThroughConfigProperty(value: Boolean): Unit = synchronized {
+    getState
+  }.enableAllowedPartitionsForEventReuseThroughConfigProperty = value
+
+  def resetEnableAllowedPartitionsForEventReuseThroughConfigProperty: Unit = synchronized {
+    getState
+  }.enableAllowedPartitionsForEventReuseThroughConfigProperty = enableAllowedPartitionsForEventReuseThroughConfigDefault
+
+  def enableAllowedPartitionsForEventReuseThroughConfigProperty: Boolean = synchronized {
+    getState
+  }.enableAllowedPartitionsForEventReuseThroughConfigProperty
+
 }

@@ -21,6 +21,9 @@ import optimus.platform._
 import optimus.platform.annotations._
 import optimus.platform.storable.Entity
 
+// Still defaulting to mutable Seq ... Some places have to enforce immutable */
+import scala.collection.immutable.{ Seq => ImmSeq }
+
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext
@@ -188,7 +191,8 @@ trait CoreAPI
   def given$withNode[T](tweaks: Tweak*)(f: Node[T]): T = EvaluationContext.given(Scenario(tweaks: _*), f).get
   def given$queued[T](tweaks: Tweak*)(f: Node[T]): NodeFuture[T] =
     EvaluationContext.given(Scenario(tweaks: _*), f).enqueueAttached
-  def given$queued[T](tweaks: Seq[Tweak], f: () => T): NodeFuture[T] = given$queued(tweaks)(toNode(f))
+  def given$queued[T](tweaks: ImmSeq[Tweak], f: () => T): NodeFuture[T] =
+    given$queued(tweaks)(toNode(f))
 
   @nodeSync
   @nodeSyncLift
@@ -214,24 +218,24 @@ trait CoreAPI
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentInternal
-  def givenNested[T](scenarios: collection.Seq[Scenario])(@nodeLift @nodeLiftByName f: => T): T =
+  def givenNested[T](scenarios: Seq[Scenario])(@nodeLift @nodeLiftByName f: => T): T =
     givenNested$withNode(scenarios)(toNode(f _))
-  def givenNested$withNode[T](scenarios: collection.Seq[Scenario])(f: Node[T]): T =
+  def givenNested$withNode[T](scenarios: Seq[Scenario])(f: Node[T]): T =
     EvaluationContext.given(scenarios, f).get
-  def givenNested$queued[T](scenarios: collection.Seq[Scenario])(f: Node[T]): Node[T] =
+  def givenNested$queued[T](scenarios: Seq[Scenario])(f: Node[T]): Node[T] =
     EvaluationContext.given(scenarios, f).enqueueAttached
-  def givenNested$queued[T](scenarios: collection.Seq[Scenario], f: => T): NodeFuture[T] =
+  def givenNested$queued[T](scenarios: Seq[Scenario], f: => T): NodeFuture[T] =
     givenNested$queued(scenarios)(toNode(f _))
 
   @nodeSync
   @nodeSyncLift
   @scenarioIndependentInternal
-  def givenIf[A](tweakCondition: Boolean)(@nodeLift @nodeLiftByName tweaks: => collection.Seq[Tweak])(
+  def givenIf[A](tweakCondition: Boolean)(@nodeLift @nodeLiftByName tweaks: => Seq[Tweak])(
       @nodeLift @nodeLiftByName f: => A): A =
     givenIf$withNode[A](tweakCondition)(toNode(tweaks _))(toNode(f _))
-  def givenIf$withNode[A](tweakCondition: Boolean)(tweaks: Node[collection.Seq[Tweak]])(f: Node[A]): A =
+  def givenIf$withNode[A](tweakCondition: Boolean)(tweaks: Node[Seq[Tweak]])(f: Node[A]): A =
     if (tweakCondition) EvaluationContext.given(Scenario(tweaks.get), f).get else f.get
-  def givenIf$queued[A](tweakCondition: Boolean)(tweaks: Node[collection.Seq[Tweak]])(f: Node[A]): Node[A] =
+  def givenIf$queued[A](tweakCondition: Boolean)(tweaks: Node[Seq[Tweak]])(f: Node[A]): Node[A] =
     if (tweakCondition) {
       val outer = tweaks.map(ts => EvaluationContext.given(Scenario(ts), f))
       val intermediate = new CompletableRawNode[A] {

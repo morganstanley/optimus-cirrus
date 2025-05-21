@@ -171,7 +171,7 @@ private[optimus] class ProgressTracker private (val params: ProgressTrackerParam
     params.progressType match {
       case ProgressType.Exact =>
         val newProgress = progress + progressUpdate
-        if (Settings.progressTrackingDebugMode && newProgress > 1) {
+        if (Settings.progressTrackingDebugMode && newProgress > 1.000001) {
           ProgressTrackerDiagnostics.report(s"""Progress exceeds 1! It is $newProgress. Setting progress to 1.
             Stack trace:\n${Thread.currentThread().getStackTrace.mkString("\n")}""")
         }

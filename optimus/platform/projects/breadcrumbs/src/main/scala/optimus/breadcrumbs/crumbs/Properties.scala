@@ -128,7 +128,7 @@ object PropertyUnits {
   }
   case object Nanoseconds extends Units("ns")
   case object MegaBytes extends Units("MB") {
-    override def fromStackCount(count: Long): Long = count / (1000L * 1000L)
+    override def fromStackCount(count: Long): Long = count / (1024L * 1024L)
   }
   case object Count extends Units("")
   case object BareNumber extends Units("")
@@ -481,6 +481,7 @@ object Properties extends KnownProperties {
     def ::(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def +(eo: Option[Elem[_]]) = eo.fold(this)(e => new Elems(e :: m))
     def toMap: Map[String, JsValue] = m.map(_.toTuple).toMap
+    def toTuples: Seq[(String, JsValue)] = m.map(_.toTuple)
     override def toString = toMap.toString
 
     // Extract a single element from the Elems list. If you want to extract many elements, use
@@ -588,6 +589,8 @@ object Properties extends KnownProperties {
   val distedFrom = prop[String]
   val engineId = prop[ChainedID]
   val engineRoot = prop[String]
+  val engineRootsCount =
+    propI.withMeta(UnintegrableCount, "The number of engine roots in the sampling interval")
   val engine = prop[String]
   private[breadcrumbs] val replicaFrom = prop[ChainedID]
   private[breadcrumbs] val limitCount = propL
@@ -614,6 +617,8 @@ object Properties extends KnownProperties {
   val priority = prop[String]
   val tasksExecutedOnEngine = propL
   val xsLockContention = propL
+  val throttleCycleBreaking = propL
+  val throttleIgnored = propL
 
   val logLevel = prop[String]
   val logMsg = prop[String]
@@ -741,16 +746,25 @@ object Properties extends KnownProperties {
   val profDalRequestsDist = propI.withMeta(IntegrableCount)
   val profDalWritesDist = propI.withMeta(IntegrableCount)
   val profDalResultsDist = propI.withMeta(IntegrableCount)
-  val profMaxHeap = propL.withMeta(MemoryInUse, "Current maximum heap memory that can be used(e.g. -Xmx limit)")
+  val profMaxHeap = propL.withMeta(MemoryInUse, "Current maximum heap memory that can be used (e.g. -Xmx limit)")
   val profCurrHeap = propL.withMeta(MemoryInUse, "Current heap memory used")
-  val profMaxNonHeap = propL.withMeta(MemoryInUse, "Current maximum non-heap memory that can be used(e.g. -Xmx limit)")
+  val profMaxNonHeap = propL.withMeta(MemoryInUse, "Current maximum non-heap memory that can be used (e.g. -Xmx limit)")
   val profCurrNonHeap = propL.withMeta(MemoryInUse, "Current non-heap memory used")
-  val profJvmCPUTime = propL.withMeta(TimeSpent, "JVM CPU time used(OS bean stats)")
-  val profJvmCPULoad = propD.withMeta(GaugeLevel, "Percentage of CPU used by the JVM(OS bean stats)")
+  val profJvmCPUTime = propL.withMeta(TimeSpent, "JVM CPU time used (from OperatingSystemMXBean.getProcessCpuTime)")
+  val profJvmCPULoad = propD.withMeta(
+    GaugeLevel,
+    "Percentage of system CPU (0 - 100%) used by this application (from OperatingSystemMXBean.getProcessCpuLoad)")
   val profSysCPULoad =
-    propD.withMeta(GaugeLevel, "Percentage of system CPU that was used by all processes(OS bean stats)")
+    propD.withMeta(
+      GaugeLevel,
+      "Percentage of system CPU (0 - 100%) that was used by all processes on the machine (from OperatingSystemMXBean.getSystemCpuLoad)")
+  val profSysFreeMem = propL.withMeta(MemoryInUse, "Free system memory")
+  val profSysTotalMem = propL.withMeta(MemoryInUse, "Total system memory")
+  val profCgroupMem = prop[Map[String, Long]].withMeta(MemoryInUse, "Cgroup memory")
   val profLoadAvg =
-    propD.withMeta(UnintegrableCount, "Average number of runnable threads over the last minute(OS bean stats)")
+    propD.withMeta(
+      UnintegrableCount,
+      "Average number of busy logical CPUs on the system over the last minute (from OperatingSystemMXBean.getSystemLoadAverage)")
   val profGcStopTheWorld = propL.withMeta(TimeSpent)
   val profGcTimeAll = propL.withMeta(
     TimeSpent,
@@ -772,8 +786,15 @@ object Properties extends KnownProperties {
   // Events about DependencyTracker queue sizes
   // Technically, Queued = Added - Processed but in practice it might differ slightly depending on when snaps are
   // published.
-  val profDepTrackerTaskAdded = prop[Map[String, Int]].withMeta(IntegrableCount)
-  val profDepTrackerTaskProcessed = prop[Map[String, Int]].withMeta(IntegrableCount)
+  
+  // Totals are always published
+  val profDepTrackerTaskTotalAdded = propL.withMeta(IntegrableCount)
+  val profDepTrackerTaskTotalProcessed = propL.withMeta(IntegrableCount)
+  val profDepTrackerTaskTotalQueued = propI.withMeta(UnintegrableCount)
+  
+  // Breakdown per queue is only published for the first -Doptimus.sampling.deptracker.maxqueues queues (defaults to 0) 
+  val profDepTrackerTaskAdded = prop[Map[String, Long]].withMeta(IntegrableCount)
+  val profDepTrackerTaskProcessed = prop[Map[String, Long]].withMeta(IntegrableCount)
   val profDepTrackerTaskQueued = prop[Map[String, Int]].withMeta(UnintegrableCount)
 
   val cardEstimated = prop[Map[String, Int]].withMeta(MetaData(AGG_HYPER | UNGRAPHABLE, PropertyUnits.Count))
@@ -831,6 +852,7 @@ object Properties extends KnownProperties {
   val server = prop[Map[String, JsValue]]
   val args = prop[Seq[String]].withMeta(NullMeta, "for risk related usages")
   val argsMap = prop[Map[String, String]].withMeta(NullMeta, "for profiling related usages")
+  val argsSeq = prop[Seq[(String, String)]].withMeta(NullMeta, "for profiling related usages")
   val argsType = prop[String]
   val tmInstance = prop[String]
   val config = prop[Map[String, String]]
@@ -860,6 +882,7 @@ object Properties extends KnownProperties {
   val gsfEngineId = prop[String]
   val kubeNodeName = prop[String]
   val state = prop[String]
+  val enabled = propB
 
   val appLaunchContextType = prop[String]
   val appLaunchContextEnv = prop[String]
@@ -940,14 +963,17 @@ object Properties extends KnownProperties {
   val obtRegexRuleInputSize = propI
   val obtRegexPatternInputSize = propI
   val obtRegexTotalScopesScanned = propI
+  val obtRegexScan = propL
+  val obtRegexRules = prop[Map[String, Long]]
 
   // pgo group validation properties
-  val pgoDiff = prop[Seq[Map[String, String]]]
+  val pgoDiff = prop[Map[String, String]]
   val optconfPath = prop[String]
   val optconfAction = prop[String]
   val optconfApplyTimeElapsed = propL
   val artifacts = prop[String]
 
+  val hotspotSource = prop[String]
   val hotspotEngine = prop[String]
   val hotspotStart: Properties.EnumeratedKeyLong = propL.withMeta(IntegrableCount, "Number of node starts")
   val hotspotEvicted = propL.withMeta(IntegrableCount, "Nodes evicted from cache")
@@ -1085,7 +1111,10 @@ object Properties extends KnownProperties {
   val profCollapsed = prop[String]
   val profMS = prop[String]
   val stackThumb = prop[Map[String, Int]]
-  val profPreOptimusStartup = propL
+  val profPreOptimusStartup = propL.withMeta(TimeSpent, "Time spent from JVM startup to invocation of withOptimus")
+  val profOptimusStartup = propL.withMeta(
+    TimeSpent,
+    "Time spent from invocation of withOptimus to execution of withOptimus closure  - includes DAL init")
 
   val distWallTime = propL.withMeta(TimeSpent)
   val distTaskDuration = propL.withMeta(TimeSpent)
@@ -1113,9 +1142,9 @@ object Properties extends KnownProperties {
   val overlayScenario = prop[String]
   val trivialOverlay = propB
 
-  /** XSFT cycle recovery (NodeTaskInfo name) */
-  val xsftCycle = prop[String]
-  val xsftStack = prop[String]
+  /** Cycle recovery node and stack */
+  val recoveredCycleNode = prop[String]
+  val recoveredCycleStack = prop[String]
 
   /** Cache time misreported task name */
   val cacheTimeMisreported = prop[String]
@@ -1246,6 +1275,10 @@ object Properties extends KnownProperties {
   val pricingTrade = prop[String]
   val pricingHugeNumber = prop[String]
   val pricingNumbers = prop[Seq[String]]
+
+  val treadmillEnv = prop[Map[String, String]]
+
+  val source = prop[String]
 }
 
 final case class RequestsStallInfo(pluginType: StallPlugin.Value, reqCount: Int, req: Seq[String]) {

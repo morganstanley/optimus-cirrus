@@ -11,13 +11,29 @@
  */
 package optimus.buildtool.utils
 
+import optimus.platform._
+import org.slf4j.LoggerFactory.getLogger
+
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
+import scala.math.Ordering.Implicits._
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 import scala.util.Try
+import scala.util.matching.Regex
 
+@entity
 object OsUtils {
+  private val log = getLogger(this.getClass)
+
+  val AutoResolvingNativeLibsForOsFolder: String = "exec"
+  val HiddenNativeLibOsVariantsFolder: String = ".exec"
+  val AutoResolveAliasFolder: String = "@sys"
+
   val Linux6Version = "linux-el6.x86_64"
   val Linux7Version = "linux-el7.x86_64"
   val Linux8Version = "linux-el8_9.x86_64"
@@ -69,8 +85,84 @@ object OsUtils {
     OsUtils.osVersion,
     throw new IllegalArgumentException(s"Unrecognized OS version: ${OsUtils.osVersion}"))
 
+  def execFor(osVersion: String): String =
+    osVersionMapping.getOrElse(osVersion, throw new IllegalArgumentException(s"Unrecognized OS version: $osVersion"))
+
   private val sysNameRegex = s"'([^']+)'".r
   private[utils] def readSysName(output: String): Seq[String] =
     sysNameRegex.findAllMatchIn(output).map(_.group(1)).to(Seq)
 
+  // GLIBC helpers
+
+  // We care only about 64 bits OS
+  private val GlibcPattern: Regex = """.*x86_64\..*glibc\.(\d+)\.(\d+).*""".r
+
+  def glibcVersion(folderName: String): GlibcVersion =
+    folderName match {
+      case GlibcPattern(major, minor) => GlibcVersion(major.toInt, minor.toInt)
+      case _ => throw new IllegalArgumentException(s"Does not know how to tell GLIBC version from $folderName")
+    }
+
+  def glibcVersion(p: Path): (GlibcVersion, Path) =
+    glibcVersion(p.getFileName.toString) -> p
+
+  def hasGlibcVersion(p: Path): Boolean =
+    GlibcPattern.pattern.matcher(p.toString).matches()
+
+  // Path rewrite helpers
+
+  def folderComponentIndex(p: Path, c: String): Option[Int] =
+    (0 until p.getNameCount)
+      .map(idx => idx -> p.getName(idx))
+      .find { case (_, name) => name.toString == c }
+      .map { case (idx, _) => idx }
+
+  def hiddenNativeLibsFromFile(f: Path): Path =
+    folderComponentIndex(f, OsUtils.HiddenNativeLibOsVariantsFolder)
+      .map { idx =>
+        val mappedTo = f.getRoot.resolve(f.subpath(0, idx + 1))
+        mappedTo
+      }
+      .getOrElse(throw new IllegalStateException(s"Could not find hidden native libs folder for $f"))
+
+  // We have caching to avoid repeated file system access on networked storage in particular
+  private val pathToGlibcVersions = new ConcurrentHashMap[Path, Seq[GlibcPath]]()
+  private[utils] def findSupportedGlibcVersion(hiddenNativeLibsLocation: Path): Seq[GlibcPath] = {
+    require(Files.isDirectory(hiddenNativeLibsLocation), s"$hiddenNativeLibsLocation is not a directory")
+    require(
+      hiddenNativeLibsLocation.getFileName.toString == HiddenNativeLibOsVariantsFolder,
+      s"$hiddenNativeLibsLocation is not a hidden native libs folder")
+    pathToGlibcVersions.computeIfAbsent(
+      hiddenNativeLibsLocation,
+      { _ =>
+        Files
+          .list(hiddenNativeLibsLocation)
+          .iterator()
+          .asScala
+          .toList
+          .distinct
+          .collect { case p if hasGlibcVersion(p) => glibcVersion(p) }
+          .sortBy { case (version, _) => version }
+          .reverse
+          .map { case (version, path) => GlibcPath(path, version) }
+      }
+    )
+  }
+
+  def findNativeLibsForTargetOs(
+      hiddenNativeLibsLocation: Path,
+      desiredGlibcVersion: GlibcVersion
+  ): Option[GlibcPath] = {
+    // We got a choice of libraries here, we need to filter by version and select the one matching os version or lower
+    // It happens that some very old library do not even have native libs for the target OS
+    val glicVersions = findSupportedGlibcVersion(hiddenNativeLibsLocation)
+    glicVersions
+      .find { case GlibcPath(_, version) => version <= desiredGlibcVersion }
+      .orElse {
+        log.warn(
+          s"No glibc version <= $desiredGlibcVersion listed in $hiddenNativeLibsLocation: the image for the target OS may be broken or it may be inconsequential (particularly very old libraries) (folder last modified on ${Files
+              .getLastModifiedTime(hiddenNativeLibsLocation)})")
+        None
+      }
+  }
 }

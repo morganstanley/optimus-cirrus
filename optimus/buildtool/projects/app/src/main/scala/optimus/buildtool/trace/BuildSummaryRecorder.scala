@@ -11,6 +11,9 @@
  */
 package optimus.buildtool.trace
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.cache.RemoteArtifactCacheTracker
 import optimus.buildtool.compilers.zinc.CompilerThrottle
@@ -31,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.compat._
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.Using
 
 class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: CompilerThrottle)
     extends DefaultObtTraceListener {
@@ -38,7 +42,7 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
 
   @volatile private var startTime: Instant = _
 
-  private val timer = new Timer
+  private val timer = new Timer(true)
   @volatile private var timerTask: Option[TimerTask] = None
 
   private val stats = new ConcurrentHashMap[ObtStat, Long]()
@@ -74,14 +78,16 @@ class BuildSummaryRecorder(outputDir: Option[Directory], compilerThrottle: Compi
   }
 
   def storeStats(): Unit = {
-    import spray.json._, DefaultJsonProtocol._
-
+    implicit val obtStatsCodec: JsonValueCodec[Map[String, Long]] = JsonCodecMaker.make[Map[String, Long]]
     outputDir.foreach { dir =>
       val preparedStats = stats.asScala.toMap.map { case (k, v) => k.key -> v }
-      val file = dir.resolveFile(s"obt-stats-${System.currentTimeMillis()}.json").asJson
+      val file = dir.resolveFile(s"obt-stats-${System.currentTimeMillis()}.json")
       log.info(s"Writing OBT stats to $file")
       if (!dir.existsUnsafe) Files.createDirectory(dir.path)
-      Files.write(file.path, preparedStats.toJson.prettyPrint.getBytes)
+
+      Using.resource(Files.newOutputStream(file.path)) { output =>
+        writeToStream(preparedStats, output)
+      }
     }
   }
 

@@ -40,7 +40,7 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.attribute.UserDefinedFileAttributeView
 import java.util
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
 import scala.util.control.NonFatal
 
 trait HashedContent {
@@ -218,7 +218,7 @@ object Hashing {
   }
 
   def consistentlyHashDirectory(directory: Directory, strict: Boolean = true): String = {
-    val fileHashes = mutable.Buffer[(String, String)]()
+    val fileHashes = ArraySeq.newBuilder[(String, String)]
     Files.walkFileTree(
       directory.path,
       new SimpleFileVisitor[Path] {
@@ -235,7 +235,7 @@ object Hashing {
         }
       }
     )
-    consistentlyHashFileHashes(fileHashes)
+    consistentlyHashFileHashes(fileHashes.result())
   }
 
   def consistentlyHashFileHashes(filesToHashes: Seq[(String, String)]): String = {

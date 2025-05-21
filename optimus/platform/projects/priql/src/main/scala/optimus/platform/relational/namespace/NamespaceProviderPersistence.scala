@@ -55,7 +55,7 @@ object NamespaceProviderPersistence extends ProviderPersistence {
       decodeType: TypeInfoDecoder): ProviderRelation = {
     val namespaceProvider = ProviderSource.NamespaceProviderRelation.parseFrom(relation.getData)
 
-    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScala)
+    val keys = ProviderPersistence.decodeRelationKeys(relation.getKeysList.asScalaUnsafeImmutable)
 
     val namespace =
       if (namespaceProvider.hasIncludesSubPackage()) {

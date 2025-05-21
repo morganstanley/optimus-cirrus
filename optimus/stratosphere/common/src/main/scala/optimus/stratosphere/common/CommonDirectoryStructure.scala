@@ -81,6 +81,8 @@ class CommonDirectoryStructure(
 
   val gitSparseCheckoutLock: Path = gitDirectory.resolve("info").resolve("sparse-checkout.lock")
 
+  val gitIndexLock: Path = gitDirectory.resolve("index.lock")
+
   // <STRATOSPHERE_HOME>/<WORKSPACE_NAME>/logs
   val logsDirectory: Path = stratosphereWorkspaceDir.resolve("logs")
 

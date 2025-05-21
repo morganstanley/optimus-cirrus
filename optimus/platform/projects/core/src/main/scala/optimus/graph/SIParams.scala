@@ -41,7 +41,8 @@ final case class SIParams(
     jobConfiguration: JobConfiguration = MissingJobConfiguration,
     scopedPlugins: Map[NodeTaskInfo, ScopedSchedulerPlugin] = null,
     // note: not included in hashcode, will be reset if it didn't match
-    @transient scheduler: WeakReference[Scheduler] = SIParams.emptyWeakRef
+    @transient scheduler: WeakReference[Scheduler] = SIParams.emptyWeakRef,
+    @transient pathMask: Long = 0
 ) {
 
   private[optimus] def markPluginNodeTaskInfos(): Unit = if (scopedPlugins ne null) {

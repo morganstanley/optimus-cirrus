@@ -12,14 +12,15 @@
 package optimus.graph
 
 import java.util.{IdentityHashMap => JIdentityHashMap}
-
 import msjava.slf4jutils.scalalog.getLogger
+import optimus.graph.tracking.NoOpTrackedNodeInvalidationObserver
 import optimus.platform.Scenario
 import optimus.platform.ScenarioStack
 import optimus.platform.Tweak
 import optimus.platform.dal.Marker
 import optimus.platform.storable.Entity
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -70,20 +71,23 @@ private[optimus] object TweakExpander {
           // re-run without the cacheableTransitively flag so that @impure checks won't be applied, and pre-invalidate
           // us so that the current caller(s) will get this value, but no subsequent callers will
           replace(scenarioStack.withoutCacheableTransitively)
-          invalidateCache()
+          invalidateCache(NoOpTrackedNodeInvalidationObserver) // it's our own node and nobody is observing it
           doExpansion()
       }
     }
 
     private def doExpansion(): Scenario = {
       val tweaks = scenario.topLevelTweaks
-      val expanded = new ArrayBuffer[Tweak](tweaks.size)
+      val expB = ArraySeq.newBuilder[Tweak]
+      expB.sizeHint(tweaks.size)
       val it = tweaks.iterator
       while (it.hasNext) {
         val tweak: Tweak = it.next()
-        if (tweak.target.unresolved) tweak.expandInto(expanded, scenarioStack)
-        else expanded += tweak
+        if (tweak.target.unresolved) tweak.expandInto(expB, scenarioStack)
+        else expB += tweak
       }
+
+      val expanded = expB.result()
 
       val results = new ArrayBuffer[Tweak](expanded.size)
       var markers: JIdentityHashMap[Marker[_], Tweak] = null
@@ -104,7 +108,11 @@ private[optimus] object TweakExpander {
       }
 
       if (markers ne null) processMarkers(markers, results)
-      val expandedScenario = Scenario.validate(results.toList, "After tweak expansion", scenario.unorderedTweaks, scenario.flagsWithoutUnresolved)
+      val expandedScenario = Scenario.validate(
+        results.toList,
+        "After tweak expansion",
+        scenario.unorderedTweaks,
+        scenario.flagsWithoutUnresolved)
       expandedScenario
     }
 

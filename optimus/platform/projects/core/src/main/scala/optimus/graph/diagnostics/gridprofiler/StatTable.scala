@@ -11,8 +11,8 @@
  */
 package optimus.graph.diagnostics.gridprofiler
 
-final case class StatTableCol(title: String, format: String, values: collection.Seq[Any]) {
-  lazy val valuesFormatted: collection.Seq[String] = values.map(format.format(_))
+final case class StatTableCol(title: String, format: String, values: Seq[Any]) {
+  lazy val valuesFormatted: Seq[String] = values.map(format.format(_))
   lazy val width: Int = Integer.max(title.length, valuesFormatted.map(_.length).max)
   def titlePadded: String = title.padTo(width, ' ')
   def valuePadded(v: String): String = v.reverse.padTo(width, ' ').reverse
@@ -20,10 +20,10 @@ final case class StatTableCol(title: String, format: String, values: collection.
 }
 
 object StatTableCol {
-  def single(title: String, format: String, value: Any) = StatTableCol(title, format, collection.Seq(value))
+  def single(title: String, format: String, value: Any) = StatTableCol(title, format, Seq(value))
 }
 
-class StatTable(val cols: collection.Seq[StatTableCol]) {
+class StatTable(val cols: Seq[StatTableCol]) {
   override def toString: String = {
     cols.map(_.titlePadded).mkString(" ") + "\n" +
       cols.map(_.spacer).mkString("+") + "\n" +

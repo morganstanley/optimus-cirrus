@@ -53,6 +53,14 @@ object UnsafeFieldInfo {
      */
     val Val: Value = Value
 
+    /**
+     * Marks a property that is LazyPickled in the newer way as managed by a $impl var and the
+     * PluginHelper.resolveRef* methods. When we implement the same mechanism for @stored @entity Traits
+     * we can remove this and go back to using StorageKind.Node to donate this since there'll only be one
+     * mechanism for handling Lazy unpickling
+     */
+    val LazyPickled: Value = Value
+
   }
 }
 
@@ -89,5 +97,5 @@ trait ReflectiveEntityPickling {
       storageInfo: StorageInfo,
       ref: EntityReference): Entity
 
-  def prepareMeta(info: EntityInfo): collection.Seq[UnsafeFieldInfo]
+  def prepareMeta(info: EntityInfo): Seq[UnsafeFieldInfo]
 }

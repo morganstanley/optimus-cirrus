@@ -13,14 +13,14 @@ package optimus.platform.storable
 
 import optimus.core.utils.RuntimeMirror
 import optimus.entity._
-import optimus.platform.node
 import optimus.platform.pickling.PicklingException
 import optimus.platform.relational.tree.MemberDescriptor
 import optimus.platform.util.HierarchyManager.embeddableHierarchyManager
+import optimus.utils.CollectionUtils._
 
+import java.lang.reflect.Constructor
 import scala.reflect.runtime.JavaUniverse
 import scala.reflect.runtime.{universe => ru}
-import optimus.utils.CollectionUtils._
 
 trait StorableCompanionBase[T <: Storable] {
   def info: StorableInfo
@@ -32,7 +32,7 @@ trait EntityCompanionBase[T <: Entity] extends StorableCompanionBase[T] {
 // have a look at KeyedEntityCompanionBase for methods specifically on Entities with Keys
 object EmbeddableCompanionBase {
 
-  private[optimus] def primaryConstructorInfoFor(clazz: Class[_ <: EmbeddableCompanionBase]) = {
+  private[optimus] def primaryConstructorInfoFor(clazz: Class[_ <: EmbeddableCompanionBase]): Constructor[_] = {
     val jru = ru.asInstanceOf[JavaUniverse]
     val mirror = RuntimeMirror.forClass(clazz)
     val myCompanionClass = mirror.classSymbol(clazz).companion
@@ -43,8 +43,7 @@ object EmbeddableCompanionBase {
     val javaConstructor = mirror
       .asInstanceOf[jru.JavaMirror]
       .constructorToJava(primaryConstructor.asMethod.asInstanceOf[jru.MethodSymbol])
-    val hasNodeAnnotation = javaConstructor.getAnnotation(classOf[node]) != null
-    javaConstructor -> hasNodeAnnotation
+    javaConstructor
   }
 }
 
@@ -60,11 +59,8 @@ trait EmbeddableCompanionBase {
   }
 
   def fromArray(a: Array[AnyRef]): Embeddable = {
-    val (constructor, isConstructorNode) = primaryConstructorInfo
-    val t = constructor.newInstance(a: _*)
-    // use constructor node if available, else use call constructor directly
-    val cachedT = if (isConstructorNode) NodeSupport.lookupConstructorCache(t) else t
-    cachedT.asInstanceOf[Embeddable]
+    val t = primaryConstructorInfo.newInstance(a: _*)
+    __intern(t).asInstanceOf[Embeddable]
   }
 
   def toArray(e: Embeddable): Array[AnyRef] = {
@@ -80,7 +76,37 @@ trait EmbeddableCompanionBase {
   }
 
   def projectedMembers: List[MemberDescriptor] = Nil
+
+  private var __internID: Int = _
+
+  /** Will be called by companion objects of @embeddable case classes that want interning */
+  // noinspection ScalaUnusedSymbol
+  def __intern(): Unit = {
+    if (__internID == 0)
+      __internID = EmbeddableCtrNodeSupport.registerID(getClass)
+  }
+
+  /**
+   * if primary constructor has @node annotation
+   * entity plugin injects calls to this method from apply() on module companion and readResolve() on the embeddable itself
+   */
+  // noinspection ScalaWeakerAccess (used by entity plugin)
+  def __intern[T](v: T): T = {
+    val embeddableInternID = __internID
+    if (embeddableInternID > 0)
+      EmbeddableCtrNodeSupport.lookupConstructorCache(v, embeddableInternID)
+    else
+      v
+  }
+
+  def setCacheable(enable: Boolean): Unit = {
+    if (__internID > 0)
+      EmbeddableCtrNodeSupport.setCacheable(__internID, enable)
+  }
 }
+
+//noinspection ScalaUnusedSymbol (entityplugin uses this to reduce the amount of code generated
+class EmbeddableCompanionBaseImpl extends EmbeddableCompanionBase
 
 /** Companion objects of @embeddable traits extend this trait (due to AdjustAST) */
 trait EmbeddableTraitCompanionBase {

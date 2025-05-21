@@ -13,9 +13,8 @@ package optimus.buildtool.builders.postbuilders.installer.component
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.builders.postbuilders.installer.BatchInstallableArtifacts
-import optimus.buildtool.builders.postbuilders.installer.InstallableArtifacts
 import optimus.buildtool.builders.postbuilders.installer.Installer
-import optimus.buildtool.builders.postbuilders.installer.component.fingerprint_diffing.FingerprintDiffChanges
+import optimus.buildtool.builders.postbuilders.installer.component.fingerprintdiffing.FingerprintDiffChanges
 import optimus.buildtool.builders.postbuilders.installer.component.testplans.GitChanges
 import optimus.buildtool.builders.postbuilders.installer.component.testplans._
 import optimus.buildtool.config.MetaBundle
@@ -51,12 +50,12 @@ final class TestplanInstaller(
     versionConfig: VersionConfiguration,
     stratoOverride: Option[String],
     workspaceStructure: WorkspaceStructure
-) extends ComponentInstaller
-    with ComponentBatchInstaller
+) extends ComponentBatchInstaller
     with Log
     with CustomPassfailTestplanInstaller
     with PactContractTestplanInstaller
     with PythonTestplanInstaller {
+
   import installer._
 
   override val descriptor = "testplan files"
@@ -70,23 +69,7 @@ final class TestplanInstaller(
     def testplanFile(suffix: String = "merged", prefix: String = ""): String = s"${prefix}downstream-$suffix.testplan"
   }
 
-  @node private def testData(scopeIds: Set[ScopeId]): Seq[TestData] =
-    prepareFor(readTestTypes(), gitChanges, scopeIds)
-
-  @node private def fingerprintDiffTestData(scopeIds: Set[ScopeId]): Seq[TestData] =
-    prepareFor(readTestTypes(), fingerprintChanges, scopeIds)
-
-  @node private def gitLogOpt: Option[GitLog] =
-    if (testplanConfig.useDynamicTests) gitLog else None
-
-  @node private def gitChanges: Changes = {
-    GitChanges(gitLogOpt, scopeConfigSource, testplanConfig.ignoredPaths)
-  }
-
-  @node private def fingerprintChanges: Changes = {
-    val srcPath: Path = installer.sourceDir.path
-    FingerprintDiffChanges(scopeConfigSource, srcPath)
-  }
+  private def gitLogOpt: Option[GitLog] = if (testplanConfig.useDynamicTests) gitLog else None
 
   private val fingerprintPrefix = "fingerprint-"
 
@@ -95,19 +78,24 @@ final class TestplanInstaller(
     val scopes = Artifact.scopeIds(installable.artifacts)
     val metaBundles = scopes.map(_.metaBundle).distinct
 
-    val allScopeIds: Set[ScopeId] = installable.allScopes
-    val allTestData: Seq[TestData] = testData(allScopeIds)
-    val allFingerprintTestData: Seq[TestData] = fingerprintDiffTestData(allScopeIds)
+    val fingerprintChanges: Changes =
+      FingerprintDiffChanges.create(scopeConfigSource, installer.buildDir.path, versionConfig.installVersion)
+    val gitChanges: Changes =
+      GitChanges(gitLogOpt, scopeConfigSource, testplanConfig.ignoredPaths)
+
+    val testTypes = readTestTypes()
+    val allTestData: Seq[TestData] = prepareFor(testTypes, gitChanges, installable.allScopes)
+    val allFingerprintTestData: Seq[TestData] = prepareFor(testTypes, fingerprintChanges, installable.allScopes)
 
     metaBundles.apar.flatMap { metaBundle =>
       installTestplanFiles(metaBundle, allTestData)
       installTestplanFiles(metaBundle, allFingerprintTestData, fingerprintPrefix)
     } ++ writeChangesFiles(gitChanges) ++
-      writeGitChangedFiles() ++
+      writeGitChangedFiles(gitChanges) ++
       writeChangesFiles(fingerprintChanges, fingerprintPrefix)
   }
 
-  @async private def writeGitChangedFiles(): Seq[FileAsset] = {
+  @async private def writeGitChangedFiles(gitChanges: Changes): Seq[FileAsset] = {
     if (gitChanges.isDefined) {
       val changedFilesFile = installDir.resolveFile("changed-files.txt")
       val changedPaths: Set[Path] =
@@ -144,8 +132,6 @@ final class TestplanInstaller(
       Seq(changedModulesFile, changedScopesFile, directlyChangedScopesFile)
     } else Nil
   }
-
-  @async def install(installable: InstallableArtifacts): Seq[FileAsset] = Seq.empty
 
   @node private def readTestTypes(): Seq[TestType] = {
     val groupsDir = directoryFactory.reactive(sourceDir.resolveDir(PathNames.TestGroups))

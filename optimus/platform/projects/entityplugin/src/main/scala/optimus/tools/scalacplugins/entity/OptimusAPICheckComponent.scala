@@ -38,8 +38,8 @@ class OptimusAPICheckComponent(val plugin: EntityPlugin, override val phaseInfo:
     import global._
 
     private var inNodeSync = false
-
     var ignoranceWithin: List[String] = Nil
+    private def nativeMockitoCheck(mockPkg: Symbol): Boolean = mockPkg == MockitoPkg || mockPkg == MockitoSugarPkg
 
     override def preTraverse(tree: global.Tree): Boolean = tree match {
       case Import(expr, selectors) if expr.symbol == optimusLanguage =>
@@ -70,6 +70,12 @@ class OptimusAPICheckComponent(val plugin: EntityPlugin, override val phaseInfo:
         traverse(within)
         ignoranceWithin = saved
         false
+
+      case applyTree @ Apply(TypeApply(Select(_, name), List(clazz)), _)
+          if name == names.mock && nativeMockitoCheck(applyTree.symbol.owner.enclosingPackage) && isEntity(
+            clazz.symbol) =>
+        alarm(OptimusErrors.ENTITY_MOCK_ERROR, tree.pos, s"${clazz.symbol.name}")
+        true
 
       case _ =>
         true

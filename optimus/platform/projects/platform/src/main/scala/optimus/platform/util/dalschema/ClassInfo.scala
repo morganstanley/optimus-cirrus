@@ -17,6 +17,7 @@ import optimus.platform._
 import optimus.platform.annotations.valAccessor
 import optimus.platform.cm.Knowable
 import optimus.platform.metadatas.internal.ClassMetaData
+import optimus.platform.metadatas.internal.MetaAnnotationAttributes
 import optimus.platform.metadatas.internal.PIIDetails
 import optimus.platform.util.ClassLoaderHook
 import optimus.platform.util.CurrentClasspathResourceFinder
@@ -197,7 +198,7 @@ final case class TypeClassInfo private (t: Type) extends ClassInfo {
           }
           .getOrElse(Seq.empty)
       } else {
-        t.members.filter((s: Symbol) => s.isTerm && !s.isMethod)
+        t.members.filter((s: Symbol) => s.isTerm && !s.isMethod && !s.isStatic)
       }
       syms.map { f =>
         SymbolFieldInfo(f.asTerm, t, includeTypeArgs)
@@ -313,20 +314,6 @@ final case class MetaDataClassInfo(meta: ClassMetaData, classLoader: ClassLoader
   override lazy val classSymbol: ClassSymbol =
     ReflectionHelper.getClassSymbolFromName(meta.fullClassName, classLoader)
   override def fields(includeTypeArgs: Boolean = true): Iterable[FieldInfo] = {
-    val filter = if (isEntity) { (s: Symbol) =>
-      s match {
-        case t: TermSymbol =>
-          t.annotations.exists { a =>
-            a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[valAccessor]
-          }
-        case _ =>
-          // Treat @key/@indexed/@projected defs as fields as they are important
-          // and persisted to DAL.
-          s.annotations.exists { a =>
-            a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[indexed] || a.tree.tpe =:= typeOf[projected]
-          }
-      }
-    } else (s: Symbol) => s.isTerm && !s.isMethod
     val syms = if (isEmbeddable) {
       // A bit tricky to get case class fields. We have to make sure
       // a) we don't grab any non-ctor vals
@@ -340,18 +327,31 @@ final case class MetaDataClassInfo(meta: ClassMetaData, classLoader: ClassLoader
           classSymbol.typeSignature.members.filter { m =>
             m.isMethod && m.asMethod.isGetter && ctorArgs.exists { _.fullName == m.fullName }
           }
-        }
-        .getOrElse(Seq.empty)
+        }.getOrElse(Seq.empty)
 
     } else {
-      classSymbol.typeSignature.members.filter(filter)
+      classSymbol.typeSignature.members.filter(if (isEntity) { (s: Symbol) =>
+        !s.isStatic &&
+          (s match {
+          case t: TermSymbol =>
+            t.annotations.exists { a =>
+              a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[valAccessor]
+            }
+          case _ =>
+            // Treat @key/@indexed/@projected defs as fields as they are important
+            // and persisted to DAL.
+            s.annotations.exists { a =>
+              a.tree.tpe =:= typeOf[key] || a.tree.tpe =:= typeOf[indexed] || a.tree.tpe =:= typeOf[projected]
+            }
+        })
+      } else (s: Symbol) => s.isTerm && !s.isMethod)
     }
     syms.map { f =>
       SymbolFieldInfo(f.asTerm, tpe, includeTypeArgs)
     }
   }
 
-  val catalogingInfo: Option[(String, String)] = meta.catalogingInfo
+  val catalogingInfo: Option[MetaAnnotationAttributes] = meta.catalogingInfo
 
   override val piiElements: Seq[PIIDetails] = meta.piiElements
 

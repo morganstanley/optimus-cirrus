@@ -271,7 +271,6 @@ public class InstrumentationSupport {
     var profileID = methodDesc.profileID;
     if (profileID == 0)
       // (once installed per injection site, never reassigned)
-      //noinspection SynchronizationOnLocalVariableOrMethodParameter
       synchronized (methodDesc) {
         if (methodDesc.profileID == 0) {
           profileID = methodDesc.profileID = NodeTaskInfoRegistry.nextId();
@@ -575,5 +574,11 @@ public class InstrumentationSupport {
     } finally {
       lock.unlock();
     }
+  }
+
+  /** Sample implementation of function interceptor, see also trace_config.sc */
+  public static boolean interceptEquals(boolean result, Object a, Object b) {
+    System.err.println("interceptEquals: " + result);
+    return result;
   }
 }

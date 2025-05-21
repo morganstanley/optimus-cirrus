@@ -11,14 +11,12 @@
  */
 package optimus.graph
 
-import optimus.config.NodeCacheConfigs
 import optimus.debug.InstrumentationConfig
 import optimus.debug.InstrumentedHashCodes
-import optimus.graph.cache.UNodeCache
 import optimus.graph.diagnostics.NodeName
 import optimus.graph.loom.LNodeFunction1
 import optimus.graph.loom.TrivialNode
-import optimus.graph.OGTrace.AsyncSuffix
+import optimus.graph.OGTrace.HashSep
 import optimus.platform._
 import optimus.platform.storable.Entity
 import optimus.platform.temporalSurface.TemporalSurface
@@ -29,8 +27,6 @@ import java.io.IOException
 import java.io.ObjectInput
 import java.io.ObjectInputStream
 import java.io.ObjectOutput
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentMap
 import scala.util.control.NonFatal
 
 /** Mostly a marker interface for DependencyTracker */
@@ -101,7 +97,7 @@ sealed trait NodeKey[+T] extends TweakableKey {
   def toKeyString: String
 
   protected[optimus] def toDebugString: String =
-    getClass.getName + AsyncSuffix + System.identityHashCode(this) + ":" + toKeyString
+    getClass.getName + HashSep + System.identityHashCode(this) + ":" + toKeyString
 }
 
 object PropertyNode {
@@ -259,14 +255,14 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
   /**
    * Called when `PropertyInfo.hasTweakHandler = true` to transform an applied tweaks into the actual tweaks to apply.
    */
-  final def transformTweak(value: TweakNode[T], pss: ScenarioStack): collection.Seq[Tweak] =
+  final def transformTweak(value: TweakNode[T], pss: ScenarioStack): Seq[Tweak] =
     transformTweak(value.cloneWithDirectAttach(pss, this).get)
 
   /**
    * The plugin implements this method to call the user written foo_:= tweak handler
    */
   // noinspection ScalaUnusedSymbol
-  def transformTweak(value: Any): collection.Seq[Tweak] =
+  def transformTweak(value: Any): Seq[Tweak] =
     throw new UnsupportedOperationException("No tweak-handler for: " + propertyInfo)
 
   /**
@@ -345,7 +341,7 @@ abstract class PropertyNode[T] extends CompletableNode[T] with NodeKey[T] with T
   }
 
   def toKeyString: String =
-    (if (entity ne null) entity.getClass.getSimpleName + AsyncSuffix + System.identityHashCode(entity).toHexString
+    (if (entity ne null) entity.getClass.getSimpleName + HashSep + System.identityHashCode(entity).toHexString
      else "-") +
       "." + (if (propertyInfo ne null) propertyInfo.name else "-") +
       (if (!args.isEmpty) "(" + args.mkString(",") + ")" else "")
@@ -545,49 +541,6 @@ class AlreadyCompletedPropertyNode[T](
   }
 }
 
-/*
- * This node is generated for @embeddable class with @node constructor.
- * This node will be looked up in cache directly, and won't be scheduled
- * Note that the key is simply the value since our aim is to intern the object
- */
-class ConstructorNode[T](v: T, propertyInfo: NodeTaskInfo)
-    extends AlreadyCompletedPropertyNode[T](v, null, propertyInfo) {
-  final override def argsHash: Int = v.##
-  final override def argsEquals(other: NodeKey[_]): Boolean = {
-    other match {
-      case cNode: ConstructorNode[T @unchecked] => cNode.result == result
-      case _                                    => false
-    }
-  }
-  final override def run(ec: OGSchedulerContext): Unit = {
-    throw new GraphInInvalidState(s"Can't run ConstructorNode $this")
-  }
-}
-
-private[optimus] object ConstructorNode {
-  final val suffix = "-constructor"
-  private val class2ConstructorInfo: ConcurrentMap[Class[_], NodeTaskInfo] = new ConcurrentHashMap
-
-  def buildConstructorInfo(cls: Class[_]): NodeTaskInfo = {
-    val nti = class2ConstructorInfo.computeIfAbsent(
-      cls,
-      key => {
-        // default settings for constructor node
-        val ctorInfo = new NodeTaskInfo(s"${key.getName}$suffix", NodeTaskInfo.SCENARIOINDEPENDENT)
-        ctorInfo.setCustomCache(UNodeCache.constructorNodeGlobal)
-        ctorInfo
-      }
-    )
-
-    // this must be outside of the NTI creation! Otherwise config will only be applied once on creation, which might
-    // be incorrect behaviour if constructor node had already been constructed by the time optconf is applied
-    val constructorConfig = NodeCacheConfigs.constructorConfigs.get(cls.getName)
-    if (constructorConfig.isDefined)
-      nti.setExternalConfig(constructorConfig.get)
-    nti
-  }
-}
-
 /** Serialization helper to reduce public surface of the ACPN classes and to reduce serialized size */
 @SerialVersionUID(1L)
 private class ACPNMoniker[T](var node: AlreadyCompletedPropertyNode[T]) extends Externalizable {
@@ -633,6 +586,6 @@ abstract class PropertyNodeDelegate[A] extends PropertyNode[A] {
     completeFromNode(child.asInstanceOf[Node[A]], eq)
   }
 
-  /* Implemented by plug-in, must return just queued up node */
-  protected def childNode: Node[A]
+  /* Implemented by plug-in, must return just queued up NodeFuture */
+  protected def childNode: NodeFuture[A]
 }

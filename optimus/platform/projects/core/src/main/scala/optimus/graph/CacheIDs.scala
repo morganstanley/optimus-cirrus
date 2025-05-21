@@ -11,10 +11,6 @@
  */
 package optimus.graph
 
-import scala.annotation.nowarn
-import java.util.concurrent.ConcurrentMap
-import java.util.concurrent.atomic.AtomicLong
-import java.util.{HashMap => JHashMap}
 import com.github.benmanes.caffeine.cache.Caffeine
 import optimus.core.TPDMask
 import optimus.platform._
@@ -23,9 +19,13 @@ import optimus.platform.annotations.deprecating
 import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
-import scala.jdk.CollectionConverters._
+import java.util.concurrent.ConcurrentMap
+import java.util.concurrent.atomic.AtomicLong
+import java.util.{HashMap => JHashMap}
+import scala.annotation.nowarn
 import scala.collection.compat._
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
+import scala.jdk.CollectionConverters._
 
 /**
  * This class supports scenario stack caching. The use case is as follows: <code> someCollection map {
@@ -401,9 +401,9 @@ final private class SSScenarioCacheID(val _inputScenario: Scenario) extends SSCa
  * never runs concurrently with an 'invalidate' cycle on the same TS
  */
 final private[optimus] class MutableSSCacheID extends SSCacheID {
-  def changesFrom(allTweaks: collection.Seq[Tweak]): collection.Seq[Tweak] = {
+  def changesFrom(allTweaks: Seq[Tweak]): Seq[Tweak] = {
     val it = allTweaks.iterator
-    val changed = mutable.ArrayBuffer[Tweak]()
+    val changed = ArraySeq.newBuilder[Tweak]
     while (it.hasNext) {
       val t = it.next()
       val info = t.target.propertyInfo
@@ -415,7 +415,7 @@ final private[optimus] class MutableSSCacheID extends SSCacheID {
       }
       if (t.alwaysInvalidateTrack || cached != t) changed += t
     }
-    changed
+    changed.result()
   }
 
   var modifyOnWrite: Boolean = _

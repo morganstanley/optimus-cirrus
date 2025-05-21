@@ -54,7 +54,7 @@ final class Scenario private[optimus] (
     extends Serializable
     with HasDmcBinaryIdentity {
 
-  def topLevelTweaks: collection.Seq[Tweak] = _topLevelTweaks
+  def topLevelTweaks: Seq[Tweak] = _topLevelTweaks
 
   /** true if any of the tweaks are convertible to byValue */
   private[optimus] def hasReducibleToByValueTweaks: Boolean = (flags & ScenarioFlags.hasReducibleToByValueTweaks) != 0
@@ -99,7 +99,7 @@ final class Scenario private[optimus] (
   private[optimus] def createdAtAsString: String =
     if (_createdAt eq null) "" else "\n" + _createdAt.getStackTrace.mkString("\n")
 
-  def allTweaks: collection.Seq[Tweak] = {
+  def allTweaks: Seq[Tweak] = {
     if (nestedScenarios.nonEmpty)
       throw new GraphException(
         "You are retrieving the tweaks from current scenario stack, but you have other tweaks inside nested scenarios. Are you sure this is what you want to do? If you are sure that this is the correct behavior please use Scenario.topLevelTweaks instead.")
@@ -338,7 +338,7 @@ object Scenario {
     scenario
   }
 
-  def toNestedScenarios(scenarios: collection.Seq[Scenario]): Scenario = {
+  def toNestedScenarios(scenarios: Seq[Scenario]): Scenario = {
     scenarios.reduceOption((a, b) => a.nest(b)).getOrElse(Scenario.empty)
   }
 

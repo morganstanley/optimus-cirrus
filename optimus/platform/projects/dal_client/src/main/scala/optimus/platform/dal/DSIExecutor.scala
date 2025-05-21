@@ -84,7 +84,18 @@ object DALDSIExecutor extends DSIExecutor {
     }
   }
 
+  private def markNodeAccessingDAL(): Unit = {
+    val currNode: NodeTask = EvaluationContext.currentNode
+    /* we need to mark access DAL even if we don't have the plugin since if this runs outside a withoutDAL block and we
+    have a cache hit on this inside of the withoutDAL block we still want to crash
+     */
+    currNode.markAccessedDAL()
+    currNode.scenarioStack
+      .findPluginTag(AdvancedUtils.WithoutDALViolationCollector)
+      .foreach(_.addLocation(EvaluationContext.currentNode.enqueuerChain()))
+  }
   @async def executeQuery(dsi: DSI, cmd: ReadOnlyCommand): Result = {
+    markNodeAccessingDAL()
     val res = asyncResult(EvaluationContext.cancelScope) { doExecuteQuery(dsi, cmd) }
 
     if (res.hasException) {
@@ -101,11 +112,13 @@ object DALDSIExecutor extends DSIExecutor {
     } else res.value
   }
 
-  @async override def executeLeadWriterCommands(dsi: DSI, cmds: Seq[LeadWriterCommand]): Seq[Result] =
+  @async override def executeLeadWriterCommands(dsi: DSI, cmds: Seq[LeadWriterCommand]): Seq[Result] = {
+    markNodeAccessingDAL()
     dsi match {
       case clientDsi: ClientSideDSI => clientDsi.executeLeadWriterCommands(cmds)
       case serverDsi                => serverDsi.executeLeadWriterCommands(cmds)
     }
+  }
 
   @async private def doExecuteQuery(dsi: DSI, cmd: ReadOnlyCommand): Result = {
     val results = dsi match {

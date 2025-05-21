@@ -61,6 +61,7 @@ abstract class NodeCCache {
   def profNumEvictions(reason: EvictionReason): Long = Integer.MIN_VALUE
   def getCacheConcurrency: Int = 0
   def isEvictOnOverflow: Boolean = false
+  def isEvictOnLowMemory: Boolean = false
 
   /** For scoped caches that temporarily decrease the size of the global cache, restore the count */
   def resetSizeReporting(): Unit = {}
@@ -69,7 +70,7 @@ abstract class NodeCCache {
   def clearOldest(ratio: Double, cause: ClearCacheCause): CleanupStats = CleanupStats(0, 0)
 
   /** Clear entire cache */
-  def clear(cause: ClearCacheCause): Long = 0
+  def clear(cause: ClearCacheCause): Long
 
   /** Update stats */
   def updateStats(): Unit = {}

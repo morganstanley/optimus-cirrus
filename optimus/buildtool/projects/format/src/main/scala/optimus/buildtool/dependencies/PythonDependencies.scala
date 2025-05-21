@@ -48,8 +48,8 @@ final case class PythonDependencies(
   private val defaultPythonDefinition: Option[PythonDefinition] = pythonDefinitions.find(_.variant.isEmpty)
   private def variantPythonDefinition(variantName: String): Option[PythonDefinition] =
     pythonDefinitions.find {
-      case PythonDefinition(_, _, _, Some(variant)) => variant.name == variantName
-      case _                                        => false
+      case PythonDefinition(_, _, _, _, Some(variant)) => variant.name == variantName
+      case _                                           => false
     }
 }
 
@@ -58,9 +58,10 @@ object PythonDefinition {
       version: String,
       path: String,
       thinPyapp: String,
+      ruffVersion: String,
       variant: Option[PythonDependencies.Variant]): PythonDefinition = {
     val fixedPath = path.replaceAll("/+", "/")
-    new PythonDefinition(version, fixedPath, thinPyapp, variant)
+    new PythonDefinition(version, fixedPath, thinPyapp, ruffVersion, variant)
   }
 }
 
@@ -68,6 +69,7 @@ final case class PythonDefinition(
     version: String,
     path: String,
     thinPyapp: String,
+    ruffVersion: String,
     variant: Option[PythonDependencies.Variant]) {
   /* extracts major and minor python version
   "3.10.10" -> "3.10"
@@ -79,7 +81,7 @@ final case class PythonDefinition(
       .take(2)
       .mkString(".")
 
-  def hash: String = Hashing.hashStrings(Seq(version, path, thinPyapp) ++ variant.map(_.name))
+  def hash: String = Hashing.hashStrings(Seq(version, path, thinPyapp, ruffVersion) ++ variant.map(_.name))
   private def LinuxPossibleBinPaths: Seq[String] = Seq("/exec/bin").map(path + _)
   private def WindowsPossibleBinPaths: Seq[String] = Seq("/exec", "/exec/bin").map(path + _)
   def binPath: Option[String] =

@@ -68,7 +68,8 @@ final case class DockerImage(
     directScopeIds: Set[ScopeId],
     relevantScopeIds: Set[ScopeId],
     extraImages: Set[ExtraImageDefinition],
-    baseImage: Option[ImageLocation])
+    baseImage: Option[ImageLocation],
+    imageSysName: Option[String])
 
 object DockerImage {
   def apply(
@@ -81,6 +82,18 @@ object DockerImage {
     val imageLocation =
       ImageLocation.File(outputDir.resolveFile(s"${imgDef.name}.tar").path, s"${imgDef.name}:$tag")
     val baseImage = imgDef.baseImage.orElse(defaults.baseImage).map(ImageLocation.parse(_, defaults.registry))
-    DockerImage(imageLocation, directScopeIds, relevantScopeIds, imgDef.extraImages, baseImage)
+    val imageSysName = imgDef.imageSysName.orElse(defaults.imageSysName)
+    apply(imageLocation, directScopeIds, relevantScopeIds, imgDef.extraImages, baseImage, imageSysName)
+  }
+
+  def apply(
+      imageLocation: ImageLocation,
+      defaults: DockerDefaults,
+      imgDef: ImageDefinition,
+      directScopeIds: Set[ScopeId],
+      relevantScopeIds: Set[ScopeId]): DockerImage = {
+    val baseImage = imgDef.baseImage.orElse(defaults.baseImage).map(ImageLocation.parse(_, defaults.registry))
+    val imageSysName = imgDef.imageSysName.orElse(defaults.imageSysName)
+    DockerImage(imageLocation, directScopeIds, relevantScopeIds, imgDef.extraImages, baseImage, imageSysName)
   }
 }

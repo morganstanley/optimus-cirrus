@@ -12,34 +12,28 @@
 package optimus.buildtool.dependencies
 
 import com.typesafe.config._
-import optimus.buildtool.config.DependencyDefinition.DefaultConfiguration
-import optimus.buildtool.config.NamingConventions.IsAgentKey
 import optimus.buildtool.config._
-import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Scala
-import optimus.buildtool.files.Asset
+import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.duplicationMsg
 import optimus.buildtool.format.MavenDependenciesConfig
 import optimus.buildtool.format.BuildDependenciesConfig
 import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.DependenciesConfig
+import optimus.buildtool.format.DependencyConfig
+import optimus.buildtool.format.DependencySetConfig
 import optimus.buildtool.format.Error
 import optimus.buildtool.format.Failure
 import optimus.buildtool.format.Keys
-import optimus.buildtool.format.Message
 import optimus.buildtool.format.JvmDependenciesConfig
 import optimus.buildtool.format.Keys.substitutionsConfig
-import optimus.buildtool.format.MavenDefinition.loadMavenDefinition
 import optimus.buildtool.format.ObtFile
-import optimus.buildtool.format.OrderingUtils
-import optimus.buildtool.format.OrderingUtils._
 import optimus.buildtool.format.ProjectProperties
 import optimus.buildtool.format.ResolverDefinitions
 import optimus.buildtool.format.Result
-import optimus.buildtool.format.ResultSeq
+import optimus.buildtool.format.SetConfig
 import optimus.buildtool.format.Success
-import optimus.buildtool.format.SuccessSeq
-import optimus.buildtool.format.TopLevelConfig
+import optimus.buildtool.format.Warning
+import optimus.buildtool.format.WorkspaceStructure
 
-import java.nio.file.FileSystems
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
@@ -52,6 +46,7 @@ object JvmDependenciesLoader {
   private[buildtool] val IvyConfiguration = "ivyConfiguration"
   private[buildtool] val ContainsMacros = "containsMacros"
   private[buildtool] val Classifier = "classifier"
+  private[buildtool] val JvmDependenciesKey = "jvm-dependencies"
   private[buildtool] val Dependencies = "dependencies"
   private[buildtool] val Excludes = "excludes"
   private[buildtool] val ExtraLibs = "extraLibs"
@@ -66,109 +61,13 @@ object JvmDependenciesLoader {
   private[buildtool] val Resolvers = "resolvers"
   private[buildtool] val Substitutions = "substitutions"
 
-  private val Ext = "ext"
-  private val KeySuffix = "keySuffix"
-  private val Reason = "reason"
-  private val TypeStr = "type"
-  private val Transitive = "transitive"
+  private[buildtool] val Ext = "ext"
+  private[buildtool] val KeySuffix = "keySuffix"
+  private[buildtool] val Reason = "reason"
+  private[buildtool] val TypeStr = "type"
+  private[buildtool] val Transitive = "transitive"
 
-  def mavenScalaLibName(name: String, scalaMajorVer: String) = s"${name}_$scalaMajorVer"
-
-  def afsScalaVersion(version: String, scalaMajorVer: String) = s"$scalaMajorVer-$version"
-
-  private[dependencies] def loadLocalDefinitions(
-      dependenciesConfig: Config,
-      configKey: String,
-      kind: Kind,
-      obtFile: ObtFile,
-      isMaven: Boolean,
-      loadedResolvers: ResolverDefinitions,
-      isExtraLib: Boolean = false,
-      scalaMajorVersion: Option[String] = None,
-      isMultiSourceScalaLib: Boolean = false
-  ): Result[Seq[DependencyDefinition]] = {
-
-    Result.tryWith(obtFile, dependenciesConfig) {
-      val groupsToDependencies = ResultSeq(dependenciesConfig.nested(obtFile)).map {
-        case (groupName: String, groupConfig: Config) =>
-          val dependencyDefinitions = for {
-            (depName, dependencyConfig) <- ResultSeq(groupConfig.nested(obtFile))
-            isScalaLib = dependencyConfig.optionalBoolean(Scala).getOrElse(isMultiSourceScalaLib)
-            loadResult = loadLibrary(
-              scalaMajorVersion
-                .filter(_ => isScalaLib && isMaven)
-                .map(mavenScalaLibName(depName, _))
-                .getOrElse(depName),
-              groupName,
-              dependencyConfig,
-              kind,
-              obtFile,
-              isMaven,
-              loadedResolvers,
-              isExtraLib,
-              if (isScalaLib) scalaMajorVersion else None
-            )
-          } yield NestedDefinitions(
-            ResultSeq(loadResult),
-            s"$configKey.$groupName",
-            depName,
-            dependencyConfig.origin().lineNumber())
-
-          val orderedDependencyDefinitions = dependencyDefinitions
-            .withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
-            .flatMap(_.loaded)
-
-          NestedDefinitions(orderedDependencyDefinitions, configKey, groupName, groupConfig.origin().lineNumber())
-      }
-
-      groupsToDependencies
-        .withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
-        .flatMap(_.loaded)
-        .value
-
-    }
-  }
-
-  def readExcludes(config: Config, file: ObtFile, allowIvyConfiguration: Boolean = false): Result[Seq[Exclude]] = {
-    file.tryWith {
-      if (config.hasPath(Excludes)) {
-        val excludeList = config.getList(Excludes).asScala.toList
-        val excludeResults: Seq[Result[Exclude]] = excludeList.map {
-          case obj: ConfigObject =>
-            val excludeConf: Config = obj.toConfig
-
-            val ivyConfiguration = excludeConf.optionalString(IvyConfiguration)
-            val (allowedKeys, ivyWarning, ivyConfigurationToUse) =
-              if (allowIvyConfiguration) (Keys.excludesWithIvyConfig, Nil, ivyConfiguration)
-              else if (ivyConfiguration.isDefined) {
-                val warning =
-                  file.warningAt(
-                    obj,
-                    s"'$IvyConfiguration' is only supported for global $Excludes, not local $Excludes")
-                (Keys.excludesConfig, Seq(warning), None)
-              } else (Keys.excludesConfig, Nil, None)
-
-            val exclude =
-              Exclude(
-                group = excludeConf.optionalString(Group),
-                name = excludeConf.optionalString(Name),
-                ivyConfiguration = ivyConfigurationToUse)
-
-            Success(exclude)
-              .withProblems(
-                excludeConf.checkExtraProperties(file, allowedKeys) ++ ivyWarning ++
-                  // we always require at least one of group or name to be present
-                  excludeConf.checkEmptyProperties(file, Keys.excludesConfig))
-
-          case other => file.failure(other, s""""$Excludes" element is not an object""")
-        }
-
-        Result.sequence(excludeResults)
-      } else Success(Nil)
-    }
-  }
-
-  def readSubstitutions(config: Config, file: ObtFile): Result[Seq[Substitution]] = {
+  def loadSubstitutions(config: Config, file: ObtFile): Result[Seq[Substitution]] = {
     file.tryWith {
       if (config.hasPath(Substitutions)) {
         val subsList = config.getList(Substitutions).asScala.toList
@@ -196,177 +95,6 @@ object JvmDependenciesLoader {
     }
   }
 
-  private def loadLibrary(
-      name: String,
-      group: String,
-      config: Config,
-      kind: Kind,
-      obtFile: ObtFile,
-      isMaven: Boolean,
-      loadedResolvers: ResolverDefinitions,
-      isExtraLib: Boolean = false,
-      scalaMajorVersion: Option[String] = None): Result[Seq[DependencyDefinition]] =
-    Result.tryWith(obtFile, config) {
-
-      def loadArtifacts(config: Config) =
-        if (!config.hasPath(Artifacts)) Success(Nil)
-        else {
-          Result.traverse(config.getObject(Artifacts).toConfig.nested(obtFile)) { case (name, artifactConfig) =>
-            Result
-              .tryWith(obtFile, artifactConfig) {
-                val tpe = artifactConfig.getString(TypeStr)
-                val ext = artifactConfig.stringOrDefault(Ext, tpe)
-                Success(IvyArtifact(name, tpe, ext))
-              }
-              .withProblems(artifactConfig.checkExtraProperties(obtFile, Keys.artifactConfig))
-          }
-        }
-
-      def loadVersion(obtFile: ObtFile, config: Config): Option[String] = {
-        val depVersion = // allow no version config for multiSource dependencies
-          if (obtFile.path == JvmDependenciesConfig.path) config.optionalString(Version)
-          else Some(config.getString(Version))
-        if (isMaven) depVersion
-        else
-          depVersion.map { v =>
-            scalaMajorVersion match { // special case for AFS lib when scala = true)
-              case Some(scalaVer) => afsScalaVersion(v, scalaVer)
-              case None           => v
-            }
-          }
-      }
-
-      def loadResolvers(
-          obtFile: ObtFile,
-          config: Config,
-          predefinedResolvers: Option[Seq[String]]): Result[Seq[String]] = Result.tryWith(obtFile, config) {
-        val (validNames, invalidNames) = predefinedResolvers match {
-          case Some(userDefined) =>
-            val (validNames, invalidNames) =
-              userDefined.partition(str => loadedResolvers.allResolvers.exists(r => r.name == str))
-            (validNames, invalidNames)
-          case None =>
-            val preDefinedIvyRepos = loadedResolvers.defaultIvyResolvers
-            val preDefinedMavenRepos = loadedResolvers.defaultMavenResolvers
-            if (isMaven && preDefinedMavenRepos.nonEmpty) (preDefinedMavenRepos.map(_.name), Nil)
-            else (preDefinedIvyRepos.map(_.name), Nil)
-        }
-        Success(validNames).withProblems(invalidNames.map(invalid =>
-          Error(s"resolver name $invalid is invalid!", obtFile, config.origin().lineNumber())))
-      }
-
-      def loadBaseLibrary(fullConfig: Config) = {
-        for {
-          artifactExcludes <- readExcludes(fullConfig, obtFile)
-          artifacts <- loadArtifacts(fullConfig)
-          version = loadVersion(obtFile, fullConfig).getOrElse("")
-          predefinedResolvers = config.optionalStringList(Resolvers)
-          resolvers <- loadResolvers(obtFile, config, predefinedResolvers)
-        } yield DependencyDefinition(
-          group = group,
-          name = if (isMaven) fullConfig.stringOrDefault("name", default = name) else name,
-          version = version,
-          kind = kind,
-          configuration =
-            fullConfig.stringOrDefault(Configuration, default = if (isMaven) "" else DefaultConfiguration),
-          classifier = config.optionalString(Classifier),
-          excludes = artifactExcludes,
-          variant = None,
-          resolvers = resolvers,
-          transitive = fullConfig.booleanOrDefault(Transitive, default = true),
-          force = fullConfig.booleanOrDefault(Force, default = false),
-          line = config.origin().lineNumber(),
-          keySuffix = fullConfig.stringOrDefault(KeySuffix, default = ""),
-          containsMacros = fullConfig.booleanOrDefault(ContainsMacros, default = false),
-          isScalacPlugin = fullConfig.booleanOrDefault(IsScalacPlugin, default = false),
-          ivyArtifacts = artifacts,
-          isMaven = isMaven,
-          isAgent = fullConfig.booleanOrDefault(IsAgentKey, default = false),
-          isExtraLib = isExtraLib
-        )
-      }
-
-      val defaultLib = loadBaseLibrary(config)
-        .withProblems(config.checkExtraProperties(obtFile, Keys.dependencyDefinition))
-
-      def loadVariant(variant: Config, name: String): Result[DependencyDefinition] = {
-        val reason = if (variant.hasPath(Reason)) variant.getString(Reason) else ""
-        val variantReason = Variant(name, reason)
-
-        loadBaseLibrary(variant.withFallback(config))
-          .map(_.copy(variant = Some(variantReason), line = variant.origin().lineNumber()))
-          .withProblems(variant.checkExtraProperties(obtFile, Keys.variantDefinition))
-      }
-
-      val configurationVariants =
-        if (!config.hasPath(Configurations)) Success(Nil)
-        else {
-          Result
-            .traverse(config.getStringList(Configurations).asScala.to(Seq)) { config =>
-              val variant = Variant(config, "Additional config to use", configurationOnly = true)
-              defaultLib.map(_.copy(configuration = config, variant = Some(variant)))
-            }
-            .withProblems(OrderingUtils.checkOrderingIn(obtFile, _)(OrderingUtils.pathOrdering))
-        }
-
-      val variantsConfigs =
-        if (!config.hasPath(Variants)) Success(Nil)
-        else
-          Result
-            .traverse(config.getObject(Variants).toConfig.nested(obtFile)) { case (name, config) =>
-              loadVariant(config, name)
-            }
-            .withProblems(OrderingUtils.checkOrderingIn(obtFile, _))
-
-      for {
-        dl <- defaultLib
-        cv <- configurationVariants
-        vc <- variantsConfigs
-      } yield Seq(dl) ++ cv ++ vc
-    }
-
-  private def loadGroups(
-      config: Config,
-      dependencies: Iterable[DependencyDefinition],
-      obtFile: ObtFile): Result[Seq[DependencyGroup]] = {
-
-    def validateGroup(name: String, values: Seq[String])(groupValue: ConfigValue) = {
-      val foundDependencies = values.flatMap(dependencyKey => dependencies.find(_.key == dependencyKey))
-      val missingDependencies = values.filterNot(dependencyKey => dependencies.exists(_.key == dependencyKey))
-      val problems = missingDependencies.map { missingDep =>
-        obtFile.errorAt(groupValue, s"Unknown dependency $missingDep")
-      }
-      Success(DependencyGroup(name, foundDependencies), problems)
-    }
-
-    obtFile.tryWith {
-      if (config.hasPath(Groups)) {
-        val groupsConfig = config.getObject(Groups).toConfig
-        Result.sequence(
-          groupsConfig.entrySet.asScala
-            .map { entry =>
-              validateGroup(entry.getKey, groupsConfig.getStringList(entry.getKey).asScala.to(Seq))(entry.getValue)
-            }
-            .to(Seq))
-      } else Success(Nil)
-    }
-  }
-
-  private def duplicatesMessages(
-      definitions: Seq[DependencyDefinition],
-      obtFile: ObtFile): Result[Seq[DependencyDefinition]] = {
-    // we only care about one of the messages, the other is exactly the same
-    val key = definitions.head.key
-    val byNameAndGroup = definitions.groupBy(d => (d.group, d.name))
-    val msg = {
-      val descriptions =
-        byNameAndGroup.keys.map { case (group, name) => s"$Group: '$group' $Name: '$name'" }.mkString("\n")
-      s"Detected conflict for key `$key` in:\n$descriptions\n" +
-        "Please add `keySuffix=...` to one of problematic dependencies."
-    }
-    Failure(definitions.map(d => Error(msg, obtFile, d.line)))
-  }
-
   def versionsAsConfig(deps: Iterable[DependencyDefinition]): Config = {
     def versionConfig(dep: DependencyDefinition): ConfigObject =
       ConfigFactory.empty().root().withValue(Version, ConfigValueFactory.fromAnyRef(dep.version))
@@ -385,204 +113,157 @@ object JvmDependenciesLoader {
       .toConfig
   }
 
-  private def checkForDuplicates(
-      definitions: Seq[DependencyDefinition],
-      obtFile: ObtFile): Result[Seq[DependencyDefinition]] =
-    definitions.size match {
-      case 1 => Success(definitions)
-      case _ => duplicatesMessages(definitions, obtFile)
-    }
-
-  private def loadNativeDeps(root: Config, obtFile: ObtFile): Result[Map[String, NativeDependencyDefinition]] = {
-    val nativeDeps = if (root.hasPath(NativeDependencies)) {
-      obtFile.tryWith(root.getValue(NativeDependencies)) {
-        val config = root.getConfig(NativeDependencies)
-        Result
-          .traverse(config.keys(obtFile)) { key =>
-            val value = config.getValue(key)
-            obtFile.tryWith(value) {
-              value.valueType match {
-                case ConfigValueType.LIST =>
-                  Success(
-                    key -> NativeDependencyDefinition(
-                      line = value.origin.lineNumber,
-                      name = key,
-                      paths = config.getStringList(key).asScala.to(Seq),
-                      extraPaths = Nil
-                    ))
-                case ConfigValueType.OBJECT =>
-                  val depCfg = config.getConfig(key)
-                  Success(
-                    key -> NativeDependencyDefinition(
-                      line = value.origin.lineNumber,
-                      name = key,
-                      paths = depCfg.stringListOrEmpty("paths"),
-                      extraPaths = depCfg.stringListOrEmpty("extraFiles").map(toAsset)
-                    )
-                  )
-                    .withProblems(depCfg.checkExtraProperties(obtFile, Keys.nativeDependencyDefinition))
-                case other =>
-                  obtFile
-                    .failure(value, s"Native dependency definition should be string or object; got '$other'")
-              }
-            }
-          }
-          .map(_.toMap)
-      }
-    } else Success(Map.empty[String, NativeDependencyDefinition])
-    nativeDeps.withProblems(ds => OrderingUtils.checkOrderingIn(obtFile, ds.values.to(Seq)))
-  }
-
-  private def checkSingleSourceDeps(
-      loadedDeps: Seq[DependencyDefinition],
-      obtFile: ObtFile): Result[Seq[DependencyDefinition]] = Result.unwrap(for {
-    (_, definitions) <- SuccessSeq(loadedDeps.groupBy(_.key).to(Seq))
-    checkedDefs <- ResultSeq(checkForDuplicates(definitions, obtFile))
-  } yield checkedDefs)
-
-  private def loadExtraLibs(
-      depsConfig: Config,
-      obtFile: ObtFile,
-      isMavenConfig: Boolean,
-      loadedResolvers: ResolverDefinitions,
-      scalaMajorVersion: Option[String]): Result[Seq[DependencyDefinition]] =
-    if (depsConfig.hasPath(ExtraLibs)) {
-      val extraLibOccurrences = depsConfig.getObject(ExtraLibs).toConfig
-      loadLocalDefinitions(
-        extraLibOccurrences,
-        ExtraLibs,
-        ExtraLibDefinition,
-        obtFile,
-        isMavenConfig,
-        loadedResolvers = loadedResolvers,
-        isExtraLib = true,
-        scalaMajorVersion = scalaMajorVersion
-      )
-    } else Success(Nil)
-
-  private def loadMultiSourceDeps(
-      singleSourceDep: Option[JvmDependencies],
-      jvmDepsConfig: Config,
-      obtFile: ObtFile,
-      loadedResolvers: ResolverDefinitions,
-      scalaMajorVersion: Option[String]): Result[Option[MultiSourceDependencies]] =
-    singleSourceDep match {
-      case Some(singleSource) =>
-        val multiSourceConfig = jvmDepsConfig.getObject(Dependencies).toConfig
-        for {
-          multiSourceDeps <- MultiSourceDependenciesLoader.load(
-            multiSourceConfig,
-            LocalDefinition,
-            obtFile,
-            loadedResolvers,
-            scalaMajorVersion)
-          checked <- MultiSourceDependenciesLoader.checkDuplicates(
-            obtFile,
-            multiSourceDeps,
-            singleSource.dependencies ++ singleSource.mavenDependencies)
-        } yield Some(checked)
-      case None => Success(None)
-    }
-
-  private def toAsset(s: String): Asset = Asset(FileSystems.getDefault, s)
-
-  private def resolveFromConfig(
-      config: Config,
-      obtFile: ObtFile,
-      useMavenLibs: Boolean,
-      isMavenConfig: Boolean,
-      singleSourceDep: Option[JvmDependencies],
-      loadedResolvers: ResolverDefinitions,
-      scalaMajorVersion: Option[String]
-  ): Result[JvmDependencies] = {
-    for {
-      globalExcludes <- readExcludes(config, obtFile, allowIvyConfiguration = true)
-      globalSubstitutions <- readSubstitutions(config, obtFile)
-      localDefinitions <-
-        if (singleSourceDep.isDefined) Success(Nil)
-        else
-          loadLocalDefinitions(
-            config.getObject(Dependencies).toConfig,
-            Dependencies,
-            LocalDefinition,
-            obtFile,
-            isMavenConfig,
-            loadedResolvers,
-            scalaMajorVersion = scalaMajorVersion)
-      extraLibDefinitions <- loadExtraLibs(config, obtFile, isMavenConfig, loadedResolvers, scalaMajorVersion)
-      mavenDefs <- loadMavenDefinition(config, isMavenConfig, useMavenLibs)
-      nativeDeps <- loadNativeDeps(config, obtFile)
-      all = localDefinitions ++ extraLibDefinitions
-      deps <- checkSingleSourceDeps(all, obtFile)
-      groups <- loadGroups(config, deps, obtFile)
-      multiSourceDependencies <- loadMultiSourceDeps(
-        singleSourceDep,
-        config,
-        obtFile,
-        loadedResolvers,
-        scalaMajorVersion)
-    } yield JvmDependencies(
-      dependencies = if (isMavenConfig) Nil else deps,
-      mavenDependencies = if (isMavenConfig) deps else Nil,
-      multiSourceDependencies = multiSourceDependencies,
-      nativeDependencies = nativeDeps,
-      groups = groups,
-      globalExcludes = globalExcludes,
-      globalSubstitutions = globalSubstitutions,
-      mavenDefinition = Option(mavenDefs),
-      scalaMajorVersion
-    )
-  }
-
   def load(
       centralConfiguration: ProjectProperties,
       loader: ObtFile.Loader,
+      workspace: WorkspaceStructure,
       useMavenLibs: Boolean,
       scalaMajorVersion: Option[String],
-      loadedResolvers: ResolverDefinitions): Result[JvmDependencies] = {
+      loadedResolvers: ResolverDefinitions
+  ): Result[JvmDependencies] = {
 
-    def getCentralDependencies(
-        topLevelConfig: TopLevelConfig,
-        singleSourceDep: Option[JvmDependencies] = None): Result[JvmDependencies] = topLevelConfig.tryWith {
-      def missingMsg(isError: Boolean): Result[JvmDependencies] =
-        Success(
-          JvmDependencies.empty,
-          Seq(Message(s"OBT file missing: ${topLevelConfig.path}", topLevelConfig, isError = isError))
-        )
+    val afsLoader =
+      new LegacyAfsDependenciesLoader(centralConfiguration, loadedResolvers, scalaMajorVersion)
+    val mavenLoader =
+      new LegacyMavenDependenciesLoader(centralConfiguration, loadedResolvers, scalaMajorVersion, useMavenLibs)
+    val buildDepsLoader =
+      new LegacyBuildDependenciesLoader(centralConfiguration, loadedResolvers, scalaMajorVersion)
 
-      val (checkingKeys, isMavenConfig) = topLevelConfig match {
-        case MavenDependenciesConfig => (Keys.mavenDependenciesFile, true)
-        case JvmDependenciesConfig   => (Keys.jvmDependenciesFile, false)
-        case _                       => (Keys.dependenciesFile, false)
+    def loadMultiSourceDeps(conf: Config, file: DependencyConfig, key: String): Result[MultiSourceDependencies] =
+      if (conf.hasPath(key))
+        MultiSourceDependenciesLoader.load(conf.getConfig(key), file, loadedResolvers, scalaMajorVersion)
+      else
+        Success(MultiSourceDependencies(Nil)).withProblems(Seq(Warning(s"OBT file missing: ${file.path}", file)))
+
+    def loadDependencySets(variantSets: Set[VariantSet]): Result[Set[DependencySet]] = {
+      val configFiles = workspace.dependencySets.to(Seq)
+
+      def depSet(id: DependencySetId, file: DependencySetConfig, config: Config): Result[DependencySet] = {
+        val hasDefaultVariant = config.hasPath(Keys.DefaultVariant)
+        val hasJvmDeps = config.hasPath(JvmDependenciesKey)
+        if (hasDefaultVariant && hasJvmDeps) {
+          val msg = s"Cannot have both ${Keys.DefaultVariant} and $JvmDependenciesKey for the same dependency set"
+          Failure(Seq(Error(msg, file, 0)))
+        } else if (hasDefaultVariant) {
+          val defaultVariant = config.getString(Keys.DefaultVariant)
+          val variant = variantSets.find(_.id.name == defaultVariant) match {
+            case Some(v) =>
+              Success(v)
+            case None =>
+              Failure(Seq(file.errorAt(config.getValue(Keys.DefaultVariant), s"Variant set $defaultVariant not found")))
+          }
+          val ds = for {
+            v <- variant
+            boms <- loadBoms(config, file)
+          } yield DependencySet(id, v.dependencies, boms)
+          ds.withProblems(config.checkExtraProperties(file, Keys.dependencySetVariant))
+        } else {
+          val ds = for {
+            deps <- loadMultiSourceDeps(config, file, JvmDependenciesKey)
+            boms <- loadBoms(config, file)
+          } yield DependencySet(id, deps, boms)
+          ds.withProblems(config.checkExtraProperties(file, Keys.dependencySet))
+        }
       }
 
-      if (loader.exists(topLevelConfig))
+      val dependencySets = configFiles.map { case (id, file) =>
         for {
-          conf <- loader(topLevelConfig)
-          deps <- resolveFromConfig(
-            conf.withFallback(centralConfiguration.config).resolve(),
-            topLevelConfig,
-            useMavenLibs,
-            isMavenConfig,
-            singleSourceDep,
-            loadedResolvers,
-            scalaMajorVersion)
-            .withProblems(conf.checkExtraProperties(topLevelConfig, checkingKeys))
-        } yield deps
-      else
-        topLevelConfig match {
-          case DependenciesConfig      => missingMsg(isError = true) // dependencies.obt is required
-          case MavenDependenciesConfig => missingMsg(isError = false) // maven-dependencies.obt is optional
-          case _                       => missingMsg(isError = false) // rest src/dependencies/*.obt are optional
-        }
+          config <- loader(file)
+          dependencySet <- depSet(id, file, config.withFallback(centralConfiguration.config).resolve())
+        } yield dependencySet
+      }
+      Result.sequence(dependencySets).map(_.toSet)
     }
 
-    for {
-      deps <- getCentralDependencies(DependenciesConfig)
-      mavenDeps <- getCentralDependencies(MavenDependenciesConfig)
-      buildDeps <- getCentralDependencies(BuildDependenciesConfig)
-      singleSourceDeps = deps ++ mavenDeps ++ buildDeps
-      multipleSourceDeps <- getCentralDependencies(JvmDependenciesConfig, Some(singleSourceDeps))
-    } yield deps ++ mavenDeps ++ buildDeps ++ multipleSourceDeps
+    def loadVariantSets: Result[Set[VariantSet]] = {
+      val configFiles = workspace.variantSets.to(Seq)
+      val variantSets = configFiles.map { case (id, file) =>
+        for {
+          config <- loader(file)
+            .map(_.withFallback(centralConfiguration.config).resolve())
+            .withProblems(_.checkExtraProperties(file, Keys.variantSet))
+          deps <- loadMultiSourceDeps(config, file, JvmDependenciesKey)
+          boms <- loadBoms(config, file)
+        } yield VariantSet(id, deps, boms)
+      }
+      Result.sequence(variantSets).map(_.toSet)
+    }
+
+    def loadBoms(config: Config, file: SetConfig): Result[Seq[DependencyDefinition]] =
+      if (config.hasPath(Keys.Boms)) {
+        DependencyLoader.loadLocalDefinitions(
+          config.getConfig(Keys.Boms),
+          Keys.Boms,
+          LocalDefinition,
+          file,
+          isMaven = true,
+          loadedResolvers
+        )
+      } else Success(Nil)
+
+    val jvmDependencies = for {
+      afsDeps <- afsLoader.load(loader)
+      mavenDeps <- mavenLoader.load(loader)
+      buildDeps <- buildDepsLoader.load(loader)
+      jvmConfig <- loader(JvmDependenciesConfig)
+        .map(_.withFallback(centralConfiguration.config).resolve())
+        .withProblems(_.checkExtraProperties(JvmDependenciesConfig, Keys.jvmDependenciesFile))
+      multipleSourceDeps <- loadMultiSourceDeps(jvmConfig, JvmDependenciesConfig, Dependencies)
+      globalExcludes <- DependencyLoader.loadExcludes(jvmConfig, JvmDependenciesConfig, allowIvyConfiguration = true)
+      globalSubstitutions <- loadSubstitutions(jvmConfig, JvmDependenciesConfig)
+      extraLibs <- DependencyLoader.loadExtraLibs(
+        jvmConfig,
+        JvmDependenciesConfig,
+        isMavenConfig = false,
+        loadedResolvers,
+        scalaMajorVersion
+      )
+      variantSets <- loadVariantSets
+      dependencySets <- loadDependencySets(variantSets)
+    } yield {
+      def toMultiSource(ds: Seq[DependencyDefinition], file: DependencyConfig) =
+        if (file != MavenDependenciesConfig) ds.map(d => MultiSourceDependency(None, AfsOnly(d), file, d.line))
+        else ds.map(d => MultiSourceDependency(None, Unmapped(d), file, d.line))
+
+      JvmDependenciesImpl(
+        MultiSourceDependencies(
+          multipleSourceDeps.all ++
+            toMultiSource(extraLibs, JvmDependenciesConfig) ++
+            toMultiSource(afsDeps.dependencies ++ afsDeps.extraLibs, DependenciesConfig) ++
+            toMultiSource(mavenDeps.dependencies ++ mavenDeps.extraLibs, MavenDependenciesConfig) ++
+            toMultiSource(buildDeps.dependencies, BuildDependenciesConfig)
+        ),
+        dependencySets,
+        variantSets,
+        afsDeps.nativeDependencies,
+        afsDeps.groups,
+        globalExcludes ++ afsDeps.excludes ++ mavenDeps.excludes,
+        globalSubstitutions,
+        mavenDeps.mavenDefinition,
+        scalaMajorVersion
+      )
+    }
+
+    jvmDependencies.withProblems(ds => checkDuplicates(ds))
   }
+
+  private def checkDuplicates(deps: JvmDependencies): Seq[Error] = {
+    val duplicates = deps
+      .dependenciesByKey(deps.dependencies, deps.groups, onlyMavenKeys = false)
+      .map { case (key, file, line, _) => key -> (file, line) }
+      .groupBy(_._1)
+      .collect { case (k, vs) if vs.size > 1 => k -> vs.map(_._2) }
+
+    val errors = for {
+      (dupeKey, dupes) <- duplicates
+      dupe <- dupes
+      (dupeFile, dupeLine) = dupe
+    } yield {
+      // pick an arbitrary other duplicate to reference in error message
+      val (otherFile, otherLine) = if (dupe == dupes.head) dupes(1) else dupes.head
+      Error(duplicationMsg(dupeKey, otherFile, otherLine), dupeFile, dupeLine)
+    }
+    errors.to(Seq)
+  }
+
 }

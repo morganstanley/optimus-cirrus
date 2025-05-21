@@ -15,6 +15,6 @@ import optimus.platform.annotations.deprecating
 
 // only used so that we can access package private java method
 private[optimus] object CacheConfigUtils {
-  @deprecating("Use resetCachePolicies instead")
+  @deprecating("Use GraphInputConfiguration.resetCachePolicies instead")
   private[optimus] def undoExternalCacheConfig(): Unit = NodeTrace.undoExternalCacheConfig()
 }

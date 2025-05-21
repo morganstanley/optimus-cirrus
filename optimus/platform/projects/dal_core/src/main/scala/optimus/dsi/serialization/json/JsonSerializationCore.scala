@@ -165,6 +165,7 @@ trait JsonSerializationBase {
     val IndexDefTypes = "it"
     val UniqueIndexDefTypes = "ut"
     val LinkageDefTypes = "lt" // this is in the scope of linkedTypes doc
+    val MonoTemporal = "mt"
 
     val ClassNameId = "cnid"
     val TypesId = "tid"
@@ -286,12 +287,17 @@ trait JsonSerialization[T] extends JsonSerializationBase {
   def toJson(p: T): String = mapper.writeValueAsString(toJsonMap(p))
   def toJsonBytes(p: T): Array[Byte] = mapper.writeValueAsBytes(toJsonMap(p))
   def toJsonBytesSeq(p: Seq[T]): Array[Byte] = mapper.writeValueAsBytes(p.map(toJsonMap))
+  def toJsonBytesOption(p: Option[T]): Array[Byte] = mapper.writeValueAsBytes(p.map(toJsonMap))
   def toJsonPrettyPrint(p: T): String = mapper.writerWithDefaultPrettyPrinter.writeValueAsString(toJsonMap(p))
   def toJsonNode(p: T): JsonNode = mapper.valueToTree(p)
   def fromJson(json: String): T = fromJsonMap(readJsonMap(json))
   def fromJsonBytes(bytes: Array[Byte]): T = fromJsonMap(mapper.readValue(bytes, classOf[Map[String, Any]]))
   def fromJsonBytesSeq(bytes: Array[Byte]): Seq[T] = {
     val elements = mapper.readValue(bytes, classOf[Seq[Map[String, Any]]])
+    elements.map(fromJsonMap)
+  }
+  def fromJsonBytesOption(bytes: Array[Byte]): Option[T] = {
+    val elements = mapper.readValue(bytes, classOf[Option[Map[String, Any]]])
     elements.map(fromJsonMap)
   }
   def fromJsonNode[V](json: JsonNode, v: Class[V]): V = mapper.treeToValue(json, v)

@@ -11,12 +11,16 @@
  */
 package optimus.buildtool.format
 
-import java.io.BufferedInputStream
+import optimus.buildtool.files.JsonAsset
+import optimus.buildtool.utils.AssetUtils
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.CodecMakerConfig
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
-import java.util.zip.GZIPInputStream
 
 trait PortableCompilationMessage {
   def filePath: Option[String]
@@ -57,6 +61,9 @@ object PortableCompilationMessage {
 
   private final case class MessageFile(messages: Seq[CompilationMessage])
 
+  implicit private val MessageFileJsonValueCodec: JsonValueCodec[MessageFile] =
+    JsonCodecMaker.make(CodecMakerConfig.withSkipUnexpectedFields(true))
+
   private var messageMapTime = 0L
   private var prefixToMessagePath: Map[String, Set[Path]] = Map.empty
 
@@ -71,18 +78,8 @@ object PortableCompilationMessage {
    *   The compilation message, assuming there is no error.
    */
   def readMessageFile(path: Path): Seq[PortableCompilationMessage] = {
-    var zIn: GZIPInputStream = null
-    try {
-      val in = Files.newInputStream(path)
-      zIn = new GZIPInputStream(new BufferedInputStream(in))
-      JsonSupport.readValue[MessageFile](zIn).messages
-    } catch {
-      case t: Throwable =>
-        logToStrato(s"Failed to read from $path ${t.getStackTrace.mkString(";")}")
-        Seq.empty
-    } finally {
-      if (zIn ne null) zIn.close()
-    }
+
+    AssetUtils.readJson[MessageFile](JsonAsset(path), unzip = true).messages
   }
 
   /**

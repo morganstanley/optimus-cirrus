@@ -78,7 +78,7 @@ class CsvReporter(obtConfig: ObtConfig) {
   }
 
   @async private def writeCsvfile[T](dir: Directory, entities: Iterable[T], fileName: String)(
-      writer: SimpleCsvWriter[T]): Option[FileAsset] =
+      writer: SimpleCsvWriter[T]): Option[FileAsset] = {
     if (entities.isEmpty) None
     else
       Some {
@@ -87,6 +87,7 @@ class CsvReporter(obtConfig: ObtConfig) {
         writer.writeCsvFile(fileAsset.path.toFile, entities)
         fileAsset
       }
+  }
 }
 
 object CsvReporter {

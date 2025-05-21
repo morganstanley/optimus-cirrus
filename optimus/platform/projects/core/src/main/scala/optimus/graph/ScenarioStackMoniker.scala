@@ -11,6 +11,7 @@
  */
 package optimus.graph
 
+import optimus.core.MonitoringBreadcrumbs
 import optimus.dist.HasDmcBinaryIdentity
 import optimus.graph.cache.CacheSelector.Moniker
 import optimus.platform.EvaluationContext
@@ -111,6 +112,15 @@ private[optimus] object ScenarioStackMoniker {
     } else {
       if (ss.isTrackingIndividualTweakUsage)
         throw new GraphException("Cannot distribute tracking scenarios")
+      else if (ss.isRecordingTweakUsage) {
+        // TODO (OPTIMUS-74952): We currently don't have a reliable serialization approach for recording tweakable
+        val owner = ss.tweakableListener match {
+          case listener: RecordingTweakableListener => listener.trackingProxy
+          case _                                    => null
+        }
+        val current = EvaluationContext.currentNodeOrNull
+        MonitoringBreadcrumbs.serializingXScenarioStack(owner, current)
+      }
       val cleanedUpFlags = ss.flags & ~EvaluationState.ENGINE_PROPAGATION_CLEAR_FLAGS
       val privateCache = ss.cacheSelector.toMoniker
 

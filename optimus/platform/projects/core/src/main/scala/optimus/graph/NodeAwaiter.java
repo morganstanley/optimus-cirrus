@@ -34,9 +34,8 @@ public abstract class NodeAwaiter {
 
   public final void setWaitingOn(NodeTask node) {
     // OGScheduler.wait() will walk the forward dependency chain and setting awaiter will expose to
-    // scheduling
-    // The node has to be ready to run at this point. This check is parallel to the one in
-    // OGSchedulerContext.enqueue
+    // scheduling. The node has to be ready to run at this point. This check is parallel to the one
+    // in OGSchedulerContext.enqueue.
     if (Settings.schedulerAsserts && node != null && node.scenarioStack() == null)
       throw new GraphInInvalidState();
     _waitingOn = node;

@@ -101,7 +101,10 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       case cd: ClassDef if isEntity(cd.symbol) =>
         super.transform(
           deriveClassDef(cd)(deriveTemplate(_) { body =>
-            val newBody = rewriteWithValBackingFields(cd, body)
+            // Generate static ctor to init VarHandles for valSyms:
+            val withLookup = generateLookupForVarHandles(cd, body)
+            val withStatics = generateStatics(cd, withLookup)
+            val newBody = rewriteWithValBackingFields(cd, withStatics)
             // We generate (if needs to be) argsHash and argsEquals methods
             // We also generate private (as opposed to private[this]) accessors for private[this] ValDef so
             // that we can access them in equals method!
@@ -161,6 +164,61 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         deriveDefDef(dd)(_ => newRhs)
 
       case _ => super.transform(tree)
+    }
+
+    private[this] def generateLookupForVarHandles(cd: ClassDef, body: List[Tree]): List[Tree] = {
+      if (cd.symbol.isTrait) body
+      else {
+        var lookupAdded = false
+        val lookup = flatMapConserve(body) {
+          case vd: ValDef
+              if !lookupAdded && (vd.symbol.hasAttachment[Stored] || vd.symbol.hasAttachment[Node]) &&
+                needsLazyUnpickling(vd.symbol) =>
+            val valSym = vd.symbol
+            val propName = TermName("lookup")
+            val storableClass = valSym.enclClass
+            val vhSymbol = storableClass
+              .newValue(propName, cd.pos)
+              .setFlag(STATIC | FINAL | PRIVATE | SYNTHETIC)
+              .setInfoAndEnter(LookupClass.tpe)
+            val rhs = q"java.lang.invoke.MethodHandles.lookup()"
+            val tree = localTyper.typedPos(cd.pos) { ValDef(vhSymbol, rhs) }
+            lookupAdded = true
+            tree :: vd :: Nil
+          case t => t :: Nil
+        }
+        lookup
+      }
+    }
+
+    private[this] def generateStatics(cd: ClassDef, body: List[Tree]): List[Tree] = {
+      if (cd.symbol.isTrait) {
+        body
+      } else {
+        flatMapConserve(body) {
+          case vd: ValDef
+              if (vd.symbol.hasAttachment[Stored] || vd.symbol.hasAttachment[Node]) &&
+                needsLazyUnpickling(vd.symbol) =>
+            val valSym = vd.symbol
+            val propName = valSym.name.toTermName.getterName
+            val storableClass = valSym.enclClass
+            val vhSymbol = storableClass
+              .newValue(mkVarHandleName(propName), cd.pos)
+              .setFlag(STATIC | FINAL | PRIVATE | SYNTHETIC)
+              .setInfoAndEnter(VarHandleClass.tpe)
+            val rhs =
+              q"${This(cd.symbol)}.lookup.findVarHandle(classOf[${cd.symbol.tpe}], ${mkImplName(propName).toString}, classOf[Any])"
+            val tree = localTyper.typedPos(cd.pos) { ValDef(vhSymbol, rhs) }
+            tree :: vd :: Nil
+          case t =>
+            t :: Nil
+        }
+      }
+    }
+
+    private[this] def needsLazyUnpickling(valSym: Symbol) = {
+      val storedInfo = valSym.attachments.get[Stored]
+      storedInfo.exists(_.lazyLoaded)
     }
 
     // Generates val foo$impl and appropriate getters and setters for any stored or node vals, and
@@ -251,7 +309,9 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         alarm(OptimusNonErrorMessages.DEALIASING, vd.pos, vd.symbol.fullName, vd.symbol.alias.fullName)
         vd.symbol.asTerm.referenced = NoSymbol
         vd :: Nil
-
+      case vd: DefDef if vd.symbol.hasAnnotation(StoredAnnotation) && !vd.symbol.enclClass.isTrait =>
+        val rhs = q"${This(vd.symbol.enclClass)}.${mkImplName(vd.name)}"
+        localTyper.typedPos(vd.pos) { DefDef(vd.symbol, rhs) } :: Nil
       case t =>
         t :: Nil
     }
@@ -277,7 +337,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       if (valSym.isTerm && valSym.alias != NoSymbol) valSym.asTerm.referenced = NoSymbol
 
       val valType = if (needsLazyUnpickling) {
-        appliedType(Node.tpe, valSym.tpe.resultType :: Nil)
+        if (isTrait) appliedType(Node.tpe, valSym.tpe.resultType :: Nil) else AnyRefTpe
       } else
         valSym.tpe.resultType
 
@@ -290,6 +350,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       // <synthetic> private def foo$impl: Int = { this.foo$backing }
       val backingValDef: Tree = {
         // For classes, synthesize:
+        //   <synthetic> private[this] static final var foo$vh: VarHandle
         //   @s <synthetic> private[this] val foo$impl: X = ...
         // For traits:
         //   @s @backingStore <synthetic> <accessor> <stable> private[this] val foo$backing: X = ...
@@ -313,12 +374,21 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
               .addAnnotation(BackingStoreAnnotation)
               .applyIf(isStored)(_.addAnnotation(AnnotationInfo(StoredAnnotation.tpe, Nil, Nil)))
               .setInfoAndEnter(NullaryMethodType(valType.widen))
-          else
-            storableClass
-              .newValue(dollarImplName.localName, pos)
-              .setFlag(~(PARAMACCESSOR | ACCESSOR) & (valSym.flags | SYNTHETIC))
+          else {
+            val impl =
+              if (needsLazyUnpickling) {
+                // need $impl to be a var for entities so that we can write to it as the state
+                // transitions from entityReference to LPR to entity itself by the pluginHelper.resolveEntity*
+                // methods.
+                storableClass.newVariable(dollarImplName.localName, pos).addAnnotation(VolatileAttr)
+              } else {
+                storableClass.newValue(dollarImplName.localName, pos)
+              }
+            impl
+              .setFlag(~(PARAMACCESSOR | ACCESSOR) & (valSym.flags | SYNTHETIC | LOCAL))
               .applyIf(isStored)(_.addAnnotation(AnnotationInfo(StoredAnnotation.tpe, Nil, Nil)))
               .setInfoAndEnter(valType.widen)
+          }
 
         for (orgAnnotation <- valSym.annotations) {
           if (orgAnnotation.symbol.isJavaAnnotation && !OptimusJavaAnnos.contains(orgAnnotation.symbol))
@@ -332,14 +402,21 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
           if (needsLazyUnpickling) {
             // TODO (OPTIMUS-0000): Can we just reuse genStoredPropertyLoad(..) here?
             if (isEntity(storableClass)) {
-              val propInfo = Select(gen.mkAttributedRef(storableClass.companionModule), propName)
-              New(
-                TypeTree(appliedType(AlreadyCompletedPropertyNode.tpe, valSym.tpe.resultType :: Nil)),
-                List(List(rhs, This(storableClass), propInfo)))
+              if (isTrait) {
+                // @stored @entity trait
+                val propInfo = Select(gen.mkAttributedRef(storableClass.companionModule), propName)
+                New(
+                  TypeTree(appliedType(AlreadyCompletedPropertyNode.tpe, valSym.tpe.resultType :: Nil)),
+                  List(List(rhs, This(storableClass), propInfo)))
+              } else {
+                rhs // @stored @entity class
+              }
             } else {
+              // embeddable?
               New(TypeTree(appliedType(AlreadyCompletedNode.tpe, valSym.tpe.resultType :: Nil)), List(List(rhs)))
             }
           } else {
+            // No lazy pickling
             rhs
           }
 
@@ -348,25 +425,32 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         localTyper.typedPos(pos) { ValDef(backingValSym, backingValRhs) }
       }
 
-      // Backing getter is always foo$impl
-      val backingGetterName = dollarImplName.toTermName.getterName
-      val backingGetterFlags = (SYNTHETIC | PRIVATE) & ~(OVERRIDE | STABLE)
-      val backingGetter = mkGetter(backingValDef, backingGetterFlags, backingGetterName, valType)
-      if (!isTrait)
-        backingGetter.symbol.setFlag(ACCESSOR)
+      val (backingGetters, getterSym) = if (needsLazyUnpickling && !isTrait) {
+        // For vals whose type is Entity, we generate foo$Impl, foo$queued and foo$newNode
+        mkGettersForEntityAccessors(backingValDef, valSym, SYNTHETIC)
+      } else {
+        // For vals whose type is not Entity, backing getter is always foo$impl
+        val backingGetterName = dollarImplName.toTermName.getterName
+        val backingGetterFlags = (SYNTHETIC | PRIVATE) & ~(OVERRIDE | STABLE)
+        val backingGetter = mkGetter(backingValDef, backingGetterFlags, backingGetterName, valType)
+        if (!isTrait)
+          backingGetter.symbol.setFlag(ACCESSOR)
+        if (valSym.isParamAccessor) backingGetter.symbol.setFlag(PARAMACCESSOR)
+        (List(backingGetter), backingGetter.symbol)
+      }
+
       // Switch the param accessor from `def foo` to the generated `def foo$impl`. Importantly, we don't
       // reset the flag on valSym itself, since the hacky way we get the scala constructors phase to move
       // the initialisation of backingValDef into the constructor relies on the paramaccessor flag on the old
       // val (see comment in rewriteWithValBackingFields for more details).
       if (valSym.isParamAccessor) {
         valSym.getterIn(valSym.owner).resetFlag(PARAMACCESSOR)
-        backingGetter.symbol.setFlag(PARAMACCESSOR)
       }
 
       // backingValDef = val foo$backing (if trait) or foo$impl (if class)
       // backingGetter = def foo$impl
-      val meths = backingValDef :: backingGetter :: Nil
-      (meths, backingGetter.symbol)
+      val meths = backingValDef :: backingGetters
+      (meths, getterSym)
     }
 
     private[this] def generateArgsMethods(classDef: ClassDef, body: List[Tree]): List[Tree] = {
@@ -401,6 +485,7 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
               verifySymbolUsed(classDef, vd.symbol, alias)
             }
             val dd = mkGetter(vd, FINAL | PRIVATE | SYNTHETIC, vd.name.append(names.$4eq))
+            dd.updateAttachment(StoredGetter(true))
             argsMethods = dd :: argsMethods
             dd
 
@@ -449,18 +534,69 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
         entitySymbol.info.decls enter hashSym
         val hashStart =
           if (includeOuter) Apply(PluginSupport.outerHash, gen.mkAttributedThis(entitySymbol) :: Nil) else LIT(1)
-        val hashDef = localTyper.typedPos(pos) { DefDef(hashSym, mkArgsHashT(args, hashStart)) }
+        val hashDef = localTyper.typedPos(pos) { DefDef(hashSym, mkArgsHashT(args, entitySymbol, hashStart)) }
 
         val equalsSym = entitySymbol.newMethod(names.argsEquals, pos).setFlag(OVERRIDE | PROTECTED)
         val argSym = equalsSym.newValueParameter(names.arg, pos).setInfo(EntityClass.tpe)
         equalsSym.setInfo(MethodType(List(argSym), BooleanClass.tpe))
-        entitySymbol.info.decls enter equalsSym
         val equalsDef = localTyper.typedPos(pos) {
           mkArgsEqualsT(argSym, entitySymbol, args, includeOuter).setSymbol(equalsSym)
         }
-
         hashDef :: equalsDef :: Nil
       } else Nil
+    }
+
+    private[this] def mkGettersForEntityAccessors(valDef: Tree, valSym: Symbol, flags: Long): (List[Tree], Symbol) = {
+      val valName = valSym.name.toTermName.getterName
+      val symbol = valDef.symbol
+      val entityCls = symbol.enclClass
+
+      // to generate def foo$impl: X = PluginHelpers.resolveRef(...)
+      val implGetter = entityCls
+        .newMethod(newTermName("" + valName + "$impl"))
+        .setFlag(flags | PRIVATE | (if (valSym.isParamAccessor) PARAMACCESSOR | ACCESSOR else 0L))
+        .setInfo(NullaryMethodType(valSym.tpe))
+      implGetter.setAttachments(implGetter.attachments.addElement(StoredGetter(true)))
+
+      // to generate def foo$queued: NodeFuture[X] = PluginHelpers.resolveRefQueued(...)
+      val queuedGetter = entityCls
+        .newMethod(newTermName("" + valName + "$queued"))
+        .setFlag(flags)
+        .setInfo(NullaryMethodType(appliedType(NodeFuture.tpe, List(valSym.tpe.finalResultType))))
+
+      // to generate def foo#newNode(): Node[X] = PluginHelpers.resolveRefNewNode(...)
+      val newNodeGetter = entityCls
+        .newMethod(newTermName("" + valName + "$newNode"))
+        .setFlag(flags)
+        .setInfo(
+          MethodType(
+            Nil,
+            intersectionType(
+              List(
+                appliedType(Node.tpe, List(valSym.tpe.finalResultType)),
+                appliedType(NodeKey.tpe, List(valSym.tpe.finalResultType))))))
+
+      newNodeGetter.addAnnotation(DefNodeCreatorAnnotation)
+
+      val defs: List[DefDef] = List(
+        ("resolveRef", implGetter),
+        ("resolveRefQueued", queuedGetter),
+        ("resolveRefNewNode", newNodeGetter)
+      ) map { case (helper, getterSym) =>
+        entityCls.info.decls enter getterSym
+        val block = {
+          val expr = gen.mkAttributedRef(symbol)
+          if (entityCls.hasAnnotation(StoredAnnotation) && entityCls.hasAnnotation(EntityAnnotation)) {
+            val valSymName = valSym.name.toTermName.getterName
+            val propInfo = Select(gen.mkAttributedRef(entityCls.companionModule), valSymName)
+            val vhHandle = q"${This(entityCls)}.${mkVarHandleName(valSymName)}"
+            val helperName = newTermName(helper)
+            q"optimus.platform.PluginHelpers.$helperName[${valSym.tpe}](${This(entityCls)}, $vhHandle, $propInfo)"
+          } else expr
+        }
+        localTyper.typedPos(valDef.pos) { DefDef(getterSym, block) }.asInstanceOf[DefDef]
+      }
+      (defs, defs.head.symbol)
     }
 
     private[this] def mkGetter(valDef: Tree, flags: Long, getterName: TermName, tpe: Type = null) = {
@@ -493,7 +629,6 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
       val listOfEquals = List.newBuilder[Tree]
       vals foreach { v =>
         val ts = v.symbol.tpe.resultType.typeSymbol
-        def valueOf(tree: Tree): Tree = if (ts isSubClass Node) Apply(PluginSupport.safeResult, tree :: Nil) else tree
         if (ts != definitions.UnitClass)
           if (ts == definitions.FloatClass) {
             listOfEquals += Apply(
@@ -505,8 +640,8 @@ class RedirectAccessorsComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
               gen.mkAttributedRef(v.symbol) :: gen.mkAttributedSelect(Ident(names.key), v.symbol) :: Nil)
           } else {
             listOfEquals += Apply(
-              Select(valueOf(gen.mkAttributedRef(v.symbol)), nme.EQ),
-              valueOf(gen.mkAttributedSelect(Ident(names.key), v.symbol)) :: Nil)
+              Select(valueOf(q"${This(entitySym)}", entitySym, v.symbol), nme.EQ),
+              valueOf(q"${names.key}", entitySym, v.symbol) :: Nil)
           }
       }
       if (includeOuter)

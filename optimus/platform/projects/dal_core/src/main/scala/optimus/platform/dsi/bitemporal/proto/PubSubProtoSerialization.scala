@@ -66,7 +66,7 @@ object CreatePubSubStreamCommandSerializer
 
   override def deserialize(proto: CreatePubSubStreamProto): CreatePubSubStream = {
     val streamId = proto.getStreamUuid
-    val subscriptions = proto.getSubscriptionsList.asScala.map(fromProto(_))
+    val subscriptions = proto.getSubscriptionsList.asScalaUnsafeImmutable.map(fromProto(_))
     val startTime = if (proto.hasStartTime) Some(fromProto(proto.getStartTime)) else None
     val endTime = if (proto.hasEndTime) Some(fromProto(proto.getEndTime)) else None
     val vtFilterInterval = if (proto.hasVtFilterInterval) Some(fromProto(proto.getVtFilterInterval)) else None
@@ -90,7 +90,7 @@ object ChangeSubscriptionCommandSerializer
   override def deserialize(proto: ChangeSubscriptionProto): ChangeSubscription = {
     val streamId = proto.getStreamUuid
     val changeReqId = proto.getChangeRequestId
-    val addSubs = proto.getAddSubscriptionsList.asScala.map(fromProto(_))
+    val addSubs = proto.getAddSubscriptionsList.asScalaUnsafeImmutable.map(fromProto(_))
     val remSubs = proto.getRemoveSubscriptionIdsList.asScala.map(_.intValue).toSeq
     ChangeSubscription(streamId, changeReqId, addSubs, remSubs)
   }
@@ -304,14 +304,14 @@ object PubSubNotificationResultSerializer
     val txTime = fromProto(proto.getTxTime)
     val writeReqId = if (proto.hasWriteRequestId) Some(proto.getWriteRequestId) else None
     if (proto.getNumberOfOutOfLineNotificationEntries == 0) {
-      val entries = proto.getNotificationsList.asScala.flatMap { subproto =>
+      val entries = proto.getNotificationsList.asScalaUnsafeImmutable.flatMap { subproto =>
         val subId = subproto.getSubId
         val nes = subproto.getNotificationEntriesList.asScala.map(fromProto(_))
         nes.map(ne => PubSubNotificationResult.SimpleEntry(subId, ne))
       }
       DirectPubSubNotificationResult(streamId, writeReqId, txTime, entries)
     } else {
-      val entries = proto.getNotificationsList.asScala.flatMap { subproto =>
+      val entries = proto.getNotificationsList.asScalaUnsafeImmutable.flatMap { subproto =>
         val subId = subproto.getSubId
         subproto.getNotificationEntryReferencesList.asScala.map(r =>
           PubSubNotificationResult.EntryReference(subId, r.getIndex))
@@ -374,14 +374,14 @@ object PubSubNotificationPartialResultSerializer
     val txTime = fromProto(proto.getTxTime)
     val writeReqId = if (proto.hasWriteRequestId) Some(proto.getWriteRequestId) else None
     if (proto.getNumberOfOutOfLineNotificationEntries == 0) {
-      val entries = proto.getNotificationsList.asScala.flatMap { subproto =>
+      val entries = proto.getNotificationsList.asScalaUnsafeImmutable.flatMap { subproto =>
         val subId = subproto.getSubId
         val nes = subproto.getNotificationEntriesList.asScala.map(fromProto(_))
         nes.map(ne => PubSubNotificationResult.SimpleEntry(subId, ne))
       }
       DirectPubSubNotificationPartialResult(streamId, writeReqId, txTime, entries, isLast)
     } else {
-      val entries = proto.getNotificationsList.asScala.flatMap { subproto =>
+      val entries = proto.getNotificationsList.asScalaUnsafeImmutable.flatMap { subproto =>
         val subId = subproto.getSubId
         subproto.getNotificationEntryReferencesList.asScala.map(r =>
           PubSubNotificationResult.EntryReference(subId, r.getIndex))
@@ -516,6 +516,8 @@ object PubSubGlobalEventSerializer
           .build
       case cn: PubSubBrokerConnect    => throw new IllegalArgumentException(s"$cn not expected in request or response")
       case dn: PubSubBrokerDisconnect => throw new IllegalArgumentException(s"$dn not expected in request or response")
+      case td: PubSubTickDelay        => throw new IllegalArgumentException(s"$td not expected in request or response")
+      case to: PubSubTickDelayOver    => throw new IllegalArgumentException(s"$to not expected in request or response")
     }
   }
 }

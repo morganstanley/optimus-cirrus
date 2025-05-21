@@ -14,6 +14,7 @@ package optimus.stratosphere.bootstrap.config;
 import java.util.Collections;
 import java.util.List;
 import com.typesafe.config.Config;
+import optimus.platform.partial.rollout.PartialRollout;
 
 /*
 Example channel format
@@ -40,12 +41,7 @@ public record Channel(
     return new Channel(name, users, autoIncludePercent, conf, description);
   }
 
-  public static int calculateHashChunk(String userId, String channelName) {
-    return Math.abs((channelName + userId).hashCode() % 100); // hash of channel name + user_name
-  }
-
   public boolean checkUserIsAutoIncluded(String userId) {
-    int hashChunk = Channel.calculateHashChunk(userId, name);
-    return hashChunk < autoIncludePercent;
+    return PartialRollout.isEligible(userId, name, autoIncludePercent);
   }
 }

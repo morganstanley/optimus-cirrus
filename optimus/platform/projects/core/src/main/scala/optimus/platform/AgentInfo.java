@@ -38,7 +38,7 @@ public class AgentInfo {
       Breadcrumbs.flush();
       throw new IllegalStateException(
           "EntityAgent version not found - somehow you are missing the "
-              + "'-javaagent:<path to entityagent.jar>' argument - Contact Optimus Graph Team");
+              + "'-javaagent' argument for entityagent - Contact Optimus Graph Team");
     }
     return version;
   }

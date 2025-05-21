@@ -13,7 +13,10 @@ package optimus.buildtool.dependencies
 
 import optimus.buildtool.config.AfsDependencies
 import optimus.buildtool.config.ExternalDependencies
+import optimus.buildtool.config.ExternalDependenciesSource
+import optimus.buildtool.config.ExternalDependency
 import optimus.buildtool.config.MavenDependencies
+import optimus.buildtool.config.ModuleSet
 
 import scala.collection.immutable.Seq
 
@@ -21,21 +24,38 @@ final case class CentralDependencies(
     jvmDependencies: JvmDependencies,
     jdkDependencies: JdkDependencies,
     pythonDependencies: PythonDependencies
-) {
-  lazy val externalDependencies: ExternalDependencies = {
+) extends ExternalDependenciesSource {
+
+  lazy val coreExternalDependencies: ExternalDependencies =
+    externalDependencies(Set.empty, Set.empty)
+
+  lazy val allExternalDependencies: ExternalDependencies =
+    externalDependencies(jvmDependencies.dependencySets, jvmDependencies.variantSets)
+
+  private val dependencySets = jvmDependencies.dependencySets.map(ds => ds.id -> ds).toMap
+  private val variantSets = jvmDependencies.variantSets.map(vs => vs.id -> vs).toMap
+
+  def externalDependencies(ms: ModuleSet): ExternalDependencies =
+    externalDependencies(ms.transitiveNonVariantDependencySets.map(dependencySets), ms.variantSets.map(variantSets))
+
+  private def externalDependencies(
+      dependencySets: Set[DependencySet],
+      variantSets: Set[VariantSet]
+  ): ExternalDependencies = {
     val loadedMultiSourceDeps =
-      jvmDependencies.multiSourceDependencies.getOrElse(MultiSourceDependencies(Seq.empty))
-    val afsMappedDeps = loadedMultiSourceDeps.multiSourceDeps.map(_.asExternalDependency)
-    val unmappedAfsDeps =
-      jvmDependencies.dependencies ++ loadedMultiSourceDeps.afsOnlyDeps.map(_.definition)
-    val unmappedMavenDeps = jvmDependencies.mavenDependencies
-    val mappedMavenDeps = afsMappedDeps.flatMap(_.equivalents).distinct
-    val mixModeMavenDeps = mappedMavenDeps ++ loadedMultiSourceDeps.mavenOnlyDeps.map(_.definition)
-    // only be used for transitive mapping without forced version
-    val noVersionMavenDeps = loadedMultiSourceDeps.noVersionMavenDeps.map(_.definition)
+      jvmDependencies.dependencies +++
+        dependencySets.map(_.dependencies) +++
+        variantSets.map(_.dependencies)
+    val unmappedAfsDeps = loadedMultiSourceDeps.afsOnly
+    val afsMappedDeps = loadedMultiSourceDeps.mapped.map(m => ExternalDependency(m.afs, m.maven))
+
+    val unmappedMavenDeps = loadedMultiSourceDeps.unmapped
+    val mixedModeMavenDeps = loadedMultiSourceDeps.mavenOnly ++ loadedMultiSourceDeps.mapped.flatMap(_.maven)
+
+    val boms = dependencySets.flatMap(_.boms) ++ variantSets.flatMap(_.boms)
 
     val allAfs = AfsDependencies(unmappedAfsDeps, afsMappedDeps)
-    val allMaven = MavenDependencies(unmappedMavenDeps, mixModeMavenDeps, noVersionMavenDeps)
+    val allMaven = MavenDependencies(unmappedMavenDeps, mixedModeMavenDeps, boms.to(Seq))
     ExternalDependencies(allAfs, allMaven)
   }
 }

@@ -18,7 +18,7 @@ public final class FlowControl {
    *
    * @see optimus.platform.PluginHelpers#setCompilerLevelZero()
    */
-  public static void turOffNodeReorder() {}
+  public static void turnOffNodeReorder() {}
   /**
    * Entire @node reordering will assume that all non-immutable functions mutate some global state
    */

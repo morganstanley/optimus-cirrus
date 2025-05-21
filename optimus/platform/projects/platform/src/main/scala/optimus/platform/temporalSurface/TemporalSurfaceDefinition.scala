@@ -13,9 +13,7 @@ package optimus.platform.temporalSurface
 
 import scala.annotation.nowarn
 import java.time.Instant
-
 import optimus.graph.tracking.DependencyTracker
-import optimus.graph.tracking.TemporalDependencyTracker
 import optimus.platform._
 import optimus.platform.temporalSurface.impl._
 import optimus.platform.storable.EntityCompanionBase
@@ -32,10 +30,7 @@ import optimus.utils.MacroUtils.SourceLocation
  * }}}
  */
 object TemporalSurfaceDefinition {
-
-  private[TemporalSurfaceDefinition] def trackingScenario: TemporalDependencyTracker = {
-    new TemporalDependencyTracker(DependencyTracker.requireTopDependencyTracker())
-  }
+  import optimus.graph.tracking.TickableContexts._
 
   object FixedLeaf {
 
@@ -116,7 +111,7 @@ object TemporalSurfaceDefinition {
 
     def apply(matcher: TemporalSurfaceMatcher, tt: Instant, endTt: Instant, tag: Option[String])(implicit
         sourceLocation: SourceLocation): LeafTemporalSurface = {
-      trackingScenario.createTickableLeafTemporalSurface(matcher, tt, endTt, tag, sourceLocation)
+      createTickableLeafTemporalSurface(matcher, tt, endTt, tag, sourceLocation)
     }
   }
 
@@ -138,7 +133,7 @@ object TemporalSurfaceDefinition {
 
     def apply(matcher: TemporalSurfaceMatcher, tt: Instant, endTt: Instant, tag: Option[String])(implicit
         sourceLocation: SourceLocation): TickableTemporalContext = {
-      trackingScenario.createTickableLeafTemporalContext(matcher, tt, endTt, tag, sourceLocation)
+      createTickableLeafTemporalContext(matcher, tt, endTt, tag, sourceLocation)
     }
   }
 
@@ -146,18 +141,9 @@ object TemporalSurfaceDefinition {
       sourceLocation: SourceLocation): TickableTemporalContext = {
     val partitions = partitionMapForNotification.allPartitions
     val children = partitions.map { p =>
-      trackingScenario.createTickableLeafTemporalSurface(
-        TemporalSurfaceMatchers.default(p),
-        tt,
-        endTt,
-        tag,
-        sourceLocation)
+      createTickableLeafTemporalSurface(TemporalSurfaceMatchers.default(p), tt, endTt, tag, sourceLocation)
     }
-    trackingScenario.createTickableBranchTemporalContext(
-      TemporalSurfaceMatchers.allScope,
-      children.toList,
-      tag,
-      sourceLocation)
+    createTickableBranchTemporalContext(TemporalSurfaceMatchers.allScope, children.toList, tag, sourceLocation)
   }
 
   object FixedBranchSurface {
@@ -213,7 +199,7 @@ object TemporalSurfaceDefinition {
         tag: Option[String] = None)(implicit sourceLocation: SourceLocation): BranchTemporalSurface = {
       if (nodes forall (_.isInstanceOf[FixedTemporalSurface]))
         FixedBranchSurface(scope, nodes map (_.asInstanceOf[FixedTemporalSurface]), tag)
-      else trackingScenario.createTickableBranchTemporalSurface(scope, nodes, tag, sourceLocation)
+      else createTickableBranchTemporalSurface(scope, nodes, tag, sourceLocation)
     }
   }
 
@@ -231,19 +217,14 @@ object TemporalSurfaceDefinition {
         sourceLocation: SourceLocation): TickableTemporalContext = {
       val partitions = partitionMapForNotification.allPartitions
       val children = partitions.map { p =>
-        trackingScenario.createTickableLeafTemporalSurface(
-          TemporalSurfaceMatchers.default(p),
-          tt,
-          endTt,
-          tag,
-          sourceLocation)
+        createTickableLeafTemporalSurface(TemporalSurfaceMatchers.default(p), tt, endTt, tag, sourceLocation)
       }
       apply(children.toList, tag)(sourceLocation)
     }
 
     def apply(nodes: List[TemporalSurface], tag: Option[String] = None)(implicit
         sourceLocation: SourceLocation): TickableTemporalContext =
-      trackingScenario.createTickableBranchTemporalContext(TemporalSurfaceMatchers.allScope, nodes, tag, sourceLocation)
+      createTickableBranchTemporalContext(TemporalSurfaceMatchers.allScope, nodes, tag, sourceLocation)
 
     def apply(start: Instant, firstType: EntityCompanionBase[_], otherTypes: EntityCompanionBase[_]*)(implicit
         sourceLocation: SourceLocation): TickableTemporalContext =
@@ -278,7 +259,7 @@ object TemporalSurfaceDefinition {
         tag: Option[String] = None)(implicit sourceLocation: SourceLocation): TemporalContext = {
       if (nodes forall (_.isInstanceOf[FixedTemporalSurface]))
         FixedBranchContext(scope, nodes map (_.asInstanceOf[FixedTemporalSurface]), tag)
-      else trackingScenario.createTickableBranchTemporalContext(scope, nodes, tag, sourceLocation)
+      else createTickableBranchTemporalContext(scope, nodes, tag, sourceLocation)
     }
   }
   object TraceSurface {

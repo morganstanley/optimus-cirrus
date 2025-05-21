@@ -128,7 +128,8 @@ private class DebugPrintFormatter(sb: StringBuilder, listAbbreviationThreshold: 
         sb.append('"')
         sb.append(s)
         sb.append('"')
-      case s: Seq[_] if (element.projectedType() ne null) && element.projectedType().clazz == classOf[Option[_]] =>
+      case s: collection.Seq[_]
+          if (element.projectedType() ne null) && element.projectedType().clazz == classOf[Option[_]] =>
         sb.append(s.find(t => true))
       case value => sb.append(value)
     }

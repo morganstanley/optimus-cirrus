@@ -28,6 +28,7 @@ import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal
 import optimus.platform.dsi.bitemporal.DALQueryResultType
 import optimus.platform.dsi.bitemporal.ExpressionQueryCommand
+import optimus.platform.dsi.bitemporal.NoDSI
 import optimus.platform.dsi.bitemporal.QueryReferenceResult
 import optimus.platform.dsi.bitemporal.QueryResult
 import optimus.platform.dsi.bitemporal.QueryResultSet

@@ -47,7 +47,7 @@ object KeyStoreReaderProvider {
             case usages => usages
           }
           .forall {
-            case usages: Seq[_] => usages.contains(usage)
+            case usages: collection.Seq[_] => usages.contains(usage)
             case _              => false
           }
       case Some(_) => false

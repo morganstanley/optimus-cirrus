@@ -18,19 +18,19 @@ object MarkTweakDependency {
   private var dependencyMap: mutable.WeakHashMap[PNodeTaskInfo, SelectionFlags.Value] = _
   def dependencyMapIsNull: Boolean = dependencyMap eq null
 
-  def setTweakDependencyHighlight(selected: PNodeTaskInfo, pntis: Seq[PNodeTaskInfo]): Unit = {
+  def setTweakDependencyHighlight(selected: PNodeTaskInfo, pntis: Iterable[PNodeTaskInfo]): Unit = {
     if (selected.tweakDependencies == TPDMask.poison)
       setPoisonHighlight(selected, pntis)
     else
       setDependentHighlight(selected, pntis)
   }
 
-  private def setPoisonHighlight(selected: PNodeTaskInfo, pntis: Seq[PNodeTaskInfo]): Unit = {
+  private def setPoisonHighlight(selected: PNodeTaskInfo, pntis: Iterable[PNodeTaskInfo]): Unit = {
     pntis.foreach(pnti => dependencyMap.put(pnti, SelectionFlags.NotFlagged))
     dependencyMap.put(selected, SelectionFlags.Poison)
   }
 
-  private def setDependentHighlight(selected: PNodeTaskInfo, pntis: Seq[PNodeTaskInfo]): Unit = {
+  private def setDependentHighlight(selected: PNodeTaskInfo, pntis: Iterable[PNodeTaskInfo]): Unit = {
     val tweakDependencies = selected.tweakDependencies
     pntis.foreach(pnti => {
       val mask = TPDMask.fromIndex(pnti.tweakID)

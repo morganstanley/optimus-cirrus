@@ -11,6 +11,8 @@
  */
 package optimus.buildtool.utils
 
+import com.opencsv.CSVParser
+
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
@@ -18,6 +20,7 @@ import java.io.FileWriter
 import com.opencsv.CSVWriter
 import optimus.platform.util.Log
 import optimus.platform._
+import scala.util._
 
 /**
  * a base trait for simple CSV writers
@@ -42,12 +45,23 @@ trait SimpleCsvWriter[T] extends Log {
 
   final def writeCsvToDir(dir: File, rows: Iterable[T]): Unit = writeCsvFile(new File(dir, defaultFilename), rows)
 
-  private def format(a: Any): String = a match {
-    case d: Double => f"$d%.2f"
-    case None      => ""
-    case Some(t)   => format(t)
-    case x         => x.toString
+  private def format(a: Any): String = {
+    a match {
+      case d: Double => f"$d%.2f"
+      case None      => ""
+      case Some(t)   => format(t)
+      case x =>
+        val parser = new CSVParser()
+        val res = x.toString
+        val verified = Try { parser.parseLine(res) } match {
+          case Success(_) => res
+          case Failure(e) => cleanUp(res)
+        }
+        verified
+    }
   }
+
+  private def cleanUp(invalid: String): String = invalid.replaceAll("[\n\r\"]", "_")
 
   private def nanosToMillis(ns: Long): Int = (ns / 1e6).toInt
 }

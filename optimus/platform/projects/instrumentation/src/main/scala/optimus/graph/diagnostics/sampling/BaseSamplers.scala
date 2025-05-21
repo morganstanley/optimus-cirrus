@@ -12,6 +12,8 @@
 package optimus.graph.diagnostics.sampling
 import com.sun.management.OperatingSystemMXBean
 import optimus.breadcrumbs.Breadcrumbs
+import optimus.breadcrumbs.ChainedID
+import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.SamplingProfiler._
@@ -20,6 +22,7 @@ import optimus.breadcrumbs.crumbs.Properties._
 import optimus.graph.DiagnosticSettings
 import optimus.platform.util.Log
 import optimus.scalacompat.collection._
+import optimus.platform.util.Version
 
 import scala.jdk.CollectionConverters._
 import sun.management.ManagementFactoryHelper
@@ -34,7 +37,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.Objects
 import java.util.concurrent.atomic.AtomicInteger
 import java.{util => jutil}
-import scala.collection.mutable.ArrayBuffer
+import java.nio.file.Files
+import java.nio.file.Paths
+import scala.collection.immutable.ArraySeq
+import scala.util.Try
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Using
@@ -42,7 +48,7 @@ import scala.util.Using
 object BaseSamplers extends Log {
   // Very simple command executor.  No exception handling, since this is meant to be called from samplers,
   // which will auto-disable on any exception.
-  private final class ExecIterator(cmd: String*) extends Iterator[String] with AutoCloseable {
+  private[optimus] final class ExecIterator(cmd: String*) extends Iterator[String] with AutoCloseable {
     private var p: Process = Runtime.getRuntime.exec(cmd.toArray)
     private var br: BufferedReader = new BufferedReader(new InputStreamReader(p.getInputStream))
     private var onbase: String = br.readLine()
@@ -115,32 +121,62 @@ object BaseSamplers extends Log {
 
   private[sampling] def clearCounters(): Unit = counters.clear()
 
+  val treadmill: Map[String, String] = Try {
+    val map = Files
+      .list(Paths.get("/env"))
+      .iterator()
+      .asScala
+      .collect {
+        case f if f.getFileName.toString.startsWith("TREADMILL") =>
+          f.getFileName.toString -> Files.readString(f).trim
+      }
+      .toMap
+    Breadcrumbs.info(
+      ChainedID.root,
+      PropertiesCrumb(_, SamplingProfiler.periodicSamplesSource, treadmillEnv -> map :: Version.properties))
+    map
+  }.getOrElse(Map.empty)
+
+  def isTreadmill: Boolean = treadmill.nonEmpty
+
 }
 
 //noinspection ScalaUnusedSymbol // ServiceLoader
-class BaseSamplers extends SamplerProvider {
+class BaseSamplers extends SamplerProvider with Log {
   import BaseSamplers._
+  import scala.util.Try
 
   override val priority: Int = 0
 
-  private val osBean: OperatingSystemMXBean =
-    ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean]
+  private val osBeanMaybe = Try(ManagementFactory.getOperatingSystemMXBean().asInstanceOf[OperatingSystemMXBean])
 
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]] = {
     val util = new Util(sp)
     import util._
 
-    val ss = ArrayBuffer.empty[SamplerTrait[_, _]]
+    val ss = ArraySeq.newBuilder[SamplerTrait[_, _]]
     // Various OS bean stats.  Note that the snap might throw, in which case the
     // individual snapper will be disabled.
-    ss += Diff(_ => osBean.getProcessCpuTime / NANOSPERMILLI, profJvmCPUTime)
-    ss += Snap(_ => osBean.getSystemCpuLoad, profSysCPULoad)
-    ss += Snap(_ => osBean.getProcessCpuLoad, profJvmCPULoad)
-    ss += Snap(_ => osBean.getSystemLoadAverage, profLoadAvg)
-    ss += Snap(_ => osBean.getCommittedVirtualMemorySize / MILLION, profCommitedMB)
-
+    // Since java 17, these are by default cgroup aware
+    osBeanMaybe.foreach { osBean =>
+      ss += Diff(_ => osBean.getProcessCpuTime / NANOSPERMILLI, profJvmCPUTime)
+      ss += Snap(_ => osBean.getSystemCpuLoad, profSysCPULoad)
+      ss += Snap(_ => osBean.getProcessCpuLoad, profJvmCPULoad)
+      ss += Snap(_ => osBean.getSystemLoadAverage, profLoadAvg)
+      ss += Snap(_ => osBean.getCommittedVirtualMemorySize / MILLION, profCommitedMB)
+      ss += Snap(_ => osBean.getFreePhysicalMemorySize / MILLION, profSysFreeMem)
+      ss += Snap(_ => osBean.getTotalPhysicalMemorySize / MILLION, profSysTotalMem)
+    }
     Option(ManagementFactory.getCompilationMXBean).filter(_.isCompilationTimeMonitoringSupported).foreach { bean =>
       ss += Diff(_ => bean.getTotalCompilationTime, profJitTime)
+    }
+
+    val cgroups = Paths.get("/sys/fs/cgroup")
+    if (Files.isDirectory(cgroups) && Files.isReadable(cgroups)) {
+      log.info(s"cgroups detected. treadmill=${isTreadmill}")
+      def mem(metric: String): Long =
+        Try(Files.readString(cgroups.resolve(s"memory/memory.${metric}_in_bytes")).trim.toLong / MILLION).getOrElse(-1)
+      ss += Snap(_ => Seq("usage", "limit", "max_usage").map(k => k -> mem(k)).toMap, profCgroupMem)
     }
 
     val classLoadBean = ManagementFactoryHelper.getHotspotClassLoadingMBean
@@ -244,6 +280,6 @@ class BaseSamplers extends SamplerProvider {
       }
     )
 
-    ss
+    ss.result()
   }
 }

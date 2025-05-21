@@ -9,7 +9,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package optimus.buildtool.bsp
+package optimus.buildtool
+package bsp
 
 import optimus.buildtool.artifacts.Artifact
 import optimus.buildtool.artifacts.ArtifactType
@@ -17,23 +18,8 @@ import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.FingerprintArtifact
 import optimus.buildtool.artifacts.MessagesArtifact
 import optimus.buildtool.builders.StandardBuilder
-import optimus.buildtool.compilers.cpp.CppFileCompiler.PrecompiledHeader
-import optimus.buildtool.config.CppConfiguration.CompilerFlag
-import optimus.buildtool.config.CppConfiguration.LinkerFlag
-import optimus.buildtool.config.CppConfiguration.OutputType
 import optimus.buildtool.config._
-import optimus.buildtool.dependencies.PythonAfsDependencyDefinition
-import optimus.buildtool.dependencies.PythonDependency
-import optimus.buildtool.dependencies.PythonDependencyDefinition
-import optimus.buildtool.files.Directory
 import optimus.buildtool.files.LocalDirectoryFactory
-import optimus.buildtool.files.ReactiveDirectory
-import optimus.buildtool.files.RelativePath
-import optimus.buildtool.files.SourceFolder
-import optimus.buildtool.format.CppToolchainStructure
-import optimus.buildtool.format.WarningsConfiguration
-import optimus.buildtool.generators.GeneratorType
-import optimus.buildtool.processors.ProcessorType
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.DependencyMetadataResolver
 import optimus.buildtool.rubbish.ArtifactRecency
@@ -45,8 +31,8 @@ import optimus.buildtool.trace.ResolveScopeStructure
 import optimus.buildtool.utils.Hashing
 import optimus.platform._
 import optimus.scalacompat.collection._
+import com.github.plokhotnyuk.jsoniter_scala.core._
 
-import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 
@@ -56,14 +42,15 @@ import scala.collection.immutable.Seq
     scalaVersionConfig: NodeFunction0[ScalaVersionConfig],
     pythonEnabled: NodeFunction0[Boolean],
     depMetadataResolvers: NodeFunction0[Seq[DependencyMetadataResolver]]) {
-  import JsonImplicits._
-  import spray.json._
+  import optimus.buildtool.artifacts.JsonImplicits.{scalaVersionJsonValueCodec, scopeConfigurationJsonValueCodec}
 
   @node private def scopeConfigSource = underlyingBuilder().factory.scopeConfigSource
 
   @node private def scalaFp: String = {
     val scalaConfig = scalaVersionConfig()
-    "scala fingerprint:" + Hashing.hashString(scalaConfig.toJson(ScalaVersionConfigFormat).compactPrint)
+    "scala fingerprint:" + Hashing.hashBytes(
+      writeToArray(scalaConfig)
+    ) // TODO (OPTIMUS-47169): to be really efficient we could write to a custom output stream which hashes the bytes as they arrive and then throws them away
   }
 
   @node private def pyEnabledFp: String = {
@@ -73,7 +60,7 @@ import scala.collection.immutable.Seq
 
   @node private def singleScopeFp(id: ScopeId): String = {
     val config = scopeConfigSource.scopeConfiguration(id)
-    id.properPath + ":" + Hashing.hashString(config.toJson(ScopeConfigurationFormat).compactPrint)
+    id.properPath + ":" + Hashing.hashBytes(writeToArray(config))
   }
 
   @node private def scopesFp: Seq[String] =
@@ -228,179 +215,3 @@ final case class ResolvedScopeInformation(
     sparseInternalCompileDependencies: Seq[ScopeId],
     externalCompileDependencies: Seq[ExternalClassFileArtifact]
 )
-
-//noinspection TypeAnnotation
-object JsonImplicits {
-  import optimus.buildtool.artifacts.JsonImplicits._
-  import spray.json.DefaultJsonProtocol._
-  import spray.json._
-
-  implicit val DirectoryFormat: JsonFormat[Directory] = new JsonFormat[Directory] {
-    override def write(obj: Directory): JsValue = obj.path.toJson
-    override def read(json: JsValue): Directory = Directory(json.convertTo[Path])
-  }
-  implicit val ReactiveDirectoryFormat: JsonFormat[ReactiveDirectory] = new JsonFormat[ReactiveDirectory] {
-    override def write(obj: ReactiveDirectory): JsValue = obj.path.toJson
-    override def read(json: JsValue): ReactiveDirectory = throw new UnsupportedOperationException
-  }
-  implicit val SourceFolderFormat: JsonFormat[SourceFolder] = new JsonFormat[SourceFolder] {
-    override def write(obj: SourceFolder): JsValue = obj.workspaceSrcRootToSourceFolderPath.path.toJson
-    override def read(json: JsValue): SourceFolder = throw new UnsupportedOperationException
-  }
-
-  implicit val ScalaVersionConfigFormat: RootJsonFormat[ScalaVersionConfig] = jsonFormat3(ScalaVersionConfig.apply)
-
-  implicit val GeneratorTypeFormat: JsonFormat[GeneratorType] = new JsonFormat[GeneratorType] {
-    override def write(obj: GeneratorType): JsValue = obj.name.toJson
-    override def read(json: JsValue): GeneratorType = GeneratorType(json.convertTo[String])
-  }
-  implicit val KindFormat: JsonFormat[Kind] = new JsonFormat[Kind] {
-    override def write(obj: Kind): JsValue = obj.toString.toJson
-    override def read(json: JsValue): Kind = Kind.values.map(k => k.toString -> k).toMap.apply(json.convertTo[String])
-  }
-
-  implicit val ProcessorTypeFormat: JsonFormat[ProcessorType] = new JsonFormat[ProcessorType] {
-    override def write(obj: ProcessorType): JsValue = obj.name.toJson
-    override def read(json: JsValue): ProcessorType = ProcessorType(json.convertTo[String])
-  }
-
-  implicit val ExcludeFormat: RootJsonFormat[Exclude] = jsonFormat3(Exclude.apply)
-  implicit val VariantFormat: RootJsonFormat[Variant] = jsonFormat3(Variant.apply)
-  implicit val IvyArtifactFormat: RootJsonFormat[IvyArtifact] = jsonFormat3(IvyArtifact.apply)
-  implicit val ModuleIdFormat: RootJsonFormat[ModuleId] = jsonFormat3(ModuleId.apply)
-
-  implicit val DependencyDefinitionFormat: RootJsonFormat[DependencyDefinition] = jsonFormat19(
-    DependencyDefinition.apply)
-  implicit val NativeDependencyDefinitionFormat: RootJsonFormat[NativeDependencyDefinition] = jsonFormat4(
-    NativeDependencyDefinition.apply)
-
-  implicit val GeneratorConfigurationFormat: RootJsonFormat[GeneratorConfiguration] = jsonFormat7(
-    GeneratorConfiguration.apply)
-  implicit val RunConfConfigurationFormat: RootJsonFormat[RunConfConfiguration[RelativePath]] = jsonFormat2(
-    RunConfConfiguration.apply[RelativePath])
-  implicit val AgentConfigurationFormat: RootJsonFormat[AgentConfiguration] = jsonFormat2(AgentConfiguration.apply)
-  implicit val MetaProjFormat: RootJsonFormat[MetaBundle] = jsonFormat2(MetaBundle.apply)
-
-  implicit val PatternFormat: JsonFormat[Pattern] = new JsonFormat[Pattern] {
-    override def write(obj: Pattern): JsValue = (obj.regex.regex, obj.exclude, obj.message).toJson
-    override def read(json: JsValue): Pattern = {
-      val (regex, exclude, message) = json.convertTo[(String, Boolean, Option[String])]
-      Pattern(regex, exclude, message)
-    }
-  }
-
-  implicit val GroupFormat: RootJsonFormat[Group] = jsonFormat3(Group.apply)
-  implicit val FilterFormat: RootJsonFormat[Filter] = jsonFormat4(Filter.apply)
-  implicit val CodeFlaggingRuleFormat: RootJsonFormat[CodeFlaggingRule] = jsonFormat9(CodeFlaggingRule.apply)
-  implicit val RegexConfigurationFormat: RootJsonFormat[RegexConfiguration] = jsonFormat1(RegexConfiguration.apply)
-
-  implicit val OutputTypeFormat: JsonFormat[OutputType] = new JsonFormat[OutputType] {
-    override def write(obj: OutputType): JsValue = obj match {
-      case OutputType.Library    => "library".toJson
-      case OutputType.Executable => "executable".toJson
-    }
-    override def read(json: JsValue): OutputType = json.convertTo[String] match {
-      case "library"    => OutputType.Library
-      case "executable" => OutputType.Executable
-    }
-  }
-
-  implicit val CompilerFlagFormat: JsonFormat[CompilerFlag] = new JsonFormat[CompilerFlag] {
-    override def write(obj: CompilerFlag): JsValue = CppToolchainStructure.printCompilerFlag(obj).toJson
-    override def read(json: JsValue): CompilerFlag = CppToolchainStructure.parseCompilerFlag(json.convertTo[String])
-  }
-
-  implicit val LinkerFlagFormat: JsonFormat[LinkerFlag] = new JsonFormat[LinkerFlag] {
-    override def write(obj: LinkerFlag): JsValue = CppToolchainStructure.printLinkerFlag(obj).toJson
-    override def read(json: JsValue): LinkerFlag = CppToolchainStructure.parseLinkerFlag(json.convertTo[String])
-  }
-
-  implicit val PrecompiledHeaderFormat: RootJsonFormat[PrecompiledHeader] = jsonFormat3(PrecompiledHeader.apply)
-
-  // Dependencies.apply is customized with private args, which would confuse write.toJson at runtime then
-  // get bsp failures. Therefore we have to define a new JsonFormat with read & write
-  implicit val DependenciesFormat: JsonFormat[Dependencies] =
-    new JsonFormat[Dependencies] {
-      override def read(json: JsValue): Dependencies = {
-        val (internal, externalAfs, externalMaven) =
-          json.convertTo[(Seq[ScopeId], Seq[DependencyDefinition], Seq[DependencyDefinition])]
-        Dependencies(internal, externalAfs, externalMaven)
-      }
-      override def write(obj: Dependencies): JsValue = obj.toJsonInput.toJson
-    }
-  implicit val GroupNameConfigFormat: RootJsonFormat[GroupNameConfig] = jsonFormat3(GroupNameConfig.apply)
-  implicit val SubstitutionFormat: RootJsonFormat[Substitution] = jsonFormat2(Substitution.apply)
-  implicit val PartialScopeIdFormat: RootJsonFormat[PartialScopeId] = jsonFormat4(PartialScopeId.apply)
-  implicit val ForbiddenDependencyConfigurationFormat: RootJsonFormat[ForbiddenDependencyConfiguration] = jsonFormat7(
-    ForbiddenDependencyConfiguration.apply)
-  implicit val AllDependenciesFormat: RootJsonFormat[AllDependencies] = jsonFormat7(AllDependencies.apply)
-  implicit val InheritableWarningsConfigFormat: JsonFormat[WarningsConfiguration] =
-    new JsonFormat[WarningsConfiguration] {
-      override def write(obj: WarningsConfiguration): JsValue = obj.asJson
-      override def read(json: JsValue): WarningsConfiguration = throw new UnsupportedOperationException
-    }
-  implicit val ScalacConfigurationFormat: RootJsonFormat[ScalacConfiguration] = jsonFormat4(ScalacConfiguration.apply)
-  implicit val JavacConfigurationFormat: RootJsonFormat[JavacConfiguration] = jsonFormat4(JavacConfiguration.apply)
-  implicit val CppToolchainFormat: RootJsonFormat[CppToolchain] = jsonFormat14(CppToolchain.apply)
-  implicit val CppBuildConfigurationFormat: RootJsonFormat[CppBuildConfiguration] = jsonFormat16(
-    CppBuildConfiguration.apply)
-  implicit val CppConfigurationFormat: RootJsonFormat[CppConfiguration] = jsonFormat3(CppConfiguration.apply)
-
-  implicit val WebConfigurationFormat: RootJsonFormat[WebConfiguration] = jsonFormat4(WebConfiguration.apply)
-  implicit val ElectronConfigurationFormat: RootJsonFormat[ElectronConfiguration] = jsonFormat5(
-    ElectronConfiguration.apply)
-
-  implicit val ProcessorConfigurationFormat: RootJsonFormat[ProcessorConfiguration] = jsonFormat7(
-    ProcessorConfiguration.apply)
-
-  implicit val ModuleSetIdFormat: RootJsonFormat[ModuleSetId] = jsonFormat1(ModuleSetId.apply)
-  implicit val ModuleSetFormat: RootJsonFormat[ModuleSet] = jsonFormat2(ModuleSet.apply)
-  implicit val ScopePathsFormat: RootJsonFormat[ScopePaths] = jsonFormat10(ScopePaths.apply)
-  implicit val ScopeFlagsFormat: RootJsonFormat[ScopeFlags] = jsonFormat16(ScopeFlags.apply)
-
-  implicit val interopConfigurationFormat: RootJsonFormat[InteropConfiguration] = jsonFormat2(
-    InteropConfiguration.apply)
-
-  implicit val pythonPyPiDependencyFormat: RootJsonFormat[PythonDependencyDefinition] = jsonFormat5(
-    PythonDependencyDefinition.apply)
-  implicit val pythonAfsDependencyFormat: RootJsonFormat[PythonAfsDependencyDefinition] = jsonFormat6(
-    PythonAfsDependencyDefinition.apply)
-
-  implicit val pythonDependencyFormat: JsonFormat[PythonDependency] = new JsonFormat[PythonDependency] {
-    override def write(obj: PythonDependency): JsValue = obj match {
-      case dep @ PythonDependencyDefinition(_, _, _, _, _)       => dep.toJson
-      case dep @ PythonAfsDependencyDefinition(_, _, _, _, _, _) => dep.toJson
-    }
-    override def read(value: JsValue): PythonDependency =
-      value.asJsObject.fields("sourceType") match {
-        case JsString("afs")  => value.convertTo[PythonAfsDependencyDefinition]
-        case JsString("pypi") => value.convertTo[PythonDependencyDefinition]
-        case _                => throw DeserializationException(s"Couldn't deserialize ${value.compactPrint}")
-      }
-  }
-
-  implicit val afsModuleFormat: JsonFormat[ModuleType] = new JsonFormat[ModuleType] {
-    override def write(obj: ModuleType): JsValue = obj match {
-      case ModuleType.Afs  => ModuleType.Afs.label.toJson
-      case ModuleType.PyPi => ModuleType.PyPi.label.toJson
-    }
-    override def read(json: JsValue): ModuleType = ModuleType.resolve(json.convertTo[String]).get
-  }
-
-  implicit val pythonOverriddenCommandsFormat: RootJsonFormat[PythonConfiguration.OverriddenCommands] = jsonFormat2(
-    PythonConfiguration.OverriddenCommands.apply)
-
-  implicit val pythonConfigurationFormat: RootJsonFormat[PythonConfiguration] = jsonFormat4(PythonConfiguration.apply)
-
-  implicit val ScopeConfigurationFormat: RootJsonFormat[ScopeConfiguration] = jsonFormat19(ScopeConfiguration.apply)
-
-  implicit val ExternalClassFileArtifactFormat: JsonFormat[ExternalClassFileArtifact] =
-    new JsonFormat[ExternalClassFileArtifact] {
-      override def write(obj: ExternalClassFileArtifact): JsValue = obj.cached.toJson
-      override def read(json: JsValue): ExternalClassFileArtifact =
-        json.convertTo[ExternalClassFileArtifact.Cached].asEntity
-    }
-
-  implicit val ResolveScopeInformationFormat: RootJsonFormat[ResolvedScopeInformation] = jsonFormat5(
-    ResolvedScopeInformation.apply)
-}

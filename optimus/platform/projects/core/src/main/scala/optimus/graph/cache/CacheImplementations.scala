@@ -39,8 +39,7 @@ private[optimus] object CacheDefaults {
 private[optimus] object UNodeCache {
   val globalCacheName: String = "global"
   val globalSICacheName: String = "siGlobal"
-  val globalCtorCacheName: String = "ctorGlobal"
-  val globalNames: Seq[String] = Seq(globalCacheName, globalSICacheName, globalCtorCacheName)
+  val globalNames: Seq[String] = Seq(globalCacheName, globalSICacheName)
 
   val scenarioStackPrivateCachePrefix: String = "privateCache"
 
@@ -55,9 +54,8 @@ private[optimus] object UNodeCache {
     _global = newValue
   }
   var siGlobal: NodeCCache = _
-  var constructorNodeGlobal: NodeCCache = _
-
 }
+
 final class UNodeCache(
     name: String,
     maxSize: Int,
@@ -65,11 +63,13 @@ final class UNodeCache(
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int,
     evictOnOverflow: Boolean = true,
+    evictOnLowMemory: Boolean = true,
     reduceMaxSizeByScopedCachesSize: Boolean = false)
     extends NodeCacheWithLRU(
       name,
       maxSize,
       evictOnOverflow,
+      evictOnLowMemory,
       requestedConcurrency,
       cacheBatchSize,
       cacheBatchSizePadding) {
@@ -83,7 +83,19 @@ final class UNodeCache(
       CacheDefaults.sizeBasedDefaultConcurrency(maxSize),
       CacheDefaults.sizeBasedDefaultBatchSize(maxSize),
       CacheDefaults.sizeBasedDefaultBatchSizePadding(maxSize),
+      true,
       true
+    )
+  }
+  def this(name: String, maxSize: Int, lowMemEviction: Boolean) = {
+    this(
+      name,
+      maxSize,
+      CacheDefaults.sizeBasedDefaultConcurrency(maxSize),
+      CacheDefaults.sizeBasedDefaultBatchSize(maxSize),
+      CacheDefaults.sizeBasedDefaultBatchSizePadding(maxSize),
+      true,
+      lowMemEviction
     )
   }
 
@@ -100,6 +112,7 @@ private[cache] abstract class BasePerPropertyCache(
     name: String,
     maxSize: Int,
     evictOnOverflow: Boolean,
+    evictOnLowMemory: Boolean,
     requestedConcurrency: Int,
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int)
@@ -107,6 +120,7 @@ private[cache] abstract class BasePerPropertyCache(
       name,
       maxSize,
       evictOnOverflow,
+      evictOnLowMemory,
       requestedConcurrency,
       cacheBatchSize,
       cacheBatchSizePadding) {
@@ -132,11 +146,13 @@ final class PerPropertyCache(
     requestedConcurrency: Int,
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int,
-    evictOnOverflow: Boolean = true)
+    evictOnOverflow: Boolean = true,
+    evictOnLowMemory: Boolean = true)
     extends BasePerPropertyCache(
       name,
       maxSize,
       evictOnOverflow,
+      evictOnLowMemory,
       requestedConcurrency,
       cacheBatchSize,
       cacheBatchSizePadding) {
@@ -147,7 +163,19 @@ final class PerPropertyCache(
       CacheDefaults.sizeBasedDefaultConcurrency(maxSize),
       CacheDefaults.sizeBasedDefaultBatchSize(maxSize),
       CacheDefaults.sizeBasedDefaultBatchSizePadding(maxSize),
+      true,
       true
+    )
+  }
+  def this(name: String, maxSize: Int, lowMemEviction: Boolean) = {
+    this(
+      name,
+      maxSize,
+      CacheDefaults.sizeBasedDefaultConcurrency(maxSize),
+      CacheDefaults.sizeBasedDefaultBatchSize(maxSize),
+      CacheDefaults.sizeBasedDefaultBatchSizePadding(maxSize),
+      true,
+      lowMemEviction
     )
   }
   def this(maxSize: Int, evictOnOverflow: Boolean) = {
@@ -175,7 +203,14 @@ final class PerPropertySizedCache(
     cacheBatchSize: Int,
     cacheBatchSizePadding: Int,
     sizeOf: NodeKey[_] => Integer)
-    extends BasePerPropertyCache(name, maxSize, true, requestedConcurrency, cacheBatchSize, cacheBatchSizePadding) {
+    extends BasePerPropertyCache(
+      name,
+      maxSize,
+      true,
+      true,
+      requestedConcurrency,
+      cacheBatchSize,
+      cacheBatchSizePadding) {
 
   override protected def newNCEntry(hash: Int, value: PropertyNode[_], next: NCEntry, kgp: Boolean): NCEntry =
     new NCSizedEntryV(hash, value, sizeOf(value), next)

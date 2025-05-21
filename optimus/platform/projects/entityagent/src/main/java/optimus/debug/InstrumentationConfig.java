@@ -102,6 +102,9 @@ public class InstrumentationConfig {
   static InstrumentationConfig.MethodRef iecResume =
       new InstrumentationConfig.MethodRef(IEC_TYPE, "resumeReporting", "(I)V");
 
+
+  public static String FWD_ORG_DEFAULT_SUFFIX = "__";
+
   public static final String CWA_INNER_NAME = "CallWithArgs";
   public static final String CWA = IS + "$" + CWA_INNER_NAME;
   public static final Type CWA_TYPE = Type.getObjectType(CWA);
@@ -190,10 +193,6 @@ public class InstrumentationConfig {
   /** For reporting */
   public static String instrumentedBaseClass() {
     return instrumentAllDerivedClasses != null ? instrumentAllDerivedClasses.cls : null;
-  }
-
-  public static void initialiseDerivedClassFromBase(String baseClassName) {
-    derivedClasses.putIfAbsent(baseClassName, Boolean.TRUE);
   }
 
   public static boolean isDerivedClass(String className, String superName) {
@@ -295,26 +294,33 @@ public class InstrumentationConfig {
     public MethodRef suffixOnException; // suffix call used if an exception was thrown
     FieldRef cacheInField;
     boolean checkAndReturn;
-    boolean localValueIsCallWithArgs; // constructs an object of a class derived from CallWithArgs
-    // instead of passing object[]
+    // constructs an object of a class derived from CallWithArgs instead of passing object[]
+    boolean localValueIsCallWithArgs;
+    // Keep original method and rename to keepOriginalMethodAs. Do make it public!
+    String keepOriginalMethodAs;
+    // As opposed to static call
+    boolean forwardToCallIsStatic;
+    // if true, just forwards the call to prefix, and returns the result
+    boolean prefixIsFullReplacement;
     boolean prefixWithID;
     boolean prefixWithThis;
     boolean prefixWithArgs;
-    boolean
-        passLocalValue; // saves the result of the prefix into a value, and than passes it to the
-    // suffix
+    boolean passLocalValue; // saves the result of the prefix into a value, and passes it to suffix
     boolean suffixWithID;
     boolean suffixWithThis;
-    public boolean
-        suffixWithReturnValue; // passes the return value to suffix (and by default returns that
-    // value)
+    /** passes the return value to suffix (and by default returns that value) */
+    public boolean suffixWithReturnValue;
+
     public boolean suffixReplacesReturnValue; // patched method will returns whatever suffix returns
     boolean suffixWithArgs;
-    public boolean
-        noArgumentBoxing; // if true, arguments (and return value) are passed using specific types;
-    // if false, arguments are passed in Object[] (and return value is Object)
-    boolean wrapWithTryCatch; // adds a try catch and invokes suffixOnException in case of exception
-    // thrown
+    /**
+     * True: arguments (and return value) are passed using specific types; False: arguments are
+     * passed in Object[] (and return value is Object)
+     */
+    public boolean noArgumentBoxing;
+    /** adds a try catch and invokes suffixOnException in case of exception thrown */
+    boolean wrapWithTryCatch;
+
     FieldRef storeToField;
     ClassPatch classPatch;
     BiPredicate<String, Integer> predicate;
@@ -459,7 +465,7 @@ public class InstrumentationConfig {
     return new MethodRef(className.replace('.', '/'), method, descriptor);
   }
 
-  public static ClassPatch forClass(String className) {
+  static ClassPatch forClass(String className) {
     var exact = clsPatches.get(className);
     if (exact != null || multiClsPatches.isEmpty()) return exact;
     for (var v : multiClsPatches) {
@@ -517,7 +523,7 @@ public class InstrumentationConfig {
     addInterfacePatch(type, ICS_TYPE);
   }
 
-  public static void addGetterMethod(MethodRef method, FieldRef field) {
+  static void addGetterMethod(MethodRef method, FieldRef field) {
     var clsPatch = putIfAbsentClassPatch(method.cls);
     clsPatch.getterMethod = new GetterMethod(method, field);
   }
@@ -630,11 +636,11 @@ public class InstrumentationConfig {
     clsPatch.methodForwardsIfMissing.add(new MethodForward(from, to));
   }
 
-  public static FieldRef addField(String clsName, String fieldName) {
+  static FieldRef addField(String clsName, String fieldName) {
     return addField(clsName, fieldName, null);
   }
 
-  public static FieldRef addField(String clsName, String fieldName, String type) {
+  static FieldRef addField(String clsName, String fieldName, String type) {
     var clsPatch = putIfAbsentClassPatch(clsName);
     var fieldPatch = new FieldRef(fieldName, type);
     clsPatch.fieldRefs.add(fieldPatch);
@@ -661,7 +667,11 @@ public class InstrumentationConfig {
     return fieldRef;
   }
 
-  public static ClassPatch addModuleConstructionIntercept(String clsName) {
+  /**
+   * Instruments given module with calls to optimus.debug.InstrumentedModuleCtor#enterReporting()
+   * etc...
+   */
+  static ClassPatch addModuleConstructionIntercept(String clsName) {
     var mref = new MethodRef(clsName, "<clinit>");
     var methodPatch = addPrefixCall(mref, InstrumentationConfig.imcEnterCtor, false, false);
     methodPatch.wrapWithTryCatch = true;
@@ -670,6 +680,14 @@ public class InstrumentationConfig {
     var classPatch = putIfAbsentClassPatch(clsName);
     classPatch.bracketAllLzyComputes = true;
     return classPatch;
+  }
+
+  /**
+   * Instruments given module with calls to optimus.debug.InstrumentedModuleCtor#enterReporting()
+   * etc... For "manual" instrumentation, i.e. when the module is not instrumented by default.
+   */
+  public static void addModuleConstructionInterceptManual(String clsName) {
+    addModuleConstructionIntercept(clsName);
   }
 
   public static void addAllMethodPatchAndChangeSuper(

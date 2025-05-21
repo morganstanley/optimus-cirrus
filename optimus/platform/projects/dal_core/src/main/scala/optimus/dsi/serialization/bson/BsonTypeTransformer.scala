@@ -119,7 +119,7 @@ trait RegisteredIndexTransformerBase[T] extends AbstractTypeTransformerOps[T] {
     case z: ZonedDateTime        => DateTimeSerialization.fromInstant(z.toInstant).asInstanceOf[AnyRef]
     case iba: ImmutableByteArray => serialize(iba.data)
     case ab: Array[Byte]         => fromByteArray(ab)
-    case x: Seq[_]               => mapToArrayList(serialize _, x)
+    case x: collection.Seq[_]    => mapToArrayList(serialize _, x)
     case x: Set[_]               => mapToArrayList(serialize _, x)
     case v => throw new IllegalArgumentException(s"Cannot serialize value: $v of type: ${v.getClass.getName}")
   }

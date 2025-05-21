@@ -121,8 +121,9 @@ abstract class DSIClient(
   override def baseContext: Context = brokerCtx.context
   override def sessionData: SessionData = sessionCtx.sessionData
 
-  // TODO (OPTIMUS-13424): should be protected, however dal_browser UserBoundDSI is massively violating encapsulation here
+  // TODO (OPTIMUS-13424): should be protected, however tests including shockwave massively violating encapsulation here
   private[optimus] def getSender(): DalBrokerClient
+  private[optimus] override def getDSIClient: DSIClient = this
 
   protected def getPubSubRetryManager(
       retryAttempts: Int,
@@ -531,6 +532,8 @@ trait ClientSideDSI extends DSI with HandlePubSub {
     executeReadOnlyCommands(reads)
   }
 
+  // TODO (OPTIMUS-13424): used by tests including shockwave test.
+  private[optimus] def getDSIClient: DSIClient
   def sessionData: SessionData
   private[optimus] def bindSessionFetcher(sessionFetcher: SessionFetcher): Unit
 

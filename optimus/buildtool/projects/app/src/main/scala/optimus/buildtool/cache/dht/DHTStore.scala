@@ -12,6 +12,10 @@
 
 package optimus.buildtool.cache.dht
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.readFromArray
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import optimus.buildtool.artifacts.CachedArtifactType
 import optimus.buildtool.artifacts.CompilerMessagesArtifact
 import optimus.buildtool.artifacts.IncrementalArtifact
@@ -59,33 +63,21 @@ import scala.util.Try
 import scala.util.Using
 
 object DHTStore extends Log {
-  import optimus.buildtool.artifacts.JsonImplicits._
-  import spray.json.DefaultJsonProtocol._
-  import spray.json._
-  implicit val keyFormat: JsonFormat[ArtifactKey] =
-    jsonFormat[ScopeId, String, CachedArtifactType, Option[String], String, ArtifactKey](
-      ArtifactKey.apply,
-      "id",
-      "fingerprintHash",
-      "tpe",
-      "discriminator",
-      "artifactVersion")
-  implicit val keyFormat2: JsonFormat[AssetKey] =
-    jsonFormat[URL, String, AssetKey](AssetKey.apply, "url", "externalArtifactVersion")
-  implicit val keyFormat3: JsonFormat[StoredKey] = new JsonFormat[StoredKey] {
-    override def read(json: JsValue): StoredKey = json match {
-      case x if x.asJsObject.fields.contains("id")  => x.convertTo[ArtifactKey]
-      case x if x.asJsObject.fields.contains("url") => x.convertTo[AssetKey]
-      case _                                        => throw new IllegalArgumentException(s"Unknown key type: $json")
-    }
-    override def write(obj: StoredKey): JsValue = obj match {
-      case x: ArtifactKey => x.toJson(keyFormat)
-      case x: AssetKey    => x.toJson(keyFormat2)
-    }
+
+  // WARNING do not define codec for StoredKey as it will break DHT space optimisations
+  // implicit val storedKeyValueCodec: JsonValueCodec[StoredKey] = ???
+  import optimus.buildtool.artifacts.JsonImplicits.{urlValueCodec, cachedArtifactTypeValueCodec}
+
+  implicit val artifactKeyValueCodec: JsonValueCodec[ArtifactKey] = JsonCodecMaker.make
+  implicit val assetKeyValueCodec: JsonValueCodec[AssetKey] = JsonCodecMaker.make
+
+  implicit class StoredKeyConversions[A <: StoredKey](key: A) {
+    def toKVKey(implicit codec: JsonValueCodec[A]) = new KVKey(writeToArray(key))
   }
 
-  implicit def storedToKV(stored: StoredKey): KVKey = new KVKey(stored.toJson(keyFormat3).compactPrint.getBytes())
-  implicit def kvToStored(kv: KVKey): StoredKey = new String(kv.key()).parseJson.convertTo[StoredKey]
+  implicit class KVKeyConversions(key: KVKey) {
+    def toStoredKey[A <: StoredKey: JsonValueCodec]: A = readFromArray[A](key.key())
+  }
 
   private val zkClusterTypePattern = """.*/obt-build-cache-(dev|qa)/.*""".r
   def zkClusterType(zkPath: String): ClusterType = zkPath match {
@@ -119,7 +111,6 @@ object DHTStore extends Log {
   ) extends StoredKey {
     override val traceType: CacheTraceType = ArtifactCacheTraceType(tpe)
     override val keyspace: Keyspace = Keyspace.of("obt-artifacts")
-
   }
 
   final case class AssetKey(url: URL, externalArtifactVersion: String) extends StoredKey {
@@ -128,7 +119,7 @@ object DHTStore extends Log {
     override val keyspace: Keyspace = Keyspace.of("obt-assets")
   }
 
-  private def debugString(keys: Set[StoredKey]): String = {
+  private def debugString[A <: StoredKey: JsonValueCodec](keys: Set[A]): String = {
     val suffix =
       if (keys.size >= 3) ""
       else
@@ -205,13 +196,13 @@ class DHTStore(
     }
   }
 
-  @async private def _put(key: StoredKey, asset: FileAsset): Unit = {
+  @async private def _put[A <: StoredKey: JsonValueCodec](key: A, asset: FileAsset): Unit = {
     AdvancedUtils.timed {
       ObtTrace.traceTask(key.id, Put(clusterType, key.traceType), failureSeverity = Warning) {
         val content = readAsset(asset)
         (
           content.map(_.remaining()).sum,
-          lvClient.putLarge(key.keyspace, new KVLargeEntry(key, new KVLargeValue(content)), key.toString))
+          lvClient.putLarge(key.keyspace, new KVLargeEntry(key.toKVKey, new KVLargeValue(content)), key.toString))
       }
     } match {
       case (timeNanos, (contentSize, overwritten)) =>
@@ -224,10 +215,10 @@ class DHTStore(
   }
 
   // private admin method - not meant for general use
-  @async private[dht] def _remove(key: StoredKey): Boolean = {
+  @async private[dht] def _remove[A <: StoredKey: JsonValueCodec](key: A): Boolean = {
     if (cacheMode.canWrite) {
       AdvancedUtils.timed {
-        lvClient.removeLarge(key.keyspace, key, key.toString)
+        lvClient.removeLarge(key.keyspace, key.toKVKey, key.toString)
       } match {
         case (timeNanos, result) =>
           logRemoved(key.id, key.traceType, s"$key (removed=$result) in ${durationStringNanos(timeNanos)}")
@@ -238,31 +229,35 @@ class DHTStore(
     }
   }
 
-  @async private def _get(key: StoredKey, destination: FileAsset): Option[FileAsset] = {
+  @async private def _get[A <: StoredKey: JsonValueCodec](key: A, destination: FileAsset): Option[FileAsset] = {
+    val id = key.id
+    val traceType = key.traceType
     AdvancedUtils.timed {
-      ObtTrace.traceTask(key.id, Fetch(clusterType, key.traceType), failureSeverity = Warning) {
-        lvClient.getLarge(key.keyspace, key, key.toString)
+      ObtTrace.traceTask(id, Fetch(clusterType, traceType), failureSeverity = Warning) {
+        lvClient.getLarge(key.keyspace, key.toKVKey, key.toString)
       }
     } match {
       case (timeNanos, Some(r)) =>
         val contentSize = r.buffers().map(_.remaining()).sum
-        logFound(key.id, key.traceType, s"$key ($contentSize content bytes in ${durationStringNanos(timeNanos)}")
+        logFound(id, traceType, s"$key ($contentSize content bytes in ${durationStringNanos(timeNanos)}")
         ObtTrace.addToStat(stat.ReadBytes, contentSize)
         writeAsset(destination, r.buffers())
         Some(destination)
-      case (_, _) => None
+      case (timeNanos, _) =>
+        logNotFound(id, traceType, s"$key (${durationStringNanos(timeNanos)})")
+        None
     }
   }
 
-  @async private def _check(keys: Set[StoredKey]): Set[StoredKey] = {
+  @async private def _check[A <: StoredKey: JsonValueCodec](keys: Set[A]): Set[A] = {
     if (keys.nonEmpty) {
       lvClient
         .contains(
           keys.head.keyspace,
-          keys.map(storedToKV),
+          keys.map(_.toKVKey),
           debugString(keys)
         )
-        .map(_.map(kvToStored))
+        .map(_.map(_.toStoredKey[A]))
         .getOrElse(Set.empty)
     } else {
       Set.empty
@@ -324,11 +319,6 @@ class DHTStore(
   @async override def put(url: URL, file: FileAsset): FileAsset = {
     _put(AssetKey(url, externalArtifactVersion), file)
     file
-  }
-
-  // private admin method - not meant for general use
-  @async private[dht] def remove(url: URL): Boolean = {
-    _remove(AssetKey(url, externalArtifactVersion))
   }
 
   @async override def check(url: URL): Boolean = {

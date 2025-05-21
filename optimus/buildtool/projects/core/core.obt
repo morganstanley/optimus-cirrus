@@ -11,11 +11,12 @@ all.javac.release = ${versions.javac.release.jetfireDependency}
 
 main {
   compile.libs = [
+    jsoniter-scala-core,
+    jsoniter-scala-macros,
     ossjava.jackson2,
+    ossjava.jackson2.module-scala,
     ossjava.typesafeconfig,
-    ossscala.jackson-module-scala,
-    ossscala.scala-parser-combinators,
-    ossscala.spray-json
+    ossscala.scala-parser-combinators
   ]
 
   tokens {

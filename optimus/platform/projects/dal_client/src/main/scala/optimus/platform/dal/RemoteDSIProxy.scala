@@ -18,8 +18,8 @@ import optimus.dsi.partitioning.PartitionMap
 import optimus.dsi.session.EstablishSession
 import optimus.dsi.session.EstablishedClientSession
 import optimus.graph.DiagnosticSettings
-import optimus.platform.dal.DALPubSub.ClientStreamId
 import optimus.platform._
+import optimus.platform.dal.DALPubSub.ClientStreamId
 import optimus.platform.dal.config.DalAppId
 import optimus.platform.dal.config.DalAsyncConfig
 import optimus.platform.dal.config.DalEnv
@@ -30,6 +30,7 @@ import optimus.platform.dsi.bitemporal._
 import optimus.platform.dsi.protobufutils.DALProtoClient
 import optimus.platform.dsi.protobufutils.DalBrokerClient
 import optimus.platform.dsi.protobufutils.PubSubProtoClient
+import optimus.platform.internal.SimpleGlobalStateHolder
 import optimus.platform.runtime.BrokerProvider
 import optimus.platform.runtime.BrokerProviderResolver
 import optimus.platform.runtime.Brokers
@@ -37,6 +38,8 @@ import optimus.platform.runtime.LeaderElectorClientListener
 import optimus.platform.runtime.OptimusCompositeLeaderElectorClient
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.collection.compat._
+import scala.collection.immutable
 import scala.collection.mutable.ArrayBuffer
 
 abstract class AbstractRemoteDSIProxy(ctx: ClientBrokerContext) extends DSIClient(ctx) {
@@ -248,10 +251,76 @@ class RandomRemoteDSIProxy(
     writeBroker.isDefined && connStr.isDefined &&
     writeBroker.get != connStr.get && !readBrokers.contains(connStr.get)
   }
-
 }
 
-class MultiReadBrokersDSIProxy(
+object ReadBrokerDSIProxy {
+  private val log = getLogger(this)
+  private[optimus] def maxReadBrokers(maxBrokersFromURI: Int = 1): Int = {
+    MultiReadBrokersConfig.getMax.filter(_ > 0) match {
+      case Some(x) =>
+        val result = Math.min(x, maxBrokersFromURI)
+        if (x != maxBrokersFromURI)
+          log.info(s"Max read brokers is set to $x by client and $maxBrokersFromURI by replica URI. Using $result.")
+        result
+      case None => maxBrokersFromURI
+    }
+  }
+
+  def apply(
+      baseContext: Context,
+      brokerProviderResolver: BrokerProviderResolver,
+      replicaBroker: String,
+      partitionMap: PartitionMap,
+      zone: DalZoneId,
+      appId: DalAppId,
+      cmdLimit: Int,
+      asyncConfig: DalAsyncConfig,
+      env: DalEnv,
+      shouldLoadBalance: Boolean,
+      secureTransport: Boolean,
+      maxBrokersFromURI: Int = 1): ClientSideDSI = {
+    val readBrokers = maxReadBrokers(maxBrokersFromURI)
+    if (readBrokers > 1) {
+      new MultiReadBrokersDSIProxy(
+        baseContext,
+        brokerProviderResolver,
+        replicaBroker,
+        partitionMap,
+        zone,
+        appId,
+        cmdLimit,
+        asyncConfig,
+        env,
+        shouldLoadBalance,
+        secureTransport,
+        readBrokers
+      )
+    } else
+      new RandomRemoteDSIProxy(
+        ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, brokerVirtualHostname(env)),
+        brokerProviderResolver,
+        partitionMap,
+        shouldLoadBalance,
+        secureTransport
+      )
+  }
+
+  private def brokerVirtualHostname(env: DalEnv): Option[String] = ClientBrokerContext.brokerVirtualHostname(env)
+}
+
+class MultiReadBrokersConfig {
+  private val MAX = "optimus.dal.multiReadBrokers.max"
+  // default to 1 to preserve existing app behavior
+  @volatile var max: Option[Int] = Option(DiagnosticSettings.getIntProperty(MAX, 1))
+}
+
+object MultiReadBrokersConfig
+    extends SimpleGlobalStateHolder[MultiReadBrokersConfig]({ () => new MultiReadBrokersConfig }) {
+  def getMax: Option[Int] = getState.max
+  def setMax(m: Option[Int]): Unit = getState.max = m
+}
+
+private class MultiReadBrokersDSIProxy(
     val baseContext: Context,
     val brokerProviderResolver: BrokerProviderResolver,
     val replicaBroker: String,
@@ -263,91 +332,58 @@ class MultiReadBrokersDSIProxy(
     val env: DalEnv,
     val shouldLoadBalance: Boolean,
     val secureTransport: Boolean,
-    val maxBrokersAllowedForConnectionFromURI: Int = 1)
+    val maxBrokersFromURI: Int = 1)
     extends ClientSideDSI {
 
   private val log = getLogger(this)
 
-  lazy val brokerProvider = brokerProviderResolver.resolve(replicaBroker)
+  private lazy val brokerProvider = brokerProviderResolver.resolve(replicaBroker)
 
-  lazy val fixedReadRemoteDSIProxyList: Option[FixedReadRemoteDSIProxyList] = {
-    if (maxBrokersAllowedForConnectionFromURI > 1) {
-      Some(
-        new FixedReadRemoteDSIProxyList(
-          brokerProvider,
-          maxBrokersAllowedForConnectionFromURI,
-          ClientBrokerContext(
-            baseContext,
-            replicaBroker,
-            zone,
-            appId,
-            cmdLimit,
-            asyncConfig,
-            brokerVirtualHostname(env)),
-          partitionMap,
-          secureTransport,
-          shouldLoadBalance
-        ))
-    } else None
+  private lazy val fixedReadRemoteDSIProxyList: FixedReadRemoteDSIProxyList = {
+    new FixedReadRemoteDSIProxyList(
+      brokerProvider,
+      maxBrokersFromURI,
+      ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, brokerVirtualHostname(env)),
+      partitionMap,
+      secureTransport,
+      shouldLoadBalance
+    )
   }
 
-  lazy val fixedReplica = new RandomRemoteDSIProxy(
-    ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, brokerVirtualHostname(env)),
-    brokerProviderResolver,
-    partitionMap,
-    shouldLoadBalance,
-    secureTransport
-  )
-
-  protected[optimus] def replica = {
-    if (maxBrokersAllowedForConnectionFromURI == 1) {
-      fixedReplica
-    } else {
-      fixedReadRemoteDSIProxyList.get.chosenReplica
-    }
-  }
-
-  private[optimus] def getDSIClient = {
-    replica
+  override private[optimus] def getDSIClient: FixedReadRemoteDSIProxy = {
+    fixedReadRemoteDSIProxyList.chosenReplica
   }
 
   private[optimus] def connectionSession(): Option[EstablishedClientSession] =
     getDSIClient.sessionCtx.connectionSession()
 
   @async def executeReplicaReadOnlyCommands(
-      chosenReplica: DSIClient,
+      chosenReplica: FixedReadRemoteDSIProxy,
       replicaCmds: Seq[ReadOnlyCommand],
       attempts: Int): Seq[Result] = {
     asyncResult(chosenReplica.executeReadOnlyCommands(replicaCmds)) match {
-      case NodeFailure(ex) =>
-        if (ex.isInstanceOf[DalBrokerClientInitializedException]) {
-          log.error(
-            s"Got exception with read broker - ${chosenReplica}, removing from the list of connected read brokers")
-
-          fixedReadRemoteDSIProxyList.get.removeReplicaFromAvailableConnections(chosenReplica)
-
-          if (attempts > 0 && fixedReadRemoteDSIProxyList.get.getAvailableConnections.size > 0) {
-            log.info("Choosing different read broker to serve this request")
-            executeReplicaReadOnlyCommands(replica, replicaCmds, attempts - 1)
-          } else {
-            log.error("Either max retry is exhausted or no brokers are available to serve this request")
-            throw ex
-          }
-        } else
+      case NodeFailure(ex: DalBrokerClientInitializedException) =>
+        log.error(s"Got exception with read broker - $chosenReplica, removing from the list of connected read brokers")
+        fixedReadRemoteDSIProxyList.removeReplicaFromAvailableConnections(chosenReplica)
+        if (attempts > 0 && fixedReadRemoteDSIProxyList.getAvailableConnections.size > 0) {
+          log.info("Choosing different read broker to serve this request")
+          executeReplicaReadOnlyCommands(getDSIClient, replicaCmds, attempts - 1)
+        } else {
+          log.error("Either max retry is exhausted or no brokers are available to serve this request")
           throw ex
-      case NodeSuccess(results) => results
+        }
+      case NodeFailure(ex: Exception) => throw ex
+      case NodeSuccess(results)       => results
     }
   }
 
   @async def executeRoundRobinReadOnlyCommands(replicaCmds: Seq[ReadOnlyCommand]): Seq[Result] = {
-    val chosenReplica = replica.asInstanceOf[FixedReadRemoteDSIProxy]
-    executeReplicaReadOnlyCommands(chosenReplica, replicaCmds, chosenReplica.maxRetryCount)
+    val chosen = getDSIClient
+    executeReplicaReadOnlyCommands(chosen, replicaCmds, chosen.maxRetryCount)
   }
 
   @async override def executeReadOnlyCommands(replicaCmds: Seq[ReadOnlyCommand]): Seq[Result] = {
-    if (maxBrokersAllowedForConnectionFromURI > 1) {
-      executeRoundRobinReadOnlyCommands(replicaCmds)
-    } else replica.executeReadOnlyCommands(replicaCmds)
+    executeRoundRobinReadOnlyCommands(replicaCmds)
   }
 
   @async override def executeLeadWriterCommands(cmds: Seq[LeadWriterCommand]): Seq[Result] = {
@@ -355,27 +391,21 @@ class MultiReadBrokersDSIProxy(
   }
 
   override def sessionData: optimus.platform.dal.session.ClientSessionContext.SessionData =
-    replica.sessionCtx.sessionData
+    getDSIClient.sessionCtx.sessionData
 
   override private[optimus] def bindSessionFetcher(sessionFetcher: SessionFetcher): Unit = {
-    if (fixedReadRemoteDSIProxyList.isDefined) {
-      fixedReadRemoteDSIProxyList.get.bindSessionFetcher(sessionFetcher)
-    } else { fixedReplica.bindSessionFetcher(sessionFetcher) }
+    fixedReadRemoteDSIProxyList.bindSessionFetcher(sessionFetcher)
   }
 
   override protected[optimus] def close(shutdown: Boolean): Unit = {
-    if (fixedReadRemoteDSIProxyList.isDefined) {
-      fixedReadRemoteDSIProxyList.get.getAvailableConnections.foreach(replica => replica.close(shutdown))
-    } else fixedReplica.close(shutdown)
+    fixedReadRemoteDSIProxyList.getAvailableConnections.foreach(replica => replica.close(shutdown))
   }
 
   override private[optimus] def setEstablishSession(establishSession: => EstablishSession): Unit = {
-    if (fixedReadRemoteDSIProxyList.isDefined) {
-      fixedReadRemoteDSIProxyList.get.setEstablishSession(establishSession)
-    } else { fixedReplica.setEstablishSession(establishSession) }
+    fixedReadRemoteDSIProxyList.setEstablishSession(establishSession)
   }
 
-  override protected[optimus] def serverFeatures(): SupportedFeatures = replica.serverFeatures()
+  override protected[optimus] def serverFeatures(): SupportedFeatures = getDSIClient.serverFeatures()
 }
 
 class DalBrokerClientInitializedException(message: String, cause: Throwable, client: Option[DalBrokerClient])
@@ -463,29 +493,30 @@ class FixedReadRemoteDSIProxyList(
     }
   }
 
-  private lazy val availableConnections: ArrayBuffer[DSIClient] = ArrayBuffer(readRemoteDSIProxyList: _*)
+  private lazy val availableConnections: ArrayBuffer[FixedReadRemoteDSIProxy] = ArrayBuffer(readRemoteDSIProxyList: _*)
 
-  def addReplicaToAvailableConnections(replica: DSIClient): Unit = this synchronized {
+  def addReplicaToAvailableConnections(replica: FixedReadRemoteDSIProxy): Unit = this synchronized {
     availableConnections += replica
   }
 
-  def removeReplicaFromAvailableConnections(replica: DSIClient): Unit = {
+  def removeReplicaFromAvailableConnections(replica: FixedReadRemoteDSIProxy): Unit = {
     this synchronized {
       availableConnections -= replica
     }
-    electionClientListener.update(brokerProvider.asInstanceOf[OptimusCompositeLeaderElectorClient].getAllBrokers)
+    electionClientListener.update(brokerProvider.getAllBrokers)
   }
 
-  def getAvailableConnections = this synchronized {
-    availableConnections.toSeq
+  def getAvailableConnections: Seq[FixedReadRemoteDSIProxy] = this synchronized {
+    availableConnections.to(immutable.Seq)
   }
 
   private var roundRobinIndex = -1
 
-  def chosenReplica = {
+  def chosenReplica: FixedReadRemoteDSIProxy = {
     this synchronized {
       roundRobinIndex = roundRobinIndex + 1
-      getAvailableConnections(roundRobinIndex % getAvailableConnections.size)
+      val connections = getAvailableConnections
+      connections(roundRobinIndex % connections.length)
     }
   }
 
@@ -500,9 +531,7 @@ class FixedReadRemoteDSIProxyList(
         maxBrokersAllowedForConnectionFromURI > currentConnections.size && currentConnections.size < listOfAllBrokers.size
       ) {
         val currentConnectedBrokers = currentConnections.map(conn =>
-          conn
-            .asInstanceOf[FixedReadRemoteDSIProxy]
-            .getReadBrokerConnectionString
+          conn.getReadBrokerConnectionString
             .getOrElse({
               log.error(
                 s"No broker registered for ${conn} connection, removing from the current connected brokers list")
@@ -612,7 +641,8 @@ class PubSubDsiProxy(
     pubSubRetryManager.get.handlePubSubException,
     pubSubRetryManager.get.checkStreamExists,
     pubSubRetryManager.get.remoteStreamCleanup,
-    () => pubSubRetryManager.get.onConnect()
+    () => pubSubRetryManager.get.onConnect(),
+    () => pubSubRetryManager.get.notifyStaleStreams()
   )
 
   override protected def shouldCloseClient(brokers: Brokers): Boolean = {
@@ -685,7 +715,8 @@ class PubSubTcpDsiProxy(
     pubSubRetryManager.get.handlePubSubException,
     pubSubRetryManager.get.checkStreamExists,
     pubSubRetryManager.get.remoteStreamCleanup,
-    () => pubSubRetryManager.get.onConnect()
+    () => pubSubRetryManager.get.onConnect(),
+    () => pubSubRetryManager.get.notifyStaleStreams()
   )
 
   override protected def getPubSubRetryManager(

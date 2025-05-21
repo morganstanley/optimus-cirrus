@@ -105,7 +105,7 @@ final class ScenarioReference private (
 
   // all prefixes of this path (starting with root and ending with this path)
   // e.g. Seq(//root, //root/a, //root/a/b, //root/a/b/c)
-  def prefixes: collection.Seq[ScenarioReference] = prefixesReversed.reverse
+  def prefixes: Seq[ScenarioReference] = prefixesReversed.reverse
 
   // it's easier to build it in reverse...
   private def prefixesReversed: List[ScenarioReference] = this :: parent.map(_.prefixesReversed).getOrElse(Nil)
@@ -205,8 +205,8 @@ object ScenarioReference
   private[optimus] def forOverlayStack(scenarioStack: ScenarioStack): ScenarioReference =
     if (scenarioStack eq null) Dummy else scenarioStack.getNode(currentOverlay$newNode).get
 
-  private[optimus] def activeScenarios: collection.Seq[String] = activeScenarioReferences.map(_.name)
-  def activeScenarioReferences: collection.Seq[ScenarioReference] =
+  private[optimus] def activeScenarios: Seq[String] = activeScenarioReferences.map(_.name)
+  def activeScenarioReferences: Seq[ScenarioReference] =
     DependencyTracker.getDependencyTrackerRoot.getScenarioReferences
 
   /**

@@ -28,4 +28,6 @@ public @interface stored {
   boolean projected() default false;
 
   boolean fullTextSearch() default false;
+
+  boolean monoTemporal() default false;
 }

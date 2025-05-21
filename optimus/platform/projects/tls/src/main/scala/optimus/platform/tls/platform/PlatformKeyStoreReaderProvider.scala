@@ -45,8 +45,8 @@ class PlatformKeyStoreReaderProvider extends KeyStoreReaderProvider {
               Splitter.on(",").trimResults().omitEmptyStrings().split(keys).asScala.flatMap { key =>
                 configuration.get(s"platform.selector.principal.$key").map(_.asInstanceOf[String])
               }
-            case names: Seq[_] if names.forall(_.isInstanceOf[String]) =>
-              names.asInstanceOf[Seq[String]]
+            case names: collection.Seq[_] if names.forall(_.isInstanceOf[String]) =>
+              names.asInstanceOf[collection.Seq[String]]
             case _ => throw new IllegalArgumentException
           })
         .map(_.map(new LdapName(_)))

@@ -231,8 +231,10 @@ trait PicklersLow1 extends PicklersLow2 {
   def entityPickler[T <: Entity] = EntityPickler.asInstanceOf[Pickler[T]]
   def inonstringMapPickler[A, B](picklerA: Pickler[A], picklerB: Pickler[B]): Pickler[immutable.Map[A, B]] =
     new CollectionPickler[(A, B), immutable.Map[A, B]](tuple2pickler(picklerA, picklerB))
-  def seqPickler[T](innerPickler: Pickler[T]): Pickler[Seq[T]] =
-    new CollectionPickler[T, Seq[T]](innerPickler)
+  def seqPickler[T](innerPickler: Pickler[T]): Pickler[collection.Seq[T]] =
+    new CollectionPickler[T, collection.Seq[T]](innerPickler)
+  def indexedSeqPickler[T](innerPickler: Pickler[T]): Pickler[collection.IndexedSeq[T]] =
+    new CollectionPickler[T, collection.IndexedSeq[T]](innerPickler)
   def sortedMapPickler[A, B](picklerA: Pickler[A], picklerB: Pickler[B]): Pickler[immutable.SortedMap[A, B]] =
     new CollectionPickler[(A, B), immutable.SortedMap[A, B]](tuple2pickler(picklerA, picklerB))
   def listMapPickler[A, B](picklerA: Pickler[A], picklerB: Pickler[B]): Pickler[immutable.ListMap[A, B]] =
@@ -261,8 +263,8 @@ trait DefaultPicklers extends PicklersLow1 {
 
   def iseqPickler[T](innerPickler: Pickler[T]): Pickler[immutable.Seq[T]] =
     new CollectionPickler[T, immutable.Seq[T]](innerPickler)
-  def indexedSeqPickler[T](innerPickler: Pickler[T]): Pickler[collection.IndexedSeq[T]] =
-    new CollectionPickler[T, collection.IndexedSeq[T]](innerPickler)
+  def iindexedSeqPickler[T](innerPickler: Pickler[T]): Pickler[immutable.IndexedSeq[T]] =
+    new CollectionPickler[T, immutable.IndexedSeq[T]](innerPickler)
   def vectorPickler[T](innerPickler: Pickler[T]): Pickler[Vector[T]] =
     new CollectionPickler[T, Vector[T]](innerPickler)
   def listPickler[T](innerPickler: Pickler[T]): Pickler[List[T]] =

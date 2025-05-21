@@ -26,6 +26,7 @@ import optimus.graph.diagnostics.SchedulerProfileEntry
 import optimus.graph.diagnostics.configmetrics.ConfigMetrics
 import optimus.graph.diagnostics.gridprofiler
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.DALStatsEntry
+import optimus.graph.diagnostics.gridprofiler.GridProfilerData.MetricData
 import optimus.graph.diagnostics.gridprofiler.GridProfilerData.nameToTweakID
 import optimus.graph.diagnostics.gridprofiler.GridProfilerDefaults._
 import optimus.graph.diagnostics.gridprofiler.GridProfilerUtils._
@@ -125,12 +126,12 @@ object GridProfiler {
    * -Doptimus.scheduler.profile.folder
    * -Doptimus.scheduler.profile.mode
    */
-  @closuresEnterGraph def profilingOnShutdown(f: => Unit): Unit = {
+  @closuresEnterGraph def profilingOnShutdown(f: => Unit)(implicit source: SourceLocation): Unit = {
     val agg = AggregationType.withNameOrDefault(initialProfileAggregation)
     val custom = if (initialProfileCustomFilter eq null) Array.empty[String] else initialProfileCustomFilter
     setNonNodeInputDefaults(agg, custom, "")
     try f
-    finally logSummary(onShutdown = true)
+    finally logSummary(onShutdown = true, source = s"$source:profilingOnShutdown")
   }
 
   // Called to ensure that class is fully initialised
@@ -162,7 +163,7 @@ object GridProfiler {
 
   // An Option[Tag] is sent out along with every distributed node
   final case class Tag(
-      scope: collection.Seq[
+      scope: Seq[
         ProfilerScope
       ], // scope name for aggregating custom (so far) profile data from the child nodes
       customMetricsFilter: Array[String], // included custom metrics
@@ -303,7 +304,7 @@ object GridProfiler {
   // scope is Seq[String] to represent nesting of profiled blocks:
   // profiled("A") { profiled("B") { node } } will execute node under scope (A,B)
 
-  val globalScope = collection.Seq.empty[ProfilerScope]
+  val globalScope = Seq.empty[ProfilerScope]
   // A wrapper around a pair of map that maintains bidirectional, thread-safe hash maps
   private object scopeRegistry {
     private val scope2blockId = mutable.HashMap.empty[Seq[ProfilerScope], Int]
@@ -312,7 +313,7 @@ object GridProfiler {
     // the global scope is an empty Seq, and its id is 1 (BLOCK_ID_UNSCOPED)
     require(putIfAbsent(globalScope) == OGTrace.BLOCK_ID_UNSCOPED)
 
-    def putIfAbsent(scope: collection.Seq[ProfilerScope]): Int = synchronized {
+    def putIfAbsent(scope: Seq[ProfilerScope]): Int = synchronized {
       scope2blockId.getOrElseUpdate(
         scope, {
           val index = blockId2Scope.size + OGTrace.BLOCK_ID_UNSCOPED
@@ -330,10 +331,10 @@ object GridProfiler {
     def toList: Seq[(Seq[ProfilerScope], Int)] = synchronized { scope2blockId.toList }
   }
   def getScopeRegistry: Seq[(Seq[ProfilerScope], Int)] = scopeRegistry.toList
-  def scopeToBlockID(scope: collection.Seq[ProfilerScope]): Int = scopeRegistry.putIfAbsent(scope)
+  def scopeToBlockID(scope: Seq[ProfilerScope]): Int = scopeRegistry.putIfAbsent(scope)
 
   // used when preparing a human-readable scope name, otherwise all scopes are handled as integers
-  def blockIDToScope(blk: Int): Option[collection.Seq[ProfilerScope]] = scopeRegistry.getByID(blk)
+  def blockIDToScope(blk: Int): Option[Seq[ProfilerScope]] = scopeRegistry.getByID(blk)
 
   // named scope is inherited if empty.
   // named scopes are combined with non-empty parent named scope
@@ -352,7 +353,7 @@ object GridProfiler {
           aggregation,
         )
       case None =>
-        Tag(collection.Seq(scope), customFilter, aggregation)
+        Tag(Seq(scope), customFilter, aggregation)
     }
     val blk = scopeToBlockID(newTag.scope)
     ss.withBlockID(blk).withPluginTag(GridProfiler.Tag, newTag)
@@ -398,9 +399,8 @@ object GridProfiler {
 
     val tags =
       if (profilerTagNeeded)
-        collection.Seq(
-          PluginTagKeyValue(GridProfiler.Tag, Tag(globalScope, defaultCustomMetrics, defaultAggregationType)))
-      else collection.Seq.empty
+        Seq(PluginTagKeyValue(GridProfiler.Tag, Tag(globalScope, defaultCustomMetrics, defaultAggregationType)))
+      else Seq.empty
     if (tags.nonEmpty)
       n.replace(n.scenarioStack.withPluginTags(tags))
   }
@@ -417,12 +417,12 @@ object GridProfiler {
   // Task ID registry:
   // This builds up the graph of dist tasks and the engines they ran on
   private[gridprofiler] val taskRegistry =
-    c.TrieMap.empty[String, (String, collection.Seq[String])] // task id -> (engine name, list of parent tasks)
-  private[optimus] def recordTask(task: String, engine: String, parents: collection.Seq[String]): Unit =
+    c.TrieMap.empty[String, (String, Seq[String])] // task id -> (engine name, list of parent tasks)
+  private[optimus] def recordTask(task: String, engine: String, parents: Seq[String]): Unit =
     taskRegistry.update(task, (engine, parents))
-  private[optimus] def getTaskRegistry: Map[String, (String, collection.Seq[String])] = taskRegistry.toMap
-  private[optimus] def removeTaskRegistry(): Map[String, (String, collection.Seq[String])] = {
-    val res = m.Map.empty[String, (String, collection.Seq[String])]
+  private[optimus] def getTaskRegistry: Map[String, (String, Seq[String])] = taskRegistry.toMap
+  private[optimus] def removeTaskRegistry(): Map[String, (String, Seq[String])] = {
+    val res = m.Map.empty[String, (String, Seq[String])]
     for (task <- taskRegistry.keySet) {
       taskRegistry.remove(task).foreach { res.update(task, _) }
     }
@@ -564,7 +564,7 @@ object GridProfiler {
   final def recordCustomCounter[V](
       key: String,
       data: V,
-      scopeOverride: Option[collection.Seq[ProfilerScope]] = None,
+      scopeOverride: Option[Seq[ProfilerScope]] = None,
       node: NodeTask = EvaluationContext.currentNode): Unit = {
     val filter = tagForNode(node) map (_.customMetricsFilter) getOrElse defaultCustomMetrics
     if (filter.contains("all") || filter.contains(key) || isCustomRegressionMetrics(filter, key)) {
@@ -726,7 +726,7 @@ object GridProfiler {
   // this version takes a metric name and uses the scope from the given or current node
   // to supply a different scope, re-enter it: profiled(scope) { removeCustomCounter("key") }
   // returns the values that were dropped from the profiler's static storage (could be more than one if distribution took place and this metric arrived from different engines)
-  final def removeCustomCounter(key: String): collection.Seq[Any] =
+  final def removeCustomCounter(key: String): MetricData =
     GridProfilerData.removeByKey(metricNameToID(key), currentScope)
 
   // Lookup/Extraction
@@ -747,8 +747,8 @@ object GridProfiler {
       case (a: Float, b: Float)   => a + b
       case (a: Double, b: Double) => a + b
       // sequences are appended
-      case (a: String, b: String) => a + b
-      case (a: Seq[_], b: Seq[_]) => a ++ b
+      case (a: String, b: String)                       => a + b
+      case (a: collection.Seq[_], b: collection.Seq[_]) => a ++ b
       // optimization for the most common case, originally made by TemporalContextTrace.scala
       // because calls to recordCustomCounter only ever add one element to a collection
       case (a: ASet, b: ASet) if b.size == 1 => a + b.head
@@ -781,9 +781,13 @@ object GridProfiler {
 
   // if profiling was enabled from command line, log the summary at exit (see comment about appName and pid overrides
   // on generateFileName)
+  def logSummary()(implicit source: SourceLocation): Unit =
+    logSummary(source = source.toString)
+
   def logSummary(
       appNameOverride: Option[String] = None,
       pidOverride: Option[Int] = None,
+      source: String,
       onShutdown: Boolean = false): Unit = {
     val defaultLvl = getDefaultLevel
     if (System.getProperty("optimus.profiler.noExitSummary") == null && defaultLvl != Level.NONE) {
@@ -807,6 +811,8 @@ object GridProfiler {
         generateFileName(appNameOverride, pidOverride),
         summaryTable,
         autoGenerateConfig = true,
+        source = source,
+        suppliedDir = "",
         onShutdown = onShutdown)
       val tm3 = System.currentTimeMillis()
       log.info(s"elapsed in getSummary: ${tm2 - tm1} ms. elapsed in writeData: ${tm3 - tm2} ms. metrics: ${GridProfiler
@@ -818,7 +824,7 @@ object GridProfiler {
     }
   }
 
-  def getTemporalContextCnt: collection.Seq[String] = {
+  def getTemporalContextCnt: Seq[String] = {
     val allData = for ((_, kvs) <- getVtTtStacks) yield kvs
     allData
       .foldLeft(Map.empty[String, Set[String]])((prev, kvs) => defaultCombOp(prev, kvs))
@@ -937,7 +943,7 @@ object GridProfiler {
   def getStallTimesSummary: Metric.StallTime =
     getStallTimes.values.foldLeft(Map.empty[String, Long])((a, b) => defaultCombOp(a, b))
 
-  def getConfigMetricSummary(hs: collection.Seq[PNodeTaskInfo]): ConfigMetrics = {
+  def getConfigMetricSummary(hs: Seq[PNodeTaskInfo]): ConfigMetrics = {
     val env = getProcessStatsSummary
     val wallTime = env.totalGraphTime
     val cpuTime = env.jvmCPUTime
@@ -1047,7 +1053,7 @@ object GridProfiler {
       heapBasedBackoffTriggerHit = env.gcStats.gcMonitorStats.heapBasedBackoffTriggerHit,
       totalNumberNodesCleared = env.gcStats.gcMonitorStats.totalNumberNodesCleared,
       threadStatesSummary = env.threadStatesSummary,
-      stallDetails = OGSchedulerTimes.getStallingReasons.asScala,
+      stallDetails = OGSchedulerTimes.getStallingReasons.asScalaUnsafeImmutable,
       nodeStarts = hs.values.map(_.start).sum,
       cacheHits = hs.values.map(_.cacheHit).sum,
       cacheMisses = hs.values.map(_.cacheMiss).sum,
@@ -1071,7 +1077,7 @@ object GridProfiler {
       if (sched.isEmpty)
         bw.write("no data: -Doptimus.profile.showThreadSummary was enabled, but profile level was " + defaultLvl)
       val (names, entries) = sched.toSeq.filter(_._2.graphTime != 0).sortBy(_._1).unzip
-      val cols = collection.Seq(
+      val cols = Seq(
         StatTableCol("Thread name", "%20s", names),
         StatTableCol("Graph time (s)", "%15.3f", entries.map(_.graphTime / 1e9)),
         StatTableCol("Self Time (s)", "%15.3f", entries.map(_.selfTime / 1e9)),
@@ -1153,11 +1159,12 @@ object GridProfiler {
       GridProfilerData.aggregateSingle(row, None, defaultAggregationType).foreach { case (task, customs) =>
         customs.foreach { case (key, value) =>
           if (!(writeExcluded contains key)) {
+            val profiledScope = GridProfiler.blockIDToScope(scope)
             if (key == CustomRegressionMetrics.dalPriqlCustomMetric)
               value.asInstanceOf[Map[String, Int]].map { case (loc, count) =>
                 priqlData += Array(
                   s"$task",
-                  s"${GridProfiler.blockIDToScope(scope).get.map(_.text).mkString(",")}",
+                  if (profiledScope.isDefined) s"${profiledScope.get.map(_.text).mkString(",")}" else "",
                   s"$key",
                   loc,
                   count.toString)
@@ -1165,7 +1172,7 @@ object GridProfiler {
             else
               nonPriqlData += Array(
                 s"$task",
-                s"${GridProfiler.blockIDToScope(scope).get.map(_.text).mkString(",")}",
+                if (profiledScope.isDefined) s"${profiledScope.get.map(_.text).mkString(",")}" else "",
                 s"$key",
                 s"$value")
           }
@@ -1232,19 +1239,23 @@ object GridProfiler {
         )
           yield plugin split " " match {
             case Array(cls, plugin, via, node) if cls == "class" && via == "via" =>
+              val profiledScope = GridProfiler.blockIDToScope(scope)
               Array(
                 s"$engine",
                 s"$plugin",
                 s"$node",
                 s"${time * 1e-6}",
-                GridProfiler.blockIDToScope(scope).get.map(_.text).mkString("."))
+                if (profiledScope.isDefined) profiledScope.get.map(_.text).mkString(".") else "")
             case node =>
+              val profiledScope = GridProfiler.blockIDToScope(scope)
               Array(
                 s"$engine",
                 "no plugin",
                 node.mkString(" "),
                 s"${time * 1e-6}",
-                GridProfiler.blockIDToScope(scope).get.map(_.text).mkString("."))
+                if (profiledScope.isDefined)
+                  profiledScope.get.map(_.text).mkString(".")
+                else "")
           }
       if (data.nonEmpty) {
         csvWriter.writeAll((header +: data.toSeq).asJava)

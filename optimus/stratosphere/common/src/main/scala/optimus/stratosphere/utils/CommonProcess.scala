@@ -192,8 +192,8 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
       env: Map[String, String] = Map.empty,
       timeout: Duration = Duration.Inf,
       withJavaOnPath: Boolean = false,
-      processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false))
-      : String = {
+      processLogger: CustomProcessLogger = stratoWorkspace.log.getProcessLogger(printOutputToScreen = false),
+      ignoreExitCode: Boolean = false): String = {
     val pb = new ProcessBuilder(cmds.toSeq: _*)
     val updatedPb = if (withJavaOnPath) addJavaToPath(pb) else pb
     if (dir.isDefined) updatedPb.directory(dir.get.toFile)
@@ -201,7 +201,7 @@ class CommonProcess(stratoWorkspace: StratoWorkspaceCommon) {
       case (key, "")    => updatedPb.environment().remove(key)
       case (key, value) => updatedPb.environment().put(key, value)
     }
-    runAndWaitForPb(updatedPb, label, timeout = timeout, processLogger = processLogger)
+    runAndWaitForPb(updatedPb, label, timeout = timeout, processLogger = processLogger, ignoreExitCode = ignoreExitCode)
   }
 
   def javaBuilder(cmdLine: Seq[String], dir: File): ProcessBuilder = {

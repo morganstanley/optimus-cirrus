@@ -19,13 +19,12 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.StringTokenizer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.StringTokenizer;
 import java.util.stream.Collectors;
-
 import optimus.graph.DiagnosticSettings;
 
 @SuppressWarnings({"unused", "WeakerAccess"})
@@ -236,6 +235,45 @@ public class InstrumentationCmds {
   }
 
   /**
+   * Instrument @methodToPatch to call @methodToCall by forwarding all the arguments
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   * @param toStatic true if method to call is static (or virtual otherwise)
+   * @param saveOrgSuffix if non-null save the original function renaming it by appending this value
+   */
+  public static void forward(
+      String methodToPatch, String methodToCall, boolean toStatic, String saveOrgSuffix) {
+    MethodRef from = asMethodRef(methodToPatch);
+    MethodRef to = asMethodRef(methodToCall);
+    var pre = InstrumentationConfig.addPrefixCall(from, to, false, true);
+    pre.prefixIsFullReplacement = true;
+    pre.noArgumentBoxing = true;
+    pre.keepOriginalMethodAs = from.method + saveOrgSuffix;
+    pre.forwardToCallIsStatic = toStatic;
+  }
+
+  /**
+   * Instrument @methodToPatch to call @methodToCall by forwarding all the arguments
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void forward(String methodToPatch, String methodToCall) {
+    forward(methodToPatch, methodToCall, true, FWD_ORG_DEFAULT_SUFFIX);
+  }
+
+  /**
+   * Instrument @methodToPatch to call @methodToCall by forwarding all the argument
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void forwardToVirtual(String methodToPatch, String methodToCall) {
+    forward(methodToPatch, methodToCall, false, null);
+  }
+
+  /**
    * Instrument @methodToPatch to call @methodToCall as the first call
    *
    * @param methodToPatch full name package1.class2.methodName1
@@ -258,6 +296,27 @@ public class InstrumentationCmds {
     MethodRef to = asMethodRef(methodToCall);
     var suffix = InstrumentationConfig.addSuffixCall(from, to);
     suffix.suffixWithThis = true;
+  }
+
+  /**
+   * Instrument @methodToPatch to call @methodToCall as the first call. <br>
+   * The methodToCall has to be a public static method with signature staring with return value and
+   * the rest matching the methodToPatch, <br>
+   * If methodToPatch is not static, the second argument of methodToCall will be the instance of the
+   * class
+   *
+   * @param methodToPatch full name package1.class2.methodName1
+   * @param methodToCall full name package1.class2.methodName2
+   */
+  public static void suffixCallTyped(String methodToPatch, String methodToCall) {
+    MethodRef from = asMethodRef(methodToPatch);
+    MethodRef to = asMethodRef(methodToCall);
+    var suffix = InstrumentationConfig.addSuffixCall(from, to);
+    suffix.suffixWithReturnValue = true; // Will be passed as first argument
+    suffix.suffixWithThis = true; // Will be passed as second argument if not static
+    suffix.suffixWithArgs = true; // Rest of the arguments
+    suffix.noArgumentBoxing = true; // No boxing
+    suffix.suffixReplacesReturnValue = true; // Replaces the return value
   }
 
   /**

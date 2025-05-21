@@ -23,10 +23,10 @@ package object storable {
     def $isModule: Boolean = e.$info.isInstanceOf[ModuleEntityInfo]
 
     def coreGetProps(): String = new EntityPrettyPrintView(e).dumpProps
-    def coreGetPropsAsSeq: collection.Seq[String] = new EntityPrettyPrintView(e).propsSeq
+    def coreGetPropsAsSeq: Seq[String] = new EntityPrettyPrintView(e).propsSeq
     def corePrettyPrint: String = new EntityPrettyPrintView(e).prettyPrint
 
-    def allKeyInfos[E <: Entity]: collection.Seq[IndexInfo[E, _]] = e.$info.keys.map(_.asInstanceOf[IndexInfo[E, _]])
+    def allKeyInfos[E <: Entity]: Seq[IndexInfo[E, _]] = e.$info.keys.map(_.asInstanceOf[IndexInfo[E, _]])
 
     final private def defaultKeyInfoOpt[E <: Entity]: Option[IndexInfo[E, _]] = {
       val keys = allKeyInfos[E]

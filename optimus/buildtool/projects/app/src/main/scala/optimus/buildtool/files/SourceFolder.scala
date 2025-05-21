@@ -81,6 +81,11 @@ import optimus.scalacompat.collection._
     } else SortedMap.empty
   }
 
+  @node def testPlanSourceFiles(): SortedMap[SourceFileId, HashedContent] = {
+    val predicate = PathRegexFilter(s".*\\.testplan\\.json")
+    findFilesAbove(workspaceSrcRootToSourceFolderPath, predicate)
+  }
+
   @node protected[files] def _findSourceFiles(
       filter: PathFilter,
       maxDepth: Int,

@@ -47,7 +47,7 @@ private[optimus] class StartNode(ss: ScenarioStack) extends Node[Unit] {
         Properties.pid -> MSProcess.getPID,
         Properties.host -> LoggingInfo.getHost,
         Properties.logFile -> LoggingInfo.getLogFile,
-        Properties.agents -> AgentInfo.agentInfo().asScala,
+        Properties.agents -> AgentInfo.agentInfo().asScalaUnsafeImmutable,
         Properties.user -> LoggingInfo.getUser
       )
     )

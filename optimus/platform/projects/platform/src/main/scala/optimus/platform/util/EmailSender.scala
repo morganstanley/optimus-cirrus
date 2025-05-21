@@ -34,19 +34,16 @@ object EmailSender {
 
   // constructors are overcomplicated here in order to keep it consistent with EmailSender until they're merged
   def apply(): EmailSender = new EmailSender()
-  def apply(smtpHost: String): EmailSender = new EmailSender(Some(smtpHost), None)
-  def apply(smtpHost: String, smtpPort: Int): EmailSender = new EmailSender(Some(smtpHost), Some(smtpPort))
+  def apply(smtp: EmailSenderSmtpServer): EmailSender = new EmailSender(Some(smtp))
 }
 
 class EmailSender private (
-    requestedSmtpHost: Option[String],
-    requestedPort: Option[Int]
+    requestedSmtp: Option[EmailSenderSmtpServer]
 ) {
 
-  def this() = this(None, None)
+  def this() = this(None)
 
-  val smtpHost: String = EmailSenderHelper.resolveSmtpHost(requestedSmtpHost)
-  val smtpPort: Int = requestedPort.getOrElse(25)
+  val smtp: EmailSenderSmtpServer = EmailSenderHelper.resolveSmtpHost(requestedSmtp)
 
   import EmailSender.log
 
@@ -123,8 +120,8 @@ class EmailSender private (
       replyTo: Option[Set[String]],
       cc: Option[Set[String]]): Message = {
     val props: Properties = new Properties()
-    props.put("mail.smtp.host", smtpHost)
-    props.put("mail.smtp.port", smtpPort.toString)
+    props.put("mail.smtp.host", smtp.host)
+    props.put("mail.smtp.port", smtp.port.toString)
     val session: Session = Session.getInstance(props)
     val msg: Message = new MimeMessage(session)
     msg.setHeader("X-Unsent: 1", "")
@@ -173,9 +170,7 @@ object EmailSenderHelper {
     override val name = "EmailSender"
   }
 
-  def resolveSmtpHost(requested: Option[String]): String = {
-    val prodSmtpHost = StaticConfig.string("prodSmtpHost")
-    val qaSmtpHost = StaticConfig.string("qaSmtpHost")
+  def resolveSmtpHost(requested: Option[EmailSenderSmtpServer]): EmailSenderSmtpServer = {
 
     val (nonObviousEnv, env) =
       try {
@@ -189,9 +184,26 @@ object EmailSenderHelper {
 
     val allowProdSmtp = DiagnosticSettings.getBoolProperty("EmailSender.allowProdSmtp", false)
 
-    val resolvedRequested = requested.getOrElse(prodSmtpHost)
-    if (resolvedRequested != prodSmtpHost) resolvedRequested
-    else if (!isProd && !allowProdSmtp) qaSmtpHost
-    else prodSmtpHost
+    val resolvedRequested = requested.getOrElse(EmailSenderSmtpServer.Prod)
+    if (resolvedRequested == EmailSenderSmtpServer.Prod && !isProd && !allowProdSmtp) EmailSenderSmtpServer.Qa
+    else resolvedRequested
+  }
+}
+
+sealed trait EmailSenderSmtpServer {
+  def host: String
+  def port: Int = 25
+  final def hostPort: String = s"$host:$port"
+}
+object EmailSenderSmtpServer extends Enum[EmailSenderSmtpServer] {
+  case object Prod extends EmailSenderSmtpServer {
+    override def host = StaticConfig.string("prodSmtpHost")
+  }
+  case object Qa extends EmailSenderSmtpServer {
+    override def host = StaticConfig.string("qaSmtpHost")
+  }
+  case object LocalTest extends EmailSenderSmtpServer {
+    override def host = "localhost"
+    override def port = 25000
   }
 }

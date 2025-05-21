@@ -20,6 +20,7 @@ import optimus.platform.StartNode
 import optimus.scalacompat.collection._
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
@@ -73,20 +74,20 @@ object NodeStacks {
     (className == "optimus.graph.OGScheduler$OGThread" && methodName == "run")
   }
 
-  def jvmStacksSplitBySyncFrame: collection.Map[Thread, collection.IndexedSeq[collection.Seq[StackTraceElement]]] =
+  def jvmStacksSplitBySyncFrame: Map[Thread, IndexedSeq[Seq[StackTraceElement]]] =
     Thread.getAllStackTraces.asScala.mapValuesNow(splitAtSyncFrame[StackTraceElement](_, isSyncMarker)).toMap
 
   @tailrec def splitAtSyncFrame[T](
-      in: collection.Seq[T],
+      in: Seq[T],
       isSyncMarker: T => Boolean,
-      out: ArrayBuffer[collection.Seq[T]] = ArrayBuffer.empty[collection.Seq[T]]
-  ): collection.IndexedSeq[collection.Seq[T]] = {
+      out: ArrayBuffer[Seq[T]] = ArrayBuffer.empty[Seq[T]]
+  ): IndexedSeq[Seq[T]] = {
     in match {
       // We append to the end of the buffer for efficiency and so must reverse it once we are done
-      case Nil => out.reverse
+      case Nil => out.view.reverse.to(ArraySeq)
       // Need the extra empty frame so that sync frame indices and the output array indices match up
-      case collection.Seq(x) if isSyncMarker(x) =>
-        splitAtSyncFrame(collection.Seq.empty, isSyncMarker, out += collection.Seq.empty)
+      case Seq(x) if isSyncMarker(x) =>
+        splitAtSyncFrame(Seq.empty, isSyncMarker, out += Seq.empty)
       // But we don't want the empty frame if we're not at the end of the stack
       case x +: xs if isSyncMarker(x) => splitAtSyncFrame(xs, isSyncMarker, out)
       case _                          =>
@@ -143,6 +144,7 @@ object NodeStacks {
     nodeTask
       .dbgWaitChain(false)
       .asScala
+      .iterator
       .collect {
         case _: StartNode   => Nil
         case task: NodeTask => NodeStackElem(task.cacheUnderlyingNode) :: Nil
@@ -152,6 +154,7 @@ object NodeStacks {
           else stack.get(sync.index).map(JvmStackElem)
       }
       .flatten
+      .to(ArraySeq)
   }
 
   def reconstitutedNodeAndJvmStack(): Array[StackElem] =

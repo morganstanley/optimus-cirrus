@@ -12,7 +12,6 @@
 package optimus.platform
 
 import msjava.base.util.uuid.MSUuid
-
 import optimus.platform._
 
 sealed trait MSUnique {
@@ -65,7 +64,7 @@ object MSUnique {
 
   object MSUniqueUnpickler extends Unpickler[MSUnique] {
     @node def unpickle(pickled: Any, ctxt: PickledInputStream): MSUnique = pickled match {
-      case buf: Seq[_] =>
+      case buf: collection.Seq[_] =>
         PersistentMSUnique(Registry.unpicklerOf[MSUuid].unpickle(pickled, ctxt))
     }
   }

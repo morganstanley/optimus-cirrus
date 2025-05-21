@@ -105,6 +105,7 @@ public abstract class NodeCacheBase extends NodeCCache {
         t = table;
         i = offset(t, hash);
         tail = null;
+        continue;
       }
 
       var insertNode = key; // If not found anything will insert the requested node

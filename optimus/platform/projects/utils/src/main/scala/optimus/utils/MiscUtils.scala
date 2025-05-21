@@ -15,15 +15,34 @@ import java.util.concurrent.atomic.AtomicLong
 import org.slf4j
 import msjava.slf4jutils.scalalog
 
-import scala.annotation.tailrec
+import java.time.Instant
 import scala.collection.LinearSeq
 import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable
 import scala.reflect.macros.whitebox
+import scala.util.Failure
+import scala.util.Random
+import scala.util.Success
 import scala.util.Try
 
 /** @see [[TypeClasses]] */
 object MiscUtils {
+
+  private val useTestingTimestampProp = "optimus.miscUtils.useTestingTimestamp"
+
+  private def useTestingTimestamp: Boolean = System.getProperty(useTestingTimestampProp) match {
+    case "true" | "1" => true
+    case _            => false
+  }
+
+  val timestampGen: AtomicLong = new AtomicLong(Instant.now.toEpochMilli)
+
+  def nextTimestamp: Long = if (useTestingTimestamp) timestampGen.incrementAndGet() else Instant.now.toEpochMilli
+
+  def nextTimestampAsInstant: Instant = if (useTestingTimestamp) Instant.ofEpochMilli(nextTimestamp)
+  else
+    throw new IllegalArgumentException(
+      "you must set -D" + useTestingTimestampProp + "=true to use MiscUtils.nextTimestampAsInstant")
 
   //  The idea is that you can call niceBreak from code you're actively developing,
   // and the breakpoints you set here will not move around as you edit.
@@ -69,30 +88,48 @@ object MiscUtils {
     def asScala: Option[A] = if (j.isPresent) Some(j.get()) else None
   }
 
-  def retry[A](n: Int, delay: Long, logger: slf4j.Logger)(f: () => A)(
-      shouldRetry: PartialFunction[Throwable, Boolean]): A = {
-    Try {
-      f()
-    }.recover {
-      case t: Throwable if n > 0 && shouldRetry.isDefinedAt(t) && shouldRetry.apply(t) =>
-        logger.error(s"Retrying after $delay ms, $n more times after exception", t)
-        if (n > 0) {
-          Thread.sleep(delay)
-          retry(n - 1, delay, logger)(f)(shouldRetry)
-        } else
-          throw t
-    }.get
+  def retry[A](
+      attempts: Int = 3,
+      delayMs: Int = 500,
+      exceptionClasses: List[Class[_ <: Throwable]],
+      expectedResult: Option[A] = None)(f: () => A): A = {
+    val r = new Random()
+    var result = Try(f())
+    var exceptionMessage = s""
+    var attemptCount = 1
+    var updatedDelayMs = delayMs
+    def retryAttempt(): Unit = {
+      if (attemptCount < attempts) {
+        Thread.sleep(updatedDelayMs + r.nextInt(updatedDelayMs))
+        updatedDelayMs *= 2
+        attemptCount += 1
+        checkResult(Try(f()))
+      } else {
+        throw new RuntimeException(exceptionMessage)
+      }
+    }
+    def checkResult(midResult: Try[A]): Unit = {
+      midResult match {
+        case Success(value) =>
+          if (expectedResult.forall(_ == value)) result = midResult
+          else {
+            exceptionMessage = s"Attempt $attemptCount failed; expected ${expectedResult.get} but got $value"
+            // log.warn(exceptionMessage)
+            retryAttempt()
+          }
+        case Failure(ex) =>
+          if (!exceptionClasses.contains(ex.getClass)) throw ex
+          else {
+            exceptionMessage = s"Attempt $attemptCount failed with: ${ex.getMessage}"
+            // log.warn(exceptionMessage, ex)
+            retryAttempt()
+          }
+      }
+    }
+    checkResult(result)
+    result.get
   }
 
-  @tailrec
-  final def syncRetryWithSleep(f: () => Boolean, retries: Int, sleepIntervalMs: Long): Boolean = {
-    val success = f()
-    if (!success && retries > 0) {
-      Thread.sleep(sleepIntervalMs)
-      syncRetryWithSleep(f, retries - 1, sleepIntervalMs)
-    } else
-      success
-  }
   /*
   Sequester code in a Function0 in _1, and return its source as _2
    */
@@ -376,6 +413,11 @@ object MiscUtils {
   // bool.thenSome(blah) = Some(blah) if bool
   implicit class ThenSome(private val pred: Boolean) extends AnyVal {
     def thenSome[T](t: => T): Option[T] = if (pred) Some(t) else None
+  }
+
+  def isPowerOfTwo(n: Long): Boolean = n > 0 && (n & (n - 1)) == 0
+  implicit class LongCandy(val n: Long) extends AnyVal {
+    def isPowerOfTwo: Boolean = MiscUtils.isPowerOfTwo(n)
   }
 }
 

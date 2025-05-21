@@ -85,7 +85,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
   protected def getGroupMaxBatchSize(grp: GroupKeyT, n: NodeTask): Int = maxBatchSize
 
   protected def onFirstRun(bnode: BNode, grpKey: GroupKeyT): Unit = {}
-  protected def run(ec: OGSchedulerContext, bnode: BNode, grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Unit
+  protected def run(ec: OGSchedulerContext, bnode: BNode, grpKey: GroupKeyT, inputs: Seq[NodeT]): Unit
 
   /**
    * Consider the following case:
@@ -127,7 +127,7 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
       batchScopeKeys: Set[BatchScopeKey],
       initState: State,
       grpKey: GroupKeyT)
-      extends CompletableNode[collection.Seq[T]]
+      extends CompletableNode[Seq[T]]
       with OutOfWorkListener {
 
     override def mustCallDelay(): Long = batcher.mustCallDelay
@@ -352,12 +352,12 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
       }
     }
 
-    def completeBatch(eq: EvaluationQueue, results: collection.Seq[T]): Unit = {
+    def completeBatch(eq: EvaluationQueue, results: Seq[T]): Unit = {
       completeWithResult(results, eq)
       completeNodes(eq, results)
     }
 
-    private def completeNodes(eq: EvaluationQueue, results: collection.Seq[T]): Unit = {
+    private def completeNodes(eq: EvaluationQueue, results: Seq[T]): Unit = {
       val resultsIter = results.iterator
 
       for (node <- inputs.iterator) {
@@ -375,12 +375,12 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
       }
     }
 
-    def completeTryBatch(eq: EvaluationQueue, results: collection.Seq[Try[T]]): Unit = {
-      completeWithResult(collection.Seq.empty, eq) // no one consumes the bnode result
+    def completeTryBatch(eq: EvaluationQueue, results: Seq[Try[T]]): Unit = {
+      completeWithResult(Seq.empty, eq) // no one consumes the bnode result
       completeTryNodes(eq, results)
     }
 
-    def completeTryNodes(eq: EvaluationQueue, results: collection.Seq[Try[T]]): Unit = {
+    def completeTryNodes(eq: EvaluationQueue, results: Seq[Try[T]]): Unit = {
       // Inlined version of Collection.foreach2
       // TODO (OPTIMUS-10900): A cleaner solution is to change to use indexedSeq and just check the sizes and fail all nodes if the lengths don't match
       val iit = inputs.iterator
@@ -428,9 +428,9 @@ abstract class NodeBatcherSchedulerPluginBase[T, NodeT <: CompletableNode[T]] ex
   protected def getBatchScopeKeys(v: NodeT): Set[BatchScopeKey] = NodeBatcherSchedulerPluginBase.defaultBatchScopeKeys
 
   @nodeSync
-  def stableCalcTags(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): StableCalcTags = null
-  def stableCalcTags$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[StableCalcTags] = null
-  def stableCalcTags$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[StableCalcTags] = null
+  def stableCalcTags(grpKey: GroupKeyT, inputs: Seq[NodeT]): StableCalcTags = null
+  def stableCalcTags$newNode(grpKey: GroupKeyT, inputs: Seq[NodeT]): Node[StableCalcTags] = null
+  def stableCalcTags$queued(grpKey: GroupKeyT, inputs: Seq[NodeT]): NodeFuture[StableCalcTags] = null
 }
 
 /**
@@ -510,12 +510,8 @@ abstract class NodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]](
   def this() = this(0, true)
   def this(priority: Int) = this(priority, false)
 
-  def run(inputs: collection.Seq[NodeT]): collection.Seq[T]
-  override protected def run(
-      ec: OGSchedulerContext,
-      bnode: BNode,
-      grpKey: GroupKeyT,
-      inputs: collection.Seq[NodeT]): Unit =
+  def run(inputs: Seq[NodeT]): Seq[T]
+  override protected def run(ec: OGSchedulerContext, bnode: BNode, grpKey: GroupKeyT, inputs: Seq[NodeT]): Unit =
     bnode.completeBatch(ec, run(inputs))
 
   override def adapt(v: NodeTask, ec: OGSchedulerContext): Boolean = {
@@ -736,15 +732,15 @@ abstract class GroupingNodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]
   def this(priority: Int) = this(priority, false)
 
   @nodeSync
-  def run(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): collection.Seq[T]
-  def run$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[T]]
-  def run$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[collection.Seq[T]]
+  def run(grpKey: GroupKeyT, inputs: Seq[NodeT]): Seq[T]
+  def run$newNode(grpKey: GroupKeyT, inputs: Seq[NodeT]): Node[Seq[T]]
+  def run$queued(grpKey: GroupKeyT, inputs: Seq[NodeT]): NodeFuture[Seq[T]]
 
   override final protected def run(
       ec: OGSchedulerContext,
       bnode: BNode,
       grpKey: GroupKeyT,
-      inputs: collection.Seq[NodeT]): Unit = {
+      inputs: Seq[NodeT]): Unit = {
 
     // report back to the JobDecorator if the batched nodes are @job
     val rn =
@@ -759,15 +755,21 @@ abstract class GroupingNodeBatcherSchedulerPlugin[T, NodeT <: CompletableNode[T]
 
     if (rn.isFSM) {
       bnode.setWaitingOn(rn)
-      rn continueWith ((eq: EvaluationQueue, _: NodeTask) => {
-        bnode.setWaitingOn(null)
-        bnode.combineInfo(rn, eq)
-        if (rn.isDoneWithResult) {
-          bnode.completeBatch(eq, rn.result)
-        } else {
-          bnode.completeWithException(rn.exception, eq)
-        }
-      }, ec)
+      rn.continueWith(
+        new NodeAwaiter {
+          override def awaiter(): NodeCause = bnode
+          override protected def onChildCompleted(eq: EvaluationQueue, node: NodeTask): Unit = {
+            bnode.setWaitingOn(null)
+            bnode.combineInfo(rn, eq)
+            if (rn.isDoneWithResult) {
+              bnode.completeBatch(eq, rn.result)
+            } else {
+              bnode.completeWithException(rn.exception, eq)
+            }
+          }
+        },
+        ec
+      )
     } else bnode.completeBatch(ec, rn.get)
   }
 
@@ -783,15 +785,15 @@ abstract class GroupingNodeBatcherWithTrySchedulerPlugin[T, NodeT <: Completable
   def this(priority: Int) = this(priority, false)
 
   @nodeSync
-  def tryRun(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): collection.Seq[Try[T]]
-  def tryRun$newNode(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): Node[collection.Seq[Try[T]]]
-  def tryRun$queued(grpKey: GroupKeyT, inputs: collection.Seq[NodeT]): NodeFuture[collection.Seq[Try[T]]]
+  def tryRun(grpKey: GroupKeyT, inputs: Seq[NodeT]): Seq[Try[T]]
+  def tryRun$newNode(grpKey: GroupKeyT, inputs: Seq[NodeT]): Node[Seq[Try[T]]]
+  def tryRun$queued(grpKey: GroupKeyT, inputs: Seq[NodeT]): NodeFuture[Seq[Try[T]]]
 
   override final protected def run(
       ec: OGSchedulerContext,
       bnode: BNode,
       grpKey: GroupKeyT,
-      inputs: collection.Seq[NodeT]): Unit = {
+      inputs: Seq[NodeT]): Unit = {
 
     // report back to the JobDecorator if the batched nodes are @job
     val rn =
@@ -808,13 +810,17 @@ abstract class GroupingNodeBatcherWithTrySchedulerPlugin[T, NodeT <: Completable
     if (rn.isFSM) {
       bnode.setWaitingOn(rn)
       rn.continueWith(
-        (eq: EvaluationQueue, _: NodeTask) => {
-          bnode.setWaitingOn(null)
-          bnode.combineInfo(rn, eq)
-          if (rn.isDoneWithResult) {
-            bnode.completeTryBatch(eq, rn.result)
-          } else {
-            bnode.completeWithException(rn.exception, eq)
+        new NodeAwaiter {
+          override def awaiter(): NodeCause = bnode
+
+          override protected def onChildCompleted(eq: EvaluationQueue, node: NodeTask): Unit = {
+            bnode.setWaitingOn(null)
+            bnode.combineInfo(rn, eq)
+            if (rn.isDoneWithResult) {
+              bnode.completeTryBatch(eq, rn.result)
+            } else {
+              bnode.completeWithException(rn.exception, eq)
+            }
           }
         },
         ec

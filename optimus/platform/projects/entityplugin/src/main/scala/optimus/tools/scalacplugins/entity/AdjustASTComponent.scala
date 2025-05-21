@@ -19,7 +19,7 @@ import optimus.tools.scalacplugins.entity.staged.scalaVersionRange
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.collection.mutable.ArrayStack
+import scala.collection.mutable.Stack
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.LinkedHashMap
 import scala.collection.mutable.ListBuffer
@@ -120,7 +120,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
     case class EntityScope(isValOrDefDef: Boolean, module: HashMap[TermName, ModuleSpec] = HashMap())
     val packageName = new StateHolder[String]("")
 
-    val scopeStack = new ArrayStack[EntityScope]()
+    val scopeStack = new Stack[EntityScope]()
     // List of properties we need to add to the companion object or null if we not in the class/object
 
     case class Info(var storedOn: Boolean)
@@ -1265,6 +1265,7 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
             val storedAnno = getAnnotation(mods, tpnames.stored)
             val projectedParam = storedAnno.flatMap(getProjectedParam)
             val fullTextSearchParam = storedAnno.flatMap(getFullTextSearchParam)
+            val monoTemporalParam = storedAnno.flatMap(getMonoTemporalParam)
             val schemaVersionParam = getSchemaVersionParam(entityAnno)
             val slotNumbParam = {
               if (schemaVersionParam.exists(_ < 0)) alarm(NEG_SCHEMA_VERSION, entityAnno.pos)
@@ -1288,7 +1289,8 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
                   mkConditionalNamedArgTree(isTrait, mods.isTrait) ++
                   mkConditionalNamedArgTree(isObject, isModule) ++
                   mkOptionalNamedArgTree(projected, projectedParam) ++
-                  mkOptionalNamedArgTree(fullTextSearch, fullTextSearchParam)
+                  mkOptionalNamedArgTree(fullTextSearch, fullTextSearchParam) ++
+                  mkOptionalNamedArgTree(monoTemporal, monoTemporalParam)
               mkAppliedAnnotation(EntityMetaDataAnnotation, entityMetaDataArgs)
             }
 
@@ -1296,7 +1298,8 @@ class AdjustASTComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           case storedAnno @ Apply(_, args) if isSpecificAnnotation(storedAnno, tpnames.stored) =>
             val projectedParam = getProjectedParam(storedAnno)
             val fullTextSearchParam = getFullTextSearchParam(storedAnno)
-            if (args.nonEmpty && projectedParam.isEmpty && fullTextSearchParam.isEmpty)
+            val monoTemporalParam = getMonoTemporalParam(storedAnno)
+            if (args.nonEmpty && projectedParam.isEmpty && fullTextSearchParam.isEmpty && monoTemporalParam.isEmpty)
               alarm(OptimusErrors.STORED_ENTITY_WITH_ARGUMENT, storedAnno.pos)
 
             storedAnno :: Nil

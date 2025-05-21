@@ -188,7 +188,7 @@ class BsonByteArraySerialization {
 
       case x: ImmutableByteArray => writeBinaryProp(key, x.data)
       case x: Option[_]          => if (x.isDefined) writeAny(key, x.get) else writeNull(key)
-      case x: Seq[_]             => writeIterable(key, x)
+      case x: collection.Seq[_]  => writeIterable(key, x)
       case x: Map[_, _]          => writeMap(key, x.asInstanceOf[Map[String, Any]])
       case x: Set[_]             => writeIterable(key, x)
       case x: Product =>

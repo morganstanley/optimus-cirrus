@@ -29,8 +29,11 @@ import scala.collection.mutable.ArrayBuffer
 private[tracking] trait UnderlayScenarioSupport {
   self: DependencyTracker =>
 
-  final private[tracking] def doSetUnderlay(scenario: Scenario, cause: EventCause): Unit = {
-    val newUnderlayStack = regenerateUnderlay(scenario, scenarioStack, cause)
+  final private[tracking] def doSetUnderlay(
+      scenario: Scenario,
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): Unit = {
+    val newUnderlayStack = regenerateUnderlay(scenario, scenarioStack, cause, observer)
     scenarioStack.setParent(newUnderlayStack)
     nc_scenarioStack.setParent(newUnderlayStack)
   }
@@ -46,7 +49,11 @@ private[tracking] trait UnderlayScenarioSupport {
    * @param scenario
    *   The new scenario to insert as the underlay scenario.
    */
-  private def regenerateUnderlay(scenario: Scenario, ss: ScenarioStack, cause: EventCause): ScenarioStack = {
+  private def regenerateUnderlay(
+      scenario: Scenario,
+      ss: ScenarioStack,
+      cause: EventCause,
+      observer: TrackedNodeInvalidationObserver): ScenarioStack = {
     // n.b. we invalidate all tweaks from the old underlay and the new underlay - this leads to over
     // invalidation (if the same byValue tweak is applied in new and old stack it does not need invalidating.
     // This leads to correct but potentially sub-optimal performance.
@@ -76,7 +83,7 @@ private[tracking] trait UnderlayScenarioSupport {
 
     if (allInvalidations.nonEmpty) {
       invalidateSnapshot()
-      underlayTweakableTracker.invalidateByTweaks(allInvalidations, cause)
+      underlayTweakableTracker.invalidateByTweaks(allInvalidations, cause, observer)
     }
 
     newStack
@@ -136,9 +143,5 @@ private[tracking] trait UnderlayScenarioSupport {
         _parent = setUnderlayScenarioStackTweakableListenerAndDepth(ss.parent, stackTop, tweakableListener, depth)
       )
     }
-  }
-
-  private[tracking] class TSA_SetUnderlay(scenario: Scenario) extends TSA_BasicUpdateAction {
-    override protected def doUpdate(): Unit = doSetUnderlay(scenario, cause.root)
   }
 }

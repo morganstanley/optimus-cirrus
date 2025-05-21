@@ -23,7 +23,7 @@ main {
     ]
     libs = [
       fsf.zookeeper,
-      optimus.jsr310-date-time,
+      netty-afscompat.handler,
       ossjava.args4j,
       ossjava.caffeine,
       ossjava.commons-io,
@@ -35,32 +35,9 @@ main {
       ossjava.javamail,
       ossjava.jettison,
       ossjava.logback,
-      ossjava.netty,
       ossjava.opencsv,
       ossjava.slf4j,
       ossjava.zstd-jni
-    ]
-    mavenLibs = [
-      args4j.args4j,
-      at.favre.lib.hkdf,
-      ch.qos.logback.logback-classic,
-      com.github.ben-manes.caffeine.caffeine,
-      com.github.luben.zstd-jni
-      com.google.guava.guava,
-      com.ms.infra.rr.kerberos,
-      com.ms.spgbc.cslshared.optimus-optimus_jsr310-date-time,
-      com.opencsv.opencsv,
-      com.sun.mail.javax.mail,
-      commons-io.commons-io,
-      io.netty.netty-all,
-      org.apache.commons.commons-text,
-      org.apache.curator.curator-client,
-      org.apache.curator.curator-framework,
-      org.apache.curator.curator-recipes,
-      org.apache.zookeeper.zookeeper,
-      org.codehaus.jettison.jettison,
-      org.scala-lang.modules.scala-xml_2.13,
-      org.slf4j.slf4j-api
     ]
   }
   compileOnly.modules += optimus.platform.legacy-jdk-api-stubs.mbeans
@@ -71,7 +48,6 @@ main {
 test {
   hasMacros = true // We need that for now due to limitation of stratosphere
   compile {
-    modules += optimus.platform.utils
     libs = [
       msjava.jprofiler,
       ossjava.junit,

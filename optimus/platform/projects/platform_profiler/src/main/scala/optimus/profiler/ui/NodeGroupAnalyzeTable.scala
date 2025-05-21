@@ -28,6 +28,7 @@ import optimus.profiler.ui.common.NodeGroupTaskInfo
 import optimus.profiler.ui.common.NodeGroupTaskResult
 import optimus.profiler.ui.common.NodeGroupTotals
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 
 object NodeGroupAnalyzeTable {
@@ -153,7 +154,7 @@ class NodeGroupAnalyzeTable(nodeAnalyzer: NodeAnalyzer) extends NPTreeTable[Node
 
   def nodeResultType: Class[_ <: AnyRef] = DebuggerUI.nodeResultType(allTasks)
 
-  private def selectedNodeTaskInfos(): ArrayBuffer[NodeTaskInfo] = {
+  private def selectedNodeTaskInfos(): ArraySeq[NodeTaskInfo] = {
     getSelections.flatMap(ng =>
       ng.key match {
         case nti: NodeTaskInfo => Some(nti)

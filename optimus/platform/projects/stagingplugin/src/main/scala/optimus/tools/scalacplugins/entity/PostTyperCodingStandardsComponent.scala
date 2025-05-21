@@ -49,10 +49,13 @@ class PostTyperCodingStandardsComponent(
     lazy val is212OnlySource = unit.source.path.split("[/\\\\]").contains("scala-2.12")
     lazy val sourceString = new String(unit.source.content)
 
+    def sourceAt(pos: Position) =
+      if (pos.start < pos.end) new String(unit.source.content.slice(pos.start, pos.end)) else ""
+
     var inClass = false
     var inMacroExpansion: Boolean = false
     var enclosingDefs: List[DefTree] = Nil
-    val enclosingTrees = mutable.ArrayStack[Tree](EmptyTree)
+    val enclosingTrees = mutable.Stack[Tree](EmptyTree)
 
     private lazy val DiscouragedAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.discouraged")
     private def alarmOnCaseClass(mods: Modifiers): Boolean =
@@ -223,7 +226,7 @@ class PostTyperCodingStandardsComponent(
               sym.isAuxiliaryConstructor && {
                 var proc = true
                 var i = dd.rhs.pos.start
-                var cs = unit.source.content
+                val cs = unit.source.content
                 while (cs(i) != ')') {
                   if (cs(i) == '=') proc = false
                   i -= 1
@@ -419,39 +422,71 @@ class PostTyperCodingStandardsComponent(
         }
       }
     }
+
     def checkCase(selector: Tree, caseDef: CaseDef): Unit = {
-      object traverser extends Traverser {
-        var selType = selector.tpe
-        override def traverse(tree: Tree): Unit = tree match {
-          case Annotated(annot, tree) => traverse(tree)
+      if (enclosingDefs.head.name == nme.isDefinedAt) return
 
-          case Apply(fun, arg :: Nil)
-              if fun.tpe.isInstanceOf[MethodType] && !fun.tpe.params.head.info.typeSymbol
-                .isNonBottomSubClass(definitions.ListClass) && arg.tpe.typeSymbol == definitions.ConsClass =>
-            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, arg.pos)
-            super.traverse(tree)
+      // no alarm for `case Nil`, it matches other `Seq`s
 
-          case Apply(fun, (u @ UnApply(unapplyFun, _)) :: Nil)
-              if fun.tpe.isInstanceOf[MethodType] && !fun.tpe.params.head.info.typeSymbol
-                .isNonBottomSubClass(definitions.ListClass) && u.tpe.typeSymbol == definitions.ListClass =>
-            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, u.pos)
-            super.traverse(tree)
-          case _ =>
-            super.traverse(tree)
+      val testCons = (s: Symbol, p: Symbol, pos: Position) =>
+        Option.when(!s.isNonBottomSubClass(definitions.ListClass) && p == definitions.ConsClass)(
+          CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN)
+
+      val testList = (s: Symbol, p: Symbol, pos: Position) =>
+        Option.when(!s.isNonBottomSubClass(definitions.ListClass) && p == definitions.ListClass)(
+          CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN)
+
+      val testSeq = (s: Symbol, p: Symbol, pos: Position) =>
+        Option.when(
+          !s.isNonBottomSubClass(definitions.SeqClass) &&
+            p == definitions.SeqClass &&
+            !sourceAt(pos).contains("immutable.Seq"))(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_SEQ_PATTERN)
+
+      def check(
+          scrut: Type,
+          pat: Type,
+          test: (Symbol, Symbol, Position) => Option[OptimusAlarmBuilder1],
+          pos: Position): Unit =
+        test(scrut.typeSymbol, pat.typeSymbol, pos).foreach(alarm(_, pos, scrut.toString))
+
+      object checkNested extends Traverser {
+        override def traverse(tree: Tree): Unit = {
+          tree match {
+            case Apply(fun, args) if fun.tpe.isInstanceOf[MethodType] =>
+              def checkArg(param: Type, arg: Tree): Unit = arg match {
+                case Apply(fun, _) =>
+                  check(param, arg.tpe, testCons, fun.pos)
+                case UnApply(fun, _) =>
+                  check(param, arg.tpe, testList, fun.pos)
+                  check(param, arg.tpe, testSeq, fun.pos)
+                case Typed(_, tpt) =>
+                  check(param, tpt.tpe, testSeq, tpt.pos)
+                case Bind(_, pat) =>
+                  checkArg(param, pat)
+                case _ =>
+              }
+              fun.tpe.params.zip(args).foreach(p => checkArg(p._1.info, p._2))
+
+            case _ =>
+          }
+          super.traverse(tree)
         }
       }
-      caseDef.pat match {
-        case p @ Apply(fun, args) if fun.tpe.resultType.typeSymbol == definitions.ConsClass =>
-          if (!selector.tpe.typeSymbol.isNonBottomSubClass(definitions.ListClass)) {
-            alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, p.pos)
-          }
-        case u @ UnApply(unapplyFun, _)
-            if !selector.tpe.typeSymbol.isNonBottomSubClass(
-              definitions.ListClass) && u.tpe.typeSymbol == definitions.ListClass =>
-          alarm(CodeStyleNonErrorMessages.OVERLY_SPECIFIC_LIST_PATTERN, u.pos)
+
+      def checkToplevel(pat: Tree): Unit = pat match {
+        case Apply(fun, _) =>
+          check(selector.tpe, fun.tpe.resultType, testCons, fun.pos)
+        case UnApply(fun, _) =>
+          check(selector.tpe, pat.tpe, testList, fun.pos)
+          check(selector.tpe, pat.tpe, testSeq, fun.pos)
+        case Typed(_, tpt) =>
+          check(selector.tpe, tpt.tpe, testSeq, tpt.pos)
+        case Bind(_, pat) =>
+          checkToplevel(pat)
         case _ =>
       }
-      traverser.traverse(caseDef.pat)
+      checkToplevel(caseDef.pat)
+      checkNested.traverse(caseDef.pat)
     }
   }
 

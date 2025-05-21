@@ -19,7 +19,7 @@ import optimus.graph.GraphInInvalidState;
 import optimus.graph.PropertyNode;
 
 /** Base class for common case of 1, 2, 3 policies */
-abstract class NCPolicyComposite extends NCPolicy {
+public abstract class NCPolicyComposite extends NCPolicy {
   static final ConcurrentHashMap<NCPolicy, NCPolicy> policyCache = new ConcurrentHashMap<>();
   final NCPolicy defaultPolicy;
 
@@ -27,6 +27,12 @@ abstract class NCPolicyComposite extends NCPolicy {
     super(false, false, 0);
     this.defaultPolicy = defaultPolicy;
   }
+
+  public NCPolicy defaultPolicy() {
+    return this.defaultPolicy;
+  }
+
+  public abstract NCPolicy[] compositePolicies();
 
   @Override
   public NCPolicy pathIndependent() {
@@ -45,13 +51,13 @@ abstract class NCPolicyComposite extends NCPolicy {
 
   static class PolicyMask {
     static Comparator<PolicyMask> COMPARATOR =
-        Comparator.comparingInt((PolicyMask pm) -> Integer.bitCount(pm.mask))
+        Comparator.comparingInt((PolicyMask pm) -> Long.bitCount(pm.mask))
             .thenComparing(pm -> pm.policy.getClass().getName());
 
     final NCPolicy policy;
-    final int mask;
+    final long mask;
 
-    PolicyMask(NCPolicy policy, int mask) {
+    PolicyMask(NCPolicy policy, long mask) {
       this.policy = policy;
       this.mask = mask;
     }
@@ -60,7 +66,7 @@ abstract class NCPolicyComposite extends NCPolicy {
   static class CompositeN extends NCPolicyComposite {
     final PolicyMask[] policies;
 
-    CompositeN(NCPolicy defaultPolicy, NCPolicy policy, int mask) {
+    CompositeN(NCPolicy defaultPolicy, NCPolicy policy, long mask) {
       this(defaultPolicy, new PolicyMask[] {new PolicyMask(policy, mask)});
     }
 
@@ -70,6 +76,11 @@ abstract class NCPolicyComposite extends NCPolicy {
         if (policy.policy instanceof NCPolicyComposite)
           throw new GraphInInvalidState("Composite policies cannot be nested");
       this.policies = policies;
+    }
+
+    @Override
+    public NCPolicy[] compositePolicies() {
+      return Arrays.stream(this.policies).map(a -> a.policy).toArray(NCPolicy[]::new);
     }
 
     /**
@@ -149,12 +160,17 @@ abstract class NCPolicyComposite extends NCPolicy {
 
   static class Composite1 extends NCPolicyComposite {
     final NCPolicy policy;
-    final int mask;
+    final long mask;
 
     Composite1(NCPolicy defaultPolicy, CompositeN.PolicyMask[] pm) {
       super(defaultPolicy);
       this.policy = pm[0].policy;
       this.mask = pm[0].mask;
+    }
+
+    @Override
+    public NCPolicy[] compositePolicies() {
+      return new NCPolicy[] {this.policy};
     }
 
     @Override
@@ -185,8 +201,8 @@ abstract class NCPolicyComposite extends NCPolicy {
   static class Composite2 extends NCPolicyComposite {
     private final NCPolicy policy1;
     private final NCPolicy policy2;
-    private final int mask1;
-    private final int mask2;
+    private final long mask1;
+    private final long mask2;
 
     Composite2(NCPolicy defaultPolicy, CompositeN.PolicyMask[] pm) {
       super(defaultPolicy);
@@ -203,6 +219,11 @@ abstract class NCPolicyComposite extends NCPolicy {
       if ((mask & mask1) != 0) resultingPolicy = policy1;
       else if ((mask & mask2) != 0) resultingPolicy = policy2;
       return resultingPolicy.switchPolicy(key);
+    }
+
+    @Override
+    public NCPolicy[] compositePolicies() {
+      return new NCPolicy[] {this.policy1, this.policy2};
     }
 
     @Override
@@ -232,9 +253,9 @@ abstract class NCPolicyComposite extends NCPolicy {
     private final NCPolicy policy1;
     private final NCPolicy policy2;
     private final NCPolicy policy3;
-    private final int mask1;
-    private final int mask2;
-    private final int mask3;
+    private final long mask1;
+    private final long mask2;
+    private final long mask3;
 
     Composite3(NCPolicy defaultPolicy, CompositeN.PolicyMask[] pm) {
       super(defaultPolicy);
@@ -254,6 +275,11 @@ abstract class NCPolicyComposite extends NCPolicy {
       else if ((mask & mask2) != 0) resultingPolicy = policy2;
       else if ((mask & mask3) != 0) resultingPolicy = policy3;
       return resultingPolicy.switchPolicy(key);
+    }
+
+    @Override
+    public NCPolicy[] compositePolicies() {
+      return new NCPolicy[] {this.policy1, this.policy2, this.policy3};
     }
 
     @Override

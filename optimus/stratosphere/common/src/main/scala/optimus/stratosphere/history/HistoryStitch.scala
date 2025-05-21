@@ -29,7 +29,7 @@ final case class MergeConfig(name: String, replacements: Seq[Replacement], requi
 }
 object MergeConfig {
   def fromConfig(config: Config): MergeConfig = {
-    val replacements = config.getConfigList("replacements").asScala.map(Replacement.fromConfig)
+    val replacements = config.getConfigList("replacements").asScalaUnsafeImmutable.map(Replacement.fromConfig)
     val requires =
       if (config.hasPath("requires"))
         config.getStringList("requires").asScala.toSeq
@@ -62,7 +62,9 @@ final class HistoryStitch(ws: StratoWorkspaceCommon) {
   }
 
   def undoAll(): Unit =
-    mergeNames.foreach(undoStitch)
+    if (git.allReplaceRefs().nonEmpty) {
+      mergeNames.foreach(undoStitch)
+    }
 
   def stitch(name: String): Unit = {
     val merge = config(name)
@@ -79,7 +81,7 @@ final class HistoryStitch(ws: StratoWorkspaceCommon) {
         else
           git.setRemote(remoteName, RemoteUrl(replacement.repo))
         ws.log.info("Fetching commits...")
-        git.fetch(remoteName)
+        git.fetch(remoteName, replacement.to)
         ws.log.info(s"Replacing ${replacement.from} with ${replacement.to}...")
         git.replace(replacement.from, replacement.to)
       }

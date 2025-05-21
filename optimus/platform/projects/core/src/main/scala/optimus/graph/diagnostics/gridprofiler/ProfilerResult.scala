@@ -42,13 +42,13 @@ class ProfilerResult[T](node: Node[T], envStart: Option[ProcessMetricsBeginSnaps
 
   // the top-level scope of this profiled block
   private val scope: Int = GridProfiler.scopeForNode(node)
-  private val scopeName: collection.Seq[ProfilerScope] = GridProfiler.blockIDToScope(scope).get
-  def getScope: collection.Seq[ProfilerScope] = scopeName
+  private val scopeName: Seq[ProfilerScope] = GridProfiler.blockIDToScope(scope).get
+  def getScope: Seq[ProfilerScope] = scopeName
 
   // the top-level scope and all of the nested scopes of this profiled block
-  private[diagnostics] val scopes: collection.Seq[Int] =
+  private[diagnostics] val scopes: Seq[Int] =
     GridProfiler.getScopeRegistry.filter(_._1.startsWith(scopeName)).map(_._2)
-  def getScopes: collection.Seq[collection.Seq[ProfilerScope]] = scopes.map(x => GridProfiler.blockIDToScope(x).get)
+  def getScopes: Seq[Seq[ProfilerScope]] = scopes.map(x => GridProfiler.blockIDToScope(x).get)
 
   // this is the golden source of local scoped hotspots for this profiled block. Remote hotspots are in GridProfiler data
   // Note: Profiler.getProfilerData is live, and may change if more hotspots are entered under the same scope
@@ -76,16 +76,16 @@ class ProfilerResult[T](node: Node[T], envStart: Option[ProcessMetricsBeginSnaps
     )
   }
 
-  def get(sc: collection.Seq[ProfilerScope]): SingleScopeProfilerResult = get(GridProfiler.scopeToBlockID(sc))
+  def get(sc: Seq[ProfilerScope]): SingleScopeProfilerResult = get(GridProfiler.scopeToBlockID(sc))
 
   private def get(sc: Int): SingleScopeProfilerResult =
     new SingleScopeProfilerResult(
-      collection.Seq(sc),
+      Seq(sc),
       immediateLocalEnvMetrics,
       localHotspots(sc)
     )
 
-  def flatAt(sc: collection.Seq[ProfilerScope]): SingleScopeProfilerResult = {
+  def flatAt(sc: Seq[ProfilerScope]): SingleScopeProfilerResult = {
     val subScopes = getScopes.filter(_.startsWith(sc)).map(GridProfiler.scopeToBlockID)
 
     // local hotspots come from a different source
@@ -100,7 +100,7 @@ class ProfilerResult[T](node: Node[T], envStart: Option[ProcessMetricsBeginSnaps
   }
 
   // returns the formatted summaries as Seq(Scope, Option(Table))
-  def getSummary: collection.Seq[(collection.Seq[ProfilerScope], Option[String])] =
+  def getSummary: Seq[(Seq[ProfilerScope], Option[String])] =
     scopes map (s => GridProfiler.blockIDToScope(s).get -> get(s).getSummary)
 
   // Prints the summaries as
@@ -124,11 +124,11 @@ class ProfilerResult[T](node: Node[T], envStart: Option[ProcessMetricsBeginSnaps
   }
 
   // drops the same set of CSVs as the shutdown hook, but as relating to this profiled block only
-  def writeCSV(dir: String): Unit = {
+  def writeCSV(dir: String, source: String): Unit = {
     val tm1 = System.currentTimeMillis()
     val csvFolder = outputPath(generateFileName(), dir)
     val csvExtractor = new CSVResultsExtractor(GridProfiler.getCSV(Option(this)))
-    Report.writeCSVFilesAndCrumbs(Paths.get(csvFolder), generateFileName(), csvExtractor)
+    Report.writeCSVFilesAndCrumbs(Paths.get(csvFolder), generateFileName(), csvExtractor, source)
     val tm2 = System.currentTimeMillis()
     GridProfiler.log.info(s"elapsed in writeCSV: ${tm2 - tm1} ms. metrics: ${GridProfiler.statistics()}")
   }
@@ -155,7 +155,7 @@ private[optimus] class ProfilerResultNode[T](
 
 // ProfilerResult.flat and ProfilerResult.get return this object representing single-scope (or flattened across all scopes) results.
 class SingleScopeProfilerResult(
-    scopes: collection.Seq[Int], // just one scope for ProfilerResult.get, a sequence for ProfilerResult.flat
+    scopes: Seq[Int], // just one scope for ProfilerResult.get, a sequence for ProfilerResult.flat
     localEnvArg: => Metric.ProcessMetrics,
     localHotArg: => Metric.Hotspots) {
 

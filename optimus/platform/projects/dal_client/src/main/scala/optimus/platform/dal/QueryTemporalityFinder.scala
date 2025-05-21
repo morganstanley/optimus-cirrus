@@ -67,7 +67,7 @@ private[optimus] object QueryTemporalityFinder {
         CoreAPI.nodeResult {
           val surface =
             loadContext.asInstanceOf[TemporalContextImpl].findFirstPossiblyMatchingLeaf(tsQuery)
-          surface.currentTemporalityFor(other)
+          surface.currentTemporality
         } match {
           case NodeSuccess(res) => Some(res)
           case NodeFailure(_)   => None

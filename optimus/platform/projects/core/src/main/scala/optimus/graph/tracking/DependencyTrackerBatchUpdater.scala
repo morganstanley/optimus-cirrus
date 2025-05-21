@@ -74,24 +74,31 @@ sealed trait DependencyTrackerBatchUpdater {
    */
   def evaluateNodeKeyImmediate[T](
       key: NodeKey[T],
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: Option[EventCause] = None): Try[T]
+      removePendingInvalidate: Boolean = false,
+      eventCause: Option[EventCause] = None,
+      trackingScope: TrackingScope[_]): Try[T]
 
   def evaluateNodeKeysImmediate[T](
       keys: Iterable[NodeKey[T]],
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: Option[EventCause] = None): List[Try[T]]
+      removePendingInvalidate: Boolean = false,
+      eventCause: Option[EventCause] = None,
+      trackingScope: TrackingScope[_]): List[Try[T]]
 
   def evaluateNodeKeysMapImmediate[T](
       keys: Iterable[NodeKey[T]],
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: Option[EventCause] = None): Map[NodeKey[T], Try[T]]
+      removePendingInvalidate: Boolean = false,
+      eventCause: Option[EventCause] = None,
+      trackingScope: TrackingScope[_]): Map[NodeKey[T], Try[T]]
 
-  def addTweaksImmediate(scenarioReference: ScenarioReference, tweaks: collection.Seq[Tweak]): Unit
+  def addTweaksImmediate(tweaks: Seq[Tweak], throwOnDuplicate: Boolean = Settings.throwOnDuplicateInstanceTweaks): Unit
 
   def removeTweaksImmediate(keys: Iterable[NodeKey[_]]): Unit
+  def removeAllTweaksImmediate(): Unit
 
-  def removeTweaksForEntityInstanceWithKeysImmediate(entityInstance: Entity, keys: Seq[NodeKey[_]]): Unit
+  def removeTweaksForEntityInstanceWithKeysImmediate(
+      entityInstance: Entity,
+      keys: Seq[NodeKey[_]],
+      excludes: Seq[NodeKey[_]]): Unit
 
   def setUnderlayImmediate(scenario: Scenario, cause: EventCause): Unit
 
@@ -102,9 +109,11 @@ sealed trait DependencyTrackerBatchUpdater {
   @closuresEnterGraph
   def evaluateImmediate[T](f: => T, modifySS: ScenarioStack => ScenarioStack = ss => ss): T
 
-  def disposeImmediate(): Unit
+  def disposeImmediate(cacheClearMode: CacheClearMode): Unit
 
   def snapshotImmediate(): ScenarioStack
+
+  def clearTracking(): Unit
 
   def multiUpdater: DependencyMultiTrackerUpdater
 
@@ -125,8 +134,9 @@ sealed trait DependencyMultiTrackerEvaluator {
   def evaluateNodeKeysAsync[T](
       keys: Map[ScenarioReference, Set[NodeKey[T]]],
       callback: EventCause => Unit = _ => {},
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: EventCause = NoEventCause): Unit
+      removePendingInvalidate: Boolean = false,
+      eventCause: EventCause = NoEventCause,
+      trackingScope: TrackingScope[_]): Unit
 
   def evaluateAsync[T](
       scenarioReference: ScenarioReference,
@@ -136,7 +146,14 @@ sealed trait DependencyMultiTrackerEvaluator {
 
   def evaluateNodeKeysLowPriorityAsync[T](
       keys: Map[ScenarioReference, Set[NodeKey[T]]],
-      eventCause: Option[EventCause]): Unit
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Unit
+
+  def evaluateNodeKeysImmediateInMultiScenario[T](
+      keys: Map[ScenarioReference, Set[NodeKey[T]]],
+      removePendingInvalidate: Boolean = false,
+      eventCause: Option[EventCause] = None,
+      trackingScope: TrackingScope[_]): Map[ScenarioReference, Map[NodeKey[T], Try[T]]]
 
   /**
    * Call this to make sure it's ok to run evaluation on this batch updater. This will increase the inflight counter to
@@ -157,8 +174,9 @@ sealed trait DependencyMultiTrackerEvaluator {
 sealed trait DependencyMultiTrackerUpdater extends DependencyMultiTrackerEvaluator {
 
   def addTweakMapImmediate(
-      tweaks: Map[ScenarioReference, collection.Seq[Tweak]],
-      tweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]]): Unit
+      tweaks: Map[ScenarioReference, Seq[Tweak]],
+      tweakLambdas: Map[ScenarioReference, Seq[TweakLambda]],
+      throwOnDuplicate: Boolean = Settings.throwOnDuplicateInstanceTweaks): Unit
 
   /**
    * retrieves the nodes that are invalidated currently, and may not have been reported to an attached application. The
@@ -171,18 +189,10 @@ sealed trait DependencyMultiTrackerUpdater extends DependencyMultiTrackerEvaluat
    */
   def allInvalidatedNodes[M >: Null <: TrackingMemo](
       scope: TrackingScope[M]): Map[ScenarioReference, Map[NodeKey[_], M]]
-
-  def evaluateNodeKeysImmediateInMultiScenario[T](
-      keys: Map[ScenarioReference, Set[NodeKey[T]]],
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: Option[EventCause] = None): Map[ScenarioReference, Map[NodeKey[T], Try[T]]]
-
-  def removeAllTweaksImmediate(scenario: ScenarioReference): Unit
-
 }
 
 private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extends DependencyTrackerBatchUpdater {
-  protected def logTimedCommand[T](name: String, details: => String, fn: => T): T = {
+  protected def logTimedCommand[T](name: String, details: => String)(fn: => T): T = {
     if (Settings.timeTrackingScenarioUpdateCommands) {
       val info = details
       val seq = consistentRoot.nextSeq()
@@ -200,7 +210,7 @@ private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extend
     }
   }
 
-  final def beforeAccessTarget(forUpdate: Boolean): Unit = {
+  final protected def beforeAccessTarget(forUpdate: Boolean): Unit = {
     consistentRoot.checkInvariants(allowAccessFromOtherGraphThreads = false)
     target.assertNotDisposed()
     if (forUpdate) consistentRoot.evaluationBarrier(forClose = false)
@@ -208,67 +218,75 @@ private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extend
       throw new GraphInInvalidState(s"${consistentRoot.target.queue}'s scope was already cancelled")
   }
 
-  override final def addTweaksImmediate(scenarioReference: ScenarioReference, tweaks: collection.Seq[Tweak]): Unit =
-    multiUpdater.addTweakMapImmediate(Map(scenarioReference -> tweaks), Map.empty)
+  final protected def runUpdate[T](name: String, details: => String)(fn: => T): T = {
+    try {
+      beforeAccessTarget(forUpdate = true)
+      logTimedCommand(name, details)(fn)
+    } finally consistentRoot.finishUpdating()
+  }
+
+  override final def addTweaksImmediate(tweaks: Seq[Tweak], throwOnDuplicate: Boolean): Unit =
+    multiUpdater.addTweakMapImmediate(Map(target.scenarioReference -> tweaks), Map.empty, throwOnDuplicate)
 
   override final def removeTweaksForEntityInstanceWithKeysImmediate(
       entityInstance: Entity,
-      keys: Seq[NodeKey[_]] = Seq()): Unit = {
-    try {
-      beforeAccessTarget(forUpdate = true)
-      logTimedCommand(
-        "removeTweaksForEntityInstanceWithKeys",
-        s"$entityInstance, $keys",
-        target.tweakContainer.doRemoveTweaksFromGivenEntity(entityInstance, keys, cause))
-    } finally consistentRoot.finishUpdating()
-  }
+      keys: Seq[NodeKey[_]] = Seq(),
+      excludes: Seq[NodeKey[_]] = Seq()): Unit =
+    runUpdate("removeTweaksForEntityInstanceWithKeys", s"entity: $entityInstance, keys: $keys, excludes: $excludes") {
+      target.tweakContainer
+        .doRemoveTweaksFromGivenEntity(entityInstance, keys, excludes, cause, consistentRoot.invalidationBatcher)
+    }
 
-  override final def removeTweaksImmediate(keys: Iterable[NodeKey[_]]): Unit = {
-    try {
-      beforeAccessTarget(forUpdate = true)
-      logTimedCommand("removeTweaksImmediate", keys.toString, target.tweakContainer.doRemoveTweaks(keys, cause))
-    } finally consistentRoot.finishUpdating()
-  }
+  override final def removeTweaksImmediate(keys: Iterable[NodeKey[_]]): Unit =
+    runUpdate("removeTweaksImmediate", keys.toString) {
+      target.tweakContainer.doRemoveTweaks(keys, cause, consistentRoot.invalidationBatcher)
+    }
 
-  override final def setPluginTag[P](key: PluginTagKey[P], value: P): Unit = {
-    logTimedCommand("setPluginTag", s"key = $key, value = $value", target.setPluginTag(key, value))
-  }
+  override final def removeAllTweaksImmediate(): Unit =
+    runUpdate("removeAllTweaksImmediate", "") {
+      target.tweakContainer.doRemoveAllTweaks(cause, consistentRoot.invalidationBatcher)
+    }
+
+  override final def setPluginTag[P](key: PluginTagKey[P], value: P): Unit =
+    logTimedCommand("setPluginTag", s"key = $key, value = $value") { target.setPluginTag(key, value) }
 
   override final def clearPluginTag[P](key: PluginTagKey[P]): Unit = {
-    logTimedCommand("clearPluginTag", key.toString, target.clearPluginTag(key))
+    logTimedCommand("clearPluginTag", key.toString) { target.clearPluginTag(key) }
   }
 
-  override final def setUnderlayImmediate(scenario: Scenario, cause: EventCause): Unit = {
-    try {
-      beforeAccessTarget(forUpdate = true)
-      logTimedCommand("setUnderlayImmediate", scenario.toString, target.doSetUnderlay(scenario, cause))
-    } finally consistentRoot.finishUpdating()
-  }
+  override final def setUnderlayImmediate(scenario: Scenario, cause: EventCause): Unit =
+    runUpdate("setUnderlayImmediate", scenario.toString) {
+      target.doSetUnderlay(scenario, cause, consistentRoot.invalidationBatcher)
+    }
 
   override final def evaluateNodeKeyImmediate[T](
       nk: NodeKey[T],
-      removePendingInvalidate: Option[TrackingScope[_]],
-      eventCause: Option[EventCause]): Try[T] =
-    evaluateNodeKeysImmediate(nk :: Nil, removePendingInvalidate, eventCause).head
+      removePendingInvalidate: Boolean,
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Try[T] =
+    evaluateNodeKeysImmediate(nk :: Nil, removePendingInvalidate, eventCause, trackingScope: TrackingScope[_]).head
 
   override def evaluateNodeKeysImmediate[T](
       keys: Iterable[NodeKey[T]],
-      removePendingInvalidate: Option[TrackingScope[_]],
-      eventCause: Option[EventCause]): List[Try[T]] = {
-    val res = evaluateNodeKeysMapImmediate(keys, removePendingInvalidate, eventCause)
+      removePendingInvalidate: Boolean,
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): List[Try[T]] = {
+    val res = evaluateNodeKeysMapImmediate(keys, removePendingInvalidate, eventCause, trackingScope)
     keys.iterator.map(res).toList
   }
 
   override def evaluateNodeKeysMapImmediate[T](
       keys: Iterable[NodeKey[T]],
-      removePendingInvalidate: Option[TrackingScope[_]],
-      eventCause: Option[EventCause]): Map[NodeKey[T], Try[T]] = {
+      removePendingInvalidate: Boolean,
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Map[NodeKey[T], Try[T]] = {
     beforeAccessTarget(forUpdate = false)
     val results = multiUpdater
       .evaluateNodeKeysImmediateInMultiScenario[T](
         Map(target.scenarioReference -> keys.toSet),
         removePendingInvalidate,
-        eventCause)(target.scenarioReference)
+        eventCause,
+        trackingScope)(target.scenarioReference)
     keys.iterator.map(key => key -> results(key)).toMap
   }
 
@@ -280,35 +298,35 @@ private[tracking] sealed abstract class DependencyTrackerBatchUpdaterBase extend
     val ss = target.nc_scenarioStack
     val newSS = modifySS(ss.withCancellationScope(consistentRoot.target.queue.currentCancellationScope))
 
-    logTimedCommand(
-      "evaluateImmediate",
-      "", {
-        // to replace target.given
-        val node =
-          new DependencyTrackerActionTask(DependencyTrackerActionTask.evaluateImm, cause, () => f)
-        EvaluationContext.enqueueAndWait(
-          node,
-          newSS
-        )
-        node.result
-      }
-    )
+    logTimedCommand("evaluateImmediate", "") {
+      // to replace target.given
+      val node =
+        new DependencyTrackerActionTask(DependencyTrackerActionTask.evaluateImm, cause, () => f)
+      EvaluationContext.enqueueAndWait(
+        node,
+        newSS
+      )
+      node.result
+    }
   }
 
-  override final def disposeImmediate(): Unit = {
-    try {
-      consistentRoot.checkInvariants(allowAccessFromOtherGraphThreads = false)
-      consistentRoot.evaluationBarrier(forClose = false)
-      logTimedCommand(
-        "disposeImmediate",
-        target.name,
-        target.doDispose(clearCacheOfDisposedNodes = true, immediate = false, cause))
-    } finally consistentRoot.finishUpdating()
-  }
+  override final def disposeImmediate(cacheClearMode: CacheClearMode): Unit = try {
+    consistentRoot.checkInvariants(allowAccessFromOtherGraphThreads = false)
+    consistentRoot.evaluationBarrier(forClose = false)
+    logTimedCommand("disposeImmediate", target.name) {
+      target.doDispose(cacheClearMode, cause, consistentRoot.invalidationBatcher)
+    }
+  } finally consistentRoot.finishUpdating()
+
   override def snapshotImmediate(): ScenarioStack = {
     beforeAccessTarget(forUpdate = false)
-    logTimedCommand("snapshotImmediate", target.name, target.snapshotScenarioStack(consistentRoot.target))
+    logTimedCommand("snapshotImmediate", target.name) { target.snapshotScenarioStack(consistentRoot.target) }
   }
+
+  override def clearTracking(): Unit = runUpdate("clearTracking", target.name) {
+    target.doClearTracking(consistentRoot.invalidationBatcher)
+  }
+
   override def multiUpdater: DependencyMultiTrackerUpdater = consistentRoot
 }
 
@@ -342,14 +360,17 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
   def consistentRoot: DependencyTrackerBatchUpdaterRoot = this
 
   private val updaters = new ConcurrentHashMap[DependencyTracker, DependencyTrackerBatchUpdater]
-  override def updaterFor(ts: DependencyTracker): DependencyTrackerBatchUpdater = {
+  override def updaterFor(ts: DependencyTracker): DependencyTrackerBatchUpdater = if (ts eq target) this
+  else {
     assert(
       consistentRoot.target hasChild ts,
       s"root.target: (${consistentRoot.target.name}) doesn't have child: (${ts.name})")
     updaters.computeIfAbsent(ts, (ts: DependencyTracker) => new DependencyTrackerBatchUpdaterView(ts, consistentRoot))
   }
   override def updaterFor(ref: ScenarioReference): DependencyTrackerBatchUpdater =
-    updaterFor(target.root.getOrCreateScenario(ref))
+    if (ref == target.scenarioReference) this else updaterFor(target.root.getOrCreateScenario(ref))
+
+  private[tracking] val invalidationBatcher = new InvalidationCallbackBatcher(target.root, cause)
 
   private object StateManager {
     private var evaluating = 0
@@ -480,15 +501,15 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
 
   private[tracking] def close(): Unit = {
     evaluationBarrier(forClose = true)
+    invalidationBatcher.complete()
     logTimingSummary()
   }
 
   override def allInvalidatedNodes[M >: Null <: TrackingMemo](
       scope: TrackingScope[M]): Map[ScenarioReference, Map[NodeKey[_], M]] = {
-    logTimedCommand(
-      "allInvalidatedNodes",
-      "",
-      target.queue.currentNodeInvalidationBatches
+    logTimedCommand("allInvalidatedNodes", "") {
+      consistentRoot.invalidationBatcher
+        .currentBatches(scope)
         .collectFirst {
           case cb if cb.scope == scope =>
             cb.copyNodes().map { case (k, v) =>
@@ -498,33 +519,26 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
             }
         }
         .getOrElse(Map.empty)
-    )
+    }
   }
 
   override def addTweakMapImmediate(
-      tweaks: Map[ScenarioReference, collection.Seq[Tweak]],
-      tweakLambdas: Map[ScenarioReference, collection.Seq[TweakLambda]]): Unit = {
-    try {
-      beforeAccessTarget(forUpdate = true)
+      tweaks: Map[ScenarioReference, Seq[Tweak]],
+      tweakLambdas: Map[ScenarioReference, Seq[TweakLambda]],
+      throwOnDuplicate: Boolean): Unit =
+    runUpdate("addTweakMapImmediate", tweaks.keys.toString()) {
       assertSafeToUpdate(tweaks.keys ++ tweakLambdas.keys)
       val tweaksByScenario = toScenario(tweaks)
       val tweakLambdasByScenario = toScenario(tweakLambdas)
-      logTimedCommand(
-        "addTweakMapImmediate",
-        tweaks.keys.toString(),
-        UpdateMultipleScenarios
-          .evaluateAndApplyTweakLambdas(tweaksByScenario, tweakLambdasByScenario, consistentRoot.target, cause)
-      )
-    } finally finishUpdating()
-  }
-
-  override def removeAllTweaksImmediate(scenario: ScenarioReference): Unit = {
-    try {
-      beforeAccessTarget(forUpdate = true)
-      val tracker = toScenario(scenario)
-      tracker.tweakContainer.doRemoveAllTweaks(cause)
-    } finally finishUpdating()
-  }
+      UpdateMultipleScenarios
+        .evaluateAndApplyTweakLambdas(
+          tweaksByScenario,
+          tweakLambdasByScenario,
+          consistentRoot.target,
+          cause,
+          throwOnDuplicate,
+          invalidationBatcher)
+    }
 
   private def causePrefix: String = s"[Graph][DependencyTrackerBatchUpdater-${target.scenarioReference}]"
 
@@ -581,7 +595,8 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
   private def attachNodes[T](
       nodes: Map[ScenarioReference, Set[NodeKey[T]]],
       ec: OGSchedulerContext,
-      eventCause: Option[EventCause]): Map[ScenarioReference, Map[NodeKey[T], Node[T]]] = {
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Map[ScenarioReference, Map[NodeKey[T], Node[T]]] = {
     // note that we use the cancel scope of the tracker that the batch update is running in, not the
     // (potentially stale) cancel scope of whatever child we're evaluating in
     val cs = consistentRoot.target.queue.currentCancellationScope
@@ -589,7 +604,7 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
     nodes.map { case (scenarioRef, keys) =>
       val tracker = safeEvaluationDependencyTracker(scenarioRef)
       scenarioRef -> keys.iterator.map { key =>
-        key -> tracker.nodeOf(key.tidyKey, ec, triggerCause, cs).asInstanceOf[Node[T]]
+        key -> tracker.nodeOf(key.tidyKey, ec, triggerCause, trackingScope, cs).asInstanceOf[Node[T]]
       }.toMap
     }
   }
@@ -597,7 +612,7 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
   private def removePendingInvalidations[T](
       nodes: Map[ScenarioReference, Set[NodeKey[T]]],
       trackingScope: TrackingScope[_]): Unit = {
-    val invalidated = target.queue.currentNodeInvalidationBatches
+    val invalidated = invalidationBatcher.currentBatches(trackingScope)
     invalidated
       .filter { _.scope == trackingScope }
       .foreach { batch =>
@@ -611,15 +626,16 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
 
   override def evaluateNodeKeysImmediateInMultiScenario[T](
       keys: Map[ScenarioReference, Set[NodeKey[T]]],
-      removePendingInvalidate: Option[TrackingScope[_]],
-      eventCause: Option[EventCause]): Map[ScenarioReference, Map[NodeKey[T], Try[T]]] = {
+      removePendingInvalidate: Boolean,
+      eventCause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Map[ScenarioReference, Map[NodeKey[T], Try[T]]] = {
     assertSafeToRead(keys.keys)
 
-    def doWork(): Map[ScenarioReference, Map[NodeKey[T], Try[T]]] = {
+    logTimedCommand("evaluateNodeKeysImmediate", s"nodes = $keys removeFrom = $removePendingInvalidate") {
       val ec = OGSchedulerContext.current()
-      val nodesAttached = attachNodes(keys, ec, eventCause)
+      val nodesAttached = attachNodes(keys, ec, eventCause, trackingScope)
       EvaluationContext.enqueueAndWaitForAll(nodesAttached.iterator.flatMap(_._2.values).toIndexedSeq)
-      removePendingInvalidate.foreach { removePendingInvalidations(keys, _) }
+      if (removePendingInvalidate) removePendingInvalidations(keys, trackingScope)
       nodesAttached.map { case (scenarioRef, nodes) =>
         val res: Map[NodeKey[T], Try[T]] = nodes.iterator.map { node =>
           node._1.tidyKey.asInstanceOf[NodeKey[T]] -> toTry(node._2)
@@ -627,47 +643,43 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
         scenarioRef -> res
       }
     }
-
-    logTimedCommand("evaluateNodeKeysImmediate", s"nodes = $keys removeFrom = $removePendingInvalidate", doWork())
   }
 
   override def evaluateNodeKeysAsync[T](
       keys: Map[ScenarioReference, Set[NodeKey[T]]],
       callback: EventCause => Unit = _ => {},
-      removePendingInvalidate: Option[TrackingScope[_]] = None,
-      eventCause: EventCause): Unit = {
+      removePendingInvalidate: Boolean = false,
+      eventCause: EventCause,
+      trackingScope: TrackingScope[_]): Unit = {
     checkInvariants(allowAccessFromOtherGraphThreads = true)
     assertSafeToRead(keys.keys)
-    logTimedCommand(
-      "evaluateNodeKeysAsync",
-      s"nodes = $keys removeFrom = $removePendingInvalidate", {
-        if (StateManager.tryIncreaseEvaluating) {
-          val evalCause = eventCause.createChild(s"$causePrefix evaluateNodeKeysAsync")
-          val token = evalCause.createAndTrackToken()
-          val ec = EvaluationContext.current
-          removePendingInvalidate.foreach { removePendingInvalidations(keys, _) }
-          val nodesAttached = attachNodes(keys, ec, Some(evalCause))
-          val nodesToRun = nodesAttached.valuesIterator.flatMap(_.valuesIterator).toSeq
-          StateManager.keepTrackOfNodes(nodesToRun)
-          // important: we run the callback inline since we may (briefly) block the current scheduler thread while waiting
-          // in StateManager.await(), which could cause deadlock if no other graph threads were available
-          ec.scheduler.evaluateNodesAsync(
-            nodesToRun,
-            _ => {
-              try { callback(evalCause) }
-              finally {
-                StateManager.finishEvaluating()
-                token.release()
-              }
-            },
-            callbackInline = true
-          )
-        } else {
-          val msg = "evaluateNodeKeysAsync failure: BatchUpdater already closed or is updating!"
-          DependencyTracker.log.error(msg, new GraphInInvalidState(msg))
-        }
+    logTimedCommand("evaluateNodeKeysAsync", s"nodes = $keys removeFrom = $removePendingInvalidate") {
+      if (StateManager.tryIncreaseEvaluating) {
+        val evalCause = eventCause.createChild(s"$causePrefix evaluateNodeKeysAsync")
+        val token = evalCause.createAndTrackToken()
+        val ec = EvaluationContext.current
+        if (removePendingInvalidate) removePendingInvalidations(keys, trackingScope)
+        val nodesAttached = attachNodes(keys, ec, Some(evalCause), trackingScope)
+        val nodesToRun = nodesAttached.valuesIterator.flatMap(_.valuesIterator).toSeq
+        StateManager.keepTrackOfNodes(nodesToRun)
+        // important: we run the callback inline since we may (briefly) block the current scheduler thread while waiting
+        // in StateManager.await(), which could cause deadlock if no other graph threads were available
+        ec.scheduler.evaluateNodesAsync(
+          nodesToRun,
+          _ => {
+            try { callback(evalCause) }
+            finally {
+              StateManager.finishEvaluating()
+              token.release()
+            }
+          },
+          callbackInline = true
+        )
+      } else {
+        val msg = "evaluateNodeKeysAsync failure: BatchUpdater already closed or is updating!"
+        DependencyTracker.log.error(msg, new GraphInInvalidState(msg))
       }
-    )
+    }
   }
 
   override def evaluateAsync[T](
@@ -676,60 +688,55 @@ private[tracking] final class DependencyTrackerBatchUpdaterRoot(
       callback: (Try[T], EventCause) => Unit,
       eventCause: EventCause): Unit = {
     checkInvariants(allowAccessFromOtherGraphThreads = true)
-    logTimedCommand(
-      "evaluateAsync",
-      s"fn = $fn", {
-        if (StateManager.tryIncreaseEvaluating) {
-          val evalCause = eventCause.createChild(s"$causePrefix evaluateAsync")
-          val token = evalCause.createAndTrackToken()
-          val ec = EvaluationContext.current
-          val tracker = safeEvaluationDependencyTracker(scenarioReference)
-          // use the cancellation scope from the updater root, child dependency tracker doesn't have their own cancellation scope
-          val cs = target.queue.currentCancellationScope
-          // Need to use the non cached scenarioStack as fn can call non-RT functions.
-          val ss = tracker.nonCachedScenarioStackWithCancelScope(cs)
-          val cb = (result: Try[T]) => {
-            try { callback(result, evalCause) }
-            finally {
-              StateManager.finishEvaluating()
-              token.release()
-            }
+    logTimedCommand("evaluateAsync", s"fn = $fn") {
+      if (StateManager.tryIncreaseEvaluating) {
+        val evalCause = eventCause.createChild(s"$causePrefix evaluateAsync")
+        val token = evalCause.createAndTrackToken()
+        val ec = EvaluationContext.current
+        val tracker = safeEvaluationDependencyTracker(scenarioReference)
+        // use the cancellation scope from the updater root, child dependency tracker doesn't have their own cancellation scope
+        val cs = target.queue.currentCancellationScope
+        // Need to use the non cached scenarioStack as fn can call non-RT functions.
+        val ss = tracker.nonCachedScenarioStackWithCancelScope(cs)
+        val cb = (result: Try[T]) => {
+          try { callback(result, evalCause) }
+          finally {
+            StateManager.finishEvaluating()
+            token.release()
           }
-          val node: Node[T] = new PropertyNodeSync[T] {
-            override def entity: Entity = null
-            override def run(ec: OGSchedulerContext): Unit = completeWithResult(fn, ec)
-            override def propertyInfo: NodeTaskInfo = NodeTaskInfo.UITrackDebug
-            override def invalidateCache(): Unit = {
-              super.invalidateCache()
-              OverInvalidationDetection.checkOverInvalidationInDebugTrack(evalCause, getId, tracker.root)
-            }
-          }
-          node.attach(ss)
-          evalCause.root.keepAliveWhileEvaluating(node)
-          StateManager.keepTrackOfNode(node)
-          // need to run callback inline, otherwise there will deadlock
-          ec.scheduler.evaluateNodeAsync(node, maySAS = true, trackCompletion = false, cb, callbackInline = true)
-        } else {
-          val msg = "evaluateAsync failure: BatchUpdater already closed or is updating!"
-          DependencyTracker.log.error(msg, new GraphInInvalidState(msg))
         }
+        val node: Node[T] = new PropertyNodeSync[T] {
+          override def entity: Entity = null
+          override def run(ec: OGSchedulerContext): Unit = completeWithResult(fn, ec)
+          override def propertyInfo: NodeTaskInfo = NodeTaskInfo.UITrackDebug
+          override def invalidateCache(observer: TrackedNodeInvalidationObserver): Unit = {
+            super.invalidateCache(observer)
+            OverInvalidationDetection.checkOverInvalidationInDebugTrack(evalCause, getId, tracker.root)
+          }
+        }
+        node.attach(ss)
+        evalCause.root.keepAliveWhileEvaluating(node)
+        StateManager.keepTrackOfNode(node)
+        // need to run callback inline, otherwise there will deadlock
+        ec.scheduler.evaluateNodeAsync(node, maySAS = true, trackCompletion = false, cb, callbackInline = true)
+      } else {
+        val msg = "evaluateAsync failure: BatchUpdater already closed or is updating!"
+        DependencyTracker.log.error(msg, new GraphInInvalidState(msg))
       }
-    )
+    }
   }
 
   override def evaluateNodeKeysLowPriorityAsync[T](
       keys: Map[ScenarioReference, Set[NodeKey[T]]],
-      cause: Option[EventCause]): Unit = {
+      cause: Option[EventCause],
+      trackingScope: TrackingScope[_]): Unit = {
     assertSafeToRead(keys.keys)
-    logTimedCommand(
-      "evaluateNodeKeysLowPriorityAsync",
-      s"nodes = $keys", {
-        keys.foreach { case (sr, keys) =>
-          safeEvaluationDependencyTracker(sr)
-            .evaluateNodeKeysLowPriorityAsync(keys.toList, _ => (), cause getOrElse this.cause)
-        }
+    logTimedCommand("evaluateNodeKeysLowPriorityAsync", s"nodes = $keys") {
+      keys.foreach { case (sr, keys) =>
+        safeEvaluationDependencyTracker(sr)
+          .evaluateNodeKeysLowPriorityAsync(keys.toList, _ => (), cause getOrElse this.cause, trackingScope)
       }
-    )
+    }
   }
 }
 

@@ -47,8 +47,8 @@ object SerializedEntity {
 private[optimus] abstract class SerializedStorable extends Serializable {
   def className: SerializedEntity.TypeRef
   def properties: Map[String, Any]
-  def keys: collection.Seq[SerializedKey]
-  def types: collection.Seq[SerializedEntity.TypeRef]
+  def keys: Seq[SerializedKey]
+  def types: Seq[SerializedEntity.TypeRef]
   def slot: Int
   def storableRef: StorableReference
 }
@@ -59,9 +59,9 @@ final case class SerializedEntity(
     cmid: Option[CmReference],
     className: SerializedEntity.TypeRef,
     properties: Map[String, Any],
-    keys: collection.Seq[SerializedKey] = collection.Seq.empty,
-    types: collection.Seq[SerializedEntity.TypeRef] = collection.Seq.empty,
-    inlinedEntities: collection.Seq[SerializedEntity] = Nil,
+    keys: Seq[SerializedKey] = Seq.empty,
+    types: Seq[SerializedEntity.TypeRef] = Seq.empty,
+    inlinedEntities: Seq[SerializedEntity] = Nil,
     /*
      * NB: we use a Option[Map] here to differentiate 3 different cases:
      * (1) SerializedEntity has no childToParent linkages (=None)
@@ -98,9 +98,9 @@ final case class SerializedEntity(
       cmid: Option[CmReference] = cmid,
       className: SerializedEntity.TypeRef = className,
       properties: Map[String, Any] = properties,
-      keys: collection.Seq[SerializedKey] = keys,
-      types: collection.Seq[SerializedEntity.TypeRef] = types,
-      inlinedEntities: collection.Seq[SerializedEntity] = inlinedEntities,
+      keys: Seq[SerializedKey] = keys,
+      types: Seq[SerializedEntity.TypeRef] = types,
+      inlinedEntities: Seq[SerializedEntity] = inlinedEntities,
       linkages: Option[Map[EntityLinkageProperty, Set[SerializedEntity.EntityLinkage]]] = linkages,
       slot: Int = slot) =
     new SerializedEntity(entityRef, cmid, className, properties, keys, types, inlinedEntities, linkages, slot)
@@ -156,13 +156,10 @@ final case class MultiSlotSerializedEntity private (entities: immutable.SortedSe
 
 object MultiSlotSerializedEntity {
   private implicit val entityOrdering: Ordering[SerializedEntity] = Ordering.by[SerializedEntity, Int](se => se.slot)
-  def apply(entities: collection.Seq[SerializedEntity]): MultiSlotSerializedEntity = {
+  def apply(entities: Seq[SerializedEntity]): MultiSlotSerializedEntity = {
     val sorted = immutable.SortedSet(entities.toSeq: _*)
     new MultiSlotSerializedEntity(sorted)
   }
 }
 
-final case class EntityMetadata(
-    entityRef: EntityReference,
-    className: String,
-    types: collection.Seq[SerializedEntity.TypeRef])
+final case class EntityMetadata(entityRef: EntityReference, className: String, types: Seq[SerializedEntity.TypeRef])

@@ -33,7 +33,10 @@ import scala.util.Try
 trait DependencyTrackerAsyncApi {
   self: DependencyTracker =>
   def addTweaksAsync(tweaks: Iterable[Tweak], throwOnDuplicate: Boolean, callback: Try[Unit] => Unit): Unit =
-    queue.executeAsync(new TSA_AddTweaks(tweaks, throwOnDuplicate), callback)
+    executeBatchUpdateAsync(
+      NoEventCause,
+      updater => updater.addTweaksImmediate(tweaks.toSeq, throwOnDuplicate),
+      callback)
 
   def executeEvaluateAsync[T](expr: () => T, callback: Try[T] => Unit, onLowPriorityQueue: Boolean = false): Unit =
     queue.executeAsync(
@@ -46,23 +49,32 @@ trait DependencyTrackerAsyncApi {
     )
 
   /** Evaluate asynchronously given node by key */
-  def evaluateNodeKeyAsync[T](key: NodeKey[T], callback: Try[T] => Unit, cause: EventCause): Unit =
-    queue.executeAsync(new EvaluateNodeKeyAction(key, cause), callback)
+  def evaluateNodeKeyAsync[T](
+      key: NodeKey[T],
+      callback: Try[T] => Unit,
+      cause: EventCause,
+      trackingScope: TrackingScope[_]): Unit =
+    queue.executeAsync(new EvaluateNodeKeyAction(key, cause, trackingScope), callback)
 
-  def evaluateNodeKeysAsync(keys: collection.Seq[NodeKey[_]], callback: NodeKeysCallback, cause: EventCause): Unit = {
-    val action = new EvaluateNodeKeysAction(keys, cause)
+  def evaluateNodeKeysAsync(
+      keys: Seq[NodeKey[_]],
+      callback: NodeKeysCallback,
+      cause: EventCause,
+      trackingScope: TrackingScope[_]): Unit = {
+    val action = new EvaluateNodeKeysAction(keys, cause, trackingScope)
     queue.executeAsync(action, adaptedNodeKeysCallback(callback, action))
   }
 
   def evaluateNodeKeysLowPriorityAsync(
-      keys: collection.Seq[NodeKey[_]],
+      keys: Seq[NodeKey[_]],
       callback: NodeKeysCallback,
-      cause: EventCause): Unit = {
-    val action = new EvaluateNodeKeysLowPriorityAction(keys, cause)
+      cause: EventCause,
+      trackingScope: TrackingScope[_]): Unit = {
+    val action = new EvaluateNodeKeysLowPriorityAction(keys, cause, trackingScope)
     queue.executeAsync(action, callback = adaptedNodeKeysCallback(callback, action))
   }
 
-  type NodeKeysCallback = Try[(collection.Seq[Node[_]], collection.Seq[NodeKey[_]])] => Unit
+  type NodeKeysCallback = Try[(Seq[Node[_]], Seq[NodeKey[_]])] => Unit
   private[this] def adaptedNodeKeysCallback(cb: NodeKeysCallback, action: EvaluateNodeKeysAction)(
       res: Try[Unit]): Unit = {
     if (cb ne null) {
@@ -96,13 +108,32 @@ trait DependencyTrackerAsyncApi {
     }
   }
 
-  def disposeAsync(clearCacheOfDisposedNodes: Boolean = true): Unit = {
+  private[tracking] def executeBatchUpdateIgnoreDisposedAsync(
+      cause: EventCause,
+      update: DependencyTrackerBatchUpdater => Unit,
+      callback: Try[Unit] => Unit,
+      highPriority: Boolean = false,
+      scheduler: Scheduler = Scheduler.currentOrDefault): Unit = {
+    if (isDisposed) {
+      callback(Success(()))
+    } else {
+      queue.executeAsync(new TSA_BatchUpdateIgnoreDisposed(cause, update, scheduler), callback, highPriority)
+    }
+  }
+
+  def disposeAsync(cacheClearMode: CacheClearMode = AsyncClear, callback: Try[Unit] => Unit = _ => ()): Unit = {
     // Note - we execute the dispose on root queue as Dispose can modify the parent and root view of child scenarios
     // keep this in step with dispose
-    root.queue.executeAsync(new TSA_Dispose(clearCacheOfDisposedNodes), null)
+    root.executeBatchUpdateIgnoreDisposedAsync(
+      NoEventCause,
+      _.updaterFor(this).disposeImmediate(cacheClearMode),
+      callback)
   }
-  private[tracking] def reevaluateTrackedNodesAction(cause: EventCause, nodes: collection.Seq[PropertyNode[_]]) =
-    new EvaluateNodeKeysAction(nodes, cause)
+  private[tracking] def reevaluateTrackedNodesAction(
+      cause: EventCause,
+      nodes: Seq[PropertyNode[_]],
+      trackingScope: TrackingScope[_]) =
+    new EvaluateNodeKeysAction(nodes, cause, trackingScope)
 
   private[tracking] def cleanupAsync(
       state: Option[DependencyTrackerRootCleanupState],

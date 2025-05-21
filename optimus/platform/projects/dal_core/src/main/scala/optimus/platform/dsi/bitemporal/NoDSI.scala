@@ -18,7 +18,8 @@ import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal.proto.FeatureInfo
 
 /**
- * A fake DSI which is used when you specify --env none. Unlike --env mock, this DSI does not provide any DAL emulation.
+ * A fake DSI which is used when you specify --env none or use a withoutDAL { } block.
+ * Unlike --env mock, this DSI does not provide any DAL emulation.
  * Use this if you don't need a DAL at all and you want faster initialization for tests or simple apps.
  *
  * It basically only supports GetInfo command (which is needed for initialization) and nothing else.
@@ -28,14 +29,17 @@ object NoDSI extends DSI {
   def partitionMap: PartitionMap = PartitionMap.empty
   def executeReadOnlyCommands(reads: Seq[ReadOnlyCommand]): Seq[Result] = reads.map {
     case GetInfo() => GetInfoResult(patch.MilliInstant.now(), FeatureInfo(-1, "NoDSI"))
-    case c         => throw new UnsupportedOperationException(s"NoDSI (i.e. --env none) does not support command: $c")
+    case c         => throw new NoDSIException(s"command: $c")
   }
   def executeLeadWriterCommands(cmds: Seq[LeadWriterCommand]): Seq[Result] =
-    throw new UnsupportedOperationException(s"NoDSI (i.e. --env none) does not support any write commands")
+    throw new NoDSIException(s"any write commands")
   override def executeMessagesCommands(cmds: Seq[MessagesCommand]): Seq[MessagesResult] =
-    throw new UnsupportedOperationException(s"NoDSI (i.e. --env none) does not support any message commands")
+    throw new NoDSIException(s"any message commands")
   protected[optimus] def close(shutdown: Boolean): Unit = ()
   private[optimus] def setEstablishSession(establishSession: => EstablishSession): Unit = ()
   protected[optimus] def serverFeatures(): SupportedFeatures = FeatureSets.None
   def supportsImpersonation: Boolean = false
 }
+
+final class NoDSIException(msg: String)
+    extends UnsupportedOperationException("NoDSI (i.e. '--env none' or 'withoutDAL { }' block) does not support " + msg)

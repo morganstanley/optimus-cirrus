@@ -16,24 +16,26 @@ import java.nio.file.Paths
 import com.typesafe.config.Config
 import optimus.buildtool.config.PartialScopeId
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.format.ConfigUtils._
 import optimus.buildtool.format.Keys
 import optimus.buildtool.format.ObtFile
 import optimus.buildtool.format.Result
+import optimus.buildtool.format.Success
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
-import optimus.buildtool.format.ConfigUtils._
-import optimus.buildtool.format.Success
+import scala.collection.immutable.Set
 
 final case class ImageDefinition(
     name: String,
     scopes: Seq[ScopeId],
     extraImages: Set[ExtraImageDefinition],
-    baseImage: Option[String])
+    baseImage: Option[String],
+    imageSysName: Option[String])
 final case class ExtraImageDefinition(name: String, pathsToIncluded: Seq[Path])
 
 object ImageDefinition {
-  val Empty: ImageDefinition = ImageDefinition("", Seq.empty, Set.empty, None)
+  val Empty: ImageDefinition = ImageDefinition("", Seq.empty, Set.empty, None, None)
 
   def load(origin: ObtFile, config: Config, key: String, validScopes: Set[ScopeId]): Result[Set[ImageDefinition]] =
     if (config.hasPath(key)) {
@@ -58,9 +60,10 @@ object ImageDefinition {
         scopeIds(origin, imgConfig, validScopes).flatMap { scopes =>
           val extraImages = ExtraImageDefinition.load(origin, imgConfig, "extraImages")
           val baseImage = imgConfig.optionalString("baseImage")
+          val imageSysName = imgConfig.optionalString("imageSysName")
           extraImages
             .map { ei =>
-              ImageDefinition(key, scopes, ei, baseImage)
+              ImageDefinition(key, scopes, ei, baseImage, imageSysName)
             }
             .withProblems(imgConfig.checkExtraProperties(origin, Keys.imageDefinition))
         }

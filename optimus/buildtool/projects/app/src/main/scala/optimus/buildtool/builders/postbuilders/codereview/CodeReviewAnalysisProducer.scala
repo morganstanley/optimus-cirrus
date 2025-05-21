@@ -63,7 +63,7 @@ object CodeReviewAnalysisProducer {
     }
   }
 
-  private def toCodeReviewMessageType(msg: CompilationMessage): CodeReviewMessageType = msg.severity match {
+  private def toCodeReviewMessageType(msg: CompilationMessage): CodeReviewMessageType.Value = msg.severity match {
     case CompilationMessage.Error                    => CodeReviewMessageType.Error
     case CompilationMessage.Warning                  => CodeReviewMessageType.Warn
     case CompilationMessage.Info if msg.isSuppressed => CodeReviewMessageType.Warn

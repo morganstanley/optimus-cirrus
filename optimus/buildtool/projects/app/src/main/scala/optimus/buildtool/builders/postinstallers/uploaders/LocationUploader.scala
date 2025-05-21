@@ -26,6 +26,7 @@ import optimus.platform.throttle.Throttle
 import optimus.platform.util.Log
 
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import scala.collection.immutable.Seq
 
 class LocationUploader(
@@ -52,9 +53,20 @@ class LocationUploader(
     .getOrElse(Map.empty)
   protected val exe: String = if (OsUtils.isWindows) ".exe" else ""
 
+  private val isInitialized = new ConcurrentHashMap[UploadFormat, Boolean]
+  @async private def init(format: UploadFormat) = {
+    if (!isInitialized.getOrDefault(format, false)) {
+      // may run more than once, but that's ok. Init commands are idempotent and thread-safe.
+      // throttle will ensure it won't run a large number of times
+      location.initCmds(format).aseq.foreach(launchProcess)
+      isInitialized.put(format, true)
+    }
+  }
+
   @async def uploadToLocation(source: Asset, format: UploadFormat): Long =
     throttle {
       log.debug(s"[$id] Starting upload for ${source.name}...")
+      init(format)
       val (durationInNanos, _) = AdvancedUtils.timed {
         location.cmds(source, format).aseq.foreach(launchProcess)
       }

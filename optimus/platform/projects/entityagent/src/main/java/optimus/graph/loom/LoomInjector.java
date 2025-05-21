@@ -17,7 +17,6 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.security.ProtectionDomain;
-import optimus.BiopsyLab;
 import optimus.graph.loom.compiler.LMessage;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassReaderEx;

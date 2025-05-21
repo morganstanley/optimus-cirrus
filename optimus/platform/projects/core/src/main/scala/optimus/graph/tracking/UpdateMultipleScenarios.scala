@@ -15,7 +15,6 @@ import optimus.graph.CompletableNode
 import optimus.graph.Node
 import optimus.graph.NodeTask
 import optimus.graph.OGSchedulerContext
-import optimus.graph.Settings
 import optimus.graph.tracking.DependencyTrackerRoot.TweakLambda
 import optimus.platform.EvaluationContext
 import optimus.platform.EvaluationQueue
@@ -25,36 +24,26 @@ import optimus.platform.Tweak
 // this will take a lock on the topmost common parent scenario
 private[tracking] object UpdateMultipleScenarios {
   def evaluateAndApplyTweakLambdas(
-      tweaks: Map[DependencyTracker, collection.Seq[Tweak]],
+      tweaks: Map[DependencyTracker, Seq[Tweak]],
       tweakLambdas: Map[DependencyTracker, Iterable[TweakLambda]],
       commonParent: DependencyTracker,
-      cause: EventCause
+      cause: EventCause,
+      throwOnDuplicate: Boolean,
+      observer: TrackedNodeInvalidationObserver
   ): Unit = {
-    val trackers = tweaks.keys ++ tweakLambdas.keys
-    val toResetBatchers: Set[DependencyTracker] = trackers.toSet.filter {
-      case tracker if tracker.queue.currentBatcher.cause.isEmpty =>
-        tracker.queue.setCurrentBatcher(commonParent.queue.currentBatcher)
-        true
-      case tracker if tracker.queue.currentBatcher != commonParent.queue.currentBatcher =>
-        DependencyTracker.log.warn(
-          s"Expected batcher on child scenario $tracker to match batcher of parent scenario $commonParent")
-        true
-      case _ => false
-    }
-
-    def nodifyLambdas(scenario: DependencyTracker, lambdas: Iterable[TweakLambda]): Node[collection.Seq[Tweak]] = {
+    def nodifyLambdas(scenario: DependencyTracker, lambdas: Iterable[TweakLambda]): Node[Seq[Tweak]] = {
       if (scenario.isDisposed) throw new DependencyTrackerDisposedException(scenario.name)
       val ss = scenario.nc_scenarioStack.withCancellationScope(commonParent.queue.currentCancellationScope)
       // need to write out apar flatmap invocation manually since we are in core (so don't have entityplugin)
       import optimus.platform.AsyncImplicits._
-      val flatmap = lambdas.toSeq.apar.flatMap$newNode[Tweak, collection.Seq[Tweak]](lambda =>
-        new CompletableNode[collection.Seq[Tweak]] {
+      val flatmap = lambdas.toSeq.apar.flatMap$newNode[Tweak, Seq[Tweak]](lambda =>
+        new CompletableNode[Seq[Tweak]] {
           attach(ss)
           override def run(ec: OGSchedulerContext): Unit = {
             lambda.apply$queued().continueWith(this, ec)
           }
           override def onChildCompleted(eq: EvaluationQueue, child: NodeTask): Unit = {
-            completeFromNode(child.asInstanceOf[Node[collection.Seq[Tweak]]], eq)
+            completeFromNode(child.asInstanceOf[Node[Seq[Tweak]]], eq)
           }
         })
       flatmap.attach(ss)
@@ -64,7 +53,7 @@ private[tracking] object UpdateMultipleScenarios {
     val nodes = tweakLambdas.map { case (scenario, exprs) => scenario -> nodifyLambdas(scenario, exprs) }
     EvaluationContext.enqueueAndWaitForAll(nodes.values.toSeq)
     // before we start applying tweaks we need to wait for any orphaned evaluations to complete
-    commonParent.queue.evaluationBarrier(commonParent.queue.currentBatcher.cause)
+    commonParent.queue.evaluationBarrier(cause)
     val cs = Some(commonParent.queue.currentCancellationScope)
 
     val results = nodes map { case (scenario, node) => scenario -> node.result }
@@ -72,9 +61,7 @@ private[tracking] object UpdateMultipleScenarios {
     val sorted = results.toSeq.sortBy { case (scenario, _) => (-scenario.level, scenario.name) }
 
     tweaks.toSeq ++ sorted foreach { case (scenario, tweaks) =>
-      scenario.tweakContainer.doAddTweaks(tweaks, Settings.throwOnDuplicateInstanceTweaks, cause, cs)
+      scenario.tweakContainer.doAddTweaks(tweaks, throwOnDuplicate, cause, cs, observer)
     }
-
-    toResetBatchers foreach { _.queue.resetCurrentBatcher() }
   }
 }

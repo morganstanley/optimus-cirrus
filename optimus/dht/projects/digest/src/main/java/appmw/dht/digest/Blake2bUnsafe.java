@@ -631,17 +631,12 @@ public interface Blake2bUnsafe {
 
     /** unsafe access */
     static final Unsafe unsafe;
-    /** array base offset of byte array */
-    static final long basexof;
 
     static {
       try {
         Field f = Unsafe.class.getDeclaredField("theUnsafe");
         f.setAccessible(true);
         unsafe = (Unsafe) f.get(null);
-
-        final byte[] foo = new byte[0];
-        basexof = unsafe.arrayBaseOffset(foo.getClass());
       } catch (Exception e) {
         e.printStackTrace(System.err);
         throw new RuntimeException(e);
@@ -654,7 +649,12 @@ public interface Blake2bUnsafe {
       // set m registers
       // the unsafe copy will appropriately init m with little endian semantics.
       final long[] m = state.m;
-      unsafe.copyMemory(b, basexof + offset, m, basexof, Spec.block_bytes);
+      unsafe.copyMemory(
+          b,
+          Unsafe.ARRAY_BYTE_BASE_OFFSET + offset,
+          m,
+          Unsafe.ARRAY_LONG_BASE_OFFSET,
+          Spec.block_bytes);
 
       // set v registers
       final long[] v = state.v;

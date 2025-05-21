@@ -52,7 +52,7 @@ import scala.collection.immutable.IndexedSeq
       outputJar = pathBuilder
         .outputPathFor(id, sources.compilationFingerprint.hash, AT.CompiledRunconf, None)
         .asJar,
-      upstreamAgents = upstream.agentsForOurRuntimeArtifacts
+      upstreamAgents = upstream.agentsForOurRuntime
     )
   }
 }

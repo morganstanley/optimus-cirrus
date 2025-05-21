@@ -307,6 +307,36 @@ class OptimusDALRefChecks(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
         alarm(OptimusErrors.PROJECTED_NOTSET, treeSym.pos)
     }
 
+    private def checkMonoTemporalAnnotationForEntity(treeSym: Symbol, isStored: Boolean): Unit = {
+      val monoTemporal = isEntityMonoTemporal(treeSym)
+      if (monoTemporal) {
+        if (!isStored)
+          alarm(OptimusErrors.INVALID_MONOTEMPORAL_NOTSTORED_ENTITY, treeSym.pos)
+
+        // bi-temporal base cannot have @indexed(unique=true)
+        val bitemporalBaseClasses = treeSym.baseClasses.filter(e => isStoredEntity(e) && !isEntityMonoTemporal(e))
+        for (baseSym <- bitemporalBaseClasses) {
+          val uniqueIndexes =
+            baseSym.info.decls.filter(s => !s.isSynthetic && isUniqueIndex(s)).map(_.decodedName.trim).toSet
+          if (uniqueIndexes.nonEmpty)
+            alarm(
+              OptimusErrors.INVALID_MONOTEMPORAL_INHERIT_BITEMPORAL_WITH_UNIQUE_INDEX,
+              treeSym.pos,
+              uniqueIndexes.mkString("'", "', '", "'"),
+              baseSym.fullName)
+        }
+      } else if (isStored) {
+        // bi-temporal entity cannot have mono-temporal base types
+        val monoTemporalBaseClasses =
+          treeSym.baseClasses.filter(e => isStoredEntity(e) && isEntityMonoTemporal(e)).map(_.fullName)
+        if (monoTemporalBaseClasses.nonEmpty)
+          alarm(
+            OptimusErrors.INVALID_BITEMPORAL_INHERIT_MONOTEMPORAL,
+            treeSym.pos,
+            monoTemporalBaseClasses.sorted.mkString(", "))
+      }
+    }
+
     /**
      * we will do some checks to guarantee user follow rules of how to use fullTextSearch feature. We do this check at
      * compile time since we want to find the violation as early as possible.
@@ -424,6 +454,7 @@ class OptimusDALRefChecks(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
           if (isEntity(treeSym)) {
             checkFullTextSearchAnnotationEntity(treeSym, treeSym.hasAnnotation(StoredAnnotation))
             checkProjectedAnnotationForEntity(treeSym, treeSym.hasAnnotation(StoredAnnotation))
+            checkMonoTemporalAnnotationForEntity(treeSym, treeSym.hasAnnotation(StoredAnnotation))
           }
           if (isEvent(treeSym)) {
             checkProjectedAnnotationForEvent(treeSym)
@@ -457,6 +488,8 @@ class OptimusDALRefChecks(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseI
         case md: ModuleDef if isEntity(treeSym) =>
           if (isEntityProjected(treeSym))
             alarm(OptimusErrors.PROJECTED_INVALID_CLASS, tree.pos)
+          if (isEntityMonoTemporal(treeSym))
+            alarm(OptimusErrors.INVALID_MONOTEMPORAL_OBJECT, tree.pos)
           super.traverse(tree)
         case _: ClassDef | _: ModuleDef if treeSym.hasAnnotation(EmbeddableAnnotation) =>
           checkProjectedAnnotationForEmbeddable(treeSym)

@@ -240,14 +240,16 @@ object Put {
       value: SerializedEntity,
       lockToken: Option[Long],
       validTime: Instant,
-      minAssignableTtOpt: Option[Instant] = None): Put =
-    new Put(value, MicroPrecisionInstant.ofInstant(validTime), lockToken, minAssignableTtOpt)
+      minAssignableTtOpt: Option[Instant] = None,
+      monoTemporal: Boolean = false): Put =
+    new Put(value, MicroPrecisionInstant.ofInstant(validTime), lockToken, minAssignableTtOpt, monoTemporal)
 }
 final case class Put private (
     value: SerializedEntity,
     vt: MicroPrecisionInstant,
     lockToken: Option[Long],
-    minAssignableTtOpt: Option[Instant]
+    minAssignableTtOpt: Option[Instant],
+    monoTemporal: Boolean
 ) extends WriteCommandWithValidTime
     with HasClassName {
   def cn = value.className
@@ -265,16 +267,24 @@ object InvalidateAfter {
       versionedRef: VersionedReference,
       lockToken: Long,
       vt: Instant,
-      clazzName: String): InvalidateAfter =
-    new InvalidateAfter(entityRef, versionedRef, MicroPrecisionInstant.ofInstant(vt), lockToken, clazzName)
+      clazzName: String,
+      monoTemporal: Boolean = false): InvalidateAfter =
+    new InvalidateAfter(
+      entityRef,
+      versionedRef,
+      MicroPrecisionInstant.ofInstant(vt),
+      lockToken,
+      clazzName,
+      monoTemporal)
 }
 final case class InvalidateAfter private (
     entityRef: EntityReference,
     versionedRef: VersionedReference,
     vt: MicroPrecisionInstant,
     lockToken: Long,
-    clazzName: String)
-    extends WriteCommandWithValidTime
+    clazzName: String,
+    monoTemporal: Boolean
+) extends WriteCommandWithValidTime
     with HasClassName {
   def cn = clazzName
   override protected def classNameImpl: Option[SerializedEntity.TypeRef] = Option(clazzName)
@@ -328,7 +338,12 @@ final case class PutApplicationEvent(
   def extractClientInfo = (application, contentOwner, clientTxTime, elevatedForUser)
 }
 
-final case class InvalidateRevertProps(er: EntityReference, lt: Long, cn: SerializedEntity.TypeRef) extends HasClassName
+final case class InvalidateRevertProps(
+    er: EntityReference,
+    lt: Long,
+    cn: SerializedEntity.TypeRef,
+    monoTemporal: Boolean = false)
+    extends HasClassName
 
 final case class WriteBusinessEvent(
     evt: SerializedBusinessEvent,
@@ -345,7 +360,7 @@ final case class WriteBusinessEvent(
       val putString = iterDisplay[WriteBusinessEvent.Put](
         "P:",
         puts,
-        { case WriteBusinessEvent.Put(e, lt) =>
+        { case WriteBusinessEvent.Put(e, lt, _) =>
           s"(${e.entityRef},${e.className},${lt},${e.linkages})"
         })
       val putSlotsString = iterDisplay[PutSlots](
@@ -357,12 +372,18 @@ final case class WriteBusinessEvent(
       val invalidateString = iterDisplay[InvalidateRevertProps](
         " I:",
         invalidates,
-        { case InvalidateRevertProps(ref, lt, cn) => s"(${ref},${lt},${cn})" }
+        { case InvalidateRevertProps(ref, lt, cn, monoTemporal) =>
+          val monoTempString = if (monoTemporal) ",m" else ""
+          s"(${ref},${lt},${cn}${monoTempString})"
+        }
       )
       val revertString = iterDisplay[InvalidateRevertProps](
         " R:",
         reverts,
-        { case InvalidateRevertProps(ref, lt, cn) => s"(${ref},${lt},${cn})" }
+        { case InvalidateRevertProps(ref, lt, cn, monoTemporal) =>
+          val monoTempString = if (monoTemporal) ",m" else ""
+          s"(${ref},${lt},${cn}${monoTempString})"
+        }
       )
       s"${super.logDisplay(level)} E:${evt.id}-${evt.className}-S:$state-VT:${evt.validTime}-TT:${evt.tt} " +
         s"$assertString $putString $putSlotsString $invalidateString $revertString"
@@ -372,7 +393,8 @@ final case class WriteBusinessEvent(
 }
 
 object WriteBusinessEvent {
-  final case class Put(ent: SerializedEntity, lockToken: Option[Long]) extends HasClassName {
+  final case class Put(ent: SerializedEntity, lockToken: Option[Long], monoTemporal: Boolean = false)
+      extends HasClassName {
     def cn = ent.className
   }
   final case class PutSlots(ents: MultiSlotSerializedEntity, lockToken: Option[Long]) extends HasClassName {
@@ -1183,7 +1205,7 @@ final case class MessagesPublishTransactionCommand(
   def businessEventClassName: String = serializedEvents.map(_.className).mkString(",")
 
   // note: it's sorted at this point, because the Event/Put is not in the same order as definition.
-  private def serializedEntities: Seq[SerializedEntity] =
+  private[optimus] def serializedEntities: Seq[SerializedEntity] =
     msg.putEvent.bes.flatMap(_.puts.map(_.ent)).sortBy(_.className)
 
   override def classNames: Seq[String] = serializedEntities.map(_.className).distinct
@@ -2418,6 +2440,14 @@ final case class PubSubUpstreamChangedResult(override val streamId: String) exte
 final case class PubSubBrokerDisconnect(override val streamId: String) extends PubSubGlobalResult
 
 final case class PubSubBrokerConnect(override val streamId: String) extends PubSubGlobalResult
+
+final case class PubSubTickDelay(delayedTypes: Set[String]) extends PubSubGlobalResult {
+  override val streamId: String = "-1" // should not be used
+}
+
+final case class PubSubTickDelayOver(recoveredTypes: Set[String]) extends PubSubGlobalResult {
+  override val streamId: String = "-1" // should not be used
+}
 
 /**
  * Response received from a PRC server when it wants to instruct us to redirect the query we sent to an alternative

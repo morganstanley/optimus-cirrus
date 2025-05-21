@@ -41,6 +41,7 @@ import optimus.profiler.DebuggerUI
 import optimus.profiler.ui.common.JPopupMenu2
 import org.slf4j.LoggerFactory
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -931,13 +932,14 @@ class NodeTimeLine(private var reader: OGTraceReader) extends JPanel {
       drawVerticalLines(g, w, h)
       lastThreadY = drawProcesses(g, w)
     } else {
-      val threadsToInclude = mutable.ArrayBuffer[PThreadContext]()
+      val threadsToIncludeBuilder = ArraySeq.newBuilder[PThreadContext]
       val threadIt = threads.iterator
       while (threadIt.hasNext) {
         val ctx = threadIt.next()
         val includeThread = threadFilter.isEmpty || ctx.name.contains(threadFilter)
-        if (includeThread) threadsToInclude += ctx
+        if (includeThread) threadsToIncludeBuilder += ctx
       }
+      val threadsToInclude = threadsToIncludeBuilder.result()
       lastThreadY = headerHeight + rowHeight * threadsToInclude.length
       drawThreadHorizontalLines(g, w, threadsToInclude)
       drawVerticalLines(g, w, h)

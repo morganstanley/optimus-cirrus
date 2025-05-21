@@ -11,7 +11,6 @@
  */
 package optimus.graph.tracking.ttracks;
 
-import static optimus.graph.OGTrace.AsyncSuffix;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 
@@ -270,7 +269,7 @@ public class TTrack extends NodeExtendedInfo implements Ptracks {
       return ((PropertyNode<?>) node).propertyInfo().entityInfo.runtimeClass().getSimpleName()
           + "."
           + ((PropertyNode<?>) node).propertyInfo().name()
-          + AsyncSuffix
+          + "@"
           + node.scenarioStack().toShortString();
     else return node.executionInfo().name() + " " + node.toString();
   }

@@ -149,7 +149,6 @@ final case class ScenarioStack private[optimus] (
     private var _parent: ScenarioStack = null,
     private[optimus] val _cacheID: SSCacheID = SSCacheID.newUnique(),
     private[optimus] var flags: Int = 0,
-    private[optimus] val pathMask: Int = 0,
     // this should be transient (used in NodeExecutor.hasRecordingSS - replace with RECORD_TWEAK_USAGE flag?
     private[optimus] val tweakableListener: TweakableListener = NoOpTweakableListener,
     private[optimus] val siParams: SIParams = ScenarioStack.emptySIParams,
@@ -353,6 +352,7 @@ final case class ScenarioStack private[optimus] (
   def progressReporter: ProgressReporter = siParams.progressReporter
   def progressTracker: ProgressTracker = siParams.progressTracker
   def profileBlockID: Int = siParams.profileBlockID
+  def pathMask: Long = siParams.pathMask
   def trackingNodeID: ChainedID = siParams.trackingNodeID
   def parent: ScenarioStack = _parent
   def topScenario: Scenario = scenario
@@ -758,13 +758,13 @@ final case class ScenarioStack private[optimus] (
         if (Settings.perAppletProfile) NCPolicy.profileBlockIDFromPath(scopePath) else OGTrace.BLOCK_ID_UNSCOPED
       val scopeMask = NCPolicy.scopeMaskFromPath(scopePath)
       if (this.pathMask == scopeMask && this.profileBlockID == profileBlockID) this
-      else copy(pathMask = scopeMask, siParams = siParams.copy(profileBlockID = profileBlockID))
+      else copy(siParams = siParams.copy(profileBlockID = profileBlockID, pathMask = scopeMask))
     }
   }
 
-  private[optimus] def withPathMask(pathMask: Int): ScenarioStack = {
+  private[optimus] def withPathMask(pathMask: Long): ScenarioStack = {
     if (this.pathMask == pathMask) this
-    else copy(pathMask = pathMask)
+    else copy(siParams = siParams.copy(pathMask = pathMask))
   }
 
   private[optimus] def withoutPrivateCache: ScenarioStack = {
@@ -848,7 +848,7 @@ final case class ScenarioStack private[optimus] (
   def hasPluginTag(tag: PluginTagKey[_]): Boolean =
     siParams.nodeInputs.contains(tag)
 
-  def pluginTags: collection.Seq[PluginTagKeyValue[_]] =
+  def pluginTags: Seq[PluginTagKeyValue[_]] =
     siParams.nodeInputs.freeze.keyValuePairs
       .filter { kv => kv.nodeInput.isInstanceOf[PluginTagKey[_]] }
       .map(kv => PluginTagKeyValue(kv.nodeInput.asInstanceOf[PluginTagKey[Any]], kv.value))
@@ -856,7 +856,7 @@ final case class ScenarioStack private[optimus] (
   /**
    * Create sibling scenario stack with new or updated plugin tags
    */
-  def withPluginTags(kvs: collection.Seq[PluginTagKeyValue[_]]): ScenarioStack = {
+  def withPluginTags(kvs: Seq[PluginTagKeyValue[_]]): ScenarioStack = {
     if (kvs.isEmpty) this
     else {
       // noinspection ComparingUnrelatedTypes (if PluginTag extends this trait, set flag)
@@ -899,10 +899,10 @@ final case class ScenarioStack private[optimus] (
   /** Create sibling scenario stack with new or updated plugin tag */
   def withPluginTag[T](key: PluginTagKey[T], tag: T): ScenarioStack = withPluginTag(0, key, tag)
 
-  def withoutPluginTag(key: PluginTagKey[_]): ScenarioStack = {
+  def withoutPluginTag(key: PluginTagKey[_]): ScenarioStack = if (hasPluginTag(key)) {
     val nss = copy(siParams = siParams.copy(nodeInputs = siParams.nodeInputs.freeze.withoutInput(key)))
     nss
-  }
+  } else this
 
   def withTrackingNodeId(id: ChainedID, parentId: ChainedID = siParams.parentTrackingNodeID): ScenarioStack =
     copy(siParams = siParams.copy(trackingNodeID = id, parentTrackingNodeID = parentId))

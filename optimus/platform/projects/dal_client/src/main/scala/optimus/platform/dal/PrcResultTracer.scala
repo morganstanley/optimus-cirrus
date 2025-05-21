@@ -114,7 +114,7 @@ class SimpleCountingResultTracer extends PrcResultTracer {
   private[optimus /*platform*/ ] def getRedirections: Seq[DalPrcRedirectionResult] = {
     val drain = new java.util.ArrayList[DalPrcRedirectionResult]()
     redirectionsSeen.drainTo(drain)
-    drain.asScala
+    drain.asScalaUnsafeImmutable
   }
 
   private[optimus /*platform*/ ] def getPrcExecutionCounter: Int = prcExecutionCounter.get()

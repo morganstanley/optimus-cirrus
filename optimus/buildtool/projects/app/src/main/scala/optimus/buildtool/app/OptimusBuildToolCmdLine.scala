@@ -14,6 +14,7 @@ package app
 
 import optimus.buildtool.app.OptimusBuildToolCmdLineT.NoneArg
 import optimus.buildtool.builders.postinstallers.uploaders.AssetUploader.UploadFormat
+import optimus.buildtool.cache.CacheMode
 import optimus.buildtool.compilers.zinc.ZincIncrementalMode
 import optimus.buildtool.config.AfsNamingConventions
 import optimus.buildtool.files.Directory
@@ -21,10 +22,10 @@ import optimus.buildtool.files.FileAsset
 import optimus.buildtool.utils.TypeClasses._
 import optimus.buildtool.utils.Utils
 import optimus.platform._
-import optimus.platform.util.ArgHandlers.StringOptionOptionHandler
+import optimus.utils.app.StringOptionOptionHandler
 import optimus.rest.bitbucket.MergeCommitUtils
-import optimus.utils.Args4JOptionHandlers.DelimitedStringOptionHandler
-import optimus.utils.Args4JOptionHandlers.PositiveIntOptionOptionHandler
+import optimus.utils.app.DelimitedStringOptionHandler
+import optimus.utils.app.PositiveIntOptionOptionHandler
 import optimus.utils.MemSize
 import optimus.utils.MemUnit
 import optimus.utils.app.MemSizeOptionHandler
@@ -242,6 +243,18 @@ private[buildtool] trait RemoteStoreCmdLine { this: OptimusAppCmdLine =>
     usage = "Force writing of artifacts to remote cache even on cache hits (defaults to false)"
   )
   val remoteCacheForceWrite: Boolean = false
+
+  lazy val cacheMode: CacheMode =
+    if (remoteCacheMode == NoneArg) {
+      if (remoteCacheForceWrite) CacheMode.ForceWrite
+      else if (remoteCacheWritable) CacheMode.ReadWrite
+      else CacheMode.ReadOnly
+    } else if (remoteCacheMode == "readWrite") CacheMode.ReadWrite
+    else if (remoteCacheMode == "readOnly") CacheMode.ReadOnly
+    else if (remoteCacheMode == "writeOnly") CacheMode.WriteOnly
+    else if (remoteCacheMode == "forceWrite") CacheMode.ForceWrite
+    else if (remoteCacheMode == "forceWriteOnly") CacheMode.ForceWriteOnly
+    else throw new IllegalArgumentException(s"Unrecognized cache mode: $remoteCacheMode")
 
   @args.Option(
     name = "--crossRegionReadThroughDHTLocations",
@@ -750,7 +763,7 @@ private[buildtool] trait OptimusBuildToolCmdLineT
   val gitPinDepth = 8
 
   @args.Option(name = "--maxLogAge", required = false, usage = "Delete logs older than specified number of days")
-  private val _maxLogAge: Int = 30 // days
+  private val _maxLogAge: Int = 7 // days
   def maxLogAge: Duration = Duration ofDays _maxLogAge
 
   @args.Option(

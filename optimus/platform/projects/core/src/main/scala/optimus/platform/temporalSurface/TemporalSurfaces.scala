@@ -19,6 +19,7 @@ import optimus.graph.NodeFuture
 import optimus.platform.TemporalContext
 import optimus.platform.annotations.nodeSync
 import optimus.platform.dal.EntityResolver
+import optimus.platform.dal.QueryTemporality
 import optimus.platform.temporalSurface.impl.EntityQueryData
 import optimus.platform.temporalSurface.operations.MatchSourceQuery
 import optimus.platform.temporalSurface.operations.TemporalSurfaceQuery
@@ -193,8 +194,6 @@ trait TemporalSurface extends Serializable {
   override final def equals(o: Any): Boolean = o match {
     case ots: TemporalSurface =>
       if (ots eq this) true
-      else // ticking TS have identity equality
-      if (canTick || ots.canTick) false
       else {
         canEqual(ots) &&
         acceptDelegation == ots.acceptDelegation &&
@@ -229,7 +228,7 @@ trait LeafTemporalSurface extends TemporalSurface {
   override final def isLeaf = true
   val matcher: TemporalSurfaceMatcher
 
-  private[optimus] def currentTemporalityFor(operation: TemporalSurfaceQuery): operation.TemporalityType
+  private[optimus] def currentTemporality: QueryTemporality.At
 
   override protected def descriptionDetail(sep: String) = ""
 

@@ -72,7 +72,7 @@ object RuntimeComponents {
   class WithMaxTime(rc: RuntimeConfiguration) extends RuntimeComponents(rc) {
     override protected[this] final def timeLookup(resolver: EntityResolver): Instant = {
       if (!EvaluationContext.isInitialised) EvaluationContext.initializeWithoutRuntime()
-      val tts = resolver.serverTime.values
+      val tts = resolver.serverTimeWithWitnessTimeUpdated("timeLookup").values
       require(tts.nonEmpty, "tt of at least one partition is expected to be defined. Got empty map")
       tts.max
     }
@@ -100,12 +100,12 @@ class RuntimeComponents(
           getRuntimeComponent(i.config)
 
         case _: MockRuntimeConfiguration =>
-          val serverTimes = resolver.serverTime
+          val serverTimes = resolver.serverTimeWithWitnessTimeUpdated("timeLookup")
           require(serverTimes.values.nonEmpty, "At least one value is expected in serverTimes got empty")
           serverTimes.getOrElse(DefaultPartition, serverTimes.values.max)
 
         case _ =>
-          val serverTime = resolver.serverTime
+          val serverTime = resolver.serverTimeWithWitnessTimeUpdated("timeLookup")
           serverTime.getOrElse(
             DefaultPartition, {
               RuntimeComponents.log.error(

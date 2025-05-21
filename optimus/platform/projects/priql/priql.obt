@@ -30,6 +30,7 @@ main {
       optimus.platform.core_macro,
       optimus.platform.entityagent,
       optimus.platform.entityplugin,
+      optimus.platform.runtime-compiler,
       optimus.platform.spray_json,
       optimus.platform.utils
     ]

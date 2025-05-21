@@ -69,6 +69,7 @@ import optimus.buildtool.compilers.zinc.ZincCompilerFactory
 import optimus.buildtool.config.ExternalDependencies
 import optimus.buildtool.config.GlobalConfig
 import optimus.buildtool.config.MetaBundle
+import optimus.buildtool.config.ModuleSet
 import optimus.buildtool.config.NamingConventions._
 import optimus.buildtool.config.ObtConfig
 import optimus.buildtool.config.RunConfConfiguration
@@ -94,7 +95,7 @@ import optimus.buildtool.processors.DeploymentScriptProcessor
 import optimus.buildtool.processors.FreemarkerProcessor
 import optimus.buildtool.processors.OpenApiProcessor
 import optimus.buildtool.processors.VelocityProcessor
-import optimus.buildtool.resolvers.CoursierArtifactResolver
+import optimus.buildtool.resolvers.CoursierArtifactResolverSource
 import optimus.buildtool.resolvers.DependencyCopier
 import optimus.buildtool.resolvers.DependencyMetadataResolvers
 import optimus.buildtool.resolvers.WebDependencyResolver
@@ -169,7 +170,6 @@ object OptimusBuildToolImpl {
   private val installDir: Directory = cmdLine.installDir.asDirectory.getOrElse(buildDir.parent.resolveDir("install"))
   private val sandboxDir: Directory =
     cmdLine.sandboxDir.asDirectory.getOrElse(buildDir.resolveDir(Sandboxes))
-  private val dockerImageCacheDir = buildDir.resolveDir("docker_cache")
 
   private val compilerThrottle = new CompilerThrottle(cmdLine.maxZincCompileBytes, cmdLine.maxNumZincs)
 
@@ -179,9 +179,11 @@ object OptimusBuildToolImpl {
   private val longRunningTraceListener = new LongRunningTraceListener(useCrumbs = useCrumbs)
   private val buildSummaryRecorder = new BuildSummaryRecorder(cmdLine.statsDir.asDirectory, compilerThrottle)
 
+  private val memoryMonitor = FreeMemoryMonitor.fromProperties()
   private val memoryThrottle = MemoryThrottle.fromConfigStringOrSysProp(cmdLine.memConfig.nonEmptyOption)
+
   private val baseListeners = timingsRecorder :: traceRecorder :: countingTrace :: longRunningTraceListener ::
-    buildSummaryRecorder :: memoryThrottle.toList
+    buildSummaryRecorder :: memoryMonitor :: memoryThrottle.toList
 
   private val uploadLocations: Seq[UploadLocation] =
     cmdLine.uploadLocations.toIndexedSeq.map(UploadLocation(_, cmdLine.decompressAfterUpload))
@@ -208,12 +210,14 @@ object OptimusBuildToolImpl {
     } else if (cmdLine.requiredCppOsVersions == Seq(NoneArg)) Nil
     else cmdLine.requiredCppOsVersions
 
+  private val appDir = sys.env.getOrElse("APP_DIR", "unknown")
+
   log.info(Utils.LogSeparator)
   log.info(s"Hostname: ${Utils.hostName.getOrElse("unknown")}")
   log.info(s"Process ID: ${Utils.processId.getOrElse("unknown")}")
   log.info(s"User: ${sys.props("user.name")}")
   log.info(s"OS version: ${OsUtils.osVersion}")
-  log.info(s"OBT app directory: ${sys.env.getOrElse("APP_DIR", "unknown")}")
+  log.info(s"OBT app directory: $appDir")
   log.info(s"OBT artifact version: $version")
   log.info(s"Working directory: $workingDir")
   log.info(s"Workspace root: $workspaceRoot")
@@ -227,12 +231,25 @@ object OptimusBuildToolImpl {
     s"Graph threads: ${EvaluationContext.current.scheduler.getIdealThreadCount} (configured: ${Settings.threadsIdeal})"
   )
   log.info(s"Max heap: ${gbString(Runtime.getRuntime.maxMemory)}GB")
+  if (cmdLine.dhtRemoteStore != NoneArg) log.info(s"DHT (${cmdLine.cacheMode}): ${cmdLine.dhtRemoteStore}")
+
+  if (appDir.replace("\\", "/").startsWith(installDir.toString) && cmdLine.install) {
+    log.error(s"""Build can't be continued because OBT is attempting to build the workspace
+                 |into the install directory which contains OBT artifacts used by this build.
+                 |
+                 |This will result in runtime filesystem errors and is most likely unintended.
+                 |In order to fix it make sure to clean your global `internal.obt.install` config.
+                 |
+                 |OBT app directory: $appDir
+                 |Install directory: $installDir""".stripMargin)
+  }
 
   // intentionally sending this to debug as this is a bit verbose for users to see
   private def optimusSysProps = sys.props.collect { case (k, v) if k.toLowerCase.contains("optimus") => s"$k=$v" }
   log.debug(s"Optimus System Props: ${optimusSysProps.mkString(", ")}")
 
   if (uploadLocations.nonEmpty) log.info(s"Upload locations: ${uploadLocations.mkString(", ")}")
+  log.info(Utils.LogSeparator)
 
   private val depCopyRoot = cmdLine.depCopyDir.asDirectory.getOrElse {
     workspaceRoot.parent.resolveDir(".stratosphere").resolveDir("depcopy")
@@ -345,10 +362,8 @@ object OptimusBuildToolImpl {
     new ZincAnalysisCache(cmdLine.zincAnalysisCacheSize, instrumentation)
 
   @node private def zincResolver: ZincClasspathResolver = new ZincClasspathResolver(
-    workspaceRoot,
-    dependencyResolver,
+    dependencyResolver.resolver(ModuleSet.empty), // we require zinc to be a core dependency
     dependencyCopier,
-    obtConfig.externalDependencies,
     scalaVersionConfig.scalaMajorVersion
   )
 
@@ -442,7 +457,7 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def rootFingerprintHasher =
     FingerprintHasher(ScopeId.RootScopeId, pathBuilder, fsCache.store, None, mischief = false)
 
-  @node def dependencyResolver: CoursierArtifactResolver = externalDependencyResolver(dependencyMetadataResolvers)
+  @node def dependencyResolver: CoursierArtifactResolverSource = externalDependencyResolver(dependencyMetadataResolvers)
 
   @node private def validateCredentials(
       loaded: Seq[Credential],
@@ -462,14 +477,14 @@ object OptimusBuildToolImpl {
     loaded
   }
 
-  @node private def externalDependencyResolver(resolvers: DependencyMetadataResolvers): CoursierArtifactResolver =
-    CoursierArtifactResolver(
+  @node private def externalDependencyResolver(resolvers: DependencyMetadataResolvers): CoursierArtifactResolverSource =
+    CoursierArtifactResolverSource(
       resolvers = resolvers,
-      externalDependencies = obtConfig.externalDependencies,
+      dependencies = obtConfig.jvmDependencies,
       dependencyCopier = dependencyCopier,
       globalExcludes = obtConfig.globalExcludes,
       globalSubstitutions = obtConfig.globalSubstitutions,
-      credentials = validateCredentials(credentials, obtConfig.externalDependencies),
+      credentials = validateCredentials(credentials, obtConfig.jvmDependencies.allExternalDependencies),
       remoteAssetStore = remoteAssetStore,
       enableMappingValidation = enableMappingValidation
     )
@@ -479,7 +494,7 @@ object OptimusBuildToolImpl {
       case (id, definition) if definition.configuration.webConfig.isDefined => id -> definition.configuration
     }
     val webInfoBeforeBuild: Map[ScopeId, WebScopeInfo] =
-      WebDependencyResolver.resolveWebInfo(webScopes, obtConfig.externalDependencies.definitions)
+      WebDependencyResolver.resolveWebInfo(webScopes, obtConfig.jvmDependencies)
     WebDependencyResolver(webInfoBeforeBuild)
   }
 
@@ -512,7 +527,12 @@ object OptimusBuildToolImpl {
   @node @scenarioIndependent private def cppCompiler =
     AsyncCppCompilerImpl(cppCompilerFactory, sandboxFactory, requiredCppOsVersions.toSet)
   @node @scenarioIndependent private def pythonCompiler =
-    AsyncPythonCompilerImpl(sandboxFactory, logDir, pythonEnvironment, asNode(() => globalConfig.pythonEnabled))
+    AsyncPythonCompilerImpl(
+      sandboxFactory,
+      logDir,
+      pythonEnvironment,
+      asNode(() => globalConfig.pythonEnabled),
+      asNode(() => globalConfig.buildAfsMapping))
   @node @scenarioIndependent private def webCompiler =
     AsyncWebCompilerImpl(depCopyRoot.resolveDir("pnpm-store"), sandboxFactory, logDir, useCrumbs)
   @node @scenarioIndependent private def electronCompiler =
@@ -617,7 +637,7 @@ object OptimusBuildToolImpl {
           pathBuilder = pathBuilder,
           compilers = Seq(scalaCompiler, javaCompiler),
           dependencyCopier = dependencyCopier,
-          externalDependencyResolver = dependencyResolver,
+          externalDependencyResolver = dependencyResolver.resolver(scopeConfig.moduleSet),
           cache = buildCache,
           factory = this,
           directoryFactory = directoryFactory,
@@ -700,6 +720,7 @@ object OptimusBuildToolImpl {
       scopeConfigSource = obtConfig,
       factory = scopedCompilationFactory,
       installDir = bspInstallDir,
+      buildDir = buildDir,
       depCopyRoot = depCopyRoot,
       sourceDir = workspaceSourceRoot,
       versionConfig = versionConfig,
@@ -715,7 +736,7 @@ object OptimusBuildToolImpl {
       generatePoms = generatePoms,
       useMavenLibs = useMavenLibs,
       pythonConfiguration = InstallTpa,
-      externalDependencies = obtConfig.externalDependencies
+      externalDependencies = obtConfig.jvmDependencies
     )
   }
 
@@ -777,6 +798,7 @@ object OptimusBuildToolImpl {
         log.warn("Press Enter to build the same scopes again, or provide a new set of scopes, or 'q' to quit...")
       // Wait for a 500ms quiet period after first message to conflate updates
       val requestedScopes: Set[String] =
+        // regex-ignore-line: thread-blocking
         (autoQueue.take() +: { Thread.sleep(500); autoQueue.pollAll() }).flatten.toSet - ""
 
       if (requestedScopes contains "q") { // quit requested
@@ -978,6 +1000,7 @@ object OptimusBuildToolImpl {
           scopeConfigSource = obtConfig,
           factory = scopedCompilationFactory,
           installDir = installDir,
+          buildDir = buildDir,
           depCopyRoot = depCopyRoot,
           sourceDir = workspaceSourceRoot,
           versionConfig = globalConfig.versionConfig,
@@ -994,25 +1017,27 @@ object OptimusBuildToolImpl {
           minimal = cmdLine.minimalInstall,
           bundleClassJars = cmdLine.bundleClassJars,
           pythonConfiguration = if (globalConfig.installWheels) InstallTpaWithWheels(pythonEnvironment) else InstallTpa,
-          externalDependencies = obtConfig.externalDependencies
+          externalDependencies = obtConfig.jvmDependencies
         )
       )
     } else None
 
     val imageBuilders = {
+      val timestamp: String = OptimusBuildToolBootstrap.generateLogFilePrefix()
       scopeSelector.imagesToBuild.toIndexedSeq.apar.map { dockerImg =>
         new oci.ImageBuilder(
           scopeConfigSource = obtConfig,
           versionConfig = globalConfig.versionConfig,
           sourceDir = workspaceSourceRoot,
           dockerImage = dockerImg,
-          workDir = buildDir.resolveDir("docker"),
+          workDir = buildDir.resolveDir("docker").resolveDir(dockerImg.location.repo).resolveDir(timestamp),
           scopedCompilationFactory = scopedCompilationFactory,
           stripDependencies = cmdLine.stripDependencies,
           latestCommit = latestCommit,
           directoryFactory = directoryFactory,
           useMavenLibs = useMavenLibs,
-          dockerImageCacheDir = dockerImageCacheDir,
+          dockerImageCacheDir =
+            buildDir.resolveDir("docker_cache").resolveDir(dockerImg.location.repo).resolveDir(timestamp),
           depCopyDir = depCopyRoot,
           useCrumbs = useCrumbs,
           minimalInstallScopes = scopeSelector.minimalInstallScopes,
@@ -1079,7 +1104,7 @@ object OptimusBuildToolImpl {
         Some(
           MetadataSettings(
             stratoConfig = stratoConfig,
-            extraLibs = dependencyResolver.extraLibsDefinitions,
+            extraLibs = obtConfig.jvmDependencies.allExternalDependencies.definitions.filter(_.isExtraLib),
             webDependencyResolver = webDependencyResolver,
             installDir = installDir,
             dockerDir = dockerDir,

@@ -165,6 +165,7 @@ trait NodeFuture[+T] {
    * Note: it looks like get... but this will start changing
    * Why a new function? Because we will modify this without breaking the existing code!
    */
+  //noinspection AccessorLikeMethodIsUnit
   def toValue$V(): Unit = get$ // void
   def toValue$Z: Boolean = get$.asInstanceOf[Boolean]
   def toValue$C: Char = get$.asInstanceOf[Char]
@@ -357,7 +358,7 @@ abstract class Node[+T] extends NodeTask with NodeFuture[T] {
     val result = new CompletableNodeM[B] {
       override def run(ec: OGSchedulerContext): Unit = {
         if (!outer.isDone) {
-          outer.attach(scenarioStack())
+          if (outer.scenarioStack() eq null) outer.attach(scenarioStack())
           ec.enqueue(outer) // Schedule the result node as a continuation of the source node.
           outer.continueWith(this, ec)
         } else {
@@ -847,7 +848,7 @@ class NodePromise[A] private (executionInfo: NodeTaskInfo, timeoutMillis: Option
     initAsRunning(ScenarioStack.constantNC)
     override def executionInfo: NodeTaskInfo = outer.executionInfo
 
-    val cancelHandler = (cs: CancellationScope) => (completeWithTry(Failure(cs.cancellationCause), None): Unit)
+    private val cancelHandler = (cs: CancellationScope) => completeWithTry(Failure(cs.cancellationCause), None): Unit
     // Note that this might run completeWithTry in the same thread right now if the CS is already cancelled!
     cancelScope.addListener(cancelHandler)
 

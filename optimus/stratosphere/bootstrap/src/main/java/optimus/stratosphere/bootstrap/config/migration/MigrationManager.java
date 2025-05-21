@@ -26,12 +26,9 @@ public class MigrationManager {
 
   private static final String CODETREE_ARCHIVE_URL_PATH =
       "internal.history-truncation.codetree-archive-url";
-  private static final String WORKSPACE_MIGRATED_PATH =
-      "internal.history-truncation.is-workspace-migrated";
 
   public static boolean requiresForkMigration(Config config, String command) {
     return config.hasPath(CODETREE_ARCHIVE_URL_PATH)
-        && (!config.hasPath(WORKSPACE_MIGRATED_PATH) || !config.getBoolean(WORKSPACE_MIGRATED_PATH))
         && Stream.of("catchup", "forkSync").anyMatch(command::equalsIgnoreCase);
   }
 

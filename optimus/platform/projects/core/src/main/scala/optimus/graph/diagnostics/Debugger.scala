@@ -34,6 +34,11 @@ object Debugger {
   private[optimus] val dbgResetProfileBeforeTest = DbgPreference("dbgResetProfileBeforeTest", default = false)
   private[optimus] val dbgShowAdvancedCmds = new NotifyingDbgPreference("dbgShowAdvancedCmds")
 
+  private[optimus] val dbgOfflineShowStart = DbgPreference("dbgOfflineShowStart", default = true)
+  private[optimus] val dbgOfflineShowUnattached = DbgPreference("dbgOfflineShowUnattached", default = false)
+  private[optimus] val dbgOfflineShowSpecProxies = DbgPreference("dbgOfflineShowSpecProxies", default = false)
+  private[optimus] val dbgOfflineShowNonCacheable = DbgPreference("dbgOfflineShowNonCacheable", default = true)
+
   /** supply a callback that takes a boolean indicating whether advanced commands are enabled */
   def registerAdvancedCommandChangedCallback(f: Boolean => Unit): Unit = dbgShowAdvancedCmds.addCallback(f)
 

@@ -223,15 +223,22 @@ object EvaluationContext {
   final def scenarioStack: ScenarioStack = currentNode.scenarioStack
 
   /**
+   * Returns currently active node or null if none
+   */
+  private[optimus] final def currentNodeOrNull: NodeTask = {
+    if (!isInitialised) null
+    else currentNode
+  }
+
+  /**
    * Returns currently active scenario stack or null if none
    * @note
    *   consider adding code that always returns null if in the middle of some module constructor
    *   [[optimus.debug.InstrumentedModuleCtor]]
    */
   final def scenarioStackOrNull: ScenarioStack = {
-    if (!isInitialised) null
-    else if (currentNode eq null) null
-    else currentNode.scenarioStack
+    val current = currentNodeOrNull
+    if (current eq null) null else current.scenarioStack()
   }
 
   final def findPluginTag[T](pKey: PluginTagKey[T]): Option[T] = {
@@ -283,10 +290,10 @@ object EvaluationContext {
       given(scenarioStack.createChild(scenario, node), node)
   }
 
-  final def given[T](scenario: Scenario, kvs: collection.Seq[PluginTagKeyValue[_]], node: Node[T]): Node[T] =
+  final def given[T](scenario: Scenario, kvs: Seq[PluginTagKeyValue[_]], node: Node[T]): Node[T] =
     given(scenarioStack.createChild(scenario, FrozenNodeInputMap.empty.withExtraInputs(kvs), 0, node), node)
 
-  final def given[T](scenarios: collection.Seq[Scenario], node: Node[T]): Node[T] =
+  final def given[T](scenarios: Seq[Scenario], node: Node[T]): Node[T] =
     given(Scenario.toNestedScenarios(scenarios), node)
 
   /** This is called from Debugger and other places too */
@@ -405,7 +412,7 @@ object EvaluationContext {
   /**
    * Execute all nodes in the list Faster than and logically equivalent to nodes.foreach(enqueueAndWait(_))
    */
-  final def enqueueAndWaitForAll(nodes: collection.Seq[NodeTask]): Unit = if (nodes.nonEmpty) {
+  final def enqueueAndWaitForAll(nodes: Seq[NodeTask]): Unit = if (nodes.nonEmpty) {
     val ec = current
     val it1 = nodes.iterator
     while (it1.hasNext) {
@@ -425,9 +432,7 @@ object EvaluationContext {
   /**
    * Executes all of the nodes in the list and waits for their continuations to complete
    */
-  private[optimus] final def evaluateSync(
-      nodes: collection.Seq[NodeTask],
-      waitForContinuations: Boolean = true): Unit = {
+  private[optimus] final def evaluateSync(nodes: Seq[NodeTask], waitForContinuations: Boolean = true): Unit = {
     val ec = current
     var awaiter: NodeAwaiterWithLatch = null
 

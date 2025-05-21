@@ -83,9 +83,11 @@ object DefaultFrameMatchers extends FrameMatcherProvider {
   private val samplingAndAp =
     startsWith("optimus/graph/diagnostics/ap") or startsWith("optimus/graph/diagnostics/sampling")
   private val instrumentation = startsWith("java/lang/instrument")
+  private val skipped = startsWith("[java_skipped")
   override def frameMatchers: Seq[SampledTimersExtractor.FrameMatcher] = Seq(
     matcher("samplingOH", samplingAndAp),
-    matcher("instrumOH", instrumentation)
+    matcher("instrumOH", instrumentation),
+    matcher("javaSkipped", skipped)
   )
 }
 

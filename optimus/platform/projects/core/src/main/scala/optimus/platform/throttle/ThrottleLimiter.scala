@@ -16,7 +16,7 @@ import optimus.graph._
 /**
  * Controls the limit for how many nodes (as measured by weight) can be running concurrently within a Throttle
  */
-private[optimus] trait ThrottleLimiter {
+private[optimus] abstract class ThrottleLimiter {
 
   /**
    * Updates the live state of the throttle limiter. This is called periodically (if pollIntervalMs > 0 and there are
@@ -32,8 +32,11 @@ private[optimus] trait ThrottleLimiter {
   /**
    * Returns true iff the possibleNext node should run now (in which case the Throttle will always run it), and updates
    * the inflight weight accordingly.
+   *
+   * If "forced" is true, nodes will be run no matter what, the throttle should update the weight as if it was returning
+   * "true". This happens when we try to break deadlocks or cycles.
    */
-  private[throttle] def canRunNow(possibleNext: Throttle#ThrottledNode[_], nInFlight: Int): Boolean
+  private[throttle] def canRunNow(possibleNext: Throttle#ThrottledNode[_], nInFlight: Int, forced: Boolean): Boolean
 
   /** Check that the weight is valid for this policy, and throw if it is not */
   private[throttle] def checkWeight(nodeWeight: Int): Unit =
@@ -50,6 +53,11 @@ private[optimus] trait ThrottleLimiter {
    * for diagnostic purposes
    */
   private[throttle] def getInflightWeightStatic: Double
+
+  // For "waitForState". hasWaiter is set to true whenever a waiter first connects and remains true afterwards forever.
+  // This is used to test throttle behaviour without Thread.sleep().
+  private[throttle] var hasTestWaiter = false
+  def notifyTestWaiters(): Unit = if (hasTestWaiter) this.notifyAll()
 }
 
 /**
@@ -57,19 +65,24 @@ private[optimus] trait ThrottleLimiter {
  * allow the limit to be breached. This means that over-limit nodes will eventually run, just not concurrently with
  * any other nodes.
  */
-private[optimus] class SimpleThrottleLimiter(private var limit: Int) extends ThrottleLimiter {
+private[optimus] class SimpleThrottleLimiter(private val limit: Int) extends ThrottleLimiter {
   require(limit >= 0, "Limit must be positive (or 0)")
   private var inflightWeight = 0L
   override def getInflightWeightStatic: Double = inflightWeight.toDouble
 
   private[throttle] override def completed(completed: Throttle#ThrottledNode[_], nInFlight: Int): Unit = synchronized {
+    notifyTestWaiters()
     inflightWeight -= completed.weight
   }
 
-  private[throttle] override def canRunNow(possibleNext: Throttle#ThrottledNode[_], nInFlight: Int): Boolean =
+  private[throttle] override def canRunNow(
+      possibleNext: Throttle#ThrottledNode[_],
+      nInFlight: Int,
+      forced: Boolean): Boolean =
     synchronized {
+      notifyTestWaiters()
       // we allow breaching the limit if no other tasks are running
-      val runNow = nInFlight == 0 || (limit >= inflightWeight + possibleNext.weight)
+      val runNow = forced || nInFlight == 0 || (limit >= inflightWeight + possibleNext.weight)
       if (runNow) inflightWeight += possibleNext.weight
       runNow
     }
@@ -101,6 +114,7 @@ private[optimus] class OscillatingThrottleLimiter(private val upperLimit: Int, l
   }
 
   private[throttle] override def completed(completed: Throttle#ThrottledNode[_], nInFlight: Int): Unit = synchronized {
+    notifyTestWaiters()
     val old = inflightWeight
 
     // Release the weight of the completed node and if we hit the lower limit, switch to the upper limit.
@@ -112,14 +126,18 @@ private[optimus] class OscillatingThrottleLimiter(private val upperLimit: Int, l
       s"Stats: (old=$old)-> $inflightWeight, limit=$limit, lowerLimit=$lowerLimit, upperLimit=$upperLimit")
   }
 
-  private[throttle] override def canRunNow(possibleNext: Throttle#ThrottledNode[_], nInFlight: Int): Boolean =
+  private[throttle] override def canRunNow(
+      possibleNext: Throttle#ThrottledNode[_],
+      nInFlight: Int,
+      forced: Boolean): Boolean =
     synchronized {
+      notifyTestWaiters()
       val old = inflightWeight
-      val runNow = limit >= inflightWeight + 1
+      val runNow = forced || (limit >= inflightWeight + 1)
 
       // Add in the estimated weight of the new calculation and if we hit the upper limit, switch to the lower limit
       if (runNow) inflightWeight += 1
-      if (inflightWeight == limit) limit = lowerLimit
+      if (inflightWeight >= limit) limit = lowerLimit
 
       Throttle.log.debug(
         s"Stats: (old=$old)-> $inflightWeight, " +
@@ -156,6 +174,7 @@ private[optimus] class LiveThrottleLimiter(
     if (decayRateNs > 0.0) Math.exp(-decayRateNs * periodNs) else 1.0
 
   private[throttle] override def updateLiveState(): Unit = synchronized {
+    notifyTestWaiters()
     val t = OGTrace.nanoTime()
     val old = inflightWeightStatic
     // Decay the inflight static weight if required and return the factor for logging purposes
@@ -170,6 +189,7 @@ private[optimus] class LiveThrottleLimiter(
   }
 
   private[throttle] override def completed(completed: Throttle#ThrottledNode[_], nInFlight: Int): Unit = synchronized {
+    notifyTestWaiters()
     // Decay the static weight of the completed node (which should match its decayed contribution to the inflight weight)
     val old = inflightWeightStatic
     val toRelease = if (completed eq null) 0.0 else completed.weight * decayFactor(prevDecayEvent - completed.tStarted)
@@ -182,12 +202,16 @@ private[optimus] class LiveThrottleLimiter(
     Throttle.log.debug(s"Stats: (old=$old)-(released=$toRelease) -> $inflightWeightStatic; inFlight=$nInFlight")
 
   }
-  private[throttle] override def canRunNow(possibleNext: Throttle#ThrottledNode[_], nInFlight: Int): Boolean =
+  private[throttle] override def canRunNow(
+      possibleNext: Throttle#ThrottledNode[_],
+      nInFlight: Int,
+      forced: Boolean): Boolean =
     synchronized {
+      notifyTestWaiters()
       val old = inflightWeightStatic
       val liveWeight = liveWeigher()
       val estimatedNew = possibleNext.weight
-      val runNow = nInFlight == 0 || (limit >= inflightWeightStatic + liveWeight + estimatedNew)
+      val runNow = forced || nInFlight == 0 || (limit >= inflightWeightStatic + liveWeight + estimatedNew)
       if (runNow) inflightWeightStatic += estimatedNew
       Throttle.log.debug(
         s"Stats: (old=$old)+(est=$estimatedNew) -> " +

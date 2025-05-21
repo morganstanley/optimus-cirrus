@@ -121,7 +121,7 @@ class Tuple2Unpickler[T1: Manifest, T2: Manifest](
     case t: Tuple2[_, _] => {
       (t1Unpickler.unpickle(t._1, ctxt), t2Unpickler.unpickle(t._2, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 2)
         error(pickled)
       else
@@ -145,7 +145,7 @@ class Tuple3Unpickler[T1: Manifest, T2: Manifest, T3: Manifest](
     case t: Tuple3[_, _, _] => {
       (t1Unpickler.unpickle(t._1, ctxt), t2Unpickler.unpickle(t._2, ctxt), t3Unpickler.unpickle(t._3, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 3)
         error(pickled)
       else
@@ -173,7 +173,7 @@ class Tuple4Unpickler[T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest](
         t3Unpickler.unpickle(t._3, ctxt),
         t4Unpickler.unpickle(t._4, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 4)
         error(pickled)
       else
@@ -207,7 +207,7 @@ class Tuple5Unpickler[T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5
         t4Unpickler.unpickle(t._4, ctxt),
         t5Unpickler.unpickle(t._5, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 5)
         error(pickled)
       else
@@ -244,7 +244,7 @@ class Tuple6Unpickler[T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5
         t5Unpickler.unpickle(t._5, ctxt),
         t6Unpickler.unpickle(t._6, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 6)
         error(pickled)
       else
@@ -284,7 +284,7 @@ class Tuple7Unpickler[T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5
         t6Unpickler.unpickle(t._6, ctxt),
         t7Unpickler.unpickle(t._7, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 7)
         error(pickled)
       else
@@ -335,7 +335,7 @@ class Tuple8Unpickler[
         t7Unpickler.unpickle(t._7, ctxt),
         t8Unpickler.unpickle(t._8, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 8)
         error(pickled)
       else
@@ -390,7 +390,7 @@ class Tuple9Unpickler[
         t8Unpickler.unpickle(t._8, ctxt),
         t9Unpickler.unpickle(t._9, ctxt))
     }
-    case s: Seq[_] => {
+    case s: collection.Seq[_] => {
       if (s.size != 9)
         error(pickled)
       else
@@ -452,7 +452,7 @@ class Tuple10Unpickler[
           t9Unpickler.unpickle(t._9, ctxt),
           t10Unpickler.unpickle(t._10, ctxt))
       }
-      case s: Seq[_] => {
+      case s: collection.Seq[_] => {
         if (s.size != 10)
           error(pickled)
         else

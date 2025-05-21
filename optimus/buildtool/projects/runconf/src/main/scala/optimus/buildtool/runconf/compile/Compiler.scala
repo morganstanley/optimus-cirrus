@@ -12,9 +12,6 @@
 package optimus.buildtool.runconf
 package compile
 
-import java.nio.file.Path
-import java.util.Properties
-import java.util.{Map => JMap}
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigException
 import com.typesafe.config.ConfigFactory
@@ -41,12 +38,14 @@ import optimus.buildtool.runconf.compile.plugins.scriptTemplates.ScriptTemplates
 import optimus.buildtool.utils.CliArgs
 import optimus.buildtool.utils.JavaOpts
 import optimus.buildtool.utils.OS
-
-import scala.jdk.CollectionConverters._
-import scala.collection.immutable.Seq
-import scala.util.Try
 import optimus.scalacompat.collection._
 
+import java.nio.file.Path
+import java.util.Properties
+import java.util.{Map => JMap}
+import scala.collection.immutable.Seq
+import scala.jdk.CollectionConverters._
+import scala.util.Try
 import scala.util.control.NonFatal
 
 object Compiler {
@@ -60,6 +59,7 @@ object Compiler {
       runEnv: RunEnv,
       projectProperties: Config,
       enableDTC: Boolean,
+      useAppDefaults: Boolean = true,
       systemProperties: Properties = System.getProperties,
       externalCache: ExternalCache = NoCache,
       editedScope: Option[ParentId] = None,
@@ -79,6 +79,7 @@ object Compiler {
       config,
       projectProperties,
       enableDTC,
+      useAppDefaults,
       externalCache,
       editedScope,
       Some(sourceRoot),
@@ -179,6 +180,7 @@ class Compiler(
     stratoConfig: Config,
     projectProperties: Config,
     enableDTC: Boolean,
+    useAppDefaults: Boolean,
     externalCache: ExternalCache,
     editedScope: Option[ParentId],
     sourceRoot: Option[Path] = None,
@@ -653,13 +655,13 @@ class Compiler(
         defaultParents(conf, names.RunConfDefaults)
       }
 
-      def defaultAppParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] = {
-        defaultRunConfParents(conf) ++ defaultParents(conf, names.ApplicationDefaults)
-      }
+      def defaultAppParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] =
+        defaultRunConfParents(conf) ++ {
+          if (useAppDefaults) defaultParents(conf, names.ApplicationDefaults) else Seq.empty
+        }
 
-      def defaultTestParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] = {
+      def defaultTestParents(conf: RunConfCompilingState): Seq[RunConfCompilingState] =
         defaultRunConfParents(conf) ++ defaultParents(conf, names.TestDefaults)
-      }
 
       def defaultParents(conf: RunConfCompilingState, name: String): Seq[RunConfCompilingState] = {
         val allIds = if (conf.name != name) conf.id.withParents else conf.id.parents

@@ -176,6 +176,7 @@ trait OptimusNames {
     val projectedMembers: TermName = newTermName("projectedMembers")
     val indexed: TermName = newTermName("indexed")
     val fullTextSearch: TermName = newTermName("fullTextSearch")
+    val monoTemporal: TermName = newTermName("monoTemporal")
     // not really a name but associated with it
     val schemaVersionDefaultValue = 0
     val projectedDefaultValue = false
@@ -208,11 +209,13 @@ trait OptimusNames {
     val pss: TermName = newTermName("pss")
     val get: TermName = newTermName("get")
     val apply: TermName = newTermName("apply")
+    val copy: TermName = newTermName("copy")
     val iterator: TermName = newTermName("iterator")
 
     val bynameDummy: TermName = newTermName("<by-name wrapper>")
 
     val ignoreWithin: TermName = newTermName("IGNORE_WITHIN")
+    val mock: TermName = newTermName("mock")
   }
 
   object entityMetaDataAnnotationNames {
@@ -225,6 +228,7 @@ trait OptimusNames {
     val isObject: TermName = newTermName(DEF.name_isObject)
     val projected: TermName = newTermName(DEF.name_projected)
     val fullTextSearch: TermName = newTermName(DEF.name_fullTextSearch)
+    val monoTemporal: TermName = newTermName(DEF.name_monoTemporal)
   }
   object embeddableMetaDataAnnotationNames {
     val isTrait: TermName = newTermName("isTrait")
@@ -378,6 +382,7 @@ trait OptimusNames {
     val KEY_INFO = "$keyInfo"
     val IMPL = "$impl"
     val BACKING = "$backing"
+    val VAR_HANDLE = "$vh"
 
     val CREATE_NODE_NAME = "$newNode"
     val CREATE_NODE_NAME_TN: TermName = newTermName(CREATE_NODE_NAME)
@@ -409,6 +414,7 @@ trait OptimusNames {
     newTermName("" + name + (if (onModule) "_info" else ""))
   def mkKeyInfoName(name: Name): TermName = newTermName("" + name + suffixes.KEY_INFO)
   def mkImplName(name: Name): TermName = newTermName("" + name + suffixes.IMPL)
+  def mkVarHandleName(name: Name): TermName = newTermName("" + name + suffixes.VAR_HANDLE)
   def mkBackingName(name: Name): TermName = newTermName("" + name + suffixes.BACKING)
   def mkGetByName(name: Name): TermName = newTermName("getBy" + makeCapitalized(name.toString))
   def mkGetOptionByName(name: Name): TermName = newTermName("getOptionBy" + makeCapitalized(name.toString))

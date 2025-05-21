@@ -60,9 +60,6 @@ public abstract class NCPolicy implements Serializable {
   public final boolean noCache;
 
   public static void resetCaches() {
-    synchronized (scopePathToIDs) {
-      scopePathToIDs.clear();
-    }
     NCPolicyComposite.policyCache.clear();
   }
 
@@ -139,9 +136,9 @@ public abstract class NCPolicy implements Serializable {
     else return composite(null, this, currentTargetPath).combineWith("IGNORED", policy, targetPath);
   }
 
-  public static int scopeMaskFromPath(String scopedPath) {
+  public static long scopeMaskFromPath(String scopedPath) {
     if (scopedPath == null || scopedPath.isEmpty()) return 0;
-    return 1 << scopeIDFromPath(scopedPath);
+    return 1L << scopeIDFromPath(scopedPath);
   }
 
   public static int profileBlockIDFromPath(String scopedPath) {
@@ -154,8 +151,7 @@ public abstract class NCPolicy implements Serializable {
     synchronized (scopePathToIDs) {
       scopeID = scopePathToIDs.computeIfAbsent(scopedPath, path -> scopePathToIDs.size());
     }
-    // TODO(OPTIMUS-72345): path based mask could overflow
-    if (scopeID > 30) OGScheduler.log.error("Too many scoped paths: " + scopeID);
+    if (scopeID > 62) OGScheduler.log.error("Too many scoped paths: " + scopeID);
     return scopeID;
   }
 
@@ -185,7 +181,7 @@ public abstract class NCPolicy implements Serializable {
 
   /** Really for testing only */
   public static NCPolicy composite(
-      NCPolicy defaultPolicy, NCPolicy policy1, int mask1, NCPolicy policy2, int mask2) {
+      NCPolicy defaultPolicy, NCPolicy policy1, long mask1, NCPolicy policy2, long mask2) {
     return new NCPolicyComposite.CompositeN(
         defaultPolicy,
         new NCPolicyComposite.PolicyMask[] {

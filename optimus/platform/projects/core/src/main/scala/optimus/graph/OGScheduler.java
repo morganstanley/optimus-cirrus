@@ -24,9 +24,9 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.PriorityQueue;
-import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
@@ -109,7 +109,6 @@ public class OGScheduler extends Scheduler {
   public static class Context extends IndexedArrayList.IndexedItem {
     Thread thread;
     final int threadID; // Linear 'logical' thread id
-    final Random rand = new Random();
     final OGSchedulerContext.WorkQueue queue = new OGSchedulerContext.WorkQueue();
     OGSchedulerContext schedulerContext; // Used for easy debugging
     boolean userEntry; // False for threads above ideal count to take 'stuck' global items
@@ -152,7 +151,7 @@ public class OGScheduler extends Scheduler {
     public final PrettyStringBuilder writePrettyString(
         PrettyStringBuilder sb, boolean showEmptyQueues, int nodeLimit) {
       var threadName = thread != null ? thread.getName() : "";
-      if (threadName.length() == 0) threadName = "vt_" + threadID;
+      if (threadName.isEmpty()) threadName = "vt_" + threadID;
       sb.append(threadName);
 
       if (showEmptyQueues || !queue.isEmpty()) {
@@ -444,7 +443,7 @@ public class OGScheduler extends Scheduler {
           // See releaseProfilingContext a few lines above
           // This line re-acquires the context. While the thread is idle it's released
           // Also note that if virtualThread case we won't get here we always shutdown
-          ec.prfCtx = OGLocalTables.acquireProfilingContext(true);
+          ec.prfCtx = OGLocalTables.acquireProfilingContext(false);
           OGTrace.observer.graphEnter(ec.prfCtx);
         }
       } catch (Throwable e) {
@@ -1384,7 +1383,7 @@ public class OGScheduler extends Scheduler {
     int count = Math.min(ctxs.count, q.length);
     if (count == 0) return null;
 
-    int random = requestingCtx.rand.nextInt(count);
+    int random = ThreadLocalRandom.current().nextInt(count);
     for (int i = 0; i < count; i++) {
       Context ctx = q[(i + random) % count];
       if (ctx != null && ctx != requestingCtx) { // It can change under us, so we need to check
@@ -1439,7 +1438,7 @@ public class OGScheduler extends Scheduler {
     _workers.foreach(c);
     _waiters.foreach(c);
 
-    if (!sb.isEmpty() || _queue.size() > 0) log.warn(sb.toString());
+    if (!sb.isEmpty() || !_queue.isEmpty()) log.warn(sb.toString());
   }
 
   private boolean checkNewWorkAdded(int initQSize) {

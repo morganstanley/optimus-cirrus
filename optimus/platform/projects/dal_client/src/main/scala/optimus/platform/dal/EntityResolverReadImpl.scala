@@ -729,8 +729,8 @@ trait EntityResolverReadImpl { this: DSIResolver =>
     val when = toDSITemporality(qt, rtt)
     val cmd = {
       val typeName = indexInfo.storableClass.getName
-      val propNames = indexInfo.propertyNames
-      EnumerateKeys(typeName, propNames, when)
+      val sortedPropNames = indexInfo.propertyNames.sorted
+      EnumerateKeys(typeName, sortedPropNames, when)
     }
 
     val dsiResult = executor.executeQuery(dsi, cmd)

@@ -14,6 +14,7 @@ package optimus.buildtool.format
 import optimus.buildtool.config.NamingConventions.LibsKey
 import optimus.buildtool.config.NamingConventions.MavenOnlyKey
 import optimus.buildtool.config.NamingConventions.IsAgentKey
+import optimus.buildtool.dependencies.JvmDependenciesLoader
 import optimus.buildtool.dependencies.JvmDependenciesLoader._
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Afs
 import optimus.buildtool.dependencies.MultiSourceDependenciesLoader.Extends
@@ -90,7 +91,6 @@ object Keys {
     "hasMacros",
     "isCompilerPlugin",
     "transitiveScalacPlugins",
-    "targetBundles",
     "jar",
     "jmh",
     "archive",
@@ -169,6 +169,7 @@ object Keys {
   val filtersDefinition = KeySet("name", "all", "any", "exclude")
 
   // bundles file
+  val bundleFileDefinition = KeySet(Names.ModulesRoot, Names.EonId, Names.Root)
   val moduleOwnership = KeySet("owner", "group")
 
   val bundleDefinition = KeySet("modulesRoot", Names.ForbiddenDependencies)
@@ -176,10 +177,26 @@ object Keys {
   val ModuleSets = "module-sets"
   val moduleSetsDefinition = KeySet(ModuleSets)
 
-  val CanDependOn = "can-depend-on"
+  val ModuleSet = "module-set"
+  val moduleSetFile = KeySet(ModuleSet)
+
   val Public = "public"
   val Private = "private"
-  val moduleSetDefinition = KeySet(CanDependOn, Public, Private)
+  val CanDependOn = "can-depend-on"
+  val DependencySets = "dependency-sets"
+  val VariantSets = "variant-sets"
+  val moduleSetDefinition = KeySet(Public, Private, CanDependOn, DependencySets, VariantSets)
+
+  // from ProjectProperties, needed below since we merge this with regular dependency configs for variable
+  // substitution
+  private val propertyKeys = KeySet("properties", "scriptDir", "versions", "workspace")
+
+  val Boms = "boms"
+
+  val DefaultVariant = "default-variant"
+  val dependencySet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms) ++ propertyKeys
+  val dependencySetVariant = KeySet(DefaultVariant, Boms) ++ propertyKeys
+  val variantSet = KeySet(JvmDependenciesLoader.JvmDependenciesKey, Boms) ++ propertyKeys
 
   // TODO (OPTIMUS-65072): Delete legacy forbidden dependency keys
   val legacyForbiddenDependencyKeys = KeySet(
@@ -196,10 +213,11 @@ object Keys {
 
   // dependencies file
   val dependenciesFile =
-    KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs)
+    KeySet(Dependencies, Excludes, NativeDependencies, Groups, ExtraLibs) ++ propertyKeys
   val mavenDependenciesFile =
-    KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes)
-  val jvmDependenciesFile = KeySet(Dependencies, Excludes, Substitutions, ExtraLibs)
+    KeySet(Dependencies, "mavenExcludes", "mavenIncludes", ExtraLibs, Excludes) ++ propertyKeys
+  val buildDependenciesFile = KeySet(Dependencies) ++ propertyKeys
+  val jvmDependenciesFile = KeySet(Dependencies, Excludes, Substitutions, ExtraLibs) ++ propertyKeys
   val artifactConfig = KeySet("type", "ext")
 
   private val commonDependencyDefinition =
@@ -239,8 +257,8 @@ object Keys {
   // docker file
   val dockerFile = KeySet("images", "configuration")
   val dockerConfiguration = KeySet("defaults", "extraDependencies", "excludes")
-  val dockerDefaults = KeySet("registry", "baseImage")
-  val imageDefinition = KeySet("scopes", "extraImages", "baseImage")
+  val dockerDefaults = KeySet("registry", "baseImage", "imageSysName")
+  val imageDefinition = KeySet("scopes", "extraImages", "baseImage", "imageSysName")
 
   val mavenDefinition =
     KeySet("all", "main", "test", "release-main", "release-test", "release-all", MavenOnlyExcludeKey)
@@ -284,7 +302,7 @@ object Keys {
 
   val pythonTopLevel = KeySet("python", Dependencies)
   val pythonDependencyLevel = KeySet(Afs, "pypi", Variants)
-  val pythonDefinition = KeySet(Version, Variants, "path", "thin-pyapp", "venv-pack")
+  val pythonDefinition = KeySet(Version, Variants, "path", "thin-pyapp", "ruff")
   val pythonVariant = pythonDefinition ++ KeySet("reason")
   val pythonObtFile = KeySet(LibsKey, "variant", "type", "pythonVenvCmd", "pipInstallCmd")
 }

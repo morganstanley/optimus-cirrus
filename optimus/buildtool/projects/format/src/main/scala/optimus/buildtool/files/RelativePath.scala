@@ -53,6 +53,8 @@ final case class RelativePath(path: Path) extends Pathed with PathedOps {
 
   def first(i: Int): Option[RelativePath] = subPath(0, i)
 
+  def contains(other: RelativePath): Boolean = other.path.normalize.startsWith(this.path.normalize)
+
   def relativize(child: RelativePath): RelativePath =
     if (this == RelativePath.empty) child else RelativePath(Pathed.relativize(path, child.path))
 }

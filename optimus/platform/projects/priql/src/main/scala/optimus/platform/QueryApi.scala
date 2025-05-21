@@ -11,8 +11,6 @@
  */
 package optimus.platform
 
-import optimus.platform.annotations.deprecating
-import optimus.platform.relational.dal.streams.EventProvider
 import optimus.platform.relational.tree.MethodPosition
 import optimus.platform.relational.tree.TypeInfo
 import optimus.platform.relational.{KeyPropagationPolicy => KeyPolicy}
@@ -27,14 +25,6 @@ trait QueryApi {
       itemType: TypeInfo[T],
       pos: MethodPosition): Query[T] = {
     conv.convert(src, if (key eq null) NoKey else key, ProviderWithKeyPropagationPolicy(policy))(itemType, pos)
-  }
-
-  @deprecating("OPTIMUS-69454 This is being worked on currently and should be used in known use-cases only.")
-  def events[T <: Entity](
-      src: EntityCompanionBase[T])(implicit itemType: TypeInfo[T], pos: MethodPosition): Query[T] = {
-    val key = KeyPolicy.NoKey.mkKey[T]
-    val provider = EventProvider(src.info, itemType, key, pos)
-    QueryProvider.NoKey.createQuery(provider)
   }
 
   // Helper overload for Scala 2.13.

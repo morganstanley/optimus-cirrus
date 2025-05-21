@@ -34,15 +34,14 @@ import optimus.buildtool.utils.AsyncUtils.asyncTry
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.Jars
-import optimus.core.utils.RuntimeMirror
 import optimus.platform._
+import optimus.utils.CaseObjectExtractor
 
 import java.nio.file.Files
 import java.nio.file.Path
 import scala.collection.compat._
 import scala.collection.immutable.Seq
 import scala.jdk.CollectionConverters._
-import scala.reflect.runtime.universe._
 
 trait ArtifactType {
   def name: String
@@ -82,7 +81,7 @@ sealed trait ResolutionArtifactType extends CachedArtifactType {
 
   override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a)
   @node override def fromAsset(id: ScopeId, a: Asset): ResolutionArtifact = {
-    import JsonImplicits._
+    import JsonImplicits.resolutionArtifactValueCodec
     val json = JsonAsset(a.path)
     val cached = AssetUtils.readJson[ResolutionArtifact.Cached](json)
     ResolutionArtifact.create(
@@ -120,7 +119,7 @@ trait GeneratedSourceArtifactType extends CachedArtifactType {
     asyncTry {
       val jarRoot = Directory.root(fs)
       val metadataFile = jarRoot.resolveFile(CachedMetadata.MetadataFile).asJson
-      import JsonImplicits._
+      import JsonImplicits.generatedSourceMetadataValueCodec
       val md = AssetUtils.readJson[GeneratedSourceMetadata](metadataFile, unzip = false)
       GeneratedSourceArtifact.create(
         id,
@@ -166,7 +165,7 @@ object MessageArtifactType {
   // how the deletion monitoring will be achieved.
   def fromUnwatchedPath(p: Path): CompilerMessagesArtifact = {
     val messageFile = JsonAsset(p)
-    import JsonImplicits._
+    import JsonImplicits.compilerMessagesArtifactValueCodec
     val cached = AssetUtils.readJson[CompilerMessagesArtifact.Cached](messageFile)
     CompilerMessagesArtifact.unwatched(
       cached.id,
@@ -222,7 +221,7 @@ trait CppArtifactType extends CachedArtifactType {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
       val metadata = root.resolveFile(CachedMetadata.MetadataFile).asJson
-      import JsonImplicits._
+      import JsonImplicits.cppMetadataValueCodec
       AssetUtils.readJson[CppMetadata](metadata, unzip = false)
     }
     InternalCppArtifact.create(
@@ -247,7 +246,7 @@ trait ElectronArtifactType extends CachedArtifactType {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
       val metadata = root.resolveFile(CachedMetadata.MetadataFile).asJson
-      import JsonImplicits._
+      import JsonImplicits.electronMetadataValueCodec
       AssetUtils.readJson[ElectronMetadata](metadata, unzip = false)
     }
     ElectronArtifact.create(id, file, hash(file), cached.mode, cached.executables)
@@ -293,10 +292,10 @@ trait GenericFilesArtifactType extends CachedArtifactType {
     val file = JarAsset(a.path)
     val cached = Jars.withJar(file) { root =>
       val msgsJson = root.resolveFile(GenericFilesArtifact.messages).asJson
-      import JsonImplicits._
+      import JsonImplicits.genericFilesArtifactValueCodec
       AssetUtils.readJson[GenericFilesArtifact.Cached](msgsJson, unzip = false)
     }
-    GenericFilesArtifact.create(id, file, cached.messages, cached.hasErrors)
+    GenericFilesArtifact.create(id, file, cached.messages)
   }
 }
 
@@ -309,7 +308,7 @@ trait ProcessorArtifactType extends CachedArtifactType {
     val file = JarAsset(a.path)
     val md = Jars.withJar(file) { root =>
       val metadataFile = root.resolveFile(CachedMetadata.MetadataFile).asJson
-      import JsonImplicits._
+      import JsonImplicits.processorMetadataValueCodec
       AssetUtils.readJson[ProcessorMetadata](metadataFile, unzip = false)
     }
     ProcessorArtifact.create(id, md.processorName, this, file, md.messages, md.hasErrors)
@@ -319,28 +318,10 @@ trait ProcessorArtifactType extends CachedArtifactType {
 object ArtifactType {
   abstract class BaseArtifactType(val name: String) extends ArtifactType
 
-// Backward compatibility (needed for root locators)
-  private val additionalTypesMap =
-    Map(
-      "pickles" -> JavaAndScalaSignatures,
-      "early-messages" -> SignatureMessages,
-      "early-analysis" -> SignatureAnalysis,
-      "analysis" -> ScalaAnalysis)
   // automatically get all obt artifact types in this object by scala runtime reflection
-  private[buildtool] lazy val parseMap: Map[String, ArtifactType] = {
-    val mirror = RuntimeMirror.mirrorForClass(this.getClass)
-    val runtimeArtifactTypesMap = mirror.mirror
-      .classSymbol(this.getClass)
-      .info
-      .members
-      .collect { case obj: ModuleSymbol =>
-        val foundType: ArtifactType = mirror.moduleByName(obj.fullName, this.getClass).asInstanceOf[ArtifactType]
-        foundType.name -> foundType
-      }
-      .toMap
-    runtimeArtifactTypesMap ++ additionalTypesMap
-  }
-  lazy val known: Seq[ArtifactType] = parseMap.values.toIndexedSeq
+  private[buildtool] val parseMap: Map[String, ArtifactType] =
+    CaseObjectExtractor.extractFieldValueToCaseObjects[String, ArtifactType](_.name)
+  val known: Seq[ArtifactType] = parseMap.values.toIndexedSeq
 
   def parse(name: String): ArtifactType = parseMap(name)
 
@@ -444,7 +425,7 @@ object ArtifactType {
     override def isReadable(a: FileAsset): Boolean = isTarJsonReadable(a, isZip = false)
     @node override def fromAsset(id: ScopeId, a: Asset): LocatorArtifact = {
       val locatorFile = JsonAsset(a.path)
-      import JsonImplicits._
+      import JsonImplicits.locatorArtifactValueCodec
       val cached = AssetUtils.readJson[LocatorArtifact.Cached](locatorFile, unzip = false)
       LocatorArtifact.create(
         id,

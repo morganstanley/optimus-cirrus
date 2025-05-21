@@ -92,15 +92,15 @@ object QueryTemporalityResolver {
             leafMatchRes match {
               case NeverMatch => resolveTemporality(parentTsProf, qt, tsList.tail, previous)
               case CantTell =>
-                val needContinue = previous.map(_ == leaf.currentTemporalityFor(qt)).getOrElse(true)
+                val needContinue = previous.map(_ == leaf.currentTemporality).getOrElse(true)
                 if (needContinue)
-                  resolveTemporality(parentTsProf, qt, tsList.tail, Some(leaf.currentTemporalityFor(qt)))
+                  resolveTemporality(parentTsProf, qt, tsList.tail, Some(leaf.currentTemporality))
                 else None
               case AlwaysMatch =>
                 headTsProf.foreach(_.recordHit())
                 headTsProf.foreach(_.recordMatcherHit())
-                val isResult = previous.map(_ == leaf.currentTemporalityFor(qt)).getOrElse(true)
-                if (isResult) Some(leaf.currentTemporalityFor(qt))
+                val isResult = previous.map(_ == leaf.currentTemporality).getOrElse(true)
+                if (isResult) Some(leaf.currentTemporality)
                 else None
               case _ => None // for any other match result, we should throw exception
             }

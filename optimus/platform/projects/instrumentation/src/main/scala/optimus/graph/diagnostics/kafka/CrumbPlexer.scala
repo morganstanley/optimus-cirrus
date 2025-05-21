@@ -15,7 +15,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import kafka.zk.KafkaZkClient
-import msjava.kerberos.auth.MSKerberosConfiguration
+import com.ms.infra.kerberos.configuration.MSKerberosConfiguration
 import msjava.zkapi.ZkaAttr
 import msjava.zkapi.ZkaConfig
 import msjava.zkapi.internal.ZkaContext
@@ -28,7 +28,7 @@ import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.breadcrumbs.util.LimitedSizeConcurrentHashMap
 import optimus.graph.diagnostics.sampling.BaseSamplers
 import optimus.graph.diagnostics.sampling.SamplingProfiler
-import optimus.utils.Args4JOptionHandlers.StringHandler
+import optimus.utils.app.StringOptionOptionHandler
 import optimus.utils.MiscUtils.retry
 import optimus.utils.OptimusStringUtils
 import optimus.utils.PropertyUtils
@@ -198,7 +198,7 @@ class KafkaListenerArgs {
   @ArgOption(
     name = "--plexdir",
     usage = "If set, crumbs with a given root ChainedID will be written to files of that name in this directory.",
-    handler = classOf[StringHandler]
+    handler = classOf[StringOptionOptionHandler]
   )
   val plexDirName: Option[String] = None
 
@@ -463,35 +463,38 @@ object CrumbPlexer extends App with CrumbRecordParser with OptimusStringUtils {
   if (userjaas)
     props.put(
       SaslConfigs.SASL_JAAS_CONFIG,
-      s"""com.sun.security.auth.module.Krb5LoginModule required principal=\"${MSKerberosConfiguration.getUserPrincipal}\" useTicketCache=true;"""
+      s"""com.sun.security.auth.module.Krb5LoginModule required principal=\"${MSKerberosConfiguration.getDefault.getLibraryConfigurations.getUserPrincipal}\" useTicketCache=true;"""
     )
 
   private val partitions = zkClient.getReplicaAssignmentForTopics(topics.split(",").toSet).keys.toSeq
 
-  private val consumers: Seq[KafkaConsumer[String, String]] = retry(3, 60000L, logger) { () =>
-    partitions.map { p =>
-      logger.info(s"Creating consumer for partition $p")
-      val consumer = new KafkaConsumer[String, String](props)
-      consumer.assign(Seq(p).asJava)
-      try {
-        consumer.offsetsForTimes(Map[TopicPartition, java.lang.Long](p -> t1).asJava).asScala.values.headOption match {
-          case None => System.err.println(s"Invalid start time $t1, will attempt to automatically reset the offset")
-          case Some(x) if Objects.isNull(x) =>
-            logger.warn(s"$poolId No offset timestamp available for partition $p")
-          case Some(offsetAndTimestamp) =>
-            logger.warn(
-              s"$poolId Seeking to offset ${offsetAndTimestamp.offset} on partition $p based on timestamp $t1")
-            consumer.seek(p, offsetAndTimestamp.offset)
+  private val consumers: Seq[KafkaConsumer[String, String]] =
+    retry(delayMs = 60000, exceptionClasses = List(classOf[NullPointerException])) { () =>
+      partitions.map { p =>
+        logger.info(s"Creating consumer for partition $p")
+        val consumer = new KafkaConsumer[String, String](props)
+        consumer.assign(Seq(p).asJava)
+        try {
+          consumer
+            .offsetsForTimes(Map[TopicPartition, java.lang.Long](p -> t1).asJava)
+            .asScala
+            .values
+            .headOption match {
+            case None => System.err.println(s"Invalid start time $t1, will attempt to automatically reset the offset")
+            case Some(x) if Objects.isNull(x) =>
+              logger.warn(s"$poolId No offset timestamp available for partition $p")
+            case Some(offsetAndTimestamp) =>
+              logger.warn(
+                s"$poolId Seeking to offset ${offsetAndTimestamp.offset} on partition $p based on timestamp $t1")
+              consumer.seek(p, offsetAndTimestamp.offset)
+          }
+        } catch {
+          case NonFatal(e) =>
+            logger.warn(s"Ignoring exception trying to set offsets for $p -> $consumer", e)
         }
-      } catch {
-        case NonFatal(e) =>
-          logger.warn(s"Ignoring exception trying to set offsets for $p -> $consumer", e)
+        consumer
       }
-      consumer
     }
-  } { case _: NullPointerException =>
-    true
-  }
 
   private trait QElem {
     def tEnqueued: Long

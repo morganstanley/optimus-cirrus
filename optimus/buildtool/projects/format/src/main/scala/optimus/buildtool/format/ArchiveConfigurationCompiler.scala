@@ -15,7 +15,7 @@ import com.typesafe.config.Config
 import com.typesafe.config.ConfigException.BadValue
 import optimus.buildtool.config.ArchiveConfiguration
 import optimus.buildtool.config.ArchiveType
-import optimus.buildtool.dependencies.JvmDependenciesLoader
+import optimus.buildtool.dependencies.DependencyLoader
 
 object ArchiveConfigurationCompiler {
   import ConfigUtils._
@@ -29,7 +29,7 @@ object ArchiveConfigurationCompiler {
           val archive = config.getConfig(archiveConfig)
           val cfg = for {
             tokens <- archive.stringMapOrEmpty("tokens", origin)
-            excludes <- JvmDependenciesLoader.readExcludes(archive, origin)
+            excludes <- DependencyLoader.loadExcludes(archive, origin)
           } yield {
             val tpeString = archive.getString("type")
             val tpe = ArchiveType

@@ -183,7 +183,7 @@ object CommitMessagesStreamCommandSerializer
     builder.build
   }
   override def deserialize(proto: CommitMessagesStreamProto): CommitMessagesStream = {
-    CommitMessagesStream(proto.getStreamId, proto.getCommitIdsList.asScala.map(_.toLong))
+    CommitMessagesStream(proto.getStreamId, proto.getCommitIdsList.asScalaUnsafeImmutable.map(_.toLong))
   }
 }
 
@@ -263,8 +263,8 @@ object MessagesNotificationResultSerializer
     val streamId = proto.getStreamUuid
     val publishReqId = proto.getPublishRequestId
     val commitId = proto.getCommitId
-    val entries = proto.getEntriesList.asScala.map(fromProto(_))
-    val transactions = proto.getTransactionsList.asScala.map(fromProto(_))
+    val entries = proto.getEntriesList.asScalaUnsafeImmutable.map(fromProto(_))
+    val transactions = proto.getTransactionsList.asScalaUnsafeImmutable.map(fromProto(_))
     MessagesNotificationResult(streamId, publishReqId, commitId, entries ++ transactions)
   }
 }
@@ -441,7 +441,7 @@ object StreamsACLsCommandSerializer
       proto: StreamsACLsCommandProto
   ): StreamsACLsCommand = {
     val streamAppId = proto.getStreamAppId
-    val acls = proto.getAclsList.asScala.map(streamsACLsSerializer.deserialize)
+    val acls = proto.getAclsList.asScalaUnsafeImmutable.map(streamsACLsSerializer.deserialize)
     StreamsACLsCommand(streamAppId, acls)
   }
 }
@@ -472,8 +472,9 @@ object StreamsACLsSerializer
       proto: StreamsACLsProto
   ): StreamsACLs = {
     val entitlement = protoEntitlementMapping(proto.getEntitlement)
-    val hierarchicalEntities = proto.getHierarchicalEntitiesList.asScala.map(hierarchicalEntitiesSerializer.deserialize)
-    val internalTopics = proto.getInternalTopicsList.asScala
+    val hierarchicalEntities =
+      proto.getHierarchicalEntitiesList.asScalaUnsafeImmutable.map(hierarchicalEntitiesSerializer.deserialize)
+    val internalTopics = proto.getInternalTopicsList.asScalaUnsafeImmutable
     StreamsACLs(entitlement, hierarchicalEntities, internalTopics)
   }
 }
@@ -490,7 +491,7 @@ object HierarchicalEntitiesSerializer
 
   override def deserialize(
       proto: HierarchicalEntitiesProto
-  ): Seq[String] = proto.getEntityNamesList.asScala
+  ): Seq[String] = proto.getEntityNamesList.asScalaUnsafeImmutable
 
 }
 

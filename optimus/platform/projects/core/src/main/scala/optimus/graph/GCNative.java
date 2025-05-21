@@ -973,8 +973,9 @@ public class GCNative {
       queueStaticField.setAccessible(true);
       referenceQueue = (ReferenceQueue) queueStaticField.get(null);
       Class<?> classDefiningLock;
-      if (Runtime.version().feature() < 19) classDefiningLock = referenceQueueClass;
-      // the lock field moved to NativeReferenceQueue in Java 19
+      int javaVersion = Runtime.version().feature();
+      if (javaVersion < 19 || javaVersion > 22) classDefiningLock = referenceQueueClass;
+      // the lock field moved to NativeReferenceQueue from Java 19 to Java 22 inclusive
       else classDefiningLock = Class.forName("java.lang.ref.NativeReferenceQueue");
       Field lockField = classDefiningLock.getDeclaredField("lock");
       lockField.setAccessible(true);
@@ -1922,7 +1923,7 @@ public class GCNative {
           try {
             long evicted =
                 AdvancedUtils.clearAllCachesWithFinalizers(
-                    CauseGCNative$.MODULE$, cleanCtor, cleanSI, cleanLocal, detectFinalizerSeconds);
+                    CauseGCNative$.MODULE$, cleanSI, cleanLocal, detectFinalizerSeconds);
             GCMonitor.gcCrumb(
                 crumbDesc,
                 Properties.gcNativeIndex().elem(gcIndex),

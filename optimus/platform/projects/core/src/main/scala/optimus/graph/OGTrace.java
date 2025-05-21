@@ -165,7 +165,8 @@ public class OGTrace {
   }
 
   public static String CachedSuffix = "$"; // for cached nodes
-  public static String AsyncSuffix = "@"; // for async
+  public static String HashSep = "@"; // for async
+  public static String AsyncPrefix = "@"; // for async
   public static String XsSuffix = "x"; // for cross-scenario cache hits
   public static String TrivialSuffix = "t"; // for trivial cache hits
   public static String ProcessOnChildCompletedSuffix = "pc"; // for process on child completed
@@ -182,7 +183,7 @@ public class OGTrace {
         DiagnosticSettings.traceAvailable = false;
         log.javaLogger()
             .error(
-                "optimus.graph is not instrumented, please add -javaagent:[fullpath]/optimus.platform.entityagent.jar=e");
+                "optimus.graph is not instrumented, please contact optimus graph team for help");
       }
     }
   }

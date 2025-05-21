@@ -16,6 +16,7 @@ import optimus.graph.OGSchedulerTimes.StallDetailedTime
 import optimus.graph.Settings
 import optimus.graph.diagnostics.ThreadStatUtil.ThreadStateSummary
 
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 
 object SummaryTable {
@@ -40,7 +41,7 @@ object SummaryTable {
     otherCols += col; col
   }
 
-  def allGroups(s: SummaryTable): collection.Seq[Group] = collection.Seq[Group](
+  def allGroups(s: SummaryTable): Seq[Group] = Seq[Group](
     SummaryTable.fullTableTimeCols,
     SummaryTable.otherColsGroup,
     SummaryTable.nestedWallTimes(s),
@@ -128,7 +129,7 @@ object SummaryTable {
     )
   }
 
-  def perStallTypeCol(s: SummaryTable): collection.Seq[Col] =
+  def perStallTypeCol(s: SummaryTable): Seq[Col] =
     if (s.stallDetails ne null) {
       s.stallDetails.sortBy(_.pluginType.name).map { details =>
         val stall = details.pluginType.name
@@ -315,9 +316,9 @@ object SummaryTable {
     ))
   val systemCPULoad = register(Col.percentage("System CPU", "How busy were the grid hosts", "%12.3f", _.systemCPULoad))
 
-  def statTableCols(s: SummaryTable): collection.Seq[StatTableCol] = (statCols).map(_.statCol(s))
+  def statTableCols(s: SummaryTable): Seq[StatTableCol] = statCols.iterator.map(_.statCol(s)).to(ArraySeq)
 
-  def threadStatTableCols(s: SummaryTable): collection.Seq[StatTableCol] =
+  def threadStatTableCols(s: SummaryTable): Seq[StatTableCol] =
     if (s.threadStatesSummary ne null) perThreadCol(s.threadStatesSummary, mb = true).map(_.statCol(s)).toSeq else Nil
 }
 
@@ -364,7 +365,7 @@ final case class SummaryTable(
     heapBasedBackoffTriggerHit: Long = Long.MinValue,
     totalNumberNodesCleared: Long = Long.MinValue,
     threadStatesSummary: ThreadStateSummary = null,
-    stallDetails: collection.Seq[StallDetailedTime] = null,
+    stallDetails: Seq[StallDetailedTime] = null,
     nodeStarts: Long = Long.MinValue,
     cacheHits: Long = Long.MinValue,
     cacheMisses: Long = Long.MinValue,

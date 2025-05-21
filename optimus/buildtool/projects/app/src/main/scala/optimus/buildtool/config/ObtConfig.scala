@@ -11,7 +11,6 @@
  */
 package optimus.buildtool.config
 
-import java.io.InputStreamReader
 import com.typesafe.config.Config
 import com.typesafe.config.ConfigFactory
 import optimus.buildtool.artifacts._
@@ -22,6 +21,7 @@ import optimus.buildtool.files.Directory.ExclusionFilter
 import optimus.buildtool.files.Directory.NotHiddenFilter
 import optimus.buildtool.files.DirectoryFactory
 import optimus.buildtool.files.ReactiveDirectory
+import optimus.buildtool.files.RelativePath
 import optimus.buildtool.files.SourceUnitId
 import optimus.buildtool.files.WorkspaceSourceRoot
 import optimus.buildtool.format.AppValidator
@@ -52,10 +52,11 @@ import optimus.buildtool.utils.GitUtils
 import optimus.buildtool.utils.HashedContent
 import optimus.platform._
 
+import java.io.InputStreamReader
 import java.nio.file.Path
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.collection.immutable.SortedMap
+import scala.jdk.CollectionConverters._
 
 /**
  * Represents complete configuration for OBT to build a workspace, as loaded from .obt files
@@ -64,7 +65,7 @@ import scala.collection.immutable.SortedMap
     workspaceSrcRoot: ReactiveDirectory,
     directoryFactory: DirectoryFactory,
     val properties: Option[ProjectProperties],
-    val externalDependencies: ExternalDependencies,
+    val jvmDependencies: ExternalDependenciesSource,
     val nativeDependencies: Map[String, NativeDependencyDefinition],
     val globalExcludes: Seq[Exclude],
     val globalSubstitutions: Seq[Substitution],
@@ -175,7 +176,7 @@ import scala.collection.immutable.SortedMap
 
       configSrcRoot.declareVersionDependence()
       val result = ObtTrace.traceTask(ScopeId.RootScopeId, ReadObtFiles) {
-        val loader: ObtFile.Loader = loadFile(configSrcRoot, git)
+        val loader: ObtFile.ScanningLoader = loadFile(configSrcRoot, git)
         WorkspaceDefinition.load(
           workspaceName,
           workspaceSrcRoot,
@@ -206,7 +207,7 @@ import scala.collection.immutable.SortedMap
             workspaceSrcRoot = workspaceSrcRoot,
             directoryFactory = directoryFactory,
             properties = Some(ws.config),
-            externalDependencies = ws.dependencies.externalDependencies,
+            jvmDependencies = ws.dependencies,
             nativeDependencies = ws.dependencies.jvmDependencies.nativeDependencies,
             globalSubstitutions = ws.dependencies.jvmDependencies.globalSubstitutions.toIndexedSeq,
             globalExcludes = ws.dependencies.jvmDependencies.globalExcludes.toIndexedSeq,
@@ -227,13 +228,14 @@ import scala.collection.immutable.SortedMap
       }
     }
 
-  private def loadFile(workspaceSrcRoot: ReactiveDirectory, git: Option[GitUtils]): ObtFile.Loader =
+  private def loadFile(workspaceSrcRoot: ReactiveDirectory, git: Option[GitUtils]): ObtFile.ScanningLoader =
     new FileLoader(workspaceSrcRoot, git)
 
-  private class FileLoader(workspaceSrcRoot: ReactiveDirectory, git: Option[GitUtils]) extends ObtFile.Loader {
+  private class FileLoader(workspaceSrcRoot: ReactiveDirectory, git: Option[GitUtils]) extends ObtFile.ScanningLoader {
     @entersGraph override def exists(file: ObtFile): Boolean = existsNode(workspaceSrcRoot, git, file)
     @entersGraph override def apply(file: ObtFile): Result[Config] = loadFileNode(workspaceSrcRoot, git, file)
     @entersGraph override def absolutePath(file: ObtFile): Path = loadFilePath(workspaceSrcRoot, file)
+    @entersGraph override def files(dir: RelativePath): Seq[RelativePath] = filesNode(workspaceSrcRoot, git, dir)
   }
 
   @node private def existsNode(
@@ -245,7 +247,7 @@ import scala.collection.immutable.SortedMap
     val fileAsset = workspaceSrcRoot.resolveFile(file.path)
     // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
     // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
-    fileAsset.existsUnsafe || git.exists(_.file(file.path.pathString).exists)
+    fileAsset.existsUnsafe || git.exists(_.file(fileAsset).exists)
   }
 
   @node private def loadFileNode(
@@ -259,7 +261,7 @@ import scala.collection.immutable.SortedMap
       // Note: We're safe to use existsUnsafe within a node here since we're already watching fileAsset
       // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
       case Some(g) if !fileAsset.existsUnsafe =>
-        val f = g.file(file.path.pathString)
+        val f = g.file(fileAsset)
         if (f.exists) {
           Result.tryWith(file, line = 0) {
             Success(f.withStream(s => ConfigFactory.parseReader(new InputStreamReader(s))))
@@ -276,6 +278,19 @@ import scala.collection.immutable.SortedMap
   ): Path = {
     workspaceSrcRoot.declareVersionDependence()
     workspaceSrcRoot.resolveFile(file.path).path
+  }
+
+  @node private def filesNode(
+      workspaceSrcRoot: ReactiveDirectory,
+      git: Option[GitUtils],
+      dir: RelativePath
+  ): Seq[RelativePath] = {
+    workspaceSrcRoot.declareVersionDependence()
+    val absDir = workspaceSrcRoot.resolveDir(dir)
+    // Note: We're safe to use existsUnsafe/findFilesUnsafe within a node here since we're already watching dir
+    // via to the call to `workspaceSrcRoot.declareVersionDependence()` above
+    if (absDir.existsUnsafe) Directory.findFilesUnsafe(absDir).map(workspaceSrcRoot.relativize)
+    else git.map(_.findFiles(absDir)).getOrElse(Nil).map(f => RelativePath(f.path))
   }
 
   private object Converter {

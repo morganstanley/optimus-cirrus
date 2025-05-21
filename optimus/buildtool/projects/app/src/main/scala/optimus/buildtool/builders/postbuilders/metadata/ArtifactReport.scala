@@ -11,30 +11,22 @@
  */
 package optimus.buildtool.builders.postbuilders.metadata
 
+import com.github.plokhotnyuk.jsoniter_scala.macros.named
+
 import optimus.buildtool.config.ModuleId
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 final case class ArtifactReport(
     name: String,
-    tpe: String,
+    @named("type") tpe: String,
     scope: String,
     usage: String,
-    onToolchain: Map[String, DependenciesReport]
+    @named("on_toolchain") onToolchain: Map[String, DependenciesReport]
 )
 
 object ArtifactReport {
-
-  implicit val artifactReportFormat: RootJsonFormat[ArtifactReport] = jsonFormat(
-    ArtifactReport.apply,
-    fieldName1 = "name",
-    fieldName2 = "type",
-    fieldName3 = "scope",
-    fieldName4 = "usage",
-    fieldName5 = "on_toolchain")
 
   @node def apply(
       settings: MetadataSettings,

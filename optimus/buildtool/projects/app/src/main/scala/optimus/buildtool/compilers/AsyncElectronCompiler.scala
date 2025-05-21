@@ -129,7 +129,7 @@ object AsyncElectronCompilerImpl {
           val hasErrors = MessagesArtifact.hasErrors(compiledMessages)
 
           AssetUtils.atomicallyWrite(outputJar) { tmp =>
-            import optimus.buildtool.artifacts.JsonImplicits._
+            import optimus.buildtool.artifacts.JsonImplicits.electronMetadataValueCodec
             val tmpJar = JarAsset(tmp)
             val metadata = ElectronMetadata(electronConfig.mode, executables, compiledMessages, hasErrors = false)
             Jars.createJar(tmpJar, metadata, Some(sandbox.buildDir)) { tempJarStream =>
@@ -150,7 +150,7 @@ object AsyncElectronCompilerImpl {
           IO.using(new PrintWriter(Files.newOutputStream(ignoreBuildFile)))(_.println(message))
           val compiledMessages = Seq(warning(message))
           AssetUtils.atomicallyWrite(outputJar) { tmp =>
-            import optimus.buildtool.artifacts.JsonImplicits._
+            import optimus.buildtool.artifacts.JsonImplicits.electronMetadataValueCodec
             val tmpJar = JarAsset(tmp)
             val metadata = ElectronMetadata(electronConfig.mode, executables, compiledMessages, hasErrors = false)
             Jars.createJar(tmpJar, metadata, Some(sandbox.sourceDir))(_ => {})

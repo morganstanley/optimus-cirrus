@@ -322,7 +322,7 @@ object RunconfCompilationSources {
         distinctLast(transitiveJniPaths).map(p => s"[JniPath]$p") ++
         distinctLast(transitiveModuleLoads)
           .map(p => s"[ModuleLoad]$p") ++
-        scope.upstream.agentsForOurRuntimeArtifacts.map(agent => s"[AgentPath]${agent.id}") ++
+        scope.upstream.agentsForOurRuntime.map(agent => s"[AgentPath]${agent.id}") ++
         Seq(s"[SubstitutionRules]${substitutions.hashableSubstitutionRules}") ++
         substitutionFingerprint ++
         blockedSubstitutionFingerprint ++
@@ -367,7 +367,8 @@ object RunconfCompilationSources {
         SortedMap.from(
           rcConfig.runConfFolder.runconfSourceFiles.toVector ++
             rcConfig.templateFolders.apar.map(_.appScriptsTemplateSourceFiles).merge[SourceUnitId] ++
-            rcConfig.runConfFolder.obtConfigSourceFiles(RunconfCompilationSources.obtConfigFilesWeCareAbout))
+            rcConfig.runConfFolder.obtConfigSourceFiles(RunconfCompilationSources.obtConfigFilesWeCareAbout) ++
+            rcConfig.runConfFolder.testPlanSourceFiles())
       }
       .getOrElse(SortedMap.empty[SourceUnitId, HashedContent])
 

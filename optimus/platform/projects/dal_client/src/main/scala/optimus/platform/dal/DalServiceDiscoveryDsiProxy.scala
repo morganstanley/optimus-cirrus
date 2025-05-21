@@ -130,6 +130,8 @@ class DalServiceDiscoveryDsiProxy(
     state.partitionedProxyOpt.getOrElse(throw new IllegalArgumentException("Service Discovery not yet complete."))
   }
 
+  private[optimus] def getDSIClient: DSIClient = initializedProxy.replica.getDSIClient
+
   private def initializeIfPossible(): Unit = synchronized {
     state match {
       case State.Uninitialized(Some(es)) =>

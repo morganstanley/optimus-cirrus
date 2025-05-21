@@ -177,6 +177,9 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
             packageName,
             metaCatalog.owner,
             metaCatalog.catalog,
+            metaCatalog.controls,
+            metaCatalog.description,
+            metaCatalog.upstreamDataset,
             classSym.hasAnnotation(EntityAnnotation),
             classSym.hasAnnotation(StoredAnnotation),
             isObject,
@@ -468,11 +471,15 @@ class OptimusExportInfoComponent(val plugin: EntityPlugin, val phaseInfo: Optimu
             pkg,
             meta.owner,
             meta.catalog,
+            meta.controls,
+            meta.description,
+            meta.upstreamDataset,
             isEntity = false,
             isStorable = false,
             isObject = false,
             isTrait = false,
-            List.empty[String]))
+            List.empty[String]
+          ))
       }
     }
 

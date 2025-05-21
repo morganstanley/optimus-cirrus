@@ -12,8 +12,9 @@
 package optimus.platform.storable
 
 import java.util.UUID
-
 import msjava.base.util.uuid.MSUuid
+import optimus.platform.EvaluationContext
+import optimus.platform.ScenarioStack
 import optimus.platform.TemporalContext
 import optimus.platform.pickling.PickledInputStream
 
@@ -45,6 +46,7 @@ private[optimus] sealed abstract class EntityFlavor extends Serializable {
   def entityEquals(e1: Entity, e2: Entity): Boolean
   def universe: EntityUniverse
   def dal$isTemporary: Boolean
+  def originScenarioStack: ScenarioStack = null
 }
 
 private[optimus] object EntityFlavor {
@@ -147,6 +149,8 @@ private[optimus] final class HybridAppliedEntityFlavor(override val dalEntityFla
 
 private[optimus] final class DALEntityFlavor extends EntityFlavor {
   override def dalEntityFlavor: DALEntityFlavor = this
+
+  override val originScenarioStack: ScenarioStack = EvaluationContext.scenarioStack.siRoot
 
   def dal$isTemporary: Boolean = false
 

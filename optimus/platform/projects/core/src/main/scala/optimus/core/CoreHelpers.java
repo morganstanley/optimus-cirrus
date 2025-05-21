@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-
 import javax.management.NotificationEmitter;
 import javax.management.NotificationListener;
 
@@ -49,10 +48,10 @@ import optimus.graph.Settings;
 import optimus.logging.LoggingInfo;
 import optimus.platform.Tweak;
 import optimus.platform.util.Version$;
+import optimus.scalacompat.collection.javaapi.CollectionConverters;
 import optimus.utils.compat.VMSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import optimus.scalacompat.collection.javaapi.CollectionConverters;
 
 public final class CoreHelpers {
   public static final MethodHandle intern_mh;
@@ -70,7 +69,8 @@ public final class CoreHelpers {
   private static final ConcurrentHashMap<String, ZoneId> _zoneIDs = new ConcurrentHashMap<>();
 
   // com.google.common.collect.int
-  private static final Interner<Object> interner = Interners.newWeakInterner();
+  private static final WeakInterner interner = new WeakInterner();
+  private static final Interner<Object> strongInterner = Interners.newStrongInterner();
 
   private static final Logger log = LoggerFactory.getLogger(Settings.class);
 
@@ -96,6 +96,10 @@ public final class CoreHelpers {
   /** Intern any object into a weak table, more logic could be added here... */
   public static Object intern(Object src) {
     return src == null ? null : interner.intern(src);
+  }
+  /** Intern any object into a strong table, more logic could be added here... */
+  public static Object strongIntern(Object src) {
+    return src == null ? null : strongInterner.intern(src);
   }
 
   public static <T> boolean arraysAreEqual(T[] a, T[] b) {
@@ -168,6 +172,7 @@ public final class CoreHelpers {
         breakOn = false;
       }
     } catch (Exception e) {
+      //noinspection CallToPrintStackTrace (debugging usage only)
       e.printStackTrace();
     }
     Breadcrumbs.send(

@@ -102,7 +102,7 @@ object TemporalSurfaceMatcherDeserializer
     )
     val decoder: RelTreeDecoder = new DalRelTreeDecoder()
     val x: Seq[ReactiveQueryProcessor] =
-      proto.getEntityInfosList.asScala.zip(proto.getListsOfRelationElementsList.asScala).map {
+      proto.getEntityInfosList.asScalaUnsafeImmutable.zip(proto.getListsOfRelationElementsList.asScala).map {
         eiprotoAndLproto: (ClassEntityInfoProto, ListOfRelationElementProto) =>
           val (eiProto, lProto) = eiprotoAndLproto
           val res: List[RelationElementWrapper] = lProto.getRelationElementsList.asScala.map(fromProto(_)).toList

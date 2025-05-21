@@ -16,4 +16,5 @@ object MiscFlags {
   final val ASYNCLAZY = 0x2
   final val NOT_RT = 0x4
   final val NODESYNC_ONLY = 0x8
+  final val SYNTHETIC_CHECKED = 0x10
 }

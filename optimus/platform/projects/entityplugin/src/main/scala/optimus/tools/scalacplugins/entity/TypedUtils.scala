@@ -16,6 +16,7 @@ import optimus.exceptions.RTExceptionTrait
 import optimus.tools.scalacplugins.entity.reporter.OptimusAlarmBuilder1
 import optimus.tools.scalacplugins.entity.reporter.OptimusPluginReporter
 import optimus.tools.scalacplugins.entity.staged.scalaVersionRange
+import optimus.tools.scalacplugins.entity.Attachment.Stored
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -29,6 +30,7 @@ import scala.tools.nsc.transform.Transform
 import scala.tools.nsc.transform.TypingTransformers
 import scala.util.control.NonFatal
 
+//noinspection TypeAnnotation
 trait SharedUtils extends TreeDSL { this: OptimusNames =>
   val global: Global
 
@@ -46,6 +48,8 @@ trait SharedUtils extends TreeDSL { this: OptimusNames =>
 
   lazy val EmbeddableCompanionBaseClass =
     rootMirror.getRequiredClass("optimus.platform.storable.EmbeddableCompanionBase")
+  lazy val EmbeddableCompanionBaseImplClass =
+    rootMirror.getRequiredClass("optimus.platform.storable.EmbeddableCompanionBaseImpl")
   lazy val EmbeddableTraitCompanionBaseClass =
     rootMirror.getRequiredClass("optimus.platform.storable.EmbeddableTraitCompanionBase")
 
@@ -111,7 +115,11 @@ trait SharedUtils extends TreeDSL { this: OptimusNames =>
           def traverse(tp: Type): Unit = {
             // we don't traverse into ReferenceHolder because they are lazy (non-blocking) by design, so we
             // don't need to check the Entity they are referring to
-            if (!isBlocking && seen.add(tp) && !tp.typeSymbol.isNonBottomSubClass(ReferenceHolder)) {
+            if (
+              !isBlocking && seen.add(tp) &&
+              !tp.typeSymbol.isNonBottomSubClass(ReferenceHolder) &&
+              !(tp =:= definitions.NothingTpe)
+            ) {
               if ((tp <:< EntityClass.tpe) || (tp exists (t => isBlockingEmbeddable(t.typeSymbol))))
                 isBlocking = true
               else {
@@ -226,6 +234,9 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val DalMetadata = rootMirror.getRequiredClass("optimus.platform.DalMetadata")
   lazy val UpstreamDatasets = rootMirror.getRequiredClass("optimus.platform.catalog.UpstreamDatasets")
   lazy val OptOut = rootMirror.getRequiredClass("optimus.platform.OptOut")
+  lazy val MockitoPkg = rootMirror.getPackageIfDefined("org.mockito")
+  lazy val MockitoSugarPkg = rootMirror.getPackageIfDefined("org.scalatestplus.mockito")
+
   // User code annotations
   lazy val EntityAnnotation = rootMirror.getRequiredClass("optimus.platform.entity")
   lazy val EventAnnotation = rootMirror.getRequiredClass("optimus.platform.event")
@@ -239,6 +250,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val ElevatedAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.elevated")
   lazy val ScenarioIndependentRhsAnnotation = rootMirror.getRequiredClass("optimus.platform.siRhs")
   lazy val GivenRuntimeEnvAnnotation = rootMirror.getRequiredClass("optimus.platform." + tpnames.givenRuntimeEnv)
+  lazy val GivenAnyRuntimeEnvAnnotation = rootMirror.getRequiredClass("optimus.platform." + tpnames.givenAnyRuntimeEnv)
   lazy val AlwaysAutoAsNodeAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.alwaysAutoAsyncArgs")
   lazy val MiscFlagsAnnotation = rootMirror.getRequiredClass("optimus.platform.annotations.miscFlags")
 
@@ -537,6 +549,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   lazy val Enumeration = rootMirror.getRequiredClass("scala.Enumeration")
   lazy val Enumeration_ValueSet = definitions.getMember(Enumeration, TypeName("ValueSet"))
   lazy val InstantCls = rootMirror.getRequiredClass("java.time.Instant")
+  lazy val LookupClass = rootMirror.getRequiredClass("java.lang.invoke.MethodHandles.Lookup")
   lazy val GenMapLikeCls = requiredClassForScalaVersion("scala.collection.GenMapLike", "scala.collection.MapOps")
   lazy val GenMapLike_get = definitions.getMemberMethod(GenMapLikeCls, nme.get)
   lazy val GenTraversableOnceClass =
@@ -640,6 +653,7 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
 
   def isKey(symbol: Symbol) = symbol.hasAnnotation(KeyAnnotation)
   def isIndex(symbol: Symbol) = symbol.hasAnnotation(IndexedAnnotation)
+  def isUniqueIndex(symbol: Symbol) = hasUniqueOption(symbol.getAnnotation(IndexedAnnotation)).getOrElse(false)
   def isKeyOrIndex(symbol: Symbol) = isKey(symbol) || isIndex(symbol)
 
   def isIndexInfo(symbol: Symbol) = symbol.tpe.typeSymbol isSubClass IndexInfo
@@ -651,6 +665,9 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   }
   def isEntityFullTextSearchable(s: Symbol): Boolean = {
     s.getAnnotation(EntityMetaDataAnnotation).exists(a => getFullTextSearchValue(a.original))
+  }
+  def isEntityMonoTemporal(s: Symbol): Boolean = {
+    s.getAnnotation(EntityMetaDataAnnotation).exists(a => getMonoTemporalValue(a.original))
   }
   def isEventProjected(s: Symbol): Boolean =
     s.getAnnotation(EventAnnotation).flatMap(extractAnnoJavaArg(_, names.projected)).getOrElse(false)
@@ -679,6 +696,18 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
         args.exists {
           case NamedArgTree(Ident(name: TermName), Literal(doc)) if names.fullTextSearch == name => doc.booleanValue
           case _                                                                                 => false
+        }
+      case Literal(doc) => doc.booleanValue
+      case _            => false
+    }
+  }
+
+  private def getMonoTemporalValue(tree: Tree): Boolean = {
+    tree match {
+      case Apply(_, args) =>
+        args.exists {
+          case NamedArgTree(Ident(name: TermName), Literal(doc)) if names.monoTemporal == name => doc.booleanValue
+          case _                                                                               => false
         }
       case Literal(doc) => doc.booleanValue
       case _            => false
@@ -721,7 +750,6 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   def hasNodeLiftByName(sym: Symbol) = sym.hasAnnotation(NodeLiftByNameAnnotation)
   def hasNodeLiftByValue(sym: Symbol) = sym.hasAnnotation(NodeLiftByValueAnnotation)
   def hasNodeLiftAnno(sym: Symbol) = sym.hasAnnotation(NodeLiftAnnotation)
-  def hasNodeSyncLiftAnno(sym: Symbol) = sym.hasAnnotation(NodeSyncLiftAnnotation)
   def hasNodeWithClassIDAnno(sym: Symbol): Boolean = sym.hasAnnotation(WithNodeClassIDAnnotation)
   def isNodeLifted(sym: Symbol) = hasNodeLiftByName(sym) || hasNodeLiftByValue(sym) || hasNodeLiftAnno(sym)
   def hasNodeAnnotation(tree: Tree) = tree.symbol.hasAnnotation(NodeAnnotation)
@@ -817,18 +845,33 @@ trait TypedUtils extends SharedUtils with PluginUtils with AsyncUtils with Optim
   }
 
   // def argsHash =  PluginHelpers.hashOf( PluginHelpers.hashOf(start, arg1), arg2 )....
-  def mkArgsHashT(vals: List[ValOrDefDef], start: Tree): Tree =
+  def mkArgsHashT(vals: List[ValOrDefDef], entitySym: Symbol, start: Tree): Tree =
     mkArgsHashImpl(
       vals map { v =>
         gen.mkAttributedRef(v.symbol)
       },
+      entitySym,
       start)
-  def mkArgsHashImpl(vals: List[Tree], start: Tree = LIT(1)): Tree = {
+
+  def valueOf(ref: Tree, entitySym: Symbol, symbol: Symbol): Tree = {
+    val needsLazyUnpickling = symbol.attachments.get[Stored].exists(_.lazyLoaded)
+    if (needsLazyUnpickling) {
+      // Need to generate:
+      // PluginHelpers.safeResult(foo$vh, this, Companion.foo)
+      // v.symbol is foo$impl so we need to replace $impl with $vh which
+      // is not ideal. Ideally this method would be given the val symbols rather
+      // than the trees and we would use mkVarHandleName here.
+      val valSymName = TermName(symbol.name.toString().replace("$impl", ""))
+      val vhHandle = q"${ref}.${mkVarHandleName(valSymName)}"
+      q"${PluginSupport.safeResult}($ref, $vhHandle)"
+    } else gen.mkAttributedSelect(ref, symbol)
+  }
+
+  def mkArgsHashImpl(vals: List[Tree], entitySym: Symbol, start: Tree = LIT(1)): Tree = {
     // If we have a lazy property, select the result out.  It is invariant that if we take this path we have an AlreadyCompletedPropertyNode.
     // Might be good to assert this to prevent regressions/violations.
     vals.foldLeft(start) { (body, arg) =>
-      val newArg =
-        if (arg.tpe.resultType.typeSymbol isSubClass Node) Apply(PluginSupport.safeResult, arg :: Nil) else arg
+      val newArg = valueOf(q"${This(entitySym)}", entitySym, arg.symbol)
       Apply(PluginSupport.hashOf, List(body, newArg))
     }
   }

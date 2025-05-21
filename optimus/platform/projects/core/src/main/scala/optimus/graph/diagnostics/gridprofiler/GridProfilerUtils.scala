@@ -15,24 +15,26 @@ import msjava.tools.util.MSProcess
 import optimus.breadcrumbs.Breadcrumbs
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Crumb
+import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
 import optimus.breadcrumbs.crumbs.CrumbHint
 import optimus.breadcrumbs.crumbs.Properties
+import optimus.breadcrumbs.crumbs.Properties.Elems
 import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.graph.DiagnosticSettings
 import optimus.graph.FileInterceptor
 import optimus.graph.OGSchedulerLostConcurrency
 import optimus.graph.OGTrace
 import optimus.graph.Settings
+import optimus.graph.cache.NCPolicy.registeredScopedPathAndProfileBlockID
 import optimus.graph.diagnostics.JsonMapper
 import optimus.graph.diagnostics.PNodeTaskInfo
+import optimus.graph.diagnostics.Report
 import optimus.graph.diagnostics.ReportOnShutdown
+import optimus.graph.diagnostics.ap.StackAnalysis
 import optimus.graph.diagnostics.configmetrics.ConfigMetrics
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.Metric
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.ProfilerOutputStrings
-import optimus.breadcrumbs.crumbs.Crumb.ProfilerSource
-import optimus.breadcrumbs.crumbs.Properties.Elems
-import optimus.graph.diagnostics.Report
-import optimus.graph.diagnostics.ap.StackAnalysis
+import optimus.graph.diagnostics.gridprofiler.GridProfiler.ProfilerOutputStrings.optconfExtension
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getConfigMetricSummary
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getDefaultLevel
 import optimus.graph.diagnostics.gridprofiler.GridProfiler.getHotspots
@@ -54,24 +56,26 @@ import optimus.platform.inputs.registry.ProcessGraphInputs
 import optimus.platform.util.PrettyStringBuilder
 import optimus.platform.util.Version
 import optimus.scalacompat.collection._
+import optimus.utils.MacroUtils.SourceLocation
 import spray.json.JsObject
 import spray.json.JsString
 import spray.json.JsValue
 import spray.json.JsonParser
 
 import java.io.File
-import java.io.{StringWriter, Writer}
+import java.io.StringWriter
+import java.io.Writer
 import java.lang.{StringBuilder => JStringBuilder}
 import java.nio.file.Files
-import java.nio.file.Paths
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.{ArrayList => JArrayList}
 import scala.collection.compat._
-import scala.collection.mutable
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -127,8 +131,7 @@ object GridProfilerUtils {
 
     // The PID
     val vmName = java.lang.management.ManagementFactory.getRuntimeMXBean.getName
-    val pid =
-      if (vmName.indexOf(OGTrace.AsyncSuffix) >= 0) "_" + vmName.take(vmName.indexOf(OGTrace.AsyncSuffix)) else ""
+    val pid = if (vmName.indexOf(OGTrace.HashSep) >= 0) "_" + vmName.take(vmName.indexOf(OGTrace.HashSep)) else ""
 
     // example: "myapp.app.common.apprunner.RunCalc_7848"
     if (cls.isEmpty) s"AppNameUnknown$pid" else s"$cls$pid"
@@ -222,28 +225,88 @@ object GridProfilerUtils {
     sb.toString
   }
 
-  def writeDataOnShutdown(fileName: String, autoGenerateConfig: Boolean): Unit =
-    writeData(fileName, getSummaryTable, autoGenerateConfig = autoGenerateConfig, onShutdown = true)
+  def writeDataOnShutdown(fileName: String, autoGenerateConfig: Boolean)(implicit source: SourceLocation): Unit =
+    writeData(
+      fileName,
+      getSummaryTable,
+      autoGenerateConfig = autoGenerateConfig,
+      source = s"$source:writeDataOnShutdown",
+      onShutdown = true,
+      suppliedDir = "")
 
-  def writeData(fileName: String, autoGenerateConfig: Boolean): Unit =
-    writeData(fileName, getSummaryTable, autoGenerateConfig = autoGenerateConfig, onShutdown = false)
+  def writeData(fileName: String, autoGenerateConfig: Boolean, suppliedDir: String = "")(implicit
+      source: SourceLocation): Unit =
+    writeData(fileName, autoGenerateConfig, source.toString, suppliedDir)
+  def writeData(fileName: String, autoGenerateConfig: Boolean, source: String, suppliedDir: String): Unit =
+    writeData(
+      fileName,
+      getSummaryTable,
+      autoGenerateConfig = autoGenerateConfig,
+      source = source,
+      onShutdown = false,
+      suppliedDir = suppliedDir)
 
-  def writeDataToDirectory(dir: String, fileName: String): Unit =
-    writeData(fileName, getSummaryTable, suppliedDir = dir, autoGenerateConfig = false, onShutdown = false)
+  def writeDataToDirectory(dir: String, fileName: String)(implicit source: SourceLocation): Unit =
+    writeDataToDirectory(dir, fileName, source.toString)
 
-  private def writePGOData(baseFileName: String, modes: collection.Seq[PGOMode]): Unit =
+  def writeDataToDirectory(dir: String, fileName: String, source: String): Unit =
+    writeData(
+      fileName,
+      getSummaryTable,
+      suppliedDir = dir,
+      autoGenerateConfig = false,
+      source = source,
+      onShutdown = false)
+
+  private def writePGOData(baseFileName: String, modes: Seq[PGOMode]): Unit =
     writePGOData(baseFileName, baseFileName, getHotspotsSummary.values.toSeq, modes)
+
+  private[optimus] def writeOptconfs(
+      hotspots: Iterable[PNodeTaskInfo],
+      settings: ConfigWriterSettings,
+      pgoGenFile: String,
+      generateScopedOptconfs: Boolean = true): (String, String) = {
+    val optconfsGenerated: ArrayBuffer[String] = ArrayBuffer.empty
+
+    if (Settings.perAppletProfile && generateScopedOptconfs) {
+      val blocks = registeredScopedPathAndProfileBlockID()
+      for ((scope, blockID) <- blocks.asScala) {
+        val pntis = Profiler.getProfileData(alwaysIncludeTweaked = true, false, blockID)
+        val optconfFileName = scopedOptconfName(pgoGenFile, scope)
+        optconfsGenerated.append(optconfFileName)
+        Profiler.autoGenerateConfig(optconfFileName, pntis, settings)
+      }
+    }
+    val optconfFName = wthOptconfSuffix(pgoGenFile)
+    optconfsGenerated.append(optconfFName)
+    val summary = Profiler.autoGenerateConfig(optconfFName, hotspots, settings)
+    (summary, optconfsGenerated.mkString(","))
+  }
+
+  private def wthOptconfSuffix(optconfName: String) = {
+    if (optconfName.endsWith(optconfExtension)) optconfName
+    else s"${optconfName.stripSuffix(".")}.$optconfExtension"
+  }
+
+  // Generate new optconf file name by appending the scope to the file name but keep the extension
+  private def scopedOptconfName(fileName: String, scopeName: String): String = {
+    if (fileName.endsWith(optconfExtension))
+      fileName.replace(s".$optconfExtension", s"_$scopeName.$optconfExtension")
+    else {
+      // files coming from ProfilerUI end with .
+      s"${fileName.stripSuffix(".")}_$scopeName.$optconfExtension"
+    }
+  }
 
   // minimum required for auto pgo is dumping the optconf and the csv we use for validation.
   // Might want to consider dumping more data (eg, hotspots csv and html report)
   private[optimus] def writePGOData(
       configMetricFile: String,
       pgoGenFile: String,
-      hotspots: collection.Seq[PNodeTaskInfo],
-      modes: collection.Seq[PGOMode] = collection.Seq(DisableCache)): Unit = {
+      hotspots: Seq[PNodeTaskInfo],
+      modes: Seq[PGOMode] = Seq(DisableCache)): Unit = {
     ConfigMetrics.writeConfigMetricsCsv(configMetricFile, getConfigMetricSummary(hotspots))
-    val settings = ConfigWriterSettings(modes)
-    Profiler.autoGenerateConfig(pgoGenFile, hotspots, settings)
+    writeOptconfs(hotspots, ConfigWriterSettings(modes), pgoGenFile)
   }
 
   private def miniGridMeta: Option[P.Elem[JsObject]] = sys.props.get(MiniGridMetaDataFileSysProp).map { filename =>
@@ -256,16 +319,17 @@ object GridProfilerUtils {
       summaryTable: SummaryTable,
       autoGenerateConfig: Boolean,
       onShutdown: Boolean,
-      suppliedDir: String = ""): Unit = {
+      source: String,
+      suppliedDir: String): Unit = {
     this.fileStamp = Some(fileStamp)
     this.summaryTable = Some(summaryTable)
     this.autoGenerateConfig = autoGenerateConfig
-    this.openFiles = FileInterceptor.openedFiles.asScala
-    this.openConnections = FileInterceptor.connectionsRaw().asScala
+    this.openFiles = FileInterceptor.openedFiles.asScalaUnsafeImmutable
+    this.openConnections = FileInterceptor.connectionsRaw().asScalaUnsafeImmutable
 
     // the registered data will be written to file and crumbs will be sent...
     if (onShutdown) ReportOnShutdown.register(suppliedDir) // ...either on shutdown
-    else Report.writeReportsAndCrumbs(suppliedDir) // ...or immediately
+    else Report.writeReportsAndCrumbs(suppliedDir, source) // ...or immediately
   }
 
   def sendSummaryCrumb(): Unit = summaryTable.foreach { summary =>
@@ -278,8 +342,8 @@ object GridProfilerUtils {
   private[optimus] def getLocalAndRemoteHotspots: (Metric.Hotspots, Map[String, Metric.Hotspots]) =
     (Profiler.getLocalHotspots(), getHotspots.filterKeysNow(_ != GridProfiler.clientKey))
 
-  private[optimus] def filterAndSendHotspotsCrumbs(): Unit = writeHotspots(writer = None)
-  private[gridprofiler] def writeHotspots(writer: Option[Writer]): Unit = {
+  private[optimus] def filterAndSendHotspotsCrumbs(source: String): Unit = writeHotspots(writer = None, source)
+  private[gridprofiler] def writeHotspots(writer: Option[Writer], source: String): Unit = {
     val (rawLocal, rawRemote) = getLocalAndRemoteHotspots
     val aggregated =
       GridProfilerData.aggregateSingle(rawRemote, Some(rawLocal), GridProfilerDefaults.defaultAggregationType)
@@ -291,7 +355,7 @@ object GridProfilerUtils {
       }
     val filteredCnt = aggregated.values.map(_.size).sum - filtered.values.map(_.size).sum
     writer.foreach(PNodeTaskInfo.printCSV(filtered.mapValuesNow(_.asJava).asJava, filteredCnt, _))
-    sendHotspotCrumbs(filtered)
+    sendHotspotCrumbs(filtered, source)
     Breadcrumbs.flush()
   }
 
@@ -300,7 +364,16 @@ object GridProfilerUtils {
     sendSummaryCrumb(
       nid,
       taskSummary,
-      more = collection.Seq(P.taskId -> taskId, P.engine -> engine, P.tasksExecutedOnEngine -> nodesExecuted))
+      more = Seq(P.taskId -> taskId, P.engine -> engine, P.tasksExecutedOnEngine -> nodesExecuted))
+  }
+
+  private[optimus] def allPublishedHotspotProperties: Seq[Properties.Key[_]] = {
+    val pNodeInfoForAllKeys = {
+      val p = new PNodeTaskInfo(0)
+      p.reuseStats = 1
+      p
+    }
+    hotspotInfo(pNodeInfoForAllKeys).m.map(_.k)
   }
 
   private def ms(us: Long): Long = us / 1000000L
@@ -345,7 +418,7 @@ object GridProfilerUtils {
     P.debug -> debug.mkString(";")
   )
 
-  private def sendHotspotCrumbs(agg: Map[String, ArrayBuffer[PNodeTaskInfo]]): Unit = {
+  private def sendHotspotCrumbs(agg: Map[String, ArrayBuffer[PNodeTaskInfo]], source: String): Unit = {
     if (Breadcrumbs.isInfoEnabled) {
       for {
         (engine, pntis) <- agg
@@ -354,7 +427,7 @@ object GridProfilerUtils {
         val enq = pnti.enqueuingPropertyName
         val pname = pnti.fullName()
         val spName = StackAnalysis.dromedize(pname)
-        val debug = mutable.ArrayBuffer.empty[String]
+        val debug = ArraySeq.newBuilder[String]
         pnti.name
         val (propertyNode, subNode) =
           if (enq eq null) {
@@ -367,15 +440,14 @@ object GridProfilerUtils {
           PropertiesCrumb(
             _,
             ProfilerSource + SamplingProfilerSource,
-            appProperties + P.Elems(
-              hotspotInfo(
-                pnti,
-                spName,
-                propertyNode,
-                engine,
-                subNode,
-                debug
-              ))
+            P.hotspotSource -> source :: appProperties + hotspotInfo(
+              pnti,
+              spName,
+              propertyNode,
+              engine,
+              subNode,
+              debug.result()
+            )
           )
         )
       }
@@ -383,7 +455,7 @@ object GridProfilerUtils {
   }
 
   def toExtractedGroups(summary: SummaryTable): Map[String, JsObject] = {
-    def extract(parentPath: collection.Seq[String], colGrp: ColGroup): collection.Seq[(String, JsValue)] = {
+    def extract(parentPath: Seq[String], colGrp: ColGroup): Seq[(String, JsValue)] = {
       val path = parentPath :+ colGrp.col.name
       val value = colGrp.col.extractor(summary)
       val formatted = colGrp.col.format.format(value).trim
@@ -400,13 +472,13 @@ object GridProfilerUtils {
       id: ChainedID,
       summary: SummaryTable,
       hints: Set[CrumbHint] = Set.empty,
-      more: collection.Seq[P.Elem[_]] = Nil): Unit = {
+      more: Seq[P.Elem[_]] = Nil): Unit = {
     val extractedGroups = toExtractedGroups(summary)
     val props = appProperties ++ more.toList + P.Elem(P.profSummary, extractedGroups)
     Breadcrumbs.info(id, u => PropertiesCrumb(u, ProfilerSource, hints, props.m: _*))
   }
 
-  private def filterAndTrimFilesList(files: collection.Seq[String]): Seq[String] = {
+  private def filterAndTrimFilesList(files: Seq[String]): Seq[String] = {
     // trim up to limit
     var limit = 0
     files.takeWhile { s =>
@@ -418,7 +490,7 @@ object GridProfilerUtils {
   // this version is called at app end
   // it receives a file list because we fetch it there for another reason
   // and it does not erase the recorded files because the app is about to end anyway
-  private[optimus] def sendFileInterceptorCrumb(files: collection.Seq[String]): Unit = {
+  private[optimus] def sendFileInterceptorCrumb(files: Seq[String]): Unit = {
     if (files.nonEmpty)
       Breadcrumbs.info(
         ChainedID.root,
@@ -431,7 +503,7 @@ object GridProfilerUtils {
   // For subsequent tasks - only what they opened
   private[optimus] def sendFileInterceptorCrumb(id: ChainedID): Unit = {
     if (FileInterceptor.isEnabled) {
-      val files = FileInterceptor.openedFiles().asScala
+      val files = FileInterceptor.openedFiles().asScalaUnsafeImmutable
       FileInterceptor.eraseFiles()
       if (files.nonEmpty)
         Breadcrumbs.info(
@@ -444,10 +516,10 @@ object GridProfilerUtils {
     if (getDefaultLevel >= LIGHT) summaryTable.map(JsonMapper.mapper.writeValueAsString)
     else None
 
-  def hotspotsContent: Option[String] =
+  def hotspotsContent(source: String): Option[String] =
     if (getDefaultLevel >= HOTSPOTSLIGHT && !DiagnosticSettings.profilerDisableHotspotsCSV) {
       val sw = new StringWriter()
-      writeHotspots(Some(sw))
+      writeHotspots(Some(sw), source)
       Some(sw.toString)
     } else None
 
@@ -482,7 +554,7 @@ object GridProfilerUtils {
     // check getDefaultLevel and trace mode (for local tracing) independently, since setTraceMode does not set
     // GridProfiler.getDefaultLevel. If either is set then we want to get the hotspots
     if (getDefaultLevel >= HOTSPOTSLIGHT || OGTrace.getTraceMode.collectsHotspots) {
-      val hotspots: collection.Seq[PNodeTaskInfo] = getHotspotsSummary.values.toSeq
+      val hotspots: Seq[PNodeTaskInfo] = getHotspotsSummary.values.toSeq
       Some(new JArrayList(hotspots.asJava))
     } else None
   }

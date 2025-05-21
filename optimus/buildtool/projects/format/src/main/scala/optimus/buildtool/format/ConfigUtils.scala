@@ -257,10 +257,7 @@ object ConfigUtils {
         val rawPath = conf.getString(key)
         try {
           val path = Paths.get(rawPath)
-          if (path.startsWith("..")) {
-            val msg = s"Invalid path $rawPath: referring to directories above is forbidden"
-            file.failure(conf.getValue(key), msg)
-          } else if (path.isAbsolute) {
+          if (path.isAbsolute) {
             val msg = s"Invalid path $path: you cannot use an absolute path"
             file.failure(conf.getValue(key), msg)
           } else {

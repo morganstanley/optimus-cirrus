@@ -53,6 +53,7 @@ import java.awt.event.MouseEvent
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 import javax.swing.SwingUtilities
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 
 object HotspotsTable {
@@ -635,23 +636,23 @@ object HotspotsTable {
   val invalidateColumns: ArrayBuffer[TableColumnCount[PNodeTaskInfo]] = ArrayBuffer(c_invalidated, c_overInvalidated)
   invalidateColumns.foreach(_.setCategory(invalidatesCategory))
 
-  val descriptionColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+  private val descriptionColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
     ArrayBuffer(TableColumn.flagsTableColumn, c_propertyNode, c_applets, c_plugins)
   descriptionColumns.foreach(_.setCategory(nodeStats))
 
-  val descriptionCompactColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+  private val descriptionCompactColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
     ArrayBuffer(TableColumn.flagsTableColumn, c_propertyShort)
   descriptionCompactColumns.foreach(_.setCategory(nodeStats))
 
-  val memColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+  private val memColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
     ArrayBuffer(c_minRetainedSize, c_maxRetainedSize, c_cachedCount)
   memColumns.foreach(_.setCategory(memoryCategory))
 
-  val cacheDetailsColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+  private val cacheDetailsColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
     ArrayBuffer(c_reuseCycle, c_simpleMatch, c_cacheName, c_reuseStats)
   cacheDetailsColumns.foreach(_.setCategory(cacheCategory))
 
-  val internalColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
+  private val internalColumns: ArrayBuffer[TableColumn[PNodeTaskInfo]] =
     ArrayBuffer(c_tweakID, c_tweakDependencies, c_tweakDependenciesFixedWidth, c_process, c_ntiName)
   internalColumns.foreach(_.setCategory(internalCategory))
 
@@ -803,7 +804,7 @@ class HotspotsTable(reader: OGTraceReader)
 
     // Multiple Selection Wrapper
     def addMenuMS(title: String, enabledOnlyOn: () => Boolean = null)(
-        ntiAction: ArrayBuffer[PNodeTaskInfo] => Unit): JMenuItem = {
+        ntiAction: ArraySeq[PNodeTaskInfo] => Unit): JMenuItem = {
       val mi = menu.addMenu(
         title, {
           val lst = getSelections
@@ -880,7 +881,7 @@ class HotspotsTable(reader: OGTraceReader)
         GraphDebuggerUI.addTab("Selected in Profiler", new GraphBrowser(nodes))
       }
       addMenuForTrace("Add from Trace To Selected Nodes...") { nodes =>
-        GraphDebuggerUI.showSelectedNodesView(nodes.asScala)
+        GraphDebuggerUI.showSelectedNodesView(nodes.asScalaUnsafeImmutable)
       }
 
       menu.addSeparator()
@@ -954,8 +955,7 @@ class HotspotsTable(reader: OGTraceReader)
               includeSiGlobal = true,
               includeGlobal = true,
               includeNamedCaches = true,
-              includePerPropertyCaches = true,
-              includeCtorGlobal = false)
+              includePerPropertyCaches = true)
             .foreach {
               _.clear(
                 n => {

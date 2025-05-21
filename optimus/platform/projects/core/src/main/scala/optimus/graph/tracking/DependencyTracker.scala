@@ -20,8 +20,13 @@ import optimus.platform.util.PrettyStringBuilder
 import optimus.platform._
 import optimus.ui.ScenarioReference
 
+import java.util.concurrent.ConcurrentHashMap
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
+import scala.util.Try
+import scala.util.Success
+import java.util.function
 
 /**
  * Metadata object associated with a Scenario, which is capable of tracking dependencies amongst Nodes and propagating
@@ -46,7 +51,6 @@ private[optimus] class DependencyTracker private[tracking] (
     protected[optimus] val parentScenarioStack: ScenarioStack,
     appletName: String)
     extends DependencyTrackerChildren
-    with TweakMutationActions
     with TTrackStatsActions
     with DependencyTrackerSyncApi
     with DependencyTrackerAsyncApi
@@ -159,7 +163,14 @@ private[optimus] class DependencyTracker private[tracking] (
    */
   final val nc_scenarioStack: ScenarioStack = newScenarioStack(cached = false, nodeInputs)
 
-  final val userNodeTracker = new UserNodeTracker(this)
+  private val userNodeTrackers = new ConcurrentHashMap[TrackingScope[TrackingMemo], UserNodeTracker[TrackingMemo]]()
+  private def createUserNodeTracker: function.Function[TrackingScope[TrackingMemo], UserNodeTracker[TrackingMemo]] =
+    (scope: TrackingScope[TrackingMemo]) => new UserNodeTracker(this, scope)
+  final def userNodeTracker[M >: Null <: TrackingMemo](scope: TrackingScope[M]): UserNodeTracker[M] =
+    userNodeTrackers
+      .computeIfAbsent(scope.asInstanceOf[TrackingScope[TrackingMemo]], createUserNodeTracker)
+      .asInstanceOf[UserNodeTracker[M]]
+  final def allUserNodeTrackers: Iterable[UserNodeTracker[_]] = userNodeTrackers.values.asScala
 
   if (NodeTrace.profileSSUsage.getValue) Profiler.t_sstack_usage(scenarioStack, this, hit = false)
 
@@ -184,8 +195,11 @@ private[optimus] class DependencyTracker private[tracking] (
     Option(currentEvaluator).filter(_.safeToEvaluate).orElse(if (parent ne null) parent.getCurrentEvaluator else None)
   }
 
-  // always need to install our underlay so that it starts tracking
-  doSetUnderlay(Scenario.empty, TrackingActionEventCause("DependencyTracker.<init>"))
+  // always need to install our underlay so that it starts tracking (nobody is yet tracking nodes here, so noop observer is ok)
+  doSetUnderlay(
+    Scenario.empty,
+    TrackingActionEventCause("DependencyTracker.<init>"),
+    NoOpTrackedNodeInvalidationObserver)
 
   // there is no cancellation scope installed at initial time
   @volatile private[this] var scenarioStackWithCancelScopeCache = scenarioStack
@@ -218,14 +232,14 @@ private[optimus] class DependencyTracker private[tracking] (
       key: NodeKey[A],
       ec: OGSchedulerContext,
       cause: EventCause,
+      trackingScope: TrackingScope[_],
       cancelScope: CancellationScope = queue.currentCancellationScope): PropertyNode[A] = {
-    val utrk = userNodeTracker.getUTrack(key)
+    val utrk = userNodeTracker(trackingScope.asInstanceOf[TrackingScope[TrackingMemo]]).getUTrack(key)
     val ss = scenarioStackWithCancelScope(cancelScope)
     val r = ss.getNode(key.prepareForExecutionIn(ss), ec).asInstanceOf[PropertyNode[A]]
     if (utrk ne null) {
       if (Settings.trackingScenarioLoggingEnabled) DependencyTrackerLogging.requestUtrack(name, key)
-      utrk.updateCause(cause)
-      val tn = utrk.registerRunningNode(r)
+      val tn = utrk.registerRunningNode(r, cause)
       OGTrace.dependency(ec.getCurrentNodeTask, tn, ec)
     }
     r
@@ -242,8 +256,9 @@ private[optimus] class DependencyTracker private[tracking] (
    *   The NodeKeys referencing the Nodes to evaluate.
    */
   private[tracking] sealed class EvaluateNodeKeysAction(
-      val nodeKeys: collection.Seq[NodeKey[_]],
-      eventCause: EventCause)
+      val nodeKeys: Seq[NodeKey[_]],
+      eventCause: EventCause,
+      trackingScope: TrackingScope[_])
       extends DependencyTrackerActionEvaluateBase[Unit]
       with DependencyTrackerActionManyNodesBase
       with InScenarioAction {
@@ -253,12 +268,12 @@ private[optimus] class DependencyTracker private[tracking] (
     override lazy val cause: EventCause = eventCause.createChild("EvaluateNodeKeysAction")
     assert(cause ne null)
 
-    lazy val nodes: collection.Seq[Node[_]] = {
+    lazy val nodes: Seq[Node[_]] = {
       val ec = EvaluationContext.current
       if (disposed) Nil
-      else nodeKeys.map { nodeOf(_, ec, cause, cancelScope) }
+      else nodeKeys.map { nodeOf(_, ec, cause, trackingScope, cancelScope) }
     }
-    override protected def asNodes: collection.Seq[NodeTask] = nodes
+    override protected def asNodes: Seq[NodeTask] = nodes
     protected[this] def cancelScope: CancellationScope = queue.currentCancellationScope
 
     override def writeWorkInfo(sb: PrettyStringBuilder): Unit = {
@@ -278,35 +293,32 @@ private[optimus] class DependencyTracker private[tracking] (
    *   - with preemption semantics, so any update action causes this action to be cancelled and re-enqueued
    */
   private[tracking] final class EvaluateNodeKeysLowPriorityAction private (
-      nodeKeys: collection.Seq[NodeKey[_]],
-      private[this] var token: EventCause.Token,
+      nodeKeys: Seq[NodeKey[_]],
+      cause: EventCause,
+      trackingScope: TrackingScope[_],
       attempt: Int
-  ) extends EvaluateNodeKeysAction(nodeKeys, token.cause)
+  ) extends EvaluateNodeKeysAction(nodeKeys, cause, trackingScope)
       with DependencyTrackerActionCancellable {
-    def this(nodeKeys: collection.Seq[NodeKey[_]], cause: EventCause) =
-      this(nodeKeys, cause.createAndTrackToken(), attempt = 0)
+    def this(nodeKeys: Seq[NodeKey[_]], cause: EventCause, trackingScope: TrackingScope[_]) =
+      this(nodeKeys, cause, trackingScope, attempt = 0)
 
-    // Token is taken by either afterAction (which comes asynchronously from the scheduler)
-    // or cancel (which comes from the queue). It's not very important which gets it in case of a race;
-    // this will happen if the scheduler completes these nodes while they're being cancelled, so either:
-    // - afterAction gets the token and releases it and cancel does nothing
-    // - cancel gets the token, sees there's nothing left to do, and releases it; afterAction does nothing
-    private[this] def getAndClearToken() = synchronized {
-      try this.token
-      finally this.token = null
-    }
-
-    override def afterAction(q: DependencyTrackerQueue): Unit = {
-      val token = getAndClearToken()
-      if (token ne null) token.release()
-    }
+    // cancel() and afterAction() can race so we synchronize so the token is not released (by super.afterAction)
+    // while cancel() is potentially using the underlying eventcause. Note that if afterAction() starts before cancel(),
+    // this must have been because all nodes were already complete, in which case cancel() doesn't use the eventcause.
+    override def afterAction(): Unit = synchronized { super.afterAction() }
 
     // lazy! because the currentCancellationScope is the one that is cancelled as part of the evaluationBarrier
     // so we need to wait until this one is re-enqueued after the update action
     override lazy val cancelScope: CancellationScope = queue.currentCancellationScope.childScope()
-    override def cancel(): Option[DependencyTrackerActionCancellable] = {
-      val token = getAndClearToken()
-      if (!cancelScope.isCancelled && (token ne null)) {
+
+    // cancel() needs to run at most once (so that we don't submit multiple retries unnecessarily), and we can't rely on
+    // just checking if cancelScope was cancelled, because it might have been cancelled by its parent rather than by us
+    private var actionCancelled: Boolean = false
+
+    // synchronized so that it doesn't run concurrently with afterAction()
+    override def cancel(): Option[DependencyTrackerActionCancellable] = synchronized {
+      if (!actionCancelled) {
+        actionCancelled = true
         // Now issue the cancellation. It's possible that, at some point before this takes place, all the
         // nodes finish before being cancelled (for instance, if the only running nodes are the ones we passed in,
         // and they make no more node calls, so the scheduler never gets a chance to cancel.)
@@ -316,17 +328,18 @@ private[optimus] class DependencyTracker private[tracking] (
         // not-yet-running nodes will start and immediately get cancelled
         // isDoneWithUsableResult excludes cancelled nodes (and those with non-RT exceptions, but that's fine)
         val incompleteNodes = nodes.filterNot(_.isDoneWithUsableResult)
-        if (incompleteNodes.isEmpty) { // lucky us! the nodes actually completed before we got the cancel request
-          log.info(s"All nodes were completed before cancellation of $this")
-          token.release()
-          None
-        } else {
-          // This is the expected case: we've got to try again.
-          log.info(s"Rescheduling ${incompleteNodes.size} preempted nodes")
-          log.debug(s"Cancelled $incompleteNodes and will reschedule")
-          val newNodeKeys = incompleteNodes.map(_.asInstanceOf[PropertyNode[_]].tidyKey) // make sure they're "fresh"
-          Some(new EvaluateNodeKeysLowPriorityAction(newNodeKeys, token, attempt = attempt + 1))
-        }
+        val reschedule =
+          if (incompleteNodes.isEmpty) { // lucky us! the nodes actually completed before we got the cancel request
+            log.info(s"All nodes were completed before cancellation of $this")
+            None
+          } else {
+            // This is the expected case: we've got to try again.
+            log.info(s"Rescheduling ${incompleteNodes.size} preempted nodes")
+            log.debug(s"Cancelled $incompleteNodes and will reschedule")
+            val newNodeKeys = incompleteNodes.map(_.asInstanceOf[PropertyNode[_]].tidyKey) // make sure they're "fresh"
+            Some(new EvaluateNodeKeysLowPriorityAction(newNodeKeys, cause, trackingScope, attempt = attempt + 1))
+          }
+        reschedule
       } else None
     }
     override def toString = s"${super.toString()} (attempt $attempt)"
@@ -340,7 +353,10 @@ private[optimus] class DependencyTracker private[tracking] (
    * @tparam T
    *   The result type.
    */
-  private[tracking] class EvaluateNodeKeyAction[T](val nodeKey: NodeKey[T], val eventCause: EventCause)
+  private[tracking] class EvaluateNodeKeyAction[T](
+      val nodeKey: NodeKey[T],
+      val eventCause: EventCause,
+      trackingScope: TrackingScope[_])
       extends DependencyTrackerActionEvaluateOneNodeBase[T]
       with InScenarioAction {
     override lazy val cause: EventCause = eventCause.createChild("EvaluateNodeKeyAction")
@@ -352,7 +368,7 @@ private[optimus] class DependencyTracker private[tracking] (
      * @return
      *   The node to be evaluated.
      */
-    protected override def asNode: PropertyNode[T] = nodeOf(nodeKey, EvaluationContext.current, cause)
+    protected override def asNode: PropertyNode[T] = nodeOf(nodeKey, EvaluationContext.current, cause, trackingScope)
 
     override def writeWorkInfo(sb: PrettyStringBuilder): Unit = {
       sb.append(s"${getClass.getSimpleName} - key:")
@@ -367,10 +383,6 @@ private[optimus] class DependencyTracker private[tracking] (
     protected final def disposed: Boolean = isDisposed
     protected final def targetScenarioName: String = name
   }
-  private[tracking] abstract class TSA_BasicUpdateBaseAction[T]
-      extends DependencyTrackerActionUpdate[T]
-      with InScenarioAction
-  private[tracking] abstract class TSA_BasicUpdateAction extends TSA_BasicUpdateBaseAction[Unit]
 
   /**
    * Action to evaluate a given expression, but in the non-cacheable ScenarioStack.
@@ -394,18 +406,16 @@ private[optimus] class DependencyTracker private[tracking] (
       eventCause: EventCause,
       update: DependencyTrackerBatchUpdater => R,
       protected override val scheduler: Scheduler)
-      extends TSA_BasicUpdateBaseAction[R] {
+      extends DependencyTrackerActionUpdate[R]
+      with InScenarioAction {
     override lazy val cause: EventCause = eventCause.createChild(s"[Graph][DependencyTracker-$name] TSA_BatchUpdate")
 
     override protected def doUpdate(): R = {
-      val doUpdateCause = cause.createChild(s"[Graph][DependencyTracker-$name] TSA_BatchUpdate-doUpdate")
-      doUpdateCause.counted {
-        val tracker = root.getOrCreateScenario(scenarioReference.rootOfConsistentSubtree)
-        val updater = new DependencyTrackerBatchUpdaterRoot(tracker, this, doUpdateCause)
-        try update(updater.updaterFor(scenarioReference))
-        finally {
-          updater.close()
-        }
+      val tracker = root.getOrCreateScenario(scenarioReference.rootOfConsistentSubtree)
+      val updater = new DependencyTrackerBatchUpdaterRoot(tracker, this, cause)
+      try update(updater.updaterFor(scenarioReference))
+      finally {
+        updater.close()
       }
     }
 
@@ -415,6 +425,15 @@ private[optimus] class DependencyTracker private[tracking] (
     }
   }
 
+  private[tracking] class TSA_BatchUpdateIgnoreDisposed(
+      eventCause_ : EventCause,
+      update_ : DependencyTrackerBatchUpdater => Unit,
+      scheduler_ : Scheduler)
+      extends TSA_BatchUpdate[Unit](eventCause_, update_, scheduler_) {
+
+    override def alreadyDisposedResult: Try[Unit] = Success(())
+  }
+
   override def toString: String = {
     val sb = new PrettyStringBuilder
     sb.append("DependencyTracker ")
@@ -422,7 +441,7 @@ private[optimus] class DependencyTracker private[tracking] (
     sb.startBlock()
     if (isDisposed) sb.append(" *** disposed ***")
     else {
-      sb.appendln(s"utracks.size = ${userNodeTracker.utracks.size()}")
+      sb.appendln(s"utracks.size = ${allUserNodeTrackers.map(_.utracks.size).sum}")
       sb.appendln(s"ttracks.size = ${tweakableTracker.ttracks.size()}")
       /*for (trk <- utracks.values()) {
       sb.appendln(trk.toString)
@@ -452,11 +471,11 @@ private[optimus] class DependencyTracker private[tracking] (
    * Clears all dependency tracking and invalidates all user tracked nodes (typically causing user to request
    * recomputation)
    */
-  final private[tracking] def doClearTracking(): Unit = {
+  final private[tracking] def doClearTracking(observer: TrackedNodeInvalidationObserver): Unit = {
     tweakableTracker.clearAllTracking()
     underlayTweakableTracker.clearAllTracking()
-    userNodeTracker.invalidateAll()
-    children.foreach(_.doClearTracking())
+    userNodeTrackers.values().forEach(_.invalidateAll(observer))
+    children.foreach(_.doClearTracking(observer))
   }
 
   protected def resetAllTraversalIds(newId: Int): Unit = {
@@ -519,7 +538,7 @@ object DependencyTracker {
   private[optimus] def commonParent(scenarios: Iterable[DependencyTracker]): DependencyTracker =
     commonParent(scenarios toSeq)
 
-  private[optimus] def commonParent(scenarios: collection.Seq[DependencyTracker]): DependencyTracker = {
+  private[optimus] def commonParent(scenarios: Seq[DependencyTracker]): DependencyTracker = {
 
     /**
      * find the common parent. Ts1 and t2 must be at the same level, and have a common root
@@ -547,3 +566,8 @@ object DependencyTracker {
     }
   }
 }
+
+sealed trait CacheClearMode
+case object NoClear extends CacheClearMode // doesn't clear cache of disposed nodes (they will get LRU'd out later)
+case object SyncClear extends CacheClearMode // clears cache of disposed nodes before completing disposal action
+case object AsyncClear extends CacheClearMode // clears cache of disposed nodes in background

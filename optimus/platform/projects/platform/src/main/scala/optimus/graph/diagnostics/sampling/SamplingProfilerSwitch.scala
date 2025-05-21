@@ -20,7 +20,7 @@ import optimus.breadcrumbs.crumbs.PropertiesCrumb
 import optimus.config.RuntimeConfiguration
 import optimus.core.GraphDiagnosticsSource
 import optimus.graph.DiagnosticSettings
-import optimus.platform.util.Log
+import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.log
 import optimus.utils.OptimusStringUtils
 import optimus.utils.PropertyUtils
 import optimus.utils.zookeeper.ReadOnlyDistributedValue
@@ -32,7 +32,7 @@ import scala.util.Random
 import scala.util.control.NonFatal
 import optimus.platform.util.Version
 
-object SamplingProfilerSwitch extends Log {
+object SamplingProfilerSwitch {
   // subnodes will be bas, reg, etc., ...
   private val SP_NODE = "breadcrumbs/sampling-profiler"
   // and each will contain a JSON map like

@@ -198,6 +198,16 @@ private[relational] class QueryMacros[C <: Context](val c: C) extends MacroBase 
     }
   }
 
+  def extendTypedOrReplaceValue[T: c.WeakTypeTag, U: c.WeakTypeTag](value: c.Expr[U])(
+      extensionOrReplaceType: c.Expr[TypeInfo[U]],
+      pos: c.Expr[MethodPosition]): c.Expr[Query[T with U]] = {
+    assertNotFinal[T, U]
+    val prefix = c.prefix.cast[Query[T]]
+    reify {
+      QueryOps(prefix.splice).extendTypedOrReplaceValue[U](value.splice)(extensionOrReplaceType.splice, pos.splice)
+    }
+  }
+
   def extend[T: c.WeakTypeTag, U: c.WeakTypeTag](field: c.Expr[String], f: c.Expr[DynamicObject => U])(
       fieldType: c.Expr[TypeInfo[U]],
       pos: c.Expr[MethodPosition]): c.Expr[Query[DynamicObject]] = {
@@ -710,6 +720,11 @@ object QueryMacros {
   def replaceValue[T: c.WeakTypeTag, U >: T: c.WeakTypeTag](c: Context)(
       repVal: c.Expr[U])(replaceType: c.Expr[TypeInfo[U]], pos: c.Expr[MethodPosition]): c.Expr[Query[T]] =
     new QueryMacros[c.type](c).replaceValue[T, U](repVal)(replaceType, pos)
+
+  def extendTypedOrReplaceValue[T: c.WeakTypeTag, U: c.WeakTypeTag](c: Context)(value: c.Expr[U])(
+      extensionOrReplaceType: c.Expr[TypeInfo[U]],
+      pos: c.Expr[MethodPosition]): c.Expr[Query[T with U]] =
+    new QueryMacros[c.type](c).extendTypedOrReplaceValue[T, U](value)(extensionOrReplaceType, pos)
 
   def on[L: c.WeakTypeTag, R: c.WeakTypeTag](c: Context)(f: c.Expr[(L, R) => Boolean]): c.Expr[JoinQuery[L, R]] =
     new QueryMacros[c.type](c).on[L, R](f)

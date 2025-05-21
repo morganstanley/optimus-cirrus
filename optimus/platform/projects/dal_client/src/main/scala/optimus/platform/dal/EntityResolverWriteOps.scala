@@ -36,5 +36,6 @@ trait EntityResolverWriteOps {
   def obliterateEventClass[B <: BusinessEvent: Manifest](): Unit
   def obliterateEvent(key: Key[_]): Unit
   def obliterateEvent(ref: BusinessEventReference): Unit
+  def obliterateEvents(refs: Seq[BusinessEventReference], classNameOpt: Option[String] = None): Unit
   def obliterateEventForClass(ref: BusinessEventReference, className: String): Unit
 }

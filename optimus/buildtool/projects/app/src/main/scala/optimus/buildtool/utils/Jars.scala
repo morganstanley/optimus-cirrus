@@ -11,6 +11,9 @@
  */
 package optimus.buildtool.utils
 
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToStream
+
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.nio.file.Files
@@ -29,6 +32,7 @@ import optimus.buildtool.artifacts.CompilationMessage
 import optimus.buildtool.artifacts.MessagesMetadata
 import optimus.buildtool.config.JarConfiguration
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.JarAsset
 import optimus.buildtool.files.Pathed
 import optimus.buildtool.files.RelativePath
@@ -39,7 +43,6 @@ import optimus.buildtool.utils.JarUtils.nme
 import optimus.platform._
 import optimus.platform.metadatas.internal.MetaDataFiles
 import sbt.internal.inc.zip.ZipCentralDir
-import spray.json.JsonFormat
 
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
@@ -356,6 +359,16 @@ object Jars {
     }
   }
 
+  def filteredJar(sourceJar: JarAsset, targetJar: JarAsset)(filter: FileAsset => Boolean): Unit = {
+    Using.resource(new UnhashedJarOutputStream(targetJar, None, compressed = true)) { out =>
+      Using.resource(JarUtils.jarFileSystem(sourceJar)) { inFs =>
+        Directory.findFiles(Directory.root(inFs)).foreach { file =>
+          if (filter(file)) out.copyInFile(file.path, RelativePath(file.path.toString.stripPrefix("/")))
+        }
+      }
+    }
+  }
+
   private def fastMergeJarContent(
       sourceJars: Seq[JarAsset],
       targetJar: JarAsset,
@@ -573,9 +586,8 @@ object Jars {
         case (v, null) => combined.getMainAttributes.put(k, v)
         case (null, v) => combined.getMainAttributes.put(k, v)
         case (v1, v2) =>
-          if (v1 == v2) combined.getMainAttributes.put(k, v1)
-          else
-            throw new MismatchedManifestException(k, Seq(one, two), Seq(v1, v2))
+          if (v1 == v2) combined.getMainAttributes.put(k, v2)
+          else throw new MismatchedManifestException(k, Seq(one, two), Seq(v1, v2))
       }
     }
     combined
@@ -640,12 +652,12 @@ object Jars {
       hasErrors: Boolean,
       contentRoot: Option[Directory]
   ): Seq[CompilationMessage] = {
-    import optimus.buildtool.artifacts.JsonImplicits._
+    import optimus.buildtool.artifacts.JsonImplicits.messagesMetadataValueCodec
     createJar(jar, MessagesMetadata(messages, hasErrors), contentRoot)()
     messages
   }
 
-  private[buildtool] def createJar[A <: CachedMetadata: JsonFormat](
+  private[buildtool] def createJar[A <: CachedMetadata: JsonValueCodec](
       jar: JarAsset,
       metadata: A,
       contentRoot: Option[Directory] = None
@@ -653,9 +665,7 @@ object Jars {
     // we don't incrementally rewrite these jars, so might as well compress them and save the disk space
     val tempJarStream = new ConsistentlyHashedJarOutputStream(jar, None, compressed = true)
     try {
-      AssetUtils.withTempJson(metadata) {
-        tempJarStream.writeFile(_, CachedMetadata.MetadataFile)
-      }
+      tempJarStream.writeInFile(writeToStream(metadata, _), CachedMetadata.MetadataFile)
       // It is required that any @nodes calling this are RT in terms of the files that they write to tempDir, so it's
       // safe to call findFilesUnsafe here
       contentRoot.foreach(c =>

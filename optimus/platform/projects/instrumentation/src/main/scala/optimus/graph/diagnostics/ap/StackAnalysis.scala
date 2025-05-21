@@ -17,12 +17,10 @@ import com.google.common.hash.Hashing
 import optimus.breadcrumbs.ChainedID
 import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.Elems
-import optimus.breadcrumbs.crumbs.Properties.Key
 import optimus.graph.AwaitStackManagement
 import optimus.graph.DiagnosticSettings
-import optimus.graph.diagnostics.ap.CrumbStackExtractor.Sample
+import optimus.graph.diagnostics.ap.StackType._
 import optimus.graph.diagnostics.sampling.AsyncProfilerSampler
-import optimus.graph.diagnostics.sampling.FlameTreatment
 import optimus.graph.diagnostics.sampling.NullSampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SampleCrumbConsumer
 import optimus.graph.diagnostics.sampling.SamplingProfiler
@@ -47,10 +45,37 @@ import java.nio.ByteBuffer
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.immutable
+
+object StackType {
+  val Alloc = "Alloc"
+  val AllocNative = "AllocNative"
+  val CacheHit = "CacheHit"
+  val Cpu = "Cpu"
+  val Live = "Live"
+  val LiveNative = "LiveNative"
+  val Free = "Free"
+  val FreeNative = "FreeNative"
+  val RevCpu = "RevCpu"
+  val RevAlloc = "RevAlloc"
+  val RevAllocNative = "RevAllocNative"
+  val RevCacheHit = "RevCacheHit"
+  val RevLive = "RevLive"
+  val RevLiveNative = "RevLiveNative"
+  val RevFree = "RevFree"
+  val RevFreeNative = "RevFreeNative"
+  val Adapted_DAL = "Adapted_DAL"
+  val RevAdapted_DAL = "RevAdapted_DAL"
+  val Lock = "Lock"
+  val RevLock = "RevLock"
+  val Wait = "Wait"
+  val RevWait = "RevWait"
+  val Unfired_DAL = "Unfired_DAL"
+  val RevUnfired_DAL = "RevUnfired_DAL"
+  val FullWait_NS_None = "FullWait.NS.None"
+  val RevFullWait_NS_None = "RevFullWait.NS.None"
+}
 
 object StackAnalysis {
-
   val AppName = "App"
   val TotalName = "total"
   val GCName = "GC"
@@ -667,7 +692,7 @@ object StackAnalysis {
     }
 
     def traverse(f: StackNode => Unit): Unit = {
-      @tailrec def traverseImpl(stack: mutable.ArrayStack[StackNode], f: StackNode => Unit): Unit = {
+      @tailrec def traverseImpl(stack: mutable.Stack[StackNode], f: StackNode => Unit): Unit = {
         if (stack.isEmpty) return
         val n = stack.pop()
         f(n)
@@ -680,20 +705,12 @@ object StackAnalysis {
         }
         traverseImpl(stack, f)
       }
-      traverseImpl(mutable.ArrayStack(this), f)
+      traverseImpl(mutable.Stack(this), f)
     }
 
     def backupLinks(): Unit = traverse { sn => sn.backup() }
 
     def restoreLinks(): Unit = traverse { sn => sn.restore() }
-
-    def toFlameGraphRow: Seq[NestedSetModelRow] = {
-      val seqb = Seq.newBuilder[NestedSetModelRow]
-      traverse { sn =>
-        seqb += NestedSetModelRow(sn.name, sn.depth, sn.total, sn.self)
-      }
-      seqb.result()
-    }
 
     def treeString: String = {
       val sb = ArrayBuffer.empty[String]
@@ -782,10 +799,6 @@ object StackAnalysis {
     prefix + (if (i > 0) b64.substring(0, i) else b64)
   }
 
-}
-
-final case class NestedSetModelRow(label: String, level: Int, value: Long, self: Long, stackFrames: Seq[String] = Nil) {
-  override def toString: String = s"$label, $level, $value $self"
 }
 
 class StackAnalysis(
@@ -925,13 +938,13 @@ class StackAnalysis(
     val unmemoize = new Unmemoizer()
     val stackTypeToRoot = mutable.HashMap.empty[String, StackNode]
     val execRoot = rootStackNode("root")
-    stackTypeToRoot += "cpu" -> execRoot
+    stackTypeToRoot += Cpu -> execRoot
     // Combine everything that looks like GC or JIT, so we don't fill up splunk with these stacks.
     val gc = execRoot.getOrCreateChildNode(cleanName(GCName))
     val compiler = execRoot.getOrCreateChildNode(cleanName(CompilerName))
     val javaRoot = execRoot.getOrCreateChildNode(cleanName(AppName))
-    stackTypeToRoot += "Free" -> cleanName("Free", CleanName.FREE).rootNode
-    stackTypeToRoot += "FreeNative" -> cleanName("FreeNative", CleanName.FREE).rootNode
+    stackTypeToRoot += Free -> cleanName(Free, CleanName.FREE).rootNode
+    stackTypeToRoot += FreeNative -> cleanName(FreeNative, CleanName.FREE).rootNode
 
     val rec = SampledTimersExtractor.newRecording
 
@@ -1055,6 +1068,7 @@ class StackAnalysis(
           if (sn.self > 0)
             leafQueue.enqueue(sn)
         }
+
         // Pluck off leaves one by one.  If the parent newly has self-time, it will need to be enqueued
         while (leafQueue.size > n) {
           val leaf = leafQueue.dequeue()
@@ -1106,8 +1120,8 @@ class StackAnalysis(
     def elem: (String, StackNode) = name -> root
   }
 
-  private val heapTracking = new LiveTracking("Live")
-  private val nativeTracking = new LiveTracking("LiveNative")
+  private val heapTracking = new LiveTracking(Live)
+  private val nativeTracking = new LiveTracking(LiveNative)
 
   private[diagnostics] def resetLiveTestingOnly(): Unit = {
     heapTracking.resetLiveForTestingOnly()
@@ -1211,6 +1225,47 @@ class StackAnalysis(
     case PruningStrategy.`leavesHaveSelfTime`   => (sn: StackNode) => sn.self > 0
   }
 
+  private[diagnostics] def reverseTree(oldCurrNode: StackNode, name: String): StackNode = {
+    @tailrec
+    def reversing(nodesToProcess: List[(StackNode, StackNode)]): Unit = {
+      if (nodesToProcess.isEmpty) {
+        return
+      }
+
+      val (currentOldNode, currentNewNode) = nodesToProcess.head
+      val remainingNodes = nodesToProcess.tail
+
+      if (currentOldNode.self > 0L) {
+        var oldN = currentOldNode
+        var newN = currentNewNode
+
+        do {
+          newN = newN.getOrCreateChildNode(oldN.cn)
+          oldN = oldN.parent
+        } while (oldN.parent ne null)
+        newN.add(currentOldNode.self)
+      }
+
+      val childNodesToProcess = currentOldNode.kiderator.map(kid => (kid, currentNewNode)).toList
+      reversing(childNodesToProcess ++ remainingNodes)
+    }
+
+    val newRoot = rootStackNode(name)
+    reversing(List((oldCurrNode, newRoot)))
+    newRoot
+  }
+
+  private[diagnostics] def addReversed(
+      typeName: String,
+      roots: Map[String, StackNode],
+      newName: String): Option[StackNode] = {
+    roots
+      .get(typeName)
+      .map({ oldRoot =>
+        reverseTree(oldRoot, newName)
+      })
+  }
+
   /**
    * Reduce a list of stack samples to a manageable set by pruning inner frames and then combining the now shorter
    * stacks.
@@ -1228,18 +1283,42 @@ class StackAnalysis(
 
       // Update live view
       if (trackLiveMemory) {
-        roots0.get("Alloc").foreach(mergeAllocationsIntoLive(heapTracking, _))
-        roots0.get("AllocNative").foreach(mergeAllocationsIntoLive(nativeTracking, _))
-        roots0.get("Free").foreach(mergeFreesIntoLive(heapTracking, _))
-        roots0.get("FreeNative").foreach(mergeFreesIntoLive(nativeTracking, _))
+        roots0.get(Alloc).foreach(mergeAllocationsIntoLive(heapTracking, _))
+        roots0.get(AllocNative).foreach(mergeAllocationsIntoLive(nativeTracking, _))
+        roots0.get(Free).foreach(mergeFreesIntoLive(heapTracking, _))
+        roots0.get(FreeNative).foreach(mergeFreesIntoLive(nativeTracking, _))
         cleanLive(heapTracking)
         cleanLive(nativeTracking)
         heapTracking.backup()
         nativeTracking.backup()
       }
 
+      // Adapted_DAL, Lock, Wait, Unfired_DAL, FullWait.NS.None,
+
       // Add live view to roots, and remove Free stub
-      val roots = roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - "Free" - "FreeNative")
+      val roots = {
+        val withLiveMemory =
+          roots0.applyIf(trackLiveMemory)(_ + heapTracking.elem + nativeTracking.elem - Free - FreeNative)
+        val revCpu = addReversed(Cpu, roots0, RevCpu).fold(withLiveMemory)(r => withLiveMemory + (RevCpu -> r))
+        val revAlloc = addReversed(Alloc, roots0, RevAlloc).fold(revCpu)(r => revCpu + (RevAlloc -> r))
+        val revAllocNative =
+          addReversed(AllocNative, roots0, RevAllocNative).fold(revAlloc)(r => revAlloc + (RevAllocNative -> r))
+        val revFree = addReversed(Free, roots0, RevFree).fold(revAllocNative)(r => revAllocNative + (RevFree -> r))
+        val revFreeNative =
+          addReversed(FreeNative, roots0, RevFreeNative).fold(revFree)(r => revFree + (RevFreeNative -> r))
+        val revAdapted_DAL =
+          addReversed(Adapted_DAL, roots0, RevAdapted_DAL).fold(revFreeNative)(r => revFree + (RevAdapted_DAL -> r))
+        val revLock =
+          addReversed(Lock, roots0, RevLock).fold(revFreeNative)(r => revAdapted_DAL + (RevLock -> r))
+        val revWait =
+          addReversed(Wait, roots0, RevWait).fold(revFreeNative)(r => revLock + (RevWait -> r))
+        val revUnfired_DAL =
+          addReversed(Unfired_DAL, roots0, RevUnfired_DAL).fold(revFreeNative)(r => revWait + (RevUnfired_DAL -> r))
+        val revFullWait =
+          addReversed(FullWait_NS_None, roots0, RevFullWait_NS_None).fold(revFreeNative)(r =>
+            revUnfired_DAL + (RevFullWait_NS_None -> r))
+        revFullWait
+      }
       if (DiagnosticSettings.samplingAsserts) roots.valuesIterator.foreach(assertTreesAreConsistent)
 
       // Post process trees, prune leaves etc

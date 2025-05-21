@@ -30,6 +30,7 @@ import optimus.platform.storable.Storable
 
 import java.util
 import java.util.concurrent.atomic.AtomicBoolean
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -254,7 +255,7 @@ class SerializedKeyBasedIndexOptimizer(mapping: QueryMapping) extends DbQueryTre
           }
 
           if (condBufChanged) {
-            val newWhere = BinaryExpressionElement.balancedAnd(condBuf.filter(_ != null).map {
+            val newWhere = BinaryExpressionElement.balancedAnd(condBuf.iterator.filter(_ != null).map {
               case contains: ContainsElement =>
                 (contains.element, contains.values) match {
                   // write back
@@ -265,7 +266,7 @@ class SerializedKeyBasedIndexOptimizer(mapping: QueryMapping) extends DbQueryTre
                   case _ => contains
                 }
               case e => e
-            })
+            }.to(ArraySeq))
             updateSelect(
               select,
               select.from,
@@ -303,9 +304,11 @@ object SerializedKeyBasedIndexOptimizer {
   }
 
   def optimize(e: RelationElement, mapping: QueryMapping): RelationElement = {
-    if (enableSerializedKeyBasedFilterForTest || serverSupportSerializedKeyBasedFilter)
-      new SerializedKeyBasedIndexOptimizer(mapping).visitElement(e)
-    else e
+    if (enableSerializedKeyBasedFilterForTest || serverSupportSerializedKeyBasedFilter) {
+      val select = PredicatePushdownOptimizer.optimize(e)
+      new SerializedKeyBasedIndexOptimizer(mapping).visitElement(select)
+
+    } else e
   }
 
   private def seqToTuple(s: Seq[Any]): Any = {

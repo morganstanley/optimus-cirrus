@@ -37,6 +37,9 @@ abstract class AbstractMultiplexedDsiProxy extends ClientSideDSI {
   protected val pubSubOpt: Option[ClientSideDSI] = None
   protected val messagesOpt: Option[ClientSideDSI] = None
 
+  private[optimus] def getDSIClient: DSIClient =
+    replicaOpt.map(_.getDSIClient).getOrElse(throw new IllegalStateException("No DSIClient available"))
+
   override def close(shutdown: Boolean): Unit = {
     leadWriter.close(shutdown)
     replicaOpt.foreach(_.close(shutdown))
@@ -109,21 +112,20 @@ final class MultiRemoteDsiProxy(
       partitionMap,
       secureTransport
     )
-  private[optimus] val replica =
-    new MultiReadBrokersDSIProxy(
-      baseContext: Context,
-      brokerProviderResolver,
-      replicaBroker,
-      partitionMap,
-      zone,
-      appId,
-      cmdLimit,
-      asyncConfig,
-      env,
-      shouldLoadBalance,
-      secureTransport,
-      maxBrokersAllowedForConnectionFromURI
-    )
+  private[optimus] val replica: ClientSideDSI = ReadBrokerDSIProxy(
+    baseContext: Context,
+    brokerProviderResolver,
+    replicaBroker,
+    partitionMap,
+    zone,
+    appId,
+    cmdLimit,
+    asyncConfig,
+    env,
+    shouldLoadBalance,
+    secureTransport,
+    maxBrokersAllowedForConnectionFromURI
+  )
 
   override protected def replicaOpt: Option[ClientSideDSI] = Some(replica)
 
@@ -262,6 +264,7 @@ final class MultiAwsRemoteDsiProxy(
   private[optimus] val replica =
     new AwsDsiProxy(ClientBrokerContext(baseContext, replicaBroker, zone, appId, cmdLimit, asyncConfig, None), false)
 
+  private[optimus] override def getDSIClient: DSIClient = replica.getDSIClient
   override def sessionData: SessionData = replica.sessionCtx.sessionData
 
   override def close(shutdown: Boolean): Unit = {

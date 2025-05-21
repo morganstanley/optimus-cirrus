@@ -35,7 +35,7 @@ import optimus.breadcrumbs.crumbs.Properties
 import optimus.breadcrumbs.crumbs.Properties.JsonImplicits._
 import org.slf4j.LoggerFactory
 import spray.json.JsValue
-import optimus.utils.Args4JOptionHandlers.StringHandler
+import optimus.utils.app.StringOptionOptionHandler
 import org.kohsuke.args4j.CmdLineException
 import org.kohsuke.args4j.CmdLineParser
 import org.slf4j.Logger
@@ -56,7 +56,7 @@ class CrumbMergerArgs {
   @ArgOption(name = "--progress")
   var progress = 0L
 
-  @ArgOption(name = "--input", handler = classOf[StringHandler])
+  @ArgOption(name = "--input", handler = classOf[StringOptionOptionHandler])
   var name: Option[String] = None
 
   @ArgOption(name = "--gzip")

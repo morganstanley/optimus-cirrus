@@ -655,6 +655,10 @@ public class Settings {
   public static final boolean reportEveryFullWait =
       getBoolProperty("optimus.graph.reportEveryFullWait", false);
 
+  // When true, re-entrance into a throttle block becomes an exception.
+  public static final boolean failOnRecursiveThrottle =
+      getBoolProperty("optimus.graph.failOnRecursiveThrottle", false);
+
   /**
    * We can evaluate initial time in three different ways:
    * <li>"eager" -- request it now and wait for it
@@ -666,6 +670,44 @@ public class Settings {
   @SuppressWarnings("JavadocReference")
   public static final String initialTimeResolutionMode =
       getStringProperty("optimus.initial.time.resolution", "eager");
+
+  /** Turn on additional runtime check for optimus channels. */
+  public static final boolean channelAsserts = getBoolProperty("optimus.channels.asserts", false);
+  /**
+   * Controls whether values in the pickled representation of instances are interned. The interning
+   * is based on statistics per shape, per field (of the pickled format). To turn off interning
+   * completely, set it to a negative value
+   */
+  public static final double hitRatioForInterning =
+      getDoubleProperty("optimus.pickling.hitRatioForInterning", 0.2);
+
+  /**
+   * Controls the size of collections for which we want to generate and use SlottedBuffers for
+   * pickled representations of instances. SlottedBuffers are good for small collections with mixed
+   * members including primitive types as we are able to avoid boxing them at the item level, rather
+   * than putting them in Object arrays.
+   */
+  public static final int slottedBufferForSeqThreshold =
+      getIntProperty("optimus.pickling.slottedBufferForSeqThreshold", 10);
+
+  /**
+   * Controls the number of unique Shapes we want to generate slotted buffers for to hold the
+   * unpickled representation of small collections (called SlottedBufferAsSeq). The number of
+   * SlottedBufferAsSeq instances is limited by the total number of unique shapes including those
+   * that are for embeddables and entities (SlottedBufferAsMap). At the point where this threshold
+   * is reached, we will allow creation of new SlottedBufferAsMap classes but no new
+   * SlottedBufferAsSeq class will be generated and we'll fall back to using ArraySeq (as we do for
+   * large collections)
+   */
+  public static final int uniqueShapeThreshold =
+      getIntProperty("optimus.pickling.uniqueShapeThreshold", 2000);
+
+  /** */
+  public static final int interningObservationThreshold =
+      getIntProperty("optimus.pickling.interningObservationThreshold", 100);
+
+  public static final boolean profileInterningStats =
+      getBoolProperty("optimus.pickling.profileStats", false);
 
   private static String entityPluginPathFromLibPath(String libPath) {
     return pluginPathFromLibPath(libPath, "entityplugin");

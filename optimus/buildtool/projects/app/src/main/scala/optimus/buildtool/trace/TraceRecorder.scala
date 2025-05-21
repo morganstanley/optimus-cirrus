@@ -11,21 +11,20 @@
  */
 package optimus.buildtool.trace
 
+import com.github.plokhotnyuk.jsoniter_scala.core._
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+
 import java.nio.file.Files
 import java.time.Instant
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.buildtool.config.ScopeId
 import optimus.buildtool.files.Directory
-import spray.json.DefaultJsonProtocol._
-import spray.json._
+import optimus.buildtool.utils.AssetUtils
 
 import scala.collection.mutable.ArrayBuffer
 
 private[buildtool] object TraceRecorder {
   private val log = getLogger(this.getClass)
-
-  type TimeStamp = Long
-  type DurationSec = Double
 
   private def toEpocMicro(i: Instant): Long =
     (i.getEpochSecond * 1000000L) + (i.getNano / 1000L)
@@ -75,19 +74,21 @@ private[buildtool] object TraceRecorder {
     override def toString: String = s"TraceRecorderTask($scopeId, $category)"
   }
 
-  implicit object CategoryJsonFormat extends RootJsonFormat[CategoryTrace] {
-    override def write(obj: CategoryTrace): JsValue = obj.toString.toLowerCase.toJson
-    override def read(json: JsValue): CategoryTrace = json match {
-      case JsString(x) if x == Queue.toString.toLowerCase      => Queue
-      case JsString(x) if x == Signatures.toString.toLowerCase => Signatures
-      case JsString(x) if x == Outline.toString.toLowerCase    => Outline
-      case JsString(x) if x == Scala.toString.toLowerCase      => Scala
-      case JsString(x) if x == Java.toString.toLowerCase       => Java
-      case _ => throw new MatchError(s"${json.compactPrint} doesn't match any defined category traces")
+  implicit val CategoryJsonValueCodec: JsonValueCodec[CategoryTrace] = new JsonValueCodec[CategoryTrace] {
+    override def decodeValue(in: JsonReader, default: CategoryTrace): CategoryTrace = in.readString(null) match {
+      case x if x == Queue.name      => Queue
+      case x if x == Signatures.name => Signatures
+      case x if x == Outline.name    => Outline
+      case x if x == Scala.name      => Scala
+      case x if x == Java.name       => Java
+      case x                         => throw new MatchError(s"$x doesn't match any defined category traces")
     }
+
+    override def encodeValue(x: CategoryTrace, out: JsonWriter): Unit = out.writeVal(x.name)
+    override def nullValue: CategoryTrace = null
   }
 
-  implicit val TraceResultJsonFormat: RootJsonFormat[TraceResult] = jsonFormat4(TraceResult.apply)
+  implicit val traceResultJsonValueCodec: JsonValueCodec[List[TraceResult]] = JsonCodecMaker.make
 
 }
 
@@ -125,8 +126,7 @@ class TraceRecorder(traceFilePrefixOpt: Option[Directory] = None) extends Defaul
     writeTraces(result.map(_.toPrettyString(false)), traceFilePrefix, "traceByName")
     traceFilePrefix.path.toFile.mkdirs()
     val file = traceFilePrefix.resolveFile(s"traces-${System.currentTimeMillis()}.json").asJson
-    val json = result.map(_.result).toJson
-    Files.write(file.path, json.toString.getBytes)
+    AssetUtils.storeJsonAtomically(file, result.map(_.result), replaceIfExists = true, zip = false)
     log.info(s"Wrote trace durations to $file")
   }
 

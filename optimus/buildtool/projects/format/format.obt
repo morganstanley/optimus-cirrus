@@ -18,11 +18,11 @@ main {
 
     libs = [
       ossjava.args4j,
+      ossjava.jackson2.module-scala,
       ossjava.jgit,
       ossjava.jib-core,
       ossjava.typesafeconfig,
       ossjava.zstd-jni,
-      ossscala.jackson-module-scala,
       ossscala.scala,
       ossscala.spray-json
     ]

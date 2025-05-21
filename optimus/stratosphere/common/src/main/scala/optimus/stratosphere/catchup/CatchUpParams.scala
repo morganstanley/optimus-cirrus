@@ -17,8 +17,7 @@ final case class CatchUpParams(
     remoteName: String,
     branchToUse: String,
     isMerge: Boolean = false,
-    scalaMajorVersion: Option[String] = None,
-    gitRef: String = "FETCH_HEAD"
+    useLatestCommit: Boolean = false
 )
 
 object CatchUpParams {

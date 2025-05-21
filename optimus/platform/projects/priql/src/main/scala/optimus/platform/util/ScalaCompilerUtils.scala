@@ -63,7 +63,7 @@ object ScalaCompilerUtils {
   // then the initialization will be retried on next access (c.f. a non lazy val, which would cause this object
   // to fail to initialize completely)
   private lazy val toolboxMgr = new ScalaToolboxManager
-  lazy val compiler = new RuntimeScalaCompiler
+  lazy val compiler = new RuntimeScalaCompiler(entityJars, Seq("entity"))
 
   val isURLClassLoader: Boolean = {
     getClass().getClassLoader() match {
@@ -129,11 +129,6 @@ object ScalaCompilerUtils {
   def compilerEval[T](str: String) = {
     val cls = compiler.compile(str)
     cls.getConstructor().newInstance().asInstanceOf[() => Any].apply().asInstanceOf[T]
-  }
-
-  def compileEntityFactory(str: String, entityName: String): () => Any = {
-    val cls = compiler.compileEntity(str, entityName)
-    cls.getConstructor().newInstance().asInstanceOf[() => Any]
   }
 
   lazy val entityJarSeq: Seq[String] = {
@@ -215,20 +210,12 @@ object ScalaCompilerUtils {
     // version of the plugin nearby...
     log.info(s"Unable to find $name on classpath. Trying to resolve from ide_build_intellij instead...")
 
-    classPathSeq.iterator
+    RuntimeScalaCompiler.classPathSeq.iterator
       .map(_.toString)
       .find(p => p.contains(name) && p.contains("classes"))
-      .getOrElse(throw new RuntimeException(s"Unable to resolve $name from classpath: $classpath"))
+      .getOrElse(
+        throw new RuntimeException(s"Unable to resolve $name from classpath: ${RuntimeScalaCompiler.classpath}"))
   }
-
-  lazy val unexpandedClassPath: Seq[Path] = ClassPathUtils.readClasspathEntries(this.getClass.getClassLoader)
-
-  lazy val classPathSeq: Seq[Path] = ClassPathUtils.expandClasspath(unexpandedClassPath)
-
-  lazy val classpath: String =
-    classPathSeq.mkString(File.pathSeparator)
-
-  private val mirror = RuntimeMirror.forClass(getClass)
 
   private val primitiveMapping = Map[Class[_], String](
     JavaBoolean.TYPE -> "Boolean",
@@ -243,159 +230,6 @@ object ScalaCompilerUtils {
   ) // Any gets compiled down to Object in the class definitions, so we need to convert back to this wider type
 
   def isPrimitive(clazz: Class[_]) = primitiveMapping.contains(clazz)
-
-  // these can be much faster than Scala's ## method
-  private val intHasher = (f: String) => s"acc = acc * 37 + $f"
-  private val hashers = Map[String, String => String](
-    "Boolean" -> (f => s"if ($f) acc += acc * 37 + 41"),
-    "Char" -> intHasher,
-    "Byte" -> intHasher,
-    "Short" -> intHasher,
-    "Int" -> intHasher,
-    "Long" -> (f => s"acc = acc * 37 + ($f ^ ($f >>> 32)).asInstanceOf[Int]"),
-    "Float" -> (f =>
-      s"acc = acc * 37 + java.lang.Float.floatToIntBits($f)"), // need full name qualifier since it is used by scala compiler
-    "Double" -> (f =>
-      s"{ val bits = java.lang.Double.doubleToLongBits($f);  acc = acc * 37 + (bits ^ (bits >>> 32)).asInstanceOf[Int] }")
-  ).withDefaultValue((f: String) => s"if (null != $f) acc += acc * 37 + $f.hashCode")
-
-  def genHashCode(fieldsToTypes: Traversable[(String, String)]): String = {
-    val updates = fieldsToTypes.map { case (f, t) => ScalaCompilerUtils.hashers(t)(f) }.mkString(";\n")
-    s"override def hashCode = {\nvar acc = 37;\n$updates;\nacc }"
-  }
-
-  def genCompareTo(propertyMap: Map[String, TypeInfo[_]]): String = {
-    val header = "override def compareTo(other: KeyImpl): Int = {\n"
-    var body: String = ""
-    val commonPart =
-      "if(_keyImpl_row == null && other._keyImpl_row == null) return 0 \n if(_keyImpl_row == null) return -1 \n if(other._keyImpl_row == null) return 1 \n"
-    propertyMap.foreach { case (field, fType) =>
-      if (!classOf[Object].isAssignableFrom(fType.concreteClass.get) && isPrimitive(fType.concreteClass.get))
-        body = s"${body}if(this.$field > other.$field) return 1 else if(this.$field < other.$field) return -1 \n"
-      // Use fully qualified name in the string for code compilation
-      else
-        // generated code we should use full qualifying name otherwise we may end up with class with same name
-        body =
-          s"${body}val c$field = optimus.platform.RelationKey.compareTwoValues(this.$field, other.$field) \n if(c$field != 0) return c$field \n"
-    }
-    body = s"${body}return 0 \n }\n"
-    s"${header}${commonPart}${body}"
-  }
-
-  /**
-   * generates an equals method which checks that the class matches the expected type and compares all of the specified
-   * properties with ==
-   */
-  def genEquals(className: String, properties: Traversable[String]): String = {
-    val equalsHeader = s"""override def equals(other: Any): Boolean =
-          null != other && other.getClass == this.getClass"""
-
-    val equalsBody =
-      if (properties.isEmpty) ""
-      else {
-        val checks = properties.map(p => s"($p == o.$p)").mkString("&&")
-        s" && { val o = other.asInstanceOf[$className];\n$checks\n}\n"
-      }
-
-    s"${equalsHeader}${equalsBody}"
-  }
-
-  /**
-   * gets a fully qualified type name which can be used for type ascription. understands about inner classes of modules
-   * etc., and also inserts wildcards for any type parameters
-   */
-  def fullTypeName(sym: Symbol, isChild: Boolean = true): String = {
-
-    def asType(sym: Symbol) =
-      if (isChild && (sym.isModuleClass || sym.isModule))
-        s"${sym.name}.type"
-      else sym.name
-
-    val tpName = sym match {
-      // if it's an abstract type, take the upper bound, or _ if none
-      case aSym: TypeSymbol if aSym.isAbstract && !aSym.isClass =>
-        aSym.typeSignature match {
-          case bounds: TypeBounds => s"_ <: ${fullTypeName(bounds.hi.typeSymbol)}"
-          case _                  => "_"
-        }
-      // if it's a concrete type, we need different behaviour depending on the parent type (because that drives which
-      // separator character we need (e.g. '.' vs '#')
-      case _ =>
-        sym.owner match {
-          case NoSymbol => ""
-          case pSym: ClassSymbol if pSym.name == typeNames.PACKAGE =>
-            s"${fullTypeName(pSym.owner, false)}.${asType(sym)}" // skip over package objects
-          case pSym: ClassSymbol if pSym.name.toString == "<root>" =>
-            s"_root_.${asType(sym)}"
-          case pSym: ClassSymbol if pSym.isPackage =>
-            s"${fullTypeName(pSym, false)}.${asType(sym)}"
-          case mSym: ModuleSymbol =>
-            s"${fullTypeName(mSym, false)}.${asType(sym)}"
-          case mSym: ClassSymbol if mSym.isModuleClass =>
-            s"${fullTypeName(mSym, false)}.${asType(sym)}"
-          case cSym: ClassSymbol if cSym.isClass =>
-            s"${fullTypeName(cSym, false)}#${asType(sym)}"
-        }
-    }
-    // add in type params if required
-    if (sym.isClass && !sym.asClass.typeParams.isEmpty)
-      s"${tpName}${sym.asClass.typeParams.map(fullTypeName(_)).mkString("[", ",", "]")}"
-    else tpName
-  }
-
-  def fullTypeOrPrimitiveName(clazz: Class[_]): String =
-    ScalaCompilerUtils.primitiveMapping.getOrElse(clazz, fullTypeName(mirror.classSymbol(clazz)))
-
-  def fullTypeOrPrimitiveName(tpe: AsmType): String = {
-    val cls = tpe.getSort match {
-      case AsmBoolean => JavaBoolean.TYPE
-      case AsmChar    => JavaCharacter.TYPE
-      case AsmByte    => JavaByte.TYPE
-      case AsmShort   => JavaShort.TYPE
-      case AsmInt     => JavaInteger.TYPE
-      case AsmFloat   => JavaFloat.TYPE
-      case AsmLong    => JavaLong.TYPE
-      case AsmDouble  => JavaDouble.TYPE
-      case AsmObject  => Class.forName(tpe.getClassName)
-    }
-    fullTypeOrPrimitiveName(cls)
-  }
-
-  def structuralTypeDescriptor(s: TypeInfo[_]): Option[String] = {
-    if (s.pureStructuralMethods.isEmpty) None
-    else {
-      Some(
-        "{ " + s.pureStructuralMethods
-          .map(m => s"def ${m.getName}: ${fullTypeOrPrimitiveName(m.getReturnType)}")
-          .mkString("; ") + " }")
-    }
-  }
-
-  def intersectionTypeName(syms: Iterable[Symbol]): String = {
-    syms.map(fullTypeName(_)).mkString(" with ")
-  }
-
-  def intersectionAndStructuralTypeName(syms: Iterable[Symbol], structuralSignature: Option[String]): String = {
-    s"${syms.map(fullTypeName(_)).mkString(" with ")} ${structuralSignature.mkString("")}"
-  }
-
-  def figureOutPropertyType(fieldName: String, implClasses: Seq[Class[_]], s: TypeInfo[_]): String = {
-    // find the first candidate method...
-    val possibleMethods = implClasses.view.flatMap(c =>
-      c.getMethods.view.filter(m => m.getName == fieldName && m.getParameterTypes.length == 0))
-    val returnType = possibleMethods.headOption.map(_.getReturnType)
-
-    // figure out the best representation of the method return type
-    returnType.map(r => fullTypeOrPrimitiveName(r)).getOrElse {
-      // no match, so check the structural sigs
-      // If no return type found, so let's play it safe and use "Any"
-      s.pureStructuralMethods
-        .filter(_.getName == fieldName)
-        .headOption
-        .map(sm => fullTypeOrPrimitiveName(sm.getReturnType))
-        .getOrElse("Any")
-    }
-  }
 
   // Returns true if any right type visible constructor arguments mask left type val/defs.
   def rightMasksLeft(right: TypeInfo[_], left: TypeInfo[_]): (Boolean, Seq[String]) = {

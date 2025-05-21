@@ -44,6 +44,7 @@ import optimus.profiler.ui.common.JPopupMenu2
 import java.awt.event.KeyAdapter
 import java.awt.event.KeyEvent
 import javax.swing.table.TableRowSorter
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ArrayBuffer
 import scala.util.matching.Regex
 
@@ -376,20 +377,21 @@ abstract class NPTable[RType] extends JPanel with Log {
     }
   }
 
-  def getSelections: ArrayBuffer[RType] = {
+  def getSelections: ArraySeq[RType] = {
     val srows = dataTable.getSelectedRows
     var i = 0
     while (i < srows.length) {
       srows(i) = dataTable.convertRowIndexToModel(srows(i))
       i += 1
     }
-    val r = new ArrayBuffer[RType](srows.length)
+    val r = ArraySeq.untagged.newBuilder[RType]
+    r.sizeHint(srows.length)
     i = 0
     while (i < srows.length) {
       r += rows(srows(i))
       i += 1
     }
-    r
+    r.result()
   }
 
   /** Update prototype and create a default view from prototypes */

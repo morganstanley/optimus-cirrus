@@ -31,11 +31,13 @@ private[optimus] object GraphEvents {
   private def getEnv: String = {
     // we're being very defensive about possible nulls here because this code is
     // sometimes called when the environment is in weird states
-    try {
-      EvaluationContext.env.config.runtimeConfig.env
-    } catch {
-      case _: Throwable => "N/A"
-    }
+    if (!EvaluationContext.isInitialised) "N/A"
+    else
+      try {
+        EvaluationContext.env.config.runtimeConfig.env
+      } catch {
+        case _: Throwable => "N/A"
+      }
   }
   private val maxStalledRequests = Settings.detectStallMaxRequests
 

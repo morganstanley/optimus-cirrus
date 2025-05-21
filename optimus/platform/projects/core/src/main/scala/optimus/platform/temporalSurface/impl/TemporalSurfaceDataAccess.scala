@@ -24,10 +24,10 @@ import optimus.platform.temporalSurface.operations.EntityReferenceQueryReason
 trait TemporalSurfaceDataAccess {
   @nodeSync def getItemKeys(
       operation: TemporalSurfaceQuery,
-      sourceTemporalitySurface: LeafTemporalSurface): collection.Seq[operation.ItemKey]
+      sourceTemporalitySurface: LeafTemporalSurface): Seq[operation.ItemKey]
   def getItemKeys$queued(
       operation: TemporalSurfaceQuery,
-      sourceTemporalitySurface: LeafTemporalSurface): NodeFuture[collection.Seq[operation.ItemKey]]
+      sourceTemporalitySurface: LeafTemporalSurface): NodeFuture[Seq[operation.ItemKey]]
 
   @nodeSync def getItemData(
       operation: TemporalSurfaceQuery,

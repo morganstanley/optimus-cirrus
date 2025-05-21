@@ -252,6 +252,17 @@ class OGEventsNewHotspotsObserver private[trace] extends OGEventsGlobalGraphObse
     lt.release()
   }
 
+  override def lookupAdjustCacheStats(nti: NodeTaskInfo, hit: Boolean, startTime: Long): Unit = {
+    val lt = LT.getOrAcquire()
+    val ctx = lt.ctx
+    trace.ensureProfileRecorded(nti.profile, nti)
+    val pnti = ctx.getPNTI(nti.profile, OGTrace.BLOCK_ID_UNSCOPED) // underlying node accounting
+    if (hit) pnti.cacheHit += 1
+    else pnti.cacheMiss += 1
+    pnti.cacheTime += OGTrace.nanoTime() - startTime
+    lt.release()
+  }
+
   override def lookupCollision(eq: EQ, collisionCount: Int): Unit = {
     val lt = LT.getOrAcquire(eq)
     val lCtx = lt.ctx

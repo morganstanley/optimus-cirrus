@@ -55,17 +55,11 @@ abstract class WriteContextOutputStream[A] extends AbstractPickledOutputStream {
     def currentField: Option[String] = None
   }
 
-  protected def newMapBuilder: mutable.Builder[(String, Any), Map[String, Any]] = {
-    // Map.newBuilder[String, Any] would seem more sensible here, but that
-    // can result in different iteration order for small Maps.
-    //
-    // If we try this, ShapeComparerTest.checkWrongTypeInEmbeddable fails.
-    // That test has since been updated to be more robust, but out of an abundance
-    // of caution let's avoid changing the order. This builder retains
-    // the exact behaviour from the code prior to the refactoring to make
-    // newMapBuilder an extension point.
-    mutable.Map.newBuilder[String, Any].mapResult(_.toMap)
-  }
+  // This builder retains the exact behaviour from the code prior to the refactoring to make
+  // newMapBuilder an extension point.
+  // See also comments on PicklingMapEntryOrderWorkaround
+  protected def newMapBuilder: mutable.Builder[(String, Any), Map[String, Any]] =
+    PicklingMapEntryOrderWorkaround.newBuilder[Any]
 
   final class MapWriteContext(val parent: WriteContextStack) extends WriteContextStack {
     private[this] val values = newMapBuilder

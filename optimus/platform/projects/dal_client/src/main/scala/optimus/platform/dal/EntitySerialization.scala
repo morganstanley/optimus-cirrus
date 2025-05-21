@@ -77,7 +77,7 @@ trait EntitySerialization extends StorableSerializer {
   abstract class InliningOutputStream(
       val rootEntity: Entity,
       val entityRefs: mutable.Map[Entity, EntityReference],
-      protected val inlineBuf: mutable.Buffer[SerializedEntity],
+      protected val inlineBuf: mutable.ListBuffer[SerializedEntity],
       visiting: mutable.Set[Entity],
       val allowMutation: Boolean)
       extends PropertyMapOutputStream(entityRefs) {
@@ -139,8 +139,8 @@ trait EntitySerialization extends StorableSerializer {
       entityRefs: mutable.Map[Entity, EntityReference],
       allowMutation: Boolean
   ): InliningOutputStream =
-    new InliningOutputStream(re, entityRefs, mutable.Buffer(), mutable.Set.empty, allowMutation) {
-      def inlinedEntities: Seq[SerializedEntity] = inlineBuf
+    new InliningOutputStream(re, entityRefs, mutable.ListBuffer(), mutable.Set.empty, allowMutation) {
+      def inlinedEntities: Seq[SerializedEntity] = inlineBuf.toList
     }
 
   private[optimus] def getBaseTypes(entityInfo: ClassEntityInfo): Seq[String] =

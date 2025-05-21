@@ -77,8 +77,9 @@ object StorageMetadataT {
       fieldName: String,
       indexedFields: Seq[(String, RegisteredFieldTypeT)],
       unique: Boolean,
-      typeName: Option[String])
-      extends StorageMetadataT
+      typeName: Option[String],
+      backendCollectionGroupId: Option[Int] // Check original @embeddable definition for details.
+  ) extends StorageMetadataT
 
   // represents an @indexed annotation on one or more fields of a stored field
   final case class Key(fieldName: String, fields: Seq[(String, RegisteredFieldTypeT)]) extends StorageMetadataT
@@ -91,8 +92,10 @@ object StorageMetadataT {
       fieldName: String,
       indexedFields: Seq[(String, RegisteredFieldTypeT)],
       unique: Boolean,
-      typeName: Option[String]): Index =
-    Index(fieldName, indexedFields, unique, typeName)
+      typeName: Option[String],
+      backendCollectionGroupId: Option[Int]
+  ): Index =
+    Index(fieldName, indexedFields, unique, typeName, backendCollectionGroupId)
 
   def key(fieldName: String, fields: Seq[(String, RegisteredFieldTypeT)]): Key = Key(fieldName, fields)
 

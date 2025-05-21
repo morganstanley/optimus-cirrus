@@ -66,6 +66,18 @@ object UpsertableTransactionSerializer extends Log {
       .toSeq
   }
 
+  // Given a bunch of (serialized) entities published with one block, return the ones not contained in other entities
+  @entersGraph
+  private[optimus] def topLevelEntities(serializedEntities: Seq[SerializedEntity]): Set[SerializedEntity] = {
+    val erefs = serializedEntities.map(se => se.entityRef -> se).toMap
+    val deser = ContainedEventSerializer.ContainedSerializedEntityDeserializer(erefs)
+    val flattenedContainedReferences = deser.flattenedNestedErefs
+    serializedEntities.filter { se =>
+      val otherEntries = flattenedContainedReferences - se
+      !otherEntries.values.exists(_.contains(se.entityRef))
+    }.toSet
+  }
+
   @node
   def deserializeAllEntities(
       transaction: DeserializedTransaction,

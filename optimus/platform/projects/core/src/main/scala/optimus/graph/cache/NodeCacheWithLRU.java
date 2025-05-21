@@ -123,6 +123,7 @@ abstract class NodeCacheWithLRU extends NodeCacheBase {
   private NCEntryLRU header; // maintain double link list of approximate LRU [updateLock]
   private int size; // current size of valid entries in LRU [updateLock] After catchUp = cache size
   private final boolean evictOnOverflow;
+  private final boolean evictOnLowMemory;
   private final CacheCounters cacheCounters = new CacheCounters();
   protected static final Logger log = LoggerFactory.getLogger(NodeCacheWithLRU.class);
 
@@ -130,6 +131,7 @@ abstract class NodeCacheWithLRU extends NodeCacheBase {
       String name,
       int maxSize,
       boolean evictOnOverflow,
+      boolean evictOnLowMemory,
       int requestedConcurrency,
       int cacheBatchSize,
       int cacheBatchSizePadding) {
@@ -149,6 +151,7 @@ abstract class NodeCacheWithLRU extends NodeCacheBase {
     }
 
     this.evictOnOverflow = evictOnOverflow;
+    this.evictOnLowMemory = evictOnLowMemory;
     reset();
   }
 
@@ -159,6 +162,10 @@ abstract class NodeCacheWithLRU extends NodeCacheBase {
 
   public boolean isEvictOnOverflow() {
     return evictOnOverflow;
+  }
+
+  public boolean isEvictOnLowMemory() {
+    return evictOnLowMemory;
   }
 
   public final int cacheBatchSize() {

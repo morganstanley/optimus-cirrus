@@ -113,6 +113,16 @@ final case class BrokerResetState(reason: String) extends NotificationWarningEve
   override def toClearString = "Broker Reset state restored"
 }
 
+final case class PubSubDelayState(types: Set[String]) extends NotificationWarningEvent {
+  override def toString = s"There is a delay in receiving ticks from PubSub broker for types $types"
+  override def toClearString = "Ticks are restored"
+}
+
+final case class PubSubDelayOverState(types: Set[String]) extends NotificationWarningEvent {
+  override def toString = s"The delay in receiving ticks from PubSub broker for types $types has recovered"
+  override def toClearString = ""
+}
+
 case object WorkerStarted extends NotificationStateEvent with InfoEvent {
   override def toString: String =
     "Notification Stream created successfully"

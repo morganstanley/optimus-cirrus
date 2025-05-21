@@ -12,7 +12,6 @@
 package optimus.graph;
 
 import static optimus.graph.NodeTaskInfo.configureCachePolicy;
-
 import java.io.Serializable;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -25,7 +24,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-
 import optimus.core.CoreUtils;
 import optimus.core.TPDMask;
 import optimus.graph.cache.NCPolicy;
@@ -35,11 +33,8 @@ import optimus.graph.diagnostics.PNodeTask;
 import optimus.graph.diagnostics.PNodeTaskInfo;
 import optimus.graph.diagnostics.PNodeTaskLive;
 import optimus.graph.diagnostics.WaitProfile;
-import optimus.graph.diagnostics.trace.OGEventsObserver;
-import optimus.graph.diagnostics.trace.OGTraceMode;
-import optimus.platform.inputs.GraphInputConfiguration$;
+import optimus.platform.storable.EmbeddableCtrNodeSupport;
 import optimus.platform.util.PrettyStringBuilder;
-import scala.Function0;
 
 /**
  * Class with static methods to assist graph code in *collecting* node trace information for
@@ -228,7 +223,7 @@ public class NodeTrace {
 
   /* for tests */
   public static NodeTaskInfo[] findConstructorNodeFor(String name) {
-    String constructorName = name + ConstructorNode$.MODULE$.suffix();
+    String constructorName = name + EmbeddableCtrNodeSupport.suffix;
     return findAllMatching(nti -> nti.name().equals(constructorName), false);
   }
 

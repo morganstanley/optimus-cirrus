@@ -29,10 +29,13 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 import optimus.platform.dal.session.ClientSessionContext
 import optimus.platform.dsi.DSIResponse
+import optimus.platform.dsi.bitemporal.ReadOnlyCommand
 import optimus.platform.dsi.bitemporal.proto.CommandProtoSerialization
 import optimus.platform.dsi.versioning.VersioningRedirectionInfo
 import optimus.platform.relational.ExtraCallerDetail
 import optimus.platform.util.Log
+
+import java.util.concurrent.atomic.AtomicBoolean
 
 object RequestBatcher extends CommandProtoSerialization {
 
@@ -70,7 +73,6 @@ abstract class RequestBatcher[A, B, C](batchingQueue: BatchingQueue[A], config: 
           while (!Thread.interrupted()) {
             try {
               val batchesToSend = filterRequests(batchingQueue.getNextBatch())
-
               val it = batchesToSend.iterator
               while (!Thread.currentThread.isInterrupted && it.hasNext) {
                 try {
@@ -125,6 +127,15 @@ abstract class RequestBatcher[A, B, C](batchingQueue: BatchingQueue[A], config: 
 
 object ClientRequestBatcher extends Log {
 
+  // Load system property value for optimus.platform.dsi.protobufutils.clientrequestbatcher.streamingBatchSplitEnabled, the default value: true
+  // This flag is used to enable the new streaming batch split feature
+  private[platform] val streamingBatchSplitEnabled: AtomicBoolean = new AtomicBoolean(
+    DiagnosticSettings
+      .getBoolProperty("optimus.platform.dsi.protobufutils.clientrequestbatcher.streamingBatchSplitEnabled", false))
+  log.info(
+    s"optimus.platform.dsi.protobufutils.clientrequestbatcher.streamingBatchSplitEnabled is enabled:(${streamingBatchSplitEnabled
+        .get()})")
+
   sealed abstract class Batch {
     def requestType: DSIRequestProto.Type
     def requests: Vector[ClientRequest]
@@ -136,18 +147,28 @@ object ClientRequestBatcher extends Log {
     override def requestType: DSIRequestProto.Type = DSIRequestProto.Type.WRITE
   }
 
-  def splitIntoBatchesConsideringEntitlements(requests: Seq[ClientRequest]): Seq[Batch] = {
+  def splitIntoBatchesConsideringEntitlements(
+      requests: Seq[ClientRequest],
+      streamingBatchSplit: Boolean = streamingBatchSplitEnabled.get()): Seq[Batch] = {
     val singleReadBatch = mutable.ArrayBuffer.empty[ReadClientRequest]
     val otherBatches = List.newBuilder[Batch]
     val singleMsgsBatch = mutable.ArrayBuffer.empty[WriteClientRequest]
+
     requests.foreach {
-      case r: ReadClientRequest if r.hasUnentitled        => otherBatches += ReadBatch(Vector(r))
-      case r: ReadClientRequest                           => singleReadBatch += r
+      case r: ReadClientRequest if r.hasUnentitled => otherBatches += ReadBatch(Vector(r))
+      // NOTE: The order of these cases is important!!
+      // (1) We shall split streaming requests from nonstreaming ones when streamingBatchSplitEnabled is set to true and the requests are streaming!
+      case r: ReadClientRequest if streamingBatchSplit && r.hasStreaming =>
+        otherBatches += ReadBatch(Vector(r))
+      // (2) Go to the normal case when the requests are nonstreaming or streamingBatchSplitEnabled being set to false!
+      case r: ReadClientRequest =>
+        singleReadBatch += r
       case w: WriteClientRequest if w.hasMessagesCommands => singleMsgsBatch += w
       case w: WriteClientRequest                          => otherBatches += WriteBatch(Vector(w))
     }
     val readBatches = if (singleReadBatch.nonEmpty) ReadBatch(singleReadBatch.toVector) :: Nil else Nil
     val msgsBatches = if (singleMsgsBatch.nonEmpty) WriteBatch(singleMsgsBatch.toVector) :: Nil else Nil
+
     readBatches ++ msgsBatches ++ otherBatches.result()
   }
 

@@ -31,7 +31,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 object CatchUp {
-  private final case class GitReference(tagName: String, commit: String)
+  private final case class GitReference(name: String, commit: String)
 
   val AutoConfirm: String => Boolean = _ => true
 
@@ -45,7 +45,8 @@ object CatchUp {
 
   private val CommitTagExtractor = """(\w+)\s+refs/tags/(.*)""".r
 
-  private val CodetreeArchiveRemoteName = "codetree-archive"
+  private val CodetreeArchiveRemoteName = "codetree-archive_2025"
+  private val CodetreeReleaseArchiveRemoteName = "codetree_release-archive_2025"
 
   private object CatchupProgress {
     val postStateInit = 0.1
@@ -84,12 +85,12 @@ class CatchUp(
     val remoteToUse = prepareRemoteForCatchup()
     step(CatchupProgress.fetchFinished)
 
-    val bestRef = findBestFromGitTag(remoteToUse)
+    val bestRef = findBestRef(remoteToUse)
     step(CatchupProgress.cacheFound)
 
     bestRef match {
       case Some(gitRef) =>
-        catchupWithCommit(currBranch, gitRef)
+        catchupWithCommit(remoteToUse, currBranch, gitRef)
         step(CatchupProgress.rebased, canCancel = false)
 
         SparseUtils.refresh()(ws)
@@ -140,7 +141,7 @@ class CatchUp(
     }
   }
 
-  private def catchupWithCommit(currBranch: String, gitRef: GitReference): Unit = {
+  private def catchupWithCommit(remoteName: String, currBranch: String, gitRef: GitReference): Unit = {
     val backupTag = s"BACKUP-$currBranch-$currentDate"
     val GitReference(catchupTag, commit) = gitRef
     val isOnLocalBranch = currBranch != branchToUse
@@ -154,7 +155,7 @@ class CatchUp(
       else gitUtil.resetKeep(commit)
 
       val result = if (migrateAfterTruncation(currBranch)) {
-        migrateBranchToTruncatedHistory(currBranch, commit)
+        migrateBranchToTruncatedHistory(remoteName, currBranch, commit)
       } else if (isMerge) {
         logger.info(s"Merging latest good commit: $commit to current branch...")
         gitUtil.merge(commit)
@@ -177,12 +178,18 @@ class CatchUp(
                      |""".stripMargin)
     }
 
-    logger.info(s"Successfully caught up with remote tag $catchupTag from ${gitUtil.relativeAge(commit)}")
+    logger.info(s"Successfully caught up with remote ref $catchupTag from ${gitUtil.relativeAge(commit)}")
     if (!isMerge && isOnLocalBranch)
       logger.warning(s"""Rebase mode was used, so please anticipate using the --force (-f) flag on push.
                         |For more info see https://stackoverflow.com/questions/8939977/8940299""".stripMargin)
     gitUtil.deleteBranch(fetchBranch, evenIfNotMerged = true)
   }
+
+  private def findBestRef(remote: String): Option[GitReference] =
+    if (useLatestCommit) findLatestRef(remote) else findBestFromGitTag(remote)
+
+  private def findLatestRef(remote: String): Option[GitReference] =
+    gitUtil.revParse(s"$remote/$branchToUse").map(id => GitReference(branchToUse, id))
 
   private def findBestFromGitTag(remote: String): Option[GitReference] = {
     val tagName = s"CATCHUP_$branchToUse"
@@ -191,7 +198,7 @@ class CatchUp(
 
     timeThis("fetch-git-catchup-tag", ws.log) {
       val bestRef = getRemoteTag(remote, tagName).collectFirst {
-        case CommitTagExtractor(commit, tag) if tag == tagName => GitReference(tagName = tag, commit = commit)
+        case CommitTagExtractor(commit, tag) if tag == tagName => GitReference(name = tag, commit = commit)
       }
       if (bestRef.isEmpty) logger.warning(s"Remote git tag $tagName not found!")
       bestRef
@@ -285,10 +292,14 @@ class CatchUp(
     isOnLocalBranch && maybeNewRootCommit.isDefined && !isBranchMigrated
   }
 
-  private def migrateBranchToTruncatedHistory(currentBranch: String, commit: String): String = {
+  private def migrateBranchToTruncatedHistory(remoteName: String, currentBranch: String, commit: String): String = {
     logger.info(s"Migrating '$currentBranch' to truncated history...")
-    fetchCodetreeArchiveRepo()
-    val commitsDiff = calculateDiffWithArchivedHistory(currentBranch)
+    val archiveRemoteName = remoteName match {
+      case "codetree-catchup" | "codetree" => CodetreeArchiveRemoteName
+      case "codetree_release"              => CodetreeReleaseArchiveRemoteName
+    }
+    fetchCodetreeArchiveRepo(archiveRemoteName)
+    val commitsDiff = calculateDiffWithArchivedHistory(archiveRemoteName, currentBranch)
     if (commitsDiff.isEmpty) {
       throw new StratosphereException(
         s"There is nothing to migrate on branch '$currentBranch'. Please cut a new one from '$branchToUse'")
@@ -298,19 +309,23 @@ class CatchUp(
     gitUtil.cherryPick(commitsDiff)
   }
 
-  private def fetchCodetreeArchiveRepo(): Unit = {
+  private def fetchCodetreeArchiveRepo(remoteName: String): Unit = {
     logger.info("Fetching archived git history...")
-    if (!gitUtil.allRemoteNames().contains(CodetreeArchiveRemoteName)) {
-      val url = ws.internal.historyTruncation.codetreeArchiveUrl.get
-      gitUtil.addRemoteNoTags(CodetreeArchiveRemoteName, url)
+    val config = ws.internal.historyTruncation
+    val url = remoteName match {
+      case CodetreeArchiveRemoteName        => config.codetreeArchiveUrl.get
+      case CodetreeReleaseArchiveRemoteName => config.codetreeReleaseArchiveUrl.get
     }
-    gitUtil.fetch(CodetreeArchiveRemoteName, branchToUse)
+    if (!gitUtil.allRemoteNames().contains(remoteName)) {
+      gitUtil.addRemoteNoTags(remoteName, url)
+    }
+    gitUtil.fetch(remoteName, branchToUse)
   }
 
-  private def calculateDiffWithArchivedHistory(currentBranch: String): Seq[String] = {
+  private def calculateDiffWithArchivedHistory(archiveRemoteName: String, currentBranch: String): Seq[String] = {
     logger.info("Calculating diff with archived history...")
     val result = gitUtil
-      .runGit("log", s"$CodetreeArchiveRemoteName/$branchToUse..$currentBranch", "--format=%H", "--no-merges")
+      .runGit("log", s"$archiveRemoteName/$branchToUse..$currentBranch", "--format=%H", "--no-merges")
     Source.fromString(result).getLines().to(Seq)
   }
 

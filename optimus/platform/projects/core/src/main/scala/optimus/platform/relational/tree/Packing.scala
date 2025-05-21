@@ -43,8 +43,8 @@ object Packer {
   /**
    * Packs sequences, much like the way strings are packed.
    */
-  implicit def seqPacking[T: Packer]: Packer[collection.Seq[T]] = new Packer[collection.Seq[T]] {
-    def serialize(t: collection.Seq[T], state: WriteState): Unit = {
+  implicit def seqPacking[T: Packer]: Packer[Seq[T]] = new Packer[Seq[T]] {
+    def serialize(t: Seq[T], state: WriteState): Unit = {
       if (t.length > 127) state.put(-128.toByte, ((t.length >> 8) & 0xff).toByte)
       state.put((t.length & 0xff).toByte)
       t foreach { v =>
@@ -127,10 +127,10 @@ object Packer {
 
   implicit val typeInfoPacker: Packer[TypeInfo[_]] = new Packer[TypeInfo[_]] {
     def serialize(ti: TypeInfo[_], state: WriteState): Unit = {
-      implicitly[Packer[collection.Seq[Class[_]]]].serialize(ti.classes, state)
-      implicitly[Packer[collection.Seq[Signature]]].serialize(ti.pureStructuralMethods, state)
-      implicitly[Packer[collection.Seq[(String, Class[_])]]].serialize(ti.primaryConstructorParams, state)
-      implicitly[Packer[collection.Seq[TypeInfo[_]]]].serialize(ti.typeParams, state)
+      implicitly[Packer[Seq[Class[_]]]].serialize(ti.classes, state)
+      implicitly[Packer[Seq[Signature]]].serialize(ti.pureStructuralMethods, state)
+      implicitly[Packer[Seq[(String, Class[_])]]].serialize(ti.primaryConstructorParams, state)
+      implicitly[Packer[Seq[TypeInfo[_]]]].serialize(ti.typeParams, state)
     }
   }
 }
@@ -155,9 +155,9 @@ object Unpacker {
   /**
    * Packs sequences, much like the way strings are packed.
    */
-  implicit def seqUnpacker[T: Unpacker]: Unpacker[collection.Seq[T]] = new Unpacker[collection.Seq[T]] {
-    def deserialize(state: ReadState): collection.Seq[T] = {
-      collection.Seq.fill(state.next() match {
+  implicit def seqUnpacker[T: Unpacker]: Unpacker[Seq[T]] = new Unpacker[Seq[T]] {
+    def deserialize(state: ReadState): Seq[T] = {
+      Seq.fill(state.next() match {
         case -128 => (state.next() << 8) & 0xff + state.next() & 0xff
         case n    => n
       })(implicitly[Unpacker[T]].deserialize(state))
@@ -241,12 +241,12 @@ object Unpacker {
   implicit val typeInfoUnpacker: Unpacker[TypeInfo[_]] = new Unpacker[TypeInfo[_]] {
     def deserialize(state: ReadState): TypeInfo[_] = {
       TypeInfo(
-        implicitly[Unpacker[collection.Seq[Option[Class[_]]]]].deserialize(state).collect { case Some(cls) => cls },
-        implicitly[Unpacker[collection.Seq[Signature]]].deserialize(state),
-        implicitly[Unpacker[collection.Seq[(String, Option[Class[_]])]]]
+        implicitly[Unpacker[Seq[Option[Class[_]]]]].deserialize(state).collect { case Some(cls) => cls },
+        implicitly[Unpacker[Seq[Signature]]].deserialize(state),
+        implicitly[Unpacker[Seq[(String, Option[Class[_]])]]]
           .deserialize(state)
           .collect { case (str, Some(cls)) => str -> cls },
-        implicitly[Unpacker[collection.Seq[TypeInfo[_]]]].deserialize(state)
+        implicitly[Unpacker[Seq[TypeInfo[_]]]].deserialize(state)
       )
     }
   }

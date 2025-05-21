@@ -570,69 +570,6 @@ final class OptimusDoubleSeq private (private val data: Array[Double])
     foldLeftToDoubleWithIndex(0.0d)((_, previous, thisValue) => previous + thisValue * thisValue)
   }
 
-  def addAll(that1: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-      }
-  }
-  def addAll(that1: TraversableOnce[Double], that2: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-      }
-  }
-  def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
-      }
-  }
-  def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double],
-      that4: TraversableOnce[Double]): OptimusDoubleSeq = {
-    if (that1.isEmpty) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
-        builder ++= that4
-      }
-  }
-  def addAll(
-      that1: TraversableOnce[Double],
-      that2: TraversableOnce[Double],
-      that3: TraversableOnce[Double],
-      that4: TraversableOnce[Double],
-      rest: TraversableOnce[Double]*): OptimusDoubleSeq = {
-    if (that1.isEmpty && that2.isEmpty && that3.isEmpty && that4.isEmpty && rest.forall(_.isEmpty)) this
-    else
-      OptimusDoubleSeq.withSharedBuilder { builder =>
-        builder ++= this
-        builder ++= that1
-        builder ++= that2
-        builder ++= that3
-        builder ++= that4
-        rest foreach (builder ++= _)
-      }
-  }
-
   // noinspection ScalaUnusedSymbol
   @throws[ObjectStreamException]("supposedly needed by serialization")
   private[this] def readResolve(): AnyRef =

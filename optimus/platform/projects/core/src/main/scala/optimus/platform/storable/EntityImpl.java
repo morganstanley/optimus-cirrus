@@ -30,6 +30,7 @@ import optimus.graph.NodeStateMachine;
 import optimus.graph.Settings;
 import optimus.platform.EvaluationContext$;
 import optimus.platform.EvaluationQueue;
+import optimus.platform.ScenarioStack;
 import optimus.platform.TemporalContext;
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation;
 import optimus.platform.pickling.PickledInputStream;
@@ -41,10 +42,8 @@ import optimus.platform.pickling.ReflectiveEntityPickling$;
 // so that the abstractions are not visible to "user" code, that is, code that is visible to the
 // compiler.
 // We have methods that only the entity plug-in should be aware of and use as their usage are based
-// on assumptions
-// that only the entity-plugin can be sure of. For example, the NodeFuture implementation within
-// EntityImpl would
-// be highly dangerous if it were exposed to user code.
+// on assumptions that only the entity-plugin can be sure of. For example, the NodeFuture
+// implementation within EntityImpl would be highly dangerous if it were exposed to user code.
 //
 @EntityMetaDataAnnotation(isStorable = true)
 public abstract class EntityImpl implements Entity, NodeFuture<EntityImpl> {
@@ -61,6 +60,11 @@ public abstract class EntityImpl implements Entity, NodeFuture<EntityImpl> {
 
   @SuppressWarnings("unused") //  entityFlavor mutated via flavor_mh
   private volatile EntityFlavor entityFlavor;
+
+  @JsonIgnore // Method name matches jackson's default naming pattern for properties
+  public ScenarioStack getOriginScenarioStack() {
+    return entityFlavor.originScenarioStack();
+  }
 
   private transient int $hashCode;
   private transient Object _localCache;
@@ -300,8 +304,7 @@ public abstract class EntityImpl implements Entity, NodeFuture<EntityImpl> {
     // We deem this to be a valid implementation only if the $queued method returning entities as
     // NodeFuture instances are implemented correctly in a way that special cases when the entity
     // reference is tweakable. This call only happens within plugin generated code which we can
-    // ensure is safely
-    // implemented.
+    // ensure is safely implemented.
     return new AlreadyCompletedNode<>(this);
   }
 }

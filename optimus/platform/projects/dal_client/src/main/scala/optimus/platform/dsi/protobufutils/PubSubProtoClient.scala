@@ -17,6 +17,7 @@ import java.util.concurrent.locks.ReadWriteLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import com.google.protobuf.ByteString
+import msjava.msnet.MSNetEventListener
 import msjava.msnet.MSNetMessage
 import msjava.protobufutils.server.BackendException
 import msjava.slf4jutils.scalalog.getLogger
@@ -41,6 +42,7 @@ import optimus.platform.util.ObjectState
 
 import scala.jdk.CollectionConverters._
 import optimus.dal.ssl.DalSSLConfig
+import optimus.graph.DiagnosticSettings
 import optimus.platform.runtime.UriUtils
 
 object PubSubProtoClient {
@@ -69,6 +71,10 @@ object PubSubProtoClient {
 
     new PubSubProtoClient(hostPort, kerberized, clientContext, config, pubSubCallback, actSecureTransport)
   }
+
+  // To disable the stream staleness check, set the following property to 0
+  private val streamStalenessCheckIntervalInSec: Int =
+    DiagnosticSettings.getIntProperty("optimus.dal.pubsub.streamStalenessCheckIntervalInSec", 1)
 
   object AuxiliaryDataProcessor extends AuxiliaryDataProcessor
 
@@ -145,6 +151,19 @@ class PubSubProtoClient(
 
   private[optimus] final val tcpRequestSender: TcpRequestSender =
     config.createTcpRequestSender(this, configSupport, secureTransport, msgListener)
+
+  if (streamStalenessCheckIntervalInSec > 0) {
+    configSupport.getLoop.callbackPeriodically(
+      streamStalenessCheckIntervalInSec * 1000,
+      new MSNetEventListener() {
+        override def eventOccurred(msNetEvent: msjava.msnet.MSNetEvent): Unit = {
+          if (isRunning) {
+            pubSubCallback.checkStaleStreams()
+          }
+        }
+      }
+    )
+  }
 
   override def connectionString: String = hostPort
 
@@ -235,7 +254,7 @@ class PubSubProtoClient(
     val response = DalResponseProto.parseFrom(ProtoBufUtils.getCodedInputStream(envelope.getPayload))
     if (response.hasDsiResponse) {
       val dsiResponse = response.getDsiResponse
-      val results: Seq[Result] = dsiResponse.getResultsList.asScala.map(fromProto(_))
+      val results: Seq[Result] = dsiResponse.getResultsList.asScalaUnsafeImmutable.map(fromProto(_))
       results match {
         case Seq(ErrorResult(t: PubSubTransientException, _)) =>
           log.error(s"$toString received retryable error response!", t)
@@ -256,7 +275,9 @@ class PubSubProtoClient(
       dsiResponseProto: DSIResponseProto,
       auxiliaryData: Iterable[ByteString]): Seq[(String, Result)] = {
     val results: Seq[Result] =
-      AuxiliaryDataProcessor.inline(dsiResponseProto.getResultsList.asScala.map(fromProto(_)), auxiliaryData)
+      AuxiliaryDataProcessor.inline(
+        dsiResponseProto.getResultsList.asScalaUnsafeImmutable.map(fromProto(_)),
+        auxiliaryData)
     results.flatMap {
       case psr: PubSubResult if pubSubCallback.streamValid(psr.streamId)          => Some(psr.streamId -> psr)
       case psr: PubSubResult if !psr.isInstanceOf[ClosePubSubStreamSuccessResult] =>

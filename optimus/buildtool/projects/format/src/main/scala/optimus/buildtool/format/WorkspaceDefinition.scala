@@ -46,13 +46,13 @@ object WorkspaceDefinition {
       workspaceSrcRoot: Directory,
       externalConfig: Config,
       externalProperties: JMap[String, String],
-      loadFile: ObtFile.Loader,
+      loadFile: ObtFile.ScanningLoader,
       cppOsVersions: Seq[String],
       useMavenLibs: Boolean = false
   ): Result[WorkspaceDefinition] = for {
     projectProperties <- ProjectProperties.load(loadFile, externalConfig, externalProperties)
 
-    loadFileWithProperties = ObtFile.Loader(loadFile) { res =>
+    loadFileWithProperties = ObtFile.ScanningLoader(loadFile) { res =>
       res.map(_.resolveWithReferences(projectProperties.config))
     }
     scalaMajorVersion = externalConfig.optionalString(ScalaVersionKey).map(_.split('.').take(2).mkString("."))
@@ -63,6 +63,7 @@ object WorkspaceDefinition {
     jvmDependencies <- JvmDependenciesLoader.load(
       projectProperties,
       loadFile,
+      workspace,
       useMavenLibs,
       scalaMajorVersion,
       resolvers

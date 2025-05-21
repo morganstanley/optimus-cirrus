@@ -56,7 +56,7 @@ object IterableProvider {
     if (src.isEmpty) src
     else {
       val subQueries: Seq[Query[Any]] = nodeOrFunc match {
-        case Left(nf) => src.apar(PriqlSettings.concurrencyLevel).mapPrelifted(nf)(collection.Seq.breakOut)
+        case Left(nf) => src.apar(PriqlSettings.concurrencyLevel).mapPrelifted(nf)(Seq.breakOut)
         case Right(f) => src.iterator.map(f).toIndexedSeq
       }
       if (fromIterable) {

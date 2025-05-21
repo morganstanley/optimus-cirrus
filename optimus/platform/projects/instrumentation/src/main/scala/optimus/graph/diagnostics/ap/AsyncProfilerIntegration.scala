@@ -195,7 +195,11 @@ object AsyncProfilerIntegration extends Log {
   def stop(): Unit = {
     if (profiling) command("stop")
   }
-  def shutdown(): Unit = stop()
+  def shutdown(): Unit = {
+    stop()
+    command("stopjemalloc")
+    profiling = false
+  }
 
   /**
    * Begin jfr sampling in concert with OG profiler tracing.
@@ -457,15 +461,8 @@ object AsyncProfilerIntegration extends Log {
     if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
     else profiler.getMethodID(cls, method, sig, true)
 
-  def setAwaitStackId(ids: Array[Long], signal: Long, insertionId: Long): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L
-    else profiler.setAwaitStackId(ids, signal, insertionId)
-
   def getAwaitDataAddress(): Long =
     if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitDataAddress()
-
-  def getAwaitSampledSignal(): Long =
-    if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.getAwaitSampledSignal()
 
   def saveAwaitFrames(ids: Array[Long], nids: Int): Long =
     if (!DiagnosticSettings.awaitStacks || !ensureLoadedIfEnabled()) 0L else profiler.saveAwaitFrames(2, ids, nids)
@@ -483,6 +480,11 @@ object AsyncProfilerIntegration extends Log {
       } catch {
         case t: Throwable => Map.empty
       }
+  }
+
+  def testIgnoredMethod(count: Int): Double = {
+    if (!ensureLoadedIfEnabled()) Double.NaN
+    else AsyncProfiler.testIgnored(count);
   }
 
   lazy val overflowMarker: Long = saveString("OverflowMarker")

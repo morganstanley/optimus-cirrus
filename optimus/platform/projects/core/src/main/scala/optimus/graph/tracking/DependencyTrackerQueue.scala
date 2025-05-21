@@ -18,7 +18,6 @@ import optimus.graph.Scheduler
 import optimus.graph.Settings
 import optimus.graph.diagnostics.GraphDiagnostics
 import optimus.graph.tracking.CleanupScheduler.InterruptionFlag
-import optimus.graph.tracking.CleanupScheduler.TrackingGraphCleanupAction
 import optimus.graph.tracking.monitoring.ActionSummary
 import optimus.graph.tracking.monitoring.QueueActionSummary
 import optimus.graph.tracking.monitoring.QueueMonitor
@@ -41,8 +40,7 @@ object DependencyTrackerQueue {
  * This class manages that scheduling
  */
 final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTracker)
-    extends DependencyTrackerActionEvaluateBase[Unit]
-    with CallbackBatchOwner {
+    extends DependencyTrackerActionEvaluateBase[Unit] {
   import DependencyTrackerQueue._
   private val monitor = QueueMonitor.register(this)
 
@@ -50,7 +48,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     override def isInterrupted: Boolean = hasPendingWork
   }
 
-  override protected def trackerRoot: DependencyTrackerRoot = tracker.root
+  protected def trackerRoot: DependencyTrackerRoot = tracker.root
   override def toString: String = s"DependencyTrackerQueue[${tracker.scenarioReference}] [$stateManager]"
 
   override def syncApply(): Boolean = {
@@ -189,6 +187,10 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
 
   private[optimus] def outstandingWorkCount = workQueue.size
 
+  // guarded by queueLock
+  private var cumulActionsAdded: Long = 0
+  private var cumulActionsProcessed: Long = 0
+
   private def registerOrEnqueueActionParent(highPriority: Boolean = false): Boolean = {
     tracker.parentDependencyTracker.get.queue
       .registerOrEnqueueAction(this, prepareWait = false /* No blocks*/, highPriority = highPriority)
@@ -208,6 +210,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     var immediate = false
     var nextIsUpdate = false
     queueLock.synchronized {
+      cumulActionsAdded += 1
       stateManager.checkInvariants()
       log.debug(s"registerOrEnqueueAction start action:$action, prepareWait:$prepareWait $stateManager")
       if (Settings.trackingScenarioConcurrencyDebug) checkActionsStalling()
@@ -287,6 +290,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     var nextIsUpdate = false
 
     queueLock.synchronized {
+      cumulActionsProcessed += 1
       log.debug(s"afterActionCompleted start completedAction:$completedAction, hasLatch:$hasLatch $stateManager")
       if (completedAction ne null) {
         stateManager.checkInvariants(
@@ -445,7 +449,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
 
     if (!action.syncApply()) {
 
-      try { action.beforeAction(this) }
+      try { action.beforeAction() }
       catch {
         case e: Exception =>
           log.error(s"beforeAction failed for $action, resetting queue stateManager ($action will not run)", e)
@@ -462,13 +466,15 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
       }
 
       action.executeAsync { accurateActionStartTime => // after execute, called on both success and failure
-        action.raiseCallback()
-        try { action.afterAction(this) }
+        try { action.afterAction() }
         catch {
           case e: Exception =>
             log.error(s"afterAction failed for $action", e)
             throw e
         } finally {
+          // raise callback after action.afterAction so that invalidation batch etc. is processed first
+          action.raiseCallback()
+
           val endNs = OGTrace.nanoTime()
           val completionLatency =
             if (accurateActionStartTime == 0) endNs - actionStartTime else endNs - accurateActionStartTime
@@ -502,14 +508,14 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     stateManager.checkInvariants(actuallyUpdating = action.isUpdate, actuallyEvaluating = !action.isUpdate)
 
     try {
-      action.beforeAction(this)
+      action.beforeAction()
       action.executeSync()
     } catch {
       case e: Exception =>
         log.error(s"action failed for $action, resetting queue stateManager", e)
         throw e
     } finally {
-      try { action.afterAction(this) }
+      try { action.afterAction() }
       catch {
         case e: Exception =>
           log.error(s"afterAction failed for $action, resetting queue stateManager", e)
@@ -574,7 +580,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
       // print all UTrack information for the trackers this queue owns (other trackers will be printed by the other queues)
       def printAllInfo(t: DependencyTracker): Unit = {
         if (t.queue eq this) {
-          t.userNodeTracker.dumpUTrackDebugInfo(sb)
+          t.allUserNodeTrackers.foreach(_.dumpUTrackDebugInfo(sb))
           t.children.foreach(printAllInfo)
         }
       }
@@ -592,7 +598,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     })
   }
 
-  private[tracking] def maybeRunCleanupNow(action: TrackingGraphCleanupAction): Unit = {
+  private[tracking] def maybeRunCleanupNow(action: GarbageCollectionSupport#TrackingGraphCleanupAction): Unit = {
     // GC triggers may fire multiple times before the cleanup has a chance to actually run - make sure we don't enqueue
     // again if the previous cleanup still hasn't run.
     //
@@ -601,8 +607,8 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     // We don't check the low priority queue, because that cleanup may never run if workQueue is always busy.
     val debounced = queueLock.synchronized {
       workQueue.peek match {
-        case other: TrackingGraphCleanupAction if other.interrupt == action.interrupt => true
-        case _                                                                        => false
+        case other: GarbageCollectionSupport#TrackingGraphCleanupAction if other.interrupt == action.interrupt => true
+        case _                                                                                                 => false
       }
     }
     if (!debounced)
@@ -618,12 +624,25 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
   def nameForAggregatedStats: String = tracker.root.name
 
   // get statistics about the queue
-  def snap: QueueStats = queueLock.synchronized {
-    QueueStats(
-      cumulAdded = workQueue.added + lowPriorityQueue.added,
-      cumulRemoved = workQueue.removed + lowPriorityQueue.removed,
-      currentSize = workQueue.size + lowPriorityQueue.size
-    )
+  def snapQueueStats: QueueStats = queueLock.synchronized {
+    // don't report stats if final stats were collected (which happens during disposal) to avoid potential double counting
+    if (finalStatsCollected) QueueStats.zero
+    else
+      QueueStats(
+        cumulAdded = cumulActionsAdded,
+        cumulProcessed = cumulActionsProcessed,
+        currentSize = workQueue.size + lowPriorityQueue.size
+      )
+  }
+
+  private var finalStatsCollected = false
+
+  // may be called once only - only for use by DependencyTrackerRoot.collectDisposedQueueStats
+  private[tracking] def collectFinalQueueStats(): QueueStats = queueLock.synchronized {
+    require(!finalStatsCollected)
+    val stats = snapQueueStats
+    finalStatsCollected = true
+    stats
   }
 
   // get additional information about the queues
@@ -631,7 +650,7 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     QueueActionSummary(
       nameForAggregatedStats,
       tracker.name,
-      snap,
+      snapQueueStats,
       workQueue.iterator.map(ActionSummary(_)).to(Vector),
       lowPriorityQueue.iterator.map(ActionSummary(_)).to(Vector)
     )
@@ -670,24 +689,16 @@ final class DependencyTrackerQueue(private[tracking] val tracker: DependencyTrac
     def addFirst(a: A): Unit = {
       assertLocked()
       underlying.addFirst(a)
-      _added += 1
     }
     def addLast(a: A): Unit = {
       assertLocked()
       underlying.addLast(a)
-      _added += 1
     }
     def pop(): A = {
       assertLocked()
       val out = underlying.pop() // throws NoSuchElementException and doesnt increment `removed` if its empty
-      _removed += 1
       out
     }
-
-    private var _added = 0
-    private var _removed = 0
-    def added: Int = _added
-    def removed: Int = _removed
   }
 }
 

@@ -221,10 +221,6 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
   }
 
-  def maybeMock(s: Name): Boolean = {
-    s.containsName("Mock") || s.containsName("mock")
-  }
-
   def newTransformer0(unit: CompilationUnit) = {
     new AutoAsync(unit)
   }
@@ -1716,13 +1712,6 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
           }
           res
 
-        // Detect and warn about applying what looks like a mocking library to an entity.
-        case TypeApply(fun, args)
-            if maybeMock(fun.symbol.name) &&
-              args.exists(i => isEntity(i.symbol)) =>
-          alarm(OptimusNonErrorMessages.MOCK_ENTITY(), args.head.pos)
-          inContext()(super.transform(tree))
-
         case Apply(fun, meth :: Nil)
             if fun.symbol.name == names.expect &&
               fun.toString.startsWith("org.easymock.EasyMock.expect") &&
@@ -1798,9 +1787,6 @@ class AutoAsyncComponent(val plugin: EntityPlugin, val phaseInfo: OptimusPhaseIn
 
         case FullMethodApply(f, ts, argss, paramss)
             if !pluginSupportSymbol.exists(_ == f.symbol.owner.module) => { // plugin support is exempt
-
-          if (maybeMock(f.symbol.name) && ts.exists(tt => isEntity(tt.symbol)))
-            alarm(OptimusNonErrorMessages.MOCK_ENTITY(), ts.head.pos)
 
           // If a method has @nodeLift, then arguments will be converted to NodeKeys rather than
           // being executed directly, so we don't need to async.

@@ -285,12 +285,12 @@ object AsyncCppCompiler {
       debugPath: Option[RelativePath],
       messages: Seq[CompilationMessage]
   ): InternalCppArtifact = {
-    val hasErrors = MessagesArtifact.hasErrors(messages)
+    import optimus.buildtool.artifacts.JsonImplicits.cppMetadataValueCodec
 
+    val hasErrors = MessagesArtifact.hasErrors(messages)
     val metadata = CppMetadata(osVersion, releasePath, debugPath, messages, hasErrors)
 
     AssetUtils.atomicallyWrite(outputJar) { tmp =>
-      import optimus.buildtool.artifacts.JsonImplicits._
       Jars.createJar(JarAsset(tmp), metadata, buildDir)()
     }
 

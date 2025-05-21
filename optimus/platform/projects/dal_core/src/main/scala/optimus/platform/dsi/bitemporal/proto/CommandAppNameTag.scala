@@ -25,7 +25,7 @@ object CommandAppNameTagSerialization {
   }
   final def fromProto(commandAppNameTagProto: CommandAppNameTagProto): CommandAppNameTag = {
     val tag = commandAppNameTagProto.getTag()
-    val indices = commandAppNameTagProto.getCommandIndicesList.asScala.map(_.asInstanceOf[Int])
+    val indices = commandAppNameTagProto.getCommandIndicesList.asScalaUnsafeImmutable.map(_.asInstanceOf[Int])
     CommandAppNameTag(tag, indices)
   }
 }

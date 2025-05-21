@@ -16,7 +16,6 @@ import optimus.platform.dsi.bitemporal.proto.Dsi._
 import optimus.platform._
 import optimus.platform.storable._
 import scala.jdk.CollectionConverters._
-import java.lang.Boolean
 
 private[proto] trait WriteCommandProtoSerialization extends BasicProtoSerialization {
   implicit val resolveKeysSerializer: ResolveKeysSerializer.type = ResolveKeysSerializer
@@ -108,6 +107,7 @@ object PutSerializer extends WriteCommandProtoSerialization with ProtoSerializer
       .setAfterTxTime(toProto(TimeInterval.NegInfinity))
       .setValidTime(toProto(put.validTime))
       .setSerializedEntity(toProto(put.value))
+      .setMonoTemporal(put.monoTemporal)
 
     if (put.lockToken.isDefined)
       builder.setLockToken(put.lockToken.get)
@@ -120,7 +120,11 @@ object PutSerializer extends WriteCommandProtoSerialization with ProtoSerializer
       if (proto.hasLockToken)
         Some(proto.getLockToken)
       else None
-    Put(fromProto(proto.getSerializedEntity), lockToken, fromProto(proto.getValidTime))
+    Put(
+      fromProto(proto.getSerializedEntity),
+      lockToken,
+      fromProto(proto.getValidTime),
+      monoTemporal = proto.getMonoTemporal)
   }
 }
 
@@ -221,7 +225,7 @@ object ResolveKeysResultSerializer
 
   override def serialize(resolve: ResolveKeysResult): ResolveKeysResultProto = {
     val found = resolve.refs.map { r =>
-      Boolean.valueOf(r.isDefined)
+      java.lang.Boolean.valueOf(r.isDefined)
     }
     val entities = resolve.refs flatMap {
       _ map {
@@ -273,7 +277,7 @@ object WriteBusinessEventSerializer
     if (writeEvent.invalidates.nonEmpty)
       builder.addAllInvalidates(
         writeEvent.invalidates
-          .map(i => (i.er, i.lt))
+          .map(i => (i.er, i.lt, i.monoTemporal))
           .map {
             toProto(_)
           }
@@ -281,7 +285,7 @@ object WriteBusinessEventSerializer
     if (writeEvent.reverts.nonEmpty)
       builder.addAllReverts(
         writeEvent.reverts
-          .map(i => (i.er, i.lt))
+          .map(i => (i.er, i.lt, false))
           .map {
             toProto(_)
           }
@@ -310,18 +314,18 @@ object WriteBusinessEventSerializer
           .map {
             fromProto(_)
           } toSeq
-      else Seq[(EntityReference, Long)]()
+      else Seq[(EntityReference, Long, Boolean)]()
     val reverts = if (proto.getRevertsCount() > 0) proto.getRevertsList.asScala.map {
       fromProto(_)
     } toSeq
-    else Seq[(EntityReference, Long)]()
+    else Seq[(EntityReference, Long, Boolean)]()
     WriteBusinessEvent(
       fromProto(proto.getSerializedEvent()),
       fromProto(proto.getState()),
       asserts,
       puts,
       putSlots,
-      invalidates.map(i => InvalidateRevertProps(i._1, i._2, "")),
+      invalidates.map(i => InvalidateRevertProps(i._1, i._2, "", i._3)),
       reverts.map(i => InvalidateRevertProps(i._1, i._2, ""))
     )
   }
@@ -336,14 +340,16 @@ object WriteBusinessEventPutSerializer
       .setSerEntity(toProto(wbePut.ent))
     if (wbePut.lockToken.isDefined) builder.setLockToken(wbePut.lockToken.get)
     // if (wbePut.verRef.isDefined) builder.setVref(toProto(wbePut.verRef.get))
+    builder.setMonoTemporal(wbePut.monoTemporal)
     builder.build
   }
 
   override def deserialize(proto: SerializedEntityTupleProto): WriteBusinessEvent.Put = {
     val lockToken: Option[Long] = if (proto.hasLockToken()) Some(proto.getLockToken()) else None
     val vref: Option[VersionedReference] = if (proto.hasVref) Some(fromProto(proto.getVref)) else None
+    val monoTemporal: Boolean = proto.getMonoTemporal
     val ser = fromProto(proto.getSerEntity())
-    WriteBusinessEvent.Put(ser, lockToken)
+    WriteBusinessEvent.Put(ser, lockToken, monoTemporal)
   }
 }
 
@@ -369,17 +375,18 @@ object WriteBusinessEventPutSlotsSerializer
 
 object EntityReferenceTupleSerializer
     extends WriteCommandProtoSerialization
-    with ProtoSerializer[Tuple2[EntityReference, Long], EntityReferenceTupleProto] {
+    with ProtoSerializer[(EntityReference, Long, Boolean), EntityReferenceTupleProto] {
 
-  override def serialize(entityRefTuple: (EntityReference, Long)): EntityReferenceTupleProto = {
+  override def serialize(entityRefTuple: (EntityReference, Long, Boolean)): EntityReferenceTupleProto = {
     EntityReferenceTupleProto.newBuilder
       .setEntityRef(toProto(entityRefTuple._1))
       .setLockToken(entityRefTuple._2)
+      .setMonoTemporal(entityRefTuple._3)
       .build
   }
 
-  override def deserialize(proto: EntityReferenceTupleProto): (EntityReference, Long) = {
-    (fromProto(proto.getEntityRef()), proto.getLockToken())
+  override def deserialize(proto: EntityReferenceTupleProto): (EntityReference, Long, Boolean) = {
+    (fromProto(proto.getEntityRef()), proto.getLockToken(), proto.getMonoTemporal)
   }
 }
 
@@ -480,7 +487,13 @@ object InvalidateAfterSerializer
   override def deserialize(proto: InvalidateAfterProto): InvalidateAfter = {
     val lt = if (proto.hasLockToken) proto.getLockToken else 0L
     val eref = if (proto.hasEntityReference) fromProto(proto.getEntityReference) else null
-    InvalidateAfter(eref, fromProto(proto.getVersionedReference), lt, fromProto(proto.getValidTime), "")
+    InvalidateAfter(
+      eref,
+      fromProto(proto.getVersionedReference),
+      lt,
+      fromProto(proto.getValidTime),
+      "",
+      monoTemporal = proto.getMonoTemporal)
   }
 
   override def serialize(invalidate: InvalidateAfter): InvalidateAfterProto = {
@@ -492,6 +505,7 @@ object InvalidateAfterSerializer
       .setAfterTxTime(toProto(TimeInterval.NegInfinity))
       .setValidTime(toProto(invalidate.validTime))
       .setLockToken(invalidate.lockToken)
+      .setMonoTemporal(invalidate.monoTemporal)
       .build
   }
 }
@@ -564,7 +578,7 @@ object InvalidateAllCurrentByRefsSerializer
 
   override def deserialize(proto: InvalidateAllCurrentByRefsProto): InvalidateAllCurrentByRefs = {
     InvalidateAllCurrentByRefs(
-      proto.getEntityReferencesList.asScala.map(EntityReferenceSerializer.deserialize(_)),
+      proto.getEntityReferencesList.asScalaUnsafeImmutable.map(EntityReferenceSerializer.deserialize(_)),
       proto.getClassName)
   }
 

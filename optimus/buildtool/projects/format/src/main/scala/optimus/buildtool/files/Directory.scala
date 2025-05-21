@@ -394,10 +394,14 @@ object Directory {
   def caseInsensitiveFileExtensionPredicate(extns: String*): FileFilter = CaseInsensitiveExtensionPredicate(extns: _*)
 
   private final case class ExactMatchPredicate(files: FileAsset*) extends PathFilter {
-    override def apply(p: String, a: BasicFileAttributes): Boolean =
-      RegularFileFilter(p, a) && files.exists(f => f.pathString == PathUtils.platformIndependentString(p))
+    private val pathStrs = files.map(_.pathString).toSet
+    private val paths = files.map(_.path.normalize).toSet
+    override def apply(p: String, a: BasicFileAttributes): Boolean = {
+      val pStr = PathUtils.platformIndependentString(p)
+      RegularFileFilter(p, a) && pathStrs.contains(pStr)
+    }
     override def apply(p: Path, a: BasicFileAttributes): Boolean =
-      RegularFileFilter(p, a) && files.exists(_.path == p)
+      RegularFileFilter(p, a) && paths.contains(p)
   }
   def exactMatchPredicate(files: FileAsset*): PathFilter = ExactMatchPredicate(files: _*)
 

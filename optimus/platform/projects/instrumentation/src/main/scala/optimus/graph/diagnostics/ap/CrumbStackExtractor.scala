@@ -36,6 +36,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import optimus.scalacompat.collection._
 
+import scala.collection.immutable.ArraySeq
+
 object CrumbStackExtractor extends Log {
 
   type CrumbMap = Map[String, JsValue]
@@ -356,7 +358,7 @@ class CrumbStackExtractor(
   }
 
   private def processStackPathTail(sid: String, head: StackNode, it: Iterator[String]): Unit = {
-    val fids = ArrayBuffer.empty[Int]
+    val fids = ArraySeq.newBuilder[Int]
     if (head ne null) fids ++= head.fids
     var prev = head
     it.foreach { encoded =>
@@ -364,7 +366,7 @@ class CrumbStackExtractor(
       prev = curr
       fids += curr.fid
     }
-    sid2frames.put(sid, fids)
+    sid2frames.put(sid, fids.result())
   }
 
   def incorporateFrames(crumb: CrumbMap, includeUnknown: Boolean = true): Unit = if (stackPath) {

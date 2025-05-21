@@ -14,12 +14,12 @@ package optimus.graph.diagnostics.pgo
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.config.CacheConfig
 import optimus.config.NodeCacheConfigs
-import optimus.graph.ConstructorNode
 import optimus.graph.NodeTaskInfo
 import optimus.graph.cache.Caches
 import optimus.graph.cache.NCPolicy
 import optimus.graph.cache.NodeCCache
 import optimus.graph.diagnostics.PNodeTaskInfo
+import optimus.platform.storable.EmbeddableCtrNodeSupport
 
 import java.io.BufferedOutputStream
 import java.io.File
@@ -56,7 +56,7 @@ object ConfigWriter {
     finally { writer.close() }
   }
 
-  def apply(out: Writer, pntis: collection.Seq[PNodeTaskInfo], cfg: ConfigWriterSettings): ConfigWriter =
+  def apply(out: Writer, pntis: Seq[PNodeTaskInfo], cfg: ConfigWriterSettings): ConfigWriter =
     new ConfigWriter(out, pntis, NodeCacheConfigs.getCacheConfigs.values, cfg)
 }
 
@@ -64,7 +64,7 @@ private final case class Config(key: String, value: String)
 
 private[optimus] class ConfigWriter(
     out: Writer,
-    allPNTIs: collection.Seq[PNodeTaskInfo],
+    allPNTIs: Seq[PNodeTaskInfo],
     sharedCaches: Iterable[CacheConfig],
     cfg: ConfigWriterSettings) {
 
@@ -167,7 +167,7 @@ private[optimus] class ConfigWriter(
   }
 
   /** de-duplicate any shared config and produce a map for looking up config given a shared key */
-  private def uniqueSharedConfigs(pnodesToWrite: collection.Seq[PNodeTaskInfo]): Map[String, String] = {
+  private def uniqueSharedConfigs(pnodesToWrite: Seq[PNodeTaskInfo]): Map[String, String] = {
     // this may contain duplicates
     val configs = pnodesToWrite.flatMap(configForPnti(_))
     // so group by key
@@ -180,11 +180,11 @@ private[optimus] class ConfigWriter(
     }
   }
 
-  private def shouldWriteCtrConfig(ctrNodes: collection.Seq[PNodeTaskInfo]): Boolean =
+  private def shouldWriteCtrConfig(ctrNodes: Seq[PNodeTaskInfo]): Boolean =
     ctrNodes.nonEmpty && ctrNodes.exists(ctr =>
       configForPnti(ctr, mutable.Set[PGOMode](), referToSharedCache = false, report = false).isDefined)
 
-  private def generateConstructorSection(ctrNodes: collection.Seq[PNodeTaskInfo]): String = {
+  private def generateConstructorSection(ctrNodes: Seq[PNodeTaskInfo]): String = {
     val res = new StringBuilder()
     if (shouldWriteCtrConfig(ctrNodes)) {
       res.append(s"""${pad(2)}"Constructors": {\n""")
@@ -202,7 +202,7 @@ private[optimus] class ConfigWriter(
           if (value.nonEmpty) allConfigForPnti += value
         }
         if (allConfigForPnti.nonEmpty) {
-          allCtrConfigs.put(ctrPnti.name.stripSuffix(ConstructorNode.suffix), allConfigForPnti.mkString(",\n"))
+          allCtrConfigs.put(ctrPnti.name.stripSuffix(EmbeddableCtrNodeSupport.suffix), allConfigForPnti.mkString(",\n"))
         }
       }
       val ctrConfigAsStr = allCtrConfigs
@@ -334,18 +334,17 @@ private[optimus] class ConfigWriter(
   }
 
   // skip non-entity nodes (they can sneak in via Include All Nodes)
-  private[optimus] def withoutConstructorPntis(
-      allPNodeTasks: collection.Seq[PNodeTaskInfo]): collection.Seq[PNodeTaskInfo] =
-    allPNodeTasks.filterNot(_.name.endsWith(ConstructorNode.suffix))
+  private[optimus] def withoutConstructorPntis(allPNodeTasks: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] =
+    allPNodeTasks.filterNot(_.name.endsWith(EmbeddableCtrNodeSupport.suffix))
 
-  private[optimus] def allPntisToWrite(allPNodeTasks: collection.Seq[PNodeTaskInfo]): collection.Seq[PNodeTaskInfo] =
+  private[optimus] def allPntisToWrite(allPNodeTasks: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] =
     allPNodeTasks
       .filter(configForPnti(_).nonEmpty)
       .filter(_.name.nonEmpty)
 
   // only constructor nodes
-  private[optimus] def ctrPntisToWrite(allPNodeTasks: collection.Seq[PNodeTaskInfo]): collection.Seq[PNodeTaskInfo] =
-    allPNodeTasks.filter(_.name.endsWith(ConstructorNode.suffix))
+  private[optimus] def ctrPntisToWrite(allPNodeTasks: Seq[PNodeTaskInfo]): Seq[PNodeTaskInfo] =
+    allPNodeTasks.filter(_.name.endsWith(EmbeddableCtrNodeSupport.suffix))
 
   private def addReferenceToSharedCache(
       pnti: PNodeTaskInfo,

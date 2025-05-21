@@ -80,7 +80,7 @@ private[optimus] trait Graph[A, V <: Vertex[A], E <: Edge[A, V]] {
       })
       processed += destination
     }
-    inBoundEdges
+    inBoundEdges.toList
   }
 
   def shortestPaths = _shortestPaths.toMap

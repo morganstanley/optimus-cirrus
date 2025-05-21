@@ -39,7 +39,10 @@ object ScopedConfiguration {
       else Some(from(new File(arg)))
     }
 
-  class OptionOptionHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Option[ScopedConfiguration]])
+  class ScopedConfigurationOptionOptionHandler(
+      parser: CmdLineParser,
+      option: OptionDef,
+      setter: Setter[Option[ScopedConfiguration]])
       extends OneArgumentOptionHandler[Option[ScopedConfiguration]](parser, option, setter) {
     override def parse(arg: String): Option[ScopedConfiguration] = fileFromString(arg)
   }

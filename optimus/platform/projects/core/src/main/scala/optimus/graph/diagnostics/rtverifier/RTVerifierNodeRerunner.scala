@@ -68,7 +68,7 @@ object RTVerifierNodeRerunner {
     private def equalsEnough(objA: AnyRef, objB: AnyRef): Boolean = (objA, objB) match {
       // unfortunately exceptions do not have a stable equality,
       // the reason why we need to relax what we mean with "equals" here
-      case (a: Throwable, b: Throwable) => // regex-ignore-line: false alarm, we are not catching exceptions here!
+      case (a: Throwable, b: Throwable) => // regex-ignore-line - false alarm, we are not catching exceptions here!
         a.getClass == b.getClass
       case (a, b) => equalityCheck(a, b, skipBadEquality = DiagnosticSettings.rtvNodeRerunnerSkipBadEquality)
     }

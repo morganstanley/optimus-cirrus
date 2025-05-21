@@ -97,7 +97,8 @@ public class OGSchedulerTimes {
   private static long preOptimusStartupTimestamp = 0L; // timestamp (nanoTime)
   private static long preOptimusStartupTime = 0L; // duration (from start of JVM), in nanos
   // 2. optimus env startup
-  // OptimusApp: from just before withOptimus to just after
+  // OptimusApp: from just before withOptimus to just after; i.e. optimusStartupTimestamp is set
+  // immediately as the first operation within the withOptimus closure.
   // further breakdown may be to separate DAL setup from og.scheduler setup, but it's 99% DAL
   // (serverTime and roles)
   private static long optimusStartupTimestamp = 0L; // timestamp (nanoTime)
@@ -172,9 +173,22 @@ public class OGSchedulerTimes {
   }
 
   public static long getPreOptimusStartupTime() {
-    return preOptimusStartupTime;
+    synchronized (timeLock) {
+      if (preOptimusStartupTime == 0) return 1000 * 1000 * DiagnosticSettings.jvmUpTimeInMs();
+      else return preOptimusStartupTime;
+    }
   }
 
+  public static long getOptimusStartupTime() {
+    synchronized (timeLock) {
+      if (optimusStartupTimestamp > 0.0)
+        return optimusStartupTimestamp - preOptimusStartupTimestamp;
+      else if (preOptimusStartupTime > 0.0) return OGTrace.nanoTime() - preOptimusStartupTimestamp;
+      else return 0;
+    }
+  }
+
+  // Called before any other operation in the withOptimus closure.
   static void optimusStartupComplete(long nanoTime) {
     synchronized (timeLock) {
       if (optimusStartupTimestamp != 0)

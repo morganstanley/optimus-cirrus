@@ -22,10 +22,14 @@ main {
       ossjava.slf4j,
       ossscala.scala
     ]
-    mavenLibs = [
-      ch.qos.logback.logback-classic,
-      org.slf4j.slf4j-api
-    ]
   }
   installIvy = true
+}
+
+test {
+  compile {
+    libs = [
+      ossjava.junit
+    ]
+  }
 }

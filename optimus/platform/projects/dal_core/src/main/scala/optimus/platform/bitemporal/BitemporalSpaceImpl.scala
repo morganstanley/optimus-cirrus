@@ -12,7 +12,6 @@
 package optimus.platform.bitemporal
 
 import java.time.Instant
-
 import optimus.core.Collections
 import optimus.platform.internal.SimpleGlobalStateHolder
 import optimus.platform.TimeInterval
@@ -22,6 +21,7 @@ import optimus.platform.bitemporal.DateConversions._
 import scala.collection.immutable.SortedSet
 import scala.collection.mutable
 import scala.collection.compat._
+import scala.collection.immutable.ArraySeq
 
 private[platform] class BitemporalSpaceSetting {
   val KEY_ENABLE_FINAL_ACTIONS_MERGE = "optims.platform.bitemporal.mergeFinalActions"
@@ -582,7 +582,8 @@ final case class SimpleBitemporalSpace[T] private (
     }
 
     val result = actions map executeAction
-    val space = new SimpleBitemporalSpace(newRects, Some(tt), currentMaxTimeSliceCount)
+    val space =
+      new SimpleBitemporalSpace(ArraySeq.unsafeWrapArray(newRects.toArray), Some(tt), currentMaxTimeSliceCount)
 
     (space, result)
   }

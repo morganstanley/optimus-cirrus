@@ -58,7 +58,7 @@ trait RelTreeDecoder extends RelationTreeDecoder {
   override def decode(rel: RelationTreeMessage): RelationElement = {
     val r = RelExpr.Relation.parseFrom(rel.toByteArray)
     if (r.getVersion > 1) throw new UnsupportedOperationException("Unsupported query version " + r.getVersion)
-    val decodeType = createTypeInfoDecoder(r.getTypeInfosList.asScala)
+    val decodeType = createTypeInfoDecoder(r.getTypeInfosList.asScalaUnsafeImmutable)
     decodeRelation(r.getRoot, decodeType)
   }
 
@@ -94,7 +94,7 @@ trait RelTreeDecoder extends RelationTreeDecoder {
     val args = method.getArgumentsList.asScala map { arg =>
       decodeMethodArg(arg, decodeType)
     }
-    val keys = r.getKeysList.asScala map { _.getName }
+    val keys = r.getKeysList.asScalaUnsafeImmutable.map(_.getName)
     new MethodElement(queryMethod, args.toList, typeInfo, DynamicKey(keys))
   }
 
@@ -258,32 +258,31 @@ private[optimus] class DefaultTypeInfoDecoder(override val source: Seq[RelExpr.T
 
   protected def decode(index: Int): TypeInfo[_] = {
     val (t, interfaces, cls, signatures, ctorParams, typeParams) = getTypeInfoProps(index)
-
-    val typeInfo = cls ++ interfaces match {
-      // no classes were resolved - mock type info
-      case Seq() =>
+    val classes = cls ++: interfaces
+    val typeInfo =
+      if (classes.isEmpty)
+        // no classes were resolved - mock type info
         TypeInfo.mock(
           t.getName,
           signatures,
           ctorParams,
           typeParams
         ) // in case TypeInfo(Nil, Nil, Nil, Nil) name comes from TypeInfo.runtimeClassName which is specified by user through TypeInfo.mock(className)
-      // some classes were resolved - create normal type info
-      case _ =>
+      else
+        // some classes were resolved - create normal type info
         TypeInfo(
-          cls.toIndexedSeq ++ interfaces,
+          classes,
           signatures,
           ctorParams,
           typeParams
         ) // this includes anonymous type case which cls + interfaces is also Nil, but others are not Nil
-    }
     log.debug(s"Decoded type number ${index} to type ${typeInfo.name}")
     typeInfo
   }
 
   protected def getTypeInfoProps(index: Int) = {
     val t = source(index)
-    val interfaces = t.getInterfaceNamesList.asScala flatMap getPrimitiveOrClass
+    val interfaces = t.getInterfaceNamesList.asScalaUnsafeImmutable.flatMap(getPrimitiveOrClass)
 
     val cls = t match {
       case _ if t.getName == TypeInfoEncoder.proxyName =>
@@ -294,17 +293,17 @@ private[optimus] class DefaultTypeInfoDecoder(override val source: Seq[RelExpr.T
       case _ => None
     }
 
-    val signatures = t.getStructuralMethodsList.asScala map { s =>
+    val signatures = t.getStructuralMethodsList.asScalaUnsafeImmutable.map { s =>
       val split = s.split("\\(")
       Signature(split(0), "(" + split(1))
     }
 
     val ctorParams = for {
-      param <- t.getConstructorParamsList.asScala
+      param <- t.getConstructorParamsList.asScalaUnsafeImmutable
       cls <- getPrimitiveOrClass(param.getClassName)
     } yield (param.getParamName, cls)
 
-    val typeParams = t.getTypeParamsList.asScala map apply
+    val typeParams = t.getTypeParamsList.asScalaUnsafeImmutable.map(apply)
     (t, interfaces, cls, signatures, ctorParams, typeParams)
   }
 

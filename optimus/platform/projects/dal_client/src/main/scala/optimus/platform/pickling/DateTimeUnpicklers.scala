@@ -35,7 +35,7 @@ private[optimus] object DateTimeUnpicklers {
 
   class InstantUnpickler extends Unpickler[Instant] {
     @nodeSync override def unpickle(pickled: Any, ctxt: PickledInputStream): Instant = pickled match {
-      case buf: Seq[_] =>
+      case buf: collection.Seq[_] =>
         val temp = buf(0)
         val seconds = LongUnpickler.unpickle(temp, ctxt)
         val nanos = buf(1).asInstanceOf[Int]
@@ -45,7 +45,7 @@ private[optimus] object DateTimeUnpicklers {
 
   class DurationUnpickler extends Unpickler[Duration] {
     @nodeSync override def unpickle(pickled: Any, ctxt: PickledInputStream): Duration = pickled match {
-      case buf: Seq[_] =>
+      case buf: collection.Seq[_] =>
         val temp = buf(0)
         val seconds = LongUnpickler.unpickle(temp, ctxt)
         val nanos = buf(1).asInstanceOf[Int]
@@ -55,7 +55,7 @@ private[optimus] object DateTimeUnpicklers {
 
   class MonthUnpickler extends Unpickler[YearMonth] {
     @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream) = pickled match {
-      case buf: Seq[_] =>
+      case buf: collection.Seq[_] =>
         val year = buf(0).asInstanceOf[Int]
         val month = buf(1).asInstanceOf[Int]
         YearMonth.of(year, month)

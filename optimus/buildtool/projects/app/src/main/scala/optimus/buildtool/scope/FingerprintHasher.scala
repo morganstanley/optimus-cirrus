@@ -17,6 +17,8 @@ import optimus.buildtool.artifacts.FingerprintArtifactType
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.cache.ArtifactStore
 import optimus.buildtool.config.ScopeId
+import optimus.buildtool.trace.HashFingerprints
+import optimus.buildtool.trace.ObtTrace
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.CompilePathBuilder
 import optimus.buildtool.utils.Hashing
@@ -37,7 +39,7 @@ import scala.collection.immutable.Seq
       fingerprint: Seq[String],
       tpe: FingerprintArtifactType,
       discriminator: Option[String] = None
-  ): FingerprintArtifact = {
+  ): FingerprintArtifact = ObtTrace.traceTask(id, HashFingerprints(tpe)) {
     log.debug(s"[$id] Calculating hashed fingerprint for $tpe...")
     val hashPrefix = Hashing.hashStrings(fingerprint ++ freezeHash)
     // we use Z for freezer because F could be interpreted as part of the hash!

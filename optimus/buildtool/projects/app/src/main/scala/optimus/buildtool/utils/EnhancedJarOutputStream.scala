@@ -79,6 +79,11 @@ abstract class EnhancedJarOutputStream(val file: JarAsset, manifest: Option[jar.
   def copyInFile(content: Array[Byte], targetName: RelativePath): Unit =
     copyInFile(new ByteArrayInputStream(content), targetName)
 
+  def writeInFile(out: OutputStream => Unit, targetName: RelativePath): Unit = {
+    putNextEntry(targetName.pathString)
+    out(this)
+  }
+
   def copyInFile(inputStream: InputStream, targetName: RelativePath): Unit = {
     putNextEntry(targetName.pathString)
     val buffer = new Array[Byte](4096)

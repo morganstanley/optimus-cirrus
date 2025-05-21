@@ -11,8 +11,18 @@
  */
 package optimus.entity
 
+import optimus.core.CoreHelpers
+
 sealed trait LinkageType {
   val propertyName: String
   val typeName: String
 }
-final case class EntityLinkageProperty(propertyName: String, typeName: String) extends LinkageType
+
+final case class EntityLinkageProperty private (propertyName: String, typeName: String) extends LinkageType
+
+// EntityLinkageProperty instances have low cardinality so we strong-intern them
+object EntityLinkageProperty {
+  def apply(propertyName: String, typeName: String): EntityLinkageProperty = {
+    CoreHelpers.strongIntern(new EntityLinkageProperty(propertyName, typeName)).asInstanceOf[EntityLinkageProperty]
+  }
+}

@@ -36,11 +36,7 @@ object Signature {
   def apply(name: String, desc: String, richReturnType: JType): Signature = {
     new Signature(name, desc, richReturnType)
   }
-  def apply(
-      name: String,
-      returnClass: Class[_],
-      argumentClasses: collection.Seq[Class[_]],
-      richReturnType: JType): Signature = {
+  def apply(name: String, returnClass: Class[_], argumentClasses: Seq[Class[_]], richReturnType: JType): Signature = {
     apply(
       name,
       Type.getMethodDescriptor(Type.getType(returnClass), argumentClasses.map(Type.getType).toSeq: _*),

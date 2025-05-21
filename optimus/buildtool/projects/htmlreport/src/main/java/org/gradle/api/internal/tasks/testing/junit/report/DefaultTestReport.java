@@ -23,6 +23,8 @@ import java.util.List;
 
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
+import org.gradle.api.internal.tasks.testing.junit.result.JUnitXmlResultOptions;
+import org.gradle.api.internal.tasks.testing.junit.result.JUnitXmlResultWriter;
 import org.gradle.api.internal.tasks.testing.junit.result.TestClassResult;
 import org.gradle.api.internal.tasks.testing.junit.result.TestFailure;
 import org.gradle.api.internal.tasks.testing.junit.result.TestMethodResult;
@@ -36,6 +38,23 @@ public class DefaultTestReport {
   public void generateReport(TestResultsProvider resultsProvider, File reportDir) {
     AllTestResults model = loadModelFromProvider(resultsProvider);
     generateFiles(model, resultsProvider, reportDir);
+  }
+
+  public void generateXmlReport(TestResultsProvider resultsProvider, File reportDir) {
+    AllTestResults model = loadModelFromProvider(resultsProvider);
+    generateXmlFiles(model, resultsProvider, reportDir);
+  }
+
+  private void generateXmlFiles(
+      AllTestResults model, TestResultsProvider resultsProvider, File reportDir) {
+    try {
+      JUnitXmlResultOptions options = new JUnitXmlResultOptions(true, false, false, false);
+      JUnitXmlResultWriter xmlWriter = new JUnitXmlResultWriter(resultsProvider, options);
+      xmlWriter.writeToFile(model, reportDir);
+    } catch (Exception e) {
+      throw new GradleException(
+          String.format("Could not generate XML test report to '%s'.", reportDir), e);
+    }
   }
 
   public void generateOverview(TestResultsProvider resultsProvider, File reportDir) {

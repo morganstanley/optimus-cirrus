@@ -16,54 +16,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.runconf.RunConf
 import optimus.platform._
 
-import java.nio.file.Path
-import java.nio.file.Paths
-
-@entity object Changes {
-  private val prefix = "[Dynamic Scoping] "
-
-  @node def pathToScopes(path: Path, scopeConfigSource: ScopeConfigurationSource): Set[ScopeId] = {
-    val partialId = maybeScopeId(path, scopeConfigSource)
-
-    scopeConfigSource.tryResolveScopes(partialId).getOrElse {
-      log.debug(s"could not resolve path=$path, partialId=$partialId to a scope. Trying parent")
-      // if we get to root we don't want 'null' here
-      pathToScopes(Option(path.getParent).getOrElse(Paths.get("")), scopeConfigSource)
-    }
-  }
-
-  @node def changesAsScopes(
-      changes: Option[Set[Path]],
-      scopeConfigSource: ScopeConfigurationSource): Option[Set[ScopeId]] =
-    changes
-      .map {
-        // optimization for huge PRs, map to parent dir to get the # of entries lower
-        _.apar.map(path => Option(path.getParent).getOrElse(Paths.get("")))
-      }
-      .map { paths =>
-        paths.apar.flatMap { path =>
-          val scopes = Changes.pathToScopes(path, scopeConfigSource)
-          log.debug(s"${Changes.prefix}Mapped $path to $scopes")
-          scopes
-        }
-      }
-
-  @node def maybeScopeId(path: Path, scopeConfigSource: ScopeConfigurationSource): String = {
-    // find a sub-scope that matches
-    scopeConfigSource.compilationScopeIds
-      .find { scopeId =>
-        val scopeConfig = scopeConfigSource.scopeConfiguration(scopeId)
-        path.startsWith(scopeConfig.paths.scopeRoot.path)
-      } match {
-      // yay, we've found our scope
-      case Some(scopeId) => scopeId.toString
-      // not a file in any scope, just some dirs, let's found out which meta/bundle/module those are in
-      case None => path.toString.split("/").filterNot(_ == "projects").take(3).mkString(".")
-    }
-  }
-
-}
-
 @entity class Changes(
     val changes: Option[Set[ScopeId]],
     val scopeConfigSource: ScopeConfigurationSource,

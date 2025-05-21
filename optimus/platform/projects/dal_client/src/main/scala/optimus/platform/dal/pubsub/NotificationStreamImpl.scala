@@ -41,7 +41,7 @@ private[optimus] class NotificationStreamImpl(
     override val id: ClientStreamId,
     addCmd: CreatePubSubStream,
     notificationStreamCallback: NotificationStreamCallback,
-    partition: Partition,
+    val partition: Partition,
     private[optimus] val pubSubRequestHandler: HandlePubSub,
     env: RuntimeEnvironment
 ) extends NotificationStream {
@@ -50,6 +50,7 @@ private[optimus] class NotificationStreamImpl(
   private[this] val subscriptionStateManager = new SubscriptionStateManager(addCmd.subs)
 
   private[optimus] val serverSideStreamId: String = addCmd.streamId
+  private[this] val lastUpdateTime = new AtomicReference[Instant](patch.MilliInstant.now)
   private[this] val lastSeenTxTime = new AtomicReference[Instant](TimeInterval.NegInfinity)
   private[this] val streamState = new AtomicReference[NotificationStreamState](NotificationStreamState.Uninitialized)
   private[this] val retryCmd = new AtomicReference[Option[CreatePubSubStream]](None)
@@ -72,7 +73,12 @@ private[optimus] class NotificationStreamImpl(
 
   private[optimus] def getLastSeenTt: Instant = lastSeenTxTime.get
 
-  private[this] def updateTt(tt: Instant): Unit = lastSeenTxTime.set(tt)
+  private[this] def updateTt(tt: Instant): Unit = {
+    lastSeenTxTime.set(tt)
+    lastUpdateTime.set(patch.MilliInstant.now) // we don't have to make the two atomic
+  }
+
+  private[optimus] def getLastUpdateTime: Instant = lastUpdateTime.get
 
   def isInitialized: Boolean = getState == NotificationStreamState.Initialized
 
@@ -299,6 +305,8 @@ private[optimus] class NotificationStreamImpl(
         log.info(
           s"${clientAndServerStreamLogHeader(svid)} Replication lag below limit threshold, $lagTime milliseconds")
         Seq(ReplicationLagDecreaseEvent(lagTime))
+      case PubSubTickDelay(types)     => Seq(PubSubDelayEvent(types))
+      case PubSubTickDelayOver(types) => Seq(PubSubDelayOverEvent(types))
       case PubSubUpstreamChangedResult(svid) =>
         log.info(s"${clientAndServerStreamLogHeader(svid)} Upstream connection changed")
         Seq(UpstreamChangedEvent)

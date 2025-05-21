@@ -32,6 +32,7 @@ import optimus.profiler.ui.common.JToolBar2
 import optimus.profiler.ui.common.JUIUtils
 
 import java.lang.StringBuilder
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -179,21 +180,20 @@ final class ResultTableCreator(fileChooserPanel: FileChooserPanel, fileChooserDi
   private def loadAndMergePntisFromPath(
       paths: ArrayBuffer[String],
       resultTableCreator: ResultTableCreator): Option[Seq[PNodeTaskInfo]] = {
-    val filePaths: ArrayBuffer[String] = ArrayBuffer[String]()
-    val files: ArrayBuffer[String] = ArrayBuffer[String]()
+    val files = ArraySeq.newBuilder[String]
     var pntis: Option[Seq[PNodeTaskInfo]] = None
 
     JUIUtils.readFromFilePaths(null, paths) { file =>
       if (file.isFile) {
-        files.append(file.toString)
-        filePaths += file.getCanonicalPath
+        files += file.toString
       } else
         JOptionPane.showMessageDialog(
           resultTableCreator,
           s"There is an issue reading $file. Please check and try again.")
     }
-    if (files.nonEmpty) {
-      val (tmp, _) = MergeTraces.mergeTraces(files)
+    val filesRes = files.result()
+    if (filesRes.nonEmpty) {
+      val (tmp, _) = MergeTraces.mergeTraces(filesRes)
       pntis = Some(tmp)
     }
     pntis

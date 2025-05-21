@@ -30,14 +30,16 @@ import optimus.graph.diagnostics.sampling.PyroUploader.AppKey
 import optimus.graph.diagnostics.sampling.PyroUploader.EngineKey
 import optimus.graph.diagnostics.sampling.SamplingProfiler.SamplerTrait
 import optimus.graph.diagnostics.sampling.TaskTracker.AppInstance
+import optimus.graph.diagnostics.sampling.SamplingProfilerLogger.log
 import optimus.platform.util.InfoDump
-import optimus.platform.util.Log
 import optimus.platform.util.ServiceLoaderUtils
 import optimus.platform.util.Version
 import optimus.utils.MacroUtils.SourceLocation
 import optimus.utils.MiscUtils.ThenSome
 import optimus.utils.PropertyUtils
 
+import org.slf4j.LoggerFactory
+import org.slf4j.Logger
 import java.lang.management.ManagementFactory
 import java.nio.file.Paths
 import java.time.Instant
@@ -51,9 +53,24 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 import scala.util.control.NonFatal
+
 trait SamplerProvider {
   def provide(sp: SamplingProfiler): Seq[SamplerTrait[_, _]]
   val priority: Int = Int.MaxValue
+}
+
+object SamplingProfilerLogger {
+  lazy val pid = ManagementFactory.getRuntimeMXBean.getName.split("@")(0)
+  val logPrefix = s"[${SamplingProfiler.Name}$pid-${ChainedID.root}] "
+  val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  object log {
+    def debug(msg: String): Unit = logger.debug(logPrefix + msg)
+    def info(msg: String): Unit = logger.info(logPrefix + msg)
+    def warn(msg: String): Unit = logger.warn(logPrefix + msg)
+    def warn(msg: String, t: Throwable): Unit = logger.warn(logPrefix + msg, t)
+    def error(msg: String): Unit = logger.error(logPrefix + msg)
+    def error(msg: String, t: Throwable): Unit = logger.error(logPrefix + msg, t)
+  }
 }
 
 object SamplingProfilerSource extends Crumb.Source {
@@ -107,8 +124,7 @@ class SamplingProfiler private[diagnostics] (
     private val ownerId: ChainedID,
     crumbConsumer: SampleCrumbConsumer = DefaultSampleCrumbConsumer,
     properties: Map[String, String] = Map.empty
-) extends SampleCrumbConsumer
-    with Log {
+) extends SampleCrumbConsumer {
   import SamplingProfiler._
 
   override def consume(id: ChainedID, source: Crumb.Source, elems: Elems): Unit =
@@ -124,7 +140,7 @@ class SamplingProfiler private[diagnostics] (
   val propertyUtils = new PropertyUtils(properties)
 
   private val pauseInactive = propertyUtils.get("optimus.sampling.pause.inactive", false)
-  val periodSec = propertyUtils.get("optimus.sampling.sec", 60)
+  val periodSec = propertyUtils.get(SamplingIntervalSec, DefaultSamplingIntervalSec)
   private val spoofRoot = propertyUtils.get("optimus.sampling.rootids", true)
   private val cleanupWaitMs = propertyUtils.get("optimus.sampling.wait.ms", 5000)
 
@@ -132,7 +148,7 @@ class SamplingProfiler private[diagnostics] (
   private val activityMeritingPublication = new AtomicInteger(1)
 
   private[sampling] def warn(msg: String, t: Throwable, counter: AtomicInteger = GlobalMaxWarnings): Unit = {
-    log.warn(logPrefix + msg, t)
+    log.warn(msg, t)
     if (counter.getAndUpdate(i => if (i > 0) i - 1 else 0) > 0) {
       Breadcrumbs.warn(
         sp.ownerId,
@@ -149,7 +165,7 @@ class SamplingProfiler private[diagnostics] (
   def recordActivity(): Unit = activityMeritingPublication.incrementAndGet()
 
   // warn log level for higher verbosity
-  log.warn(s"${logPrefix}Starting SamplingProfiler ownerId=$ownerId period=$periodSec")
+  log.warn(s"Starting SamplingProfiler ownerId=$ownerId period=$periodSec")
 
   private val sp = this
 
@@ -198,7 +214,7 @@ class SamplingProfiler private[diagnostics] (
             else {
               val msg =
                 s"SamplingProfiler $ownerId has not snapped in ${System.currentTimeMillis() - _currentSnapTime} ms"
-              log.warn(logPrefix + msg)
+              log.warn(msg)
               InfoDump.dump("sampling", msg :: Nil)
               delay * 2
             }
@@ -236,6 +252,7 @@ class SamplingProfiler private[diagnostics] (
           distActiveTime -> cycle.timeAnyActiveInCycle / NANOSPERMILLI,
           currentlyRunning -> cycle.activeChainedIDs,
           activeRoots -> cycle.appInstances.map(_.root),
+          engineRootsCount -> 1,
           activeScopes -> cycle.activeScopes,
           distTasksRcvd -> cycle.numActivated,
           distTasksComplete -> cycle.numDeactivated,
@@ -328,7 +345,7 @@ class SamplingProfiler private[diagnostics] (
               warn("Exception shutting down samplers", t)
           }
       }
-      log.info(s"${logPrefix}Exiting $this")
+      log.info(s"Exiting $this")
     }
   }
 
@@ -364,7 +381,7 @@ class SamplingProfiler private[diagnostics] (
         _snapAndPublishImmediately
       }
       if (doSnapNow) {
-        log.info(s"${logPrefix}Triggering off-cycle snap and publish.")
+        log.info("Triggering off-cycle snap and publish.")
         snap()
         publish()
         waiter.synchronized {
@@ -442,7 +459,7 @@ class SamplingProfiler private[diagnostics] (
                   pulse -> pulseData :: identificationData
 
               if (isCanonical)
-                log.debug(s"${logPrefix}Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
+                log.debug(s"Publishing batch=$iBatch to $source:${destinations.mkString(",")}: $toPublish")
               crumbConsumer.consume(id, source, toPublish)
             }
             batchesForAllSamplers = rest.filter(_.nonEmpty)
@@ -480,7 +497,7 @@ class SamplingProfiler private[diagnostics] (
   def shutdown(waitMs: Long): Unit = {
     waiter.synchronized {
       if (_stillPulsing && samplingThread.isAlive) {
-        log.info(s"${logPrefix}Shutting down sampling")
+        log.info("Shutting down sampling")
         enabled = false
         _snapAndPublishImmediately = waitMs > 0
         _stillPulsing = false
@@ -505,13 +522,14 @@ trait SchedulerCounter {
   def numThreads: Option[Int]
 }
 
-object SamplingProfiler extends Log {
+object SamplingProfiler {
   @volatile private[diagnostics] var configured = false
 
   val Name = "SamplingProfiler"
-  val logPrefix = s"[$Name-${ChainedID.root}] "
   val stackDataSource: Crumb.Source = SamplingProfilerSource
   val periodicSamplesSource: Crumb.Source = SamplingProfilerSource + ProfilerSource
+  val SamplingIntervalSec = "optimus.sampling.sec"
+  val DefaultSamplingIntervalSec = 60
 
   // minimum publication interval in the presence of "activity" (e.g. a distributed task completion)
   private val activityIntervalMs = PropertyUtils.get("optimus.sampling.activity.sec", 30) * 1000L
@@ -534,7 +552,7 @@ object SamplingProfiler extends Log {
     enabled && AsyncProfilerSampler.numPrunedStacks > 0 &&
       AsyncProfilerIntegration.ensureLoadedIfEnabled() &&
       (!AsyncProfilerIntegration.isProfiling || {
-        log.warn(s"${logPrefix}async-profiler already running")
+        log.warn(s"async-profiler already running")
         false
       })
 
@@ -582,7 +600,7 @@ object SamplingProfiler extends Log {
               val msg = s"Permanently disabling SP: Not configured within $configTimeoutSec seconds"
               SamplingProfiler.shutdownNow()
               configured = true
-              log.warn(logPrefix + msg)
+              log.warn(msg)
               Breadcrumbs.warn(
                 ChainedID.root,
                 PropertiesCrumb(
@@ -698,6 +716,10 @@ object SamplingProfiler extends Log {
       new Sampler(sp, loc.toString, snapper, LATEST[N], (v, _) => Elems(key.maybe(num.nonZero(v))))
     }
 
+    def SnapElems(name: String)(snapper: Elems): Unit = {
+      new Sampler[Elems, Elems](sp, name, _ => snapper, LATEST[Elems], (v, _) => v)
+    }
+
   }
 
   /**
@@ -738,7 +760,7 @@ object SamplingProfiler extends Log {
     override def shutdown(): Unit = {}
   }
 
-  private[sampling] trait SamplerTrait[T, V] {
+  trait SamplerTrait[T, V] {
     protected val sp: SamplingProfiler
     protected def snap(firstTime: Boolean): T
     protected def transform(prev: Option[T], curr: T): V

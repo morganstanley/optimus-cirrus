@@ -19,8 +19,6 @@ import java.util.IdentityHashMap;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import optimus.breadcrumbs.Breadcrumbs;
-import optimus.core.MonitoringBreadcrumbs$;
 import optimus.graph.diagnostics.InfoDumper$;
 import optimus.graph.diagnostics.ProfiledEvent;
 import optimus.graph.diagnostics.rtverifier.RTVerifierNodeRerunner$;

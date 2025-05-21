@@ -87,7 +87,7 @@ object Compression {
   }
 
   def decompressTaggedArray(stuff: Any): Array[Byte] = stuff match {
-    case buf: Seq[_] =>
+    case buf: collection.Seq[_] =>
       val compression = buf(0).asInstanceOf[Int]
       val sz = buf(1).asInstanceOf[Int]
       val data = buf(2).asInstanceOf[ImmutableByteArray].data

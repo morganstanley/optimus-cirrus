@@ -21,7 +21,7 @@ import org.apache.commons.text.StringEscapeUtils
 final case class Group(groupName: String, innerNodes: HtmlNode*) extends GroupHtmlNode {
   override def prettyGroupName: String =
     if (innerNodes.isEmpty) s"""Group("$groupName")""" else s"""Group("$groupName","""
-  override def withContents(newContents: collection.Seq[HtmlNode]) = Group(groupName, newContents.toSeq: _*)
+  override def withContents(newContents: Seq[HtmlNode]) = Group(groupName, newContents.toSeq: _*)
 }
 
 /**
@@ -191,15 +191,14 @@ object FreeFormStringBuilderContents {
     new FreeFormStringBuilderContents(new StringBuilder(contents))
   implicit def stringToStringBuilderContents(contents: String): FreeFormStringBuilderContents = apply(contents)
 }
-final case class MoreHtmlNodes(attrs: collection.Seq[HtmlNode]) extends HtmlNodeContents {
+final case class MoreHtmlNodes(attrs: Seq[HtmlNode]) extends HtmlNodeContents {
   override def toString: String = attrs.toString
   override def isEmpty: Boolean = attrs.isEmpty || attrs.forall(_.contents.isEmpty)
 }
 object MoreHtmlNodes {
   val Empty = MoreHtmlNodes(Nil)
-  def apply(attrs: collection.Seq[HtmlNode]): MoreHtmlNodes = new MoreHtmlNodes(attrs)
-  implicit def attributesToMoreHtmlNodes(contents: collection.Seq[HtmlNode]): MoreHtmlNodes = new MoreHtmlNodes(
-    contents)
+  def apply(attrs: Seq[HtmlNode]): MoreHtmlNodes = new MoreHtmlNodes(attrs)
+  implicit def attributesToMoreHtmlNodes(contents: Seq[HtmlNode]): MoreHtmlNodes = new MoreHtmlNodes(contents)
 }
 object EmptyContents extends HtmlNodeContents {
   override def isEmpty: Boolean = true
@@ -220,7 +219,7 @@ sealed trait HtmlNode {
 
   def isEmpty: Boolean = contents.isEmpty
 
-  def flatten: collection.Seq[HtmlNode]
+  def flatten: Seq[HtmlNode]
   def withoutNodes(predicate: HtmlNode => Boolean): Option[HtmlNode]
   def isDescriptive: Boolean
   def collapse: HtmlNode
@@ -235,11 +234,11 @@ sealed trait Styled {
 sealed trait GroupHtmlNode extends HtmlNode {
   // Constructor arguments to be overridden by concrete implementations
   def groupName: String
-  def innerNodes: collection.Seq[HtmlNode]
+  def innerNodes: Seq[HtmlNode]
   final override def contents: MoreHtmlNodes = innerNodes
 
   // Clone with new contents
-  def withContents(newContents: collection.Seq[HtmlNode]): GroupHtmlNode
+  def withContents(newContents: Seq[HtmlNode]): GroupHtmlNode
 
   // How is the group name printed
   def prettyGroupName: String
@@ -265,7 +264,7 @@ sealed trait GroupHtmlNode extends HtmlNode {
   final override def withDefaultContents: GroupHtmlNode =
     withContents(innerNodes.map(_.withDefaultContents))
 
-  final override def flatten: collection.Seq[HtmlNode] = innerNodes.flatMap(_.flatten)
+  final override def flatten: Seq[HtmlNode] = innerNodes.flatMap(_.flatten)
   final override def withoutNodes(predicate: HtmlNode => Boolean): Option[GroupHtmlNode] =
     if (predicate(this)) None else Some(withContents(innerNodes.flatMap(_.withoutNodes(predicate))))
   final override def isDescriptive = true
@@ -290,7 +289,7 @@ sealed trait LeafHtmlNode extends HtmlNode {
     sb ++= this.getClass.getSimpleName ++= "()"
 
   // Final implementation for all LeafHtmlNodes
-  final override def flatten: collection.Seq[HtmlNode] = collection.Seq(this)
+  final override def flatten: Seq[HtmlNode] = Seq(this)
   final override def withoutNodes(predicate: HtmlNode => Boolean): Option[LeafHtmlNode] =
     if (predicate(this)) None else Some(this)
   final override def collapse: HtmlNode = this

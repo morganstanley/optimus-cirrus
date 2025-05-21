@@ -63,11 +63,17 @@ import optimus.buildtool.runconf.AppRunConf
 import optimus.buildtool.utils.AssetUtils
 import optimus.buildtool.utils.Commit
 import optimus.buildtool.utils.FileAttrs._
+import optimus.buildtool.utils.GlibcPath
+import optimus.buildtool.utils.GlibcVersion
 import optimus.buildtool.utils.Hashing
 import optimus.buildtool.utils.JarUtils
 import optimus.buildtool.utils.JarUtils.nme
 import optimus.buildtool.utils.Jars
 import optimus.buildtool.utils.OptimusBuildToolAssertions
+import optimus.buildtool.utils.OsUtils
+import optimus.buildtool.utils.OsUtils.findNativeLibsForTargetOs
+import optimus.buildtool.utils.OsUtils.folderComponentIndex
+import optimus.buildtool.utils.OsUtils.hiddenNativeLibsFromFile
 import optimus.buildtool.utils.PathUtils
 import optimus.buildtool.utils.PosixPermissionUtils
 import optimus.buildtool.utils.Utils
@@ -77,6 +83,9 @@ import optimus.platform.util.Log
 import optimus.platform.util.Version
 
 import java.nio.charset.StandardCharsets
+import java.nio.file.attribute.PosixFilePermission
+import java.util.{HashSet => JHashSet}
+import java.util.{Set => JSet}
 import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Seq
 import scala.collection.mutable.ArrayBuffer
@@ -120,11 +129,23 @@ object AbstractImageBuilder {
 
   private val InstalledArtifactPattern: Regex = """([^/]+)/([^/]+)/([^/]+)/install/common/(.*)""".r
 
+  private type PathConverter = Path => Path
+
   private def resolveLib(root: Path, fileName: String): JarAsset = JarAsset(root.resolve("lib").resolve(fileName))
   private def resolveBin(root: Path, fileName: String): FileAsset = FileAsset(root.resolve("bin").resolve(fileName))
 }
 
-final case class DependencyFile(bucketId: Int, absFilePath: Path, inOutputTarPath: Path)
+// Discovered path represent the asset found in a scanned folder or a source such as a pathing jar
+// Selected source is a path that is selected for the target Linux distribution (e.g. native libraries)
+// Image path is the path that will be used in the final image
+private final case class FileEntrySpec(discoveredAbsPath: Path, selectedSourcePath: Path, imagePath: Path)
+    extends SymLinkSearch
+
+private final case class DependencyFile(bucketId: Int, file: FileEntrySpec) {
+  def discoveredAbsPath: Path = file.discoveredAbsPath
+  def selectedSourcePath: Path = file.selectedSourcePath
+  def imagePath: Path = file.imagePath
+}
 
 class ImageBuilder(
     val scopeConfigSource: ScopeConfigurationSource with DockerConfigurationSupport,
@@ -212,43 +233,55 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     directoryFactory
   )
 
+  private val osSysName = dockerImage.imageSysName.map(OsUtils.execFor).getOrElse(OsUtils.exec)
+  private val desiredGlibcVersion: GlibcVersion = OsUtils.glibcVersion(osSysName)
   private val distMavenLibDir = pathBuilder.dirForMetaBundle(pathBuilder.mavenReleaseMetaBundle, "lib")
 
   private val layerToDirs = newLayerDirsMap
 
   private def addEntryWithParents(layer: FileEntriesLayer.Builder, fileEntry: FileEntry): Unit = {
-    val dst = fileEntry.getExtractionPath.toString
-    var currentParent: Path = Paths.get(dst).getParent
-    val parents = new ArrayBuffer[Path]()
+    def ensureParentFoldersExists(): Unit = {
+      val dst = fileEntry.getExtractionPath.toString
+      var currentParent: Path = Paths.get(dst).getParent
+      val parents = new ArrayBuffer[Path]()
 
-    // Collect all parent directories
-    while (currentParent != null && currentParent != currentParent.getRoot) {
-      if (layerToDirs.getOrDefault(layer, Set.empty).contains(currentParent)) currentParent = null
-      else {
-        parents += currentParent
-        currentParent = currentParent.getParent
+      // Collect all parent directories
+      while (currentParent != null && currentParent != currentParent.getRoot) {
+        if (layerToDirs.getOrDefault(layer, Set.empty).contains(currentParent)) currentParent = null
+        else {
+          parents += currentParent
+          currentParent = currentParent.getParent
+        }
+      }
+
+      // add all parent directories first, we can't trust Jib automatically create parent directories
+      parents.reverse.foreach { parent =>
+        layerToDirs.compute(
+          layer,
+          (_, existing) => {
+            val updated = if (existing != null) existing + parent else Set(parent)
+            layer.addEntry(
+              // We use the Afs path to ensure that the directories are created with the correct permissions
+              // Particularly since we can create arbitrary directories (e.g. metadata like /etc/obt),
+              // the source folder need to be a valid path.
+              if (Files.exists(parent)) parent
+              else
+                NamingConventions.AfsDist.path,
+              absoluteUnixPath(parent),
+              DEFAULT_FOLDER_PERMISSIONS,
+              Instant.EPOCH
+            )
+            updated
+          }
+        )
       }
     }
 
-    // add all parent directories first, we can't trust Jib automatically create parent directories
-    parents.reverse.foreach { parent =>
-      layerToDirs.compute(
-        layer,
-        (_, existing) => {
-          val updated = if (existing != null) existing + parent else Set(parent)
-          layer.addEntry(
-            NamingConventions.AfsDist.path,
-            absoluteUnixPath(parent),
-            DEFAULT_FOLDER_PERMISSIONS,
-            Instant.EPOCH)
-          updated
-        }
-      )
-    }
-
     // then add the target file
-    if (Files.exists(fileEntry.getSourceFile)) layer.addEntry(fileEntry)
-    else // avoid OBT generate broken docker image
+    if (Files.exists(fileEntry.getSourceFile)) {
+      ensureParentFoldersExists()
+      layer.addEntry(fileEntry)
+    } else // avoid OBT generate broken docker image
       throw new IllegalArgumentException(
         s"File ${fileEntry.getSourceFile} does not exist! This may be due to AFS not being able to copy the file.")
   }
@@ -276,7 +309,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
   private val internalLayers = AbstractImageBuilder.newLayersBuilder[MetaBundle]()
   private val processedDependencies = new ConcurrentHashMap[Path, Set[DependencyFile]]()
-  private val processedJDKs = new ConcurrentHashMap[Path, Set[Path]]()
+  private val processedJDKs = new ConcurrentHashMap[Path, Set[FileEntrySpec]]()
 
   AbstractImageBuilder.initSpecialSystemProperties()
 
@@ -409,6 +442,17 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       )
     }
 
+    // Include runconf jars in the docker image
+    relevantRunconfJars.apar.foreach { case (scopeId, runConfJar) =>
+      val installDir = pathBuilder.dirForDist(scopeId.metaBundle, "etc")
+      putFile(
+        scopeId.metaBundle,
+        runConfJar,
+        installDir.resolveFile(NamingConventions.bundleRunConfsJar),
+        OctalMode.Default
+      )
+    }
+
     relevantRunconfJars.apar.foreach { case (scopeId, runConfJar) =>
       val hash = Hashing.hashFileContent(runConfJar)
       val stagingDir = stagingSubdir(scopeId, hash) resolveDir "bin"
@@ -447,7 +491,8 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   ): Unit = {
     val runconfScopes = relevantRunconfJars.map(_._1).toSet
     val scopesNeedingPathing =
-      scopes.apar.filter(s => runconfScopes.contains(s) || scopeConfigSource.scopeConfiguration(s).pathingBundle)
+      scopes.apar.filter(s =>
+        runconfScopes.contains(s) || scopeConfigSource.scopeConfiguration(s).pathingBundle || isAgentJar(s))
 
     allScopeArtifacts.apar.foreach {
       case scopeArtifacts if scopesNeedingPathing.contains(scopeArtifacts.scopeId) =>
@@ -478,6 +523,9 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     }
   }
 
+  @node private def isAgentJar(scopeId: ScopeId): Boolean =
+    scopeConfigSource.scopeConfiguration(scopeId).agentConfig.isDefined
+
   @async private def analyzeCppLibs(installable: InstallableArtifacts): Unit = {
     val cppArtifacts = installable.includedArtifacts(ArtifactType.Cpp)
     val grouped = cppArtifacts.groupBy(_.scopeId.metaBundle)
@@ -486,10 +534,18 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       stagedFiles.foreach { staged =>
         // we need to put C++ libs in exec rather than .exec/sysname, since docker doesn't get the automatic
         // exec symlink that AFS provides
-        val target = pathBuilder.dirForMetaBundle(mb, leaf = "lib", branch = "exec").resolveFile(staged.name)
+        val target = pathBuilder
+          .dirForMetaBundle(mb, leaf = "lib", branch = OsUtils.AutoResolvingNativeLibsForOsFolder)
+          .resolveFile(staged.name)
         putFile(mb, staged, target, OctalMode.Default)
       }
     }
+  }
+
+  private def ensureReadableByAll(permissions: JSet[PosixFilePermission]): JSet[PosixFilePermission] = {
+    val posixPermissions = new JHashSet[PosixFilePermission](permissions)
+    posixPermissions.add(PosixFilePermission.OTHERS_READ)
+    posixPermissions
   }
 
   @async private def analyzeCopyFileConfiguration(scopeIds: Set[ScopeId]): Unit = scopeIds.apar.foreach { scopeId =>
@@ -502,8 +558,8 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     } yield {
       val dst = into.resolveFile(stagingDir.relativize(copiedFile))
       val mode = if (!isWindows) {
-        // we just preserve the mode used by the copy file installer
-        PosixPermissionUtils.toMode(Files.getPosixFilePermissions(copiedFile.path))
+        // we just preserve the mode used by the copy file installer but ensure others can read
+        PosixPermissionUtils.toMode(ensureReadableByAll(Files.getPosixFilePermissions(copiedFile.path)))
       } else OctalMode.Default
       FileToPut(src = copiedFile, dst = dst, mode)
     }
@@ -513,7 +569,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
   private def analyzePathingJarDependencies(
       jarAsset: JarAsset,
       manifest: jar.Manifest,
-      inTarPathToAddFct: Path => Path = identity): Unit =
+      inTarPathToAddFct: PathConverter = identity): Unit =
     analyzeDependencies(
       Jars.extractManifestClasspath(jarAsset, manifest).map(_.path) ++
         Seq(
@@ -523,13 +579,13 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
           nme.ExternalJniPath,
           nme.ExtraFiles
         ).flatMap { k => JarUtils.load(manifest, k, ";").map(Paths.get(_)) },
-      inTarPathToAddFct
+      inTarPathToAddFct = inTarPathToAddFct
     )
 
   private def analyzeDependencies(
       paths: Iterable[Path],
-      inTarPathToAddFct: Path => Path = identity,
-      extraImagePaths: Option[Map[Path, Path]] = None): Unit = {
+      extraImagePaths: Option[Map[Path, Path]] = None,
+      inTarPathToAddFct: PathConverter = identity): Unit = {
     def pickBucketId(path: Path): Int = {
       // Dependencies tend to be by far our biggest layer
       // here we try to split them in an idempotent way
@@ -543,15 +599,22 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       initialPath.hashCode().abs % layersForDependencies
     }
 
-    def getFileAbsPath(distPath: Path): Path = {
-      FileAsset(distPath) match {
-        case httpLib if isMavenReleasePath(distPath) => // copy http file from local disk depcopied location
+    def getFileAbsPath(sourcePathToAdd: Path, realPathToAdd: Path): Path =
+      FileAsset(sourcePathToAdd) match {
+        case httpLib if isMavenReleasePath(sourcePathToAdd) =>
+          // copy http file from local disk .stratosphere/depcopy/ location
           val inHttps = depCopyDir.resolveDir("https").resolveFile(distMavenLibDir.relativize(httpLib))
           if (inHttps.exists) inHttps.path
           else depCopyDir.resolveDir("http").resolveFile(distMavenLibDir.relativize(httpLib)).path
-        case _ => distPath // copy disted file from AFS
+        case _ =>
+          // copy disted file from AFS
+          if (Files.exists(realPathToAdd)) {
+            realPathToAdd
+          } else {
+            log.warn(s"File $realPathToAdd does not exist; reverting to $sourcePathToAdd")
+            sourcePathToAdd
+          }
       }
-    }
 
     val filePaths =
       if (extraImagePaths.isDefined) paths // all extracted local disk files from extraImage.
@@ -561,15 +624,21 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
       processedDependencies.computeIfAbsent(
         dependency,
         { d =>
-          processPath(d, withDynamicDeps = true).map { sourcePathToAdd =>
-            val fileAbsPath = extraImagePaths match {
-              case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(sourcePathToAdd) =>
-                extraImagePathMap(sourcePathToAdd) // get local disk path
-              case _ => // when not for extraImage(should also consider not in extraImagePathMap case when concurrent)
-                getFileAbsPath(sourcePathToAdd)
-            }
-            val inTarPathToAdd = inTarPathToAddFct(sourcePathToAdd)
-            DependencyFile(pickBucketId(inTarPathToAdd), fileAbsPath, inTarPathToAdd)
+          if (Files.isDirectory(d)) log.debug(s"[${dstImage.name}] Analyzing $d")
+
+          processPath(d, withDynamicDeps = true).map { case FileEntrySpec(sourcePathToAdd, realPathToAdd, targetPath) =>
+            val fileAbsPath =
+              extraImagePaths match {
+                case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(targetPath) =>
+                  extraImagePathMap(targetPath) // get local disk path
+                case Some(extraImagePathMap) if extraImagePathMap.keySet.contains(sourcePathToAdd) =>
+                  extraImagePathMap(sourcePathToAdd) // get local disk path
+                case _ => // when not for extraImage(should also consider not in extraImagePathMap case when concurrent)
+                  // Could filter here for the version no higher than target, but we seem to be selecting elsewhere....
+                  getFileAbsPath(sourcePathToAdd, realPathToAdd)
+              }
+            val inTarPathToAdd = inTarPathToAddFct(targetPath)
+            DependencyFile(pickBucketId(inTarPathToAdd), FileEntrySpec(sourcePathToAdd, fileAbsPath, inTarPathToAdd))
           }
         }
       )
@@ -578,8 +647,8 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
   @async private def addJdkLayer(): Unit = {
     val layer = FileEntriesLayer.builder().setName(Layers.jdk)
-    val pathsToAdd = processedJDKs.values().asScala.toSet.flatten
-    pathsToAdd.toSeq.sorted.foreach(p => addEntryToLayer(layer, p, p))
+    val filesToAdd = processedJDKs.values().asScala.toSet.flatten
+    filesToAdd.toSeq.sortBy(_.discoveredAbsPath).foreach(addEntryToLayer(layer, _))
     jib.addFileLayerBuilder(layer)
   }
 
@@ -633,7 +702,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
                       .resolve(NamingConventions.Common)
                       .resolve(artifact)
                 }
-              log.info(s"$sourceFile -> $layerTargetPath")
+              log.debug(s"[${dstImage.name}]   [OAR] $sourceFile -> $layerTargetPath")
               layerTargetPath
             }
 
@@ -694,25 +763,25 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
     val pathsWithBucketsToAdd = processedDependencies.values().asScala.toSet.flatten
     val (extraImagesPaths, depsPaths) = pathsWithBucketsToAdd.partition { depDef =>
-      depDef.absFilePath.startsWith(dockerImageCacheDir.toString)
+      depDef.selectedSourcePath.startsWith(dockerImageCacheDir.toString)
     }
     val deps = if (extraImages.nonEmpty) {
       // instead of let Jib automatically remove duplications, it's better we drop it at the beginning
       // so we can ensure extraImages files should be prior than dependencies native extraFiles
-      val allExtraImageInTarPaths = extraImagesPaths.map(_.inOutputTarPath)
-      val (duplicatedDeps, includedDeps) = depsPaths.partition(p => allExtraImageInTarPaths.contains(p.inOutputTarPath))
+      val allExtraImageInTarPaths = extraImagesPaths.map(_.imagePath)
+      val (duplicatedDeps, includedDeps) = depsPaths.partition(p => allExtraImageInTarPaths.contains(p.imagePath))
       log.warn(
         s"[${dockerImage.location.name}] dropped duplicated dependency ${duplicatedDeps.size} files: ${duplicatedDeps
-            .map(_.absFilePath.toString)
+            .map(_.selectedSourcePath.toString)
             .mkString(",\n")}")
       // extraImages files should be prior than dependencies extraFiles
-      extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath)) ++ includedDeps.toSeq.sortBy(e =>
-        (e.bucketId, e.absFilePath))
-    } else depsPaths.toSeq.sortBy(e => (e.bucketId, e.absFilePath))
+      extraImagesPaths.toSeq.sortBy(e => (e.bucketId, e.selectedSourcePath)) ++ includedDeps.toSeq.sortBy(e =>
+        (e.bucketId, e.selectedSourcePath))
+    } else depsPaths.toSeq.sortBy(e => (e.bucketId, e.selectedSourcePath))
     deps.groupBy(f => f.bucketId).apar.foreach { case (bucketId, depDefs) => // parallel inserts for all buckets
       depDefs.foreach { depDef => // jib will keep insert order
-        val absPath = depDef.absFilePath
-        val symLinkLayer: Option[String] = pickSymLinkLayer(absPath)
+        val absPath = depDef.selectedSourcePath
+        val symLinkLayer: Option[String] = pickSymLinkLayer(depDef.discoveredAbsPath)
         val sourcePath =
           if (symLinkLayer.isDefined) {
             val finalPath = stagingDir.path.resolve(absPath)
@@ -721,7 +790,8 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
           } else absPath
 
         val layerName = symLinkLayer.getOrElse(f"<dependencies-$bucketId%02d>")
-        addEntryToLayer(layers.get(layerName), sourcePath, depDef.inOutputTarPath)
+        val entry = depDef.file.copy(selectedSourcePath = sourcePath)
+        addEntryToLayer(layers.get(layerName), entry)
       }
     }
 
@@ -730,7 +800,7 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     }
   }
 
-  private def processPath(path: Path, withDynamicDeps: Boolean): Set[Path] = {
+  private def processPath(path: Path, withDynamicDeps: Boolean): Set[FileEntrySpec] = {
     // this is a horrid hack around the problem that we have broken symlinks in our dependencies
     // and a second, less horrid hack around https://github.com/GoogleContainerTools/jib/issues/2275 (symlinks don't work)
     // plus an expedient exclusion of debug-only files and other detritus while I figure out the principled way of doing so
@@ -745,14 +815,58 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
 
     def unprincipledExclude(path: Path): Boolean = pathExcludes.exists(_.matches(path))
 
+    def processNativeLibsForTargetGlibc(hiddenNativeLibsLocation: Path): Set[FileEntrySpec] =
+      findNativeLibsForTargetOs(hiddenNativeLibsLocation, desiredGlibcVersion) match {
+        case Some(GlibcPath(winningPath, version)) =>
+          log.debug(s"[${dstImage.name}] [$desiredGlibcVersion] Winner: $version -> $winningPath")
+          processPath(winningPath, withDynamicDeps)
+        case None =>
+          Set.empty
+      }
+
     path match {
+      case dir if Files.isDirectory(dir) && dir.getFileName.toString == OsUtils.HiddenNativeLibOsVariantsFolder =>
+        processNativeLibsForTargetGlibc(dir)
       case dir if Files.isDirectory(dir) =>
+        log.debug(s"[${dstImage.name}] Visiting $dir")
         Files.list(dir).iterator().asScala.toSet.flatMap(processPath(_, withDynamicDeps))
       case file if (isReallyRealFile(file) && !unprincipledExclude(file)) || isMavenReleasePath(file) =>
+        def autoResolveAliasFolder(file: Path): Path =
+          if (file.toString.contains(OsUtils.AutoResolveAliasFolder)) {
+            // 1) list .exec glibc folders for a matching native library
+            findNativeLibsForTargetOs(hiddenNativeLibsFromFile(file), desiredGlibcVersion)
+              .map(_.path)
+              .map { hiddenNativeLibsForOs =>
+                // 2) fix @sys
+                folderComponentIndex(file, OsUtils.AutoResolveAliasFolder)
+                  .map { idx =>
+                    val mappedTo =
+                      hiddenNativeLibsForOs
+                        .resolve(file.subpath(idx + 1, file.getNameCount))
+                    if (file.getFileName.toString.contains(".so"))
+                      log.debug(s"[${dstImage.name}] [$desiredGlibcVersion]  $mappedTo identified from $file")
+                    mappedTo
+                  }
+                  .getOrElse(path)
+              }
+              .getOrElse(file)
+          } else file
+
+        val realFile = Try(file.toRealPath()).getOrElse(file)
+        val actualFile = autoResolveAliasFolder(realFile)
+
         val dynamicDeps =
-          if (withDynamicDeps) dynamicDependencyDetector.getDynamicDependencies(file, unprincipledExclude)
+          if (withDynamicDeps) dynamicDependencyDetector.getDynamicDependencies(actualFile, unprincipledExclude).map {
+            // Dynamic dependencies always have fully qualified paths, which include the OS version
+            file => FileEntrySpec(file, file, file)
+          }
           else Set.empty
-        Set(file) ++ dynamicDeps
+
+        if (dynamicDeps.nonEmpty)
+          log.debug(
+            s"[$desiredGlibcVersion]   File: $actualFile    DynamicDeps: ${dynamicDeps.mkString("\n  ", "\n  ", "")}")
+        Set(FileEntrySpec(file, actualFile, file)) ++ dynamicDeps
+
       case file if unprincipledExclude(file) =>
         log.debug(s"[${dstImage.name}] File $file excluded by the unprincipled filter")
         Set.empty
@@ -762,18 +876,19 @@ abstract class AbstractImageBuilder extends PostBuilder with BaseInstaller with 
     }
   }
 
-  private def addEntryToLayer(layer: FileEntriesLayer.Builder, file: Path, inTarDst: Path): Unit = {
-    val dst = absoluteUnixPath(inTarDst)
-    val perms = copyPermissions(file)
-    val reduced = if (stripDependencies) dependencyStripper.copyWithoutDebugSymbols(file) else None
-    addEntryWithParents(layer, new FileEntry(reduced.getOrElse(file), dst, perms, Instant.EPOCH))
+  private def addEntryToLayer(layer: FileEntriesLayer.Builder, file: FileEntrySpec): Unit = {
+    val dst = absoluteUnixPath(file.imagePath)
+    val perms = copyPermissions(file.selectedSourcePath)
+    val reduced = if (stripDependencies) dependencyStripper.copyWithoutDebugSymbols(file.selectedSourcePath) else None
+    addEntryWithParents(layer, new FileEntry(reduced.getOrElse(file.selectedSourcePath), dst, perms, Instant.EPOCH))
   }
 
   private def copyPermissions(srcPath: Path): FilePermissions =
     FilePermissions.fromPosixFilePermissions {
       if (Files.exists(srcPath)) {
         srcPath.asView[PosixFileAttributeView] match {
-          case Some(attrs) => attrs.readAttributes.permissions
+          case Some(attrs) =>
+            ensureReadableByAll(attrs.readAttributes.permissions)
           case None =>
             OptimusBuildToolAssertions.assert(Properties.isWin, s"Expected to find mode for $srcPath somehow")
             PosixPermissionUtils.NoPermissions

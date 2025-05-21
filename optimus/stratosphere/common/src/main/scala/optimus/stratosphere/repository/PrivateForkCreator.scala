@@ -12,6 +12,7 @@
 package optimus.stratosphere.repository
 
 import optimus.stratosphere.bitbucket.BitbucketApiRestClient
+import optimus.stratosphere.bitbucket.RepoPermission
 import optimus.stratosphere.config.StratoWorkspaceCommon
 import optimus.stratosphere.utils.RemoteUrl
 
@@ -31,8 +32,10 @@ final class PrivateForkCreator(ws: StratoWorkspaceCommon, val bitbucketClient: B
     log.info(s"Creating new fork '$forkName' for $projectKey/$repository...")
     val forkRemoteUrl = bitbucketClient.createPrivateFork(projectKey, repository, forkName)
 
-    log.info("Setting access to fork as public...")
-    bitbucketClient.setAccess(userName, forkName, makePublic = true)
+    val privateForkReadGroup = ws.internal.bitbucket.allUsersGroup
+
+    log.info(s"Setting read access for '$privateForkReadGroup' group on fork '$forkName'")
+    bitbucketClient.grantAccessToGroup(userName, forkName, privateForkReadGroup, RepoPermission.REPO_READ)
 
     log.info("Setting write access for self on fork (needed if your Access Designation is PROD)...")
     bitbucketClient.grantWriteAccessToSelf(userName, forkName)

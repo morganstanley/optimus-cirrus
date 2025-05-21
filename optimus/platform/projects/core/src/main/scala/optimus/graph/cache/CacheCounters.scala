@@ -99,7 +99,7 @@ sealed trait CacheGroup {
 }
 
 object CacheGroup {
-  val All: Seq[CacheGroup] = Seq(CacheGroupGlobal, CacheGroupSiGlobal, CacheGroupCtorGlobal, CacheGroupOthers)
+  val All: Seq[CacheGroup] = Seq(CacheGroupGlobal, CacheGroupSiGlobal, CacheGroupOthers)
 }
 
 case object CacheGroupGlobal extends CacheGroup {
@@ -108,9 +108,6 @@ case object CacheGroupGlobal extends CacheGroup {
 case object CacheGroupSiGlobal extends CacheGroup {
   val shortName = "SI"
 
-}
-case object CacheGroupCtorGlobal extends CacheGroup {
-  val shortName = "Ctor"
 }
 case object CacheGroupOthers extends CacheGroup {
   val shortName = "Others"

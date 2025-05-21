@@ -173,7 +173,8 @@ final case class PutEntityGrouping(
     maxVersionCount: Int,
     className: String,
     types: Seq[SerializedEntity.TypeRef],
-    linkedTypes: Option[LinkedTypes])
+    linkedTypes: Option[LinkedTypes],
+    monoTemporal: Boolean)
     extends EntityGroupingTxnAction {
 
   def createEntityGrouping(tt: Instant): EntityGrouping =
@@ -185,7 +186,8 @@ final case class PutEntityGrouping(
       maxTimeSliceCount,
       maxVersionCount,
       DateTimeSerialization.fromInstant(tt),
-      linkedTypes)
+      linkedTypes,
+      monoTemporal)
 }
 
 final case class UpdateEntityGrouping(
@@ -198,20 +200,9 @@ final case class UpdateEntityGrouping(
     typesUpdated: Boolean,
     cmid: Option[CmReference],
     linkedTypes: Option[LinkedTypes],
-    linkedTypesUpdated: Boolean)
-    extends EntityGroupingTxnAction {
-
-  def createUpdateEntityGrouping(tt: Instant): EntityGrouping =
-    EntityGrouping(
-      entityRef,
-      cmid,
-      className,
-      types,
-      maxTimeSliceCount,
-      maxVersionCount,
-      DateTimeSerialization.fromInstant(tt),
-      linkedTypes)
-}
+    linkedTypesUpdated: Boolean,
+    monoTemporal: Boolean)
+    extends EntityGroupingTxnAction {}
 
 /*
  * Entity Unique Index Groupings
@@ -806,7 +797,7 @@ object HighLevelAction {
       vrefMap: Map[SerializedEntity, VersionedReference],
       bevrefMap: Map[SerializedBusinessEvent, VersionedReference]): HighLevelAction = {
     cmd match {
-      case p: bitemporal.Put                        => Put(vrefMap(p.value), p.lockToken, p.validTime)
+      case p: bitemporal.Put                        => Put(vrefMap(p.value), p.lockToken, p.validTime, p.monoTemporal)
       case i: bitemporal.InvalidateAfter            => InvalidateAfter.make(i)
       case a: bitemporal.AssertValid                => AssertValid.make(a)
       case g: bitemporal.GeneratedAppEvent          => GeneratedAppEvent.make(g, vrefMap)
@@ -909,19 +900,26 @@ object HighLevelAction {
     }
   }
   final case class Placeholder() extends HighLevelAction
-  final case class Put(value: VersionedReference, lockToken: Option[Long], validTime: Instant) extends HighLevelAction
+  final case class Put(
+      value: VersionedReference,
+      lockToken: Option[Long],
+      validTime: Instant,
+      monoTemporal: Boolean = false)
+      extends HighLevelAction
   object Put {
     def make(p: bitemporal.Put, vref: Map[SerializedEntity, VersionedReference]) =
-      Put(vref(p.value), p.lockToken, p.validTime)
+      Put(vref(p.value), p.lockToken, p.validTime, p.monoTemporal)
   }
   final case class InvalidateAfter(
       entityRef: EntityReference,
       versionedRef: VersionedReference,
       lockToken: Long,
-      validTime: Instant)
+      validTime: Instant,
+      monoTemporal: Boolean = false)
       extends HighLevelAction
   object InvalidateAfter {
-    def make(i: bitemporal.InvalidateAfter) = InvalidateAfter(i.entityRef, i.versionedRef, i.lockToken, i.validTime)
+    def make(i: bitemporal.InvalidateAfter) =
+      InvalidateAfter(i.entityRef, i.versionedRef, i.lockToken, i.validTime, i.monoTemporal)
   }
   final case class AssertValid(refs: Iterable[EntityReference], validTime: Instant) extends HighLevelAction
   object AssertValid {
@@ -960,11 +958,11 @@ object HighLevelAction {
       asserts: Iterable[EntityReference],
       puts: Seq[WriteBusinessEvent.Put],
       putSlots: Seq[WriteBusinessEvent.PutSlots],
-      invalidates: Seq[(EntityReference, Long)],
+      invalidates: Seq[(EntityReference, Long, Boolean)],
       reverts: Seq[(EntityReference, Long)])
       extends HighLevelAction
   object WriteBusinessEvent {
-    final case class Put(ent: VersionedReference, lockToken: Option[Long])
+    final case class Put(ent: VersionedReference, lockToken: Option[Long], monoTemporal: Boolean = false)
     final case class PutSlots(ents: immutable.SortedSet[VersionedReference], lockToken: Option[Long])
     object PutSlots {
       def make(bev: bitemporal.WriteBusinessEvent.PutSlots, vrefMap: Map[SerializedEntity, VersionedReference]) = {
@@ -975,7 +973,7 @@ object HighLevelAction {
         b: bitemporal.WriteBusinessEvent,
         vrefMap: Map[SerializedEntity, VersionedReference],
         bevrefMap: Map[SerializedBusinessEvent, VersionedReference]) = {
-      val puts = b.puts.map(p => Put(vrefMap(p.ent), p.lockToken))
+      val puts = b.puts.map(p => Put(vrefMap(p.ent), p.lockToken, p.monoTemporal))
       val putSlots = b.putSlots.map(p => PutSlots.make(p, vrefMap))
       // For WriteBusinessEvents with EventStateFlag.RESTATE, we won't have a versioned reference in the map, so just put in a blank vref
       WriteBusinessEvent(
@@ -984,8 +982,9 @@ object HighLevelAction {
         b.asserts,
         puts,
         putSlots,
-        b.invalidates.map(i => i.er -> i.lt),
-        b.reverts.map(i => i.er -> i.lt))
+        b.invalidates.map(i => (i.er, i.lt, i.monoTemporal)),
+        b.reverts.map(i => i.er -> i.lt)
+      )
     }
   }
   final case class AccAction(

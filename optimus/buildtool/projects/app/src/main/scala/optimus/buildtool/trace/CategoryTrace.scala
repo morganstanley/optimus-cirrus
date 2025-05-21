@@ -12,6 +12,7 @@
 package optimus.buildtool.trace
 
 import optimus.buildtool.artifacts.CachedArtifactType
+import optimus.buildtool.artifacts.FingerprintArtifactType
 import optimus.buildtool.builders.postinstallers.uploaders.UploadLocation
 import optimus.buildtool.cache.remote.ClusterType
 import optimus.buildtool.config.MetaBundle
@@ -65,27 +66,6 @@ private[buildtool] sealed trait StrictSingletonCategoryTrace extends SingletonCa
 
 /** A CategoryTrace that can produce CompilerMessages. */
 private[buildtool] sealed trait MessageTrace extends CategoryTrace
-
-object MessageTrace {
-  private val parseMap = new mutable.HashMap[String, MessageTrace]
-  private def add(c: MessageTrace): Unit = {
-    parseMap += (c.name -> c)
-  }
-  def parse(name: String): MessageTrace = parseMap(name)
-
-  add(LoadConfig)
-  add(GenerateSource)
-  add(Signatures)
-  add(Outline)
-  add(Scala)
-  add(Java)
-  add(Jmh)
-  add(Runconf)
-  add(ProcessScope)
-  add(RegexCodeFlagging)
-  add(ConfigurationValidation)
-}
-
 private[buildtool] sealed trait ResolveTrace extends SingletonCategoryTrace
 
 object ResolveTrace {
@@ -196,13 +176,6 @@ private[buildtool] final case class Query(clusterType: ClusterType, tpe: CacheTr
 private[buildtool] final case class Fetch(clusterType: ClusterType, tpe: CacheTraceType) extends CacheTrace
 private[buildtool] final case class Put(clusterType: ClusterType, tpe: CacheTraceType) extends CacheTrace
 
-// TODO (OPTIMUS-70246): Integrate into DHTStore
-private[buildtool] final case class DhtOperation(clusterType: ClusterType, requestId: String)
-    extends ClusterTrace
-    with AsyncCategoryTrace {
-  override lazy val name: String = s"$categoryName($requestId)"
-}
-
 private[buildtool] case object ScanFilesystem extends CategoryTrace
 private[buildtool] case object FindArtifacts extends CategoryTrace
 private[buildtool] case object TidyRubbish extends CategoryTrace
@@ -211,6 +184,9 @@ private[buildtool] case object BackgroundCommand extends SingletonCategoryTrace 
 private[buildtool] case object HashSources extends SingletonCategoryTrace
 private[buildtool] case object HashResources extends SingletonCategoryTrace
 private[buildtool] case object HashArchiveContents extends SingletonCategoryTrace
+private[buildtool] final case class HashFingerprints(tpe: FingerprintArtifactType) extends CategoryTrace {
+  override lazy val name: String = s"$categoryName(${CategoryTrace.lower(tpe.getClass)})"
+}
 private[buildtool] case object Sources extends SingletonCategoryTrace
 private[buildtool] case object Resources extends SingletonCategoryTrace
 private[buildtool] case object WarSources extends SingletonCategoryTrace
@@ -288,7 +264,7 @@ private[buildtool] case object GitUntrackedFiles extends SingletonCategoryTrace
 trait TraceFilter {
   import TraceFilter._
   def include(category: CategoryTrace): Boolean =
-    category != Build && category != TidyRubbish && !category.isInstanceOf[DhtOperation]
+    category != Build && category != TidyRubbish
   def publish(category: CategoryTrace): FilterResult
 }
 

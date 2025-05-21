@@ -110,6 +110,11 @@ public abstract class CacheSelector {
     protected boolean readFromGlobalCaches() {
       return prev.readFromGlobalCaches();
     }
+
+    @Override
+    public NodeCCache dbgCache() {
+      return cache;
+    }
   }
 
   static class Private extends CacheSelector {

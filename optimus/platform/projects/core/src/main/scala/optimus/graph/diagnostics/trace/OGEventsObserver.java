@@ -189,6 +189,7 @@ public abstract class OGEventsObserver implements Cloneable {
       boolean countMiss) {}
 
   public void lookupAdjustCacheHit(EvaluationQueue eq, PropertyNode<?> hit) {}
+  public void lookupAdjustCacheStats(NodeTaskInfo nti, boolean hit, long startTime) {}
 
   public void evicted(NodeTask task) {}
 

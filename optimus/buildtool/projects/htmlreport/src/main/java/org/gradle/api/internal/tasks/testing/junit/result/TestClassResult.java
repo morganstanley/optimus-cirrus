@@ -91,4 +91,8 @@ public class TestClassResult {
   public void setStartTime(long startTime) {
     this.startTime = startTime;
   }
+
+  public String getXmlTestSuiteName() {
+    return className;
+  }
 }

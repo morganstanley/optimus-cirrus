@@ -372,6 +372,7 @@ public class OGTraceStore {
       // not file itself to allow pre-deleting noinspection ResultOfMethodCallIgnored
       fileLocation = file.getParentFile();
       // create parent directories if they don't exist (usually if traceTo property was set)
+      //noinspection ResultOfMethodCallIgnored
       fileLocation.mkdirs();
       backingFile = new RandomAccessFile(file, "rw");
       fileChannel = backingFile.getChannel();
@@ -428,6 +429,7 @@ public class OGTraceStore {
     try {
       return new OGTraceFileReader(backingFile, true, false);
     } catch (IOException e) {
+      //noinspection CallToPrintStackTrace (could happen before any logging is set up)
       e.printStackTrace();
     }
     return null; // Should we return some empty reader?
@@ -510,7 +512,7 @@ public class OGTraceStore {
 
     if (shouldFail) {
       GridProfiler$.MODULE$.disable();
-      log.javaLogger().error(String.format("OGTraceStore failure : %s", table.toString()));
+      log.javaLogger().error(String.format("OGTraceStore failure : %s", table));
       Thread.dumpStack();
 
       Breadcrumbs.flush();
@@ -526,6 +528,22 @@ public class OGTraceStore {
       return integrityCheck(tryTable);
 
     return integrityCheck(allocateFixedSizeTable(tryTable, type));
+  }
+
+  public void writeEdge(int from, int to) {
+    var ctx = OGLocalTables.getOrAcquire(null);
+    try {
+      ctx.edgeTrace = getTableBuffer(ctx.edgeTrace, TABLE_EDGES, 12);
+    } catch (Exception e) {
+      OGTrace.panic(e, fileLocation);
+      return;
+    }
+    Table table = ctx.edgeTrace;
+    table.putInt(from);
+    table.putInt(1);
+    table.putInt(to);
+    table.setLastCmdPosition();
+    ctx.release();
   }
 
   public void writeEdges(OGLocalTables ctx, int parentID, EdgeIDList ids) {
@@ -748,7 +766,7 @@ public class OGTraceStore {
     }
 
     final void setVersionTypeAndThread(short versionMarker, short type) {
-      setVersionTypeAndThread(versionMarker, type, Thread.currentThread().getId());
+      setVersionTypeAndThread(versionMarker, type, Thread.currentThread().threadId());
     }
 
     final void setVersionTypeAndThread(short versionMarker, short type, long threadID) {

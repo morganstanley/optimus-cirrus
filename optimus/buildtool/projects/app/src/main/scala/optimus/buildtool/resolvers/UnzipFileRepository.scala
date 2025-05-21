@@ -167,9 +167,11 @@ private[resolvers] final case class UnzipFileRepository(
       else throw new UnsupportedOperationException("Unexpected: Should not be called 'artifacts' for UnzipRepository")
 
     @node override def artifactsNode(
-        dependency: Dependency,
+        coursierDependency: CoursierDependency,
         project: Project,
-        overrideClassifiers: Option[Seq[String]]): Seq[Either[String, CoursierArtifact]] = {
+        overrideClassifiers: Option[Seq[String]]
+    ): Seq[Either[String, CoursierArtifact]] = {
+      val dependency = coursierDependency.dependency
       val insideFileUrls: Seq[URL] = artifactPatterns.map { artifactPattern =>
         makeUrl(dependency.module, dependency.version, dependency.configuration.value, artifactPattern)
       }

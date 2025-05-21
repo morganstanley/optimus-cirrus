@@ -12,43 +12,34 @@
 package optimus.platform.util
 
 import com.ms.zookeeper.clientutils.ZkEnv
-import optimus.utils.app.Args4jOptionHandlers
 import org.apache.zookeeper.ZooDefs.Perms
 import org.kohsuke.args4j.CmdLineParser
 import org.kohsuke.args4j.OptionDef
-import org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler
 import org.kohsuke.args4j.spi.OneArgumentOptionHandler
 import org.kohsuke.args4j.spi.Setter
 
-/**
+/*
  * Please put new handlers in [[optimus.utils.app.Args4jOptionHandlers]] instead if possible.
  *
- * This class should only contains handlers for types not accessible from the utils project.
+ * This file should only contains handlers for types not accessible from the utils project.
  */
-object ArgHandlers extends Args4jOptionHandlers {
 
-  // For backwards compatibility
-  type BooleanOptionHandler = ExplicitBooleanOptionHandler
-  type InstantOptionHandler = SimpleInstantOptionHandler
+final class ZkEnvHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[ZkEnv])
+    extends OneArgumentOptionHandler[ZkEnv](parser, option, setter) {
+  override def parse(arg: String): ZkEnv = ZkEnv.valueOf(arg)
+}
 
-  class ZkEnvHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[ZkEnv])
-      extends OneArgumentOptionHandler[ZkEnv](parser, option, setter) {
-    override def parse(arg: String): ZkEnv = ZkEnv.valueOf(arg)
-  }
-
-  class ZkPermsHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Int])
-      extends OneArgumentOptionHandler[Int](parser, option, setter) {
-    override def parse(arg: String): Int = {
-      arg.toCharArray
-        .map {
-          case 'A' => Perms.ADMIN
-          case 'C' => Perms.CREATE
-          case 'D' => Perms.DELETE
-          case 'R' => Perms.READ
-          case 'W' => Perms.WRITE
-          case c   => throw new IllegalArgumentException(s"Unexpected permission: $c")
-        }
-        .foldLeft(0)(_ | _)
-    }
-  }
+final class ZkPermsHandler(parser: CmdLineParser, option: OptionDef, setter: Setter[Int])
+    extends OneArgumentOptionHandler[Int](parser, option, setter) {
+  override def parse(arg: String): Int =
+    arg.toCharArray
+      .map {
+        case 'A' => Perms.ADMIN
+        case 'C' => Perms.CREATE
+        case 'D' => Perms.DELETE
+        case 'R' => Perms.READ
+        case 'W' => Perms.WRITE
+        case c   => throw new IllegalArgumentException(s"Unexpected permission: $c")
+      }
+      .foldLeft(0)(_ | _)
 }

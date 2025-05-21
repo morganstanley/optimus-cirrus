@@ -115,6 +115,9 @@ public class DiagnosticSettings {
   public static final boolean writeRTVerifierReport =
       enableRTVerifier && getBoolProperty("optimus.rt.verifier.report", true);
 
+  public static final boolean lenientWithoutDAL =
+      getBoolProperty("optimus.graph.lenientWithoutDAL", true);
+
   public static final boolean granularCacheSize =
       getBoolProperty("optimus.graph.timeline.granular.cache", false);
 

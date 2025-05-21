@@ -12,9 +12,13 @@
 package optimus.buildtool.utils
 
 import optimus.buildtool.files.Directory
+import optimus.buildtool.files.Directory.NoFilter
+import optimus.buildtool.files.Directory.PathFilter
 import optimus.buildtool.files.FileAsset
 import optimus.buildtool.files.LocalDirectoryFactory
 import optimus.buildtool.files.ReactiveDirectory
+import optimus.buildtool.files.RelativePath
+import optimus.buildtool.trace.ObtStats
 import optimus.buildtool.trace.ObtTrace
 import optimus.git.diffparser.DiffParser
 import optimus.platform._
@@ -31,20 +35,26 @@ import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileBasedConfig
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.treewalk.TreeWalk
+import org.eclipse.jgit.treewalk.filter.TreeFilter
+import org.eclipse.jgit.treewalk.filter.{PathFilter => GitPathFilter}
 import org.eclipse.jgit.util.FS
 
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.PathMatcher
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 import java.util.Collections
 import scala.collection.compat._
 import scala.collection.immutable.Seq
+import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 import scala.sys.process.ProcessLogger
 
 @entity class GitUtils(
+    workspaceSourceRoot: Directory,
     gitDir: Directory,
     reflogDir: ReactiveDirectory,
     configDir: ReactiveDirectory,
@@ -57,12 +67,69 @@ import scala.sys.process.ProcessLogger
 
   @node final def declareReflogVersionDependence(): Unit = reflogDir.declareVersionDependence()
 
-  @node def file(path: String): GitFile = {
+  @node def file(path: FileAsset): GitFile = {
     val repo = git.getRepository
     val head = commit(Constants.HEAD)
-    val treeWalk = TreeWalk.forPath(repo, PathUtils.platformIndependentString(path), head.getTree.getId)
+    val pathStr = workspaceSourceRoot.relativize(path).pathString
+    val treeWalk = TreeWalk.forPath(repo, pathStr, head.getTree.getId)
     val fileId = if (treeWalk != null) treeWalk.getObjectId(0) else ObjectId.zeroId
-    GitFile(path, repo, fileId)
+    GitFile(pathStr, repo, fileId)
+  }
+
+  @node def findFiles(dir: Directory, filter: PathFilter = NoFilter, maxDepth: Int = Int.MaxValue): Seq[GitFile] = {
+    val tree = treeId(dir, commit(Constants.HEAD))
+    findFilesWithId(dir, tree, filter, maxDepth)
+  }
+
+  @node private[buildtool] def findFilesWithId(
+      dir: Directory,
+      treeId: ObjectId,
+      filter: PathFilter,
+      maxDepth: Int = Int.MaxValue): Seq[GitFile] =
+    if (treeId != ObjectId.zeroId) {
+      val reader = repo.newObjectReader()
+      val treeWalk = new TreeWalk(repo, reader)
+      treeWalk.setFilter(new Filter(None, filter, maxDepth, dir))
+      treeWalk.reset(treeId)
+      treeWalk.setRecursive(true)
+
+      val relDir = workspaceSourceRoot.relativize(dir)
+      val relDirStr = relDir.pathString.stripSuffix("/")
+
+      val files = mutable.Buffer[GitFile]()
+      while (treeWalk.next()) {
+        val path =
+          if (relDir == RelativePath.empty) treeWalk.getPathString
+          else s"$relDirStr/${treeWalk.getPathString}"
+        files += GitFile(path, repo, treeWalk.getObjectId(0))
+      }
+      files.toIndexedSeq
+    } else Nil
+
+  @node def treeId(dir: Directory, commit: RevCommit): ObjectId = {
+    val relPath = workspaceSourceRoot.relativize(dir)
+    if (relPath == RelativePath.empty) {
+      commit.getTree
+    } else {
+      val walk = TreeWalk.forPath(repo, relPath.pathString, commit.getTree)
+      if (walk != null) walk.getObjectId(0) else ObjectId.zeroId
+    }
+  }
+
+  @node def hash(files: Seq[GitFile]): SortedMap[GitFile, HashedContent] = {
+    val reader = repo.newObjectReader()
+    val queue = reader.open(files.map(_.fileId).asJava, false)
+    val fileIter = files.iterator
+
+    val contents = mutable.Buffer[(GitFile, HashedContent)]()
+    while (queue.next()) {
+      val f = fileIter.next()
+      ObtTrace.addToStat(ObtStats.ReadGitSourceFiles, 1)
+      ObtTrace.addToStat(ObtStats.ReadDistinctGitSourceFiles, Set(f.path))
+      val hashedContent = Hashing.hashFileInputStreamWithContent(f.path, () => queue.open().openStream())
+      contents += (f -> hashedContent)
+    }
+    SortedMap(contents.to(Seq): _*)
   }
 
   @node def commit(revStr: String): RevCommit = {
@@ -76,12 +143,12 @@ import scala.sys.process.ProcessLogger
     // note that getConfig will automatically reload the config if the files have changed but we must declare dependence
     // so that this node is invalidated in cache
     configDir.declareVersionDependence()
-    log.info("Loading git config via jgit")
+    log.debug("Loading git config via jgit")
     val mainConfig = git.getRepository.getConfig
     // jgit doesn't seem to handle the worktreeConfig logic internally
     if (repo.getConfig.getBoolean("extensions", "worktreeConfig", false)) {
       val configWorktreeFile = configDir.resolveFile(ConfigWorktreeFile).path.toFile
-      log.info(s"Loading ${configWorktreeFile} (because extensions.worktreeConfig = true)")
+      log.debug(s"Loading ${configWorktreeFile} (because extensions.worktreeConfig = true)")
       val mergedConfig = new FileBasedConfig(mainConfig, configWorktreeFile, FS.DETECTED)
       mergedConfig.load()
       mergedConfig
@@ -97,18 +164,18 @@ import scala.sys.process.ProcessLogger
     if (isSparseCheckoutEnabled) {
       sparseCheckoutDir.declareVersionDependence()
       val sparseFile = sparseCheckoutDir.resolveFile(SparseCheckoutFile)
-      log.info(s"Loading ${sparseFile.path}")
+      log.debug(s"Loading ${sparseFile.path}")
       // we've declared version dependence, so this is safe here
       if (sparseFile.existsUnsafe) {
         val configLines = Files.readAllLines(sparseFile.path).asScala.to(Seq)
-        log.info(s"Read ${configLines.size} lines from ${sparseFile.path}")
+        log.debug(s"Read ${configLines.size} lines from ${sparseFile.path}")
         Some(GitSparseMatcher(gitDir.parent, configLines))
       } else {
         log.warn(s"sparsecheckout was enabled in git but ${sparseFile.path} was not present")
         None
       }
     } else {
-      log.info("sparsecheckout mode was not enabled in git")
+      log.debug("sparsecheckout mode was not enabled in git")
       None
     }
   }
@@ -119,18 +186,59 @@ object GitUtils extends Log {
   private val ConfigFile = "config"
   private val SparseCheckoutFile = "sparse-checkout"
 
+  object GitFileAttributes extends BasicFileAttributes {
+    private val EPOCH = FileTime.fromMillis(0)
+
+    override def lastModifiedTime(): FileTime = EPOCH
+    override def lastAccessTime(): FileTime = EPOCH
+    override def creationTime(): FileTime = EPOCH
+    override def isRegularFile: Boolean = true // git only stores files
+    override def isDirectory: Boolean = false
+    override def isSymbolicLink: Boolean = false
+    override def isOther: Boolean = false
+    override def size(): Long = 0
+    override def fileKey(): AnyRef = null
+  }
+
+  class Filter(
+      root: Option[GitPathFilter],
+      filter: PathFilter,
+      maxDepth: Int,
+      dir: Directory
+  ) extends TreeFilter {
+    override def include(walker: TreeWalk): Boolean = matchFilter(walker) <= 0
+
+    override def matchFilter(walker: TreeWalk): Int = {
+      if (walker.getDepth >= maxDepth) 1 // definitely no match
+      else {
+        val rootMatch = root.map(_.matchFilter(walker)).getOrElse(0)
+        if (rootMatch == 1) 1 // definitely no match
+        else if (rootMatch == 0 && filter(abs(walker.getPathString), GitFileAttributes)) 0 // definitely a match
+        else if (walker.isSubtree) -1 // a subtree might match the PathFilter
+        else 1 // definitely no match
+      }
+    }
+
+    private def abs(pathString: String): String = s"${dir.pathString}/$pathString"
+
+    override def shouldBeRecursive(): Boolean = true
+
+    override def clone(): Filter = this
+  }
+
   @scenarioIndependent @node private def filteredDirectory(
       dir: Directory,
       directoryFactory: LocalDirectoryFactory,
       filenames: String*) =
     directoryFactory.lookupDirectory(dir.path, Directory.fileNamePredicate(filenames: _*), maxDepth = 1)
-  @scenarioIndependent
-  @node def apply(gitDir: Directory, directoryFactory: LocalDirectoryFactory): GitUtils = {
+
+  @scenarioIndependent @node def apply(srcDir: Directory, directoryFactory: LocalDirectoryFactory): GitUtils = {
+    val gitDir = srcDir.resolveDir(Constants.DOT_GIT)
     val reflogDir = filteredDirectory(gitDir.resolveDir("logs"), directoryFactory, Constants.HEAD)
     // note that ConfigFile is loaded implicitly by jgit so we must watch it too
     val configDir = filteredDirectory(gitDir, directoryFactory, ConfigFile, ConfigWorktreeFile)
     val sparseCheckoutDir = filteredDirectory(gitDir.resolveDir("info"), directoryFactory, SparseCheckoutFile)
-    GitUtils(gitDir, reflogDir = reflogDir, configDir = configDir, sparseCheckoutDir = sparseCheckoutDir)
+    GitUtils(srcDir, gitDir, reflogDir = reflogDir, configDir = configDir, sparseCheckoutDir = sparseCheckoutDir)
   }
 
   @scenarioIndependent
@@ -140,7 +248,7 @@ object GitUtils extends Log {
   ): Option[GitUtils] = {
     val gitDir = srcDir.resolveDir(Constants.DOT_GIT)
     if (gitDir.existsUnsafe) {
-      Some(GitUtils(gitDir, directoryFactory))
+      Some(GitUtils(srcDir, directoryFactory))
     } else {
       log.warn(s"No git directory found at $gitDir. Analysis will be stored without commit hash.")
       None
@@ -148,6 +256,9 @@ object GitUtils extends Log {
   }
 }
 
+object GitFile {
+  implicit val ordering: Ordering[GitFile] = Ordering.by(_.path)
+}
 final case class GitFile(path: String, repo: Repository, fileId: ObjectId) {
   def withStream[A](f: InputStream => A): A = {
     val stream = repo.open(fileId).openStream()

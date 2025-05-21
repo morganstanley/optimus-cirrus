@@ -238,7 +238,7 @@ private[buildtool] class WatchServiceDirectoryWatcher(watchService: WatchService
         watchInfoByWatchedDir(watchKey.watchable().asInstanceOf[Path])
       }
     }.map { info =>
-      info -> info.key.pollEvents().asScala.map(_.asInstanceOf[WatchEvent[Path]])
+      info -> info.key.pollEvents().asScalaUnsafeImmutable.map(_.asInstanceOf[WatchEvent[Path]])
     }
   }
 

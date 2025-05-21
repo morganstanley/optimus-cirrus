@@ -150,7 +150,7 @@ object ElementFactory {
   def constant(value: Any, typeDescriptor: TypeInfo[_]): ConstValueElement =
     new ConstValueElement(value, typeDescriptor)
 
-  def lambda(body: RelationElement, parameters: collection.Seq[ParameterElement]): LambdaElement =
+  def lambda(body: RelationElement, parameters: Seq[ParameterElement]): LambdaElement =
     new LambdaElement(body.rowTypeInfo, body, parameters)
 
   def makeBinary(

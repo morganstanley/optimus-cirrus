@@ -809,13 +809,14 @@ object GenericFilesArtifact {
       file: JarAsset,
       messages: Seq[CompilationMessage]
   ): GenericFilesArtifact = create(scopeId, file, messages, MessagesArtifact.hasErrors(messages))
+
   @node private[artifacts] def create(
       scopeId: ScopeId,
       file: JarAsset,
       messages: Seq[CompilationMessage],
       hasErrors: Boolean
   ): GenericFilesArtifact =
-    GenericFilesArtifact(scopeId, file, messages, MessagesArtifact.hasErrors(messages)).watchForDeletion()
+    GenericFilesArtifact(scopeId, file, messages, hasErrors).watchForDeletion()
 }
 
 /** represents a jar of scala signatures (i.e. not classes) */
@@ -923,7 +924,7 @@ object PathingArtifact {
   override def path: Path = resolutionFile.path
   override def toString: String = s"${getClass.getSimpleName}($id, $resolutionFile)"
 
-  import JsonImplicits._
+  import JsonImplicits.resolutionArtifactValueCodec
   override protected def writeAsJson(): Unit =
     resolutionFile.storeJson(
       ResolutionArtifact.Cached(
@@ -1018,7 +1019,7 @@ object InMemoryMessagesArtifact {
 
   @node override def contentsHash: String =
     Hashing.hashStrings(messages.map(_.toString) ++ internalDeps.map(_.toString) ++ externalDeps.map(_.toString))
-  import JsonImplicits._
+  import JsonImplicits.compilerMessagesArtifactValueCodec
   override protected def writeAsJson(): Unit =
     messageFile.storeJson(
       CompilerMessagesArtifact.Cached(id, messages, internalDeps, externalDeps, taskCategory, incremental, hasErrors),
@@ -1166,7 +1167,7 @@ object CompilerMessagesArtifact {
   override def path: Path = locatorFile.path
 
   override def id: InternalArtifactId = InternalArtifactId(scopeId, ArtifactType.Locator, Some(analysisType.name))
-  import JsonImplicits._
+  import JsonImplicits.locatorArtifactValueCodec
   override protected def writeAsJson(): Unit =
     locatorFile.storeJson(
       LocatorArtifact.Cached(analysisType, commitHash, artifactHash, timestamp),

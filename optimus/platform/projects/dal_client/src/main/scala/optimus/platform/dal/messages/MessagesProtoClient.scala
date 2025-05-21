@@ -376,7 +376,7 @@ class MessagesProtoClient(
       request.completable.completeWithException(throwable)
     }
 
-    val results: Seq[Result] = dsiResponse.getResultsList.asScala.map(fromProto)
+    val results: Seq[Result] = dsiResponse.getResultsList.asScalaUnsafeImmutable.map(fromProto)
     try {
       val requests = ctx.clientRequests
       require(requests.size == results.size, "Response result received must be equal to the requests sent for Messages")
@@ -422,7 +422,7 @@ class MessagesProtoClient(
 
   private def handleStreamCmdResponse(response: DalResponseProto): Unit = {
     val dsiResponse = response.getDsiResponse
-    val results: Seq[Result] = dsiResponse.getResultsList.asScala.map(fromProto)
+    val results: Seq[Result] = dsiResponse.getResultsList.asScalaUnsafeImmutable.map(fromProto)
     val filteredRes = results.flatMap {
       case msr: MessagesStreamResult       => Some(msr)
       case err: MessagesErrorResult        => Some(err)

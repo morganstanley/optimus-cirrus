@@ -158,5 +158,7 @@ object Events extends KnownEvents {
   val DalBanWriteEntity = event("DalBanWriteEntity")
 
   val UiFeature = event("UiFeature")
+  val SessionManagerEvent = event("SessionManagerEvent")
+  val UIWebSocketChannelEvent = event("UIWebSocketChannelEvent")
 
 }

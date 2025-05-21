@@ -702,8 +702,8 @@ object QueryBuilder {
     val joinBuilder = ofJoin[L, R](method)
 
     val ofOn = (onPredicate, onFields) match {
-      case (_, Some(fields: Seq[String] @unchecked)) =>
-        Some(JoinOnFields(_: JoinQueryBuilder[L, R], fields))
+      case (_, Some(fields: collection.Seq[String] @unchecked)) =>
+        Some(JoinOnFields(_: JoinQueryBuilder[L, R], fields.toSeq))
       case (Some(cPredicate: ScalaLambdaCallee2[L, R, Boolean] @unchecked), _) =>
         val fLeft = leftMultiKey.map { case cLeft: ScalaLambdaCallee[L, MultiKey] @unchecked => toLambda1(cLeft) }
         val fRight = rightMultiKey.map { case cRight: ScalaLambdaCallee[R, MultiKey] @unchecked => toLambda1(cRight) }
@@ -814,11 +814,11 @@ object QueryBuilder {
     val (
       src ::
         ConstValueElement(groupByProperties: Set[String @unchecked], _) ::
-        ConstValueElement(untypedAggregations: Seq[UntypedAggregation @unchecked], _) ::
+        ConstValueElement(untypedAggregations: collection.Seq[UntypedAggregation @unchecked], _) ::
         _
     ) = takeParams(method, 3)
 
-    AggregateByUntyped(of(src), groupByProperties, untypedAggregations, method.pos)
+    AggregateByUntyped(of(src), groupByProperties, untypedAggregations.toSeq, method.pos)
   }
 
   private def ofPermitTableScan(method: MethodElement): QueryBuilder[_] = {

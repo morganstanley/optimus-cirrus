@@ -18,6 +18,7 @@ import optimus.buildtool.artifacts.ElectronArtifact
 import optimus.buildtool.artifacts.ExternalClassFileArtifact
 import optimus.buildtool.artifacts.InternalArtifactId
 import optimus.buildtool.artifacts.InternalClassFileArtifact
+import optimus.buildtool.artifacts.PathingArtifact
 import optimus.buildtool.compilers.AsyncCppCompiler.BuildType
 import optimus.buildtool.compilers.cpp.CppLibrary
 import optimus.buildtool.compilers.cpp.CppUtils
@@ -41,7 +42,7 @@ import scala.collection.immutable.Seq
       scopeConfig: ScopeConfiguration,
       allRuntimeArtifacts: Seq[Artifact],
       runtimeDependencies: ScopeDependencies,
-      agentArtifacts: Seq[ClassFileArtifact]
+      agentArtifacts: Seq[Artifact]
   ): jar.Manifest = {
 
     val internalClassFileArtifacts = allRuntimeArtifacts.collect { case c: ClassFileArtifact => c }
@@ -136,9 +137,10 @@ import scala.collection.immutable.Seq
       .mkString(" ")
 
     val allAgentPaths = agentArtifacts.apar.map {
-      case internal: InternalClassFileArtifact => internal
+      case internal: PathingArtifact => internal
       case external: ExternalClassFileArtifact =>
         dependencyCopier.atomicallyDepCopyExternalClassFileArtifactsIfMissing(external)
+      case other => throw new MatchError(other)
     }
 
     Jars.updateManifest(

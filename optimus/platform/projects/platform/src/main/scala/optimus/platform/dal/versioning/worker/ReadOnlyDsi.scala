@@ -16,6 +16,7 @@ import optimus.dsi.session.EstablishSession
 import optimus.platform.async
 import optimus.platform.dal.session.ClientSessionContext.SessionData
 import optimus.platform.dal.ClientSideDSI
+import optimus.platform.dal.DSIClient
 import optimus.platform.dal.SessionFetcher
 import optimus.platform.dsi.SupportedFeatures
 import optimus.platform.dsi.bitemporal._
@@ -33,6 +34,8 @@ final case class ReadOnlyClientSideDsi(private val underlying: ClientSideDSI, ov
 
   @async override def executeReadOnlyCommands(reads: Seq[ReadOnlyCommand]): Seq[Result] =
     underlying.executeReadOnlyCommands(reads)
+
+  private[optimus] override def getDSIClient: DSIClient = underlying.getDSIClient
 
   override def sessionData: SessionData =
     underlying.sessionData

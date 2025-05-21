@@ -18,6 +18,7 @@ import java.lang.{Boolean => JBoolean}
 import msjava.slf4jutils.scalalog.Logger
 import msjava.slf4jutils.scalalog.getLogger
 import optimus.breadcrumbs.Breadcrumbs
+
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.collection.concurrent
@@ -31,6 +32,10 @@ import optimus.graph.NodeTask
 import optimus.graph.PropertyNode
 import optimus.graph.diagnostics.EvictionReason
 import optimus.graph.diagnostics.GCMonitorDiagnostics
+import optimus.graph.tracking.AsyncClear
+import optimus.graph.tracking.CacheClearMode
+import optimus.graph.tracking.NoClear
+import optimus.graph.tracking.SyncClear
 
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -104,13 +109,12 @@ object Caches {
       includeGlobal: Boolean = true,
       includeNamedCaches: Boolean = true,
       includePerPropertyCaches: Boolean = true,
-      includeCtorGlobal: Boolean = true,
       includeEvictedButRetained: Boolean = true
   ): List[NodeCCache] = {
 
     val shared = {
       val evictedButReachable =
-        if (!includeEvictedButRetained) collection.Seq.empty[UNodeCache]
+        if (!includeEvictedButRetained) Seq.empty[UNodeCache]
         else {
           evictedButRetainedSharedCaches
             .synchronized {
@@ -124,11 +128,9 @@ object Caches {
       var shared = sharedCaches.values ++ evictedButReachable
       if (!includeGlobal) shared = shared.filter(_.getName != UNodeCache.globalCacheName)
       if (!includeSiGlobal) shared = shared.filter(_.getName != UNodeCache.globalSICacheName)
-      if (!includeCtorGlobal) shared = shared.filter(_.getName != UNodeCache.globalCtorCacheName)
       if (!includeNamedCaches) shared = shared.filter { cache =>
         cache.getName == UNodeCache.globalCacheName ||
-        cache.getName == UNodeCache.globalSICacheName ||
-        cache.getName == UNodeCache.globalCtorCacheName
+        cache.getName == UNodeCache.globalSICacheName
       }
       shared
     }
@@ -136,7 +138,7 @@ object Caches {
     (shared ++ perProperty).toList
   }
 
-  val ClearCachesDescription = "Caches.clearCaches"
+  private val ClearCachesDescription = "Caches.clearCaches"
 
   def approxNumCacheEntries: Int = allCaches().map(_.getSizeIndicative).sum
 
@@ -148,13 +150,12 @@ object Caches {
       includeNamedCaches: Boolean = true,
       includePerPropertyCaches: Boolean = true,
       invokeGCNativeRegisteredCleaners: Boolean = false,
-      includeCtorGlobal: Boolean = true,
       filter: CacheFilter = CacheFilter.None
   ): Long = {
     val numRemoved = {
       val toClear =
-        allCaches(includeSiGlobal, includeGlobal, includeNamedCaches, includePerPropertyCaches, includeCtorGlobal)
-          .filter(_.isEvictOnOverflow)
+        allCaches(includeSiGlobal, includeGlobal, includeNamedCaches, includePerPropertyCaches)
+          .filter(c => if (cause.isMemoryPressureRelated) c.isEvictOnLowMemory else c.isEvictOnOverflow)
       filter match {
         case CacheFilter.None         => toClear.map(_.clear(cause))
         case CacheFilter.Filter(f, _) => toClear.map(_.clear(CacheFilter.predicate(f), cause))
@@ -202,7 +203,6 @@ object Caches {
   ): Long = {
     val ret = clearCaches(
       cause,
-      includeCtorGlobal = includeSI, // make constructor cache same as SI cache since they are both actually "SI"
       includeSiGlobal = includeSI,
       includePerPropertyCaches = includePropertyLocal,
       includeNamedCaches = includeNamed
@@ -228,24 +228,27 @@ object Caches {
   def clearOldestForAllSSPrivateCache(ratio: Double, cause: ClearCacheCause): Long = {
     log.info("Clearing oldest for scenario stack private Caches")
     val privateCaches = sharedCaches.values.filter(_.getName.startsWith(UNodeCache.scenarioStackPrivateCachePrefix))
-    privateCaches.filter(_.isEvictOnOverflow).map(_.clearOldest(ratio, cause).removed).sum
+    privateCaches
+      .filter(c => if (cause.isMemoryPressureRelated) c.isEvictOnLowMemory else c.isEvictOnOverflow)
+      .map(_.clearOldest(ratio, cause).removed)
+      .sum
   }
 
   private var schedulerCleanTask: ScheduledFuture[_] = _
   private def clearNodesWithDisposedTrackersFromCaches(): Unit = {
     def clearFn(n: NodeTask): Boolean = n.scenarioStack().tweakableListener.isDisposed
     val clearTime = System.nanoTime()
-    Caches.allCaches(includeSiGlobal = false, includeCtorGlobal = false) foreach {
+    Caches.allCaches(includeSiGlobal = false) foreach {
       _.clear(clearFn, CauseDisposeDependencyTracker)
     }
     log.info(s"cache cleanup after dispose took ${((System.nanoTime() - clearTime) / 1000) / 1000.0} ms")
   }
 
-  def lazyClearDisposedTrackers(immediate: Boolean): Unit = {
-    if (immediate)
-      clearNodesWithDisposedTrackersFromCaches()
-    else {
-      if (schedulerCleanTask != null) // If a new cleanup reguest arrives before previous run we cancel it
+  def lazyClearDisposedTrackers(cacheClearMode: CacheClearMode): Unit = cacheClearMode match {
+    case NoClear   =>
+    case SyncClear => clearNodesWithDisposedTrackersFromCaches()
+    case AsyncClear =>
+      if (schedulerCleanTask != null) // If a new cleanup request arrives before previous run we cancel it
         schedulerCleanTask.cancel(false)
 
       log.info("Schedule cleanup")
@@ -253,24 +256,27 @@ object Caches {
         new Runnable { override def run(): Unit = clearNodesWithDisposedTrackersFromCaches() },
         25,
         TimeUnit.MILLISECONDS)
-    }
   }
-
 }
 
 sealed trait ClearCacheCause {
   val evictionReason: EvictionReason
+
+  val isMemoryPressureRelated: Boolean = false
 }
 
 // These are good reasons
 case object CauseGCNative extends ClearCacheCause {
   override val evictionReason: EvictionReason = EvictionReason.gcNative
+  override val isMemoryPressureRelated: Boolean = true
 }
 case object CauseGCMonitor extends ClearCacheCause {
   override val evictionReason: EvictionReason = EvictionReason.gcMonitor
+  override val isMemoryPressureRelated: Boolean = true
 }
 case object CauseWin64MemoryWatcher extends ClearCacheCause {
   override val evictionReason: EvictionReason = EvictionReason.memoryPressure
+  override val isMemoryPressureRelated: Boolean = true
 }
 case object CauseUntrackedTweakableTweaked extends ClearCacheCause {
   override val evictionReason: EvictionReason = EvictionReason.untrackedTweaked
@@ -309,7 +315,7 @@ private[optimus] case object CacheResizeCause extends ClearCacheCause {
   override val evictionReason: EvictionReason = EvictionReason.resize
 }
 
-// Stringly typed user causes. These are often hasty bug fixes, and should be looked at more closely.
+// String typed user causes. These are often hasty bug fixes, and should be looked at more closely.
 final case class CauseClearedByUser(user: String) extends ClearCacheCause {
   override def toString: String = s"ClearedByUser:$user"
   override val evictionReason: EvictionReason = EvictionReason.explicitUserCleared

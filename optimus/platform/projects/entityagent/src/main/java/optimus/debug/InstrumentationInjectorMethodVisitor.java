@@ -51,7 +51,7 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
     var descriptor = "(";
     if (patch.prefixWithID) descriptor += loadMethodID(patch);
 
-    if (patch.prefixWithThis) descriptor += loadThisOrNull();
+    if (patch.prefixWithThis) descriptor += loadThisOrNull(patch);
 
     if (patch.prefixWithArgs) descriptor += loadArgsInlineOrAsArray(patch);
 
@@ -154,12 +154,13 @@ class InstrumentationInjectorMethodVisitor extends CommonAdapter {
 
     if (patch.suffixWithID) descriptor += loadMethodID(patch);
 
-    if (patch.suffixWithThis) descriptor += loadThisOrNull();
+    if (patch.suffixWithThis) descriptor += loadThisOrNull(patch);
 
     if (patch.suffixWithArgs) descriptor += loadArgsInlineOrAsArray(patch);
 
     if (patch.suffixReplacesReturnValue) {
-      if (patch.noArgumentBoxing) descriptor += ")" + Type.getReturnType(methodDesc).getDescriptor();
+      if (patch.noArgumentBoxing)
+        descriptor += ")" + Type.getReturnType(methodDesc).getDescriptor();
       else descriptor += ")" + OBJECT_DESC;
     } else descriptor += ")V";
 

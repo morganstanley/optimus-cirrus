@@ -12,7 +12,6 @@
 package optimus.graph.tracking.ttracks
 
 import java.lang
-
 import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.TweakableKey
@@ -22,8 +21,8 @@ import optimus.graph.diagnostics.PerTrackerStatsKey
 import optimus.graph.diagnostics.StatsSummary
 import optimus.graph.diagnostics.TTrackStats
 import optimus.graph.tracking.DependencyTracker
-import optimus.graph.tracking.DependencyTrackerActionUpdate
 import optimus.graph.tracking.DependencyTrackerRoot
+import optimus.graph.tracking.NoEventCause
 import optimus.graph.tracking.TraversalIdSource
 
 import scala.jdk.CollectionConverters._
@@ -69,7 +68,7 @@ private[tracking] final object TTrackStatsSupport {
     // pt == perTracker
     val ptNumTweaks = tracker.scenarioStack.expandedTweaks.size
     val ptTrackedTweakables = ttracks.size
-    val ptUTrackedTweakables = tracker.userNodeTracker.utracks.size
+    val ptUTrackedTweakables = tracker.allUserNodeTrackers.map(_.utracks.size).sum
 
     val visitor = new TTrackStatsCollector
     visitor.visit(ttracks.values.asJava, root)
@@ -207,11 +206,9 @@ trait TTrackStatsActions {
   self: DependencyTracker =>
 
   private[tracking] def getTTrackStats(cleanup: Boolean, callback: Try[TTrackStats] => Unit): Unit =
-    queue.executeAsync(new TSA_TTrackStats(cleanup), callback)
-
-  private class TSA_TTrackStats(cleanup: Boolean)
-      extends DependencyTrackerActionUpdate[TTrackStats]
-      with InScenarioAction {
-    override protected def doUpdate(): TTrackStats = TTrackStatsSupport.doGetTTrackStats(self.root, cleanup)
-  }
+    // running this in a batch update (even though we don't use the BatchUpdater) so that we hold the locks
+    executeBatchUpdateAsync[TTrackStats](
+      NoEventCause,
+      _ => TTrackStatsSupport.doGetTTrackStats(self.root, cleanup),
+      callback)
 }

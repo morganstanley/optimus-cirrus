@@ -720,6 +720,22 @@ trait DefaultQueryProvider extends QueryProvider { this: KeyPropagationPolicy =>
     QueryImpl[T](method, this)
   }
 
+  def extendTypedOrReplaceValue[T, U: TypeInfo](src: Query[T], value: U)(implicit
+      pos: MethodPosition): Query[T with U] = {
+    val sourceType = src.elementType.cast[T]
+    val replaceType = typeInfo[U]
+    val resultType = TypeInfo.intersect(sourceType, replaceType)
+    val key = mkComposite[T, U](src.element.key.asInstanceOf[RelationKey[T]])(sourceType, replaceType, resultType)
+    val valueElement = new ConstValueElement(value, replaceType)
+    val method = new MethodElement(
+      QueryMethod.REPLACE,
+      List(MethodArg(source, src.element), MethodArg("repVal", valueElement)),
+      resultType,
+      key,
+      pos)
+    QueryImpl[T with U](method, this)
+  }
+
   def sortBy[T, U](src: Query[T], f: Lambda1[T, U])(implicit
       ordering: Ordering[U],
       sortType: TypeInfo[U],

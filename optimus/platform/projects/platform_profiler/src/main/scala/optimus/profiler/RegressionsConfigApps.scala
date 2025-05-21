@@ -33,8 +33,8 @@ import optimus.profiler.RegressionsConfigApps.extractTestAndFileName
 import optimus.profiler.RegressionsConfigApps.findFiles
 import optimus.profiler.RegressionsConfigApps.outputConfigFilePath
 import optimus.scalacompat.collection._
-import optimus.utils.Args4JOptionHandlers.DelimitedStringOptionHandler
-import optimus.utils.Args4JOptionHandlers.GroupedDelimitedStringOptionHandler
+import optimus.utils.app.DelimitedStringOptionHandler
+import optimus.utils.app.GroupedDelimitedStringOptionHandler
 import optimus.utils.ErrorIgnoringFileVisitor
 import org.kohsuke.args4j
 import org.kohsuke.args4j.CmdLineException
@@ -48,6 +48,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
+import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.BufferedSource
@@ -324,7 +325,7 @@ private[optimus] object RegressionsConfigApps {
         }
       }
     )
-    groupedFilePaths.mapValuesNow(_.toMap).toMap
+    groupedFilePaths.mapValuesNow(_.toMap.mapValuesNow(ArraySeq.from)).toMap
   }
 
   def outputConfigFilePath(outputPath: String, artifactsPath: String, fileName: String, suffix: String): String = {
@@ -658,16 +659,12 @@ object MergeTraces extends App {
     val cacheNames = mutable.Set.empty[String]
 
     // use iterator to avoid opening over a thousand trace files at once
-    val allPntis = files.iterator
+    val filePntis: Iterator[Seq[PNodeTaskInfo]] = files.iterator
       .map { file =>
         try {
-          Some(getReaderFromFile(file))
-            .map(_.getHotspots.asScala)
-            .map(pntis => {
-              log.debug(s"Processing ${pntis.size} hotspots from $file")
-              pntis.map(resetOgTraceConfig)
-            })
-            .getOrElse(Nil)
+          val pntis = getReaderFromFile(file).getHotspots.asScalaUnsafeImmutable
+          log.debug(s"Processing ${pntis.size} hotspots from $file")
+          pntis.map(resetOgTraceConfig)
         } catch {
           case e: Exception =>
             log.error(s"Skipping file $file because OGTraceReader failed with exception:")
@@ -675,11 +672,12 @@ object MergeTraces extends App {
             Nil
         }
       }
+      val allPntis = filePntis
       .reduceOption { (trace, otherTrace) =>
         val combined = combine(trace, otherTrace) // merge traces as we go
         val cacheNamesFromTraces = combineCaches(combined)
         cacheNames ++= cacheNamesFromTraces // keep track of configured custom caches as we go
-        combined.toBuffer
+        combined
       }
 
     (allPntis.getOrElse(Nil), Set[String](cacheNames.toSeq: _*))

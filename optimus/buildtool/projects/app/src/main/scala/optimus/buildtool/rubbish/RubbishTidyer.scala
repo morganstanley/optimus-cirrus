@@ -50,9 +50,9 @@ object RubbishTidyer extends Log {
     val threshold = Instant ofEpochMilli OptimusApp.startupTime minus maxAge
     def tooOld(file: Path) = Files.getLastModifiedTime(file).toInstant isBefore threshold
     if (Files.exists(logDir)) {
-      log.info(s"Removing OBT log files older than $threshold")
+      log.debug(s"Removing OBT log files older than $threshold")
       Files
-        .list(logDir)
+        .walk(logDir)
         .iterator
         .asScala
         .filter(tooOld)

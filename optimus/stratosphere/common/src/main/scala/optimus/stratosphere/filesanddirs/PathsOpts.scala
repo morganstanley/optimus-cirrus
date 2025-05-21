@@ -23,6 +23,9 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.WatchEvent
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
+import java.time.ZonedDateTime
+import java.time.ZoneId
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -42,9 +45,19 @@ class PathsOpts protected (val path: Path) {
 
   def delete(): Boolean = FileUtils.deleteQuietly(path.toFile)
 
-  def creationTime: Long = Files.readAttributes(path, classOf[BasicFileAttributes]).creationTime().toMillis
+  private def creationFileTime: FileTime = Files.readAttributes(path, classOf[BasicFileAttributes]).creationTime()
 
-  def lastModifiedTime: Long = Files.readAttributes(path, classOf[BasicFileAttributes]).lastModifiedTime().toMillis
+  def creationTime: Long = creationFileTime.toMillis
+
+  def creationDateTime: ZonedDateTime = ZonedDateTime.ofInstant(creationFileTime.toInstant, ZoneId.systemDefault())
+
+  private def lastModifiedFileTime: FileTime =
+    Files.readAttributes(path, classOf[BasicFileAttributes]).lastModifiedTime()
+
+  def lastModifiedTime: Long = lastModifiedFileTime.toMillis
+
+  def lastModifiedDateTime: ZonedDateTime =
+    ZonedDateTime.ofInstant(lastModifiedFileTime.toInstant, ZoneId.systemDefault())
 
   def deleteIfExists(): Unit = {
     def deleteIfNeeded() = exists() && (!delete() || exists())
@@ -91,7 +104,7 @@ class PathsOpts protected (val path: Path) {
     val thread = new Thread(() => {
       while (true) {
         val key = watchService.take()
-        val modifiedFiles = key.pollEvents().asScala.map(_.asInstanceOf[WatchEvent[Path]].context())
+        val modifiedFiles = key.pollEvents().asScalaUnsafeImmutable.map(_.asInstanceOf[WatchEvent[Path]].context())
         try {
           body(modifiedFiles)
         } catch {

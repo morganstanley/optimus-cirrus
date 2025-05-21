@@ -35,7 +35,7 @@ class givenRuntimeEnv extends Annotation
  * @see
  *   http://optimusguide/CoreAnnotations/BasicAnnotations.html
  */
-class givenAnyRuntimeEnv extends Annotation
+class givenAnyRuntimeEnv extends StaticAnnotation
 
 /**
  * Marks def as a legal entry point into the graph and turns off warning of using async function from sync context
@@ -165,9 +165,9 @@ class meta(
 ) extends StaticAnnotation {
 // docs-snippet:MetaDeclaration
   def this(catalog: DalMetadata) =
-    this(owner = null, catalog = catalog, dqControls = null, upstreamDatasets = null, description = null)
+    this(owner = null, catalog = catalog, description = null, dqControls = null, upstreamDatasets = null)
   def this(owner: OwnershipMetadata) =
-    this(owner = owner, catalog = null, dqControls = null, upstreamDatasets = null, description = null)
+    this(owner = owner, catalog = null, description = null, dqControls = null, upstreamDatasets = null)
   def this(owner: OwnershipMetadata, catalog: DalMetadata) =
     this(owner = owner, catalog = catalog, description = null, dqControls = null, upstreamDatasets = null)
   def this(owner: OwnershipMetadata, catalog: DalMetadata, description: String) =

@@ -13,6 +13,7 @@ package optimus.graph.diagnostics.trace
 
 import optimus.core.EdgeIDList
 import optimus.graph.NodeTask
+import optimus.graph.NodeTaskInfo
 import optimus.graph.NodeTrace
 import optimus.graph.OGTrace.trace
 import optimus.graph.{OGLocalTables => LT}
@@ -31,18 +32,21 @@ abstract class OGEventsRecordingObserverBase protected (config: RecordingConfig)
 
   protected def this() = this(RecordingConfig.default)
 
-  override def dependency(fromTask: NodeTask, toTask: NodeTask, eq: EvaluationQueue): Unit = {
+  override def dependency(fromTask: NodeTask, toTask: NodeTask, eq: EvaluationQueue): Unit =
+    if (!((toTask.executionInfo eq NodeTaskInfo.TweakLookup) && !toTask.isDone)) {
 
-    /** always need both calls to accessProfile because they call ensureProfileRecorded to write the PNodeTaskInfo */
-    val callee = NodeTrace.accessProfile(toTask)
-    val caller = NodeTrace.accessProfile(fromTask)
+      /** always need both calls to accessProfile because they call ensureProfileRecorded to write the PNodeTaskInfo */
+      val callee = NodeTrace.accessProfile(toTask)
+      val caller = NodeTrace.accessProfile(fromTask)
 
-    if (callee.traceSelfAndParents) {
-      caller.traceSelfAndParents = true
-      caller.addLiveCalleeID(callee.id)
+      if (callee.traceSelfAndParents) {
+        caller.traceSelfAndParents = true
+        if (fromTask.getId == 1) { // start node never completes so we manually inject the edge here
+          trace.writeEdge(1, toTask.getId)
+        } else caller.addLiveCalleeID(callee.id)
+      }
+      super.dependency(fromTask, toTask, eq)
     }
-    super.dependency(fromTask, toTask, eq)
-  }
 
   override def enqueue(fromTask: NodeTask, toTask: NodeTask): Unit = {
     val caller = NodeTrace.accessProfile(fromTask)

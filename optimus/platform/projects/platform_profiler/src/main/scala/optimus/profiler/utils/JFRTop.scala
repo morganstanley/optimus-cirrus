@@ -51,7 +51,7 @@ object JFRTop extends App {
       tMax: Long = Long.MaxValue,
       absStartTime: Long = 0): Map[String, Long] = {
     val methodNames = new Dictionary[String]
-    val agg = new EventAggregator(false, false)
+    val agg = new EventAggregator(false, 0.0)
     val eventClass = classOf[ExecutionSample]
     var event: Event = jfr.readEvent(eventClass)
     var t0 = Long.MaxValue
@@ -64,7 +64,7 @@ object JFRTop extends App {
     val counts = mutable.HashMap.empty[Long, Long]
 
     agg.forEach {
-      case (event: Event, value: Long) => {
+      case (event: Event, samples: Long, value: Long) => {
         val t = event.time - t0
         val stackTrace = jfr.stackTraces.get(event.stackTraceId)
         if ((stackTrace ne null) && t >= tMin && (t <= tMax || tMax <= 0)) {
@@ -73,7 +73,7 @@ object JFRTop extends App {
             methodId <- methods
           } {
             val prev = counts.getOrElse(methodId, 0L)
-            counts.put(methodId, prev + value)
+            counts.put(methodId, prev + value * samples)
           }
         }
       }

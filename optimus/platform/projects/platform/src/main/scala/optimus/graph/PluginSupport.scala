@@ -725,7 +725,6 @@ object PluginSupport {
   final def getEntityReference(pnode: NodeKey[_]): Seq[EntityReference] = {
     pnode match {
       case node: MaybePickledReference[_]         => getEntityReferenceFromPickledRepr(node, node.pickled)
-      case cnode: AlreadyCompletedPropertyNode[_] => handleNode(cnode).map(_.dal$entityRef)
       // illegal cases
       case badNode: PropertyNode[_] =>
         throw new IllegalStateException(s"Unexpected node type $badNode ${badNode.getClass}")
@@ -759,8 +758,6 @@ object PluginSupport {
             throw new IllegalStateException(
               s"Cannot create reference holder from pickled value of type: ${unexpected.getClass.getName}.")
         }
-      // Heap entity(s).
-      case cnode: AlreadyCompletedPropertyNode[_] => fromHydratedNode(cnode)
       case badNode: PropertyNode[_] =>
         throw new IllegalStateException(s"Unexpected node type ${badNode.getClass}")
     }

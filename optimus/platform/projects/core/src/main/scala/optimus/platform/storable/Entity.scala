@@ -11,15 +11,16 @@
  */
 package optimus.platform.storable
 
-import com.google.common.cache.CacheBuilder
 import msjava.slf4jutils.scalalog.Logger
 import optimus.entity._
 import optimus.graph.PropertyInfo
 import optimus.platform.EvaluationContext
 import optimus.platform.TemporalContext
 import optimus.platform.annotations.internal.EntityMetaDataAnnotation
+import optimus.platform.pickling.ContainsUnresolvedReference
 
 import java.io._
+import java.util.concurrent.ConcurrentHashMap
 
 private[optimus /*platform*/ ] final case class ReferenceEntityToken(
     ref: EntityReference,
@@ -31,29 +32,27 @@ private[optimus /*platform*/ ] final case class ReferenceEntityToken(
 }
 
 /** this is used in the pickled representation of entities (aka "SerializedEntity") */
-private[optimus] final case class ModuleEntityToken(className: String) {
+private[optimus] final case class ModuleEntityToken private (className: String) extends ContainsUnresolvedReference {
   // n.b. we don't implement readResolve because the pickled representation of an entity should retain ModuleEntityToken
   // after java deserialization. This method is called manually during unpickling, NOT as part of deserialization
-  def resolve: Entity = ModuleEntityTokenImpl.resolve(className)
+  lazy val resolve: Entity = {
+    val moduleClass = Class.forName(className)
+    moduleClass.getField("MODULE$").get(null)
+  }.asInstanceOf[Entity]
+}
+
+private[optimus] object ModuleEntityToken {
+  private val cache = new ConcurrentHashMap[String, ModuleEntityToken]
+  def apply(className: String): ModuleEntityToken = {
+    cache.computeIfAbsent(className, cls => new ModuleEntityToken(cls))
+  }
 }
 
 /** this is used in the serialized (i.e. java.io.Serializable) representation of entities */
 private[optimus] final case class ModuleEntitySerializationToken(className: String) {
   // readResolve back to the actual entity instance - this is called during deserialization and undoes the
   // writeReplace() of Entity
-  def readResolve(): AnyRef = ModuleEntityTokenImpl.resolve(className)
-}
-
-private[optimus] object ModuleEntityTokenImpl {
-  private val loaded = CacheBuilder.newBuilder().build[String, Entity]()
-  private[storable] def resolve(className: String): Entity =
-    loaded.get(
-      className,
-      () =>
-        {
-          val moduleClass = Class.forName(className)
-          moduleClass.getField("MODULE$").get(null)
-        }.asInstanceOf[Entity])
+  def readResolve(): AnyRef = ModuleEntityToken(className).resolve
 }
 
 //Usually this annotation is written by the entity plugin for @entities, but we need to create it manually here
@@ -92,7 +91,7 @@ trait InlineEntity extends Entity {
 }
 
 @EntityMetaDataAnnotation(isObject = true)
-private[optimus] abstract class FakeModuleEntity(properties: collection.Seq[PropertyInfo[_]]) extends EntityImpl {
+private[optimus] abstract class FakeModuleEntity(properties: Seq[PropertyInfo[_]]) extends EntityImpl {
   override val $info: EntityInfo = new ModuleEntityInfo(FakeModuleEntity.this.getClass, isStorable = false, properties)
   properties.foreach(_.entityInfo = $info)
 }

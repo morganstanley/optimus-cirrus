@@ -70,7 +70,7 @@ trait FieldCompressor {
 trait BasicStructureCompressor extends FieldCompressor {
   override def compress[V <: AnyRef](value: V, level: Int, fieldInterner: CompressingFieldInterner): Option[V] = {
     val v = value match {
-      case s: Seq[t] =>
+      case s: collection.Seq[t] =>
         s map { v =>
           fieldInterner.compressWithLock(v, level)
         }

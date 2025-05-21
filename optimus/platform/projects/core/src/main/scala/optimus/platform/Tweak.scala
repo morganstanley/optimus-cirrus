@@ -11,15 +11,16 @@
  */
 package optimus.platform
 
-import java.util.concurrent.atomic.AtomicInteger
 import optimus.core._
-import optimus.platform.annotations._
+import optimus.graph.DiagnosticSettings.traceTweaksOverflowDetected
 import optimus.graph._
+import optimus.platform.annotations._
 import optimus.platform.storable.Storable
 import optimus.platform.util.html._
-import optimus.graph.DiagnosticSettings.traceTweaksOverflowDetected
 
-import scala.collection.mutable.ArrayBuffer
+import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.compat.immutable.ArraySeq
+import scala.collection.mutable
 
 /**
  * Class describes a general tweak, there are few classes that derive from Tweak, but they should only be used to convey
@@ -77,18 +78,18 @@ class Tweak private[optimus] (
    * @param currentScenarioStack
    *   the current stack. Must match EvaluationContext.scenarioStack
    */
-  private[optimus /*platform*/ ] def expanded(currentScenarioStack: ScenarioStack): collection.Seq[Tweak] = {
+  private[optimus /*platform*/ ] def expanded(currentScenarioStack: ScenarioStack): Seq[Tweak] = {
     if (target.unresolved) {
-      val buffer = new ArrayBuffer[Tweak](1)
-      expandInto(buffer, currentScenarioStack)
-      buffer
+      val b = ArraySeq.newBuilder[Tweak]
+      expandInto(b, currentScenarioStack)
+      b.result()
     } else this :: Nil
   }
 
   /**
    * Adds fully expanded tweaks to mutable outputBuffer (more efficient version of #expanded)
    */
-  private[optimus] def expandInto(outputBuffer: ArrayBuffer[Tweak], currentScenarioStack: ScenarioStack): Unit = {
+  private[optimus] def expandInto(outputBuffer: mutable.Growable[Tweak], currentScenarioStack: ScenarioStack): Unit = {
     if (target.unresolved) {
       val expansion = target.hashKey
         .asInstanceOf[PropertyNode[Any]]
@@ -290,59 +291,59 @@ object Tweaks {
   // start - need to clean
   @expectingTweaks
   @nodeLiftByName
-  def apply(tweaks: Tweak*): collection.Seq[Tweak] = tweaks
+  def apply(tweaks: Tweak*): Seq[Tweak] = tweaks
 
   @expectingTweaks
   @nodeLiftByName
-  def apply(tweak: Tweak): collection.Seq[Tweak] = tweak :: Nil
+  def apply(tweak: Tweak): Seq[Tweak] = tweak :: Nil
 
   // end - need to clean
 
   @expectingTweaks
   @nodeLiftByName
-  def byName(tweaks: Tweak*): collection.Seq[Tweak] = tweaks
+  def byName(tweaks: Tweak*): Seq[Tweak] = tweaks
 
   @expectingTweaks
   @nodeLiftByName
-  def byName(tweak: Tweak): collection.Seq[Tweak] = tweak :: Nil
+  def byName(tweak: Tweak): Seq[Tweak] = tweak :: Nil
 
   @expectingTweaks
   @nodeLiftByName
-  def byName(): collection.Seq[Tweak] = Nil
+  def byName(): Seq[Tweak] = Nil
 
   @expectingTweaks
   @nodeLiftByValue
-  def byValue(tweaks: Tweak*): collection.Seq[Tweak] = tweaks
+  def byValue(tweaks: Tweak*): Seq[Tweak] = tweaks
 
   @expectingTweaks
   @nodeLiftByValue
-  def byValue(tweak: Tweak): collection.Seq[Tweak] = tweak :: Nil
+  def byValue(tweak: Tweak): Seq[Tweak] = tweak :: Nil
 
   @expectingTweaks
   @nodeLiftByValue
-  def byValue(): collection.Seq[Tweak] = Nil
+  def byValue(): Seq[Tweak] = Nil
 
   @expectingTweaks
   @nodeLiftByName
-  def bind(tweaks: Tweak*): collection.Seq[Tweak] = tweaks map {
+  def bind(tweaks: Tweak*): Seq[Tweak] = tweaks map {
     _.bind(if (Settings.kludgeBind2BindOnce) evaluateInGiven else evaluateInCurrent)
   }
 
   @expectingTweaks
   @nodeLiftByName
-  def bind(tweak: Tweak): collection.Seq[Tweak] =
+  def bind(tweak: Tweak): Seq[Tweak] =
     tweak.bind(if (Settings.kludgeBind2BindOnce) evaluateInGiven else evaluateInCurrent) :: Nil
 
   @expectingTweaks
   @nodeLiftByName
-  def bindOnce(tweaks: Tweak*): collection.Seq[Tweak] = tweaks map { _.bind(evaluateInGiven) }
+  def bindOnce(tweaks: Tweak*): Seq[Tweak] = tweaks map { _.bind(evaluateInGiven) }
 
   @expectingTweaks
   @nodeLiftByName
-  def bindOnce(tweak: Tweak): collection.Seq[Tweak] = tweak.bind(evaluateInGiven) :: Nil
+  def bindOnce(tweak: Tweak): Seq[Tweak] = tweak.bind(evaluateInGiven) :: Nil
 
-  def apply(): collection.Seq[Tweak] = Nil
-  def empty: collection.Seq[Tweak] = Nil
+  def apply(): Seq[Tweak] = Nil
+  def empty: Seq[Tweak] = Nil
 
 }
 

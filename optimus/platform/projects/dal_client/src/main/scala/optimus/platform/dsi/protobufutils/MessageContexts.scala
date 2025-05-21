@@ -45,6 +45,7 @@ import optimus.platform.dsi.bitemporal.HasVtTime
 import optimus.platform.dsi.bitemporal.MessagesPublishCommandBase
 import optimus.platform.dsi.bitemporal.Put
 import optimus.platform.dsi.bitemporal.PutApplicationEvent
+import optimus.platform.dsi.bitemporal.ReadOnlyCommand
 import optimus.platform.dsi.bitemporal.ReadOnlyCommandWithTT
 import optimus.platform.dsi.bitemporal.ReadOnlyCommandWithTTRange
 import optimus.platform.dsi.bitemporal.ReadOnlyCommandWithTemporality
@@ -212,7 +213,8 @@ object BatchContext {
                   alt.foreach(seq => results.update(0, seq.head))
                 }
                 // doesn't overwrite if file exists
-                DALCache.Global.save(command, commandProto, results, resultProtos, helper.extraCallerDetail)
+                DALCache.Global
+                  .save(command, commandProto, results.toList, resultProtos.toList, helper.extraCallerDetail)
               }
             })
           }
@@ -657,6 +659,12 @@ final case class ReadClientRequest private (
   lazy val hasUnentitled = commands exists { _.isInstanceOf[UnentitledCommand] }
 
   def withCompletable(completable: Completable): ReadClientRequest = this.copy(completable = completable)
+  def hasStreaming: Boolean = {
+    commands exists {
+      case x: ReadOnlyCommand => x.needStreamingExecution
+      case _                  => false
+    }
+  }
 }
 
 final case class WriteClientRequest private (

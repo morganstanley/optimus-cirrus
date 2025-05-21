@@ -36,6 +36,7 @@ trait DALEntitlements {
      *       - MatrixOnBehalfAllowList
      *       - SoaOnBehalfAllowList
      *       - TrustedInternalOnBehalfAllowList
+     *    - or must have read entitlements for Basic Role or Role
      *
      * @param user The user id to query role membership
      * @return all role names user has permission to, including default role and TEA roles.

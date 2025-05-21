@@ -14,40 +14,26 @@ package optimus.graph.tracking.ttracks;
 import optimus.graph.NodeTask;
 import optimus.graph.PropertyNode;
 import optimus.graph.diagnostics.PNodeInvalidate;
-import optimus.graph.tracking.DependencyTrackerQueue;
 import optimus.graph.tracking.TrackedNode;
+import optimus.graph.tracking.TrackedNodeInvalidationObserver;
 import optimus.graph.tracking.TraversalIdSource;
-import optimus.graph.tracking.UserNodeTracker;
 
 /** Methods to visit TTrack graphs and invalidate the nodes */
 public class Invalidators {
-  /**
-   * Notify all UTracks that the node to which they're attached is about to be invalidated.
-   *
-   * @param q The DependencyTrackerQueue to use.
-   */
-  static void invalidatePreview(
-      final TTrack ttrack, final DependencyTrackerQueue q, TraversalIdSource idSource) {
-    new AllTTrackRefsGraphTraverser() {
-      @Override
-      protected void visitRef(NodeTask task, TTrackRef tref) {
-        if (task instanceof TrackedNode) {
-          q.notifyNodeWillBeInvalidated((TrackedNode<?>) task);
-        }
-      }
-    }.visit(ttrack, idSource);
-  }
-
-  public static void invalidate(TTrack ttrack, TraversalIdSource idSource) {
-    invalidate(ttrack, null, idSource);
+  public static void invalidate(
+      TTrack ttrack, TraversalIdSource idSource, TrackedNodeInvalidationObserver observer) {
+    invalidate(ttrack, null, idSource, observer);
   }
 
   static PNodeInvalidate invalidate(
-      final TTrack ttrack, final PNodeInvalidate pninv, TraversalIdSource idSource) {
+      final TTrack ttrack,
+      final PNodeInvalidate pninv,
+      TraversalIdSource idSource,
+      TrackedNodeInvalidationObserver observer) {
     new AllTTrackRefsGraphTraverser() {
       @Override
       protected void visitRef(NodeTask task, TTrackRef tref) {
-        task.invalidateCache();
+        task.invalidateCache(observer);
         if (pninv != null) {
           if (task instanceof TrackedNode) {
             pninv.addUTrack((TrackedNode<?>) task);

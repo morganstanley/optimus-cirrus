@@ -30,12 +30,12 @@ class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boo
   private var newLineCount: Int = -1
   private def onNewLine: Boolean = newLineCount != 0
 
-  override def toString: String = HtmlInterpreters.prod(buffer)
+  override def toString: String = HtmlInterpreters.prod(buffer.toList)
   def toStringWithLineBreaks: String = toString.replace("\n", "<br>")
-  def toPlaintext: String = HtmlInterpreters.plaintext(buffer)
-  def toPlaintextSeq: collection.Seq[String] = HtmlInterpreters.plaintextSeq(buffer)
-  def toComponent = HtmlComponent(HtmlInterpreters.prod, buffer)
-  def toComponent(htmlInterpreter: HtmlInterpreters.Type) = HtmlComponent(htmlInterpreter, buffer)
+  def toPlaintext: String = HtmlInterpreters.plaintext(buffer.toList)
+  def toPlaintextSeq: Seq[String] = HtmlInterpreters.plaintextSeq(buffer.toList)
+  def toComponent = HtmlComponent(HtmlInterpreters.prod, buffer.toList)
+  def toComponent(htmlInterpreter: HtmlInterpreters.Type) = HtmlComponent(htmlInterpreter, buffer.toList)
 
   def tweaksToWrite(allTweaks: Iterable[Tweak]): Iterable[Tweak] =
     if (hasInfectionSet && cfg.scenarioStackSmart) allTweaks.filter(x => infectionSet.contains(x.id)) else allTweaks
@@ -50,7 +50,7 @@ class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boo
   /**
    * extract all Link elements from the builder
    */
-  def links: collection.Seq[Link] = HtmlInterpreters.links(buffer)
+  def links: Seq[Link] = HtmlInterpreters.links(buffer.toList)
 
   private def unIndent(): Unit = {
     indentLevel -= 1
@@ -175,7 +175,7 @@ class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boo
     buildPrettyLeaf((x: String) => leafHtmlNodeConstructor(FreeFormStringBuilderContents(x)), buildLeafNode)
 
   private def addGroup[T](
-      groupHtmlNode: collection.Seq[HtmlNode] => GroupHtmlNode,
+      groupHtmlNode: Seq[HtmlNode] => GroupHtmlNode,
       indented: Boolean,
       newLinesNo: Int,
       buildHtml: => T): T = {
@@ -186,7 +186,7 @@ class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boo
     if (newLinesNo > 0) newLines(newLinesNo)
     val result = buildHtml
     buffer = outerBuffer
-    add(groupHtmlNode(innerBuffer))
+    add(groupHtmlNode(innerBuffer.toList))
     if (indented) unIndent()
     if (newLinesNo > 0) newLines(newLinesNo)
     result
@@ -194,10 +194,8 @@ class HtmlBuilder(val cfg: DetailsConfig = DetailsConfig.default, val short: Boo
   def namedGroup[T](groupName: String, indented: Boolean = false, separateBy: Int = 0)(buildHtml: => T): T = {
     addGroup(node => Group(groupName, node.toSeq: _*), indented, separateBy, buildHtml)
   }
-  def styledGroup[T](
-      styledGroup: collection.Seq[HtmlNode] => StyledGroupHtmlNode,
-      indented: Boolean = false,
-      separateBy: Int = 0)(buildHtml: => T): T = {
+  def styledGroup[T](styledGroup: Seq[HtmlNode] => StyledGroupHtmlNode, indented: Boolean = false, separateBy: Int = 0)(
+      buildHtml: => T): T = {
     addGroup(styledGroup, indented, separateBy, buildHtml)
   }
 

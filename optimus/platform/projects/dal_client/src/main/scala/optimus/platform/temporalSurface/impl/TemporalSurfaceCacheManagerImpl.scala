@@ -186,7 +186,7 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
 
     type Key = operation.ItemKey
     val rec = recorder
-    val sourceTemporality = sourceTemporalitySurface.currentTemporalityFor(operation)
+    val sourceTemporality = sourceTemporalitySurface.currentTemporality
     val result = resolverGetItemKeys(operation)(sourceTemporality)
     result
   }
@@ -215,8 +215,8 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
     // <~ TemporalContextImpl#startDataAccess <~ pluginHa.start <~ TCI#dataAccess .
     // with priql:
     // <~ DALEntityResolver#findByIndex <~ DALExecutionProvider
-    val sourceTemporality = sourceTemporalitySurface.currentTemporalityFor(operation)
-    val itemTemporality = itemTemporalitySurface.currentTemporalityFor(operation)
+    val sourceTemporality = sourceTemporalitySurface.currentTemporality
+    val itemTemporality = itemTemporalitySurface.currentTemporality
     val result = resolverGetItemData(operation)(sourceTemporality, itemTemporality)
     result
   }
@@ -239,7 +239,7 @@ class TemporalSurfaceCachedDataAccess(private[optimus] val resolver: TemporalCon
   @scenarioIndependent @node def getSingleItemDataCallback(
       operation: TemporalSurfaceQuery,
       sourceTemporalitySurface: LeafTemporalSurface)(itemKey: operation.ItemKey): operation.ItemData = {
-    val temporality = sourceTemporalitySurface.currentTemporalityFor(operation)
+    val temporality = sourceTemporalitySurface.currentTemporality
     resolverGetSingleItemData(operation)(temporality, itemKey)
   }
 

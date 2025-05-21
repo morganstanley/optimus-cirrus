@@ -18,8 +18,6 @@ import optimus.buildtool.config.ScopeId
 import optimus.buildtool.resolvers.ResolutionResult
 import optimus.buildtool.scope.ScopedCompilation
 import optimus.platform._
-import spray.json.DefaultJsonProtocol._
-import spray.json._
 
 import scala.collection.compat._
 import scala.collection.immutable.Seq
@@ -29,8 +27,6 @@ final case class DependenciesReport(dependencies: Set[DependencyReport])
 final case class ExternalDependenciesReports(jvm: DependenciesReport, extraLibs: DependenciesReport)
 
 object DependenciesReport {
-
-  implicit val dependenciesReportFormat: RootJsonFormat[DependenciesReport] = jsonFormat1(DependenciesReport.apply)
 
   @node def apply(
       settings: MetadataSettings,

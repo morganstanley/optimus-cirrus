@@ -57,7 +57,7 @@ private[optimus] object PrcUserOptsSerializer
 
   private def mkCommandsPrcUserOptions(typ: PrcUserOptionsProto.UserOptionsType, proto: PrcUserOptionsProto) = {
     require(proto.getCommandCount == proto.getKeyCount, "Each key option should be mapped to a command.")
-    val keys = proto.getKeyList.asScala.map(NonTemporalPrcKeySerializer.deserialize)
+    val keys = proto.getKeyList.asScalaUnsafeImmutable.map(NonTemporalPrcKeySerializer.deserialize)
     val cmds = proto.getCommandList.asScala.map(CommandSerializer.deserialize)
     val prcKeyOpts = keys zip cmds map { case (k, c) =>
       require(c.isInstanceOf[ReadOnlyCommand], s"expected read only command in PRC request, but got $c")

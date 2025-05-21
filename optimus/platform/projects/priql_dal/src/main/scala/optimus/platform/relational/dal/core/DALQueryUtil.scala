@@ -61,7 +61,7 @@ trait DALQueryUtil {
     case _: Long                                      => TypeCode.Long
     case _: Short                                     => TypeCode.Short
     case _: Byte                                      => TypeCode.Byte
-    case _: Seq[_]                                    => TypeCode.Sequence
+    case _: collection.Seq[_]                         => TypeCode.Sequence
     case _: Array[Byte]                               => TypeCode.Sequence
     case _: ImmutableByteArray                        => TypeCode.Sequence
     case _: ZonedDateTime                             => TypeCode.ZonedDateTime

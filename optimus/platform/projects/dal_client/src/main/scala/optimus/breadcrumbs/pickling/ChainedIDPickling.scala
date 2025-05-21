@@ -31,7 +31,7 @@ class ChainedIDPickler extends Pickler[ChainedID] {
 
 class ChainedIDUnpickler extends Unpickler[ChainedID] {
   @nodeSync def unpickle(pickled: Any, ctxt: PickledInputStream): ChainedID = pickled match {
-    case Seq(repr: String, depth: Int, crumbLevel: Int, vertexId: String) =>
+    case collection.Seq(repr: String, depth: Int, crumbLevel: Int, vertexId: String) =>
       new ChainedID(repr, depth, crumbLevel, vertexId)
   }
 }

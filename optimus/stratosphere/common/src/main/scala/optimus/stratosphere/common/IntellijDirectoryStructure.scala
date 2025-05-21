@@ -64,6 +64,10 @@ final case class IntellijDirectoryStructure(config: StratoWorkspaceCommon, intel
 
   val workspaceXml: Path = ideaConfigurationStore.resolve("workspace.xml")
 
+  val ruffXml: Path = ideaConfigurationStore.resolve("ruff.xml")
+
+  val autoBuildRulesJson: Path = ideaConfigurationStore.resolve("auto-build-rules.json")
+
   val intellijInstanceConfigStoreDir: Path = intellijInstanceConfigStoreDirForVersion(intellijVersion)
 
   def intellijInstanceConfigStoreDirForVersion(version: String): Path =
